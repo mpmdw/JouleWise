@@ -853,6 +853,13 @@ to the research lead for review before merge.
 > **Blind status.** Not blind to Block 5; the ruling is about wording released results.
 
 - **Effect on estimands.** None. It fixes where a registered limitation sentence is stated.
+- **2026-11-11, RL-66 F05 (dated precision of this interpretation; not a new entry).** "Every table caption" is made
+  precise: the limitation goes in the caption of every table that prints a phase energy or a quantity computed from
+  one (reported cells, interval components, floors, dominance ratios and their terms, contrasts, and per-cell or
+  per-contrast sensitivity lines). It does not go on tables of counts, flags, attempts, hazard readings,
+  request-level energies and shares, reference-request screens, or comparator differences. For paragraphs the rule
+  stays literal: every paragraph that states a phase energy carries it. In Paper 1 this puts it on Tables 2, 3, 4, 5
+  and S5, and not on Tables 1, S1 to S4, S6, S7 and S8.
 
 ---
 

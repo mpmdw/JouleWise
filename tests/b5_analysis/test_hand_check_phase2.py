@@ -321,6 +321,34 @@ class Round3RepositoryGateTests(unittest.TestCase):
         fill.check_sites(paper.replace('by 146.63 J', 'by 146.64 J', 1))
         self.assertTrue(any('ledger-rendered text' in f for f in fill.FAILURES))
 
+    def test_fill_gate_requires_a_reason_for_ledger_precision(self):
+        # RL-60/RL-52: the 1.7B prefill R_cm terms print at ledger precision only because rounding would flip a
+        # comparison; with that reason removed the check refuses them, and rounding them is refused as a flip.
+        fill = self.load_script('fill_check_b5.py')
+        fill.L = fill.load_ledger()
+        with patch.object(fill, 'FORCED_LEDGER', {}):
+            fill.FAILURES.clear()
+            fill.check_formats()
+        self.assertTrue(any('ledger precision without a recorded comparison flip' in f for f in fill.FAILURES))
+        sites = [(n, i, t.replace('{r849:ledger}', '{r849:e}').replace('{r850:ledger}', '{r850:e}'), c, lab)
+                 for n, i, t, c, lab in fill.SITES]
+        with patch.object(fill, 'SITES', sites):
+            fill.FAILURES.clear()
+            fill.check_comparisons()
+        self.assertTrue(any('flips on the printed (rounded) values' in f and 'failed R_cm row 1846' in f
+                            for f in fill.FAILURES))
+
+    def test_fill_gate_appendix_c_is_the_producer_text(self):
+        fill = self.load_script('fill_check_b5.py')
+        fill.L = fill.load_ledger()
+        paper = fill.PAPER.read_text()
+        fill.FAILURES.clear()
+        fill.check_appendix_c(paper)
+        self.assertEqual(fill.FAILURES, [])
+        i = paper.index('## Appendix C')
+        fill.check_appendix_c(paper[:i] + paper[i:].replace('as part of B; X itself', 'X itself', 1))
+        self.assertTrue(any('Appendix C differs' in f for f in fill.FAILURES))
+
     def test_fill_gate_rejects_a_format_outside_the_row_class(self):
         fill = self.load_script('fill_check_b5.py')
         fill.L = fill.load_ledger()
@@ -730,7 +758,7 @@ class Round5DeltaTests(unittest.TestCase):
         fill = self.module('fill_check_b5.py')
         rows = coverage.build(coverage.paper_text(), fill.load_ledger())
         current = (SCRIPT.parents[3]/'docs/paper/paper1/paper1.md').read_text()
-        self.assertEqual(coverage.check_working_paper(current, rows, fill), (53, 12))
+        self.assertEqual(coverage.check_working_paper(current, rows, fill), (55, 10))
         with self.assertRaisesRegex(ValueError, 'unaccounted Block 5 placeholder'):
             coverage.check_working_paper(current + '\n{{FILL: P1-B5-NEW-GAP | x}}', rows, fill)
         with patch.object(fill, 'FILLED', [f for f in fill.FILLED if f != 'P1-B5-XWIN']):

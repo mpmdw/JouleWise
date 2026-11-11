@@ -11,7 +11,10 @@ and AST string literals in the disclosure producer; it executes no producer,
 analysis, Git, network, model, or measurement code. No custody paths are followed.
 
 Authority: release-to-paper audit §2 D constraints C1-C10, RL-4, RL-41,
-RL-52 and RL-55. Fixed sentences are checked in Appendix C, allowing only
+RL-52, RL-55, and RL-66 (the lead's dispositions of this lint's first findings:
+F05 names the tables whose captions carry D-177; J01 rules the two sentences
+that name the dominance statement only to say it is not licensed; F01 asks
+Table 5 for kept over planned quads). Fixed sentences are checked in Appendix C, allowing only
 whitespace changes and initial capitalization. Internal labels need bracketed
 glosses; paraphrases need an Appendix C label citation. Scope is Part 1:
 BYTES text and unfilled replication branches are not result assertions.
@@ -41,6 +44,13 @@ PRODUCER = ROOT / 'joulewise/b5_analysis/disclosures.py'
 LEDGER_SHA = '41b7e577a7be494245ed42ba38190da9de860430a75f5dc6d0987a15de79060f'
 BOUNDARY = 'M3 Max / MLX / powermetrics SoC rails'
 D177 = 'phase attribution is reported without a measured instrument phase-accounting check'
+# RL-66 F05: the limitation goes in the caption of every table that prints a phase energy or a quantity computed
+# from one (reported cells, interval components, floors, dominance ratios and their terms, contrasts); not on tables
+# of counts, flags, attempts, hazard readings, request-level energies and shares, reference-request screens or
+# comparator differences. Tables 1, S1-S4, S6, S7 and S8 (comparator differences) are therefore not listed.
+D177_CAPTIONS = ('2', '3', '4', '5', 'S5')
+# RL-66 J01: the ruled sentences name the dominance statement only to say when it is licensed and that it is not met.
+META_DOMINANCE = r'(?:statement that|for stating that|licenses the sentence that)\s*$'
 
 
 def norm(text: str) -> str:
@@ -212,13 +222,17 @@ def check(text: str, ledger: dict[int, dict[str, str]],
             if b.section.startswith('4.6') and 'Branch A holds when' in plain:
                 continue  # prospective definition, not the selected branch
             for match in re.finditer(pattern, plain, re.I):
-                if not re.search(r'\b(?:no|not|never)\b[^.;:]*$', plain[max(0, match.start()-45):match.start()], re.I):
+                before = plain[max(0, match.start()-45):match.start()]
+                if re.search(META_DOMINANCE, before, re.I):
+                    continue
+                if not re.search(r'\b(?:no|not|never)\b[^.;:]*$', before, re.I):
                     fail(b, 'C3/C4/C5', 'forbidden assertion: ' + match.group())
         if re.search(r'sensitivity[ _-]clean', plain, re.I) and 'Erratum-3 bracket sensitivity only' not in plain:
             fail(b, 'RL4-vi', 'sensitivity clean lacks Erratum-3 bracket sensitivity only')
         if not plain.startswith('|') and re.search(r'\bp\s*[<≤=]\s*\d', plain, re.I):
             fail(b, 'RL4-ii', 'numerical p-value outside a results table')
-        if re.match(r'\*Table (?:S[1-8]|[1-5])\.', b.text) and not has_d177(plain):
+        caption = re.match(r'\*Table (S[1-8]|[1-5])\.', b.text)
+        if caption and caption.group(1) in D177_CAPTIONS and not has_d177(plain):
             fail(b, 'C7/RL4-x', 'Block 5 table caption lacks the D-177 limitation')
 
     class_blocks = [b for b in scoped if 'attribution_limited' in b.text]
@@ -303,7 +317,10 @@ def check(text: str, ledger: dict[int, dict[str, str]],
             if phase in seen:
                 raise ValueError('duplicate contrast')
             seen.add(phase)
-            n, estimate = int(cells[1]), Decimal(cells[2])
+            kept = re.fullmatch(r'(\d+) of (\d+)', cells[1])
+            if not kept:
+                raise ValueError('Table 5 prints kept of planned quads (RL-66 F01)')
+            n, estimate = int(kept.group(1)), Decimal(cells[2])
             ci, di = interval(cells[3]), interval(cells[4])
             gate, p = Decimal(cells[5]), pvalue(cells[6])
             if not all(v.is_finite() for v in (estimate, gate, p)) or gate < 0 or not 0 <= p <= 1:
@@ -352,6 +369,16 @@ def self_test() -> bool:
     ledger, fixed = load_ledger(), fixed_sentences()
     paper = PAPER.read_text(encoding='utf-8')
 
+    t2 = next(b for b in blocks(paper) if b.text.startswith('*Table 2.'))
+    table2, table2_line = t2.text, t2.line
+    d177_t2 = next(m.group() for m in re.finditer(r'Phase attribution is reported\s+without a measured\s+instrument\s+'
+                                                   r'phase-accounting\s+check\.', table2))
+
+    t3 = next(b for b in blocks(paper) if b.text.startswith('*Table 3.'))
+    table3 = t3.text
+    d177_t3 = next(m.group() for m in re.finditer(r'Phase attribution is reported\s+without a measured\s+instrument\s+'
+                                                   r'phase-accounting\s+check\.', table3))
+
     class LicenceTests(unittest.TestCase):
         def test_precedence(self) -> None:
             d = Decimal
@@ -371,17 +398,19 @@ def self_test() -> bool:
         def test_violating_copies(self) -> None:
             cases = [
                 ('dominance', paper.replace('## 11. Conclusion', '## 11. Conclusion\n\nTiming uncertainty dominates.'), 'C3/C4/C5'),
-                ('counts', paper.replace('| decode | 6 | 146.63', '| decode | 4 | 146.63'), 'C2/L2'),
+                ('counts', paper.replace('| decode | 6 of 10 | 146.63', '| decode | 4 of 10 | 146.63'), 'C2/L2'),
                 ('outcome', paper.replace('| direction supported | L2 |', '| unresolved | L2 |', 1), 'C2/precedence'),
-                ('missing-row', paper.replace(next(b.text for b in blocks(paper) if b.text.startswith('| decode | 6 |')), ''), 'C4'),
+                ('missing-row', paper.replace(next(b.text for b in blocks(paper) if b.text.startswith('| decode | 6 of 10 |')), ''), 'C4'),
                 ('sensitivity', paper.replace('## 11. Conclusion', '## 11. Conclusion\n\nSensitivity clean.'), 'RL4-vi'),
                 ('cross-floor', paper.replace('## 11. Conclusion', '## 11. Conclusion\n\nBETA minus ALPHA shows a model effect.'), 'C3/C4/C5'),
                 ('higher-level', paper.replace('## 11. Conclusion', '## 11. Conclusion\n\nBlock 5 reaches L3.'), 'C3/C4/C5'),
                 ('p-prose', paper.replace('## Abstract', '## Abstract\n\np = 0.001.'), 'RL4-ii'),
-                ('caption', paper.replace(
-                    'Phase attribution is reported without a measured instrument\nphase-accounting check.*', ''), 'C7/RL4-x'),
+                ('caption', paper.replace(table2, table2.replace(d177_t2, '')), 'C7/RL4-x'),
+                ('dominance-bare', paper.replace('## 11. Conclusion', '## 11. Conclusion\n\nTiming attribution dominates the detection floor.'), 'C3/C4/C5'),
+                ('caption-3', paper.replace(table3, table3.replace(d177_t3, '')), 'C7/RL4-x'),
             ]
             baseline = set(check(paper, ledger, fixed))
+            self.assertNotEqual(table2, '')
             with tempfile.TemporaryDirectory(prefix='jw-b5-licence-') as directory:
                 for name, mutant, code in cases:
                     with self.subTest(copy=name):
@@ -391,7 +420,7 @@ def self_test() -> bool:
                         added = set(check(path.read_text(encoding='utf-8'), ledger, fixed)) - baseline
                         self.assertTrue(any(f.code == code for f in added), added)
                         if name == 'caption':
-                            self.assertTrue(any(f.code == code and f.line == 852 for f in added), added)
+                            self.assertTrue(any(f.code == code and f.line == table2_line for f in added), added)
 
         def test_comments_and_templates_are_not_results(self) -> None:
             extra = '\n<!-- Timing uncertainty dominates. -->\n{{FILL: pending | p = 0.001}}\n'

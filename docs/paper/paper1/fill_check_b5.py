@@ -40,6 +40,7 @@ Exit status 0 when every check passes, 1 otherwise. Standard library only.
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 import datetime
 import hashlib
@@ -57,6 +58,10 @@ LEDGER = ROOT / 'docs/analysis/b5/rederivation.tsv'
 PLAN = ROOT / 'configs/campaigns/v5_claim_25g83/analysis_plan_block5.md'
 INDEX = ROOT / 'configs/analysis/b5/analysed_windows.json'
 DEVLOG = ROOT / 'docs/analysis/b5/DEVIATION-LOG.md'
+PRODUCER = ROOT / 'joulewise/b5_analysis/disclosures.py'
+SEAL_RECORD = ROOT / 'docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md'
+SEALED_INVENTORY = ROOT / 'configs/campaigns/v5_claim_25g83/sealed_inventory.json'
+BOUNDARY = 'M3 Max / MLX / powermetrics SoC rails'
 ORIGINAL_AUTHORITY_COMMIT = '0b8763f0a8291bfa5d47fdc18aa64ef3aa33ec1b'
 ORIGINAL_AUTHORITY_SHA256 = '0462f8144388e758ec1461452828309c4968ac39d2f986ef4a15175d07b84343'
 AUTHORITY_SHA256 = '41b7e577a7be494245ed42ba38190da9de860430a75f5dc6d0987a15de79060f'
@@ -114,16 +119,18 @@ NUMERIC = re.compile(r'[+\-−]?(\d+(\.\d*)?|\.\d+)([eE][+\-]?\d+)?')
 INTEGER = re.compile(r'[+\-−]?\d+')
 MODE = {'near': ROUND_HALF_UP, 'down': ROUND_FLOOR, 'up': ROUND_CEILING}
 
-# format -> (kind, digits, direction).  'dp' = decimal places, 'sf' = significant figures.
+# format -> (kind, digits, direction).  'dp' = decimal places, 'sf' = significant figures, 'J' = RL-60's joule
+# rule: two decimals or three significant figures, whichever shows more digits.
 ROUNDERS = {
-    # energies, interval ends, floors, bounds and allowances in J per request: two decimals
-    'e': ('dp', 2, 'near'), 'lo': ('dp', 2, 'down'), 'hi': ('dp', 2, 'up'), 'up': ('dp', 2, 'up'),
+    # joules per request (RL-60 (2)). 'e' is an estimate, or an operand of a ratio, sum or difference printed beside
+    # it (RL-60 (1)): nearest. 'lo'/'hi' are interval and range ends: outward. 'up' states an uncertainty or a limit
+    # (bounds, half-widths, allowances, floors, attribution floors): up.
+    'e': ('J', 0, 'near'), 'lo': ('J', 0, 'down'), 'hi': ('J', 0, 'up'), 'up': ('J', 0, 'up'),
     # per-token values: four significant figures
     'tok': ('sf', 4, 'near'), 'toklo': ('sf', 4, 'down'), 'tokhi': ('sf', 4, 'up'),
     # magnitude ratios: three decimals
     'mr': ('dp', 3, 'near'), 'mrlo': ('dp', 3, 'down'), 'mrhi': ('dp', 3, 'up'),
-    # shares: three decimals in tables, two in running text
-    'sh3': ('dp', 3, 'near'), 'sh3lo': ('dp', 3, 'down'), 'sh3hi': ('dp', 3, 'up'),
+    # shares and quantities on the share's scale: as issued (four decimals) in tables, 'sh4'; two in running text
     'sh2': ('dp', 2, 'near'), 'sh2lo': ('dp', 2, 'down'), 'sh2hi': ('dp', 2, 'up'),
     # p-values: two significant figures (tables only)
     'p': ('sf', 2, 'near'),
@@ -134,7 +141,7 @@ CLASS_FORMATS = {
     'J': {'e', 'lo', 'hi', 'up'},
     'tok': {'tok', 'toklo', 'tokhi'},
     'mr': {'mr', 'mrlo', 'mrhi'},
-    'share': {'sh3', 'sh3lo', 'sh3hi', 'sh2', 'sh2lo', 'sh2hi'},
+    'share': {'sh4', 'sh2', 'sh2lo', 'sh2hi'},
     'R': {'R'},
     'p': {'p'},
     'count': {'n', 'pos'},
@@ -147,9 +154,10 @@ CLASS_FORMATS = {
 ASIS_KEY = re.compile(r'(^CMP\.bars\.|largest_absolute_difference|cpu_s|rise_k|\.measurements\.'
                       r'|^contention\.(threshold|interval_seconds)|^duration\.)')
 
-# Rows that must print at ledger precision because a rounding would flip a stated comparison (RL-52). Empty: no
-# comparison flips under the rule (see comparisons()); an entry needs a reason and the format 'ledger'.
-FORCED_LEDGER: dict[int, str] = {}
+# Rows that must print at ledger precision because a rounding would flip a stated comparison (RL-52); format 'ledger'.
+_RCM_TERMS = ('1.7B prefill R_cm terms: to nearest at three significant figures, 1.63 / 0.814 = 2.0025 would pass 2 '
+              'while the ratio 1.99975 fails it')
+FORCED_LEDGER: dict[int, str] = {567: _RCM_TERMS, 568: _RCM_TERMS, 849: _RCM_TERMS, 850: _RCM_TERMS}
 
 
 def row_class(n: int) -> str:
@@ -164,34 +172,43 @@ def row_class(n: int) -> str:
         return 'p'
     if 'per_token' in k:
         return 'tok'
-    if 'magnitude_ratio' in k or 'within_model_spread' in k:
+    if 'magnitude_ratio' in k:
         return 'mr'
-    if 'rho_' in k:
+    if 'rho_' in k or 'within_model_spread' in k:  # RL-60 (3): ρ and quantities on its scale
         return 'share'
     if re.search(r'(\.R$|\.R_cm$|^Rcm\.|block_lines\[\d+\]\.ratio$)', k):
         return 'R'
     return 'J'
 
 
-def quantize(d: Decimal, fmt: str) -> Decimal:
-    kind, k, direction = ROUNDERS[fmt]
+def target_exponent(d: Decimal, fmt: str) -> int:
+    kind, k, _ = ROUNDERS[fmt]
     if kind == 'dp':
-        return d.quantize(Decimal(1).scaleb(-k), rounding=MODE[direction])
-    if d == 0:
-        return d
-    q = d.quantize(Decimal(1).scaleb(d.adjusted() - k + 1), rounding=MODE[direction])
-    if q.adjusted() != d.adjusted():  # carried into the next decade
-        q = q.quantize(Decimal(1).scaleb(q.adjusted() - k + 1), rounding=MODE[direction])
-    return q
+        return -k
+    if kind == 'sf':
+        return d.adjusted() - k + 1 if d != 0 else -k
+    # RL-60 (2): two decimals or three significant figures, whichever shows more digits
+    return -2 if d == 0 else min(-2, d.adjusted() - 2)
 
 
 def is_tie(d: Decimal, fmt: str) -> bool:
-    kind, k, direction = ROUNDERS[fmt]
-    if direction != 'near' or d == 0:
+    if ROUNDERS[fmt][2] != 'near' or d == 0:
         return False
-    exp = -k if kind == 'dp' else d.adjusted() - k + 1
-    rest = (abs(d) * Decimal(10) ** -exp) % 1
+    rest = (abs(d) * Decimal(10) ** -target_exponent(d, fmt)) % 1
     return rest == Decimal('0.5')
+
+
+def quantize(d: Decimal, fmt: str) -> Decimal:
+    """Round once from the ledger row. Never print more digits than the row carries, and print an exact tie at the
+    rounding digit with the ledger's digits (RL-60 (3)): the row is itself rounded, so a second rounding could go
+    either way."""
+    exp = target_exponent(d, fmt)
+    if d.as_tuple().exponent >= exp or is_tie(d, fmt):
+        return d
+    q = d.quantize(Decimal(1).scaleb(exp), rounding=MODE[ROUNDERS[fmt][2]])
+    if ROUNDERS[fmt][0] == 'sf' and q.adjusted() != d.adjusted():  # carried into the next decade
+        q = q.quantize(Decimal(1).scaleb(q.adjusted() - ROUNDERS[fmt][1] + 1), rounding=MODE[ROUNDERS[fmt][2]])
+    return q
 
 
 SUP = str.maketrans('-0123456789', '⁻⁰¹²³⁴⁵⁶⁷⁸⁹')
@@ -223,7 +240,7 @@ def render_value(n: int, fmt: str | None) -> str:
     if fmt in ROUNDERS:
         q = quantize(dec(n), fmt)
         return sci(q) if fmt == 'p' else signed(format(q, 'f'))
-    if fmt in (None, 'asis', 'id', 'n', 'R', 'ledger'):
+    if fmt in (None, 'asis', 'id', 'n', 'R', 'ledger', 'sh4'):
         return signed(v.replace('−', '-')) if NUMERIC.fullmatch(v) else v
     if fmt == 'w':
         return v.replace('_', ' ')
@@ -275,18 +292,198 @@ def render_attempt(pack: str) -> str:
     return f"{a['plan_id']} ({day.day} {day:%B} {day.year})"
 
 
+# ---------------------------------------------------------------- names and constants from committed files (RL-60 (5))
+
+IDENTITY_FILE = 'configs/campaigns/v5_claim_25g83/identity_pins.json'
+PROMPT_MANIFESTS = ['configs/campaigns/d117_floor_qwen3-1p7b_v5/decode_prompt_manifest.json',
+                    'configs/campaigns/d117_floor_qwen3-8b_v5/decode_prompt_manifest.json']
+PREFILL_PIN = 'configs/campaigns/d117_floor_qwen3-1p7b_v5/prefill_pin/prefill_prompt_pin.json'
+SELECTIONS = ['configs/campaigns/d117_floor_qwen3-1p7b_v5/prefill_pin/selection.json',
+              'configs/campaigns/d117_floor_qwen3-8b_v5/prefill_pin/selection.json',
+              'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/prefill_pin/selection.json']
+
+
+def sha_file(rel: str) -> str:
+    return hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
+
+
+def check_sealed(rel: str) -> None:
+    """The committed file is the sealed one: its digest is in the sealed inventory, or, for the identity pins, in the
+    seal record's final table (the inventory does not list that file)."""
+    digest = sha_file(rel)
+    files = json.loads(SEALED_INVENTORY.read_text())['files']
+    if rel in files:
+        if files[rel] != digest:
+            fail(f'{rel}: SHA-256 differs from the sealed inventory')
+    elif f'| `{rel}` | `{digest}` |' not in SEAL_RECORD.read_text():
+        fail(f'{rel}: SHA-256 {digest[:12]}… is not bound by the seal record')
+
+
+def render_committed(kind: str) -> str:
+    if kind == 'identity':
+        check_sealed(IDENTITY_FILE)
+        pins = json.loads((ROOT / IDENTITY_FILE).read_text())
+        models = []
+        for label, units in (('1.7B', ('alpha', 'alpha/prefill_p2048', 'A/decode', 'A/prefill_p2048')),
+                             ('8B', ('beta', 'beta/prefill_p2048', 'B/decode', 'B/prefill_p2048'))):
+            got = {(pins['units'][u]['model_name'], pins['units'][u]['model_revision'],
+                    pins['units'][u]['model_artifact_sha256']) for u in units}
+            if len(got) != 1:
+                fail(f'identity pins: the {label} units disagree on model, revision or artifact')
+            name, rev, art = sorted(got)[0]
+            models.append(f'{name} at revision {rev[:12]}…, artifact SHA-256 {art[:12]}…')
+        rv = pins['runtime_versions']
+        pk = ', '.join(f'{k} {v}' for k, v in sorted(rv['packages'].items()))
+        templates = set()
+        for rel in PROMPT_MANIFESTS:
+            check_sealed(rel)
+            templates |= set(re.findall(r'chat_template_sha256:([0-9a-f]{64})', (ROOT / rel).read_text()))
+        if len(templates) != 1:
+            fail('decode prompt manifests: expected one chat-template digest for both models')
+        check_sealed(PREFILL_PIN)
+        tok = re.findall(r'under tokenizer sha256:([0-9a-f]{64})', (ROOT / PREFILL_PIN).read_text())
+        if len(set(tok)) != 1:
+            fail('prefill prompt pin: expected one tokenizer digest')
+        return (f'{models[0]}, and {models[1]}; {pk}, under Python {rv["python"]}; chat-template SHA-256 '
+                f'{sorted(templates)[0][:12]}… for both models; the prefill prompt built under tokenizer SHA-256 '
+                f'{tok[0][:12]}…; from the identity pins (`{IDENTITY_FILE}`, bound by the seal record), the floor '
+                f'packs\' decode prompt manifests and the prefill prompt pin')
+    if kind == 'length':
+        digests = set()
+        for rel in SELECTIONS:
+            check_sealed(rel)
+            digests.add(sha_file(rel))
+        if len(digests) != 1:
+            fail('selection records: the three packs do not share one record')
+        return (f'the selection record `{SELECTIONS[0]}`, SHA-256 {sorted(digests)[0][:12]}…, one record shared by the '
+                f'three packs')
+    raise ValueError(kind)
+
+
+# ---------------------------------------------------------------- Appendix C from the producer's literals (RL-66 F03)
+
+PRODUCER_NAMES = {'ATTRIBUTION_SENTENCE', 'GROSS_SENTENCE', 'AGREE_SENTENCE', 'DIFFER_SENTENCE', 'DECISION_SENTENCE',
+                  'LOO_SENTENCE', 'MACHINE_BOUNDARY', 'CONDITIONALITY', 'ARM_SENTENCE', 'MONITOR_SENTENCE',
+                  'MIDPOINT_SENTENCE', 'TEMPERATURE_SENTENCE'}
+
+
+def producer_literals() -> dict[str, str]:
+    """The registered fixed sentences as the disclosure producer defines them, read by AST; nothing is imported."""
+    out: dict[str, str] = {}
+    for node in ast.parse(PRODUCER.read_text(encoding='utf-8')).body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            name = node.targets[0].id
+            if name in PRODUCER_NAMES:
+                out[name] = ast.literal_eval(node.value)
+            elif name == 'FIXED_SENTENCES':
+                out.update(ast.literal_eval(node.value))
+    if len(out) != 21:
+        fail(f'disclosure producer: expected 21 fixed sentences, found {len(out)}')
+    return out
+
+
+GLOSS = {'GAMMA': '[GAMMA: the contrast session]', 'NEG-8': '[NEG-8: the drift screen of Section 4.7]',
+         'D-179': '[D-179: the registered dependence caveat]', 'p42': '[p42: the 42-token prefill of the decode workload]'}
+# (label, literal name, trigger) in the order of the paper; trigger None = printed unconditionally
+APPENDIX_C = [
+    ('Conditionality', 'CONDITIONALITY', None), ('Single window', 'single_window', None),
+    ('Attribution floor', 'ATTRIBUTION_SENTENCE', None), ('Gross energy', 'GROSS_SENTENCE', None),
+    ('Cross-window agree/differ (agree)', 'AGREE_SENTENCE', 'agree'),
+    ('Cross-window agree/differ (differ)', 'DIFFER_SENTENCE', 'differ'),
+    ('Decision interval against the floor', 'DECISION_SENTENCE', 'decision'),
+    ('Leave-one-quad-out magnitude', 'LOO_SENTENCE', 'loo'), ('Order', 'order', None),
+    ('Floor transfer assumption', 'floor_transfer_assumption', None),
+    ('Floor transfer limit', 'floor_transfer_limit', None), ('Separate windows', 'separate_windows', None),
+    ('Short prefill', 'p42', None), ('Dominance', 'dominance', None), ('Phase attribution', 'd177', None),
+    ('Fixed prompt', 'fixed_prompt', None), ('A hazard not read at arm', 'ARM_SENTENCE', 'arm'),
+    ('Monitor cost', 'MONITOR_SENTENCE', None), ('Lost midpoint', 'MIDPOINT_SENTENCE', 'midpoint'),
+    ('Battery temperature', 'TEMPERATURE_SENTENCE', 'temperature'),
+    ('Whole-machine boundary', 'MACHINE_BOUNDARY', None),
+]
+APPENDIX_C_INTRO = (
+    'These are the registered fixed sentences, printed from the literals the disclosure producer uses '
+    '(`joulewise/b5_analysis/disclosures.py`), so that each is verbatim; only the first letter is capitalized and a '
+    'closing full stop supplied. X, Δ, k and S are filled where a sentence is used. Internal labels stay in the '
+    'sentence and are glossed in brackets after it. The registered sentences say "window"; the body says "session" '
+    'for the same thing. A sentence marked "not triggered" has a condition that did not occur in the primary block; '
+    'it is listed so that the inventory is complete. The body prints a sentence in these words, or paraphrases it '
+    'and cites its label here.')
+
+
+def triggered(key: str) -> bool:
+    words = [val(n) for n in (978, 1010, 1058, 1100)]
+    if key == 'agree':
+        return 'agree' in words
+    if key == 'differ':
+        return 'differ' in words
+    if key == 'decision':
+        return not (dec(48) > dec(52) and dec(50) > dec(55))
+    if key == 'loo':
+        return any(max(abs(dec(lo) - dec(d)), abs(dec(hi) - dec(d))) > dec(g) / 4
+                   for d, lo, hi, g in ((15, 63, 64, 52), (16, 67, 68, 55)))
+    if key == 'arm':
+        return any(val(n) != '0' for n in (1427, 1461, 1511))
+    if key == 'midpoint':
+        return any(val(n) != 'false' for n in (1280, 1408, 1631))
+    if key == 'temperature':
+        return any(val(e) != 'false' or val(d) != 'false' for rows in STAGES.values() for _, _, _, d, e, _ in rows)
+    raise ValueError(key)
+
+
+def render_appendix_c() -> str:
+    lit = producer_literals()
+    lines = [APPENDIX_C_INTRO, '']
+    for label, name, trig in APPENDIX_C:
+        text = lit[name]
+        text = text[:1].upper() + text[1:]
+        if not text.endswith(('.', '?', '!')):
+            text += '.'
+        mark = ' (not triggered in the primary block)' if trig and not triggered(trig) else ''
+        gloss = ' '.join(g for k, g in GLOSS.items() if re.search(r'(?<![\w-])' + re.escape(k) + r'(?![\w-])', text))
+        lines.append(f'- *{label}*{mark}: "{text}"' + (f' {gloss}' if gloss else ''))
+    return '\n'.join(lines)
+
+
+def check_appendix_c(paper: str) -> None:
+    text = render_appendix_c()
+    if norm(paper).count(norm(text)) != 1:
+        fail('Appendix C differs from the registered sentences rendered from the disclosure producer:\n    ' + text)
+    if 'open question' in paper[paper.find('## Appendix C'):paper.find('## Appendix D')]:
+        fail('Appendix C still calls the fixed-sentence wording an open question (RL-66 F03)')
+
+
+def check_table3_identity() -> None:
+    """RL-60 (4): guarded value = tabulated floor less the floor session's allowance, where the ledger holds both."""
+    if L[793]['key/leaf'] != 'RC.windows.ALPHA.neg8.allowance_j' or L[802]['key/leaf'] != 'RC.windows.BETA.neg8.allowance_j':
+        fail('rows 793/802 are not the floor sessions\' drift allowances')
+    for tab, guarded, allowance in ((54, 288, 289), (57, 291, 292)):
+        if dec(tab) - dec(802) != dec(guarded) or dec(allowance) != dec(802):
+            fail(f'Table 3: row {tab} less row 802 is not the guarded value of row {guarded}')
+    if dec(1260) != dec(793) or dec(1388) != dec(802):
+        fail('Table 3 allowances disagree with the drift-screen allowances of Table S6')
+
+
+def check_floor_class() -> None:
+    """RL-66 F07: every issued floor class of the two contrasts is attribution_limited, from the clock-anchor bound."""
+    for n in range(869, 885):
+        want = 'attribution_limited' if n % 2 else 'E_clock_anchor_shift_bound_j'
+        if val(n) != want:
+            fail(f'row {n}: floor class/source {val(n)!r}, expected {want!r}')
+
+
 # ---------------------------------------------------------------- templates
 
 PH = re.compile(r'\{r(\d+)(?::(\w+))?\}')
 AP = re.compile(r'\{a:(alpha|beta|gamma)\}')
+CP = re.compile(r'\{c:(identity|length)\}')
 FILL_RE = re.compile(r'\{\{FILL:.*?\}\}', re.S)
 
 # Literal digits a site may carry: names, cross-references and three registered constants, each verified below.
 ALLOWED_LITERALS = [
-    r'Qwen3-1\.7B', r'Qwen3-8B', r'Qwen2\.5-1\.5B', r'1\.7B', r'8B', r'2,048', r'95%',
+    r'M3 Max / MLX / powermetrics SoC rails', r'Qwen3-1\.7B', r'Qwen3-8B', r'Qwen2\.5-1\.5B', r'1\.7B', r'8B', r'2,048', r'95%',
     r'Table S?\d+', r'Sections? \d+(\.\d+)*( and \d+(\.\d+)*)?', r'DLE-\d', r'\br[34]\b',
     r'configs/analysis/b5/', r'docs/analysis/b5/', r'`p42_status`',
-    r'\b24\b',             # the number of comparator families in Table S8 (asserted equal to its rows)
+    r'n < 10', r'\b24\b',             # the number of comparator families in Table S8 (asserted equal to its rows)
     r'7 November 2026',    # DLE-3 and DLE-4 adoption date (asserted in DEVIATION-LOG.md)
     r'\b0\.2\b',           # the registered "consistent" spread limit (asserted in analysis plan §8)
 ]
@@ -326,12 +523,12 @@ METER = '\n'.join([
     cells('Session', 'Model', 'Member windows', 'Median ρ', 'Range', 'Interquartile range', 'Spread',
           'Outside hard band', 'Word'),
     cells(*['---'] * 9),
-    *[cells(s, m, f'{{r{n}:n}}', f'{{r{md}:sh3}}', f'[{{r{lo}:sh3lo}}, {{r{hi}:sh3hi}}]',
-            f'[{{r{q0}:sh3lo}}, {{r{q1}:sh3hi}}]', f'{{r{sp}:mr}}', f'{{r{o}:n}}', f'{{r{w}:id}}')
+    *[cells(s, m, f'{{r{n}:n}}', f'{{r{md}:sh4}}', f'[{{r{lo}:sh4}}, {{r{hi}:sh4}}]',
+            f'[{{r{q0}:sh4}}, {{r{q1}:sh4}}]', f'{{r{sp}:sh4}}', f'{{r{o}:n}}', f'{{r{w}:id}}')
       for s, m, n, md, lo, hi, q0, q1, sp, o, w in METER_ROWS],
     '',
     '*Table S1. Rails\' share ρ of request energy on the whole-machine boundary, per analysed session and model, '
-    'primary block (descriptive; Section 3.2). Ranges and interquartile ranges are rounded outward.*',
+    'primary block (descriptive; Section 3.2). ρ and its spread print as issued, at four decimals.*',
 ])
 
 # --- Section 6.1: attempts, analysed sessions, Table 1, Table S2, hazards, Tables S3 and S4
@@ -525,13 +722,13 @@ TABLE_S5 = '\n'.join([
     cells('Model', 'Phase', 'h (J)', 'B (J)', 'First-kind timing bound (J)', 'Interpolation bound (J)',
           'Drift term (J)', 'Attribution floor attained by', 'Smallest first-kind bound (J)'),
     cells(*['---'] * 9),
-    *[cells(m, p, f'{{r{h}:up}}', f'{{r{b}:up}}', f'{{r{k0}:up}}', f'{{r{k1}:up}}', f'{{r{k2}:up}}',
+    *[cells(m, p, f'{{r{h}:e}}', f'{{r{b}:e}}', f'{{r{k0}:e}}', f'{{r{k1}:e}}', f'{{r{k2}:e}}',
             f'{{r{at}:id}}', f'{{r{mn}:up}}') for m, p, h, b, k0, k1, k2, at, mn in INTERVAL_PARTS],
     '',
-    '*Table S5. Components of the intervals of Table 2: the half-width h, and B with its three stratified averages '
-    '(Section 4.3); the kept run that attains the cell\'s attribution floor (Section 4.4), and the smallest '
-    'first-kind bound over the cell\'s kept runs. Each value is rounded up separately, so the three averages need '
-    'not sum to B in the last digit. ' + D177 + '*',
+    '*Table S5. Components of the intervals of Table 2, M3 Max / MLX / powermetrics SoC rails: the half-width h, and B '
+    'with its three stratified averages (Section 4.3), each an operand of a sum and rounded to nearest separately, '
+    'so the averages can differ from B in the last digit; the kept run that attains the cell\'s attribution floor '
+    '(Section 4.4), and the smallest first-kind bound over the cell\'s kept runs, rounded up. ' + D177 + '*',
 ])
 
 BATT_LINE = (
@@ -553,9 +750,8 @@ LOAD_LINE = (
     'repeats and {r1104:n} quads restored: {r1107:e} J [{r1110:lo}, {r1111:hi}] (n_r = {r1103:n}, '
     'n_b = {r1105:n}). ' + D177)
 
-INTERVAL_PARTS_SENTENCE = ('Each row of Table 2 carries the fixed attribution-floor sentence of Section 4.4 with its '
-                           'own value of X, and the interval\'s three components: h, and the average first-kind '
-                           'timing bound, interpolation bound and drift term that make up B (Table S5).')
+INTERVAL_PARTS_SENTENCE = ('Table S5 gives each interval\'s components: h, and the average first-kind timing bound, '
+                           'interpolation bound and drift term that make up B.')
 
 # --- Section 6.3: Table 3. Absolute floor = the cell's drift-widened guarded absolute floor (hand-check key
 # `.../absolute.minted`; rows 290 and 293 name it directly for 8B). Operative floor = the arm's `floor_gate_j`
@@ -563,52 +759,78 @@ INTERVAL_PARTS_SENTENCE = ('Each row of Table 2 carries the fixed attribution-fl
 TABLE3 = [
     ('Table 3, 1.7B decode', ['F_1p7B_decode_abs_J', 'F_1p7B_decode_operative_J', 'F_1p7B_decode_cmp_J',
                               'P1-B5-FN-1p7B-decode'],
-     '| Qwen3-1.7B | decode | {r53:up} | {r550:up} | {r53:up} | {r543:n} / {r548:n} |'),
+     '| Qwen3-1.7B | decode | {r53:up} | {r550:up} | {r53:up} | {r793:up} | {r543:n} / {r548:n} |'),
     ('Table 3, 1.7B prefill', ['F_1p7B_prefill_p2048_abs_J', 'F_1p7B_prefill_p2048_operative_J',
                                'F_1p7B_prefill_p2048_cmp_J', 'P1-B5-FN-1p7B-prefill'],
-     '| Qwen3-1.7B | prefill (2,048) | {r56:up} | {r566:up} | {r56:up} | {r559:n} / {r564:n} |'),
+     '| Qwen3-1.7B | prefill (2,048) | {r56:up} | {r566:up} | {r56:up} | {r793:up} | {r559:n} / {r564:n} |'),
     ('Table 3, 8B decode', ['F_8B_decode_abs_J', 'F_8B_decode_operative_J', 'F_8B_decode_cmp_J', 'P1-B5-FN-8B-decode'],
-     '| Qwen3-8B | decode | {r290:up} | {r582:up} | {r54:up} | {r575:n} / {r580:n} |'),
+     '| Qwen3-8B | decode | {r290:up} | {r582:up} | {r54:up} | {r802:up} | {r575:n} / {r580:n} |'),
     ('Table 3, 8B prefill', ['F_8B_prefill_p2048_abs_J', 'F_8B_prefill_p2048_operative_J', 'F_8B_prefill_p2048_cmp_J',
                              'P1-B5-FN-8B-prefill'],
-     '| Qwen3-8B | prefill (2,048) | {r293:up} | {r598:up} | {r57:up} | {r591:n} / {r596:n} |'),
+     '| Qwen3-8B | prefill (2,048) | {r293:up} | {r598:up} | {r57:up} | {r802:up} | {r591:n} / {r596:n} |'),
 ]
 
 # --- Section 6.4: Table 4 (R = corner / point; TERM_B = corner = numerator_j, TERM_A = point = denominator_j)
-DOM = [  # (label, cell token, R abs rows (R, num, den), R cmp rows, R_cm row; RL-55: 1846 is the five-decimal row)
-    ('1.7B decode', '1p7B_decode', (540, 541, 542), (545, 546, 547), 276),
-    ('1.7B prefill', '1p7B_prefill_p2048', (556, 557, 558), (561, 562, 563), 1846),
-    ('8B decode', '8B_decode', (572, 573, 574), (577, 578, 579), 278),
-    ('8B prefill', '8B_prefill_p2048', (588, 589, 590), (593, 594, 595), 279),
+DOM = [  # (label, cell token, R abs rows (R, num, den, n), R cmp rows, R_cm rows; RL-55: 1846 is the five-decimal R_cm)
+    ('1.7B decode', '1p7B_decode', (540, 541, 542, 543), (545, 546, 547, 548), (276, 551, 552, 553)),
+    ('1.7B prefill', '1p7B_prefill_p2048', (556, 557, 558, 559), (561, 562, 563, 564), (1846, 567, 568, 569)),
+    ('8B decode', '8B_decode', (572, 573, 574, 575), (577, 578, 579, 580), (278, 583, 584, 585)),
+    ('8B prefill', '8B_prefill_p2048', (588, 589, 590, 591), (593, 594, 595, 596), (279, 599, 600, 601)),
 ]
+
+
+def _term(n: int) -> str:
+    return f'{{r{n}:ledger}}' if n in FORCED_LEDGER else f'{{r{n}:e}}'
+
+
 TABLE4 = []
-for _label, _tok, (_ra, _na, _da), (_rc, _nc, _dc), _rcm in DOM:
+for _label, _tok, (_ra, _na, _da, _nn), (_rc, _nc, _dc, _cn), (_rcm, _mn, _md, _mnn) in DOM:
     _model = 'Qwen3-1.7B' if _tok.startswith('1p7B') else 'Qwen3-8B'
     _phase = 'decode' if 'decode' in _tok else 'prefill (2,048)'
     _ids = [f'R_{_tok}_abs', f'TERM_B_{_tok}_abs_J', f'TERM_A_{_tok}_abs_J', f'R_{_tok}_cmp', f'TERM_B_{_tok}_cmp_J',
             f'TERM_A_{_tok}_cmp_J', f'R_cm_{_tok}_cmp']
     TABLE4.append((f'Table 4, {_label}', _ids,
-                   f'| {_model} | {_phase} | {{r{_ra}:R}} ({{r{_na}:up}} ÷ {{r{_da}:up}}) | '
-                   f'{{r{_rc}:R}} ({{r{_nc}:up}} ÷ {{r{_dc}:up}}) | {{r{_rcm}:R}} |'))
+                   f'| {_model} | {_phase} | {{r{_ra}:R}} ({_term(_na)} ÷ {_term(_da)}), n = {{r{_nn}:n}} | '
+                   f'{{r{_rc}:R}} ({_term(_nc)} ÷ {_term(_dc)}), n = {{r{_cn}:n}} | '
+                   f'{{r{_rcm}:R}} ({_term(_mn)} ÷ {_term(_md)}), n = {{r{_mnn}:n}} |'))
 
+FLOOR_CLASS = (
+    'All four published floors of Table 3, which are the arm gates of the two contrasts, are attribution-limited: '
+    'each one\'s issued floor class is `{r869:id}`, with floor source `{r870:id}`, the clock-anchor timing bound. Their '
+    'repeatability-only floors are the point floors that Table 4 gives as denominators; with the small-sample guard, '
+    'the absolute forms lie between {r284:lo} and {r285:hi} J.')
+TABLE3_CAPTION = (
+    '*Table 3. Detection floors, primary block, M3 Max / MLX / powermetrics SoC rails (Section 4.5). Each absolute and '
+    'comparative value includes its small-sample guard where n < 10, followed by the floor session\'s whole gross '
+    'drift allowance; the operative column is the larger of those drift-widened values. The allowance is each floor '
+    'session\'s own drift allowance from its reference requests (Section 4.7, Table S6), and the guarded value of '
+    'each form is the tabulated value less that allowance. A floor is a property of this machine, stack, boundary and '
+    'session; it does not rank hardware or validate absolute scale. ' + D177 + '*')
+TABLE4_CAPTION = (
+    '*Table 4. Dominance ratios, primary block, M3 Max / MLX / powermetrics SoC rails, each over the kept units, with '
+    'its numerator, denominator (J) and n. Point diagnostic; no interval. Each ratio is computed from the unrounded '
+    'terms; the terms print to nearest, and the 1.7B prefill R_cm terms at the ledger\'s precision, because rounded '
+    'they would divide to a value above the threshold while the ratio is below it. "Independent" in the registered name refers to the '
+    'independent-corner box, not to statistical independence; the twelve values share runs and are correlated. An '
+    'absolute R_cm is not defined by the registered replay. ' + D177 + '*')
 DOM_FAILED = (
     'Timing attribution did not at least double every detection floor. The components where it did not are the '
-    'comparative common-mode replays: R_cm = {r843:R} for 1.7B decode ({r844:up} ÷ {r845:up} J, n = {r846:n}), '
-    'R_cm = {r1846:R} for 1.7B prefill ({r849:up} ÷ {r850:up} J, n = {r851:n}) and R_cm = {r853:R} for 8B decode '
-    '({r854:up} ÷ {r855:up} J, n = {r856:n}).')
+    'comparative common-mode replays: R_cm = {r843:R} for 1.7B decode ({r844:e} ÷ {r845:e} J, n = {r846:n}), '
+    'R_cm = {r1846:R} for 1.7B prefill ({r849:ledger} ÷ {r850:ledger} J, n = {r851:n}) and R_cm = {r853:R} for 8B '
+    'decode ({r854:e} ÷ {r855:e} J, n = {r856:n}).')
 
 # --- Section 6.5
 TABLE5 = [
     ('Table 5, decode', ['E_decode_contrast_signed_J_per_request', 'P1-B5-CTR-decode-METRO', 'E_decode_contrast_lower_J',
                          'E_decode_contrast_upper_J', 'F_claim_decode_armwise_max_J', 'P1-B5-CTR-decode-PADJ',
                          'P1-B5-CTR-decode-OUTCOME', 'P1-B5-CTR-decode-LEVEL'],
-     '| decode | {r11:n} | {r15:e} | [{r36:lo}, {r37:hi}] | [{r48:lo}, {r49:hi}] | {r52:up} | {r60:p} | {r530:w} | '
+     '| decode | {r11:n} of {r12:n} | {r15:e} | [{r36:lo}, {r37:hi}] | [{r48:lo}, {r49:hi}] | {r52:up} | {r60:p} | {r530:w} | '
      '{r532:id} |'),
     ('Table 5, prefill', ['E_prefill_p2048_contrast_signed_J_per_request', 'P1-B5-CTR-prefill-METRO',
                           'E_prefill_p2048_contrast_lower_J', 'E_prefill_p2048_contrast_upper_J',
                           'F_claim_prefill_p2048_armwise_max_J', 'P1-B5-CTR-prefill-PADJ',
                           'P1-B5-CTR-prefill-OUTCOME', 'P1-B5-CTR-prefill-LEVEL'],
-     '| prefill (2,048) | {r13:n} | {r16:e} | [{r38:lo}, {r39:hi}] | [{r50:lo}, {r51:hi}] | {r55:up} | {r61:p} | '
+     '| prefill (2,048) | {r13:n} of {r14:n} | {r16:e} | [{r38:lo}, {r39:hi}] | [{r50:lo}, {r51:hi}] | {r55:up} | {r61:p} | '
      '{r533:w} | {r535:id} |'),
 ]
 LABEL_T5 = ['recorded output', 'collection-time records']
@@ -621,7 +843,7 @@ XWIN = (
     '{r1058:id} by {r1054:e} J, more than their within-session intervals cover; the reported intervals understate '
     'between-session variation, which includes different interleaving and thermal history. For 8B prefill, they '
     '{r1100:id} within their within-session intervals (difference {r1096:e} J). Each difference is the contrast '
-    'session\'s mean minus the floor session\'s cell, Δ = G − F. ' + D177)
+    'session\'s mean minus the floor session\'s cell, Δ = G − F (Appendix C, Cross-window agree/differ). ' + D177)
 
 NEG8_TEXT = (
     'Each analysed session\'s drift screen passed on both energy families (Table S6), and its reference and corpus '
@@ -647,7 +869,7 @@ TABLE_S6 = '\n'.join([
     'screen statistic is the difference between the end and start reference means; the screen passes when it is at '
     'most the bound, which is the larger of its envelope and prediction terms. The allowance is the larger of the '
     'bound and the largest excursion of the start, midpoint and end references. Terms, bounds, excursions and '
-    'allowances are rounded up, the statistic to nearest. ' + D177 + '*',
+    'allowances are rounded up, the statistic to nearest.*',
 ])
 TABLE_S7 = '\n'.join([
     cells('', '1.7B floor session', '8B floor session', 'Contrast session'),
@@ -738,9 +960,11 @@ TABLE_S8 = '\n'.join([
 ])
 
 # --- Section 11: branch 9.D (CP-X02-conclusion), branch B sentence with the failing components named
-CONCLUSION_9D = ('Timing attribution at least doubled the detection floor for some components and not others (not '
-                 'for the common-mode replays R_cm of 1.7B decode, 1.7B prefill and 8B decode), so neither timing nor '
-                 'repeatability alone limits these measurements.')
+CONCLUSION_9D = ('Allowing each value to move within its registered timing uncertainty at least doubled the detection '
+                 'floor in all eight independent-corner ratios, and did not in three of the four shared-sign replays '
+                 '(1.7B decode, 1.7B prefill, 8B decode). The registered condition for stating that timing attribution '
+                 'dominates the detection floor is therefore not met, and we make no statement about which source '
+                 'limits these measurements.')
 
 # --- first-fill prose, re-rounded under RL-52
 PROSE = [
@@ -761,7 +985,7 @@ PROSE = [
      'and {r237:asis} times in prefill, from the independent recomputation only), so a background process at a fixed '
      'rate overlaps 8B requests more often. This reading is not established.', [LBL_RECOMP]),
     ('Section 6.5, branch 5.5.1, decode', ['P1-B5-CTR-PHASE', 'P1-B5-CTR-DBAR', 'P1-B5-CTR-DI', 'P1-B5-CTR-GATE'],
-     'On this stack and boundary, the 8B model\'s decode phase used more gross processor-rail energy per request than '
+     'On M3 Max / MLX / powermetrics SoC rails, the 8B model\'s decode phase used more gross processor-rail energy per request than '
      'the 1.7B model\'s, by {r15:e} J (decision interval [{r48:lo}, {r49:hi}] J, whose statistical part is the '
      'within-session 95% interval [{r36:lo}, {r37:hi}] J). The estimate exceeds the floor gate of {r52:up} J, both '
      'intervals exclude zero, Holm\'s correction rejects, and leaving out any one quad changes none of these. This is '
@@ -769,7 +993,7 @@ PROSE = [
      'this machine, from one session in which {r11:n} of {r12:n} planned quads were kept. ' + D177,
      ['registered claim gate']),
     ('Section 6.5, branch 5.5.1, prefill', ['P1-B5-CTR-PHASE', 'P1-B5-CTR-DBAR', 'P1-B5-CTR-DI', 'P1-B5-CTR-GATE'],
-     'On this stack and boundary, the 8B model\'s 2,048-token prefill phase used more gross processor-rail energy per '
+     'On M3 Max / MLX / powermetrics SoC rails, the 8B model\'s 2,048-token prefill phase used more gross processor-rail energy per '
      'request than the 1.7B model\'s, by {r16:e} J (decision interval [{r50:lo}, {r51:hi}] J, whose statistical part '
      'is the within-session 95% interval [{r38:lo}, {r39:hi}] J). The estimate exceeds the floor gate of {r55:up} J, '
      'both intervals exclude zero, Holm\'s correction rejects, and leaving out any one quad changes none of these. '
@@ -780,16 +1004,16 @@ PROSE = [
      '**Leave-one-quad-out.** Decode: no single quad changes the verdict; the {r62:n} leave-one-out estimates run '
      'from {r63:lo} to {r64:hi} J. Prefill: no single quad changes the verdict; the {r65:n} leave-one-out estimates '
      'run from {r67:lo} to {r68:hi} J, each over {r66:n} quads, one fewer than the cell minimum of {r505:n}; the '
-     'registered check recomputes the contrast on the remaining quads and does not re-apply that minimum.', []),
+     'registered check recomputes the contrast on the remaining quads and does not re-apply that minimum. ' + D177, []),
     ('Section 6.5, decision interval against the floor', ['P1-B5-CTR-DIFLOOR'],
      '**Decision interval against the floor.** In both contrasts the near end of the decision interval lies beyond '
      'the floor gate: {r48:lo} J against {r52:up} J for decode, and {r50:lo} J against {r55:up} J for 2,048-token '
-     'prefill.', []),
+     'prefill. ' + D177, []),
     ('Section 6.5, descriptive ratios and per-token differences',
      ['P1-B5-RATIO-decode', 'P1-B5-RATIO-prefill', 'P1-B5-PERTOK-decode', 'P1-B5-PERTOK-prefill'],
      'The 8B-to-1.7B ratio of phase energies was {r114:mr} (the geometric mean over kept quads of the per-quad ratio; '
      't interval [{r115:mrlo}, {r116:mrhi}]) for decode and {r117:mr} (same quantity; t interval [{r118:mrlo}, '
-     '{r119:mrhi}]) for 2,048-token prefill. Per token, the difference was {r120:tok} (metrology interval '
+     '{r119:mrhi}]) for 2,048-token prefill; recorded timing bounds are not propagated into these t intervals. Per token, the difference was {r120:tok} (metrology interval '
      '[{r124:toklo}, {r125:tokhi}]; decision interval [{r128:toklo}, {r129:tokhi}]) J per output token and '
      '{r122:tok} (metrology interval [{r126:toklo}, {r127:tokhi}]; decision interval [{r130:toklo}, {r131:tokhi}]) J '
      'per prompt token.', []),
@@ -834,6 +1058,11 @@ SITES.append(('Section 6.6, monitor cost', ['P1-B5-MONITOR'], MONITOR, 1, [LBL_S
 SITES.append(('Section 6.7, primary-block recomputation (RL-4 vii)', ['P1-RECOMPUTE-SUMMARY'], RECOMPUTE_B5, 1, []))
 SITES.append(('Table S8, comparator families', [], TABLE_S8, 1, []))
 SITES.append(('Section 11, branch 9.D', ['CP-X02-conclusion'], CONCLUSION_9D, 1, []))
+SITES.append(('Section 5.1, identities (RL-60 (5))', ['CP-X01-identity'], '({c:identity})', 1, []))
+SITES.append(('Section 5.1, prefill length record (RL-60 (5))', ['CP-X01-length'], '({c:length})', 1, []))
+SITES.append(('Section 6.3, floor class (RL-66 F07)', [], FLOOR_CLASS, 1, []))
+SITES.append(('Table 3 caption (RL-60 (4))', [], TABLE3_CAPTION, 1, []))
+SITES.append(('Table 4 caption (RL-60 (2))', [], TABLE4_CAPTION, 1, []))
 
 # A print-labelled row in a table cell carries its label in the table note (RL-42), which is its own site.
 LABEL_SITE = {'Table 5, decode': 'Table 5 caption, claim level (RL-41 b)',
@@ -849,7 +1078,7 @@ DELETED_WITH_BRANCH = ['P1-B5-NOPACK', 'P1-B5-NOPACK-REASON', 'P1-B5-CELL-REFUSE
 DROPPED = ['P1-B5-B-SHARE']  # RL-52 (5): dropped with its sentence
 
 # Block 5 ids left as placeholders (reasons in the run report), and the new Block 6 half of the recompute summary.
-PENDING = ['P1-ABS-PART1', 'CP-X01-identity', 'CP-X01-length', 'CP-X08-decode-a-conclusion',
+PENDING = ['P1-ABS-PART1', 'CP-X08-decode-a-conclusion',
            'P1-RECOMPUTE-SUMMARY-B6']
 
 GONE = ['[BRANCH 5.1.a', '[END BRANCH 5.1]', '[BRANCH 5.2.a', '[END BRANCH 5.2]', '[BRANCH 5.4.A', '[END BRANCH 5.4.A]',
@@ -889,11 +1118,11 @@ def check_formats() -> None:
             if f == 'R' and not (re.fullmatch(r'\d+\.\d{4}', val(n)) or (n == 1846 and val(n) == '1.99975')):
                 fail(f'row {n}: an R or R_cm prints at four decimals as issued (1.99975 excepted), found {val(n)}')
             if f in ROUNDERS and is_tie(dec(n), f):
-                NOTES.append(f'row {n}: {val(n)} is an exact tie under {f!r}; rounded half away from zero')
+                NOTES.append(f'row {n}: {val(n)} is an exact tie under {f!r}; printed with the ledger digits (RL-60 (3))')
 
 
 def check_literals(name: str, template: str) -> None:
-    literal = AP.sub('', FILL_RE.sub('', PH.sub('', template)))
+    literal = CP.sub('', AP.sub('', FILL_RE.sub('', PH.sub('', template))))
     for pat in ALLOWED_LITERALS:
         literal = re.sub(pat, '', literal)
     if re.search(r'\d', literal):
@@ -913,7 +1142,8 @@ def verify_allowed_literals() -> None:
 
 
 def rendered(template: str) -> str:
-    t = AP.sub(lambda m: render_attempt(m.group(1)), template)
+    t = CP.sub(lambda m: render_committed(m.group(1)), template)
+    t = AP.sub(lambda m: render_attempt(m.group(1)), t)
     return PH.sub(lambda m: render_value(int(m.group(1)), m.group(2)), t)
 
 
@@ -1027,6 +1257,9 @@ def comparisons(v) -> list[tuple[str, bool]]:
         out.append((f'R row {r}: printed corner/point on the same side of 2', (v(nu) / v(de) >= two) == (v(r) >= two)))
     for r, below in [(276, True), (1846, True), (278, True), (279, False)]:
         out.append((f'R_cm row {r} {"below" if below else "at least"} 2', (v(r) < two) == below))
+    for r, nu, de, below in [(276, 551, 552, True), (1846, 567, 568, True), (278, 583, 584, True), (279, 599, 600, False)]:
+        out.append((f'Table 4 R_cm row {r}: printed numerator/denominator on the side of 2 of the ratio',
+                    (v(nu) / v(de) < two) == below))
     for r, nu, de in [(843, 844, 845), (1846, 849, 850), (853, 854, 855)]:
         out.append((f'failed R_cm row {r}: printed numerator/denominator below 2', v(nu) / v(de) < two))
     # Table S5: the smallest first-kind bound does not exceed the attribution floor
@@ -1071,6 +1304,11 @@ def check_comparisons() -> None:
     for label, ok in comparisons(printed):
         if not ok:
             fail(f'stated comparison flips on the printed (rounded) values: {label}; print at ledger precision')
+
+    def rounded_anyway(n: int) -> Decimal:
+        return quantize(dec(n), 'e') if n in FORCED_LEDGER else printed(n)
+    if FORCED_LEDGER and all(ok for _, ok in comparisons(rounded_anyway)):
+        fail('FORCED_LEDGER: no comparison would flip if its rows were rounded; print them by the rule')
 
 
 # ---------------------------------------------------------------- branch derivations
@@ -1276,11 +1514,14 @@ def main(argv=()) -> int:
             paper = PAPER.read_text()
         check_sites(paper)
         check_placeholders(paper)
+        check_appendix_c(paper)
     check_formats()
     check_f4_pairing()
     verify_allowed_literals()
     check_comparisons()
     check_floor_roles()
+    check_table3_identity()
+    check_floor_class()
     check_branches()
     for note in NOTES:
         print('note: ' + note)
