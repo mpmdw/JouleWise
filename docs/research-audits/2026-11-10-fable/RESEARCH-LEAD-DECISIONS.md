@@ -638,13 +638,148 @@ corrections, then restructure, then fill.
 
 ---
 
+# Decision request 5: Block 6 §17 decisions, PR #710, D-01, and the PR #709 points (2026-11-10 20:07 PST)
+
+## RL-25. Block 6 §17: the audit's decisions 7, 8 and 9, the drafter's flags, and PR #710
+
+Read: `docs/registrations/block6_s17_entries_DRAFT_2026-11-10.md`, the DLE-6 to DLE-10 text and the registry
+addendum on `docs/2026-11-10-paper1-b6-dev` @ `fc9f60242`; registration §9.5, §10 to §12.
+
+Every ruling here carries the label **"decided after Block 5 outcomes were known"**, as RL-6 (b) requires.
+I have seen Block 5's released per-phase whole-machine values and its scaled-allowance line
+(`RESULTS.md` §4.4, §4.5). The choices below rest on the registered text and on which program computes what.
+None was made by looking at what a value would favour.
+
+**One principle for all three decisions.** Where the Block 5 release's pinned program already computes a
+quantity, Block 6 uses that program's rule, found by reading its code, and no Block 5 number is computed anew.
+That is item 37's "block 5's registered arithmetic unchanged" applied to the labelled lines. Where no Block 5
+rule exists, the registered text decides, and where it is silent the line is not added.
+
+**Decision 7 (R8, slot S-15).**
+
+- *First sentence.* It stays the default, with its source made exact. Registration §9.5 item 5 says the
+  definition "is the one committed for block 5". That is the per-phase whole-machine computation the Block 5
+  release executed, in `scripts/independent_recompute_b5.py` at the release-pinned digest. DESIGN §8 is entered
+  as its written statement. Where the two differ, the pinned code governs and the entry lists each difference.
+- *7a: single implementation* (7a-i). The line prints with the label "single implementation; not independently
+  recomputed". If a second producer is ever added, it enters as a tooling entry and the line is then compared.
+- *7b: neither option as written.* Block 5's side of §10 for this quantity is the value its own release
+  produced, which exists. This holds on one condition, settled by structure before any Block 6 number is read:
+  Block 6's line is produced by the same pinned Block 5 function. If that function cannot produce Block 6's
+  line unchanged, 7b-ii applies and §10 prints "block 5: not computed" for this quantity. 7b-i is refused: no
+  Block 5 number is computed by Block 6 code.
+
+**Decision 8 (R9).**
+
+- *8a: estimator-1 weights* (8a-i). The registered sentence names "the cell's estimator-1 mean", and the same
+  weights form E and the cell's bound B. Where the plain-mean factor would differ (a cell with unequal losses),
+  it prints beside the registered one, labelled.
+- *8b: stated exactly* (8b-i): E_ref and T_ref are the means of the start, midpoint and end references'
+  request energy and length. This is a clarification to what both programs do; no alternative prints.
+- *8c: out* (8c-ii). The J6 line is not among §9.5's eight labelled lines. A line is not added to a
+  registration after the block it replicates was unsealed. If an optional L9 audit run prints it, it stays in
+  that run's output.
+- *8d: the label.* "Block 5's floors were formed under its own calibration acceptance (minimum bracket
+  allowance 14.531 ms) and Block 6's under its own (10.818 ms). The difference, up to 3.713 ms of timing bound
+  and up to 0.175 J of floor by the registration's sizing, comes from the registered rule and not from the
+  machine. The summary over Block 6 sessions alone is printed beside the summary over all sessions." It sits on
+  every §10 row whose quantity contains the operative timing bound: floors, attribution floors, the bound B,
+  D, intervals, decision intervals and floor gates.
+
+**Decision 9 (R11).**
+
+- *9a: `desk_compress.read_bytes`.* The `zstd` binary, streamed, with each file's decompressed SHA-256 checked
+  against the desk-compression record before a byte is parsed. A missing binary or a digest mismatch is a STOP.
+  The binary's path and version go in the run record. Not `compression.zstd`: it needs Python 3.14 and would
+  change the interpreter under every number. Not an in-place restore: it was exercised only on synthetic trees
+  and needs the disk a streamed read does not.
+- *9b: the Air* (9b-i), from a custody copy verified against the archive's `SHA256SUMS`. The MBP stays with the
+  magistrate.
+
+**The drafter's flags.**
+
+1. *Signing statement.* Confirmed in substance, reworded for the entries: "Signed blind to Block 6: neither the
+   signer nor the drafter has seen a Block 6 energy, floor, ratio, contrast or outcome word. Not blind to
+   Block 5, whose released outcome words and numbers both have seen. Entry texts marked 'drafted pre-unseal'
+   are quoted from texts dated 2026-11-06 and 2026-11-07."
+2. *R0's deadline.* Yes. R0's deadline clause reads: "The audit's deadline, before the Block 5 unseal, was not
+   met. These entries are made after it, under §12.4, which allows entries until the Block 6 release. Decided
+   after Block 5 outcomes were known."
+3. *Later entries.* The second half of the audit's decision 3 governs from the day this set is entered: only
+   an entry that fixes a tooling defect and chooses no rule, labelled as such. Anything else needs a
+   research-lead ruling, carries "decided after Block 5 outcomes were known", and prints the alternative where
+   a number changes.
+4. *The DLE-10 sentence.* "A replication of this experiment in nine further sessions on later days (Block 6)
+   was registered before any Block 5 number was seen and has been collected. Its results are sealed and are not
+   yet released." On a slide: "Replication collected (nine sessions, registered blind); not yet released."
+5. *One deviation line for the late entries.* R0, with flag 2's clause, is that line. No separate entry. Paper
+   1's deviation list names it.
+6. *R1's audit wording.* Under option (c) the L9 audit is optional. "The audit run" in RL-6 (b) means the
+   registered second side of option (c). Whether an L9 audit is run is decided and recorded before the blind
+   dry run; if one is started, the release holds until it finishes.
+
+**PR #710, for gate-ledger row 4: ADMIT, with these edits.** Apply the rulings above to the §17 draft and
+update its status words. Replace DLE-10's "The required sentence" paragraph with flag 4's wording. Append to
+DLE-6 the scope lines of RL-27 (1) and (2). The quotations I checked against my own text are exact. The Sol
+refuter then checks the §17 draft as amended.
+
+**Reason.** These were the choices the pre-unseal audit left open, so no pre-unseal text can settle them. The
+principle keeps them from becoming a second analysis of Block 5.
+
+**Blind status.** Blind to Block 6: nothing of it has been read. Not blind to Block 5, including the two
+lines these decisions touch.
+
+## RL-26. D-01: binding `scripts/zero_ntp_frequency.c` in the registration receipt: RATIFIED
+
+**Ruling.** The edit to `joulewise/align/apple/v4_registration.py` (`_NAMED_ARTIFACTS`) and to the receipt
+template on `ops/2026-11-10-w1-reliability` is ratified. It gets a deviation-log row before the W1 STRICT
+re-registration, saying that the seat's scope excluded registration code and that the change was ratified
+here. Two conditions for the arm side, not for the receipt: the arm record carries the SHA-256 of the
+installed helper binary beside the bound source digest, since the receipt binds the source and root runs the
+binary; and it carries the frequency word read before t0.
+
+**Reason.** A root helper that changes the measurement host's clock state before a window belongs in the
+receipt's closure. Leaving it out to honour a scope note would make the registration less complete. The helper
+takes no input, changes one kernel word to the value every passing arm had, and reads it back.
+
+**Blind status.** Blind: no v4 data exists. I read the diff and the helper's source.
+
+## RL-27. What RL-3 covers, site builds, RESULTS.md's stale sections, and the tripwire plans
+
+From the PR #709 cold review, as the lead summarised it; I did not open the review record.
+
+1. **RL-3 is a quality gate, not a secrecy gate.** The repository is public, and `RESULTS.md` and `RUN_STATE.md`
+   item 232 have carried the Block 5 numbers since 2026-11-08. "Any public page" in RL-3 means a presentation
+   of Block 5 numbers as results to a reader: the paper, slides, the site, and the status pages (`README.md`,
+   `PROJECT_STATUS.md`, `CLAIMS_STATUS.md`, the advisor status site). It does not mean the repository's working
+   records: `RUN_STATE.md`, `RESULTS.md`, audits, the deviation and decision logs, review records. Those may
+   carry the numbers, naming their source. RL-3's word "internal" is replaced by "working records".
+2. **Site builds are held** until RL-3's gate passes: no `build_site.py`, capsule or report build is published,
+   and Pages is not enabled. The hold goes in `CANONICAL.md` beside the site row.
+3. **`RESULTS.md` stays byte-identical.** Its §6 and §8 are historical as to gates. `CANONICAL.md` says so in its
+   row for the file: gate 1 is closed by RL-2 (DLE-7), gate 2 by item 256, gate 3 by RL-3 (DLE-6), gate 4 by
+   RL-6 (e) (DLE-10).
+4. **The tripwire plans.** Under item 256 no tripwire manuscript is in production. `PAPER-PLAN-v2.md` and
+   `PAPER-OUTLINE.md` are superseded as manuscript plans and kept as the source register and evidence ledger
+   for Paper 1's outlook and for the talk. Their Block 5 exclusion is neither in force nor reversed; it is
+   historical. Block 5 numbers are placed in Paper 1 only (RL-2), and on slides under RL-10. A later tripwire
+   or v4 manuscript needs its own placement ruling. One header note on each file says this; the lines are not
+   edited one by one. This amends RL-1 item 3, which said the exclusion "is superseded by item 232".
+
+**Reason.** A gate that pretends a public repository is private would be false on its face. What it can and
+should control is what we present as a result.
+
+**Blind status.** Not blind to Block 5. Procedural.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
 |---|---|
 | Delta check of the four RL-22 fixes to the claim-contract branch | The fix commit |
 | Review of the built R1 G0 branch before the re-arm, including the held δ_slow value and the NR-1 question (RL-23) | The branch, and leave to read `docs/process_traces/2026-11-10-r1-g0/` |
-| Block 6 audit decisions 7, 8 and 9 (RL-24 seat 5) | The draft, 12 Nov |
+| Second look at the Block 6 §17 draft after the Sol refuter, and at the structural answer to RL-25's 7b condition | The refuter's report, 14 Nov |
 | A ruling on continuing or restarting if two consecutive, or three, U1-U3 FAIL bars occur in the series (RL-20) | The event |
 | Review the drafted Block 6 §17 entries (RL-6 (b)), including the audit's decisions 7, 8 and 9, which have no pre-unseal recommendation | The lead's draft |
 | Any custody change that moves BYTES keys to the Air | A proposal from the lead, if Ed wants Paper 1 off the MBP entirely |
