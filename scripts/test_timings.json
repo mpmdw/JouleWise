@@ -774,7 +774,6 @@
     "tests.test_window_lineage": 52.155,
     "tests.test_window_lineage_idempotent": 1.184,
     "tests.test_window_state": 1.7,
-    "tests.test_window_status_guard": 0.94,
     "tests.test_workload_profile": 0.003,
     "tests.test_workload_sizing": 0.001,
     "tests.test_workloads": 0.034,
