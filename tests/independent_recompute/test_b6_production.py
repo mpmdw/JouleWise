@@ -1,6 +1,7 @@
 """RL-24 seat 7: synthetic-only production, 7b and authenticated zstd witnesses."""
 import contextlib
 import copy
+from dataclasses import replace
 import hashlib
 import io
 import json
@@ -99,8 +100,6 @@ class Production(unittest.TestCase):
         quantities = b6.session_quantities(result)
         labels = {"boundary", "implementation", "request_assisted_members", "request_assisted_count"}
         for cid, line in result["lines"].items():
-            if "p42" in cid:
-                continue
             with self.subTest(cell=cid):
                 printed, expected = line["whole_machine"], cells[cid]
                 # B6 replaces the boundary sentence and adds three labels;
@@ -109,8 +108,9 @@ class Production(unittest.TestCase):
                                  {k: v for k, v in expected.items() if k not in labels})
                 self.assertEqual(len(printed["edge_shift_sensitivity"]["corners"]), 4)
                 self.assertEqual(printed["boundary"], b6.PHASE_BOUNDARY)
-                key = "lines/whole_machine/" + b6.tag_of(b6.MODELS[session.pack]) + "/" + b6.contrast_key(cid) + "/mean_j"
-                self.assertEqual(quantities[key], expected["mean_j"])
+                if "p42" not in cid:
+                    key = "lines/whole_machine/" + b6.tag_of(b6.MODELS[session.pack]) + "/" + b6.contrast_key(cid) + "/mean_j"
+                    self.assertEqual(quantities[key], expected["mean_j"])
         self.assertNotEqual(cells["df-ph-decode-qwen3-1p7b"]["mean_j"],
                             cells["df-ph-prefill-p2048-qwen3-1p7b"]["mean_j"])
 
@@ -125,6 +125,27 @@ class Production(unittest.TestCase):
         self.assertFalse(output["block"]["option_c"]["pass"])
         self.assertEqual(len(output["block"]["option_c"]["failures"]), 1)
         self.assertFalse(output["block"]["option_c"]["comparator"]["pass"])
+        self.assertIn("option_c_disagrees", {f["code"] for f in output["flags"]})
+        self.assertTrue(json.loads(public)["comparison_stopped"])
+        self.assertEqual(rc, 3)
+
+    def test_option_c_checker_only_disagreement_stops_with_exit_three(self):
+        from joulewise.b6_analysis_check import harvest
+        original = harvest.anchor_envelope
+        deltas = iter([.01])
+        def changed_bound(*args):
+            envelope = original(*args)
+            # Only harvest_bound consumes this field; the comparison table
+            # contains phase energies, which remain unchanged.
+            return replace(envelope, max_abs_delta_j=envelope.max_abs_delta_j + next(deltas, 0.))
+        with mock.patch.object(harvest, "anchor_envelope", side_effect=changed_bound):
+            rc, numbers, public, _, _ = self.execute(1)
+        output = json.loads(numbers)
+        checks = output["block"]["option_c"]
+        self.assertTrue(checks["comparator"]["pass"])
+        self.assertEqual(len(checks["failures"]), 1)
+        self.assertTrue(checks["failures"][0].startswith("harvest_bound:"), checks["failures"])
+        self.assertFalse(checks["pass"])
         self.assertIn("option_c_disagrees", {f["code"] for f in output["flags"]})
         self.assertTrue(json.loads(public)["comparison_stopped"])
         self.assertEqual(rc, 3)
@@ -239,6 +260,8 @@ class Production(unittest.TestCase):
             inputs.read(directory_alias / "roster.json")
         root_alias = self.root / "synthetic-root-alias"
         root_alias.symlink_to(archive, target_is_directory=True)
+        with self.assertRaisesRegex(InputRefusal, "^input_path_invalid$"):
+            AuthenticatedInputs(root_alias / "derived" / "..", pin)
         with self.assertRaisesRegex(InputRefusal, "input_symlink"):
             AuthenticatedInputs(root_alias, pin)
         ancestor = self.root / "synthetic-ancestor-alias"

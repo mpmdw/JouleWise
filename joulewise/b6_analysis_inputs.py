@@ -32,6 +32,8 @@ def relative(value):
 class AuthenticatedInputs:
     def __init__(self, archive, pin):
         self.supplied_archive = Path(archive).absolute()
+        if ".." in self.supplied_archive.parts:
+            raise InputRefusal("input_path_invalid")
         if self.supplied_archive.is_symlink():
             raise InputRefusal("input_symlink")
         # Ancestors such as macOS /var and /tmp are outside the archive's
