@@ -1068,6 +1068,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 (3) After `chain.exited`: runbook §4 on `20e9edbc4` with `S=/Users/edr/night-align/r1-20261111T014106Z`. Read `r1_result.json` status first. Then network time ON, the Automatic restore, KM003C, stray monitors, uninstall, record, mail Ed. **Before the NEXT arm after that, zero the frequency word again** (network time OFF, then the zero script, then measure the rate).
 (4) The watchdog-v5 fix (PR #707) is still open; install it only after the chain exits.
 
+260. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 22:05 PST: the W1 line is integrated and moved. `align/2026-11-08-v4-r11` is now at `d865d76a3`. Research lead RL-35 sets the registration and arm gates.**
+- **The line carries:**
+  - claim contract B (RL-28): K confirmatory, S with an equivalence margin, randomized sabotage slots, T4/T5 reserves, U3 at N=24, series freeze after C1;
+  - the Fable-admitted W1 reliability work: A-01/A-02 fault reporting and delivery, KM003C gating, a production HostLock preflight, host-state restores on every terminal path, the kernel NTP frequency-word preflight (zero or refuse) with helper digest and pre-t0 read, and the D-02..D-06 and R5-1/R5-2 fixes;
+  - the watchdog port: named holds with immediate notice and dwell bound, heartbeat, an off-MBP status export gated outside armed spans, model-rejection hold, and **`--model claude-fable-5-2`** (Ed: Fable 5.2 is the magistrate);
+  - bound-closure additions under RL-29/RL-35, with deviation rows RL29-WATCHDOG-BIND, RL35-DATA-BIND and W06-HOSTLINK.
+  - Reviews: Fable integration review READY; research lead RL-35 (a) yes.
+- **STRICT re-registration is gated on:**
+  (1) the four inputs, `u3_bar.json`, `w1_plan.json`, `wp19_receipt.json` and `r1_soak_reference.json`, with R1's slots entering under RL-32's conditions (1)-(9) plus **two new ones**:
+    (10) the battery journal shows AC present and not discharging through every slot-feeding segment, the A-B-A legs above all; a failing segment is not used;
+    (11) no agent-presence episode overlaps a slot-feeding segment; an overlapped segment is reported with the slots and goes to the research lead;
+  (2) the RL-35 bindings (done);
+  (3) the W-06 row (done).
+- **The W1 arm is gated on procedure and native checks** (no bound bytes):
+  - the native checks from the Fable review §7/D6/R6/S4: helper provisioning and digest, meter gates, restores on every terminal path, the watchdog dry run against the rendered plan, the launchd status push plus the Air poller/notifier (W-01/W-02), and PREQUAL plus the W1 smoke at the registered head;
+  - **W-03:** before every arm, unload the Air's link monitor or write `armed_until` from the arm notice, and record which;
+  - **W-06:** each arm record carries `pmset -g custom` plus one line saying the host-link services are as in the W06-HOSTLINK row;
+  - **I-05:** the W1 arm records that R1's plists are uninstalled and no R1 chain process is alive;
+  - **F-09:** native check 8 exercises `night/courier.delivery.json`.
+- **Installing the new watchdog** (the Fable 5.2 magistrate) happens only after R1's chain exits. Uninstall R1's plists first, then install from the W1 line. The first `prepare` after that needs the frequency helper provisioned (a sudo step, batched for Ed's visit).
+- **Can wait past the arm:** A-06, A-08, I-02, I-03, I-04 (R1-driver findings) and A-07, A-11, W-04 (cost time, not data; conditional on the Air poller being proven).
+
 259. **Laptop lead (interactive session 41120c85, Opus 5.5), 2026-11-10 21:35 PST: research lead rulings RL-32 (R1) and RL-33 (BYTES stage 1) for the magistrate.** Full text: `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` @ `37c20df92`.
 - **RL-32, R1 at `da3187e6e`:**
   - **δ_slow stays 1.5 °C** (slot S6, citing RL-32; S5 stays 1.0). The RL-23 hold is lifted. At 1.0 °C the fitted release is 907-1,299 s against the 1,200 s cap, so it is not a usable gate. Correction to item 255's disposition: only a 2.0 °C gate can be replayed from a 1.5 °C night, not a 1.0 °C one.
