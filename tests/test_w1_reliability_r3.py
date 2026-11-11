@@ -1,5 +1,6 @@
 """Synthetic frequency-word preflight; no sudo, clock changes or study inputs."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -12,7 +13,7 @@ import unittest
 from unittest import mock
 
 from joulewise import network_time_off
-from joulewise.align.apple import powermode
+from joulewise.align.apple import powermode, v4_registration
 from scripts import align_v4_session as session
 from tests.test_kernel_clock import frequency_probe
 
@@ -63,6 +64,20 @@ class FrequencyPreflightTests(unittest.TestCase):
         self.path = self.root / 'night_plan.json'
         self.path.write_text(json.dumps({'hazard_window': {'thresholds': {'clock': LIMITS}, 'T_stream_max_s': LIMITS['t_stream_max_s']}, 't0_epoch_s': time.time() + 3600}))
         self.state = {'plan_path': str(self.path), 'plan_sha256': session.pilot.h.locator(self.path)['sha256']}
+        # RL-26: synthetic installed bytes and the receipt-bound source pair.
+        source = self.root / 'scripts/zero_ntp_frequency.c'
+        source.parent.mkdir()
+        source.write_bytes((session.ROOT / 'scripts/zero_ntp_frequency.c').read_bytes())
+        receipt = self.root / v4_registration.REGISTRATION / 'registration_receipt.json'
+        receipt.parent.mkdir(parents=True)
+        receipt.write_text(json.dumps({'artifacts': {
+            'scripts/zero_ntp_frequency.c': hashlib.sha256(source.read_bytes()).hexdigest()}}))
+        self.state['source_measurement_root'] = str(self.root)
+        helper = self.root / 'synthetic-helper'
+        helper.write_bytes(b'synthetic installed helper')
+        binary = mock.patch.object(session, 'ZERO_FREQUENCY_ARGV', ('sudo', '-n', str(helper)))
+        binary.start()
+        self.addCleanup(binary.stop)
         env = mock.patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(self.root / 'host')})
         env.start()
         self.addCleanup(env.stop)

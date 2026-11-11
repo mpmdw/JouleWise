@@ -402,6 +402,16 @@ class FakeWorld:
         base = w1.build_files(ROOT)
         for path, raw in {**base, **files}.items():
             write(m, path, raw)
+        # The real preflight records the helper's registered source digest.
+        # Only synthetic registration is admitted by this replay's kit seam.
+        from joulewise.align.apple import v4_registration
+        source_path = Path('scripts/zero_ntp_frequency.c')
+        source_raw = (ROOT / source_path).read_bytes()
+        write(m, source_path, source_raw)
+        receipt_path = Path(v4_registration.REGISTRATION) / 'registration_receipt.json'
+        receipt = json.loads((m / receipt_path).read_bytes()) if (m / receipt_path).exists() else {}
+        receipt.setdefault('artifacts', {})[source_path.as_posix()] = s.sha(source_raw)
+        write(m, receipt_path, receipt)
         write(m, s.MANIFEST, s.candidate())
         # Pending native power/R1 readiness is a labelled fixture seam.
         for directory in (w1.KIT, s.kit_path(name)) if name != 'W1' else (w1.KIT,):
