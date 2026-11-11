@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent seed check of the option-B series manifest (RUN_STATE 251; claim contract B5/B6).
+"""Independent seed check of the option-B series manifest (RUN_STATE 252; claim contract B5/B6).
 
 Standard library only: no JouleWise or scripts import. The allocation is re-derived from the REGISTERED TEXT
 (pilot_protocol_v4.md: the W1 roster table, the seed law, R15, R22-2 / R24 and the claim contract's B5
