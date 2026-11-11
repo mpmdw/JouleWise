@@ -463,6 +463,21 @@ def check_table3_identity() -> None:
         fail('Table 3 allowances disagree with the drift-screen allowances of Table S6')
 
 
+def check_floor_class_denominators() -> None:
+    """RL-70 (2): the four repeatability-only floors of §6.3 are Table 4's absolute-form denominator rows."""
+    t4 = {n: t for n, _, t, _, _ in SITES if n.startswith('Table 4, ')}
+    fc = next(t for n, _, t, _, _ in SITES if n.startswith('Section 6.3, floor class'))
+    cited = re.findall(r'\{r(\d+):e\} J; with the guard|\{r(\d+):e\}', fc)
+    rows = [int(a or b) for a, b in cited]
+    for label, row in zip(('1.7B decode', '1.7B prefill', '8B decode', '8B prefill'), rows):
+        table_row = t4[f'Table 4, {label}']
+        absolute_cell = table_row.split('|')[3]
+        if f'÷ {{r{row}:e}})' not in absolute_cell or not L[row]['key/leaf'].endswith('/absolute].denominator_j'):
+            fail(f'§6.3: repeatability-only floor row {row} is not the absolute denominator of Table 4, {label}')
+    if len(rows) != 4:
+        fail(f'§6.3: expected four repeatability-only floors, found {len(rows)}')
+
+
 def check_floor_class() -> None:
     """RL-66 F07: every issued floor class of the two contrasts is attribution_limited, from the clock-anchor bound."""
     for n in range(869, 885):
@@ -483,7 +498,8 @@ ALLOWED_LITERALS = [
     r'M3 Max / MLX / powermetrics SoC rails', r'Qwen3-1\.7B', r'Qwen3-8B', r'Qwen2\.5-1\.5B', r'1\.7B', r'8B', r'2,048', r'95%',
     r'Table S?\d+', r'Sections? \d+(\.\d+)*( and \d+(\.\d+)*)?', r'DLE-\d', r'\br[34]\b',
     r'configs/analysis/b5/', r'docs/analysis/b5/', r'`p42_status`',
-    r'n < 10', r'\b24\b',             # the number of comparator families in Table S8 (asserted equal to its rows)
+    r'n < 10', r'\b24\b',
+    r'\bat least 2\b', r'\breach 2\b',  # RL-70 (1): the registered dominance threshold (row 275), as words             # the number of comparator families in Table S8 (asserted equal to its rows)
     r'7 November 2026',    # DLE-3 and DLE-4 adoption date (asserted in DEVIATION-LOG.md)
     r'\b0\.2\b',           # the registered "consistent" spread limit (asserted in analysis plan §8)
 ]
@@ -518,7 +534,9 @@ METER = '\n'.join([
     'model\'s member windows: its median, range and interquartile range, and the within-model spread '
     '(max ρ − min ρ) ÷ median ρ. No member window fell outside the hard plausibility band, so none is listed; every '
     'spread is at most 0.2 and is described, as registered, as "consistent". No session was clean ({r528:n} clean '
-    'sessions): no clean session, no central band.',
+    'sessions): no clean session, no central band. A session is clean, for this cross-check, when it carries no '
+    'session-level meter flag and none of its members carries the meter\'s battery-activity flag; the central band '
+    'is set only from the first clean session.',
     '',
     cells('Session', 'Model', 'Member windows', 'Median ρ', 'Range', 'Interquartile range', 'Spread',
           'Outside hard band', 'Word'),
@@ -549,6 +567,8 @@ ATTEMPTS = (
     'analysed are from the registered disclosure record; not independently recomputed. A count of runs is of runs '
     'that succeeded.')
 
+ATTEMPTS_RULE = ('Under the registered rules only the analysed attempt of each pack enters any number; the earlier '
+                 'attempts of the 8B floor pack are listed with the registered cause that made each not claim-usable.')
 ANALYSED = 'The analysed sessions were {a:alpha}, {a:beta} and {a:gamma}, dated in UTC.'
 
 UNITS = {  # (unit_id, stratum, codes, families, stage_ids, positions) per reported cell, in run order
@@ -797,8 +817,9 @@ for _label, _tok, (_ra, _na, _da, _nn), (_rc, _nc, _dc, _cn), (_rcm, _mn, _md, _
 FLOOR_CLASS = (
     'All four published floors of Table 3, which are the arm gates of the two contrasts, are attribution-limited: '
     'each one\'s issued floor class is `{r869:id}`, with floor source `{r870:id}`, the clock-anchor timing bound. Their '
-    'repeatability-only floors are the point floors that Table 4 gives as denominators; with the small-sample guard, '
-    'the absolute forms lie between {r284:lo} and {r285:hi} J.')
+    'repeatability-only floors are the point floors that Table 4 gives as denominators, before the small-sample guard '
+    'and the drift allowance. For the absolute forms, which set all four published floors, these are {r542:e}, '
+    '{r558:e}, {r574:e} and {r590:e} J; with the guard they lie between {r284:lo} and {r285:hi} J.')  # RL-70 (2)
 TABLE3_CAPTION = (
     '*Table 3. Detection floors, primary block, M3 Max / MLX / powermetrics SoC rails (Section 4.5). Each absolute and '
     'comparative value includes its small-sample guard where n < 10, followed by the floor session\'s whole gross '
@@ -813,11 +834,15 @@ TABLE4_CAPTION = (
     'they would divide to a value above the threshold while the ratio is below it. "Independent" in the registered name refers to the '
     'independent-corner box, not to statistical independence; the twelve values share runs and are correlated. An '
     'absolute R_cm is not defined by the registered replay. ' + D177 + '*')
-DOM_FAILED = (
-    'Timing attribution did not at least double every detection floor. The components where it did not are the '
-    'comparative common-mode replays: R_cm = {r843:R} for 1.7B decode ({r844:e} ÷ {r845:e} J, n = {r846:n}), '
-    'R_cm = {r1846:R} for 1.7B prefill ({r849:ledger} ÷ {r850:ledger} J, n = {r851:n}) and R_cm = {r853:R} for 8B '
-    'decode ({r854:e} ÷ {r855:e} J, n = {r856:n}).')
+DOM_FAILED = (  # RL-70 (1), verbatim
+    'Timing movement did not at least double every detection floor. All eight independent-corner ratios R are at '
+    'least 2. Three of the four shared-sign replays are not: R_cm = {r843:R} for 1.7B decode ({r844:e} ÷ {r845:e} J, '
+    'n = {r846:n}), R_cm = {r1846:R} for 1.7B prefill ({r849:ledger} ÷ {r850:ledger} J, n = {r851:n}) and '
+    'R_cm = {r853:R} for 8B decode ({r854:e} ÷ {r855:e} J, n = {r856:n}). The registered condition for stating that '
+    'timing attribution dominates the detection floor is therefore not met, and no contingent subtitle is printed. '
+    'Where a ratio is at least 2, it is reported as that component\'s diagnostic only. This is a different question '
+    'from the floor class of Section 6.3: the class says which term sets each published floor, and the dominance '
+    'branch requires every one of the twelve ratios to reach 2.')
 
 # --- Section 6.5
 TABLE5 = [
@@ -1032,6 +1057,7 @@ PROSE = [
 SITES: list[tuple[str, list[str], str, int, list[str]]] = []
 SITES.append(('Section 3.4, whole-machine cross-check, Table S1', ['P1-B5-METER'], METER, 1, []))
 SITES.append(('Section 6.1, attempts', ['P1-B5-ATTEMPTS'], ATTEMPTS, 1, [LBL_RJ, LBL_SS]))
+SITES.append(('Section 6.1, attempts rule (RL-70 (3))', [], ATTEMPTS_RULE, 1, []))
 SITES.append(('Section 6.1, analysed sessions', ['P1-B5-ANALYSED'], ANALYSED, 1, []))
 for _c in TABLE1_IDS:
     SITES.append((f'Table 1, {_c}', TABLE1_FIRST[_c] + [TABLE1_IDS[_c]], table1_row(_c), 1, []))
@@ -1522,6 +1548,7 @@ def main(argv=()) -> int:
     check_floor_roles()
     check_table3_identity()
     check_floor_class()
+    check_floor_class_denominators()
     check_branches()
     for note in NOTES:
         print('note: ' + note)
