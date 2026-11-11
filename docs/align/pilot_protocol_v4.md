@@ -498,11 +498,16 @@ calibration nor U checks; X7 remains incomplete/excluded. Bind X1 to the actual
 registered sampler-stream span, not an entire shared journal. `F:411–419;
 G:110–113,152–155`
 
-U1–U3 failure means thermal protocol not met and no new-model held-out pool
-entry. Apply the registered escalation ladder before the next window, never
-in-place: idle 300→450 s; loosen δ_slow in 0.5 °C steps up to 2.0 °C
-for timeout-driven failures, tighten for spread-driven failures; then one
-quantization step down. Holds are already on for heavy D and are not another step. U4/U5 failure means state not
+U1–U3 FAIL means thermal protocol not met and bars the window from the held-out pool (R22-2).
+**RL-20, series freeze:** from C1 on, the thermal policy and every cohort-identity field are fixed
+under D-17a. A barred window's C or T replacement uses the unchanged plan. The escalation ladder applies
+only between W1 and C1: idle 300→450 s; loosen δ_slow in 0.5 °C steps up to 2.0 °C for timeouts,
+tighten for spread; then one quantization step down. Holds are already on for heavy D.
+Two consecutive attempted C/T windows barred by U1-U3 FAIL, or a third such bar in the series, stop
+arming until a signed research-lead ruling names that attempt (new reset `u1_u3_fail_escalation`).
+An in-series ladder step requires a new cohort: calibration restarts, prior windows stay disclosed and
+are never pooled, and the U3 roster is re-derived. The packet builder refuses any changed thermal policy
+inside the series. INCONCLUSIVE uses its slot, enters the pool and triggers nothing. U4/U5 failure means state not
 controlled; a **U4** inconclusive adds the two R20 escalation sentinels (below), never a
 looser margin. A U5 inconclusive does NOT (A15 / R21: U5, an OLS with intercept on three
 R1 designed states with df 1, is inconclusive by construction, the sentinels cannot resolve
@@ -874,7 +879,7 @@ from the committed record before the arm; the arm waits for them.
 | `meter_reader_live` | the KM003C reader is verified live before this arm; the meter is SECONDARY and nothing else about it gates |
 | `meter_coverage` | RECORDED, NON-GATING: the previous window's per-member meter sample/clock coverage, gaps listed |
 | `capture_faults` | sidecar/powermetrics coverage, collector, OOM/Metal, deadman, unobserved-state faults (X1-X8) |
-| `thermal_escalation` | U1-U3 result and the registered escalation ladder, recorded before use, never in place |
+| `thermal_escalation` | W1→C1: recorded ladder for U1-U3 FAIL only. From C1: unchanged thermal policy; record each U1-U3 FAIL bar; two consecutive or a third bar holds arming until a signed ruling naming that attempt (RL-20) |
 | `cohort_pool_rules` | U1-U3 failure bars pool entry; one frozen cohort; no pooling across a changed configuration |
 | `sentinel_roster` | a U4 inconclusive (not U5; A15 / R21) adds the two R20 escalation sentinels to the next window |
 | `member_eligibility` | eligibility adjudication (identity X5, U3 pairs, exclusions). Lead ruling R17 (RUN_STATE 228): at the arm it passes on the light triage's **provisional** adjudication (no harvest) unless the full desk is due; window k's **final** eligibility (the off-MBP harvest and full desk, carried by record k or by record k+1's `previous_final`) is required before the arm of k+2 and before any arm the full desk gates |
@@ -1358,8 +1363,10 @@ at R24's stress rate 1/4; a reserve costs a window of MBP time only when it is u
 rule (the roster covers every window that can be run) makes the U3 roster N = 24 (T4 and T5, D 1 each); at
 n = 7 and β = .05 that moves q from 4.2793 to 4.3305 and the D multiplier from 6.4190 to 6.4958
 (`v4_u3.series_quantile`). RL-16 installs N = 24 in the export roster and U3 inputs before the bar is
-signed; β = .05, transfer factor 1.5 and every other U constant stay unchanged. A T reserve armed after a thermal bar inherits the lead's ruling on V4-04 (the
-escalation ladder).
+signed; β = .05, transfer factor 1.5 and every other U constant stay unchanged. From C1 on the thermal policy and every cohort-identity field are frozen (RL-20); a C or T reserve
+replaces a barred window under the unchanged plan. Two consecutive U1-U3 FAIL bars or a third in the
+series hold arming for a signed ruling naming that attempt. A ladder step after C1 requires a new cohort,
+restarted calibration, disclosure without pooling of earlier windows and a re-derived U3 roster.
 
 **B7. Print-only secondaries.** None gates, selects or changes K, S or any eligibility; each is computed in the
 release run over the admitted C and T windows.
