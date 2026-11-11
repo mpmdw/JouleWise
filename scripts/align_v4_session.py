@@ -73,7 +73,26 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     kwargs.setdefault('kit', kit.KIT)
     kwargs.setdefault('pack_id', kit.PACK_ID)
     kwargs.setdefault('session_prefix', 'align-v4-')
-    state = pilot.prepare(measurement_root, session_root, **kwargs)
+    try:
+        state = pilot.prepare(measurement_root, session_root, **kwargs)
+    except (pilot.h.PhysicalHazard, KeyError, OSError) as exc:
+        # The shared caller's presence check precedes plan staging. A missing
+        # shard/row or unreadable tree must still get RL-62's named refusal.
+        # Never overwrite an existing session or replace another physical gate.
+        if isinstance(exc, pilot.h.PhysicalHazard) and not str(exc).startswith('models missing:'):
+            raise
+        session = Path(session_root)
+        if session.exists() and any(session.iterdir()):
+            raise
+        state = {'measurement_root': str(measurement_root), 'preparation_status': 'INPUTS_ONLY',
+                 'registration_dir': str(Path(measurement_root) / kwargs['kit'] / 'registration'),
+                 'host_state_preflight': preflight}
+        weights = weight_digest_preflight(state, identity_fn=weight_identity_fn)
+        if weights['ok']:
+            raise
+        state['weight_digest_preflight'] = weights
+        pilot.h.write(session / 'session.json', state)
+        raise ValueError('; '.join(weights['reasons'])) from exc
     state['host_state_preflight'] = preflight
     privileges = (host_privilege_preflight(runner=power_runner) if powermode.host_state_override() is None
                   else {'ok': True, 'skipped': 'host-state test override', 'reasons': []})
