@@ -30,7 +30,7 @@ def seed_calibration(root, clock, sources, source):
         for name, expected in prior["files"].items():
             if hashlib.sha256(Path(name).read_bytes()).hexdigest() != expected:
                 raise ValueError("prior synthetic prerequisite input changed: " + name)
-        copied = smoke.copy_ledger(Path(prior["root"]) / "input-repo", source, root)
+        copied = smoke.copy_ledger(Path(prior["measurement"]), source, root)
         sources.subprocess_run(["git", "-C", str(source), "add", plan.HEAD_PIN_RELATIVE], check=True)
         sources.subprocess_run(["git", "-C", str(source), "-c", "commit.gpgsign=false", "commit", "-qm",
                                "Import prior chain-written synthetic prerequisite pin"], check=True)

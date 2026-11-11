@@ -290,10 +290,15 @@ def main(argv=None):
         seed = json.loads((prior / "seed-receipt.json").read_text())
         if common.get("synthetic_only") is not True or common.get("pin") != PIN or seed.get("driver_rc") not in (0, 6):
             raise ValueError("completed real-chain synthetic prerequisite required")
+        measurement = Path(seed["smoke"]["measurement"])
+        if (not measurement.is_absolute() or not measurement.is_relative_to(prior)
+                or measurement != measurement.resolve()):
+            raise ValueError("prior seed measurement must be plain and within its synthetic root")
         files = [prior / "manifest.json", prior / "seed-receipt.json",
-                 prior / "input-repo/runs/calibration_observation_ledger.jsonl",
-                 prior / "input-repo/configs/calibration/calibration_ledger_head.json"]
-        declaration = {"root": str(prior), "files": {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files},
+                 measurement / "runs/calibration_observation_ledger.jsonl",
+                 measurement / "configs/calibration/calibration_ledger_head.json"]
+        declaration = {"root": str(prior), "measurement": str(measurement),
+                       "files": {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files},
                        "clock_ns": struct.unpack("!Q", (prior / "clock.bin").read_bytes())[0],
                        "writer": "pinned joulewise.b6.smoke.copy_ledger; prior captures stay immutable at original synthetic locators"}
         (root / "prior-seed-input.json").write_text(json.dumps(declaration, indent=2) + "\n")
