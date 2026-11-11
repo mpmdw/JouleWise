@@ -129,6 +129,7 @@ def declare_sources(root):
         "joulewise.b6.precheck.Seams.orphan_collect": "declared empty external process observation",
         "Loop.clock / DriverLane.clock": "shared injected wall clock; original transitions, status and attempt writers",
         "scheduler": "call actual run_night at plan t0; installer/uninstaller command results 0; no launchd job",
+        "JOULEWISE_WHOLE_WINDOW_WORKERS": "1; pinned environment concurrency input; unchanged strict validator in its isolated verdict process, no spawned interpreter outside bootstrap",
         "zsh file utilities": "unchanged rendered program uses cat/mkdir/jq on its fixture-bound paths; date/sleep source functions and bootstrap interpreter isolate time and host commands",
         "Git, /bin/cp -c -pR and zstd": "actual fixture-scoped code/input Git, non-symlink fixture-only APFS copy writer and desk codec; no network Git; no simulated copying or compression"})
     value["actions"] = {"default": "deny rc 126, stdout empty, stderr RL-49 default deny; execute nothing",

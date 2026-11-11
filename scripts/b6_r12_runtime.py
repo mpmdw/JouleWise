@@ -365,6 +365,10 @@ def bootstrap(argv=None):
     os.environ["JOULEWISE_CUSTODY_PARENT"] = str(root / "host-state")
     os.environ.pop("JOULEWISE_ADDITIONAL_CUSTODY_PARENTS", None)
     os.environ["PYTHONNOUSERSITE"] = "1"
+    # The pinned verdict writer exposes this execution-concurrency input.
+    # Its spawn pool cannot inherit the fixture's Python source bootstrap;
+    # serial validation runs the same validator inside the isolated process.
+    os.environ["JOULEWISE_WHOLE_WINDOW_WORKERS"] = "1"
     os.environ["PATH"] = "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     overlay_path = root / "input-overlays.json"
     if overlay_path.exists():
