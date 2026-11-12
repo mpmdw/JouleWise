@@ -185,6 +185,26 @@ class Mini(unittest.TestCase):
         p.write_bytes(p.read_bytes().replace(b"outputs", b"outputz"))
         self.assertRefused(self.verify(), "digest_mismatch")
 
+    def test_desk_folder_on_copy_when_source_had_none(self):
+        # Expected (L2): unexpected_desk_folder for an archive.desk beside a session whose source had none.
+        write(Path(str(self.ca) + ".desk/note.txt"), "n")
+        self.assertRefused(self.verify(), "unexpected_desk_folder")
+
+    def test_empty_source_desk_folder_must_be_present_and_empty(self):
+        # Expected: a source .desk with no files is recorded (desk_present); an extra file in it on the copy is
+        # desk_file_set_mismatch, a missing folder too.
+        Path(str(self.a) + ".desk").mkdir()
+        self.manifest.unlink()
+        rc, out, err = run("manifest", "--session", self.a, "--session", self.b, "--loop-attempts", self.attempts,
+                           "--out", self.manifest)
+        self.assertEqual((rc, err), (0, ""))
+        self.msha = out.strip().splitlines()[-1].rsplit("=", 1)[1]
+        self.assertRefused(self.verify(), "desk_file_set_mismatch")      # copy was made before the folder existed
+        Path(str(self.ca) + ".desk").mkdir()
+        self.assertEqual(self.verify(out=self.base / "r-empty-desk.json")[0], 0)
+        write(Path(str(self.ca) + ".desk/x"), "x")
+        self.assertRefused(self.verify(out=self.base / "r-empty-desk2.json"), "desk_file_set_mismatch")
+
     def test_desk_folder_missing_its_file(self):
         # Expected: desk_file_set_mismatch exactly, for an emptied desk folder and for a removed one.
         desk = Path(str(self.cb) + ".desk")
