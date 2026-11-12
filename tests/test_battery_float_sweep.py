@@ -32,7 +32,7 @@ READERS = {
         "independent recompute (comparison only)", "reads calibration captures' and members' stored "
         "b_fiducial_s to compute b_op for an offline cross-check; issues, pins and gates nothing"),
     "scripts/b5_edge_check.py": (
-        "post-release desk analysis (comparison and printing; no gate)", "exploratory diagnostic on released "
+        "post-release desk analysis (compares, prints and selects wording; no battery-float gate)", "exploratory diagnostic on released "
         "Block 5 sessions, run after the Revision-5 derivation and outside its scope. It loads no battery-float "
         "verdict: it reads b_op_s from the release-check recompute and cross-checks it against each session's "
         "withheld/bracket-evaluation.json assessment.b_fiducial_s, aborting on a mismatch (the abort message "
