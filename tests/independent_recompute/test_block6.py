@@ -218,8 +218,26 @@ class Block6(unittest.TestCase):
         self.assertAlmostEqual(gross - idle, 0.5 * 2.0, delta=1e-12)
 
     def test_key_contract_matches_published_file(self):
+        """Legacy published names plus the explicit retained-empty-cell fixture correction; computation is unchanged."""
         published = json.loads((b6.ROOT_DIR / "configs/b6/recompute/comparison_keys.json").read_text())
-        self.assertEqual(b6.key_contract(self.R), published)
+        # The historical toy key census omitted these n=0 floor-line cells.
+        # The reader now deliberately retains them (n=0, mean/sd/delta=None).
+        # Enumerate that correction independently, rather than regenerating
+        # expected keys from the implementation or weakening the exact match.
+        empty = {}
+        for pack, model in (("ALPHA", "qwen3-1p7b"), ("BETA", "qwen3-8b")):
+            for phase in ("decode", "prefill-p2048"):
+                cell = f"{pack}/lines/whole_machine/{model}/{phase}/mean_j"
+                for view in ("inclusive", "summary"):
+                    for statistic in ("mean", "n", "sd"):
+                        empty[f"{view}/{cell}/{statistic}"] = 0 if statistic == "n" else None
+                empty[f"side_by_side/{cell}/delta"] = None
+        self.assertTrue(set(empty).isdisjoint(published["block_quantity_keys"]))
+        corrected = copy.deepcopy(published)
+        corrected["block_quantity_keys"] = sorted(published["block_quantity_keys"] + list(empty))
+        self.assertEqual(b6.key_contract(self.R), corrected)
+        block = self.R["comparison_table"]["block"]["quantities"]
+        self.assertEqual({key: block[key] for key in empty}, empty)
         for r in self.R["sessions"].values():
             self.assertEqual(sorted(r["quantities"]), published["session_quantity_keys"][r["pack"]], r["session_id"])
 
