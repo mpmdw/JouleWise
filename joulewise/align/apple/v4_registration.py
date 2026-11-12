@@ -85,6 +85,7 @@ EXECUTED_CLOSURE = (
     'joulewise/adapters/node_client.py',
     'joulewise/adapters/nvidia_smi.py',
     'joulewise/adapters/powermetrics.py',
+    'joulewise/adapters/powermetrics_reap.py',
     'joulewise/adapters/suite_control.py',
     'joulewise/agent_identity.py',
     'joulewise/aggregate.py',
