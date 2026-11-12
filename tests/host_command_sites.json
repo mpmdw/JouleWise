@@ -264,6 +264,18 @@
     "seam": "host_snapshot(run=...) / display_census(run=...)"
   },
   {
+    "file": "joulewise/align/r1_arm.py",
+    "locator": "display_dwell:541443a289d468bd",
+    "command": "pmset",
+    "seam": "display_dwell(custody_root, run=..., sleep=..., now=...); tests pass a fake run"
+  },
+  {
+    "file": "joulewise/align/r1_arm.py",
+    "locator": "display_dwell:f679f0584e90bf28",
+    "command": "pmset",
+    "seam": "display_dwell(custody_root, run=..., sleep=..., now=...); tests pass a fake run"
+  },
+  {
     "file": "joulewise/align/w1_prequal.py",
     "locator": "FakeHost.__call__:24e5e1c2bbef5653",
     "command": "sudo",
