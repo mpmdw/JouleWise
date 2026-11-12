@@ -135,7 +135,7 @@ class Mini(unittest.TestCase):
 
     def assertRefused(self, result, code):
         rc, out, err = result
-        self.assertEqual((rc, err.strip()), (4, "refused: " + code))
+        self.assertEqual((rc, err.splitlines()[0] if err else err), (4, "refused: " + code))
 
     def inputs(self, mapping, out=None, receipt=None, extra=()):
         path = self.base / ("mapping-%d.json" % len(list(self.base.glob("mapping-*.json"))))
@@ -259,6 +259,18 @@ class Mini(unittest.TestCase):
         subprocess.run(["zstd", "-q", "-19", "-f", "--no-check", str(plain), "-o", str(p)], check=True)
         self.assertNotEqual(p.stat().st_size, (self.a / "sources/meter/stream-2.jsonl.zst").stat().st_size)
         self.assertRefused(self.verify(), "tree_size_mismatch")
+
+    def test_refusal_names_the_session_and_file(self):
+        # Expected (L1): a second stderr line `  at <copy_path>: <relative name>`, names only; nothing from file content.
+        p = self.cb / "sources/runs/r1/data.bin"
+        p.write_bytes(b"y" + p.read_bytes()[1:])
+        rc, out, err = self.verify()
+        self.assertEqual((rc, err.splitlines()), (4, ["refused: digest_mismatch",
+                                                      "  at b6-beta-r1: sources/runs/r1/data.bin"]))
+        p.write_bytes(b"x" * 300)
+        write(self.ca / "derived/extra.json", "{}")
+        self.assertEqual(self.verify(out=self.base / "r2.json")[2].splitlines(),
+                         ["refused: unlisted_extra_file", "  at b6-alpha-r1: derived/extra.json"])
 
     def test_extra_file_in_sources(self):
         # Expected: refused unlisted_extra_file.
@@ -969,7 +981,7 @@ class MultiChunk(unittest.TestCase):
 
     def assertRefused(self, result, code="digest_mismatch"):
         rc, out, err = result
-        self.assertEqual((rc, err.strip()), (4, "refused: " + code))
+        self.assertEqual((rc, err.splitlines()[0] if err else err), (4, "refused: " + code))
 
 
 
