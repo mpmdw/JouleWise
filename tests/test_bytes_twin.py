@@ -665,7 +665,12 @@ class H1Tests(QuantityTestCase):
         self.assertEqual(words["active_or_resident"]["flags"], flags)
         # the unsorted, duplicated input prints sorted; no MoE model missing prints none.
         self.assertEqual(bt.h1_words(lines, held, missing=miss, missing_flags=["b", "a"])["active_or_resident"]["flags"], ["a", "b"])
-        self.assertEqual(bt.h1_words(lines, held, missing=[], missing_flags=flags)["active_or_resident"]["flags"], [])
+        # fewer than three MoE points computed: the analysis's row lists the union even with none withheld-missing.
+        self.assertEqual(bt.h1_words(lines, held, missing=[], missing_flags=flags)["active_or_resident"]["flags"], flags)
+        # three computed MoE points: no row flags.
+        full = {**held, **{n: {"x": {"bytes": 2.0, "resident": 40.0, "time": 1.9}, "e": 2.0, "w": 0.15, "kind": "moe"}
+                           for n in bt.MOE}}
+        self.assertEqual(bt.h1_words(lines, full, missing=[], missing_flags=flags)["active_or_resident"]["flags"], [])
 
     def test_neither_and_mixed(self):
         lines = bt.h1_lines(self.points())
@@ -1512,6 +1517,61 @@ class TwoStageTests(QuantityTestCase):
             self.assertLess(eps["lower"], truth["S_BYTES_j_per_GB"])
             self.assertGreater(eps["upper"], truth["S_BYTES_j_per_GB"])
         self.assertEqual(two["sessions"]["p2-s1"]["pass_of"]["qwen3-4b-4bit"], 2)
+
+
+class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
+    """N2 through `analyse`: the row's flags are the union over ALL non-computed points, refused included."""
+
+    MOE = "qwen3-30b-a3b-4bit"
+    DENSE = "qwen3-14b-4bit"
+
+    def run_with(self, *, all_points):
+        world = WORLD["two"]
+        record = {"row_count": 40, "config_row_count": 14, "path": "withheld/x.csv", "config_key_sha256": "x"}
+        real, real_cell = bt.analyse, bt.compute_cell
+        state = {}
+
+        def wrapper(rows, manifest, archives, **kw):
+            sessions = sorted({r["session_id"] for r in rows},
+                              key=lambda sid: bt.pass_identity(sid, kw.get("listed") or {}, (kw.get("sidecars") or {}).get(sid))["pass_id"])
+            state["first"] = sessions[0]
+            for name in (self.MOE, self.DENSE):
+                manifest[name]["cell_ids"] = ["cell-" + name]
+            for archive in archives:
+                archive["cell_run_codes"] = {"cell-" + self.DENSE: ["audit.c14"]}
+            missing = {s: {self.MOE: record} for s in sessions}
+            missing[sessions[0]][self.DENSE] = record
+            withheld = {s: {"rows": [], "missing": m} for s, m in missing.items()}
+            if not all_points:
+                del withheld[sessions[0]]["missing"][self.DENSE]
+            return real(rows, manifest, archives, **{**kw, "withheld": withheld})
+
+        def refusing(srows, *args, **kw):
+            cell = real_cell(srows, *args, **kw)
+            if bt.canon(srows[0]["model_name"]) == self.DENSE and srows[0]["session_id"] != state["first"]:
+                cell["gross"] = {"status": "refused_below_minimum", "flags": ["audit.refusal"]}
+            return cell
+
+        with patch.object(bt, "analyse", wrapper), patch.object(bt, "compute_cell", refusing):
+            return run_twin(world, "2")
+
+    def test_refused_point_without_withheld_flag_contributes(self):
+        # 14B: the first pass withheld-missing (carries audit.c14), every other pass refused: refused, not missing.
+        result = self.run_with(all_points=True)
+        for boundary in bt.BOUNDARIES:
+            row = result["h1"][boundary]["passes_mean"]["active_or_resident"]
+            self.assertEqual(row["answer"], "missing")
+            self.assertEqual(row["missing_models"], [self.MOE])
+            self.assertEqual(row["flags"], ["audit.c14", "bytes.withheld_missing"])
+
+    def test_only_the_missing_moe_model_without_the_refused_point(self):
+        result = self.run_with(all_points=False)
+        row = result["h1"]["rails"]["passes_mean"]["active_or_resident"]
+        self.assertEqual(row["flags"], ["bytes.withheld_missing"])
+
+    def test_output_manifest_keeps_no_cell_ids(self):
+        result = self.run_with(all_points=False)
+        self.assertTrue(all("cell_ids" not in entry for entry in result["manifest"].values()))
 
 
 class OnePassFallbackTests(QuantityTestCase):

@@ -1999,7 +1999,8 @@ def h1_words(lines, models, missing=(), missing_flags=None):
     return {"models": per_model,
             "active_or_resident": {"answer": answer, "moe_models": moe_present, "misses": misses,
                                    "missing_models": moe_missing,
-                                   "flags": (sorted(missing_flags) if missing_flags is not None else [WITHHELD_MISSING]) if moe_missing else []},
+                                   "flags": (([] if len(moe_present) == 3 else sorted(missing_flags)) if missing_flags is not None
+                                             else [WITHHELD_MISSING] if moe_missing else [])},
             "dense_note": ("Dense held-out models test the line's linearity over the bytes range, not which "
                            "hypothesis is right.")}
 
@@ -2363,10 +2364,12 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                         all_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                              "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": ROSTER[model]["kind"],
                                              **model_pass_status(model, boundary)}
-                # The analysis's row lists the sorted union of the missing points' pass flags.
+                # The analysis's row lists the sorted union of every non-computed point's pass flags
+                # (refused as well as withheld-missing), whenever fewer than three MoE points computed.
                 missing_here = missing_models(pass_key)
-                missing_flags = sorted({f for m in missing_here for f in (
-                    cells[m][pass_key]["boundaries"].get(boundary, {}).get("quantities", {}).get("gross", {}).get("flags") or [])})
+                missing_flags = sorted({f for m in roster if m in cells and pass_key in cells[m]
+                                        for q in [cells[m][pass_key]["boundaries"].get(boundary, {}).get("quantities", {}).get("gross", {})]
+                                        if q.get("status") != "ok" for f in (q.get("flags") or [])})
                 words = h1_words(lines, all_points, missing=missing_here, missing_flags=missing_flags)
                 for model in held_out:
                     if model not in all_points and model in cells:
@@ -2420,7 +2423,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                                   offset_terms_apply=offset_apply)}
             stage1["h2_tier1_inputs"].setdefault(boundary, {})[pass_key] = {m: points[m] for m in FIT_SET if m in points}
     stage1_hash = sha256_of(stage1)
-    return {"schema": SCHEMA, "stage": stage, "notes": notes, "flags": flags, "roster": roster, "manifest": manifest,
+    return {"schema": SCHEMA, "stage": stage, "notes": notes, "flags": flags, "roster": roster, "manifest": {name: {k: v for k, v in entry.items() if k != "cell_ids"} for name, entry in manifest.items()},
             "constants": {"decode_steps": DECODE_STEPS, "printed_tokens": PRINTED_TOKENS, "GB": GB,
                           "unit_minimum": UNIT_MINIMUM, "corpus_cap": CORPUS_CAP},
             "sessions": {s: {"rows": len(r), "neg8": {f"{b}/{v}": a for (b, v), a in allowances[s].items()},
