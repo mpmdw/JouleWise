@@ -178,6 +178,7 @@ class RuntimeWiringTests(unittest.TestCase):
                 segment.out = Path(tmp)
                 segment.smoke_part = 'B'
                 segment.smoke_started = 0
+                segment.smoke_watchdog = unittest.mock.Mock()   # RUN_STATE 278: off ITIMER_REAL
                 segment.quiet_spans = []
                 segment.clock = SimpleNamespace(sleep=lambda s: None)
                 segment.now_ns = unittest.mock.Mock(side_effect=[0, 300 * rt.NS, 300 * rt.NS])
@@ -187,7 +188,8 @@ class RuntimeWiringTests(unittest.TestCase):
                     segment.reference_hook({}, quiet_s=300, rearm_s=turn_bound, capture=True)(session)
                     session.wait('G0')
                 expected = 300 + turn_bound + rt.RECOVERY_CAP_S + 120
-                timer.assert_called_once_with(signal.ITIMER_REAL, expected)
+                timer.assert_not_called()
+                segment.smoke_watchdog.set.assert_called_once_with(expected)
                 self.assertEqual(json.loads((segment.out / 'smoke_part_a.json').read_text())['post_g0_budget_s']['total'], expected)
 
 

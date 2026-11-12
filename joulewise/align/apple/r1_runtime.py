@@ -119,6 +119,53 @@ TIMEOUT_RUN_KINDS = ("step-30b", "step-d", *contract.HIGH_POWER_KINDS, *contract
 # in Part A. An engineering watchdog on the smoke only (RL-84 P-5: the ruled
 # 1,200 s is the G0 cap and nothing else); no production member reads it.
 SMOKE_ADMISSION_S = 3000
+# RUN_STATE 278: the smoke's watchdogs leave ITIMER_REAL to its one owner, the
+# episode deadman (budget.EpisodeDeadman.guard refuses to arm over an active
+# timer, WP8), and reach the main thread on this signal instead.
+SMOKE_WATCHDOG_SIGNAL = signal.SIGUSR1
+
+
+class SmokeWatchdog:
+    """Smoke-only wall watchdog on the monotonic clock, off ITIMER_REAL.
+
+    ``set(seconds)`` behaves like ``setitimer(ITIMER_REAL, seconds)`` did for
+    the smoke: a positive value (re)arms one deadline, 0 disarms. At the
+    deadline a daemon thread sends SMOKE_WATCHDOG_SIGNAL once to the main
+    thread, whose handler raises; ``stop()`` ends the thread, after which no
+    signal is sent and ``active`` is False (the handler ignores a late one)."""
+
+    def __init__(self, *, signum=SMOKE_WATCHDOG_SIGNAL, monotonic=time.monotonic,
+                 send=signal.pthread_kill, main_ident=None):
+        self.signum, self.monotonic, self.send = signum, monotonic, send
+        self.main_ident = main_ident if main_ident is not None else threading.main_thread().ident
+        self.active, self.deadline = True, None
+        self._wake = threading.Condition()
+        self._thread = threading.Thread(target=self._run, name="r1-smoke-watchdog", daemon=True)
+        self._thread.start()
+
+    def set(self, seconds):
+        with self._wake:
+            self.deadline = self.monotonic() + seconds if seconds > 0 else None
+            self._wake.notify_all()
+
+    def stop(self):
+        with self._wake:
+            self.active, self.deadline = False, None
+            self._wake.notify_all()
+        self._thread.join(timeout=5.0)
+
+    def _run(self):
+        with self._wake:
+            while self.active:
+                if self.deadline is None:
+                    self._wake.wait()
+                    continue
+                left = self.deadline - self.monotonic()
+                if left > 0:
+                    self._wake.wait(min(left, 1.0))
+                    continue
+                self.deadline = None
+                self.send(self.main_ident, self.signum)
 
 
 def smoke_post_g0_budget(quiet_s, rearm_s):
@@ -1699,7 +1746,7 @@ class Segment:
                     if budget is not None:
                         segment.smoke_gate["post_g0_budget_s"] = budget
                         (segment.out / "smoke_part_a.json").write_text(canonical(segment.smoke_gate) + "\n")
-                    signal.setitimer(signal.ITIMER_REAL, budget["total"] if budget else 0)
+                    segment.smoke_watchdog.set(budget["total"] if budget else 0)
                     if segment.smoke_part == "A":
                         rearm_deadman(deadman, 0, "R1_smoke_A_stop_after_G0")
                         return row
@@ -2325,7 +2372,7 @@ def parse_args(argv=None):
 
 def main(argv=None, *, backend_factory=None, stdout=None):
     args = parse_args(argv)
-    previous_alarm = signal.getsignal(signal.SIGALRM)
+    previous_smoke_signal = signal.getsignal(SMOKE_WATCHDOG_SIGNAL)
     term = Termination().install()
     out = Path(args.output).resolve()
     # Every print below this point (controller, adapters, mlx) goes to stderr;
@@ -2371,11 +2418,12 @@ def main(argv=None, *, backend_factory=None, stdout=None):
         if args.smoke_part and args.r1_kind == "step-d":
             segment.smoke_part = args.smoke_part
             segment.smoke_started = args.smoke_started if args.smoke_started is not None else time.monotonic()
+            watchdog = segment.smoke_watchdog = SmokeWatchdog()
             def smoke_timeout(_sig, _frame):
-                raise RuntimeFailure("smoke part wall cap reached; partial smoke is not a pass")
-            signal.signal(signal.SIGALRM, smoke_timeout)
-            signal.setitimer(signal.ITIMER_REAL,
-                             max(.001, SMOKE_ADMISSION_S - (time.monotonic() - segment.smoke_started)))
+                if watchdog.active:
+                    raise RuntimeFailure("smoke part wall cap reached; partial smoke is not a pass")
+            signal.signal(SMOKE_WATCHDOG_SIGNAL, smoke_timeout)
+            watchdog.set(max(.001, SMOKE_ADMISSION_S - (time.monotonic() - segment.smoke_started)))
         result = segment.run()
         (out / RESULT_NAME).write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n")
         record["status"], code = "complete", 0
@@ -2391,8 +2439,9 @@ def main(argv=None, *, backend_factory=None, stdout=None):
         code = EXIT_FAILED
     finally:
         if args.smoke_part:
-            signal.setitimer(signal.ITIMER_REAL, 0)
-            signal.signal(signal.SIGALRM, previous_alarm)
+            if getattr(segment, "smoke_watchdog", None) is not None:
+                segment.smoke_watchdog.stop()
+            signal.signal(SMOKE_WATCHDOG_SIGNAL, previous_smoke_signal)
         try:
             if segment is not None:
                 for error in segment.close():

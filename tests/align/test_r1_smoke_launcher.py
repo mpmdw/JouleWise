@@ -1,6 +1,7 @@
 """Agent-free handoff and orchestration; host commands and data are synthetic."""
 from contextlib import ExitStack
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -13,10 +14,13 @@ import time
 from types import SimpleNamespace
 import types
 import unittest
+import unittest.mock
 from unittest.mock import patch
 
 from scripts import launch_align_r0 as launcher
 from scripts import run_align_r1_smoke as smoke
+
+REPO = Path(launcher.__file__).resolve().parents[1]
 
 
 class RunnerTests(unittest.TestCase):
@@ -706,7 +710,7 @@ class SmokeAdmissionBudgetTests(unittest.TestCase):
                          {"A": rt.SMOKE_ADMISSION_S + 120, "B": rt.SMOKE_ADMISSION_S + post_g0 + 120})
         self.assertEqual(launcher.r1_minimum_seconds(), 3120 + 5720 + 300 + 2 * 180 + 10)
 
-    def test_runtime_pre_g0_itimer_is_the_admission_budget(self):
+    def test_runtime_pre_g0_watchdog_is_the_admission_budget(self):
         from joulewise.align.apple import r1_runtime as rt
 
         class Stop(Exception):
@@ -721,18 +725,19 @@ class SmokeAdmissionBudgetTests(unittest.TestCase):
                     patch.object(rt, "read_soak_reference", return_value={}), \
                     patch.object(rt, "Segment", side_effect=segment), \
                     patch.object(rt.time, "monotonic", return_value=1.0), \
-                    patch.object(rt.signal, "setitimer") as timer:
+                    patch.object(rt.signal, "setitimer") as timer, \
+                    patch.object(rt, "SmokeWatchdog") as watchdog:
                 code = rt.main(["--config", str(root / "configs/align/v4/r1_runtime.json"),
                                 "--r1-kind", "step-d", "--output", str(Path(tmp) / "out"),
                                 "--smoke-part", part, "--smoke-started", "0"],
                                backend_factory=lambda _config: SimpleNamespace(close=lambda: None),
                                stdout=__import__("io").StringIO())
                 self.assertNotEqual(code, 0)
-                armed = timer.call_args_list[0].args
-                self.assertEqual(armed[0], signal.ITIMER_REAL)
-                self.assertGreaterEqual(armed[1] + 1.0, self.need())
-                self.assertEqual(armed[1], rt.SMOKE_ADMISSION_S - 1.0)
-                self.assertEqual(timer.call_args_list[-1].args, (signal.ITIMER_REAL, 0))
+                timer.assert_not_called()                 # RUN_STATE 278: ITIMER_REAL is the deadman's
+                armed = watchdog.return_value.set.call_args_list[0].args
+                self.assertGreaterEqual(armed[0] + 1.0, self.need())
+                self.assertEqual(armed, (rt.SMOKE_ADMISSION_S - 1.0,))
+                watchdog.return_value.stop.assert_called_once_with()
 
     def test_g0_released_after_1800_s_but_inside_budget_admits_and_stops_part_a(self):
         from joulewise.align.apple import r1_runtime as rt
@@ -740,6 +745,7 @@ class SmokeAdmissionBudgetTests(unittest.TestCase):
             with self.subTest(elapsed=elapsed), tempfile.TemporaryDirectory() as tmp:
                 segment = object.__new__(rt.Segment)
                 segment.kind, segment.out, segment.smoke_part, segment.smoke_started = "step-d", Path(tmp), "A", 0
+                segment.smoke_watchdog = unittest.mock.Mock()
                 session = SimpleNamespace(reference={"fast_c": 40., "slow_c": 40.},
                                           wait=lambda *a, **kw: {"outcome": "released"})
                 with patch.object(rt.time, "monotonic", return_value=elapsed), \
@@ -748,7 +754,8 @@ class SmokeAdmissionBudgetTests(unittest.TestCase):
                     segment.reference_hook({}, quiet_s=300, rearm_s=1580, capture=True)(session)
                     if admits:
                         self.assertEqual(session.wait("G0", deadman="d")["outcome"], "released")
-                        timer.assert_called_once_with(signal.ITIMER_REAL, 0)
+                        timer.assert_not_called()
+                        segment.smoke_watchdog.set.assert_called_once_with(0)   # Part A disarms after G0
                         rearm.assert_called_once_with("d", 0, "R1_smoke_A_stop_after_G0")
                     else:
                         with self.assertRaisesRegex(rt.RuntimeFailure, "did not release within 3000 s"):
@@ -783,6 +790,136 @@ class SmokeAdmissionBudgetTests(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(ValueError, refusal):
                         kit.smoke(Path(tmp) / "s", "A", runtime, soak_reference="x", invoke=invoke)
+
+
+class SmokeTimerOwnerTests(unittest.TestCase):
+    """RUN_STATE 278: ITIMER_REAL has one owner, the episode deadman.
+
+    These run the REAL EpisodeDeadman.guard on a SystemClock, so its WP8
+    refusal ("cannot replace an active timer") is live, not faked."""
+
+    def setUp(self):
+        self.previous_alarm = signal.getsignal(signal.SIGALRM)
+        self.addCleanup(signal.signal, signal.SIGALRM, self.previous_alarm)
+        self.addCleanup(signal.setitimer, signal.ITIMER_REAL, 0)
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+
+    def guarded(self, deadman):
+        try:
+            with deadman.guard():
+                return signal.getitimer(signal.ITIMER_REAL)[0]
+        except RuntimeError as error:
+            self.fail(f"the smoke stole the deadman's timer: {error}")
+
+    def test_part_b_post_g0_turn_arms_the_real_episode_deadman(self):
+        from joulewise.align.apple import r1_runtime as rt
+        from joulewise.align.apple.budget import EpisodeDeadman
+        from joulewise.clock import SystemClock
+        clock = SystemClock()
+        with tempfile.TemporaryDirectory() as tmp:
+            segment = object.__new__(rt.Segment)
+            segment.kind, segment.out, segment.smoke_part = "step-d", Path(tmp), "B"
+            segment.smoke_started, segment.quiet_spans = rt.time.monotonic(), []
+            if hasattr(rt, "SmokeWatchdog"):
+                segment.smoke_watchdog = rt.SmokeWatchdog(send=lambda *a: self.fail("watchdog fired"))
+                self.addCleanup(segment.smoke_watchdog.stop)
+            session = SimpleNamespace(reference={"fast_c": 40., "slow_c": 40.}, flags=[],
+                                      wait=lambda *a, **kw: {"outcome": "released"})
+            deadman = EpisodeDeadman(clock, clock.stamp(), 5)
+            segment.reference_hook({}, quiet_s=0, rearm_s=1580, capture=True)(session)
+            self.assertEqual(session.wait("G0", deadman=deadman)["outcome"], "released")
+            # The re-armed turn: the workload's first guarded model call.
+            armed = self.guarded(deadman)
+            self.assertGreater(armed, 1500)            # the deadman's 1,580 s, not the smoke's 2,600 s
+            self.assertLessEqual(armed, 1580)
+            self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+            total = rt.smoke_post_g0_budget(0, 1580)["total"]   # quiet 0 here: 1,580 + 600 + 120
+            left = segment.smoke_watchdog.deadline - rt.time.monotonic()
+            self.assertGreater(left, total - 10)        # the post-G0 watchdog is still armed, off the itimer
+            self.assertLessEqual(left, total)
+
+    def test_pre_g0_guarded_call_runs_under_the_smoke_admission_watchdog(self):
+        from joulewise.align.apple import r1_runtime as rt
+        from joulewise.align.apple.budget import EpisodeDeadman
+        from joulewise.clock import SystemClock
+        seen = {}
+
+        def run():
+            clock = SystemClock()
+            seen["timer"] = self.guarded(EpisodeDeadman(clock, clock.stamp(), 5))
+            seen["watchdog_left"] = fake.smoke_watchdog.deadline - rt.time.monotonic()
+            return {"ok": True}
+
+        fake = SimpleNamespace(run=run, close=lambda: [])
+        for part in ("A", "B"):
+            with self.subTest(part=part), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(rt, "read_soak_reference", return_value={}), \
+                    patch.object(rt, "Segment", return_value=fake):
+                seen.clear()
+                before = signal.getsignal(signal.SIGUSR1)
+                code = rt.main(["--config", str(REPO / "configs/align/v4/r1_runtime.json"),
+                                "--r1-kind", "step-d", "--output", str(Path(tmp) / "out"),
+                                "--smoke-part", part, "--smoke-started", str(rt.time.monotonic())],
+                               backend_factory=lambda _config: SimpleNamespace(close=lambda: None),
+                               stdout=io.StringIO())
+                self.assertEqual(code, 0, json.loads((Path(tmp) / "out" / rt.CUSTODY_NAME).read_text()))
+                self.assertGreater(seen["timer"], 4)
+                self.assertGreater(seen["watchdog_left"], rt.SMOKE_ADMISSION_S - 10)
+                self.assertFalse(fake.smoke_watchdog.active)          # stopped by main's finally
+                self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+                self.assertEqual(signal.getsignal(signal.SIGUSR1), before)  # handler restored
+
+    def test_runs_without_a_step_d_smoke_part_start_no_watchdog_and_touch_no_timer(self):
+        from joulewise.align.apple import r1_runtime as rt
+
+        class Stop(Exception):
+            pass
+
+        def segment(**_):
+            return SimpleNamespace(run=lambda: (_ for _ in ()).throw(Stop()), close=lambda: [])
+
+        for extra in (["--r1-kind", "step-d"], ["--r1-kind", "step-30b"],
+                      ["--r1-kind", "step-30b", "--smoke-part", "A", "--smoke-started", "0"]):
+            before = signal.getsignal(signal.SIGUSR1)
+            with self.subTest(argv=extra), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(rt, "read_soak_reference", return_value={}), \
+                    patch.object(rt, "Segment", side_effect=segment), \
+                    patch.object(rt.signal, "setitimer") as timer, \
+                    patch.object(rt, "SmokeWatchdog") as watchdog:
+                code = rt.main(["--config", str(REPO / "configs/align/v4/r1_runtime.json"),
+                                "--output", str(Path(tmp) / "out"), *extra],
+                               backend_factory=lambda _config: SimpleNamespace(close=lambda: None),
+                               stdout=io.StringIO())
+                self.assertNotEqual(code, 0)
+                timer.assert_not_called()
+                watchdog.assert_not_called()
+                self.assertEqual(signal.getsignal(signal.SIGUSR1), before)
+
+    def test_watchdog_fires_once_on_the_main_thread_and_disarms_and_stops(self):
+        from joulewise.align.apple import r1_runtime as rt
+
+        class Fired(Exception):
+            pass
+
+        def handler(_sig, _frame):
+            raise Fired()
+
+        previous = signal.signal(rt.SMOKE_WATCHDOG_SIGNAL, handler)
+        self.addCleanup(signal.signal, rt.SMOKE_WATCHDOG_SIGNAL, previous)
+        watchdog = rt.SmokeWatchdog()
+        self.addCleanup(watchdog.stop)
+        watchdog.set(0.05)
+        with self.assertRaises(Fired):
+            time.sleep(5)                               # interrupted, as the itimer interrupted a sleep
+        self.assertIsNone(watchdog.deadline)            # one shot
+        watchdog.set(0.05)
+        watchdog.set(0)                                 # 0 disarms, like setitimer(..., 0)
+        time.sleep(0.3)
+        watchdog.set(0.05)
+        watchdog.stop()                                 # stop: nothing is sent afterwards
+        time.sleep(0.3)
+        self.assertFalse(watchdog.active)
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
 
 
 class MutantTests(unittest.TestCase):

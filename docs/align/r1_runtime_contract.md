@@ -62,6 +62,18 @@ so this is an engineering watchdog, not a ruled parameter. It is active only
 under `--smoke-part`; no night member reads it. It changes the executed bytes
 of `r1_runtime.py` (condition 13), so it gets a delta review before the smoke.
 
+The smoke's two wall watchdogs (pre-G0 admission and Part B's post-G0 budget)
+do not use `ITIMER_REAL` (RUN_STATE 278). The process has one interval timer,
+and the episode deadman owns it: `budget.EpisodeDeadman.guard` refuses to arm
+over an active timer (WP8), so smoke 278's Part B turn failed its first
+guarded call under the old post-G0 `setitimer`. `r1_runtime.SmokeWatchdog` is
+a monotonic daemon thread with the same `set(seconds)` / 0-disarms behaviour;
+at its deadline it sends `SMOKE_WATCHDOG_SIGNAL` (SIGUSR1) once to the main
+thread, whose handler raises the same `RuntimeFailure` the itimer did, so the
+runtime still writes its own terminal record and tears down. Budgets, part caps
+and the launch minimum are unchanged. It exists only under `--smoke-part` on
+step-d; the night path arms neither it nor its signal handler.
+
 ## Arguments
 
 - `--output DIR` is always the canonical segment directory, `<R1 output>/<segment name>`. When the driver rejects an attempt (ruling 8 load, or soak slope), it renames that directory to `<segment name>.rejectedN` (the next free N from 1) before the next attempt starts. A step-d or designed start state whose G0 timed out is moved to `<segment name>.g0_timeout1` before its one retry (LEAD-RULINGS-2 R6-2). The accepted attempt therefore always ran in, and owns, the canonical directory. The runtime must write only inside `DIR` and use paths relative to it.
