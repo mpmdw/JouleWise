@@ -169,7 +169,8 @@ class ConformanceTests(unittest.TestCase):
             self.assertIsNone(battery["charge_resume_soc_pct"])
             # LEAD-RULINGS-2 R7-2: the gated runs, X-G, step-d and the designed
             # start states arm the runtime config's 1,200 s G0 timeout through
-            # the gate policy; every other member keeps the 600 s default. Each
+            # the gate policy (RL-59 extends 1,200 s to step-30b and the legs, asserted
+            # below); only g0-release-soak keeps the 600 s default. Each
             # reports its G0 wait (the bundle's G0 interval) and that cap.
             armed = {}
             for name, result in results.items():
@@ -458,7 +459,7 @@ class IncompleteMemberTests(unittest.TestCase):
             finally:
                 del world.status
 
-    def test_planning_turn_with_an_unreleased_g0_is_inconclusive(self):
+    def test_planning_turn_with_an_unreleased_g0_runs_flagged_as_a_candidate_only_turn(self):
         # RL-72 E3 (a85ee8ec6): a planning kind's G0 timeout now runs the turn
         # flagged r1.g0_timeout_run (no release temperature, candidate only);
         # the driver marks the segment inconclusive from that flag (covered by
@@ -516,11 +517,11 @@ class IncompleteMemberTests(unittest.TestCase):
                               if r["kind"] == "G0"], ["released"])
             self.assertEqual(len(episode["turns"]), 1)
 
-    def test_step_d_with_an_unreleased_g0_is_inconclusive(self):
+    def test_step_d_with_an_unreleased_g0_runs_flagged_with_slots_and_a_consumer_reads_its_reference(self):
         # RL-72 E3 (a85ee8ec6): step-d's G0 timeout no longer yields an
         # inconclusive segment with no turn. The step runs flagged
-        # r1.g0_timeout_run, is a candidate only, and its captured reference
-        # is not an admitted R_D, so no consumer may read it.
+        # r1.g0_timeout_run and is a candidate only. Its captured reference
+        # still survives (asserted below at the consumer call).
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
@@ -708,6 +709,20 @@ class Round5RuntimeTests(unittest.TestCase):
 
 class Round5Tests(unittest.TestCase):
     """Lead rulings R5-4, R5-9 and R5-10 (round-5 infrastructure)."""
+
+    def test_a_custody_bound_step_d_result_without_slots_is_refused(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            step_dir = root / rt.STEP_D_SEGMENT
+            step_dir.mkdir()
+            (step_dir / rt.RESULT_NAME).write_text(json.dumps(
+                {"kind": "step-d", "segment_status": "inconclusive", "g0_released": False}))
+            rt.write_custody(step_dir, {"status": "complete"})
+            segment = object.__new__(rt.Segment)
+            segment.out, segment.kind = root / "consumer", "d-spam-benign-s1-a"
+            self.assertEqual(segment.accepted_result(rt.STEP_D_SEGMENT, "step-d")["kind"], "step-d")
+            with self.assertRaisesRegex(rt.Refused, "lacks slots"):
+                segment.step_d_result()
 
     def test_terminal_custody_includes_nested_file_with_same_basename(self):
         # Sol wp15rev F2: only DIR's own record is excluded, not a nested namesake.

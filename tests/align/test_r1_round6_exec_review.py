@@ -240,7 +240,7 @@ class NightLockAcrossProcessesTests(unittest.TestCase):
 class PhaseOrderTests(unittest.TestCase):
     """R6-1 / R6-2 on the phase table the driver runs (any cap, with or without 4-bit)."""
 
-    def test_gated_runs_follow_a_d_turn_and_calibrations_follow_a_bounded_precool(self):
+    def test_gated_runs_follow_a_d_turn_and_planning_kinds_follow_a_bounded_idle_until_soak(self):
         from joulewise.align.apple import r1_runtime_contract as contract
         from scripts import align_r1_rehearsal as r1
         for include_4bit in (False, True):

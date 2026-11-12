@@ -201,7 +201,7 @@ class KitLowTests(unittest.TestCase):
 
 
 class RehearsalLowTests(unittest.TestCase):
-    def test_soak_reference_checks_slow_role_only_and_records_roles(self):
+    def test_step_d_reference_consumption_checks_slow_role_only_and_soak_records_roles(self):
         # a85ee8ec6 (RL-59/64/72): consumers no longer gate on the soak, so the
         # consumption check is _check_d_reference_consumed against step-D's
         # operating_reference (the check is still on the slow role only). The
