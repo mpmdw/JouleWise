@@ -98,6 +98,55 @@ class SessionFlagTests(unittest.TestCase):
             self.assertEqual(bt.load_archive(root)["session_flags"],
                              ["catalog.digest_mismatch", "power.pstar_unsized", "registration.default_used"])
 
+    def test_session_code_fixture_sorts_around_run_and_withheld_codes(self):
+        # F5: a session code that sorts before battery.assist guards ordering without the slow campaign.
+        with tempfile.TemporaryDirectory(prefix="bytes-session-flags-") as directory:
+            root = Path(directory)
+            (root / "derived").mkdir()
+            (root / "derived/flags.jsonl").write_text(
+                json.dumps({"code": "audit.early", "scope": {}}) + "\n" +
+                json.dumps({"code": "battery.assist", "scope": {"run_id": "r1"}}) + "\n")
+            (root / "derived/b6-acceptance.json").write_text(json.dumps(
+                {"emitted_flags": [{"code": "audit.early"}, {"code": "zeta.late"}]}))
+            codes = bt.load_archive(root)["session_flags"]
+            self.assertEqual(codes, ["audit.early", "zeta.late"])
+            self.assertLess(codes[0], "battery.assist")
+
+
+class MissingWithheldFlagTests(unittest.TestCase):
+    """RL-82 reading A, F1: a cell whose withheld store is missing lists {withheld_missing} | session codes."""
+
+    MODEL = "qwen3-30b-a3b-4bit"
+
+    def missing_result(self, session_flags, archive=True):
+        manifest = {name: {"config_key": "key-" + name} for name in bt.ROSTER}
+        record = {"row_count": 40, "config_row_count": 14, "path": "withheld/s1.csv", "config_key_sha256": "x"}
+        archives = [{"session_id": "s1", "session_flags": session_flags}] if archive else []
+        with tempfile.TemporaryDirectory(prefix="bytes-missing-keys-") as keys:
+            return bt.analyse([], manifest, archives, stage="2", key_dir=keys, listed={"s1": {"pass_id": 1}},
+                              withheld={"s1": {"rows": [], "missing": {self.MODEL: record}}})
+
+    def assert_flags(self, result, expected):
+        cell = result["cells"][self.MODEL]["pass1"]
+        self.assertEqual(cell["status"], "missing")
+        self.assertEqual(cell["flags"], expected)
+        for boundary in bt.BOUNDARIES:
+            block = cell["boundaries"][boundary]
+            self.assertEqual(block["flags"], expected)
+            for item in block["quantities"].values():
+                self.assertEqual(item["flags"], expected)
+
+    def test_session_codes_before_and_after_with_duplicate(self):
+        # "audit.early" < "bytes.withheld_missing" < "zeta.late"; the duplicate is listed once.
+        codes = ["audit.early", "zeta.late", "audit.early", "bytes.withheld_missing"]
+        self.assertLess("audit.early", bt.WITHHELD_MISSING)
+        self.assertLess(bt.WITHHELD_MISSING, "zeta.late")
+        self.assert_flags(self.missing_result(codes), ["audit.early", "bytes.withheld_missing", "zeta.late"])
+
+    def test_no_session_codes_or_no_archive_keeps_only_the_withheld_flag(self):
+        self.assert_flags(self.missing_result([]), ["bytes.withheld_missing"])
+        self.assert_flags(self.missing_result(["audit.early"], archive=False), ["bytes.withheld_missing"])
+
     def test_blinded_stage_never_loads_archive_session_flags(self):
         with patch.object(bt, "load_archive", side_effect=AssertionError("blinded archive read")):
             result = run_twin(WORLD["one"], "blinded")

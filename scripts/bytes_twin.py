@@ -1812,10 +1812,10 @@ def quantities(cell_block, manifest_entry):
 WITHHELD_MISSING = "bytes.withheld_missing"
 
 
-def missing_pass_quantities(record):
+def missing_pass_quantities(record, flags=(WITHHELD_MISSING,)):
     """B6 ruling Q1 (registration 11 item 4): a pass whose withheld file is missing prints `missing`
     with the flag and the sidecar's withheld row counts, on every boundary and variant."""
-    item = {"status": "missing", "flags": [WITHHELD_MISSING], "withheld_row_count": record.get("row_count"),
+    item = {"status": "missing", "flags": list(flags), "withheld_row_count": record.get("row_count"),
             "withheld_config_row_count": record.get("config_row_count"), "withheld_path": record.get("path")}
     return {variant: dict(item) for variant in ("gross", "idle_subtracted", "flagged_inclusive", "idle_flagged_inclusive", "without_assisted")}
 
@@ -2206,13 +2206,18 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         for pass_index, session_id in enumerate(session_ids, 1):
             missing = withheld_missing.get(session_id, {}).get(model)
             if missing is not None:
+                # RL-82 reading A: the cell's flags are its session's codes as well; the withheld
+                # code is one of them (the analysis's sorted set), at the archive stages only.
+                archive = archive_by_session.get(session_id)
+                missing_flags = sorted({WITHHELD_MISSING} | set(
+                    archive.get("session_flags", []) if archive is not None and stage in ("1", "2") else []))
                 cells.setdefault(model, {})[f"pass{pass_index}"] = {
-                    "session_id": session_id, "status": "missing", "flags": [WITHHELD_MISSING],
+                    "session_id": session_id, "status": "missing", "flags": missing_flags,
                     "withheld_row_count": missing["row_count"], "withheld_config_row_count": missing["config_row_count"],
-                    "boundaries": {b: {"status": "missing", "flags": [WITHHELD_MISSING],
+                    "boundaries": {b: {"status": "missing", "flags": missing_flags,
                                        "withheld_row_count": missing["row_count"],
                                        "withheld_config_row_count": missing["config_row_count"],
-                                       "quantities": missing_pass_quantities(missing)} for b in BOUNDARIES}}
+                                       "quantities": missing_pass_quantities(missing, missing_flags)} for b in BOUNDARIES}}
                 continue
             srows = [r for r in sessions[session_id] if r["role"] == "science" and canon(r["model_name"]) == model]
             unblinded = all(r["_unblinded"] for r in srows)
