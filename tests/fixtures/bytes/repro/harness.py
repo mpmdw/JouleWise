@@ -91,9 +91,14 @@ def run(root: Path, out_name="out", *, two_stage=True):
         codes.append(bytes_analyze.main(["--export", str(root / "export"), "--manifest", str(root / "manifest.json"),
                                          "--stage", "fit", "--out", str(out_fit)]))
         if codes[-1] == 0 and two_stage:
-            codes.append(bytes_analyze.main(["--export", str(root / "export"), "--manifest", str(root / "manifest.json"),
-                                             "--stage", "heldout", "--predictions", str(out_fit / "predictions.json"),
-                                             "--out", str(out_held)]))
+            # RL-7a: the held-out stage runs against a synthetic commitment of the fit predictions.
+            from tests.bytes_commitment_support import fixture_options, synthetic_checkout
+            options = fixture_options(root, out_fit / "predictions.json")
+            with synthetic_checkout(options):
+                codes.append(bytes_analyze.main(["--export", str(root / "export"), "--manifest", str(root / "manifest.json"),
+                                                 "--stage", "heldout", *options,
+                                                 "--predictions", str(out_fit / "predictions.json"),
+                                                 "--out", str(out_held)]))
     return codes, err.getvalue().strip(), out_held
 
 

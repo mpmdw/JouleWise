@@ -1957,6 +1957,23 @@
       ]
     },
     {
+      "reason": "RL-7a commitment-gate receipt (scripts/bytes_commitment.py), copied by the primary into its held-out analysis record: commit, origin, push-time, journal and checkout provenance, including check times and the analysis head. It is not an estimate; the twin runs the same external guard in a separate process. The gate's checks are tested in tests/test_bytes_commitment.py.",
+      "fields": [
+        "analysis_record.json/stage1_verification/analysis_head",
+        "analysis_record.json/stage1_verification/checked_utc",
+        "analysis_record.json/stage1_verification/estimator_sha256/joulewise/bytes_analysis.py",
+        "analysis_record.json/stage1_verification/historical_metadata_revisions_checked",
+        "analysis_record.json/stage1_verification/origin_ref",
+        "analysis_record.json/stage1_verification/origin_tip_at_push",
+        "analysis_record.json/stage1_verification/origin_tip_checked",
+        "analysis_record.json/stage1_verification/predictions_sha256",
+        "analysis_record.json/stage1_verification/push_time_authority",
+        "analysis_record.json/stage1_verification/pushed_utc",
+        "analysis_record.json/stage1_verification/stage1_commit",
+        "analysis_record.json/stage1_verification/unblinding_journal"
+      ]
+    },
+    {
       "reason": "Repeated model/pass identity or measured model-point value; canonical point labels/counts and fit, deviation and leave-one-out results are compared.",
       "fields": [
         "h2.json/[]/tier_deviations/[]/reason"
@@ -2091,7 +2108,9 @@
     "replayed_batch",
     "replayed_tail",
     "first_batch_tail_replayed",
-    "compressed"
+    "compressed",
+    "anchor_narrow",
+    "anchor_wide"
   ],
   "mutation_sampling": "Fixed semantic row identities: gross-primary decision rows first for H1/H2/MoE; all campaigns inventoried. Meter projection preserves every emitted schema on both sides.",
   "row_exemptions": [

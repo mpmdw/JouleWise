@@ -115,6 +115,7 @@ def reference_template():
 # the wall after that date closes every round at once (state DONE), so the
 # synthetic round clock starts no later than two weeks before it.
 FIXTURE_PACKS_CLOSE = 1793606400.0  # 2026-11-02T00:00:00-08:00
+BYTES_PACKS_CLOSE = 1793865600.0  # 2026-11-05T00:00:00-08:00 (configs/b6/packs/bytes-*)
 
 
 class Clock:
@@ -690,10 +691,19 @@ def bytes_rehearsal(root):
             return subprocess.CompletedProcess(argv, 0, stdout='', stderr='')
         return subprocess.run(argv, **{"capture_output": True, "text": True, "timeout": 120,
                                        "check": False, **kwargs})
+    # The real BYTES packs' committed stopping rule closes at end_t0_before
+    # 2026-11-05T00:00:00-08:00; a wall clock after that closes the loop at once
+    # (NEXT, DONE, ...). The rehearsal clock runs at wall rate, shifted to start
+    # no later than two weeks before that close.
+    shift = max(0.0, time.time() - (BYTES_PACKS_CLOSE - 14 * 86400))
+
+    def clock():
+        return time.time() - shift
+
     def factory(repo, loop_root, **kwargs):
-        kwargs.update(run=runner, mailer=Mailer(loop_root, __import__(
+        kwargs.update(run=runner, clock=clock, mailer=Mailer(loop_root, __import__(
             'joulewise.flags.catalog', fromlist=['load_catalog']).load_catalog(measurement / config['flag_catalog']),
-            clock=time.time, transport=Transport()))
+            clock=clock, transport=Transport()))
         loop = real_loop(repo, loop_root, **kwargs)
         loop.lanes.precheck.run = lambda *args: PrecheckResult(fingerprint={'synthetic': True})
         loop.lanes.driver.launchctl_bin = str(fake)

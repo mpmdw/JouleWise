@@ -33,7 +33,9 @@ def git(repo, *args, date='2026-11-01T10:00:00+00:00'):
 def commitment_fixture(root, predictions=None):
     repo = Path(root) / 'commitment-repo'
     repo.mkdir()
-    git(repo, 'init', '-q')
+    # Imported here: this module also runs as a script (--run-cli) before tests/ is importable.
+    from tests.git_fixture import init_git_fixture
+    init_git_fixture(repo, '-q')
     git(repo, 'config', 'user.name', 'BYTES Synthetic')
     git(repo, 'config', 'user.email', 'synthetic@example.invalid')
     git(repo, 'remote', 'add', 'origin', 'https://github.com/synthetic/bytes.git')

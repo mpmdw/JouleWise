@@ -123,11 +123,11 @@ def cli_stage_chain(root, manifest):
     _write_json(root / "manifest.json", manifest)
     args = [sys.executable, str(ROOT / "scripts/bytes_analyze.py"),
             "--export", str(root / "export"), "--manifest", str(root / "manifest.json")]
-    def stage(name, output, predictions=None):
-        command = args + ["--stage", name, "--out", str(output)]
+    def stage(name, output, predictions=None, options=()):
+        command = args + ["--stage", name, "--out", str(output), *options]
         if predictions is not None:
             command += ["--predictions", str(predictions)]
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+        result = subprocess.run(commitment_command(command), cwd=ROOT, capture_output=True, text=True, check=False)
         if result.returncode:
             raise AssertionError(result.stdout + result.stderr)
     stage("blinded", root / "blinded")
@@ -137,7 +137,9 @@ def cli_stage_chain(root, manifest):
     predictions = root / "stage1/predictions.json"
     commitment = predictions.read_bytes()
     release_keys(root, manifest, "all")
-    stage("heldout", root / "out", predictions)
+    # RL-7a: held-out stages run against a synthetic commitment of these predictions.
+    from tests.bytes_commitment_support import fixture_options
+    stage("heldout", root / "out", predictions, fixture_options(root, predictions))
     # Exact identity is the property: stage 2 must never rewrite predictions.
     assert predictions.read_bytes() == commitment
     assert predictions.with_suffix(".sha256").read_text().strip() == hashlib.sha256(commitment).hexdigest()
@@ -840,9 +842,13 @@ class ProductionArchiveTests(NumericTestCase):
 
             def analyze(stage, out, *, predictions=None, expected=0):
                 command = args + ["--stage", stage, "--out", str(root / out)]
+                if stage == "heldout":
+                    # RL-7a: held-out stages run against a synthetic commitment.
+                    from tests.bytes_commitment_support import fixture_options
+                    command += fixture_options(root, predictions)
                 if predictions is not None:
                     command += ["--predictions", str(predictions)]
-                result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
+                result = subprocess.run(commitment_command(command), cwd=ROOT, capture_output=True, text=True, check=False)
                 self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
 
             private = root / "private-keys/bytes/blinding"
@@ -911,8 +917,11 @@ class ProductionArchiveTests(NumericTestCase):
                 self.assertEqual(bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
                     "--stage","fit","--out",str(root/"fit")]),0)
                 prediction_bytes = (root/"fit/predictions.json").read_bytes()
-                self.assertEqual(bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
-                    "--stage","heldout","--predictions",str(root/"fit/predictions.json"),"--out",str(root/"heldout")]),0)
+                from tests.bytes_commitment_support import fixture_options, synthetic_checkout
+                options = fixture_options(root, root/"fit/predictions.json")
+                with synthetic_checkout(options):
+                    self.assertEqual(bytes_analyze.main(["--export",str(root/"export"),"--manifest",str(root/"manifest.json"),
+                        "--stage","heldout",*options,"--predictions",str(root/"fit/predictions.json"),"--out",str(root/"heldout")]),0)
             self.assertEqual((root/"fit/predictions.json").read_bytes(),prediction_bytes)
             self.assertEqual(len(ba.read_json(root/"heldout/h1.json")),360)
             self.assertEqual(len(ba.read_json(root/"heldout/h2.json")),12)
@@ -1453,12 +1462,14 @@ class Addendum4RegressionTests(NumericTestCase):
             self.assertTrue(all(p["role"]=="fit" for p in frozen["fit_points"]))
             fit_names = {m["model"] for m in manifest["models"] if m["role"]=="fit"}
             self.assertEqual({r["model"] for r in frozen["tier_fit_inputs"]},fit_names)
-            predict = ["--predictions",str(root/"fit/predictions.json")]
-            with contextlib.redirect_stderr(io.StringIO()), patch.object(ba,"_session_streams",side_effect=AssertionError("heldout meter before release")):
+            from tests.bytes_commitment_support import fixture_options, synthetic_checkout
+            options = fixture_options(root, root/"fit/predictions.json")
+            predict = [*options,"--predictions",str(root/"fit/predictions.json")]
+            with contextlib.redirect_stderr(io.StringIO()), patch.object(ba,"_session_streams",side_effect=AssertionError("heldout meter before release")), synthetic_checkout(options):
                 self.assertEqual(bytes_analyze.main(args+predict+["--stage","heldout","--out",str(root/"blocked")]),1)
             commitment = (root/"fit/predictions.json").read_bytes()
             release_keys(root,manifest,"all")
-            with contextlib.redirect_stdout(io.StringIO()):
+            with contextlib.redirect_stdout(io.StringIO()), synthetic_checkout(options):
                 self.assertEqual(bytes_analyze.main(args+predict+["--stage","heldout","--out",str(root/"held")]),0)
             self.assertEqual((root/"fit/predictions.json").read_bytes(),commitment)
             self.assertEqual(ba.read_json(root/"held/unavailable.json"),[])
