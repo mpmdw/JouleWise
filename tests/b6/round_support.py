@@ -110,9 +110,16 @@ def reference_template():
     return bundle
 
 
+# The fixture packs' committed stopping rule closes the loop at end_t0_before
+# 2026-11-02T00:00:00-08:00 (asserted in test_cold_pass_fixes). A clock read from
+# the wall after that date closes every round at once (state DONE), so the
+# synthetic round clock starts no later than two weeks before it.
+FIXTURE_PACKS_CLOSE = 1793606400.0  # 2026-11-02T00:00:00-08:00
+
+
 class Clock:
     def __init__(self):
-        self.value = time.time()
+        self.value = min(time.time(), FIXTURE_PACKS_CLOSE - 14 * 86400)
     def __call__(self):
         return self.value
 

@@ -1866,7 +1866,9 @@ class AgreementTests(unittest.TestCase):
         campaign("bytes")
         root = WORK["root"] / "bytes"
         # Fault the independent program's request term only. NEG-8 consumes
-        # request energy; science cells consume decode energy and stay intact.
+        # request energy, so NEG-8 rows must go above the bar; other held-out
+        # rows that are built on the same term may move too, and the assertion
+        # below looks at NEG-8 held-out rows only.
         source = (ROOT / "scripts/bytes_twin.py").read_text()
         expression = 'request_energy + request_battery["battery_gross_j"]'
         self.assertEqual(source.count(expression), 1)

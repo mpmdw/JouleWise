@@ -14,7 +14,6 @@ from pathlib import Path
 
 from joulewise import bytes_analysis as ba
 from scripts import bytes_twin as bt
-from tests.git_fixture import init_git_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 DROP = "Qwen3-8B-8bit"
@@ -106,7 +105,10 @@ class RosterCLIChainTests(unittest.TestCase):
 
 
 def command(args, commands, *, cwd=ROOT):
-    result = subprocess.run([str(a) for a in args], cwd=cwd, capture_output=True, text=True,
+    # RL-7a (276d05201): post-commit commands carry the synthetic commitment checkout's
+    # options; commitment_command binds the production guard to it in test processes.
+    from tests.bytes_commitment_support import commitment_command
+    result = subprocess.run(commitment_command([str(a) for a in args]), cwd=cwd, capture_output=True, text=True,
                             env={**os.environ, "JW_B5_SYNTHETIC_ONLY": "1", "PYTHONDONTWRITEBYTECODE": "1"})
     commands.append({"argv": [str(a) for a in args], "exit": result.returncode})
     if result.returncode:
@@ -162,8 +164,8 @@ def run_chain(root, manifest, commands, *, twin=False, code_root=ROOT, label="ou
         command([*analysis, "--stage", stage, "--out", out / tag, *extra], commands, cwd=code_root)
         (out / (tag + ".exit")).write_text("0\n")
 
-    def run_twin(stage, tag, keys=None):
-        args = [*twin_args, "--stage", stage, "--out", out / (tag + ".json")]
+    def run_twin(stage, tag, keys=None, extra=()):
+        args = [*twin_args, "--stage", stage, "--out", out / (tag + ".json"), *extra]
         if keys:
             args += ["--key-dir", root / keys]
         if stage == "2":
@@ -172,13 +174,12 @@ def run_chain(root, manifest, commands, *, twin=False, code_root=ROOT, label="ou
         command(args, commands, cwd=code_root)
         (out / (tag + ".exit")).write_text("0\n")
 
-    def release(stage, keys, commit=None):
+    def release(stage, keys, options=()):
         args = [sys.executable, "-B", code_root / "scripts/b6_release_subset.py",
                 "--pack-records-root", root / "private-keys", "--blinding-group", "bytes",
                 "--registrations-root", root / "registrations", "--project-root", root,
                 "--stage", stage, "--out", root / (label + "-" + stage + "-keys"), "--keys", *sorted(keys)]
-        if commit:
-            args += ["--stage1-commit", commit]
+        args += list(options)
         command(args, commands, cwd=code_root)
         return label + "-" + stage + "-keys"
 
@@ -190,18 +191,17 @@ def run_chain(root, manifest, commands, *, twin=False, code_root=ROOT, label="ou
     analyze("fit", "a-fit", "--key-dir", root / fit)
     if twin:
         run_twin("1", "t-1", fit)
-    init_git_fixture(out / "a-fit", "-q")
-    command(["git", "-C", out / "a-fit", "add", "."], commands)
-    command(["git", "-C", out / "a-fit", "-c", "user.name=BYTES Synthetic", "-c", "user.email=fixture",
-             "commit", "-qm", "Freeze synthetic predictions"], commands)
-    commit = command(["git", "-C", out / "a-fit", "rev-parse", "HEAD"], commands).strip()
-    analyze("blinded", "a-postcommit", "--stage1-commit", commit)
+    # The synthetic commitment of the fit predictions: a commit, its push receipt and
+    # an empty journal, verified by the production RL-7a gate on every use.
+    from tests.bytes_commitment_support import fixture_options
+    options = fixture_options(root, out / "a-fit/predictions.json")
+    analyze("blinded", "a-postcommit", *options)
     all_keys = {"neg8_reference", *(m["config_key"] for m in manifest["models"])}
-    held = release("heldout", all_keys, commit)
-    analyze("heldout", "a-held", "--key-dir", root / held,
+    held = release("heldout", all_keys, options)
+    analyze("heldout", "a-held", "--key-dir", root / held, *options,
             "--predictions", out / "a-fit/predictions.json")
     if twin:
-        run_twin("2", "t-2", held)
+        run_twin("2", "t-2", held, options)
     return out
 
 

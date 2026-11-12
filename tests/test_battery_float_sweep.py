@@ -78,8 +78,10 @@ READERS = {
     "scripts/run_campaign.py": ("run metadata", "reads the run's own controller attachment"),
     "scripts/bytes_twin.py": (
         "run metadata", "BYTES twin (anchor fix 447d9d81f, RL-80 item 1): reads a member bundle's own "
-        "instrument_calibration bound only to refuse a session operative timing bound narrower than it "
-        "(registration §7 item 4); the refusal names no value, and no lexeme is printed or written"),
+        "instrument_calibration bound and compares it in-process only to refuse the member's anchor "
+        "(evidence incomplete, or the session operative timing bound narrower than it; registration "
+        "§7 item 4 and Addendum 1 item 4); the fixed-text refusal goes to anchor_join_status and names "
+        "no value, and no lexeme is printed or written"),
     "scripts/calibration_ledger_backfill.py": (
         "refuses Revision 5", "raises '<dir>: revision_five evidence is not a backfill candidate'; "
         "test_revision_five_b_readers.test_backfill_refuses_revision_five_before_bound"),
