@@ -516,6 +516,17 @@ class LauncherTests(unittest.TestCase):
             _, plist = self.launch_files(launcher, Path(directory), kind="r1-smoke")
             self.assertGreaterEqual(plistlib.loads(plist)["ExitTimeOut"], 2 * launcher.R1_CLEANUP_GRACE_S + 10)
 
+    def test_r1_smoke_plist_runs_interactive_like_the_night_templates(self):
+        # RUN_STATE 274: under the default ProcessType the smoke's 300 s idle
+        # capture ran at ~240 ms a frame and hit its 460 s timeout; the night
+        # templates W1 runs under declare Interactive (~130 ms a frame).
+        for name in ("com.joulewise.night.plist.template", "com.joulewise.night-probe.plist.template"):
+            text = (smoke.ROOT / "configs/launchd" / name).read_text()
+            self.assertIn("<key>ProcessType</key><string>Interactive</string>", text)
+        with tempfile.TemporaryDirectory() as directory:
+            _, plist = self.launch_files(launcher, Path(directory), kind="r1-smoke")
+            self.assertEqual("Interactive", plistlib.loads(plist).get("ProcessType"))
+
     def test_launch_refuses_deadline_shorter_than_caps_dwell_and_grace(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, "deadline cannot fit"):

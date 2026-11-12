@@ -311,6 +311,11 @@ def launch(args) -> None:
     if args.runner_kind == "r1-smoke":
         # Cover the runner's teardown plus the outer helper's TERM grace.
         job_spec["ExitTimeOut"] = 2 * R1_CLEANUP_GRACE_S + 40
+        # The night, dead-man and probe templates run Interactive: the default
+        # ProcessType coalesces timers and slows `powermetrics -i 100` to ~240 ms
+        # a frame (the 09-19 slow-cadence class), so a 300 s idle capture
+        # overruns its 460 s timeout (RUN_STATE 274). The smoke runs as W1 runs.
+        job_spec["ProcessType"] = "Interactive"
     plist.write_bytes(plistlib.dumps(job_spec))
     with fence_lock(root):
         current = read_fence(root)
