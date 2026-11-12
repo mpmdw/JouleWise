@@ -360,3 +360,212 @@ Resolution guidance:
 
 The harness, scenario driver and logs are in `/Volumes/JW-EXT/scratch/rev-r1-launcher/` (`harness/`, `logs/`,
 `r0eq/`, `kept/normal-keep/`).
+
+## Round 2 delta (2026-11-11, head `a5e06b33c`)
+
+Reviewer: Opus 5.5, the same independent executing seat. This is a delta against the round-1 findings above. Range
+`2d54da7e9..a5e06b33c`: `4c27eba47` (fixes) and `a695857f6`/`a5e06b33c` (Sol's reports). The worktrees were clean
+at `a5e06b33c` and at base `9b4817f36`. Same constraints as round 1: `TMPDIR` on the SSD, `nice -n 10 python3.13 -B`,
+one module at a time, the test host-command guard installed, and every host interaction faked. The only real external
+commands were `git` and the harness's read-only `/bin/ps` orphan census. No Block 6, BYTES held-out or v4 outcome
+data was opened. No code was changed, and `scripts/test_timings.json` was not touched (the range does not change it
+either). The Air ran at load average 36 to 82, so wall times are not timing evidence.
+
+### Verdict: ADMIT
+
+H-1, M-1, M-2, L-2 to L-8 and the deadline are fixed, and each fix is witnessed end to end. R0 is still
+byte-identical. All 9 round-1 mutants and 4 new round-2 mutants are killed. The open items are L-1 (reported only,
+acceptable for a smoke) and two new LOWs (N-1, N-2); none blocks. M-3 (the presign conflict in
+`hazard_refusals.json`) is still a merge-time task; the exact rows are listed below. **Run the smoke only on a presign
+commit that contains `4c27eba47`, with `DEADLINE = now + 9000`.**
+
+### Finding-by-finding
+
+| Round-1 finding | Status | Evidence at `a5e06b33c` |
+|---|---|---|
+| **H-1** Part B capped at 1,800 s | **FIXED** | `launcher.r1_part_caps()` = `{"A": 1920, "B": 4520}`: 1,800 + `smoke_post_g0_budget(300, 1580)["total"]` (= 2,600) + 120. I recomputed this from `configs/align/v4/r1_runtime.json`. Both the launcher and the runner use it uncached. Scaled end to end (caps A 4 s, B 10 s; A sleeps 1 s, B 6 s): **B ran past A's cap, rc 0, parts A and B.** Sol's unit witness runs B on a simulated clock to 2,000 s against a 4,520 s enforcer. |
+| H-1 refusal: cap does not fit | **FIXED** | `part()` refuses before `Popen` when `work_remaining < cap`. End to end: B cap 7,000 with a 7,200 s fence gives `Part B not started: full 7000 s cap cannot fit before work deadline`, rc 2, A only, B never spawned. A cap 7,000 gives `Part A not started`, no part spawned. Both ran full cleanup and left no orphans. The launch-time check refuses a 7,000 s fence with `r1-smoke deadline cannot fit…` (rc 2) **before** any custody job directory, fence or `launchctl` call. The minimum is 1,920 + 4,520 + 300 + 2×180 + 10 = **7,110 s**. |
+| L-2 Part A cap counts kit start-up | FIXED | A gets 1,800 + 120 s, so the kit's own 1,800 s verdict decides. |
+| L-3 misleading truncation text | FIXED | A cap expiry reads `Part A exceeded its 3 s runner cap`. A fence expiry goes through `work_remaining()`, which raises `R1 smoke work deadline reached`, also after the enforcer fires. With the fit check in place, a work-deadline expiry inside a part can no longer precede the cap. |
+| **M-1** Automatic restore against a foreign W1 marker | **FIXED** | Two changes. `restore_power(power_read=False)` returns `no_power_read` without the lock or any command. Under the lock, a present `host_marker_path()` returns `foreign_marker_left`. `night_agents` now runs before `ac_power`. End to end with a foreign marker and `com.joulewise.night.align-r1` loaded: refused at `night_agents`, rc 2, **no `pmset` at all** (not even `-g batt`) and no `sudo`. With a foreign marker and a clean read (Automatic, no agent), A and B ran, rc 0 and **no `sudo`**; only the `-g batt` and `-g custom` reads ran. All early refusals (battery, night agent, condition 13, soak, meter, agent, volume, powermode 2) issued no `sudo`. The kit never sets the power mode (grep), so any marker is foreign to the smoke. |
+| **M-2** 60 s volume census | **FIXED** | `VolumeFeed.poll()` is a no-op. In a kept normal run, `volume_censuses.jsonl` has exactly 4 rows, stamped inside `start-volumes` (1.09 s), `before-part-A-volumes` (4.30 s), `before-part-B-volumes` (6.55 s) and `close-volumes` (11.49 s). `close-volumes` runs after all three feed stops. `/sbin/mount` was called 4 times in the normal run. Agent census stays on the 30 s grid. |
+| L-4 no `ExitTimeOut` | FIXED | r1-smoke plists carry `ExitTimeOut = 400` (seen in every end-to-end plist). On an external `bootout`, launchd TERMs the shell. The shell TERMs the `run` helper, which TERMs the runner and waits at most `R1_CLEANUP_GRACE_S` = 180 s before KILL; the runner's own cleanup runs inside that wait. Spotlight CONT, fence `clear` and `bootout` then take a few seconds. The bound is therefore about 190 s, and 400 s covers it with 210 s of margin. R0 plists have no `ExitTimeOut` (byte identity, below). |
+| L-5 meter identity | FIXED | `identity=night.observe_identity` is passed. |
+| L-6 hard-coded `/usr/bin/pmset` | FIXED | `runner.json` argv ends with `--pmset-bin <launcher's --pmset-bin>`, and `display()` uses it. `--checks/--keep-going` are still ignored for r1-smoke (harmless). |
+| L-7 no non-racy R1 wait witness | FIXED | Sol's R1 end-to-end test now holds the owner past the dwell seam and asserts no `handoff-returned`, no output and no meter journal. The skip-wait mutant is one of the 14 in-module mutants, all killed (module OK). |
+| L-8 meter before agent census | FIXED | Feed order is agents, meter, volumes. |
+| L-1 unmeasured agent census aborts a part | OPEN (report only) | Unchanged. Acceptable for a smoke: a failed smoke goes back to the lead. |
+| M-3 presign conflict | OPEN (merge task) | See "Merge rows" below. |
+| Deadline | **9,000 s confirmed** | Worst case: exit 180 + launcher preflight/Spotlight 30 + runner preflight/feeds 120 + dwell 300 + A 1,920 + B 4,520 + reserve 370 + boundary censuses (seconds) ≈ 7,440 s. B's fit check at B start with A at its full cap: 9,000 − 370 − 2,550 = 6,080 ≥ 4,520. |
+
+### New findings (LOW, non-blocking)
+
+- **N-1.** The launch-time minimum (7,110 s) leaves out the magistrate exit wait (≤ 180 s, `--exit-wait-seconds`)
+  and launcher and runner start-up (about 150 s). A fence between 7,110 s and about 7,440 s is admitted. If A then
+  runs near its cap, B refuses `not started`: no truncation, but a wasted A. The 9,000 s instruction makes this moot.
+  A later cleanup could add `args.exit_wait_seconds` plus a start-up allowance to the launch check. Sol's report
+  states this explicitly.
+- **N-2.** The terminal `close-volumes` census runs inside the runner's 180 s cleanup window and has only per-probe
+  timeouts (15 s each, `mount` plus one `diskutil` per disk). In a pathological case, the helper's KILL could arrive
+  before `runner_receipt.json` is written. Owned producers are already stopped by then, so the worst case is a lost
+  receipt, not an orphan. A close census that refuses (for example, a volume mounted during capture) sets rc 2 after
+  passing parts, which is the right call. Sol documents this.
+
+### R0 unchanged
+
+`r0eq.py` (base `9b4817f36` against head `a5e06b33c`, fixed UUID, `bootstrap` refused so the job stays):
+`runner.json` and plist bytes are **identical** for both default `--keep-going` and `--checks smc,battery
+--no-keep-going`. `run_until_deadline` and `scripts/run_align_r0_launchagent.sh` have no diff in the range; the R0
+terminate wait is still 5 s.
+
+### Scenarios and mutants (end-to-end harness, head)
+
+All 24 non-mutant scenarios **PASS**: the round-1 injections plus R2-normal, the H-1 and M-1 rows above, and
+F-partA-over-cap with caps A 3 s and B 10 s. Every run had a receipt with all feed stops proven, no owned or
+fixture-rooted process alive, the fence removed, the service unloaded and no unexpected host command. F-work-deadline
+(fence 395 s) no longer applies, because launch now refuses such a fence (H1-launch-deadline-short).
+
+| # | Mutant | Result |
+|---|---|---|
+| M1 | skip the magistrate wait | **KILLED**, but see the note: meter start and first probe 15.4 and 17.6 s before the magistrate exit, with a 25 s hold; the control with the same hold passes |
+| M2 | no shell `wait` on handoff | KILLED (17.6 and 18.4 s before exit with a 25 s hold; also killed with a 4 s hold) |
+| M3 | B after A fails | KILLED |
+| M4 | skip restore (round-2 cleanup line) | KILLED (no restore step) |
+| M5a / M5b / M5c | leak meter / census process / part group | KILLED (orphans) |
+| M6 | drop receipt | KILLED |
+| M7 | skip dwell | KILLED |
+| X1 | drop the foreign-marker check | KILLED (`sudo pmset -c powermode 0` with marker present) |
+| X2 | restore without own read | KILLED (`sudo` after a battery refusal) |
+| X3 | volume census in the poll loop | KILLED (80 `mount` calls against 4) |
+| X4 | no cap-fit check | KILLED (B spawned with a 7,000 s cap that cannot fit) |
+
+Note on M1: in the batch, M1 with the default 4 s magistrate hold **survived**. At load average 80, the
+fake-launchd → shell → helper → runner chain took longer than 4 s, so the first probe came after the exit anyway.
+This is a timing artifact of my harness, not a code regression. Re-run with a 25 s hold, M1 is killed decisively.
+Sol's in-module L-7 witness also kills it.
+
+### Tests at head (serial, `nice -n 10 python3.13 -B -m unittest`)
+
+| Module | Result |
+|---|---|
+| `tests.align.test_r1_smoke_launcher` | 36 OK (51.5 s), including 14 in-module mutants |
+| `tests.align.test_r1_followup` | 12 OK (100.2 s) |
+| `tests.test_magistrate_desk_fence` (R0 launcher) | 42, 8 F, all `timed out waiting for synthetic LaunchAgent` under load. Re-run alone, 7 of 8 pass at head. `test_spotlight_resumes_and_runner_is_reaped_before_deadline` fails alone at **both** head and base (as in round 1). Base alone also failed one more test (`…census_scopes…`), which passes at head. |
+| `tests.hazards.test_refusal_allowlist` | 23, 2 F, 1 skip, all inherited: unlisted driver `_run_hazard_night_body` re-raise and watchdog `_decide` FENCED/HOLD_UNSAFE, plus the inherited scope gaps. **No entry names `launch_align_r0.py`, `run_align_r1_smoke.py` or `r1_runtime.py`**, so the owned sites match their rows and the new dependency is declared. |
+| `tests.test_host_command_sites` | 2 OK |
+| `tests.align.test_v4_executed_closure` | 6 OK |
+
+### Merge rows (M-3 against presign `566720484`)
+
+Sol's table (report section "Exact refusal keys") has 43 keys and 46 sites, and every digest and count matches
+`configs/gates/hazard_refusals.json` at head. The branch's whole `sites` delta against base is exactly these 43 keys,
+with nothing removed. Against presign tip `origin/ops/2026-11-11-w1-presign` = `566720484`, 24 of the 25 launcher keys
+are already present with identical guards. The merge must:
+
+1. **Change one presign row:** `(scripts/launch_align_r0.py, launch, raise, ValueError|measurement checkout runner)`,
+   guard `2e266720c3066866` → **`cef3647b206ff276`** (count 1).
+2. **Add 19 rows:**
+   - `launch_align_r0.py | launch | raise | ValueError|r smoke requires` | 1 | `ba3ce19df8fddae7` (INTERNAL)
+   - `launch_align_r0.py | launch | raise | ValueError|r smoke deadline` | 1 | `14289bc956d7cebc` (NUMBER_INTEGRITY)
+   - `run_align_r1_smoke.py | ac_power | raise | ValueError|r smoke requires` | 1 | `c1ac40146e287262`
+   - `run_align_r1_smoke.py | night_agents | raise | ValueError|loaded night agent` | 1 | `b3c0de324562cf91`
+   - `run_align_r1_smoke.py | read_power | raise | ValueError|r smoke requires` | 1 | `7a2c2d4486f25339`
+   - `run_align_r1_smoke.py | restore_power | raise | ValueError|automatic restore blocked` | 1 | `93f3c8356c1d09e2`
+   - `run_align_r1_smoke.py | AgentFeed.sample | raise | ValueError|agent census refused` | 1 | `60b83eaf0cb8937e`
+   - `run_align_r1_smoke.py | VolumeFeed.sample | raise | ValueError|volume census refused` | 1 | `0af62d3a443cba6b`
+   - `run_align_r1_smoke.py | MeterFeed.start | raise | ValueError|km c supervisor` | 1 | `e236046ee123e156`
+   - `run_align_r1_smoke.py | MeterFeed.start | raise | ValueError|km c has` | 1 | `2ae2af4fcf176341`
+   - `run_align_r1_smoke.py | work_remaining | raise | TimeoutError|r smoke work` | 1 | `9e37a3ff2b12e605`
+   - `run_align_r1_smoke.py | part | raise | TimeoutError|part not started` | 1 | `009ba56e7bd6dab0` (NUMBER_INTEGRITY)
+   - `run_align_r1_smoke.py | part | raise | TimeoutError|part exceeded its` | **2** | `47cb9b4ead2779bb`
+   - `run_align_r1_smoke.py | part | raise | RuntimeError|part process group` | 1 | `fcd5b23f0ff85aab`
+   - `run_align_r1_smoke.py | run.step | raise | StepFailed|row[rc]` | 1 | `2d9502005a242afb` (NUMBER_INTEGRITY)
+   - `run_align_r1_smoke.py | run.step | raise | <reraise>` | 1 | `420f332386437c13` (NUMBER_INTEGRITY)
+   - `run_align_r1_smoke.py | run.interrupted | raise | SystemExit|128 + signum` | 1 | `e3b0c44298fc1c14`
+   - `run_align_r1_smoke.py | run.soak | raise | ValueError|soak reference file` | 1 | `a5ef691ee2acee56` (NUMBER_INTEGRITY)
+   - `run_align_r1_smoke.py | <module> | raise | SystemExit|main()` | 1 | `5972e4a22de36d17` (NUMBER_INTEGRITY)
+
+   All paths are under `scripts/`. Unmarked rows are PHYSICS. Take the `category` and `protects` text from the
+   branch's rows.
+3. **Scan scope:**
+   - Add `scripts/run_align_r1_smoke.py` to `scan.modules`.
+   - Add the `not_scanned_reasons` entry `r1_smoke_existing_dependency`, keeping presign's `v4_desk`.
+   - Map `joulewise/align/apple/r1_runtime.py`, `joulewise/align/apple/v4_registration.py`,
+     `scripts/align_r1_followup_kit.py` and `scripts/align_r1_rehearsal.py` to it.
+   - Keep presign's `scripts/align_r0_checks.py → desk` and `scripts/align_v4_session.py → v4_desk`.
+4. Re-run `tests.hazards.test_refusal_allowlist` on the merge, and have the RL-86 owner sign off on the new
+   `protects` text.
+
+Presign does not modify `launch_align_r0.py`, `run_align_r0_launchagent.sh`, `run_night.py`, `driver.py`,
+`powermode.py`, `r1_runtime.py` or `r1_runtime.json`. Its `align_r1_rehearsal.py` hunks (constants, `run()`) do not
+touch `VolumeWatch`. The guards above should therefore survive the merge unchanged; the allowlist re-run confirms it.
+
+### Magistrate command sequence (round-2 head, merged into presign)
+
+Start and check, while the magistrate is still alive:
+
+```sh
+cd /Users/edr/code/jw-wt/r1-followup-smoke
+git fetch origin && git checkout --detach <MERGED_PRESIGN_SHA>
+REPO="$PWD"
+: "${PY:?Set PY to the existing pinned measurement-venv interpreter (do not resolve the symlink)}"
+: "${MAGISTRATE_PID:?Set to the PID of this magistrate's own claude process}"
+ps -o pid=,comm= -p "$MAGISTRATE_PID"     # must show the claude process, not a tool shell
+CUSTODY="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-/Users/edr/night-custody/magistrate}"
+SOAK=/Users/edr/night-align/r1-20261111T043229Z/night/align-r1/soak_reference.json
+OUT="$REPO/.desk/r1-followup-smoke-$("$PY" -B -c 'import time; print(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))')"
+git status --short --branch
+test -z "$(git status --porcelain)"
+git merge-base --is-ancestor 9b4817f36 HEAD
+git merge-base --is-ancestor 4c27eba47 HEAD      # round-2 fixes (H-1, M-1, M-2) present
+"$PY" -B -c 'from pathlib import Path; import subprocess; from joulewise.align.apple import v4_registration as r; root=Path.cwd(); head=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); print(r.verify_r1_executed_sources(root,{"executed_commit":head}))'
+"$PY" -B -c 'from scripts import launch_align_r0 as l; c=l.r1_part_caps(); print(c, l.r1_minimum_seconds()); assert c=={"A":1920,"B":4520}'
+test ! -e /Users/Shared/JouleWise/host-power/high-power.marker   # no armed W1 High Power (precaution; M-1 fixed)
+"$PY" -B scripts/launch_align_r0.py preflight --disk-path "$REPO"
+DEADLINE="$("$PY" -B -c 'import time; print(time.time()+9000)')"
+```
+
+Run, as the magistrate's last action:
+
+```sh
+"$PY" -B scripts/launch_align_r0.py launch \
+  --runner-kind r1-smoke --repo "$REPO" --python-bin "$PY" \
+  --output "$OUT" --soak-reference "$SOAK" --disk-path "$REPO" \
+  --custody-root "$CUSTODY" --magistrate-pid "$MAGISTRATE_PID" \
+  --deadline "$DEADLINE" --exit-wait-seconds 180 --start-wait-seconds 30
+echo "$OUT"   # record for the next activation
+```
+
+Require exit 0 and `"next": "exit the magistrate session now"` with a claimed fence (fence `pid` ≠
+`MAGISTRATE_PID`). Then exit the magistrate session at once and make sure no other `claude`/`codex` process is running.
+If launch refuses with `r1-smoke deadline cannot fit…`, the fence was shorter than 7,110 s: recompute `DEADLINE` and
+do not lower it.
+
+Check, on the next activation after the fence is gone:
+
+```sh
+"$PY" -B - "$OUT" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+r = json.loads((root / "runner_receipt.json").read_text())
+print(json.dumps({k: r[k] for k in ("rc", "parts", "error") if k in r}, sort_keys=True))
+print([(s["name"], s["rc"]) for s in r["steps"]])
+print({s["name"]: s.get("result", {}).get("action") for s in r["steps"] if s["name"] == "restore"})
+assert r["rc"] == 0 and r["parts"] == {"A": True, "B": True}
+assert [s["name"] for s in r["steps"]].count("close-volumes") == 1
+for feed in r["feeds"].values():
+    assert feed["stop"]["proven_stopped"]
+    for f in feed["files"]:
+        with (root / f["path"]).open("rb") as h:
+            assert hashlib.file_digest(h, "sha256").hexdigest() == f["sha256"]
+PY
+test ! -e "$CUSTODY/desk_fence.json"; launchctl list | grep -c 'com.joulewise.align-r0' || true   # expect 0
+```
+
+Also read the job's `stdout.log`/`stderr.log` under `$CUSTODY/r0-launches/<token>/`. A `restore` action of
+`foreign_marker_left` means a W1 marker appeared during the smoke: report it to the lead. A failed or partial smoke
+goes back to the lead: do not retry a part, do not extend it, and do not reuse `OUT`.
+
+Harness, scenario driver and logs: `/Volumes/JW-EXT/scratch/rev-r1-launcher/` (`harness/`, `logs/r2b/`,
+`kept/r2-normal-keep/`, `r0eq/`).
