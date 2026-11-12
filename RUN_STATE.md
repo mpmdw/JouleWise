@@ -1042,6 +1042,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+286. **Magistrate 882ff176 (headless, Opus 5.5), 2026-11-12 06:50 PST: the item-285 RL-89 Part A smoke at `bb6394f2b` PASSED. A fresh TV0h/Th0C soak ran, then Part A: G0 RELEASED in 727.7 s, under the 1,200 s bar. Receipt rc 0, every receipt assert in item 285's check holds. Nothing armed. MAGISTRATE: nothing to run until the lead's next item, which arms tonight's R1 follow-up night or calls the second Part A smoke (wrapper) after 13:15.**
+
+```pointer
+owner: lead
+wait: none
+deadline: none
+on_early_or_refused: n/a (nothing launched)
+next_observable: the lead's next item: arm tonight's R1 follow-up night on these bytes, or a second Part A smoke after 13:15 if the powermetrics orphan wrapper (RL-91, RL-96) lands cold-reviewed and green by 12:00
+```
+
+- OUT: `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T132843Z` (launched by 502c59ea at 05:28 PST; the run ended and the fence released at 06:35).
+- Receipt: `{"error": null, "fresh_soak": true, "parts": {"A": true, "B": false}, "parts_requested": "A", "rc": 0}`. All 20 steps returned rc 0, `close-volumes` ran once, every feed is `proven_stopped`, and every feed file's sha256 matches.
+- Soak: 05:34:25 to 06:04:25 PST (1,800 s), rc 0. `soak_reference.json` sha256 `b45801a5764d9bbdb6230e1339f5d312c70c872711a750064e4941e7a920d560`, matching the receipt. The last 1,200 s, detrended: TV0h mean 34.167 °C, sd 0.0098 °C; Th0C mean 27.097 °C, sd 0.077 °C; both `settled`. Gate bands 1.0/1.0 °C (`delta_fast_c`, `delta_slow_c` in `align_episode.json`).
+- G0 (step D, `smoke_part_a.json`): entered 06:22:16 PST, hot after the prefill (TV0h 84.41, Th0C 66.69, Tf08 69.80 °C; slow slope −6.92 °C/min). It released at 06:34:23, `duration_s` 727.666. The G0 reference is the window's own pre-step-D capture (`align-v4-r1-step-d`, 60 s span): fast 34.715, slow 33.110 °C.
+  - Release minus reference: fast −0.21 °C, slow −2.44 °C, both under the +1.0 °C bands.
+  - The slow slope at release was −0.194 °C/min, against the gate's |slope| ≤ 0.2 °C/min. The slope was the deciding condition. Both temperatures had margin; the slope cleared its bar by 0.006.
+  - Tf08 is recorded at entry only. The G0 release record holds only the fast and slow values.
+  - `admission_s` 1,796.8; `rearmed` true.
+- `align_failure.json` in step D says `episode.deadman` with `deadline_origin: R1_smoke_A_stop_after_G0`. Its deadline is 4 ms after G0's end. That is Part A's designed stop after G0, and item 281's passing Part A left the same record.
+- The launch plist has `ProcessType Interactive`; no `com.joulewise.align-r0*` job is loaded; `desk_fence.json` is gone. `night.lock` was left as found: `{"epoch_s": 1794494120.826043, "pid": 77434, "role": "r1-smoke-close"}`, written by this smoke's close.
+- No High Power marker. No unread mail from Ed; no new directive (standing #587, #422, #421, #417, #416, #408, #405). The canonical root was already at `0804d3563`. No Codex child was started.
+
 285. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 05:18 PST: MAGISTRATE: run the RL-89 Part A smoke on `bb6394f2b`: a FRESH TV0h/Th0C idle soak, then Part A only (`--fresh-soak --parts A`). It runs on the final bytes for tonight's R1 follow-up night. No prepare, no arm. The launch is your LAST action, and you exit at once. LAUNCH BEFORE 11:05 PST: the soak refuses if it would end after 11:45, the start of the OS batch window. If it is too late, wait until after 13:15 and launch then.**
 
 ```pointer
