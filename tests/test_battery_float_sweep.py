@@ -76,6 +76,10 @@ READERS = {
         "G2-b authenticates the launch lineage's session and plan, its finalized pre slot and battery pair; "
         "test_controller_g2b_attachment.G2bAttachmentTests covers real-capture acceptance and binding refusals"),
     "scripts/run_campaign.py": ("run metadata", "reads the run's own controller attachment"),
+    "scripts/bytes_twin.py": (
+        "run metadata", "BYTES twin (anchor fix 447d9d81f, RL-80 item 1): reads a member bundle's own "
+        "instrument_calibration bound only to refuse a session operative timing bound narrower than it "
+        "(registration §7 item 4); the refusal names no value, and no lexeme is printed or written"),
     "scripts/calibration_ledger_backfill.py": (
         "refuses Revision 5", "raises '<dir>: revision_five evidence is not a backfill candidate'; "
         "test_revision_five_b_readers.test_backfill_refuses_revision_five_before_bound"),
