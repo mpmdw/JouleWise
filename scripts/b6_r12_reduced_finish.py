@@ -63,7 +63,8 @@ def finish(root, denied):
         "serial_receipt_sha256": sha(root / "option-c-receipt.json"),
         "timing": serial["process_measurement"], "time_wrapper_exit": serial["time_wrapper_exit"],
         "finisher_sha256": sha(Path(__file__)),
-        "remaining_gates": ["three full-volume sessions", "Opus cold review"]}
+        "remaining_gates": ["three full-volume sessions", "canonical nine-session benchmark including full-volume sessions",
+                            "Opus cold review"]}
     (root / "reduced-finish-receipt.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     if assertions.returncode:
         return assertions.returncode
