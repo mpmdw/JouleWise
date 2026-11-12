@@ -316,6 +316,37 @@ class Mini(unittest.TestCase):
                             "--root", dst, "--loop-dir", dst, "--out", self.base / "c-receipt.json")
         self.assertEqual((rc, err.splitlines()[:1]), (4, ["refused: file_size_mismatch"]))
 
+    def counted_sums_opens(self, call):
+        opened, real = [], os.open
+
+        def counting(path, *args, **kwargs):
+            if str(path).endswith("SHA256SUMS"):
+                opened.append(str(path))
+            return real(path, *args, **kwargs)
+
+        real_read = Path.read_bytes
+
+        def counting_read(path):
+            if str(path).endswith("SHA256SUMS"):
+                opened.append(str(path))
+            return real_read(path)
+
+        with mock.patch.object(kit.os, "open", counting), mock.patch.object(Path, "read_bytes", counting_read):
+            result = call()
+        return result, opened
+
+    def test_sha256sums_is_read_once_per_archive(self):
+        # Expected (L5): the kit opens each archive's SHA256SUMS once in manifest, verify and inputs: the bytes it
+        # parses are the bytes it hashed (no second read to race with).
+        result, opened = self.counted_sums_opens(lambda: run(
+            "manifest", "--session", self.a, "--session", self.b, "--loop-attempts", self.attempts,
+            "--out", self.base / "once.json"))
+        self.assertEqual((result[0], len(opened)), (0, 2))
+        result, opened = self.counted_sums_opens(self.verify)
+        self.assertEqual((result[0], len(opened)), (0, 2))
+        result, opened = self.counted_sums_opens(lambda: run("inputs", *self.ia(), "--list-names", "b6-alpha-r1"))
+        self.assertEqual((result[0], len(opened)), (0, 1))
+
     def test_extra_file_in_sources(self):
         # Expected: refused unlisted_extra_file.
         write(self.ca / "sources/runs/r1/extra.txt", "e")

@@ -83,6 +83,16 @@ def hash_file(path):
     return digest.hexdigest(), size
 
 
+def read_hashed(path):
+    """Bytes and SHA-256 of a regular file from ONE read (cold review L5): the bytes parsed are the bytes hashed."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            refuse("not_regular_file")
+        data = stream.read()
+    return data, hashlib.sha256(data).hexdigest()
+
+
 def hash_zst(path, zstd):
     """SHA-256 of the decompressed stream; zstd writes to a pipe, nothing on disk."""
     digest = hashlib.sha256()
@@ -194,7 +204,8 @@ def session_manifest(source, copy_path):
     for name in (SUMS, HARVEST, ACCEPTANCE):
         if name not in files:
             refuse("required_file_missing")
-    check_sources_set(files, sums_names((source / SUMS).read_bytes()))
+    sums_data, sums_sha = read_hashed(source / SUMS)
+    check_sources_set(files, sums_names(sums_data))
     desk = Path(str(source) + DESK_SUFFIX)
     desk_files = {}
     if desk.is_symlink():
@@ -211,7 +222,7 @@ def session_manifest(source, copy_path):
     elif adjacent:
         compression = {"location": "adjacent", "name": DESK_LOG, "sha256": desk_files[DESK_LOG]}
     return {"copy_path": copy_path, "basename": source.name, "source_path": str(source),
-            "sha256sums_sha256": hash_file(source / SUMS)[0], "harvest_sha256": outside[HARVEST],
+            "sha256sums_sha256": sums_sha, "harvest_sha256": outside[HARVEST],
             "acceptance_sha256": outside[ACCEPTANCE], "compression": compression,
             "outside_sources": outside, "sources_sizes": {n: z for n, z in sorted(files.items()) if n.startswith("sources/")},
             "desk_present": desk.is_dir(), "desk_files": desk_files,
@@ -270,7 +281,8 @@ def verify_session(root, entry, tool):
     files = tree(archive)
     if SUMS not in files:
         refuse("listed_file_missing")
-    if hash_file(archive / SUMS)[0] != entry["sha256sums_sha256"]:
+    sums_data, sums_sha = read_hashed(archive / SUMS)
+    if sums_sha != entry["sha256sums_sha256"]:
         refuse("sums_digest_mismatch")
     expected = {SUMS}
     for name, sha in entry["outside_sources"].items():
@@ -279,7 +291,7 @@ def verify_session(root, entry, tool):
             refuse("listed_file_missing", name)
         if hash_file(archive / name)[0] != sha:
             refuse("digest_mismatch", name)
-    rows = sums_names((archive / SUMS).read_bytes())
+    rows = sums_names(sums_data)
     compressed = 0
     for name, sha in sorted(rows.items()):
         plain, packed = "sources/" + name, "sources/" + name + ".zst"
@@ -404,9 +416,10 @@ def authenticated_names(root, entry):
     `files`, and the three pinned files. Other manifest-hashed files (the inside desk log, markers)
     are not citable."""
     archive = no_symlink_components(root / relative(entry["copy_path"]))
-    if hash_file(archive / SUMS)[0] != entry["sha256sums_sha256"]:
+    sums_data, sums_sha = read_hashed(archive / SUMS)
+    if sums_sha != entry["sha256sums_sha256"]:
         refuse("sums_digest_mismatch")
-    listed = {"sources/" + n for n in sums_names((archive / SUMS).read_bytes())}
+    listed = {"sources/" + n for n in sums_names(sums_data)}
     return archive, listed | set(emitted_files(entry)) | {SUMS, HARVEST, ACCEPTANCE}
 
 
