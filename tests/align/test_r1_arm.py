@@ -59,10 +59,18 @@ class ArmTests(unittest.TestCase):
     def test_plan_pins_single_chain_and_derives_the_long_deadline(self):
         record = self.prepare()
         sizing = record['derivation']
-        self.assertEqual(record['window_max_s'], sum(sizing['base_terms_s'].values()) + sizing['extra_batch_s'])
+        self.assertEqual(record['window_max_s'], sizing['window_max_s'])
         self.assertEqual(sizing['base_terms_s']['display_dwell_s'], arm.DISPLAY_DWELL_S)
-        self.assertEqual(self.plan.ac_powermode, 0)
+        mapping = json.loads(self.plan_path.read_text())
+        # RL-72 E2 sizing on the plan itself (W1 PREQUAL's installed-R1-plan check, w1_prequal.py:1396-1404).
+        self.assertEqual(mapping['hazard_window']['programmed_span_s'], 108768)
+        self.assertEqual(mapping['window_max_s'], 126480)
+        # Admission at Automatic is the default (night_gate: absent means 0); the R1 driver owns
+        # every A-B-A/series power transition. The key is omitted so main's watchdog can read the plan.
+        self.assertNotIn('ac_powermode', mapping)
+        self.assertIsNone(self.plan.ac_powermode)
         self.assertEqual(self.plan.receipt_class, 'HAZARD_PACK')
+        self.assertTrue(self.plan.plan_id.startswith('align-r1-'))
         self.assertEqual(self.plan.hazard_window['member_count'], 0)
         self.assertEqual(self.plan.hazard_window['T_stream_max_s'], 5764)
         clock = self.plan.hazard_window['thresholds']['clock']
@@ -76,45 +84,52 @@ class ArmTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             arm.prepare(ROOT, self.custody, int(self.plan.t0_epoch_s))
 
-    def test_sizing_counts_local_crossings_and_adds_the_display_dwell(self):
-        # All expected seconds come from the original route terms + item 216;
-        # D3's additional dwell is shown separately from D2's original base.
-        base = (arm.R1_RETRY_FLOOR_S + arm.b5_plan.T0_STAGE_CAP_S
-                + 2 * (arm.BOOKEND_S + arm.CLOSE_S) + arm.HARVEST_S)
-        for hour, minute, crossings in ((13, 30, 1), (8, 0, 2)):
-            with self.subTest(hour=hour):
-                t0 = datetime(2026, 11, 8, hour, minute, tzinfo=arm.BATCH_ZONE).timestamp()
-                expected = base + (crossings - 1) * arm.BATCH_ENCOUNTER_S
-                original = arm.crossing_size(t0, base)
-                self.assertEqual(original['window_max_s'], expected)
-                final = arm.size_window(t0)
-                self.assertEqual(final['batch_window_crossings'], crossings)
-                self.assertEqual(final['window_max_s'], expected + arm.DISPLAY_DWELL_S)
-                replay = arm.crossing_size(t0, final['base_s'])
-                self.assertEqual(replay, {k: v for k, v in final.items() if k != 'base_terms_s'})
-                cli = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/arm_align_r1.py'),
-                                      'size', '--t0', str(int(t0))], capture_output=True, text=True, check=True)
-                self.assertEqual(json.loads(cli.stdout), final)
-
-    def test_sizing_uses_local_calendar_across_dst_and_half_open_end(self):
-        self.assertEqual(arm.BATCH_ZONE, ZoneInfo('America/Los_Angeles'))
-        # Fall-back is 2026-11-01. From 05:00 the next-day 11:45 is
-        # 31 h 45 min away (one extra hour), beyond the 109,627 s base.
-        # Spring-forward is 2026-03-08, < 30 h after the second t0. Its next
-        # 11:45 is only 28 h 45 min away (one fewer hour), inside the window.
-        for date, hour, crossings in (((2026, 10, 31), 5, 1), ((2026, 3, 7), 6, 2)):
-            with self.subTest(date=date):
-                t0 = datetime(*date, hour, tzinfo=arm.BATCH_ZONE).timestamp()
+    def test_follow_up_sizing_is_rl72_e2_for_every_t0(self):
+        # RL-72 E2: programmed span 108,768 s (the driver's own two whole-unit redos, two batch
+        # encounters and 9,000 s in-driver overhead), window_max_s 126,480 s.
+        from scripts import align_r1_rehearsal as r1
+        from joulewise.b6 import plan_inputs
+        driver = r1.night_worst_case_s(['--config', str(ROOT / 'configs/align/v4/r1_runtime.json')])
+        self.assertEqual(driver['programmed_span_s'], 108768)
+        cases = [((2026, 11, 12), 19, 26), ((2026, 11, 8), 13, 30), ((2026, 11, 8), 8, 0),
+                 ((2026, 10, 31), 5, 0), ((2026, 3, 7), 6, 0)]
+        for date, hour, minute in cases:
+            with self.subTest(date=date, hour=hour):
+                t0 = int(datetime(*date, hour, minute, tzinfo=arm.BATCH_ZONE).timestamp())
                 sizing = arm.size_window(t0)
-                self.assertEqual(sizing['batch_window_crossings'], crossings)
-                self.assertEqual(sizing['window_max_s'], arm.BASE_WINDOW_S + arm.DISPLAY_DWELL_S
-                                 + (crossings - 1) * arm.BATCH_ENCOUNTER_S)
+                self.assertEqual(sizing['programmed_span_s'], 108768)
+                self.assertEqual(sizing['writer_window_max_s'],
+                                 plan_inputs.window_max_s({'programmed_span_s': {'seconds': 108768}}))
+                self.assertEqual(sizing['window_max_s'], 126480)
+                # No batch allowance is added on top: the span already holds two encounters.
+                self.assertLessEqual(sizing['batch_window_crossings'], 2)
                 for epoch in sizing['batch_crossings_epoch_s']:
                     local = datetime.fromtimestamp(epoch, arm.BATCH_ZONE)
                     self.assertEqual((local.hour, local.minute), (11, 45))
-        t0 = datetime(2026, 11, 8, 11, 45, tzinfo=arm.BATCH_ZONE).timestamp()
-        # A full standard-time day includes t0 but excludes the next 11:45.
-        self.assertEqual(arm.crossing_size(t0, 24 * 60 * 60)['batch_crossings_epoch_s'], [t0])
+                    self.assertTrue(t0 <= epoch < t0 + sizing['window_max_s'])
+                cli = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/arm_align_r1.py'),
+                                      'size', '--t0', str(t0)], capture_output=True, text=True, check=True)
+                self.assertEqual(json.loads(cli.stdout), sizing)
+
+    def test_window_covers_wrapper_prefix_driver_work_deadline_and_close(self):
+        # The wrapper's display dwell and D-109 bookends run outside the driver (r1_arm.wrapper_bytes);
+        # the driver's own calibration brackets are inside its span (align_r1_rehearsal.phase_bound).
+        sizing = arm.size_window(int(datetime(2026, 11, 12, 19, 26, tzinfo=arm.BATCH_ZONE).timestamp()))
+        terms = sizing['base_terms_s']
+        self.assertEqual(terms, {'r1_driver_span_s': 108768, 'hazard_arm_s': arm.b5_plan.T0_STAGE_CAP_S,
+                                 'display_dwell_s': 300, 'bookends_s': 2 * 1800, 'close_s': 2 * 600,
+                                 'harvest_s': 600})
+        self.assertEqual(sizing['base_s'], sum(terms.values()))
+        # Latest driver end: arm cap + dwell + pre bookend (+ its budget grace) + the driver's whole span
+        # (its work deadline is chain start + span - 900, then its 900 s close reserve).
+        latest_driver_end = (arm.b5_plan.T0_STAGE_CAP_S + 300 + 1800 + arm.chain.BUDGET_GRACE_S + 108768)
+        self.assertEqual(sizing['latest_driver_end_offset_s'], latest_driver_end)
+        self.assertLessEqual(latest_driver_end + 1800 + arm.chain.BUDGET_GRACE_S + 600, sizing['window_max_s'])
+        self.assertLessEqual(sizing['base_s'], sizing['window_max_s'])
+
+    def test_sizing_refuses_a_driver_span_other_than_rl72_e2(self):
+        with self.assertRaisesRegex(ValueError, 'RL-72 E2'):
+            arm.size_window(int(time.time()) + 3600, span_s=100627)
 
     def test_prepare_requires_fifteen_minute_notice_without_writing_custody(self):
         t0 = math.ceil(time.time() / 60) * 60
