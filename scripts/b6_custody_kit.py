@@ -40,15 +40,22 @@ CHUNK = 1 << 20
 
 
 class Refusal(Exception):
-    pass
+    def __init__(self, code, name=None):
+        super().__init__(code)
+        self.name = name
+
+
+# Where a refusal happened (cold review L1): the session's copy path and, when known, a relative file name.
+# Names and copy paths are permitted content; exception messages stay suppressed.
+WHERE = {"session": None}
 
 
 def host_name():
     return socket.gethostname().split(".")[0].lower()
 
 
-def refuse(code):
-    raise Refusal(code)
+def refuse(code, name=None):
+    raise Refusal(code, name)
 
 
 def no_symlink_components(path):
@@ -210,6 +217,11 @@ def session_manifest(source, copy_path):
             "file_count": len(files), "total_bytes": sum(files.values())}
 
 
+def located(copy_path, function, *arguments):
+    WHERE["session"] = copy_path
+    return function(*arguments)
+
+
 def cmd_manifest(args):
     check_out(args.out)
     sources = [no_symlink_components(s) for s in args.session]
@@ -229,7 +241,7 @@ def cmd_manifest(args):
     names = copy_paths(sources)
     host = (args.source_host or host_name()).split(".")[0].lower()
     document = {"schema": MANIFEST_SCHEMA, "host": host, "loop": loop, "loop_state_waived": bool(args.no_loop_state),
-                "sessions": [session_manifest(s, n) for s, n in zip(sources, names)]}
+                "sessions": [located(n, session_manifest, s, n) for s, n in zip(sources, names)]}
     digest = write_new(args.out, document)
     for entry in document["sessions"]:   # names and counts only: nobody needs to open the manifest
         print("session " + entry["copy_path"] + " files=" + str(entry["file_count"]) + " bytes="
@@ -263,9 +275,9 @@ def verify_session(root, entry, tool):
     for name, sha in entry["outside_sources"].items():
         expected.add(relative(name))
         if name not in files:
-            refuse("listed_file_missing")
+            refuse("listed_file_missing", name)
         if hash_file(archive / name)[0] != sha:
-            refuse("digest_mismatch")
+            refuse("digest_mismatch", name)
     rows = sums_names((archive / SUMS).read_bytes())
     compressed = 0
     for name, sha in sorted(rows.items()):
@@ -280,21 +292,21 @@ def verify_session(root, entry, tool):
             got = hash_zst(archive / packed, tool["zstd"]["path"])
             compressed += 1
         else:
-            refuse("listed_file_missing")
+            refuse("listed_file_missing", plain)
         if got != sha:
-            refuse("digest_mismatch")
+            refuse("digest_mismatch", plain)
     if set(files) - expected:
-        refuse("unlisted_extra_file")
+        refuse("unlisted_extra_file", sorted(set(files) - expected)[0])
     if len(files) != entry["file_count"] or sum(files.values()) != entry["total_bytes"]:
         refuse("tree_size_mismatch")
     desk = Path(str(archive) + DESK_SUFFIX)
     if entry["desk_files"]:
         no_symlink_components(desk)
         if set(tree(desk)) != set(entry["desk_files"]):
-            refuse("desk_file_set_mismatch")
+            refuse("desk_file_set_mismatch", archive.name + DESK_SUFFIX)
         for name, sha in entry["desk_files"].items():
             if hash_file(desk / relative(name))[0] != sha:
-                refuse("digest_mismatch")
+                refuse("digest_mismatch", name + " (desk)")
     return {"files": len(files), "bytes": sum(files.values()), "sums_rows": len(rows),
             "sums_rows_compressed": compressed, "desk_files": len(entry["desk_files"])}
 
@@ -320,13 +332,13 @@ def cmd_verify(args):
     for e in manifest["sessions"]:
         if not args.self_check and str(root / relative(e["copy_path"])) == e["source_path"]:
             refuse("copy_is_source")
-        sessions[e["copy_path"]] = verify_session(root, e, tool)
+        sessions[e["copy_path"]] = located(e["copy_path"], verify_session, root, e, tool)
     loop_dir = no_symlink_components(args.loop_dir)
     for field, item in sorted(manifest["loop"].items()):
         if not no_symlink_components(loop_dir / relative(item["name"])).exists():
-            refuse("loop_file_missing")
+            refuse("loop_file_missing", item["name"])
         if hash_file(loop_dir / relative(item["name"]))[0] != item["sha256"]:
-            refuse("digest_mismatch")
+            refuse("digest_mismatch", item["name"] + " (loop)")
     totals = {k: sum(s[k] for s in sessions.values()) for k in
               ("files", "bytes", "sums_rows", "sums_rows_compressed", "desk_files")}
     if args.self_check:
@@ -454,7 +466,7 @@ def cmd_inputs(args):
         refuse("mapping_session_mismatch")
     sessions = {}
     for copy_path, entry in by_path.items():
-        archive, names = authenticated_names(root, entry)
+        archive, names = located(copy_path, authenticated_names, root, entry)
         sessions[str(archive)] = session_pin(archive, entry, mapping["sessions"][copy_path], names)
     document = {"host": "Air", "l9_audit": args.l9_audit, "sessions": sessions,
                 "external": {k: v["sha256"] for k, v in manifest["loop"].items()}}
@@ -463,7 +475,13 @@ def cmd_inputs(args):
     return 0
 
 
+def print_where(name):
+    if WHERE["session"] or name:
+        print("  at " + (WHERE["session"] or "-") + (": " + name if name else ""), file=sys.stderr)
+
+
 def main(argv=None):
+    WHERE["session"] = None
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     m = sub.add_parser("manifest", help="at the source: digests of each archive's pinned files")
@@ -498,10 +516,12 @@ def main(argv=None):
         return {"manifest": cmd_manifest, "verify": cmd_verify, "inputs": cmd_inputs}[args.command](args)
     except Refusal as exc:
         print("refused: " + str(exc), file=sys.stderr)
+        print_where(exc.name)
         return 4
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         # The type only: an exception message could quote bytes it failed on.
         print("refused: " + type(exc).__name__, file=sys.stderr)
+        print_where(None)
         return 4
 
 
