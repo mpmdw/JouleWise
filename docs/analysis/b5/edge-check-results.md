@@ -11,7 +11,7 @@ Run 2026-11-12 on the Air by an Opus 5.5 seat, following `docs/analysis/b5/edge-
 | Seed; resamples | 20261112; 2,000 |
 | Data | `night-archive/harvest-v5-b5-{alpha-a1-20261009T2312Z, beta-a6-20261011T2011Z, gamma-a1-20261012T0420Z}` (kept runs, their calibration capture, `derived/{exclusions,roster}.json`, `withheld/bracket-evaluation.json`, the meter `stream-001.jsonl`); b and the kept-unit cross-check from `jw-b5-custody/release-check-final-20261108T0942Z/recompute.json` (RC). Nothing else opened. |
 | Per-edge output | `edges.json`, SHA-256 `8dc61055975331e54c04362c5c78fb2aa3acbca5bf52b654513a5c14347cb07f` (identical in both runs; kept outside the repo at `/Volumes/JW-EXT/tmp/b5-edge-check/run2/`) |
-| Script wall time | 11.5 s (run 2), 11.9 s (run 1). Whole task, rule read to PR: about 15 minutes. |
+| Script wall time | 11.5 s (run 2), 11.9 s (run 1). Whole task, rule read to PR: about 10 minutes (12:11 to 12:21 PST). |
 
 Reproduce: `python3.13 scripts/b5_edge_check.py --out "$TMPDIR/b5-edge-check"` (selftest only: `--selftest`).
 
