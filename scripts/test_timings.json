@@ -427,6 +427,7 @@
     "tests.test_b6_agent_pause": 0.003,
     "tests.test_b6_busy_fraction_desk": 0.045,
     "tests.test_b6_compose": 0.483,
+    "tests.test_b6_custody_kit": 36.0,
     "tests.test_b6_idle_wait": 1.756,
     "tests.test_b6_loop": 8.689,
     "tests.test_b6_machine_test": 2.388,
