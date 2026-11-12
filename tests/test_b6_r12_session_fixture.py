@@ -864,6 +864,49 @@ class VerifierInventoryTests(unittest.TestCase):
         self.assertEqual(value["pin"], PIN)
 
 
+class SchedulerBoundaryTests(unittest.TestCase):
+    """Control-only tests; these are not real-chain session fixtures."""
+
+    def test_dispatch_requires_collecting_state_and_absent_terminal(self):
+        """Predict: completed drivers and desk states are never scheduled again."""
+        from b6_r12_orchestrate import pending_driver
+        with tempfile.TemporaryDirectory(prefix="r12-boundary-") as directory:
+            terminal = Path(directory) / "terminal.json"
+            prepared = {"plan_path": "unused", "terminal_path": str(terminal)}
+            state = {"state": "SESSION_RUN", "session": {"prepared": prepared, "handle": {"id": 1}}}
+            self.assertEqual(pending_driver(state), ("", prepared))
+            terminal.write_text("{}\n")
+            self.assertIsNone(pending_driver(state))
+            terminal.unlink()
+            state["state"] = "SESSION_DESK"
+            self.assertIsNone(pending_driver(state))
+            state["state"] = "SMOKE_RUN"
+            state["session"].update(smoke_prepared=prepared, smoke_handle={"id": 1})
+            self.assertEqual(pending_driver(state), ("smoke_", prepared))
+
+    def test_plausible_state_does_not_resume_interrupted_parent(self):
+        """Predict: missing/failed parent completion refuses before reading a session."""
+        from b6_r12_segments import validate_resume
+        for steps in ([], [{"started_native_ns": 1}], [{"exit_code": 143}], [{"exit_code": 0}]):
+            with self.subTest(steps=steps), self.assertRaisesRegex(ValueError, "interrupted/failed phase"):
+                validate_resume(Path("unused"), {"steps": steps})
+
+    def test_driver_boundary_requires_original_terminal(self):
+        """Predict: a launched handle alone cannot authenticate a completed driver phase."""
+        from b6_r12_segments import snapshot
+        with tempfile.TemporaryDirectory(prefix="r12-boundary-") as directory:
+            root = Path(directory).resolve()
+            (root / "loop").mkdir()
+            terminal = root / "terminal.json"
+            state = {"state": "SESSION_RUN", "session": {"id": "control-only",
+                "prepared": {"terminal_path": str(terminal)}, "handle": {"id": 1}}}
+            (root / "loop/state.json").write_text(json.dumps(state))
+            with self.assertRaisesRegex(ValueError, "handle/terminal"):
+                snapshot(root)
+            terminal.write_text("{}\n")
+            self.assertEqual(snapshot(root)["terminal_sha256"], hashlib.sha256(b"{}\n").hexdigest())
+
+
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
 class DeclaredShapeTests(unittest.TestCase):
     """Integration expectations declared before any official named shape run.

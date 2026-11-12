@@ -102,7 +102,20 @@ def session_policy(pack, round_number, base):
     return value
 
 
-def loop_fixture(root, clock, pack="alpha", limit="1"):
+def pending_driver(state):
+    """Dispatch only an active, not-yet-terminal original driver handle."""
+    if state["state"] not in {"SMOKE_RUN", "SESSION_RUN"}:
+        return None
+    session = state.get("session") or {}
+    prefix = "smoke_" if state["state"] == "SMOKE_RUN" else ""
+    prepared = session.get(prefix + "prepared")
+    if (not prepared or not session.get(prefix + "handle")
+            or Path(prepared["terminal_path"]).exists()):
+        return None
+    return prefix, prepared
+
+
+def loop_fixture(root, clock, pack="alpha", limit="1", boundary="continuous"):
     from runtime import install_sources, source_root
     from joulewise.b6.loop import Loop
     from joulewise.b6 import precheck
@@ -118,11 +131,20 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
     sources = install_sources(root, clock)
     def run(argv, **kwargs):
         return sources.subprocess_run(argv, **{"capture_output": True, "text": True, **kwargs})
-    base_policy = json.loads((root / "source-policy.json").read_text())
+    base_path = root / "base-source-policy.json"
+    if not base_path.exists():
+        base_path.write_bytes((root / "source-policy.json").read_bytes())
+    base_policy = json.loads(base_path.read_text())
     declarations = [session_policy(p, r, base_policy) for r in (1, 2, 3) for p in ("alpha", "beta", "gamma")]
     declarations.append(session_policy("alpha", 4, base_policy))
-    (root / "fixture-plan.json").write_text(json.dumps(declarations, indent=2) + "\n")
-    (root / "source-policy.json").write_text(json.dumps({**base_policy, "denied_off": False}, indent=2) + "\n")
+    declaration_path = root / "fixture-plan.json"
+    declared = json.dumps(declarations, indent=2) + "\n"
+    if declaration_path.exists():
+        if declaration_path.read_text() != declared:
+            raise ValueError("predeclared source schedule changed")
+    else:
+        declaration_path.write_text(declared)
+        (root / "source-policy.json").write_text(json.dumps({**base_policy, "denied_off": False}, indent=2) + "\n")
     seed_calibration(root, clock, sources, source)
     loop_root = root / "loop"
     config = json.loads((source / "configs/b6/loop.json").read_text())
@@ -146,6 +168,7 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
                 clock=clock.time, run=run)
     scheduled = set()
     for tick in range(300):
+        previous = loop.read_state()["state"]
         loop.tick()
         state = loop.read_state()
         print("loop", tick, state["state"], flush=True)
@@ -160,10 +183,14 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
             return 0
         if pack != "all" and len(state.get("attempts", [])) >= int(limit):
             return 0
+        if boundary == "one" and ((previous == "SESSION_DESK" and state["state"] == "ROTATE")
+                or (previous == "SMOKE_DESK" and state["state"] == "ARM_WAIT")):
+            print("scheduler_boundary", state["state"], flush=True)
+            return 0
         session = state.get("session") or {}
-        prefix = "smoke_" if state["state"] == "SMOKE_RUN" else ""
-        prepared = session.get(prefix + "prepared")
-        if prepared and session.get(prefix + "handle") and prepared["plan_path"] not in scheduled:
+        pending = pending_driver(state)
+        if pending and pending[1]["plan_path"] not in scheduled:
+            prefix, prepared = pending
             from scripts.run_night import run_night
             plan_path = Path(prepared["plan_path"])
             plan = json.loads(plan_path.read_text())
@@ -190,6 +217,11 @@ def loop_fixture(root, clock, pack="alpha", limit="1"):
             clock.sleep(max(0, plan["t0_epoch_s"] - clock.time()))
             code = run_night(plan_path)
             print("scheduled_driver", code, str(plan_path), flush=True)
+            if boundary == "one":
+                if not Path(prepared["terminal_path"]).is_file():
+                    raise RuntimeError("driver returned without its original terminal record")
+                print("scheduler_boundary", state["state"], flush=True)
+                return 0
         if state["state"] == "ARM_WAIT":
             clock.sleep(max(0, session["notice_sent"] + 1800 - clock.time()))
         if state["state"] == "WAIT_PHYSICS":

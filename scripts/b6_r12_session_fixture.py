@@ -275,6 +275,10 @@ def main(argv=None):
     parser.add_argument("--driver-probe", choices=("alpha", "beta", "gamma"))
     parser.add_argument("--loop-probe", choices=("alpha", "beta", "gamma"))
     parser.add_argument("--nine-session-set", action="store_true")
+    parser.add_argument("--one-boundary", action="store_true",
+                        help="exit only after a complete driver or desk phase")
+    parser.add_argument("--continue-segment", action="store_true",
+                        help="continue a safely completed scheduler segment; runner validates receipts")
     parser.add_argument("--seed-probe", action="store_true")
     parser.add_argument("--prior-chain-root", type=Path,
                         help="explicit prior synthetic root supplying a chain-written ledger input")
@@ -284,6 +288,19 @@ def main(argv=None):
     parser.add_argument("--deny-normal-session", action="store_true",
                         help="deny OFF only in the ordinary session; keep prerequisite/smoke actions normal")
     args = parser.parse_args(argv)
+    if args.continue_segment:
+        from b6_r12_verify import safe_root, sha
+        root = safe_root(args.out)
+        manifest = json.loads((root / "manifest.json").read_text())
+        for copied, key in (("runtime.py", "runtime_sha256"),
+                            ("b6_r12_orchestrate.py", "orchestrator_sha256"),
+                            ("arm_sources.py", "arm_sources_sha256")):
+            if sha(root / copied) != manifest[key]:
+                raise ValueError("copied collection harness changed: " + copied)
+        if not args.one_boundary or not args.nine_session_set:
+            parser.error("continuation requires --one-boundary --nine-session-set")
+        return subprocess.run(command(root, "loop-probe", "all", "9", "one"),
+                              cwd=root, check=False).returncode
     root = prepare(args.out)
     if args.prior_chain_root:
         import struct
@@ -331,6 +348,9 @@ def main(argv=None):
         if args.seed_probe:
             return subprocess.run(command(root, "seed-probe"), cwd=root, check=False).returncode
         if args.nine_session_set:
+            if args.one_boundary:
+                return subprocess.run(command(root, "loop-probe", "all", "9", "one"),
+                                      cwd=root, check=False).returncode
             with (root / "generator.stdout").open("wb") as out, (root / "generator.stderr").open("wb") as err:
                 return subprocess.run(command(root, "loop-probe", "all", "9"), cwd=root,
                                       stdout=out, stderr=err, check=False).returncode
