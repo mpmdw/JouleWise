@@ -278,10 +278,15 @@ class StubbedTimeoutTests(unittest.TestCase):
             mine = f"4242 /usr/bin/powermetrics -n 3 -b 0 -i 100 --samplers x --format plist -o {path}"
             sidecar = "5151 /usr/bin/powermetrics -i 100 --samplers x --format plist -o /tmp/sidecar.plist"
             byname = "6161 /usr/sbin/somethingelse powermetrics"
+            # Exact -o match (Fable review 0db3cb85b, finding 1): each row kills one wrong-match mutant.
+            longer = f"7171 /usr/bin/powermetrics -n 3 -b 0 -i 100 --samplers x --format plist -o {path}2"
+            suffixed = f"7272 /usr/bin/powermetrics -n 3 -b 0 -i 100 --samplers x --format plist -o /private{path}"
+            noted = f"7373 /usr/bin/powermetrics -n 3 -b 0 -i 100 --note {path} -o /tmp/other.plist"
+            others = [sidecar, byname, longer, suffixed, noted]
             tables.append(list(argv))
             if list(argv) == list(powermetrics_reap.CENSUS_ARGV):
                 census = sum(1 for a in tables if a == list(powermetrics_reap.CENSUS_ARGV))
-                rows = [mine, sidecar, byname] if census == 1 else [sidecar, byname]
+                rows = [mine, *others] if census == 1 else others
                 return SimpleNamespace(returncode=0, stdout="\n".join([f"{os.getpid()} py", *rows]), stderr="")
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
@@ -297,6 +302,8 @@ class StubbedTimeoutTests(unittest.TestCase):
     def test_census_that_cannot_answer_refuses(self) -> None:
         for name, reply in (
             ("nonzero", SimpleNamespace(returncode=1, stdout="", stderr="ps: denied")),
+            # finding 7: a non-zero ps that still lists the caller is not an answer either.
+            ("nonzero_with_table", SimpleNamespace(returncode=1, stdout=f"{os.getpid()} py\n", stderr="ps: partial")),
             ("no_own_pid", SimpleNamespace(returncode=0, stdout="1 /sbin/launchd\n", stderr="")),
             ("empty", SimpleNamespace(returncode=0, stdout="", stderr="")),
         ):
