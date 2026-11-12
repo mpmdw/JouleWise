@@ -4,21 +4,25 @@ The census probe ``pgrep -a -lf '[c]odex|[c]laude'`` lists every process
 whose command line contains one of the substrings.  A window whose custody
 root contained one of them (before the T3 prune of 2026-10-07 also ``t3``, as
 in an ``attempt3`` id) listed its own processes, and the census stopped the
-window for a string.  These tests start real processes and
+window for a string.  The live tests start real processes and
 build the census line exactly as pgrep prints it (pid, a space, the argv joined
-by spaces) from the kernel's argv, so they hold on Darwin and Linux alike.
+by spaces) from their launch arguments, so they hold on Darwin and Linux alike.
+The census-wiring cases use a fixed process table: a synthetic probe result
+must not be compared against a later, possibly exited, live process.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import select
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -29,17 +33,50 @@ from joulewise.hazards import arm, base
 ATTEMPT3_ROOT = "/Users/edr/night-custody/b5-gamma-attempt3/custody"
 
 
-def _live(argv: list[str]) -> subprocess.Popen:
-    process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:  # wait for the exec to land in the kernel's argv
-        info = agent_identity.inspect(process.pid)
-        if info is not None and info.argv and tuple(info.argv) == tuple(argv):
-            return process
-        time.sleep(0.02)
-    process.kill()
+def _reap(process: subprocess.Popen) -> None:
+    if process.poll() is None:
+        process.kill()
     process.wait()
-    raise unittest.SkipTest("the kernel did not report the child's argv")
+    for stream in (process.stdin, process.stdout, process.stderr):
+        if stream is not None:
+            stream.close()
+
+
+def _live(argv: list[str], *, executable: str | None = None) -> subprocess.Popen:
+    """Require a child readiness byte and exact kernel argv; failures never skip."""
+    process = subprocess.Popen(argv, executable=executable, stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    deadline = time.monotonic() + 10
+    try:
+        if not select.select([process.stdout], [], [], max(0, deadline - time.monotonic()))[0]:
+            raise AssertionError(f"child readiness timed out: {argv!r}")
+        if process.stdout.read(1) != b"R":
+            raise AssertionError(f"child exited without readiness: {argv!r}")
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise AssertionError(f"child exited before kernel inspection: {argv!r}")
+            info = agent_identity.inspect(process.pid)
+            if info is not None and info.argv == tuple(argv):
+                return process
+            time.sleep(0.02)
+        raise AssertionError(f"the kernel did not report the child's argv: {argv!r}")
+    except BaseException:
+        _reap(process)
+        raise
+
+
+def _named_waiter(name: str) -> subprocess.Popen:
+    """Keep argv[0] named until parent cleanup, independent of multicall tools."""
+    # identify() reads the executable path and argv[0], not comm. On Darwin,
+    # sys.executable can be a Python wrapper that re-execs and replaces argv[0].
+    # Use the running interpreter's native kernel path instead.
+    info = agent_identity.inspect(os.getpid())
+    if info is None or not info.executable:
+        raise AssertionError("the kernel did not report the interpreter executable")
+    # Keep the old census tail for the multiline-record assertion; 60 is an
+    # inert argument here, not a lifetime. The child waits on the parent's pipe.
+    return _live([name, "-I", "-S", "-u", "-c",
+                  "import os; os.write(1, b'R'); os.read(0, 1)", "60"], executable=info.executable)
 
 
 def _line(process: subprocess.Popen) -> str:
@@ -50,6 +87,16 @@ def _census_probes(stdout: str, exit_code: int = 0):
     def run(argv):
         return night_gate.ProbeResult(tuple(argv), exit_code, stdout, "", 10)
     return SimpleNamespace(run=run, monotonic_ns=lambda: 10)
+
+
+@contextmanager
+def _census_process_table(*rows: agent_identity.ProcessInfo):
+    """Run the real matcher with only these fixture PIDs and parent/group links."""
+    inspector = {row.pid: row for row in rows}.get
+    original_filter = agent_identity.filter_census
+    with mock.patch.object(agent_identity, "filter_census", side_effect=lambda text, **kw:
+                           original_filter(text, inspector=inspector, **kw)):
+        yield
 
 
 class AgentIdentityTests(unittest.TestCase):
@@ -63,30 +110,27 @@ class AgentIdentityTests(unittest.TestCase):
 
     def _reap(self) -> None:
         for process in self.processes:
-            process.kill()
-            process.wait()
+            _reap(process)
 
     def spawn(self, argv: list[str]) -> subprocess.Popen:
         process = _live(argv)
         self.processes.append(process)
         return process
 
-    def marker(self, name: str) -> str:
-        # A symlink to sleep: the kernel executable is sleep, the process name
-        # (argv[0]) is the agent's name.
-        path = Path(self.tmp.name) / name
-        path.symlink_to("/bin/sleep")
-        return str(path)
+    def marker(self, name: str) -> subprocess.Popen:
+        """Start a waiter with this basename in the kernel's argv[0]."""
+        process = _named_waiter(str(Path(self.tmp.name) / name))
+        self.processes.append(process)
+        return process
 
     def window_process(self) -> subprocess.Popen:
-        """A window process: sleep started from an attempt3 custody path as ``run_campaign``."""
+        """A live ``run_campaign`` argv[0] under a synthetic attempt3 custody path."""
 
         root = Path(self.tmp.name) / "night-custody" / "b5-gamma-attempt3" / "custody"
         root.mkdir(parents=True, exist_ok=True)
-        runner = root / "run_campaign"
-        if not runner.exists():
-            runner.symlink_to("/bin/sleep")
-        return self.spawn([str(runner), "60"])
+        process = _named_waiter(str(root / "run_campaign"))
+        self.processes.append(process)
+        return process
 
     def test_a_listed_window_process_is_not_an_agent(self):
         process = self.window_process()
@@ -98,25 +142,34 @@ class AgentIdentityTests(unittest.TestCase):
         self.assertIn("pgrep exit 0", observed.stderr)
 
     def test_an_agent_named_process_is_still_an_agent(self):
-        window = self.window_process()
+        window_pid, agent_pid = os.getpid() + 1, os.getpid() + 2
+        window_argv = ("/fixture/night-custody/b5-gamma-attempt3/custody/run_campaign", "60")
+        window = agent_identity.ProcessInfo(window_pid, 1, window_pid, "/bin/sleep", window_argv)
+        window_line = f"{window_pid} {' '.join(window_argv)}\n"
         for name in ("claude", "codex"):
             with self.subTest(name=name):
-                agent = self.spawn([self.marker(name), "60"])
-                stdout = _line(window) + _line(agent)
-                observed, refusal = night_gate.agent_census(_census_probes(stdout))
+                agent_argv = (f"/fixture/{name}", "60")
+                agent = agent_identity.ProcessInfo(agent_pid, 1, agent_pid, "/bin/sleep", agent_argv)
+                agent_line = f"{agent_pid} {' '.join(agent_argv)}\n"
+                with _census_process_table(window, agent):
+                    observed, refusal = night_gate.agent_census(_census_probes(window_line + agent_line))
+                self.assertIsNotNone(refusal)
                 self.assertEqual("night_refused_agent_present", refusal.reason)
-                self.assertEqual(_line(agent), observed.stdout)
-                self.assertIn(str(agent.pid), refusal.detail)
-                self.assertNotIn(str(window.pid), observed.stdout)
+                self.assertEqual(agent_line, observed.stdout)
+                self.assertIn(str(agent_pid), refusal.detail)
+                self.assertIn(f"pid {window_pid} not_agent_executable", observed.stderr)
 
     def test_the_callers_own_tree_is_ignored_even_when_agent_named(self):
-        agent = self.spawn([self.marker("codex"), "60"])
-        stdout = _line(agent)
-        _, refusal = night_gate.agent_census(_census_probes(stdout))
-        self.assertEqual("night_refused_agent_present", refusal.reason)
-        observed, refusal = night_gate.agent_census(_census_probes(stdout), own_tree_root=os.getpid())
-        self.assertIsNone(refusal)
-        self.assertIn(f"pid {agent.pid} own_tree", observed.stderr)
+        for name in ("claude", "codex"):
+            with self.subTest(name=name):
+                agent = self.marker(name)
+                stdout = _line(agent)
+                _, refusal = night_gate.agent_census(_census_probes(stdout))
+                self.assertIsNotNone(refusal)
+                self.assertEqual("night_refused_agent_present", refusal.reason)
+                observed, refusal = night_gate.agent_census(_census_probes(stdout), own_tree_root=os.getpid())
+                self.assertIsNone(refusal)
+                self.assertIn(f"pid {agent.pid} own_tree", observed.stderr)
 
     def test_an_undecidable_line_stays_a_hit(self):
         # A pid that is not running, a pid whose argv differs from the line, and
@@ -131,7 +184,7 @@ class AgentIdentityTests(unittest.TestCase):
         process_line = _line(process)
         decided = agent_identity.filter_census(process_line.replace(" 60\n", "\n60\n"))
         self.assertEqual(process_line.replace(" 60\n", "\n60\n"), decided.kept_text)  # argv differs: kept
-        process = self.spawn([self.marker("worker\nb5-gamma-attempt3"), "60"])
+        process = self.marker("worker\nb5-gamma-attempt3")
         decided = agent_identity.filter_census(_line(process))
         self.assertEqual("", decided.kept_text)
         self.assertEqual([process.pid], [item["pid"] for item in decided.ignored])
@@ -272,7 +325,7 @@ class AgentIdentityTests(unittest.TestCase):
         package = Path(self.tmp.name) / "node_modules" / "@openai" / "codex"
         package.mkdir(parents=True)
         cli = package / "cli.js"
-        cli.write_text("setInterval(() => {}, 1000);\n", encoding="utf-8")
+        cli.write_text("process.stdout.write('R'); setInterval(() => {}, 1000);\n", encoding="utf-8")
         process = self.spawn([node, "--trace-require-module", "all", str(cli)])
         info = agent_identity.inspect(process.pid)
         self.assertEqual("agent", agent_identity.identify(info.executable, info.argv))
@@ -305,7 +358,15 @@ class AgentIdentityTests(unittest.TestCase):
         self.assertNotIn("4103 ", decided.kept_text)
 
     def test_the_hazard_arm_census_uses_the_same_matcher(self):
-        window = self.window_process()
+        window_pid, agent_pid = os.getpid() + 1, os.getpid() + 2
+        window_argv = ("/fixture/night-custody/b5-gamma-attempt3/custody/run_campaign", "60")
+        window = agent_identity.ProcessInfo(window_pid, os.getpid(), window_pid, "/bin/sleep", window_argv)
+        window_line = f"{window_pid} {' '.join(window_argv)}\n"
+        # A foreign orphan has an absent group leader, exercising the group
+        # ancestry branch without a real child that this test cannot wait() for.
+        agent_argv = ("/fixture/claude", "60")
+        agent = agent_identity.ProcessInfo(agent_pid, 1, agent_pid + 1, "/bin/sleep", agent_argv)
+        agent_line = f"{agent_pid} {' '.join(agent_argv)}\n"
 
         def ctx_for(stdout: bytes):
             def run(argv, timeout):
@@ -313,29 +374,36 @@ class AgentIdentityTests(unittest.TestCase):
             stamp = SimpleNamespace(to_json=lambda: {})
             return SimpleNamespace(run=run, stamp=lambda: stamp)
 
-        census = arm.agent_census(ctx_for(_line(window).encode()))
+        with _census_process_table(window, agent):
+            census = arm.agent_census(ctx_for(window_line.encode()))
         self.assertTrue(census["clean"], census)
         self.assertEqual((1, 0), (census["returncode"], census["raw_returncode"]))
-        self.assertEqual([window.pid], [item["pid"] for item in census["ignored"]])
-        # The arm ignores its own tree, so the agent must be someone else's:
-        # a detached grandchild whose parent shell has exited.
-        marker = self.marker("claude")
-        shell = subprocess.run(["/bin/sh", "-c", f"'{marker}' 60 "
-                                "</dev/null >/dev/null 2>&1 & echo $!"],
-                               capture_output=True, text=True, start_new_session=True, check=True)
-        pid = int(shell.stdout.strip())
-        self.addCleanup(os.kill, pid, 9)
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            info = agent_identity.inspect(pid)
-            if info is not None and info.argv and info.argv[0] == marker:
-                break
-            time.sleep(0.02)
-        line = f"{pid} {' '.join(agent_identity.inspect(pid).argv)}\n"
-        census = arm.agent_census(ctx_for((_line(window) + line).encode()))
+        self.assertEqual([(window_pid, "own_tree")],
+                         [(item["pid"], item["reason"]) for item in census["ignored"]])
+        with _census_process_table(window, agent):
+            census = arm.agent_census(ctx_for((window_line + agent_line).encode()))
         self.assertFalse(census["clean"])
-        self.assertIn(str(pid), census["detail"])
-        self.assertEqual(line, census["stdout"])
+        self.assertIn(str(agent_pid), census["detail"])
+        self.assertEqual(agent_line, census["stdout"])
+
+
+class LiveFixtureTests(unittest.TestCase):
+    def test_an_early_exit_fails_instead_of_skipping_and_is_reaped(self):
+        children = []
+        popen = subprocess.Popen
+
+        def launch(*args, **kwargs):
+            process = popen(*args, **kwargs)
+            children.append(process)
+            return process
+
+        with mock.patch.object(subprocess, "Popen", side_effect=launch):
+            with self.assertRaisesRegex(AssertionError, "child exited without readiness"):
+                _live([sys.executable, "-I", "-S", "-c", "pass"])
+        self.assertEqual(1, len(children))
+        self.assertIsNotNone(children[0].returncode)
+        self.assertTrue(all(stream.closed for stream in
+                            (children[0].stdin, children[0].stdout, children[0].stderr)))
 
 
 class CodexAppServerCensusTests(unittest.TestCase):
@@ -385,17 +453,11 @@ import json, os, subprocess, sys, time
 from types import SimpleNamespace
 from joulewise import agent_identity, night_gate
 from joulewise.hazards import arm, base
+from tests.test_agent_identity import _named_waiter, _reap
 
 own_marker = sys.argv[1]
-own = subprocess.Popen([own_marker, "60"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+own = _named_waiter(own_marker)
 try:
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        info = agent_identity.inspect(own.pid)
-        if info is not None and info.argv and info.argv[0] == own_marker:
-            break
-        time.sleep(0.02)
-
     def run(argv):
         done = subprocess.run(argv, capture_output=True, text=True, timeout=30)
         return night_gate.ProbeResult(tuple(argv), done.returncode, done.stdout, done.stderr,
@@ -411,8 +473,7 @@ try:
     stamp = SimpleNamespace(to_json=lambda: {})
     hazard = arm.agent_census(SimpleNamespace(run=ctx_run, stamp=lambda: stamp))
 finally:
-    own.kill()
-    own.wait()
+    _reap(own)
 print(json.dumps({"census_pid": os.getpid(), "chain_pid": os.getppid(), "own_pid": own.pid,
                   "gate": {"argv": list(gate.argv), "exit_code": gate.exit_code, "stdout": gate.stdout,
                            "stderr": gate.stderr, "refusal": refusal.reason if refusal else None},
@@ -434,7 +495,7 @@ class AncestorCensusLiveTests(unittest.TestCase):
         test -> "claude" (a zsh named claude: the agent session)
              -> zsh running .../b5-gamma-attempt3/chain.zsh (argv-substring only)
              -> python running the census (the driver: own_tree_root)
-             -> "codex" (a sleep named codex: the window's own descendant)
+             -> "codex" (a Python waiter named codex: the window's own descendant)
 
     plus a foreign ``run_campaign`` under an ``attempt3`` path.  Only owned pids
     are asserted: this test may run inside a real agent session, whose own
@@ -454,16 +515,13 @@ class AncestorCensusLiveTests(unittest.TestCase):
 
     def _reap(self) -> None:
         for process in self.processes:
-            if process.poll() is None:
-                process.kill()
-            process.wait()
+            _reap(process)
 
     def test_an_agent_ancestor_is_a_hit_and_the_window_is_not(self):
         root = Path(self.tmp.name)
         agent = root / "claude"
         agent.symlink_to("/bin/zsh")
         own_marker = root / "codex"
-        own_marker.symlink_to("/bin/sleep")
         # Under a .claude directory, so pgrep lists the foreign run_campaign by
         # argv substring alone (before the T3 prune the attempt3 id did).
         custody = root / ".claude" / "night-custody" / "b5-gamma-attempt3" / "custody"
@@ -474,8 +532,7 @@ class AncestorCensusLiveTests(unittest.TestCase):
         child = root / "census_child.py"
         child.write_text(_ANCESTOR_CENSUS_CHILD, encoding="utf-8")
         runner = custody / "run_campaign"
-        runner.symlink_to("/bin/sleep")
-        foreign = _live([str(runner), "60"])
+        foreign = _named_waiter(str(runner))
         self.processes.append(foreign)
 
         env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
