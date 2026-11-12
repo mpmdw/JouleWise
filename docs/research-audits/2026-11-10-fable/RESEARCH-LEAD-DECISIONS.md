@@ -5228,6 +5228,338 @@ cites is not a design change. The margin is real and is answered by a decision r
 
 ---
 
+# Decision request 56: the lead's engineering calls during the smoke series, and the G0 finding (2026-11-12 04:40 PST)
+
+**Read.** RUN_STATE 273 to 282 and the queue entries from 20:40 on 11-11 to 02:23 on 11-12. From the fifth
+smoke's `smoke.json`, the G0 record of Part B. I did not re-review the four fixes' code; each has a Fable
+delta review on record and I rely on those.
+
+## RL-90. All four calls are confirmed. G0 now releases, on the slope, and above the duty allowance
+
+| Call | Ruling | Basis |
+|---|---|---|
+| `ProcessType=Interactive` on the smoke's launchd job | Confirmed | The registration pins Interactive (prereg d079 rev 1, :608). RL-84 P-1: the rehearsal runs as W1 runs. A smoke under a throttled job measured a host no window will have. |
+| `SMOKE_ADMISSION_S` 1,800 to 3,000; caps A 3,120 s, B 5,720 s | Confirmed | RL-84 P-5: the smoke's bounds are engineering watchdogs. The ruled number is the 1,200 s G0 cap, and it did not move. |
+| Smoke watchdogs off `ITIMER_REAL`, onto a SIGUSR1 thread; `budget.py` untouched | Confirmed | Smoke-only. The episode deadman keeps the one real timer, as on a night. The night's timer path is the one the R1 night ran. |
+| Inventory sampler period held at 1.000 s | Confirmed as a bug fix, not a design change | RL-74 (a), RL-76 and R5-5 rule a 1 Hz grid. A period of 0.99 s plus the sweep time was never ruled. The fix is in a condition-13 file and the night runs it. |
+
+Review lows that stay open (F-1 and F-2 test witnesses, F-3's refusal wording, the 1.5 s stall test) are
+test-side or wording. F-3's wording is in a condition-13 file and is left as it is.
+
+### The G0 finding
+
+Six step-D G0s have now run on TV0h / Tf08 at the default band: 683, 747, 812, 843, 883 and 926 s. All
+released. On the R1 night both timed out at 1,200 s.
+
+- **The band was not what held them.** In the five whose release values I have, Tf08 was 2.3 to 3.3 °C
+  *below* its reference at release. The band had been met long before, and the slope bar is what remained:
+  the one slope I read was -0.17 °C/min at release, against 0.2.
+- **So a member starts with the slow mass colder than the operating reference**, by two to three degrees.
+  That is the quantity RL-78 ordered printed: Tf08's excess at each member's start over the window
+  reference. Here it is negative. It is a disclosure and the night prints it.
+- **All six exceed the duty allowance.** RL-78 put the three gates together under 617 s. RL-78 E5 already
+  says what happens: the night arms at the default band, and if the duty bar fails on G0 alone I decide from
+  the night's record between 1.5 °C on a replayed G0 and a short gated-block night. That stands. With Th0C
+  gating, the durations may differ; Part A will show the first one.
+
+**The night's report prints, for every G0:** its duration, which condition decided it, and release minus
+reference for the fast key, the slow key and Tf08. It also says in one paragraph what differs between this
+kit and the R1 night that timed out. I do not need that before the arm.
+
+**Reason.** The four calls restore conditions that were already ruled or registered. None changes what a
+night measures.
+
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures and code review text only.
+
+---
+
+# Decision request 57: three night-driver items (2026-11-12 04:45 PST)
+
+**Read.** At `22f438fd3`: `scripts/run_night.py:512-534, 1378-1392, 5814-5830`;
+`joulewise/adapters/powermetrics.py`, `_run_bounded_capture`; `joulewise/align/apple/r1_runtime.py`,
+`ProductionBackend.ticker`. The queue's 20:40 and 22:20 entries.
+
+## RL-91. The powermetrics orphan is fixed before W1. The census floor is not a W1 item. The ticker is left alone
+
+### The powermetrics orphan: before W1 signing; tonight if it is ready
+
+`_run_bounded_capture` calls `subprocess.run` with a timeout. On timeout that kills `sudo` and leaves the
+root `powermetrics` running, because a non-root parent cannot signal it.
+
+- **This one can change a measurement.** An orphaned root sampler keeps running through the members that
+  follow, unrecorded. It adds load that differs between members by accident of which capture timed out.
+- **It lands before W1 signing.** It is a defect in the executed measurement path, so it is not under RL-53's
+  cut-off.
+- **The fix proves the process gone.** Reaping the descendants, as `r1_runtime.stop_powermetrics_descendants`
+  already does, with the absence recorded. A TERM relayed through `sudo` may be added; alone it is not
+  enough, because nothing then shows the sampler stopped.
+- **Tonight:** it rides the follow-up night if it is built, cold-reviewed and green by the time RL-89's
+  config commit is ready for Part A, and no later than 12:00 PST. Part A then smokes it. If it is not ready,
+  the night runs without it and is not delayed. `powermetrics.py` is not a condition-13 file, so landing
+  after the night breaks nothing.
+- **If the night runs without it,** the report states whether any idle capture timed out, and whether a root
+  `powermetrics` was alive outside a member's own capture at any census.
+
+### The census floor: not before the night, not before W1
+
+The clip to 0.01 s bites only on the last look, when the 70 s window is already spent. A census that cannot
+finish reports "not absent". That is the conservative error: a false "could not be proven", never a false
+"empty". The two red tests were red at a load of about 42, on a host no night will resemble.
+
+- It is under RL-53's cut-off. It does not land before W1 on this evidence.
+- **The two tests are re-run on a quiet host.** If they pass, the item is closed as a load artefact and the
+  tests are marked load-sensitive. If either is red on a quiet host, the defect bites without load and it
+  comes back to me as a W1 item.
+- If it is ever built, the window's stated 70 s bound stays true, or the text that states it changes in the
+  same commit.
+
+### The ticker: no change
+
+After a stall of N seconds the ticker runs N callbacks back to back, so equal-weight load statistics
+over-weight the instants after a stall.
+
+- It is in `r1_runtime.py`, a condition-13 file. RL-89 allows no code change before tonight, and after
+  tonight the file is frozen to the night's bytes. W1 does not run this ticker.
+- **It is handled in the report, not the code.** From the journal's own tick times, each member's count of
+  ticks that follow the previous tick by under 0.5 s is printed. Where they exceed 1% of a member's ticks,
+  that member's load statistics are also printed time-weighted. No verdict reads either.
+
+### Summary
+
+| Item | Before the follow-up night | Before W1 signing |
+|---|---|---|
+| powermetrics orphan | if ready by 12:00 PST | **required** |
+| census floor | no | no, unless red on a quiet host |
+| ticker burst | no | no (not W1 code) |
+
+**Reason.** Only one of the three can put an unrecorded process inside a measured member. The other two
+err on the safe side or touch a disclosure.
+
+**Blind status.** Blind: code only.
+
+---
+
+# Decision request 58: BYTES: the stage-1 commitment, and labels for a held-out model with no computed pass (2026-11-12 04:55 PST)
+
+**Read.** RUN_STATE 283. The second delta cold review on `fix/2026-11-11-bytes-twin-sesscodes` @ `1e78224cd`.
+Registration `docs/registrations/bytes_pack_v1.md` §7 (the one-pass fallback), §8, §11 item 4 and the stage
+table, §12, §13, §15. `scripts/bytes_analyze.py` (`_missing_labels`) and `joulewise/bytes_analysis.py`
+(`evaluate`, lines 1345-1364, 1418-1430, 1525-1576), whose SHA-256 I checked: `18582818…`, the registered
+digest. Text and code only. The magistrate's re-run (item 284) had not reported when I ruled.
+
+## RL-92. The commitment may proceed on a clean re-run. A model is `missing` only when both passes are; the H1 row and the MoE answer stay as the bound program prints them
+
+### 1. The commitment: yes, today, if every line below holds
+
+The lead does not come back to me if they all hold. If any fails, nothing is committed and it does.
+
+1. Item 284 reports **rc 0 and no field above the bar** at the blinded and fit stages. A return code of 7, or
+   any above-bar field of any kind, stops it (RL-82 condition 5).
+2. The re-run's predictions file is **byte-identical to `a6cb172c…5f19`**. The re-run's file is the one
+   committed.
+3. `joulewise/bytes_analysis.py` hashes to `18582818…0a71` in the tree that ran.
+4. All nineteen synthetic campaigns show zero fields above the bar at `1e78224cd` (RL-82 condition 3), and
+   PR #737 is merged with CI green. The twin that agreed is the twin on `main`.
+5. The rows BY-BLIND-1 (RL-44) and BY-AGREE-1 (RL-82) are entered in `bytes_deviation_log.md` before the
+   commitment commit. BY-AGREE-1 gains the sentence in point 2 below.
+6. RL-44's census is re-run and recorded (RL-82 condition 6).
+7. RL-7 (a)'s gate passes: the commit exists, its predictions blob hashes to `predictions.sha256`, it is
+   reachable from `origin`, and the push time is recorded.
+
+The open review items, M1 and P1, are on held-out paths. They do not touch the fit stage or the committed
+file and do not hold the commitment. They hold the held-out agreement.
+
+### 2. The lead's readings: confirmed
+
+- **F1** (a missing-withheld cell lists its session's codes) is RL-82's reading A as written: a cell's flags
+  include the codes on its session, for every cell.
+- **N1** (a missing cell lists the run-scoped and member-exclusion codes of its planned runs) is not reading
+  A's words, which say "kept runs". A cell that cannot be computed has no kept set. The bound program lists
+  the codes of all its planned runs, the text is silent, and RL-82's second ground decides: the program
+  stands and the twin matches. BY-AGREE-1 gains, after "Ruled: a cell's flags are the codes on its kept runs
+  and on its session.":
+
+  > "For a cell that cannot be computed, they are the codes on all of its planned runs and on its session."
+
+- **Condition 5's attribution is met by F1.** The flag rows left above the bar after the first twin change
+  were attributed from the code and the text by the cold review, before any value was compared, as RL-80
+  requires. The re-run must now show none.
+
+### 3. P1: what the text says, case by case
+
+A held-out model with no computed pass. Three places print something about it.
+
+**The model's own label: the twin follows the text. `scripts/bytes_analyze.py` changes.**
+
+- §15: "a model prints `missing` only when both of its passes do." §11 item 4: "when both passes are missing
+  the model prints `missing`".
+- `_missing_labels` relabels a point `missing` when *any* pass carries the withheld flag. For a model with
+  one pass withheld-missing and the other refused, that contradicts "only when both".
+- **Ruled:** the relabel applies only when every pass of the model is withheld-missing. A mixed model keeps
+  the library's no-point status, and its reason names both causes. A purely refused model is unchanged:
+  the library already leaves it un-relabelled.
+- The change is in the script. `joulewise/bytes_analysis.py` and its digest do not move, and the script
+  writes no part of the predictions file. If the builder finds the script's digest bound anywhere, it comes
+  back to me before it is built.
+
+**The H1 row: the bound program stands. The twin changes. One deviation row.**
+
+- The library prints an H1 row with `status: missing` for every model without a point, with the point's
+  reason and its flags. For a refused model that uses the word `missing` where §15's sentence reserves it.
+- D9 (b) requires two things of a model whose passes refuse: no H1 word, and the refusal printed. The row
+  does both. What departs from the text is one token.
+- Moving a registered digest for a token would cost a second commitment under §11 and a
+  `bytes.module_changed_after_commitment` flag on every stage-2 record. No number, word, family size or
+  exclusion depends on the token. So the row stays, and the departure is logged.
+- **Ruled:** in an H1 row, `status: missing` means the model has no H1 word. The row's `reason` says why:
+  withheld rows missing, all passes refused, or both. The twin prints the same row: status, reason and
+  flags.
+
+**The active-or-resident answer: the bound program stands. The twin changes.**
+
+- §8 defines the answer "over the three MoE models", from each one's H1 result. A model with no point has no
+  H1 result. The sentence "otherwise `mixed`" describes three results that disagree. It is not a default for
+  a result that does not exist.
+- The library prints no answer (`missing`, "active or resident requires all three MoE points") and lists
+  every MoE model without a point. The twin does that when a file is withheld-missing and prints `mixed`
+  when a pass refused. Those are the same condition and get the same print.
+- **Ruled:** with fewer than three MoE points there is no answer, whatever the cause. `missing_models` lists
+  every MoE model without a point.
+- This is the one part of P1 where a word in the paper could differ. I rule it from the definition, blind,
+  and toward the side that claims less.
+
+**M1: reading A answers it.** The active-or-resident row's flags are the codes of every non-computed
+pass, refused passes included: session, run, exclusion and meter codes. The twin's refused pass carries its
+cell's list. The test that pins the opposite is rewritten to the analysis's behaviour.
+
+### 4. Conditions on the P1 change
+
+1. **After the commitment, before the held-out agreement run and before any held-out key is released.** It
+   does not hold today's commitment.
+2. Built by a seat with this ruling and the cold review, and nothing from any run. Cold review after.
+3. Failing first, on a synthetic campaign that joins the registered agreement set: one purely refused
+   held-out model, one mixed model, and one refused MoE model with no withheld-missing MoE model. The
+   reviewer's probe is the model for it. Before the change it shows fields above the bar; after, none.
+4. All campaigns: zero above the bar. The library's digest is unchanged. A `--stage fit` re-run still writes
+   a predictions file byte-identical to the committed one.
+5. If the held-out agreement on real rows still stops, it is attributed as RL-80 says, before any key moves.
+
+### 5. The deviation row, entered with the change
+
+> "BY-LABEL-1 (entered 2026-11-12, after the stage-1 commitment and before the held-out agreement; blind to
+> every BYTES energy). For a held-out model with no computed pass, the analysis and its twin printed
+> different labels on synthetic campaigns; no real held-out row had been read. Ruled from this text (research
+> lead ruling RL-92). (1) A model prints `missing` only when both of its passes do (§11 item 4, §15). The
+> analysis script labelled a model `missing` when one pass was withheld-missing and the other refused; it was
+> corrected. (2) In an H1 row, the status `missing` means the model has no H1 word, for either cause, and the
+> row's reason says which: withheld rows missing, or all passes refused. This departs from §15's sentence for
+> a refused model, in one token. `joulewise/bytes_analysis.py` prints it so and was not changed; its digest is
+> the registered one. D9 (b)'s two requirements, no H1 word and the refusal printed, are met. (3) The
+> active-or-resident answer needs an H1 result from all three MoE models (§8). With fewer, no answer is
+> printed, whatever the cause, and the models without a point are listed. The twin had printed `mixed` when a
+> pass refused; it was changed. (4) That row's flags are the codes of every pass that did not compute. No
+> number, interval, family size or exclusion depends on any of the four."
+
+If no real held-out model turns out to lack a computed pass, the paper says so in one clause and the row
+stands as a record.
+
+### For the paper
+
+Where an H1 table prints `missing`, the note reads: "no H1 word; the reason column says whether the model's
+rows were withheld-missing or its passes refused."
+
+**Reason.** The text reserves one word for one cause at the model level, and the fix there costs nothing
+bound. At the H1 row the same fidelity would cost a second commitment for a token, so the registered
+program stands and the departure is written down. The MoE answer is ruled from its definition: a verdict
+over three models needs three.
+
+**Blind status.** Blind to every BYTES energy, power and duration, fit set and held-out. Registration text,
+source code and a review of synthetic campaigns only. No export, predictions file, store or key was opened.
+
+---
+
+# Decision request 59: the older parked items in the queue (2026-11-12 05:05 PST)
+
+**Read.** The queue from its top to the 18:40 entry of 11-11. On `ops/2026-11-11-w1-presign`:
+`configs/gates/hazard_refusals.json`, the 43 `sites` rows for `scripts/launch_align_r0.py` and
+`scripts/run_align_r1_smoke.py` and the `not_scanned` map. I did not re-run the census.
+
+## RL-93. Six are already ruled. The smoke runner's registry rows are not signed off as worded. The R1 driver does not join the census
+
+### Already ruled; closed
+
+| Queue entry | Where it was ruled |
+|---|---|
+| Kit cold review `51b6aeb14`: predecessor sidecar, Tf08 "every member", coverage bar, condition 13 and the contract module, Part B's bound | RL-84 P-1 to P-5 |
+| Acceptance-only code list; the `workload.py` row | RL-83 |
+| `topup_log` into `battery_float.PHASES` | RL-83 (b): it stays out |
+| `pmset -g` getters in the test guard | RL-85 |
+| D-1, the R0 filter on the ranking | RL-88. RL-89 now corrects the list that filter read |
+| P3, the v5 qualification registry | RL-87. "At the next registration, or never?": never, unless someone proposes a qualification night, and then it is that registration's work |
+
+**RL-87's follow-through** is the four test-tree edits it lists. They are the lead's, they are not on W1's
+critical path, and they go with the test migration already parked after the smoke. Nothing further from me
+unless `RegisteredRosterTests` stays red for a reason other than the three calls.
+
+### The launcher merge's registry rows: 24 accepted, 19 to be reworded and recategorised
+
+- **The 24 `launch_align_r0.py` rows marked "RL-86 W1 P2C mechanical listing" are accepted.** Each says what
+  the site checks and why it cannot stop a HAZARD_PACK chain. That includes the changed guard on
+  `measurement checkout runner` (`cef3647b206ff276`).
+- **The 17 `run_align_r1_smoke.py` rows and the two new `launch` rows are not accepted as worded.**
+  - Twelve are PHYSICS under one shared sentence about AC power, volumes and the meter. Among them are a
+    wall-cap timeout, a signal exit and a process-group check. That sentence is not true of those sites, and
+    they are not physics.
+  - By RL-86's own test, a site is categorised by what it can stop. A smoke is not a collection. None of
+    these 19 can stop a registered night or exclude a member or window. They are INTERNAL, as the launcher's
+    other rows are.
+  - **Ruled:** all 19 become INTERNAL. Each `protects` says in one clause what that site checks, then:
+    "R1 engineering smoke only; stops the smoke, never a registered night, member or window. RL-93." The
+    row for `launch / r smoke requires` loses "reconcile with RL-86/w1-p2c".
+  - Counts and guards do not change; category totals in the tests do.
+- **`r1_smoke_existing_dependency` gets a true reason** (next section).
+- This is text in a file that is not a v4 artifact. It lands with the next pre-signing commit and before
+  signing. It gates neither the smoke nor tonight's arm.
+
+The reviewer's lows N-1, N-2 and L-1 are acceptable for a smoke and need no ruling.
+
+### C09: the R1 driver does not join the hazard census
+
+`align_r1_rehearsal.py`, `align_r1_followup_kit.py` and `r1_runtime.py` run on rehearsal nights and at the
+desk. They produce slots, not confirmatory members. A wrong stop there costs a rehearsal night, which is an
+engineering loss the smoke series exists to find, and after the slot-producing night condition 13 freezes
+these files and no further R1 night is planned.
+
+- **They stay `not_scanned`**, under a reason that says so: "R1 rehearsal driver, kit and runtime: run on
+  rehearsal nights and at the desk only; produce slots and no confirmatory member; not censused, RL-93".
+- **`v4_registration.py` is different if a W1 night imports it.** `run_night.py` names it. If any module on
+  the W1 night's executed path imports it, it joins the 155-key census RL-86 already owes between W1 and W2,
+  and the `alignment_workload` reason counts it. If only desk programs import it, it takes the `v4_desk`
+  reason. The lead checks which and words it accordingly.
+- A gated-block night, if RL-78 E5 leads to one, is still a rehearsal and changes none of this.
+
+### Deferred, with the reason
+
+| Item | Deferred to | Why |
+|---|---|---|
+| The 155-key census of the align workload's closure | Between W1 and W2, on the Air (RL-86) | Unchanged. It gates no arm |
+| R7-2 delta review lows F2 (a comment) and F3 (a refusal reason overwritten when teardown exceeds 900 s; exit stays 3) | Dropped unless the W1 driver is edited again before signing | Both are in W1-bound bytes. "The next rebind" does not exist after signing. Neither changes a measurement or a verdict. The lead's call if a pre-signing edit opens the file anyway |
+| The 14 stale-expectation reds from `a85ee8ec6` (F4) | Test migration after the night | Test-side |
+| The `candidate_replays` defect (RL-89) | After the arm | Not gating |
+
+### One note on blinding
+
+The diagnoser of smoke 274 saw one idle power mean from the R1 rehearsal's step-30b in a truncated event
+line. That is rehearsal data. It is not v4, Block 6 or BYTES held-out, and nothing follows from it.
+
+**Reason.** Most of this queue was answered yesterday and only needed saying so. The one new judgment is
+the same as RL-86's: a registry line is worth having only if it is true of its site, and a category is
+about what a site can stop.
+
+**Blind status.** Blind: a JSON registry, queue text and source names only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
@@ -5240,3 +5572,6 @@ cites is not a design change. The margin is real and is answered by a decision r
 | The capstone manuscript and talk, as a whole | Ed's decision E1 in `paper-audit.md` §9 |
 | Any key in the align_episode census that can stop or exclude a member and is not PHYSICS or NUMBER_INTEGRITY (RL-86) | The census, between W1 and W2 |
 | A listed key in `watchdog_status.py` or `launch_align_r0.py` that is not INTERNAL (RL-86) | The 41-key listing and its cold review |
+| The follow-up night's thermometry bar, if its confirmation fails on any clause other than the slow pick's return time; the duty bar on G0 with Th0C (RL-78 E5, RL-89) | The night |
+| The census floor in `run_night.py`, if the two tests are red on a quiet host (RL-91) | The quiet-host run |
+| The held-out agreement, if it stops after the RL-92 change | The run |
