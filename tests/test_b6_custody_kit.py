@@ -11,6 +11,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -390,6 +391,55 @@ class Mini(unittest.TestCase):
         self.receipt.write_text("{}")
         self.assertRefused(run("verify", "--manifest", self.base / "absent.json", "--manifest-sha256", "0" * 64,
                                "--root", self.dst, "--loop-dir", self.dst, "--out", self.receipt), "out_exists")
+
+    # -- outputs (cold review M6, RL-100 item 2) --
+
+    def test_outputs_are_created_0600_whatever_the_umask(self):
+        # Expected: manifest, receipt and run-input document are mode 0600 even under umask 000.
+        old = os.umask(0)
+        try:
+            manifest = self.base / "m-0600.json"
+            rc, _, err = run("manifest", "--session", self.a, "--loop-attempts", self.attempts, "--out", manifest)
+            self.assertEqual((rc, err), (0, ""))
+            self.verified()
+            out = self.base / "i-0600.json"
+            self.assertEqual(self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]), out=out)[0], 0)
+        finally:
+            os.umask(old)
+        for path in (manifest, self.receipt, out):
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600, path.name)
+
+    def test_outputs_refused_in_a_group_or_world_accessible_directory(self):
+        # Expected: out_dir_mode for each command when the output directory has group or other bits; nothing written.
+        self.verified()
+        for mode in (0o755, 0o770, 0o701):
+            wide = self.base / ("wide-%o" % mode)
+            wide.mkdir()
+            os.chmod(wide, mode)
+            self.assertRefused(run("manifest", "--session", self.a, "--loop-attempts", self.attempts,
+                                   "--out", wide / "m.json"), "out_dir_mode")
+            self.assertRefused(self.verify(out=wide / "r.json"), "out_dir_mode")
+            self.assertRefused(self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]), out=wide / "i.json"),
+                               "out_dir_mode")
+            self.assertEqual(list(wide.iterdir()), [])
+        owner_only = self.base / "owner-only"
+        owner_only.mkdir(mode=0o700)
+        self.assertEqual(self.verify(out=owner_only / "r.json")[0], 0)
+
+    def test_manifest_prints_per_session_counts_and_one_digest(self):
+        # Expected: one `session <copy_path> files= bytes= desk_files=` line per session, then the manifest line;
+        # the only 64-hex digest on stdout is the manifest's own.
+        rc, out, err = run("manifest", "--session", self.a, "--session", self.b, "--loop-attempts", self.attempts,
+                           "--out", self.base / "counts.json")
+        self.assertEqual((rc, err), (0, ""))
+        lines = out.splitlines()
+        document = json.loads((self.base / "counts.json").read_bytes())
+        for line, entry in zip(lines, document["sessions"]):
+            self.assertEqual(line, "session %s files=%d bytes=%d desk_files=%d" % (
+                entry["copy_path"], entry["file_count"], entry["total_bytes"], len(entry["desk_files"])))
+        self.assertEqual(len(lines), 3)
+        self.assertTrue(lines[2].startswith("manifest sessions=2 sha256="))
+        self.assertEqual(len(re.findall(r"\b[0-9a-f]{64}\b", out)), 1)
 
     # -- loop files (cold review M4) --
 
