@@ -2,7 +2,7 @@
 
 - **Reviewer:** Fable 5.2, cold and executing (RL-74(a) gate). Did not write the change.
 - **Target:** `fix/2026-11-12-r1-inventory-period` @ `22138c5b5220144bed3f31267c34f980a17d953a`, parent `8f5a1a0f9`.
-- **Date:** 2026-11-12, about 02:10 to 02:35 PST. Run on the Air; no host-changing command, no MBP access.
+- **Date:** 2026-11-12, 02:10 to 02:23 PST. Run on the Air; no host-changing command, no MBP access.
 - **Blind status:** blind. Fake-clock tests and source reading only; no v4, Block 6 or BYTES outcome and no energy or power value was read.
 
 ## Verdict: ADMIT
