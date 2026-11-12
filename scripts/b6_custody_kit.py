@@ -21,6 +21,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -40,6 +41,10 @@ CHUNK = 1 << 20
 
 class Refusal(Exception):
     pass
+
+
+def host_name():
+    return socket.gethostname().split(".")[0].lower()
 
 
 def refuse(code):
@@ -210,7 +215,8 @@ def cmd_manifest(args):
         if value:
             loop[field] = {"name": Path(value).name, "sha256": hash_file(no_symlink_components(value))[0]}
     names = copy_paths(sources)
-    document = {"schema": MANIFEST_SCHEMA, "loop": loop,
+    host = (args.source_host or host_name()).split(".")[0].lower()
+    document = {"schema": MANIFEST_SCHEMA, "host": host, "loop": loop,
                 "sessions": [session_manifest(s, n) for s, n in zip(sources, names)]}
     digest = write_new(args.out, document)
     print("manifest sessions=" + str(len(sources)) + " sha256=" + digest)
@@ -279,23 +285,38 @@ def verify_session(root, entry, tool):
 
 
 def cmd_verify(args):
-    if os.path.lexists(args.out):
+    if args.self_check and args.out:
+        refuse("self_check_writes_no_receipt")
+    if not args.self_check and not args.out:
+        refuse("verify_out_missing")
+    if args.out and os.path.lexists(args.out):
         refuse("out_exists")
     data, manifest = read_json_artifact(args.manifest)
     if hashlib.sha256(data).hexdigest() != args.manifest_sha256:
         refuse("manifest_digest_mismatch")
-    if manifest.get("schema") != MANIFEST_SCHEMA:
+    if manifest.get("schema") != MANIFEST_SCHEMA or not isinstance(manifest.get("host"), str):
         refuse("manifest_schema_invalid")
+    if not args.self_check and manifest["host"] == host_name():
+        # A manifest made on the machine being verified is a digest of the copy (BRIEF-B: not authentication).
+        refuse("copy_on_source_host")
     root = no_symlink_components(args.root)
     tool = {"zstd": None}
-    sessions = {e["copy_path"]: verify_session(root, e, tool) for e in manifest["sessions"]}
+    sessions = {}
+    for e in manifest["sessions"]:
+        if not args.self_check and str(root / relative(e["copy_path"])) == e["source_path"]:
+            refuse("copy_is_source")
+        sessions[e["copy_path"]] = verify_session(root, e, tool)
+    totals = {k: sum(s[k] for s in sessions.values()) for k in
+              ("files", "bytes", "sums_rows", "sums_rows_compressed", "desk_files")}
+    if args.self_check:
+        print("self-check sessions=" + str(len(sessions)) + " files=" + str(totals["files"])
+              + " bytes=" + str(totals["bytes"]) + " (no receipt written)")
+        return 0
     receipt = {"schema": RECEIPT_SCHEMA, "verdict": "verified", "manifest_sha256": args.manifest_sha256,
-               "root": str(root), "sessions": sessions, "zstd": tool["zstd"],
-               "totals": {k: sum(s[k] for s in sessions.values()) for k in
-                          ("files", "bytes", "sums_rows", "sums_rows_compressed", "desk_files")}}
+               "root": str(root), "sessions": sessions, "zstd": tool["zstd"], "totals": totals}
     digest = write_new(args.out, receipt)
-    print("verify sessions=" + str(len(sessions)) + " files=" + str(receipt["totals"]["files"])
-          + " bytes=" + str(receipt["totals"]["bytes"]) + " receipt_sha256=" + digest)
+    print("verify sessions=" + str(len(sessions)) + " files=" + str(totals["files"])
+          + " bytes=" + str(totals["bytes"]) + " receipt_sha256=" + digest)
     return 0
 
 
@@ -408,12 +429,15 @@ def main(argv=None):
     m.add_argument("--session", action="append", required=True, help="an archive root (repeat)")
     m.add_argument("--loop-attempts", required=True)
     m.add_argument("--loop-state")
+    m.add_argument("--source-host", help="host name to record (default: this host; for rehearsals only)")
     m.add_argument("--out", required=True, help="new manifest file (refused if it exists)")
     v = sub.add_parser("verify", help="on the copy: rehash every SHA256SUMS row")
     v.add_argument("--manifest", required=True)
     v.add_argument("--manifest-sha256", required=True, help="the digest manifest printed at the source")
     v.add_argument("--root", required=True, help="copy root; each archive at <root>/<copy_path>")
-    v.add_argument("--out", required=True, help="new receipt file (counts and bytes only)")
+    v.add_argument("--out", help="new receipt file (counts and bytes only)")
+    v.add_argument("--self-check", action="store_true",
+                   help="rehash the SOURCE tree against its own manifest; no receipt is written (--out refused)")
     i = sub.add_parser("inputs", help="on the Air: the run-input document, digests from the source manifest")
     i.add_argument("--manifest", required=True)
     i.add_argument("--verify-receipt", required=True)
