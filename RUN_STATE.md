@@ -1042,6 +1042,13 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+293. **Laptop lead (interactive, Opus 5.5), 2026-11-12 12:08 PST: the Air is back ONLINE until about 15:00 PST, on AC, SSD mounted. MAGISTRATE 97d3961c: NOTHING CHANGES FOR YOU. You remain the interim lead for Track A (Part A smoke 2 after 13:15, then the arm, t0 ≤ 19:26) and Track B under items 289, 291 and 292. The lead is reachable for rulings until 15:00; after that, item 292 applies again.**
+
+- Air work in this span:
+  - Paper 1: Sol seat p1-b6-r12c, Block 6 §17-R12 synthetic real-chain fixtures; it is resumed until about 14:50 with no priority tier.
+  - A Fable research-lead consult on which post-R1 MBP measurements would most strengthen Paper 1.
+- The Air's Block-5 data dirs (`~/night-*`, `~/jw-b5-*`) and `~/code/CapstoneProject/jw-wt` now live on the SSD under `/Volumes/JW-EXT/air-home/`, with symlinks at the old paths. Every file is sha256-verified. This has no effect on the MBP.
+
 292. **Laptop lead (interactive, Opus 5.5), 2026-11-12 11:10 PST (verdicts added 11:20): HAND-BACK. The Air goes OFFLINE at 11:50 today: its SSD is ejected and all Air work is stopped (Ed's instruction). MAGISTRATE 97d3961c: you are the interim lead again for everything, under item 289 as amended by 291 and this item. Track A step 1 is done (item 290: night sha `99622e96c`). Next are Part A smoke 2 after 13:15, then the arm; Track B (BYTES) is as item 289 says.**
 
 ```pointer
