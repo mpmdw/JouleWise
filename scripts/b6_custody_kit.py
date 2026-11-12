@@ -312,7 +312,7 @@ def cmd_verify(args):
         print("self-check sessions=" + str(len(sessions)) + " files=" + str(totals["files"])
               + " bytes=" + str(totals["bytes"]) + " (no receipt written)")
         return 0
-    receipt = {"schema": RECEIPT_SCHEMA, "verdict": "verified", "manifest_sha256": args.manifest_sha256,
+    receipt = {"schema": RECEIPT_SCHEMA, "produced_by": RECEIPT_PRODUCER, "verdict": "verified", "manifest_sha256": args.manifest_sha256,
                "root": str(root), "sessions": sessions, "zstd": tool["zstd"], "totals": totals}
     digest = write_new(args.out, receipt)
     print("verify sessions=" + str(len(sessions)) + " files=" + str(totals["files"])
@@ -322,15 +322,35 @@ def cmd_verify(args):
 
 # -- inputs -------------------------------------------------------------------
 
+COUNT_KEYS = ("files", "bytes", "sums_rows", "sums_rows_compressed", "desk_files")
+RECEIPT_PRODUCER = "b6_custody_kit.py verify"
+
+
 def verified_context(args):
+    """The manifest and the receipt are each pinned by an out-of-band digest (cold review M3); the receipt must
+    be one verify wrote for exactly this manifest: producer mark, every session with its five counts, and the
+    counts equal to the manifest's file count and total bytes."""
     data, manifest = read_json_artifact(args.manifest)
-    _, receipt = read_json_artifact(args.verify_receipt)
+    if hashlib.sha256(data).hexdigest() != args.manifest_sha256:
+        refuse("manifest_digest_mismatch")
+    if manifest.get("schema") != MANIFEST_SCHEMA:
+        refuse("manifest_schema_invalid")
+    receipt_data, receipt = read_json_artifact(args.verify_receipt)
+    if hashlib.sha256(receipt_data).hexdigest() != args.verify_receipt_sha256:
+        refuse("receipt_digest_mismatch")
     if receipt.get("schema") != RECEIPT_SCHEMA or receipt.get("verdict") != "verified":
         refuse("receipt_not_verified")
-    if receipt.get("manifest_sha256") != hashlib.sha256(data).hexdigest():
+    if receipt.get("manifest_sha256") != args.manifest_sha256:
         refuse("receipt_manifest_mismatch")
     if set(receipt["sessions"]) != {e["copy_path"] for e in manifest["sessions"]}:
         refuse("receipt_manifest_mismatch")
+    if receipt.get("produced_by") != RECEIPT_PRODUCER:
+        refuse("receipt_invalid")
+    for entry in manifest["sessions"]:
+        counts = receipt["sessions"][entry["copy_path"]]
+        if not isinstance(counts, dict) or set(counts) != set(COUNT_KEYS) \
+                or counts["files"] != entry["file_count"] or counts["bytes"] != entry["total_bytes"]:
+            refuse("receipt_invalid")
     return manifest, receipt, Path(receipt["root"])
 
 
@@ -440,7 +460,9 @@ def main(argv=None):
                    help="rehash the SOURCE tree against its own manifest; no receipt is written (--out refused)")
     i = sub.add_parser("inputs", help="on the Air: the run-input document, digests from the source manifest")
     i.add_argument("--manifest", required=True)
+    i.add_argument("--manifest-sha256", required=True, help="the digest manifest printed at the source")
     i.add_argument("--verify-receipt", required=True)
+    i.add_argument("--verify-receipt-sha256", required=True, help="the receipt_sha256 verify printed")
     i.add_argument("--mapping", help="person-written mapping.json")
     i.add_argument("--l9-audit", choices=("not_run", "completed"))
     i.add_argument("--out", help="new run-input document")
