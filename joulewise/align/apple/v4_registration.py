@@ -24,6 +24,7 @@ _NAMED_ARTIFACTS = (
     'scripts/align_v4_kit.py', 'scripts/align_v4_session.py',
     'scripts/zero_ntp_frequency.c',
     'scripts/watchdog_status.py', 'scripts/launch_align_r0.py',
+    'scripts/run_align_r1_smoke.py',
     'joulewise/align/apple/r1_phase_table.py',
     'scripts/align_r1_followup_kit.py', 'scripts/align_r1_thermal_replay.py',
     'scripts/run_align_r0_launchagent.sh', 'scripts/post_window_unstrand.sh',

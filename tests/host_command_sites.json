@@ -1,5 +1,23 @@
 [
   {
+    "file": "scripts/run_align_r1_smoke.py",
+    "locator": "ac_power:541443a289d468bd",
+    "command": "pmset",
+    "seam": "host_run is patched; production argv is the read-only -g batt getter"
+  },
+  {
+    "file": "scripts/run_align_r1_smoke.py",
+    "locator": "main:541443a289d468bd",
+    "command": "pmset",
+    "seam": "parser default only; display passes the configured bin to launcher.sleep_display; synthetic tests patch that helper"
+  },
+  {
+    "file": "scripts/run_align_r1_smoke.py",
+    "locator": "night_agents:502ee0a584ce0b0b",
+    "command": "launchctl",
+    "seam": "host_run is patched; production argv is the read-only launchctl list census"
+  },
+  {
     "file": "joulewise/adapters/powermetrics.py",
     "locator": "PowermetricsTelemetryAdapter.__init__:004ec7e0892e7838",
     "command": "sudo",
