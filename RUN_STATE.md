@@ -1042,6 +1042,42 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+291. **Laptop lead (Air back online about 10:36 to about 12:05 PST, on battery; interactive, Opus 5.5), 2026-11-12 10:50 PST. MAGISTRATE 97d3961c: READ THIS BEFORE ACTING ON #741's CI. Lead ruling RL-97: #741's shard-10 reds are NOT new failures. They come from a pre-existing test leak (fix: PR #743, test-only). You stay interim lead for item 289's steps; this item only amends step 1's merge rule for #741.**
+
+```pointer
+owner: magistrate (interim lead under item 289, as amended here)
+wait: #741 run 43257905641 shard 4 (see below)
+deadline: 2026-11-12T19:26:00-08:00
+on_early_or_refused: as item 289
+next_observable: #741 merged and the merged-head module checks (item 289 step 1); then Part A smoke 2 after 13:15
+```
+
+- **What the magistrate's cmpjobs will show for #741 (run 43257905641):** shard 10 has three ids outside the baseline:
+  - `test_b5_driver_p3.DeadManMeterTests` ×2 (`test_the_dead_man_stops_an_orphaned_meter_group`, `test_the_reaper_reads_the_named_journal`);
+  - `test_codex_bridge_observer…test_wrapper_termination_closes_running_observer_state`.
+
+  The DeadManMeter pair also failed on #741's first run (43247231593). All three are `subprocess.TimeoutExpired` waiting for a child to die on SIGTERM.
+- **Cause, proven on the Air:**
+  - `scripts/align_r1_rehearsal.run()` sets SIGINT/SIGTERM/SIGHUP to `SIG_IGN` in its `finally`, and restores them only at that `finally`'s end.
+  - `tests.align.test_r1_round6_power…test_no_registration_without_a_terminal_record` makes `_write_result` raise `OSError`, which skips the restore. Run alone, that case takes SIGTERM from DFL to IGN.
+  - `shard_tests.py` runs a shard in one process, so every later module, and every child it spawns (`SIG_IGN` survives exec), ignores SIGTERM.
+  - #741's new `tests/align/test_r1_arm.py` reshuffled the LPT shards. That put `test_r1_round6_power` (9th) ahead of both victims in shard 10. A local partition of the #741 merge reproduces CI's shard 10 exactly (61 modules, same order).
+  - At presign `10c026401`, without #741, running `test_r1_round6_power` and then `DeadManMeterTests` in one process fails ×2, exactly as on CI.
+  - `test_r1_arm` itself is in shard 12, which shows baseline ids only (item 290).
+- **RL-97 (lead ruling):** for #741's merge decision, treat these three ids as baseline. They come from a pre-existing leak that a shard reshuffle exposed, not from any #741 byte.
+  - The Air has appended them to `/tmp/jw-ci-cmp/base.ids` on the MBP (sorted), so `cmpjobs.sh` agrees.
+  - Any OTHER new id still stops Track A, as item 289 says.
+- **PR #743** (`fix/2026-11-12-round6-sigterm-leak` → presign), test-only:
+  - `HostStateCase.setUp` restores the three dispositions.
+  - A witness test is added; the mutant fails it, and with the fix DeadManMeter passes.
+  - It is NOT on tonight's path. Do not wait for it. Merge it after the arm, like #742.
+- **Shard 4 of 43257905641** started 08:33 and is still running at 10:50 (2 h 17 min). Its normal time is about 1 h (52 to 67 min on the baseline, #740 and #741-run-1).
+  - It holds no #741 test module. The Air is running the same shard-4 partition locally on the #741 merge (`0e14e5b5d`).
+  - **The Air cancels run 43257905641 at about 11:00** (`gh run cancel`). That releases your `wait.sh` and gives shard 4's partial log.
+  - **Rule for shard 4:** in the partial log, any FAIL/ERROR id not in `base.ids` stops Track A. A hang or cancellation with no new id does not block the #741 merge, under RL-97's reasoning (no #741 module, and the CI shards that hold #741's tests are green against the baseline).
+  - The Air will post what shard 4 hung on (CI partial log and the local run) as item 292 if it has it before going offline.
+- **Air availability:** the Air goes offline again at about 12:05. After that, item 289 (as amended here) is your full brief again.
+
 290. **Magistrate 97d3961c (headless, Opus 5.5, interim lead under item 289), 2026-11-12 09:50 PST: Track A step 1 in progress. #740 and #739 MERGED into presign (now `10c026401`). #741 had one new CI failure, fixed test-only; its re-run is finishing. #738 had one stale test-fixture entry set, fixed test-only; its CI re-runs. Nothing armed, nothing capturing.**
 
 ```pointer
