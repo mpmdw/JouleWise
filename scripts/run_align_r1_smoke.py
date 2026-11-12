@@ -3,6 +3,12 @@
 
 Launch ONLY through launch_align_r0.py launch --runner-kind r1-smoke. This
 runner neither arms a night nor changes the kit or condition-13 sources.
+
+RL-94: ``--fresh-soak`` first runs the night's own idle soak (runtime kind
+``idle`` as ``idle_soak``, the phase table's duration) for the config's gate
+pair, under the same feeds, and hands the soak reference it writes to the
+parts. It is the smoke's reference only. ``--parts A`` stops after Part A
+(RL-89: Part A on the final night bytes; Part B is not re-run).
 """
 from __future__ import annotations
 
@@ -291,7 +297,43 @@ def dwell(args, feeds):
     return {"rc": 0, "dwell_s": seconds, "dwell_constant_s": launcher.DISPLAY_SLEEP_DWELL_S}
 
 
+def soak_seconds():
+    """The night's own idle_soak duration (phase table), never a smoke constant."""
+    return float(next(d for name, _kind, d, _c in r1.phase_plan() if name == "idle_soak"))
+
+
+def soak_child(output, inputs):
+    """RL-94: the night's idle-soak path, verbatim, for this config's gate pair.
+
+    Same invocation, contract check, settled-slope refusal and reference
+    writer as align_r1_rehearsal's idle_soak; one attempt, no redo.
+    """
+    reg.verify_r1_executed_sources(ROOT, {"executed_commit": r1.executed_commit(ROOT)})
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    def overlaps_batch(_delay):
+        raise ValueError("idle soak would overlap the 11:45-13:15 local OS batch window (ruling 8)")
+    r1.wait_outside_os_batch(soak_seconds(), sleep=overlaps_batch)
+    started = time.time_ns()
+    result = r1._invoke(r1.runtime_argv_from_inputs(inputs), "idle", output / "idle_soak", soak_seconds(),
+                        quiet=True, contract_key="idle_soak")
+    row = {"name": "idle_soak", "class": "light", "started_ns": started, "ended_ns": time.time_ns(),
+           "attempt": 0, "output_dir": str(output / "idle_soak"), "result": result}
+    row["os_load"] = r1.os_load_verdict("idle_soak", result, wall_s=(row["ended_ns"] - started) / 1e9)
+    row["soak_detrended"] = r1.soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"),
+                                              result.get("sensor_series_end_t_s"))
+    (output / "soak_row.json").write_text(json.dumps(row, indent=2, sort_keys=True) + "\n")
+    if not all(v["settled"] for v in row["soak_detrended"].values()):
+        raise ValueError("idle soak has unresolved slope")
+    if row["os_load"]["redo"]:
+        raise ValueError("idle soak: sustained CPU load (the night would redo it; the smoke does not)")
+    return r1.write_soak_reference(output, row)
+
+
 def part_argv(args, which):
+    if which == "soak":
+        return [sys.executable, "-B", str(ROOT / "scripts/run_align_r1_smoke.py"), "--soak-child",
+                "--output", str(args.output / "soak")]
     return [sys.executable, "-B", str(ROOT / "scripts/align_r1_followup_kit.py"), "smoke", "--part", which,
             "--output", str(args.output / ("part-" + which.lower())), "--soak-reference", str(args.soak_reference)]
 
@@ -315,7 +357,10 @@ class PartDeadline(night._WindowDeadline):
 
 def part(args, which, feeds, *, on_start=lambda: None):
     argv = part_argv(args, which)
-    cap = launcher.r1_part_caps()[which]
+    if which == "soak":
+        cap = launcher.r1_soak_cap_s()
+    else:
+        cap = launcher.r1_part_caps()[which]
     remaining = work_remaining(args)
     if remaining < cap:
         raise TimeoutError(f"Part {which} not started: full {cap:g} s cap cannot fit before work deadline")
@@ -372,10 +417,12 @@ def run(args, *, feeds=None):
     # Create-once: a retry cannot overwrite even a refused/partial smoke.
     args.output.mkdir(parents=True, exist_ok=False)
     feeds = feeds if feeds is not None else [AgentFeed(args.output), MeterFeed(args.output), VolumeFeed(args.output)]
+    fresh_soak, parts = getattr(args, "fresh_soak", False), getattr(args, "parts", "AB")
     power_read = False
     record = {"schema": "joulewise.align.r1_smoke_runner.v1", "started": stamp(),
               "deadline": args.deadline, "work_reserve_s": WORK_RESERVE_S,
-              "soak_reference": str(args.soak_reference), "parts": {"A": False, "B": False},
+              "soak_reference": None if fresh_soak else str(args.soak_reference),
+              "fresh_soak": fresh_soak, "parts_requested": parts, "parts": {"A": False, "B": False},
               "steps": [], "feeds": {}, "rc": 0}
 
     def step(name, operation, *, fatal=True):
@@ -404,6 +451,8 @@ def run(args, *, feeds=None):
         step("ac_power", ac_power)
         step("condition13", condition13)
         def soak():
+            if fresh_soak:
+                return {"rc": 0, "path": None, "fresh": True}
             if not args.soak_reference.is_file():
                 raise ValueError("soak reference file is missing")
             return {"rc": 0, "path": str(args.soak_reference)}
@@ -421,7 +470,23 @@ def run(args, *, feeds=None):
         # Match R0: a failed display sleep is recorded, not a refusal.
         step("display", lambda: display(args.pmset_bin), fatal=False)
         step("dwell", lambda: dwell(args, feeds))
-        for which in ("A", "B"):
+        if fresh_soak:
+            for feed in feeds:
+                if hasattr(feed, "before_part"):
+                    step("before-soak-" + feed.name, feed.before_part)
+            def run_soak():
+                result = part(args, "soak", feeds)
+                if result.get("rc"):
+                    return result
+                path = args.output / "soak" / "soak_reference.json"
+                if not path.is_file():
+                    raise ValueError("fresh soak wrote no soak reference")
+                args.soak_reference = path
+                record["soak_reference"] = str(path)
+                with path.open("rb") as handle:
+                    return {**result, "soak_reference_sha256": hashlib.file_digest(handle, "sha256").hexdigest()}
+            step("soak", run_soak)
+        for which in parts:
             for feed in feeds:
                 if hasattr(feed, "before_part"):
                     step("before-part-" + which + "-" + feed.name, feed.before_part)
@@ -481,14 +546,24 @@ def run(args, *, feeds=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--soak-reference", type=Path, required=True)
-    parser.add_argument("--deadline", type=float, required=True)
+    parser.add_argument("--soak-reference", type=Path)
+    parser.add_argument("--fresh-soak", action="store_true")
+    parser.add_argument("--parts", choices=("AB", "A"), default="AB")
+    parser.add_argument("--soak-child", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
+    parser.add_argument("--deadline", type=float)
     parser.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
-    if not math.isfinite(args.deadline):
+    if args.soak_child:
+        soak_child(args.output, args.inputs)
+        return 0
+    if args.deadline is None or not math.isfinite(args.deadline):
         parser.error("deadline must be finite")
+    if args.fresh_soak == (args.soak_reference is not None):
+        parser.error("give exactly one of --soak-reference and --fresh-soak")
     args.output = args.output.resolve()
-    args.soak_reference = args.soak_reference.resolve()
+    if args.soak_reference is not None:
+        args.soak_reference = args.soak_reference.resolve()
     return run(args)
 
 

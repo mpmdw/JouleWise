@@ -481,7 +481,7 @@ class ProductionSeamTests(unittest.TestCase):
 
 
 class LauncherTests(unittest.TestCase):
-    def launch_files(self, module, root, *, kind="r0", checks=None, keep_going=True, seconds=11400):
+    def launch_files(self, module, root, *, kind="r0", checks=None, keep_going=True, seconds=11400, **extra):
         repo = root / "repo"
         (repo / "scripts").mkdir(parents=True)
         for name in ("align_r0_checks.py", "run_align_r1_smoke.py"):
@@ -493,6 +493,8 @@ class LauncherTests(unittest.TestCase):
             magistrate_pid=1234, deadline=1000 + seconds, custody_root=root / "custody", exit_wait_seconds=180,
             start_wait_seconds=30, disk_path=root, launchctl_bin="fake-launchctl", pmset_bin="fake-pmset",
             pgrep_bin="fake-pgrep", kill_bin="fake-kill")
+        for name, value in extra.items():
+            setattr(args, name, value)
         with patch.object(module, "pid_alive", return_value=True), patch.object(module.time, "time", return_value=1000), \
              patch.object(module.uuid, "uuid4", return_value=SimpleNamespace(hex="fixed")), \
              patch.object(module.subprocess, "run", side_effect=[subprocess.CalledProcessError(19, []),
@@ -969,6 +971,138 @@ class MutantTests(unittest.TestCase):
                     case(name).run(result)
                 self.assertTrue(result.failures, (name, result.errors))
                 self.assertFalse(result.errors, result.errors)
+
+
+class FreshSoakPartATests(unittest.TestCase):
+    """RL-89/RL-94: --fresh-soak runs the night's idle soak first; --parts A stops after A."""
+    operation, feed, run_runner, receipt = (RunnerTests.operation, RunnerTests.feed,
+                                            RunnerTests.run_runner, RunnerTests.receipt)
+
+    def setUp(self):
+        RunnerTests.setUp(self)
+        self.args.soak_reference = None
+        self.args.fresh_soak, self.args.parts = True, "A"
+        original = self.operation("part")
+
+        def part(*args, **kwargs):
+            if args[1] == "soak":
+                self.events.append("part-soak")
+                path = self.args.output / "soak" / "soak_reference.json"
+                path.parent.mkdir(parents=True)
+                path.write_text("{}")
+                return {"rc": 0}
+            self.assertEqual(self.args.soak_reference, self.args.output / "soak" / "soak_reference.json")
+            return original(*args, **kwargs)
+        self.stack.enter_context(patch.object(smoke, "part", side_effect=part))
+
+    def test_order_and_receipt(self):
+        self.assertEqual(self.run_runner(), 0)
+        self.assertEqual(self.events, ["night_agents", "ac_power", "condition13", "start-meter",
+            "start-agents", "start-volumes", "read_power", "display", "dwell", "part-soak", "part-A",
+            "restore", "stop-volumes", "stop-agents", "stop-meter"])
+        receipt = self.receipt()
+        self.assertEqual(receipt["parts"], {"A": True, "B": False})
+        self.assertEqual((receipt["fresh_soak"], receipt["parts_requested"]), (True, "A"))
+        self.assertEqual(receipt["soak_reference"], str(self.args.output / "soak" / "soak_reference.json"))
+        soak = next(s for s in receipt["steps"] if s["name"] == "soak")
+        self.assertEqual(soak["result"]["soak_reference_sha256"], hashlib.sha256(b"{}").hexdigest())
+
+    def test_soak_failure_runs_no_part(self):
+        self.fault_step = None
+        with patch.object(smoke, "part", side_effect=lambda *a, **k: {"rc": 3}):
+            self.assertEqual(self.run_runner(), 3)
+        self.assertEqual(self.receipt()["parts"], {"A": False, "B": False})
+        self.assertIsNone(self.receipt()["soak_reference"])
+        self.assertFalse(self.live)
+
+    def test_part_a_failure_after_soak_stops_and_cleans(self):
+        self.fault_step = "part-A"
+        self.assertEqual(self.run_runner(), 2)
+        self.assertEqual(self.events[-5:], ["part-A", "restore", "stop-volumes", "stop-agents", "stop-meter"])
+        self.assertFalse(self.live)
+
+
+class SoakChildTests(unittest.TestCase):
+    def soak_result(self, slope=0.0):
+        times = [float(t) for t in range(1801)]
+        series = {key: [30.0 + slope * t / 60.0 + (0.01 if t % 2 else 0.0) for t in times] for key in ("TV0h", "Th0C")}
+        return {"sensor_series_c": series, "sensor_series_t_s": {k: times for k in series},
+                "sensor_series_end_t_s": 1800.0, "sensor_roles": {"s_fast": "TV0h", "s_slow": "Th0C"},
+                "cpu_busy_cores": [0.1] * 1801, "cpu_busy_t_s": times, "census": [{"ok": True}]}
+
+    def run_child(self, result, *, batch=False):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / "soak"
+            calls = []
+            def invoke(runtime, kind, output, duration=None, **kwargs):
+                calls.append((kind, Path(output).name, duration, kwargs))
+                return result
+            def wait(seconds, *, sleep):
+                if batch:
+                    sleep(60.0)
+                return 0.0
+            with patch.object(smoke.reg, "verify_r1_executed_sources"), \
+                 patch.object(smoke.r1, "executed_commit", return_value="0" * 40), \
+                 patch.object(smoke.r1, "runtime_argv_from_inputs", return_value=["runtime"]), \
+                 patch.object(smoke.r1, "wait_outside_os_batch", side_effect=wait), \
+                 patch.object(smoke.r1, "_invoke", side_effect=invoke):
+                path = smoke.soak_child(out, Path(directory) / "inputs.json")
+                return calls, json.loads(path.read_text())
+
+    def test_night_idle_soak_path_and_reference(self):
+        calls, reference = self.run_child(self.soak_result())
+        self.assertEqual(calls, [("idle", "idle_soak", smoke.soak_seconds(),
+                                  {"quiet": True, "contract_key": "idle_soak"})])
+        self.assertEqual(smoke.soak_seconds(), 1800.0)
+        self.assertEqual(reference["schema"], smoke.r1.SOAK_REFERENCE_SCHEMA)
+        self.assertEqual(set(reference["sensors_c"]), {"TV0h", "Th0C"})
+        self.assertEqual(reference["sensor_roles"], {"s_fast": "TV0h", "s_slow": "Th0C"})
+        self.assertTrue(all(v["settled"] for v in reference["detrended"].values()))
+
+    def test_unsettled_soak_and_os_batch_overlap_refuse(self):
+        with self.assertRaisesRegex(ValueError, "unresolved slope"):
+            self.run_child(self.soak_result(slope=0.5))
+        with self.assertRaisesRegex(ValueError, "OS batch"):
+            self.run_child(self.soak_result(), batch=True)
+
+    def test_launcher_argv_minimum_and_cap(self):
+        args = SimpleNamespace(repo=Path("/synthetic/repo"), python_bin=Path("/synthetic/python"),
+                               output=Path("/synthetic/new"), runner_kind="r1-smoke", soak_reference=None,
+                               fresh_soak=True, parts="A", deadline=1234, pmset_bin="fake-pmset")
+        self.assertEqual(launcher.runner_argv(args), ["/synthetic/python",
+            "/synthetic/repo/scripts/run_align_r1_smoke.py", "--output", "/synthetic/new", "--fresh-soak",
+            "--parts", "A", "--deadline", "1234", "--pmset-bin", "fake-pmset"])
+        self.assertEqual(launcher.r1_soak_cap_s(), 1800 + 30 + 120)
+        self.assertEqual(launcher.r1_minimum_seconds("A", True), 3120 + 1950 + 300 + 2 * 180 + 10)
+        self.assertEqual(launcher.r1_minimum_seconds(), 3120 + 5720 + 300 + 2 * 180 + 10)
+
+    def test_launch_fresh_soak_part_a_spec_and_deadline(self):
+        helper = LauncherTests()
+        with tempfile.TemporaryDirectory() as directory:
+            spec, _ = helper.launch_files(launcher, Path(directory), kind="r1-smoke", soak_reference=None,
+                                          fresh_soak=True, parts="A",
+                                          seconds=launcher.r1_minimum_seconds("A", True))
+            argv = json.loads(spec)["argv"]
+            self.assertIn("--fresh-soak", argv)
+            self.assertNotIn("--soak-reference", argv)
+            self.assertEqual(argv[argv.index("--parts") + 1], "A")
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "deadline cannot fit"):
+                helper.launch_files(launcher, Path(directory), kind="r1-smoke", soak_reference=None,
+                                    fresh_soak=True, parts="A",
+                                    seconds=launcher.r1_minimum_seconds("A", True) - 1)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "not both"):
+                helper.launch_files(launcher, Path(directory), kind="r1-smoke", fresh_soak=True)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "r1-smoke only"):
+                helper.launch_files(launcher, Path(directory), parts="A")
+
+    def test_runner_cli_takes_exactly_one_soak_source(self):
+        for argv in (["--output", "/x", "--deadline", "1"],
+                     ["--output", "/x", "--deadline", "1", "--fresh-soak", "--soak-reference", "/s"]):
+            with self.assertRaises(SystemExit), patch("sys.stderr", io.StringIO()):
+                smoke.main(argv)
 
 
 if __name__ == "__main__":

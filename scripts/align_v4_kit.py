@@ -1360,14 +1360,23 @@ def gate_policy_fields(policy, role='D'):
 
 
 def r0_heatsink_key(root=ROOT):
-    """RL-78/RL-84: the registered R0 pick, independent of R1's gate picks.
+    """RL-78/RL-84/RL-94: R0's registered slow pick, independent of any gate pick.
 
-    The runtime config retains R0's sensor selection and its record digest;
-    R1's replacement gate pair lives in inputs.R1 and thermometry.D instead.
-    Read only this repository config, never the R0 measurement record.
+    RL-89 made ``sensors.s_slow`` an R1 pick (Th0C), so the recorded key is
+    read from ``r0_picks.s_slow``, the field that names R0's own pair, beside
+    the R0 record digest. It must also be one of the runtime's
+    ``sensors.record_keys``. Read only this repository config, never the R0
+    measurement record.
     """
     config = json.loads((Path(root) / 'configs/align/v4/r1_runtime.json').read_bytes())
-    return r1_runtime.sensors_policy(config)['s_slow']
+    sensors = r1_runtime.sensors_policy(config)
+    picks = config.get('r0_picks')
+    key = picks.get('s_slow') if isinstance(picks, dict) else None
+    if not isinstance(key, str) or not key:
+        raise ValueError('r1_runtime.json r0_picks.s_slow must name R0\'s heatsink key (RL-94)')
+    if key not in (sensors.get('record_keys') or []):
+        raise ValueError(f'R0 heatsink key {key} is not in r1_runtime.json sensors.record_keys (RL-94)')
+    return key
 
 
 def check_w1_record_keys(plan, root=ROOT):
