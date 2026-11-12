@@ -19,7 +19,8 @@ from tests.hazards.test_temperature import FakeSensors, POLICY as SIDECAR_POLICY
 from joulewise.hazards.base import Context
 
 ROOT = Path(__file__).resolve().parents[2]
-HEATSINK = json.loads((ROOT / 'configs/align/v4/r1_runtime.json').read_bytes())['sensors']['s_slow']
+# RL-94: R0's heatsink is read from r0_picks, not sensors.s_slow (an R1 pick since RL-89).
+HEATSINK = json.loads((ROOT / 'configs/align/v4/r1_runtime.json').read_bytes())['r0_picks']['s_slow']
 
 
 class W1RecordTests(unittest.TestCase):
@@ -71,17 +72,46 @@ class W1RecordTests(unittest.TestCase):
         for member in plan['members'][4:]:
             self.assertEqual((member['spec']['thermal']['sensors'] or {}).get('record_keys'), [HEATSINK])
 
-    def test_policy_derives_record_key_from_registered_r0_config(self):
-        config = json.loads((ROOT / 'configs/align/v4/r1_runtime.json').read_bytes())
-        config['sensors']['s_slow'] = 'Tsyn'
+    def policy_with(self, config, inputs=None):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / 'configs/align/v4/r1_runtime.json'
             target.parent.mkdir(parents=True)
             target.write_text(json.dumps(config))
-            result = kit.thermal_policy(self.inputs, heavy=True, per_turn=True,
-                                        window_reference={'role': 'capture'}, root=Path(tmp))
+            return kit.thermal_policy(inputs or self.inputs, heavy=True, per_turn=True,
+                                      window_reference={'role': 'capture'}, root=Path(tmp))
+
+    def test_policy_derives_record_key_from_registered_r0_config(self):
+        config = json.loads((ROOT / 'configs/align/v4/r1_runtime.json').read_bytes())
+        config['r0_picks']['s_slow'] = 'Tsyn'
+        config['sensors']['record_keys'] = ['Tsyn']
+        result = self.policy_with(config)
         self.assertEqual(result['sensors']['record_keys'], ['Tsyn'])
         self.assertEqual(result['sensors']['s_slow'], self.inputs['R1']['thermal_policy']['sensors']['s_slow'])
+
+    def test_rl94_record_key_is_r0_pick_not_runtime_s_slow(self):
+        # RL-94: with the runtime's s_slow an R1 pick (Th0C), W1 records Tf08
+        # and gates on the R1 picks; a changed s_slow alone moves nothing.
+        config = json.loads((ROOT / 'configs/align/v4/r1_runtime.json').read_bytes())
+        self.assertEqual((config['sensors']['s_fast'], config['sensors']['s_slow']), ('TV0h', 'Th0C'))
+        self.assertEqual(config['r0_picks'], {'s_fast': 'TV0h', 's_slow': 'Tf08'})
+        self.assertEqual(kit.r0_heatsink_key(ROOT), 'Tf08')
+        inputs = deepcopy(self.inputs)
+        inputs['R1']['thermal_policy']['sensors'].update(s_fast='TV0h', s_slow='Th0C')
+        result = self.policy_with(config, inputs)
+        self.assertEqual(result['sensors']['record_keys'], ['Tf08'])
+        self.assertEqual((result['sensors']['s_fast'], result['sensors']['s_slow']), ('TV0h', 'Th0C'))
+        config['sensors']['s_slow'] = 'Tsyn'
+        self.assertEqual(self.policy_with(config, inputs)['sensors']['record_keys'], ['Tf08'])
+
+    def test_r0_pick_must_be_named_and_recorded_by_the_runtime(self):
+        config = json.loads((ROOT / 'configs/align/v4/r1_runtime.json').read_bytes())
+        for mutate, message in ((lambda c: c.pop('r0_picks'), 'r0_picks.s_slow'),
+                                (lambda c: c['r0_picks'].update(s_slow=None), 'r0_picks.s_slow'),
+                                (lambda c: c['sensors'].update(record_keys=['Tbad']), 'not in .*record_keys')):
+            candidate = deepcopy(config)
+            mutate(candidate)
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                self.policy_with(candidate)
 
     def test_readiness_refuses_missing_or_wrong_record_key_in_each_sidecar_member(self):
         for index in range(4, 18):
