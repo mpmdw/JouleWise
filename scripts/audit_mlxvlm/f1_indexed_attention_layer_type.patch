@@ -1,0 +1,29 @@
+--- a/mlx_vlm/models/qwen4_exp/config.py
++++ b/mlx_vlm/models/qwen4_exp/config.py
+@@ -94,8 +94,14 @@
+                 for i in range(self.num_hidden_layers)
+             ]
+         else:
++            # Checkpoints say "full_attention"; transformers' Qwen4ExpTextConfig
++            # normalizes it to "indexed_attention" and writes that on save.
+             self.layer_types = [
+-                "qwen_sparse_attention" if kind == "full_attention" else kind
++                (
++                    "qwen_sparse_attention"
++                    if kind in ("full_attention", "indexed_attention")
++                    else kind
++                )
+                 for kind in self.layer_types
+             ]
+ 
+@@ -112,7 +118,9 @@
+             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported}")
+         if self.hc_count <= 1:
+             raise ValueError("Qwen4-Exp requires hc_count > 1")
+-        if self.output_gate_type not in {"sigmoid", "silu"}:
++        # transformers' default is None (the gated norm then uses hidden_act,
++        # as Qwen4ExpGatedDeltaNet already does); the checkpoint sets "sigmoid".
++        if self.output_gate_type not in {None, "sigmoid", "silu"}:
+             raise ValueError("Qwen4-Exp output_gate_type must be 'sigmoid' or 'silu'")
+         if self.indexer_kv_heads != 1:
+             raise ValueError("Qwen4-Exp QSA requires indexer_kv_heads=1")
