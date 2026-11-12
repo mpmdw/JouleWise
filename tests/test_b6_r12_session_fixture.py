@@ -961,6 +961,22 @@ class SchedulerBoundaryTests(unittest.TestCase):
                 verify(outer, outer / "absent-denied", "control-probe")
             self.assertFalse((outer / "control-probe").exists())
 
+    def test_full_verifier_refuses_completed_smoke_boundary(self):
+        """Predict: a successful original smoke desk cannot authorize the production-size reader or create a full-volume report view."""
+        from b6_r12_full_verify import verify
+        from b6_r12_segments import snapshot
+        with tempfile.TemporaryDirectory(prefix="r12-full-guard-") as directory:
+            outer = Path(directory).resolve()
+            main = prepare(outer / "main")
+            (main / "loop").mkdir()
+            (main / "loop/state.json").write_text(json.dumps({
+                "state": "ARM_WAIT", "session": {"id": "control-only", "smoke_done": True}}))
+            (outer / "segments.json").write_text(json.dumps({"main": str(main),
+                "steps": [{"exit_code": 0, "boundary": snapshot(main)}]}))
+            with self.assertRaisesRegex(ValueError, "ordinary desk"):
+                verify(outer, "control-check")
+            self.assertFalse((outer / "control-check").exists())
+
 
 class CourierProfileTests(unittest.TestCase):
     def test_original_courier_preserves_stdin_argv_and_injected_clock(self):
