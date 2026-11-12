@@ -200,9 +200,7 @@ def check_sources_set(files, rows):
         found = [n for n in ("sources/" + name, "sources/" + name + ".zst") if n in files]
         if not found:
             refuse("listed_file_missing")
-        if len(found) > 1:
-            refuse("unlisted_extra_file")
-        expected.add(found[0])
+        expected.add(found[0])   # a row present plain AND compressed leaves the twin unexpected, refused below
     if {n for n in files if n.startswith("sources/")} != expected:
         refuse("unlisted_extra_file")
 

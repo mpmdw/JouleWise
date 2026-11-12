@@ -943,6 +943,22 @@ class Mini(unittest.TestCase):
             bad.write_text(json.dumps(r))
             self.assertRefused(run("inputs", *self.ia(receipt=bad), "--list-names", "b6-alpha-r1"), "receipt_invalid")
 
+    def test_inputs_refuses_a_file_that_is_not_a_manifest(self):
+        # Expected: manifest_schema_invalid when the digest-matching manifest argument is not a kit manifest.
+        self.verified()
+        other = self.base / "other.json"
+        other.write_text('{"sessions": []}')
+        self.assertRefused(run("inputs", *self.ia(manifest=other), "--list-names", "b6-alpha-r1"),
+                           "manifest_schema_invalid")
+
+    def test_read_hashed_refuses_a_fifo_without_opening_it_blocking(self):
+        # Expected: not_regular_file (the single-read helper for SHA256SUMS never blocks on a FIFO).
+        fifo = self.base / "SHA256SUMS"
+        os.mkfifo(fifo)
+        with self.assertRaises(kit.Refusal) as caught:
+            kit.read_hashed(fifo)
+        self.assertEqual(str(caught.exception), "not_regular_file")
+
     def test_sha256sums_changed_after_verify(self):
         # Expected: refused sums_digest_mismatch when inputs reads the name column.
         self.verified()
