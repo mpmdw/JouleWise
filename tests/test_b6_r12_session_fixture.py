@@ -703,6 +703,40 @@ class DeskInputBoundaryTests(unittest.TestCase):
 
 
 class VerifierInventoryTests(unittest.TestCase):
+    def _unit_manifest(self, root):
+        """Metadata-only unit root; no session, archive or loop record exists."""
+        (root / "runtime.py").write_bytes((REPO / "scripts/b6_r12_runtime.py").read_bytes())
+        manifest = {"synthetic_only": True, "source_sha256": {}, "seams": {},
+            "runtime_sha256": hashlib.sha256((root / "runtime.py").read_bytes()).hexdigest(),
+            "generator_commit": subprocess.check_output(["git", "rev-parse", "HEAD"],
+                                                         cwd=REPO, text=True).strip()}
+        (root / "manifest.json").write_text(json.dumps(manifest) + "\n")
+
+    def test_manifest_names_actual_dependency_and_harvest_default_seams(self):
+        """Predict: final attestation names version-reader values from the hash-bound copied runtime and the killpg constructor default. This is a manifest unit, not a collected fixture."""
+        from b6_r12_verify import finalize_manifest
+        with tempfile.TemporaryDirectory(prefix="r12-source-seam-unit-") as directory:
+            root = Path(directory).resolve()
+            self._unit_manifest(root)
+            finalize_manifest(root)
+            value = json.loads((root / "manifest.json").read_bytes())
+            versions = value["seams"]["importlib.metadata.version"]
+            self.assertEqual(versions["packages"], {name: "r12-synthetic" for name in (
+                "mlx", "mlx-lm", "mlx-metal", "numpy", "safetensors", "tokenizers", "transformers")})
+            self.assertEqual(value["seams"]["joulewise.b5.harvest.Seams.__init__.__defaults__"]["field"], "killpg")
+            self.assertEqual(value["source_seam_provenance"]["runtime_sha256"], value["runtime_sha256"])
+
+    def test_manifest_refuses_runtime_bytes_different_from_pre_run_hash(self):
+        """Predict: changing a metadata unit's copied runtime after its declared hash refuses final attestation, even if the version declarations did not change."""
+        from b6_r12_verify import finalize_manifest
+        with tempfile.TemporaryDirectory(prefix="r12-source-digest-unit-") as directory:
+            root = Path(directory).resolve()
+            self._unit_manifest(root)
+            with (root / "runtime.py").open("ab") as stream:
+                stream.write(b"\n# deliberately changed metadata-unit bytes\n")
+            with self.assertRaisesRegex(ValueError, "generator runtime digest mismatch"):
+                finalize_manifest(root)
+
     def test_prediction_sources_use_bound_git_blobs(self):
         """Predict: later working-file edits cannot change the manifest's original committed prediction/doc hashes. The temporary Git repo is a provenance unit, not a chain fixture."""
         from b6_r12_verify import prediction_sources

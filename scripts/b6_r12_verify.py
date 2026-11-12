@@ -150,9 +150,50 @@ def prediction_sources(commit, repo=REPO):
             "source_sha256": sources, "test_docstrings": declarations}
 
 
+def runtime_source_seams(root, manifest):
+    """Name source bindings from the runtime bytes recorded before collection.
+
+    Decode literals without importing the simulator or using any run result.
+    This also works for an older generator whose manifest grouped these
+    bindings under broader interface names.
+    """
+    raw = child(root, str(root / "runtime.py")).read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != manifest.get("runtime_sha256"):
+        raise ValueError("generator runtime digest mismatch")
+    tree = ast.parse(raw)
+    engine = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "install_engine")
+    assignments = [node for node in engine.body if isinstance(node, ast.Assign)]
+    packages = ast.literal_eval(next(node.value for node in assignments
+        if any(isinstance(target, ast.Name) and target.id == "packages" for target in node.targets)))
+    version = next(node.value for node in assignments
+        if any(ast.unparse(target) == "importlib.metadata.version" for target in node.targets))
+    if (not isinstance(packages, set) or not packages or not all(isinstance(name, str) for name in packages)
+            or not isinstance(version, ast.Lambda) or not isinstance(version.body, ast.IfExp)
+            or ast.unparse(version.body.test) != "name in packages"
+            or ast.unparse(version.body.orelse) != "original_version(name)"):
+        raise ValueError("unrecognized dependency-version source")
+    value = ast.literal_eval(version.body.body)
+    if not isinstance(value, str):
+        raise ValueError("dependency-version source is not a literal string")
+    statements = {ast.unparse(node) for node in ast.walk(tree) if isinstance(node, ast.Assign)}
+    if ("defaults[names.index('killpg')] = os.killpg" not in statements
+            or "harvest.Seams.__init__.__defaults__ = tuple(defaults)" not in statements):
+        raise ValueError("unrecognized harvest process-input source")
+    return {"importlib.metadata.version": {
+        "packages": {name: value for name in sorted(packages)}, "others": "unchanged original provider"},
+        "joulewise.b5.harvest.Seams.__init__.__defaults__": {
+            "field": "killpg", "value_source": "os.killpg fixture signal/observation input", "others": "unchanged"}}, {
+        "schema": "r12.source_seams.v1", "runtime_sha256": digest,
+        "basis": "literal bindings in copied runtime whose hash was recorded before collection; no run-output inference"}
+
+
 def finalize_manifest(root):
     manifest_path = root / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
+    seams, provenance = runtime_source_seams(root, manifest)
+    manifest.setdefault("seams", {}).update(seams)
+    manifest["source_seam_provenance"] = provenance
     reads = set()
     for receipt in root.glob("source-reads-*.jsonl"):
         reads.update(json.loads(line)["path"] for line in receipt.read_text().splitlines() if line)

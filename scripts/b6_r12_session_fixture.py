@@ -124,6 +124,8 @@ def declare_sources(root):
         "os.link filesystem writer primitive": "actual no-clobber hard link only when both resolved, non-symlink endpoints are inside the fixture; dirfd variants and escaping links denied; pinned publisher and ownership judgments unchanged",
         "subprocess.Popen._execute_child": "dispatch unchanged pinned children; sampler raw plists at 10 Hz; first-source-tick startup barrier; undeclared commands return 126 and are logged",
         "mlx.core / mlx_lm": "tiny engine library source, batch 1; matmul pulse source 50 W; request first/decode 10/6 W; token/model timings in source policy; original runtime, events and reducers run; weights never loaded",
+        "importlib.metadata.version": "r12-synthetic for mlx, mlx-lm, mlx-metal, numpy, safetensors, tokenizers and transformers; other names use the original provider; original metadata writers and identity comparisons run",
+        "joulewise.b5.harvest.Seams.__init__.__defaults__": "only the killpg constructor default uses the declared os.killpg signal/observation input; all other defaults unchanged",
         "Tokenizer.encode/decode": "original input token IDs and 1 ms source latency",
         "mlx_lm.load source argument / raw sampler script": "model-source-PID.json outside session trees; scripted science-only busy readings keyed by the public engine input, references kept clean; no controller internals inspected",
         "joulewise.adapters.powermetrics.PowermetricsTelemetryAdapter.__init__.__kwdefaults__.drain_sleep": "minimum 200 ms external scheduler quantum; original right-edge drain judgment",
