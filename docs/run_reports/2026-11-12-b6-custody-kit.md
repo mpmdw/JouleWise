@@ -153,15 +153,41 @@ makes every manifest-hashed file citable again), 50 killed. Line numbers are at 
 # SOURCE (MBP desk gap, nothing armed): manifest, then note the printed sha256 OUT OF BAND (its digest only).
 python3.13 -B scripts/b6_custody_kit.py manifest --session <sessions>/<id>/archive [...x each session] \
   --loop-attempts <loop>/attempts.jsonl --loop-state <loop>/state.json --out <desk>/b6-custody-manifest.json
-# COPY: keep <copy_path> (printed in the manifest) and the sibling .desk folder; never --copy-links.
-mkdir -m 700 /Volumes/JW-EXT/b6-custody && for id in <ids>; do rsync -aR <sessions>/./$id/archive <sessions>/./$id/archive.desk \
-  <air>:/Volumes/JW-EXT/b6-custody/; done; rsync -a <loop>/attempts.jsonl <loop>/state.json <desk>/b6-custody-manifest.json <air>:/Volumes/JW-EXT/b6-custody/
+# COPY (cold review H1): per session, from the sessions directory, with RELATIVE paths and -R. The stock macOS rsync (openrsync 2.6.9)
+# ignores the "/./" anchor, so the earlier absolute form landed the files under <dest>/Volumes/... and verify refused session_missing.
+# Name <id>/archive.desk only where it exists (an absent folder makes rsync exit 23). The directory is made on the Air, mode 700.
+# Paths for the manifest, loop files and scratch must sit under /Users or /Volumes (the kit refuses a path through /tmp or /var).
+ssh <air> 'mkdir -m 700 /Volumes/JW-EXT/b6-custody'
+cd <sessions> && rsync -aR <id>/archive [<id>/archive.desk] <air>:/Volumes/JW-EXT/b6-custody/     # once per session; expected exit 0
+rsync -a <loop>/attempts.jsonl <loop>/state.json <desk>/b6-custody-manifest.json <air>:/Volumes/JW-EXT/b6-custody/
+# Before the real copy: rsync --version; zstd --version on the source host, and one synthetic two-session rehearsal source -> Air.
 # AIR: verify, write mapping.json from --list-names, emit inputs, run the recompute on the copy.
 python3.13 -B scripts/b6_custody_kit.py verify --manifest /Volumes/JW-EXT/b6-custody/b6-custody-manifest.json --manifest-sha256 <sha from SOURCE> --root /Volumes/JW-EXT/b6-custody --out <run>/verify-receipt.json
 python3.13 -B scripts/b6_custody_kit.py inputs --manifest <...> --verify-receipt <run>/verify-receipt.json --list-names <id>/archive
 python3.13 -B scripts/b6_custody_kit.py inputs --manifest <...> --verify-receipt <...> --mapping <run>/mapping.json --l9-audit not_run --out <run>/run-inputs.json
 python3.13 -B scripts/independent_recompute_b6.py block --session /Volumes/JW-EXT/b6-custody/<id>/archive [...] --closed --loop-attempts /Volumes/JW-EXT/b6-custody/attempts.jsonl --loop-state /Volumes/JW-EXT/b6-custody/state.json --inputs <run>/run-inputs.json --inputs-sha256 <printed> --workers <n> --restricted-out <...> --public-out <...>
 ```
+
+## Copy rehearsal (cold review H1), Air only
+
+Synthetic two-session tree built with the test module's `mini_archive` under `/Volumes/JW-EXT/tmp/b6-rehearsal-*`
+(NOT `/tmp` or `/var`): `S1/archive` with an adjacent `archive.desk`, `S2/archive` with an inside log and no `.desk`.
+A local directory on JW-EXT stood in for `air:`. Host: Air, macOS openrsync 2.6.9, zstd 1.5.7. No SSH to the MBP.
+The MBP's own `rsync --version; zstd --version` is still to be recorded by the magistrate (written into the draft item).
+
+```
+$ python3.13 -I scripts/b6_custody_kit.py manifest --session <T>/sessions/S1/archive --session <T>/sessions/S2/archive --loop-attempts <T>/loop/attempts.jsonl --loop-state <T>/loop/state.json --out <T>/desk/b6-custody-manifest.json
+exit 0   manifest sessions=2 sha256=6055ab21...
+$ mkdir -m 700 <T>/air-custody                                                       exit 0
+$ cd <T>/sessions && rsync -aR S1/archive S1/archive.desk <T>/air-custody/            exit 0
+$ cd <T>/sessions && rsync -aR S2/archive <T>/air-custody/                            exit 0
+$ rsync -a <T>/loop/attempts.jsonl <T>/loop/state.json <T>/desk/b6-custody-manifest.json <T>/air-custody/   exit 0
+$ python3.13 -I scripts/b6_custody_kit.py verify --manifest <T>/air-custody/b6-custody-manifest.json --manifest-sha256 6055ab21... --root <T>/air-custody --out <T>/receipt.json
+exit 0   verify sessions=2 files=21 bytes=2496 receipt_sha256=300277ab...
+```
+
+Landed layout: `S1/archive`, `S1/archive.desk`, `S2/archive`, `attempts.jsonl`, `state.json`, the manifest. The rehearsal is
+re-run at the end of the fixes with the final flags (section "Cold-review fixes").
 
 ## What the operator supplies by hand
 
