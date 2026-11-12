@@ -1042,6 +1042,65 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+289. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 08:11 PST: THE AIR IS OFFLINE (Ed is moving it). MAGISTRATE: until the Air's lead posts again, YOU are the interim lead for the steps below. Ed authorized this ("pass that work to the mbp"). Read `docs/process_traces/2026-11-12-air-offline-handoff/RESUME.md` first. Do the steps in order. An agent may run on this Mac only when nothing is capturing; every launch is still your LAST action, and you exit at once.**
+
+```pointer
+owner: magistrate (interim lead)
+wait: none
+deadline: 2026-11-12T19:26:00-08:00
+on_early_or_refused: if any gate below fails, stop that track, record why in RUN_STATE, and mail Ed and the lead. Never arm on unreviewed bytes, never retry a failed smoke, never commit BYTES predictions unless every RL-92/RL-95 condition is verified
+next_observable: RUN_STATE items from you for each step (bundle merged → Part A smoke 2 → arm), and the BYTES commitment if its gate opens
+```
+
+**Track A: tonight's R1 follow-up night. It gates on the night bundle. t0 must be ≤ 19:26 PST; earlier is better (Fable F6).**
+1. **Merge the night bundle into `ops/2026-11-11-w1-presign`** (now `bb6394f2b`), with `gh` (logged in in your session).
+   - **The PRs:**
+     - #740: R1 test fixes, test-only, Fable ADMIT-WITH-FIXES.
+     - #741: arm route port with RL-72 E2 sizing, Fable ADMIT-WITH-FIXES (`docs/run_reports/2026-11-12-r1fu-arm-route-review.md`).
+     - #739: powermetrics orphan wrapper, RL-96, Fable ADMIT-WITH-FIXES.
+   - **The merge rule:** a PR may merge only if its CI shows NO NEW failing test against presign's baseline run 43226060105. Baseline reds by shard:
+     - 8: test_r1_runtime ×9;
+     - 6: round6_lows ×2;
+     - 5: round6_exec_review PhaseOrder, test_r1_followup ProcessSampler;
+     - 3: round6_power ×2;
+     - 11: test_r11_delta4_sol1 r0_filled;
+     - 7: test_timing_receipts CaptureEquality;
+     - 12: test_w1_prequal Meter ×2;
+     - 9: test_w1bm_sol1, test_agent_identity census matcher;
+     - 2: test_w1bm_sol2.
+     A gate-ledger failure caused only by "pending" ledger rows is not a code failure.
+   - **#739 rides tonight only if its CI is in by 12:00 PST with no new failures** (RL-91). Otherwise merge #740 + #741 without it, and the night runs without the wrapper.
+   - **WITHOUT #741 THERE IS NO ARM ROUTE.** If #741 shows a new failure, Track A stops and you mail Ed.
+   - **How to merge:** merge commits with `gh pr merge --merge`, never `--admin`. Merge-tree is clean for every pair.
+   - **After merging:** on the merged head, run `tests.align.test_r1_arm`, `tests.align.test_v4_registration`, both closure modules, `tests.align.test_r1_smoke_launcher` and `tests.hazards.test_refusal_allowlist`. If #739 is in, also run `tests.test_powermetrics_reap`. Use `python3.13 -B`, one at a time, from a scratch worktree (NOT `$M`, NOT the smoke worktree). All must pass. Record the merged sha.
+2. **Part A smoke 2 on that exact merged sha, AFTER 13:15 PST.** The OS batch window is 11:45–13:15, and the fresh soak refuses if it would end inside it.
+   - Use `partA-smoke-item-template.md` in the handoff dir, which is item 285's text. Fill in the sha and the review lines, and post it as your own RUN_STATE item.
+   - Run its start and check blocks, then the launch, as your last action.
+   - PASS means G0 releases ≤ 1,200 s (RL-89).
+3. **Arm (next activation, after smoke 2 PASSES).** Use `arm-item-draft.md` (with `arm-notes.md`). Fill in `__NIGHT_SHA__` = the merged sha. Add Fable F1:
+   - delete `$M/.align-r1-prepare.json`;
+   - run kit `prepare` on the final commit and record its sha256;
+   - arm with `scripts/arm_align_r1.py` from `$M` with `$M`'s Python;
+   - compare `arm.json`'s packet sha256 with the one `prepare` printed;
+   - check that `arm.json` `flags` has NO `r1.prepare_packet_absent_at_arm`.
+
+   If #739 is in, `sudo -n -l /bin/kill` must exit 0. The KM003C must be live. t0 = now + 15 min, rounded up to a whole minute, and ≤ 19:26. Item 288's prepare dry run passed in 18 s with warm caches; allow about a minute.
+
+**Track B: BYTES stage-1 commitment (deadline today, 12 Nov). Do it between Track A steps, never during a capture.**
+- PR #738 (`fix/2026-11-12-bytes-neg8-guard` → `lane/2026-11-07-bytes-stage1-run`): CI run 4 on head `000a716de`, expected about 10:00. Its Fable reviews ADMIT.
+- When EVERY job is green, do a TRUE fast-forward: `git push origin <head>:lane/2026-11-07-bytes-stage1-run`, with no merge commit and no --admin.
+- Then follow `bytes-commitment-draft.md`. Fill its CI-run and sha placeholders. Check every RL-92 condition (as amended by RL-95) exactly as the draft lists them:
+  - `scripts/bytes_twin.py` sha256 `4820dc2e4d6c2b717ae7d1e70c9d66bc28b3c2ad622497604d3ea487b10a03de`;
+  - estimator `18582818…0a71`;
+  - predictions `a6cb172c…5f19` (RUN_STATE 284);
+  - BY-BLIND-1 present;
+  - BY-AGREE-1 entered first. It is committed on the Air (`ac6c0c548` + `1db077944`) but NOT pushed. If it is not on origin, Track B WAITS for the Air.
+  - the RL-44 census;
+  - the RL-7(a) gate.
+- If any condition cannot be verified on this Mac, do NOT commit predictions; record it and wait for the Air.
+
+**Do not touch:** PR #742, the Sol seat (stopped on the Air), or anything in `research-lead-queue.md` except to read it.
+
 288. **Magistrate 6c77976e (headless, Opus 5.5), 2026-11-12 07:09 PST: the item-287 dry run of the R1 follow-up `prepare` at `bb6394f2b` PASSED. rc 0, `status FOR_LEAD_ARM`, weights ok, runtime_stack ok, `window_max_s` 126480, `programmed_span_s` 108768. Wall time 17.85 s. No install, no arm, nothing loaded, no capture. MAGISTRATE: nothing to run until the lead's next item (in order: the second Part A smoke after 13:15, the BYTES commitment, tonight's arm).**
 
 ```pointer
