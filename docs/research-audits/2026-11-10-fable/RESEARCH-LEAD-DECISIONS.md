@@ -5051,6 +5051,183 @@ condition.
 
 ---
 
+# Decision request 55: the fifth smoke's Part B table; the slow sensor for the follow-up night (2026-11-12 04:30 PST)
+
+**Read.** RUN_STATE 273 to 283. On the measurement Mac, read-only, with nothing armed: the fifth smoke's
+`smoke_part_b.json` (sha `6b05379d…f373`) and `smoke.json`, and R0's pinned record `smc/r0.json`
+(sha `e6231a8f…769b`). From R0's record I read key, class, eligibility, τ, return time and noise. Rehearsal
+temperatures and classifier fields only.
+
+## RL-89. Th0C is a key R0 classified. The six-key list was a transcription of my own question, not R0's record. The pick is TV0h / Th0C
+
+### What the record shows
+
+- **R0 classified 403 keys, not six.** Its ranking gives a role class to 60 of them: 16 `die`, 44 `heatsink`.
+  The other 343 are `record-only`.
+- **Th0C is one of the 44.** R0's row: `heatsink`, eligible, τ 69.5 s, return time 261.0 s, noise 0.047 °C, not
+  clamped. Its alias Th0D has the same row. Th04 is there too (heatsink, 264.4 s).
+- **`r0_classified_keys` in `configs/align/v4/r1_runtime.json` holds the six keys I asked the lead about in the
+  follow-up to RL-74.** That read answered "are these six among the keys R0 classified". It was then stored as
+  if it were the whole set. The fault starts with how I framed RL-75 and RL-88, which both speak of "the six".
+- So the one failing clause in the selection, R0 membership, failed on a wrong constant. The classifier, the
+  sampler and the coverage rule all did what was ruled.
+
+### The ruling
+
+**The slow sensor for the follow-up night is Th0C. The pair is TV0h / Th0C. Tf08 stays recorded.**
+
+This is RL-74's outcome 2 as RL-75 narrowed it: the smoke's slow pick differs from R0's, is not null, and is a
+key R0 did not class as fast. None of the brief's four options is needed.
+
+- Not (a): no non-R0 key is admitted. Th0C is an R0 key.
+- Not (b): no new R0 run. The existing record answers the question.
+- Not (c): the 300 s bar is unchanged.
+- Not (d): the registered slow class was not empty, so RL-78's fallback has no condition to fire on.
+
+**"R0 classified", fixed now:** a key to which R0's record gives the class `die` or `heatsink` with
+`eligible` true. A `record-only` row is not a classification for the purpose of naming a gate key.
+
+### The 0.18 s margin
+
+RL-78 E4 already says a margin to a class edge decides nothing once the pick is made. That holds for the
+pick. It does not hold for the night's confirmation, which re-applies the return-time clause, and I address
+that here.
+
+- Six distinct heatsink sensors (twelve keys with aliases) sit at τ 78.6 to 79.9 s with return times of 293.4 to 299.8 s. They are one
+  thermal mass. The rule "longest return time not above 300 s" picks whichever of them is nearest the bar, so
+  a small margin is what the rule produces, not an accident of this key.
+- Return time is τ × ln(rise). At τ 79 s and a rise of 44 °C, one degree of rise moves it 1.8 s and one second
+  of τ moves it 3.8 s. On the night's own D step Th0C will land above 300 s about as often as below.
+- There is one native D classification with a working sampler. The fourth smoke's is unusable. So no
+  tolerance can be derived from data, and I do not invent one.
+
+**So the disposition is fixed now, before the night, with no code change.** The night's code runs as built.
+If its confirmation fails, the thermometry bar reads `fail` with `r1.sensor_inadmissible`, the members still
+run, and the result comes to me as RL-78 item 3 says. What I will then do:
+
+1. **If the only failed clause is the slow pick's return time**, the pick stands when the night shows directly
+   what that clause extrapolates to: step-D's G0 released, and every per-turn gate (G1, H) that ran on the
+   pair released inside its 300 s cap. If any of those timed out, the slow role goes back to a design round
+   and W1 does not sign on this pair.
+2. **If any other clause fails** (rise, noise, alias, clamp, heat-ordering exclusion, τ above 300 s), there is
+   no pre-ruled outcome. It comes to me.
+3. A different key ranking above Th0C on the night changes nothing (RL-78 item 3).
+
+Rule 1 uses a measurement where the registered test uses an extrapolation RL-78 already found to be
+contradicted by the data. This smoke shows the same thing: `s7_for_r1_picks` reports TV0h / Th0C not back
+within 1.0 °C of the quiet baseline after 800 s, censored, against a registered return time of 299.8 s.
+
+### What RL-78 said that is no longer true
+
+RL-78 chose option 3a expecting the classifier to pick a key R0 classed fast, and named the second key a
+"near-die settling check". The classifier picked a heatsink-class key. Option 3a stands as ruled: the
+registered classifier's picks gate, nobody chooses by hand, Tf08 is recorded. The description changes.
+
+- Th0C is heatsink class with a shorter time constant than Tf08 on the same step: 79.3 s against 97.4 s.
+- Whether a gate on it fits the duty bar is not known. RL-78 E5 governs: arm at the registered default band,
+  1.0 °C, and I decide from the night's record.
+- The runtime's records carry `second_key_label: "near-die settling check"`. That string is in a condition-13
+  file and is **not** changed. The deviation row says what the key is.
+
+**Edits to the WP14(a)-R1-SLOW row, before signing.** Replace the two sentences from "The slow pick is a key
+R0 classed fast." to "…and it does not control the heatsink mass." with:
+
+> "On the native D step of 2026-11-12 the registered slow class was not empty and the fallback did not run. R0's
+> slow pick Tf08 failed the registered return-time rule there (τ 97.4 s; 370 s against 300 s). The slow pick is
+> Th0C (alias Th0D), a key R0 classed heatsink (τ 69.5 s on R0's step; τ 79.3 s and a registered return time of
+> 299.8 s on the D step). It is the second gate key. It follows a faster mass than Tf08 does, and the gate
+> does not hold Tf08's mass. The runtime's records label the second key 'near-die settling check', a name
+> ruled before the pick was known; for Th0C it reads 'second gate key, heatsink class'."
+
+After "…and does not re-rank them." add:
+
+> "Th0C's registered return time is 0.2 s inside the bar, one of six sensors of one mass within 7 s of it. A
+> return time above 300 s on the night's D step alone does not unseat the pick if step-D's G0 and every
+> per-turn gate that ran on the pair released inside their caps; any other failed clause goes to the research
+> lead (RL-89, ruled before the night)."
+
+The citation at the end of the row becomes "(RL-75, RL-78, RL-84, RL-89)".
+
+### The D-turn length (D-4)
+
+**Closed. No change to the turn.** The native D load was 438 s (98 s prefill, 340 s decode), against D-4's
+150 s line below which the coverage bars are fragile. The load phase took 437 of 438 sweeps.
+
+The turn ended at its 4,096-token cap inside reasoning. That is the step as registered: a fixed prefill and a
+fixed decode cap, with no minimum duration and no requirement that the model finish a thought. A step that
+ends at the cap is the same size every time, which is what a step test wants.
+`reasoning_censored_at_token_limit` is expected on this member, is recorded, and excludes nothing.
+
+### What must change before the arm
+
+1. **`configs/align/v4/r1_runtime.json`** (a condition-13 file; the night runs these bytes):
+   - `r0_classified_keys`: the 60 keys R0's record classes `die` or `heatsink` with `eligible` true, in the
+     record's ranking order. Generated from `smc/r0.json` by a script, not typed.
+   - `r0_classes`: the same 60 with their classes.
+   - `r0_classes_authority`: R0's `smc/r0.json` sha `e6231a8f…769b` and RL-89.
+   - `sensors`: `s_fast` TV0h, `s_slow` Th0C, `record_keys` ["Tf08"]. Fans and `r0_sha256` unchanged.
+   - `slow_band_floor_c` stays 1.0. `g0_timeout_s` stays 1,200.
+2. **No code changes.** Not `r1_runtime.py`, not the classifier, not the kit. Tests that pin the six-key list
+   follow the config.
+3. **The Part B table is regenerated, not re-measured.** At the config commit, the kit's own `smoke_table`
+   runs on the saved segment of the fifth smoke. The new table is accepted only if all four hold:
+   - `classification_sha256` is `0b9cdb9e…e0a6`, unchanged;
+   - `coverage` is identical to the saved table's;
+   - `selection` is `ok` true, `fallback` false, TV0h / Th0C;
+   - the only other difference is `r0_classified_keys` and the `r0_class` labels in `rejected_keys`.
+
+   The old table (`6b05379d…f373`) is kept beside it and both hashes are recorded.
+4. **A check on the Mac**, in the magistrate's arm item: the config's 60 keys and classes equal the eligible
+   rows of `smc/r0.json`, whose sha is verified first.
+5. **The row edits above**, on the pre-signing branch.
+
+The config change gets a cold review of the list's derivation and of the table regeneration, and CI. It is
+small; it does not need a full round.
+
+### Is another smoke needed?
+
+**Part A, yes. Part B, no.**
+
+- **Part B is not re-run.** The pick is made once (RL-78 item 1), and it was made on this table. If the
+  launcher can only run A then B, B's classification is record-only for selection and I read it for the
+  repeatability of Th0C's return time. It cannot change the pick.
+- **Part A is required, on the final night bytes.** No gate has yet run on Th0C. The R1 night lost step-D
+  twice to a G0 that did not release, and that is the one failure tonight cannot afford to find at 23:00.
+  Part A costs under an hour and there are fifteen. It passes if G0 on TV0h / Th0C at 1.0 / 1.0 °C releases
+  inside 1,200 s. If it does not release, nothing arms and it comes to me.
+
+### What the arm needs
+
+- the config commit, reviewed, CI green, with the regenerated table accepted on the four identities;
+- Part A passed at that commit;
+- the Mac check in item 4;
+- the ruling file `validate_sensor_ruling` reads, which the lead writes citing RL-89: `research_lead_ruling`
+  "RL-89", `smoke_part_b_sha256` the regenerated table's, `sensors` equal to the config's,
+  `authorizes_night` true. **I authorize the night on those conditions**; the lead does not come back to me
+  if they are all met;
+- D-7 and D-8, which are not mine.
+
+### One defect, not gating
+
+Every row of the table's `candidate_replays` is `unobserved` with `reference_coverage` 0.0. The release times
+and reference sensitivities RL-76 asked for were not produced. Part A now gives Th0C's G0 directly and the
+night gives the rest, so this does not hold the arm. The lead diagnoses it afterwards.
+
+**For Ed, plainly:** "The smoke test worked this time and picked a heatsink sensor called Th0C. It was
+refused only because a list in our config said the first night had vetted six sensors. That list was a
+shorthand for a question I had asked; the first night's record really vetted sixty, and Th0C is one of them.
+We correct the list, re-derive the result from the saved data, and run one short gate test on the new sensor
+before tonight. The sensor passes one of our rules by a hair, so I have written down now, before the night,
+how that rule will be read if it lands on the wrong side."
+
+**Reason.** The registered classifier picked, on a native step, with the sampler's bar met in every phase.
+The hold came from a constant that misdescribed R0's record. Correcting a constant to match the record it
+cites is not a design change. The margin is real and is answered by a decision rule fixed blind.
+
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures, classifier fields and code only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
