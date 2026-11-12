@@ -102,26 +102,49 @@ sh scripts/air/install_air_watch.sh --dry-run    # print rendered plist + comman
 sh scripts/air/install_air_watch.sh --uninstall  # idempotent
 ```
 
-The installer renders `com.joulewise.air-watch.plist.template` with the
-checkout path, `python3.13` (override with `JW_AIR_PYTHON`) and the log path
-into `~/Library/LaunchAgents/com.joulewise.air-watch.plist`, then runs
-`launchctl bootstrap gui/$UID`. The agent runs `air_watch_agent.py run`, which:
+The installer renders `com.joulewise.air-watch.plist.template` into
+`~/Library/LaunchAgents/com.joulewise.air-watch.plist` and
+`air-watch-run.sh.template` into
+`~/Library/Application Support/JouleWise/air-watch/air-watch-run.sh`, using
+the checkout path, `python3.13` (override with `JW_AIR_PYTHON`) and the log
+path. Then it runs `launchctl bootstrap gui/$UID`. The plist's program and
+working directory are the internal-disk wrapper, so launchd can always start it.
+If the checkout (on JW-EXT) is missing, the wrapper posts
+`ALARM WATCHER_EXIT agent repo_missing` at most once an hour through
+`/usr/bin/osascript`, logs it and exits. Otherwise it execs
+`air_watch_agent.py run`, which:
 
-- starts `night_results_watch.py --loop --keep-going --interval 120 --hours 24`
-  as a child and exits with the child's status; `KeepAlive` restarts it
-  (`ThrottleInterval` 60 s), and the state file deduplicates across restarts;
+- starts `night_results_watch.py --loop --keep-going --interval 120 --hours 24
+  --current-from-origin` as a child and exits with the child's status;
+  `KeepAlive` restarts it (`ThrottleInterval` 60 s), and the state file
+  deduplicates across restarts. On a child failure (status other than 0, 10 or
+  20: bad CURRENT, Git or notifier error, SSD gone mid-run) or a spawn failure,
+  the agent itself posts `ALARM WATCHER_EXIT agent status=N` (once per status
+  per hour; state `.../air-watch/agent-exit.json`);
+- with `--current-from-origin`, each poll fetches origin `main` into the private
+  ref `refs/air-watch/main` (same HTTPS/file-only Git boundary, no working-tree
+  change) and reads `docs/process/CURRENT.json` there. If that fails, it uses
+  the local file and prints `INFO CURRENT_STALE` once per stale spell;
 - every 900 s runs `main_ci_watch.py`: the newest completed `ci.yml` push run
   on `main` alarms `MAIN_CI_RED` once per run id if `fences`, `quick` or any
-  `test (...)` shard failed (state: `.../air-watch/main-ci-state.json`). If `gh`
-  is missing or unauthenticated, one `INFO GH_UNAVAILABLE` and no alarm;
-- delivers each NOTICE/ALARM as a macOS notification (`osascript display
-  notification`) carrying only level, code and subject, and appends
+  `test (...)` shard failed or was cancelled (state `.../air-watch/main-ci-state.json`).
+  If `gh` is missing or unauthenticated, one `INFO GH_UNAVAILABLE` and no alarm;
+- delivers each NOTICE/ALARM as a macOS notification (`/usr/bin/osascript
+  display notification`) carrying only level, code and subject, and appends
   `NOTIFY ok|failed ...` to the log. Notification failure is logged, not fatal.
+  `NOTIFY ok` does not prove a banner was shown; after installing, run
+  `python3.13 scripts/air/air_watch_agent.py notify "2026-01-01 00:00:00 ALARM INSTALL_TEST air"`
+  once and confirm the banner appears.
 
-Everything logs to `~/Library/Logs/JouleWise/air-watch.log`. The watcher reads
-`docs/process/CURRENT.json` from the agent's checkout, so `git -C <checkout>
-pull --ff-only` (or re-detach at `origin/main`) when CURRENT changes, or pass
-armed timing with `--watch-arg`. `main_ci_watch.py` also runs standalone
+Everything logs to `~/Library/Logs/JouleWise/air-watch.log` (internal disk).
+**Ejecting JW-EXT:** the running agent holds its Python files and the
+checkout on JW-EXT, so macOS reports the volume busy. Run
+`sh install_air_watch.sh --uninstall` (or
+`launchctl bootout gui/$UID/com.joulewise.air-watch`) before ejecting, and
+reinstall after remounting. If the SSD disappears without that, expect
+`WATCHER_EXIT` banners (hourly), not silence. `--uninstall` always runs
+`bootout`, so it also stops a job whose plist was removed by hand.
+`main_ci_watch.py` also runs standalone
 (`python3.13 scripts/air/main_ci_watch.py`; exit 0 quiet, 20 alarm).
 
 Stop the old scratch watcher **only after the current night's chain has exited**.

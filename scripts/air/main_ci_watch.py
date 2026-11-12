@@ -2,7 +2,7 @@
 
 Structure only: it reads run ids, job names and conclusions through `gh`. It
 never reads logs. An unavailable or unauthenticated `gh` yields one INFO and no
-alarm. Each red run id alarms once; the state file survives restarts.
+alarm. A cancelled required job counts as red. Each red run id alarms once; the state file survives restarts.
 """
 from __future__ import annotations
 
@@ -35,10 +35,10 @@ def token(text):
     return re.sub(r"[^A-Za-z0-9_.,()=-]", "", text.replace(" ", ""))[:64]
 
 
-def gh_json(gh, args, timeout):
+def gh_json(gh, args, timeout, cwd=None):
     try:
         done = subprocess.run([gh, *args], stdin=subprocess.DEVNULL, capture_output=True,
-                              timeout=timeout, check=False)
+                              timeout=timeout, check=False, cwd=cwd)
     except (OSError, subprocess.SubprocessError):
         raise GhUnavailable() from None
     if done.returncode != 0:
@@ -49,16 +49,16 @@ def gh_json(gh, args, timeout):
         raise GhUnavailable() from None
 
 
-def latest_completed(gh, repo, workflow, timeout):
+def latest_completed(gh, repo, workflow, timeout, cwd=None):
     base = ["--repo", repo] if repo else []
     runs = gh_json(gh, ["run", "list", *base, "--branch", "main", "--workflow", workflow,
-                        "--limit", "5", "--json", "databaseId,status,conclusion,headSha,event"], timeout)
+                        "--limit", "5", "--json", "databaseId,status,conclusion,headSha,event"], timeout, cwd)
     done = [r for r in runs if isinstance(r, dict) and r.get("status") == "completed"
             and r.get("event") in (None, "push") and type(r.get("databaseId")) is int]
     if not done:
         return None, []
     run = done[0]  # gh lists newest first
-    view = gh_json(gh, ["run", "view", str(run["databaseId"]), *base, "--json", "jobs"], timeout)
+    view = gh_json(gh, ["run", "view", str(run["databaseId"]), *base, "--json", "jobs"], timeout, cwd)
     jobs = view.get("jobs", []) if isinstance(view, dict) else []
     red = sorted(token(j["name"]) for j in jobs if isinstance(j, dict) and isinstance(j.get("name"), str)
                  and required(j["name"]) and j.get("conclusion") in FAILED)
@@ -79,10 +79,10 @@ def load(path):
     return state
 
 
-def check(state, *, gh="gh", repo=None, workflow="ci.yml", timeout=30):
+def check(state, *, gh="gh", repo=None, workflow="ci.yml", timeout=30, cwd=None):
     """Return new events and mutate state. Caller saves state after delivery."""
     try:
-        run, red = latest_completed(gh, repo, workflow, timeout)
+        run, red = latest_completed(gh, repo, workflow, timeout, cwd)
     except GhUnavailable:
         if state["gh_unavailable"]:
             return []

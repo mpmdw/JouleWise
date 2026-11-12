@@ -4,16 +4,13 @@
 <plist version="1.0"><dict>
   <key>Label</key><string>com.joulewise.air-watch</string>
   <key>ProgramArguments</key><array>
-    <string>@PYTHON@</string>
-    <string>@REPO@/scripts/air/air_watch_agent.py</string>
-    <string>run</string>
-    <string>--python</string><string>@PYTHON@</string>
-    <string>--log</string><string>@LOG@</string>
+    <string>/bin/sh</string>
+    <string>@STATEDIR@/air-watch-run.sh</string>
     <string>--interval</string><string>120</string>
     <string>--hours</string><string>24</string>
     <string>--ci-interval</string><string>900</string>
   </array>
-  <key>WorkingDirectory</key><string>@REPO@</string>
+  <key>WorkingDirectory</key><string>@STATEDIR@</string>
   <key>EnvironmentVariables</key><dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>GIT_TERMINAL_PROMPT</key><string>0</string>

@@ -123,7 +123,8 @@ class NotifyTest(unittest.TestCase):
         child.poll.side_effect = [None, None, 20]
         popen = mock.Mock(return_value=child)
         args = types.SimpleNamespace(python="/py", log=self.log, interval=120, hours=24, watch_arg=[],
-                                     ci_interval=900, ci_state=self.tmp / "ci.json", gh="gh", repo=None)
+                                     ci_interval=900, ci_state=self.tmp / "ci.json", gh="gh", repo=None,
+                                     exit_state=self.tmp / "exit.json")
         ticks = iter(range(0, 10000, 1000))
         with mock.patch.object(agent.main_ci_watch, "run_once", return_value=0) as once:
             status = agent.run(args, popen=popen, sleep=lambda _: None, clock=lambda: next(ticks))
@@ -132,6 +133,29 @@ class NotifyTest(unittest.TestCase):
         self.assertEqual(argv[2:4], ["--loop", "--keep-going"])
         self.assertEqual(argv[argv.index("--notify-cmd") + 1:][-3:], ["notify", "--log", str(self.log)])
         self.assertEqual(once.call_count, 2)
+        self.assertIn("--current-from-origin", argv)
+        self.assertFalse((self.tmp / "exit.json").exists())
+
+    def test_watcher_failure_posts_rate_limited_watcher_exit(self):
+        args = types.SimpleNamespace(python="/py", log=self.log, interval=120, hours=24, watch_arg=[],
+                                     ci_interval=0, ci_state=self.tmp / "ci.json", gh="gh", repo=None,
+                                     exit_state=self.tmp / "exit.json")
+        with mock.patch.object(agent.subprocess, "run",
+                               return_value=subprocess.CompletedProcess([], 0)) as osa:
+            for _ in range(2):
+                child = mock.Mock()
+                child.poll.return_value = 2
+                self.assertEqual(agent.run(args, popen=mock.Mock(return_value=child), sleep=lambda _: None), 2)
+            self.assertEqual(osa.call_count, 1)
+            self.assertEqual(osa.call_args.args[0][0], "/usr/bin/osascript")
+            self.assertIn("ALARM WATCHER_EXIT agent", osa.call_args.args[0][2])
+            # A different status, or the same one after an hour, notifies again.
+            self.assertTrue(agent.watcher_exit(3, args.exit_state, self.log))
+            self.assertTrue(agent.watcher_exit(2, args.exit_state, self.log, now=agent.time.time() + 3700))
+            # Spawn failure (e.g. python missing) also notifies.
+            self.assertEqual(agent.run(args, popen=mock.Mock(side_effect=FileNotFoundError())), 2)
+        self.assertEqual(osa.call_count, 4)
+        self.assertIn("WATCHER_EXIT_SUPPRESSED", self.log.read_text())
 
 
 class InstallerTest(unittest.TestCase):
@@ -140,7 +164,7 @@ class InstallerTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.home)
         self.calls = self.home / "launchctl.calls"
         fake = self.home / "fake-launchctl"
-        fake.write_text(f'#!/bin/sh\necho "$@" >> "{self.calls}"\n')
+        fake.write_text(f'#!/bin/sh\necho "$@" >> "{self.calls}"\n[ "$1" != print ]\n')
         fake.chmod(0o755)
         self.env = dict(os.environ, HOME=str(self.home), JW_LAUNCHCTL=str(fake),
                         JW_AIR_PYTHON="/opt/example/python3.13")
@@ -156,13 +180,15 @@ class InstallerTest(unittest.TestCase):
         plist = plistlib.loads(xml.encode())
         self.assertEqual(plist["Label"], "com.joulewise.air-watch")
         self.assertTrue(plist["KeepAlive"])
-        self.assertEqual(plist["ProgramArguments"][:3],
-                         ["/opt/example/python3.13", str(ROOT / "scripts/air/air_watch_agent.py"), "run"])
+        statedir = str(self.home / "Library/Application Support/JouleWise/air-watch")
+        self.assertEqual(plist["ProgramArguments"][:2], ["/bin/sh", statedir + "/air-watch-run.sh"])
         log = str(self.home / "Library/Logs/JouleWise/air-watch.log")
         self.assertEqual(plist["StandardOutPath"], log)
-        self.assertIn(log, plist["ProgramArguments"])
-        self.assertEqual(plist["WorkingDirectory"], str(ROOT))
-        self.assertNotIn("@", xml.replace("UTF-8", ""))
+        self.assertEqual(plist["WorkingDirectory"], statedir)
+        self.assertIn(f"REPO='{ROOT}'", done.stdout)
+        self.assertIn("PYTHON='/opt/example/python3.13'", done.stdout)
+        self.assertIn("bootout gui/", done.stdout)
+        self.assertNotRegex(done.stdout, r"@[A-Z]+@")
         self.assertIn("bootstrap gui/", done.stdout)
         self.assertFalse((self.home / "Library").exists())
         self.assertFalse(self.calls.exists())
@@ -171,14 +197,16 @@ class InstallerTest(unittest.TestCase):
         for _ in range(2):
             done = self.sh("--uninstall")
             self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertFalse(self.calls.exists())
+        # bootout always runs: a loaded job whose plist was removed by hand is still stopped.
+        self.assertEqual(self.calls.read_text().count("bootout"), 2)
+        self.calls.unlink()
         agents = self.home / "Library/LaunchAgents"
         agents.mkdir(parents=True)
         (agents / "com.joulewise.air-watch.plist").write_text("x")
         for _ in range(2):
             self.assertEqual(self.sh("--uninstall").returncode, 0)
         self.assertFalse((agents / "com.joulewise.air-watch.plist").exists())
-        self.assertEqual(self.calls.read_text().count("bootout"), 1)
+        self.assertEqual(self.calls.read_text().count("bootout"), 2)
         self.assertEqual(self.sh("--uninstall", "--dry-run").returncode, 0)
 
     def test_install_in_temp_home_with_fake_launchctl(self):
@@ -187,6 +215,29 @@ class InstallerTest(unittest.TestCase):
         plist = self.home / "Library/LaunchAgents/com.joulewise.air-watch.plist"
         self.assertEqual(plistlib.loads(plist.read_bytes())["Label"], "com.joulewise.air-watch")
         self.assertIn("bootstrap gui/", self.calls.read_text())
+        wrapper = self.home / "Library/Application Support/JouleWise/air-watch/air-watch-run.sh"
+        self.assertTrue(os.access(wrapper, os.X_OK))
+
+    def test_missing_repo_wrapper_posts_watcher_exit_once(self):
+        statedir = self.home / "state"
+        log = self.home / "Logs/air-watch.log"
+        text = (ROOT / "scripts/air/air-watch-run.sh.template").read_text()
+        for key, value in (("@REPO@", str(self.home / "unmounted/JouleWise")), ("@PYTHON@", "/opt/example/py"),
+                           ("@LOG@", str(log)), ("@STATEDIR@", str(statedir))):
+            text = text.replace(key, value)
+        wrapper = self.home / "run.sh"
+        wrapper.write_text(text)
+        osa_calls = self.home / "osa.calls"
+        osa = self.home / "fake-osascript"
+        osa.write_text(f'#!/bin/sh\necho "$@" >> "{osa_calls}"\n')
+        osa.chmod(0o755)
+        env = dict(self.env, JW_OSASCRIPT=str(osa))
+        for _ in range(2):
+            done = subprocess.run(["sh", str(wrapper)], env=env, capture_output=True, timeout=30)
+            self.assertEqual(done.returncode, 78)
+        self.assertEqual(osa_calls.read_text().count("WATCHER_EXIT"), 1)
+        self.assertIn("NOTIFY ok ALARM WATCHER_EXIT agent repo_missing", log.read_text())
+        self.assertIn("WATCHER_EXIT_SUPPRESSED", log.read_text())
 
     def test_bad_flag(self):
         self.assertEqual(self.sh("--bogus").returncode, 2)
@@ -194,3 +245,66 @@ class InstallerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CurrentFromOriginTest(unittest.TestCase):
+    def test_private_ref_then_local_fallback(self):
+        from scripts.air import night_results_watch as w
+        from tests.git_fixture import init_git_fixture
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root)
+        bare, source, air = (root / n for n in ("origin", "source", "air"))
+        for path in (bare, source, air):
+            path.mkdir()
+            init_git_fixture(path, *(("--bare",) if path == bare else ()))
+
+        def git(path, *args):
+            return subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True).stdout
+
+        for path in (source, air):
+            git(path, "remote", "add", "origin", str(bare))
+        remote_doc = {"armed": {"plan_id": "fresh-plan", "t0_epoch_s": 1, "latest_end_epoch_s": 2}}
+        (source / "docs/process").mkdir(parents=True)
+        (source / "docs/process/CURRENT.json").write_text(json.dumps(remote_doc))
+        git(source, "add", ".")
+        git(source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", "c")
+        git(source, "push", "origin", "HEAD:refs/heads/main")
+        local = root / "local-CURRENT.json"
+        local.write_text(json.dumps({"armed": {"plan_id": "stale-plan"}}))
+        transport = w.Git(air)
+        doc, stale = w.fresh_current(transport, local)
+        self.assertFalse(stale)
+        self.assertEqual(doc["armed"]["plan_id"], "fresh-plan")
+        self.assertTrue(git(air, "rev-parse", "refs/air-watch/main").strip())
+        self.assertFalse((air / "docs").exists())  # working tree untouched
+        self.assertFalse((air / ".git/FETCH_HEAD").exists())
+        git(air, "remote", "set-url", "origin", str(root / "unmounted"))
+        doc, stale = w.fresh_current(transport, local)
+        self.assertTrue(stale)
+        self.assertEqual(doc["armed"]["plan_id"], "stale-plan")
+
+    def test_cli_reports_current_stale_once(self):
+        from scripts.air import night_results_watch as w
+        import contextlib
+        import io
+
+        class Offline:
+            def check_origin(self):
+                pass
+
+            def fetch_main(self):
+                raise w.WatchError("GIT_FAILED")
+
+            def ls_remote(self, _):
+                return {}
+
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root)
+        out = io.StringIO()
+        with mock.patch.object(w, "Git", return_value=Offline()), \
+                mock.patch.object(w, "optional_exit_module", return_value=None), \
+                mock.patch.object(w.time, "sleep", side_effect=[None, None, KeyboardInterrupt]), \
+                contextlib.redirect_stdout(out), self.assertRaises(KeyboardInterrupt):
+            w.main(["--loop", "--keep-going", "--current-from-origin",
+                    "--state", str(root / "s"), "--current", str(root / "absent")])
+        self.assertEqual(out.getvalue().count("INFO CURRENT_STALE"), 1)

@@ -18,6 +18,8 @@ PYTHON=${JW_AIR_PYTHON:-$(command -v python3.13 || true)}
 AGENTS="$HOME/Library/LaunchAgents"
 PLIST="$AGENTS/$LABEL.plist"
 LOG="$HOME/Library/Logs/JouleWise/air-watch.log"
+STATEDIR="$HOME/Library/Application Support/JouleWise/air-watch"
+WRAPPER="$STATEDIR/air-watch-run.sh"
 LAUNCHCTL=${JW_LAUNCHCTL:-launchctl}
 DOMAIN="gui/$(id -u)"
 
@@ -26,27 +28,35 @@ run() {
 }
 
 if [ "$MODE" = uninstall ]; then
-  if [ "$DRY" = 1 ] || [ -e "$PLIST" ]; then
-    run "$LAUNCHCTL" bootout "$DOMAIN/$LABEL" || true
-    run rm -f "$PLIST"
-  fi
+  run "$LAUNCHCTL" bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  run rm -f "$PLIST" "$WRAPPER"
   [ "$DRY" = 1 ] || echo "uninstalled $LABEL (idempotent)"
   exit 0
 fi
 
 case "$PYTHON" in /*) ;; *) echo "python3.13 not found; set JW_AIR_PYTHON" >&2; exit 2 ;; esac
-for v in "$REPO" "$PYTHON" "$LOG"; do
-  case "$v" in *[\&\<\>\"@#]*) echo "unsupported character in path: $v" >&2; exit 2 ;; esac
+for v in "$REPO" "$PYTHON" "$LOG" "$STATEDIR"; do
+  case "$v" in *[\&\<\>\"@#\'\\]*) echo "unsupported character in path: $v" >&2; exit 2 ;; esac
 done
 [ -f "$REPO/scripts/air/air_watch_agent.py" ] || { echo "not a JouleWise checkout: $REPO" >&2; exit 2; }
-RENDERED=$(sed -e "s#@REPO@#$REPO#g" -e "s#@PYTHON@#$PYTHON#g" -e "s#@LOG@#$LOG#g" \
-  "$REPO/scripts/air/$LABEL.plist.template")
+render() {
+  sed -e "s#@REPO@#$REPO#g" -e "s#@PYTHON@#$PYTHON#g" -e "s#@LOG@#$LOG#g" \
+    -e "s#@STATEDIR@#$STATEDIR#g" "$REPO/scripts/air/$1"
+}
+RENDERED=$(render "$LABEL.plist.template")
+RUNNER=$(render air-watch-run.sh.template)
 
 if [ "$DRY" = 1 ]; then
   printf '%s\n' "$RENDERED"
+  printf '# %s:\n%s\n' "$WRAPPER" "$RUNNER"
+  echo "+ $LAUNCHCTL bootout $DOMAIN/$LABEL"
 else
-  mkdir -p "$AGENTS" "$(dirname "$LOG")"
+  mkdir -p "$AGENTS" "$(dirname "$LOG")" "$STATEDIR"
   "$LAUNCHCTL" bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+  i=0
+  while [ $i -lt 10 ] && "$LAUNCHCTL" print "$DOMAIN/$LABEL" >/dev/null 2>&1; do sleep 1; i=$((i+1)); done
+  printf '%s\n' "$RUNNER" > "$WRAPPER"
+  chmod 755 "$WRAPPER"
   printf '%s\n' "$RENDERED" > "$PLIST"
 fi
 run "$LAUNCHCTL" bootstrap "$DOMAIN" "$PLIST"
