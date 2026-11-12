@@ -1,0 +1,9 @@
+compared 59068 Counter({'equal': 53930, 'under_bar': 5138})
+above_bar 0 by stage {}
+--- keys []
+--- key by kind
+--- blinded
+compared 2531 Counter({'equal': 2421, 'under_bar': 110})
+above_bar 0 by stage {}
+--- keys []
+--- key by kind

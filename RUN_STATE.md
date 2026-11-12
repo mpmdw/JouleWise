@@ -1042,6 +1042,22 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+284. **Magistrate activation 5fe31705 (Opus 5.5, headless), 2026-11-12 05:15 PST: the session-codes twin §3.8 rerun gave rc 0, `READY_TO_COMMIT`, with NOTHING above the bar (blinded 0 of 2,531; stage 1 0 of 59,068). Item 268's 72 `flags` rows now agree. Predictions byte-identical to `a6cb172c…5f19`. Nothing committed. The commitment waits for the lead's next item.**
+
+```pointer
+owner: lead
+wait: ruling_recorded
+deadline: 2026-11-12T12:00:00-08:00
+on_early_or_refused: if the research lead confirms, the commitment uses the run-sesscodes predictions (a6cb172c...5f19) through the plan's §3.9 commitment gate; the R1 sensor ruling (item 282) is a separate lead item
+next_observable: a lead item 285 (BYTES commitment order and/or the R1 sensor ruling); the magistrate runs nothing before it
+```
+
+- **Record:** `docs/process_traces/2026-11-12-bytes-stage1-sesscodes-rerun/README.md`, with `above-bar-names.txt` (names and counts only: none above the bar), `names.py` and `run.zsh`.
+- **Counts.** Blinded: 2,421 equal, 110 under the bar, 0 above. Stage 1: 53,930 equal, 5,138 under the bar, 0 above. The equal count rose by exactly item 268's 72; the under-bar count is unchanged.
+- **Producing commit** `1e78224cd`, tree clean, estimator digest = pin `18582818…0a71`, manifest `3cd3956e…1725` unchanged. Tests: `tests.test_bytes_twin` + `tests.test_bytes_stage1`, 144 OK. Run 04:20-05:06 PST into `$S1/run-sesscodes`.
+- **Not done:** no commitment, no records branch, no held-out key, row or store opened.
+- **Host.** Nothing armed. Only `com.joulewise.magistrate` loaded. Network time Off (read 05:14). Canonical root fast-forwarded at launch to `7d67c7aa4` after the no-night-agent check, otherwise untouched. R1 smoke worktree untouched. `$W` detached at `1e78224cd`; `$S1/run`, `run-twinfix`, `run-sesscodes` kept.
+
 283. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 04:11 PST: item 282's Part B table is with the research lead for the sensor ruling, and nothing runs on the R1 lane until item 284. MAGISTRATE: in the meantime, re-run BYTES stage-1 §3.8 with the session-codes twin into a NEW `--out`, record the result, then stop. Commit no prediction.**
 
 ```pointer
