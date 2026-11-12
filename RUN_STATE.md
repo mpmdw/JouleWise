@@ -1042,6 +1042,39 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+283. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 04:11 PST: item 282's Part B table is with the research lead for the sensor ruling, and nothing runs on the R1 lane until item 284. MAGISTRATE: in the meantime, re-run BYTES stage-1 §3.8 with the session-codes twin into a NEW `--out`, record the result, then stop. Commit no prediction.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-12T08:00:00-08:00
+on_early_or_refused: anything other than rc 0, or rc 7 with only flag fields above the bar: stop, record, mail the lead; never commit predictions
+next_observable: commit on main adding docs/process_traces/2026-11-12-bytes-stage1-sesscodes-rerun/ (rc, above-bar field names and counts, predictions sha256), plus RUN_STATE 284 from the magistrate
+```
+
+- **Why now.** The MBP is idle while the research lead rules on item 282's sensor table. This is a desk run of about 45 minutes, not a capture. If the lead's item 284 arrives first, finish this run, then take item 284. Never run this during an armed span or a smoke capture.
+- **The fix.** Branch `fix/2026-11-11-bytes-twin-sesscodes` @ `1e78224cd`, which is `a0d5b19c4` (item 267's anchor fix) plus the RL-82 reading A twin work:
+  - session codes on every cell;
+  - F1: missing-withheld cells list the session codes;
+  - N1: a missing cell lists its planned runs' run-scoped and member-exclusion codes;
+  - N2: the active-or-resident row's flags.
+  - Fable cold reviews: REJECT at `23b82a4b7`, then ADMIT-WITH-FIXES at `76a490b8a` and at `1e78224cd`. The last says the fit-set rerun is READY.
+  - Estimator unchanged at SHA-256 `18582818…0a71`. The twin still imports nothing from `joulewise`.
+- **Steps.** Use `$W=/Users/edr/code/jw-wt/bytes-stage1`, `$S1=/Users/edr/night-archive/bytes-stage1-20261111` and `$PY` as in items 264 and 267. The export and manifest stay the same.
+  1. Fetch the branch, then `git -C $W checkout --detach 1e78224cd`. `$W` is the disposable stage-1 checkout, not the canonical root.
+  2. Confirm `shasum -a 256 $W/joulewise/bytes_analysis.py` starts with `18582818`. If it does not, STOP.
+  3. Run ONLY `tests.test_bytes_twin` and `tests.test_bytes_stage1` (test safety, item 265).
+  4. Run §3.8 exactly as in plan §3.8, from the same `$S1` export and manifest, into a NEW `--out $S1/run-sesscodes`. Do NOT reuse or overwrite `$S1/run` or `$S1/run-twinfix`.
+  5. Expected: rc 0, with no field above the bar. Item 268's 72 `flags` rows should now agree under RL-82 reading A. Record whether the written predictions are byte-identical to `a6cb172c…5f19`.
+  6. Record under `docs/process_traces/2026-11-12-bytes-stage1-sesscodes-rerun/` on main:
+     - the rc;
+     - above-bar field NAMES and COUNTS by cell kind (no values, no signs);
+     - the predictions' sha256.
+
+     Write RUN_STATE 284 (owner: lead), mail the lead, and stop.
+- **Do not commit any prediction or open any held-out key or store.** The commitment (the 12 Nov checkpoint) waits for the lead's item after the research lead confirms. Held-out also waits for the research lead's blind ruling on P1 (missing vs refused labels).
+- **Host.** Nothing is armed. Network time stays OFF. The canonical root is untouched, and the R1 smoke worktree is untouched.
+
 282. **Magistrate 93a9db69 (headless, Opus 5.5), 2026-11-12 04:20 PST: the item-281 R1 follow-up smoke re-run at `22f438fd3` FIXED the coverage problem but FAILED sensor selection. Part A passed (G0 released, 683 s). Part B ran its full turn, and the sampler and Tf08 coverage now pass in every phase (≥99.67%). Part B then stopped with `SELECTION_FAILED`: the classifier's slow pick `Th0C` is not in the R0-classified key set, and R0's own slow key `Tf08` misses the 300 s return-time bar (370 s). Receipt rc 1. Per item 281 this goes back to the lead: no retry, OUT not reused. Nothing armed. MAGISTRATE: nothing to run until the lead's next item.**
 
 ```pointer
