@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import shlex
 
@@ -27,7 +28,9 @@ def prepare_profile(root):
     # The original pinned shell file is sourced unchanged, not parsed/rebuilt.
     alias = "/opt/homebrew/bin/python3.13=" + shlex.quote(str(root / "interpreter/python3.13"))
     (root / "courier-source.zsh").write_text(
-        "#!/bin/zsh -f\nalias -g " + shlex.quote(alias) + '\nsource "$1" "${@:2}"\n')
+        "#!/bin/zsh -f\nalias -g " + shlex.quote(alias) + "\n"
+        + "alias -g " + shlex.quote("/bin/sh=/bin/zsh -f " + shlex.quote(str(root / "courier-source.zsh")))
+        + '\nsource "$1" "${@:2}"\n')
     path = root / "manifest.json"
     value = json.loads(path.read_bytes())
     value["generator_files_sha256"][Path(__file__).name] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
@@ -36,6 +39,7 @@ def prepare_profile(root):
         "shell_input_sha256": hashlib.sha256((root / "courier-source.zsh").read_bytes()).hexdigest(),
         "seam": "b6_r12_runtime.install_sources -> returned ChainSources.rewritten; external executable input only",
         "interpreter_input": "/opt/homebrew/bin/python3.13 -> " + str(root / "interpreter/python3.13"),
+        "smoke_shell_input": "/bin/sh -> isolated zsh source wrapper, only the exact pinned smoke writer's launcher template",
         "judgments_and_writers": "original f31; no replacement", "network_or_message_delivery": False}
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
     return root
@@ -70,12 +74,25 @@ def install_runtime():
 
         def command_input(argv):
             words = list(map(str, argv))
-            if words and Path(words[0]).name == "b6_courier.sh":
+            if words and Path(words[0]).name in {"b6_courier.sh", "smoke-courier"}:
                 path = Path(words[0])
-                if (path.is_absolute() and path.is_relative_to(root)
-                        and path == path.resolve()
-                        and path.parent.name == "scripts"
-                        and hashlib.sha256(path.read_bytes()).hexdigest() == profile["courier_sha256"]):
+                plain = path.is_absolute() and path.is_relative_to(root) and path == path.resolve() and path.is_file()
+                direct = (plain and path.name == "b6_courier.sh" and path.parent.name == "scripts"
+                          and hashlib.sha256(path.read_bytes()).hexdigest() == profile["courier_sha256"])
+                smoke = False
+                if plain and path.name == "smoke-courier" and path.parent.name == "bin":
+                    target = path.parent.parent / "measurement" / COURIER
+                    expected = '#!/bin/sh\nexec /bin/sh ' + shlex.quote(str(target)) + ' "$@"\n'
+                    smoke = (path.read_bytes() == expected.encode() and target == target.resolve()
+                             and target.is_file()
+                             and hashlib.sha256(target.read_bytes()).hexdigest() == profile["courier_sha256"])
+                if direct or smoke:
+                    # Runtime's general source-read audit selects extensions;
+                    # the original smoke writer's extensionless launcher also
+                    # needs its actual bytes included in final attestation.
+                    if smoke:
+                        with (root / f"source-reads-{os.getpid()}.jsonl").open("a") as stream:
+                            stream.write(json.dumps({"path": str(path)}) + "\n")
                     return ["/bin/zsh", "-f", str(root / "shell.zsh"),
                             str(root / "courier-source.zsh"), *words]
             return rewritten(argv)

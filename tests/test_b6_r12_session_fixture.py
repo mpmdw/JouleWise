@@ -1005,6 +1005,25 @@ assert (records[0].parent / record["stdin"]).read_bytes() == b"R12 exact stdin\\
 stamp = int(records[0].stem)
 assert before <= stamp <= time.time_ns(), (before, stamp, time.time_ns())
 assert (custody / "night/courier.sent").is_file()
+# Tiny launcher input matching the pinned smoke writer's template; this is
+# a bootstrap unit, not a hand-assembled session or real-chain fixture.
+import shlex
+base = root / "smoke-launcher-unit"
+target = base / "measurement/scripts/b6_courier.sh"
+target.parent.mkdir(parents=True)
+target.write_bytes((root / "pin/scripts/b6_courier.sh").read_bytes())
+wrapper = base / "bin/smoke-courier"
+wrapper.parent.mkdir()
+wrapper.write_text('#!/bin/sh\\nexec /bin/sh ' + shlex.quote(str(target)) + ' "$@"\\n')
+wrapper.chmod(0o755)
+smoke_custody = base / "custody"
+smoke_prompt = "Custody root: " + str(smoke_custody) + "; plan: synthetic."
+wrapped = subprocess.run([str(wrapper), "-p", smoke_prompt], input=b"smoke stdin", capture_output=True)
+assert wrapped.returncode == 0, ("smoke-wrapper", wrapped.returncode, wrapped.stderr)
+assert (smoke_custody / "night/courier.sent").is_file()
+wrapper.write_text(wrapper.read_text() + "exit 42\\n")
+changed = subprocess.run([str(wrapper), "-p", smoke_prompt], input=b"", capture_output=True)
+assert changed.returncode == 126, ("changed launcher", changed.returncode)
 denied = subprocess.run(["/usr/bin/r12-undeclared-host-action"], capture_output=True)
 assert denied.returncode == 126, denied.returncode
 print("original_courier")
@@ -1236,6 +1255,8 @@ class FullProductionSessionTests(unittest.TestCase):
             self.assertEqual(primary["elapsed_fields"], primary["frames"])
             self.assertEqual(primary["cpu_fields"], 16 * primary["frames"])
         self.assertTrue(volume["meter"])
+        self.assertGreaterEqual(sum(m["span_s"] for m in volume["meter"]),
+                                sum(p["duration_s"] for p in volume["primary_plists"]))
         for meter in volume["meter"]:
             self.assertEqual((meter["sps"], meter["step_ms"]), (50, 20))
             self.assertEqual(meter["duplicates"], 0)
@@ -1250,6 +1271,7 @@ class FullProductionSessionTests(unittest.TestCase):
             series = volume["monitor"][base + filename]["kinds"][kind]
             cadence = volume["registered_monitor_cadence"][cadence_key]
             self.assertEqual(series["cadence_ns"], [round(cadence * 1e9)])
+            self.assertGreaterEqual(series["span_s"], min(m["span_s"] for m in volume["meter"]) - cadence)
         self.assertTrue(value["courier_records"])
         for courier in value["courier_records"]:
             self.assertEqual(courier["transport"], "file")
