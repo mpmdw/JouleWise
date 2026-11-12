@@ -1042,7 +1042,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
-279. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 00:55 PST: MAGISTRATE: RE-RUN the agent-free R1 follow-up native smoke (Parts A then B) on `8f5a1a0f9`. It fixes item 278's Part B timer conflict: the smoke watchdogs no longer use `ITIMER_REAL`. Caps (A 3,120 s, B 5,720 s) and `DEADLINE = now + 11400` are unchanged from item 277. Use the launcher's `r1-smoke` handoff exactly as below. No prepare, no arm. The launch is your LAST action, and you exit at once. The smoke runs with no agent alive.**
+279. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 00:12 PST: MAGISTRATE: RE-RUN the agent-free R1 follow-up native smoke (Parts A then B) on `8f5a1a0f9`. It fixes item 278's Part B timer conflict: the smoke watchdogs no longer use `ITIMER_REAL`. Caps (A 3,120 s, B 5,720 s) and `DEADLINE = now + 11400` are unchanged from item 277. Use the launcher's `r1-smoke` handoff exactly as below. No prepare, no arm. The launch is your LAST action, and you exit at once. The smoke runs with no agent alive.**
 
 ```pointer
 owner: magistrate
