@@ -31,6 +31,13 @@ READERS = {
     "scripts/independent_recompute_b5.py": (
         "independent recompute (comparison only)", "reads calibration captures' and members' stored "
         "b_fiducial_s to compute b_op for an offline cross-check; issues, pins and gates nothing"),
+    "scripts/b5_edge_check.py": (
+        "post-release desk analysis (comparison and printing; no gate)", "exploratory diagnostic on released "
+        "Block 5 sessions, run after the Revision-5 derivation and outside its scope. It loads no battery-float "
+        "verdict: it reads b_op_s from the release-check recompute and cross-checks it against each session's "
+        "withheld/bracket-evaluation.json assessment.b_fiducial_s, aborting on a mismatch (the abort message "
+        "prints both values), then prints b and uses it to pick the outcome wording of "
+        "docs/analysis/b5/edge-check-reading-rule.md. It issues, pins and gates nothing and mints no claim"),
     "scripts/issue_calibration_acceptance_generation.py": (
         "gated", "check dry run and prepare-candidate, both through authenticate_battery_epoch "
         "(authenticate_committed_verdict); proved by test_battery_float_consumers and the "
