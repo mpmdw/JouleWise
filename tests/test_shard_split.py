@@ -581,6 +581,43 @@ class UnitExpansionTests(unittest.TestCase):
             shard_tests.expand_units((BETA,), {}, {}, unknown_weight=0.0)
 
 
+class SignalIsolationTests(unittest.TestCase):
+    """#741 CI run 43257905641 shard 10: one module left SIGTERM at SIG_IGN and
+    later modules' children (which inherit it across exec) ignored SIGTERM."""
+
+    def test_a_module_that_leaves_sigterm_ignored_does_not_reach_the_next(self):
+        import signal
+
+        self.addCleanup(signal.signal, signal.SIGTERM, signal.getsignal(signal.SIGTERM))
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        seen = []
+        leaker = types.ModuleType(_import_name(ALPHA))
+        leaker.FixtureTests = type("FixtureTests", (unittest.TestCase,), {
+            "__module__": leaker.__name__,
+            "test_leaks": lambda self: signal.signal(signal.SIGTERM, signal.SIG_IGN),
+        })
+        victim = types.ModuleType(_import_name(BETA))
+        victim.FixtureTests = type("FixtureTests", (unittest.TestCase,), {
+            "__module__": victim.__name__,
+            "test_only": lambda self: seen.append(signal.getsignal(signal.SIGTERM)),
+        })
+        output = io.StringIO()
+        with _installed(leaker, victim), _discovered(ALPHA, BETA), redirect_stdout(output):
+            exit_code = shard_tests.run_units((ALPHA, BETA), 4, 1)
+        text = output.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(seen, [signal.SIG_DFL])
+        self.assertIn(f"SIGNAL RESTORE after {ALPHA}: SIGTERM=IGN->DFL", text)
+        self.assertNotIn(f"SIGNAL RESTORE after {BETA}", text)
+        self.assertEqual(signal.getsignal(signal.SIGTERM), signal.SIG_DFL)
+
+    def test_restore_reports_nothing_when_nothing_changed(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            shard_tests._restore_signals(shard_tests._signal_snapshot(), "tests.quiet")
+        self.assertEqual(output.getvalue(), "")
+
+
 class RunUnitsTests(unittest.TestCase):
     def test_only_the_assigned_declared_test_id_executes(self):
         executed = []

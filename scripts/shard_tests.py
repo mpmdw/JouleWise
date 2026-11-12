@@ -32,6 +32,7 @@ import math
 import os
 from pathlib import Path
 import re
+import signal
 import statistics
 import subprocess
 import sys
@@ -568,6 +569,63 @@ def _result_counts(result: unittest.TestResult) -> tuple[int, int, int, int]:
     )
 
 
+def _signal_snapshot():
+    """Every catchable signal's Python-level disposition, plus the blocked mask.
+
+    A shard runs all its modules in one process. A module that leaves a
+    disposition changed (for example SIGTERM at SIG_IGN, which survives exec)
+    breaks every later module whose children must die on SIGTERM: #741 CI run
+    43257905641 shard 10, after test_r1_round6_power."""
+
+    handlers = {}
+    for number in sorted(signal.valid_signals()):
+        if number in (signal.SIGKILL, signal.SIGSTOP):
+            continue
+        try:
+            handler = signal.getsignal(number)
+        except (OSError, ValueError):
+            continue
+        if handler is not None:  # None: installed outside Python; not restorable
+            handlers[number] = handler
+    return handlers, signal.pthread_sigmask(signal.SIG_BLOCK, ())
+
+
+def _restore_signals(snapshot, module: str) -> None:
+    """Put back what ``module`` changed, and say so on one log line.
+
+    The line does not start with ``MODULE `` so the CI parsers that read
+    MODULE PASS/FAIL lines are unaffected. It is a report, not a failure: the
+    leaking module is named so it can be fixed, and later modules run clean."""
+
+    handlers, mask = snapshot
+    changed = []
+
+    def name(handler):
+        if handler is signal.SIG_IGN:
+            return "IGN"
+        if handler is signal.SIG_DFL:
+            return "DFL"
+        return "handler"
+
+    for number, before in handlers.items():
+        try:
+            after = signal.getsignal(number)
+        except (OSError, ValueError):
+            continue
+        if after is not before and after != before:
+            try:
+                signal.signal(number, before)
+            except (OSError, ValueError):
+                continue
+            changed.append(f"{signal.Signals(number).name}={name(after)}->{name(before)}")
+    current_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
+    if current_mask != mask:
+        signal.pthread_sigmask(signal.SIG_SETMASK, mask)
+        changed.append("blocked-mask")
+    if changed:
+        print(f"SIGNAL RESTORE after {module}: {' '.join(changed)}", flush=True)
+
+
 def _unittest_import_name(module: str) -> str:
     """Translate the canonical repo name to discover's top-level import name."""
 
@@ -626,9 +684,11 @@ def run_shard(modules, shard_count: int, shard_index: int) -> int:
                 flush=True,
             )
             continue
+        snapshot = _signal_snapshot()
         started = time.monotonic()
         result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
         elapsed = time.monotonic() - started
+        _restore_signals(snapshot, module)
         tests_run, failures, errors, skipped = _result_counts(result)
         total_tests += tests_run
         total_failures += failures
@@ -773,9 +833,11 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
                 flush=True,
             )
             continue
+        snapshot = _signal_snapshot()
         started = time.monotonic()
         result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
         elapsed = time.monotonic() - started
+        _restore_signals(snapshot, module)
         tests_run, failures, errors, skipped = _result_counts(result)
         total_tests += tests_run
         total_failures += failures
