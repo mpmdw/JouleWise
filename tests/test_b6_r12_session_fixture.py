@@ -940,6 +940,25 @@ class SchedulerBoundaryTests(unittest.TestCase):
                 finish(main, denied)
             self.assertFalse((main / "manifest.json").exists())
 
+    def test_checkpoint_verifier_requires_completed_ordinary_desk(self):
+        """Predict: control-only successful driver boundary cannot authorize archive verification before the ordinary desk; no report view is created."""
+        from b6_r12_checkpoint_verify import verify
+        from b6_r12_segments import snapshot
+        with tempfile.TemporaryDirectory(prefix="r12-probe-guard-") as directory:
+            outer = Path(directory).resolve()
+            main = prepare(outer / "main")
+            (main / "loop").mkdir()
+            terminal = main / "terminal-control-input.json"
+            terminal.write_text("{}\n")
+            state = {"state": "SESSION_RUN", "session": {"id": "control-only",
+                "prepared": {"terminal_path": str(terminal)}, "handle": {"id": 1}}}
+            (main / "loop/state.json").write_text(json.dumps(state))
+            (outer / "segments.json").write_text(json.dumps({"main": str(main),
+                "steps": [{"exit_code": 0, "boundary": snapshot(main)}]}))
+            with self.assertRaisesRegex(ValueError, "ordinary desk"):
+                verify(outer, outer / "absent-denied", "control-probe")
+            self.assertFalse((outer / "control-probe").exists())
+
 
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
 class DeclaredShapeTests(unittest.TestCase):
