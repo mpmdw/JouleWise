@@ -373,6 +373,7 @@
     "tests.test_agent_census_concurrency": 6.708,
     "tests.test_agent_identity": 0.06,
     "tests.test_aggregate": 0.04,
+    "tests.test_air_watch_agent": 3.0,
     "tests.test_align_pilot_session": 122.321,
     "tests.test_analysis_claims": 0.485,
     "tests.test_analysis_engine": 0.023,
