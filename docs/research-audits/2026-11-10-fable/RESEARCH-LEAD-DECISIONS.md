@@ -5814,6 +5814,122 @@ disclosure (§17-R3), and complete `relocations` in `mapping.json`. The kit chec
 run report and tests built on synthetic archives. Block-5-aware. The rulings rest on the input schema and the
 authentication chain.
 
+## RL-101. The R3 table: RL-99's `single-source` covers the cell, floor and dominance-ratio values only (2026-11-12 14:15 PST)
+
+Source for RL-101 to RL-104: the four STOP items of `docs/run_reports/2026-11-12-b6-r3-table.md` on
+`analysis/2026-11-12-b6-r3-table` at `267d0fac1`. I read that report, `scripts/b6_r3_table.py`,
+`check_block` in `joulewise/b6_analysis_check.py` and `dominance_rows` in
+`scripts/independent_recompute_b6.py` at that commit, and the R3 section of PR #748's run report at `27b6cacfd`.
+These are rulings on labels and coverage. They are not the generator's cold review.
+
+**Ruling.** The generator's rule 4 stands as built.
+
+1. `reported/*` and `floor/*` for ALPHA and BETA print `single-source` (RL-99 item 1).
+2. `dominance/<model>/<phase>/<mode>/R` and `R_cm` print `single-source`. `dominance_rows` copies `floor["R"]`
+   and `floor["R_cm"]` from `B5.make_floors` output and computes nothing. A copy of a floor-estimator field is
+   floor-estimator output.
+3. The §9.5 lines that rerun `B5.make_reported` on another unit set (load sensitivity, battery assist, waited
+   runs, outside-processor alternative), the scaled-allowance lines and the single-step lines print §17-R3's
+   default, "not independently recomputed". So do the GAMMA lines and `dominance/branch`.
+
+**Reason.** Both labels mean one producer. The difference is what the paper may say beside them. RL-99 item 2
+lets `single-source` carry the sentence that the same byte-pinned functions agreed with the registered analysis
+on Block 5. I ruled that for the cell and floor estimators on the registered selection. The §9.5, scaled and
+single-step lines use other unit sets or other functions, and I have not seen a Block 5 comparison for them, so
+they do not inherit that sentence.
+
+**Condition on item 2.** The S-14 pin request, which already cites the Block 5 record for RL-99 item 2, shows
+that `R` and `R_cm` were among the families compared on Block 5. If they were not, those 12 keys take the
+default label. That is the one-line rule change the report names, in the generator only.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. I read code, two
+run reports and a keys file. Block-5-aware. The ruling rests on which function writes each key.
+
+## RL-102. The R3 table: §17-R3 states the coverage `check_block` has. `check_block` is not extended before the pin
+
+**Ruling.** §17-R3 asks for the producer and an honest label for every printed quantity. It does not require a
+second producer for each. The generated table is the registered coverage:
+
+1. `contrast/<phase>/{n, dbar_j, D_j, p, holm_p}`: computed and compared, as S-13 rows.
+2. `contrast/<phase>/{s_d_j, decision_lower_j, decision_upper_j, outcome}`: compared inside the gate, with
+   RL-103's label. A disagreement there fails `check_block`, so the gate is not weaker than a table row. Moving
+   them into `exposed` would buy nothing and is not required.
+3. `contrast/<phase>/{ceiling, direction, energy_ratio, energy_ratio_lower, energy_ratio_upper, floor_gate_j,
+   metrology_lower_j, metrology_upper_j, per_token_j, t}` and the seven `cross_session/*` fields: "not
+   independently recomputed".
+4. Block-scope rows (`summary`, `inclusive`, `side_by_side`, `replication`): the label is "§10-§11
+   arithmetic computed and compared; session inputs as labelled at session scope". The second side recomputes the
+   arithmetic over the production program's session values, and some of those are one-producer (the per-phase
+   whole-machine `mean_j` among them). The plain "computed and compared" would overstate that.
+
+**What changes.** PR #748's draft rows for `contrast/*` and `cross_session/*` are replaced by the generated
+table; the draft was wrong and the code is right. The generator's block-scope label string changes to item 4's
+text. `joulewise/b6_analysis_check.py` and `scripts/independent_recompute_b6.py` do not change.
+
+**What the paper may say.** "The GAMMA engine" in RL-48 F10 and RL-99 item 2 means the nine fields of items 1
+and 2. The agreement sentence does not cover item 3's fields, and no claim word rests on one of them without its
+label. The decision word and the decision interval are in item 2, so the decision is covered.
+
+**Reason.** Extending `check_block` means new twin code for ratios, per-token values and the cross-window
+words: a new, unreviewed second producer written after the design was fixed, inside R12's review, against RL-98's
+deadline of 13 November. The labels cost nothing and state exactly what was compared. This choice is made blind,
+and it is the one that claims less.
+
+**Blind status.** Blind to Block 6, as RL-101. Block-5-aware. The ruling rests on which fields `check_block`
+compares.
+
+## RL-103. The R3 table: the gate-only label
+
+**Ruling.** The exact labels, replacing the seat's wording:
+
+- `s_d_j`, `decision_lower_j`, `decision_upper_j`:
+  "computed and compared in the option (c) gate; not an S-13 table row"
+- `outcome`:
+  "computed and compared in the option (c) gate when the twin refuses or the contrast has five or more quads,
+  otherwise not independently recomputed; not an S-13 table row"
+
+The check family goes in the Source column, not in the label. The bar column for these four rows gives the gate's
+bar, read from `check`: its default (5e-6 absolute, on unrounded values) for the three numbers, exact for the
+word. The printed-precision bar does not apply, because no S-13 comparison is made.
+
+**Reason.** "computed and compared" is decision 6 (a)'s registered phrase, and the rest says where. The clause on
+`outcome` is in the code: `engine_refusal` runs when the twin returns no estimate and `engine_word` only at
+five or more quads, so a contrast with an estimate on fewer than five quads has its word unchecked. The label
+says so.
+
+**Blind status.** Blind to Block 6, as RL-101. Block-5-aware. I do not know how many quads any Block 6 contrast
+has.
+
+## RL-104. The R3 table: the eight copied-disclosure families are hand-entered, with three checks
+
+**Ruling.** Acceptable. `monitor_cost`, `arm_host`, `battery_phase`, `subject_temperature`,
+`reference_history`, `attempt_history`, `g10_history` and `block5_codes_carried` are decision 6 (b) rows.
+Nothing computes them, so they are not comparison keys and a generator that reads the keys file cannot produce
+them. They keep the registered label, "copied from the harvest or acceptance record, bound by digest, not
+recomputed". The checks:
+
+1. **Disjoint and fixed.** The eight names are a literal list beside the generator. Its test fails if a name on
+   the list is a key or a key prefix in `production_comparison_keys.json`, or if the list is not exactly these
+   eight. A family can then be neither in both tables nor silently dropped.
+2. **Bound by digest.** Each hand-entered row names the record file its disclosure is copied from. At the S-14
+   pin, the lead confirms that each named file has a source digest in the run-input document (RL-100 item 1's
+   set). A row whose file has none does not print.
+3. **The item-83 ruling-3 hand check**, as decision 6 (b) registers it and RL-100 already lists as owed: the
+   lead reads each copied-record file and confirms it holds its disclosure. This is done at the release, on the
+   restricted side, and recorded with the reader's name.
+
+A second reader (the cold review of the generator) compares the eight rows against decision 6's list once.
+
+**Reason.** Decision 6 (b) registered a hand check for these families, not a computation. Adding them to the keys
+file would put uncompared entries into a file whose meaning is "compared keys".
+
+**Does any of RL-101 to RL-104 need a code change before the pin?** Not in the pinned analysis code. The
+generator, which is a table tool outside the pin set, takes three small edits: the block-scope label (RL-102
+item 4), the gate labels and bar (RL-103), and the list with its test (RL-104 check 1). They go to the
+generator's cold review with the rest of it.
+
+**Blind status.** Blind to Block 6, as RL-101. Block-5-aware.
+
 ---
 
 ## Open items routed to me, not yet ruled
@@ -5832,4 +5948,5 @@ authentication chain.
 | The census floor in `run_night.py`, if the two tests are red on a quiet host (RL-91) | The quiet-host run |
 | The held-out agreement, if it stops after the RL-92 change | The run |
 | The custody kit's cold review, if it finds the authentication chain wider than RL-100 item 1 states | The rebase onto R12's final head |
+| `R` and `R_cm` in the Block 5 comparison record (RL-101 condition) | The S-14 pin request |
 | The S-14 pin request for Block 6, under RL-98 (volume, deadline 13 November 20:00 PST) and RL-99 | The R12 seat's report with its generation ratio, and the Opus cold review |
