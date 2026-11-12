@@ -1094,7 +1094,7 @@ next_observable: RUN_STATE items from you for each step (bundle merged → Part 
   - estimator `18582818…0a71`;
   - predictions `a6cb172c…5f19` (RUN_STATE 284);
   - BY-BLIND-1 present;
-  - BY-AGREE-1 entered first. It is committed on the Air (`ac6c0c548` + `1db077944`) but NOT pushed. If it is not on origin, Track B WAITS for the Air.
+  - BY-AGREE-1 entered first. It is on origin as branch `docs/2026-11-12-bytes-by-agree-1` @ `00596b1ea` (BY-AGREE-1 entry `8c165af3f`, plus the review record). After #738's fast-forward, fast-forward or merge it into `lane/2026-11-07-bytes-stage1-run` BEFORE the commitment commit (RL-92), checking it is docs-only.
   - the RL-44 census;
   - the RL-7(a) gate.
 - If any condition cannot be verified on this Mac, do NOT commit predictions; record it and wait for the Air.
