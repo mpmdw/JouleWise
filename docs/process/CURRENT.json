@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "RUN_STATE item 273 naming the reviewed launcher commit (9b4817f36 plus the launcher only) and the magistrate's exact handoff commands",
-  "owner": "lead",
+  "next_observable": "after 13:15 PST (OS batch window end), the Part A smoke 2 item (from item 289's template, on 99622e96c), then the arm item; the BYTES commitment when #738 is green",
+  "owner": "magistrate (interim lead under items 289/291/292)",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "272",
-  "source_item_heading_date": "2026-11-11",
+  "source_item": "292",
+  "source_item_heading_date": "2026-11-12",
   "wait": {
-    "deadline_epoch_s": 1794452400,
+    "deadline_epoch_s": 1794540360,
     "observable": "none",
-    "on_early_or_refused": "if the launcher's executing review refuses, the smoke moves to the next day; nothing is captured meanwhile"
+    "on_early_or_refused": "as item 289"
   }
 }

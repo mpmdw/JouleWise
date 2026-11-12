@@ -1053,10 +1053,10 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 ```pointer
 owner: magistrate (interim lead under items 289/291/292)
-wait: 13:15 PST (OS batch window end) for Part A smoke 2 on 99622e96c; #738 shard 7 for Track B
+wait: none
 deadline: 2026-11-12T19:26:00-08:00
 on_early_or_refused: as item 289
-next_observable: the Part A smoke 2 item (from item 289's template, on 99622e96c), then the arm item; the BYTES commitment when #738 is green
+next_observable: after 13:15 PST (OS batch window end), the Part A smoke 2 item (from item 289's template, on 99622e96c), then the arm item; the BYTES commitment when #738 is green
 ```
 
 - **Correction to item 291:** shard 4 of 43257905641 was NOT hung. `test_bytes_analysis` alone takes 7,465 to 9,057 s in CI. I compared against shard 4's old duration, but shard membership moves. The Air cancelled it (Ed approved, on my misreading). Up to the cancel it showed no FAIL/ERROR ids.
@@ -1100,10 +1100,10 @@ next_observable: the Part A smoke 2 item (from item 289's template, on 99622e96c
 
 ```pointer
 owner: magistrate (interim lead under item 289, as amended here)
-wait: #741 run 43257905641 shard 4 (see below)
+wait: none
 deadline: 2026-11-12T19:26:00-08:00
 on_early_or_refused: as item 289
-next_observable: #741 merged and the merged-head module checks (item 289 step 1); then Part A smoke 2 after 13:15
+next_observable: (was waiting on: #741 run 43257905641 shard 4 (see below)) #741 merged and the merged-head module checks (item 289 step 1); then Part A smoke 2 after 13:15
 ```
 
 - **What the magistrate's cmpjobs will show for #741 (run 43257905641):** shard 10 has three ids outside the baseline:
@@ -1137,7 +1137,6 @@ next_observable: #741 merged and the merged-head module checks (item 289 step 1)
 ```pointer
 owner: lead (BYTES); magistrate continues Track A (item 292)
 wait: none
-deadline: none
 on_early_or_refused: n/a
 next_observable: the lead decides how the records branch reaches main (see "Not done"); the next BYTES task (RL-92 sections 3-5, P1/M1) is NOT authorized here
 ```
@@ -1172,10 +1171,10 @@ next_observable: the lead decides how the records branch reaches main (see "Not 
 
 ```pointer
 owner: magistrate (interim lead)
-wait: CI on #741 (head 389b363bb, shards 4/7/10 pending, about 11:10 PST) and #738 (head 5ce8b5df6, full run, about 12:30 PST)
+wait: none
 deadline: 2026-11-12T19:26:00-08:00
 on_early_or_refused: as item 289
-next_observable: #741 merged and the merged-head module checks (item 289 step 1); then the Part A smoke 2 item after 13:15; BYTES fast-forward + commitment when #738 is green
+next_observable: (was waiting on: CI on #741 (head 389b363bb, shards 4/7/10 pending, about 11:10 PST) and #738 (head 5ce8b5df6, full run, about 12:30 PST)) #741 merged and the merged-head module checks (item 289 step 1); then the Part A smoke 2 item after 13:15; BYTES fast-forward + commitment when #738 is green
 ```
 
 - **Track A step 1 result (11:05 to 11:15 PST).**
@@ -1282,7 +1281,6 @@ next_observable: RUN_STATE items from you for each step (bundle merged → Part 
 ```pointer
 owner: lead
 wait: none
-deadline: none
 on_early_or_refused: n/a (nothing launched)
 next_observable: the lead's next item: the second Part A smoke (arm-route port + powermetrics wrapper #739 + test fixes #740) after 13:15, or the BYTES commitment once #738's CI is green
 ```
@@ -1365,7 +1363,6 @@ git status --porcelain                          # expect empty: OUT is outside $
 ```pointer
 owner: lead
 wait: none
-deadline: none
 on_early_or_refused: n/a (nothing launched)
 next_observable: the lead's next item: arm tonight's R1 follow-up night on these bytes, or a second Part A smoke after 13:15 if the powermetrics orphan wrapper (RL-91, RL-96) lands cold-reviewed and green by 12:00
 ```
@@ -1553,10 +1550,9 @@ next_observable: commit on main adding docs/process_traces/2026-11-12-bytes-stag
 
 ```pointer
 owner: lead
-wait: the research lead's sensor ruling on the Part B table below
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a lead item 283 (a sensor ruling and/or a new smoke commit); the magistrate runs nothing before it
+next_observable: (was waiting on: the research lead's sensor ruling on the Part B table below) a lead item 283 (a sensor ruling and/or a new smoke commit); the magistrate runs nothing before it
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T103324Z` (launch token `09a8e9816cdc47259bf2198566ef9b40`). `runner_receipt.json` sha256 `f69e56499d85de47eb676eac4923c0ac7154ae992af1169674026ff150e5aaa1`; `part-b/smoke_part_b.json` sha256 `6b05379df65a34e6503a29ce5813d8934ee9d923b9fe3c83c04301070d1ff373`.
@@ -1665,10 +1661,9 @@ Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, 
 
 ```pointer
 owner: lead
-wait: lead fixes the inventory sampler period (or rules on the coverage rule) and writes a new smoke item
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a RUN_STATE 281 from the lead naming a fixed commit and a fresh OUT
+next_observable: (was waiting on: lead fixes the inventory sampler period (or rules on the coverage rule) and writes a new smoke item) a RUN_STATE 281 from the lead naming a fixed commit and a fresh OUT
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T081821Z` (launched by activation b29bd5bf; token `c5956fddbfde45019615298547486019`; plist `ProcessType` = `Interactive`; launcher stdout is the preflight line only, stderr empty).
@@ -1772,10 +1767,9 @@ Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, 
 
 ```pointer
 owner: lead
-wait: lead fixes the Part B timer conflict and writes a new smoke item (Part B alone, or A then B)
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a RUN_STATE 279 from the lead naming a fixed commit and a fresh OUT
+next_observable: (was waiting on: lead fixes the Part B timer conflict and writes a new smoke item (Part B alone, or A then B)) a RUN_STATE 279 from the lead naming a fixed commit and a fresh OUT
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T061727Z` (launched by activation ec417b44 at 22:17; token `a5119cbc3c3e4b40b9990b439397e143`; plist `ProcessType` = `Interactive`; launcher stdout is the preflight line only, stderr empty).
@@ -1879,10 +1873,9 @@ Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, 
 
 ```pointer
 owner: lead
-wait: lead resizes the smoke's Part A cap (or splits Part A) and writes a new smoke item
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a RUN_STATE 277 from the lead naming a fixed commit and a fresh OUT
+next_observable: (was waiting on: lead resizes the smoke's Part A cap (or splits Part A) and writes a new smoke item) a RUN_STATE 277 from the lead naming a fixed commit and a fresh OUT
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T044711Z` (launch token `6057949535aa4fb4bb30f60f1cd629e1`; plist `ProcessType` = `Interactive`; launcher stdout is the preflight line only, stderr empty). Runner 20:47:42 to 21:23:41 PST; Part A 20:52:45 to 21:23:40 (1,855 s of its 1,920 s cap).
@@ -1987,10 +1980,9 @@ Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, 
 
 ```pointer
 owner: lead
-wait: lead diagnosis of the two Part A defects below and a new smoke item
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a RUN_STATE 275 from the lead naming a fixed commit and a fresh OUT
+next_observable: (was waiting on: lead diagnosis of the two Part A defects below and a new smoke item) a RUN_STATE 275 from the lead naming a fixed commit and a fresh OUT
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T034735Z` (launch token `90ac1ac57695471589383e23750fbf72`; launcher stdout/stderr clean). Runner 19:48:09 to 20:01:22 PST; Part A 19:53:12 to 20:01:22 (490 s of its 1,920 s cap).
