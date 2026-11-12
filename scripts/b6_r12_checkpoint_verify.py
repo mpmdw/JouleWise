@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 from b6_r12_finish import agree
+from b6_r12_chain_fixture import PIN
 from b6_r12_segments import validate_resume
 from b6_r12_verify import REPO, child, run_option_c, safe_root, session_facts, sha
 
@@ -31,6 +32,9 @@ def verify(outer, denied, stem):
         state = control["steps"][-1]["boundary"]["state"]
         if state not in {"ROTATE", "DONE"}:
             raise ValueError("ordinary desk must have completed before checkpoint verification")
+        denied_manifest = json.loads((denied / "manifest.json").read_bytes())
+        if denied_manifest.get("synthetic_only") is not True or denied_manifest.get("pin") != PIN:
+            raise ValueError("explicit pinned synthetic denied fixture required")
         if ((denied / "generator-parent-exit.txt").read_text().strip() != "0"
                 or (denied / "source-stop.json").exists()):
             raise ValueError("completed non-retired denied fixture required")
