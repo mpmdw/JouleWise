@@ -5603,6 +5603,34 @@ gates was right only while the two were the same key.
 
 ---
 
+# Decision request 61: where the agreeing twin must sit for the BYTES commitment (2026-11-12 05:35 PST)
+
+**Read.** The lead's facts: `main` holds no BYTES code; the lineage reaches it only through the open #701;
+the commitment code is on `lane/2026-11-07-bytes-stage1-run` (`df4c73e55`); the twin branch is a
+fast-forward of that line by twelve commits. I did not check them myself.
+
+## RL-95. RL-92 condition 4 is amended: the twin on the commitment line
+
+"The twin that agreed is the twin on `main`" was written without knowing that `main` has no BYTES code. It
+is replaced by:
+
+- The twin change is merged by PR into `lane/2026-11-07-bytes-stage1-run`, fast-forward, with CI green on the
+  merged head, the nineteen campaigns included.
+- At the commitment commit, `scripts/bytes_twin.py` has the SHA-256 of the twin that ran item 284's re-run,
+  and `joulewise/bytes_analysis.py` is `18582818…0a71`. Both hashes are recorded with the commitment.
+- RL-7 (a)'s "reachable from `origin`" is met by that branch on `origin`. It does not require `main`.
+- **#701 may not change either file.** When it merges, both hashes are checked again on `main` and recorded.
+  A difference comes to me before the merge.
+
+RL-92's other six conditions are unchanged.
+
+**Reason.** The condition exists so that the commitment sits beside the twin that agreed with it. Which
+branch carries them is bookkeeping, provided the bytes are the same and publicly reachable.
+
+**Blind status.** Blind to every BYTES value. Branch facts only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
