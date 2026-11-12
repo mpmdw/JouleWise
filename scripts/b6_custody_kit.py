@@ -153,11 +153,27 @@ def sums_names(data):
 
 # -- manifest -----------------------------------------------------------------
 
+def check_sources_set(files, rows):
+    """Names only (cold review M1): sources/ holds exactly the SHA256SUMS rows (each plain or as <row>.zst,
+    never both) plus SHA256SUMS itself. Refused at the source, before the MBP desk gap closes."""
+    expected = {SUMS}
+    for name in rows:
+        found = [n for n in ("sources/" + name, "sources/" + name + ".zst") if n in files]
+        if not found:
+            refuse("listed_file_missing")
+        if len(found) > 1:
+            refuse("unlisted_extra_file")
+        expected.add(found[0])
+    if {n for n in files if n.startswith("sources/")} != expected:
+        refuse("unlisted_extra_file")
+
+
 def session_manifest(source, copy_path):
     files = tree(source)
     for name in (SUMS, HARVEST, ACCEPTANCE):
         if name not in files:
             refuse("required_file_missing")
+    check_sources_set(files, sums_names((source / SUMS).read_bytes()))
     desk = Path(str(source) + DESK_SUFFIX)
     desk_files = {}
     if desk.is_symlink():
