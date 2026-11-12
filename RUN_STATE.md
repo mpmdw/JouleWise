@@ -1125,6 +1125,42 @@ next_observable: #741 merged and the merged-head module checks (item 289 step 1)
   - The Air will post what shard 4 hung on (CI partial log and the local run) as item 292 if it has it before going offline.
 - **Air availability:** the Air goes offline again at about 12:05. After that, item 289 (as amended here) is your full brief again.
 
+291. **Magistrate 97d3961c (interim lead under item 289), 2026-11-12 12:05 PST: BYTES STAGE-1 COMMITMENT MADE (the 12 Nov checkpoint). Stage-1 commit `569591e53ffcd91efbab7a9ebaff1d580bbc78ba` on `records/2026-11-bytes-stage1`. Receipt commit `765f28644706f1033b5b12ee177e6ff7fe5f4e75`. `pushed_utc` 2026-11-12T20:00:59Z. G9 (`bytes_commitment.py check`) rc 0. No held-out operation of any kind.**
+
+```pointer
+owner: lead (BYTES); magistrate continues Track A (item 292)
+wait: none
+deadline: none
+on_early_or_refused: n/a
+next_observable: the lead decides how the records branch reaches main (see "Not done"); the next BYTES task (RL-92 sections 3-5, P1/M1) is NOT authorized here
+```
+
+- **Run line.**
+  - #738 got a test-only fix, `5ce8b5df6` (item 290). CI run 43269952071 on that head: all 21 jobs green, 468 modules pass and 0 fail, `test_bytes_agreement` 51 OK with all nineteen campaigns 0 above the bar, NEG-8 ok.
+  - Gate-ledger rows 2 to 4 were filled with RUN evidence; gate-ledger passes.
+  - TRUE fast-forward: `df4c73e55..5ce8b5df6`.
+  - BY-AGREE-1 (`00596b1ea`, docs only: `bytes_deviation_log.md` and the cold-review record) joined by a merge commit, since `5ce8b5df6` came after its branch point. Run line head **`d7098081df6812ead4e87bfe8ec9f55c32307b02`**.
+- **Gates** (outputs in `docs/process_traces/2026-11-12-bytes-stage1-commitment/`; hashes, rcs, counts and names only):
+  - G1: rc=0; `READY_TO_COMMIT 0 1e78224cd… False True`; `[0, 0]`.
+  - G2: `$PRED` ×2, `IDENTICAL`.
+  - G3: `1e78224cd`, 0 dirty, `$PIN`, `$TWIN`.
+  - G4: `ANCESTOR`, `SAME_BYTES`, 0 code paths, exactly the 13 listed paths; `$PIN`/`$TWIN` again at `d7098081d`; CI `success` on `5ce8b5df6`.
+  - G5: 1/1/1.
+  - G6: fetch rc 0, census rc 0 with **151 hits**, duration scan rc 0 with **124 rows**. The counts are higher than the Air's 130/107, as expected; the hits are recorded, not classified, and none was opened.
+  - G7: 0/0/0.
+  - G8: nothing armed, 97 GiB free, `Network Time: Off`, no smoke running.
+  - G9: rc 0.
+- **Values.** `$PRED` `a6cb172c58462b76609be5ec532f1a9bcfbe474ea64d7e004e948b3ffaeb5f19`; `$PIN` `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`; `$TWIN` `4820dc2e4d6c2b717ae7d1e70c9d66bc28b3c2ad622497604d3ea487b10a03de`. The commit holds exactly the 8 files under `docs/bytes/stage1/`.
+- **Deviation (my decision): the push-time receipt.**
+  - The stage-1 commit was pushed as the commit that CREATED the branch. GitHub logged that push as `branch_creation` (19:59:21Z).
+  - `record-push` asks for `activity_type=push` only, so it refused with rc 1: "no unambiguous non-force GitHub push event for origin tip". The draft's procedure therefore cannot pass as written, on either machine.
+  - `verify_commitment` accepts any origin tip that descends from the stage-1 commit. So I pushed one EMPTY commit, `f50e80d16`, plainly; its message says why. `record-push` then passed on that push event.
+  - The recorded `pushed_utc` is 98 s after the first push. That is the conservative direction, and it precedes every held-out operation (none has run). No tool code changed.
+  - **Tool defect for the P1 lane:** `record-push` should accept a `branch_creation` event whose `before` is all zeros. Alternatively, the procedure should create the branch before the stage-1 commit is pushed.
+- **`$W` is left at the receipt commit `765f28644`.** That commit descends from the stage-1 commit, and `check` needs `push-receipt.json` in the tree. The held-out agreement runs from here.
+- **Not done (lead's call): the draft PR into `main`.** The records branch is cut from the run line, so a PR into main would carry the whole BYTES lineage (hundreds of files), not a docs-only change. I opened nothing.
+- **#701 note (RL-95)** stands: when #701 merges, re-check both hashes on main before the merge.
+
 290. **Magistrate 97d3961c (headless, Opus 5.5, interim lead under item 289), 2026-11-12 11:20 PST: TRACK A STEP 1 DONE. The night bundle is merged into presign: #740 → `c2648fdc3`, #739 → `10c026401`, #741 → **`99622e96cf83d578672747a90db1d8128a57eae9` (the night sha)**. Item 289's post-merge modules all pass at that sha. Part A smoke 2 launches on it after 13:15 (item 291). BYTES #738 is green except shard 7, which is still running. Nothing armed.**
 
 ```pointer
