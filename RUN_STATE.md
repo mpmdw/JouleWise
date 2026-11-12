@@ -1042,6 +1042,33 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+292. **Laptop lead (interactive, Opus 5.5), 2026-11-12 11:15 PST: HAND-BACK. The Air goes OFFLINE at 11:50 today: its SSD is ejected and all Air work is stopped (Ed's instruction). MAGISTRATE 97d3961c: you are the interim lead again for everything, under item 289 as amended by 291 and this item. Track A step 1 is done (item 290: night sha `99622e96c`). Next are Part A smoke 2 after 13:15, then the arm; Track B (BYTES) is as item 289 says.**
+
+```pointer
+owner: magistrate (interim lead under items 289/291/292)
+wait: 13:15 PST (OS batch window end) for Part A smoke 2 on 99622e96c; #738 shard 7 for Track B
+deadline: 2026-11-12T19:26:00-08:00
+on_early_or_refused: as item 289
+next_observable: the Part A smoke 2 item (from item 289's template, on 99622e96c), then the arm item; the BYTES commitment when #738 is green
+```
+
+- **Correction to item 291:** shard 4 of 43257905641 was NOT hung. `test_bytes_analysis` alone takes 7,465 to 9,057 s in CI. I compared against shard 4's old duration, but shard membership moves. The Air cancelled it (Ed approved, on my misreading). Up to the cancel it showed no FAIL/ERROR ids.
+  - The unreached modules are covered twice:
+    - your local run, 32 of 32 OK (item 290);
+    - the Air's run of the same 34 units with the CI runner on a tree identical to `99622e96c`: 1,015 tests, one failure, `test_run_campaign_p2_rc…test_hazard_member_is_validated_structurally_and_labelled_deferred` ("member ran past the 2 s cap"). It is a load-timing flake: it passed 3 of 3 re-runs, the full module passes, and it passed in all three earlier CI runs.
+- **The `rerun --failed` of 43257905641 that the arm activation reads:**
+  - **Shard 10 WILL show the same three RL-97 ids again.** The leak is only fixed by #743, which is not merged. Those three ids are baseline under RL-97 (they are in `base.ids`). They do NOT block the arm.
+  - **Shard 4 will take about 2.5 h** (`test_bytes_analysis`). Every shard-4 module already has a result on this tree, so do NOT hold the arm for shard 4. Any other new FAIL/ERROR id in the re-run blocks, as item 289 says.
+- **Do not merge #742 or #743 before the arm.**
+  - A Fable cold review of both runs on the Air until about 11:45. Its report, if finished, is `/Volumes/JW-EXT/scratch/fable-rev-742-743.md` on the Air's SSD, which will NOT be mounted. I will post the verdicts below this line before 11:50, if they are in.
+  - After the arm, the lead handles both when the Air is back.
+- **Sol seat p1-b6-r12c:** its 60 local commits are pushed to `backup/2026-11-12-sol-p1-b6-r12c-unaudited`. The events audit is clean; the diff is not reviewed. It is NOT resumed. Do not touch it.
+- **Timestamp note:** item 290 is stamped 11:20 PST but was on origin at about 11:08. Take every RUN_STATE time from `date`.
+- **Follow-ups (lead, post-night):**
+  - `test_bytes_analysis` takes 2+ h in CI (analysis runtime is a bug);
+  - add a `shard_tests.py` guard that fails a module which leaves signal dispositions changed;
+  - the OSError path in `align_r1_rehearsal.run()` leaves the handlers ignored (no night effect, since the process exits).
+
 291. **Laptop lead (Air back online about 10:36 to about 12:05 PST, on battery; interactive, Opus 5.5), 2026-11-12 10:50 PST. MAGISTRATE 97d3961c: READ THIS BEFORE ACTING ON #741's CI. Lead ruling RL-97: #741's shard-10 reds are NOT new failures. They come from a pre-existing test leak (fix: PR #743, test-only). You stay interim lead for item 289's steps; this item only amends step 1's merge rule for #741.**
 
 ```pointer
