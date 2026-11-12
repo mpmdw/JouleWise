@@ -47,6 +47,17 @@ def verify(outer, denied, stem):
             "boundary": control["steps"][-1]["boundary"],
             "prediction": "original named skip and denied tests pass with production exit 0/comparator agreement",
             "full_volume_claim": False, "closed_nine_claim": False}
+        snapshots = {}
+        for label, root in (("r12-skips", main), ("r12-denied-action", denied)):
+            snapshots[label] = {}
+            for key, name in (("loop_state", "state.json"), ("loop_attempts", "attempts.jsonl")):
+                source = root / "loop" / name
+                target = view / (label + "-" + name)
+                target.write_bytes(source.read_bytes())
+                if sha(target) != sha(source):
+                    raise ValueError("literal original loop snapshot changed")
+                snapshots[label][key] = {"source": str(source), "snapshot": str(target), "sha256": sha(target)}
+        declarations["literal_loop_inputs"] = snapshots
         (view / "declaration.json").write_text(json.dumps(declarations, indent=2, sort_keys=True) + "\n")
         observed = {}
         receipts = {}
@@ -54,6 +65,9 @@ def verify(outer, denied, stem):
                                       ("r12-denied-action", denied, stem + "-denied")):
             run_option_c(root, 1, stem=run_stem, session_id="r1-alpha")
             receipt = agree(root, run_stem)
+            inputs = json.loads((root / (run_stem + "-inputs.json")).read_bytes())
+            if any(inputs["external"][key] != data["sha256"] for key, data in snapshots[label].items()):
+                raise ValueError("program loop inputs differ from literal checkpoint snapshots")
             facts = session_facts(root, "r1-alpha")
             value = {"flags": facts["flags"], "production_exit": receipt["exit_code"],
                 "comparator_agrees": receipt["option_c"]["comparator"]["pass"],
