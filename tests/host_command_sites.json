@@ -624,6 +624,18 @@
     "seam": "none"
   },
   {
+    "file": "scripts/air/README.md",
+    "locator": "shell:d1facf855b6697a3",
+    "command": "launchctl",
+    "seam": "documentation only: README prose quoting the installer's launchctl bootstrap/bootout; not executed (install_air_watch.sh runs it, and only when Ed runs the installer)"
+  },
+  {
+    "file": "scripts/air/README.md",
+    "locator": "shell:e580d6f41f99fbc8",
+    "command": "launchctl",
+    "seam": "documentation only: README prose quoting the installer's launchctl bootstrap/bootout; not executed (install_air_watch.sh runs it, and only when Ed runs the installer)"
+  },
+  {
     "file": "scripts/b5_e2e_synthetic.py",
     "locator": "_production_interrupt.killing_run:d9f606b4af0199bb",
     "command": "kill",
