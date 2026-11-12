@@ -43,8 +43,43 @@ class R3TableTests(unittest.TestCase):
         self.assertIn('"single implementation; not independently recomputed" (§17-R8)',
                       rows["`lines/whole_machine/<model>/<phase>/mean_j`"])
         self.assertIn("`single-source` (RL-99 item 1)", rows["`dominance/<model>/<phase>/<mode>/R`"])
-        self.assertIn("not independently recomputed (§17-R3", rows["`dominance/branch`"])
-        self.assertIn("not independently recomputed (§17-R3", rows["`lines/waited_runs/<phase>/dbar_j`"])
+        for name in ("`dominance/branch`", "`lines/waited_runs/<phase>/dbar_j`", "`contrast/<phase>/t`",
+                     "`cross_session/<model>/<phase>/F_j`"):
+            self.assertEqual(rows[name].split("|")[9].strip(), b6_r3_table.LABEL_ONE, name)
+        # RL-103: gate rows carry the gate's bar and the check family in Source.
+        cells = rows["`contrast/<phase>/s_d_j`"].split("|")
+        self.assertEqual(cells[9].strip(), b6_r3_table.LABEL_GATE)
+        self.assertIn("5e-06 absolute", cells[8])
+        self.assertIn("check family `engine`", cells[10])
+        cells = rows["`contrast/<phase>/outcome`"].split("|")
+        self.assertEqual(cells[9].strip(), b6_r3_table.LABEL_GATE_WORD)
+        self.assertIn("exact", cells[8])
+        # RL-102 item 4: block-scope rows.
+        self.assertEqual(rows["`summary/ALPHA/reported/<model>/<phase>/mean_j`"].split("|")[9].strip(),
+                         b6_r3_table.LABEL_BLOCK)
+
+    def test_copied_families_are_the_eight_and_not_comparison_keys(self):
+        """RL-104 check 1: exactly the eight decision 6 (b) families, none a key or key prefix."""
+        self.assertEqual(b6_r3_table.COPIED_FAMILIES, (
+            "monitor_cost", "arm_host", "battery_phase", "subject_temperature", "reference_history",
+            "attempt_history", "g10_history", "block5_codes_carried"))
+        keys = json.loads(KEYS.read_text(encoding="utf-8"))
+        self.assertEqual(b6_r3_table.copied_overlap(keys), [])
+        every = list(keys["block_quantity_keys"]) + [k for v in keys["session_quantity_keys"].values() for k in v]
+        for family in b6_r3_table.COPIED_FAMILIES:
+            for key in every:
+                self.assertFalse(key == family or key.startswith(family + "/") or family in key.split("/"),
+                                 (family, key))
+        keys["session_quantity_keys"]["ALPHA"].append("monitor_cost/cpu_s")
+        self.assertEqual(b6_r3_table.copied_overlap(keys), ["monitor_cost"])
+        records, _ = b6_r3_table.copied_records(REPO / b6_r3_table.VERIFY)
+        self.assertEqual(set(records), set(b6_r3_table.COPIED_FAMILIES))
+        text = run().stdout.decode()
+        for family in b6_r3_table.COPIED_FAMILIES:
+            row = next(line for line in text.splitlines() if "| `" + family + "` |" in line)
+            self.assertIn(b6_r3_table.LABEL_COPIED, row)
+            for path in records[family]:
+                self.assertIn("`" + path + "`", row)
 
     def test_missing_producer_exits_nonzero_and_names_the_group(self):
         keys = json.loads(KEYS.read_text(encoding="utf-8"))

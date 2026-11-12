@@ -11,18 +11,22 @@ Inputs (code and configuration only; no custody, no outcome):
   producing functions and the pinned Block 5 functions they call are read
   with ``ast``; ``decimals_for`` and ``quantity_class`` are imported.
 
-Label rules (each row cites the rule it used):
+Label rules (each row cites the rule it used; RL-101 to RL-104):
 - the key is a row of the option (c) comparison table -> "computed and
   compared" (§17-R3 decision 6 (a));
+- block-scope rows -> "§10-§11 arithmetic computed and compared; session
+  inputs as labelled at session scope" (RL-102 item 4);
 - the key's result field is checked inside the option (c) gate but is not a
-  table row -> "computed and compared (gate check only)";
+  table row -> RL-103's gate label, with the gate's own bar;
 - the per-phase whole-machine line -> the literal RC-B6-1 stamps on it
   (§17-R8), which must also be b6_analysis_check's single_implementation;
 - one producer, value a field of the Block 5 cell or floor estimator's output
-  for the registered selection (B5.make_reported / B5.make_floors) ->
-  `single-source` (RL-99 item 1);
-- any other one-producer key -> "not independently recomputed" (§17-R3: "Where
-  there is one producer, label it 'not independently recomputed'").
+  for the registered selection (B5.make_reported / B5.make_floors), or a copy
+  of one (dominance R, R_cm) -> `single-source` (RL-99 item 1, RL-101);
+- any other one-producer key -> "not independently recomputed" (§17-R3).
+- the eight copied-disclosure families (COPIED_FAMILIES, RL-104) are
+  hand-entered decision 6 (b) rows naming their record files, read from
+  scripts/b6_r12_verify.py; none may be a comparison key.
 
 Exit 1, naming the groups, when any key has no stated producer or label.
 Output is deterministic: no clock, no environment, sorted rows.
@@ -43,13 +47,25 @@ DEFAULTS = {
     "precision": "configs/b6/recompute/precision.json",
     "check": "joulewise/b6_analysis_check.py",
     "recompute": "scripts/independent_recompute_b6.py",
+    "verify": "scripts/b6_r12_verify.py",
 }
 R8_LITERAL = "single implementation; not independently recomputed"
 UNSTATED = "UNSTATED"
 LABEL_COMPARED = "computed and compared (decision 6 (a))"
-LABEL_GATE = "computed and compared inside the option (c) gate (check family {}); not an S-13 table row"
+# RL-102 item 4: the second side recomputes §10-§11 arithmetic over RC-B6-1's session values.
+LABEL_BLOCK = "§10-§11 arithmetic computed and compared; session inputs as labelled at session scope"
+# RL-103: exact gate labels; the check family goes in the Source column.
+LABEL_GATE = "computed and compared in the option (c) gate; not an S-13 table row"
+LABEL_GATE_WORD = ("computed and compared in the option (c) gate when the twin refuses or the contrast has five or "
+                   "more quads, otherwise not independently recomputed; not an S-13 table row")
 LABEL_SINGLE_SOURCE = "`single-source` (RL-99 item 1)"
-LABEL_ONE = "not independently recomputed (§17-R3, one producer)"
+LABEL_ONE = "not independently recomputed"
+# RL-104: decision 6 (b) rows, hand-entered. Never comparison keys; their record files are read from
+# scripts/b6_r12_verify.py's copied_records map.
+COPIED_FAMILIES = ("monitor_cost", "arm_host", "battery_phase", "subject_temperature", "reference_history",
+                   "attempt_history", "g10_history", "block5_codes_carried")
+LABEL_COPIED = '"copied from the harvest or acceptance record, bound by digest, not recomputed" (decision 6 (b))'
+VERIFY = "scripts/b6_r12_verify.py"
 LABEL_R8 = '"' + R8_LITERAL + '" (§17-R8)'
 B5_ESTIMATORS = ("make_reported", "make_floors")
 
@@ -130,6 +146,13 @@ def read_check(path):
         raise SystemExit("b6_r3_table: check_block not found in " + str(path))
     session_keys, contrast_fields, phases = {}, {}, set()
     gate_fields, block_heads, single = {}, {}, []
+    default_bar = next((n.args.defaults[-1].value for n in ast.walk(fn) if isinstance(n, ast.FunctionDef)
+                        and n.name == "check" and n.args.defaults), None)
+
+    def bar_of(call):
+        if len(call.args) >= 5 and isinstance(call.args[4], ast.Constant):
+            return call.args[4].value
+        return default_bar
     for node in ast.walk(fn):
         # q["calibration/b_op_s"] = ...  and  q["contrast/" + phase + "/" + exposed[key]] = expected
         if isinstance(node, ast.Assign):
@@ -160,8 +183,10 @@ def read_check(path):
             firsts = [e.elts[0].value for e in node.iter.elts if isinstance(e, ast.Tuple) and e.elts
                       and isinstance(e.elts[0], ast.Constant)]
             if "engine" in fams:
+                call = next(c for c in ast.walk(node) if isinstance(c, ast.Call) and is_name(c.func, "check")
+                            and isinstance(c.args[0], ast.Constant) and c.args[0].value == "engine")
                 for f in firsts:
-                    gate_fields[f] = (("engine",), (node.lineno,))
+                    gate_fields[f] = (("engine",), (call.lineno,), (bar_of(call),))
             if "section10" in fams:
                 for f in firsts:
                     block_heads[f] = node.lineno
@@ -173,9 +198,10 @@ def read_check(path):
                 actual = actual.value
             if (fam and isinstance(actual, ast.Subscript) and is_name(actual.value, "original")
                     and isinstance(actual.slice, ast.Constant)):
-                prior = gate_fields.get(actual.slice.value, ((), ()))
+                prior = gate_fields.get(actual.slice.value, ((), (), ()))
                 gate_fields[actual.slice.value] = (tuple(sorted(set(prior[0]) | {fam})),
-                                                   tuple(sorted(set(prior[1]) | {node.lineno})))
+                                                   tuple(sorted(set(prior[1]) | {node.lineno})),
+                                                   tuple(sorted(set(prior[2]) | {bar_of(node)})))
             # table["block"]["quantities"][name] for "side_by_side/" + ... and "replication/" + ...
         if isinstance(node, ast.Assign):
             for expr in [node.value] + [t.slice for t in node.targets if isinstance(t, ast.Subscript)]:
@@ -190,7 +216,7 @@ def read_check(path):
     if line is None or not phases:
         raise SystemExit("b6_r3_table: contrast row form not found in check_block")
     return {"session_keys": session_keys, "contrast_fields": contrast_fields, "contrast_line": line,
-            "phases": phases, "gate_fields": gate_fields, "block_heads": block_heads, "single": single,
+            "phases": phases, "gate_fields": gate_fields, "default_bar": default_bar, "block_heads": block_heads, "single": single,
             "lines": (fn.lineno, fn.end_lineno)}
 
 
@@ -271,11 +297,17 @@ def classify_session(key, pack, check, rc):
     if key.startswith("contrast/"):
         source = rc["printed"].get(field)
         if source in check["gate_fields"]:
-            fams, lines = check["gate_fields"][source]
+            fams, lines, bars = check["gate_fields"][source]
             line = ",".join(str(x) for x in lines)
+            word = "engine_word" in fams
+            if len(bars) != 1:
+                return UNSTATED, UNSTATED, "gate bars differ for `{}`".format(source)
+            gate_bar = ("gate: exact (word)" if word else
+                        "gate: {:g} absolute, unrounded (CHK `check` bar)".format(bars[0]))
             return (primary + "; second: engine twin via `check_block` (CHK:{})".format(line),
-                    LABEL_GATE.format(", ".join("`" + f + "`" for f in fams)),
-                    "CHK:{} (result field `{}`)".format(line, source))
+                    LABEL_GATE_WORD if word else LABEL_GATE,
+                    "CHK:{}, check family {} (result field `{}`)".format(
+                        line, ", ".join("`" + f + "`" for f in fams), source), gate_bar)
     # 3. the per-phase whole-machine line (R8)
     if key.startswith("lines/whole_machine/"):
         if not (rc["r8"] and any("per-phase whole-machine" in s for s in check["single"])):
@@ -284,8 +316,10 @@ def classify_session(key, pack, check, rc):
                 LABEL_R8, "RC:{} literal; CHK:{} single_implementation".format(rc["r8"], c1))
     # 4. one producer
     if estimator and set(needs) & set(B5_ESTIMATORS) or estimator and fname == "dominance_rows":
-        return primary + "; no second producer in `check_block`", LABEL_SINGLE_SOURCE, "CHK:{}-{} (absent)".format(c0, c1)
-    return primary + "; no second producer in `check_block`", LABEL_ONE, "CHK:{}-{} (absent)".format(c0, c1)
+        return (primary + "; no second producer in `check_block`", LABEL_SINGLE_SOURCE,
+                "CHK:{}-{} (absent); RL-99 item 1, RL-101".format(c0, c1))
+    return (primary + "; no second producer in `check_block`", LABEL_ONE,
+            "CHK:{}-{} (absent); §17-R3 one-producer default".format(c0, c1))
 
 
 def classify_block(key, check, rc):
@@ -295,7 +329,7 @@ def classify_block(key, check, rc):
         return UNSTATED, UNSTATED, "no §10-§11 producer for `{}`".format(head)
     line = check["block_heads"][head]
     return ("RC-B6-1 `{}` (RC:{}); second: `check_block` §10-§11 arithmetic (CHK:{}) over RC-B6-1's session values"
-            .format(BLOCK_PRODUCER, fn.lineno, line), LABEL_COMPARED, "CHK:{}".format(line))
+            .format(BLOCK_PRODUCER, fn.lineno, line), LABEL_BLOCK, "CHK:{}; RL-102 item 4".format(line))
 
 
 def bar(key, rc_module, spec):
@@ -314,6 +348,8 @@ def build(paths):
     groups = collections.OrderedDict()
 
     def add(scope, pack, key, stat, result, bar_text):
+        if len(result) == 4:
+            result, bar_text = result[:3], result[3]
         name = generalize(key)
         row = groups.setdefault((scope, name), {"packs": set(), "stats": set(), "n": 0, "result": set(),
                                                 "bar": set()})
@@ -334,10 +370,43 @@ def build(paths):
     return keys, groups
 
 
+def copied_records(path):
+    """{family: [record path]} from the copied_records literal in b6_r12_verify.py (names only)."""
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        local = {}
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                    and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
+                local[node.targets[0].id] = node.value.value
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Subscript)
+                    and isinstance(node.targets[0].slice, ast.Constant)
+                    and node.targets[0].slice.value == "copied_records" and isinstance(node.value, ast.Dict)):
+                def text(e):
+                    if isinstance(e, ast.Constant):
+                        return e.value
+                    if isinstance(e, ast.Name):
+                        return local[e.id]
+                    return text(e.left) + text(e.right)
+                return {k.value: [text(e) for e in v.elts] for k, v in zip(node.value.keys, node.value.values)}, \
+                    node.lineno
+    return {}, None
+
+
+def copied_overlap(keys):
+    """Copied-family names that are a key, or a key prefix, in the comparison key registry."""
+    every = list(keys["block_quantity_keys"]) + [k for v in keys["session_quantity_keys"].values() for k in v]
+    return sorted({f for f in COPIED_FAMILIES for k in every
+                   if k == f or k.startswith(f + "/") or ("/" + f + "/") in "/" + k + "/"})
+
+
 def render(paths, keys, groups):
     out = ["# Block 6 §17-R3 printed-quantity table (generated by scripts/b6_r3_table.py)", "",
            "Inputs (SHA-256):", ""]
-    for name in ("keys", "precision", "check", "recompute"):
+    for name in ("keys", "precision", "check", "recompute", "verify"):
         out.append("- `{}` `{}`".format(DEFAULTS[name], sha256(paths[name])))
     out += ["", "CHK = `joulewise/b6_analysis_check.py`, RC = `scripts/independent_recompute_b6.py` (line numbers).",
             "", "| # | Scope | Key group | Packs | Stats | Keys | Producer(s) | Comparator family, bar | Label | Source |",
@@ -356,6 +425,19 @@ def render(paths, keys, groups):
         out.append("| {} | {} | `{}` | {} | {} | {} | {} | {} | {} | {} |".format(
             i, scope, name, ",".join(sorted(row["packs"])), ",".join(sorted(row["stats"])) or "—", row["n"], prod,
             " / ".join(sorted(row["bar"])), label, src))
+    records, line = copied_records(paths["verify"])
+    for j, family in enumerate(COPIED_FAMILIES, len(groups) + 1):
+        files = records.get(family)
+        if not files:
+            unstated.append("copied `{}`: no record file in {}".format(family, VERIFY))
+            files = [UNSTATED]
+        out.append("| {} | session (copied) | `{}` | ALPHA,BETA,GAMMA | — | — | none: copied from {} | none (hand "
+                   "check, item 83 ruling 3) | {} | {}:{} `copied_records`; RL-104 |".format(
+                       j, family, ", ".join("`" + f + "`" for f in files), LABEL_COPIED, VERIFY, line))
+    for family in copied_overlap(keys):
+        unstated.append("copied `{}` is also a comparison key or key prefix (RL-104 check 1)".format(family))
+    if set(records) != set(COPIED_FAMILIES):
+        unstated.append("copied families differ from {}: {}".format(VERIFY, sorted(set(records) ^ set(COPIED_FAMILIES))))
     total = len(keys["block_quantity_keys"]) + sum(len(v) for v in keys["session_quantity_keys"].values())
     covered = sum(r["n"] for r in groups.values())
     out += ["", "Keys covered: {} of {}; {} groups; UNSTATED groups: {}.".format(covered, total, len(groups),
