@@ -1042,6 +1042,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+274. **Magistrate 61f1c614 (headless, Opus 5.5), 2026-11-11 20:10 PST: the R1 follow-up smoke launched by item 273 FAILED in Part A (receipt rc 2, Part B never ran). Per item 273 this goes back to the lead: no retry, no extension, OUT not reused. Nothing armed. MAGISTRATE: nothing to run until the lead's next item.**
+
+```pointer
+owner: lead
+wait: lead diagnosis of the two Part A defects below and a new smoke item
+deadline: none
+on_early_or_refused: n/a
+next_observable: a RUN_STATE 275 from the lead naming a fixed commit and a fresh OUT
+```
+
+- **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T034735Z` (launch token `90ac1ac57695471589383e23750fbf72`; launcher stdout/stderr clean). Runner 19:48:09 to 20:01:22 PST; Part A 19:53:12 to 20:01:22 (490 s of its 1,920 s cap).
+- **Receipt:** `rc` 2; `parts` `{"A": true, "B": false}`; every setup step rc 0 (deadline, night_agents, ac_power, condition13, soak_reference, start-agents/meter/volumes, read_power, display, 300 s dwell); `part-A` rc 2; `restore` action `sudo -n pmset -c powermode 0`, observed 0, no marker (no `foreign_marker_left`); stop-volumes, stop-meter, stop-agents all `proven_stopped`; `close-volumes` once. Desk fence gone; no `com.joulewise.align-r0` label loaded. The item-273 assert block fails on `rc == 0` and `parts`.
+- **Defect 1 (root cause of the part failure):** `capture-predecessor-30b` member `align-pilot-v3-episodes-a-e01` wrote no episode: `sudo -n /usr/bin/powermetrics -n 3000 -i 100 --samplers cpu_power,gpu_power,ane_power,thermal` timed out after 460 s. 3,000 samples at 100 ms is 300 s nominal, so powermetrics ran more than 1.5x slow (or stalled). `pmset -g log` shows no sleep or dark wake in the span; the agent census saw no claude/codex process. Traceback: `align_r1_followup_kit.py:290` -> `align_r1_rehearsal.py:499` Refusal, `part-a.stderr.log`.
+- **Defect 2 (why rc is 2 rather than a clean part refusal):** after Part A exited, `run_align_r1_smoke.py:362` raised "Part A process group not proven stopped": the group census `pgrep -lf -g 37537 .` was given a 0.01 s timeout and timed out (`reaped: True`). The timeout comes from `run_night.py:528`, `min(1.0, max(0.01, deadline - now))`: the census window was spent, so the last census ran on the 0.01 s floor, below pgrep's measured ~13.8 ms cost (A269 comment beside `_group_census`). A census floor below the command's own cost cannot answer; the lead should size that floor from the measured pgrep cost.
+- **Stale lock left as found:** `/Users/Shared/JouleWise/host-power/night.lock` (R1 driver pid 52565, not running), as item 273's launch trace recorded.
+- Gmail: no unread from Ed. Directives: only the standing open issues (#587, #422, #421, #417, #416, #408, #405); nothing new. Canonical root fast-forwarded to `2dfa1e1d4`.
+
 273. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-11 19:50 PST: MAGISTRATE: run the agent-free R1 follow-up native smoke (Parts A then B) on `e6d8a62c6`, using the launcher's `r1-smoke` handoff exactly as below. No prepare, no arm. The launch is your LAST action, and you exit at once. The smoke runs with no agent alive.**
 
 ```pointer
