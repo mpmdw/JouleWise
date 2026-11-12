@@ -81,9 +81,9 @@ PLANNING_PREHEAT_CAP_S = 900
 # 1,800 s member bound no longer contains either; both are added here.
 STEP_G0_CAP_S = 600
 STEP_QUIET_S = 300
-# LEAD-RULINGS-2 R7-2: step-d and the designed start states (the R6-2
-# calibration segments), the gated D runs and X-G arm the R1 G0 timeout, the
-# runtime config's g0_timeout_s (1,200 s); step-30b keeps the 600 s G0 cap.
+# LEAD-RULINGS-2 R7-2: step-d, the gated D runs and X-G arm the R1 G0 timeout,
+# the runtime config's g0_timeout_s (1,200 s). RL-59 ("1,200 s stays, for every
+# R1 gate"; follow-up kit a85ee8ec6): step-30b, the A-B-A legs and d-4bit arm it too.
 # The gated runs and X-G arm their G0 inside the member deadman, so their
 # 1,800 s member bound already contains it.
 G0_TIMEOUT_KEY = "g0_timeout_s"
@@ -117,8 +117,8 @@ def segment_bounds(g0_timeout_s, step_deadman_s):
 
     Round-8 disposition D8-3 (R1 round-8 exec LOW-2): step-30b's deadman is
     re-armed after its G0 and quiet too, so it takes the same construction:
-    the re-armed member plus its pre-deadman phases (the 600 s G0 cap it keeps
-    under R7-2, the 300 s quiet) and the 600 s recovery."""
+    the re-armed member plus its pre-deadman phases (the R1 G0 timeout, 1,200 s
+    under RL-59, the 300 s quiet) and the 600 s recovery."""
     member = rearmed_member_bound_s(step_deadman_s)
     return {"step-30b": member + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
             "step-d": member + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
@@ -135,8 +135,10 @@ T_95_DF1 = 12.706204736432095
 # Ruling 16: High Power adoption.
 HIGH_POWER_GAIN = 1.25
 HIGH_POWER_A_LEG_SPREAD = 0.25
-# A G0-style release against the soak precedes every A-B-A leg (ruling 16)
-# and every redo of a heavy quiet segment (ruling 8); FD:489 caps G0 at 600 s.
+# Earlier rounds: a G0-style release against the soak preceded every A-B-A leg
+# (ruling 16) and every redo of a heavy quiet segment (ruling 8); FD:489 caps
+# that G0 at 600 s. The follow-up night drops the leg release (RL-59) and redoes
+# whole admission units (RL-72 E2); only release_segment_bound_s keeps this.
 G0_RELEASE_BOUND_S = 600
 SOAK_REFERENCE_SCHEMA = "joulewise.align.r1_soak_reference.v1"
 # Lead ruling L2 (LEAD-RULINGS-1): U5 is |beta_T|_90 x delta_slow <= c x sigma_pair
