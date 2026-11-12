@@ -939,3 +939,23 @@ to the research lead for review before merge.
 
 - **Effect on estimands.** None. No Block 5 or Block 6 number changes. It changes what a draft, the talk or a Tier C
   submission prints beside Block 5.
+
+---
+
+## DLE-11. Cross-instrument edge check, fix 1 (label only)
+
+- **Status.** Logged 2026-11-12 under the edge-check reading rule (`docs/analysis/b5/edge-check-reading-rule.md`,
+  rule commit `7e1d4278c`), §6: "A bug fix is allowed; it is logged in `DEVIATION-LOG.md` and both results are
+  printed." The check is exploratory and outside the sealed PLAN; this entry changes nothing the PLAN governs.
+- **Bug.** In `scripts/b5_edge_check.py` at the pre-run commit `56cf90719`, assumption check (a) labelled each
+  2,048-token run's model from the prefill event's `item_id`. The 2,048-token runs carry no `item_id`, so every
+  label printed as `?` and GAMMA's two models were pooled in one duration line. Found after the first run.
+- **Fix.** Commit `7d3724b70` reads the model from the run's `config.json` (`model.name`). Nothing else changed.
+- **Both results.** Every Δ, T, interval, exclusion count and the outcome row are identical in the two runs; the
+  per-edge output file has the same SHA-256 (`8dc61055…cb07f`) both times. Only the (a) lines differ:
+  - run 1: "ALPHA ? n 41, min 607 ms"; "BETA ? n 33, min 2663 ms"; "GAMMA ? n 20, min 609 ms, median 1651 ms,
+    max 2689 ms".
+  - run 2: "ALPHA Qwen3-1.7B-4bit n 41, min 607 ms"; "BETA Qwen3-8B-4bit n 33, min 2663 ms"; "GAMMA
+    Qwen3-1.7B-4bit n 10, min 609 / median 621 / max 634 ms"; "GAMMA Qwen3-8B-4bit n 10, min 2669 / median 2679 /
+    max 2689 ms".
+- **Effect on estimands.** None.
