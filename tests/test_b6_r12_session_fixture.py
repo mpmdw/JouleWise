@@ -1066,5 +1066,30 @@ class ReducedSetTests(unittest.TestCase):
         self.assertIs(receipt["full_volume_claim"], False)
 
 
+@unittest.skipUnless(os.environ.get("R12_SINGLE_PACK_SET"), "explicit additional single-pack fixture required")
+class SinglePackShapeTests(unittest.TestCase):
+    def facts(self):
+        root = Path(os.environ["R12_SINGLE_PACK_SET"])
+        from b6_r12_verify import safe_root
+        value = json.loads((safe_root(root) / "single-observations.json").read_text())
+        self.assertEqual(value["production_exit"], 0)
+        self.assertTrue(value["comparator_agrees"])
+        return value
+
+    def test_anchor(self):
+        """Predict additional single-BETA-anchor: full roster, reduced streams, option (c) 0/agrees with member.anchor_not_bounded from native sampler ordinal 27 +5 s (§17-R12:673; RL-49 rule 3)."""
+        self.assertIn("member.anchor_not_bounded", self.facts()["flags"])
+
+    def test_mixed_rows(self):
+        """Predict additional single-BETA-mixed: option (c) 0/agrees and original executed-member plus trailing evaluation rows (§17-R12:673)."""
+        self.assertEqual(set(self.facts()["campaign_row_kinds"]), {"member", "evaluation"})
+
+    def test_compressed(self):
+        """Predict additional single-BETA-compressed: option (c) 0/agrees through original desk-compressed campaign logs and plists (§17-R12:673)."""
+        value = self.facts()
+        self.assertGreater(value["compressed_campaign_logs"], 0)
+        self.assertGreater(value["compressed_plists"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
