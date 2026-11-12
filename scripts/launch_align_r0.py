@@ -57,8 +57,21 @@ def r1_part_caps() -> dict[str, float]:
     return {"A": rt.SMOKE_ADMISSION_S + 120, "B": rt.SMOKE_ADMISSION_S + post_g0 + 120}
 
 
-def r1_minimum_seconds() -> float:
-    return sum(r1_part_caps().values()) + DISPLAY_SLEEP_DWELL_S + 2 * R1_CLEANUP_GRACE_S + 10
+def r1_soak_cap_s() -> float:
+    """RL-94 fresh soak: the night's idle_soak duration plus the runtime's
+    own 30 s child margin and 120 s for start-up and the reference write."""
+    repo = Path(__file__).resolve().parents[1]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from joulewise.align.apple.r1_phase_table import phase_plan
+
+    return float(next(d for name, _kind, d, _c in phase_plan() if name == "idle_soak")) + 30 + 120
+
+
+def r1_minimum_seconds(parts: str = "AB", fresh_soak: bool = False) -> float:
+    caps = r1_part_caps()
+    return (sum(caps[p] for p in parts) + (r1_soak_cap_s() if fresh_soak else 0)
+            + DISPLAY_SLEEP_DWELL_S + 2 * R1_CLEANUP_GRACE_S + 10)
 
 
 def positive_seconds(value: str) -> float:
@@ -251,8 +264,12 @@ def run_until_deadline(args) -> int:
 
 def runner_argv(args) -> list[str]:
     if getattr(args, "runner_kind", "r0") == "r1-smoke":
+        fresh = getattr(args, "fresh_soak", False)
+        parts = getattr(args, "parts", "AB")
         return [str(args.python_bin), str(args.repo / "scripts/run_align_r1_smoke.py"),
-                "--output", str(args.output), "--soak-reference", str(args.soak_reference),
+                "--output", str(args.output),
+                *(["--fresh-soak"] if fresh else ["--soak-reference", str(args.soak_reference)]),
+                *(["--parts", parts] if parts != "AB" else []),
                 "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin)]
     return [str(args.python_bin), str(args.repo / "scripts/align_r0_checks.py"),
             "--config", str(args.config), "--output", str(args.output),
@@ -271,9 +288,15 @@ def launch(args) -> None:
         raise ValueError("R0 output must be a new record directory")
     if args.checks is not None and not CHECKS_PATTERN.fullmatch(args.checks):
         raise ValueError("--checks must be comma-separated runner check names")
-    if args.runner_kind == "r1-smoke" and (args.soak_reference is None or not args.soak_reference.is_file()):
+    fresh = getattr(args, "fresh_soak", False)
+    parts = getattr(args, "parts", "AB")
+    if args.runner_kind != "r1-smoke" and (fresh or parts != "AB"):
+        raise ValueError("--fresh-soak and --parts apply to r1-smoke only")
+    if args.runner_kind == "r1-smoke" and fresh and args.soak_reference is not None:
+        raise ValueError("r1-smoke takes --soak-reference or --fresh-soak, not both")
+    if args.runner_kind == "r1-smoke" and not fresh and (args.soak_reference is None or not args.soak_reference.is_file()):
         raise ValueError("r1-smoke requires an existing --soak-reference")
-    if args.runner_kind == "r1-smoke" and args.deadline - time.time() < r1_minimum_seconds():
+    if args.runner_kind == "r1-smoke" and args.deadline - time.time() < r1_minimum_seconds(parts, fresh):
         raise ValueError("r1-smoke deadline cannot fit both part caps, display dwell and cleanup grace")
     runner = Path(runner_argv(args)[1])
     if (not runner.is_file() or not os.access(args.python_bin, os.X_OK)
@@ -354,7 +377,10 @@ def main(argv=None) -> int:
     start.add_argument("--repo", type=Path, required=True)
     start.add_argument("--config", type=Path, help="required for the default r0 runner")
     start.add_argument("--runner-kind", choices=("r0", "r1-smoke"), default="r0")
-    start.add_argument("--soak-reference", type=Path, help="required for r1-smoke")
+    start.add_argument("--soak-reference", type=Path, help="required for r1-smoke unless --fresh-soak")
+    start.add_argument("--fresh-soak", action="store_true",
+                       help="r1-smoke: run the night's idle soak first and use its reference (RL-94)")
+    start.add_argument("--parts", choices=("AB", "A"), default="AB", help="r1-smoke: AB (default) or A only (RL-89)")
     start.add_argument("--output", type=Path, required=True)
     start.add_argument("--python-bin", type=Path, required=True)
     start.add_argument("--disk-path", type=Path, required=True)
