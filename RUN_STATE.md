@@ -1042,6 +1042,68 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+287. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 06:57 PST: MAGISTRATE: run a daytime DRY RUN of the R1 follow-up `prepare` at `bb6394f2b`, to a SCRATCH output: the real weight-digest and installed-stack preflights, timed. No install, no arm, nothing loaded, no capture. It is a desk read of the model weights and the venv; it is not a measurement. Finish before 10:30 PST. Do not run it during a smoke capture.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-12T10:30:00-08:00
+on_early_or_refused: a refusal is a finding, not a retry: record the REFUSED record's reasons verbatim and mail the lead. Never write to $M/.align-r1-prepare.json, never install or arm
+next_observable: RUN_STATE 288 from the magistrate: prepare rc, wall time, per-root elapsed_s and ok, runtime_stack ok/reasons, output sha256 and path
+```
+
+- **Why (RL-62/73, kit report round 5).** `prepare` has never run against the real weights or the installed stack. Tonight's arm must not be its first native run. This also measures the weight-hash time that tonight's arm has to fit before t0 ≤ 19:26.
+- **Where it runs.** It runs from `$M`, which holds the pinned `.venv`. `r1_runtime.json` has no `measurement_python` key, so `prepare_checks` needs `root/.venv`. Moving `$M` to bb6394f2b is the same fetch-and-detach as item 256, and tonight's arm re-pins `$M` to the final commit.
+- **Output.** It goes to a scratch path, never `.align-r1-prepare.json`, so D-7 is untouched.
+- **Host.** Nothing is armed, and only `com.joulewise.magistrate` is loaded. Leave network time OFF. Leave `night.lock` as found. Run no BYTES desk job at the same time.
+
+```sh
+export M=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2
+export PY="$M/.venv/bin/python"          # do not resolve the symlink
+CUSTODY="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-/Users/edr/night-custody/magistrate}"
+unset JOULEWISE_HOST_STATE_DIR ALIGN_R1_RUNTIME ALIGN_R1_INPUTS ALIGN_R1_REGISTRATION ALIGN_R1_PREPARE_PACKET EVIDENCE_POWER_RECORDER_REPLAY
+launchctl list | grep com.joulewise            # expect only com.joulewise.magistrate
+test ! -e "$CUSTODY/desk_fence.json"           # no smoke running
+test ! -e /Users/Shared/JouleWise/host-power/high-power.marker
+git -C "$M" rev-parse HEAD; git -C "$M" status --short --branch    # record both
+test -z "$(git -C "$M" status --porcelain)"   # STOP if dirty (incl. any untracked .align-r1-*)
+git -C "$M" fetch origin
+git -C "$M" switch --detach bb6394f2bf290550b43a87efecb15d581839b845
+test "$(git -C "$M" rev-parse HEAD)" = bb6394f2bf290550b43a87efecb15d581839b845
+"$PY" -B -c 'import mlx.core,mlx_lm,transformers; from importlib.metadata import version; print(*(version(x) for x in ("mlx","mlx_lm","transformers")))'   # 0.31.2 0.31.3 5.12.1
+cd "$(cd "$M" && pwd -P)"
+OUT="$CUSTODY/r1fu-prepare-dryrun-$(date -u +%Y%m%dT%H%M%SZ).json"
+test ! -e "$OUT"
+/usr/bin/time -p "$PY" -B scripts/align_r1_followup_kit.py prepare --output "$OUT" \
+  --sensor-ruling docs/run_reports/2026-11-12-rl89/sensor_ruling_rl89.json \
+  --smoke-table docs/run_reports/2026-11-12-rl89/smoke_part_b.rl89.json
+echo "prepare rc=$?"
+shasum -a 256 "$OUT"
+"$PY" -I -B - "$OUT" <<'PY'
+import json, sys
+p = json.load(open(sys.argv[1]))
+print("status", p.get("status"), "executed_commit", p.get("executed_commit"))
+w, s = p["weight_digests"], p["runtime_stack"]
+print("weights ok", w["ok"], w["reasons"])
+for root, v in w["roots"].items():
+    print(" ", root, "ok", v["ok"], "elapsed_s", round(v["elapsed_s"], 1), "bytes", v["total_bytes"], "files", v["file_count"])
+print("runtime_stack ok", s["ok"], s["reasons"], "elapsed_s", round(s.get("elapsed_s", 0), 1))
+print("window_max_s", p.get("window_max_s"), "programmed_span_s", p.get("programmed_span_s"))
+PY
+git status --porcelain                          # expect empty: OUT is outside $M
+```
+
+- **PASS** means all of: `prepare rc=0`, `status FOR_LEAD_ARM`, `executed_commit bb6394f2b…`, weights ok, runtime_stack ok, `window_max_s` 126480 and `programmed_span_s` 108768.
+- **Report:**
+  - the wall time from `time -p`;
+  - every root's `elapsed_s`;
+  - the output sha256.
+- **Leave as is:**
+  - `$M` stays detached at bb6394f2b. Tonight's arm re-pins it to the final commit.
+  - The output file stays in `$CUSTODY`. Do not copy it to `$M`.
+- **A refusal** prints the reasons, and the record is still written: commit those reasons to RUN_STATE 288 and stop.
+- **Next for the lead (FYI):** tonight's arm needs the R1 arm route ported onto presign with RL-72 E2 sizing. That port is being built now. It will be bundled with the powermetrics wrapper (#739) and the test fixes (#740) for a SECOND Part A smoke after 13:15. The BYTES commitment item follows when #738's CI is green (about 10:15). Take items in order.
+
 286. **Magistrate 882ff176 (headless, Opus 5.5), 2026-11-12 06:50 PST: the item-285 RL-89 Part A smoke at `bb6394f2b` PASSED. A fresh TV0h/Th0C soak ran, then Part A: G0 RELEASED in 727.7 s, under the 1,200 s bar. Receipt rc 0, every receipt assert in item 285's check holds. Nothing armed. MAGISTRATE: nothing to run until the lead's next item, which arms tonight's R1 follow-up night or calls the second Part A smoke (wrapper) after 13:15.**
 
 ```pointer
