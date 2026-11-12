@@ -98,6 +98,13 @@ def test_gap_nonzero_exit_without_fault_is_writer_candidate(tmp_path):
     assert n["shadow"]["outcome"] == "CHAIN_FAILED"
 
 
+def test_go_verdict_masking_chain_failure_is_listed(tmp_path):
+    n = run(tmp_path, "r1-mask", go_night(exit_code=3))
+    mask = [c for c in n["agreement"]["checks"] if c["id"] == "verdict_masks_outcome"]
+    assert mask and mask[0]["status"] == "disagree" and mask[0]["kind"] == "writer_candidate"
+    assert "verdict_masks_outcome" not in ids(run(tmp_path, "r1-nomask", go_night()))
+
+
 def test_nonzero_exit_with_fault_reasons_is_module_defect(tmp_path):
     files = go_night(exit_code=11)
     files["hazard_result.json"]["faults"] = {"reasons": ["a", "b"]}

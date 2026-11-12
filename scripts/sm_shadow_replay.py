@@ -193,6 +193,10 @@ def agreement(rec, report, exit_cls):
     got = "MEASURED" if outcome.startswith("MEASURED") else outcome
     add("outcome", "agree" if exp == got else "disagree", f"records imply {exp}; shadow derives {outcome}")
 
+    if rec["verdict"] == "GO" and outcome in {"CHAIN_FAILED", "ABORTED"}:
+        checks.append({"id": "verdict_masks_outcome", "status": "disagree", "kind": "writer_candidate",
+                       "detail": f"result verdict GO (admission) while the derived outcome is {outcome}; "
+                                 "the record's verdict word does not carry the chain's failure (audit finding A-01 pattern)"})
     problems = []
     if rec["chain_exited"] and not rec["chain_started"]:
         problems.append("chain.exited without chain.started")
