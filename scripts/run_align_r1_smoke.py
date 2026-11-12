@@ -28,7 +28,6 @@ from joulewise.align.apple import powermode, v4_registration as reg
 from joulewise.b5 import driver
 from scripts import align_r1_rehearsal as r1, launch_align_r0 as launcher, run_night as night
 
-PART_LIMIT_S = 1800
 # The parent reserves another 190 s for emergency teardown before the fence
 # expires. Work stops 180 s earlier still: part-group proof (70 s), meter
 # proof (up to 90 s), and bounded Automatic setter/readback (20 s).
@@ -94,13 +93,17 @@ def read_power():
     return {"rc": 0, "ac_powermode": value, "automatic": True}
 
 
-def restore_power():
+def restore_power(*, power_read=False):
     # Same host exclusion as the ordinary procedure: never set a mode under
-    # another measuring night's lock, even on an early preflight refusal.
+    # another measuring night's lock. Early refusals owe no host restore.
+    if not power_read:
+        return {"rc": 0, "action": "no_power_read"}
     lock = powermode.HostLock(role="r1-smoke-close")
     try:
         if not lock.acquire():
             raise ValueError("Automatic restore blocked by another host night lock")
+        if os.path.lexists(powermode.host_marker_path()):
+            return {"rc": 0, "action": "foreign_marker_left"}
         result = powermode.restore_automatic()
         return {**result, "rc": 0 if result["ok"] else 2}
     finally:
@@ -163,12 +166,34 @@ class AgentFeed(CensusFeed):
 
 class VolumeFeed(CensusFeed):
     name = "volumes"
-    interval = 60
 
     def __init__(self, output):
         super().__init__(output)
         self.path = self.output / "volume_censuses.jsonl"
         self.watch = r1.VolumeWatch(runner=host_run)
+        self.close_censused = False
+
+    def poll(self):
+        # Night cadence: feed start, before each part, close. No in-window
+        # mount/diskutil probes from the cooperative polling loop.
+        pass
+
+    def start(self):
+        if not self.started and not self.closed:
+            self.started = self.active = True
+            self.sample()
+        return {"rc": 0}
+
+    def before_part(self):
+        if self.active:
+            self.sample()
+        return {"rc": 0}
+
+    def close(self):
+        if self.started and not self.close_censused:
+            self.close_censused = True
+            self.sample()
+        return {"rc": 0}
 
     def sample(self):
         verdict = self.watch.census("r1-smoke")
@@ -199,7 +224,7 @@ class MeterFeed:
             # used by HAZARD_PACK. Never use a different channel/parser.
             self.supervisor = driver.MonitorSupervisor(
                 lambda: seams.meter_argv(request), night_dir=self.output, popen=subprocess.Popen,
-                group_census=night._group_census, name=driver.METER_NAME)
+                group_census=night._group_census, name=driver.METER_NAME, identity=night.observe_identity)
             with register_child_before_interrupt():
                 started = self.supervisor.start()
             if not started:
@@ -251,8 +276,8 @@ def work_remaining(args):
     return remaining
 
 
-def display():
-    record = launcher.sleep_display("/usr/bin/pmset")
+def display(pmset_bin):
+    record = launcher.sleep_display(pmset_bin)
     return {"rc": record["exit_code"] if record["exit_code"] is not None else 2, **record}
 
 
@@ -290,7 +315,11 @@ class PartDeadline(night._WindowDeadline):
 
 def part(args, which, feeds, *, on_start=lambda: None):
     argv = part_argv(args, which)
-    until = time.monotonic() + min(PART_LIMIT_S, work_remaining(args))
+    cap = launcher.r1_part_caps()[which]
+    remaining = work_remaining(args)
+    if remaining < cap:
+        raise TimeoutError(f"Part {which} not started: full {cap:g} s cap cannot fit before work deadline")
+    until = time.monotonic() + cap
     child = None
     deadline = None
     proof = {}
@@ -309,11 +338,12 @@ def part(args, which, feeds, *, on_start=lambda: None):
             while child.poll() is None:
                 work_remaining(args)
                 if time.monotonic() >= until:
-                    raise TimeoutError(f"Part {which} exceeded its single {PART_LIMIT_S} s budget")
+                    raise TimeoutError(f"Part {which} exceeded its {cap:g} s runner cap")
                 poll_feeds(feeds)
                 time.sleep(.1)
             if deadline.expired() or deadline.cancel() is not None:
-                raise TimeoutError(f"Part {which} exceeded its single {PART_LIMIT_S} s budget")
+                work_remaining(args)  # Name a fence deadline honestly, even if the enforcer fired.
+                raise TimeoutError(f"Part {which} exceeded its {cap:g} s runner cap")
             code = child.wait()
     finally:
         if child is not None:
@@ -330,7 +360,7 @@ def part(args, which, feeds, *, on_start=lambda: None):
                     signal.signal(s, handler)
             if not proven:
                 raise RuntimeError(f"Part {which} process group not proven stopped: {proof}")
-    return {"rc": code, "argv": argv, "group": proof, "proven_stopped": True}
+    return {"rc": code, "argv": argv, "cap_s": cap, "group": proof, "proven_stopped": True}
 
 
 class StepFailed(RuntimeError):
@@ -341,7 +371,8 @@ class StepFailed(RuntimeError):
 def run(args, *, feeds=None):
     # Create-once: a retry cannot overwrite even a refused/partial smoke.
     args.output.mkdir(parents=True, exist_ok=False)
-    feeds = feeds if feeds is not None else [MeterFeed(args.output), AgentFeed(args.output), VolumeFeed(args.output)]
+    feeds = feeds if feeds is not None else [AgentFeed(args.output), MeterFeed(args.output), VolumeFeed(args.output)]
+    power_read = False
     record = {"schema": "joulewise.align.r1_smoke_runner.v1", "started": stamp(),
               "deadline": args.deadline, "work_reserve_s": WORK_RESERVE_S,
               "soak_reference": str(args.soak_reference), "parts": {"A": False, "B": False},
@@ -369,8 +400,8 @@ def run(args, *, feeds=None):
     handlers = {s: signal.signal(s, interrupted) for s in SIGNALS}
     try:
         step("deadline", lambda: {"remaining_s": work_remaining(args)})
-        step("ac_power", ac_power)
         step("night_agents", night_agents)
+        step("ac_power", ac_power)
         step("condition13", condition13)
         def soak():
             if not args.soak_reference.is_file():
@@ -379,11 +410,21 @@ def run(args, *, feeds=None):
         step("soak_reference", soak)
         for feed in feeds:
             step("start-" + feed.name, feed.start)
-        step("read_power", read_power)
+        def read_owned_power():
+            nonlocal power_read
+            # A completed own read permits cleanup; earlier refusals owe
+            # nothing. This runner never changes mode before cleanup.
+            result = read_power()
+            power_read = True
+            return result
+        step("read_power", read_owned_power)
         # Match R0: a failed display sleep is recorded, not a refusal.
-        step("display", display, fatal=False)
+        step("display", lambda: display(args.pmset_bin), fatal=False)
         step("dwell", lambda: dwell(args, feeds))
         for which in ("A", "B"):
+            for feed in feeds:
+                if hasattr(feed, "before_part"):
+                    step("before-part-" + which + "-" + feed.name, feed.before_part)
             def run_part():
                 result = part(args, which, feeds, on_start=lambda: record["parts"].__setitem__(which, True))
                 record["parts"][which] = True
@@ -396,7 +437,8 @@ def run(args, *, feeds=None):
         for s in SIGNALS:
             signal.signal(s, signal.SIG_IGN)
         try:
-            cleanup = [("restore", restore_power), *(("stop-" + f.name, f.stop) for f in reversed(feeds))]
+            cleanup = [("restore", lambda: restore_power(power_read=power_read)),
+                       *(("stop-" + f.name, f.stop) for f in reversed(feeds))]
             for name, operation in cleanup:
                 try:
                     result = step(name, operation)
@@ -404,6 +446,14 @@ def run(args, *, feeds=None):
                         record["feeds"].setdefault(name[5:], {})["stop"] = result
                 except BaseException:
                     record["rc"] = record["rc"] or 2
+            # A multi-volume census must not delay stopping owned producers.
+            # Hash its final journal only after this terminal census returns.
+            for feed in feeds:
+                if hasattr(feed, "close"):
+                    try:
+                        step("close-" + feed.name, feed.close)
+                    except BaseException:
+                        record["rc"] = record["rc"] or 2
             for feed in feeds:
                 files = []
                 try:
@@ -433,6 +483,7 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--soak-reference", type=Path, required=True)
     parser.add_argument("--deadline", type=float, required=True)
+    parser.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
     if not math.isfinite(args.deadline):
         parser.error("deadline must be finite")

@@ -7,9 +7,9 @@
   },
   {
     "file": "scripts/run_align_r1_smoke.py",
-    "locator": "display:541443a289d468bd",
+    "locator": "main:541443a289d468bd",
     "command": "pmset",
-    "seam": "patch launcher.sleep_display or the runner display seam; fake-launchd harness fakes display"
+    "seam": "parser default only; display passes the configured bin to launcher.sleep_display; synthetic tests patch that helper"
   },
   {
     "file": "scripts/run_align_r1_smoke.py",

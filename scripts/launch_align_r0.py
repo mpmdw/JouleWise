@@ -42,6 +42,24 @@ DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
 R1_CLEANUP_GRACE_S = 180
 
 
+def r1_part_caps() -> dict[str, float]:
+    """Read the kit's bound config; never load weights or measurement data."""
+    repo = Path(__file__).resolve().parents[1]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from joulewise.align.apple import r1_runtime as rt
+
+    config = json.loads((repo / "configs/align/v4/r1_runtime.json").read_text())
+    post_g0 = rt.smoke_post_g0_budget(rt.STEP_QUIET_S, config["step"]["deadman_s"])["total"]
+    # The kit starts its own admission clock AFTER its source/config checks.
+    # Keep 120 s outside that 1800 s verdict for startup and final table work.
+    return {"A": 1800 + 120, "B": 1800 + post_g0 + 120}
+
+
+def r1_minimum_seconds() -> float:
+    return sum(r1_part_caps().values()) + DISPLAY_SLEEP_DWELL_S + 2 * R1_CLEANUP_GRACE_S + 10
+
+
 def positive_seconds(value: str) -> float:
     seconds = float(value)
     if not math.isfinite(seconds) or seconds <= 0:
@@ -234,7 +252,7 @@ def runner_argv(args) -> list[str]:
     if getattr(args, "runner_kind", "r0") == "r1-smoke":
         return [str(args.python_bin), str(args.repo / "scripts/run_align_r1_smoke.py"),
                 "--output", str(args.output), "--soak-reference", str(args.soak_reference),
-                "--deadline", str(args.deadline)]
+                "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin)]
     return [str(args.python_bin), str(args.repo / "scripts/align_r0_checks.py"),
             "--config", str(args.config), "--output", str(args.output),
             *(["--checks", args.checks] if args.checks is not None else []),
@@ -254,6 +272,8 @@ def launch(args) -> None:
         raise ValueError("--checks must be comma-separated runner check names")
     if args.runner_kind == "r1-smoke" and (args.soak_reference is None or not args.soak_reference.is_file()):
         raise ValueError("r1-smoke requires an existing --soak-reference")
+    if args.runner_kind == "r1-smoke" and args.deadline - time.time() < r1_minimum_seconds():
+        raise ValueError("r1-smoke deadline cannot fit both part caps, display dwell and cleanup grace")
     runner = Path(runner_argv(args)[1])
     if (not runner.is_file() or not os.access(args.python_bin, os.X_OK)
             or (args.runner_kind == "r0" and (args.config is None or not args.config.is_file()))):
@@ -282,12 +302,16 @@ def launch(args) -> None:
                  str(args.deadline), str(args.exit_wait_seconds), args.pmset_bin,
                  str(args.disk_path), args.pgrep_bin, args.kill_bin, str(runner_spec),
                  args.launchctl_bin, f"{domain}/{label}"]
-    plist.write_bytes(plistlib.dumps({
+    job_spec = {
         "Label": label, "ProgramArguments": arguments, "RunAtLoad": True,
         "WorkingDirectory": str(args.repo),
         "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin", "LC_ALL": "C"},
         "StandardOutPath": str(job / "stdout.log"), "StandardErrorPath": str(job / "stderr.log"),
-    }))
+    }
+    if args.runner_kind == "r1-smoke":
+        # Cover the runner's teardown plus the outer helper's TERM grace.
+        job_spec["ExitTimeOut"] = 2 * R1_CLEANUP_GRACE_S + 40
+    plist.write_bytes(plistlib.dumps(job_spec))
     with fence_lock(root):
         current = read_fence(root)
         if current and current["deadline"] > time.time() and pid_alive(current["pid"]):
