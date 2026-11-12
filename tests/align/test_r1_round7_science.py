@@ -12,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -182,6 +183,50 @@ class G0TimeoutTests(_World):
                       "with_retries_and_one_batch_encounter_s", "batch_window_wait_max_s",
                       "with_one_batch_wait_s", "with_retries_and_one_batch_wait_s"):
             self.assertNotIn(stale, value)
+
+
+class SpanAndDeadlineTests(_World):
+    """RL-72 E2 on a night that ran (Fable F1 on the R7-2 fix, c64a3f2a9): the close/span check and the
+    work deadline are read inside the refusal-handled region, so a later edit could leave them unset
+    without the missing-field witness noticing. Kills the review's mutants M3 and M4."""
+
+    def test_a_night_that_overruns_its_span_bound_is_aborted_without_slots(self):
+        real = r1.night_worst_case_s
+
+        def tiny(*args, **kwargs):
+            value = dict(real(*args, **kwargs))
+            value["programmed_span_s"] = 1e-6
+            return value
+
+        with tempfile.TemporaryDirectory() as td, patch.object(r1, "night_worst_case_s", tiny), \
+                patch.object(r1, "_R1_WORK_DEADLINE", None):
+            world = FakeWorld()   # the fake command boundary ignores the work deadline, so the night runs
+            result, registration = self.run_world(td, world, expected=4)
+            self.assertTrue([c for c in world.calls if "--r1-kind" in c])
+            self.assertEqual(result["status"], "aborted")
+            self.assertEqual(result["error"], "RL-72 E2: close/span overhead cap exceeded")
+            self.assertIsNone(registration)
+
+    def test_the_work_deadline_is_armed_for_every_runtime_call_and_cleared_after(self):
+        seen = []
+
+        class World(FakeWorld):
+            def __call__(self, argv):
+                if "--r1-kind" in argv:
+                    seen.append(r1._R1_WORK_DEADLINE)
+                return super().__call__(argv)
+
+        span = r1.night_worst_case_s(["fake-runtime"])["programmed_span_s"]
+        with tempfile.TemporaryDirectory() as td, patch.object(r1, "_R1_WORK_DEADLINE", None):
+            before = time.monotonic()
+            self.run_world(td, World())
+            after = time.monotonic()
+            self.assertIsNone(r1._R1_WORK_DEADLINE)
+        self.assertTrue(seen)
+        self.assertNotIn(None, seen)
+        self.assertEqual(len(set(seen)), 1)   # one deadline all night
+        self.assertGreaterEqual(seen[0], before + span - 900)
+        self.assertLessEqual(seen[0], after + span - 900)
 
 
 class G0CapW1Tests(_World):
