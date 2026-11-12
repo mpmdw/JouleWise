@@ -906,6 +906,25 @@ class SchedulerBoundaryTests(unittest.TestCase):
             terminal.write_text("{}\n")
             self.assertEqual(snapshot(root)["terminal_sha256"], hashlib.sha256(b"{}\n").hexdigest())
 
+    def test_reduced_policy_only_changes_external_generator_inputs(self):
+        """Predict: short-dwell supplier preserves scripted waits/skew and every chain file; its source plan explicitly claims no full volume."""
+        from b6_r12_reduced_set import reduced_bootstrap
+        text = reduced_bootstrap()
+        # Execute only the supplier definition, before bootstrap's entry point.
+        namespace = {}
+        exec(text.split("from runtime import bootstrap")[0], namespace)
+        import b6_r12_orchestrate as scheduler
+        original = namespace["original_source_policy"]
+        self.addCleanup(setattr, scheduler, "session_policy", original)
+        for pack, round_number in (("alpha", 1), ("alpha", 2), ("beta", 2)):
+            actual = namespace["reduced_source_policy"](pack, round_number, {})
+            expected = original(pack, round_number, {})
+            for key in ("volume", "primary_stream_duration_s", "token_first_s", "token_next_s"):
+                expected[key] = actual[key]
+            self.assertEqual(actual, expected)
+            self.assertEqual(actual["volume"], "reduced")
+            self.assertEqual(actual["primary_stream_duration_s"], 5)
+
 
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
 class DeclaredShapeTests(unittest.TestCase):
@@ -995,6 +1014,22 @@ class DeclaredShapeTests(unittest.TestCase):
                 cadence_s = value["registered_monitor_cadence"][cadence_key]
                 self.assertEqual(series["cadence_ns"], [round(cadence_s * 1e9)], sid)
                 self.assertGreaterEqual(series["span_s"], min(m["span_s"] for m in value["meter"]) - cadence_s, sid)
+
+
+@unittest.skipUnless(os.environ.get("R12_REDUCED_CHAIN_SET"), "explicit reduced real-chain set required")
+class ReducedSetTests(unittest.TestCase):
+    def test_predeclared_reduced_nine(self):
+        """Predict reduced-set: closed nine-session option (c) exits 0/agrees, serial/pool numbers/public bytes match, and all six §17-R12:673 shapes pass their original assertions; no full-volume claim (RL-48 item 5 stays open)."""
+        root = Path(os.environ["R12_REDUCED_CHAIN_SET"])
+        from b6_r12_verify import safe_root
+        root = safe_root(root)
+        receipt = json.loads((root / "reduced-finish-receipt.json").read_text())
+        self.assertEqual(receipt["sessions"], 9)
+        self.assertEqual(receipt["production_exit"], 0)
+        self.assertTrue(receipt["comparator_agrees"])
+        self.assertTrue(receipt["serial_pool_byte_identical"])
+        self.assertEqual(receipt["shape_assertion_exit"], 0)
+        self.assertIs(receipt["full_volume_claim"], False)
 
 
 if __name__ == "__main__":
