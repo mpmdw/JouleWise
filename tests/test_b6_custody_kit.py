@@ -583,6 +583,27 @@ class Mini(unittest.TestCase):
         self.assertEqual(pins[str(dst / "S1/archive")]["compression"]["external_path"],
                          str(dst / "S1/archive.desk/compression.jsonl"))
 
+    def test_rsync_relative_form_lands_verifiable_layout(self):
+        # Expected (cold review H1): the runbook's `cd <sessions> && rsync -aR <id>/archive [<id>/archive.desk] <dest>/`
+        # lands <dest>/<id>/archive[.desk], and verify on that tree exits 0 (the absolute-path form did not).
+        if shutil.which("rsync") is None:
+            self.skipTest("no rsync")
+        src, dst = self.base / "rs-src", self.base / "rs-dst"
+        x, y = mini_archive(src / "S1", "archive", log="adjacent"), mini_archive(src / "S2", "archive")
+        manifest = self.base / "rs-manifest.json"
+        rc, out, _ = run("manifest", "--session", x, "--session", y, "--loop-attempts", self.attempts,
+                         "--out", manifest)
+        self.assertEqual(rc, 0)
+        dst.mkdir()
+        for session in ("S1", "S2"):
+            parts = [session + "/archive"] + ([session + "/archive.desk"] if (src / session / "archive.desk").is_dir() else [])
+            done = subprocess.run(["rsync", "-aR", *parts, str(dst) + "/"], cwd=src, capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(sorted(p.name for p in dst.iterdir()), ["S1", "S2"])
+        rc, _, err = run("verify", "--manifest", manifest, "--manifest-sha256", out.strip().rsplit("=", 1)[1],
+                         "--root", dst, "--out", self.base / "rs-receipt.json")
+        self.assertEqual((rc, err), (0, ""))
+
 
 class NoContentLeak(unittest.TestCase):
     def test_no_output_contains_session_content(self):
