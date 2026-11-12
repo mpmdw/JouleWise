@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from .support_b6 import b6, build_session, nine_sessions, session_id, write_attempts
+from .support_b6 import CAMPAIGN, b6, build_session, nine_sessions, session_id, write_attempts
 
 
 def run(args):
@@ -376,6 +376,42 @@ class Block6Guards(unittest.TestCase):
         self.assertIsNone(r["neg8"]["midpoint_j"])
         self.assertEqual(r["neg8"]["n_mid"], 0)
         self.assertIn("neg8_midpoint_lost", public["sessions"]["b6-gamma-r1"]["flag_counts"])
+
+
+class PreRebindStopFlags(unittest.TestCase):
+    def test_init_stop_flag_counts_under_plan_session_id(self):
+        """Predict: a stop flag raised in Session.__init__ before the copied-plan rebinding is filed under the
+        final (plan) session ID, so binding_defect is true, the replication word is suppressed and the
+        public per-session flag counts keep it."""
+        tmp = Path(tempfile.mkdtemp(prefix="b6-prebind-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        archives, attempts, _ = nine_sessions(tmp / "block")
+        bracket, outer = session_id("GAMMA", 1), "outer-gamma-1"
+        archive = tmp / "block" / bracket
+        roster = json.loads((archive / "derived/roster.json").read_text())
+        roster["pack_id"] = CAMPAIGN["ALPHA"]  # roster/acceptance pack mismatch: stop flag before rebinding
+        (archive / "derived/roster.json").write_text(json.dumps(roster))
+        plan = archive / "sources/night-custody/night_plan.json"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        plan.write_text(json.dumps({"plan_id": outer, "hazard_window": {"bindings": {"bracket_session_id": bracket}}}))
+        rows = [json.loads(line) for line in attempts.read_text().splitlines()]
+        for row in rows:
+            if row["session_id"] == bracket:
+                row["session_id"] = outer
+        attempts.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        _, R, P = recompute_block(archives, attempts, tmp / "out")
+        self.assertIn(outer, R["sessions"])
+        self.assertTrue(R["sessions"][outer]["counting"])
+        mismatch = [f for f in R["flags"] if f["code"] == "acceptance_session_mismatch"]
+        self.assertTrue(mismatch)
+        self.assertEqual({f["session"] for f in mismatch}, {outer})
+        self.assertTrue(R["sessions"][outer]["binding_defect"])
+        self.assertIn("acceptance_session_mismatch", P["sessions"][outer]["flag_counts"])
+        contrast = copy.deepcopy(R["sessions"][outer]["contrasts"]["ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"])
+        b5 = {"contrasts": {"ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b": contrast}, "descriptive": {}}
+        row = b6.block_lines(R["sessions"], b6.block5_quantities(b5))["replication"]["decode"]
+        self.assertIsNone(row["word"])
+        self.assertTrue(row["reason"].startswith("binding_defect"))
 
 
 if __name__ == "__main__":
