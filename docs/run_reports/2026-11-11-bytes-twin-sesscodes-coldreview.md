@@ -158,3 +158,156 @@ I opened no BYTES export, predictions file, held-out store, key, custody root, B
 were code, the registration-facing rulings RL-80 and RL-82, the boundary lines named in check 7, and synthetic
 campaigns generated in temporary directories on the external SSD. No host-changing command was run.
 `scripts/test_timings.json` was not written.
+
+---
+
+# Delta review (c95242509)
+
+2026-11-11, 22:10 PST. Reviewer: Claude Fable 5.2, the same cold seat, independent of the build seat (Sonnet).
+Target: `de07c51dd..c95242509` on `fix/2026-11-11-bytes-twin-sesscodes`: `scripts/bytes_twin.py` (15 lines, the
+`missing is not None` branch of `analyse` and `missing_pass_quantities`) and `tests/test_bytes_twin.py` (49 lines).
+
+## Verdict: ADMIT-WITH-FIXES at `c95242509`
+
+**F1 is fixed as written.** In a missing-withheld cell the twin now prints `sorted({bytes.withheld_missing} ∪
+session codes)`, and the `withheld` campaign has zero fields above the bar. Nothing else in the twin moved. RL-82
+condition 3 is no longer blocked by F1, and nothing here stands in the way of the fit-set rerun (condition 4):
+a missing-withheld cell exists only at the held-out stage.
+
+**One fix is needed before the held-out agreement (stage 2), not before the commitment: N1.** The analysis
+builds a missing cell's list from every planned run of the cell, so it also lists codes recorded on those runs
+in the archive. The twin lists the session's codes only. I planted one run code on one missing run of the
+`withheld` campaign: 12 `flags` fields went above the bar. No committed campaign carries that feature, which is
+the same reason the nineteen campaigns missed the two earlier differences.
+
+**No new ruling is needed for F1.** I agree with the lead's reading. RL-82 reading A defines a cell's flags
+without regard to the cell's status, its scope covers "every stage that reads the session's archive", and its
+second ground makes the bound program the registration where the prose is silent. A missing cell has a session
+and the analysis lists that session's codes. Condition 5 ("stop, do not widen, attribute as RL-80 says") was
+met in substance by F1 itself: names, counts, sides and the governing sentence, from synthetic data, with no
+value compared. The lead should record that F1 served as that attribution. N1 falls under the same second
+ground; whether it needs a line in the ruling is the research lead's call, and I flag it for that reason only.
+
+## Check by check
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | The new list matches the analysis exactly | **Matches for session codes; one term missing (N1).** Analysis: `reduce_models` prints `sorted({f for r in module for f in r["flags"]})` over all planned records of the cell; `archive_records` gives each record `run codes ∪ session codes ∪ member exclusion codes`, plus `bytes.withheld_missing` when the run is absent from the export. Twin: `sorted({bytes.withheld_missing} ∪ session codes)`. Set of session codes, sort, dedupe and the withheld code: identical. Run codes and member exclusion codes of the missing runs: absent in the twin. Stage: both sides give the bare `["bytes.withheld_missing"]` at the post-commit blinded stage (no archive) and have no missing cell at fit. Levels: every boundary and every variant of the cell carries the same list on both sides. |
+| 2 | Nothing else moved; the default `flags=` path | **Pass.** `missing_pass_quantities` has one caller in the repository, the changed one, so the default is unused; it yields `["bytes.withheld_missing"]` as before. The new list object is shared by the cell and its three boundaries; nothing in the twin mutates a cell's flag list in place. Twin outputs at blinded and fit are byte-identical to the campaign's own under replay. `joulewise/` and `scripts/test_timings.json` are untouched by the range. |
+| 3 | Fail-first | **Pass.** With the twin of `de07c51dd` (sha256 `252a5434…`, the same file as at `23b82a4b7`) under the head's tests: `MissingWithheldFlagTests.test_session_codes_before_and_after_with_duplicate` FAILS; the `withheld` campaign has 36 above the bar. At `c95242509` the test passes and the campaign has 0. The other two new tests pass at both commits, as they should: one asserts the unchanged no-code case, the other is a loader test. |
+| 4 | Mutants | **Every requested kind is killed.** Two survivors are equivalent through the command line. Table below. |
+| 5 | Tests | **All pass.** Table below. |
+| 6 | Import fence; estimator digest | **Pass.** `FenceTests` (3) pass. `joulewise/bytes_analysis.py` sha256 is `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`. |
+| 7 | Point-level flags on missing passes | **It is what the analysis does, and it removes a divergence.** See "Point level" below. |
+
+## Tests
+
+Python 3.13, `-B`, `nice -n 10`, one module at a time, `JW_B5_SYNTHETIC_ONLY=1`, temp root on the external SSD,
+29 GB free on `/` before each. Synthetic campaigns only. The full agreement suite was not run: no targeted
+result pointed to a wider problem.
+
+| Run at `c95242509` | Result |
+| --- | --- |
+| `tests.test_bytes_twin` | 114 tests, OK, 467 s |
+| `AgreementTests.test_withheld_campaign_missing_files_and_uncollected_pass` | OK, 184 s. `withheld`: 219,549 compared, **0 above the bar** |
+| `AgreementTests.test_session_codes_at_archive_stages` (`anchor_narrow`) | OK, 0 above the bar; the run-only twin still fails with 72 |
+| `AgreementTests.test_defects_campaign` | OK. `defects`: 269,281 compared, 0 above the bar |
+| `FenceTests` | 3 tests, OK |
+
+`test_bytes_stage1` was not rerun; the range does not touch what it covers and the author reports 23 OK.
+
+## Mutants
+
+One-site edits of the head twin (sha256 `6c65efd6…5453`). "Unit" is the committed `MissingWithheldFlagTests`
+bound to the mutant. "Campaign" is the mutant's held-out output through the real comparer on a freshly built
+`withheld` campaign. The unmutated control gave 0 above the bar.
+
+| Requested kind | Mutant | Unit | Campaign (above the bar) |
+| --- | --- | --- | --- |
+| Drop the session codes | hard-coded list again | killed | killed, 36 |
+| | the twin of `de07c51dd` | killed | killed, 36 |
+| Drop `bytes.withheld_missing` | session codes only | killed | killed, 105 |
+| Unsorted | reverse order | killed | killed, 36 |
+| | session codes, then the withheld code last | killed | killed, 36 |
+| | withheld code first, then session codes | killed | survives |
+| | input order, not sorted | killed | survives |
+| | no dedupe | killed | survives |
+| Stage | fit only | killed | killed, 36 |
+| | blinded and fit only | killed | killed, 36 |
+| | stage guard removed (applies at blinded too) | survives | survives, **equivalent** |
+| | held-out only | survives | survives, **equivalent** |
+| Present-withheld cells only | codes attached only when the store was read | killed | killed, 36 |
+| Level | cell level keeps the old list | killed | survives |
+| | boundary level keeps the old list | killed | killed, 36 |
+| | variant level keeps the old list | killed | survives |
+
+- **The two equivalent survivors.** `main` loads no archive at the blinded stage and reads no withheld store
+  at fit, so neither edit can change what the program writes. All four stage outputs of both mutants equal the
+  control's in every computed field.
+- **Campaign-only survivors are killed by the unit test alone.** The campaign's three session codes all sort
+  after `bytes.withheld_missing` and hold no duplicate, and the comparer reads the boundary-level list only.
+  The new unit test is therefore the sole guard of sort order around the withheld code, of dedupe, and of the
+  cell-level and variant-level lists.
+
+## Point level (check 7)
+
+The author's note is right, and the new behaviour is the analysis's. `scripts/bytes_analyze.py`
+(`_missing_labels`) gives a point with a missing pass the sorted union of all its passes' flags, session codes
+included. The twin's `mean_of_passes` takes the same union from the per-variant lists that
+`missing_pass_quantities` now fills. I compared the full lists on the `withheld` campaign, outside the suite:
+
+| Held-out rows carrying the withheld flag | Twin of `de07c51dd` | Twin of `c95242509` |
+| --- | --- | --- |
+| Points (24) | 0 equal, 24 different | **24 equal** |
+| H1 rows (9) | 0 equal, 9 different | **9 equal** |
+| Active-or-resident rows (3) | 3 different | 3 different (N2) |
+
+So it is not a new divergence. It closes one that F2 said the comparer could not see. F2 itself stands: the
+comparer still checks membership of the withheld code only at these levels.
+
+## Findings
+
+**N1 (fix before the held-out agreement; does not block the commitment). A missing cell omits the codes
+recorded on its own runs.**
+
+- Where: `scripts/bytes_twin.py`, `analyse`, the same branch. `missing_flags` is `{bytes.withheld_missing}` and
+  the session codes.
+- Analysis: each planned record carries `flags.get(run_id) ∪ window_flags ∪ exclusion codes`
+  (`_record_base`), and the missing cell prints the union over all of them. A run code in
+  `derived/flags.jsonl` or in the acceptance record's `emitted_flags`, or a member exclusion code, on a run
+  whose rows sit in the missing store, is therefore listed.
+- Evidence: one line `{"code": "audit.runprobe", "scope": {"run_id": <a 30B-A3B run of bytes-s2-p2>}}` added
+  to that archive's flags file, analysis and twin rerun at held-out: both exit 0, **12 `flags` fields above the
+  bar** (3 boundaries × 4 variants), analysis with the code, twin without. The file was restored.
+- Reach: only when a withheld store is missing and one of its runs has a code. The failure is loud, not
+  silent: the stage-2 agreement would stop. No number or word depends on it.
+- Repair: in a missing cell, add the run-scoped codes and member exclusion codes of the model's planned runs,
+  read from the archive (the roster maps runs to cells; the twin already reads the other two files itself).
+  This matches what the twin already does in refused cells, where it lists the codes of all rows. Add a run
+  code on a missing run to the `withheld` fixture or to `MissingWithheldFlagTests`, failing first.
+
+**N2 (low, pre-existing, inside F2). The active-or-resident row's flags are still hard-coded.** The twin
+prints `["bytes.withheld_missing"]` (`h1_words`, `"flags": [WITHHELD_MISSING] if moe_missing else []`); the
+analysis prints the sorted union of the missing points' pass flags, session codes included. Three rows differ
+in the `withheld` campaign. The comparer checks membership only, so nothing is above the bar. It is the same
+kind of site as F1 and the cheapest time to fix it is with N1.
+
+**N3 (low). The F5 fixture does not close F5.** `test_session_code_fixture_sorts_around_run_and_withheld_codes`
+exercises `load_archive` only. Four cell-level mutants pass it: reversed order, session codes appended,
+session codes prepended, and dropped runs' codes included. Ordering of session codes against run codes in a
+computed cell is still guarded only by the `bytes` and `defects` campaigns. The missing-cell ordering is
+guarded by the new unit test.
+
+**N4 (note). No test calls the missing branch at the blinded stage with an archive present.** That is why the
+stage-guard mutant survives the unit test. One assertion with `stage="blinded"` would pin the guard without
+relying on `main`.
+
+F2, F3 and F4 of the first review are unchanged by this range.
+
+## Blinding and custody
+
+I opened no BYTES export, predictions file, held-out store, key, custody root, Block 6 or v4 outcome. Inputs
+were code, RL-80 and RL-82 with the two decision-request headings that bound them, and synthetic campaigns
+built in temporary directories on the external SSD. No host-changing command was run.
+`scripts/test_timings.json` was not written. I changed no code; mutants were temporary files in a throwaway
+worktree, removed after each run.
