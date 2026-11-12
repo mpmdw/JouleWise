@@ -400,7 +400,12 @@ class Mini(unittest.TestCase):
         names = out.splitlines()
         self.assertIn("sources/meter/stream-2.jsonl", names)
         self.assertIn("derived/flags.jsonl", names)
-        self.assertEqual(len(names), 5 + 5)
+        # Exactly: 5 SHA256SUMS rows, the 3 emitted files, harvest.json and sources/SHA256SUMS.
+        self.assertNotIn("compression.jsonl", names)
+        self.assertEqual(sorted(names), sorted(["sources/" + n for n in (
+            "meter/stream-1.jsonl", "meter/stream-2.jsonl", "monitor/contention.jsonl", "monitor/clock.jsonl",
+            "runs/r1/data.bin")] + ["derived/b6-acceptance.json", "derived/flags.jsonl", "withheld/spans.json",
+            "harvest.json", "sources/SHA256SUMS"]))
 
     def test_list_names_unknown_session(self):
         # Expected: refused session_unknown.
@@ -429,6 +434,22 @@ class Mini(unittest.TestCase):
         m = mapping_for(["b6-alpha-r1", "b6-beta-r1"])
         m["sessions"]["b6-beta-r1"]["copied_records"]["arm_host"] = ["sources/monitor/not-there.json"]
         self.assertRefused(self.inputs(m), "mapping_path_unlisted")
+
+    def test_mapping_path_hashed_but_not_emitted(self):
+        # Expected: refused mapping_path_unlisted for the inside desk log, which the manifest hashes but
+        # does not emit in `files` and which is not a pinned file (RL-100).
+        self.verified()
+        m = mapping_for(["b6-alpha-r1", "b6-beta-r1"])
+        m["sessions"]["b6-alpha-r1"]["copied_records"]["arm_host"] = ["compression.jsonl"]
+        self.assertRefused(self.inputs(m), "mapping_path_unlisted")
+
+    def test_mapping_may_cite_pinned_files(self):
+        # Expected: exit 0 when copied records cite harvest.json and sources/SHA256SUMS (pinned files).
+        self.verified()
+        m = mapping_for(["b6-alpha-r1", "b6-beta-r1"])
+        m["sessions"]["b6-alpha-r1"]["copied_records"]["attempt_history"] = ["harvest.json", "sources/SHA256SUMS"]
+        rc, _, err = self.inputs(m)
+        self.assertEqual((rc, err), (0, ""))
 
     def test_mapping_path_escapes(self):
         # Expected: refused path_invalid for '..'.

@@ -3,8 +3,8 @@
 Opus 5.5 build seat, on the Air, 12:45-13:05 PST. Branch `analysis/2026-11-12-b6-custody-kit`, worktree
 `/Volumes/JW-EXT/jw-wt/b6-custody-kit`, base `b4e4df8ed` (R12, fetched read-only from
 `/Volumes/JW-EXT/jw-wt/sol-p1-b6-r12c` into `snap/b6-r12-b4e4df8ed`; the short sha was not fetchable by name, so
-the branch was fetched and the full sha `b4e4df8ed7df6bd3b85bcf3bcf2eae7fa07c4e71` pinned). Local commits only, not
-pushed. Synthetic archives only; no real session, custody, `night-*` or archive path was opened, listed or stat'ed.
+the branch was fetched and the full sha `b4e4df8ed7df6bd3b85bcf3bcf2eae7fa07c4e71` pinned). The branch is pushed to
+origin as a backup; it carries the R12 snapshot it is based on (no rebase onto R12 until R12's review, RL-100). Synthetic archives only; no real session, custody, `night-*` or archive path was opened, listed or stat'ed.
 
 ## What was built
 
@@ -42,11 +42,13 @@ manifest. Exit 0 ok, 4 refusal (`refused: <code>` on stderr; for an unexpected e
 
 ## Interpretations a reviewer should check
 
-1. **Mapped paths may be `SHA256SUMS` rows or manifest-digested files.** The brief says "listed in that session's
-   SHA256SUMS". `SHA256SUMS` lists `sources/` only, but both the seat-7 fixture pins and R12's real-shaped pins map
-   copied families to `derived/flags.jsonl`, `derived/b6-acceptance.json` and `withheld/b6-neg8.json`. A strict
-   reading would refuse every real mapping, so the kit accepts a name that is either a `SHA256SUMS` row (as
-   `sources/<row>`) or a file the source manifest digested.
+1. **Citable mapped paths (ruled, RL-100 item 1).** `SHA256SUMS` lists `sources/` only, but both the seat-7
+   fixture pins and R12's real-shaped pins map copied families to `derived/flags.jsonl`,
+   `derived/b6-acceptance.json` and `withheld/b6-neg8.json`. RL-100 rules that a mapped path must be a `SHA256SUMS`
+   row (as `sources/<row>`), a key of the pin's emitted `files` (`derived/`, `withheld/`), or one of the three pinned
+   files (`harvest.json`, `derived/b6-acceptance.json`, `sources/SHA256SUMS`). Any other manifest-hashed file (the
+   inside desk log, a marker file) is refused; `--list-names` prints exactly this set. Witness
+   `test_mapping_path_hashed_but_not_emitted`; mutant RL-100 below.
 2. **The manifest digests every file outside `sources/` and the `.desk` folder.** The brief lists four digests plus
    count and bytes. R12 shows flags and spans may be absent from `harvest.outputs`, and `AuthenticatedInputs` takes
    them through `files`; those digests must come from the source, so the manifest records them. These files are small
@@ -85,11 +87,14 @@ OK
 $ python3.13 -B -m unittest tests.test_b6_custody_kit
 Ran 63 tests in 42.585s
 OK
+$ python3.13 -B -m unittest tests.test_b6_custody_kit     # after RL-100 (two tests added)
+Ran 65 tests in 32.764s
+OK
 $ python3.13 -B -m unittest tests.test_shard_split      # the one timing line
 Ran 36 tests in 2.027s
 OK
 $ python3.13 -B $TMPDIR/mutants/run_mutants.py           # 3 min 07 s
-mutants 49 survived 0
+mutants 50 survived 0                                     # after RL-100
 ```
 
 The end-to-end test runs `production_block` (ten archives, the first with two compressed rows and an inside log),
@@ -104,7 +109,8 @@ stdout, stderr or written file.
 ## Mutant kill table
 
 The runner (in `$TMPDIR/mutants/`, not committed) replaces one `refuse(...)` call with `pass` per mutant and runs the
-`Mini` and `NoContentLeak` classes. No mutant kills, signals or reaps a process. 49 mutants, 49 killed.
+`Mini` and `NoContentLeak` classes. No mutant kills, signals or reaps a process. 50 mutants (49 refusal deletions plus the RL-100 mutant, which
+makes every manifest-hashed file citable again), 50 killed. Line numbers are at the RL-100 head.
 
 | Line | Refusal | Killed by |
 |---|---|---|
@@ -120,7 +126,7 @@ The runner (in `$TMPDIR/mutants/`, not committed) replaces one `refuse(...)` cal
 | 160 | required_file_missing | test_manifest_refuses_missing_pinned_file |
 | 164 | symlink (desk folder) | test_manifest_refuses_symlinked_desk |
 | 169 | compression_log_ambiguous | test_manifest_refuses_two_compression_logs |
-| 185, 267, 367 | out_exists (early) | test_manifest_refuses_existing_out_before_reading; test_verify_out_exists_before_any_read; test_inputs_out_exists_before_mapping_read |
+| 185, 267, 373 | out_exists (early) | test_manifest_refuses_existing_out_before_reading; test_verify_out_exists_before_any_read; test_inputs_out_exists_before_mapping_read |
 | 188, 190 | session_missing, session_repeated (manifest) | test_manifest_refuses_missing_session; test_manifest_refuses_repeated_session |
 | 209, 212 | zstd_unavailable | test_zstd_unavailable; test_zstd_version_fails |
 | 219 | session_missing (copy) | test_session_missing_on_copy |
@@ -132,17 +138,19 @@ The runner (in `$TMPDIR/mutants/`, not committed) replaces one `refuse(...)` cal
 | 257 | desk_file_set_mismatch | test_desk_file_set |
 | 270, 272 | manifest_digest_mismatch, manifest_schema_invalid | test_wrong_manifest_sha256; test_manifest_schema |
 | 292, 294, 296 | receipt_not_verified, receipt_manifest_mismatch ×2 | test_receipt_not_verified; test_receipt_for_other_manifest; test_receipt_session_set_differs |
-| 304 | sums_digest_mismatch (inputs) | test_sha256sums_changed_after_verify |
-| 312 | mapping_path_unlisted | test_mapping_path_not_in_sha256sums |
-| 316, 319, 321 | mapping_key_unknown, meter_streams_empty, contention_journal_missing | the same-named tests |
-| 324, 326 | family_set_invalid, family_empty | test_missing_required_family; test_empty_required_family |
-| 339, 348 | relocations_without_log, relocation_conflict | the same-named tests |
-| 360, 365, 370 | session_unknown, inputs_arguments_missing, mapping_session_mismatch | test_list_names_unknown_session; test_inputs_arguments_missing; test_mapping_session_mismatch |
+| 311 | sums_digest_mismatch (inputs) | test_sha256sums_changed_after_verify |
+| 319 | mapping_path_unlisted | test_mapping_path_not_in_sha256sums |
+| 323, 326, 328 | mapping_key_unknown, meter_streams_empty, contention_journal_missing | the same-named tests |
+| 331, 333 | family_set_invalid, family_empty | test_missing_required_family; test_empty_required_family |
+| 345, 354 | relocations_without_log, relocation_conflict | the same-named tests |
+| 366, 371, 376 | session_unknown, inputs_arguments_missing, mapping_session_mismatch | test_list_names_unknown_session; test_inputs_arguments_missing; test_mapping_session_mismatch |
+| RL-100 | citable names (all manifest-hashed files made citable) | test_mapping_path_hashed_but_not_emitted, test_list_names |
 
 ## Operator runbook (placeholders in angle brackets)
 
 ```
-# SOURCE (MBP desk gap, nothing armed): manifest, then note the printed sha256 OUT OF BAND (mail / RUN_STATE).
+# CUSTODY: the manifest and run-input document hold digests of withheld/ files. They stay in the mode-700 custody directory and are never committed, mailed or pasted into RUN_STATE; only their own SHA-256 values travel.
+# SOURCE (MBP desk gap, nothing armed): manifest, then note the printed sha256 OUT OF BAND (its digest only).
 python3.13 -B scripts/b6_custody_kit.py manifest --session <sessions>/<id>/archive [...x each session] \
   --loop-attempts <loop>/attempts.jsonl --loop-state <loop>/state.json --out <desk>/b6-custody-manifest.json
 # COPY: keep <copy_path> (printed in the manifest) and the sibling .desk folder; never --copy-links.

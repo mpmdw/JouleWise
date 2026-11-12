@@ -297,13 +297,20 @@ def verified_context(args):
     return manifest, receipt, Path(receipt["root"])
 
 
+def emitted_files(entry):
+    """Products outside SHA256SUMS (flags, spans) bound by their SOURCE digests: derived/ and withheld/."""
+    return {n: s for n, s in entry["outside_sources"].items() if n.split("/")[0] in ("derived", "withheld")}
+
+
 def authenticated_names(root, entry):
-    """Names a mapping may cite: SHA256SUMS rows (as sources/...) and manifest-digested files."""
+    """Names a mapping may cite (RL-100): SHA256SUMS rows (as sources/...), the keys of the emitted
+    `files`, and the three pinned files. Other manifest-hashed files (the inside desk log, markers)
+    are not citable."""
     archive = no_symlink_components(root / relative(entry["copy_path"]))
     if hash_file(archive / SUMS)[0] != entry["sha256sums_sha256"]:
         refuse("sums_digest_mismatch")
     listed = {"sources/" + n for n in sums_names((archive / SUMS).read_bytes())}
-    return archive, listed | set(entry["outside_sources"])
+    return archive, listed | set(emitted_files(entry)) | {SUMS, HARVEST, ACCEPTANCE}
 
 
 def session_pin(archive, entry, mapping, names):
@@ -326,8 +333,7 @@ def session_pin(archive, entry, mapping, names):
         refuse("family_empty")
     pin = {"harvest_sha256": entry["harvest_sha256"], "acceptance_sha256": entry["acceptance_sha256"],
            "sha256sums_sha256": entry["sha256sums_sha256"],
-           # Products outside SHA256SUMS (flags, spans) are bound by their SOURCE digests.
-           "files": {n: s for n, s in entry["outside_sources"].items() if n.split("/")[0] in ("derived", "withheld")},
+           "files": emitted_files(entry),
            "meter_streams": [cited(s) for s in streams],
            "contention_journal": cited(mapping["contention_journal"]),
            "copied_records": {f: [cited(p) for p in records[f]] for f in FAMILIES}}
