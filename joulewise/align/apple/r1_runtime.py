@@ -381,7 +381,12 @@ def _inventory_process(path, stop, ready, reader_factory):
                 break
             journal.sample()
             # A slow sweep does not synthesize missed cells or catch up in a burst.
-            due = max(due, time.monotonic() - 0.01)
+            # The grid stays at 1.000 s (a sweep shorter than a tick costs no
+            # time); a sweep that overran whole ticks skips them, as the
+            # thermal sidecar's loop does (RUN_STATE 280).
+            now = time.monotonic()
+            if now - due >= 1.0:
+                due += (now - due) // 1.0
     except BaseException as error:
         try:
             ready.send((False, f"{type(error).__name__}: {error}"))

@@ -74,6 +74,15 @@ runtime still writes its own terminal record and tears down. Budgets, part caps
 and the launch minimum are unchanged. It exists only under `--smoke-part` on
 step-d; the night path arms neither it nor its signal handler.
 
+**Inventory period (RUN_STATE 280; night and smoke).** The full-inventory
+journal's process (`r1_runtime._inventory_process`, RL-74/RL-76) ticks on a
+fixed 1.000 s grid. Until RUN_STATE 280 it re-based the grid to 10 ms before
+the end of every sweep, so the period was 0.99 s + the sweep (about 1.12 s at
+smoke 280's 0.128 s median sweep) and every phase fell to 88-93% of one-second
+cells against the RL-74 bar of 99%. Now a sweep shorter than a tick costs no
+time, and a sweep that overruns whole ticks skips them (the thermal sidecar's
+rule): missed cells stay missed and are never caught up in a burst.
+
 ## Arguments
 
 - `--output DIR` is always the canonical segment directory, `<R1 output>/<segment name>`. When the driver rejects an attempt (ruling 8 load, or soak slope), it renames that directory to `<segment name>.rejectedN` (the next free N from 1) before the next attempt starts. A step-d or designed start state whose G0 timed out is moved to `<segment name>.g0_timeout1` before its one retry (LEAD-RULINGS-2 R6-2). The accepted attempt therefore always ran in, and owns, the canonical directory. The runtime must write only inside `DIR` and use paths relative to it.
