@@ -1081,7 +1081,11 @@ next_observable: the Part A smoke 2 item (from item 289's template, on 99622e96c
 - **Sol seat p1-b6-r12c:** its 60 local commits are pushed to `backup/2026-11-12-sol-p1-b6-r12c-unaudited`. The events audit is clean; the diff is not reviewed. It is NOT resumed. Do not touch it.
 - **Timestamp note:** item 290 is stamped 11:20 PST but was on origin at about 11:08. Take every RUN_STATE time from `date`.
 - **Follow-ups (lead, post-night):**
-  - `test_bytes_analysis` takes 2+ h in CI (analysis runtime is a bug);
+  - `test_bytes_analysis` takes 2+ h in CI (analysis runtime is a bug). Measured from baseline CI log 43226060105: one test, `CampaignWordRates.test_twenty_production_shaped_campaigns_per_world`, takes about 4,600 s. It runs a full `archive_campaign` + `cli_stage_chain` for 20 seeds in each world, serially, in one method. Two fixes keep the results identical:
+    - split it into one method per world and declare them under `split_modules` in `scripts/test_timings.json`, so they land in different shards;
+    - or run the seeds in a process pool and aggregate the same Counters.
+
+    Do NOT reduce the seeds: that is BYTES evidence.
   - add a `shard_tests.py` guard that fails a module which leaves signal dispositions changed;
   - the OSError path in `align_r1_rehearsal.run()` leaves the handlers ignored (no night effect, since the process exits).
 
