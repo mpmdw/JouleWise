@@ -412,6 +412,24 @@ class PreRebindStopFlags(unittest.TestCase):
         row = b6.block_lines(R["sessions"], b6.block5_quantities(b5))["replication"]["decode"]
         self.assertIsNone(row["word"])
         self.assertTrue(row["reason"].startswith("binding_defect"))
+    def test_plan_refusal_flag_carries_session_pack(self):
+        """Predict: a copied plan whose bracket ID does not match refuses binding; its flag is filed under the
+        bracket session ID and the session's pack (GAMMA), not an empty pack."""
+        tmp = Path(tempfile.mkdtemp(prefix="b6-planrefuse-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        bracket = session_id("GAMMA", 1)
+        archive, _ = build_session(tmp, "GAMMA", 1, 0)
+        plan = archive / "sources/night-custody/night_plan.json"
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        plan.write_text(json.dumps({"plan_id": "outer-gamma-1",
+                                    "hazard_window": {"bindings": {"bracket_session_id": "other-bracket"}}}))
+        flags = []
+        s = b6.Session(archive, flags, [])
+        self.assertEqual(s.session_id, bracket)
+        refusal = [f for f in flags if f["code"] == "acceptance_session_mismatch"
+                   and isinstance(f["detail"], dict) and "plan_id" in f["detail"]]
+        self.assertEqual([(f["session"], f["pack"]) for f in refusal], [(bracket, "GAMMA")])
+
 
 
 if __name__ == "__main__":

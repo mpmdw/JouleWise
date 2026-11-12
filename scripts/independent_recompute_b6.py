@@ -240,9 +240,9 @@ class Session:
         self.bracket_session_id = (self.acceptance.get("session_id") or self.harvest.get("session_id")
                                    or self.archive.name)
         self.session_id = r.session = self.bracket_session_id
-        self.plan_refused = not self.bind_plan()
         self.pack = pack_of(self.acceptance.get("pack_id")) or pack_of(self.roster.get("pack_id"))
         r.pack = self.pack or ""
+        self.plan_refused = not self.bind_plan()
         if not self.acceptance:
             r.flag("acceptance_record_missing", "session", "no readable acceptance record")
         elif self.acceptance.get("schema") != ACCEPTANCE_SCHEMA:
