@@ -1042,6 +1042,94 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+279. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 00:55 PST: MAGISTRATE: RE-RUN the agent-free R1 follow-up native smoke (Parts A then B) on `8f5a1a0f9`. It fixes item 278's Part B timer conflict: the smoke watchdogs no longer use `ITIMER_REAL`. Caps (A 3,120 s, B 5,720 s) and `DEADLINE = now + 11400` are unchanged from item 277. Use the launcher's `r1-smoke` handoff exactly as below. No prepare, no arm. The launch is your LAST action, and you exit at once. The smoke runs with no agent alive.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-12T05:30:00-08:00
+on_early_or_refused: any refusal or failure (preflight, launch, rc≠0, part missing) goes back to the lead. Do not retry a part, do not extend one, and do not reuse OUT
+next_observable: the magistrate's next activation runs the receipt check below and reports the receipt (rc, parts, steps, restore action, OUT) by email and as RUN_STATE 280
+```
+
+- **Why a re-run (item 278).** Part A PASSED, and step D's G0 released for the first time (747 s). In Part B, G0 released again (883 s), then the re-armed turn failed before any model call with `ALIGN deadman cannot replace an active timer`.
+  - Cause: Part B's post-G0 2,600 s smoke watchdog held the process's one `ITIMER_REAL`, and `EpisodeDeadman.guard` refuses nested arming by design (WP8). The pre-G0 admission watchdog had the same latent conflict.
+  - Fix `4365d9d6f`: a monotonic `SmokeWatchdog` thread that sends `SIGUSR1` to the main thread drives both smoke watchdogs, and raises the same `smoke part wall cap reached` failure. The episode deadman is the only `ITIMER_REAL` owner, and `budget.py` is untouched. Every change is smoke-only; the night driver never passes `--smoke-part`.
+  - Item 277's output (`.../r1-followup-smoke-20261112T061727Z`) is evidence for the research lead (Part A's G0 release) but is not this smoke's result. Never reuse that OUT.
+- **Smoke commit:** `8f5a1a0f9`, which is `9c5ba057e` (item 277's commit) plus fix `4365d9d6f` and its review doc `8f5a1a0f9` (`joulewise/align/apple/r1_runtime.py`, a condition-13 path, smoke-only lines; the contract doc; tests).
+  - Fable cold executing delta review: ADMIT-WITH-FIXES: the executed bytes are admitted, and the fixes are test-only and land after the smoke (`docs/run_reports/2026-11-12-r1-smoke-278-watchdog-review.md`).
+  - Author's tests: `test_r1_smoke_launcher` 45 OK; `SmokeTimerOwnerTests` use the real `EpisodeDeadman.guard`; `test_r1_followup`, `round7_science`, `round3`, `v4_registration`, both closures, the allowlist and the decode-budget tests are OK; `test_r1_runtime`'s 9 known stale failures are unchanged.
+  - **If Part A or B fails on a G0 timeout,** read `g0.outcome` in that part's `smoke_part_a.json` and report it: a timeout is a G0 finding for the research lead, NOT a reason to resize.
+- **Worktree:** `/Users/edr/code/jw-wt/r1-followup-smoke` exists from item 273; the start block checks it out detached at `8f5a1a0f9`. Use a FRESH `OUT` (the start block's timestamped name gives one); never reuse items 273's, 275's or 277's. Leave the stale `/Users/Shared/JouleWise/host-power/night.lock` (dead R1 driver pid 52565) as found, as item 274 did.
+- **Soak reference:** `/Users/edr/night-align/r1-20261111T043229Z/night/align-r1/soak_reference.json`.
+- **Deadline:** `DEADLINE = now + 11400`, computed at launch. Worst case is about 9,840 s; Part caps are A 3,120 s and B 5,720 s; the launch minimum is 9,510 s. If launch refuses with `r1-smoke deadline cannot fit…`, recompute it, and never lower it.
+- **High Power marker:** if `/Users/Shared/JouleWise/host-power/high-power.marker` exists, STOP and report. Nothing should be armed.
+
+**Start and check (while you are still alive):**
+
+```sh
+git -C /Users/edr/code/JouleWise fetch origin
+# the old worktree was removed after item 272; create it fresh, detached at the smoke commit
+test -d /Users/edr/code/jw-wt/r1-followup-smoke || git -C /Users/edr/code/JouleWise worktree add --detach /Users/edr/code/jw-wt/r1-followup-smoke 8f5a1a0f9
+cd /Users/edr/code/jw-wt/r1-followup-smoke
+git checkout --detach 8f5a1a0f9
+test "$(git rev-parse HEAD)" = 8f5a1a0f9be4a65ae735bd6a501e793b526fc902
+REPO="$PWD"
+: "${PY:?Set PY to the existing pinned measurement-venv interpreter (do not resolve the symlink)}"
+: "${MAGISTRATE_PID:?Set to the PID of this magistrate's own claude process}"
+ps -o pid=,comm= -p "$MAGISTRATE_PID"     # must show the claude process, not a tool shell
+CUSTODY="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-/Users/edr/night-custody/magistrate}"
+SOAK=/Users/edr/night-align/r1-20261111T043229Z/night/align-r1/soak_reference.json
+OUT="$REPO/.desk/r1-followup-smoke-$("$PY" -B -c 'import time; print(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))')"
+git status --short --branch
+test -z "$(git status --porcelain)"
+git merge-base --is-ancestor 9b4817f36 HEAD
+git merge-base --is-ancestor 4c27eba47 HEAD      # round-2 fixes (H-1, M-1, M-2) present
+"$PY" -B -c 'from pathlib import Path; import subprocess; from joulewise.align.apple import v4_registration as r; root=Path.cwd(); head=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); print(r.verify_r1_executed_sources(root,{"executed_commit":head}))'
+"$PY" -B -c 'from scripts import launch_align_r0 as l; c=l.r1_part_caps(); print(c, l.r1_minimum_seconds()); assert c=={"A":3120,"B":5720}'
+"$PY" -B -m unittest tests.align.test_r1_smoke_launcher.LauncherTests.test_r1_smoke_plist_runs_interactive_like_the_night_templates   # must be OK: the r1-smoke plist renders ProcessType=Interactive
+test ! -e /Users/Shared/JouleWise/host-power/high-power.marker   # no armed W1 High Power (precaution; M-1 fixed)
+"$PY" -B scripts/launch_align_r0.py preflight --disk-path "$REPO"
+DEADLINE="$("$PY" -B -c 'import time; print(time.time()+11400)')"
+```
+
+**Run (your last action):**
+
+```sh
+"$PY" -B scripts/launch_align_r0.py launch \
+  --runner-kind r1-smoke --repo "$REPO" --python-bin "$PY" \
+  --output "$OUT" --soak-reference "$SOAK" --disk-path "$REPO" \
+  --custody-root "$CUSTODY" --magistrate-pid "$MAGISTRATE_PID" \
+  --deadline "$DEADLINE" --exit-wait-seconds 180 --start-wait-seconds 30
+echo "$OUT"   # record for the next activation
+```
+
+Require exit 0 and `"next": "exit the magistrate session now"` with a claimed fence (fence `pid` ≠ `MAGISTRATE_PID`). Then exit the session at once, making sure no other `claude`/`codex` process is running.
+
+**Check (next activation, after the fence is gone):**
+
+```sh
+"$PY" -B - "$OUT" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+r = json.loads((root / "runner_receipt.json").read_text())
+print(json.dumps({k: r[k] for k in ("rc", "parts", "error") if k in r}, sort_keys=True))
+print([(s["name"], s["rc"]) for s in r["steps"]])
+print({s["name"]: s.get("result", {}).get("action") for s in r["steps"] if s["name"] == "restore"})
+assert r["rc"] == 0 and r["parts"] == {"A": True, "B": True}
+assert [s["name"] for s in r["steps"]].count("close-volumes") == 1
+for feed in r["feeds"].values():
+    assert feed["stop"]["proven_stopped"]
+    for f in feed["files"]:
+        with (root / f["path"]).open("rb") as h:
+            assert hashlib.file_digest(h, "sha256").hexdigest() == f["sha256"]
+PY
+test ! -e "$CUSTODY/desk_fence.json"; launchctl list | grep -c 'com.joulewise.align-r0' || true   # expect 0
+```
+
+Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, which must print `Interactive`. Read `stdout.log`/`stderr.log` under `$CUSTODY/r0-launches/<token>/`. If Part A fails again on a powermetrics timeout, report the frame count and duration of the part's `raw/powermetrics_idle.plist`, and do not retry. A `restore` action of `foreign_marker_left` means a W1 marker appeared: report it. The smoke's Part B sensor table goes to the lead for the research lead's sensor ruling, and it gates the follow-up night arm.
+
 278. **Magistrate e3a82cc1 (headless, Opus 5.5), 2026-11-11 23:45 PST: the item-277 R1 follow-up smoke re-run PASSED Part A (G0 released, 747 s) and FAILED Part B (receipt rc 1) on a smoke-only timer conflict: Part B's post-G0 watchdog holds the process's one `ITIMER_REAL`, so the re-armed turn's episode deadman refused on its first call. Per item 277 this goes back to the lead: no retry, no extension, OUT not reused. Nothing armed. MAGISTRATE: nothing to run until the lead's next item.**
 
 ```pointer
