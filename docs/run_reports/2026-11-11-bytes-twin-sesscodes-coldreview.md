@@ -311,3 +311,185 @@ were code, RL-80 and RL-82 with the two decision-request headings that bound the
 built in temporary directories on the external SSD. No host-changing command was run.
 `scripts/test_timings.json` was not written. I changed no code; mutants were temporary files in a throwaway
 worktree, removed after each run.
+
+---
+
+# Second delta review (1e288b355)
+
+2026-11-12, 00:16 PST. Reviewer: Claude Fable 5.2, the same cold seat, independent of the build seat (Sonnet).
+Target: `76a490b8a..1e288b355` on `fix/2026-11-11-bytes-twin-sesscodes`, two commits (`feb901c65`,
+`1e288b355`): `scripts/bytes_twin.py` (48 lines: `read_manifest`, `load_archive`, `h1_words`, the missing
+branch and the H1 loop of `analyse`, the output manifest) and `tests/test_bytes_twin.py` (137 lines).
+
+## Verdict: ADMIT-WITH-FIXES at `1e288b355`
+
+**N1 is fixed, exactly.** A missing-withheld cell now lists `sorted({bytes.withheld_missing} ∪ session codes ∪
+run codes ∪ member exclusion codes)` over every planned run of the cell. With one run code planted on one
+missing run of the `withheld` campaign, the comparer shows **0 above the bar** (12 with the twin of
+`76a490b8a`). With seven kinds of code planted, the twin's list equals the analysis's at every level.
+
+**N3 and N4 are closed.** **N2 is fixed for withheld-missing points and is not exact for refused points
+(M1 below).** That is also the answer to the author's open question: the premise is wrong on the analysis
+side. In the analysis every non-computed pass row carries the codes of all its planned runs and of its
+session, whether it is `missing` or `unavailable`. In the twin a refused pass carries none where the row
+reads them.
+
+**Readiness.**
+
+- **(a) The fit-set rerun: ready.** The twin's blinded and fit outputs are byte-identical to those of
+  `76a490b8a` under replay. Nothing in this range can act at the fit stage.
+- **(b) The held-out agreement: this range no longer stands in its way.** N1 was the stated blocker and it
+  is closed. M1 cannot stop the agreement, because the comparer does not read the full list at that row.
+  One thing outside this range can stop it, loudly, and is the lead's to decide before stage 2: **P1**
+  below. A held-out model with no computed pass and at least one refused pass is above the bar today, in
+  the twin of `76a490b8a` and in this one alike.
+
+## Check by check
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | N1 matches the analysis exactly | **Pass.** Runs: the analysis builds one record per roster member with a unit in the model's cells (`archive_records`) and the missing row prints the union over all of them (`reduce_models`); the twin unions `cell_run_codes` over the manifest's `cell_ids` of the model, built from every roster member of that session's archive. Sources: run-scoped rows of `derived/flags.jsonl` and of the acceptance record's `emitted_flags`, and `excluding` entries with `scope == "member"`, on both sides. Set, dedupe and sort: the same. Stage: stages 1 and 2 only; the bare `["bytes.withheld_missing"]` at the blinded stage and without an archive. Levels: the cell, its three boundaries and every variant carry one list. Other models' codes: excluded. Evidence below. |
+| 2 | N2 matches `evaluate` exactly | **Partly.** The `[]` case matches: the analysis writes a `flags` field only when fewer than three MoE points computed, and the twin prints `[]` exactly when three did. The union is taken over all non-computed points, as in `evaluate`. But the twin's refused pass has no flags to contribute, and the analysis's has. See M1. |
+| 3 | Nothing else moved | **Pass.** Replay on a freshly built `withheld` campaign, twin of `76a490b8a` against the head twin: blinded and fit outputs **byte-identical** (sha256 `4777aecf…`, `8e2f6800…`). Post-commit blinded: equal but for the three verification stamps (time and journal). Held-out: the only other differences are the nine `active_or_resident/flags` fields (three boundaries, three pass keys). The output `manifest` is unchanged. `joulewise/` and `scripts/test_timings.json` are untouched by the range. Estimator sha256 `18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71`. `FenceTests` (3) pass. |
+| 4 | Fail-first | **Pass.** Head tests on the twin of `76a490b8a`: 5 of the new tests fail or error. Head tests on the twin of `feb901c65`: the three tests that `1e288b355` adds or widens fail (`test_active_or_resident_row_carries_the_missing_points_flags`, `test_refused_point_without_withheld_flag_contributes`, `test_output_manifest_keeps_no_cell_ids`). `test_blinded_stage_missing_branch_ignores_archive` passes at every commit, as it should: it pins a guard that already existed. |
+| 5 | Mutants | **All seven requested kinds are killed.** Two of my own survive. Table below. |
+| 6 | Planted run code | **0 above the bar** at head; 12 with the twin of `76a490b8a`, as before. The archive files were restored byte for byte after each run. |
+| 7 | Tests | **All pass.** Table below. |
+
+**Evidence for check 1.** On the `withheld` campaign I added to the archive of `bytes-s2-p2` (30B-A3B's store
+missing; 8B is the session's other model): a run code on two missing runs and another on a third in the
+flags file; a run code in `emitted_flags`; a member exclusion; an exclusion with `scope: "session"`; and a
+file code, an emitted code and a member exclusion on 8B runs. Analysis and twin rerun at held-out, both exit
+0. The analysis printed one list for the cell, the twin one list at all levels, and they are equal: the
+four codes of the missing runs listed once each and sorted among the withheld code and the three session
+codes; none of the 8B codes; not the session-scope exclusion.
+
+## Tests
+
+Python 3.13, `-B`, `nice -n 10`, one module at a time, `JW_B5_SYNTHETIC_ONLY=1`, temp root on the external
+SSD, 29 to 32 GB free on `/` before each. Synthetic campaigns only. The full agreement suite was not run:
+no targeted result pointed to a wider problem in this range.
+
+| Run at `1e288b355` | Result |
+| --- | --- |
+| `tests.test_bytes_twin` | 121 tests, OK, 434 s |
+| `tests.test_bytes_stage1` | 23 tests, OK, 125 s |
+| `AgreementTests.test_withheld_campaign_missing_files_and_uncollected_pass` | OK. `withheld`: 219,549 compared, **0 above the bar** |
+| `AgreementTests.test_session_codes_at_archive_stages` (`anchor_narrow`) | OK, 0 above the bar; the run-only twin still fails with 72 |
+| `AgreementTests.test_defects_campaign` | OK. `defects`: 269,281 compared, 0 above the bar |
+| `FenceTests` | 3 tests, OK |
+
+The three agreement tests took 550 s together.
+
+## Mutants
+
+One-site edits of the head twin (sha256 `4820dc2e…03de`). "Unit" is four classes of the committed
+`tests.test_bytes_twin` bound to the mutant (`MissingWithheldFlagTests`, `SessionFlagTests`, `H1Tests`,
+`ActiveOrResidentFlagsEndToEndTests`). "Campaign" is the mutant's held-out output against the analysis's on
+the `withheld` campaign with the seven planted codes of check 1; the unmutated control was equal.
+
+| Kind | Mutant | Unit | Campaign |
+| --- | --- | --- | --- |
+| **Drop run codes** (requested) | no run-scoped flags read | killed | killed |
+| | flags file only | killed | not run |
+| | `emitted_flags` only | killed | not run |
+| | no cell run codes in the missing branch | killed | not run |
+| **Drop exclusion codes** (requested) | no `excluding` read | killed | killed |
+| **Other models' runs** (requested) | union over every cell of the archive | killed | killed |
+| **Drop the member filter** (requested) | any `excluding` entry with a run | killed | killed |
+| **N2, withheld-missing points only** (requested) | `status == "missing"` | killed | not visible |
+| **N2 non-empty with three MoE points** (requested) | the union always | killed | not visible |
+| **`cell_ids` in the output** (requested) | manifest printed whole | killed | not run |
+| Stage | run codes also at the blinded stage | killed | not run |
+| N2 order | reverse sorted | killed | not run |
+| N2 scope | MoE points only | killed | not run |
+| | no row flags unless an MoE model is withheld-missing | killed | not run |
+| | every boundary reads the rails point | **survives** | not visible |
+| Roster | a member's first unit only | **survives** | survives |
+
+- **"Not visible"**: no committed campaign, and neither of mine, has a row where these N2 mutants change the
+  output. The unit tests are their only guard.
+- **Rails-point survivor.** Not equivalent: a point whose only computed pass has no DC join is a point on
+  rails and none on DC input. No test has such a point beside a withheld-missing pass. Low.
+- **First-unit survivor.** Equivalent on any roster the analysis accepts for one cell per run; it differs
+  only if a run has units in two cells. Low.
+
+## The author's open question, and what it turned up
+
+**Question.** Does every twin refusal correspond to an analysis `unavailable` row, as far as flags go?
+
+**Answer: the statuses correspond, the flags do not.**
+
+- Analysis. `reduce_models` has three exits without a number: `missing`, `unavailable` because `_kept`
+  refused, and `unavailable` because the NEG-8 references are absent. All three print
+  `sorted({f for r in module for f in r["flags"]})`: session codes, run codes, exclusion codes and meter
+  flags of every planned run. There is no refused row without them. `evaluate` then unions those lists over
+  every non-computed point into the active-or-resident row and into each `missing` H1 row.
+- Twin. A refused estimate does collect the same list (`compute_cell`, `est["flags"]` over all rows), and it
+  equals the analysis's at the cell. But `quantities` copies only `status` and `reason` for a refused
+  variant, so the pass, the point and now the row see no flags from it.
+
+**Probe.** A synthetic campaign of my own: `withheld` plus six pass-1 repeats excluded in 32B (its only
+collected pass, so a purely refused point) and in 30B-A3B (pass 1 refused, pass 2 withheld-missing, so a
+mixed point). Both programs exit 0 at every stage.
+
+| Held-out, gross primary | Analysis | Twin (head) |
+| --- | --- | --- |
+| Refused cells' flags (32B pass 1, 30B-A3B pass 1) | session codes + `member.strict_validation_failed` | the same list |
+| Active-or-resident row flags (3 rows) | withheld code + session codes + `member.strict_validation_failed` | withheld code + session codes |
+| 30B-A3B point | `missing` | `refused_no_pass_computed` |
+| 30B-A3B H1 row | `missing`, flags listed | `refused`, no status, no flags |
+| 32B H1 row | `missing` ("all passes refused"), flags listed | `refused`, no status, no flags |
+| Active-or-resident `missing_models` | 30B-A3B and 122B | 122B |
+
+The comparer reports **32 fields above the bar** on this campaign (24 `status`, 4 `missing_models`, 4
+withheld-flag membership). The twin of `76a490b8a` gives the same 32: the range did not cause them and did
+not cure them.
+
+## Findings
+
+**M1 (low; fix or restate before N2 is called closed). The active-or-resident row omits a refused pass's
+codes.**
+
+- Where: `scripts/bytes_twin.py`, `analyse`, the `missing_flags` union, which reads `q.get("flags")` from pass
+  quantities; `quantities` gives a refused variant none.
+- Effect: when fewer than three MoE points computed and some point has a refused pass and no computed one,
+  the analysis's row lists that pass's session, run, exclusion and meter codes and the twin's does not. On
+  real sessions, which carry session codes, the lists would differ whenever that happens.
+- Reach: the comparer checks only membership of the withheld code at this row (F2), so nothing is above the
+  bar. No number or word depends on it.
+- The comment ("refused as well as withheld-missing") and the commit message claim more than the code does.
+  `test_refused_point_without_withheld_flag_contributes` plants `audit.refusal` on the refused cell and
+  asserts a row without it. That pins the twin's behaviour, not the analysis's.
+- Repair: either let a refused pass quantity carry its cell's list, which changes point-level lists too and
+  should be worked through with P1; or keep the code and say in the comment and the test that refused passes
+  contribute nothing, as a known difference inside F2.
+
+**P1 (pre-existing, outside this range; for the lead and the research lead before stage 2). A held-out point
+with no computed pass and a refused pass is above the bar.**
+
+- Purely refused held-out point: the analysis's H1 row says `missing`; the twin prints `refused` and no
+  status. 4 fields on the probe.
+- Mixed point (one pass withheld-missing, the other refused): the analysis relabels the point `missing`
+  (`scripts/bytes_analyze.py`, `_missing_labels`); the twin says `refused_no_pass_computed`
+  (`mean_of_passes`: `missing` only when every pass is). 28 fields on the probe.
+- By reading only, not run: a refused MoE point with no withheld-missing MoE model would give the answer
+  `missing` in the analysis and `mixed` in the twin.
+- No committed campaign has such a point: `minimum` refuses one pass of two, `withheld` refuses none.
+- It is loud, not silent: stage 2 would stop. Which side follows the registration is a question of text
+  (the B6 Q1 ruling and Addendum 7 D9, which were not on my read list), so I do not say. It is cheaper to
+  rule it now, blind, than after held-out keys are out. The new end-to-end test's comment ("refused, not
+  missing") takes the twin's side of that question without a ruling.
+
+**N1, N3, N4: closed.** N3's ordering assertion now runs through `analyse`. N4's blinded-stage assertion kills
+the stage-guard mutant.
+
+F2, F3 and F4 of the first review are unchanged by this range.
+
+## Blinding and custody
+
+I opened no BYTES export, predictions file, held-out store, key, custody root, Block 6 or v4 outcome. Inputs
+were code, RL-80 and RL-82, and synthetic campaigns built in temporary directories on the external SSD. No
+host-changing command was run. `scripts/test_timings.json` was not written. I changed no code; mutants and
+planted codes were temporary files in throwaway worktrees and scratch campaigns, restored or removed after
+each run.
