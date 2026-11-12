@@ -962,6 +962,47 @@ class SchedulerBoundaryTests(unittest.TestCase):
             self.assertFalse((outer / "control-probe").exists())
 
 
+class CourierProfileTests(unittest.TestCase):
+    def test_original_courier_preserves_stdin_argv_and_injected_clock(self):
+        """Predict: exact f31 courier exits 0, writes file-transport bytes/argv and synthetic time; undeclared host argv still returns 126. Before the new executable input this fails with rc 126/no courier records (RL-49 rules 1, 4, 6)."""
+        from b6_r12_courier_profile import prepare_profile, export_prompt, COURIER, PROMPT
+        with tempfile.TemporaryDirectory(prefix="r12-courier-source-") as directory:
+            root = prepare_profile(prepare(Path(directory).resolve() / "fixture"))
+            export_chain_inputs(root)
+            export_prompt(root)
+            prepare_interpreters(root)
+            code = '''import json, subprocess, sys, time
+from pathlib import Path
+root = Path(sys.argv[1])
+custody = root / "courier-unit" / "custody"
+prompt = "Custody root: " + str(custody) + "; plan: synthetic."
+before = time.time_ns()
+p = subprocess.run([str(root / "pin/scripts/b6_courier.sh"), "-p", prompt],
+    input=b"R12 exact stdin\\x00\\xff\\n", capture_output=True)
+assert p.returncode == 0, (p.returncode, p.stderr)
+records = list((custody.parent / "courier-program").glob("*.json"))
+assert len(records) == 1, records
+record = json.loads(records[0].read_bytes())
+assert record["argv"] == ["-p", prompt], record
+assert record["transport"] == "file" and record["mail_sent"] is False
+assert (records[0].parent / record["stdin"]).read_bytes() == b"R12 exact stdin\\x00\\xff\\n"
+stamp = int(records[0].stem)
+assert before <= stamp <= time.time_ns(), (before, stamp, time.time_ns())
+assert (custody / "night/courier.sent").is_file()
+denied = subprocess.run(["/usr/bin/r12-undeclared-host-action"], capture_output=True)
+assert denied.returncode == 126, denied.returncode
+print("original_courier")
+'''
+            result = subprocess.run(command(root, "code", code, str(root)), capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "original_courier")
+            manifest = json.loads((root / "manifest.json").read_bytes())
+            self.assertEqual(hashlib.sha256((root / "pin" / COURIER).read_bytes()).hexdigest(),
+                             manifest["source_sha256"][COURIER])
+            self.assertEqual(hashlib.sha256((root / "pin" / PROMPT).read_bytes()).hexdigest(),
+                             manifest["pinned_input_sha256"][PROMPT])
+
+
 class SinglePackVerifierTests(unittest.TestCase):
     """Control-only verifier tests; no session collection or archive evidence."""
 
@@ -1156,6 +1197,59 @@ class ReducedSetTests(unittest.TestCase):
         self.assertTrue(receipt["serial_pool_byte_identical"])
         self.assertEqual(receipt["shape_assertion_exit"], 0)
         self.assertIs(receipt["full_volume_claim"], False)
+
+
+@unittest.skipUnless(os.environ.get("R12_FULL_SESSION"), "explicit completed full-volume profile fixture required")
+class FullProductionSessionTests(unittest.TestCase):
+    """Declared before the first courier-profile production-size collection."""
+
+    def facts(self):
+        from b6_r12_verify import safe_root
+        root = safe_root(Path(os.environ["R12_FULL_SESSION"]))
+        return json.loads((root / "full-session-observations.json").read_bytes())
+
+    def test_registered_production_volume(self):
+        """Predict full-BETA-courier: 125 original roster members and executed primary streams, each >=334 s at 10 Hz with 16 CPU records/frame; 50 Hz meter with no drops/gaps/duplicates and registered monitor cadences/errors 0; original courier records file transport (RL-48 item 5; RL-98 term 1)."""
+        value = self.facts()
+        self.assertEqual(value["roster_members"], 125)
+        volume = value["volume"]
+        self.assertEqual(len(volume["primary_plists"]), 125)
+        for primary in volume["primary_plists"]:
+            self.assertGreaterEqual(primary["duration_s"], 334, primary["path"])
+            self.assertEqual(primary["cadence_ns"], [100_000_000])
+            self.assertEqual(primary["elapsed_fields"], primary["frames"])
+            self.assertEqual(primary["cpu_fields"], 16 * primary["frames"])
+        self.assertTrue(volume["meter"])
+        for meter in volume["meter"]:
+            self.assertEqual((meter["sps"], meter["step_ms"]), (50, 20))
+            self.assertEqual(meter["duplicates"], 0)
+            self.assertEqual(meter["drops"]["dropped"], 0)
+            self.assertEqual(meter["drops"]["irregular_gaps"], 0)
+        self.assertTrue(volume["monitor"])
+        for journal in volume["monitor"].values():
+            self.assertEqual(journal["errors"], 0)
+        from b6_r12_verify import FULL_VOLUME_MONITOR_SERIES
+        base = "sources/night-custody/hazards/monitor/"
+        for filename, kind, cadence_key in FULL_VOLUME_MONITOR_SERIES:
+            series = volume["monitor"][base + filename]["kinds"][kind]
+            cadence = volume["registered_monitor_cadence"][cadence_key]
+            self.assertEqual(series["cadence_ns"], [round(cadence * 1e9)])
+        self.assertTrue(value["courier_records"])
+        for courier in value["courier_records"]:
+            self.assertEqual(courier["transport"], "file")
+            self.assertIs(courier["mail_sent"], False)
+
+    def test_production_reader_at_full_size(self):
+        """Predict full-BETA-reader: actual option (c) exits 0/comparator agrees on the full original desk archive and emits every published production BETA quantity key; record native session/primary/meter ratios, reader wall and RSS separately (RL-98 terms 1 and 2)."""
+        value = self.facts()
+        self.assertEqual(value["production_exit"], 0)
+        self.assertTrue(value["comparator_agrees"])
+        registry = json.loads((REPO / "configs/b6/recompute/production_comparison_keys.json").read_bytes())
+        self.assertEqual(value["quantity_keys"], registry["session_quantity_keys"]["BETA"])
+        native = value["volume"]["native_generation"]
+        self.assertGreater(native["wall_s"], 0)
+        self.assertTrue(native["includes_validation_and_compression"])
+        self.assertFalse(native["injected_clock"])
 
 
 @unittest.skipUnless(os.environ.get("R12_SINGLE_PACK_SET"), "explicit additional single-pack fixture required")

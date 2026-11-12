@@ -17,7 +17,7 @@ from b6_r12_segments import snapshot, validate_resume
 from b6_r12_verify import REPO, child, safe_root, sha
 
 
-def run(root, prior=None, pack=None, scenario=None):
+def run(root, prior=None, pack=None, scenario=None, *, declared_volume="reduced"):
     root = safe_root(root)
     fresh = prior is not None
     if fresh:
@@ -31,7 +31,7 @@ def run(root, prior=None, pack=None, scenario=None):
             control = {"schema": "r12.single-pack.v1", "synthetic_only": True, "pin": inputs.PIN,
                 "runner_sha256": sha(Path(__file__)), "implementation_sha256": sha(Path(inputs.__file__)),
                 "main": str(root / ("single-" + "long-path-" * 18)), "pack": pack,
-                "scenario": scenario, "steps": [], "full_volume_claim": False, "closed_nine_claim": False,
+                "scenario": scenario, "steps": [], "full_volume_claim": declared_volume == "full", "closed_nine_claim": False,
                 "prediction": "option (c) 0/agrees; anchor/mixed/compressed shape assertions for anchor BETA; no roster or threshold changes"}
         else:
             control = json.loads(path.read_bytes())
@@ -68,7 +68,7 @@ def run(root, prior=None, pack=None, scenario=None):
             manifest["single_pack"] = {"pack": pack, "scenario": scenario, "source_policy": policy,
                 "runner_sha256": sha(Path(__file__)), "implementation_sha256": control["implementation_sha256"],
                 "registered_member_counts": "unchanged", "registered_thresholds": "unchanged",
-                "full_volume_claim": False, "closed_nine_claim": False,
+                "full_volume_claim": policy["volume"] == "full", "closed_nine_claim": False,
                 "unused_catalog": "fixture-plan.json lists the shared generator's all-pack schedules; this one-pack path uses the literal base source policy above"}
             manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         argv = command(main, "loop-probe", control["pack"], "1", "one")
