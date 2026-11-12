@@ -115,13 +115,22 @@ def relative(value):
     return str(p)
 
 
+def check_out(path):
+    """An output is new and its directory is owner-only (RL-100 item 2: the documents hold withheld/ digests)."""
+    if os.path.lexists(path):
+        refuse("out_exists")
+    if os.stat(Path(path).absolute().parent).st_mode & 0o077:
+        refuse("out_dir_mode")
+
+
 def write_new(path, document):
     data = (json.dumps(document, indent=1, sort_keys=True) + "\n").encode()
     try:
-        with open(path, "xb") as out:
-            out.write(data)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except FileExistsError:
         refuse("out_exists")
+    with os.fdopen(fd, "wb") as out:
+        out.write(data)
     return hashlib.sha256(data).hexdigest()
 
 
@@ -202,8 +211,7 @@ def session_manifest(source, copy_path):
 
 
 def cmd_manifest(args):
-    if os.path.lexists(args.out):
-        refuse("out_exists")
+    check_out(args.out)
     sources = [no_symlink_components(s) for s in args.session]
     if any(not s.is_dir() for s in sources):
         refuse("session_missing")
@@ -223,6 +231,9 @@ def cmd_manifest(args):
     document = {"schema": MANIFEST_SCHEMA, "host": host, "loop": loop, "loop_state_waived": bool(args.no_loop_state),
                 "sessions": [session_manifest(s, n) for s, n in zip(sources, names)]}
     digest = write_new(args.out, document)
+    for entry in document["sessions"]:   # names and counts only: nobody needs to open the manifest
+        print("session " + entry["copy_path"] + " files=" + str(entry["file_count"]) + " bytes="
+              + str(entry["total_bytes"]) + " desk_files=" + str(len(entry["desk_files"])))
     print("manifest sessions=" + str(len(sources)) + " sha256=" + digest)
     return 0
 
@@ -293,8 +304,8 @@ def cmd_verify(args):
         refuse("self_check_writes_no_receipt")
     if not args.self_check and not args.out:
         refuse("verify_out_missing")
-    if args.out and os.path.lexists(args.out):
-        refuse("out_exists")
+    if args.out:
+        check_out(args.out)
     data, manifest = read_json_artifact(args.manifest)
     if hashlib.sha256(data).hexdigest() != args.manifest_sha256:
         refuse("manifest_digest_mismatch")
@@ -437,8 +448,7 @@ def cmd_inputs(args):
         return 0
     if not (args.mapping and args.l9_audit and args.out):
         refuse("inputs_arguments_missing")
-    if os.path.lexists(args.out):
-        refuse("out_exists")
+    check_out(args.out)
     _, mapping = read_json_artifact(args.mapping)
     if not isinstance(mapping.get("sessions"), dict) or set(mapping["sessions"]) != set(by_path):
         refuse("mapping_session_mismatch")
