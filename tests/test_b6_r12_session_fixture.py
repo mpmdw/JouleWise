@@ -371,6 +371,37 @@ print(count)
         self.assertEqual(facts["drops"]["dropped"], 0)
         self.assertEqual(facts["duplicates"], 0)
 
+    @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol source")
+    def test_usb_source_sampling_grid_survives_poll_roundoff(self):
+        """Predict: a 1 ns early poll and a partial last poll retain the device's 20 ms sampling grid, with legal variable packet counts and no native USB access."""
+        code = '''import ctypes,json,struct,sys
+from pathlib import Path
+from types import SimpleNamespace
+from runtime import install_usb_source
+from joulewise.external import km003c_usb as usb
+from joulewise.external.km003c_parse import SAMPLE,WRAP
+root=Path(sys.argv[1]); clock=SimpleNamespace(ns=1_000_000_000_000)
+install_usb_source(root,clock); library=usb.load_libusb(); counts=[]; sequence=[]
+for offset in (0,200_000_000,399_999_999,599_999_999,800_000_000,999_000_000,999_000_000):
+    clock.ns=1_000_000_000_000+offset
+    request=(ctypes.c_ubyte*4)(0x0c,1,0,0); size=ctypes.c_int()
+    assert library.libusb_bulk_transfer(7,usb.EP_OUT,request,4,ctypes.byref(size),100)==0
+    response=(ctypes.c_ubyte*4096)()
+    assert library.libusb_bulk_transfer(7,usb.EP_IN,response,4096,ctypes.byref(size),100)==0
+    raw=bytes(response[:size.value]); count=struct.unpack('<I',raw[4:8])[0]>>16
+    parsed,parsed_count,ok=usb.parse_put_data(raw)
+    assert ok and parsed==raw[8:] and parsed_count==count
+    counts.append(count); points=list(SAMPLE.iter_unpack(raw[8:])); assert len(points)==count
+    sequence.extend(point[0] for point in points)
+assert counts==[10,10,9,10,11,9,0], counts
+assert all((b-a)%WRAP==20 for a,b in zip(sequence,sequence[1:])), sequence
+print('fixed_device_grid')
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "fixed_device_grid")
+
     def test_original_verdict_publisher_retains_no_clobber_and_root_fence(self):
         """Predict: the pinned publisher writes exact bytes under its real lock, refuses overwrite, and an escaping hard link is denied before creation."""
         export_chain_inputs(self.root)
@@ -703,6 +734,19 @@ class DeskInputBoundaryTests(unittest.TestCase):
 
 
 class VerifierInventoryTests(unittest.TestCase):
+    def test_full_volume_thermal_selector_matches_original_writer(self):
+        """Predict: the full-volume gate selects the real notify thermal records and observes their registered 5 s cadence. These two copied synthetic writer records are a parser unit, not a session fixture."""
+        from b6_r12_verify import FULL_VOLUME_MONITOR_SERIES, monitor_facts
+        data = (REPO / "tests/fixtures/b6_r12_monitor_thermal.jsonl").read_bytes()
+        facts = monitor_facts(data)
+        _filename, kind, cadence_key = next(item for item in FULL_VOLUME_MONITOR_SERIES
+                                          if item[0] == "thermal.jsonl")
+        series = facts["kinds"][kind]
+        self.assertEqual(facts["errors"], 0)
+        self.assertEqual(series["rows"], 2)
+        self.assertEqual(series["cadence_ns"], [5_000_000_000])
+        self.assertEqual(cadence_key, "thermal_s")
+
     def _unit_manifest(self, root):
         """Metadata-only unit root; no session, archive or loop record exists."""
         (root / "runtime.py").write_bytes((REPO / "scripts/b6_r12_runtime.py").read_bytes())
@@ -902,9 +946,8 @@ class DeclaredShapeTests(unittest.TestCase):
             for journal in value["monitor"].values():
                 self.assertEqual(journal["errors"], 0, sid)
             base = "sources/night-custody/hazards/monitor/"
-            for filename, kind, cadence_key in (("clock.jsonl", "reading", "clock_s"),
-                    ("thermal.jsonl", "reading", "thermal_s"),
-                    ("battery.jsonl", "reading:smc", "battery_smc_s")):
+            from b6_r12_verify import FULL_VOLUME_MONITOR_SERIES
+            for filename, kind, cadence_key in FULL_VOLUME_MONITOR_SERIES:
                 series = value["monitor"][base + filename]["kinds"][kind]
                 cadence_s = value["registered_monitor_cadence"][cadence_key]
                 self.assertEqual(series["cadence_ns"], [round(cadence_s * 1e9)], sid)

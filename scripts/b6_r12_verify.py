@@ -27,6 +27,11 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 LOADED_VERIFIER_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 PROGRAM_ARGV_SCHEMA = "r12.program_argv.v1"
+FULL_VOLUME_MONITOR_SERIES = (
+    ("clock.jsonl", "reading", "clock_s"),
+    ("thermal.jsonl", "reading:notify_get_state", "thermal_s"),
+    ("battery.jsonl", "reading:smc", "battery_smc_s"),
+)
 
 
 def sha(path):
@@ -338,6 +343,23 @@ def primary_plist_names(names):
         r"sources/(?:claim|bound)-runs/[^/]+/raw/powermetrics\.plist", name))
 
 
+def monitor_facts(data):
+    """Count the original journal's actual kind and source fields."""
+    decoded = rows(data)
+    by_kind = {}
+    for row in decoded:
+        stamp = row.get("started", {}).get("monotonic_ns")
+        if isinstance(stamp, int):
+            kind = row.get("kind", "unknown")
+            source = (row.get("values") or {}).get("source")
+            key = kind + ":" + source if isinstance(source, str) else kind
+            by_kind.setdefault(key, []).append(stamp)
+    return {"rows": len(decoded), "errors": sum(bool(row.get("error")) for row in decoded),
+            "kinds": {kind: {"rows": len(times), "span_s": (times[-1] - times[0]) / 1e9,
+                "cadence_ns": sorted({b - a for a, b in zip(times, times[1:])})}
+                for kind, times in by_kind.items()}}
+
+
 def volume_facts(root, session_id):
     """Count native frames/cadence and actual meter rows without refitting decisions.
 
@@ -364,20 +386,7 @@ def volume_facts(root, session_id):
     monitor = {}
     for name in reader.expected:
         if name.startswith("sources/night-custody/hazards/monitor/") and name.endswith(".jsonl"):
-            data = rows(reader.read(archive / name))
-            by_kind = {}
-            for row in data:
-                stamp = row.get("started", {}).get("monotonic_ns")
-                if isinstance(stamp, int):
-                    kind = row.get("kind", "unknown")
-                    source = (row.get("values") or {}).get("source")
-                    key = kind + ":" + source if isinstance(source, str) else kind
-                    by_kind.setdefault(key, []).append(stamp)
-            monitor[name] = {"rows": len(data), "errors": sum(bool(row.get("error")) for row in data),
-                            "kinds": {kind: {
-                "rows": len(times), "span_s": (times[-1] - times[0]) / 1e9,
-                "cadence_ns": sorted({b - a for a, b in zip(times, times[1:])})}
-                for kind, times in by_kind.items()}}
+            monitor[name] = monitor_facts(reader.read(archive / name))
     config_path = archive / "sources/night-custody/hazards/monitor/config.json"
     config = json.loads(reader.read(config_path))
     declaration = root / "fixture-manifests" / (session_id + ".json")

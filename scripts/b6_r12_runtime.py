@@ -1350,6 +1350,9 @@ def install_usb_source(root, clock):
         def __init__(self):
             self.queue = []
             self.origin = clock.ns
+            # The instrument samples independently of the host's polling
+            # clock. Its initial queue contains the preceding ten samples.
+            self.last_sample_ns = self.origin - 200_000_000
             self.offset = 0
             self.intervals = []
 
@@ -1398,6 +1401,11 @@ def install_usb_source(root, clock):
                 elif kind == 0x4c:
                     self.queue.append(bytes([0x4c, tid, 2, 0]))
                 elif kind == 0x0c:
+                    now = clock.ns
+                    last = self.origin + ((now - self.origin) // 20_000_000) * 20_000_000
+                    first = max(self.last_sample_ns + 20_000_000,
+                                last - (usb.RESPONSE_CAP - 1) * 20_000_000)
+                    points = list(range(first, last + 1, 20_000_000))
                     path = root / "engine-intervals.jsonl"
                     if path.exists():
                         with path.open() as source:
@@ -1405,15 +1413,17 @@ def install_usb_source(root, clock):
                             for line in source:
                                 self.intervals.append(json.loads(line))
                             self.offset = source.tell()
-                    self.intervals = [row for row in self.intervals if row["end_ns"] > clock.ns - 180_000_000]
+                    oldest = points[0] if points else now
+                    self.intervals = [row for row in self.intervals if row["end_ns"] > oldest]
                     payload = bytearray()
-                    for index in range(10):
-                        point = clock.ns - (9 - index) * 20_000_000
+                    for point in points:
                         power = 10 + sum(row["power_mw"] / 1000 for row in self.intervals
                                          if row["start_ns"] <= point < row["end_ns"])
                         payload.extend(struct.pack("<HHiiHHHH", ((point - self.origin) // 1_000_000) % 65536,
                                                    0, 28_000_000, round(power * 1_000_000 / 28), 0, 0, 0, 0))
-                    self.queue.append(bytes([0x41, tid, 0, 0]) + struct.pack("<I", 2 | (10 << 16)) + payload)
+                    if points:
+                        self.last_sample_ns = points[-1]
+                    self.queue.append(bytes([0x41, tid, 0, 0]) + struct.pack("<I", 2 | (len(points) << 16)) + payload)
                 else:
                     self.queue.append(bytes([0x05, tid, 0, 0]))
                 transferred._obj.value = length
