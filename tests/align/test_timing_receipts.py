@@ -603,8 +603,18 @@ class ProducerTests(unittest.TestCase):
 
 class CaptureEqualityTests(unittest.TestCase):
     NON_RECEIPT_OVERLAY = ('joulewise/align/apple/thermal.py', 'scripts/align_v4_kit.py',
-                           'scripts/validate_align_v4_w1_plan.py',
                            'tests/align/w1_synthetic.py')
+    # Fable review of #742 (MEDIUM 2): the overlay copies these files from HEAD, so a timing
+    # change inside them would be invisible to the byte comparison. They must stay free of
+    # timing-receipt code; if one ever needs it, pin the overlay to a commit instead.
+    RECEIPT_MARKERS = ('timing_receipts', 'window_timing', 'timing_boundary')
+
+    def test_overlaid_files_hold_no_timing_receipt_code(self):
+        for name in self.NON_RECEIPT_OVERLAY:
+            text = (self.repo / name).read_text()
+            for marker in self.RECEIPT_MARKERS:
+                with self.subTest(file=name, marker=marker):
+                    self.assertNotIn(marker, text)
 
     @classmethod
     def setUpClass(cls):
