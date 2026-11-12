@@ -569,15 +569,30 @@ def _result_counts(result: unittest.TestResult) -> tuple[int, int, int, int]:
     )
 
 
+_ITIMERS = tuple(
+    (label, getattr(signal, attr))
+    for label, attr in (
+        ("itimer-real", "ITIMER_REAL"),
+        ("itimer-virtual", "ITIMER_VIRTUAL"),
+        ("itimer-prof", "ITIMER_PROF"),
+    )
+    if hasattr(signal, attr)
+)
+
+
 def _signal_snapshot():
-    """Every catchable signal's Python-level disposition, plus the blocked mask.
+    """Every catchable signal's Python-level disposition, the blocked mask and
+    the interval timers.
 
     A shard runs all its modules in one process. A module that leaves a
     disposition changed (for example SIGTERM at SIG_IGN, which survives exec)
     breaks every later module whose children must die on SIGTERM: #741 CI run
-    43257905641 shard 10, after test_r1_round6_power."""
+    43257905641 shard 10, after test_r1_round6_power.
+
+    Take it BEFORE importing the module, so import-time changes are covered."""
 
     handlers = {}
+    unrestorable = set()
     for number in sorted(signal.valid_signals()):
         if number in (signal.SIGKILL, signal.SIGSTOP):
             continue
@@ -585,19 +600,29 @@ def _signal_snapshot():
             handler = signal.getsignal(number)
         except (OSError, ValueError):
             continue
-        if handler is not None:  # None: installed outside Python; not restorable
+        if handler is None:  # installed outside Python; cannot be put back
+            unrestorable.add(number)
+        else:
             handlers[number] = handler
-    return handlers, signal.pthread_sigmask(signal.SIG_BLOCK, ())
+    timers = {}
+    for _, which in _ITIMERS:
+        try:
+            timers[which] = signal.getitimer(which)
+        except (OSError, ValueError):
+            continue
+    return handlers, signal.pthread_sigmask(signal.SIG_BLOCK, ()), timers, unrestorable
 
 
-def _restore_signals(snapshot, module: str) -> None:
+def _restore_signals(snapshot, module: str) -> list:
     """Put back what ``module`` changed, and say so on one log line.
 
     The line does not start with ``MODULE `` so the CI parsers that read
     MODULE PASS/FAIL lines are unaffected. It is a report, not a failure: the
-    leaking module is named so it can be fixed, and later modules run clean."""
+    leaking module is named so it can be fixed, and later modules run clean.
+    Also emits a GitHub Actions ``::warning::`` annotation. Returns the list of
+    changes (empty when the module left everything as it found it)."""
 
-    handlers, mask = snapshot
+    handlers, mask, timers, unrestorable = snapshot
     changed = []
 
     def name(handler):
@@ -613,17 +638,67 @@ def _restore_signals(snapshot, module: str) -> None:
         except (OSError, ValueError):
             continue
         if after is not before and after != before:
+            label = signal.Signals(number).name
             try:
                 signal.signal(number, before)
-            except (OSError, ValueError):
+            except (OSError, ValueError, TypeError):
+                changed.append(f"{label}=restore-failed")
                 continue
-            changed.append(f"{signal.Signals(number).name}={name(after)}->{name(before)}")
+            changed.append(f"{label}={name(after)}->{name(before)}")
+    for number in sorted(unrestorable):
+        try:
+            after = signal.getsignal(number)
+        except (OSError, ValueError):
+            continue
+        if after is not None:
+            changed.append(f"{signal.Signals(number).name}=changed-unrestorable")
+    for label, which in _ITIMERS:
+        before = timers.get(which)
+        if before is None:
+            continue
+        try:
+            now = signal.getitimer(which)
+        except (OSError, ValueError):
+            continue
+        if before == (0.0, 0.0) and now != (0.0, 0.0):
+            signal.setitimer(which, 0, 0)
+            changed.append(f"{label}=disarmed")
     current_mask = signal.pthread_sigmask(signal.SIG_BLOCK, ())
     if current_mask != mask:
+        # A signal the module left blocked AND pending would be delivered the
+        # moment the mask is restored, at its default action, killing the
+        # runner before any line is printed. Consume those first and name them.
+        newly_blocked = set(current_mask) - set(mask)
+        discarded = []
+        for number in sorted(set(signal.sigpending()) & newly_blocked):
+            try:
+                signal.sigwait({number})
+            except (OSError, ValueError):
+                continue
+            discarded.append(signal.Signals(number).name)
         signal.pthread_sigmask(signal.SIG_SETMASK, mask)
         changed.append("blocked-mask")
+        if discarded:
+            changed.append(f"pending-discarded={','.join(discarded)}")
     if changed:
-        print(f"SIGNAL RESTORE after {module}: {' '.join(changed)}", flush=True)
+        text = " ".join(changed)
+        print(f"SIGNAL RESTORE after {module}: {text}", flush=True)
+        print(
+            f"::warning title=shard signal leak::{module} leaked process "
+            f"signal state ({text}); restored by shard_tests",
+            flush=True,
+        )
+    return changed
+
+
+def _print_leak_recap(leaks) -> None:
+    """One line before SHARD SUMMARY naming every leaking module (not a failure)."""
+
+    if leaks:
+        print(
+            f"SIGNAL LEAK RECAP modules={len(leaks)}: {', '.join(leaks)}",
+            flush=True,
+        )
 
 
 def _unittest_import_name(module: str) -> str:
@@ -660,12 +735,14 @@ def run_shard(modules, shard_count: int, shard_index: int) -> int:
     loader = unittest.TestLoader()
     total_tests = total_failures = total_errors = total_skipped = 0
     successful = bool(modules)
+    leaks = []
 
     if not modules:
         print("SHARD ERROR assigned zero modules; refusing to pass", flush=True)
 
     for module in modules:
         print(f"MODULE START {module}", flush=True)
+        snapshot = _signal_snapshot()
         try:
             imported_module = importlib.import_module(_unittest_import_name(module))
             suite = loader.loadTestsFromModule(
@@ -683,12 +760,14 @@ def run_shard(modules, shard_count: int, shard_index: int) -> int:
                 "skipped=0 seconds=0.000",
                 flush=True,
             )
+            if _restore_signals(snapshot, module):
+                leaks.append(module)
             continue
-        snapshot = _signal_snapshot()
         started = time.monotonic()
         result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
         elapsed = time.monotonic() - started
-        _restore_signals(snapshot, module)
+        if _restore_signals(snapshot, module):
+            leaks.append(module)
         tests_run, failures, errors, skipped = _result_counts(result)
         total_tests += tests_run
         total_failures += failures
@@ -703,6 +782,7 @@ def run_shard(modules, shard_count: int, shard_index: int) -> int:
             flush=True,
         )
 
+    _print_leak_recap(leaks)
     print(
         f"SHARD SUMMARY index={shard_index}/{shard_count} modules={len(modules)} "
         f"tests={total_tests} failures={total_failures} errors={total_errors} "
@@ -783,6 +863,7 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
     total_tests = total_failures = total_errors = total_skipped = 0
     unit_list = list(units)
     successful = bool(unit_list)
+    leaks = []
 
     if not unit_list:
         print("SHARD ERROR assigned zero modules; refusing to pass", flush=True)
@@ -797,6 +878,7 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
     )
     for module, whole_module, unit_ids in groups:
         print(f"MODULE START {module}", flush=True)
+        snapshot = _signal_snapshot()
         try:
             imported_module = importlib.import_module(_unittest_import_name(module))
             if whole_module:
@@ -832,12 +914,14 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
                 "skipped=0 seconds=0.000",
                 flush=True,
             )
+            if _restore_signals(snapshot, module):
+                leaks.append(module)
             continue
-        snapshot = _signal_snapshot()
         started = time.monotonic()
         result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
         elapsed = time.monotonic() - started
-        _restore_signals(snapshot, module)
+        if _restore_signals(snapshot, module):
+            leaks.append(module)
         tests_run, failures, errors, skipped = _result_counts(result)
         total_tests += tests_run
         total_failures += failures
@@ -853,6 +937,7 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
             flush=True,
         )
 
+    _print_leak_recap(leaks)
     print(
         f"SHARD SUMMARY index={shard_index}/{shard_count} modules={len(groups)} "
         f"tests={total_tests} failures={total_failures} errors={total_errors} "
