@@ -1042,6 +1042,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+288. **Magistrate 6c77976e (headless, Opus 5.5), 2026-11-12 07:09 PST: the item-287 dry run of the R1 follow-up `prepare` at `bb6394f2b` PASSED. rc 0, `status FOR_LEAD_ARM`, weights ok, runtime_stack ok, `window_max_s` 126480, `programmed_span_s` 108768. Wall time 17.85 s. No install, no arm, nothing loaded, no capture. MAGISTRATE: nothing to run until the lead's next item (in order: the second Part A smoke after 13:15, the BYTES commitment, tonight's arm).**
+
+```pointer
+owner: lead
+wait: none
+deadline: none
+on_early_or_refused: n/a (nothing launched)
+next_observable: the lead's next item: the second Part A smoke (arm-route port + powermetrics wrapper #739 + test fixes #740) after 13:15, or the BYTES commitment once #738's CI is green
+```
+
+- Output: `/Users/edr/night-custody/magistrate/r1fu-prepare-dryrun-20261112T150824Z.json`, sha256 `482a665b72a834f9655aecce9365ade90d49b3229b20439e85f7008d2c857ee9`. `executed_commit` `bb6394f2bf290550b43a87efecb15d581839b845`.
+- `time -p`: real 17.85 s, user 15.61 s, sys 2.20 s.
+- Weight roots (all `ok`, `reasons` []):
+  - `~/.cache/huggingface/hub/models--mlx-community--Qwen3-30B-A3B-4bit/snapshots/d388dead…` : `elapsed_s` 6.3, 17,174,780,668 bytes, 4 files;
+  - `~/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit` : `elapsed_s` 0.4, 868,628,559 bytes, 1 file;
+  - `~/jw_models/mlx-community/Qwen3.8-27B-8bit` : `elapsed_s` 10.8, 29,501,218,479 bytes, 6 files.
+- `runtime_stack`: ok, reasons [], `elapsed_s` 0.042.
+- 47.5 GB hashed in about 17.5 s (about 2.7 GB/s). The page cache was probably warm: Part A loaded the 30B model at 06:22. A cold-cache hash at the arm is bounded by the SSD read rate. Allow about a minute of margin before t0, not 17 s.
+- Preflight: only `com.joulewise.magistrate` loaded; no `desk_fence.json`; no High Power marker. `$M` (`JouleWise-measurement-20261102-align-pilot2`) was clean at `da3187e6e`; fetched and detached to `bb6394f2b` (HEAD verified). Versions mlx 0.31.2, mlx_lm 0.31.3, transformers 5.12.1. `$M` still clean after the run; no `.align-r1-prepare.json` in `$M`. `$M` is left detached at `bb6394f2b` as item 287 says.
+- Network time not touched. No BYTES desk job ran. No Codex child. No unread mail from Ed; no new directive (standing #587, #422, #421, #417, #416, #408, #405). The canonical root was fast-forwarded to `bbcccf976` (no night job loaded or on disk). Free disk 98 GiB.
+
 287. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 06:57 PST: MAGISTRATE: run a daytime DRY RUN of the R1 follow-up `prepare` at `bb6394f2b`, to a SCRATCH output: the real weight-digest and installed-stack preflights, timed. No install, no arm, nothing loaded, no capture. It is a desk read of the model weights and the venv; it is not a measurement. Finish before 10:30 PST. Do not run it during a smoke capture.**
 
 ```pointer
