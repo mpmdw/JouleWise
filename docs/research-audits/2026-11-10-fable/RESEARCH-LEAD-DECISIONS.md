@@ -5932,6 +5932,326 @@ generator's cold review with the rest of it.
 
 ---
 
+# Decision request 63: the state-machine lane's parked items and the timing of wave 3 (2026-11-12 15:22 PST)
+
+**Read.** The lane plan on `docs/2026-11-11-state-machine-lane`, whole, with §4, §8 and §12 closely. RL-53,
+RL-54, RL-56, RL-71, RL-72, RL-77, RL-79, RL-81, RL-83, RL-84 and RL-93 in this file. RUN_STATE items 295 to
+297 on `main` @ `e5ebb03f8`. On `ops/2026-11-11-w1-presign` @ `99622e96c` (PR #734's head, and the commit the
+follow-up night is running): where each window-level code is raised (`joulewise/b6/acceptance.py`,
+`code_check.py`, `model_files.py`, `precheck_lane.py`, `precheck.py`, `joulewise/b5/harvest.py`) and who calls
+those modules; the v4 registration directory's file list; `HELD_WINDOW_REASONS` in
+`scripts/align_v4_session.py`; the diff of `joulewise/align/apple/workload.py` and `thermal_gates.py` against
+the W1 line `b4a6c217f`; `tests/align/test_r1_followup.py` (`DispatchTests`, `DefaultBundleTests`);
+`R1_EXECUTED_SOURCES`, `verify_r1_executed_sources` and `require_registration` in
+`joulewise/align/apple/v4_registration.py`; `R1ExecutedSourceTests` in `tests/align/test_v4_registration.py`;
+the rows R1-FOLLOWUP-TIMEOUT, R1-PHASE-TABLE, RL53-BATCH and HELD-WINDOWS in `docs/align/v4/DEVIATIONS.md`;
+`joulewise/battery_float.py` and the top-up phase's one caller; the check list of PR #734. On `main`: the
+header of `joulewise/window_state.py`. I ran no test and made no contact with the measurement Mac.
+
+**A note on the list itself.** Plan §12.2 was written at 09:17 on 11-11. RL-83 answered its items 1 and 3 at
+12:52 the same day, and RL-93 closed them in the queue. They reached me again because the plan was not
+updated. I have re-read the code at today's head rather than repeat RL-83 from memory; nothing has moved.
+
+## RL-105. Plan §12.2 items 1 and 3 were ruled in RL-83 and stand at today's head
+
+**Ruling.** Confirmed, no amendment.
+
+1. **The acceptance-only list is seven, plus one that cannot fire (RL-83 (a)).** RL-71's "five" is superseded.
+   At `99622e96c`:
+   - `code.number_bearing_unreviewed` is raised only in `b6/code_check.py`, whose one caller is
+     `b6/acceptance.py`.
+   - `model.stack_differs_from_registered` is raised only in `b6/model_files.py` (`compare`), whose one caller
+     is `b6/acceptance.py`.
+   - `model.files_differ_from_registered` is raised in `b6/acceptance.py`, in `b6/model_files.py` and in
+     `b6/precheck_lane.py`. The first two are the acceptance step. The third is the Block 6 loop's pre-check
+     lane, which v4 does not run.
+   - The four `structure.*` codes are raised only in `b6/acceptance.py`.
+   - `precheck.certain_exclusion` is raised only in `b6/precheck_lane.py`.
+   - `records.source_changed_during_harvest` and `roster.no_science_bundles` are raised by
+     `b5/harvest.py`. They are the only held reasons that can occur in v4.
+   - The v4 registration directory holds twelve files and none is an acceptance registration, so the step
+     still returns `precheck.acceptance_unavailable` before it evaluates anything.
+   - `HELD_WINDOW_REASONS` is the three codes of RL-79, and the HELD-WINDOWS row carries RL-83's two edits
+     word for word.
+2. **`topup_log` stays out of `battery_float.PHASES` (RL-83 (b)).** `joulewise/battery_float.py` has no
+   difference from the W1 line. The label has one production user, `scripts/align_v4_battery_log.py:78`, and
+   the test-side registration with its no-gate assertion is in `tests/test_battery_float_sweep.py`. No edit,
+   no deviation row.
+
+**Terms.**
+
+- RL-83's condition is unchanged: no file is added to `configs/campaigns/align_v4/registration/` after
+  signing without coming to me, because an acceptance file there switches the step on.
+- The plan's §12.2 is marked closed against RL-83, RL-105, RL-106 and RL-107, so that it is not parked a
+  third time.
+
+**Why.** The row gives the real reason the codes cannot fire, and the reason still holds in the tree that is
+running tonight.
+
+**Blind status.** Blind: no v4 outcome exists. Blind to Block 6. Code and registration text only.
+
+## RL-106. The `workload.py` callback row (R1-FOLLOWUP-TIMEOUT) is accepted with its last sentence replaced
+
+**Ruling.** RL-72 E3 set three terms for the callback. Two are met in the tree; the third is met in a report.
+The row is accepted once its last sentence is true on the day of signing.
+
+What I checked at `99622e96c`:
+
+- **The default is inert.** The edit is eleven lines. It reads a hook only when G0 is already unreleased and
+  the gate row's outcome is `timeout`, and with no hook it changes nothing. The hook is assigned in two
+  places, both in `joulewise/align/apple/r1_runtime.py` (lines 1730 and 1786). W1's gate module,
+  `thermal_gates.py`, is byte-identical to the W1 line and defines no such attribute.
+- **The test RL-72 asked for exists.** `DefaultBundleTests` loads the adapter as it was before the callback
+  (`82c14c9ea`, an ancestor of this branch), runs it and the present adapter on one member, once released and
+  once timed out, and compares every bundle file byte for byte. `DispatchTests` shows that a timed-out step
+  member runs one turn only with the callback, keeps a null episode reference and keeps
+  `thermal.start_gate_timeout`.
+- **The cold review is done:** `docs/run_reports/2026-11-11-r1-followup-kit-coldreview.md`,
+  ADMIT-WITH-FIXES. It found the default byte-identical by its own check and killed the mutant that dispatches
+  with no hook.
+
+**The edit.** For "Cold review and native smoke remain owed." put:
+
+> "Nothing in W1 supplies the callback, so in W1 an unreleased G0 ends the member exactly as before:
+> `DefaultBundleTests` in `tests/align/test_r1_followup.py` runs the adapter as it was before the callback
+> (`82c14c9ea`) and the present one on the same member, released and timed out, and every bundle file is
+> byte-identical. Cold review: `docs/run_reports/2026-11-11-r1-followup-kit-coldreview.md`. On the
+> slot-producing night the callback dispatched N times (the count of `r1.g0_timeout_run` flags in that
+> night's record)."
+
+N is filled at signing from the night's record. It is a count of rehearsal flags, not a v4 outcome.
+
+**Terms.**
+
+- `DefaultBundleTests` and `DispatchTests` pass by name on the signing head, run and not skipped. PR #734
+  shows six red test shards at this head, so a green or red shard is not the evidence; the two test ids are.
+- The row cites RL-72 E3 and E7 and RL-106.
+- This closes what RL-77 listed as owed for the callback. RL-83 (c) is discharged.
+
+**Why.** A row is signed with the registration (RL-77). "Remain owed" would be false at signing if the work
+is done and a defect if it is not.
+
+**Blind status.** Blind: no v4 outcome exists. Blind to Block 6. Code and row text only.
+
+## RL-107. RL-81 F-1: the condition-13 test exists. It stays a signing gate in a smaller form
+
+**Ruling.** The test the R1-PHASE-TABLE row promises is in the tree, so the row no longer promises something
+absent. What is left of the gate is that the test passes on the signing head and that the slots file names
+the right commit.
+
+What I checked at `99622e96c`:
+
+- `R1_EXECUTED_SOURCES` is the ten paths of RL-84 P-4, and the row names the same ten.
+- `R1ExecutedSourceTests.test_condition13_names_exactly_the_ten_ruled_sources` pins the literal set and its
+  length. That is the cold review's F-5: removing a path from the list now fails a test.
+- `test_condition13_changes_each_file_commit_and_missing_phase_module` builds a repository, changes each of
+  the ten files in turn and expects a refusal each time, then a wrong commit, then a missing file.
+- `require_registration` calls `verify_r1_executed_sources` on `r1_slots.json` straight after the receipt
+  check. So the comparison is made on the real tree at every arm, not only in the test.
+- `r1_slots.json` still reads `PENDING_R1_REHEARSAL` and has no `executed_commit`. The check refuses a slots
+  file without one, so an arm cannot pass with the placeholder.
+
+**Terms. Before signing, the lead shows three things.**
+
+1. Both `R1ExecutedSourceTests` tests pass by name on the signing head.
+2. `r1_slots.json` carries `executed_commit` equal to the full commit the slot-producing night ran. If
+   tonight's night produces the slots, that is `99622e96cf83d578672747a90db1d8128a57eae9`.
+3. `verify_r1_executed_sources` returns that commit when run on the signing head's tree. In words: none of
+   the ten files changed between the night and the signing. This is the freeze RL-84 stated, and it is the
+   reason no commit after the night may touch those ten paths. A needed change to one of them after the
+   night comes to me before it is made, because it means a new slot-producing night or a ruling that the
+   slots survive.
+
+The R1-PHASE-TABLE row stands as written.
+
+**Why.** A row may not promise a test the signed tree lacks (RL-81). It has the test. What a test on a
+synthetic repository cannot show is that the real slots file points at the real night, and that is what
+item 2 and item 3 add.
+
+**Blind status.** Blind: no v4 outcome exists. Blind to Block 6. Code and registration text only.
+
+## RL-108. Wave 3: W-4 and W-6 do not enter the bytes signed for W1. Shadow replay may start now; a side branch may be built; "after the series" becomes "between W1 and C1, or after the series"
+
+### Does RL-53 still stand?
+
+For W1, yes, and the case is stronger than it was on 11-11.
+
+- **The files W-4 edits are the ones running tonight.** `scripts/run_night.py`, `joulewise/b5/driver.py` and
+  `joulewise/align/apple/powermode.py` at `99622e96c` passed smoke 2 and are executing the follow-up night.
+  Against the W1 line they differ by one line of `run_night.py`. A change to the exit mapping or the terminal
+  restore after this night would send W1 down a path no native night has run.
+- **"Prove in shadow" has not happened yet.** The shadow modules are on `main`, with synthetic fixtures.
+  `window_state.py` says in its own header that the writers were read "without opening custody". Nothing has
+  been run over a real night's files.
+- **Nothing in W-4 or W-6 protects W1's data.** The lane's own W-0 said so: what is left costs schedule.
+  W-1, W-2 and W-3 closed the paths that stranded the Mac, and they are in the pre-signing set.
+
+That W1 is still unsigned makes a bound edit cheap to register. It does not make it cheap to qualify.
+
+### One amendment to RL-53: when adoption may happen
+
+RL-53 said W-4 waits for "the registration that follows the series", and W-6 for the next re-registration
+that happens for another reason or the end of the series. I now make both the same and more exact:
+
+- **Not in W1's signed bytes.**
+- **Earliest: a re-registration that happens for another reason between W1 and C1.** The series freeze
+  (V4-04) fixes thermal policy and cohort identity from C1; W1 to C1 is the interval in which the instrument
+  may still change. RL-79 expects one such re-registration at the analysis seal. Adoption may ride with it
+  if the conditions below are met and I rule on the request.
+- **Never between claim windows.** From C1 to the end of the series every window's record is written by the
+  same writers.
+- **Otherwise after the series.**
+- RL-53's defect clause is unchanged: if a defect forces part of this earlier, it comes to me as a defect.
+
+### In shadow, now: yes
+
+This is Track M work on `main` and on the Air. It needs no further ruling, on these terms.
+
+1. **Replay over real nights.** `derive_window_state` and `window_outcome`, the exit-contract classifier and
+   `owed_effects()` are run over the delivered records of the R1 nights already closed, and over the
+   follow-up night once its custody has closed.
+2. **Structure only.** States, marker files, exit codes, fault-reason names, verdict words, timestamps. No
+   temperature, energy, power or token count is read or printed. No Block 6 path is opened.
+3. **Nothing new on the measurement Mac.** No shadow writer runs there, no file is added to a custody
+   directory, and nothing reads the Mac before `chain.exited`. The replay reads delivered results on the
+   Air.
+4. **The journal is derived, not written.** A `window.journal.jsonl` may be produced off the Mac from the
+   delivered files, to exercise the format. It is labelled derived and is not custody.
+5. **The watchdog's transition table** may be declared as data on `main`, with a check that every transition
+   seen in the exported watchdog status of those nights is in the table. No bound file changes.
+6. **The output is an agreement report.** For each night it gives: the derived state sequence against what
+   the records and RUN_STATE say happened; for each chain exit, the contract's class against the fault
+   reasons the driver wrote; and each violated invariant, explained as a module defect, a fixture gap or a
+   writer defect. A writer defect comes to me.
+
+### On a branch, now: yes, as an unmerged draft
+
+1. **Base and custody of the branch.** A side branch off the W1 signing head once there is one; before that,
+   off `99622e96c` and rebased later. One draft PR against the W1 line, titled as not for merge. It is not
+   merged into the pre-signing branch or any branch a night runs from, and it is never installed on the
+   measurement Mac, until a ruling names it.
+2. **The exit contract in the driver is a refactor on declared codes.** A table test shows that for every
+   declared code of every chain the result carries the same fault-reason strings as today. An undeclared
+   code keeps today's `chain_exit_nonzero:<rc>`. Any reason the adoption adds or renames is listed, because
+   that is the record change.
+3. **One `restore_owed()`.** For each terminal path the host's end state is shown equal to today's, with
+   fakes under the host-command guard. No test or mutant touches a live process or the host.
+4. **The journal has no write inside a member.** Appends happen at transitions, outside the span between a
+   member's start and end stamps. If one cannot be kept out, it is listed as an activity during members, as
+   RL-81 did for the liveness read. The engine and the recompute never read the journal.
+5. **The single finality field** (RL-53 W-7's last sentence) is built with this branch and not separately.
+6. **W-6 follows the same terms**: the transition table as bound data and the dwell limits for the non-hold
+   states may be built on the same branch or a sibling. The tolerant fence reader stays unbuilt, as RL-53
+   ruled. The plan identification RL-56 deferred to W-6 is already in the W-1 check (RL53-BATCH (1)) and is
+   no longer owed there.
+7. **It does not queue ahead of anything on the path to W1 or to the Block 6 pin.** No seat is taken from
+   those for it. If that means it is not started until W1 is collected, nothing is lost.
+
+### What an adoption request must bring
+
+The agreement report, covering at least the follow-up night and W1's own night; the branch with its cold
+review; the trace regenerated with both closure modules passing; the draft deviation row, which names the
+new custody file and every changed or added fault reason; and the plan for the native check, remote. I rule
+then.
+
+**Why.** A change to what a record carries belongs where the series can absorb it: before the claim windows
+or after them. The modules have to be shown right about nights that happened before any writer is made to
+depend on them, and the cheapest proof is to run them over the records we already hold.
+
+**Blind status.** Blind: no v4 outcome exists. Blind to Block 6. From RUN_STATE item 296 I read the smoke's
+engineering figures (release time, settling temperatures); they are rehearsal values and bear on nothing
+here.
+
+## RL-109. Track W as it stands on 2026-11-12, one line each
+
+RUN_STATE item 295 says wave 3 "needs research-lead rulings W-1, W-2, W-4 and W-7". Three of those were ruled
+on 11-11. This is the current reference.
+
+| Item | Status | Ruled in | Still owed, and by whom |
+|---|---|---|---|
+| W-0 | Ruled. One batch before the STRICT re-registration, with the cut-off at the post-R1 PREQUAL. | RL-53 | Nothing. |
+| W-1 | **Admitted and built.** `watchdog_acceptance` and `_watchdog_post_install` in `scripts/align_v4_session.py` at `99622e96c`; row RL53-BATCH (1). | RL-53, RL-54, RL-56 | No ruling. It reaches the W1 line with PR #734 at signing. The native check of plan §11.3 item 8 is the lead's, remote, after the night. |
+| W-2 | **Admitted and built.** `host_privilege_preflight` at prepare, in the same file; `powermode.py` unchanged; row RL53-BATCH (2). | RL-53 | No ruling. Arrives with PR #734. |
+| W-3 | **Admitted and built.** `post_window_unstrand.sh` accepts a delivered REFUSED result with no chain markers and has `--restore-host`. | RL-53 | No ruling. The native check of §11.3 item 9 is the lead's, remote. |
+| W-4 | **Not in W1's signed bytes.** Shadow replay now; unmerged draft branch allowed; adoption between W1 and C1 at the earliest, on a request. | RL-53, RL-108 | The agreement report (the lane). |
+| W-5 | Plain engineering; the file is unbound. Source removal and its verification are not altered. | RL-53, plan §8 | The orchestrator's. |
+| W-6 | Transition table and dwell limits: same timing and terms as W-4. Tolerant fence reader: approved in design, not built. | RL-53, RL-108 | Nothing now. |
+| W-7 | **Closed for W1.** No release is built. Late exclusion recovers by replay; only record k+1 carries k's final sources; nothing is owed before signing. | RL-53, RL-54, RL-56 | No ruling. PR #724 (tests and runbook, no bound file) may merge when its failing checks are no more than its base's; that judgement is the orchestrator's. The single finality field goes with W-4. A re-issue after record k+2 exists comes to me first. |
+| W-8 | The unseal record is approved and `joulewise/unseal_record.py` is on `main`. Refusal in display tools is the orchestrator's choice. | RL-53 | Each unseal from now on is a committed record. |
+
+**Why.** One table, so that the next hand-back does not list a ruled item as waiting.
+
+**Blind status.** Blind: no v4 outcome exists. Blind to Block 6.
+
+---
+
+# Decision request 64: two "computed and compared" groups in the R3 table are compared only conditionally (2026-11-12 15:40 PST)
+
+**Read.** The note at the end of my cold review of the R3 generator
+(`/Volumes/JW-EXT/scratch/fable-rev-r3-table.md`). At `a3f54e3ad`: `check_block` in
+`joulewise/b6_analysis_check.py` lines 40 to 110; the screen's result and `session_quantities` in
+`scripts/independent_recompute_b6.py` (lines 525 to 534 and 883 to 885); the label constants in
+`scripts/b6_r3_table.py`. RL-102 and RL-103. Code only.
+
+## RL-110. The R3 table: `neg8/*` and the five S-13 contrast fields take a conditional label
+
+**Ruling.** Yes, both groups need one. The labels, exactly:
+
+- every `neg8/*` key (`neg8/verdict`, `neg8/bound_j`, `neg8/allowance_j`):
+  "computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, otherwise not
+  independently recomputed"
+- `contrast/<phase>/{n, dbar_j, D_j, p, holm_p}`:
+  "computed and compared (decision 6 (a)) when the twin returns an estimate, otherwise not independently
+  recomputed"
+
+This amends RL-102 item 1, which gave the five contrast fields the plain label.
+
+**What the code does.**
+
+- **The screen.** `check_block` builds its own drift result only inside `if s.neg8["verdict"] != "undefined"`.
+  The verdict it tests is the first program's. When that verdict is `undefined`, the second side computes
+  nothing, checks nothing, and puts no `neg8/*` key in its table. The first program then prints the word
+  `undefined` with a null bound and a null allowance. The word comes from two counting rules (too few corpus
+  members, or too few start or end references), and nothing on the second side recounts them. So in that
+  case there is no number to compare, as the review guessed, but there is a word, and the word has one
+  producer.
+- **The contrast.** When the twin returns no estimate, `check_block` compares only `outcome`, against
+  `not_estimable`, and continues. The five fields are not compared and do not enter the table. Whatever the
+  first program prints for them in that case, `n` included, has one producer. The word is covered by
+  RL-103's `outcome` label, whose first clause is this case.
+
+**Terms.**
+
+1. **Generator only.** Two label strings and the rule that selects them, with a test that pins both strings
+   and the keys they apply to. `joulewise/b6_analysis_check.py` and `scripts/independent_recompute_b6.py` do
+   not change, as RL-102 ruled. The edit goes into the same round as the review's other fixes and is in the
+   regenerated table that fills PR #748.
+2. **Bars are unchanged.** The S-13 bar stays in the bar column for these rows. It applies where the
+   comparison is made.
+3. **An absent row is not an agreeing row.** The S-14 pin request states, from the comparator's code, what
+   the S-13 comparison does with a key that the first program prints and the second side's table does not
+   hold. Either answer is acceptable if it is stated: the comparison reports the key as absent on the second
+   side, or it refuses. What is not acceptable is a count of compared keys, or an agreement sentence, that
+   includes such a key. If the comparator passes over it silently and counts it, that comes back to me
+   before the pin.
+4. **What the paper may say.** The agreement sentence covers a session's screen row only where the screen
+   was defined, and a contrast's five fields only where the twin estimated. A session with an undefined
+   screen, or a contrast the twin refused, is reported with the label's second clause.
+5. **One thing for R12's review to confirm, not ruled here.** In the GAMMA branch `check_block` halves
+   `s.neg8["allowance_j"]` without testing the verdict. If a GAMMA session with an undefined screen can
+   reach that line, it raises. That fails closed, which is the safe direction, but the review should say
+   whether the case can occur and what the run then prints.
+
+**Why.** RL-103 put the condition into the `outcome` label because the code compares the word only in some
+cases. The same is true here, and a label that says "compared" for a row nobody compared is the overstatement
+§17-R3 exists to prevent. The conditional label costs two strings and claims less.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. I do not know
+whether any Block 6 session has an undefined screen or any contrast is refused. Block-5-aware. The ruling
+rests on which branches of `check_block` make a comparison.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
@@ -5950,3 +6270,6 @@ generator's cold review with the rest of it.
 | The custody kit's cold review, if it finds the authentication chain wider than RL-100 item 1 states | The rebase onto R12's final head |
 | `R` and `R_cm` in the Block 5 comparison record (RL-101 condition) | The S-14 pin request |
 | The S-14 pin request for Block 6, under RL-98 (volume, deadline 13 November 20:00 PST) and RL-99 | The R12 seat's report with its generation ratio, and the Opus cold review |
+| An adoption request for W-4 or W-6 (RL-108) | The agreement report over real nights, the branch's cold review and the draft deviation row |
+| A change to any of the ten condition-13 files after the slot-producing night (RL-107 item 3) | The event |
+| The S-13 comparison's treatment of a key absent on the second side, if it counts such a key as compared (RL-110 term 3) | The S-14 pin request |
