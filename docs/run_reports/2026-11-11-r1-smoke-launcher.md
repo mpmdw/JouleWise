@@ -1,6 +1,6 @@
 # Agent-free R1 follow-up smoke launcher — 2026-11-11
 
-Status: implemented and synthetically exercised; **native smoke and independent executing review remain owed**. Branch `ops/2026-11-11-r1-smoke-launcher`, based exactly on `9b4817f362524a443d92547453d68023faa1bd95` (`ops/2026-11-11-w1-presign`). No night was armed or measurement captured. No model weights, network, real host-setting command, or sealed custody was accessed.
+Status: round-2 executing-review fixes implemented and synthetically exercised; **native smoke and RL-86 merge reconciliation remain owed**. The independent review is [recorded here](2026-11-11-r1-smoke-launcher-executing-review.md); the round-2 section below supersedes the original implementation details. Branch `ops/2026-11-11-r1-smoke-launcher`, based exactly on `9b4817f362524a443d92547453d68023faa1bd95` (`ops/2026-11-11-w1-presign`). No night was armed or measurement captured. No model weights, network, real host-setting command, or sealed custody was accessed.
 
 ## Intake and scope
 
@@ -82,7 +82,7 @@ One existing launch key changes guard, not count: `(scripts/launch_align_r0.py, 
 
 ## Exact magistrate start / check / run sequence
 
-These commands are a **future native handoff**, not commands executed here. First obtain the independent executing review requested by the refusal record, reconcile RL-86, and select the committed branch head descended from `9b4817f36`. Set `PY` to the already installed, pinned measurement venv; do not resolve its interpreter symlink or download weights. Set `MAGISTRATE_PID` to the real magistrate process that will exit, not a tool-shell PID. `CUSTODY` must be the watchdog's actual configured root; its default is printed below as text only.
+These commands are a **future native handoff**, not commands executed here. The independent executing review and round-2 fixes are recorded below. Before native use, reconcile RL-86 and select the committed merged head descended from `9b4817f36`. Set `PY` to the already installed, pinned measurement venv; do not resolve its interpreter symlink or download weights. Set `MAGISTRATE_PID` to the real magistrate process that will exit, not a tool-shell PID. `CUSTODY` must be the watchdog's actual configured root; its default is printed below as text only.
 
 Start/check while the magistrate is still alive:
 
@@ -100,7 +100,7 @@ test -z "$(git status --porcelain)"
 git merge-base --is-ancestor 9b4817f36 HEAD
 "$PY" -B -c 'from pathlib import Path; import subprocess; from joulewise.align.apple import v4_registration as r; root=Path.cwd(); head=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); print(r.verify_r1_executed_sources(root,{"executed_commit":head}))'
 "$PY" -B scripts/launch_align_r0.py preflight --disk-path "$REPO"
-DEADLINE="$("$PY" -B -c 'import time; print(time.time()+7200)')"
+DEADLINE="$("$PY" -B -c 'import time; print(time.time()+9000)')"
 "$PY" -B scripts/launch_align_r0.py launch \
   --runner-kind r1-smoke --repo "$REPO" --python-bin "$PY" \
   --output "$OUT" --soak-reference "$SOAK" --disk-path "$REPO" \
@@ -139,3 +139,195 @@ Synthetic lifecycle evidence is not native hardware validation. The lead must ru
 Automatic restoration blocked by another host lock is recorded as failure, never forced through another measuring night. SIGKILL/power loss cannot execute a finally path or guarantee a receipt, as with R0; ordinary errors, TERM/INT/HUP and bounded part timeouts are covered. The global fixture census command would invoke a real host process-table binary, so it was not run under the brief's no-real-host-command rule; the end-to-end tests instead prove absence of their exact owned meter/part PIDs. No installed skill or external integration was used.
 
 Changed files: the two launcher/runner scripts; the new test module; the strict artifact inventory and receipt template; refusal and host-command allowlists; the fixture registry and its synthetic census test; one inserted test-timing line; and this report. Implementation commit: `97fcf7f207ec7d2816c5aec637c8867f5ed185c6` (`ops: launch R1 follow-up smoke agent-free with shared feeds`). A subsequent report-only commit records this receipt. Post-commit `reg.verify_r1_executed_sources` against that full HEAD passed; protected-source/state diffs are empty and the timing diff is exactly one insertion. The working tree was clean after the implementation commit. No push. Next exact step: lead's independent executing review of this branch, adjudicate the documented census baseline/dependency declarations with w1-p2c, then the native handoff above. Coordination-state updates remain lead-owned.
+
+
+## Round 2 — executing-review fixes (2026-11-11)
+
+Continued the brief's existing local branch `ops/2026-11-11-r1-smoke-launcher` from `2d54da7e9`.
+Read the executing review in full first, then M0, targeted intake/queue state (no active stop card),
+AGENTS/CLAUDE, orchestration, D-050, the runtime contract, and the speed toolbox from `origin/main`.
+This direct [AGENT] correction outranks the ordinary queue; the brief explicitly leaves all coordination
+state with the lead. No coordination state or condition-13 path was edited. No delegation, skill,
+network, measurement-data access, model download, full suite, B5 analysis, or native MLX execution.
+
+### Disposition and implementation
+
+- **H-1 / L-2 / L-3:** `launcher.r1_part_caps()` reads only the bound local runtime JSON and calls
+  `r1_runtime.smoke_post_g0_budget(STEP_QUIET_S, config["step"]["deadman_s"])["total"]`.
+  A is **1,920 s**; B is **4,520 s** with the current config. Both the launch admission and the
+  runner use this helper, without caching. Before spawning either part the runner requires its full
+  cap to fit before `deadline - WORK_RESERVE_S` (370 s). A short fence refuses without spawning;
+  a fence expiry during work says **work deadline**, while a part-cap expiry names the actual runner cap.
+  The successful part receipt records `cap_s`.
+- Part A's kit clock is private and starts after the kit's condition-13/config checks. Rather than
+  alter the protected kit or infer its private `started` from an output file, the requested extra
+  120 s covers startup and final work outside the kit's own 1,800 s verdict. The runner cap still
+  includes startup; an extraordinarily slow startup exceeding that margin can still exhaust it.
+  This is the review's explicit A-margin remedy, not evidence of a measured startup bound.
+- **M-1:** restore is eligible only after this runner successfully completed `read_power`.
+  Earlier exits record `no_power_read` and do not acquire the host lock or issue any restore command.
+  Under the host lock, `os.path.lexists(powermode.host_marker_path())` returns `foreign_marker_left`
+  without reading/removing the marker or setting power mode. Night-agent census now precedes even
+  the AC getter, so a loaded foreign W1 scenario issues **no pmset at all** in this runner.
+- **M-2:** volume census runs at feed start, before A, before B, and close. `VolumeFeed.poll()`
+  performs no work. The close census runs after all owned feeds have stopped, so its multiple
+  bounded mount/diskutil probes cannot delay meter teardown. Agent census remains at feed start and
+  every 30 s. Agents start before the meter. The terminal volume census retains per-probe
+  timeouts/retry rather than an aggregate bound: pathological serial probe timeouts can still
+  delay or lose the terminal receipt at the outer timeout, after producer-stop attempts.
+- **L-4 / L-5 / L-6 / L-7 / L-8:** only R1 plists get `ExitTimeOut = 400` (two 180 s cleanup
+  layers plus 40 s margin). Meter supervisor receives `identity=night.observe_identity`. The configured
+  `--pmset-bin` reaches `display()`. The R1 fake-launchd witness holds the magistrate alive beyond
+  its 0.5 s dwell seam and checks handoff entry/return plus absent output/meter journal; the
+  skip-magistrate-wait mutant is killed directly in this R1 witness.
+- **Deadline:** the command sequence above now uses `DEADLINE = now + 9000`. `launch` refuses less
+  than A+B+dwell+370 = **7,110 s**, before creating custody/job/fence files. This is a structural
+  minimum, not an allowance for magistrate-exit and startup latency. The review's full estimate is
+  about 7,440 s; 9,000 s retains slack, and the per-part admission check still protects against delay.
+- **Report only, L-1:** an unmeasured agent census still aborts a running part. The night's retry
+  policy was not transplanted. This is a known capture-completion limitation for the lead to assess.
+- **M-3:** no trial merge or unrelated refusal repair. RL-86 still owns reconciliation and sign-off
+  on the `protects` wording. Both new round-2 rows are NUMBER_INTEGRITY engineering-smoke refusals.
+  The new cap-helper import also explicitly declares the unchanged `r1_runtime.py` dependency under
+  `r1_smoke_existing_dependency`; it calls only the post-G0 budget arithmetic, and this is not a fresh
+  review of the runtime module's refusals. RL-86 must retain/reconcile that fifth declaration.
+
+R0 `runner.json` and plist bytes are compared to `2d54da7e9` for both default keep-going and explicit
+`smc,battery`/no-keep-going variants, normalizing only the synthetic temp root. The argv comparison
+also passes. The shell wrapper and R0 runner branch, including its **5 s** terminate wait, have no diff.
+`scripts/test_timings.json` is unchanged: no replacement of the existing timing row and no new module
+requiring an inserted row. No throughput saving is claimed.
+
+### Verification and fixture corrections
+
+All tests use unittest/Python 3.13 with the installed test host-command guard, one module at a time,
+and the requested `nice -n 10` prefix. **The sandbox prints `nice: setpriority: Operation not permitted`**
+and then executes Python, so reduced scheduling priority could not be established. Total test wall time
+remained below the brief's approximately 20-minute ceiling. Logs and synthetic TMPDIR are under
+`/Volumes/JW-EXT/jwsol/squeeze/r1-smoke-launcher-r2/tmp/r1-smoke-r2/`; the review harness was inspected
+but no removed review worktree was recreated. Early scratch logs were moved from this clone's `tmp/`
+to that writable external scratch root after their fixtures ended.
+
+The baseline R1 module passed 24 tests (13.465 s). First updated run: 36 tests, one failure and one
+error (26.746 s): an uninitialized mocked volume record list, and a wait witness still dependent on
+slow runner import. Both fixture defects were repaired. A second run passed 36 (16.534 s).
+The first updated end-to-end run also allowed the newly added identity callback to execute read-only
+`/bin/ps` on owned fixture PIDs; this deviated from the no-real-host-command brief. It was corrected
+by faking `night.observe_identity` in the child fixture. No host-setting command ran. Final synthetic
+runs fake that observer, host probes/setters, meter argv, and group census; fixture signals target only
+owned synthetic PIDs/groups. The normal and TERM paths assert owned meter and part PIDs are absent.
+The global fixture-orphan census was not run because it would execute real host `ps`.
+
+The final inspection moved terminal volume census after owned feed stops; the affected R1 module
+passed again (36 tests, 17.212 s). The first allowlist run (23 tests, 121.684 s, two failures/one skip)
+confirmed the inherited site differences and also caught one new undeclared dependency from the cap
+helper to `r1_runtime.py`. Its explicit unchanged-dependency declaration removes that new scope gap;
+the final allowlist run is recorded below.
+
+The final R1 module has 36 tests and 14 killed source mutants (assertion failures, no setup errors):
+the original 11, the 1,800 s Part B cap, removed full-cap-before-start admission, and skipped magistrate
+wait. A simulated B runs to 2,000 s without waiting in real time; A and B are independently refused
+when one second short of their full caps. Additional witnesses cover the dynamic runtime total,
+short launch admission, foreign marker/loaded night with no pmset, marker preservation after a read,
+four volume boundaries, agent cadence/order, configured display bin, supervisor identity and R1 plist grace.
+
+Final command results (same TMPDIR and `nice -n 10 python3.13 -B -m unittest MODULE` prefix):
+
+| Module / check | Result |
+|---|---|
+| `tests.align.test_r1_smoke_launcher` | 36 tests OK, 17.212 s; 14 killed mutants |
+| `tests.test_magistrate_desk_fence` | 42 tests OK, 64.205 s |
+| `tests.align.test_r1_followup` | 12 tests OK, 45.480 s |
+| `tests.test_host_command_sites` | 2 tests OK, 28.482 s |
+| `tests.hazards.test_refusal_allowlist` | 23 tests; 2 inherited failures, 1 skip, 121.306 s; owned 43 keys match |
+| compileall, diff and protected-path checks | compileall exit 0; protected paths/outer-runner bytes/owned refusal and host inventories match; diff check exit 0 |
+
+The final allowlist differences are unchanged outside the owned modules: three unlisted keys
+(driver re-raise and watchdog `_decide` FENCED/HOLD_UNSAFE), two watchdog miscounts, two changed
+guards (harvest `archive_copy_mismatch`, watchdog `_launch_fence` HOLD_UNSAFE), zero stale keys,
+and ten inherited dependency scope gaps. The new runtime dependency gap is gone. The owning
+43 keys (46 sites) match exactly after the final cleanup-order change. These inherited failures
+remain with RL-86; no overall green allowlist result is claimed.
+
+Additional final commands: `python3.13 -B -m compileall -q joulewise tests scripts/launch_align_r0.py
+scripts/run_align_r1_smoke.py` (exit 0), `git diff --check` (exit 0), and a focused guarded source
+census plus `git diff --exit-code 2d54da7e9 -- <ten condition-13 paths, kit, state, timing, wrapper>`
+(exit 0). The entire outer runner function is byte-identical to the input head, so its R0 5 s wait
+is preserved. No further suite expansion was needed after these checks; the full suite remains forbidden.
+
+Mechanism catches: the executing review identified the cap/restore/cadence defects; the R1 witnesses
+and 14 mutants verify those boundaries and handoff; the allowlist caught the new dependency declaration;
+R0 byte comparisons and protected-path checks caught no drift. No claim-bearing number was produced.
+
+### Exact refusal keys / RL-86 reconciliation
+
+Round 2 adds exactly these keys; no previously listed guard/count changes or removals:
+
+- `(scripts/launch_align_r0.py, launch, raise, ValueError|r smoke deadline)`, count 1,
+  guard **`14289bc956d7cebc`**.
+- `(scripts/run_align_r1_smoke.py, part, raise, TimeoutError|part not started)`, count 1,
+  guard **`009ba56e7bd6dab0`**.
+
+For the merge, the complete branch-vs-`9b4817f36` refusal-allowlist delta follows. This includes the
+launcher's inherited sites newly enumerated by the original change, and the existing measurement-checkout
+key with changed guard. It is **43 keys / 46 sites** (26 launcher, 17 runner; counts are shown individually).
+All keys below match the final owned-source census; this does not assert that unrelated inherited
+allowlist/scope gaps are resolved. Kind is `raise` unless shown otherwise.
+
+| File | Function | Kind | Detail | Count | Guard |
+|---|---|---|---|---|---|
+| `scripts/launch_align_r0.py` | `positive_seconds` | `raise` | `ArgumentTypeError\|seconds must be` | `1` | `58efbc81526ad7cd` |
+| `scripts/launch_align_r0.py` | `read_fence` | `raise` | `ValueError\|desk fence must` | `1` | `d4768c794e8a2ca6` |
+| `scripts/launch_align_r0.py` | `read_fence` | `raise` | `ValueError\|desk fence exceeds` | `1` | `dcb5516b0df56ce5` |
+| `scripts/launch_align_r0.py` | `read_fence` | `raise` | `ValueError\|invalid desk fence` | `1` | `f2c8a97a0763b67b` |
+| `scripts/launch_align_r0.py` | `pid_alive` | `kill` | `kill\|` | `1` | `f45dd2ee051df972` |
+| `scripts/launch_align_r0.py` | `handoff` | `raise` | `ValueError\|desk fence changed` | `1` | `ed4a5b9de7bfd57b` |
+| `scripts/launch_align_r0.py` | `handoff` | `raise` | `TimeoutError\|magistrate did not` | `1` | `3dfa1d7025f17b84` |
+| `scripts/launch_align_r0.py` | `preflight` | `raise` | `CalledProcessError\|run` | `1` | `e3b0c44298fc1c14` |
+| `scripts/launch_align_r0.py` | `preflight` | `raise` | `ValueError\|r requires ac` | `1` | `c35ede7c1c282a1e` |
+| `scripts/launch_align_r0.py` | `run_until_deadline` | `raise` | `TimeoutError\|r desk deadline` | `3` | `149e2a2fd716c21f` |
+| `scripts/launch_align_r0.py` | `run_until_deadline.interrupted` | `raise` | `SystemExit\|128 + signum` | `1` | `e3b0c44298fc1c14` |
+| `scripts/launch_align_r0.py` | `run_until_deadline` | `kill` | `terminate\|` | `1` | `7ebf051686638e42` |
+| `scripts/launch_align_r0.py` | `run_until_deadline` | `kill` | `kill\|` | `1` | `9bec38a7c66bcce0` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `ValueError\|live magistrate pid` | `1` | `70ba2e6f677d8d6e` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `ValueError\|desk deadline is` | `1` | `105e69e6d7e82b2b` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `ValueError\|r output must` | `1` | `f5e7e526a9e48602` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `ValueError\|checks must be` | `1` | `fe8a4761d6289d36` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `ValueError\|r smoke requires` | `1` | `ba3ce19df8fddae7` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `ValueError\|measurement checkout runner` | `1` | `cef3647b206ff276` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `ValueError\|an active desk` | `1` | `fea26754173cfa2d` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `CalledProcessError\|run` | `1` | `400865cc0fa44fbc` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `TimeoutError\|launchagent did not` | `1` | `400865cc0fa44fbc` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `<reraise>` | `1` | `420f332386437c13` |
+| `scripts/launch_align_r0.py` | `main` | `return_code` | `2` | `1` | `8cf857c98761b721` |
+| `scripts/launch_align_r0.py` | `<module>` | `raise` | `SystemExit\|main()` | `1` | `5972e4a22de36d17` |
+| `scripts/run_align_r1_smoke.py` | `ac_power` | `raise` | `ValueError\|r smoke requires` | `1` | `c1ac40146e287262` |
+| `scripts/run_align_r1_smoke.py` | `night_agents` | `raise` | `ValueError\|loaded night agent` | `1` | `b3c0de324562cf91` |
+| `scripts/run_align_r1_smoke.py` | `read_power` | `raise` | `ValueError\|r smoke requires` | `1` | `7a2c2d4486f25339` |
+| `scripts/run_align_r1_smoke.py` | `restore_power` | `raise` | `ValueError\|automatic restore blocked` | `1` | `93f3c8356c1d09e2` |
+| `scripts/run_align_r1_smoke.py` | `AgentFeed.sample` | `raise` | `ValueError\|agent census refused` | `1` | `60b83eaf0cb8937e` |
+| `scripts/run_align_r1_smoke.py` | `VolumeFeed.sample` | `raise` | `ValueError\|volume census refused` | `1` | `0af62d3a443cba6b` |
+| `scripts/run_align_r1_smoke.py` | `MeterFeed.start` | `raise` | `ValueError\|km c supervisor` | `1` | `e236046ee123e156` |
+| `scripts/run_align_r1_smoke.py` | `MeterFeed.start` | `raise` | `ValueError\|km c has` | `1` | `2ae2af4fcf176341` |
+| `scripts/run_align_r1_smoke.py` | `work_remaining` | `raise` | `TimeoutError\|r smoke work` | `1` | `9e37a3ff2b12e605` |
+| `scripts/launch_align_r0.py` | `launch` | `raise` | `ValueError\|r smoke deadline` | `1` | `14289bc956d7cebc` |
+| `scripts/run_align_r1_smoke.py` | `part` | `raise` | `TimeoutError\|part not started` | `1` | `009ba56e7bd6dab0` |
+| `scripts/run_align_r1_smoke.py` | `part` | `raise` | `TimeoutError\|part exceeded its` | `2` | `47cb9b4ead2779bb` |
+| `scripts/run_align_r1_smoke.py` | `part` | `raise` | `RuntimeError\|part process group` | `1` | `fcd5b23f0ff85aab` |
+| `scripts/run_align_r1_smoke.py` | `run.step` | `raise` | `StepFailed\|row[rc]` | `1` | `2d9502005a242afb` |
+| `scripts/run_align_r1_smoke.py` | `run.step` | `raise` | `<reraise>` | `1` | `420f332386437c13` |
+| `scripts/run_align_r1_smoke.py` | `run.interrupted` | `raise` | `SystemExit\|128 + signum` | `1` | `e3b0c44298fc1c14` |
+| `scripts/run_align_r1_smoke.py` | `run.soak` | `raise` | `ValueError\|soak reference file` | `1` | `a5ef691ee2acee56` |
+| `scripts/run_align_r1_smoke.py` | `<module>` | `raise` | `SystemExit\|main()` | `1` | `5972e4a22de36d17` |
+
+### Handoff
+
+Changed in round 2: `scripts/launch_align_r0.py`, `scripts/run_align_r1_smoke.py`,
+`tests/align/test_r1_smoke_launcher.py`, `configs/gates/hazard_refusals.json`,
+`tests/host_command_sites.json`, and this report. Implementation commit: `4c27eba472b647c2219c5669a2be0860f706f346` (`fix: honor R1 smoke budgets and preserve foreign power state`).
+No push. Coordination state, all ten condition-13 sources, and `align_r1_followup_kit.py` remain unchanged.
+
+Next exact step: the lead reviews this local commit, reconciles the table and inherited gaps with RL-86,
+then uses the 9,000 s magistrate sequence on the clean merged checkout in an agent-free native session.
+The native A/B smoke and its MLX/runtime, KM003C freshness, sampler/Tf08 coverage, D-load duration,
+census and cleanup receipts remain owed outside this sandbox. Synthetic tests do not close any hardware gate.
