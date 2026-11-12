@@ -1042,6 +1042,36 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+296. **Magistrate a30af3e5 (headless, Opus 5.5, interim lead under items 289/291/292/295), 2026-11-12 14:33 PST (`date`): PART A SMOKE 2 PASSED at the night sha `99622e96c` (G0 released in 837.3 s, bar 1,200 s; receipt rc 0). R1 FOLLOW-UP NIGHT ARMED: plan `align-r1-20261112T2251Z`, t0 14:51:00 PST, custody `/Users/edr/night-align/r1fu-20261112T223055Z`, D-7 packet `8d63766d…eab9`. Arm notice sent to Ed before install. Record: `docs/process_traces/2026-11-12-r1-followup-night/MAGISTRATE-ARM-a30af3e5.md`.**
+
+```pointer
+owner: magistrate
+armed: align-r1-20261112T2251Z
+host: MBP Mac15,9 (measurement Mac)
+t0: 2026-11-12T14:51:00-08:00
+latest_end: 2026-11-14T02:04:00-08:00
+wait: result_json_exists
+deadline: 2026-11-14T03:04:00-08:00
+on_early_or_refused: a REFUSED result or no `chain.started` by t0+10 min (15:01 PST): restore (uninstall, powermode 0), mail Ed and the lead. No `chain.exited` by the latest end (Sat 14 Nov 02:04 PST; deadman 03:04): the deadman/restore path; mail Ed and the lead
+next_observable: after `chain.exited`, the next activation runs the arm draft's "After the night" block with S=/Users/edr/night-align/r1fu-20261112T223055Z and PKT_SHA=8d63766da71bcc85ade0a60672758793fe8b3c3a490dad405c948a85f232eab9, then runbook §4 (uninstall, powermode 0, no strays, KM003C capture present) and the RL-90/RL-78/RL-89-margin/RL-72-E4/RL-91 report; then item 295's item C (custody copy) once the lead posts it
+```
+
+- **Smoke 2 check (item 285's block on item 294's OUT):** PASS.
+  - Receipt rc 0, parts A only, fresh soak, 20 steps all rc 0, feeds proven stopped, sha256s match.
+  - Soak reference `c0d2f440…6ff5`; TV0h 34.056 °C (sd 0.007), Th0C 26.070 °C (sd 0.037), both settled.
+  - G0 released in 837.331 s. Release minus the step-D reference: fast −0.24 °C, slow −2.46 °C. Slope at release −0.147 °C/min, against the 0.2 bar.
+  - ProcessType Interactive; no align-r0 label loaded; fence gone.
+- **#741 CI re-run 43257905641:** no new failing id in any shard (`cmpjobs.sh`, every failing shard new=0); shard 4 green.
+- **Arm checks:** all pass. RL-89 (a), (b) and (c) passed, with the wrapper in and both sudo-kill checks rc 0. Network time Off, word 0. AC power, not charging, 0 mA. 97 GiB free. The `night.lock` writer is dead (pid 11787), and the lock was left as found.
+- **Plan:** `prepare` rc 0 in 17.8 s. `arm.json` packet hash equals `prepare`'s. Its only flag is `disk.allocation_unsized`. `window_max_s` 126,480. The night crosses one batch window, Fri 11:45 PST.
+- **Mail:** no unread mail from Ed. Directives unchanged: standing #587, #422, #421, #417, #416, #408 and #405.
+- **Canonical root:** fast-forwarded to `00a338c44` (no night job loaded or on disk).
+- **Housekeeping:** a records worktree `/Users/edr/code/jw-wt/mag-a30af3e5` was created; prune it after the night. No Codex child was started.
+- **From now until `chain.exited`:**
+  - no agent on this Mac;
+  - no git operation in `$M`;
+  - no desk job.
+
 295. **Laptop lead (interactive, Opus 5.5), 2026-11-12 14:22 PST: HAND-BACK #2. The Air goes OFFLINE at 15:00; all Air seats are stopped, and Block 6 and state-machine work is queued below. MAGISTRATE 97d3961c (or its successor): you remain interim lead under items 289/291/292 for Track A (smoke 2 result, then the arm). Nothing below is yours tonight, except item C, after the night closes.**
 
 **A. Block 6 release path** (research-lead plan `/Volumes/JW-EXT/scratch/b6-release-path.md`; rulings RL-98, RL-99, RL-100, RL-101..104):
