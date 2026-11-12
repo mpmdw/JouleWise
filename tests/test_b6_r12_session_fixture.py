@@ -960,6 +960,96 @@ class SchedulerBoundaryTests(unittest.TestCase):
             self.assertFalse((outer / "control-probe").exists())
 
 
+class SinglePackVerifierTests(unittest.TestCase):
+    """Control-only verifier tests; no session collection or archive evidence."""
+
+    def setUp(self):
+        from b6_r12_segments import snapshot
+        self.temp = tempfile.TemporaryDirectory(prefix="r12-single-verify-control-")
+        self.addCleanup(self.temp.cleanup)
+        self.outer = Path(self.temp.name).resolve()
+        self.main = self.outer / "main"
+        (self.main / "loop").mkdir(parents=True)
+        (self.main / "loop/state.json").write_text('{"state":"ROTATE"}\n')
+        (self.main / "loop/attempts.jsonl").write_text('{"control_only":true}\n')
+        (self.main / "manifest.json").write_text(json.dumps({
+            "pin": PIN, "synthetic_only": True, "generator_files_sha256": {}}))
+        (self.main / "generator-parent-exit.txt").write_text("0\n")
+        self.control = {"main": str(self.main), "pack": "beta", "scenario": "anchor",
+                        "steps": [{"exit_code": 0, "boundary": snapshot(self.main)}]}
+        self.save_control()
+
+    def save_control(self):
+        (self.outer / "segments.json").write_text(json.dumps(self.control))
+
+    def program_inputs(self, root, workers, *, stem, session_id):
+        """Stand in for analysis only, never for the chain or its judgments."""
+        from b6_r12_verify import sha
+        self.assertEqual((root, workers, session_id), (self.main, 1, "r1-beta"))
+        pins = {key: sha(root / "loop" / name) for key, name in (
+            ("loop_state", "state.json"), ("loop_attempts", "attempts.jsonl"))}
+        (root / (stem + "-inputs.json")).write_text(json.dumps({"external": pins}))
+        (root / (stem + "-receipt.json")).write_text('{"control_only":true}\n')
+
+    def test_failed_parent_refuses_before_analysis(self):
+        """Predict: a failed parent refuses before creating a view or running analysis, even with plausible desk bytes."""
+        from unittest.mock import patch
+        import b6_r12_single_verify as verifier
+        self.control["steps"][-1]["exit_code"] = 143
+        self.save_control()
+        with patch.object(verifier, "run_option_c") as program:
+            with self.assertRaisesRegex(ValueError, "interrupted/failed phase"):
+                verifier.verify(self.outer, "control-check")
+        program.assert_not_called()
+        self.assertFalse((self.outer / "control-check").exists())
+
+    def test_literal_loop_pins_and_failed_shape_exit_are_preserved(self):
+        """Predict: verifier preserves exact original loop bytes/pins and returns the shape-test failure; this mocked control run is no fixture evidence."""
+        from unittest.mock import patch
+        import b6_r12_single_verify as verifier
+        originals = {name: (self.main / "loop" / name).read_bytes()
+                     for name in ("state.json", "attempts.jsonl")}
+        receipt = {"exit_code": 0, "option_c": {"comparator": {"pass": True}},
+                   "process_measurement": {"control_only": True}, "time_wrapper_exit": 1}
+        with patch.object(verifier, "finalize_manifest") as finalize, \
+             patch.object(verifier, "run_option_c", side_effect=self.program_inputs), \
+             patch.object(verifier, "agree", return_value=receipt), \
+             patch.object(verifier, "session_facts", return_value={"control_only": True}), \
+             patch.object(verifier.subprocess, "run", return_value=subprocess.CompletedProcess([], 7)) as tests:
+            self.assertEqual(verifier.verify(self.outer, "control-check"), 7)
+        finalize.assert_called_once_with(self.main)
+        self.assertEqual(tests.call_args.kwargs["env"]["R12_SINGLE_PACK_SET"],
+                         str(self.outer / "control-check"))
+        for name, data in originals.items():
+            self.assertEqual((self.main / "loop" / name).read_bytes(), data)
+            self.assertEqual((self.outer / "control-check" / name).read_bytes(), data)
+        observed = json.loads((self.outer / "control-check/receipt.json").read_text())
+        self.assertEqual(observed["test_exit"], 7)
+        self.assertFalse(observed["full_volume_claim"])
+        self.assertFalse(observed["closed_nine_claim"])
+
+    def test_changed_program_loop_pin_refuses_before_shape_tests(self):
+        """Predict: mismatched program loop pins refuse before any shape assertion, even after a successful analysis receipt."""
+        from unittest.mock import patch
+        import b6_r12_single_verify as verifier
+
+        def wrong_pin(root, workers, *, stem, session_id):
+            self.program_inputs(root, workers, stem=stem, session_id=session_id)
+            path = root / (stem + "-inputs.json")
+            value = json.loads(path.read_text())
+            value["external"]["loop_state"] = "0" * 64
+            path.write_text(json.dumps(value))
+
+        with patch.object(verifier, "finalize_manifest"), \
+             patch.object(verifier, "run_option_c", side_effect=wrong_pin), \
+             patch.object(verifier, "agree", return_value={}), \
+             patch.object(verifier.subprocess, "run") as tests:
+            with self.assertRaisesRegex(ValueError, "program loop pins"):
+                verifier.verify(self.outer, "control-check")
+        tests.assert_not_called()
+        self.assertFalse((self.outer / "control-check/receipt.json").exists())
+
+
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
 class DeclaredShapeTests(unittest.TestCase):
     """Integration expectations declared before any official named shape run.
