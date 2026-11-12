@@ -118,8 +118,14 @@ class Mini(unittest.TestCase):
     def inputs(self, mapping, out=None, receipt=None, extra=()):
         path = self.base / ("mapping-%d.json" % len(list(self.base.glob("mapping-*.json"))))
         path.write_text(json.dumps(mapping))
-        return run("inputs", "--manifest", self.manifest, "--verify-receipt", receipt or self.receipt,
+        return run("inputs", *self.ia(receipt=receipt),
                    "--mapping", path, "--l9-audit", "not_run", "--out", out or self.base / "run-inputs.json", *extra)
+
+    def ia(self, receipt=None, manifest=None):
+        """The five pinning arguments of `inputs` (cold review M3): both out-of-band digests."""
+        receipt = receipt or self.receipt
+        return ["--manifest", manifest or self.manifest, "--manifest-sha256", sha(manifest or self.manifest),
+                "--verify-receipt", receipt, "--verify-receipt-sha256", sha(receipt)]
 
     def verified(self):
         rc, out, err = self.verify()
@@ -470,7 +476,7 @@ class Mini(unittest.TestCase):
     def test_list_names(self):
         # Expected: exit 0; SHA256SUMS rows as sources/... plus manifest-digested names; no content.
         self.verified()
-        rc, out, err = run("inputs", "--manifest", self.manifest, "--verify-receipt", self.receipt,
+        rc, out, err = run("inputs", *self.ia(),
                            "--list-names", "b6-alpha-r1")
         self.assertEqual((rc, err), (0, ""))
         names = out.splitlines()
@@ -486,13 +492,13 @@ class Mini(unittest.TestCase):
     def test_list_names_unknown_session(self):
         # Expected: refused session_unknown.
         self.verified()
-        self.assertRefused(run("inputs", "--manifest", self.manifest, "--verify-receipt", self.receipt,
+        self.assertRefused(run("inputs", *self.ia(),
                                "--list-names", "nope"), "session_unknown")
 
     def test_inputs_arguments_missing(self):
         # Expected: refused inputs_arguments_missing without --mapping.
         self.verified()
-        self.assertRefused(run("inputs", "--manifest", self.manifest, "--verify-receipt", self.receipt,
+        self.assertRefused(run("inputs", *self.ia(),
                                "--l9-audit", "not_run", "--out", self.base / "x.json"), "inputs_arguments_missing")
 
     def test_inputs_out_exists_before_mapping_read(self):
@@ -500,7 +506,7 @@ class Mini(unittest.TestCase):
         self.verified()
         out = self.base / "exists.json"
         out.write_text("{}")
-        self.assertRefused(run("inputs", "--manifest", self.manifest, "--verify-receipt", self.receipt,
+        self.assertRefused(run("inputs", *self.ia(),
                                "--mapping", self.base / "absent.json", "--l9-audit", "not_run", "--out", out),
                            "out_exists")
 
@@ -626,6 +632,54 @@ class Mini(unittest.TestCase):
         self.assertRefused(self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]), receipt=bad),
                            "receipt_manifest_mismatch")
 
+    def test_inputs_refuses_wrong_manifest_digest(self):
+        # Expected (M3): manifest_digest_mismatch when --manifest-sha256 is not the manifest's digest.
+        self.verified()
+        args = self.ia()
+        args[args.index("--manifest-sha256") + 1] = "0" * 64
+        self.assertRefused(run("inputs", *args, "--list-names", "b6-alpha-r1"), "manifest_digest_mismatch")
+
+    def test_inputs_refuses_wrong_receipt_digest(self):
+        # Expected (M3): receipt_digest_mismatch when the receipt is not the file whose digest was carried out of band.
+        self.verified()
+        args = self.ia()
+        args[args.index("--verify-receipt-sha256") + 1] = "0" * 64
+        self.assertRefused(run("inputs", *args, "--list-names", "b6-alpha-r1"), "receipt_digest_mismatch")
+
+    def test_inputs_requires_both_digests(self):
+        # Expected (M3): argparse usage error (exit 2) when either out-of-band digest is omitted.
+        self.verified()
+        for flag in ("--manifest-sha256", "--verify-receipt-sha256"):
+            args = self.ia()
+            i = args.index(flag)
+            del args[i:i + 2]
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                run("inputs", *args, "--list-names", "b6-alpha-r1")
+            self.assertEqual(caught.exception.code, 2)
+
+    def test_inputs_refuses_hand_written_receipt(self):
+        # Expected (M3): a receipt with the right schema, verdict, manifest digest and root but nothing verify wrote
+        # (empty session bodies) is refused receipt_invalid, even with its own digest supplied; the copy has a
+        # changed source file that this receipt would have waved through.
+        (self.ca / "sources/runs/r1/data.bin").write_bytes(b"changed")
+        fake = self.base / "fake-receipt.json"
+        fake.write_text(json.dumps({"schema": kit.RECEIPT_SCHEMA, "verdict": "verified", "manifest_sha256": self.msha,
+                                    "root": str(self.dst), "sessions": {"b6-alpha-r1": {}, "b6-beta-r1": {}}}))
+        self.assertRefused(run("inputs", *self.ia(receipt=fake), "--list-names", "b6-alpha-r1"), "receipt_invalid")
+
+    def test_inputs_refuses_receipt_without_producer_or_with_other_counts(self):
+        # Expected (M3): receipt_invalid for a copied verify receipt with the producer mark removed, and for one whose
+        # file count differs from the manifest's.
+        self.verified()
+        good = json.loads(self.receipt.read_bytes())
+        for name, edit in (("producer", lambda r: r.pop("produced_by")),
+                           ("count", lambda r: r["sessions"]["b6-alpha-r1"].update(files=1))):
+            r = json.loads(json.dumps(good))
+            edit(r)
+            bad = self.base / ("receipt-" + name + ".json")
+            bad.write_text(json.dumps(r))
+            self.assertRefused(run("inputs", *self.ia(receipt=bad), "--list-names", "b6-alpha-r1"), "receipt_invalid")
+
     def test_sha256sums_changed_after_verify(self):
         # Expected: refused sums_digest_mismatch when inputs reads the name column.
         self.verified()
@@ -651,8 +705,8 @@ class Mini(unittest.TestCase):
         mapping = self.base / "rep-mapping.json"
         mapping.write_text(json.dumps(mapping_for(["S1/archive", "S2/archive"])))
         doc = self.base / "rep-inputs.json"
-        rc, _, err = run("inputs", "--manifest", manifest, "--verify-receipt", receipt, "--mapping", mapping,
-                         "--l9-audit", "completed", "--out", doc)
+        rc, _, err = run("inputs", "--manifest", manifest, "--manifest-sha256", sha(manifest), "--verify-receipt", receipt,
+                         "--verify-receipt-sha256", sha(receipt), "--mapping", mapping, "--l9-audit", "completed", "--out", doc)
         self.assertEqual((rc, err), (0, ""))
         pins = json.loads(doc.read_bytes())["sessions"]
         self.assertEqual(set(pins), {str(dst / "S1/archive"), str(dst / "S2/archive")})
@@ -701,11 +755,12 @@ class NoContentLeak(unittest.TestCase):
             shutil.copytree(src, dst, symlinks=True)
             streams.append(run("verify", "--manifest", manifest, "--manifest-sha256", msha, "--root", dst,
                                "--out", receipt))
-            streams.append(run("inputs", "--manifest", manifest, "--verify-receipt", receipt,
-                               "--list-names", "b6-alpha-r1"))
+            pins = ["--manifest", manifest, "--manifest-sha256", msha, "--verify-receipt", receipt,
+                    "--verify-receipt-sha256", sha(receipt)]
+            streams.append(run("inputs", *pins, "--list-names", "b6-alpha-r1"))
             mapping = base / "map.json"
             mapping.write_text(json.dumps(mapping_for(["b6-alpha-r1"])))
-            streams.append(run("inputs", "--manifest", manifest, "--verify-receipt", receipt, "--mapping", mapping,
+            streams.append(run("inputs", *pins, "--mapping", mapping,
                                "--l9-audit", "not_run", "--out", doc))
             self.assertEqual([s[0] for s in streams], [0, 0, 0, 0])
             # Refusals while reading planted files: a flipped byte and a corrupt stream.
@@ -753,8 +808,8 @@ class EndToEnd(unittest.TestCase):
                                 for name, pin in sealed.items()}}
         (base / "mapping.json").write_text(json.dumps(mapping))
         cls.kit_doc = base / "run-inputs.json"
-        cls.inputs_run = run("inputs", "--manifest", manifest, "--verify-receipt", receipt,
-                             "--mapping", base / "mapping.json", "--l9-audit", "not_run", "--out", cls.kit_doc)
+        cls.inputs_run = run("inputs", "--manifest", manifest, "--manifest-sha256", msha, "--verify-receipt", receipt,
+                             "--verify-receipt-sha256", sha(receipt), "--mapping", base / "mapping.json", "--l9-audit", "not_run", "--out", cls.kit_doc)
         cls.kit = cls.recompute([copy / a.name for a in cls.archives], attempts, cls.kit_doc, "kit")
 
     @classmethod
