@@ -6185,7 +6185,7 @@ on 11-11. This is the current reference.
 
 ---
 
-# Decision request 64: two "computed and compared" groups in the R3 table are compared only conditionally (2026-11-12 15:40 PST)
+# Decision request 64: two "computed and compared" groups in the R3 table are compared only conditionally (2026-11-12 15:25 PST)
 
 **Read.** The note at the end of my cold review of the R3 generator
 (`/Volumes/JW-EXT/scratch/fable-rev-r3-table.md`). At `a3f54e3ad`: `check_block` in
