@@ -384,34 +384,31 @@ class R1NightWorstCaseTests(unittest.TestCase):
     """Round-5 cold pass LOW-6: the all-caps R1 night wall, from the phase table."""
 
     def test_worst_case_sums_every_phase_cap(self):
+        # Migrated to the round-8 admission-unit table (a85ee8ec6, RL-59/64/72):
+        # the `segments` and `precool_cap_s` keys are gone. The exact table is
+        # asserted in test_r1_round7_science's test_night_worst_case_with_the_round8_bounds.
         value = r1.night_worst_case_s(['fake-runtime'])
-        names = [row['name'] for row in value['segments']]
-        self.assertEqual(names, [row[0] for row in r1.phase_plan(False)])
-        bounds = {row['name']: row['bound_s'] for row in value['segments']}
+        units = value['admission_units']
+        flat = [name for unit in units for name in unit['names']]
+        # Every modelled phase is in exactly one unit; only the two calibration brackets
+        # (priced as overhead) are outside the units.
+        self.assertEqual(flat, [row[0] for row in r1.phase_plan(False)
+                                if row[1] not in ('calibration-pre', 'calibration-post')])
+        bounds = {unit['names'][-1]: unit['bound_s'] for unit in units}
         self.assertEqual(bounds['idle_soak'], 1800)
-        # R7-2 and R8-4: 1,750 + 1.13544 x 1,580 + 120 (the re-armed member) + 1,200 + 300 + 600
-        self.assertAlmostEqual(bounds['step_D_prefill_10k_decode_4096'], 5763.9952)
+        # R7-2 and R8-4: 1,750 + 1.13544 x 1,580 + 120 (the re-armed member) + 1,200 + 300 + 600;
+        # the step-d unit adds its ordinary 1,800 s 30B predecessor.
+        self.assertAlmostEqual(bounds['step_D_prefill_10k_decode_4096'], 1800 + 5763.9952)
         self.assertAlmostEqual(bounds['high_power_B'], r1.aba_leg_bound_s(['fake-runtime']))
         self.assertAlmostEqual(value['no_redo_s'], sum(bounds.values()))
         self.assertEqual(value['batch_blackout_s'], 5400)
+        self.assertAlmostEqual(value['largest_unit_s'], max(bounds.values()))
         self.assertAlmostEqual(value['batch_encounter_max_s'], max(bounds.values()) + 5400)
 
-    def test_worst_case_uses_the_round6_table_and_counts_the_r6_2_retries(self):
-        # Round-6 integration: the R6-1/R6-2/R6-6 phase table with the runtime
-        # config's precool cap, and one R6-2 retry per calibration segment.
-        value = r1.night_worst_case_s(['fake-runtime'])
-        cap = r1.runtime_precool_cap_s(['fake-runtime'])
-        self.assertEqual(value['precool_cap_s'], cap)
-        names = [row['name'] for row in value['segments']]
-        self.assertEqual(names, [row[0] for row in r1.phase_plan(False, precool_cap_s=cap)])
-        self.assertNotIn('cooldown_after_30b', names)
-        bounds = {row['name']: row['bound_s'] for row in value['segments']}
-        self.assertEqual(bounds[r1.STEP_D_NAME + r1.PRECOOL_SUFFIX], cap)
-        calibration = [row for row in value['segments'] if row['kind'] in r1.contract.G0_INCONCLUSIVE_KINDS]
-        self.assertEqual(len(calibration), 4)
-        self.assertAlmostEqual(value['r6_2_retry_max_s'], sum(cap + row['bound_s'] for row in calibration))
-        self.assertAlmostEqual(value['with_retries_and_one_batch_encounter_s'],
-                               value['no_redo_s'] + value['r6_2_retry_max_s'] + value['batch_encounter_max_s'])
+    # test_worst_case_uses_the_round6_table_and_counts_the_r6_2_retries: deleted. RL-59/64/72
+    # (a85ee8ec6) removed the R6-2 retries and the step-D precool, and priced the night as two
+    # whole-unit load redos; superseded by test_r1_round7_science.G0TimeoutTests.
+    # test_night_worst_case_with_the_round8_bounds (108768 / 126480).
 
 
 if __name__ == '__main__':

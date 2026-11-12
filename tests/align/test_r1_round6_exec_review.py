@@ -240,7 +240,7 @@ class NightLockAcrossProcessesTests(unittest.TestCase):
 class PhaseOrderTests(unittest.TestCase):
     """R6-1 / R6-2 on the phase table the driver runs (any cap, with or without 4-bit)."""
 
-    def test_gated_runs_follow_a_d_turn_and_calibrations_follow_a_bounded_precool(self):
+    def test_gated_runs_follow_a_d_turn_and_planning_kinds_follow_a_bounded_idle_until_soak(self):
         from joulewise.align.apple import r1_runtime_contract as contract
         from scripts import align_r1_rehearsal as r1
         for include_4bit in (False, True):
@@ -252,11 +252,22 @@ class PhaseOrderTests(unittest.TestCase):
                         # R6-1: only W1's own idle (inside the member) after a D
                         # turn; no idle segment, no cool-to-band in between.
                         self.assertIn(kinds[index - 1], r1.D_TURN_KINDS, (name, kinds[index - 1]))
-                    if kind in contract.G0_INCONCLUSIVE_KINDS:
-                        # R6-2: a bounded precool to the G0 band of R right before.
+                    if kind in contract.PLANNING_KINDS:
+                        # R6-2 as revised by RL-59/64/72 (a85ee8ec6): each planning
+                        # kind starts after a bounded idle-until-soak (the cooldown
+                        # after D, or its own precool), now against step-D R_D.
                         before = phases[index - 1]
                         self.assertEqual(before[1], "idle-until-soak", name)
                         self.assertIn(before[2], (cap, r1.COOLDOWN_AFTER_D_MAX_S), name)
+                    elif kind in contract.G0_INCONCLUSIVE_KINDS:
+                        # There are no soak releases, no step-D precool and no wait that
+                        # could split the capture pair: step-30b follows the soak
+                        # idle, the A-B-A legs their own native captures, and step-d
+                        # its ordinary 30B predecessor (one admission unit).
+                        expected = {"step-30b": "idle", "step-d": "capture-predecessor-30b",
+                                    "high-power-aba-a1": "step-30b", "high-power-aba-b": "high-power-aba-a1",
+                                    "high-power-aba-a2": "high-power-aba-b"}[kind]
+                        self.assertEqual(kinds[index - 1], expected, name)
                 self.assertNotIn("cooldown_after_30b", [name for name, *_ in phases])   # R6-6
                 gated = [i for i, (n, k, *_) in enumerate(phases) if n in r1.GATED_NAMES or k == "x-g"]
                 self.assertEqual(gated, list(range(gated[0], gated[0] + 4)))
