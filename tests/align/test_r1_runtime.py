@@ -39,6 +39,15 @@ def custody(out):
     return json.loads((Path(out) / rt.CUSTODY_NAME).read_text())
 
 
+def run_step_d(test, run, config, soak):
+    """A real native step-d run with its complete runtime custody: the one
+    sibling every consumer reads R_D from (RL-59/64/72, a85ee8ec6)."""
+    code, step = call(config, run / rt.STEP_D_SEGMENT, "step-d", "--soak-reference", str(soak))
+    test.assertEqual(code, 0, custody(run / rt.STEP_D_SEGMENT).get("error"))
+    test.assertIs(step["g0_released"], True)
+    return step
+
+
 class ConformanceTests(unittest.TestCase):
     """Every driver kind, run by the runtime against the fake backend, returns
     its contract fields and passes the driver's own validators."""
@@ -109,12 +118,13 @@ class ConformanceTests(unittest.TestCase):
             digest = body.pop("classification_sha256")
             self.assertEqual(digest, thermometry["classification_sha256"])
             self.assertEqual(digest, __import__("hashlib").sha256(rt.canonical(body).encode()).hexdigest())
-            self.assertEqual(detail["S6_tuning"]["status"], "TODO")
+            self.assertEqual(detail["S6_tuning"]["status"], "adopted")   # RL-78
             self.assertEqual(results["step_30b"]["thermometry"]["for_record_only"], True)
             cool = segment("cooldown_after_D", "idle-until-soak", "--duration-s", "1500")
             self.assertTrue(cool["recovery_curve"])
             gated = {}
-            soak_r = json.loads((run / "soak_reference.json").read_text())["sensors_c"][rs.syn.SLOW]
+            # RL-59/64/72 (a85ee8ec6): consumers gate on the native step-D R_D, not the soak.
+            r_d = step["operating_reference"]
             for name, kind in r1.GATED_D_RUNS:
                 # R6-1: no precool; the member's own W1 idle is the schedule.
                 gated[name] = segment(name, kind)
@@ -126,16 +136,17 @@ class ConformanceTests(unittest.TestCase):
                                      .read_text())["turns"]))
                 self.assertGreater(gated[name]["decode_tokens"], 0)
                 r1._check_gated_t_dead(name, gated[name], step)
-                r1._check_soak_reference_consumed(name, gated[name], run / "soak_reference.json")
+                r1._check_d_reference_consumed(name, gated[name], step)
                 r1.deadman_summary(name, gated[name])
                 bundle = run / name / gated[name]["bundle"]
                 self.assertFalse((bundle / "outputs/align_window_reference.json").exists())
                 episode = json.loads((bundle / "outputs/align_episode.json").read_text())
                 g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
-                self.assertEqual(g0["reference"]["slow_c"], soak_r)
-                self.assertEqual(g0["reference"]["source_member"], "r1_soak_reference")
+                self.assertEqual(g0["reference"]["slow_c"], r_d["slow_c"])
+                self.assertEqual(g0["reference"]["source_member"], r_d["source_member"])
             xg = segment("X_G_contrast", "x-g")
-            self.assertEqual(xg["reference_source"], "r1_soak_reference")
+            self.assertEqual(xg["reference_source"], r_d["source_member"])
+            r1._check_d_reference_consumed("X_G_contrast", xg, step)
             self.assertEqual((xg["inter_member_idle_s"], xg["g0_outcome"]), (300.0, "released"))
             self.assertEqual(r1.gate_wait_medians(gated)["G1_waits"],
                              sum(len(g["gate_waits_s"]["G1"]) for g in gated.values()))
@@ -171,10 +182,11 @@ class ConformanceTests(unittest.TestCase):
                 g0 = [r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0"][0]
                 self.assertEqual(result["g0_wait_s"], g0["duration_s"], name)
                 self.assertEqual(result["g0_timeout_s"], 1200 if kinds[name] in rt.G0_TIMEOUT_KINDS else 600, name)
-            for kind in ("step-d", "x-g", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS):
+            # a85ee8ec6, RL-59: "1,200 s stays, for every R1 gate" (step-30b and
+            # the A-B-A legs included; only g0-release-soak keeps the default).
+            for kind in ("step-30b", "step-d", "x-g", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS,
+                         *contract.HIGH_POWER_KINDS):
                 self.assertEqual(armed[kind], 1200, kind)
-            for kind in ("step-30b", *contract.HIGH_POWER_KINDS):
-                self.assertIsNone(armed[kind], kind)
             # R7-13: the D classification records its alias groups (none here).
             self.assertEqual(step["thermometry"]["alias_groups"], [])
             # Every runtime wrote only inside its own segment directory.
@@ -447,48 +459,50 @@ class IncompleteMemberTests(unittest.TestCase):
                 del world.status
 
     def test_planning_turn_with_an_unreleased_g0_is_inconclusive(self):
+        # RL-72 E3 (a85ee8ec6): a planning kind's G0 timeout now runs the turn
+        # flagged r1.g0_timeout_run (no release temperature, candidate only);
+        # the driver marks the segment inconclusive from that flag (covered by
+        # test_r1_followup's G0-timeout night).
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
-            soak = root / "soak.json"
-            soak.write_text(json.dumps({"schema": rt.SOAK_REFERENCE_SCHEMA,
-                                        "sensors_c": {rs.syn.FAST: 38.0, rs.syn.SLOW: 38.0},
-                                        "detrended": {k: {"detrended_sd_c": 0.1} for k in (rs.syn.FAST, rs.syn.SLOW)}}))
+            soak = write_soak(root / "soak.json")
+            run_step_d(self, root, config, soak)
             out = root / "planning_turn_R_plus_2C"
             buffer = io.StringIO()
             code = rt.main(["--config", str(config), "--r1-kind", "d-planning-turn-r-plus-2c", "--output", str(out),
                             "--soak-reference", str(soak)], stdout=buffer, backend_factory=self.NoReleaseBackend)
             record = custody(out)
-            # LEAD-RULINGS-2 R6-2: INCONCLUSIVE (exit 0), not a failure that
-            # refuses the night; still no release temperature and no energy.
             self.assertEqual(code, 0, record)
             self.assertEqual(record["status"], "complete")
             result = json.loads(buffer.getvalue())
-            self.assertEqual((result["segment_status"], result["g0_released"], result["g0_outcome"]),
-                             ("inconclusive", False, "timeout"))
-            self.assertNotIn("g0_release_c", result)
-            self.assertNotIn("energy_j", result)
+            self.assertNotIn("segment_status", result)
+            self.assertEqual((result["g0_outcome"], result["candidate_only"]), ("timeout", True))
+            self.assertIsNone(result["g0_release_c"])
+            self.assertIn("r1.g0_timeout_run", result["episode_flags"])
+            self.assertGreater(result["energy_j"], 0)       # the turn ran
             self.assertEqual(contract.missing_fields("d-planning-turn-r-plus-2c", result, quiet=True), [])
             r1.os_load_verdict("planning_turn_R_plus_2C", result)
-            # The member itself ended at G0 with no turn: the evidence stays in DIR.
             bundle = out / "runs" / "align-v4-r1-d-planning-turn-r-plus-2c"
-            self.assertTrue((bundle / "summary_metrics.json").exists())
+            episode = json.loads((bundle / "outputs/align_episode.json").read_text())
+            self.assertEqual(len(episode["turns"]), 1)
+            self.assertEqual([r["outcome"] for r in episode["hardware"]["thermal"]["intervals"]
+                              if r["kind"] == "G0"], ["timeout"])
 
     def test_planning_turn_cut_by_the_deadman_fails_the_segment(self):
         # The Fable cold pass HIGH-1 path: G0 releases, then the deadman cuts
         # the one decode. The old runtime returned that partial turn's energy.
         # (Since R5-2 the deadman is armed after the G0, so it must be shorter
-        # than the turn itself to cut it.)
+        # than the turn itself to cut it.) The step-d sibling is made first,
+        # under the ordinary deadman; only the planning member gets 20 s.
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
+            soak = write_soak(root / "soak.json")
+            run_step_d(self, root, config, soak)
             data = json.loads(config.read_text())
             data["step"]["deadman_s"] = 20    # synthetic full turn ~232 s
             config.write_text(json.dumps(data))
-            soak = root / "soak.json"
-            soak.write_text(json.dumps({"schema": rt.SOAK_REFERENCE_SCHEMA,
-                                        "sensors_c": {rs.syn.FAST: 38.0, rs.syn.SLOW: 38.0},
-                                        "detrended": {k: {"detrended_sd_c": 0.1} for k in (rs.syn.FAST, rs.syn.SLOW)}}))
             out = root / "planning_turn_R_plus_0C"
             code, result = call(config, out, "d-planning-turn-r-plus-0c", "--soak-reference", str(soak))
             record = custody(out)
@@ -503,7 +517,10 @@ class IncompleteMemberTests(unittest.TestCase):
             self.assertEqual(len(episode["turns"]), 1)
 
     def test_step_d_with_an_unreleased_g0_is_inconclusive(self):
-        # R6-2: step-d's G0 timeout used to exit 3 and refuse R1 after hours.
+        # RL-72 E3 (a85ee8ec6): step-d's G0 timeout no longer yields an
+        # inconclusive segment with no turn. The step runs flagged
+        # r1.g0_timeout_run, is a candidate only, and its captured reference
+        # is not an admitted R_D, so no consumer may read it.
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
@@ -514,17 +531,26 @@ class IncompleteMemberTests(unittest.TestCase):
                             "--soak-reference", str(soak)], stdout=buffer, backend_factory=self.NoReleaseBackend)
             record = custody(out)
             self.assertEqual(code, 0, record)
+            self.assertEqual(record["status"], "complete")
             result = json.loads(buffer.getvalue())
-            self.assertEqual((result["segment_status"], result["g0_released"]), ("inconclusive", False))
-            self.assertNotIn("slots", result)
-            self.assertEqual(sorted(result["incomplete_reasons"]),
-                             ["episode.g0_unreleased:0", "thermal.start_gate_timeout", "turns:0"])
+            self.assertNotIn("segment_status", result)
+            self.assertEqual((result["g0_released"], result["g0_outcome"], result["candidate_only"]),
+                             (False, "timeout", True))
+            self.assertIn("r1.g0_timeout_run", result["episode_flags"])
+            self.assertIn("thermal.start_gate_timeout", result["episode_flags"])
+            self.assertNotIn("incomplete_reasons", result)
+            self.assertIn("slots", result)          # the turn ran
+            self.assertGreater(result["decode_tokens"], 0)
             self.assertEqual(contract.missing_fields("step-d", result, quiet=True), [])
-            # A consumer never reads an INCONCLUSIVE step-d as slots.
-            run = root
-            code, _ = call(config, run / "D_spam_benign_s1_gated_held_a", "d-spam-benign-s1-a",
-                           "--soak-reference", str(soak))
-            self.assertEqual(code, rt.EXIT_REFUSED)
+            self.assertFalse(contract.is_g0_inconclusive("step-d", result))
+            # RL-72: "a captured R_D survives a timeout". The flagged step-d
+            # stays a candidate (candidate_only), but its captured reference is
+            # still what a consumer authenticates and gates against.
+            code, consumer = call(config, root / "D_spam_benign_s1_gated_held_a", "d-spam-benign-s1-a",
+                                  "--soak-reference", str(soak))
+            self.assertEqual(code, 0, custody(root / "D_spam_benign_s1_gated_held_a").get("error"))
+            self.assertEqual((consumer["reference_source"], consumer["reference_c"]),
+                             (result["reference_source"], result["reference_c"]))
 
     def test_only_a_pure_g0_timeout_is_inconclusive(self):
         self.assertTrue(rt.g0_timeout_only(["turns:0", "episode.g0_unreleased:0", "thermal.start_gate_timeout"]))
@@ -569,10 +595,11 @@ class Round5RuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
+            soak = write_soak(root / "soak.json")
+            run_step_d(self, root, config, soak)      # R_D is consumed from the native step-d (RL-59/72)
             data = json.loads(config.read_text())
             data["step"]["deadman_s"] = 280
             config.write_text(json.dumps(data))
-            soak = write_soak(root / "soak.json")
             out = root / "planning_turn_R_plus_2C"
             code, result = call(config, out, "d-planning-turn-r-plus-2c", "--soak-reference", str(soak))
             self.assertEqual(code, 0, custody(out).get("error"))
@@ -586,35 +613,44 @@ class Round5RuntimeTests(unittest.TestCase):
             self.assertGreaterEqual(budget["deadline_ns"], g0["end_ns"] + 280 * NS)
             self.assertNotIn("episode.deadman:0", episode["flags"])
 
-    def test_gated_d_run_gates_against_the_soak_reference_not_a_warm_capture(self):
-        # R5-1 (cold HIGH-2): the old gated run captured its own R from the
-        # 60 s before warmup (a warm value) and wrote align_window_reference.json.
+    def test_gated_d_run_gates_against_the_step_d_reference_not_the_soak(self):
+        # R5-1 (cold HIGH-2) migrated to RL-59/64/72 (a85ee8ec6): a gated run
+        # neither captures its own warm R nor gates on the soak; it consumes the
+        # native step-D R_D through the step-d sibling's bundle and custody.
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
             soak = write_soak(root / "soak.json", slow=38.25, fast=38.5)
             run = root / "r1"
-            (run / rt.STEP_D_SEGMENT).mkdir(parents=True)
-            (run / rt.STEP_D_SEGMENT / rt.RESULT_NAME).write_text(json.dumps({"kind": "step-d", "slots": {
-                "S7": 30.0, "T_dead": 600.0, "N_chunk": 256, "B_D": 4096}}))
-            # Sol wp15rev F3 (R5-9): consumers read step-d only under its complete custody.
-            rt.write_custody(run / rt.STEP_D_SEGMENT, {"status": "complete"})
+            run.mkdir()
+            # No step-d sibling: the consumer refuses before work.
+            code, _ = call(config, run / "no_step_d", "d-spam-benign-s1-b", "--soak-reference", str(soak))
+            self.assertEqual(code, rt.EXIT_REFUSED)
+            self.assertIn("step-d result and custody", custody(run / "no_step_d")["error"])
+            step = run_step_d(self, run, config, soak)
+            reference = step["operating_reference"]
+            self.assertNotEqual(reference["slow_c"], 38.25)     # R_D is not the soak value
             out = run / "D_spam_benign_s1_gated_held_a"
             code, result = call(config, out, "d-spam-benign-s1-a", "--soak-reference", str(soak))
             self.assertEqual(code, 0, custody(out).get("error"))
-            self.assertEqual((result["reference_source"], result["reference_c"]), ("r1_soak_reference", 38.25))
-            self.assertEqual(result["g0_reference"]["slow_c"], 38.25)
-            self.assertEqual(result["g0_reference"]["fast_c"], 38.5)
+            self.assertEqual((result["reference_source"], result["reference_c"]),
+                             (reference["source_member"], reference["slow_c"]))
+            self.assertEqual(result["g0_reference"]["slow_c"], reference["slow_c"])
+            self.assertEqual(result["g0_reference"]["fast_c"], reference["fast_c"])
             self.assertEqual(set(result["gate_waits_s"]), {"G0", "G1", "H"})
+            r1._check_d_reference_consumed("D_spam_benign_s1_gated_held_a", result, step)
             bundle = out / result["bundle"]
             self.assertFalse((bundle / "outputs/align_window_reference.json").exists())
+            # Without --soak-reference the kind still refuses (the bands need it).
             code, _ = call(config, run / "no_soak", "d-spam-benign-s1-b")
             self.assertEqual(code, rt.EXIT_REFUSED)
             self.assertIn("--soak-reference", custody(run / "no_soak")["error"])
 
     def test_aba_leg_without_its_own_g0_release_is_inconclusive_not_a_failure(self):
-        # R5-3 (exec MEDIUM-1): the leg used to exit 3 ("not one complete turn"),
-        # which refused the whole R1 night after ~10 h.
+        # R5-3 (exec MEDIUM-1) migrated to RL-72 E3 (a85ee8ec6): the leg's G0
+        # timeout runs the turn flagged r1.g0_timeout_run (still no exit 3,
+        # which would refuse the whole R1 night); g0_released is False, so the
+        # driver gives it t_decline None and adoption is INCONCLUSIVE.
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
@@ -627,24 +663,47 @@ class Round5RuntimeTests(unittest.TestCase):
             self.assertEqual(code, 0, custody(out).get("error"))
             result = json.loads(buffer.getvalue())
             self.assertIs(result["g0_released"], False)
-            self.assertIsNone(result["t_decline_s"])
-            self.assertEqual(result["t_decline_status"], "not_measured_g0_unreleased")
-            self.assertEqual(result["leg_status"], "inconclusive")
+            self.assertEqual(result["g0_outcome"], "timeout")
+            self.assertIn("r1.g0_timeout_run", result["episode_flags"])
+            self.assertIs(result["candidate_only"], True)
+            self.assertNotIn("leg_status", result)       # the turn ran; no no-turn inconclusive record
             self.assertEqual(contract.missing_fields("high-power-aba-b", result, quiet=True), [])
             r1.os_load_verdict("high_power_B", result)
+            # The driver (run(): legs[label] = t_decline_s if g0_released else None)
+            # turns the unreleased leg into an inconclusive adoption.
+            adoption = r1.aba_adoption({"A1": 20.0, "B": None, "A2": 21.0},
+                                       {"A1": True, "B": True, "A2": True},
+                                       {"A1": True, "B": result["g0_released"], "A2": True})
+            self.assertEqual(adoption["verdict"], "inconclusive")
+            self.assertEqual(adoption["inconclusive_legs"], ["B"])
 
     def test_cooldown_releases_on_the_one_sided_g0_band(self):
-        # R5-1: "within the G0 band of R" is S_slow <= R + delta_slow. A host
-        # already cooler than the soak R has cooled; the old |S_slow - R| <=
-        # delta rule waited out the whole cap and reported a timeout.
+        # R5-1 migrated to RL-59/72 (a85ee8ec6): "within the G0 band of R" is
+        # S_slow <= R_D + delta_slow, with R_D the native step-D reference (not
+        # the soak). A host already cooler than R_D has cooled; the old
+        # |S_slow - R| <= delta rule waited out the whole cap.
+        from unittest import mock
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
             config = rs.synthetic_config(root / "cfg")
             soak = write_soak(root / "soak.json", slow=rs.syn.AMBIENT_C + 5.0)   # world sits at ambient
+            step = run_step_d(self, root, config, soak)
             out = root / "D_bank_benign_s1_gated_held.precool"
             code, result = call(config, out, "idle-until-soak", "--duration-s", "120", "--soak-reference", str(soak))
             self.assertEqual(code, 0, custody(out).get("error"))
             self.assertIs(result["released"], True)
+            self.assertEqual((result["reference_source"], result["reference_c"]),
+                             (step["operating_reference"]["source_member"], step["operating_reference"]["slow_c"]))
+            self.assertLess(result["recovery_curve"][-1][0], 10)
+            # One-sidedness proper: a step-D R_D well above the ambient world.
+            hot = dict(step["operating_reference"], slow_c=rs.syn.AMBIENT_C + 5.0, fast_c=rs.syn.AMBIENT_C + 5.0)
+            out = root / "hot_R_D.precool"
+            with mock.patch.object(rt.Segment, "reference", lambda self: dict(hot)):
+                code, result = call(config, out, "idle-until-soak", "--duration-s", "120",
+                                    "--soak-reference", str(soak))
+            self.assertEqual(code, 0, custody(out).get("error"))
+            self.assertIs(result["released"], True)
+            self.assertEqual(result["reference_c"], rs.syn.AMBIENT_C + 5.0)
             self.assertLess(result["recovery_curve"][-1][0], 10)
 
 class Round5Tests(unittest.TestCase):
@@ -669,15 +728,28 @@ class Round5Tests(unittest.TestCase):
             step_dir = root / rt.STEP_D_SEGMENT
             step_dir.mkdir()
             result = step_dir / rt.RESULT_NAME
-            result.write_text(json.dumps({"kind": "step-d", "slots": {"T_dead": 10, "B_D": 1024}}))
-            segment = SimpleNamespace(out=root / "consumer", kind="d-spam-benign-s1-a")
+            result.write_text(json.dumps({"kind": "step-d", "bundle": "runs/align-v4-r1-step-d",
+                                          "slots": {"T_dead": 10, "B_D": 1024}}))
+            # a85ee8ec6: step_d_result and consume_d_reference both read the
+            # sibling through Segment.accepted_result, a real Segment method.
+            segment = object.__new__(rt.Segment)
+            segment.out, segment.kind = root / "consumer", "d-spam-benign-s1-a"
             with self.assertRaisesRegex(rt.Refused, "result and custody"):
                 rt.Segment.step_d_result(segment)
+            with self.assertRaisesRegex(rt.Refused, "result and custody"):
+                segment.accepted_result(rt.STEP_D_SEGMENT, "step-d")
             rt.write_custody(step_dir, {"status": "complete"})
             self.assertEqual(rt.Segment.step_d_result(segment)["kind"], "step-d")
-            result.write_text(json.dumps({"kind": "step-d", "slots": {"T_dead": 11, "B_D": 8192}}))
+            self.assertEqual(segment.accepted_result(rt.STEP_D_SEGMENT, "step-d")["bundle"],
+                             "runs/align-v4-r1-step-d")
+            with self.assertRaisesRegex(rt.Refused, "not an accepted step-30b result"):
+                segment.accepted_result(rt.STEP_D_SEGMENT, "step-30b")
+            result.write_text(json.dumps({"kind": "step-d", "bundle": "runs/align-v4-r1-step-d",
+                                          "slots": {"T_dead": 11, "B_D": 8192}}))
             with self.assertRaisesRegex(rt.Refused, "complete runtime custody"):
                 rt.Segment.step_d_result(segment)
+            with self.assertRaisesRegex(rt.Refused, "complete runtime custody"):
+                segment.consume_d_reference()
             rt.write_custody(step_dir, {"status": "failed"})
             with self.assertRaisesRegex(rt.Refused, "complete runtime custody"):
                 rt.Segment.step_d_result(segment)

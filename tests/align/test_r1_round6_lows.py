@@ -202,25 +202,24 @@ class KitLowTests(unittest.TestCase):
 
 class RehearsalLowTests(unittest.TestCase):
     def test_soak_reference_checks_slow_role_only_and_records_roles(self):
+        # a85ee8ec6 (RL-59/64/72): consumers no longer gate on the soak, so the
+        # consumption check is _check_d_reference_consumed against step-D's
+        # operating_reference (the check is still on the slow role only). The
+        # soak reference file still records its sensor roles.
+        step_d = {'operating_reference': {'source_member': 'align-v4-r1-step-d', 'slow_c': 40.0, 'fast_c': 45.0}}
+        result = {'reference_source': 'align-v4-r1-step-d', 'reference_c': 45.0}
+        with self.assertRaisesRegex(r1.Refusal, 'step-D R_D'):    # the fast value is not the slow R_D
+            r1._check_d_reference_consumed('gated', result, step_d)
+        result['reference_c'] = 40.0
+        r1._check_d_reference_consumed('gated', result, step_d)
+        with self.assertRaisesRegex(r1.Refusal, 'step-D R_D'):    # the soak is not a source
+            r1._check_d_reference_consumed('gated', dict(result, reference_source='r1_soak_reference'), step_d)
+        with self.assertRaisesRegex(r1.Refusal, 'step-D R_D'):    # no authenticated reference recorded
+            r1._check_d_reference_consumed('gated', result, {})
         with tempfile.TemporaryDirectory() as td:
             row = {'name': 'idle_soak', 'output_dir': td, 'attempt': 0,
                    'result': {'sensor_roles': {'s_fast': 'FAST', 's_slow': 'SLOW'}},
                    'soak_detrended': {'FAST': {'mean_c': 45.0}, 'SLOW': {'mean_c': 40.0}}}
-            path = r1.write_soak_reference(Path(td), row)
-            # Supply roles for the pre-fix check too, so the refusal regression
-            # exercises the existing any-sensor comparison.
-            value = json.loads(path.read_text())
-            value['sensor_roles'] = row['result']['sensor_roles']
-            path.write_text(json.dumps(value))
-            result = {'reference_source': 'r1_soak_reference', 'reference_c': 45.0}
-            with self.assertRaisesRegex(r1.Refusal, 's_slow'):
-                r1._check_soak_reference_consumed('gated', result, path)
-            result['reference_c'] = 40.0
-            r1._check_soak_reference_consumed('gated', result, path)
-            value.pop('sensor_roles')
-            path.write_text(json.dumps(value))
-            with self.assertRaisesRegex(r1.Refusal, 's_slow'):
-                r1._check_soak_reference_consumed('gated', result, path)
             path = r1.write_soak_reference(Path(td), row)
             self.assertEqual(json.loads(path.read_text())['sensor_roles'], row['result']['sensor_roles'])
 
