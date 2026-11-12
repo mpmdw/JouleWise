@@ -17,6 +17,7 @@ import unittest
 import unittest.mock
 from unittest.mock import patch
 
+from joulewise.align.apple import r1_runtime as rt
 from scripts import launch_align_r0 as launcher
 from scripts import run_align_r1_smoke as smoke
 
@@ -922,6 +923,63 @@ class SmokeTimerOwnerTests(unittest.TestCase):
         time.sleep(0.3)
         self.assertFalse(watchdog.active)
         self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+
+
+class SmokeAdmissionScopeTests(unittest.TestCase):
+    def test_runs_without_a_step_d_smoke_part_arm_no_itimer_or_alarm(self):
+        class Stop(Exception):
+            pass
+
+        def segment(**_):
+            return SimpleNamespace(run=lambda: (_ for _ in ()).throw(Stop()), close=lambda: [])
+
+        cases = ((["--r1-kind", "step-d"], []),
+                 (["--r1-kind", "step-30b"], []),
+                 # --smoke-part on another kind arms nothing; main only clears on exit
+                 (["--r1-kind", "step-30b", "--smoke-part", "A", "--smoke-started", "0"],
+                  [(signal.ITIMER_REAL, 0)]))
+        for extra, timers in cases:
+            alarms = []
+            real = signal.signal
+
+            def record(num, handler):
+                if num == signal.SIGALRM and callable(handler):
+                    alarms.append(getattr(handler, "__name__", ""))
+                return real(num, handler)
+
+            with self.subTest(argv=extra), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(rt, "read_soak_reference", return_value={}), \
+                    patch.object(rt, "Segment", side_effect=segment), \
+                    patch.object(rt.signal, "signal", side_effect=record), \
+                    patch.object(rt.signal, "setitimer") as timer:
+                code = rt.main(["--config", str(REPO / "configs/align/v4/r1_runtime.json"),
+                                "--output", str(Path(tmp) / "out"), *extra],
+                               backend_factory=lambda _config: SimpleNamespace(close=lambda: None),
+                               stdout=io.StringIO())
+                self.assertNotEqual(code, 0)
+                self.assertEqual([c.args for c in timer.call_args_list], timers)
+                self.assertNotIn("smoke_timeout", alarms)
+
+    def test_non_smoke_g0_return_ignores_the_admission_budget(self):
+        for outcome in ("released", "timeout"):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as tmp:
+                segment = object.__new__(rt.Segment)
+                segment.kind, segment.out, segment.quiet_spans = "step-d", Path(tmp), []
+                session = SimpleNamespace(reference={"fast_c": 40., "slow_c": 40.}, flags=[],
+                                          wait=lambda *a, **kw: {"outcome": outcome})
+                with patch.object(rt.time, "monotonic", return_value=rt.SMOKE_ADMISSION_S + 500.0), \
+                        patch.object(rt.signal, "setitimer") as timer, \
+                        patch.object(rt, "rearm_deadman") as rearm:
+                    segment.reference_hook({}, quiet_s=0, rearm_s=1580, capture=True)(session)
+                    self.assertEqual(session.wait("G0", deadman="d")["outcome"], outcome)
+                timer.assert_not_called()
+                rearm.assert_called_once_with("d", 1580, "R1_after_G0_release")
+                self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_launcher_caps_follow_the_constant(self):
+        with patch.object(rt, "SMOKE_ADMISSION_S", 3333):
+            self.assertEqual(launcher.r1_part_caps(), {"A": 3333 + 120, "B": 3333 + 2600 + 120})
+
 
 
 class MutantTests(unittest.TestCase):
