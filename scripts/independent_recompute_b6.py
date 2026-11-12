@@ -333,6 +333,20 @@ class Session:
                 and isinstance(get(f, "scope", "run_id"), str)}
 
     def loop_attempt(self, attempts):
+        # The collection writers identify acceptance/harvest by the ledger
+        # bracket, while the loop records the enclosing plan's session ID.
+        # Bind them through the copied, authenticated plan, never a suffix
+        # convention or an archive directory name. Legacy toy inputs omit it.
+        plan_path = self.archive / "sources/night-custody/night_plan.json"
+        if present(plan_path):
+            plan = mapping(self.reader.json(plan_path, "night_plan"))
+            bracket = get(plan, "hazard_window", "bindings", "bracket_session_id")
+            outer = plan.get("plan_id")
+            if not isinstance(outer, str) or not outer or bracket != self.session_id:
+                self.reader.flag("acceptance_session_mismatch", "session",
+                                 {"plan_id": outer, "bracket_session_id": bracket})
+                return None
+            self.session_id = self.reader.session = outer
         if attempts is None:
             return None
         rows = [a for a in attempts if a.get("session_id") == self.session_id]

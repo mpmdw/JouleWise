@@ -555,6 +555,28 @@ raise SystemExit(4)
 
 
 class DeskInputBoundaryTests(unittest.TestCase):
+    def test_loop_identity_uses_copied_plan_without_suffix_guess(self):
+        """Predict: a copied plan binds its outer loop ID to a distinct bracket ID; the original attempt matches only after that authenticated binding. A mismatching bracket refuses association."""
+        from tests.independent_recompute.support_b6 import b6
+        with tempfile.TemporaryDirectory(prefix="r12-plan-identity-") as directory:
+            archive = Path(directory).resolve()
+            plan = archive / "sources/night-custody/night_plan.json"
+            plan.parent.mkdir(parents=True)
+            plan.write_text(json.dumps({"plan_id": "outer-loop-name",
+                "hazard_window": {"bindings": {"bracket_session_id": "distinct-ledger-name"}}}))
+            flags = []
+            session = b6.Session.__new__(b6.Session)
+            session.archive, session.session_id = archive, "distinct-ledger-name"
+            session.reader = b6.Reader("ALPHA", session.session_id, flags)
+            attempt = {"session_id": "outer-loop-name", "round": 2}
+            self.assertEqual(session.loop_attempt([attempt]), attempt)
+            self.assertEqual(session.session_id, "outer-loop-name")
+            self.assertEqual(session.reader.session, "outer-loop-name")
+            self.assertEqual(flags, [])
+            session.session_id = "wrong-ledger-name"
+            self.assertIsNone(session.loop_attempt([attempt]))
+            self.assertIn("acceptance_session_mismatch", {flag["code"] for flag in flags})
+
     def test_open_block_prints_noncomputable_registered_summaries(self):
         """Predict: with no eligible sessions, every registered block summary prints n=0 and null mean/sd; coverage still rejects a missing required session key. No session or counting judgment is simulated here."""
         from tests.independent_recompute.support_b6 import b6
