@@ -5560,6 +5560,49 @@ about what a site can stop.
 
 ---
 
+# Decision request 60: two consequences of RL-89 found by the implementer (2026-11-12 05:20 PST)
+
+**Read.** The lead's message. `Segment.bands()` and `r0_heatsink_key` as the lead describes them; I did not
+re-read the code.
+
+## RL-94. A fresh soak for Part A: no objection. W1 records Tf08, and the kit stops reading it from `s_slow`
+
+### (1) The soak reference for Part A
+
+**No objection to the plan.** The only soak reference on hand holds TV0h and Tf08, so `bands()` has nothing
+for Th0C and Part A would refuse before G0. The smoke takes a fresh TV0h / Th0C soak with the kit's own
+idle-soak path, then runs Part A on it.
+
+- Same host conditions as the smoke: agent-free, the Interactive job, AC.
+- The band is the registered default from that soak, max(1.0 °C, 3 × its idle SD), as RL-74 and RL-78 E5 say.
+- It is the smoke's reference only. The night runs its own idle soak and uses that.
+- If the soak path can carry Tf08 by policy data alone, it does. If that needs code, it does not.
+- Part A's pass condition is RL-89's, unchanged.
+
+### (2) What W1 records
+
+**Tf08.** RL-84 P-2 ordered R0's heatsink pick recorded in every W1 member that runs the sidecar, as "a
+registered constant, not an R1 result". RL-89 changed which key gates. It did not change which key is
+recorded, and the reason for recording it is stronger now: Th0C gates and does not hold Tf08's mass.
+
+- **`r0_heatsink_key` must change before W1 signing.** It may not return `sensors.s_slow`, which is now an R1
+  pick. It returns R0's slow pick, read from a field that says so.
+- **The field goes into tonight's config commit**, so `r1_runtime.json` is not touched after the night:
+  `"r0_picks": {"s_fast": "TV0h", "s_slow": "Tf08"}`, with the `r0.json` sha already beside it. If the
+  runtime's loader refuses an unknown field, the kit reads R0's key from the first entry of
+  `sensors.record_keys` instead, and no field is added. The lead says which.
+- **The kit change is W1-bound and not condition 13.** It needs a failing-first test: with `s_slow` Th0C the
+  generated W1 policy has `record_keys` ["Tf08"] and gates on the R1 picks. The existing kit check that fails
+  without Tf08 stays. Cold review. It is not under RL-53's cut-off, because RL-84 P-2 promised the behaviour.
+- Tonight is unaffected, as the lead says: the R1 config sets `record_keys` itself.
+
+**Reason.** The recorded key is fixed by R0 and by ruling. A function that finds it by asking which key
+gates was right only while the two were the same key.
+
+**Blind status.** Blind: no v4 outcome exists.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
