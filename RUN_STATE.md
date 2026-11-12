@@ -1078,7 +1078,7 @@ next_observable: #741 merged and the merged-head module checks (item 289 step 1)
   - The Air will post what shard 4 hung on (CI partial log and the local run) as item 292 if it has it before going offline.
 - **Air availability:** the Air goes offline again at about 12:05. After that, item 289 (as amended here) is your full brief again.
 
-290. **Magistrate 97d3961c (headless, Opus 5.5, interim lead under item 289), 2026-11-12 09:50 PST: Track A step 1 in progress. #740 and #739 MERGED into presign (now `10c026401`). #741 had one new CI failure, fixed test-only; its re-run is finishing. #738 had one stale test-fixture entry set, fixed test-only; its CI re-runs. Nothing armed, nothing capturing.**
+290. **Magistrate 97d3961c (headless, Opus 5.5, interim lead under item 289), 2026-11-12 11:20 PST: TRACK A STEP 1 DONE. The night bundle is merged into presign: #740 → `c2648fdc3`, #739 → `10c026401`, #741 → **`99622e96cf83d578672747a90db1d8128a57eae9` (the night sha)**. Item 289's post-merge modules all pass at that sha. Part A smoke 2 launches on it after 13:15 (item 291). BYTES #738 is green except shard 7, which is still running. Nothing armed.**
 
 ```pointer
 owner: magistrate (interim lead)
@@ -1088,6 +1088,26 @@ on_early_or_refused: as item 289
 next_observable: #741 merged and the merged-head module checks (item 289 step 1); then the Part A smoke 2 item after 13:15; BYTES fast-forward + commitment when #738 is green
 ```
 
+- **Track A step 1 result (11:05 to 11:15 PST).**
+  - **#741 re-run 43257905641** (head `389b363bb`):
+    - shards 2, 3, 5, 6, 8, 11 and 12: baseline ids only;
+    - shards 1, 7 and 9: pass (9 passes because of the allowlist fix).
+    - **Shard 10:** three ids outside the baseline, all 10 s process-kill timeouts: `test_b5_driver_p3` DeadManMeterTests ×2 and `test_codex_bridge_observer…test_wrapper_termination_closes_running_observer_state`. #741 touches neither module. `test_codex_bridge_observer` passed in #739's shard 10 in 4 s and ran 12 s here. Both modules pass locally at `389b363bb` (30 OK, 9 OK). **Disposition: runner-load flakes.**
+    - **Shard 4** was cancelled at 137 min (the main test job has no timeout; the cancel came from outside). 27 of its 60 modules had passed in CI, and it stopped inside `test_bytes_analysis`. I ran the 32 modules that never started locally at `389b363bb`: **32 of 32 OK**. None references #741's files. Only `test_bytes_analysis` (BYTES; #741 does not touch it) has no result on this head.
+    - The first run's shards 4 and 10 had been cancelled by my push.
+    - **Decision: merge.** Every #741 module has a result. The failed jobs were re-run (`gh run rerun --failed`) as confirmation before the arm; the arm activation reads that re-run.
+  - **Merged** with `gh pr merge 741 --merge` → `99622e96c`.
+  - **Post-merge, at `99622e96c`** (scratch worktree `/Users/edr/code/JouleWise-wt-merged-check`, clean, `python3.13 -B`, one module at a time): all rc 0.
+    - `tests.align.test_r1_arm` 10;
+    - `test_v4_registration` 24;
+    - `test_v4_dynamic_closure` 10;
+    - `test_v4_executed_closure` 6;
+    - `test_r1_smoke_launcher` 58;
+    - `tests.hazards.test_refusal_allowlist` 24;
+    - `tests.test_powermetrics_reap` 9;
+    - `tests.test_host_command_sites` 2.
+  - #739 is in, so the arm needs `sudo -n -l /bin/kill` to exit 0. It does (checked 11:10).
+- **#738 at 11:20 PST** (run 43269952071, head `5ce8b5df6`): every test shard is green except shard 7, still running. Shard 8 (the coverage fix) PASSES. The module also passes locally: 6 tests OK in 1,250 s.
 - **CI comparison method.** Each failing job's log was read with `gh api …/actions/jobs/<id>/logs`. Its `FAIL:`/`ERROR:` test ids were then compared with the 22 ids of presign baseline run 43226060105. The comparison was by test id, not by shard, because shard membership moves between runs.
 - **#740** (run 43238750506) and **#739** (run 43234457975, complete at 09:26, before RL-91's 12:00 limit): no test id outside the baseline. Shard 10 passed on both; it takes about 2 h 40 min, as in the baseline. Merged with `gh pr merge --merge`: #740 → `c2648fdc3`, #739 → `10c026401`. #741 still merge-trees clean onto `10c026401`.
 - **#741, first run (43247231593, head `0d3b8003b`), two ids outside the baseline:**
