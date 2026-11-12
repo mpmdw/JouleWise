@@ -33,6 +33,13 @@ def sha(path):
 
 
 def run(*argv):
+    argv = [str(a) for a in argv]
+    if argv[0] == "manifest" and "--source-host" not in argv:
+        argv += ["--source-host", "mbp-test"]   # tests run source and copy on one machine
+    return run_raw(*argv)
+
+
+def run_raw(*argv):
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         rc = kit.main([str(a) for a in argv])
@@ -312,6 +319,45 @@ class Mini(unittest.TestCase):
         self.receipt.write_text("{}")
         self.assertRefused(run("verify", "--manifest", self.base / "absent.json", "--manifest-sha256", "0" * 64,
                                "--root", self.dst, "--out", self.receipt), "out_exists")
+
+    # -- source versus copy (cold review M2) --
+
+    def test_verify_refuses_the_source_tree(self):
+        # Expected: copy_is_source when <root>/<copy_path> is the manifest's source_path, and no receipt.
+        rc = run("verify", "--manifest", self.manifest, "--manifest-sha256", self.msha, "--root", self.src,
+                 "--out", self.base / "src-receipt.json")
+        self.assertRefused(rc, "copy_is_source")
+        self.assertFalse((self.base / "src-receipt.json").exists())
+
+    def test_verify_refuses_manifest_made_on_this_host(self):
+        # Expected: copy_on_source_host for a manifest that records this host (re-running `manifest` on the copy).
+        local = self.base / "local-manifest.json"
+        rc, out, err = run_raw("manifest", "--session", self.ca, "--session", self.cb,
+                               "--loop-attempts", self.attempts, "--out", local)
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual(json.loads(local.read_bytes())["host"], kit.host_name())
+        self.assertRefused(self.verify(manifest=local, msha=sha(local)), "copy_on_source_host")
+
+    def test_self_check_rehashes_source_and_writes_nothing(self):
+        # Expected: exit 0 on the source tree with the same-host manifest rule off, no file created;
+        # a changed source byte is refused digest_mismatch; --out is refused.
+        before = sorted(p.name for p in self.base.iterdir())
+        rc, out, err = run("verify", "--self-check", "--manifest", self.manifest, "--manifest-sha256", self.msha,
+                           "--root", self.src)
+        self.assertEqual((rc, err), (0, ""))
+        self.assertIn("no receipt written", out)
+        self.assertEqual(sorted(p.name for p in self.base.iterdir()), before)
+        self.assertRefused(run("verify", "--self-check", "--manifest", self.manifest, "--manifest-sha256", self.msha,
+                               "--root", self.src, "--out", self.base / "r.json"), "self_check_writes_no_receipt")
+        p = self.a / "sources/runs/r1/data.bin"
+        p.write_bytes(b"y" + p.read_bytes()[1:])
+        self.assertRefused(run("verify", "--self-check", "--manifest", self.manifest, "--manifest-sha256", self.msha,
+                               "--root", self.src), "digest_mismatch")
+
+    def test_verify_needs_out_unless_self_check(self):
+        # Expected: verify_out_missing.
+        self.assertRefused(run("verify", "--manifest", self.manifest, "--manifest-sha256", self.msha,
+                               "--root", self.dst), "verify_out_missing")
 
     # -- manifest refusals --
 
