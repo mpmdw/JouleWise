@@ -52,6 +52,11 @@ DEFAULTS = {
 R8_LITERAL = "single implementation; not independently recomputed"
 UNSTATED = "UNSTATED"
 LABEL_COMPARED = "computed and compared (decision 6 (a))"
+# RL-110: two groups are compared only conditionally; exact strings, character for character.
+LABEL_NEG8 = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, "
+              "otherwise not independently recomputed")
+LABEL_CONTRAST = ("computed and compared (decision 6 (a)) when the twin returns an estimate, otherwise not "
+                  "independently recomputed")
 # RL-102 item 4: the second side recomputes §10-§11 arithmetic over RC-B6-1's session values.
 LABEL_BLOCK = "§10-§11 arithmetic computed and compared; session inputs as labelled at session scope"
 # RL-103: exact gate labels; the check family goes in the Source column.
@@ -296,11 +301,12 @@ def classify_session(key, pack, check, rc):
     field = key.rsplit("/", 1)[-1]
     # 1. a row of the option (c) comparison table
     if key in check["session_keys"]:
-        return (primary + "; second: `check_block` (CHK:{})".format(check["session_keys"][key]), LABEL_COMPARED,
+        return (primary + "; second: `check_block` (CHK:{})".format(check["session_keys"][key]),
+                LABEL_NEG8 if key.startswith("neg8/") else LABEL_COMPARED,
                 "CHK:{}".format(check["session_keys"][key]))
     if key.startswith("contrast/") and field in check["contrast_fields"]:
         return (primary + "; second: engine twin via `check_block` (CHK:{})".format(check["contrast_line"]),
-                LABEL_COMPARED, "CHK:{}".format(check["contrast_line"]))
+                LABEL_CONTRAST, "CHK:{}".format(check["contrast_line"]))
     # 2. checked inside the gate on the result field the printed key reads
     if key.startswith("contrast/"):
         source = rc["printed"].get(field)

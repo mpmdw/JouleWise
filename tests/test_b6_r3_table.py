@@ -65,6 +65,11 @@ class R3TableTests(unittest.TestCase):
     RULED_GATE = "computed and compared in the option (c) gate; not an S-13 table row"
     RULED_GATE_WORD = ("computed and compared in the option (c) gate when the twin refuses or the contrast has five or "
                        "more quads, otherwise not independently recomputed; not an S-13 table row")
+    # RL-110, character for character.
+    RULED_NEG8 = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, "
+                  "otherwise not independently recomputed")
+    RULED_CONTRAST = ("computed and compared (decision 6 (a)) when the twin returns an estimate, otherwise not "
+                      "independently recomputed")
     RULED_COPIED = '"copied from the harvest or acceptance record, bound by digest, not recomputed" (decision 6 (b))'
 
     def labels(self):
@@ -91,6 +96,12 @@ class R3TableTests(unittest.TestCase):
         self.assertEqual(rows["`summary/ALPHA/reported/<model>/<phase>/mean_j`"], self.RULED_BLOCK)
         self.assertEqual(rows["`contrast/<phase>/s_d_j`"], self.RULED_GATE)
         self.assertEqual(rows["`contrast/<phase>/outcome`"], self.RULED_GATE_WORD)
+        # RL-110: every neg8/* key and the five S-13 contrast fields carry the conditional labels.
+        for name in ("`neg8/verdict`", "`neg8/bound_j`", "`neg8/allowance_j`"):
+            self.assertEqual(rows[name], self.RULED_NEG8, name)
+        for field in ("n", "dbar_j", "D_j", "p", "holm_p"):
+            self.assertEqual(rows["`contrast/<phase>/" + field + "`"], self.RULED_CONTRAST, field)
+        self.assertEqual(sum(1 for k, v in rows.items() if k.startswith("`neg8/")), 3)
         for family in ("monitor_cost", "arm_host", "battery_phase", "subject_temperature", "reference_history",
                        "attempt_history", "g10_history", "block5_codes_carried"):
             self.assertEqual(rows["`" + family + "`"], self.RULED_COPIED, family)
@@ -99,7 +110,9 @@ class R3TableTests(unittest.TestCase):
             "Keys by label:", "",
             '- "single implementation; not independently recomputed" (§17-R8): 24',
             "- `single-source` (RL-99 item 1): 100",
-            "- computed and compared (decision 6 (a)): 22",
+            "- computed and compared (decision 6 (a)): 3",
+            "- " + self.RULED_NEG8 + ": 9",
+            "- " + self.RULED_CONTRAST + ": 10",
             "- " + self.RULED_GATE_WORD + ": 2",
             "- " + self.RULED_GATE + ": 6",
             "- not independently recomputed: 183",
