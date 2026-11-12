@@ -254,23 +254,38 @@ class Mini(unittest.TestCase):
         write(Path(str(self.cb) + ".desk/other.log"), "o")
         self.assertRefused(self.verify(), "desk_file_set_mismatch")
 
+    def verify_with_edited_sums(self, edit):
+        """Edit the copy's SHA256SUMS and re-issue the manifest's digest for it, as a forged source would:
+        verify's own SHA256SUMS parsing is then the only guard (the real manifest step refuses these at the source)."""
+        sums = self.ca / "sources/SHA256SUMS"
+        sums.write_text(edit(sums.read_text()))
+        document = json.loads(self.manifest.read_bytes())
+        document["sessions"][0]["sha256sums_sha256"] = sha(sums)
+        forged = self.base / "forged-manifest.json"
+        forged.write_text(json.dumps(document))
+        return self.verify(manifest=forged, msha=sha(forged), out=self.base / "forged-receipt.json")
+
     def test_sums_line_invalid(self):
-        # Expected: refused sums_line_invalid for a malformed row, even with a matching manifest digest.
+        # Expected: verify refuses sums_line_invalid for a malformed row, even with a matching manifest digest;
+        # the manifest step refuses the same file at the source.
+        self.assertRefused(self.verify_with_edited_sums(lambda t: t + "nothex  sources/x\n"), "sums_line_invalid")
         sums = self.a / "sources/SHA256SUMS"
         sums.write_text(sums.read_text() + "nothex  sources/x\n")
-        self.assertRefused(self.remanifest_and_verify(), "sums_line_invalid")
+        self.assertRefused(self.manifest_run(self.a), "sums_line_invalid")
 
     def test_sums_duplicate_row(self):
-        # Expected: refused sums_line_invalid for a repeated path.
+        # Expected: sums_line_invalid for a repeated path, at verify and at the manifest step.
+        self.assertRefused(self.verify_with_edited_sums(lambda t: t + t.splitlines()[0] + "\n"), "sums_line_invalid")
         sums = self.a / "sources/SHA256SUMS"
         sums.write_text(sums.read_text() + sums.read_text().splitlines()[0] + "\n")
-        self.assertRefused(self.remanifest_and_verify(), "sums_line_invalid")
+        self.assertRefused(self.manifest_run(self.a), "sums_line_invalid")
 
     def test_sums_path_escapes(self):
-        # Expected: refused path_invalid for a '..' row.
+        # Expected: path_invalid for a '..' row, at verify and at the manifest step.
+        self.assertRefused(self.verify_with_edited_sums(lambda t: t + "0" * 64 + "  ../harvest.json\n"), "path_invalid")
         sums = self.a / "sources/SHA256SUMS"
         sums.write_text(sums.read_text() + "0" * 64 + "  ../harvest.json\n")
-        self.assertRefused(self.remanifest_and_verify(), "path_invalid")
+        self.assertRefused(self.manifest_run(self.a), "path_invalid")
 
     def remanifest_and_verify(self):
         shutil.rmtree(self.dst)
@@ -357,6 +372,21 @@ class Mini(unittest.TestCase):
         # Expected: refused compression_log_ambiguous with both an inside and an adjacent log.
         write(Path(str(self.a) + ".desk/compression.jsonl"), "{}\n")
         self.assertRefused(self.manifest_run(self.a), "compression_log_ambiguous")
+
+    def test_manifest_refuses_stray_file_in_sources(self):
+        # Expected (M1): unlisted_extra_file for a .DS_Store that Finder leaves in sources/.
+        write(self.a / "sources/.DS_Store", "x")
+        self.assertRefused(self.manifest_run(self.a), "unlisted_extra_file")
+
+    def test_manifest_refuses_missing_listed_file(self):
+        # Expected (M1): listed_file_missing when a SHA256SUMS row has neither the file nor its .zst.
+        (self.a / "sources/monitor/clock.jsonl").unlink()
+        self.assertRefused(self.manifest_run(self.a), "listed_file_missing")
+
+    def test_manifest_refuses_row_present_plain_and_compressed(self):
+        # Expected (M1): unlisted_extra_file when a row has both the plain file and its .zst.
+        write(self.a / "sources/meter/stream-2.jsonl", "plain twin")
+        self.assertRefused(self.manifest_run(self.a), "unlisted_extra_file")
 
     def test_copy_path_ambiguous(self):
         # Expected: refused copy_path_ambiguous when three trailing names still collide.
