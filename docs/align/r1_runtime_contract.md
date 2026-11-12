@@ -48,6 +48,20 @@ the re-armed turn deadman, recovery, and a 120 s classification/close margin
 not a total bound. This executed-byte engineering change requires delta
 review before smoke.
 
+Both parts admit through G0 on one engineering budget, `r1_runtime.SMOKE_ADMISSION_S`
+= 3,000 s on the kit's clock (RUN_STATE 276). The 1,800 s it replaces predates
+RL-84 P-1's 30B predecessor in the smoke, and smoke 276's Part A hit it 727 s
+into a G0 wait. Part A must fit the predecessor (551.3 s in smoke 276), step D's
+start-up to G0 entry (521.6 s; R1 night 518.1 and 516.0 s), the full 1,200 s G0
+cap and its close after G0 (R1 night at most 134.6 s): 2,407.5 s, plus 592.5 s of
+slack. The runtime's pre-G0 itimer, its G0-return check and the kit's two Part A
+checks read the constant, and the launcher's caps derive from it: A = 3,000 + 120
+= 3,120 s, B = 3,000 + 2,600 + 120 = 5,720 s, and the launch minimum is
+3,120 + 5,720 + 300 + 2 x 180 + 10 = 9,510 s. RL-84 P-5 rules only the G0 cap,
+so this is an engineering watchdog, not a ruled parameter. It is active only
+under `--smoke-part`; no night member reads it. It changes the executed bytes
+of `r1_runtime.py` (condition 13), so it gets a delta review before the smoke.
+
 ## Arguments
 
 - `--output DIR` is always the canonical segment directory, `<R1 output>/<segment name>`. When the driver rejects an attempt (ruling 8 load, or soak slope), it renames that directory to `<segment name>.rejectedN` (the next free N from 1) before the next attempt starts. A step-d or designed start state whose G0 timed out is moved to `<segment name>.g0_timeout1` before its one retry (LEAD-RULINGS-2 R6-2). The accepted attempt therefore always ran in, and owns, the canonical directory. The runtime must write only inside `DIR` and use paths relative to it.
@@ -281,8 +295,9 @@ harvest 4,500). The existing plan writer yields `window_max_s=126480` from
 harvest; close is checked and recorded. These are bounds, not a wall prediction.
 
 Native commands are in `scripts/align_r1_followup_kit.py`: smoke A stops after
-capture/G0 within 1,800 s; smoke B continues the D step for at most another
-1,200 s and prints inventory coverage, unchanged classification, and every
+the predecessor capture and the D step's G0 within `r1_runtime.SMOKE_ADMISSION_S`
+(3,000 s, below); smoke B runs the same admission, then continues the D step
+under the post-G0 watchdog above, and prints inventory coverage, unchanged classification, and every
 candidate at bands 1.0/1.5 C with deciding condition and reference +/-0.03 C
 sensitivity. Run under the ordinary clean-host/DC-in custody procedure; the
 script is not authority to run while an agent is active. The `desk` subcommand

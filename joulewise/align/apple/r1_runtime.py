@@ -110,6 +110,17 @@ INCOMPLETE_MEMBER_FLAGS = ("episode.deadman:", "episode.decode_budget:", "episod
 TIMEOUT_RUN_KINDS = ("step-30b", "step-d", *contract.HIGH_POWER_KINDS, *contract.PLANNING_KINDS)
 
 
+# Smoke admission budget (RUN_STATE 276), on the kit's clock from its start.
+# Part A must fit the 30B predecessor (551.3 s in smoke 276), step D's start-up
+# to G0 entry (521.6 s; 518.1 and 516.0 s in the R1 night), the full 1,200 s
+# G0 cap and Part A's close after G0 (134.6 s in the R1 night): 2,407.5 s.
+# 3,000 s leaves 592.5 s of slack. Part B uses it up to G0 release, then
+# smoke_post_g0_budget. The 1,800 s it replaces predates RL-84 P-1's predecessor
+# in Part A. An engineering watchdog on the smoke only (RL-84 P-5: the ruled
+# 1,200 s is the G0 cap and nothing else); no production member reads it.
+SMOKE_ADMISSION_S = 3000
+
+
 def smoke_post_g0_budget(quiet_s, rearm_s):
     """Finite Part B watchdog, derived from the phases after G0 release."""
     if rearm_s is None or not _finite(rearm_s) or rearm_s <= 0:
@@ -1679,8 +1690,8 @@ class Segment:
                     segment.smoke_gate = {"admission_s": elapsed, "g0": row,
                                           "reference": dict(reference), "rearmed": rearm_s is not None}
                     (segment.out / "smoke_part_a.json").write_text(canonical(segment.smoke_gate) + "\n")
-                    if row["outcome"] != "released" or elapsed > 1800:
-                        raise RuntimeFailure("smoke Part A did not release within 1800 s")
+                    if row["outcome"] != "released" or elapsed > SMOKE_ADMISSION_S:
+                        raise RuntimeFailure(f"smoke Part A did not release within {SMOKE_ADMISSION_S} s")
                     # The 1,200 s cap belongs to G0. After G0 the smoke must
                     # fit quiet, the re-armed turn, recovery, and close. This
                     # engineering watchdog does not decide RL-72 E5's total.
@@ -2363,7 +2374,8 @@ def main(argv=None, *, backend_factory=None, stdout=None):
             def smoke_timeout(_sig, _frame):
                 raise RuntimeFailure("smoke part wall cap reached; partial smoke is not a pass")
             signal.signal(signal.SIGALRM, smoke_timeout)
-            signal.setitimer(signal.ITIMER_REAL, max(.001, 1800 - (time.monotonic() - segment.smoke_started)))
+            signal.setitimer(signal.ITIMER_REAL,
+                             max(.001, SMOKE_ADMISSION_S - (time.monotonic() - segment.smoke_started)))
         result = segment.run()
         (out / RESULT_NAME).write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n")
         record["status"], code = "complete", 0

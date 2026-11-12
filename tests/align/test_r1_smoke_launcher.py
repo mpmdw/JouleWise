@@ -380,7 +380,7 @@ class ProductionSeamTests(unittest.TestCase):
                 self.fail(f"legitimate Part B was truncated: {exc}")
             self.assertEqual(result["rc"], 0)
             self.assertEqual(clock.now, 2000)
-            self.assertEqual(enforcer.call_args.kwargs["deadline_monotonic"], 4520)
+            self.assertEqual(enforcer.call_args.kwargs["deadline_monotonic"], 5720)
 
     def test_full_part_cap_must_fit_before_spawn(self):
         for which, cap in launcher.r1_part_caps().items():
@@ -477,7 +477,7 @@ class ProductionSeamTests(unittest.TestCase):
 
 
 class LauncherTests(unittest.TestCase):
-    def launch_files(self, module, root, *, kind="r0", checks=None, keep_going=True, seconds=9000):
+    def launch_files(self, module, root, *, kind="r0", checks=None, keep_going=True, seconds=11400):
         repo = root / "repo"
         (repo / "scripts").mkdir(parents=True)
         for name in ("align_r0_checks.py", "run_align_r1_smoke.py"):
@@ -551,9 +551,9 @@ class LauncherTests(unittest.TestCase):
 
     def test_caps_derive_post_g0_budget_from_runtime_config(self):
         from joulewise.align.apple import r1_runtime as rt
-        self.assertEqual(launcher.r1_part_caps(), {"A": 1920, "B": 4520})
+        self.assertEqual(launcher.r1_part_caps(), {"A": 3120, "B": 5720})
         with patch.object(rt, "smoke_post_g0_budget", return_value={"total": 3333}) as budget:
-            self.assertEqual(launcher.r1_part_caps(), {"A": 1920, "B": 5253})
+            self.assertEqual(launcher.r1_part_caps(), {"A": 3120, "B": 6453})
             budget.assert_called_once_with(rt.STEP_QUIET_S, 1580)
 
     def test_r1_outer_run_does_not_dwell_before_feeds_and_allows_cleanup(self):
@@ -644,7 +644,7 @@ class LauncherTests(unittest.TestCase):
                 soak.write_text("{}")
                 with patch.object(desk, "SCRIPT", fixture_launcher):
                     result = h.launch("--runner-kind", "r1-smoke", "--soak-reference", str(soak),
-                                      "--deadline", str(time.time() + 9000))
+                                      "--deadline", str(time.time() + 11400))
                 self.assertEqual(result.returncode, 0, result.stderr)
                 h.wait_for(lambda: (h.root / "handoff-entered").exists())
                 # Keep the owner alive beyond the .5 s dwell seam: a skipped
@@ -677,6 +677,112 @@ class LauncherTests(unittest.TestCase):
                     if path.exists():
                         with self.assertRaises(ProcessLookupError):
                             os.kill(int(path.read_text()), 0)
+
+
+# RUN_STATE 276: wall seconds observed on the MBP (timestamps only). Part A
+# must fit all of them with the full G0 cap; the old 1,800 s could not.
+SMOKE_276_PREDECESSOR_S = 551.3      # capture-predecessor-30b runtime span, smoke 276
+SMOKE_276_STEP_D_PRE_G0_S = 521.6    # step-d runtime start to G0 entry (R1 night: 518.1, 516.0)
+R1_STEP_D_AFTER_G0_CLOSE_S = 134.6   # R1 night step-d G0 end to runtime end (max of two)
+
+
+class SmokeAdmissionBudgetTests(unittest.TestCase):
+    """Part A = predecessor + step-D start-up + full G0 cap + close (RUN_STATE 276)."""
+
+    def need(self):
+        config = json.loads((launcher.Path(launcher.__file__).resolve().parents[1]
+                             / "configs/align/v4/r1_runtime.json").read_text())
+        from joulewise.align.apple import r1_runtime as rt
+        return (SMOKE_276_PREDECESSOR_S + SMOKE_276_STEP_D_PRE_G0_S + rt.g0_timeout_s(config)
+                + R1_STEP_D_AFTER_G0_CLOSE_S)
+
+    def test_part_a_budget_covers_predecessor_pre_g0_full_g0_cap_and_close(self):
+        from joulewise.align.apple import r1_runtime as rt
+        self.assertGreaterEqual(rt.SMOKE_ADMISSION_S, self.need())
+        self.assertEqual(rt.SMOKE_ADMISSION_S, 3000)
+        post_g0 = rt.smoke_post_g0_budget(rt.STEP_QUIET_S, 1580)["total"]
+        self.assertEqual(post_g0, 2600)   # the Part B watchdog after G0 is unchanged
+        self.assertEqual(launcher.r1_part_caps(),
+                         {"A": rt.SMOKE_ADMISSION_S + 120, "B": rt.SMOKE_ADMISSION_S + post_g0 + 120})
+        self.assertEqual(launcher.r1_minimum_seconds(), 3120 + 5720 + 300 + 2 * 180 + 10)
+
+    def test_runtime_pre_g0_itimer_is_the_admission_budget(self):
+        from joulewise.align.apple import r1_runtime as rt
+
+        class Stop(Exception):
+            pass
+
+        def segment(**_):
+            return SimpleNamespace(run=lambda: (_ for _ in ()).throw(Stop()), close=lambda: [])
+
+        root = launcher.Path(launcher.__file__).resolve().parents[1]
+        for part in ("A", "B"):
+            with self.subTest(part=part), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(rt, "read_soak_reference", return_value={}), \
+                    patch.object(rt, "Segment", side_effect=segment), \
+                    patch.object(rt.time, "monotonic", return_value=1.0), \
+                    patch.object(rt.signal, "setitimer") as timer:
+                code = rt.main(["--config", str(root / "configs/align/v4/r1_runtime.json"),
+                                "--r1-kind", "step-d", "--output", str(Path(tmp) / "out"),
+                                "--smoke-part", part, "--smoke-started", "0"],
+                               backend_factory=lambda _config: SimpleNamespace(close=lambda: None),
+                               stdout=__import__("io").StringIO())
+                self.assertNotEqual(code, 0)
+                armed = timer.call_args_list[0].args
+                self.assertEqual(armed[0], signal.ITIMER_REAL)
+                self.assertGreaterEqual(armed[1] + 1.0, self.need())
+                self.assertEqual(armed[1], rt.SMOKE_ADMISSION_S - 1.0)
+                self.assertEqual(timer.call_args_list[-1].args, (signal.ITIMER_REAL, 0))
+
+    def test_g0_released_after_1800_s_but_inside_budget_admits_and_stops_part_a(self):
+        from joulewise.align.apple import r1_runtime as rt
+        for elapsed, admits in ((2300.0, True), (rt.SMOKE_ADMISSION_S + 1.0, False)):
+            with self.subTest(elapsed=elapsed), tempfile.TemporaryDirectory() as tmp:
+                segment = object.__new__(rt.Segment)
+                segment.kind, segment.out, segment.smoke_part, segment.smoke_started = "step-d", Path(tmp), "A", 0
+                session = SimpleNamespace(reference={"fast_c": 40., "slow_c": 40.},
+                                          wait=lambda *a, **kw: {"outcome": "released"})
+                with patch.object(rt.time, "monotonic", return_value=elapsed), \
+                        patch.object(rt.signal, "setitimer") as timer, \
+                        patch.object(rt, "rearm_deadman") as rearm:
+                    segment.reference_hook({}, quiet_s=300, rearm_s=1580, capture=True)(session)
+                    if admits:
+                        self.assertEqual(session.wait("G0", deadman="d")["outcome"], "released")
+                        timer.assert_called_once_with(signal.ITIMER_REAL, 0)
+                        rearm.assert_called_once_with("d", 0, "R1_smoke_A_stop_after_G0")
+                    else:
+                        with self.assertRaisesRegex(rt.RuntimeFailure, "did not release within 3000 s"):
+                            session.wait("G0", deadman="d")
+                self.assertEqual(json.loads((Path(tmp) / "smoke_part_a.json").read_text())["admission_s"], elapsed)
+
+    def test_kit_part_a_checks_use_the_admission_budget(self):
+        from joulewise.align.apple import thermal_gates
+        from scripts import align_r1_followup_kit as kit
+
+        def invoke(runtime, kind, out, **kwargs):
+            if kind == "capture-predecessor-30b":
+                return {"synthetic": True}
+            out.mkdir(parents=True)
+            (out / "smoke_part_a.json").write_text("{}")
+            (out / kit.rt.CUSTODY_NAME).write_text(json.dumps({"files": {"runs/member/config.json": "a" * 64}}))
+            return {"bundle": "runs/member"}
+
+        runtime = ["synthetic", "--config", str(kit.ROOT / kit.r1.DEFAULT_RUNTIME_CONFIG)]
+        budget = kit.rt.SMOKE_ADMISSION_S
+        cases = (([0, 1900, 2500], None),                      # smoke 276's timing admits
+                 ([0, budget, budget], "exhausted at predecessor"),
+                 ([0, 1900, budget + 1], f"exceeded {budget} s including close"))
+        for clock, refusal in cases:
+            with self.subTest(clock=clock), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(kit.reg, "verify_r1_executed_sources"), \
+                    patch.object(thermal_gates, "load_window_reference", return_value=({}, {})), \
+                    patch.object(kit, "time", SimpleNamespace(monotonic=iter(clock).__next__)):
+                if refusal is None:
+                    self.assertEqual(kit.smoke(Path(tmp) / "s", "A", runtime, soak_reference="x",
+                                               invoke=invoke)["part"], "A")
+                else:
+                    with self.assertRaisesRegex(ValueError, refusal):
+                        kit.smoke(Path(tmp) / "s", "A", runtime, soak_reference="x", invoke=invoke)
 
 
 class MutantTests(unittest.TestCase):

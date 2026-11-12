@@ -289,7 +289,7 @@ def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
     started = time.monotonic()
     predecessor = invoke(runtime, "capture-predecessor-30b", output / "capture_predecessor_30b",
                          soak_reference=soak_reference)
-    if time.monotonic() - started >= 1800:
+    if time.monotonic() - started >= rt.SMOKE_ADMISSION_S:
         raise ValueError("Part A exhausted at predecessor; partial smoke is not a pass")
     command = list(runtime) + ["--smoke-part", part, "--smoke-started", str(started)]
     fields = invoke(command, "step-d", output / rt.STEP_D_SEGMENT, soak_reference=soak_reference)
@@ -305,8 +305,8 @@ def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
         "source_config_sha256": custody["files"][(Path(fields["bundle"]) / "config.json").as_posix()]}}
     reference, verified = load_window_reference(policy, SimpleNamespace(
         bundle_path=source.parent / "smoke-reference-consumer", run_id="smoke-reference-consumer"))
-    if part == "A" and time.monotonic() - started > 1800:
-        raise ValueError("Part A exceeded 1800 s including close; partial smoke is not a pass")
+    if part == "A" and time.monotonic() - started > rt.SMOKE_ADMISSION_S:
+        raise ValueError(f"Part A exceeded {rt.SMOKE_ADMISSION_S} s including close; partial smoke is not a pass")
     result = {"part": part, "predecessor": predecessor, "capture_and_gate": receipt, "member": fields,
               "verified_reference": reference, "reference_custody": verified}
     if part == "B":

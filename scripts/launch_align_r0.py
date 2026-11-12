@@ -52,8 +52,9 @@ def r1_part_caps() -> dict[str, float]:
     config = json.loads((repo / "configs/align/v4/r1_runtime.json").read_text())
     post_g0 = rt.smoke_post_g0_budget(rt.STEP_QUIET_S, config["step"]["deadman_s"])["total"]
     # The kit starts its own admission clock AFTER its source/config checks.
-    # Keep 120 s outside that 1800 s verdict for startup and final table work.
-    return {"A": 1800 + 120, "B": 1800 + post_g0 + 120}
+    # Keep 120 s outside that admission verdict (rt.SMOKE_ADMISSION_S, RUN_STATE
+    # 276) for startup and final table work.
+    return {"A": rt.SMOKE_ADMISSION_S + 120, "B": rt.SMOKE_ADMISSION_S + post_g0 + 120}
 
 
 def r1_minimum_seconds() -> float:
