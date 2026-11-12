@@ -1032,6 +1032,16 @@ smoke_prompt = "Custody root: " + str(smoke_custody) + "; plan: synthetic."
 wrapped = subprocess.run([str(wrapper), "-p", smoke_prompt], input=b"smoke stdin", capture_output=True)
 assert wrapped.returncode == 0, ("smoke-wrapper", wrapped.returncode, wrapped.stderr)
 assert (smoke_custody / "night/courier.sent").is_file()
+# Exercise the production courier's own wait judgment, not communicate().
+# An inherited-stdin launch must see the night job's declared EOF input.
+from scripts.run_night import _wait_for_courier
+wait_custody = base / "wait-custody"
+wait_prompt = "Custody root: " + str(wait_custody) + "; plan: synthetic."
+waiting = subprocess.Popen([str(target), "-p", wait_prompt])
+heartbeat, sent = _wait_for_courier(wait_custody / "night/courier.heartbeat",
+                                    wait_custody / "night/courier.sent")
+waiting.wait()
+assert heartbeat and sent, ("original-wait", heartbeat, sent)
 wrapper.write_text(wrapper.read_text() + "exit 42\\n")
 changed = subprocess.run([str(wrapper), "-p", smoke_prompt], input=b"", capture_output=True)
 assert changed.returncode == 126, ("changed launcher", changed.returncode)

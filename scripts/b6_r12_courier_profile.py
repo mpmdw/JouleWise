@@ -40,6 +40,7 @@ def prepare_profile(root):
         "seam": "b6_r12_runtime.install_sources -> returned ChainSources.rewritten; external executable input only",
         "interpreter_input": "/opt/homebrew/bin/python3.13 -> " + str(root / "interpreter/python3.13"),
         "smoke_shell_input": "/bin/sh -> isolated zsh source wrapper, only the exact pinned smoke writer's launcher template",
+        "courier_process_inputs": "subprocess.Popen.__init__: missing/None stdin is declared EOF (night-job shape); same existing SharedClock passive foreground observation as other isolated code children",
         "judgments_and_writers": "original f31; no replacement", "network_or_message_delivery": False}
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
     return root
@@ -67,6 +68,8 @@ def install_runtime():
         return
 
     def install(root, clock):
+        import inspect
+        import subprocess
         sources = original(root, clock)
         rewritten = sources.rewritten
         root = Path(root)
@@ -98,6 +101,29 @@ def install_runtime():
             return rewritten(argv)
 
         sources.rewritten = command_input
+        native_init = subprocess.Popen.__init__
+        signature = inspect.signature(native_init)
+
+        def process_input(process, args, *positional, **keywords):
+            words = list(map(str, args)) if not isinstance(args, (str, bytes)) else []
+            courier = (words and Path(words[0]).name in {"b6_courier.sh", "smoke-courier"}
+                       and command_input(words) is not None)
+            if not courier:
+                return native_init(process, args, *positional, **keywords)
+            bound = signature.bind(process, args, *positional, **keywords)
+            if bound.arguments.get("stdin") is None:
+                bound.arguments["stdin"] = subprocess.DEVNULL
+            result = native_init(*bound.args, **bound.kwargs)
+            # A shell courier is an isolated foreground program just like
+            # the runtime's existing Python/zsh children. Native interpreter
+            # startup is not elapsed synthetic scenario time. The pinned
+            # wait/retry/heartbeat judgments run on the coherent clock.
+            clock.passive = True
+            clock.foreground = process
+            clock.foregrounds[process.pid] = process
+            return result
+
+        subprocess.Popen.__init__ = process_input
         return sources
 
     install._r12_courier_profile = True
