@@ -959,3 +959,20 @@ to the research lead for review before merge.
     Qwen3-1.7B-4bit n 10, min 609 / median 621 / max 634 ms"; "GAMMA Qwen3-8B-4bit n 10, min 2669 / median 2679 /
     max 2689 ms".
 - **Effect on estimands.** None.
+
+## DLE-12. Cross-instrument edge check: interpretations disclosed after the cold review (no number changed)
+
+- **Status.** Logged 2026-11-12 after the Fable 5.2 cold review of PRs #746/#747 (ADMIT-WITH-FIXES; review comment on
+  #747). Exploratory check outside the sealed PLAN; nothing the PLAN governs changes.
+- **What is disclosed.**
+  - **I2 consequence.** Every run in a session shares one calibration capture, so the run-level bootstrap holds the
+    pulse median fixed. The printed 95% intervals therefore omit pulse-side uncertainty. Reviewer's intervals with
+    pulses also resampled: rises [-6.4, +13.3] ms, falls [-9.7, -0.5] ms; the outcome row is unchanged.
+  - **Failed assumption (a).** The Qwen3-1.7B 2,048-token prefill (607–635 ms) is shorter than the +800 ms
+    neighbour window. Under the rule's exclusion logic, all 51 1.7B request starts drop out, so the pooled rise T
+    covers Qwen3-8B request starts only, in BETA and GAMMA.
+  - **I13 (new).** The pooled rise T uses the three-session pulse reference, including ALPHA's pulses. The
+    session-matched value is +2.7 ms against the printed +1.8 ms, with the same reading.
+- **Text changes.** One scope and interval caveat was added to the outcome block of `edge-check-results.md`, and I13
+  was listed. The script, Δ, T, intervals, exclusion counts and outcome row are unchanged.
+- **Effect on estimands.** None.

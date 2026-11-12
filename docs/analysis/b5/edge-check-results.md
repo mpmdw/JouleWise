@@ -21,6 +21,12 @@ Reproduce: `python3.13 scripts/b5_edge_check.py --out "$TMPDIR/b5-edge-check"` (
 > larger than the timing bound (T = +1.8 ms, 95% interval [-3.0, +14.8] ms, for rises, -5.6 ms, 95% interval
 > [-7.5, -1.9] ms, for falls).
 
+> Scope and interval caveat (cold review of 2026-11-12, MEDIUM 1 and 2): the rise result rests on Qwen3-8B request
+> starts only, in two sessions (BETA and GAMMA); Qwen3-1.7B request starts could not be tested, because its 2,048-token
+> prefill (about 0.6 s) is shorter than the exclusion window. The printed 95% intervals leave out the uncertainty of
+> the pulse median, because every run in a session shares one calibration capture. With the pulses resampled as well,
+> the reviewer's intervals are [-6.4, +13.3] ms for rises and [-9.7, -0.5] ms for falls, and the reading is unchanged.
+
 > Standing caveat: the meter reads whole-machine DC input, whose lag behind rail power may depend on step size and
 > shape, so T mixes sampler placement with that path difference. The meter is not ground truth.
 
@@ -157,6 +163,10 @@ Where the rule was ambiguous or did not match the data, the most literal reading
   both inside gives row 1; otherwise row 3. Every per-session row is also `inside` (ALPHA rise has none).
 - **I12 Step test.** Excluded if |L_post − L_pre| < 5 × max(SD_pre, SD_post) on either instrument; every reason is
   evaluated where computable, so the counts by reason overlap.
+- **I13 Pooled rise reference (added after the cold review; listed, not changed).** The pooled rise T compares the
+  43 Qwen3-8B request starts (BETA, GAMMA) with the pooled pulse reference of all three sessions, including ALPHA's
+  59 pulses. The session-matched alternative gives +2.7 ms instead of +1.8 ms; the reading is the same. The printed
+  value stays +1.8 ms as computed; this interpretation was implicit in the script, not chosen after looking.
 
 ## Deviations
 
