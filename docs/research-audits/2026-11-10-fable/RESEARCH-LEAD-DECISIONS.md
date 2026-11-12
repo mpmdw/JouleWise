@@ -5631,6 +5631,53 @@ branch carries them is bookkeeping, provided the bytes are the same and publicly
 
 ---
 
+# Decision request 62: where the powermetrics orphan fix lives (2026-11-12 05:50 PST)
+
+**Read.** The lead's facts: `joulewise/adapters/powermetrics.py` is an estimator code path pinned by the
+issued W1 calibration acceptance at `70f47086…e5e4`, the bytes RL-58 restored; an in-place fix makes that
+acceptance stale. The builder's alternative as described. I did not read the builder's code.
+
+## RL-96. Option A: the reap goes in a subclass, the acceptance pin stands, and the wrapper is disclosed
+
+**Ruled: A.** `powermetrics.py` stays byte-identical. A new module holds a subclass that overrides
+`_run_bounded_capture` only, and `resolve_telemetry` constructs it.
+
+**Why not in place.** The pin says the bytes that turn a capture into a number are the bytes that were
+calibrated. The defect is in what happens after a capture has already failed. Fixing it in place would make
+a true statement stale and need the acceptance re-issued a few days before W1, for a change that touches no
+estimating line. That is a cost to the series' custody, which is the case where a frozen file is not edited.
+
+**Terms.**
+
+1. The subclass calls the parent's method and adds only the handling after an exception. On a capture that
+   succeeds, the returned bytes and the artifact are identical with and without it; a test shows that.
+2. It signals only the process whose arguments carry this capture's own `-o` path. Never by name.
+3. Absence is proven by census and recorded. The original exception still propagates, so the member fails
+   exactly as it does today.
+4. **The refusal when absence cannot be proven is accepted, as NUMBER_INTEGRITY.** A member measured beside
+   an unrecorded root sampler is not comparable with one that was not. It gets its registry row with that
+   reason, and it joins the hazard scan and the executed closure as the builder proposes.
+5. `sudo -n /bin/kill` must be permitted on the measurement Mac. The W-2 sudo preflight lists it, by
+   listing and not by running, so a missing rule is found at the arm and not at the first timeout.
+6. One deviation row before signing: the capture adapter is wrapped; the estimator file and its acceptance
+   pin are unchanged; what the wrapper does and when it refuses.
+7. Cold review. The `adapters/__init__.py` digest pin in the tests follows the one-line change.
+
+**Tonight.** It may ride under RL-91's condition: built, cold-reviewed and CI green by 12:00 PST, in the
+same commit Part A smokes. Part A exercises only the success path, so term 1's identity test and a stubbed
+timeout test carry the rest. If it is not ready, the night runs without it, as RL-91 says.
+
+**For Ed.** His standing rule is to fix a frozen file in place with a cited rebind. I have ruled the other
+way here because the rebind would be of a calibration acceptance already issued for W1. If that acceptance
+is ever re-issued for another reason, the wrapper is folded into `powermetrics.py` in the same step. The
+lead tells him.
+
+**Reason.** The pin protects the estimator. The fix does not need to touch the estimator, so it does not.
+
+**Blind status.** Blind: code placement only.
+
+---
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
