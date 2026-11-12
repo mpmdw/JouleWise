@@ -5759,6 +5759,61 @@ shown on Block 5 for unchanged bytes. The label states exactly what was and was 
 **Blind status.** Blind to Block 6. Block-5-aware: I know Block 5's released outcome words. The choice was not
 made by looking at what a floor would favour; it follows RL-25 flag 6 and RL-48 F10.
 
+## RL-100. The Block 6 custody kit: two departures from BRIEF-B accepted, one with a change; it follows R12
+
+The kit is `scripts/b6_custody_kit.py` on `analysis/2026-11-12-b6-custody-kit` at `d1119ad86`, base `b4e4df8ed`
+(the unreviewed R12 snapshot). I read its run report, the script's manifest, verify and inputs paths, the
+end-to-end test, and `AuthenticatedInputs` at that base. 63 tests pass and 49 of 49 mutants die, on synthetic
+archives only. This is a ruling on the departures. It is not the kit's cold review.
+
+**1. Mapped paths: ACCEPT-WITH-CHANGE.** My brief was wrong. `SHA256SUMS` lists `sources/` only, and the real
+mappings cite `derived/` and `withheld/` files, so the brief's rule would have refused every real mapping. The
+rule I meant is: every mapped path has a digest taken at the source. The kit's rule is wider than that by one
+step. It accepts any file the manifest hashed, but it writes into `files` only the ones under `derived/` and
+`withheld/`. A mapped name elsewhere outside `sources/` passes the kit and reaches the recompute with no digest
+in the document. The recompute then refuses it, or accepts it through `harvest.outputs`. That fails closed, but
+late, and the rule cannot be stated in one line.
+
+The change: a mapped path must be a `SHA256SUMS` row, or a name whose source digest the run-input document
+itself carries (a key of the emitted `files`, or one of the three pinned files). `--list-names` prints exactly
+that set. One witness test for a manifest-hashed name outside it, and one mutant. This is owed before an
+operator runs the kit on real sessions. It does not hold up the R12 review.
+
+**2. Extra digests: ACCEPT.** The four digests in the brief authenticate nothing that is absent from
+`harvest.outputs`, and R12 showed flags and spans can be absent. `AuthenticatedInputs` takes such files through
+`files`, and those digests must come from the source, so the manifest has to record them. The kit hashes these
+files and reads their names; it parses none of them. The source-side cost is small JSON records.
+
+One condition. The manifest and the run-input document now hold digests of `withheld/` files. A digest of a
+small file with few possible contents can be tested against guesses. Both documents stay in the custody
+directory (mode 700) and are not committed, mailed or pasted into RUN_STATE. Only their own SHA-256 values
+travel. The runbook already sends only the manifest's digest out of band; it gains one line saying so.
+
+**3. Public output equality: ACCEPT as built. No recompute change.** Byte identity is impossible by
+construction: the restricted output records `inputs.run_inputs_sha256`, and the public output records the
+restricted output's digest. `test_public_output_identical_up_to_run_input_digest` already asserts the
+equality explicitly, in the strong form: the restricted outputs differ in that one field only, the public
+outputs in `restricted_sha256` only, and the public bytes are identical once that value is removed. That is
+sufficient for the pin. Editing the pinned recompute to obtain literal identity would cost more than it shows.
+
+**4. Order against R12.** The kit is not merged ahead of R12 and not in the same PR. After R12's Opus review,
+it is rebased onto R12's final head and merged after R12, as its own PR with its own cold review (item 1's
+change included). On the rebase the 63 tests are re-run. If `joulewise/b6_analysis_inputs.py` (`f46367d5…`)
+or `session_input_pin` and `main` in `scripts/independent_recompute_b6.py` (`ee00548d…`) changed in review,
+the mutant run is repeated as well and the "Schema targeted" section is restated. The kit is not part of the
+S-14 pin set: the recompute binds its output through `--inputs-sha256`.
+
+Two notes for the record. The pushed kit branch carries R12's five unreviewed commits to origin as its base;
+that is a backup, as `backup/2026-11-12-sol-p1-b6-r12c-unaudited` is, and reviews nothing. The report's
+"not pushed" line is stale and is corrected on the rebase.
+
+**Still owed, unchanged by this ruling:** the lead's hand check that each copied-record file holds its
+disclosure (§17-R3), and complete `relocations` in `mapping.json`. The kit checks names and coverage only.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. I read code, a
+run report and tests built on synthetic archives. Block-5-aware. The rulings rest on the input schema and the
+authentication chain.
+
 ---
 
 ## Open items routed to me, not yet ruled
@@ -5776,4 +5831,5 @@ made by looking at what a floor would favour; it follows RL-25 flag 6 and RL-48 
 | The follow-up night's thermometry bar, if its confirmation fails on any clause other than the slow pick's return time; the duty bar on G0 with Th0C (RL-78 E5, RL-89) | The night |
 | The census floor in `run_night.py`, if the two tests are red on a quiet host (RL-91) | The quiet-host run |
 | The held-out agreement, if it stops after the RL-92 change | The run |
+| The custody kit's cold review, if it finds the authentication chain wider than RL-100 item 1 states | The rebase onto R12's final head |
 | The S-14 pin request for Block 6, under RL-98 (volume, deadline 13 November 20:00 PST) and RL-99 | The R12 seat's report with its generation ratio, and the Opus cold review |
