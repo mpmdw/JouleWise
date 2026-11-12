@@ -1042,6 +1042,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+276. **Magistrate fb511f67 (headless, Opus 5.5), 2026-11-11 21:40 PST: the item-275 R1 follow-up smoke re-run FAILED in Part A again (receipt rc 1, Part B never ran), this time on Part A's own wall cap, not on powermetrics. The ProcessType fix worked. Per item 275 this goes back to the lead: no retry, no extension, OUT not reused. Nothing armed. MAGISTRATE: nothing to run until the lead's next item.**
+
+```pointer
+owner: lead
+wait: lead resizes the smoke's Part A cap (or splits Part A) and writes a new smoke item
+deadline: none
+on_early_or_refused: n/a
+next_observable: a RUN_STATE 277 from the lead naming a fixed commit and a fresh OUT
+```
+
+- **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T044711Z` (launch token `6057949535aa4fb4bb30f60f1cd629e1`; plist `ProcessType` = `Interactive`; launcher stdout is the preflight line only, stderr empty). Runner 20:47:42 to 21:23:41 PST; Part A 20:52:45 to 21:23:40 (1,855 s of its 1,920 s cap).
+- **Receipt:** `rc` 1, `error` `StepFailed: 1`, `parts` `{"A": true, "B": false}`. Every setup step rc 0 (deadline, night_agents, ac_power, condition13, soak_reference, start-agents/meter/volumes, read_power, display, 300 s dwell, before-part-A-volumes); `part-A` rc 1 with `proven_stopped: true` and an empty group census (item 274's census-floor problem did not recur); `restore` ran `sudo -n pmset -c powermode 0`, observed 0, no marker; stop-volumes, stop-meter, stop-agents all proven stopped; `close-volumes` once; all three feeds (agents 1 file, meter 4, volumes 1) proven stopped and sha256-matching. Desk fence gone; no `com.joulewise.align-r0` label loaded; no powermetrics/MLX process left. The item-275 assert fails on `rc == 0` and `parts`.
+- **The ProcessType fix held.** `capture-predecessor-30b` member `align-pilot-v3-episodes-a-e01` completed (20:52:45 to about 21:01:47): idle baseline 381.4 s for 3,000 frames (127 ms a frame, the R1 rate; item 273's was 240 ms), measured run 2,940 samples, episode written. Step D's own idle baseline was 3,000 frames in 380.0 s.
+- **Defect: Part A's cap cannot hold step D.** Member `align-v4-r1-step-d` (prefill 10k, decode 4,096): prepare 18 s, idle 380 s, warmup 104 s, measured run from 21:10:37 until 21:22:45, when the runtime raised `smoke part wall cap reached; partial smoke is not a pass` after 728 s of measured run and 1,800 s of Part A. In the R1 night itself the same member's measured run took 1,292.8 s and 1,291.8 s (both attempts, `/Users/edr/night-align/r1-20261111T043229Z/night/align-r1/step_D_prefill_10k_decode_4096{,.g0_timeout1}`), and the whole member 1,849 s from validate to reduce. Part A therefore needs at least about 554 s (predecessor) + 1,849 s (step D) = about 2,400 s before any slack, against the 1,800 s internal wall / 1,920 s cap. That is about 600 s more than the internal wall and about 480 s more than the cap; the lead should size it from these R1 durations. Traceback: `align_r1_followup_kit.py:295` -> `align_r1_rehearsal.py:499` Refusal, `part-a.stderr.log`.
+- **Lock:** `/Users/Shared/JouleWise/host-power/night.lock` was rewritten by the smoke's close at 21:23 (`{"pid": 39981, "role": "r1-smoke-close"}`); pid 39981 is not running. Left as found.
+- Gmail: no unread from Ed. Directives: only the standing open issues (#587, #422, #421, #417, #416, #408, #405); nothing new. Canonical root already at `origin/main` (`96e59991e`). Ed emailed this failure (a fault on a smoke he gates the follow-up arm on).
+
 274. **Magistrate 61f1c614 (headless, Opus 5.5), 2026-11-11 20:10 PST: the R1 follow-up smoke launched by item 273 FAILED in Part A (receipt rc 2, Part B never ran). Per item 273 this goes back to the lead: no retry, no extension, OUT not reused. Nothing armed. MAGISTRATE: nothing to run until the lead's next item.**
 
 ```pointer
