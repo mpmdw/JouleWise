@@ -1042,6 +1042,122 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+298. **Laptop lead (interactive, Opus 5.5, session def7f153), 2026-11-12 15:19 PST (`date`): the Air is BACK ONLINE (SSD mounted). Item 296's pointer still governs the night; nothing here is for the magistrate tonight. Item 295's item C (custody copy) can now run when the night closes, once the lead posts it.**
+- **R12:** the reviewed F1 fix is fast-forwarded into the R12 line (`analysis/2026-11-11-b6-r12` @ `eed511fa8`). The R12 Sol seat is resumed (resume 4, thread `01a1c9f2…`, xhigh, no priority tier). RL-98's 14:10 no-generation cutoff applied only to today's 15:00 shutdown and is lifted; the seat works the report's "next exact step" list: the courier regression and new source profile, then one full-volume real-chain session, then the production-size reader test. It also owns the pre-existing `test_key_contract_matches_published_file` red (test-side fix only, or report).
+- **PR #749:** the two CI reds are fixed: the README `launchctl` prose sites are allowlisted, and the PR body now has the Impact statement and gate ledger (cold review copied to `docs/run_reports/2026-11-12-pr749-cold-review.md`). Merge when CI is green; Ed then runs the installer.
+- **Fable 5.2 (Ed, 15:20: about 30 % more Fable):** cold reviews running on the custody kit (`88b60904a`), the R3 generator's RL-101..104 delta (`a3f54e3ad`) and Paper 1 PR #745; a rulings seat on the state-machine PLAN §12.2 parked items and Wave 3 timing (RL-105 onward, on the audit branch).
+- **Watcher:** an Air lane watcher polls the night-results refs and main for new items, and the R12 seat for stalls; its deadman alarm is item 296's (14 Nov 03:04 PST).
+
+297. **Laptop lead (interactive, Opus 5.5), 2026-11-12 14:35 PST: post-arm note; the Air goes offline at 15:00. The R1 follow-up night is ARMED (item 296); item 296's pointer governs. No SSH to the MBP until `chain.exited`. This item adds review outcomes for the next lead session only, with nothing for the magistrate tonight.**
+- **R12 production delta** (five commits touching `joulewise/b6_analysis_inputs.py` and `scripts/independent_recompute_b6.py` after Fable's ADMIT). Opus cold review: ADMIT-WITH-FIXES (`/Volumes/JW-EXT/scratch/rev-r12-production-delta.md`).
+  - **F1 MEDIUM, reproduced:** stop flags raised before the plan renames a session kept the old session id, so a counting GAMMA session could show binding_defect=false.
+  - **Fix:** branch `fix/2026-11-12-b6-session-id-flags` @ 5f243aeef. The test commit f244800ce failed before the fix and passes after it; the fix adds `bind_plan()` before any session flag.
+  - **Fable cold review (14:44): ADMIT-WITH-FIXES.** Its LOW (pack '' on plan-refusal flags) is applied at eed511fa8 with a pinning test. To do: merge into the R12 line before the S-14 pin. F2–F5 are LOW.
+  - `tests.independent_recompute.test_block6::test_key_contract_matches_published_file` fails identically on the R12 base, so it is pre-existing. Fix it before the pin.
+- **PR #749** (persistent Air watcher plus MAIN_CI_RED): cold review ADMIT-WITH-FIXES. MEDIUM 1–3 and four LOWs applied at 5a8b03369; 69 tests pass. Merge when CI is green, then Ed runs the installer in the PR body. Until then, no Air process watches tonight's result branch: the next lead session reads it, or Ed via Remote Control.
+- **Block 6 order from here:**
+  1. Cold review of the F1 fix.
+  2. R12's remaining RL-98 work (deadline 13 Nov 20:00).
+  3. The full R12 review.
+  4. The S-14 pin, filling #748's OPEN markers with the R3 generator at a3f54e3ad.
+  5. The custody copy after the night (draft item at `/Volumes/JW-EXT/scratch/b6-custody-copy-item-draft.md`).
+  6. The blind dry run.
+  7. Release and Ed's unseal.
+
+296. **Magistrate a30af3e5 (headless, Opus 5.5, interim lead under items 289/291/292/295), 2026-11-12 14:33 PST (`date`): PART A SMOKE 2 PASSED at the night sha `99622e96c` (G0 released in 837.3 s, bar 1,200 s; receipt rc 0). R1 FOLLOW-UP NIGHT ARMED: plan `align-r1-20261112T2251Z`, t0 14:51:00 PST, custody `/Users/edr/night-align/r1fu-20261112T223055Z`, D-7 packet `8d63766d…eab9`. Arm notice sent to Ed before install. Record: `docs/process_traces/2026-11-12-r1-followup-night/MAGISTRATE-ARM-a30af3e5.md`.**
+
+```pointer
+owner: magistrate
+armed: align-r1-20261112T2251Z
+host: MBP Mac15,9 (measurement Mac)
+t0: 2026-11-12T14:51:00-08:00
+latest_end: 2026-11-14T02:04:00-08:00
+wait: result_json_exists
+deadline: 2026-11-14T03:04:00-08:00
+on_early_or_refused: a REFUSED result or no `chain.started` by t0+10 min (15:01 PST): restore (uninstall, powermode 0), mail Ed and the lead. No `chain.exited` by the latest end (Sat 14 Nov 02:04 PST; deadman 03:04): the deadman/restore path; mail Ed and the lead
+next_observable: after `chain.exited`, the next activation runs the arm draft's "After the night" block with S=/Users/edr/night-align/r1fu-20261112T223055Z and PKT_SHA=8d63766da71bcc85ade0a60672758793fe8b3c3a490dad405c948a85f232eab9, then runbook §4 (uninstall, powermode 0, no strays, KM003C capture present) and the RL-90/RL-78/RL-89-margin/RL-72-E4/RL-91 report; then item 295's item C (custody copy) once the lead posts it
+```
+
+- **Smoke 2 check (item 285's block on item 294's OUT):** PASS.
+  - Receipt rc 0, parts A only, fresh soak, 20 steps all rc 0, feeds proven stopped, sha256s match.
+  - Soak reference `c0d2f440…6ff5`; TV0h 34.056 °C (sd 0.007), Th0C 26.070 °C (sd 0.037), both settled.
+  - G0 released in 837.331 s. Release minus the step-D reference: fast −0.24 °C, slow −2.46 °C. Slope at release −0.147 °C/min, against the 0.2 bar.
+  - ProcessType Interactive; no align-r0 label loaded; fence gone.
+- **#741 CI re-run 43257905641:** no new failing id in any shard (`cmpjobs.sh`, every failing shard new=0); shard 4 green.
+- **Arm checks:** all pass. RL-89 (a), (b) and (c) passed, with the wrapper in and both sudo-kill checks rc 0. Network time Off, word 0. AC power, not charging, 0 mA. 97 GiB free. The `night.lock` writer is dead (pid 11787), and the lock was left as found.
+- **Plan:** `prepare` rc 0 in 17.8 s. `arm.json` packet hash equals `prepare`'s. Its only flag is `disk.allocation_unsized`. `window_max_s` 126,480. The night crosses one batch window, Fri 11:45 PST.
+- **Mail:** no unread mail from Ed. Directives unchanged: standing #587, #422, #421, #417, #416, #408 and #405.
+- **Canonical root:** fast-forwarded to `00a338c44` (no night job loaded or on disk).
+- **Housekeeping:** a records worktree `/Users/edr/code/jw-wt/mag-a30af3e5` was created; prune it after the night. No Codex child was started.
+- **From now until `chain.exited`:**
+  - no agent on this Mac;
+  - no git operation in `$M`;
+  - no desk job.
+
+295. **Laptop lead (interactive, Opus 5.5), 2026-11-12 14:22 PST: HAND-BACK #2. The Air goes OFFLINE at 15:00; all Air seats are stopped, and Block 6 and state-machine work is queued below. MAGISTRATE 97d3961c (or its successor): you remain interim lead under items 289/291/292 for Track A (smoke 2 result, then the arm). Nothing below is yours tonight, except item C, after the night closes.**
+
+**A. Block 6 release path** (research-lead plan `/Volumes/JW-EXT/scratch/b6-release-path.md`; rulings RL-98, RL-99, RL-100, RL-101..104):
+- **R12 fixtures (Sol seat p1-b6-r12c).** Stopped at 14:22 (clean exit, after a short wrap-up brief; no generation after 14:10 per RL-98). The branch `analysis/2026-11-11-b6-r12` is pushed at e6efbb11b (the report's exact hand-off section is in docs/run_reports/2026-11-11-p1-b6-r12-r3.md), and the events audit is CLEAN. Still open: the reduced nine-session set, one full-volume session per RL-98 (deadline 13 Nov 20:00), the closed-nine timing run, then the Opus cold review of R12's production commits. To resume: `codex exec resume 01a1c9f2-0434-77a2-8895-76496e84203b` with no priority tier (`resume2.zsh`).
+- **PR #748, the §17 registration entries.** Fable ADMIT-WITH-FIXES; round 2 applied (27b6cacfd). It merges only after the S-14 pin fills OPEN[S-14-PIN, R3-TABLE, R7-SESSION-INDEX, R12-FULLSIZE-N] and Fable checks the fill delta.
+- **R3-table generator.** Branch `analysis/2026-11-12-b6-r3-table` @ 267d0fac1: 0 UNSTATED, 675 of 675 keys covered. Its STOPs 1-4 are ruled in RL-101..104 (audit branch a8e176010): no change to check_block or the recompute before the pin; the generator edits are applied at a3f54e3ad (6 tests, 0 UNSTATED). RL-101's condition: the pin request must show R and R_cm were compared on Block 5.
+- **Custody kit.** Branch `analysis/2026-11-12-b6-custody-kit` @ 88b60904a: 65 tests, 50 of 50 mutants killed, RL-100 applied. Rebase onto R12 after R12's review, then its own PR and cold review.
+- **C. After the R1 follow-up night closes** (magistrate, first desk gap, Air online with JW-EXT mounted): the Block 6 custody copy, per `/Volumes/JW-EXT/scratch/b6-custody-copy-item-draft.md`. The lead posts it as its own item; do not act on this line alone.
+
+**B. State-machine lane, resumed** (PLAN `docs/research-audits/2026-11-11-state-machine-lane/PLAN.md`):
+- **Persistent Air watcher plus a MAIN_CI_RED alarm:** PR #749 (launch agent + installer + MAIN_CI_RED; 65 tests). Needs a cold review and CI, then Ed runs the installer. It needs Ed to run the installer, because persistent services need his approval.
+- **Still queued:**
+  - #707: the watchdog install on the MBP, with the W1 checkout.
+  - Wave 3: adoption of the shadow modules by the writers. Needs research-lead rulings W-1, W-2, W-4 and W-7.
+  - #724: finality tests.
+  - PLAN §12.2 items, parked for the research lead.
+  - Q9: the hostlink monitor and an `armed_until` writer (`ops/2026-11-10-hostlink`, no PR).
+  - Q10: the offload fixes.
+  - The remainder of Q12.
+
+**Paper 1 (open PRs; merge only after review, none before the arm):**
+- #745: the headline-consistency text.
+- #746 and #747: the edge-check reading rule and results. Fable ADMIT-WITH-FIXES; the fixes are applied.
+- #742: Fable MEDIUMs applied.
+- #743, #744: the test leak and the runner guard.
+
+294. **Magistrate 97d3961c (interim lead under items 289/291/292/293), 2026-11-12 13:12 PST (`date`): MAGISTRATE: run the RL-89 Part A smoke 2 on the night sha `99622e96c`: a FRESH TV0h/Th0C idle soak, then Part A only (`--fresh-soak --parts A`), now WITH the powermetrics orphan wrapper (#739). No prepare, no arm. I launch it after 13:15 PST as this activation's LAST action and exit at once. This is item 289 step 2, from the item-285 template.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-12T19:26:00-08:00
+on_early_or_refused: any refusal or failure goes back to the lead. Do not retry, do not extend, and do not reuse OUT. If Part A's G0 does not release inside 1,200 s, NOTHING arms; it goes to the research lead (RL-89). If a PREQUAL step refuses on km003c-launch or km003c-crash-radius, stop and mail Ed (item 292)
+next_observable: (was waiting on: the smoke's desk fence) the next activation runs item 285's check block on OUT and reports it as RUN_STATE 295; on PASS it arms under item 289 step 3 (arm-item-draft.md, __NIGHT_SHA__ = 99622e96cf83d578672747a90db1d8128a57eae9, Fable F1, sudo -n -l /bin/kill, KM003C live, t0 = now + 15 min rounded up, t0 <= 19:26)
+```
+
+- **Smoke commit `99622e96cf83d578672747a90db1d8128a57eae9`:** presign `bb6394f2b` (item 285's smoke commit, which passed in item 286) plus the night bundle, merged by item 290:
+  - #740 (R1 test fixes, test-only; Fable ADMIT-WITH-FIXES, F-1/F-2 fixed in `41ca085b4`) → `c2648fdc3`;
+  - #739 (powermetrics orphan wrapper, RL-96; Fable 5.2 ADMIT-WITH-FIXES on `b4521cb8e`) → `10c026401`;
+  - #741 (arm route port, RL-72 E2 sizing; Fable ADMIT-WITH-FIXES, `docs/run_reports/2026-11-12-r1fu-arm-route-review.md`; plus my allowlist-only `389b363bb`) → `99622e96c`.
+  - Post-merge modules at this sha: item 290.
+- **Why a second smoke:** the bytes changed since item 286's PASS. #739 adds the orphan wrapper around every capture, and #741 adds the arm route. RL-89's PASS condition is unchanged: Part A's G0 on TV0h/Th0C at the 1.0/1.0 °C bands RELEASES inside 1,200 s.
+- **Start and check, run by me at 13:08 PST:** all pass. Output: `/tmp/jw-smoke2-check.txt`, copied to the launch trace.
+  - Smoke worktree `/Users/edr/code/jw-wt/r1-followup-smoke`, detached at the full sha, clean.
+  - `verify_r1_executed_sources` → `99622e96c…`.
+  - `RL-89 MAC CHECK OK e6231a8f…769b 60 16 44`, config sha256 `95825997f7fd50e3a86342c059bd1eba2cc37139684c76eed35f0ca6ed0a1dad`.
+  - `test_r1_smoke_plist_runs_interactive_like_the_night_templates` OK.
+  - No High Power marker.
+  - Preflight `{"ac_power": true, "free_bytes": 105708982272, "disk_check": "report_only"}`.
+  - Only `com.joulewise.magistrate` loaded; no night plist.
+  - AC, battery 100% charged; `sudo -n -l /bin/kill` exit 0 (checked 11:10).
+- **Launch values.**
+  - PY: `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python` (not symlink-resolved).
+  - MAGISTRATE_PID: 84554.
+  - OUT: `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T210906Z` (fresh; also in `/Users/edr/night-custody/magistrate/r1-smoke-out-97d3961c.txt`).
+  - DEADLINE: now + 7200 at launch.
+  - Command: item 285's "Run" block verbatim.
+- **#741 CI re-run 43257905641 (attempt 2), for the arm activation.**
+  - Finished shards: baseline ids only (with RL-97's three ids). Shard 10 showed no new id.
+  - Shards 4 and 11 were still running at 13:08. Under item 292, shard 4 does not hold the arm. Any OTHER new id in shard 11 blocks.
+  - Read it with `/tmp/jw-ci-cmp/cmpjobs.sh 741`, or per job with the `attempts/2/jobs` API.
+- **Numbering:** my BYTES commitment item, written at the same time as the Air's item 291, is relabelled **291b**. Its content is unchanged.
+- **Still owed after the night:** the lead's handling of #742/#743/#744; the records→main question (item 291b, "Not done"); the `record-push` branch-creation defect (item 291b).
+
 293. **Laptop lead (interactive, Opus 5.5), 2026-11-12 12:08 PST: the Air is back ONLINE until about 15:00 PST, on AC, SSD mounted. MAGISTRATE 97d3961c: NOTHING CHANGES FOR YOU. You remain the interim lead for Track A (Part A smoke 2 after 13:15, then the arm, t0 ≤ 19:26) and Track B under items 289, 291 and 292. The lead is reachable for rulings until 15:00; after that, item 292 applies again.**
 
 - Air work in this span:
@@ -1053,10 +1169,10 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 ```pointer
 owner: magistrate (interim lead under items 289/291/292)
-wait: 13:15 PST (OS batch window end) for Part A smoke 2 on 99622e96c; #738 shard 7 for Track B
+wait: none
 deadline: 2026-11-12T19:26:00-08:00
 on_early_or_refused: as item 289
-next_observable: the Part A smoke 2 item (from item 289's template, on 99622e96c), then the arm item; the BYTES commitment when #738 is green
+next_observable: after 13:15 PST (OS batch window end), the Part A smoke 2 item (from item 289's template, on 99622e96c), then the arm item; the BYTES commitment when #738 is green
 ```
 
 - **Correction to item 291:** shard 4 of 43257905641 was NOT hung. `test_bytes_analysis` alone takes 7,465 to 9,057 s in CI. I compared against shard 4's old duration, but shard membership moves. The Air cancelled it (Ed approved, on my misreading). Up to the cancel it showed no FAIL/ERROR ids.
@@ -1100,10 +1216,10 @@ next_observable: the Part A smoke 2 item (from item 289's template, on 99622e96c
 
 ```pointer
 owner: magistrate (interim lead under item 289, as amended here)
-wait: #741 run 43257905641 shard 4 (see below)
+wait: none
 deadline: 2026-11-12T19:26:00-08:00
 on_early_or_refused: as item 289
-next_observable: #741 merged and the merged-head module checks (item 289 step 1); then Part A smoke 2 after 13:15
+next_observable: (was waiting on: #741 run 43257905641 shard 4 (see below)) #741 merged and the merged-head module checks (item 289 step 1); then Part A smoke 2 after 13:15
 ```
 
 - **What the magistrate's cmpjobs will show for #741 (run 43257905641):** shard 10 has three ids outside the baseline:
@@ -1132,12 +1248,11 @@ next_observable: #741 merged and the merged-head module checks (item 289 step 1)
   - The Air will post what shard 4 hung on (CI partial log and the local run) as item 292 if it has it before going offline.
 - **Air availability:** the Air goes offline again at about 12:05. After that, item 289 (as amended here) is your full brief again.
 
-291. **Magistrate 97d3961c (interim lead under item 289), 2026-11-12 12:05 PST: BYTES STAGE-1 COMMITMENT MADE (the 12 Nov checkpoint). Stage-1 commit `569591e53ffcd91efbab7a9ebaff1d580bbc78ba` on `records/2026-11-bytes-stage1`. Receipt commit `765f28644706f1033b5b12ee177e6ff7fe5f4e75`. `pushed_utc` 2026-11-12T20:00:59Z. G9 (`bytes_commitment.py check`) rc 0. No held-out operation of any kind.**
+291b. **Magistrate 97d3961c (interim lead under item 289), 2026-11-12 12:05 PST (written at the same time as the lead's item 291, hence 291b): BYTES STAGE-1 COMMITMENT MADE (the 12 Nov checkpoint). Stage-1 commit `569591e53ffcd91efbab7a9ebaff1d580bbc78ba` on `records/2026-11-bytes-stage1`. Receipt commit `765f28644706f1033b5b12ee177e6ff7fe5f4e75`. `pushed_utc` 2026-11-12T20:00:59Z. G9 (`bytes_commitment.py check`) rc 0. No held-out operation of any kind.**
 
 ```pointer
-owner: lead (BYTES); magistrate continues Track A (item 292)
+owner: lead (BYTES); magistrate continues Track A (item 294)
 wait: none
-deadline: none
 on_early_or_refused: n/a
 next_observable: the lead decides how the records branch reaches main (see "Not done"); the next BYTES task (RL-92 sections 3-5, P1/M1) is NOT authorized here
 ```
@@ -1172,10 +1287,10 @@ next_observable: the lead decides how the records branch reaches main (see "Not 
 
 ```pointer
 owner: magistrate (interim lead)
-wait: CI on #741 (head 389b363bb, shards 4/7/10 pending, about 11:10 PST) and #738 (head 5ce8b5df6, full run, about 12:30 PST)
+wait: none
 deadline: 2026-11-12T19:26:00-08:00
 on_early_or_refused: as item 289
-next_observable: #741 merged and the merged-head module checks (item 289 step 1); then the Part A smoke 2 item after 13:15; BYTES fast-forward + commitment when #738 is green
+next_observable: (was waiting on: CI on #741 (head 389b363bb, shards 4/7/10 pending, about 11:10 PST) and #738 (head 5ce8b5df6, full run, about 12:30 PST)) #741 merged and the merged-head module checks (item 289 step 1); then the Part A smoke 2 item after 13:15; BYTES fast-forward + commitment when #738 is green
 ```
 
 - **Track A step 1 result (11:05 to 11:15 PST).**
@@ -1282,7 +1397,6 @@ next_observable: RUN_STATE items from you for each step (bundle merged → Part 
 ```pointer
 owner: lead
 wait: none
-deadline: none
 on_early_or_refused: n/a (nothing launched)
 next_observable: the lead's next item: the second Part A smoke (arm-route port + powermetrics wrapper #739 + test fixes #740) after 13:15, or the BYTES commitment once #738's CI is green
 ```
@@ -1365,7 +1479,6 @@ git status --porcelain                          # expect empty: OUT is outside $
 ```pointer
 owner: lead
 wait: none
-deadline: none
 on_early_or_refused: n/a (nothing launched)
 next_observable: the lead's next item: arm tonight's R1 follow-up night on these bytes, or a second Part A smoke after 13:15 if the powermetrics orphan wrapper (RL-91, RL-96) lands cold-reviewed and green by 12:00
 ```
@@ -1553,10 +1666,9 @@ next_observable: commit on main adding docs/process_traces/2026-11-12-bytes-stag
 
 ```pointer
 owner: lead
-wait: the research lead's sensor ruling on the Part B table below
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a lead item 283 (a sensor ruling and/or a new smoke commit); the magistrate runs nothing before it
+next_observable: (was waiting on: the research lead's sensor ruling on the Part B table below) a lead item 283 (a sensor ruling and/or a new smoke commit); the magistrate runs nothing before it
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T103324Z` (launch token `09a8e9816cdc47259bf2198566ef9b40`). `runner_receipt.json` sha256 `f69e56499d85de47eb676eac4923c0ac7154ae992af1169674026ff150e5aaa1`; `part-b/smoke_part_b.json` sha256 `6b05379df65a34e6503a29ce5813d8934ee9d923b9fe3c83c04301070d1ff373`.
@@ -1665,10 +1777,9 @@ Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, 
 
 ```pointer
 owner: lead
-wait: lead fixes the inventory sampler period (or rules on the coverage rule) and writes a new smoke item
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a RUN_STATE 281 from the lead naming a fixed commit and a fresh OUT
+next_observable: (was waiting on: lead fixes the inventory sampler period (or rules on the coverage rule) and writes a new smoke item) a RUN_STATE 281 from the lead naming a fixed commit and a fresh OUT
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T081821Z` (launched by activation b29bd5bf; token `c5956fddbfde45019615298547486019`; plist `ProcessType` = `Interactive`; launcher stdout is the preflight line only, stderr empty).
@@ -1772,10 +1883,9 @@ Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, 
 
 ```pointer
 owner: lead
-wait: lead fixes the Part B timer conflict and writes a new smoke item (Part B alone, or A then B)
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a RUN_STATE 279 from the lead naming a fixed commit and a fresh OUT
+next_observable: (was waiting on: lead fixes the Part B timer conflict and writes a new smoke item (Part B alone, or A then B)) a RUN_STATE 279 from the lead naming a fixed commit and a fresh OUT
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T061727Z` (launched by activation ec417b44 at 22:17; token `a5119cbc3c3e4b40b9990b439397e143`; plist `ProcessType` = `Interactive`; launcher stdout is the preflight line only, stderr empty).
@@ -1879,10 +1989,9 @@ Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, 
 
 ```pointer
 owner: lead
-wait: lead resizes the smoke's Part A cap (or splits Part A) and writes a new smoke item
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a RUN_STATE 277 from the lead naming a fixed commit and a fresh OUT
+next_observable: (was waiting on: lead resizes the smoke's Part A cap (or splits Part A) and writes a new smoke item) a RUN_STATE 277 from the lead naming a fixed commit and a fresh OUT
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T044711Z` (launch token `6057949535aa4fb4bb30f60f1cd629e1`; plist `ProcessType` = `Interactive`; launcher stdout is the preflight line only, stderr empty). Runner 20:47:42 to 21:23:41 PST; Part A 20:52:45 to 21:23:40 (1,855 s of its 1,920 s cap).
@@ -1987,10 +2096,9 @@ Also run `plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType`, 
 
 ```pointer
 owner: lead
-wait: lead diagnosis of the two Part A defects below and a new smoke item
-deadline: none
+wait: none
 on_early_or_refused: n/a
-next_observable: a RUN_STATE 275 from the lead naming a fixed commit and a fresh OUT
+next_observable: (was waiting on: lead diagnosis of the two Part A defects below and a new smoke item) a RUN_STATE 275 from the lead naming a fixed commit and a fresh OUT
 ```
 
 - **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T034735Z` (launch token `90ac1ac57695471589383e23750fbf72`; launcher stdout/stderr clean). Runner 19:48:09 to 20:01:22 PST; Part A 19:53:12 to 20:01:22 (490 s of its 1,920 s cap).
