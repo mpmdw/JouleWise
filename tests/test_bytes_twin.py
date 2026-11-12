@@ -118,12 +118,13 @@ class MissingWithheldFlagTests(unittest.TestCase):
 
     MODEL = "qwen3-30b-a3b-4bit"
 
-    def missing_result(self, session_flags, archive=True):
-        manifest = {name: {"config_key": "key-" + name} for name in bt.ROSTER}
+    def missing_result(self, session_flags, archive=True, cell_run_codes=None, stage="2"):
+        manifest = {name: {"config_key": "key-" + name, "cell_ids": ["cell-" + name]} for name in bt.ROSTER}
         record = {"row_count": 40, "config_row_count": 14, "path": "withheld/s1.csv", "config_key_sha256": "x"}
-        archives = [{"session_id": "s1", "session_flags": session_flags}] if archive else []
+        archives = [{"session_id": "s1", "session_flags": session_flags,
+                     "cell_run_codes": cell_run_codes or {}}] if archive else []
         with tempfile.TemporaryDirectory(prefix="bytes-missing-keys-") as keys:
-            return bt.analyse([], manifest, archives, stage="2", key_dir=keys, listed={"s1": {"pass_id": 1}},
+            return bt.analyse([], manifest, archives, stage=stage, key_dir=keys, listed={"s1": {"pass_id": 1}},
                               withheld={"s1": {"rows": [], "missing": {self.MODEL: record}}})
 
     def assert_flags(self, result, expected):
@@ -146,6 +147,60 @@ class MissingWithheldFlagTests(unittest.TestCase):
     def test_no_session_codes_or_no_archive_keeps_only_the_withheld_flag(self):
         self.assert_flags(self.missing_result([]), ["bytes.withheld_missing"])
         self.assert_flags(self.missing_result(["audit.early"], archive=False), ["bytes.withheld_missing"])
+
+    def planned_archive(self, root):
+        """A harvest archive whose roster plans two runs of the missing model and one of another."""
+        (root / "derived").mkdir()
+        cell, other = "cell-" + self.MODEL, "cell-qwen3-14b-4bit"
+        (root / "derived/roster.json").write_text(json.dumps({"members": [
+            {"run_id": "r1", "units": [{"cell_id": cell}]}, {"run_id": "r2", "units": [{"cell_id": cell}]},
+            {"run_id": "r3", "units": [{"cell_id": other}]}]}))
+        (root / "derived/flags.jsonl").write_text("".join(json.dumps(row) + "\n" for row in [
+            {"code": "audit.early", "scope": {}},
+            {"code": "battery.assist", "scope": {"run_id": "r1"}},
+            {"code": "battery.assist", "scope": {"run_id": "r2"}},
+            {"code": "other.model", "scope": {"run_id": "r3"}}]))
+        (root / "derived/b6-acceptance.json").write_text(json.dumps({
+            "session_id": "s1",
+            "emitted_flags": [{"code": "audit.early"}, {"code": "zeta.late"}, {"code": "run.emitted", "scope": {"run_id": "r2"}}],
+            "excluding": [{"scope": "member", "run_id": "r1", "code": "member.excluded"},
+                          {"scope": "member", "run_id": "r2", "code": "member.excluded"},
+                          {"scope": "member", "run_id": "r3", "code": "other.excluded"},
+                          {"scope": "session", "run_id": "r1", "code": "not.a.member.code"}]}))
+
+    def test_missing_cell_lists_planned_run_and_exclusion_codes(self):
+        # N1: run codes, member exclusion codes and session codes, sorted, with duplicates across runs
+        # listed once; the other model's run codes stay out; read through load_archive.
+        with tempfile.TemporaryDirectory(prefix="bytes-missing-planned-") as directory:
+            root = Path(directory)
+            self.planned_archive(root)
+            archive = bt.load_archive(root)
+        self.assertEqual(archive["cell_run_codes"]["cell-" + self.MODEL],
+                         ["battery.assist", "member.excluded", "run.emitted"])
+        result = bt.analyse([], {name: {"config_key": "key-" + name, "cell_ids": ["cell-" + name]} for name in bt.ROSTER},
+                            [archive], stage="2", key_dir=tempfile.mkdtemp(prefix="bytes-missing-keys-"),
+                            listed={"s1": {"pass_id": 1}},
+                            withheld={"s1": {"rows": [], "missing": {self.MODEL: {
+                                "row_count": 40, "config_row_count": 14, "path": "w.csv", "config_key_sha256": "x"}}}})
+        expected = ["audit.early", "battery.assist", "bytes.withheld_missing", "member.excluded",
+                    "run.emitted", "zeta.late"]
+        self.assert_flags(result, expected)
+        # N3: the session code sorts before battery.assist inside a computed cell, not only in load_archive.
+        self.assertLess(result["cells"][self.MODEL]["pass1"]["flags"].index("audit.early"),
+                        result["cells"][self.MODEL]["pass1"]["flags"].index("battery.assist"))
+
+    def test_missing_cell_run_codes_at_stage_one_and_without_archive(self):
+        codes = {"cell-" + self.MODEL: ["battery.assist"], "cell-other": ["other.run"]}
+        self.assert_flags(self.missing_result(["audit.early"], cell_run_codes=codes),
+                          ["audit.early", "battery.assist", "bytes.withheld_missing"])
+        self.assert_flags(self.missing_result(["audit.early"], archive=False, cell_run_codes=codes),
+                          ["bytes.withheld_missing"])
+
+    def test_blinded_stage_missing_branch_ignores_archive(self):
+        # N4: at the blinded stage the analysis reads no archive; the cell holds the bare withheld code.
+        codes = {"cell-" + self.MODEL: ["battery.assist"]}
+        self.assert_flags(self.missing_result(["audit.early"], cell_run_codes=codes, stage="blinded"),
+                          ["bytes.withheld_missing"])
 
     def test_blinded_stage_never_loads_archive_session_flags(self):
         with patch.object(bt, "load_archive", side_effect=AssertionError("blinded archive read")):
@@ -597,6 +652,20 @@ class H1Tests(QuantityTestCase):
         self.assertEqual(words["active_or_resident"]["answer"], "active")
         self.assertEqual(words["models"]["qwen3-14b-4bit"]["word"], "unresolved")
         self.assertIsNone(words["models"]["a"]["word"])
+
+    def test_active_or_resident_row_carries_the_missing_points_flags(self):
+        # N2: the row's flags are the sorted union of the missing points' pass flags, not a constant.
+        fit = self.points()
+        lines = bt.h1_lines(fit)
+        held = {**fit, "qwen3-14b-4bit": {"x": {"bytes": 8.0, "resident": 8.0, "time": 3.0}, "e": 8.0, "w": 0.2, "kind": "dense"}}
+        miss = ["qwen3-30b-a3b-4bit"]
+        flags = ["audit.early", "battery.assist", "bytes.withheld_missing"]
+        words = bt.h1_words(lines, held, missing=miss, missing_flags=flags)
+        self.assertEqual(words["active_or_resident"]["answer"], "missing")
+        self.assertEqual(words["active_or_resident"]["flags"], flags)
+        # the unsorted, duplicated input prints sorted; no MoE model missing prints none.
+        self.assertEqual(bt.h1_words(lines, held, missing=miss, missing_flags=["b", "a"])["active_or_resident"]["flags"], ["a", "b"])
+        self.assertEqual(bt.h1_words(lines, held, missing=[], missing_flags=flags)["active_or_resident"]["flags"], [])
 
     def test_neither_and_mixed(self):
         lines = bt.h1_lines(self.points())

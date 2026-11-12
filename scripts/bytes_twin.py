@@ -712,7 +712,7 @@ def read_manifest(path):
                 raise ValueError("model predictors differ from registered manifest: " + name)
         manifest[name] = {"model": entry.get("_name"), "W_bytes": w, "KV_bytes": kv, "R_bytes": r,
                           "b_GB": (w + kv) / GB, "R_GB": r / GB,
-                          "revision": entry.get("revision"), "kind": ROSTER.get(name, {}).get("kind"),
+                          "revision": entry.get("revision"), "cell_ids": entry.get("cell_ids"), "kind": ROSTER.get(name, {}).get("kind"),
                           # the public configuration identity (lead ruling 2026-10-20 item 1: the sidecar
                           # lists withheld rows by the digest of this key)
                           "config_key": entry.get("config_key")}
@@ -1052,6 +1052,21 @@ def load_archive(root):
     # either source. Read them independently of the analysis and export.
     session_flags = sorted({flag["code"] for flag in flag_rows + record.get("emitted_flags", [])
                             if not (flag.get("scope") or {}).get("run_id")})
+    # RL-82 (second ground): a planned run's codes are its run-scoped flags and its member exclusion
+    # codes; the roster maps each run to its cell. Kept apart per cell for a missing cell's list.
+    run_codes = {}
+    for flag in flag_rows + record.get("emitted_flags", []):
+        run_id = (flag.get("scope") or {}).get("run_id")
+        if run_id:
+            run_codes.setdefault(run_id, set()).add(flag["code"])
+    for entry in record.get("excluding", []):
+        if entry.get("scope") == "member":
+            run_codes.setdefault(entry["run_id"], set()).add(entry["code"])
+    roster = read_json(root / "derived/roster.json", {}) or {}
+    cell_run_codes = {}
+    for member in roster.get("members", []):
+        for unit in member.get("units", []):
+            cell_run_codes.setdefault(unit["cell_id"], set()).update(run_codes.get(member["run_id"], ()))
     streams = []
     base = root / "sources/night-custody/hazards/meter"
     for path in sorted(base.glob("stream-*.jsonl")):
@@ -1065,7 +1080,8 @@ def load_archive(root):
     # §16: "reads the harvest's operative timing bound ... and never recomputes
     # a calibration bracket". Keep the archive's already evaluated record.
     return {"root": root, "session_id": record.get("session_id"), "pack_id": record.get("pack_id"),
-            "streams": streams, "calibration": record.get("calibration") or {}, "session_flags": session_flags}
+            "streams": streams, "calibration": record.get("calibration") or {}, "session_flags": session_flags,
+            "cell_run_codes": {cell: sorted(codes) for cell, codes in cell_run_codes.items()}}
 
 
 def anchor_envelope(intervals, window, common_s, edge_s):
@@ -1943,7 +1959,7 @@ def h1_predict(lines, hyp, x):
     return {"x": x, "central": central, "lower": min(values), "upper": max(values)}
 
 
-def h1_words(lines, models, missing=()):
+def h1_words(lines, models, missing=(), missing_flags=None):
     """models: {model: {"x": {hyp: v}, "e", "w", "kind"}} for every model with a number; missing: the
     models whose point is `missing` (B6 ruling Q1), which have no word and leave the active-or-resident
     answer `missing` when one of them is an MoE model."""
@@ -1983,7 +1999,7 @@ def h1_words(lines, models, missing=()):
     return {"models": per_model,
             "active_or_resident": {"answer": answer, "moe_models": moe_present, "misses": misses,
                                    "missing_models": moe_missing,
-                                   "flags": [WITHHELD_MISSING] if moe_missing else []},
+                                   "flags": (sorted(missing_flags) if missing_flags is not None else [WITHHELD_MISSING]) if moe_missing else []},
             "dense_note": ("Dense held-out models test the line's linearity over the bytes range, not which "
                            "hypothesis is right.")}
 
@@ -2206,11 +2222,16 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         for pass_index, session_id in enumerate(session_ids, 1):
             missing = withheld_missing.get(session_id, {}).get(model)
             if missing is not None:
-                # RL-82 reading A: the cell's flags are its session's codes as well; the withheld
-                # code is one of them (the analysis's sorted set), at the archive stages only.
+                # RL-82 reading A and its second ground: the cell's flags are the withheld code, the
+                # session's codes, and the codes of the model's planned runs (run-scoped flags and
+                # member exclusion codes), as the analysis lists them; archive stages only.
                 archive = archive_by_session.get(session_id)
-                missing_flags = sorted({WITHHELD_MISSING} | set(
-                    archive.get("session_flags", []) if archive is not None and stage in ("1", "2") else []))
+                from_archive = set()
+                if archive is not None and stage in ("1", "2"):
+                    from_archive = set(archive.get("session_flags", []))
+                    for cell_id in manifest.get(model, {}).get("cell_ids") or ():
+                        from_archive |= set(archive.get("cell_run_codes", {}).get(cell_id, ()))
+                missing_flags = sorted({WITHHELD_MISSING} | from_archive)
                 cells.setdefault(model, {})[f"pass{pass_index}"] = {
                     "session_id": session_id, "status": "missing", "flags": missing_flags,
                     "withheld_row_count": missing["row_count"], "withheld_config_row_count": missing["config_row_count"],
@@ -2342,7 +2363,11 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                         all_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                              "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": ROSTER[model]["kind"],
                                              **model_pass_status(model, boundary)}
-                words = h1_words(lines, all_points, missing=missing_models(pass_key))
+                # The analysis's row lists the sorted union of the missing points' pass flags.
+                missing_here = missing_models(pass_key)
+                missing_flags = sorted({f for m in missing_here for f in (
+                    cells[m][pass_key]["boundaries"].get(boundary, {}).get("quantities", {}).get("gross", {}).get("flags") or [])})
+                words = h1_words(lines, all_points, missing=missing_here, missing_flags=missing_flags)
                 for model in held_out:
                     if model not in all_points and model in cells:
                         q = cells[model].get(pass_key, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
