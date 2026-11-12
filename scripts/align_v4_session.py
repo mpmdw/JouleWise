@@ -355,6 +355,7 @@ def host_privilege_rules():
     """The night's fixed sudo rules, from their owning constants, never setters here."""
     from joulewise import network_time_off
     from joulewise.align.apple import powermode
+    from joulewise.adapters import powermetrics_reap
     from joulewise.b5 import driver
     from scripts import run_night
     # driver.NETWORK_TIME_OFF_ARGV and network_time_off.OFF_ARGV are the same
@@ -365,7 +366,9 @@ def host_privilege_rules():
              ('network_time_query', run_night.NETWORK_TIME_QUERY_ARGV),
              ('powermode_automatic', powermode.RESTORE_AUTOMATIC),
              ('powermode_high', powermode.SET_HIGH_POWER),
-             ('zero_ntp_frequency', ZERO_FREQUENCY_ARGV)]
+             ('zero_ntp_frequency', ZERO_FREQUENCY_ARGV),
+             # RL-91/RL-96: the bounded-capture reaper's privileged kill.
+             ('powermetrics_reap_kill', powermetrics_reap.KILL_PREFIX)]
     seen, unique = set(), []
     for name, argv in rules:
         command = tuple(argv[2:])

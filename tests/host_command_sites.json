@@ -30,6 +30,30 @@
     "seam": "privilege_prefix/executable parameters; patch module subprocess.Popen for capture"
   },
   {
+    "file": "joulewise/adapters/powermetrics_reap.py",
+    "locator": "<module>:0ad70fd971de1688",
+    "command": "kill",
+    "seam": "kill_prefix/reap_run constructor parameters (tests/test_powermetrics_reap.py: fake sudo + fake kill, or a scripted reap_run); used only after a failed capture"
+  },
+  {
+    "file": "joulewise/adapters/powermetrics_reap.py",
+    "locator": "<module>:24e5e1c2bbef5653",
+    "command": "sudo",
+    "seam": "kill_prefix/reap_run constructor parameters (tests/test_powermetrics_reap.py: fake sudo + fake kill, or a scripted reap_run); used only after a failed capture"
+  },
+  {
+    "file": "joulewise/adapters/powermetrics_reap.py",
+    "locator": "<module>:b60138314909f121",
+    "command": "kill",
+    "seam": "kill_prefix/reap_run constructor parameters (tests/test_powermetrics_reap.py: fake sudo + fake kill, or a scripted reap_run); used only after a failed capture"
+  },
+  {
+    "file": "joulewise/adapters/powermetrics_reap.py",
+    "locator": "<module>:b60138314909f121",
+    "command": "sudo",
+    "seam": "kill_prefix/reap_run constructor parameters (tests/test_powermetrics_reap.py: fake sudo + fake kill, or a scripted reap_run); used only after a failed capture"
+  },
+  {
     "file": "joulewise/align/analysis/budget_pilot.py",
     "locator": "frontier_lines:127a51b03ee80741",
     "command": "kill",
