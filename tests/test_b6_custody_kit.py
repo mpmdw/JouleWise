@@ -292,6 +292,30 @@ class Mini(unittest.TestCase):
         self.assertEqual(self.verify(out=self.base / "r2.json")[2].splitlines(),
                          ["refused: unlisted_extra_file", "  at b6-alpha-r1: derived/extra.json"])
 
+    def test_cancelling_size_changes_in_two_compressed_rows(self):
+        # Expected (L3): file_size_mismatch when one .zst is recompressed smaller and another grows by a skippable
+        # frame by exactly the same number of bytes (decompressed streams, hence digests, unchanged; session total
+        # unchanged, so tree_size_mismatch alone would pass it).
+        src, dst = self.base / "c-src", self.base / "c-dst"
+        x = mini_archive(src, "b6-big-r1", big=True)
+        manifest = self.base / "c-manifest.json"
+        rc, out, _ = run("manifest", "--session", x, "--loop-attempts", self.attempts, "--out", manifest)
+        self.assertEqual(rc, 0)
+        shutil.copytree(src, dst, symlinks=True)
+        small, big = dst / "b6-big-r1/sources/meter/stream-2.jsonl.zst", dst / "b6-big-r1/sources/runs/r1/big-z.bin.zst"
+        before = small.stat().st_size
+        plain = self.base / "c-plain.jsonl"
+        subprocess.run(["zstd", "-q", "-d", "-f", str(small), "-o", str(plain)], check=True)
+        subprocess.run(["zstd", "-q", "-9", "-f", "--no-check", str(plain), "-o", str(small)], check=True)
+        delta = before - small.stat().st_size
+        self.assertGreaterEqual(delta, 8)
+        with open(big, "ab") as frame:   # skippable frame: magic, payload length, payload
+            frame.write((0x184D2A50).to_bytes(4, "little") + (delta - 8).to_bytes(4, "little") + b"\0" * (delta - 8))
+        shutil.copyfile(self.attempts, dst / "attempts.jsonl")
+        rc, out2, err = run("verify", "--manifest", manifest, "--manifest-sha256", out.strip().rsplit("=", 1)[1],
+                            "--root", dst, "--loop-dir", dst, "--out", self.base / "c-receipt.json")
+        self.assertEqual((rc, err.splitlines()[:1]), (4, ["refused: file_size_mismatch"]))
+
     def test_extra_file_in_sources(self):
         # Expected: refused unlisted_extra_file.
         write(self.ca / "sources/runs/r1/extra.txt", "e")

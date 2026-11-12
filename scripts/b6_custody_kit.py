@@ -213,7 +213,8 @@ def session_manifest(source, copy_path):
     return {"copy_path": copy_path, "basename": source.name, "source_path": str(source),
             "sha256sums_sha256": hash_file(source / SUMS)[0], "harvest_sha256": outside[HARVEST],
             "acceptance_sha256": outside[ACCEPTANCE], "compression": compression,
-            "outside_sources": outside, "desk_present": desk.is_dir(), "desk_files": desk_files,
+            "outside_sources": outside, "sources_sizes": {n: z for n, z in sorted(files.items()) if n.startswith("sources/")},
+            "desk_present": desk.is_dir(), "desk_files": desk_files,
             "file_count": len(files), "total_bytes": sum(files.values())}
 
 
@@ -299,6 +300,9 @@ def verify_session(root, entry, tool):
         refuse("unlisted_extra_file", sorted(set(files) - expected)[0])
     if len(files) != entry["file_count"] or sum(files.values()) != entry["total_bytes"]:
         refuse("tree_size_mismatch")
+    for name, size in entry["sources_sizes"].items():   # cold review L3: per-file, so two size changes cannot cancel
+        if files.get(name) != size:
+            refuse("file_size_mismatch", name)
     desk = Path(str(archive) + DESK_SUFFIX)
     if not entry["desk_present"] and os.path.lexists(desk):
         refuse("unexpected_desk_folder", archive.name + DESK_SUFFIX)   # cold review L2
