@@ -27,6 +27,8 @@ class TemporaryCandidate:
         self.root = root
         for relative in registration.ARTIFACTS:
             self.write(relative, 'synthetic registered bytes\n')
+        # require_registration() json-loads r1_slots.json before the U3 bar is read.
+        self.write(registration.REGISTRATION + 'r1_slots.json', '{}')
         # W1's HAZARD_PACK chain executes this as campaign_runner; it is not
         # an import edge, and the current receipt does not bind it.
         self.write('scripts/run_campaign.py', 'synthetic campaign implementation\n')
@@ -44,6 +46,12 @@ class TemporaryCandidate:
                       for s, p in self.gates.items()},
         }
         registration.validate_receipt(self.receipt, self.root)
+
+    @staticmethod
+    def executed_sources_unchecked():
+        # The synthetic repo has no R1 executed_commit (condition 13); the callers that
+        # reach require_registration() test the checks after it. Same pattern as test_r1_round4.
+        return patch.object(registration, 'verify_r1_executed_sources', lambda root, slots: None)
 
     def write(self, relative, value):
         path = self.root / relative
