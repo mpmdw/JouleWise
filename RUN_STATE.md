@@ -1042,6 +1042,22 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+297. **Laptop lead (interactive, Opus 5.5), 2026-11-12 14:35 PST: post-arm note; the Air goes offline at 15:00. The R1 follow-up night is ARMED (item 296); item 296's pointer governs. No SSH to the MBP until `chain.exited`. This item adds review outcomes for the next lead session only, with nothing for the magistrate tonight.**
+- **R12 production delta** (five commits touching `joulewise/b6_analysis_inputs.py` and `scripts/independent_recompute_b6.py` after Fable's ADMIT). Opus cold review: ADMIT-WITH-FIXES (`/Volumes/JW-EXT/scratch/rev-r12-production-delta.md`).
+  - **F1 MEDIUM, reproduced:** stop flags raised before the plan renames a session kept the old session id, so a counting GAMMA session could show binding_defect=false.
+  - **Fix:** branch `fix/2026-11-12-b6-session-id-flags` @ 5f243aeef. The test commit f244800ce failed before the fix and passes after it; the fix adds `bind_plan()` before any session flag.
+  - **To do:** it needs its own cold review, then a merge into the R12 line before the S-14 pin. F2–F5 are LOW.
+  - `tests.independent_recompute.test_block6::test_key_contract_matches_published_file` fails identically on the R12 base, so it is pre-existing. Fix it before the pin.
+- **PR #749** (persistent Air watcher plus MAIN_CI_RED): cold review ADMIT-WITH-FIXES. MEDIUM 1–3 and four LOWs applied at 5a8b03369; 69 tests pass. Merge when CI is green, then Ed runs the installer in the PR body. Until then, no Air process watches tonight's result branch: the next lead session reads it, or Ed via Remote Control.
+- **Block 6 order from here:**
+  1. Cold review of the F1 fix.
+  2. R12's remaining RL-98 work (deadline 13 Nov 20:00).
+  3. The full R12 review.
+  4. The S-14 pin, filling #748's OPEN markers with the R3 generator at a3f54e3ad.
+  5. The custody copy after the night (draft item at `/Volumes/JW-EXT/scratch/b6-custody-copy-item-draft.md`).
+  6. The blind dry run.
+  7. Release and Ed's unseal.
+
 296. **Magistrate a30af3e5 (headless, Opus 5.5, interim lead under items 289/291/292/295), 2026-11-12 14:33 PST (`date`): PART A SMOKE 2 PASSED at the night sha `99622e96c` (G0 released in 837.3 s, bar 1,200 s; receipt rc 0). R1 FOLLOW-UP NIGHT ARMED: plan `align-r1-20261112T2251Z`, t0 14:51:00 PST, custody `/Users/edr/night-align/r1fu-20261112T223055Z`, D-7 packet `8d63766d…eab9`. Arm notice sent to Ed before install. Record: `docs/process_traces/2026-11-12-r1-followup-night/MAGISTRATE-ARM-a30af3e5.md`.**
 
 ```pointer
