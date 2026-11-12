@@ -600,11 +600,13 @@ class DeskInputBoundaryTests(unittest.TestCase):
             session.archive, session.session_id = archive, "distinct-ledger-name"
             session.reader = b6.Reader("ALPHA", session.session_id, flags)
             attempt = {"session_id": "outer-loop-name", "round": 2}
+            session.plan_refused = not session.bind_plan()
             self.assertEqual(session.loop_attempt([attempt]), attempt)
             self.assertEqual(session.session_id, "outer-loop-name")
             self.assertEqual(session.reader.session, "outer-loop-name")
             self.assertEqual(flags, [])
             session.session_id = "wrong-ledger-name"
+            session.plan_refused = not session.bind_plan()
             self.assertIsNone(session.loop_attempt([attempt]))
             self.assertIn("acceptance_session_mismatch", {flag["code"] for flag in flags})
 

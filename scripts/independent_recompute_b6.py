@@ -232,21 +232,27 @@ class Session:
             raise InputRefusal("authenticated_inputs_required")
         self.reader = r = Reader("", "", flags, inputs)
         self.acceptance = r.json(self.archive / "derived/b6-acceptance.json", "derived/b6-acceptance.json")
+        self.roster = r.json(self.archive / "derived/roster.json", "derived/roster.json")
+        self.harvest = r.json(self.archive / "harvest.json", "harvest.json", False)
+        # Bind the final session ID (the copied plan's outer ID) before any
+        # session flag is raised, so every stop flag is filed under it. The
+        # bracket ID is kept only for the harvest comparison below.
+        self.bracket_session_id = (self.acceptance.get("session_id") or self.harvest.get("session_id")
+                                   or self.archive.name)
+        self.session_id = r.session = self.bracket_session_id
+        self.plan_refused = not self.bind_plan()
+        self.pack = pack_of(self.acceptance.get("pack_id")) or pack_of(self.roster.get("pack_id"))
+        r.pack = self.pack or ""
         if not self.acceptance:
             r.flag("acceptance_record_missing", "session", "no readable acceptance record")
         elif self.acceptance.get("schema") != ACCEPTANCE_SCHEMA:
             r.flag("acceptance_schema_unknown", "session", {"schema": self.acceptance.get("schema")})
-        self.roster = r.json(self.archive / "derived/roster.json", "derived/roster.json")
-        self.harvest = r.json(self.archive / "harvest.json", "harvest.json", False)
-        self.session_id = self.acceptance.get("session_id") or self.harvest.get("session_id") or self.archive.name
-        self.pack = pack_of(self.acceptance.get("pack_id")) or pack_of(self.roster.get("pack_id"))
-        r.pack, r.session = self.pack or "", self.session_id
         if self.pack is None:
             r.flag("acceptance_pack_unknown", "session", {"pack_id": self.acceptance.get("pack_id")})
         roster_pack = pack_of(self.roster.get("pack_id"))
         if roster_pack is not None and self.pack is not None and roster_pack != self.pack:
             r.flag("acceptance_session_mismatch", "session", {"acceptance_pack": self.pack, "roster_pack": roster_pack})
-        if self.harvest.get("session_id") not in (None, self.session_id):
+        if self.harvest.get("session_id") not in (None, self.bracket_session_id):
             r.flag("acceptance_session_mismatch", "session", {"harvest_session_id": self.harvest.get("session_id")})
         self.claim_root = Path(claim_root) if claim_root else self.archive / "sources/claim-runs"
         self.bound_root = Path(bound_root) if bound_root else self.archive / "sources/bound-runs"
@@ -332,11 +338,12 @@ class Session:
         return {get(f, "scope", "run_id") for f in self.flag_rows if f.get("code") == code
                 and isinstance(get(f, "scope", "run_id"), str)}
 
-    def loop_attempt(self, attempts):
+    def bind_plan(self):
         # The collection writers identify acceptance/harvest by the ledger
         # bracket, while the loop records the enclosing plan's session ID.
         # Bind them through the copied, authenticated plan, never a suffix
         # convention or an archive directory name. Legacy toy inputs omit it.
+        # Returns False (session keeps the bracket ID) when the plan refuses.
         plan_path = self.archive / "sources/night-custody/night_plan.json"
         if present(plan_path):
             plan = mapping(self.reader.json(plan_path, "night_plan"))
@@ -345,8 +352,13 @@ class Session:
             if not isinstance(outer, str) or not outer or bracket != self.session_id:
                 self.reader.flag("acceptance_session_mismatch", "session",
                                  {"plan_id": outer, "bracket_session_id": bracket})
-                return None
+                return False
             self.session_id = self.reader.session = outer
+        return True
+
+    def loop_attempt(self, attempts):
+        if getattr(self, "plan_refused", False):
+            return None
         if attempts is None:
             return None
         rows = [a for a in attempts if a.get("session_id") == self.session_id]
