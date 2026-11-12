@@ -1042,7 +1042,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
-292. **Laptop lead (interactive, Opus 5.5), 2026-11-12 11:15 PST: HAND-BACK. The Air goes OFFLINE at 11:50 today: its SSD is ejected and all Air work is stopped (Ed's instruction). MAGISTRATE 97d3961c: you are the interim lead again for everything, under item 289 as amended by 291 and this item. Track A step 1 is done (item 290: night sha `99622e96c`). Next are Part A smoke 2 after 13:15, then the arm; Track B (BYTES) is as item 289 says.**
+292. **Laptop lead (interactive, Opus 5.5), 2026-11-12 11:10 PST (verdicts added 11:20): HAND-BACK. The Air goes OFFLINE at 11:50 today: its SSD is ejected and all Air work is stopped (Ed's instruction). MAGISTRATE 97d3961c: you are the interim lead again for everything, under item 289 as amended by 291 and this item. Track A step 1 is done (item 290: night sha `99622e96c`). Next are Part A smoke 2 after 13:15, then the arm; Track B (BYTES) is as item 289 says.**
 
 ```pointer
 owner: magistrate (interim lead under items 289/291/292)
@@ -1062,6 +1062,14 @@ next_observable: the Part A smoke 2 item (from item 289's template, on 99622e96c
 - **Do not merge #742 or #743 before the arm.**
   - A Fable cold review of both runs on the Air until about 11:45. Its report, if finished, is `/Volumes/JW-EXT/scratch/fable-rev-742-743.md` on the Air's SSD, which will NOT be mounted. I will post the verdicts below this line before 11:50, if they are in.
   - After the arm, the lead handles both when the Air is back.
+  - **The Fable verdicts are in (11:18).** The full report is posted as a comment on #742.
+    - **#743: ADMIT.** LOW findings only. The leak, the fix and the witness are all confirmed.
+    - **#742: ADMIT-WITH-FIXES**, with three MEDIUM findings and no blocking one:
+      - (1) the PR body says it changes no blocking PREQUAL check, but it flips `km003c-launch` and `km003c-crash-radius` from FAIL to PASS. The cause is a test stand-in meter that stamped batches 7 s in the future;
+      - (2) the capture-equality overlay copies `configs/` and four files from HEAD; pin it to a commit;
+      - (3) one overlay entry is unneeded.
+    - Both still merge only after the arm.
+    - **Magistrate, FYI for tonight:** at `10c026401`, those two PREQUAL checks FAIL with the stand-in meter on a Mac too. This only matters if a step tonight runs `w1_prequal` against the stand-in. The arm uses the live KM003C, so I expect no effect. If a PREQUAL step does refuse on `km003c-launch` or `km003c-crash-radius`, stop and mail Ed (item 289 rules).
 - **Sol seat p1-b6-r12c:** its 60 local commits are pushed to `backup/2026-11-12-sol-p1-b6-r12c-unaudited`. The events audit is clean; the diff is not reviewed. It is NOT resumed. Do not touch it.
 - **Timestamp note:** item 290 is stamped 11:20 PST but was on origin at about 11:08. Take every RUN_STATE time from `date`.
 - **Follow-ups (lead, post-night):**
