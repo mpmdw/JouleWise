@@ -1042,6 +1042,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+282. **Magistrate 93a9db69 (headless, Opus 5.5), 2026-11-12 04:20 PST: the item-281 R1 follow-up smoke re-run at `22f438fd3` FIXED the coverage problem but FAILED sensor selection. Part A passed (G0 released, 683 s). Part B ran its full turn, and the sampler and Tf08 coverage now pass in every phase (≥99.67%). Part B then stopped with `SELECTION_FAILED`: the classifier's slow pick `Th0C` is not in the R0-classified key set, and R0's own slow key `Tf08` misses the 300 s return-time bar (370 s). Receipt rc 1. Per item 281 this goes back to the lead: no retry, OUT not reused. Nothing armed. MAGISTRATE: nothing to run until the lead's next item.**
+
+```pointer
+owner: lead
+wait: the research lead's sensor ruling on the Part B table below
+deadline: none
+on_early_or_refused: n/a
+next_observable: a lead item 283 (a sensor ruling and/or a new smoke commit); the magistrate runs nothing before it
+```
+
+- **OUT:** `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T103324Z` (launch token `09a8e9816cdc47259bf2198566ef9b40`). `runner_receipt.json` sha256 `f69e56499d85de47eb676eac4923c0ac7154ae992af1169674026ff150e5aaa1`; `part-b/smoke_part_b.json` sha256 `6b05379df65a34e6503a29ce5813d8934ee9d923b9fe3c83c04301070d1ff373`.
+- **Receipt:** `rc 1`, `parts {A: true, B: true}`, `error "StepFailed: 1"`. Every step rc 0 except `part-B` (rc 1). `restore` rc 0 (`pmset -c powermode 0`, marker null, so the check's `action` prints None). `close-volumes` appears once. All three feeds `proven_stopped`; all 6 feed-file digests match. Desk fence gone, 0 `com.joulewise.align-r0` labels loaded, the plist says `ProcessType Interactive`, `stderr.log` empty. The worktree is clean at `22f438fd3`.
+- **G0:** Part A `released` after 683 s; Part B `released` after 926 s.
+- **Coverage (fixed by `22138c5b5`):** `coverage.pass true`. Sampler fractions: pre-warmup idle 1.000 (393/393), quiet 0.9967 (299/300), load 0.9977 (437/438), recovery 0.9983. Required key Tf08 passes. All 375 keys pass in quiet, recovery and pre-warmup idle. In load, every key passes except `TVH3` (0.436, 56% read errors, one 247 s gap), which RL-78/84 rejects on its own without failing the smoke.
+- **Selection (`smoke_part_b.json` `selection`):** `ok false`, `fallback false`, `s_fast TV0h`, `s_slow Th0C`, reason `s_slow: Th0C is not admissible on D (rise/noise/return-time/R0/quality)`. Flag `r1.sensor_pick_changed` (R0 pair was TV0h / Tf08).
+  - `TV0h` (die): tau 21.9 s, t_band 87.6 s, noise 0.0097 °C, rise 54.3 °C. Admissible.
+  - `Th0C` (heatsink, alias Th0D): tau 79.3 s, t_band 299.82 s (0.18 s inside the 300 s bar), noise 0.039 °C (bar 0.15), rise 43.8 °C, not clamped or excluded. **The only failing clause is R0 membership.** The R0-classified set is TV0h, TV1h, TV0m, TV0s, TV1s, Tf08. Replayed through `r1_runtime.sensor_admissibility` on the saved table: with Th0C added to that set the pair is `ok`.
+  - `Tf08` (R0's slow key, now record-only): tau 97.4 s, **t_band 370.2 s > 300 s**, noise 0.062 °C. The R0 pair TV0h/Tf08 also fails on D.
+  - Disclosed alternatives (record only): design-literal `Th04` (t_band 295.6 s, also not R0-classified), Opus `TVFm` (t_band 738.6 s), Sol none.
+  - The RL-78 fallback did not run, because the classifier did return a heatsink pick.
+- **For the research lead:** with the 1 Hz grid restored, Tf08's return to its band (370 s) is too slow for D's 300 s bar on this run, and the classifier's replacement Th0C sits 0.18 s inside that bar and was never R0-classified. Choosing the slow sensor (admit a non-R0 key, re-classify at R0, or change the bar with a derivation) is the research lead's ruling. It gates the follow-up night arm.
+
 281. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 02:23 PST: MAGISTRATE: RE-RUN the agent-free R1 follow-up native smoke (Parts A then B) on `22f438fd3`. This fixes item 280's inventory sampler period: it now holds 1.000 s, where it had drifted to 0.99 s plus the sweep time. Caps (A 3,120 s, B 5,720 s) and `DEADLINE = now + 11400` are unchanged. Use the launcher's `r1-smoke` handoff exactly as below. No prepare, no arm. The launch is your LAST action, and you exit at once. The smoke runs with no agent alive.**
 
 ```pointer
