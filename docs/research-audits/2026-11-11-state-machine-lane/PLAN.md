@@ -402,20 +402,67 @@ Opus 5.5 took over the lane at 07:25. No research ruling could be obtained; item
 Host-command leak list: `tests.test_post_window_unstrand` (`test_native_ps_clean_completed_window_under_caffeinate`, a real
 `caffeinate`), fixed. `tests.test_run_night`'s four probe tests were a false positive (a fake `sudo` on PATH).
 
-### 12.2 Open pre-signing items, parked for the research lead
+### 12.2 Pre-signing items: all four closed (2026-11-12, RL-105 to RL-107)
 
-1. **RL-71's "five" acceptance-only codes.** The HELD-WINDOWS row lists `code.number_bearing_unreviewed` and the four
-   `structure.*` codes. By reading, `model.stack_differs_from_registered` is also raised only by B6 acceptance, and
-   `model.files_differ_from_registered` by acceptance or the precheck lane; the row covers both by the prepare checks
-   without saying whether they can be raised. Confirm the list.
-2. **RL-72 `workload.py` callback row** (RL-77): owed when the follow-up kit's change lands on the presign branch.
-3. **`topup_log` in `battery_float.PHASES`** (bound): register before signing, or leave the registry as is. No
-   production code reads `PHASES`; the gates that read a recorded phase admit only the phases they name; a test now
-   checks that none admits `topup_log`.
-4. Still a signing gate: RL-81 F-1, the condition-13 registration test (the follow-up kit seat builds it).
+1. **RL-71's "five" acceptance-only codes.** CLOSED. Ruled in RL-83 (a) and confirmed without amendment in RL-105:
+   the acceptance-only list is seven plus one that cannot fire; RL-71's "five" is superseded.
+2. **RL-72 `workload.py` callback row** (RL-77). CLOSED by RL-106: the R1-FOLLOWUP-TIMEOUT row is accepted with its
+   last sentence replaced (the default is inert, `DefaultBundleTests` and `DispatchTests` exist, cold review done).
+   `N` is filled at signing from the slot-producing night's record.
+3. **`topup_log` in `battery_float.PHASES`.** CLOSED. Ruled in RL-83 (b) and confirmed in RL-105: it stays out of
+   `PHASES`; no edit, no deviation row.
+4. **RL-81 F-1, the condition-13 test.** CLOSED by RL-107: the test exists; it stays a signing gate in a smaller
+   form. Before signing the lead shows three things:
+   1. both `R1ExecutedSourceTests` tests pass by name on the signing head;
+   2. `r1_slots.json` carries `executed_commit` equal to the full commit the slot-producing night ran (if tonight's
+      night produces the slots, `99622e96cf83d578672747a90db1d8128a57eae9`);
+   3. `verify_r1_executed_sources` returns that commit when run on the signing head's tree, i.e. none of the ten
+      files changed between the night and the signing. A needed change to one of them after the night comes to the
+      research lead before it is made.
 
 ### 12.3 Pre-existing failures seen on the Air, identical on the W1 line `b4a6c217f`
 
 `tests.test_post_window_unstrand`: four native/process-table tests under load (other lanes' live chain-like
 processes) and the follower timing test. `tests.align.test_r1_round8_exec_review`: two. `tests.test_run_night`: R8
 template test (one), and `BindSupervisionProcessTests` under load.
+
+## 13. Rulings 2026-11-12 (state at 15:28 PST)
+
+**RL-108 (wave 3).**
+- W-4 and W-6 do not enter the bytes signed for W1. RL-53's timing is amended: earliest adoption is a
+  re-registration that happens for another reason between W1 and C1 (on request, with a ruling); never between claim
+  windows (C1 to the end of the series); otherwise after the series. RL-53's defect clause is unchanged.
+- Shadow replay may start now (Track M, on `main` and the Air): replay over the delivered records of closed R1 nights
+  and the follow-up night once its custody has closed; structure only (no temperature, energy, power or token count,
+  no Block 6 path); nothing new on the measurement Mac; any journal is derived, not custody; the watchdog transition
+  table may be declared as data with a check against the exported watchdog status; the output is an agreement report
+  (a writer defect comes to the research lead).
+- A side branch may be built as an unmerged draft PR, with six conditions: (1) base and custody: off the W1 signing
+  head (before it exists, off `99622e96c`, rebased later); one draft PR against the W1 line titled not for merge;
+  never merged into a branch a night runs from nor installed on the measurement Mac until a ruling names it;
+  (2) the driver exit contract is a refactor on declared codes, with a table test that every declared code carries
+  the same fault-reason strings as today, undeclared codes keep `chain_exit_nonzero:<rc>`, and every added or
+  renamed reason is listed; (3) one `restore_owed()`, with each terminal path's host end state shown equal to
+  today's using fakes under the host-command guard, no test or mutant touching a live process; (4) no journal write
+  inside a member, appends at transitions only, any exception listed as an activity during members; (5) the single
+  finality field (RL-53 W-7) is built with this branch; (6) W-6 follows the same terms (transition table as bound
+  data, dwell limits for non-hold states; tolerant fence reader stays unbuilt). It does not queue ahead of anything
+  on the path to W1 or the Block 6 pin (RL-108 lists seven numbered terms; item 7 is this non-queueing term, and the
+  "six conditions" above are items 1-6).
+- An adoption request brings: the agreement report (at least the follow-up night and W1's own night), the branch with
+  its cold review, the trace regenerated with both closure modules passing, the draft deviation row (new custody
+  file, every changed or added fault reason), and the remote native-check plan.
+
+**RL-109 (Track W status, 2026-11-12).**
+
+| Item | Status | Ruled in | Still owed, and by whom |
+|---|---|---|---|
+| W-0 | Ruled. One batch before the STRICT re-registration, with the cut-off at the post-R1 PREQUAL. | RL-53 | Nothing. |
+| W-1 | **Admitted and built.** `watchdog_acceptance` and `_watchdog_post_install` in `scripts/align_v4_session.py` at `99622e96c`; row RL53-BATCH (1). | RL-53, RL-54, RL-56 | No ruling. It reaches the W1 line with PR #734 at signing. The native check of plan §11.3 item 8 is the lead's, remote, after the night. |
+| W-2 | **Admitted and built.** `host_privilege_preflight` at prepare, in the same file; `powermode.py` unchanged; row RL53-BATCH (2). | RL-53 | No ruling. Arrives with PR #734. |
+| W-3 | **Admitted and built.** `post_window_unstrand.sh` accepts a delivered REFUSED result with no chain markers and has `--restore-host`. | RL-53 | No ruling. The native check of §11.3 item 9 is the lead's, remote. |
+| W-4 | **Not in W1's signed bytes.** Shadow replay now; unmerged draft branch allowed; adoption between W1 and C1 at the earliest, on a request. | RL-53, RL-108 | The agreement report (the lane). |
+| W-5 | Plain engineering; the file is unbound. Source removal and its verification are not altered. | RL-53, plan §8 | The orchestrator's. |
+| W-6 | Transition table and dwell limits: same timing and terms as W-4. Tolerant fence reader: approved in design, not built. | RL-53, RL-108 | Nothing now. |
+| W-7 | **Closed for W1.** No release is built. Late exclusion recovers by replay; only record k+1 carries k's final sources; nothing is owed before signing. | RL-53, RL-54, RL-56 | No ruling. PR #724 (tests and runbook, no bound file) may merge when its failing checks are no more than its base's; that judgement is the orchestrator's. The single finality field goes with W-4. A re-issue after record k+2 exists comes to the research lead first. |
+| W-8 | The unseal record is approved and `joulewise/unseal_record.py` is on `main`. Refusal in display tools is the orchestrator's choice. | RL-53 | Each unseal from now on is a committed record. |
