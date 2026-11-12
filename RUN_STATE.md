@@ -1042,6 +1042,44 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+294. **Magistrate 97d3961c (interim lead under items 289/291/292/293), 2026-11-12 13:12 PST (`date`): MAGISTRATE: run the RL-89 Part A smoke 2 on the night sha `99622e96c`: a FRESH TV0h/Th0C idle soak, then Part A only (`--fresh-soak --parts A`), now WITH the powermetrics orphan wrapper (#739). No prepare, no arm. I launch it after 13:15 PST as this activation's LAST action and exit at once. This is item 289 step 2, from the item-285 template.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-12T19:26:00-08:00
+on_early_or_refused: any refusal or failure goes back to the lead. Do not retry, do not extend, and do not reuse OUT. If Part A's G0 does not release inside 1,200 s, NOTHING arms; it goes to the research lead (RL-89). If a PREQUAL step refuses on km003c-launch or km003c-crash-radius, stop and mail Ed (item 292)
+next_observable: (was waiting on: the smoke's desk fence) the next activation runs item 285's check block on OUT and reports it as RUN_STATE 295; on PASS it arms under item 289 step 3 (arm-item-draft.md, __NIGHT_SHA__ = 99622e96cf83d578672747a90db1d8128a57eae9, Fable F1, sudo -n -l /bin/kill, KM003C live, t0 = now + 15 min rounded up, t0 <= 19:26)
+```
+
+- **Smoke commit `99622e96cf83d578672747a90db1d8128a57eae9`:** presign `bb6394f2b` (item 285's smoke commit, which passed in item 286) plus the night bundle, merged by item 290:
+  - #740 (R1 test fixes, test-only; Fable ADMIT-WITH-FIXES, F-1/F-2 fixed in `41ca085b4`) → `c2648fdc3`;
+  - #739 (powermetrics orphan wrapper, RL-96; Fable 5.2 ADMIT-WITH-FIXES on `b4521cb8e`) → `10c026401`;
+  - #741 (arm route port, RL-72 E2 sizing; Fable ADMIT-WITH-FIXES, `docs/run_reports/2026-11-12-r1fu-arm-route-review.md`; plus my allowlist-only `389b363bb`) → `99622e96c`.
+  - Post-merge modules at this sha: item 290.
+- **Why a second smoke:** the bytes changed since item 286's PASS. #739 adds the orphan wrapper around every capture, and #741 adds the arm route. RL-89's PASS condition is unchanged: Part A's G0 on TV0h/Th0C at the 1.0/1.0 °C bands RELEASES inside 1,200 s.
+- **Start and check, run by me at 13:08 PST:** all pass. Output: `/tmp/jw-smoke2-check.txt`, copied to the launch trace.
+  - Smoke worktree `/Users/edr/code/jw-wt/r1-followup-smoke`, detached at the full sha, clean.
+  - `verify_r1_executed_sources` → `99622e96c…`.
+  - `RL-89 MAC CHECK OK e6231a8f…769b 60 16 44`, config sha256 `95825997f7fd50e3a86342c059bd1eba2cc37139684c76eed35f0ca6ed0a1dad`.
+  - `test_r1_smoke_plist_runs_interactive_like_the_night_templates` OK.
+  - No High Power marker.
+  - Preflight `{"ac_power": true, "free_bytes": 105708982272, "disk_check": "report_only"}`.
+  - Only `com.joulewise.magistrate` loaded; no night plist.
+  - AC, battery 100% charged; `sudo -n -l /bin/kill` exit 0 (checked 11:10).
+- **Launch values.**
+  - PY: `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python` (not symlink-resolved).
+  - MAGISTRATE_PID: 84554.
+  - OUT: `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261112T210906Z` (fresh; also in `/Users/edr/night-custody/magistrate/r1-smoke-out-97d3961c.txt`).
+  - DEADLINE: now + 7200 at launch.
+  - Command: item 285's "Run" block verbatim.
+- **#741 CI re-run 43257905641 (attempt 2), for the arm activation.**
+  - Finished shards: baseline ids only (with RL-97's three ids). Shard 10 showed no new id.
+  - Shards 4 and 11 were still running at 13:08. Under item 292, shard 4 does not hold the arm. Any OTHER new id in shard 11 blocks.
+  - Read it with `/tmp/jw-ci-cmp/cmpjobs.sh 741`, or per job with the `attempts/2/jobs` API.
+- **Numbering:** my BYTES commitment item, written at the same time as the Air's item 291, is relabelled **291b**. Its content is unchanged.
+- **Still owed after the night:** the lead's handling of #742/#743/#744; the records→main question (item 291b, "Not done"); the `record-push` branch-creation defect (item 291b).
+
 293. **Laptop lead (interactive, Opus 5.5), 2026-11-12 12:08 PST: the Air is back ONLINE until about 15:00 PST, on AC, SSD mounted. MAGISTRATE 97d3961c: NOTHING CHANGES FOR YOU. You remain the interim lead for Track A (Part A smoke 2 after 13:15, then the arm, t0 ≤ 19:26) and Track B under items 289, 291 and 292. The lead is reachable for rulings until 15:00; after that, item 292 applies again.**
 
 - Air work in this span:
@@ -1132,10 +1170,10 @@ next_observable: (was waiting on: #741 run 43257905641 shard 4 (see below)) #741
   - The Air will post what shard 4 hung on (CI partial log and the local run) as item 292 if it has it before going offline.
 - **Air availability:** the Air goes offline again at about 12:05. After that, item 289 (as amended here) is your full brief again.
 
-291. **Magistrate 97d3961c (interim lead under item 289), 2026-11-12 12:05 PST: BYTES STAGE-1 COMMITMENT MADE (the 12 Nov checkpoint). Stage-1 commit `569591e53ffcd91efbab7a9ebaff1d580bbc78ba` on `records/2026-11-bytes-stage1`. Receipt commit `765f28644706f1033b5b12ee177e6ff7fe5f4e75`. `pushed_utc` 2026-11-12T20:00:59Z. G9 (`bytes_commitment.py check`) rc 0. No held-out operation of any kind.**
+291b. **Magistrate 97d3961c (interim lead under item 289), 2026-11-12 12:05 PST (written at the same time as the lead's item 291, hence 291b): BYTES STAGE-1 COMMITMENT MADE (the 12 Nov checkpoint). Stage-1 commit `569591e53ffcd91efbab7a9ebaff1d580bbc78ba` on `records/2026-11-bytes-stage1`. Receipt commit `765f28644706f1033b5b12ee177e6ff7fe5f4e75`. `pushed_utc` 2026-11-12T20:00:59Z. G9 (`bytes_commitment.py check`) rc 0. No held-out operation of any kind.**
 
 ```pointer
-owner: lead (BYTES); magistrate continues Track A (item 292)
+owner: lead (BYTES); magistrate continues Track A (item 294)
 wait: none
 on_early_or_refused: n/a
 next_observable: the lead decides how the records branch reaches main (see "Not done"); the next BYTES task (RL-92 sections 3-5, P1/M1) is NOT authorized here

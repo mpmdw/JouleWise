@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "after 13:15 PST (OS batch window end), the Part A smoke 2 item (from item 289's template, on 99622e96c), then the arm item; the BYTES commitment when #738 is green",
-  "owner": "magistrate (interim lead under items 289/291/292)",
+  "next_observable": "(was waiting on: the smoke's desk fence) the next activation runs item 285's check block on OUT and reports it as RUN_STATE 295; on PASS it arms under item 289 step 3 (arm-item-draft.md, __NIGHT_SHA__ = 99622e96cf83d578672747a90db1d8128a57eae9, Fable F1, sudo -n -l /bin/kill, KM003C live, t0 = now + 15 min rounded up, t0 <= 19:26)",
+  "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "292",
+  "source_item": "294",
   "source_item_heading_date": "2026-11-12",
   "wait": {
     "deadline_epoch_s": 1794540360,
     "observable": "none",
-    "on_early_or_refused": "as item 289"
+    "on_early_or_refused": "any refusal or failure goes back to the lead. Do not retry, do not extend, and do not reuse OUT. If Part A's G0 does not release inside 1,200 s, NOTHING arms; it goes to the research lead (RL-89). If a PREQUAL step refuses on km003c-launch or km003c-crash-radius, stop and mail Ed (item 292)"
   }
 }
