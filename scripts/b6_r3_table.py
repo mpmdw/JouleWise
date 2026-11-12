@@ -150,8 +150,16 @@ def read_check(path):
                         and n.name == "check" and n.args.defaults), None)
 
     def bar_of(call):
-        if len(call.args) >= 5 and isinstance(call.args[4], ast.Constant):
-            return call.args[4].value
+        if len(call.args) >= 5:
+            # A positional bar that is not a literal cannot be read: refuse rather than print the default.
+            if isinstance(call.args[4], ast.Constant):
+                return call.args[4].value
+            raise SystemExit("b6_r3_table: `check` bar at line {} is not a literal".format(call.lineno))
+        for kw in call.keywords:
+            if kw.arg == "bar":
+                if isinstance(kw.value, ast.Constant):
+                    return kw.value.value
+                raise SystemExit("b6_r3_table: `check` bar at line {} is not a literal".format(call.lineno))
         return default_bar
     for node in ast.walk(fn):
         # q["calibration/b_op_s"] = ...  and  q["contrast/" + phase + "/" + exposed[key]] = expected
@@ -300,6 +308,10 @@ def classify_session(key, pack, check, rc):
             fams, lines, bars = check["gate_fields"][source]
             line = ",".join(str(x) for x in lines)
             word = "engine_word" in fams
+            # RL-103 wording describes exactly the refusal check plus the word check on `outcome`.
+            if (source == "outcome" or word) and set(fams) != {"engine_refusal", "engine_word"}:
+                return UNSTATED, UNSTATED, "`{}` checked by {}, not exactly engine_refusal and engine_word".format(
+                    source, ", ".join(fams))
             if len(bars) != 1:
                 return UNSTATED, UNSTATED, "gate bars differ for `{}`".format(source)
             gate_bar = ("gate: exact (word)" if word else
