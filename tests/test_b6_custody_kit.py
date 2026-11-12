@@ -53,7 +53,7 @@ def write(path, text):
     path.write_text(text)
 
 
-def mini_archive(parent, name, *, log="inside", marker=False):
+def mini_archive(parent, name, *, log="inside", marker=False, big=False):
     """A small sealed archive in the production layout (synthetic content only)."""
     a = parent / name
     planted = MARKER if marker else "plain"
@@ -63,6 +63,9 @@ def mini_archive(parent, name, *, log="inside", marker=False):
     write(a / "sources/monitor/contention.jsonl", '{"k": 1}\n')
     write(a / "sources/monitor/clock.jsonl", '{"c": 1}\n')
     write(a / "sources/runs/r1/data.bin", "x" * 300)
+    if big:   # multi-chunk files: larger than the kit's 1 MiB read chunk, plain and compressed
+        (a / "sources/runs/r1/big.bin").write_bytes(big_bytes(b"plain"))
+        (a / "sources/runs/r1/big-z.bin").write_bytes(big_bytes(b"packed"))
     sources = sorted(p for p in (a / "sources").rglob("*") if p.is_file())
     write(a / "sources/SHA256SUMS", "".join(f"{sha(p)}  {p.relative_to(a / 'sources')}\n" for p in sources))
     write(a / "derived/b6-acceptance.json", '{"verdict": "ACCEPTED"}\n')
@@ -73,11 +76,27 @@ def mini_archive(parent, name, *, log="inside", marker=False):
     subprocess.run(["zstd", "-q", "-1", "-T1", "-f", str(stream), "-o", str(stream) + ".zst"], check=True)
     row = json.dumps({"event": "compress", "path": str(stream), "sha256": sha(stream)}) + "\n"
     stream.unlink()
+    if big:
+        packed = a / "sources/runs/r1/big-z.bin"
+        subprocess.run(["zstd", "-q", "-1", "-T1", "-f", str(packed), "-o", str(packed) + ".zst"], check=True)
+        packed.unlink()
     if log == "inside":
         write(a / "compression.jsonl", row)
     elif log == "adjacent":
         write(Path(str(a) + ".desk/compression.jsonl"), row)
     return a
+
+
+BIG = 3 * (1 << 20) + 5
+
+
+def big_bytes(seed):
+    """BIG incompressible, deterministic bytes: three full 1 MiB chunks and a short tail."""
+    out, counter = bytearray(), 0
+    while len(out) < BIG:
+        out += hashlib.sha256(seed + str(counter).encode()).digest()
+        counter += 1
+    return bytes(out[:BIG])
 
 
 def mapping_for(copy_paths):
@@ -150,6 +169,50 @@ class Mini(unittest.TestCase):
     def test_manifest_prints_its_own_digest(self):
         # Expected: the printed digest is the SHA-256 of the manifest file's bytes.
         self.assertEqual(self.msha, sha(self.manifest))
+
+    # -- digest checks the mutants showed untested (cold review M5) --
+
+    def test_flipped_byte_in_withheld_file(self):
+        # Expected: digest_mismatch for a withheld/ file (bound by the source manifest, outside SHA256SUMS).
+        p = self.ca / "withheld/spans.json"
+        p.write_bytes(p.read_bytes().replace(b"spans", b"spanz"))
+        self.assertRefused(self.verify(), "digest_mismatch")
+
+    def test_flipped_byte_in_harvest(self):
+        # Expected: digest_mismatch for harvest.json.
+        p = self.ca / "harvest.json"
+        p.write_bytes(p.read_bytes().replace(b"outputs", b"outputz"))
+        self.assertRefused(self.verify(), "digest_mismatch")
+
+    def test_desk_folder_missing_its_file(self):
+        # Expected: desk_file_set_mismatch exactly, for an emptied desk folder and for a removed one.
+        desk = Path(str(self.cb) + ".desk")
+        (desk / "compression.jsonl").unlink()
+        self.assertRefused(self.verify(), "desk_file_set_mismatch")
+        desk.rmdir()
+        self.assertRefused(self.verify(out=self.base / "r2.json"), "desk_file_set_mismatch")
+
+    def test_inputs_pins_never_rehash_the_copy(self):
+        # Expected: after verify, every pinned file on the copy is changed (harvest, acceptance, flags, withheld
+        # spans, the loop file); inputs exits 0 and each pin equals the SOURCE digest. A pin rehashed from the
+        # copy would carry the changed digest.
+        self.verified()
+        changed = ("harvest.json", "derived/b6-acceptance.json", "derived/flags.jsonl", "withheld/spans.json")
+        for name in changed:
+            (self.ca / name).write_text("changed on the copy\n")
+        (self.dst / "attempts.jsonl").write_text("changed on the copy\n")
+        out = self.base / "pins.json"
+        rc, _, err = self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]), out=out)
+        self.assertEqual((rc, err), (0, ""))
+        doc = json.loads(out.read_bytes())
+        pin = doc["sessions"][str(self.ca)]
+        self.assertEqual(pin["harvest_sha256"], sha(self.a / "harvest.json"))
+        self.assertEqual(pin["acceptance_sha256"], sha(self.a / "derived/b6-acceptance.json"))
+        self.assertEqual(pin["files"], {n: sha(self.a / n) for n in
+                                        ("derived/b6-acceptance.json", "derived/flags.jsonl", "withheld/spans.json")})
+        self.assertEqual(doc["external"], {"loop_attempts": sha(self.attempts)})
+        for name in changed:
+            self.assertNotEqual(sha(self.ca / name), sha(self.a / name))
 
     # -- verify refusals (brief witnesses) --
 
@@ -799,6 +862,65 @@ class Mini(unittest.TestCase):
         rc, _, err = run("verify", "--manifest", manifest, "--manifest-sha256", out.strip().rsplit("=", 1)[1],
                          "--root", dst, "--loop-dir", dst, "--out", self.base / "rs-receipt.json")
         self.assertEqual((rc, err), (0, ""))
+
+
+class MultiChunk(unittest.TestCase):
+    """Files larger than the kit's read chunk (cold review M5): a digest of the first chunk alone must not pass."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="b6-custody-big-")
+        self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name).resolve()
+        self.src, self.dst = self.base / "src", self.base / "dst"
+        self.a = mini_archive(self.src, "b6-big-r1", big=True)
+        attempts = self.src / "attempts.jsonl"
+        write(attempts, '{"loop": 1}\n')
+        self.manifest = self.base / "manifest.json"
+        rc, out, err = run("manifest", "--session", self.a, "--loop-attempts", attempts, "--out", self.manifest)
+        self.assertEqual((rc, err), (0, ""))
+        self.msha = out.strip().rsplit("=", 1)[1]
+        shutil.copytree(self.src, self.dst, symlinks=True)
+        self.ca = self.dst / "b6-big-r1"
+
+    def verify(self, name="receipt.json"):
+        return run("verify", "--manifest", self.manifest, "--manifest-sha256", self.msha, "--root", self.dst,
+                   "--loop-dir", self.dst, "--out", self.base / name)
+
+    def test_helpers_hash_every_chunk(self):
+        # Expected: hash_file and hash_zst equal hashlib over the whole 3 MiB + 5 byte content.
+        data = big_bytes(b"plain")
+        self.assertGreater(len(data), 3 * kit.CHUNK)
+        self.assertEqual(kit.hash_file(self.a / "sources/runs/r1/big.bin"), (hashlib.sha256(data).hexdigest(), len(data)))
+        self.assertEqual(kit.hash_zst(self.a / "sources/runs/r1/big-z.bin.zst", shutil.which("zstd")),
+                         hashlib.sha256(big_bytes(b"packed")).hexdigest())
+
+    def test_clean_multichunk_copy_verifies(self):
+        # Expected: exit 0 with one compressed row among the big files.
+        rc, _, err = self.verify()
+        self.assertEqual((rc, err), (0, ""))
+
+    def test_last_byte_flipped_in_plain_multichunk_file(self):
+        # Expected: digest_mismatch (the changed byte is past the first chunk).
+        p = self.ca / "sources/runs/r1/big.bin"
+        data = bytearray(p.read_bytes())
+        data[-1] ^= 1
+        p.write_bytes(bytes(data))
+        self.assertRefused(self.verify())
+
+    def test_last_byte_flipped_in_compressed_multichunk_file(self):
+        # Expected: digest_mismatch (a valid frame whose decompressed stream differs past the first chunk).
+        data = bytearray(big_bytes(b"packed"))
+        data[-1] ^= 1
+        plain = self.base / "tampered.bin"
+        plain.write_bytes(bytes(data))
+        subprocess.run(["zstd", "-q", "-1", "-T1", "-f", str(plain), "-o", str(self.ca / "sources/runs/r1/big-z.bin.zst")],
+                       check=True)
+        self.assertRefused(self.verify())
+
+    def assertRefused(self, result, code="digest_mismatch"):
+        rc, out, err = result
+        self.assertEqual((rc, err.strip()), (4, "refused: " + code))
+
 
 
 class NoContentLeak(unittest.TestCase):
