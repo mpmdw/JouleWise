@@ -180,22 +180,65 @@ python3.13 -B scripts/independent_recompute_b6.py block --session /Volumes/JW-EX
 
 Synthetic two-session tree built with the test module's `mini_archive` under `/Volumes/JW-EXT/tmp/b6-rehearsal-*`
 (NOT `/tmp` or `/var`): `S1/archive` with an adjacent `archive.desk`, `S2/archive` with an inside log and no `.desk`.
-A local directory on JW-EXT stood in for `air:`. Host: Air, macOS openrsync 2.6.9, zstd 1.5.7. No SSH to the MBP.
-The MBP's own `rsync --version; zstd --version` is still to be recorded by the magistrate (written into the draft item).
+A local directory on JW-EXT stood in for `air:`; `--source-host mbp-rehearsal` stood in for a manifest made on another
+machine. Host: Air, openrsync 2.6.9, zstd 1.5.7. No SSH to the MBP. The MBP's own `rsync --version; zstd --version` and a
+real MBP -> Air synthetic rehearsal are still to be done by the magistrate (written into the draft item). Run twice: at the
+H1 commit with the then-current flags (`manifest`, rsync, `verify`: all exit 0), and again at the fixed head:
 
 ```
-$ python3.13 -I scripts/b6_custody_kit.py manifest --session <T>/sessions/S1/archive --session <T>/sessions/S2/archive --loop-attempts <T>/loop/attempts.jsonl --loop-state <T>/loop/state.json --out <T>/desk/b6-custody-manifest.json
-exit 0   manifest sessions=2 sha256=6055ab21...
+$ python3.13 -I scripts/b6_custody_kit.py manifest --session <T>/sessions/S1/archive --session <T>/sessions/S2/archive --loop-attempts <T>/loop/attempts.jsonl --loop-state <T>/loop/state.json --source-host mbp-rehearsal --out <T>/desk/b6-custody-manifest.json
+exit 0   session S1/archive files=10 bytes=1147 desk_files=1 / session S2/archive files=11 bytes=1349 desk_files=0 / manifest sessions=2 sha256=dd15c6ee...
 $ mkdir -m 700 <T>/air-custody                                                       exit 0
 $ cd <T>/sessions && rsync -aR S1/archive S1/archive.desk <T>/air-custody/            exit 0
 $ cd <T>/sessions && rsync -aR S2/archive <T>/air-custody/                            exit 0
 $ rsync -a <T>/loop/attempts.jsonl <T>/loop/state.json <T>/desk/b6-custody-manifest.json <T>/air-custody/   exit 0
-$ python3.13 -I scripts/b6_custody_kit.py verify --manifest <T>/air-custody/b6-custody-manifest.json --manifest-sha256 6055ab21... --root <T>/air-custody --out <T>/receipt.json
-exit 0   verify sessions=2 files=21 bytes=2496 receipt_sha256=300277ab...
+$ python3.13 -I scripts/b6_custody_kit.py verify --manifest <T>/air-custody/b6-custody-manifest.json --manifest-sha256 dd15c6ee... --root <T>/air-custody --loop-dir <T>/air-custody --out <T>/receipt.json
+exit 0   verify sessions=2 files=21 bytes=2496 receipt_sha256=9a14f4ee...
+$ verify --self-check --manifest <T>/desk/b6-custody-manifest.json ... --root <T>/sessions --loop-dir <T>/loop      exit 0  (no receipt written)
+$ manifest re-run on the copy WITHOUT --source-host (exit 0), then verify against it:   refused: copy_on_source_host   exit 4
 ```
 
-Landed layout: `S1/archive`, `S1/archive.desk`, `S2/archive`, `attempts.jsonl`, `state.json`, the manifest. The rehearsal is
-re-run at the end of the fixes with the final flags (section "Cold-review fixes").
+Landed layout: `S1/archive`, `S1/archive.desk`, `S2/archive`, `attempts.jsonl`, `state.json`, the manifest (0600 each output,
+custody directory 0700). Before the fix, the earlier absolute-path `-R` form landed `<dest>/Volumes/...` on this rsync and verify refused `session_missing`.
+
+## Cold-review fixes (Fable 5.2, ADMIT-WITH-FIXES; `/Volumes/JW-EXT/scratch/fable-rev-custody-kit.md`)
+
+Applied on the kit branch only; R12 files (`scripts/independent_recompute_b6.py`, `joulewise/b6_analysis_inputs.py`, R12 tests)
+are untouched. The 65-test module is now 99 tests (102 with the three EndToEnd tests under `JW_B5_SYNTHETIC_ONLY=1`); all pass.
+
+Mutants. The earlier "50/50" line covers refusal deletions only: 49 refusal deletions plus the RL-100 mutant. Restated: the review's
+eight semantic mutants (m1 first-MiB `hash_file`, m5 first-chunk `hash_zst`, m2 `withheld/` digest skipped, m3/m4/m6 pins rehashed
+from the copy, m7 desk check weakened, m8 bytes term) all fail the module now (runner `scratch/b6-m5-mutants.py`: 8 of 8 killed; seven
+survived before). Refusal deletions rerun on the fixed head (`scratch/run_mutants2.py`, whole module, line numbers shifted): 66 mutants
+(the code gained refusals), three survived at first (read_hashed `not_regular_file`, inputs `manifest_schema_invalid`, and an
+equivalent both-plain-and-compressed check in `check_sources_set`, which was removed); the first two now have tests, and all
+refusal mutants die. m1 and m5 are killed by the clean multi-chunk copy failing, not by the flipped-byte tests alone: a first-chunk hash
+cannot equal a full-stream SHA256SUMS row, so the last-byte flips are belt and braces. Line numbers in the older kill table are at 88b60904a.
+
+Behavior changes a reader of the table above should know: the manifest also records `host`, `loop_state_waived`, `desk_present` and
+per-file `sources_sizes`; `verify` needs `--loop-dir` and refuses on the source host; `inputs` needs both out-of-band digests; the
+receipt carries `produced_by` and `loop_files`; `refuse` prints a second stderr line `  at <copy_path>: <name>`.
+
+Not checked by `verify` (L2, stated): stray files beside the archives, a missing empty directory inside an archive. The recompute reads neither.
+
+### Disposition
+
+| Finding | Disposition |
+|---|---|
+| H1 copy command (report, draft item), rehearsal | c6102e9e6 (report runbook, rehearsal, draft item edited in place), 1835b8164 (rsync form test); rehearsal rerun at the final head above; MBP rsync/zstd version check and an MBP -> Air rehearsal added to the item |
+| M1 sources/ names vs own SHA256SUMS at manifest | 46259bf2e |
+| M2 refuse source tree / source host; `--self-check` | 70a005b58 |
+| M3 inputs: both out-of-band digests, receipt provenance | 2ea7beed3 |
+| M4 loop files required at source, verified on copy | 5af45f3dd |
+| M5 four tests, mutants fail-then-pass | b2b28a1d7 (+ d6a5384d1 for two refusal mutants) |
+| M6 outputs 0600, directory mode, per-session counts | 737d9c257 |
+| L1 refusal location | ef28d9528 |
+| L2 unexpected `.desk`, absent recorded `.desk` refused; stray files / empty dirs documented | 98a29748a (+ this report) |
+| L3 per-file sizes (cancelling size changes) | 3767b3bf2 |
+| L4 `/tmp` and `/var` symlink refusal | documented in the runbook and the draft item (docs commit at head); no code change (the refusal is correct) |
+| L5 SHA256SUMS read once | d088cc35f |
+| L6 wording | ef4927cd9 (docstring, `--list-names` help); draft item step 4 names itself as the one exception and the fields (session id, t0, round) |
+| L7 custody directory move after `inputs` | Deferred as code, documented as a runbook line: a pin keyed by absolute copy path is the exact form the recompute's `AuthenticatedInputs` consumes (changing it would mean editing the R12 files), and the failure is closed (the recompute refuses the missing path); the fix is to re-run verify and inputs |
 
 ## What the operator supplies by hand
 
