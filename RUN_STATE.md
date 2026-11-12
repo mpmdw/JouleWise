@@ -1046,7 +1046,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **R12 production delta** (five commits touching `joulewise/b6_analysis_inputs.py` and `scripts/independent_recompute_b6.py` after Fable's ADMIT). Opus cold review: ADMIT-WITH-FIXES (`/Volumes/JW-EXT/scratch/rev-r12-production-delta.md`).
   - **F1 MEDIUM, reproduced:** stop flags raised before the plan renames a session kept the old session id, so a counting GAMMA session could show binding_defect=false.
   - **Fix:** branch `fix/2026-11-12-b6-session-id-flags` @ 5f243aeef. The test commit f244800ce failed before the fix and passes after it; the fix adds `bind_plan()` before any session flag.
-  - **To do:** it needs its own cold review, then a merge into the R12 line before the S-14 pin. F2–F5 are LOW.
+  - **Fable cold review (14:44): ADMIT-WITH-FIXES.** Its LOW (pack '' on plan-refusal flags) is applied at eed511fa8 with a pinning test. To do: merge into the R12 line before the S-14 pin. F2–F5 are LOW.
   - `tests.independent_recompute.test_block6::test_key_contract_matches_published_file` fails identically on the R12 base, so it is pre-existing. Fix it before the pin.
 - **PR #749** (persistent Air watcher plus MAIN_CI_RED): cold review ADMIT-WITH-FIXES. MEDIUM 1–3 and four LOWs applied at 5a8b03369; 69 tests pass. Merge when CI is green, then Ed runs the installer in the PR body. Until then, no Air process watches tonight's result branch: the next lead session reads it, or Ed via Remote Control.
 - **Block 6 order from here:**
