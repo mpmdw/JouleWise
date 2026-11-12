@@ -27,7 +27,7 @@ from joulewise import night_agent_install, night_gate
 from joulewise.hazards.clock import measured_rate_bound
 from scripts import magistrate_watchdog as watchdog, run_night
 from tests import process_reaper
-from tests.test_b5_driver import FakeArm, fake_monitor_argv
+from tests.test_b5_driver import FakeArm, fake_dc_meter_argv, fake_monitor_argv
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -61,6 +61,9 @@ class ArmTests(unittest.TestCase):
         sizing = record['derivation']
         self.assertEqual(record['window_max_s'], sizing['window_max_s'])
         self.assertEqual(sizing['base_terms_s']['display_dwell_s'], arm.DISPLAY_DWELL_S)
+        # The repository root has no prepare packet: recorded, flagged, not refused here.
+        self.assertEqual(record['prepare_packet']['sha256'], None)
+        self.assertTrue(any(f.startswith('r1.prepare_packet_absent_at_arm') for f in record['flags']))
         mapping = json.loads(self.plan_path.read_text())
         # RL-72 E2 sizing on the plan itself (W1 PREQUAL's installed-R1-plan check, w1_prequal.py:1396-1404).
         self.assertEqual(mapping['hazard_window']['programmed_span_s'], 108768)
@@ -239,6 +242,7 @@ def fake_pmset(argv, **kwargs):
 r1_arm.display_dwell = lambda custody: real_dwell(custody, run=fake_pmset, sleep=fake_sleep, now=lambda: clock[0])
 raise SystemExit(main())
 ''')
+        (measurement / '.align-r1-prepare.json').write_text('{"synthetic": true}\n')
         (measurement / '.venv/bin').mkdir(parents=True)
         (measurement / '.venv/bin/python').symlink_to(sys.executable)
         self.mode = self.root / 'mode'
@@ -266,6 +270,13 @@ r1._run = run
 # This synthetic runtime starts no descendants. The sandbox denies ps;
 # supply that fixture process table explicitly rather than misreading it.
 r1._process_table = lambda: {{}}
+# The follow-up chain requires $MEASUREMENT_ROOT/.align-r1-prepare.json (D-2). Its
+# real weight/stack preflights are native; the driver's packet check is replaced
+# by a record of the file the chain passed, which must be the fixed path.
+def require_prepare_packet(path, root=None):
+    assert Path(path) == Path(os.environ['MEASUREMENT_ROOT']) / '.align-r1-prepare.json', path
+    return {{'path': str(path), 'sha256': 'synthetic', 'synthetic': True}}
+r1.require_prepare_packet = require_prepare_packet
 r1.wait_outside_os_batch = lambda _: 0
 raise SystemExit(r1.main())
 ''')
@@ -317,6 +328,11 @@ raise SystemExit(7)
         def probe(argv):
             if tuple(argv) == night_gate.AGENT_CENSUS_ARGV:
                 return night_gate.ProbeResult(tuple(argv), 1, '', '', time.monotonic_ns())
+            if tuple(argv) == ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '0'):
+                self.mode.write_text('0')  # run_night's close restore (host-level, R6-7)
+                return night_gate.ProbeResult(tuple(argv), 0, '', '', time.monotonic_ns())
+            if tuple(argv) == run_night.NETWORK_TIME_QUERY_ARGV:
+                return night_gate.ProbeResult(tuple(argv), 0, 'Network Time: Off\n', '', time.monotonic_ns())
             self.assertEqual(tuple(argv), powermode.QUERY)
             return night_gate.ProbeResult(tuple(argv), 0, 'AC Power:\n powermode ' + self.mode.read_text() + '\n', '', time.monotonic_ns())
         probes = night_gate.Probes(run=probe, now_epoch_s=time.time, monotonic_ns=time.monotonic_ns,
@@ -329,7 +345,8 @@ raise SystemExit(7)
             arm=FakeArm(), publish_lineage=production.publish_lineage,
             verify_lineage=lambda _: {role: {'valid': True} for role in ('claim', 'bound')},
             monitor_argv=lambda request: fake_monitor_argv(request.custody_root),
-            meter_argv=lambda request: [sys.executable, '-c', 'raise SystemExit(0)'],
+            meter_argv=fake_dc_meter_argv,  # every measurement requires DC-in (presign hazard driver)
+            meter_probe=lambda root: {'live': True, 'synthetic': True},
             collectors_argv=lambda _: [sys.executable, '-c', 'print("synthetic collectors")'],
             g10_argv=production.g10_argv, disk_free_bytes=lambda _: 10**13,
             boot_session_uuid=lambda: 'SYNTHETIC-BOOT',
@@ -418,6 +435,12 @@ raise SystemExit(7)
         else:
             self.assertEqual(code, 0)
             self.assertEqual(result['status'], 'complete')
+            armed = json.loads((self.custody / 'arm.json').read_text())
+            self.assertEqual(armed['prepare_packet'], {
+                'path': str(measurement / '.align-r1-prepare.json'),
+                'sha256': arm.digest(measurement / '.align-r1-prepare.json')})
+            # D-2/D-7: the chain hands the driver the fixed packet under the plan's measurement root.
+            self.assertEqual(result['prepare_packet']['path'], str(measurement / '.align-r1-prepare.json'))
             self.assertTrue((night / 'align-r1/r1_slots.json').is_file())
             self.assertEqual(json.loads((self.custody / 'bookends/pre.json').read_text())['flag'], 'r1.bookend_failed')
             self.assertEqual(json.loads((self.custody / 'bookends/pre.json').read_text())['exit_code'], 7)

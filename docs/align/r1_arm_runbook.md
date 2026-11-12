@@ -5,6 +5,18 @@ seats run synthetic tests only. The route is one `HAZARD_PACK` LaunchAgent
 window, containing diagnostic calibration bookends and the existing R1 chain.
 It does not run the W1 roster. No R1 measurement code or kit numbers change.
 
+**R1 follow-up night (2026-11-12 port).** This route was pinned at
+`20e9edbc4` for the first R1 night. It now lives on the presign line beside the
+follow-up driver (RL-59/RL-64/RL-72), with two changes and nothing else:
+the window is sized to RL-72 E2 (section 2), and the plan carries no
+`ac_powermode` key. Absent means 0 (`night_gate.NightPlan.ac_powermode`), the
+same Automatic admission as before; the R1 driver still owns every A–B–A and
+series power transition and its restore. Without the key, the magistrate
+watchdog on `main` can parse the installed plan (items 249 and 262: it held
+`HOLD_UNSAFE` on `extra ['ac_powermode']`). The arm item in RUN_STATE, not
+this runbook, names the commit, the D-7 prepare-packet step and the RL-89
+checks; step 1's fetch line below is the first night's and is superseded by it.
+
 ## 1. Advance the existing measurement checkout
 
 Use the checkout with the already pinned environment, rather than rebuilding
@@ -41,7 +53,7 @@ unset EVIDENCE_POWER_RECORDER_REPLAY NIGHT_VERIFY_ONLY NIGHT_RESERVATION_ARGV_ON
 ```
 
 Read-only `pmset` is shown here. Do not manually select High Power: R1 admits
-Automatic (`ac_powermode: 0`) and owns its A–B–A power transitions and restore.
+Automatic (the plan's `ac_powermode` is absent, meaning 0) and owns its A–B–A power transitions and restore.
 Do not delete a persistent High Power marker by hand. A leftover marker is an
 owed restore; the existing admission/driver handles it with the host lock.
 
@@ -75,35 +87,52 @@ plutil -p "$S/rendered/com.joulewise.night.plist"
 plutil -p "$S/rendered/com.joulewise.night.deadman.plist"
 ```
 
-`window_max_s` depends on t0. The script prints the base terms, counted local
-11:45 crossings and final seconds; `arm.json` retains the same derivation.
-It is a ceiling, not a reservation:
+`window_max_s` is RL-72 E2's 126,480 s for every t0. `size` prints the terms,
+the local 11:45 crossings (disclosed) and the final seconds; `arm.json` keeps the
+same derivation. It is a ceiling, not a reservation.
+
+**What is inside the driver's span, and what is outside it (from the code).**
+
+- The driver's span is `align_r1_rehearsal.night_worst_case_s()["programmed_span_s"]`
+  = 108,768 s: the no-redo phase subtotal (58,711.9616 s), two whole-unit load
+  redos and two batch encounters (largest unit 7,563.9952 s + 5,400 s blackout),
+  rounded up to 99,768 s, plus 9,000 s overhead. That overhead is the driver's
+  OWN segments: `pre_calibration_bracket` and `post_calibration_bracket`
+  (`r1_phase_table.py`, kinds `calibration-pre`/`-post`, 1,800 s each in
+  `phase_bound` and `_run`), close 900 and harvest 4,500.
+- The driver's work deadline is its own start + 108,768 − 900 s
+  (`_R1_WORK_DEADLINE`), and every runtime child's cap is clipped to it.
+- This route's wrapper (`r1_arm.wrapper_bytes`) runs OUTSIDE the driver, before
+  and after the chain: the hazard arm (inside run_night's t0 deadline), the 300 s
+  display dwell, and two D-109 fiducial bookends (`validate_powermetrics_fiducial.py`
+  under the stage budget helper), which are not the driver's calibration brackets.
+  The 11-10 R1 night ran both: `bookends/{pre,post}.json` and the driver's
+  `pre_calibration_bracket` phase.
 
 | Term | Seconds | Source |
 |---|---:|---|
-| R1 with retries and corrected batch encounter | 100,627 | prior 96,427 s floor (RUN_STATE items 215–216) + 600 s step-30b + 3 × 1,200 s A-B-A G0, per 2026-11-10 ruling |
+| R1 follow-up driver span | 108,768 | RL-72 E2; `night_worst_case_s` on the measurement checkout (refuses any other value) |
 | Hazard admission, inside the t0 deadline | 3,300 | `b5.plan.T0_STAGE_CAP_S` |
 | Two diagnostic bookends | 3,600 | twice `b5.chain.STAGE_WALL_BUDGET_S.pre_calibration_capture` (1,800 each) |
-| Bookend teardown/close allowances | 1,200 | twice the existing 600-second session-status budget; covers the budget helper's 30-second TERM grace and bounded process censuses/reap |
+| Bookend teardown/close allowances | 1,200 | twice the existing 600-second session-status budget; covers the budget helper's 30-second TERM grace |
 | Final R1 harvest/result writes | 600 | one existing session-status wall allowance |
-| Display sleep dwell before the pre bookend | 300 | R0-L3 / RUN_STATE items 206, 209: R0 re-run 11 passing dwell |
+| Display sleep dwell before the pre bookend | 300 | R0-L3 / RUN_STATE items 206, 209 |
+| **Route base** | **117,768** | sum |
+| **`window_max_s`** | **126,480** | max(plan writer `b6.plan_inputs.window_max_s(108,768)` = 126,480, RL-72 E2 126,480, base) |
 
-The base with display dwell is now 109,627 s: the preceding base
-105,427 s plus 600 + 3 × 1,200 = 4,200 s for the changed model G0 bounds.
-The redo floor already includes one 11,164 s batch encounter. Each further
-local 11:45 in `[t0, t0 + window_max_s)` adds 11,164 s (item 216);
-recalculate crossings until the size stops changing. Calendar crossings use
-America/Los_Angeles, including DST. For 2026-11-08 t0 at 13:30 PT there is
-one crossing: 109,627 s. At 08:00 PT there are two: 120,791 s.
-The existing driver supervises the meter within the arm/close allowances,
-so no extra allowance is added. This route retains exact seconds.
+No batch allowance is added on top: the driver's span already holds two
+encounters, and the driver refuses a third. A 126,480 s window holds at most two
+local 11:45 starts; `size` refuses more. The latest driver end after t0 is
+3,300 + 300 + 1,830 + 108,768 = 114,198 s; with the post bookend (1,830) and the
+final writes (600) that is 116,628 s, inside 126,480 s. The outer driver keeps
+its existing 300-second shutdown grace after `window_max_s`.
 
-Extra sustained-load redos can still reach this ceiling; it is not a promise
-that every possible sequence of two redos per quiet segment will fit. The
-outer driver also has its existing 300-second shutdown grace. The revised `night_worst_case_s` table has 60,406.9616 s without redos,
-29,055.9808 s for R6-2 retries and 5,400 s for one batch wait, totaling
-94,862.9424 s. The arm floor preserves the prior corrected encounter
-allowance: 100,627 s, above that display total.
+**D-7 at arm time.** `prepare` records in `arm.json` the path and SHA-256 of
+`$M/.align-r1-prepare.json`, the packet the chain hands the driver (a missing
+packet is flagged `r1.prepare_packet_absent_at_arm`; the chain refuses without
+it). Compare that SHA-256 with the one `align_r1_followup_kit.py prepare`
+printed, before install. The driver's `r1_result.json` `prepare_packet.sha256`
+gives the same comparison after the night.
 
 The two bookends are ordinary diagnostic D-109 fiducial observations. They
 are **not a claim-eligible reserved W1 bracket**: R1 may exceed the existing

@@ -20,60 +20,76 @@ from joulewise.night_gate import NightPlan
 
 
 KIT = Path("configs/campaigns/align_v4")
-# origin/main RUN_STATE items 215-216 supersede the runtime's display-only
-# total: R6-2 retries plus corrected step-D/batch encounter, rounded up.
-# 2026-11-10 ruling: step-30b +600 s; three A-B-A legs +1,200 s
-# each. The preserved floor includes one R6-2 retry, not load redos.
-R1_G0_BOUND_INCREASE_S = 600 + 3 * 1200
-R1_RETRY_FLOOR_S = 96_427 + R1_G0_BOUND_INCREASE_S
-# Reuse the existing stage wall budgets, rather than timing a happy path.
+# R1 follow-up night (RL-59/RL-64/RL-72). The driver's own span is RL-72 E2:
+# two whole-unit load redos, two batch encounters (largest unit + 5,400 s
+# blackout) and 9,000 s of in-driver overhead (its calibration-pre/-post
+# brackets, 1,800 s each, close 900, harvest 4,500), so 108,768 s
+# (align_r1_rehearsal.night_worst_case_s; r1_runtime_contract.md). It is read
+# from the measurement checkout's driver and must equal the ruled value.
+R1_FOLLOWUP_SPAN_S = 108_768
+R1_FOLLOWUP_WINDOW_S = 126_480  # RL-72 E2; = b6.plan_inputs.window_max_s(span)
+# This route's own wrapper runs OUTSIDE the driver and its span: the hazard
+# arm (inside run_night's t0 deadline), the R0-L3 display dwell, two D-109
+# diagnostic bookends with their teardown allowances, and the final writes.
 BOOKEND_S = chain.STAGE_WALL_BUDGET_S["pre_calibration_capture"]  # 1,800 s each
 CLOSE_S = chain.STAGE_WALL_BUDGET_S["session_status_record"]  # 600 s teardown allowance each
 HARVEST_S = CLOSE_S  # one existing session-status budget for final manifest/result writes
-# The arm itself is inside run_night's t0-based deadline too (not extra time
-# before it). Its existing cap must therefore be added, as must both bookends.
-BASE_WINDOW_S = R1_RETRY_FLOOR_S + b5_plan.T0_STAGE_CAP_S + 2 * (BOOKEND_S + CLOSE_S) + HARVEST_S
-BATCH_ENCOUNTER_S = 11_164  # RUN_STATE item 216; the floor includes the first encounter
 DISPLAY_DWELL_S = 300  # R0-L3 / RUN_STATE items 206, 209: re-run 11 passing dwell
 ARM_NOTICE_S = 15 * 60  # R1-ARM-FIX-1: choose t0 at least 15 minutes ahead
 BATCH_ZONE = ZoneInfo("America/Los_Angeles")  # R1 ruling 8 local batch clock
+MAX_BATCH_CROSSINGS = 2  # the driver budgets two encounters; it refuses a third
 CHAIN_SOURCE = Path("scripts/night_chains/align_r1_rehearsal.zsh")
+RUNTIME_CONFIG = Path("configs/align/v4/r1_runtime.json")
 
 
-def crossing_size(t0, base_s):
-    """Item 216 fixed point, counting local 11:45 in the half-open window.
-
-    The daily encounter adds less than even a DST-shortened day, so this
-    monotone iteration converges without an arbitrary iteration limit.
-    """
-    window_s = base_s
+def batch_crossings(t0, window_s):
+    """Local 11:45 starts in the half-open window [t0, t0 + window_s)."""
+    day = datetime.fromtimestamp(t0, BATCH_ZONE).date()
+    crossings = []
     while True:
-        day = datetime.fromtimestamp(t0, BATCH_ZONE).date()
-        crossings = []
-        while True:
-            epoch = datetime(day.year, day.month, day.day, 11, 45, tzinfo=BATCH_ZONE).timestamp()
-            if epoch >= t0 + window_s:
-                break
-            if epoch >= t0:
-                crossings.append(epoch)
-            day += timedelta(days=1)
-        extra = max(0, len(crossings) - 1)
-        wanted = base_s + extra * BATCH_ENCOUNTER_S
-        if wanted == window_s:
-            return {"base_s": base_s, "batch_crossings_epoch_s": crossings,
-                    "batch_window_crossings": len(crossings), "extra_batch_encounters": extra,
-                    "batch_encounter_s": BATCH_ENCOUNTER_S, "extra_batch_s": extra * BATCH_ENCOUNTER_S,
-                    "window_max_s": window_s}
-        window_s = wanted
+        epoch = datetime(day.year, day.month, day.day, 11, 45, tzinfo=BATCH_ZONE).timestamp()
+        if epoch >= t0 + window_s:
+            return crossings
+        if epoch >= t0:
+            crossings.append(epoch)
+        day += timedelta(days=1)
 
 
-def size_window(t0):
-    terms = {"r1_retry_floor_s": R1_RETRY_FLOOR_S, "hazard_arm_s": b5_plan.T0_STAGE_CAP_S,
-             "bookends_s": 2 * BOOKEND_S, "close_s": 2 * CLOSE_S, "harvest_s": HARVEST_S,
-             "display_dwell_s": DISPLAY_DWELL_S}
-    # No extra meter allowance: the existing hazard driver supervises it,
-    # including startup/close, within the unchanged arm/close budgets above.
-    return dict(crossing_size(t0, sum(terms.values())), base_terms_s=terms)
+def driver_span_s(measurement_root=None):
+    """The measurement checkout's driver span for its own runtime config (RL-72 E2)."""
+    from scripts import align_r1_rehearsal as r1
+    root = Path(measurement_root) if measurement_root is not None else Path(r1.ROOT)
+    return r1.night_worst_case_s(["--config", str(root / RUNTIME_CONFIG)])["programmed_span_s"]
+
+
+def size_window(t0, span_s=None):
+    """RL-72 E2 sizing. The batch encounters are inside the driver's span, so
+    crossings are disclosed, not added (no double count); the window is the
+    plan writer's window for that span, and must also cover this wrapper."""
+    from joulewise.b6 import plan_inputs
+    span = driver_span_s() if span_s is None else span_s
+    if span != R1_FOLLOWUP_SPAN_S:
+        raise ValueError(f"driver span {span} s is not the RL-72 E2 follow-up span {R1_FOLLOWUP_SPAN_S} s")
+    terms = {"r1_driver_span_s": span, "hazard_arm_s": b5_plan.T0_STAGE_CAP_S,
+             "display_dwell_s": DISPLAY_DWELL_S, "bookends_s": 2 * BOOKEND_S, "close_s": 2 * CLOSE_S,
+             "harvest_s": HARVEST_S}
+    base = sum(terms.values())
+    writer = plan_inputs.window_max_s({"programmed_span_s": {"seconds": span}})
+    window = max(writer, R1_FOLLOWUP_WINDOW_S, base)
+    # Latest driver end after t0: arm cap, dwell, pre bookend under its budget
+    # helper (cap + grace), then the whole driver span (its work deadline is
+    # chain start + span - 900 s, followed by its 900 s close reserve).
+    driver_end = b5_plan.T0_STAGE_CAP_S + DISPLAY_DWELL_S + BOOKEND_S + chain.BUDGET_GRACE_S + span
+    if driver_end + BOOKEND_S + chain.BUDGET_GRACE_S + HARVEST_S > window:
+        raise ValueError("window does not cover the wrapper, the driver span and the post bookend")
+    crossings = batch_crossings(t0, window)
+    if len(crossings) > MAX_BATCH_CROSSINGS:
+        raise ValueError(f"{len(crossings)} local 11:45 batch windows inside the window; the driver budgets "
+                         f"{MAX_BATCH_CROSSINGS}")
+    return {"programmed_span_s": span, "base_terms_s": terms, "base_s": base, "writer_window_max_s": writer,
+            "window_max_s": window, "latest_driver_end_offset_s": driver_end,
+            "batch_crossings_epoch_s": crossings, "batch_window_crossings": len(crossings),
+            "authority": "RL-72 E2 (span 108,768 s, window_max_s 126,480 s); encounters inside the span"}
 
 
 def digest(path):
@@ -96,7 +112,7 @@ def prepare(measurement_root, custody_root, t0, *, planned_bytes=0, now=None):
     clock = time.time() if now is None else now
     if t0 < clock + ARM_NOTICE_S:
         raise ValueError("t0 must leave at least 15 minutes for the arm notice")
-    sizing = size_window(t0)
+    sizing = size_window(t0, driver_span_s(measurement))
     head = subprocess.check_output(["git", "-C", str(measurement), "rev-parse", "HEAD"], text=True).strip()
     config = json.loads((measurement / "configs/align/v4/r1_runtime.json").read_text())
     # Longest single segment (not the whole night): a continuous sampler can
@@ -155,7 +171,7 @@ def prepare(measurement_root, custody_root, t0, *, planned_bytes=0, now=None):
         "T_stream_max_s": stream_s, "planned_bytes": planned_bytes,
         # R1 is one chain, with no W1 campaign members or yield denominator.
         "member_count": 0, "thresholds": thresholds, "g10": False,
-        "programmed_span_s": R1_RETRY_FLOOR_S, "t0_stage_cap_s": b5_plan.T0_STAGE_CAP_S,
+        "programmed_span_s": sizing["programmed_span_s"], "t0_stage_cap_s": b5_plan.T0_STAGE_CAP_S,
         "settle_s": 0,  # the hazard arm dwells; R1 owns its soak and releases
         "window_env": {"path": str(custody / "window.env"), "sha256": hashlib.sha256(b"").hexdigest()},
         "registration": None,
@@ -167,7 +183,9 @@ def prepare(measurement_root, custody_root, t0, *, planned_bytes=0, now=None):
     }
     mapping = {
         "schema": "joulewise.night_plan.v5", "schema_version": 5,
-        "plan_id": plan_id, "receipt_class": "HAZARD_PACK", "ac_powermode": 0,
+        # No ac_powermode: absent means 0 (Automatic) for admission, which is
+        # what R1 needs; the driver owns the A-B-A legs and the series mode.
+        "plan_id": plan_id, "receipt_class": "HAZARD_PACK",
         "t0_epoch_s": t0, "window_max_s": sizing["window_max_s"], "authored_epoch_s": clock,
         "repo_head": head, "measurement_root": str(measurement), "measurement_head": head,
         "chain_path": str(custody / "chain.zsh"), "chain_sha256_path": str(custody / "chain.zsh.sha256"),
@@ -192,10 +210,18 @@ def prepare(measurement_root, custody_root, t0, *, planned_bytes=0, now=None):
     (custody / "chain.zsh").write_bytes(wrapper)
     (custody / "chain.zsh.sha256").write_bytes(chain.sidecar_bytes(wrapper, "chain.zsh"))
     write(custody / "night_plan.json", mapping)
+    # D-7 (procedural route, r1_runtime_contract.md): the arm record carries the
+    # SHA-256 of the packet the chain will hand the driver, so the lead compares
+    # it with the one prepare printed before t0, not only after the night.
+    packet_path = measurement / ".align-r1-prepare.json"
+    packet = ({"path": str(packet_path), "sha256": digest(packet_path)} if packet_path.is_file()
+              else {"path": str(packet_path), "sha256": None})
     record = {"schema": "joulewise.align.r1_arm.v1", "plan": str(custody / "night_plan.json"),
+              "prepare_packet": packet,
               "plan_sha256": digest(custody / "night_plan.json"), "schedule": scheduling,
               "window_max_s": sizing["window_max_s"], "derivation": sizing,
-              "flags": (["disk.allocation_unsized; shared headroom and live disk floor remain"] if not planned_bytes else [])}
+              "flags": (["disk.allocation_unsized; shared headroom and live disk floor remain"] if not planned_bytes else [])
+                        + ([] if packet["sha256"] else ["r1.prepare_packet_absent_at_arm; the chain refuses without it"])}
     write(custody / "arm.json", record)
     return record
 
