@@ -1870,16 +1870,26 @@ class AgreementTests(unittest.TestCase):
         source = (ROOT / "scripts/bytes_twin.py").read_text()
         expression = 'request_energy + request_battery["battery_gross_j"]'
         self.assertEqual(source.count(expression), 1)
-        mutant = root / "twin-no-reference-battery.py"
+        # The twin's stage-2 guard runs the bytes_commitment.py beside its own file
+        # (RL-7a, 276d05201), so the mutant gets the production guard beside it, by
+        # symlink, and the campaign's synthetic commitment options, exactly as
+        # run_both gives the unmutated twin. Without them the guard refuses before
+        # the twin computes, and NEG-8 would pass or fail without being compared.
+        mutant_dir = root / "neg8-mutant/bin"
+        mutant_dir.mkdir(parents=True)
+        (mutant_dir / "bytes_commitment.py").symlink_to(ROOT / "scripts/bytes_commitment.py")
+        mutant = mutant_dir / "bytes_twin.py"
         mutant.write_text(source.replace(expression, "request_energy"))
         manifest = load(root / "manifest.json")
         output = root / "no-reference-battery.json"
+        from tests.bytes_commitment_support import fixture_options
         command = [sys.executable, str(mutant), "--export-dir", str(root / "export"),
                    "--manifest", str(root / "manifest.json"), "--stage", "2",
                    "--key-dir", str(root / "released-keys/bytes/blinding"), "--out", str(output)]
         for session in manifest["sessions"]:
             command += ["--archive", session["archive"]]
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
+        command += fixture_options(root, root / "out/a-fit/predictions.json")
+        result = subprocess.run(ample_space_command(command), cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         wrong = load(output)
         original = load
