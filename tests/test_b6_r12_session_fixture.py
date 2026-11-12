@@ -925,6 +925,21 @@ class SchedulerBoundaryTests(unittest.TestCase):
             self.assertEqual(actual["volume"], "reduced")
             self.assertEqual(actual["primary_stream_duration_s"], 5)
 
+    def test_reduced_finisher_refuses_running_original_loop(self):
+        """Predict: a successful intermediate parent cannot authorize finalization or analysis while the original loop is running."""
+        from b6_r12_reduced_finish import finish
+        with tempfile.TemporaryDirectory(prefix="r12-finish-guard-") as directory:
+            root = Path(directory).resolve()
+            main, denied = root / "main", root / "denied"
+            for path in (main, denied):
+                path.mkdir()
+                (path / "generator-parent-exit.txt").write_text("0\n")
+            (main / "loop").mkdir()
+            (main / "loop/state.json").write_text('{"state":"SESSION_RUN"}')
+            with self.assertRaisesRegex(ValueError, "not DONE"):
+                finish(main, denied)
+            self.assertFalse((main / "manifest.json").exists())
+
 
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
 class DeclaredShapeTests(unittest.TestCase):
