@@ -454,13 +454,13 @@ def main() -> int:
         # stamped edges: every kept run and every distinct capture
         stamped = []  # (rt_s, owner, class)
         edges = []    # edges to estimate
-        p2048 = {"Qwen3-1.7B": [], "Qwen3-8B": [], "?": []}
+        p2048 = {}
         for r in runs:
             ev = load_events(run_info[r] / "events.jsonl")
             redges, tokens, prefill_s = run_edges(r, ev)
-            item = next(e for e in ev if e["event_type"] == "phase_start" and e["phase"] == "prefill")
-            item = item["metadata"].get("item_id", "")
-            model = "Qwen3-8B" if "qwen3-8b" in item else ("Qwen3-1.7B" if "qwen3-1p7b" in item else "?")
+            # Fix 1 (DEVIATION-LOG, edge check): the model label for check (a) came from the prefill event's
+            # item_id, which 2,048-token runs do not carry; it now comes from the run's config.json.  Label only.
+            model = json.loads((run_info[r] / "config.json").read_text())["model"]["name"]
             if tokens == 2048:
                 p2048.setdefault(model, []).append(prefill_s)
             for cls, t in redges:
