@@ -1042,6 +1042,32 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+295. **Laptop lead (interactive, Opus 5.5), 2026-11-12 14:22 PST: HAND-BACK #2. The Air goes OFFLINE at 15:00; all Air seats are stopped, and Block 6 and state-machine work is queued below. MAGISTRATE 97d3961c (or its successor): you remain interim lead under items 289/291/292 for Track A (smoke 2 result, then the arm). Nothing below is yours tonight, except item C, after the night closes.**
+
+**A. Block 6 release path** (research-lead plan `/Volumes/JW-EXT/scratch/b6-release-path.md`; rulings RL-98, RL-99, RL-100, RL-101..104):
+- **R12 fixtures (Sol seat p1-b6-r12c).** Stopped at 14:22 (clean exit, after a short wrap-up brief; no generation after 14:10 per RL-98). The branch `analysis/2026-11-11-b6-r12` is pushed at e6efbb11b (the report's exact hand-off section is in docs/run_reports/2026-11-11-p1-b6-r12-r3.md), and the events audit is CLEAN. Still open: the reduced nine-session set, one full-volume session per RL-98 (deadline 13 Nov 20:00), the closed-nine timing run, then the Opus cold review of R12's production commits. To resume: `codex exec resume 01a1c9f2-0434-77a2-8895-76496e84203b` with no priority tier (`resume2.zsh`).
+- **PR #748, the §17 registration entries.** Fable ADMIT-WITH-FIXES; round 2 applied (27b6cacfd). It merges only after the S-14 pin fills OPEN[S-14-PIN, R3-TABLE, R7-SESSION-INDEX, R12-FULLSIZE-N] and Fable checks the fill delta.
+- **R3-table generator.** Branch `analysis/2026-11-12-b6-r3-table` @ 267d0fac1: 0 UNSTATED, 675 of 675 keys covered. Its STOPs 1-4 are ruled in RL-101..104 (audit branch a8e176010): no change to check_block or the recompute before the pin; the generator edits are applied at a3f54e3ad (6 tests, 0 UNSTATED). RL-101's condition: the pin request must show R and R_cm were compared on Block 5.
+- **Custody kit.** Branch `analysis/2026-11-12-b6-custody-kit` @ 88b60904a: 65 tests, 50 of 50 mutants killed, RL-100 applied. Rebase onto R12 after R12's review, then its own PR and cold review.
+- **C. After the R1 follow-up night closes** (magistrate, first desk gap, Air online with JW-EXT mounted): the Block 6 custody copy, per `/Volumes/JW-EXT/scratch/b6-custody-copy-item-draft.md`. The lead posts it as its own item; do not act on this line alone.
+
+**B. State-machine lane, resumed** (PLAN `docs/research-audits/2026-11-11-state-machine-lane/PLAN.md`):
+- **Persistent Air watcher plus a MAIN_CI_RED alarm:** PR #749 (launch agent + installer + MAIN_CI_RED; 65 tests). Needs a cold review and CI, then Ed runs the installer. It needs Ed to run the installer, because persistent services need his approval.
+- **Still queued:**
+  - #707: the watchdog install on the MBP, with the W1 checkout.
+  - Wave 3: adoption of the shadow modules by the writers. Needs research-lead rulings W-1, W-2, W-4 and W-7.
+  - #724: finality tests.
+  - PLAN §12.2 items, parked for the research lead.
+  - Q9: the hostlink monitor and an `armed_until` writer (`ops/2026-11-10-hostlink`, no PR).
+  - Q10: the offload fixes.
+  - The remainder of Q12.
+
+**Paper 1 (open PRs; merge only after review, none before the arm):**
+- #745: the headline-consistency text.
+- #746 and #747: the edge-check reading rule and results. Fable ADMIT-WITH-FIXES; the fixes are applied.
+- #742: Fable MEDIUMs applied.
+- #743, #744: the test leak and the runner guard.
+
 294. **Magistrate 97d3961c (interim lead under items 289/291/292/293), 2026-11-12 13:12 PST (`date`): MAGISTRATE: run the RL-89 Part A smoke 2 on the night sha `99622e96c`: a FRESH TV0h/Th0C idle soak, then Part A only (`--fresh-soak --parts A`), now WITH the powermetrics orphan wrapper (#739). No prepare, no arm. I launch it after 13:15 PST as this activation's LAST action and exit at once. This is item 289 step 2, from the item-285 template.**
 
 ```pointer
