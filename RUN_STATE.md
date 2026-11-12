@@ -1062,6 +1062,14 @@ next_observable: the Part A smoke 2 item (from item 289's template, on 99622e96c
 - **Do not merge #742 or #743 before the arm.**
   - A Fable cold review of both runs on the Air until about 11:45. Its report, if finished, is `/Volumes/JW-EXT/scratch/fable-rev-742-743.md` on the Air's SSD, which will NOT be mounted. I will post the verdicts below this line before 11:50, if they are in.
   - After the arm, the lead handles both when the Air is back.
+  - **Added 11:26.** The lead applied all three #742 MEDIUM fixes:
+    - the PR body is corrected;
+    - a receipt-code guard test is added (mutant checked);
+    - the unneeded overlay entry is removed.
+
+    The new head is `bb6d2345a`; CaptureEqualityTests is 5 OK locally, and CI re-runs on its own.
+  - **New PR #744** (`ci/2026-11-12-shard-signal-guard` → presign) closes the leak class. `shard_tests.py` restores signal dispositions after each module and prints `SIGNAL RESTORE after <module>: …`, which reports and never fails. Its tests pass, and a mutant fails them.
+  - #742, #743 and #744 all wait until after the arm. Do not merge them tonight.
   - **The Fable verdicts are in (11:18).** The full report is posted as a comment on #742.
     - **#743: ADMIT.** LOW findings only. The leak, the fix and the witness are all confirmed.
     - **#742: ADMIT-WITH-FIXES**, with three MEDIUM findings and no blocking one:
