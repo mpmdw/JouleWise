@@ -1,0 +1,20 @@
+{
+  "blinding_group": "bytes",
+  "keys": [
+    "Qwen3-1.7B-4bit|bytes_synthetic_2048_decode_512|512",
+    "Qwen3-4B-4bit|bytes_synthetic_2048_decode_512|512",
+    "Qwen3-8B-4bit|bytes_synthetic_2048_decode_512|512",
+    "neg8_reference"
+  ],
+  "released_utc": "2026-11-12T12:20:34.773667+00:00",
+  "schema": "joulewise.b6_subset_release.v1",
+  "sha256": {
+    "config-003efb11986e54bb.json": "589cb20bf44b93688ffdc21656cf7f32303229acc646e1812218b133a4fffa16",
+    "config-27c336f764dfebc7.json": "0d9bbe35750d42882de208bb399bad1a7360511d467c2bf7a66191bb80a9dc50",
+    "config-3ce163164262f229.json": "b8b17bc9d1ecc61bf3b4157983f81b7d625c8cc30a65ffb4914aa11583f1f570",
+    "config-dcfd67352c7d894f.json": "5da0f5455ec22317b93497d14a234e66efeb4a967c4af2c68405f6be6cdea9e6",
+    "pack.json": "7ab187d4ed2e71d55f6d277a8bdf97f13d090ec1cd570474b703d052a1d59746"
+  },
+  "stage": "fit",
+  "stage1_commit": null
+}

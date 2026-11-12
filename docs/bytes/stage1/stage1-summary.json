@@ -1,0 +1,74 @@
+{
+  "blinded_agreement": {
+    "above_bar": 0,
+    "above_bar_fields": [],
+    "compared": 2531,
+    "diagnostic_compared": 24,
+    "diagnostic_different": 20,
+    "equal": 2421,
+    "under_bar": 110
+  },
+  "blinded_completeness": {
+    "missing_comparisons": [],
+    "missing_products": []
+  },
+  "bytes_analysis_sha256": "18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71",
+  "census_warnings": [],
+  "exit": 0,
+  "exits": {
+    "a-blinded": 0,
+    "a-fit": 0,
+    "a-fit-nokeys": 1,
+    "t-1": 0,
+    "t-1-nokeys": 1,
+    "t-blinded": 0
+  },
+  "exports": [
+    "/Users/edr/night-archive/bytes-stage1-20261111/export"
+  ],
+  "manifest_file_sha256": "3dc6d157b7841bd3ffc6fb53e66580d9c4c6ada4bee152057da65cec0f243865",
+  "manifest_sha256": "3cd3956e8cada8f32e92f682bff715ac4c52e7cec66614196990069b64721725",
+  "predictions_sha256": "a6cb172c58462b76609be5ec532f1a9bcfbe474ea64d7e004e948b3ffaeb5f19",
+  "producing_commit": "1e78224cdd5b49bd0c0fc5ada98d07f93cfb1e30",
+  "producing_tree_dirty": false,
+  "release": {
+    "keys": [
+      "Qwen3-1.7B-4bit|bytes_synthetic_2048_decode_512|512",
+      "Qwen3-4B-4bit|bytes_synthetic_2048_decode_512|512",
+      "Qwen3-8B-4bit|bytes_synthetic_2048_decode_512|512",
+      "neg8_reference"
+    ],
+    "record": {
+      "keys": [
+        "Qwen3-1.7B-4bit|bytes_synthetic_2048_decode_512|512",
+        "Qwen3-4B-4bit|bytes_synthetic_2048_decode_512|512",
+        "Qwen3-8B-4bit|bytes_synthetic_2048_decode_512|512",
+        "neg8_reference"
+      ],
+      "released_utc": "2026-11-12T12:20:34.773667+00:00",
+      "sha256": {
+        "config-003efb11986e54bb.json": "589cb20bf44b93688ffdc21656cf7f32303229acc646e1812218b133a4fffa16",
+        "config-27c336f764dfebc7.json": "0d9bbe35750d42882de208bb399bad1a7360511d467c2bf7a66191bb80a9dc50",
+        "config-3ce163164262f229.json": "b8b17bc9d1ecc61bf3b4157983f81b7d625c8cc30a65ffb4914aa11583f1f570",
+        "config-dcfd67352c7d894f.json": "5da0f5455ec22317b93497d14a234e66efeb4a967c4af2c68405f6be6cdea9e6",
+        "pack.json": "7ab187d4ed2e71d55f6d277a8bdf97f13d090ec1cd570474b703d052a1d59746"
+      },
+      "stage": "fit"
+    }
+  },
+  "schema": "joulewise.bytes_stage1_run.v1",
+  "stage1_agreement": {
+    "above_bar": 0,
+    "above_bar_fields": [],
+    "compared": 59068,
+    "diagnostic_compared": 19088,
+    "diagnostic_different": 2120,
+    "equal": 53930,
+    "under_bar": 5138
+  },
+  "stage1_completeness": {
+    "missing_comparisons": [],
+    "missing_products": []
+  },
+  "verdict": "READY_TO_COMMIT"
+}

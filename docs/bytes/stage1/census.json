@@ -1,0 +1,250 @@
+{
+  "reasons": [],
+  "schema": "joulewise.bytes_stage1_census.v1",
+  "sessions": [
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s2-p1/r1-bytes-s2-p1-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s2-p1",
+      "pass_id": 1,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "science": 50,
+        "start": 3
+      },
+      "session_id": "r1-bytes-s2-p1-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s2-p1/r1-bytes-s2-p1-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [
+        "Qwen3-8B-4bit"
+      ],
+      "withheld_row_count": 50,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s3-p1/r1-bytes-s3-p1-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s3-p1",
+      "pass_id": 1,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "start": 3
+      },
+      "session_id": "r1-bytes-s3-p1-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s3-p1/r1-bytes-s3-p1-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [],
+      "withheld_row_count": 100,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s4-p1/r1-bytes-s4-p1-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s4-p1",
+      "pass_id": 1,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "start": 3
+      },
+      "session_id": "r1-bytes-s4-p1-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s4-p1/r1-bytes-s4-p1-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [],
+      "withheld_row_count": 100,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s5-p1/r1-bytes-s5-p1-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s5-p1",
+      "pass_id": 1,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "start": 3
+      },
+      "session_id": "r1-bytes-s5-p1-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s5-p1/r1-bytes-s5-p1-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [],
+      "withheld_row_count": 50,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s1-p1/r2-bytes-s1-p1-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s1-p1",
+      "pass_id": 1,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "science": 100,
+        "start": 3
+      },
+      "session_id": "r2-bytes-s1-p1-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s1-p1/r2-bytes-s1-p1-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [
+        "Qwen3-1.7B-4bit",
+        "Qwen3-4B-4bit"
+      ],
+      "withheld_row_count": 0,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s1-p2/r2-bytes-s1-p2-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s1-p2",
+      "pass_id": 2,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "science": 100,
+        "start": 3
+      },
+      "session_id": "r2-bytes-s1-p2-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s1-p2/r2-bytes-s1-p2-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [
+        "Qwen3-1.7B-4bit",
+        "Qwen3-4B-4bit"
+      ],
+      "withheld_row_count": 0,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s2-p2/r2-bytes-s2-p2-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s2-p2",
+      "pass_id": 2,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "science": 50,
+        "start": 3
+      },
+      "session_id": "r2-bytes-s2-p2-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s2-p2/r2-bytes-s2-p2-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [
+        "Qwen3-8B-4bit"
+      ],
+      "withheld_row_count": 50,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s3-p2/r2-bytes-s3-p2-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s3-p2",
+      "pass_id": 2,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "start": 3
+      },
+      "session_id": "r2-bytes-s3-p2-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s3-p2/r2-bytes-s3-p2-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [],
+      "withheld_row_count": 100,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s4-p2/r2-bytes-s4-p2-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s4-p2",
+      "pass_id": 2,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "start": 3
+      },
+      "session_id": "r2-bytes-s4-p2-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s4-p2/r2-bytes-s4-p2-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [],
+      "withheld_row_count": 100,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s5-p2/r2-bytes-s5-p2-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s5-p2",
+      "pass_id": 2,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "start": 3
+      },
+      "session_id": "r2-bytes-s5-p2-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s5-p2/r2-bytes-s5-p2-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [],
+      "withheld_row_count": 50,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s6-p1/r2-bytes-s6-p1-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s6-p1",
+      "pass_id": 1,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "start": 3
+      },
+      "session_id": "r2-bytes-s6-p1-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s6-p1/r2-bytes-s6-p1-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [],
+      "withheld_row_count": 50,
+      "withheld_store_present": true
+    },
+    {
+      "counting": true,
+      "csv": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s6-p2/r2-bytes-s6-p2-n3-calibration.runs.csv",
+      "group": "bytes",
+      "pack_id": "bytes-s6-p2",
+      "pass_id": 2,
+      "rows_by_role": {
+        "corpus": 18,
+        "end": 3,
+        "midpoint": 1,
+        "start": 3
+      },
+      "session_id": "r2-bytes-s6-p2-n3-calibration",
+      "sidecar": "/Users/edr/night-archive/bytes-stage1-20261111/export/bytes-s6-p2/r2-bytes-s6-p2-n3-calibration.session.json",
+      "verdict": "ACCEPT",
+      "visible_science_models": [],
+      "withheld_row_count": 50,
+      "withheld_store_present": true
+    }
+  ],
+  "verdict": "OK",
+  "warnings": []
+}

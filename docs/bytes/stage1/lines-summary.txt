@@ -1,0 +1,12 @@
+r2-bytes-s1-p2 equals registered line 0 False
+r2-bytes-s2-p2 equals registered line 0 False
+r2-bytes-s3-p2 equals registered line 0 False
+r2-bytes-s4-p2 equals registered line 0 False
+r2-bytes-s5-p2 evaluated 23 False
+r2-bytes-s6-p2-n3 equals registered line 0 False
+r1-bytes-s2-p1 equals registered line 0 False
+r1-bytes-s3-p1 equals registered line 0 False
+r1-bytes-s4-p1 equals registered line 0 False
+r1-bytes-s5-p1 evaluated 10 False
+r2-bytes-s1-p1 equals registered line 0 False
+r2-bytes-s6-p1 equals registered line 0 False
