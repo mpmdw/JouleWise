@@ -977,6 +977,17 @@ class SchedulerBoundaryTests(unittest.TestCase):
                 verify(outer, "control-check")
             self.assertFalse((outer / "control-check").exists())
 
+    def test_full_supervisor_never_restarts_inflight_journal(self):
+        """Predict: an existing inflight supervisor refuses before reading a session or starting a child; interruption cannot silently become success."""
+        from b6_r12_full_supervise import run
+        with tempfile.TemporaryDirectory(prefix="r12-full-supervisor-guard-") as directory:
+            root = Path(directory).resolve()
+            journal = root / "full-reader-supervision.json"
+            journal.write_text('{"status":"inflight"}\n')
+            with self.assertRaisesRegex(ValueError, "never restart"):
+                run(root, "control-reader")
+            self.assertEqual(journal.read_text(), '{"status":"inflight"}\n')
+
 
 class CourierProfileTests(unittest.TestCase):
     def test_original_courier_preserves_stdin_argv_and_injected_clock(self):
