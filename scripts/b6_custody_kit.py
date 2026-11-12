@@ -213,10 +213,14 @@ def cmd_manifest(args):
     for field in ("loop_attempts", "loop_state"):
         value = getattr(args, field)
         if value:
-            loop[field] = {"name": Path(value).name, "sha256": hash_file(no_symlink_components(value))[0]}
+            loop[field] = {"name": relative(Path(value).name), "sha256": hash_file(no_symlink_components(value))[0]}
+    # Cold review M4: both loop files sit in one directory, so one --loop-dir on the copy checks them by name.
+    if len({Path(no_symlink_components(getattr(args, f))).parent for f in ("loop_attempts", "loop_state")
+            if getattr(args, f)}) > 1 or len({v["name"] for v in loop.values()}) != len(loop):
+        refuse("loop_files_split")
     names = copy_paths(sources)
     host = (args.source_host or host_name()).split(".")[0].lower()
-    document = {"schema": MANIFEST_SCHEMA, "host": host, "loop": loop,
+    document = {"schema": MANIFEST_SCHEMA, "host": host, "loop": loop, "loop_state_waived": bool(args.no_loop_state),
                 "sessions": [session_manifest(s, n) for s, n in zip(sources, names)]}
     digest = write_new(args.out, document)
     print("manifest sessions=" + str(len(sources)) + " sha256=" + digest)
@@ -306,6 +310,12 @@ def cmd_verify(args):
         if not args.self_check and str(root / relative(e["copy_path"])) == e["source_path"]:
             refuse("copy_is_source")
         sessions[e["copy_path"]] = verify_session(root, e, tool)
+    loop_dir = no_symlink_components(args.loop_dir)
+    for field, item in sorted(manifest["loop"].items()):
+        if not no_symlink_components(loop_dir / relative(item["name"])).exists():
+            refuse("loop_file_missing")
+        if hash_file(loop_dir / relative(item["name"]))[0] != item["sha256"]:
+            refuse("digest_mismatch")
     totals = {k: sum(s[k] for s in sessions.values()) for k in
               ("files", "bytes", "sums_rows", "sums_rows_compressed", "desk_files")}
     if args.self_check:
@@ -313,7 +323,8 @@ def cmd_verify(args):
               + " bytes=" + str(totals["bytes"]) + " (no receipt written)")
         return 0
     receipt = {"schema": RECEIPT_SCHEMA, "produced_by": RECEIPT_PRODUCER, "verdict": "verified", "manifest_sha256": args.manifest_sha256,
-               "root": str(root), "sessions": sessions, "zstd": tool["zstd"], "totals": totals}
+               "root": str(root), "sessions": sessions, "zstd": tool["zstd"], "totals": totals,
+               "loop_files": sorted(v["name"] for v in manifest["loop"].values())}
     digest = write_new(args.out, receipt)
     print("verify sessions=" + str(len(sessions)) + " files=" + str(totals["files"])
           + " bytes=" + str(totals["bytes"]) + " receipt_sha256=" + digest)
@@ -448,13 +459,17 @@ def main(argv=None):
     m = sub.add_parser("manifest", help="at the source: digests of each archive's pinned files")
     m.add_argument("--session", action="append", required=True, help="an archive root (repeat)")
     m.add_argument("--loop-attempts", required=True)
-    m.add_argument("--loop-state")
+    loop_state = m.add_mutually_exclusive_group(required=True)
+    loop_state.add_argument("--loop-state")
+    loop_state.add_argument("--no-loop-state", action="store_true",
+                            help="record that there is no loop-state file (the run-input document then carries none)")
     m.add_argument("--source-host", help="host name to record (default: this host; for rehearsals only)")
     m.add_argument("--out", required=True, help="new manifest file (refused if it exists)")
     v = sub.add_parser("verify", help="on the copy: rehash every SHA256SUMS row")
     v.add_argument("--manifest", required=True)
     v.add_argument("--manifest-sha256", required=True, help="the digest manifest printed at the source")
     v.add_argument("--root", required=True, help="copy root; each archive at <root>/<copy_path>")
+    v.add_argument("--loop-dir", required=True, help="directory holding the copied loop files, checked by recorded name")
     v.add_argument("--out", help="new receipt file (counts and bytes only)")
     v.add_argument("--self-check", action="store_true",
                    help="rehash the SOURCE tree against its own manifest; no receipt is written (--out refused)")

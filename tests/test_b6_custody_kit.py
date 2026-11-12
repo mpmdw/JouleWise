@@ -36,6 +36,8 @@ def run(*argv):
     argv = [str(a) for a in argv]
     if argv[0] == "manifest" and "--source-host" not in argv:
         argv += ["--source-host", "mbp-test"]   # tests run source and copy on one machine
+    if argv[0] == "manifest" and "--loop-state" not in argv and "--no-loop-state" not in argv:
+        argv += ["--no-loop-state"]
     return run_raw(*argv)
 
 
@@ -109,7 +111,7 @@ class Mini(unittest.TestCase):
 
     def verify(self, out=None, msha=None, manifest=None):
         return run("verify", "--manifest", manifest or self.manifest, "--manifest-sha256", msha or self.msha,
-                   "--root", self.dst, "--out", out or self.receipt)
+                   "--root", self.dst, "--loop-dir", self.dst, "--out", out or self.receipt)
 
     def assertRefused(self, result, code):
         rc, out, err = result
@@ -324,14 +326,75 @@ class Mini(unittest.TestCase):
         # Expected: refused out_exists before the (absent) manifest is read.
         self.receipt.write_text("{}")
         self.assertRefused(run("verify", "--manifest", self.base / "absent.json", "--manifest-sha256", "0" * 64,
-                               "--root", self.dst, "--out", self.receipt), "out_exists")
+                               "--root", self.dst, "--loop-dir", self.dst, "--out", self.receipt), "out_exists")
+
+    # -- loop files (cold review M4) --
+
+    def loop_manifest(self, *extra, state=True):
+        state_file = self.src / "state.json"
+        write(state_file, '{"state": 1}\n')
+        out = self.base / ("loop-manifest-%d.json" % len(list(self.base.glob("loop-manifest-*"))))
+        flag = ["--loop-state", state_file] if state else []
+        return out, run("manifest", "--session", self.a, "--loop-attempts", self.attempts, *flag, *extra, "--out", out)
+
+    def test_manifest_requires_a_loop_state_decision(self):
+        # Expected (M4): usage error (exit 2) when neither --loop-state nor --no-loop-state is given;
+        # both together are also a usage error.
+        for extra in ([], ["--loop-state", self.attempts, "--no-loop-state"]):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                run_raw("manifest", "--session", str(self.a), "--loop-attempts", str(self.attempts), *extra,
+                        "--source-host", "h", "--out", str(self.base / "x.json"))
+            self.assertEqual(caught.exception.code, 2)
+
+    def test_no_loop_state_is_recorded_and_inputs_carry_none(self):
+        # Expected: the manifest records loop_state_waived true and no loop_state; inputs `external` has only attempts.
+        document = json.loads(self.manifest.read_bytes())
+        self.assertIs(document["loop_state_waived"], True)
+        self.assertEqual(set(document["loop"]), {"loop_attempts"})
+
+    def test_loop_state_is_digested_and_verified_on_the_copy(self):
+        # Expected: with --loop-state the manifest records both files; verify refuses a missing and a changed copy.
+        out, (rc, mout, err) = self.loop_manifest()
+        self.assertEqual((rc, err), (0, ""))
+        document = json.loads(out.read_bytes())
+        self.assertEqual(document["loop"]["loop_state"], {"name": "state.json", "sha256": sha(self.src / "state.json")})
+        self.assertIs(document["loop_state_waived"], False)
+        msha = mout.strip().rsplit("=", 1)[1]
+        shutil.copyfile(self.src / "state.json", self.dst / "state.json")
+        self.assertEqual(self.verify(manifest=out, msha=msha, out=self.base / "lr1.json")[0], 0)
+        (self.dst / "state.json").write_text('{"state": 2}\n')
+        self.assertRefused(self.verify(manifest=out, msha=msha, out=self.base / "lr2.json"), "digest_mismatch")
+        (self.dst / "state.json").unlink()
+        self.assertRefused(self.verify(manifest=out, msha=msha, out=self.base / "lr3.json"), "loop_file_missing")
+
+    def test_attempts_file_missing_or_changed_on_the_copy(self):
+        # Expected (M4): loop_file_missing, then digest_mismatch, for the attempts file.
+        (self.dst / "attempts.jsonl").write_text('{"session_id": "t"}\n')
+        self.assertRefused(self.verify(), "digest_mismatch")
+        (self.dst / "attempts.jsonl").unlink()
+        self.assertRefused(self.verify(out=self.base / "r9.json"), "loop_file_missing")
+
+    def test_loop_files_in_two_directories_are_refused(self):
+        # Expected: loop_files_split, so a single --loop-dir covers both files.
+        other = self.base / "other-loop"
+        write(other / "state.json", "{}\n")
+        rc = run("manifest", "--session", self.a, "--loop-attempts", self.attempts, "--loop-state", other / "state.json",
+                 "--out", self.base / "split.json")
+        self.assertRefused(rc, "loop_files_split")
+
+    def test_verify_requires_loop_dir(self):
+        # Expected: usage error (exit 2) without --loop-dir.
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            run("verify", "--manifest", self.manifest, "--manifest-sha256", self.msha, "--root", self.dst,
+                "--out", self.base / "x.json")
+        self.assertEqual(caught.exception.code, 2)
 
     # -- source versus copy (cold review M2) --
 
     def test_verify_refuses_the_source_tree(self):
         # Expected: copy_is_source when <root>/<copy_path> is the manifest's source_path, and no receipt.
         rc = run("verify", "--manifest", self.manifest, "--manifest-sha256", self.msha, "--root", self.src,
-                 "--out", self.base / "src-receipt.json")
+                 "--loop-dir", self.src, "--out", self.base / "src-receipt.json")
         self.assertRefused(rc, "copy_is_source")
         self.assertFalse((self.base / "src-receipt.json").exists())
 
@@ -339,7 +402,7 @@ class Mini(unittest.TestCase):
         # Expected: copy_on_source_host for a manifest that records this host (re-running `manifest` on the copy).
         local = self.base / "local-manifest.json"
         rc, out, err = run_raw("manifest", "--session", self.ca, "--session", self.cb,
-                               "--loop-attempts", self.attempts, "--out", local)
+                               "--loop-attempts", self.attempts, "--no-loop-state", "--out", local)
         self.assertEqual((rc, err), (0, ""))
         self.assertEqual(json.loads(local.read_bytes())["host"], kit.host_name())
         self.assertRefused(self.verify(manifest=local, msha=sha(local)), "copy_on_source_host")
@@ -349,21 +412,21 @@ class Mini(unittest.TestCase):
         # a changed source byte is refused digest_mismatch; --out is refused.
         before = sorted(p.name for p in self.base.iterdir())
         rc, out, err = run("verify", "--self-check", "--manifest", self.manifest, "--manifest-sha256", self.msha,
-                           "--root", self.src)
+                           "--root", self.src, "--loop-dir", self.src)
         self.assertEqual((rc, err), (0, ""))
         self.assertIn("no receipt written", out)
         self.assertEqual(sorted(p.name for p in self.base.iterdir()), before)
         self.assertRefused(run("verify", "--self-check", "--manifest", self.manifest, "--manifest-sha256", self.msha,
-                               "--root", self.src, "--out", self.base / "r.json"), "self_check_writes_no_receipt")
+                               "--root", self.src, "--loop-dir", self.src, "--out", self.base / "r.json"), "self_check_writes_no_receipt")
         p = self.a / "sources/runs/r1/data.bin"
         p.write_bytes(b"y" + p.read_bytes()[1:])
         self.assertRefused(run("verify", "--self-check", "--manifest", self.manifest, "--manifest-sha256", self.msha,
-                               "--root", self.src), "digest_mismatch")
+                               "--root", self.src, "--loop-dir", self.src), "digest_mismatch")
 
     def test_verify_needs_out_unless_self_check(self):
         # Expected: verify_out_missing.
         self.assertRefused(run("verify", "--manifest", self.manifest, "--manifest-sha256", self.msha,
-                               "--root", self.dst), "verify_out_missing")
+                               "--root", self.dst, "--loop-dir", self.dst), "verify_out_missing")
 
     # -- manifest refusals --
 
@@ -698,9 +761,10 @@ class Mini(unittest.TestCase):
         self.assertEqual([s["copy_path"] for s in json.loads(manifest.read_bytes())["sessions"]],
                          ["S1/archive", "S2/archive"])
         shutil.copytree(src, dst, symlinks=True)
+        shutil.copyfile(self.attempts, dst / "attempts.jsonl")
         receipt = self.base / "rep-receipt.json"
         rc, _, err = run("verify", "--manifest", manifest, "--manifest-sha256", out.strip().rsplit("=", 1)[1],
-                         "--root", dst, "--out", receipt)
+                         "--root", dst, "--loop-dir", dst, "--out", receipt)
         self.assertEqual((rc, err), (0, ""))
         mapping = self.base / "rep-mapping.json"
         mapping.write_text(json.dumps(mapping_for(["S1/archive", "S2/archive"])))
@@ -730,8 +794,10 @@ class Mini(unittest.TestCase):
             done = subprocess.run(["rsync", "-aR", *parts, str(dst) + "/"], cwd=src, capture_output=True, text=True)
             self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(sorted(p.name for p in dst.iterdir()), ["S1", "S2"])
+        done = subprocess.run(["rsync", "-a", str(self.attempts), str(dst) + "/"], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
         rc, _, err = run("verify", "--manifest", manifest, "--manifest-sha256", out.strip().rsplit("=", 1)[1],
-                         "--root", dst, "--out", self.base / "rs-receipt.json")
+                         "--root", dst, "--loop-dir", dst, "--out", self.base / "rs-receipt.json")
         self.assertEqual((rc, err), (0, ""))
 
 
@@ -754,7 +820,7 @@ class NoContentLeak(unittest.TestCase):
             msha = streams[-1][1].strip().rsplit("=", 1)[1]
             shutil.copytree(src, dst, symlinks=True)
             streams.append(run("verify", "--manifest", manifest, "--manifest-sha256", msha, "--root", dst,
-                               "--out", receipt))
+                               "--loop-dir", dst, "--out", receipt))
             pins = ["--manifest", manifest, "--manifest-sha256", msha, "--verify-receipt", receipt,
                     "--verify-receipt-sha256", sha(receipt)]
             streams.append(run("inputs", *pins, "--list-names", "b6-alpha-r1"))
@@ -767,7 +833,7 @@ class NoContentLeak(unittest.TestCase):
             p = dst / "b6-alpha-r1/sources/meter/stream-1.jsonl"
             p.write_bytes(p.read_bytes().replace(b"PLANTED", b"PLANTEX"))
             streams.append(run("verify", "--manifest", manifest, "--manifest-sha256", msha, "--root", dst,
-                               "--out", base / "r2.json"))
+                               "--loop-dir", dst, "--out", base / "r2.json"))
             self.assertEqual(streams[-1][0], 4)
             outputs = b"".join((s[1] + s[2]).encode() for s in streams)
             outputs += b"".join(f.read_bytes() for f in (manifest, receipt, doc))
@@ -801,7 +867,7 @@ class EndToEnd(unittest.TestCase):
         shutil.copyfile(cls.attempts, attempts)
         receipt = base / "receipt.json"
         cls.verify_run = run("verify", "--manifest", manifest, "--manifest-sha256", msha, "--root", copy,
-                             "--out", receipt)
+                             "--loop-dir", copy, "--out", receipt)
         sealed = json.loads(cls.document.read_bytes())["sessions"]
         mapping = {"sessions": {name: {k: pin[k] for k in ("meter_streams", "contention_journal",
                                                              "clock_journal", "copied_records") if k in pin}
