@@ -3,15 +3,23 @@
 
 Stdlib only. It hashes bytes and reads file NAMES. It never parses or prints
 the content of a session file, with one exception: the path column of each
-archive's sources/SHA256SUMS (read only after its digest matches the source
-manifest).
+archive's sources/SHA256SUMS (parsed from the same bytes whose digest is
+checked: at the source against itself, on the copy against the source manifest).
 
-  manifest  (at the source)  digests of the pinned files of each archive
+  manifest  (at the source)  digests of the pinned files of each archive; refuses a
+                             sources/ file set that differs from its own SHA256SUMS;
+                             prints per-session counts (never a digest but its own)
   verify    (on the copy)    rehash every SHA256SUMS row; no missing, extra
-                             or changed file; writes a counts-only receipt
+                             or changed file; refuses the source tree and the source
+                             host; writes a counts-only receipt (--self-check: none)
   inputs    (on the Air)     the run-input document for
                              scripts/independent_recompute_b6.py; every digest
-                             comes from the SOURCE manifest, never the copy
+                             comes from the SOURCE manifest, never the copy; the
+                             manifest and the receipt are each pinned by an
+                             out-of-band digest
+
+Outputs are created mode 0600 and only in a directory without group/other bits
+(RL-100 item 2: the manifest and run-input document hold withheld/ digests).
 
 Exit 0 on success, 4 on a refusal ("refused: <code>" on stderr), 2 on usage.
 """
@@ -529,7 +537,7 @@ def main(argv=None):
     i.add_argument("--l9-audit", choices=("not_run", "completed"))
     i.add_argument("--out", help="new run-input document")
     i.add_argument("--list-names", metavar="COPY_PATH",
-                   help="print the authenticated names of one session (SHA256SUMS path column) and exit")
+                   help="print the names one session's mapping may cite (RL-100 item 1) and exit")
     args = parser.parse_args(argv)
     try:
         return {"manifest": cmd_manifest, "verify": cmd_verify, "inputs": cmd_inputs}[args.command](args)
