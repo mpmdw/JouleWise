@@ -146,25 +146,33 @@ makes every manifest-hashed file citable again), 50 killed. Line numbers are at 
 | 366, 371, 376 | session_unknown, inputs_arguments_missing, mapping_session_mismatch | test_list_names_unknown_session; test_inputs_arguments_missing; test_mapping_session_mismatch |
 | RL-100 | citable names (all manifest-hashed files made citable) | test_mapping_path_hashed_but_not_emitted, test_list_names |
 
-## Operator runbook (placeholders in angle brackets)
+## Operator runbook (placeholders in angle brackets; final flags after the cold review)
 
 ```
-# CUSTODY: the manifest and run-input document hold digests of withheld/ files. They stay in the mode-700 custody directory and are never committed, mailed or pasted into RUN_STATE; only their own SHA-256 values travel.
-# SOURCE (MBP desk gap, nothing armed): manifest, then note the printed sha256 OUT OF BAND (its digest only).
-python3.13 -B scripts/b6_custody_kit.py manifest --session <sessions>/<id>/archive [...x each session] \
-  --loop-attempts <loop>/attempts.jsonl --loop-state <loop>/state.json --out <desk>/b6-custody-manifest.json
+# CUSTODY: the manifest and run-input document hold digests of withheld/ files. They stay in the mode-700 custody directory and are never
+# committed, mailed or pasted into RUN_STATE; only their own SHA-256 values travel. The kit creates every output 0600 and refuses (out_dir_mode)
+# an output directory with group or other bits. Manifest, loop, scratch and copy paths must sit under /Users or /Volumes: the kit refuses
+# a path through the /tmp or /var symlinks (cold review L4).
+# SOURCE (MBP desk gap, nothing armed): manifest. It prints one "session <copy_path> files= bytes= desk_files=" line per session, then
+# its own sha256 (note that OUT OF BAND; nobody needs to open the file). --loop-state is required unless --no-loop-state (recorded) is stated;
+# both loop files must sit in one directory. --source-host is for rehearsals only.
+python3.13 -I scripts/b6_custody_kit.py manifest --session <sessions>/<id>/archive [...x each session] \
+  --loop-attempts <loop>/attempts.jsonl --loop-state <loop>/state.json --out <dir mode 700>/b6-custody-manifest.json
+# Optional, at the source: rehash the source against its own manifest. Writes no receipt; reads every byte (decompresses .zst rows).
+python3.13 -I scripts/b6_custody_kit.py verify --self-check --manifest <dir>/b6-custody-manifest.json --manifest-sha256 <printed> --root <sessions-parent-of-ids> --loop-dir <loop>
 # COPY (cold review H1): per session, from the sessions directory, with RELATIVE paths and -R. The stock macOS rsync (openrsync 2.6.9)
 # ignores the "/./" anchor, so the earlier absolute form landed the files under <dest>/Volumes/... and verify refused session_missing.
 # Name <id>/archive.desk only where it exists (an absent folder makes rsync exit 23). The directory is made on the Air, mode 700.
-# Paths for the manifest, loop files and scratch must sit under /Users or /Volumes (the kit refuses a path through /tmp or /var).
 ssh <air> 'mkdir -m 700 /Volumes/JW-EXT/b6-custody'
 cd <sessions> && rsync -aR <id>/archive [<id>/archive.desk] <air>:/Volumes/JW-EXT/b6-custody/     # once per session; expected exit 0
 rsync -a <loop>/attempts.jsonl <loop>/state.json <desk>/b6-custody-manifest.json <air>:/Volumes/JW-EXT/b6-custody/
 # Before the real copy: rsync --version; zstd --version on the source host, and one synthetic two-session rehearsal source -> Air.
-# AIR: verify, write mapping.json from --list-names, emit inputs, run the recompute on the copy.
-python3.13 -B scripts/b6_custody_kit.py verify --manifest /Volumes/JW-EXT/b6-custody/b6-custody-manifest.json --manifest-sha256 <sha from SOURCE> --root /Volumes/JW-EXT/b6-custody --out <run>/verify-receipt.json
-python3.13 -B scripts/b6_custody_kit.py inputs --manifest <...> --verify-receipt <run>/verify-receipt.json --list-names <id>/archive
-python3.13 -B scripts/b6_custody_kit.py inputs --manifest <...> --verify-receipt <...> --mapping <run>/mapping.json --l9-audit not_run --out <run>/run-inputs.json
+# AIR: verify (refuses the source tree and a manifest recorded on this host), write mapping.json from --list-names, emit inputs (both
+# out-of-band digests), run the recompute on the copy. Do not move the custody directory after `inputs`: the document keys sessions by
+# absolute copy path (cold review L7); if it moves, re-run verify and inputs.
+python3.13 -I scripts/b6_custody_kit.py verify --manifest /Volumes/JW-EXT/b6-custody/b6-custody-manifest.json --manifest-sha256 <sha from SOURCE> --root /Volumes/JW-EXT/b6-custody --loop-dir /Volumes/JW-EXT/b6-custody --out <run>/verify-receipt.json
+python3.13 -I scripts/b6_custody_kit.py inputs --manifest <...> --manifest-sha256 <sha from SOURCE> --verify-receipt <run>/verify-receipt.json --verify-receipt-sha256 <receipt_sha256 printed by verify> --list-names <id>/archive
+python3.13 -I scripts/b6_custody_kit.py inputs --manifest <...> --manifest-sha256 <...> --verify-receipt <...> --verify-receipt-sha256 <...> --mapping <run>/mapping.json --l9-audit not_run --out <run>/run-inputs.json
 python3.13 -B scripts/independent_recompute_b6.py block --session /Volumes/JW-EXT/b6-custody/<id>/archive [...] --closed --loop-attempts /Volumes/JW-EXT/b6-custody/attempts.jsonl --loop-state /Volumes/JW-EXT/b6-custody/state.json --inputs <run>/run-inputs.json --inputs-sha256 <printed> --workers <n> --restricted-out <...> --public-out <...>
 ```
 
