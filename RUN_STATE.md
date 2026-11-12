@@ -1042,6 +1042,36 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+290. **Magistrate 97d3961c (headless, Opus 5.5, interim lead under item 289), 2026-11-12 09:50 PST: Track A step 1 in progress. #740 and #739 MERGED into presign (now `10c026401`). #741 had one new CI failure, fixed test-only; its re-run is finishing. #738 had one stale test-fixture entry set, fixed test-only; its CI re-runs. Nothing armed, nothing capturing.**
+
+```pointer
+owner: magistrate (interim lead)
+wait: CI on #741 (head 389b363bb, shards 4/7/10 pending, about 11:10 PST) and #738 (head 5ce8b5df6, full run, about 12:30 PST)
+deadline: 2026-11-12T19:26:00-08:00
+on_early_or_refused: as item 289
+next_observable: #741 merged and the merged-head module checks (item 289 step 1); then the Part A smoke 2 item after 13:15; BYTES fast-forward + commitment when #738 is green
+```
+
+- **CI comparison method.** Each failing job's log was read with `gh api …/actions/jobs/<id>/logs`. Its `FAIL:`/`ERROR:` test ids were then compared with the 22 ids of presign baseline run 43226060105. The comparison was by test id, not by shard, because shard membership moves between runs.
+- **#740** (run 43238750506) and **#739** (run 43234457975, complete at 09:26, before RL-91's 12:00 limit): no test id outside the baseline. Shard 10 passed on both; it takes about 2 h 40 min, as in the baseline. Merged with `gh pr merge --merge`: #740 → `c2648fdc3`, #739 → `10c026401`. #741 still merge-trees clean onto `10c026401`.
+- **#741, first run (43247231593, head `0d3b8003b`), two ids outside the baseline:**
+  - `test_host_command_sites…test_tracked_command_sites_match_reviewed_allowlist` (shard 9). The port added `pmset displaysleepnow` in `r1_arm.display_dwell` (the existing non-veto display-sleep step, flag `r1.display_sleep_failed`) without its allowlist rows. **Fixed** in `389b363bb`: two rows added to `tests/host_command_sites.json`, test only, module OK locally. Decision: a missing registry row is fixable, so I fixed it rather than stop Track A. No byte the night runs changed.
+  - `test_agent_identity…test_an_agent_named_process_is_still_an_agent` (shard 3). This is the baseline's census-matcher defect class: a sibling test's waiter `…/b5-gamma-attempt3/custody/run_campaign` was still in the process list. #741 does not touch agent identity. It did not recur on the re-run, so it is a flake of the baseline defect, not a new failure.
+  - **Re-run 43257905641 (head `389b363bb`)**, so far: shards 2, 3, 5, 6, 8, 11 and 12 show baseline ids only, and shard 9 passes. Shards 4, 7 and 10 are pending.
+- **#738, run 4 (43248645368, head `000a716de`), one real failure:** `test_bytes_coverage_map…test_every_output_field_is_compared_or_explicitly_exempt` (shard 8), "stale coverage decisions must be removed", on eight bare `…/flags` paths.
+  - Cause: the inventory yields `…/flags` only for an EMPTY list. Since `000a716de` put every chain on the RL-7a fixture, those lists are never empty. Their `…/flags/[]` forms stay listed and compared.
+  - Run 3 never reached this assertion.
+  - **Fixed** in `5ce8b5df6`, which deletes the eight entries (fixture only). CI is re-running, and the module is running locally.
+  - #738's gate-ledger red is unfilled rows 2 to 4, to be filled with RUN evidence when CI is green.
+- **BYTES pre-checks (read-only; hashes and counts only):** all pass as the commitment draft states.
+  - G1: `READY_TO_COMMIT 0 1e78224cd… False True`, `[0, 0]`.
+  - G2: `$PRED` twice, `IDENTICAL`.
+  - G3: `$W` at `1e78224cd`, 0 dirty paths, `$PIN`, `$TWIN`.
+  - G7: 0, 0, 0.
+  - G4/G5 against `docs/2026-11-12-bytes-by-agree-1` @ `00596b1ea`, which stacks directly on `000a716de` and is docs-only (2 files): `SAME_BYTES`, 0 code paths, exactly the 13 listed paths, and BY-BLIND-1, BY-AGREE-1 and the sentence each counted 1.
+  - Because of `5ce8b5df6`, BY-AGREE-1 joins the run line by a docs-only MERGE commit (item 289 allows "fast-forward or merge"). The G4 path list stays 13, since `output_coverage.json` is already on it.
+- **Mail:** Ed had no unread mail at 08:18 or 09:35. The directive list is unchanged (standing issues only).
+
 289. **Laptop lead (interactive session 52877569, Opus 5.5), 2026-11-12 08:11 PST: THE AIR IS OFFLINE (Ed is moving it). MAGISTRATE: until the Air's lead posts again, YOU are the interim lead for the steps below. Ed authorized this ("pass that work to the mbp"). Read `docs/process_traces/2026-11-12-air-offline-handoff/RESUME.md` first. Do the steps in order. An agent may run on this Mac only when nothing is capturing; every launch is still your LAST action, and you exit at once.**
 
 ```pointer
