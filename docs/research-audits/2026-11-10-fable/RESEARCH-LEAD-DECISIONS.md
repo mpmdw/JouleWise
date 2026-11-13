@@ -6814,6 +6814,123 @@ night's commit.
 **Lead note (2026-11-12):** numbered RL-111T to RL-115T in the seat file, renumbered RL-116 to RL-120 here because RL-111 to RL-115 (decision request 65) landed first; text otherwise verbatim.
 
 
+# Decision request 66: an excluded drift-screen run is read as a compared run (2026-11-12 23:24 PST)
+
+**Read.** The "Finding" in `docs/run_reports/2026-11-12-b6-rl113-115.md` on
+`fix/2026-11-12-b6-rl113-115` @ `1b08ba97a`, and the code it cites, myself, in detached worktrees at
+`04eacce2a` and `1b08ba97a` (removed): `Session.reference`, `Session.member`, `Session.screen`,
+`compared_runs`, `run_energies`, `stops_comparison` and `recompute_block` in
+`scripts/independent_recompute_b6.py`; `check_block` line 54 in `joulewise/b6_analysis_check.py`;
+`Window.select` and `Member.__init__` in the pinned `scripts/independent_recompute_b5.py`. Synthetic fixtures
+only. No custody, archive, session or outcome path was opened.
+
+## RL-121. An excluded screen run is not a compared run. `Session.reference` decides exclusion before it marks the run
+
+**What the code does** (`04eacce2a`; unchanged at `1b08ba97a`).
+
+- `Session.reference` calls `self.member(run_id, which, compared=True)` and only then tests
+  `run_id not in self.excluded`. Every start, midpoint and end reference on the roster, and every corpus run
+  read before the cap of 12 clean runs is reached, enters `compared_run_ids`, excluded or not.
+- The first program lists the right set. `compared_runs` is "every run of a kept unit, the surviving screen
+  references and the clean corpus" (lead decision 2's contract), and `screen` puts only clean runs in
+  `survivor_ids` and `corpus_ids`.
+- The science side is already consistent. `Window.select` drops a unit with an excluded member before it calls
+  `member`, so an excluded science run is never read and never marked. The screen is the only place an
+  excluded run is read.
+
+Two things follow from the wrong mark. I reproduced both on `04eacce2a` and on `1b08ba97a` with a synthetic
+block of ALPHA r1, BETA r1 and GAMMA r1, one run excluded `member.status_not_succeeded` in the BETA session.
+
+| Case | Result today |
+|---|---|
+| Start reference excluded, bundle usable | 3 failed `run_phase_energy` rows, `option_c_disagrees` on all 3 sessions, exit 3 |
+| Corpus run excluded, bundle usable | the same |
+| Midpoint excluded, bundle usable | the same |
+| Start reference excluded, `raw/powermetrics.plist` absent | gate passes, but `trace_plist_missing` on that run is a stop flag: `comparison_stopped` true, exit 3 |
+| No exclusion (control) | passes, exit 0 |
+
+- **The gate disagrees.** `check_block` line 54 computes energies for every usable run in `compared_run_ids`.
+  The first program does not list the excluded run, the projection gives `None`, and the three rows fail. The
+  failed rows are also counted in `compared` (1011 with the run, 1008 without).
+- **The comparison stops.** `stops_comparison` treats a trace flag as a stop when its run is in
+  `compared_run_ids`. An excluded reference with no trace is the ordinary shape of a run that failed, and it
+  stops the comparison for the block. The builder's report does not have this arm.
+
+**Ruling.** The second side is not wrong and the first program's list is not wrong. The defect is the mark in
+`Session.reference`, which both of them read. The first program's list is the contract and stays as it is.
+
+The first program does not start listing excluded runs. An excluded run feeds no reported quantity, so comparing
+its energy would be a new compared quantity, which RL-102 ruled out. It is also the run most likely to have
+damaged data, and a 1 mJ bar on it would stop the block on a run the analysis has already set aside.
+
+`check_block` does not get its own exclusion test either. One place decides which screen runs are compared.
+
+**Required behaviour** (`scripts/independent_recompute_b6.py`, `Session.reference`).
+
+1. Exclusion is decided before the run is marked. A run in `self.excluded` is read as now, is not added to
+   `compared_run_ids`, and returns `None` as now. In practice the `compared` argument becomes
+   `run_id not in self.excluded`.
+2. The member is still built for an excluded screen run. The reads, the file census and the flags raised while
+   reading it do not change. Only the mark changes.
+3. A run that is not excluded stays marked, whether or not it turns out clean. So:
+   - a non-excluded reference with a missing or unreadable trace still stops the comparison;
+   - a non-excluded, usable reference that the screen drops (wrong model, or no finite request energy) still
+     fails the gate. That is not a registered state. It stops and comes to me.
+4. `check_block`, `compared_runs`, `stops_comparison` and the twins do not change.
+5. With no excluded screen run in the block, the restricted and public outputs are the same as before apart
+   from `program_sha256`.
+
+I checked the one-line change in item 1 by patching `Session.reference` in the probe: the three excluded-usable
+cases pass with exit 0 and 1008 (or 1011 for the corpus case) compared rows, the excluded-no-trace case exits 0
+with `trace_plist_missing` present and not a stop, the non-excluded no-trace case still exits 3, and the
+non-excluded wrong-model case still fails the gate.
+
+**Tests** (R12 line, `tests/independent_recompute/test_block6.py`; a 3-session synthetic block, the run
+excluded through `build_session(exclude=...)` with the acceptance record's `neg8.survivors` set to agree).
+
+- `test_excluded_screen_run_is_not_compared`: once each for a start reference, the midpoint and a corpus run,
+  bundle left usable. Exit 0, `option_c.pass` true, no `option_c_disagrees`, the run id absent from the second
+  side's `run_phase_energy_j` and from the first program's, and the `run_phase_energy` `compared` count equal
+  to the first program's row count for the block.
+- `test_excluded_screen_run_without_trace_does_not_stop`: a start reference excluded and its
+  `raw/powermetrics.plist` removed. The `trace_plist_missing` flag is present with `stops_comparison` false,
+  `comparison_stopped` is false, exit 0.
+- `test_unexcluded_screen_run_without_trace_still_stops`: the same without the exclusion. `stops_comparison`
+  true, exit 3.
+
+The first two must fail on `1b08ba97a` before the change. The third passes before and after; it pins item 3.
+
+**Pin request and paper.**
+
+- The S-14 pin request's paragraph on the comparison (RL-113 term 5) gains one sentence: an excluded screen run
+  is read but is not a compared run, and its trace flags do not stop the comparison.
+- No R3 label changes. The run-energy label already describes the first program's list.
+- The agreement sentence is unaffected: these rows were never agreeing rows, and after the fix they are not
+  rows.
+
+**Who changes what.** The R12 line, on `fix/2026-11-12-b6-rl113-115`, in the same round as RL-113 to RL-115 and
+the three test additions from my cold review (`/Volumes/JW-EXT/scratch/fable-rev-rl113-115.md`). I review the
+delta cold before it merges into the R12 line.
+
+**Gates.** The S-14 pin: yes. The pinned program changes, and the state is a registered one that is easy to
+reach: any member-level exclusion on a reference or corpus run. After the pin the only way out would be a change
+to pinned bytes with the data in hand, the outcome RL-114 was written to avoid. Not the custody verify. Not W1
+signing.
+
+**Blind status.** Blind to Block 6. I do not know whether any Block 6 session has an excluded reference or
+corpus run. Block-5-aware. The ruling rests on which runs `Session.reference` marks.
+
+## Summary of gates
+
+| Ruling | Change | Owner | W1 signing | S-14 pin | Custody verify |
+|---|---|---|---|---|---|
+| RL-121 | `Session.reference` marks a screen run as compared only if it is not excluded; three tests; one sentence in the pin request | R12 line (same fix branch) | No | Yes | No |
+
+## Open-items table: changes
+
+- Add: "RL-121 delta on `fix/2026-11-12-b6-rl113-115`", waiting on the builder, then my cold review.
+
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
