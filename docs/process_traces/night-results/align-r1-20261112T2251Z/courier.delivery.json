@@ -1,0 +1,8 @@
+{
+  "commit": "e25753a044a8e4af67d2b0b1644f3a8a8f4ef612",
+  "delivered_epoch_s": 1794550065.32439,
+  "plan_id": "align-r1-20261112T2251Z",
+  "ref": "refs/heads/night-results/align-r1-20261112T2251Z",
+  "result_sha256": "1827aeedfb781aee94d0b433b7486bf40a914231cbe00e11e1da43187d1a1acd",
+  "transport": "git-push"
+}
