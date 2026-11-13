@@ -41,6 +41,7 @@ HARVEST = "harvest.json"
 ACCEPTANCE = "derived/b6-acceptance.json"
 INSIDE_LOG = "compression.jsonl"
 DESK_SUFFIX = ".desk"
+SYNTHETIC_MARKER = "SYNTHETIC_BLOCK6_FIXTURE"   # the recompute's marker name; a name check only
 DESK_LOG = "compression.jsonl"
 FAMILIES = ("monitor_cost", "arm_host", "battery_phase", "subject_temperature",
             "reference_history", "attempt_history", "g10_history", "block5_codes_carried")
@@ -235,6 +236,14 @@ def session_manifest(source, copy_path):
             "file_count": len(files), "total_bytes": sum(files.values())}
 
 
+def same_tree(a, b):
+    """Identity, not spelling (cold review R2 M1): case-respelled and `..` roots are the same directory."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
 def located(copy_path, function, *arguments):
     WHERE["session"] = copy_path
     return function(*arguments)
@@ -257,7 +266,9 @@ def cmd_manifest(args):
             if getattr(args, f)}) > 1 or len({v["name"] for v in loop.values()}) != len(loop):
         refuse("loop_files_split")
     names = copy_paths(sources)
-    host = (args.source_host or host_name()).split(".")[0].lower()
+    if args.rehearsal_source_host and not all((s / SYNTHETIC_MARKER).is_file() for s in sources):
+        refuse("source_host_on_real_archive")   # cold review R2 M1: the override exists for synthetic trees only
+    host = (args.rehearsal_source_host or host_name()).split(".")[0].lower()
     document = {"schema": MANIFEST_SCHEMA, "host": host, "loop": loop, "loop_state_waived": bool(args.no_loop_state),
                 "sessions": [located(n, session_manifest, s, n) for s, n in zip(sources, names)]}
     digest = write_new(args.out, document)
@@ -354,7 +365,7 @@ def cmd_verify(args):
     tool = {"zstd": None}
     sessions = {}
     for e in manifest["sessions"]:
-        if not args.self_check and str(root / relative(e["copy_path"])) == e["source_path"]:
+        if not args.self_check and same_tree(root / relative(e["copy_path"]), e["source_path"]):
             refuse("copy_is_source")
         sessions[e["copy_path"]] = located(e["copy_path"], verify_session, root, e, tool)
     loop_dir = no_symlink_components(args.loop_dir)
@@ -371,9 +382,10 @@ def cmd_verify(args):
         return 0
     receipt = {"schema": RECEIPT_SCHEMA, "produced_by": RECEIPT_PRODUCER, "verdict": "verified", "manifest_sha256": args.manifest_sha256,
                "root": str(root), "sessions": sessions, "zstd": tool["zstd"], "totals": totals,
+               "loop_state_waived": bool(manifest.get("loop_state_waived")),
                "loop_files": sorted(v["name"] for v in manifest["loop"].values())}
     digest = write_new(args.out, receipt)
-    print("verify sessions=" + str(len(sessions)) + " files=" + str(totals["files"])
+    print("verify sessions=" + str(len(sessions)) + " loop_files=" + str(len(manifest["loop"])) + " files=" + str(totals["files"])
           + " bytes=" + str(totals["bytes"]) + " receipt_sha256=" + digest)
     return 0
 
@@ -476,6 +488,8 @@ def session_pin(archive, entry, mapping, names):
 
 def cmd_inputs(args):
     manifest, receipt, root = verified_context(args)
+    if manifest.get("loop_state_waived") and not args.accept_no_loop_state:
+        refuse("loop_state_waived")   # cold review R2 M2: a waiver must be accepted by name, never silently
     by_path = {e["copy_path"]: e for e in manifest["sessions"]}
     if args.list_names is not None:
         if args.list_names not in by_path:
@@ -496,7 +510,8 @@ def cmd_inputs(args):
     document = {"host": "Air", "l9_audit": args.l9_audit, "sessions": sessions,
                 "external": {k: v["sha256"] for k, v in manifest["loop"].items()}}
     digest = write_new(args.out, document)
-    print("inputs sessions=" + str(len(sessions)) + " sha256=" + digest)
+    print("inputs sessions=" + str(len(sessions)) + (" loop_state=waived" if manifest.get("loop_state_waived") else "")
+          + " sha256=" + digest)
     return 0
 
 
@@ -516,7 +531,8 @@ def main(argv=None):
     loop_state.add_argument("--loop-state")
     loop_state.add_argument("--no-loop-state", action="store_true",
                             help="record that there is no loop-state file (the run-input document then carries none)")
-    m.add_argument("--source-host", help="host name to record (default: this host; for rehearsals only)")
+    m.add_argument("--rehearsal-source-host", help="host name to record (default: this host); refused unless every "
+                   "--session root carries the SYNTHETIC_BLOCK6_FIXTURE marker")
     m.add_argument("--out", required=True, help="new manifest file (refused if it exists)")
     v = sub.add_parser("verify", help="on the copy: rehash every SHA256SUMS row")
     v.add_argument("--manifest", required=True)
@@ -532,6 +548,8 @@ def main(argv=None):
     i.add_argument("--verify-receipt", required=True)
     i.add_argument("--verify-receipt-sha256", required=True, help="the receipt_sha256 verify printed")
     i.add_argument("--mapping", help="person-written mapping.json")
+    i.add_argument("--accept-no-loop-state", action="store_true",
+                   help="accept a manifest that waived the loop-state file (the recompute then runs without re-harvest corrections)")
     i.add_argument("--l9-audit", choices=("not_run", "completed"))
     i.add_argument("--out", help="new run-input document")
     i.add_argument("--list-names", metavar="COPY_PATH",
