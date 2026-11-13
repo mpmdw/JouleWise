@@ -17,10 +17,10 @@ Lead (Opus 5.5), 2026-11-13 15:56 PST. RL-142 §2 item 5's "merge on both green"
 | test_mint_policy_resolver_guard | 4 | base-inherent, reproduced on 3551e1a7d | addendum §3 M1 |
 | test_b6_r12_session_fixture | 8 | platform (passes on macOS at r2, 86 OK/14 skipped) | addendum §1 item 2 |
 | test_git_fixture_maintenance | 1 | base-inherent, reproduced on 3551e1a7d (macOS: same 1 FAIL at head and base) | premerge-macos.log §C |
-| test_install_night_agent | 55 | platform (macOS at r2: Ran 67, OK; base same) | premerge-macos.log §C |
+| test_install_night_agent | 52 | platform (macOS at r2: Ran 67, OK; base same) | premerge-macos.log §C |
 | test_run_night (NightDriverTests installer ids) | 8 | platform (none of the 8 fails on macOS at r2) | premerge-macos.log §C |
 
-Unexplained: none. Named set (test_block6, b6_analysis_check/production, b6_release_record, structure probe, kit e2e): no failing id.
+Total 75 failing ids (2+4+8+1+52+8). Unexplained: none. Named set (test_block6, b6_analysis_check/production, b6_release_record, structure probe, kit e2e): no failing id.
 
 Side note, not a CI id: on macOS under taskpolicy -b, test_run_night has 7 failures (BindSupervisionProcessTests x6, QuietDriverIntegrationTests x1), identical at head and base: base-inherent, outside the diff; routed to the CI owed list.
 
