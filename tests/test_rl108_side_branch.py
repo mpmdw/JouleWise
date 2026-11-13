@@ -196,25 +196,26 @@ class _NetworkTimeHost(trn._PowerHost):
 
 # Captured at a6a09e6d7 with RL108_BASE=1 (see the module docstring). Each value: exit code, the ordered host
 # operations, end power mode, end network time, host marker present, R1 marker present, the result's
-# host_restoration ok/action (None when absent), and the custody-log restore labels.
+# host_restoration ok/action (None when absent), the custody-log restore labels, and the refusal's
+# exit_restore ok/action (None when absent).
 GOLDEN = {
- "admission_refused_under_the_lock": {"calls": ["read", "restore", "read", "nt_query"], "exit": 3, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "another_night_holds_the_lock": {"calls": [], "exit": 3, "host_marker": True, "labels": ["ac powermode close deferred:"], "mode": 2, "network_time": "off", "r1_marker": False, "restoration": {"action": None, "ok": False}},
- "chain_exit_nonzero_high_power": {"calls": ["read", "restore", "read", "nt_query"], "exit": 5, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "close_restore_fails": {"calls": ["read", "restore", "read", "nt_query"], "exit": 0, "host_marker": True, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 2, "network_time": "off", "r1_marker": False, "restoration": {"action": "restore_failed", "ok": False}},
- "deadman_absent_marker_at_completion": {"calls": ["restore", "read", "nt_query"], "exit": 0, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "deadman_after_courier_sent": {"calls": ["restore", "read", "nt_query"], "exit": 0, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "exception_after_parse_before_admission": {"calls": ["restore", "read", "nt_query"], "exit": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (exception_before_admission)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "exception_before_plan_parse": {"calls": ["restore", "read", "nt_query"], "exit": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (exception_before_admission)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "go_complete_high_power": {"calls": ["read", "restore", "read", "nt_query"], "exit": 0, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "go_complete_high_power_network_time_turned_off": {"calls": ["read", "restore", "read", "nt_on", "nt_query"], "exit": 0, "host_marker": False, "labels": ["ac powermode close: restore Automatic and network time ON"], "mode": 0, "network_time": "on", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "go_complete_mode_zero": {"calls": ["read", "restore", "read", "nt_query"], "exit": 0, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "host_lock_error": {"calls": ["restore", "read", "nt_query"], "exit": 3, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (host_lock_error)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "launch_abandoned": {"calls": ["restore", "read", "nt_query"], "exit": 3, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (launch_abandoned)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": None},
- "mode_zero_host_left_at_two_refused": {"calls": ["read", "restore", "read", "nt_query"], "exit": 3, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "plan_malformed": {"calls": ["restore", "read", "nt_query"], "exit": 3, "host_marker": False, "labels": [], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": None},
- "prechain_gate_refusal": {"calls": ["read", "restore", "read", "nt_query"], "exit": 3, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
- "rerun": {"calls": ["restore", "read", "nt_query"], "exit": 3, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (rerun)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": None},
+ "admission_refused_under_the_lock": {"calls": ["read", "restore", "read", "nt_query"], "exit": 3, "exit_restore": {"action": "restored", "ok": True}, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "another_night_holds_the_lock": {"calls": [], "exit": 3, "exit_restore": None, "host_marker": True, "labels": ["ac powermode close deferred:"], "mode": 2, "network_time": "off", "r1_marker": False, "restoration": {"action": None, "ok": False}},
+ "chain_exit_nonzero_high_power": {"calls": ["read", "restore", "read", "nt_query"], "exit": 5, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "close_restore_fails": {"calls": ["read", "restore", "read", "nt_query"], "exit": 0, "exit_restore": None, "host_marker": True, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 2, "network_time": "off", "r1_marker": False, "restoration": {"action": "restore_failed", "ok": False}},
+ "deadman_absent_marker_at_completion": {"calls": ["restore", "read", "nt_query"], "exit": 0, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "deadman_after_courier_sent": {"calls": ["restore", "read", "nt_query"], "exit": 0, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "exception_after_parse_before_admission": {"calls": ["restore", "read", "nt_query"], "exit": None, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (exception_before_admission)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "exception_before_plan_parse": {"calls": ["restore", "read", "nt_query"], "exit": None, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (exception_before_admission)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "go_complete_high_power": {"calls": ["read", "restore", "read", "nt_query"], "exit": 0, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "go_complete_high_power_network_time_turned_off": {"calls": ["read", "restore", "read", "nt_on", "nt_query"], "exit": 0, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic and network time ON"], "mode": 0, "network_time": "on", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "go_complete_mode_zero": {"calls": ["read", "restore", "read", "nt_query"], "exit": 0, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "host_lock_error": {"calls": ["restore", "read", "nt_query"], "exit": 3, "exit_restore": {"action": "restored", "ok": True}, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (host_lock_error)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "launch_abandoned": {"calls": ["restore", "read", "nt_query"], "exit": 3, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (launch_abandoned)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": None},
+ "mode_zero_host_left_at_two_refused": {"calls": ["read", "restore", "read", "nt_query"], "exit": 3, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "plan_malformed": {"calls": ["restore", "read", "nt_query"], "exit": 3, "exit_restore": None, "host_marker": False, "labels": [], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": None},
+ "prechain_gate_refusal": {"calls": ["read", "restore", "read", "nt_query"], "exit": 3, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": {"action": "restored", "ok": True}},
+ "rerun": {"calls": ["restore", "read", "nt_query"], "exit": 3, "exit_restore": None, "host_marker": False, "labels": ["ac powermode close: restore Automatic; network time left_off", "ac powermode exit restore (rerun)"], "mode": 0, "network_time": "off", "r1_marker": False, "restoration": None},
 }
 
 
@@ -248,6 +249,11 @@ class TerminalHostEndStateTests(unittest.TestCase):
             restoration = json.loads((night / "result.json").read_text()).get("host_restoration")
         except OSError:
             restoration = None
+        try:
+            evidence = json.loads((night / "refusal.json").read_text())["refusal"].get("evidence")
+            exit_restore = evidence.get("exit_restore") if isinstance(evidence, dict) else None
+        except (OSError, KeyError, TypeError):
+            exit_restore = None
         log = (self.custody / "night.log").read_text() if (self.custody / "night.log").exists() else ""
         labels = sorted(set(re.findall(r"ac powermode (?:exit restore \([a-z_]+\)|close[^:{]*(?::[^:{]*)?)", log)))
         observed = {"exit": exit_code, "calls": list(host.calls), "mode": host.mode,
@@ -256,7 +262,9 @@ class TerminalHostEndStateTests(unittest.TestCase):
                     "r1_marker": (self.root / ".align-r1-high-power").exists(),
                     "restoration": None if restoration is None else
                     {"ok": restoration.get("ok"), "action": restoration.get("action")},
-                    "labels": [label.strip() for label in labels]}
+                    "labels": [label.strip() for label in labels],
+                    "exit_restore": None if exit_restore is None else
+                    {"ok": exit_restore.get("ok"), "action": exit_restore.get("action")}}
         if os.environ.get("RL108_CAPTURE"):
             with open(os.environ["RL108_CAPTURE"], "a", encoding="utf-8") as stream:
                 stream.write(json.dumps({name: observed}, sort_keys=True) + "\n")
