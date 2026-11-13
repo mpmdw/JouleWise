@@ -68,14 +68,17 @@ def chain_contract_for(night_name: str) -> str:
 # RL-108 item 6: each violated invariant is explained as module defect, fixture gap or writer defect.
 def explain_invariant(inv, rec, fault_reason_count):
     if inv == "COURIER_SENT_WITHOUT_DELIVERY":
-        return ("fixture_gap", "pre-W1 courier: sent marker/field recorded, no delivery receipt "
-                "(message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule")
+        return ("input_gap", "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not "
+                "observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input"
+                + ("; see audit A-02 (file-only courier marks courier.sent)" if rec.get("night", "").startswith("align-r1-") else ""))
     if inv == "COURIER_SENT_WITHOUT_RESULT":
         return ("writer_candidate", "courier.sent without result.json in the delivered tree")
     if inv == "NONZERO_EXIT_WITHOUT_FAULT":
+        if fault_reason_count and not rec["fault_boolean_present"]:
+            return ("legacy_schema_gap", "fault reasons recorded but no boolean fault field (pre-W1 schema); "
+                    "fault recorded, cause unknown; the reasons need not relate to the nonzero exit (audit A-01)")
         if fault_reason_count:
-            return ("module_defect", "fault reasons are recorded but no boolean fault field; "
-                    "invariant_nonzero_fault ignores fault_reasons")
+            return ("writer_candidate", "boolean fault is false while fault reasons and a nonzero exit are recorded")
         return ("writer_candidate", "nonzero chain exit with neither a fault flag nor fault reasons recorded")
     return ("unclassified", "no explanation rule")
 
@@ -215,6 +218,9 @@ def recorded_facts(files):
     return {
         "result_present": "result.json" in files,
         "refusal_present": "refusal.json" in files,
+        "fault_boolean_present": any(isinstance(d, dict) and type(d.get("fault")) is bool for d in (res, haz)),
+        "chain_outcome": next((d["chain_outcome"] for d in (res, haz) if isinstance(d, dict)
+                               and isinstance(d.get("chain_outcome"), str)), None),
         "verdict": res.get("verdict") if res and isinstance(res.get("verdict"), str) else None,
         "chain_started": "chain.started" in files,
         "chain_exited": "chain.exited" in files,
@@ -274,7 +280,7 @@ def expected_outcome(rec):
     return "CHAIN_FAILED" if code != 0 else "MEASURED"
 
 
-def agreement(rec, report, exit_cls):
+def agreement(rec, report, exit_cls, night_name=""):
     checks = []
 
     def add(cid, status, detail):
@@ -285,7 +291,12 @@ def agreement(rec, report, exit_cls):
     got = "MEASURED" if outcome.startswith("MEASURED") else outcome
     add("outcome", "agree" if exp == got else "disagree", f"records imply {exp}; shadow derives {outcome}")
 
-    if rec["verdict"] == "GO" and outcome in {"CHAIN_FAILED", "ABORTED"}:
+    if rec["chain_outcome"] is not None:
+        # W1-style record: GO kept by design, failure carried in chain_outcome / fault. Compare, do not mask.
+        rec_out = {"COMPLETE": "MEASURED"}.get(rec["chain_outcome"], rec["chain_outcome"])
+        add("recorded_chain_outcome", "agree" if rec_out in (got, "UNKNOWN") else "disagree",
+            f"record carries chain_outcome {rec['chain_outcome']}; shadow derives {outcome}")
+    elif rec["verdict"] == "GO" and outcome in {"CHAIN_FAILED", "ABORTED"}:
         checks.append({"id": "verdict_masks_outcome", "status": "disagree", "kind": "writer_candidate",
                        "detail": f"result verdict GO (admission) while the derived outcome is {outcome}; "
                                  "the record's verdict word does not carry the chain's failure (audit finding A-01 pattern)"})
@@ -338,6 +349,7 @@ def agreement(rec, report, exit_cls):
         add("delivery", "n/a", "no result.json")
 
     frc = dict(report.outcome.evidence).get("fault_reason_count", 0)
+    rec = {**rec, "night": night_name}
     for inv in report.violated_invariants:
         kind, why = explain_invariant(inv, rec, frc)
         checks.append({"id": "invariant:" + inv, "status": "disagree", "kind": kind, "detail": why})
@@ -360,7 +372,7 @@ def replay_night(name, files, now_epoch_s):
     rec = recorded_facts(files)
     obs, report, owed = shadow_replay(files, now_epoch_s)
     exit_cls = classify_exit(rec, name)
-    checks = agreement(rec, report, exit_cls)
+    checks = agreement(rec, report, exit_cls, name)
     return {
         "night": name,
         "derived": True,

@@ -62,7 +62,7 @@ def test_agree_case_has_no_disagreement_except_legacy_courier_gap(tmp_path):
     assert ids(n) <= {"invariant:COURIER_SENT_WITHOUT_DELIVERY"}
     for c in n["agreement"]["checks"]:
         if c["id"] == "invariant:COURIER_SENT_WITHOUT_DELIVERY":
-            assert c["kind"] == "fixture_gap"
+            assert c["kind"] == "input_gap"
     assert {"outcome", "chain_lifecycle", "exit_code_sources", "delivery"} <= ids(n, "agree")
     assert n["derived"] is True and n["custody"] is False
 
@@ -133,12 +133,43 @@ def test_go_verdict_masking_chain_failure_is_listed(tmp_path):
     assert "verdict_masks_outcome" not in ids(run(tmp_path, "r1-nomask", go_night()))
 
 
-def test_nonzero_exit_with_fault_reasons_is_module_defect(tmp_path):
+def test_w1_style_record_does_not_trigger_verdict_mask(tmp_path):
+    files = go_night(exit_code=5)
+    for k in ("result.json", "hazard_result.json"):
+        files[k].update({"chain_outcome": "CHAIN_FAILED", "fault": True, "fault_reasons": ["chain_exit_nonzero:5"]})
+    n = run(tmp_path, "align-r1-w1", files)
+    assert "verdict_masks_outcome" not in ids(n)
+    assert "recorded_chain_outcome" in ids(n, "agree")
+    assert "invariant:NONZERO_EXIT_WITHOUT_FAULT" not in ids(n)
+
+
+def test_w1_style_record_with_wrong_chain_outcome_disagrees(tmp_path):
+    files = go_night(exit_code=5)
+    files["result.json"]["chain_outcome"] = "COMPLETE"
+    assert "recorded_chain_outcome" in ids(run(tmp_path, "align-r1-w1b", files))
+
+
+def test_legacy_record_without_chain_outcome_still_masks(tmp_path):
+    assert "verdict_masks_outcome" in ids(run(tmp_path, "align-r1-old", go_night(exit_code=3)))
+
+
+def test_reasons_without_boolean_is_legacy_schema_gap(tmp_path):
     files = go_night(exit_code=11)
     files["hazard_result.json"]["faults"] = {"reasons": ["a", "b"]}
     n = run(tmp_path, "b5-faulted", files)
     inv = [c for c in n["agreement"]["checks"] if c["id"] == "invariant:NONZERO_EXIT_WITHOUT_FAULT"]
-    assert inv and inv[0]["kind"] == "module_defect"
+    assert inv and inv[0]["kind"] == "legacy_schema_gap"
+
+
+def test_boolean_false_with_nonzero_exit_stays_a_violation(tmp_path):
+    files = go_night(exit_code=11)
+    files["result.json"]["fault"] = False
+    files["hazard_result.json"].update({"fault": False, "faults": {"reasons": ["a"]}})
+    n = run(tmp_path, "b5-boolfalse", files)
+    inv = [c for c in n["agreement"]["checks"] if c["id"] == "invariant:NONZERO_EXIT_WITHOUT_FAULT"]
+    assert inv and inv[0]["kind"] == "writer_candidate"
+    n2 = run(tmp_path, "b5-boolfalse2", {**go_night(exit_code=11), "result.json": {"verdict": "GO", "chain_exit_code": 11, "fault": False}})
+    assert "invariant:NONZERO_EXIT_WITHOUT_FAULT" in ids(n2)
 
 
 def test_disagree_courier_sent_but_no_result_leaves_unknown_outcome(tmp_path):
