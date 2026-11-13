@@ -72,7 +72,15 @@ class S0BlockedEnumerationTests(unittest.TestCase):
                             )
                         )
 
-        self.assertEqual(expected_failures, [])
+        # Admitted W1 witnesses only: 0b2d4d9b2 retains the ruled-wrong
+        # raise-in-hook form under D8 (HARVEST-OFF-MERGED.md §9); 0d998b6bc
+        # records WP22 F3's accepted fail-fast collector-death divergence.
+        # Exact identities keep additions, removals and renames visible.
+        self.assertEqual(expected_failures, [
+            "test_hoff_delta_sol1.py:"
+            "test_a_forbidden_open_audit_event_must_fail_the_test_not_only_log",
+            "test_v4_w1_synthetic.py:test_collector_death_is_x4_and_episode_continues",
+        ])
         counts = Counter(
             prefix
             for _test_id, reason, _docstring in blocked

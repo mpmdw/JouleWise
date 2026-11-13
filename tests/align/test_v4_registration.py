@@ -1,4 +1,6 @@
 """Registration blockers: synthetic records only; no native probes or weights."""
+from tests.git_fixture import init_git_fixture
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from copy import deepcopy
 import hashlib
 import json
@@ -10,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts import align_v4_kit as kit
-from joulewise.align.apple import thermal_desk, v4_estimands
+from joulewise.align.apple import thermal_desk, v4_estimands, v4_registration as reg
 from tests.align.test_thermal_desk import member, contrast
 
 
@@ -22,7 +24,10 @@ class RegistrationTests(unittest.TestCase):
              patch.object(kit, 'read_r1_slots', return_value={}), \
              patch.object(kit, 'read_ruling_1f_receipt', return_value=None), \
              patch.object(kit, 'require_ready'), patch.object(kit, 'require_sizing'), \
+             patch.object(kit, 'check_w1_record_keys'), \
              patch.object(kit, 'validate_wp18_fixtures'):
+            # check_w1_record_keys (RL-84 P-2) is witnessed in tests.align.test_w1_tf08_record; this test
+            # isolates the registration requirement, like the other gates patched above.
             plan = Path(tmp)/kit.KIT/'collection_plan.json'
             plan.parent.mkdir(parents=True)
             plan.write_text(json.dumps({'runtime_requirements': {'km003c': kit.km003c.REQUIREMENT}}))
@@ -42,7 +47,7 @@ class RegistrationTests(unittest.TestCase):
                 p.write_text('synthetic gate\n')
             def git(*args):
                 return subprocess.run(['git', *args], cwd=root, check=True, capture_output=True).stdout.decode().strip()
-            git('init', '-q')
+            init_git_fixture(root, '-q')
             git('add', '.')
             git('-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid',
                 'commit', '-qm', 'Synthetic registration fixture')
@@ -178,14 +183,15 @@ class RegistrationTests(unittest.TestCase):
              patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
-             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')) as observe:
+             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')) as observe, \
+             patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', '')
             log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000., completion_age=100)        # (a) completed charge
             floated = write_battery_log(Path(tmp) / 'float.jsonl', 5000., completion_age=2400)     # (b) continuous float
             stale = write_battery_log(Path(tmp) / 'stale.jsonl', 5000., completion_age=2400, end_age=900)
             arm = lambda **kw: session.arm_checks('.', {}, obc_off_attested_by=kw.pop('obc', 'synthetic'), runner=run,
                                                   now=lambda: 5000., **arm_seams(), **kw)
-            self.assertFalse(session.arm_checks('.', {}, runner=run, meter_probe=lambda root: {'live': False})['admitted'])
+            self.assertFalse(session.arm_checks('.', {}, watchdog_check=_watchdog_acceptance, runner=run, meter_probe=lambda root: {'live': False})['admitted'])
             self.assertFalse(arm(obc='', battery_log=log, next_arm_triage=packet)['admitted'])     # no attestation
             self.assertFalse(arm(next_arm_triage=packet)['admitted'])                              # no battery evidence
             record = arm(battery_log=log, next_arm_triage=packet)
@@ -236,7 +242,8 @@ class RegistrationTests(unittest.TestCase):
              patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS', 'reasons': []}), \
-             patch('joulewise.battery_float.observe', return_value=(good, b'raw')):
+             patch('joulewise.battery_float.observe', return_value=(good, b'raw')), \
+             patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', '')
             rows = lambda start, end, charge_until=None: [
                 {'schema': 'joulewise.battery_float.v1', 'probe_error': False, 'wall_time_s': float(t),
@@ -432,6 +439,47 @@ class RegistrationTests(unittest.TestCase):
             self.assertTrue(result['v4_D_cohort'])
             records[1]['configuration']['max_turns'] = 11
             self.assertFalse(check()['v4_D_cohort'])
+
+
+class R1ExecutedSourceTests(unittest.TestCase):
+    def test_condition13_names_exactly_the_ten_ruled_sources(self):
+        self.assertEqual(set(reg.R1_EXECUTED_SOURCES), {
+            "scripts/align_r1_rehearsal.py", "joulewise/align/apple/r1_runtime.py",
+            "configs/align/v4/r1_runtime.json", "joulewise/align/apple/r1_phase_table.py",
+            "joulewise/align/apple/workload.py", "joulewise/align/apple/thermal.py",
+            "joulewise/align/apple/thermal_gates.py",
+            "scripts/align_r1_runtime.py", "joulewise/align/apple/r1_runtime_contract.py",
+            "joulewise/align/apple/smc_enumeration.py",
+        })
+        self.assertEqual(len(reg.R1_EXECUTED_SOURCES), 10)
+
+    def test_condition13_changes_each_file_commit_and_missing_phase_module(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def git(*args):
+                return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+            from tests.git_fixture import init_git_fixture
+            init_git_fixture(root, "-q")
+            for path in reg.R1_EXECUTED_SOURCES:
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(path + "\n")
+            git("add", ".")
+            git("-c", "user.name=Synthetic", "-c", "user.email=synthetic@example.invalid", "commit", "-qm", "fixture")
+            commit = git("rev-parse", "HEAD")
+            reg.verify_r1_executed_sources(root, {"executed_commit": commit})
+            for path in reg.R1_EXECUTED_SOURCES:
+                target = root / path
+                raw = target.read_bytes()
+                target.write_bytes(raw + b"x")
+                with self.subTest(path=path), self.assertRaisesRegex(ValueError, "differs"):
+                    reg.verify_r1_executed_sources(root, {"executed_commit": commit})
+                target.write_bytes(raw)
+            with self.assertRaises(ValueError):
+                reg.verify_r1_executed_sources(root, {"executed_commit": "0" * 40})
+            (root / "joulewise/align/apple/r1_phase_table.py").unlink()
+            with self.assertRaisesRegex(ValueError, "missing"):
+                reg.verify_r1_executed_sources(root, {"executed_commit": commit})
 
 
 if __name__ == '__main__':

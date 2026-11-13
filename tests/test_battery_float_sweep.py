@@ -106,7 +106,17 @@ OBSERVE_CALLERS = {
     "joulewise/night_agent_install.py": ["validate_install: observe's own bytes subprocess.run"],
     "joulewise/arm_readiness_evidence_t0.py": ["t0_power_row: _execute_probe stdout_bytes"],
     "scripts/validate_powermetrics_fiducial.py": ["slot_pre/slot_post: observe's own bytes subprocess.run"],
+    # W1 line: the arm's battery predicate (RL-53 batch era) and the between-window top-up sampler.
+    "scripts/align_v4_session.py": ["arm_check: the injected battery_runner or the arm's runner"],
+    "scripts/align_v4_battery_log.py": ["topup_log: the sampler's injected runner or observe's own bytes subprocess.run"],
 }
+
+# Observation phases a production caller records that are NOT in battery_float.PHASES. `topup_log` came with
+# f993b784f (scripts/align_v4_battery_log.py; Opus cold MED-3, r11-dispositions.md). No production code reads
+# battery_float.PHASES (lead finding, w1-ci-debt-3 review); a record's phase is only a label for these
+# records, and the gates below admit only the phases they name. Whether to register it in battery_float.PHASES
+# (a bound file) is parked for the research lead before signing.
+TEST_REGISTERED_PHASES = ("topup_log",)
 
 
 def _observe_phases(name, source):
@@ -150,7 +160,7 @@ class SweepGuardTests(unittest.TestCase):
         for name, source in _production_sources():
             for lineno, phase in _observe_phases(name, source):
                 if isinstance(phase, ast.Constant) and isinstance(phase.value, str):
-                    self.assertIn(phase.value, battery_float.PHASES, (name, lineno))
+                    self.assertIn(phase.value, battery_float.PHASES + TEST_REGISTERED_PHASES, (name, lineno))
                     seen.add(phase.value)
                 else:
                     # The existing slot writer formats only its pre/post loop.
@@ -160,7 +170,27 @@ class SweepGuardTests(unittest.TestCase):
                     self.assertTrue({"slot_pre", "slot_post"} <= set(battery_float.PHASES))
                     seen.update(("slot_pre", "slot_post"))
         self.assertEqual(seen, set(battery_float.PHASES[:7]) | {
-            "quiet_pre", "quiet_post", "bundle_pre", "bundle_post"})
+            "quiet_pre", "quiet_post", "bundle_pre", "bundle_post"} | set(TEST_REGISTERED_PHASES))
+
+    def test_no_gate_admits_a_test_registered_phase(self):
+        """A topup_log record can never enter a gate that reads a recorded phase.
+
+        authenticate_pair admits only its three fixed pairs; the v5 boundary gates (v5_qualification,
+        assemble_v5_battery_boundaries, check_v5_arm_abort) compare against BATTERY_BOUNDARY_PHASES.
+        """
+        from joulewise import v5_qualification as q
+        for extra in TEST_REGISTERED_PHASES:
+            self.assertNotIn(extra, battery_float.PHASES)
+            self.assertNotIn(extra, set(q.BATTERY_BOUNDARY_PHASES.values()))
+            for pair in ((extra, extra), ("quiet_pre", extra), (extra, "quiet_post"), ("bundle_pre", extra),
+                         ("slot_pre", extra), (extra, "slot_post")):
+                with self.subTest(pair=pair), self.assertRaisesRegex(ValueError, "unregistered battery pair phases"):
+                    battery_float.authenticate_pair({}, ROOT, phases=pair, identity=None, span=(0, 1))
+        # No production file names the phase except its one writer, so no gate can compare against it.
+        for extra in TEST_REGISTERED_PHASES:
+            named = sorted(name for name, text in _production_sources()
+                           if re.search(r"""['"]%s['"]""" % re.escape(extra), text))
+            self.assertEqual(named, ["scripts/align_v4_battery_log.py"], extra)
 
     def test_aliased_out_of_set_phase_is_visible(self):
         forms = (

@@ -21,7 +21,7 @@ NS = 1_000_000_000
 
 def validate_policy(value: Any) -> dict[str, Any]:
     fields = {"s_fast", "s_slow", "fan_keys", "r0_sha256"}
-    if not isinstance(value, Mapping) or set(value) != fields:
+    if not isinstance(value, Mapping) or not fields <= set(value) or set(value) - fields - {"record_keys"}:
         raise ValueError("smc_temperature must have s_fast, s_slow, fan_keys, r0_sha256")
     for role in ("s_fast", "s_slow"):
         if not isinstance(value[role], str) or not re.fullmatch(r"T[!-~]{3}", value[role]):
@@ -34,11 +34,21 @@ def validate_policy(value: Any) -> dict[str, Any]:
         raise ValueError("smc_temperature.fan_keys must be distinct F?Ac keys (empty for fanless hosts)")
     if not isinstance(value["r0_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", value["r0_sha256"]):
         raise ValueError("smc_temperature.r0_sha256 must pin the R0 JSON bytes")
+    if "record_keys" in value:
+        recorded = value["record_keys"]
+        if (not isinstance(recorded, list)
+                or any(not isinstance(k, str) or not re.fullmatch(r"T[!-~]{3}", k) for k in recorded)
+                or len(set(recorded)) != len(recorded)):
+            raise ValueError("smc_temperature.record_keys must be distinct temperature keys")
+        # A key may already supply a role (R0's synthetic default is Tf08).
+        # It is sampled once; record_keys never supplies another gate role.
+        value = {**value, "record_keys": list(recorded)}
     return {**value, "fan_keys": list(fans)}
 
 
 def keys(policy: Mapping[str, Any]) -> tuple[str, ...]:
-    return (policy["s_fast"], policy["s_slow"], *policy["fan_keys"])
+    return tuple(dict.fromkeys((policy["s_fast"], policy["s_slow"], *policy["fan_keys"],
+                               *policy.get("record_keys", ()))))
 
 
 def valid_value(key: str, value: Any) -> bool:

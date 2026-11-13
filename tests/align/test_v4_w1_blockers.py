@@ -1,4 +1,5 @@
 """Prospective W1 blocker contract; entirely synthetic, no hardware probes."""
+from tests.git_fixture import init_git_fixture
 from copy import deepcopy
 import json
 import math
@@ -47,7 +48,7 @@ class U3Tests(unittest.TestCase):
             gate.write_bytes(original_gate)
             def git(*args):
                 return subprocess.run(['git', *args], cwd=root, capture_output=True, check=True).stdout.decode().strip()
-            git('init', '-q')
+            init_git_fixture(root, '-q')
             git('add', '.')
             git('-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid',
                 'commit', '-qm', 'synthetic source custody')

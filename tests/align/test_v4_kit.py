@@ -20,6 +20,7 @@ from joulewise.schemas import BenchmarkConfig
 from joulewise.b6 import registration
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_session as session
 from scripts import validate_align_v4_w1_plan as validator
+from tests.align.v4_registration_fixtures import held_window_acceptance, session_plan
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -945,14 +946,15 @@ class Round6KitTests(unittest.TestCase):
     def test_an_inconclusive_step_d_is_refused_by_name(self):
         inputs, slots = ready_inputs()
         slots['inconclusive_segments'] = {kit.STEP_D_SEGMENT: 'G0 did not release, twice'}
-        with self.assertRaisesRegex(ValueError, 'step-d was INCONCLUSIVE'):
+        with self.assertRaisesRegex(ValueError, 'INCONCLUSIVE'):
             kit.require_ready(inputs, slots)
 
     def test_an_inconclusive_designed_state_refuses_w1(self):
         # Sol critique of round 6: fail closed at the kit for every R6-2 segment.
         inputs, slots = ready_inputs()
         slots['inconclusive_segments'] = {'planning_turn_R_plus_2C': 'G0 did not release, twice'}
-        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(R6-2\): planning_turn_R_plus_2C'):
+        # a85ee8ec6: RL-72 bars flagged/inconclusive feeding members, including X-G.
+        with self.assertRaisesRegex(ValueError, r'INCONCLUSIVE \(RL-72\): planning_turn_R_plus_2C'):
             kit.require_ready(inputs, slots)
         del slots['inconclusive_segments']
         with self.assertRaisesRegex(ValueError, 'inconclusive_segments'):
@@ -1091,7 +1093,7 @@ class Round7KitTests(unittest.TestCase):
             with self.subTest(segment=segment), self.assertRaises(ValueError) as raised:
                 kit.require_ready(inputs, slots)
             message = str(raised.exception)
-            for text in ('re-run', 'magistrate', 'no per-occurrence lead ruling', 'LEAD-RULINGS-2 R7-3'):
+            for text in ('INCONCLUSIVE', 'candidate slots', 'research lead ruling'):
                 self.assertIn(text, message)
 
     def test_missing_or_malformed_alias_groups_refuse(self):
@@ -1178,6 +1180,9 @@ class SessionParameterTests(unittest.TestCase):
         env = patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(Path(host.name) / 'host-power')})
         env.start()
         self.addCleanup(env.stop)
+        held = patch.object(session, 'held_window_check', side_effect=held_window_acceptance)
+        held.start()
+        self.addCleanup(held.stop)
 
     def test_v3_defaults_and_v4_prepare_parameters(self):
         with patch.object(pilot.h, 'prepare', return_value='prepared') as prepare:
@@ -1233,7 +1238,8 @@ class SessionParameterTests(unittest.TestCase):
         seed_series(measurement)
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': mode_expected}))
-        pilot.h.write(session_root / 'session.json', {'measurement_root': str(measurement)})
+        pilot.h.write(session_root / 'session.json', session_plan(session_root,
+                                                               {'measurement_root': str(measurement)}))
         return measurement, session_root
 
     def test_v4_install_reads_measurement_r1_slots_and_refuses_powermode_mismatch(self):
@@ -1614,6 +1620,9 @@ class W1HighPowerTests(unittest.TestCase):
         env = patch.dict(os.environ, {powermode.HOST_STATE_ENV: str(Path(host.name) / 'host-power')})
         env.start()
         self.addCleanup(env.stop)
+        held = patch.object(session, 'held_window_check', side_effect=held_window_acceptance)
+        held.start()
+        self.addCleanup(held.stop)
 
     def install(self, tmp, ac_powermode, *, gate_status='pass', start_mode=0):
         from joulewise.align.apple import powermode
@@ -1624,9 +1633,9 @@ class W1HighPowerTests(unittest.TestCase):
             {'runtime_requirements': {'ac_powermode': ac_powermode}}))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
-        (session_root / 'session.json').write_text(json.dumps(
+        (session_root / 'session.json').write_text(json.dumps(session_plan(session_root,
             {'measurement_root': str(measurement), 'inputs': {'custody_root': str(Path(tmp) / 'custody')},
-             'plan_path': str(Path(tmp) / 'custody/night_plan.json')}))
+             'plan_path': str(Path(tmp) / 'custody/night_plan.json')})))
         self.marker = Path(powermode.host_marker_path())
         self.host = FakeArmHost(mode=start_mode, marker=self.marker)
         config = W1DiskGateTests.config(self, tmp)
@@ -1779,8 +1788,11 @@ class W1DiskGateTests(unittest.TestCase):
         (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
         session_root = Path(tmp) / 's'
         (session_root / 'staging').mkdir(parents=True, exist_ok=True)
-        (session_root / 'session.json').write_text(json.dumps({'measurement_root': str(measurement)}))
-        with patch.object(kit, 'generate'), patch.object(pilot, 'install') as install:
+        (session_root / 'session.json').write_text(json.dumps(session_plan(session_root,
+                                                               {'measurement_root': str(measurement)})))
+        with patch.object(kit, 'generate'), \
+                patch.object(session, 'held_window_check', side_effect=held_window_acceptance), \
+                patch.object(pilot, 'install') as install:
             try:
                 host = FakeArmHost(mode=0)
                 session.install(session_root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(), **kwargs)
@@ -1848,7 +1860,8 @@ class W1DiskGateTests(unittest.TestCase):
         self.assertEqual(seen, {'session_root': Path('s'), 'w1_disk_config': Path('/c.json'),
                                 'obc_off_attested_by': 'synthetic', 'battery_log': [Path('/b.jsonl'), Path('/c.jsonl')],
                                 'window_battery_journal': [Path('/w.jsonl')],
-                                'next_arm_triage': Path('/t.json')})
+                            'next_arm_triage': Path('/t.json'), 'weight_digests_attested': None,
+                            'runtime_stack_attested': None, 'held_window_ruling': None})
 
 
 if __name__ == '__main__':

@@ -32,7 +32,7 @@ from tests.b6.support import ROOT, PACKS, fake_environment, tree
 from tests.git_fixture import init_git_fixture
 from tests.test_b6_loop import Transport
 
-PYTHON = '/opt/homebrew/bin/python3.13'
+PYTHON = sys.executable
 
 
 def reference_template():
@@ -158,7 +158,7 @@ class Round:
         bin_dir = self.measurement / '.venv/bin'
         bin_dir.mkdir(parents=True)
         (bin_dir / 'python').symlink_to(PYTHON)
-        (self.measurement / '.venv/lib/python3.13/site-packages').mkdir(parents=True)
+        (self.measurement / f'.venv/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages').mkdir(parents=True)
         (self.measurement / '.gitignore').write_text('.venv/\nruns/\n')
         init_git_fixture(self.measurement)
         for args in (('config', 'user.name', 'B6 Desk'), ('config', 'user.email', 'desk@invalid'),
@@ -670,7 +670,7 @@ def bytes_rehearsal(root):
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     ledger_path.write_bytes(b'')
     write(measurement / plan.HEAD_PIN_RELATIVE, GENESIS_PIN)
-    sites = measurement / '.venv/lib/python3.13/site-packages'
+    sites = measurement / f'.venv/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages'
     sites.mkdir(parents=True)
     (measurement / '.gitignore').write_text('.venv/\nruns/\n')
     init_git_fixture(measurement, '-q')

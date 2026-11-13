@@ -422,6 +422,7 @@ class ProductionPreflightTests(unittest.TestCase):
 
     def test_prepare_acquires_and_releases_the_fixed_path_even_without_a_marker(self):
         with mock.patch.object(session, 'session_start_restore', return_value={'action': 'none'}), \
+                mock.patch.object(session, 'host_privilege_preflight', return_value={'ok': True, 'synthetic': True}), \
                 mock.patch.object(session.kit, 'generate'), \
                 mock.patch.object(session, 'series_ac_powermode', return_value=0), \
                 mock.patch.object(session.pilot, 'prepare', return_value={}), \

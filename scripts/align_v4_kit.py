@@ -179,8 +179,98 @@ U5_VERDICTS = ('pass', 'fail', 'inconclusive')
 # (Fable cold pass round 4 LOW-1).
 DUTY_FALLBACK_STEPS = (1, 2, 3)
 
+# RL-120 item 3, extended to R+0 by RL-122 item 3(a): a planning-turn G0
+# timeout (R+0, R+2 or R+4), with OS level 0 and Nominal throughout, where the
+# desk shows the heater's key at the band edge (within 0.3 C under target +
+# delta_slow, or crossing it), does not block W1; U5 and the planning
+# temperature print inconclusive (RL-20). The lead records the desk evidence in
+# a signed file citing the desk print; any other pattern stays refused and goes
+# to the research lead. The measure is the heater key's peak over the LAST
+# 300 s of the G0 interval (PR #752 cold review F1): the preheat overshoots the
+# edge early in nearly every planning G0, so a whole-interval peak would also
+# pass a key that sat well inside the band at the end.
+R1_PLANNING_RELEASE = KIT / 'registration/r1_planning_release.json'
+R1_PLANNING_RELEASE_SCHEMA = 'joulewise.align_v4.r1_planning_release.v1'
+PLANNING_RELEASE_AUTHORITY = 'RL-120 item 3; RL-122 item 3(a)'
+PLANNING_SEGMENTS = tuple(f'planning_turn_R_plus_{offset}C' for offset in (0, 2, 4))
+PLANNING_RELEASE_REASON = 'r1.g0_timeout_run'
+PLANNING_RELEASE_EDGE_C = 0.3
+PLANNING_RELEASE_WINDOW_S = 300
+PLANNING_RELEASE_PEAK_FIELD = 'heater_key_max_last_300s_c'
 
-def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
+
+def read_r1_planning_release(root=ROOT):
+    """The committed lead planning-release record (a canonical raw_json file), or None."""
+    path = Path(root) / R1_PLANNING_RELEASE
+    if not path.is_file():
+        return None
+    raw = path.read_bytes()
+    record = json.loads(raw)
+    if not isinstance(record, dict) or raw != raw_json(record):
+        raise ValueError(f'{R1_PLANNING_RELEASE} must be a canonical JSON object (indent 2, sorted keys)')
+    return record
+
+
+def planning_heater_key(root=ROOT):
+    """The key the R1 planning heater regulates: the runtime config's sensors.s_slow."""
+    config = json.loads((Path(root) / 'configs/align/v4/r1_runtime.json').read_bytes())
+    return r1_runtime.sensors_policy(config)['s_slow']
+
+
+def planning_released_segments(r1_slots, release, root=ROOT):
+    """The planning segments whose G0 timeout the lead's record releases (RL-120 item 3, RL-122 3(a)).
+
+    Per segment the record carries ``band_edge_c`` (target + delta_slow) and
+    ``heater_key_max_last_300s_c``, the heater key's peak over the last 300 s
+    of the G0 interval; it passes when that peak is >= band_edge_c - 0.3 C.
+    ``desk_print`` names the desk output the values come from (path, sha256).
+    Empty when no planning segment is INCONCLUSIVE or no record exists (the
+    ordinary refusal then applies). A record that does not cover exactly the
+    INCONCLUSIVE planning segments, or whose evidence shows any other pattern,
+    is refused. The heater key is the ``root`` config's sensors.s_slow."""
+    inconclusive = r1_slots.get('inconclusive_segments') or {}
+    planning = {name: reason for name, reason in inconclusive.items() if name in PLANNING_SEGMENTS}
+    if not planning or release is None:
+        return set()
+    if (not isinstance(release, dict) or release.get('schema') != R1_PLANNING_RELEASE_SCHEMA
+            or release.get('authority') != PLANNING_RELEASE_AUTHORITY):
+        raise ValueError(f'R1 planning release must be a {R1_PLANNING_RELEASE_SCHEMA} record with authority '
+                         f'{PLANNING_RELEASE_AUTHORITY!r}')
+    if not valid_lead_signature(release.get('lead_signature')):
+        raise ValueError("R1 planning release is not signed: 'lead: <name/session> <ISO date>'")
+    if release.get('r1_record') != r1_record_identity(r1_slots):
+        raise ValueError('R1 planning release names a different R1 record')
+    desk = release.get('desk_print')
+    if (not isinstance(desk, dict) or not isinstance(desk.get('path'), str) or not desk['path'].strip()
+            or not valid_digest(desk.get('sha256'))):
+        raise ValueError('R1 planning release must cite its desk print: desk_print {path, sha256} '
+                         '(PR #752 cold review F5)')
+    segments = release.get('segments')
+    if not isinstance(segments, dict) or set(segments) != set(planning):
+        raise ValueError('R1 planning release must cover exactly the INCONCLUSIVE planning segments: '
+                         + ', '.join(sorted(planning)))
+    heater = planning_heater_key(root)
+    for name, row in sorted(segments.items()):
+        row = row if isinstance(row, dict) else {}
+        edge, peak = row.get('band_edge_c'), row.get(PLANNING_RELEASE_PEAK_FIELD)
+        problems = []
+        if planning[name] != PLANNING_RELEASE_REASON:
+            problems.append(f'reason {planning[name]!r} is not a G0 timeout alone')
+        if row.get('os_levels') != [0] or row.get('pm_states') != ['Nominal']:
+            problems.append('OS level above 0 or a non-Nominal state')
+        if row.get('heater_key') != heater:
+            problems.append(f'heater key {row.get("heater_key")!r} is not {heater!r}')
+        if not (finite(edge) and finite(peak)) or peak < edge - PLANNING_RELEASE_EDGE_C:
+            problems.append(f'the heater key\'s peak over the last {PLANNING_RELEASE_WINDOW_S} s of G0 '
+                            f'({PLANNING_RELEASE_PEAK_FIELD}) is not within {PLANNING_RELEASE_EDGE_C} C '
+                            'of the band edge')
+        if problems:
+            raise ValueError(f'R1 planning release {name}: ' + '; '.join(problems)
+                             + ': not the RL-122 3(a) pattern; the research lead rules')
+    return set(planning)
+
+
+def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planning_release=None, root=ROOT):
     """Bind r1_slots to R1 evidence (executing review MEDIUM-3).
 
     The record must be the R1 driver's own (schema and hardware source; the
@@ -191,6 +281,8 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
     duty bar must pass or carry a recorded lead fallback step (ruling 1(e)).
     ``receipt`` is the lead's committed ruling 1(f) receipt or None
     (LEAD-RULINGS-2 R10-4); R11 binds a non-veto contrast cap/fit on every path.
+    ``planning_release`` is the lead's RL-122 3(a) record or None; ``root``
+    supplies the runtime config whose sensors.s_slow the planning heater held.
     """
     if not isinstance(r1_slots, dict) or r1_slots.get('schema') != R1_SLOTS_SCHEMA:
         raise ValueError(f'R1 r1_slots must be a {R1_SLOTS_SCHEMA} record')
@@ -200,19 +292,28 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
     inconclusive = r1_slots.get('inconclusive_segments')
     if not isinstance(inconclusive, dict):
         raise ValueError('R1 r1_slots must record inconclusive_segments (LEAD-RULINGS-2 R6-2)')
-    if STEP_D_SEGMENT in inconclusive:
-        # LEAD-RULINGS-2 R6-2: recorded by the driver, refused here (fail closed at the kit).
-        raise ValueError(f'R1 step-d was INCONCLUSIVE ({inconclusive[STEP_D_SEGMENT]}): no slots, no thermometry '
-                         'bar and no gated runs; W1 cannot be sized from this R1 record; '
-                         'the remedy is an R1 re-run, which is the magistrate\'s call, '
-                         'with no per-occurrence lead ruling (LEAD-RULINGS-2 R7-3)')
-    if {k: v for k, v in inconclusive.items() if k != 'X_G_contrast'}:
-        # A designed start state that was never reached leaves beta_T (U5)
-        # without a point; before R6-2 it refused the night, so it still
-        # refuses W1 here (Sol critique of round 6).
-        raise ValueError('R1 calibration segment(s) INCONCLUSIVE (R6-2): ' + ', '.join(sorted(inconclusive))
-                         + '; the remedy is an R1 re-run, which is the magistrate\'s call, '
-                         'with no per-occurrence lead ruling (LEAD-RULINGS-2 R7-3)')
+    released = planning_released_segments(r1_slots, planning_release, root)
+    inconclusive = {name: reason for name, reason in inconclusive.items() if name not in released}
+    if inconclusive:
+        raise ValueError('R1 segment(s) INCONCLUSIVE (RL-72): ' + ', '.join(sorted(inconclusive))
+                         + '; candidate slots are inadmissible without the research lead ruling')
+    barred = r1_slots.get('inadmissible_slots', {})
+    if released:
+        # RL-122 3(a): U5 and the planning temperature print inconclusive; only
+        # the released timeouts may flag them, and nothing else is admitted.
+        temperature = r1_slots.get('planning_temperature') or {}
+        if ((r1_slots.get('u5') or {}).get('verdict') != 'inconclusive'
+                or temperature.get('status') != 'inconclusive'
+                or sorted(temperature.get('inconclusive_states') or []) != sorted(released)):
+            raise ValueError('R1 planning release: U5 and the planning temperature must print inconclusive '
+                             'for exactly the released segments (RL-122 3(a), RL-20)')
+        # The driver records each slot's flags as a sorted set (inadmissible_slots).
+        excused = {'planning_temperature': {PLANNING_RELEASE_REASON},
+                   'U5': {PLANNING_RELEASE_REASON, 'r1.u5_inconclusive'}}
+        barred = {slot: [f for f in flags if f not in excused.get(slot, ())] for slot, flags in barred.items()}
+    if any(barred.values()):
+        raise ValueError('R1 slot flags require a research lead ruling: ' + ', '.join(
+            sorted(k for k, flags in barred.items() if flags)))
     slots = r1_slots.get('slots')
     if not isinstance(slots, dict) or not finite(slots.get('I_D')):
         raise ValueError('R1 r1_slots must carry the step-d slots with a finite I_D')
@@ -261,10 +362,15 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None):
         if fast == slow or any(fast in group and slow in group for group in aliases):
             raise ValueError('R1.thermal_policy s_fast/s_slow: aliased keys are one thermometer '
                              '(LEAD-RULINGS-2 R7-13)')
-        if sensors.get('s_fast') not in (classified.get('die_candidates') or ()):
-            raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list')
-        if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()):
-            raise ValueError(f'R1.thermal_policy s_slow {sensors.get("s_slow")!r} is not in the R1 heatsink list')
+        confirmation = classified.get('night_confirmation') or {}
+        fixed_pair = (confirmation.get('ok') is True and confirmation.get('authority') == 'RL-78'
+                      and all(confirmation.get(r) == sensors.get(r) for r in ('s_fast', 's_slow')))
+        if sensors.get('s_fast') not in (classified.get('die_candidates') or ()) and not fixed_pair:
+            raise ValueError(f'R1.thermal_policy s_fast {sensors.get("s_fast")!r} is not in the R1 die list '
+                             'or an admissible RL-78 fixed pair')
+        if sensors.get('s_slow') not in (classified.get('heatsink_candidates') or ()) and not fixed_pair:
+            raise ValueError(f'R1.thermal_policy s_slow {sensors.get("s_slow")!r} is not in the R1 heatsink list '
+                             'or an admissible RL-78 fixed smoke pair')
         if any(sensors.get(role) != classified.get(role) for role in ('s_fast', 's_slow')):
             raise ValueError('R1.thermal_policy sensors must equal the R1 thermometry.D picks')
     if classified.get('sensor_pick_changed') is not False:
@@ -1002,9 +1108,11 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
     return fit
 
 
-def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None):
+def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None, planning_release=None, root=ROOT):
     """W1 readiness. ``receipt`` is the lead's ruling 1(f) receipt (LEAD-RULINGS-2
-    R10-4); None is the R6-3 rule, which refuses whenever 1(f) does not fit."""
+    R10-4); None is the R6-3 rule, which refuses whenever 1(f) does not fit.
+    ``planning_release`` is the lead's RL-122 3(a) record or None, read
+    against ``root``'s runtime config."""
     pending = pending_inputs(inputs)
     if pending:
         raise ValueError(pending_message(pending))
@@ -1037,7 +1145,8 @@ def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None):
     tail = r1_slots.get('max_r1_tail_s')
     if not finite(tail) or tail < 0:
         raise ValueError('R1 r1_slots must record a finite, non-negative max_r1_tail_s')
-    check_r1_evidence(inputs, r1_slots, synthetic=synthetic, receipt=receipt)
+    check_r1_evidence(inputs, r1_slots, synthetic=synthetic, receipt=receipt, planning_release=planning_release,
+                      root=root)
     expected = l1_t_dead(slots['I_D'], tail)
     if not finite(slots['T_dead']) or not math.isclose(slots['T_dead'], expected, rel_tol=1e-9):
         raise ValueError('R1.T_dead must equal min((1750 - I_D) / 1.13544, '
@@ -1272,11 +1381,13 @@ def require_w1_ready(root=ROOT):
         raise ValueError('RUN_STATE 210 / squeeze ruling: W1/D requires a readable collection plan '
                          'that enables KM003C capture') from exc
     km003c.require_enabled(collection_plan)
+    check_w1_record_keys(collection_plan, root)
     inputs = read_inputs(root)
     if not any(p.startswith('WP11.') for p in pending_inputs(inputs)):
         pins_raw = (Path(root) / D_PINS).read_bytes()
         validate_d_identity(inputs['WP11'], json.loads(pins_raw), pins_raw=pins_raw)
-    require_ready(inputs, read_r1_slots(root), receipt=read_ruling_1f_receipt(root))
+    require_ready(inputs, read_r1_slots(root), receipt=read_ruling_1f_receipt(root),
+                  planning_release=read_r1_planning_release(root), root=root)
     require_sizing(root)
     validate_wp18_fixtures(inputs, root)
     from joulewise.align.apple.v4_registration import require_registration
@@ -1359,13 +1470,53 @@ def gate_policy_fields(policy, role='D'):
     return fields
 
 
-def thermal_policy(inputs, *, heavy, per_turn, window_reference, role='D'):
+def r0_heatsink_key(root=ROOT):
+    """RL-78/RL-84/RL-94: R0's registered slow pick, independent of any gate pick.
+
+    RL-89 made ``sensors.s_slow`` an R1 pick (Th0C then; TVh0 since RL-119 and
+    RL-122), so the recorded key is
+    read from ``r0_picks.s_slow``, the field that names R0's own pair, beside
+    the R0 record digest. It must also be one of the runtime's
+    ``sensors.record_keys``. Read only this repository config, never the R0
+    measurement record.
+    """
+    config = json.loads((Path(root) / 'configs/align/v4/r1_runtime.json').read_bytes())
+    sensors = r1_runtime.sensors_policy(config)
+    picks = config.get('r0_picks')
+    key = picks.get('s_slow') if isinstance(picks, dict) else None
+    if not isinstance(key, str) or not key:
+        raise ValueError('r1_runtime.json r0_picks.s_slow must name R0\'s heatsink key (RL-94)')
+    if key not in (sensors.get('record_keys') or []):
+        raise ValueError(f'R0 heatsink key {key} is not in r1_runtime.json sensors.record_keys (RL-94)')
+    return key
+
+
+def check_w1_record_keys(plan, root=ROOT):
+    """RL-84 P-1/P-2: record the heatsink in every existing sidecar only."""
+    heatsink = r0_heatsink_key(root)
+    for member in plan['members']:
+        thermal = member['spec'].get('thermal')
+        if member['role'] == 'anchor':
+            if thermal is not None:
+                raise ValueError(f'member {member["ordinal"]} is ungated; no thermal sidecar is allowed (RL-84 P-1/P-2)')
+            continue
+        sensors = thermal.get('sensors') if isinstance(thermal, dict) else None
+        recorded = sensors.get('record_keys') if isinstance(sensors, dict) else None
+        if not isinstance(recorded, list) or heatsink not in recorded:
+            raise ValueError(f'member {member["ordinal"]} thermal sidecar record_keys must contain '
+                             f'R0 heatsink key {heatsink} (RL-84 P-2)')
+
+
+def thermal_policy(inputs, *, heavy, per_turn, window_reference, role='D', root=ROOT):
     value = inputs['R1']['thermal_policy']
     if value is None:
-        value = dict(sensors=None, delta_fast_c=None, delta_slow_c=None,
+        value = dict(sensors=dict(s_fast=None, s_slow=None, fan_keys=None, r0_sha256=None),
+                     delta_fast_c=None, delta_slow_c=None,
                      turn_cap_s=None, chunk_tokens=None)
     else:
         value = gate_policy_fields(value, role)
+    # Recording the registered R0 heatsink does not assign it either gate role.
+    value['sensors'] = {**value['sensors'], 'record_keys': [r0_heatsink_key(root)]}
     value.update(heavy=heavy, per_turn=per_turn)
     value['window_reference'] = window_reference
     return value
@@ -1424,14 +1575,14 @@ def build_files(root=ROOT):
                             chat_template_kwargs={'reasoning_effort': inputs['R0']['reasoning_effort']},
                             max_episode_decode_tokens=inputs['R1']['B_D'], deadman_s=inputs['R1']['T_dead'],
                             hybrid_checkpoint_limit=0, thermal=thermal_policy(
-                                inputs, heavy=True, per_turn=True, window_reference=reference))
+                                inputs, heavy=True, per_turn=True, window_reference=reference, root=root))
             else:
                 reference = {'role': 'consume', 'source_run_id': capture_run_id,
                              'source_config_sha256': capture_config_sha256}
                 spec.update(max_turns=inputs['WP18'][name[0]]['max_turns'],
                             deadman_s=CONTRAST_DEADMAN_S,
                             thermal=thermal_policy(inputs, heavy=False, per_turn=name.endswith('G'),
-                                                   window_reference=reference, role='contrast'))
+                                                   window_reference=reference, role='contrast', root=root))
             config['workload_profile']['prompt_text'] = json.dumps(spec, sort_keys=True, separators=(',', ':'), allow_nan=False)
             model_id = D_TAG if name == 'D' else 'qwen3-30b-a3b'
             config['run_metadata']['tags'] = [PACK_ID, 'non-claim', 'launch_lineage_required', 'align', 'align_episode',
@@ -1511,6 +1662,7 @@ def build_files(root=ROOT):
                     w1_launcher='per-member configs via the plan_tree stage commands (the specs carry the roles)',
                     r1_runtime_entrypoint=inputs['WP15']['runtime_entrypoint']))
     check_window_reference_roles(plan)
+    check_w1_record_keys(plan, root)
     files[KIT / 'collection_plan.json'] = raw_json(plan)
     seed_table = {}
     for tag, indices in ((D_TAG, (1, 2, 91, 92, 93)), ('qwen3-30b-a3b', (1, 14, 16))):

@@ -4,6 +4,7 @@ The five Witness tests intentionally fail on 353446ad6. Product repairs and
 scientific rulings belong to the lead. Controls characterize the working
 paths and the receipt's conservative B6 coupling.
 """
+from tests.git_fixture import init_git_fixture
 from copy import deepcopy
 import hashlib
 import json
@@ -26,13 +27,15 @@ class TemporaryCandidate:
         self.root = root
         for relative in registration.ARTIFACTS:
             self.write(relative, 'synthetic registered bytes\n')
+        # require_registration() json-loads r1_slots.json before the U3 bar is read.
+        self.write(registration.REGISTRATION + 'r1_slots.json', '{}')
         # W1's HAZARD_PACK chain executes this as campaign_runner; it is not
         # an import edge, and the current receipt does not bind it.
         self.write('scripts/run_campaign.py', 'synthetic campaign implementation\n')
         self.gates = {s: f'docs/align/v4/delta-witness-{s}.md' for s in ('A', 'B')}
         for relative in self.gates.values():
             self.write(relative, 'synthetic admitted gate\n')
-        self.git('init', '-q')
+        init_git_fixture(self.root, '-q')
         reviewed = self.commit('Synthetic reviewed candidate')
         self.receipt = {
             'schema': registration.RECEIPT_SCHEMA, 'status': 'registered',
@@ -43,6 +46,12 @@ class TemporaryCandidate:
                       for s, p in self.gates.items()},
         }
         registration.validate_receipt(self.receipt, self.root)
+
+    @staticmethod
+    def executed_sources_unchecked():
+        # The synthetic repo has no R1 executed_commit (condition 13); the callers that
+        # reach require_registration() test the checks after it. Same pattern as test_r1_round4.
+        return patch.object(registration, 'verify_r1_executed_sources', lambda root, slots: None)
 
     def write(self, relative, value):
         path = self.root / relative
@@ -115,7 +124,8 @@ class TriageEvidenceWitnesses(unittest.TestCase):
              patch('joulewise.align.apple.powermode.host_state_dir', return_value=tmp), \
              patch('joulewise.align.apple.external_volume.census', return_value={}), \
              patch('joulewise.align.apple.external_volume.arm_check', return_value={'verdict': 'PASS'}), \
-             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')):
+             patch('joulewise.battery_float.observe', return_value=(good, b'synthetic raw')), \
+             patch.object(session, 'held_window_check', return_value={'ok': True, 'reasons': [], 'synthetic': True}):
             runner = lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', '')
             log = write_battery_log(Path(tmp) / 'battery.jsonl', 5000.)
             records = [session.arm_checks(tmp, {}, runner=runner, now=lambda: 5000.,

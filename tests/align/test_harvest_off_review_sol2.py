@@ -5,6 +5,8 @@ prevents the shared fixture's optional native decorators from probing an archive
 Run this module alone with a realpath TMPDIR and JW_WP22_FULL=1. Red assertions
 describe the required behavior, not acceptance of the observed defect.
 """
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
+from tests.align.v4_registration_fixtures import session_plan
 from copy import deepcopy
 import contextlib
 import hashlib
@@ -187,7 +189,7 @@ class ArchiveEqualityTests(Scratch):
                 now=lambda: 1786300000.0, monotonic_ns=lambda: 123, boot_session_uuid=lambda: 'SYNTHETIC',
                 workers=workers, io_workers=io_workers, harvest_checkout=lambda **_: checkout)
 
-        with mock.patch.object(pm, 'document_memo', contextlib.nullcontext):
+        with mock.patch.object(harvest, 'document_memo', contextlib.nullcontext):
             reference = harvest.harvest(harvest.resolve_inputs(w.plan_path), w.archive,
                                         seams=seams(1, 1), prepare_desk=True)
         expected = {p.relative_to(w.archive).as_posix(): p.read_bytes()
@@ -282,9 +284,9 @@ class EligibilityTests(Scratch):
              mock.patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
              mock.patch.object(session.pilot, 'install', return_value={}) as install:
             try:
-                session._arm_and_install(target, {'v4_series': {'window_id': 'T3'},
-                    'source_measurement_root': str(self.root)}, self.root, t2.next_plan, None,
-                    runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
+                session._arm_and_install(target, session_plan(target, {'v4_series': {'window_id': 'T3'},
+                    'source_measurement_root': str(self.root)}, now=records.NOW), self.root, t2.next_plan, None,
+                    watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
                     now=lambda: records.NOW, w1_disk_config=None, disk_gate=None, battery_log=log,
                     next_arm_triage=packet, obc_off_attested_by='synthetic', meter_probe=lambda _: {'live': True})
             except ValueError:
@@ -298,39 +300,39 @@ class MemoTests(unittest.TestCase):
         return plistlib.dumps({'value': value, 'nested': {'items': [1, 2]}})
 
     def test_changed_bytes_are_a_miss_and_callers_are_isolated(self):
-        with mock.patch.object(pm, '_parse_powermetrics_documents', wraps=pm._parse_powermetrics_documents) as parse:
-            with pm.document_memo():
+        with mock.patch.object(pm, '_powermetrics_documents', wraps=pm._powermetrics_documents) as parse:
+            with harvest.document_memo():
                 first = pm._powermetrics_documents(self.data(1))
                 first[0][0]['nested']['items'].append(3)
                 self.assertEqual(pm._powermetrics_documents(self.data(1))[0][0]['nested']['items'], [1, 2])
                 self.assertEqual(pm._powermetrics_documents(self.data(2))[0][0]['value'], 2)
-            with pm.document_memo():
+            with harvest.document_memo():
                 pm._powermetrics_documents(self.data(1))
         self.assertEqual(parse.call_count, 3)
-        self.assertIsNone(pm._DOCUMENT_MEMO.get())
+        self.assertIsNone(harvest._DOCUMENT_MEMO.get())
 
     def test_failed_parse_is_retried_and_exception_drops_member_scope(self):
-        with mock.patch.object(pm, '_parse_powermetrics_documents', wraps=pm._parse_powermetrics_documents) as parse:
+        with mock.patch.object(pm, '_powermetrics_documents', wraps=pm._powermetrics_documents) as parse:
             with self.assertRaises(RuntimeError):
-                with pm.document_memo():
+                with harvest.document_memo():
                     for _ in range(2):
                         with self.assertRaises(ValueError):
                             pm._powermetrics_documents(b'not a plist')
-                    self.assertEqual(pm._DOCUMENT_MEMO.get(), {})
+                    self.assertEqual(harvest._DOCUMENT_MEMO.get(), {})
                     raise RuntimeError('synthetic worker fault')
         self.assertEqual(parse.call_count, 2)
-        self.assertIsNone(pm._DOCUMENT_MEMO.get())
+        self.assertIsNone(harvest._DOCUMENT_MEMO.get())
 
     def test_each_assessed_member_gets_a_fresh_memo(self):
         with tempfile.TemporaryDirectory(dir=REAL_TMP) as d:
             def assess(task, readable):
-                self.assertEqual(pm._DOCUMENT_MEMO.get(), {})
+                self.assertEqual(harvest._DOCUMENT_MEMO.get(), {})
                 pm._powermetrics_documents(self.data(1))
                 return {'run_id': task['run_id']}
             with mock.patch.object(harvest, '_assess_plain_member', side_effect=assess):
                 for rid in ('first', 'second'):
                     harvest.assess_member({'bundle_path': d, 'run_id': rid})
-                    self.assertIsNone(pm._DOCUMENT_MEMO.get())
+                    self.assertIsNone(harvest._DOCUMENT_MEMO.get())
 
 
 class SizingTests(unittest.TestCase):

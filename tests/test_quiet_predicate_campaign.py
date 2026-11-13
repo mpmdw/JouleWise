@@ -3424,6 +3424,9 @@ def write_site_inventory(root, *, write_calls=WRITE_SITE_CALLS, learn_module=Tru
 
 class WriteSiteInventoryTests(unittest.TestCase):
     EXPECTED = Counter({
+        # 7146444ed's admitted W1 smoke kit writes its synthetic session.
+        ('joulewise/align/w1_smoke.py', 'prepare_smoke',
+         'write_json', 'session.json'): 1,
         ('joulewise/quiet_predicate_campaign.py', 'record_attestation',
          'write_text', 'session.json'): 1,
         ('joulewise/quiet_predicate_campaign.py', 'record_attestation',
@@ -3442,15 +3445,16 @@ class WriteSiteInventoryTests(unittest.TestCase):
 
     def copy_writers(self, root):
         for relative in ('joulewise/quiet_predicate_campaign.py',
+                         'joulewise/align/w1_smoke.py',
                          'scripts/sample_quiet_predicate_evidence.py'):
             target = Path(root) / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes((ROOT / relative).read_bytes())
         return Path(root) / 'scripts/sample_quiet_predicate_evidence.py'
 
-    def test_r45_1_repository_has_exactly_nine_write_sites(self):
+    def test_r45_1_repository_has_exactly_ten_admitted_write_sites(self):
         self.assertEqual(write_site_inventory(ROOT), self.EXPECTED)
-        self.assertEqual(sum(self.EXPECTED.values()), 9)
+        self.assertEqual(sum(self.EXPECTED.values()), 10)
 
     def test_r45_2_new_session_writer_is_listed(self):
         with tempfile.TemporaryDirectory(dir='/tmp') as tmp:

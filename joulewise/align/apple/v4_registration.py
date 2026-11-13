@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 import statistics
 import subprocess
@@ -23,8 +24,14 @@ _NAMED_ARTIFACTS = (
     'scripts/align_v4_kit.py', 'scripts/align_v4_session.py',
     'scripts/zero_ntp_frequency.c',
     'scripts/watchdog_status.py', 'scripts/launch_align_r0.py',
+    'scripts/run_align_r1_smoke.py',
+    'joulewise/align/apple/r1_phase_table.py',
+    'scripts/align_r1_followup_kit.py', 'scripts/align_r1_thermal_replay.py',
     'scripts/run_align_r0_launchagent.sh', 'scripts/post_window_unstrand.sh',
     'scripts/install_magistrate_watchdog.sh', 'tests/fixtures/night_plan_v1_retired.json',
+    # RL-62: the flag catalog the v4 desk harvest resolves to (scripts/harvest_b6_session.py falls through to
+    # joulewise.b6.registration.DEFAULTS['catalog']); it decides members_excluded, so it is bound, strict.
+    'configs/b6/flag_catalog_b6.json',
     'scripts/align_v4_thermal_desk.py', 'scripts/align_pilot_session.py',
     'scripts/align_v4_u3_bar.py', 'scripts/align_v4_u3_export.py', 'scripts/align_v4_wp19.py', 'scripts/align_v4_offloads.py',
     'joulewise/align/apple/v4_u3.py', 'joulewise/align/apple/v4_battery.py',
@@ -78,6 +85,7 @@ EXECUTED_CLOSURE = (
     'joulewise/adapters/node_client.py',
     'joulewise/adapters/nvidia_smi.py',
     'joulewise/adapters/powermetrics.py',
+    'joulewise/adapters/powermetrics_reap.py',
     'joulewise/adapters/suite_control.py',
     'joulewise/agent_identity.py',
     'joulewise/aggregate.py',
@@ -473,6 +481,32 @@ def _committed_bytes(root, commit, paths):
     return result
 
 
+R1_EXECUTED_SOURCES = (
+    "scripts/align_r1_rehearsal.py", "scripts/align_r1_runtime.py",
+    "joulewise/align/apple/r1_runtime.py", "joulewise/align/apple/r1_runtime_contract.py",
+    "joulewise/align/apple/smc_enumeration.py",
+    "joulewise/align/apple/thermal_gates.py", "configs/align/v4/r1_runtime.json",
+    "joulewise/align/apple/r1_phase_table.py", "joulewise/align/apple/workload.py",
+    "joulewise/align/apple/thermal.py",
+)
+
+
+def verify_r1_executed_sources(root, slots):
+    """RL-61/72/78/84 condition 13. Compare to the night's full commit."""
+    commit = slots.get("executed_commit")
+    if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("R1 slots require executed_commit (condition 13)")
+    blobs = _committed_bytes(root, commit, R1_EXECUTED_SOURCES)
+    for path in R1_EXECUTED_SOURCES:
+        try:
+            raw = _local(root, path).read_bytes()
+        except OSError as error:
+            raise ValueError(f"R1 executed source missing: {path}") from error
+        if blobs.get(path) is None or raw != blobs[path]:
+            raise ValueError(f"R1 executed source differs (condition 13): {path}")
+    return commit
+
+
 def validate_receipt(receipt, root):
     """Bind reviewed bytes to one existing Git commit and current working bytes.
 
@@ -531,6 +565,7 @@ def require_registration(root):
     except (OSError, ValueError) as exc:
         raise ValueError('registration_receipt.json missing or unreadable; W1 is not registered') from exc
     validate_receipt(receipt, root)
+    verify_r1_executed_sources(root, json.loads(_local(root, REGISTRATION+'r1_slots.json').read_bytes()))
     bar = json.loads(_local(root, REGISTRATION+'u3_bar.json').read_bytes())
     validate_u3(bar, root=root, commit=receipt['commit'])
     from joulewise.align.apple.v4_battery import validate_policy

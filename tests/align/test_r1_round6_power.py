@@ -20,6 +20,7 @@ from unittest.mock import patch
 from joulewise.align.apple import powermode
 from scripts import align_pilot_session as pilot, align_r1_rehearsal as r1, align_v4_kit as kit
 from scripts import align_v4_session as session
+from tests.align.v4_registration_fixtures import held_window_acceptance, session_plan
 from tests.align import test_r1_rehearsal as rehearsal_tests
 from tests.align.test_v4_kit import FakeArmHost, W1DiskGateTests
 
@@ -29,6 +30,15 @@ RESTORE = ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '0')
 
 class HostStateCase(unittest.TestCase):
     def setUp(self):
+        # r1.run() sets SIGINT/SIGTERM/SIGHUP to SIG_IGN in its teardown and
+        # restores them only at the end of its ``finally``. A test that makes
+        # the terminal-record write raise (OSError) skips that restore, and the
+        # in-process shard runner then leaks SIG_IGN into every later module:
+        # SIG_IGN survives exec, so their children ignore SIGTERM (CI run
+        # 43257905641 shard 10: test_b5_driver_p3 DeadManMeter x2 and
+        # test_codex_bridge_observer timed out). Put the dispositions back.
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            self.addCleanup(signal.signal, sig, signal.getsignal(sig))
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.tmp = Path(temporary.name)
@@ -120,14 +130,15 @@ class V4SessionHighPowerTests(HostStateCase):
         root = self.tmp / 's'
         (root / 'staging').mkdir(parents=True, exist_ok=True)
         self.custody = self.tmp / 's/custody'
-        (root / 'session.json').write_text(json.dumps(
+        (root / 'session.json').write_text(json.dumps(session_plan(root,
             {'measurement_root': str(measurement), 'inputs': {'custody_root': str(self.custody)},
-             'plan_path': str(self.custody / 'night_plan.json')}))
+             'plan_path': str(self.custody / 'night_plan.json')})))
         return measurement, root
 
     def install(self, root, host, *, installed=None):
         from tests.align.test_v4_kit import topup
         with patch.object(kit, 'require_w1_ready'), patch.object(kit, 'generate'), \
+                patch.object(session, 'held_window_check', side_effect=held_window_acceptance), \
                 patch.object(pilot, 'install', return_value={'exit_code': 0} if installed is None else installed) \
                 as install:
             try:
@@ -202,6 +213,7 @@ class V4SessionHighPowerTests(HostStateCase):
         host = FakeArmHost(mode=0, marker=self.marker)
         from tests.align.test_v4_kit import topup
         with patch.object(kit, 'require_w1_ready'), patch.object(kit, 'generate'), \
+                patch.object(session, 'held_window_check', side_effect=held_window_acceptance), \
                 patch.object(pilot, 'install', side_effect=installer):
             session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic', **topup(),
                             w1_disk_config=W1DiskGateTests.config(self, self.tmp),
@@ -357,6 +369,16 @@ class R1RegistrationAuthorityTests(HostStateCase):
         self.assertIsNone(code)
         self.assertFalse(args.registration.exists())
 
+    def test_the_driver_signal_dispositions_do_not_leak_past_a_test(self):
+        # Witness for the setUp cleanup: run the leaking path as its own case
+        # and check SIGTERM is back to what it was afterwards.
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)   # setUp's cleanup puts the outer value back
+        before = signal.getsignal(signal.SIGTERM)
+        result = unittest.TestResult()
+        type(self)('test_no_registration_without_a_terminal_record').run(result)
+        self.assertEqual([], result.errors + result.failures)
+        self.assertEqual(before, signal.getsignal(signal.SIGTERM))
+
     def test_a_signal_after_the_slots_are_built_leaves_no_registration(self):
         # A first signal between building r1_slots and the return records
         # status aborted; no r1_slots may then exist for the magistrate.
@@ -381,34 +403,31 @@ class R1NightWorstCaseTests(unittest.TestCase):
     """Round-5 cold pass LOW-6: the all-caps R1 night wall, from the phase table."""
 
     def test_worst_case_sums_every_phase_cap(self):
+        # Migrated to the round-8 admission-unit table (a85ee8ec6, RL-59/64/72):
+        # the `segments` and `precool_cap_s` keys are gone. The exact table is
+        # asserted in test_r1_round7_science's test_night_worst_case_with_the_round8_bounds.
         value = r1.night_worst_case_s(['fake-runtime'])
-        names = [row['name'] for row in value['segments']]
-        self.assertEqual(names, [row[0] for row in r1.phase_plan(False)])
-        bounds = {row['name']: row['bound_s'] for row in value['segments']}
+        units = value['admission_units']
+        flat = [name for unit in units for name in unit['names']]
+        # Every modelled phase is in exactly one unit; only the two calibration brackets
+        # (priced as overhead) are outside the units.
+        self.assertEqual(flat, [row[0] for row in r1.phase_plan(False)
+                                if row[1] not in ('calibration-pre', 'calibration-post')])
+        bounds = {unit['names'][-1]: unit['bound_s'] for unit in units}
         self.assertEqual(bounds['idle_soak'], 1800)
-        # R7-2 and R8-4: 1,750 + 1.13544 x 1,580 + 120 (the re-armed member) + 1,200 + 300 + 600
-        self.assertAlmostEqual(bounds['step_D_prefill_10k_decode_4096'], 5763.9952)
+        # R7-2 and R8-4: 1,750 + 1.13544 x 1,580 + 120 (the re-armed member) + 1,200 + 300 + 600;
+        # the step-d unit adds its ordinary 1,800 s 30B predecessor.
+        self.assertAlmostEqual(bounds['step_D_prefill_10k_decode_4096'], 1800 + 5763.9952)
         self.assertAlmostEqual(bounds['high_power_B'], r1.aba_leg_bound_s(['fake-runtime']))
         self.assertAlmostEqual(value['no_redo_s'], sum(bounds.values()))
         self.assertEqual(value['batch_blackout_s'], 5400)
+        self.assertAlmostEqual(value['largest_unit_s'], max(bounds.values()))
         self.assertAlmostEqual(value['batch_encounter_max_s'], max(bounds.values()) + 5400)
 
-    def test_worst_case_uses_the_round6_table_and_counts_the_r6_2_retries(self):
-        # Round-6 integration: the R6-1/R6-2/R6-6 phase table with the runtime
-        # config's precool cap, and one R6-2 retry per calibration segment.
-        value = r1.night_worst_case_s(['fake-runtime'])
-        cap = r1.runtime_precool_cap_s(['fake-runtime'])
-        self.assertEqual(value['precool_cap_s'], cap)
-        names = [row['name'] for row in value['segments']]
-        self.assertEqual(names, [row[0] for row in r1.phase_plan(False, precool_cap_s=cap)])
-        self.assertNotIn('cooldown_after_30b', names)
-        bounds = {row['name']: row['bound_s'] for row in value['segments']}
-        self.assertEqual(bounds[r1.STEP_D_NAME + r1.PRECOOL_SUFFIX], cap)
-        calibration = [row for row in value['segments'] if row['kind'] in r1.contract.G0_INCONCLUSIVE_KINDS]
-        self.assertEqual(len(calibration), 4)
-        self.assertAlmostEqual(value['r6_2_retry_max_s'], sum(cap + row['bound_s'] for row in calibration))
-        self.assertAlmostEqual(value['with_retries_and_one_batch_encounter_s'],
-                               value['no_redo_s'] + value['r6_2_retry_max_s'] + value['batch_encounter_max_s'])
+    # test_worst_case_uses_the_round6_table_and_counts_the_r6_2_retries: deleted. RL-59/64/72
+    # (a85ee8ec6) removed the R6-2 retries and the step-D precool, and priced the night as two
+    # whole-unit load redos; superseded by test_r1_round7_science.G0TimeoutTests.
+    # test_night_worst_case_with_the_round8_bounds (108768 / 126480).
 
 
 if __name__ == '__main__':

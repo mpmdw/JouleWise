@@ -35,6 +35,7 @@
     "joulewise/adapters/node_client.py": null,
     "joulewise/adapters/nvidia_smi.py": null,
     "joulewise/adapters/powermetrics.py": null,
+    "joulewise/adapters/powermetrics_reap.py": null,
     "joulewise/adapters/suite_control.py": null,
     "joulewise/agent_identity.py": null,
     "joulewise/aggregate.py": null,
@@ -242,6 +243,8 @@
     "scripts/align_r0_checks.py": null,
     "scripts/align_r1_rehearsal.py": null,
     "scripts/align_r1_runtime.py": null,
+    "scripts/align_r1_followup_kit.py": null,
+    "scripts/align_r1_thermal_replay.py": null,
     "scripts/align_r1_to_w1_chain.py": null,
     "scripts/align_r1_turn_counts_export.py": null,
     "scripts/align_smc_enumerate.py": null,
@@ -321,10 +324,13 @@
     "scripts/zero_ntp_frequency.c": null,
     "scripts/watchdog_status.py": null,
     "scripts/launch_align_r0.py": null,
+    "scripts/run_align_r1_smoke.py": null,
     "scripts/run_align_r0_launchagent.sh": null,
     "scripts/post_window_unstrand.sh": null,
     "scripts/install_magistrate_watchdog.sh": null,
-    "tests/fixtures/night_plan_v1_retired.json": null
+    "tests/fixtures/night_plan_v1_retired.json": null,
+    "joulewise/align/apple/r1_phase_table.py": null,
+    "configs/b6/flag_catalog_b6.json": null
   },
   "commit": null,
   "gates": {

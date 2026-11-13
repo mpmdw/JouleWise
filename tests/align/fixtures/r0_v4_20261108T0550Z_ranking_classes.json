@@ -1,0 +1,2022 @@
+{
+ "schema": "joulewise.align.r0_ranking_classes.v1",
+ "source_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b",
+ "source": "night-align/r0-v4-20261108T0550Z/smc/r0.json response.ranking",
+ "ranking": [
+  {
+   "key": "TVH3",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf2B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf18",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf2E",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf1B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf24",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf2D",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf14",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf1D",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf1E",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf19",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf1A",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf28",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf29",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TCDX",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVV0",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf2A",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVFh",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TV0h",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "TV1h",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "TVh0",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Tf48",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Ts0h",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Tf44",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Tf4D",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Tf4E",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Ts0i",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "TCMz",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf4A",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf3B",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf34",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf3D",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf3E",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "TCMb",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "TVD0",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "TVHC",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Tf39",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf49",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf3A",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf4B",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp3P",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TV0s",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "TV1s",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "TVsa",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "TVss",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Tf38",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Te0S",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Te0L",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Te0K",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Te0M",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Te0T",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ts0C",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Ts0D",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Ts0E",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp1K",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf09",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf0A",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf04",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf0D",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf0E",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Th0C",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Th0D",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tf08",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp18",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Th0E",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp0w",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf0B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0i",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp16",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp17",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ts0R",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Ts0S",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp0c",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0u",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp0v",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp3T",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3S",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Ts0T",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp10",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0z",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0y",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1S",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Te04",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Te05",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Te0P",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp1G",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1I",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1J",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ts04",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Ts05",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp1E",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1F",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3W",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1Q",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1R",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3X",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVSC",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp0W",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ts06",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Te06",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Te0Q",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TV0m",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Tp0g",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0h",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVMC",
+   "class": "die",
+   "eligible": true
+  },
+  {
+   "key": "Tp3O",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Th04",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Th05",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp0M",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0a",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0b",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0o",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Th0A",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0E",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Th08",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Th09",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Ts0U",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Ts0V",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Th06",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ts0W",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp0U",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0V",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp06",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0K",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0L",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0T",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0D",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp04",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp05",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Th02",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Th00",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Th01",
+   "class": "heatsink",
+   "eligible": true
+  },
+  {
+   "key": "Tp0S",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0R",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0m",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp0n",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf9F",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TfA0",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TSVR",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TSXR",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TR1d",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TSWR",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TS0P",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD0",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD2",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD4",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD9",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRDf",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD5",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD1",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRDX",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRDa",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRDb",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD8",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRDc",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD6",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD3",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRD7",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRDd",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TRDe",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TaTP",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TR2d",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TCHP",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD5",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD9",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD1",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD6",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPDf",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TW0P",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD7",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPDb",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPDc",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD2",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD3",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPDX",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPDd",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPDa",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPDe",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD8",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD4",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TaRF",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPSP",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPD0",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TPMP",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TaLP",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TMVR",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVS2",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVS1",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDER",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVS0",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDEL",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDBP",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDCR",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDEC",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDeL",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDeR",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TaRW",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDTP",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TaLW",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TaLT",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TaRT",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ts0P",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TB1T",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TG1B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TH0b",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TH0x",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TH0a",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TAOL",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ts1P",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Ac",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0CR",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Dc",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Fb",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Fc",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Md",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Mn",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Mx",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Sf",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0St",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F0Tg",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Ac",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1CR",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Dc",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Fb",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Fc",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Md",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Mn",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Mx",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Sf",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1St",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "F1Tg",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "FNum",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "FOFC",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "FOff",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "FRmp",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Fpds",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ftst",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TB0T",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TB2T",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD00",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD01",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD02",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD03",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD04",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD10",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD11",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD12",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD13",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD14",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD20",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD21",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD22",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD23",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TD24",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TDVx",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TG0B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TG0C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TG0H",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TG0V",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TG2B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TH1a",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TH1b",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TR0Z",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TV1m",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TV2S",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TV3S",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVFm",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVH2",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVHO",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVM2",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVM3",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVMD",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVMO",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVSO",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVm0",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ta08",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ta09",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ta0G",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ta0H",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ta0K",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ta0L",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ta0O",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Ta0P",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf00",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf01",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf02",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf05",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf06",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf0C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf10",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf11",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf12",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf15",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf16",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf1C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf20",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf21",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf22",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf25",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf26",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf30",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf31",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf32",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf35",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf36",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf3C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf40",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf41",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf42",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf45",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf46",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tf4C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg00",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg01",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg04",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg05",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg0C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg0D",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg0K",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg0L",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg0y",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg0z",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg16",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg17",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg1E",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg1F",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg1s",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg1t",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg1x",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg1y",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg21",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg22",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg29",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg2A",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg2H",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg2I",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg33",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg34",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg3B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg3C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg3J",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg3K",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg3x",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tg3y",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1g",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1h",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1i",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1o",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1p",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1q",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1x",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1y",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp1z",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp25",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp26",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp27",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp29",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2A",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2H",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2I",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2J",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2P",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2Q",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2R",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2X",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2Y",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2Z",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2f",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2g",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2h",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2j",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2k",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2l",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2r",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2s",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2t",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp2z",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp30",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp31",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp33",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp34",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp35",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3B",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3C",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3D",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3a",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3b",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3e",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3f",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3i",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tp3j",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz11",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz12",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz13",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz14",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz15",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz16",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz17",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz18",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "Tz1j",
+   "class": "record-only",
+   "eligible": false
+  },
+  {
+   "key": "TVA0",
+   "class": "record-only",
+   "eligible": false
+  }
+ ]
+}

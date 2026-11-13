@@ -28,6 +28,7 @@ from joulewise.b5 import plan
 from joulewise.b6 import registration
 from tests.test_b5_driver import Harness, fake_monitor_argv
 from tests.align.test_v4_cadence import arm_seams
+from tests.align.v4_registration_fixtures import span_aware_watchdog
 from tests.align.test_v4_kit import ROOT, FakeArmHost
 
 
@@ -507,6 +508,12 @@ class FakeWorld:
                     return {'artifacts': {uid: {'inventory': [{'path': 'weight'}]} for uid in pins['units']}}
                 return original_read(path, *args)
             stack.enter_context(patch.object(registration, 'load_identity_pins', side_effect=physical_pins))
+            stack.enter_context(patch.object(session, '_prepare_weight_digests',
+                                            return_value={'ok': True, 'synthetic': True}))
+            stack.enter_context(patch.object(session, 'runtime_stack_preflight',
+                return_value={'ok': True, 'reasons': [], 'synthetic': True}))
+            stack.enter_context(patch.object(session, 'held_window_check',
+                return_value={'ok': True, 'reasons': [], 'synthetic': True}))
             stack.enter_context(patch.object(h, 'read', side_effect=physical_inventory))
             # The chain replay stages t0 in the past to avoid an eight-minute
             # wait. The pre-arm clock is earlier; the real preflight still reads
@@ -532,7 +539,7 @@ class FakeWorld:
                 now=lambda: state['t0_epoch_s'] - 1, next_arm_triage=packet,
                 obc_off_attested_by='SYNTHETIC operator', battery_log=self.battery_log(state),
                 frequency_reader=lambda: frequency_probe(0),
-                **arm_seams())
+                **{**arm_seams(), 'watchdog_check': span_aware_watchdog})
             test.assertEqual(installed['exit_code'], 0)
             test.assertEqual(len(self.installer_calls), 1)
             harness.plan_path = Path(state['plan_path'])

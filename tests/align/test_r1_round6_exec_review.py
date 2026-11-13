@@ -30,6 +30,28 @@ from tests import test_run_night as rn
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def setUpModule():
+    real_run = subprocess.run
+    sudo_attempts = []
+
+    def isolated_run(argv, *args, **kwargs):
+        if argv and str(argv[0]) in ("sudo", "/usr/bin/sudo"):
+            sudo_attempts.append(argv)
+            raise AssertionError(f"real sudo forbidden in this module: {argv!r}")
+        return real_run(argv, *args, **kwargs)
+
+    def assert_no_sudo():
+        # Close deliberately catches probe errors; a swallowed guard failure
+        # must still fail the module instead of appearing to prove isolation.
+        if sudo_attempts:
+            raise AssertionError(f"real sudo attempted: {sudo_attempts!r}")
+
+    patcher = mock.patch.object(subprocess, "run", isolated_run)
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+    unittest.addModuleCleanup(assert_no_sudo)
+
+
 def load_tests(loader, tests, pattern):
     """Only this module's own tests (DeadManHighPowerTests inherits the
     NightDriverTests fixture, not its tests)."""
@@ -48,6 +70,10 @@ class DeadManHighPowerTests(rn.NightDriverTests):
         mapping["ac_powermode"] = 2
         self.plan_path.write_text(json.dumps(mapping))
         host = self._power_host(2)
+        # 19a862dc8 routes dead-man restoration through close; c6d25d963
+        # adds its leave-network-time read. Keep that read explicitly fake.
+        query = self.driver.NETWORK_TIME_QUERY_ARGV
+        self.source.results[query] = rn._probe(query, stdout="Network Time: Off\n")
         marker = Path(powermode.host_marker_path())
         powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG,
                                     owner={"custody_root": owner_custody or self.custody,
@@ -69,7 +95,18 @@ class DeadManHighPowerTests(rn.NightDriverTests):
         self.assertEqual(self._dead_man_at_completion(), self.driver.EXIT_GO)
         self.assertEqual(host.mode, 0)
         self.assertFalse(marker.exists())
-        self.assertIn("ac powermode exit restore (dead_man)", (self.custody / "night.log").read_text())
+        # 19a862dc8: the dead-man uses the shared close, not exit-restore.
+        self.assertIn("ac powermode close: restore Automatic; network time left_off:",
+                      (self.custody / "night.log").read_text())
+        records = list((self.custody / "night").glob("deadman_host_restoration-*.json"))
+        self.assertEqual(len(records), 1)
+        restored = json.loads(records[0].read_text())
+        self.assertEqual(restored["action"], "restored")
+        self.assertEqual(restored["marker"], str(marker))
+        self.assertTrue(restored["marker_removed"])
+        self.assertEqual(restored["observed"], 0)
+        self.assertTrue(restored["ok"])
+        self.assertEqual(restored["network_time"]["read"]["stdout"], "Network Time: Off\n")
         self.driver.run_courier.assert_called_once()
 
     def test_the_dead_man_after_a_killed_run_night_restores_once_the_chain_is_gone(self):
@@ -203,7 +240,7 @@ class NightLockAcrossProcessesTests(unittest.TestCase):
 class PhaseOrderTests(unittest.TestCase):
     """R6-1 / R6-2 on the phase table the driver runs (any cap, with or without 4-bit)."""
 
-    def test_gated_runs_follow_a_d_turn_and_calibrations_follow_a_bounded_precool(self):
+    def test_gated_runs_follow_a_d_turn_and_planning_kinds_follow_a_bounded_idle_until_soak(self):
         from joulewise.align.apple import r1_runtime_contract as contract
         from scripts import align_r1_rehearsal as r1
         for include_4bit in (False, True):
@@ -215,11 +252,22 @@ class PhaseOrderTests(unittest.TestCase):
                         # R6-1: only W1's own idle (inside the member) after a D
                         # turn; no idle segment, no cool-to-band in between.
                         self.assertIn(kinds[index - 1], r1.D_TURN_KINDS, (name, kinds[index - 1]))
-                    if kind in contract.G0_INCONCLUSIVE_KINDS:
-                        # R6-2: a bounded precool to the G0 band of R right before.
+                    if kind in contract.PLANNING_KINDS:
+                        # R6-2 as revised by RL-59/64/72 (a85ee8ec6): each planning
+                        # kind starts after a bounded idle-until-soak (the cooldown
+                        # after D, or its own precool), now against step-D R_D.
                         before = phases[index - 1]
                         self.assertEqual(before[1], "idle-until-soak", name)
                         self.assertIn(before[2], (cap, r1.COOLDOWN_AFTER_D_MAX_S), name)
+                    elif kind in contract.G0_INCONCLUSIVE_KINDS:
+                        # There are no soak releases, no step-D precool and no wait that
+                        # could split the capture pair: step-30b follows the soak
+                        # idle, the A-B-A legs their own native captures, and step-d
+                        # its ordinary 30B predecessor (one admission unit).
+                        expected = {"step-30b": "idle", "step-d": "capture-predecessor-30b",
+                                    "high-power-aba-a1": "step-30b", "high-power-aba-b": "high-power-aba-a1",
+                                    "high-power-aba-a2": "high-power-aba-b"}[kind]
+                        self.assertEqual(kinds[index - 1], expected, name)
                 self.assertNotIn("cooldown_after_30b", [name for name, *_ in phases])   # R6-6
                 gated = [i for i, (n, k, *_) in enumerate(phases) if n in r1.GATED_NAMES or k == "x-g"]
                 self.assertEqual(gated, list(range(gated[0], gated[0] + 4)))

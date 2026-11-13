@@ -1,0 +1,30 @@
+{
+  "authority": "docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md RL-89 (audit/2026-11-10-fable @ 01026f651), RL-94 (@ f89488aec)",
+  "authorizes_night": true,
+  "classification_sha256": "0b9cdb9e136eee48c742a6bdfef3313373f795949027779353c31f717630e0a6",
+  "conditions": [
+    "the config commit reviewed (cold review of the list derivation and table regeneration) and CI green",
+    "the regenerated table accepted on RL-89's four identities",
+    "Part A passed at that commit: G0 on TV0h/Th0C at the registered default band releases inside 1,200 s (fresh TV0h/Th0C soak, RL-94)",
+    "the magistrate's Mac check: smc/r0.json sha256 verified, then the config's 60 keys and classes equal its eligible die/heatsink rows",
+    "D-7 and D-8 (not the research lead's)"
+  ],
+  "note": "RL-89: the research lead authorizes the night on these conditions; the lead does not return to the research lead if all are met. Written by the lead.",
+  "research_lead_ruling": "RL-89",
+  "schema": "joulewise.align.r1_sensor_ruling.v1",
+  "sensors": {
+    "fan_keys": [
+      "F0Ac",
+      "F1Ac"
+    ],
+    "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b",
+    "record_keys": [
+      "Tf08"
+    ],
+    "s_fast": "TV0h",
+    "s_slow": "Th0C"
+  },
+  "smoke_part_b_path": "docs/run_reports/2026-11-12-rl89/smoke_part_b.rl89.json",
+  "smoke_part_b_sha256": "1fdd980c91ceca6ee3907191b499f0108ca84b8709648a638bd49808a298eba3",
+  "superseded_smoke_part_b_sha256": "6b05379df65a34e6503a29ce5813d8934ee9d923b9fe3c83c04301070d1ff373"
+}

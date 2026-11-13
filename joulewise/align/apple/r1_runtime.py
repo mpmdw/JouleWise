@@ -60,6 +60,9 @@ RESULT_NAME = "runtime_result.json"
 CUSTODY_NAME = "runtime_custody.json"
 # The accepted step-d attempt always owns this canonical directory (driver).
 STEP_D_SEGMENT = "step_D_prefill_10k_decode_4096"
+STEP_30B_SEGMENT = "step_30b"
+OPERATING_REFERENCE_SOURCE = "r1_step_30b_pre_warmup"
+R1_REGISTRATION = ROOT / "configs/campaigns/align_v4/registration/r1_slots.json"
 NS = 1_000_000_000
 TERM_TEARDOWN_S = 15.0       # forced exit, inside the driver's 20 s TERM grace
 WATCHDOG_HARD_S = 4.0        # the watchdog's own teardown: 15 s + 4 s < the 20 s grace
@@ -72,13 +75,11 @@ STEP_QUIET_S = 300
 RECOVERY_CAP_S = 600
 COOLDOWN_CAP_S = 1500        # ruling 1(c)
 PREHEAT_CAP_S = 900
-# LEAD-RULINGS-2 R7-2: R1's gated D runs, X-G, step-d and the designed start
-# states (the R6-2 precool/retry segments) arm the G0 timeout the runtime
-# config names (``g0_timeout_s``, 1,200 s: after a full load no key reaches
-# G0's slope bar until 840-1,040 s after load end, so the 600 s cap truncated
-# the waits R1 exists to measure). Every other G0 keeps the 600 s default.
+# 2026-11-10 ruling §3.3 extends the existing 1,200 s R7-2 timeout
+# to every model member. Only the sensors-only release keeps 600 s.
 G0_TIMEOUT_CONFIG_KEY = "g0_timeout_s"
-G0_TIMEOUT_KINDS = ("step-d", "x-g", *contract.GATED_D_KINDS, *contract.PLANNING_KINDS)
+G0_TIMEOUT_KINDS = ("step-30b", "step-d", "x-g", "d-4bit", *contract.HIGH_POWER_KINDS,
+                    *contract.GATED_D_KINDS, *contract.PLANNING_KINDS)
 PREHEAT_MARGIN_C = 0.5
 PLANNING_FAST_CEILING_C = 150.0   # designed start states band S_slow only (ruling 6)
 DEADMAN_FACTOR = 1.13544
@@ -104,6 +105,88 @@ INCOMPLETE_MEMBER_FLAGS = ("episode.deadman:", "episode.decode_budget:", "episod
                            "thermal.start_gate_timeout", "thermal.gate_timeout:", "thermal.hold_timeout:",
                            "thermal.state_unobserved", "thermal.collector_failed", "thermal.custody_invalid",
                            "thermal.status_source_missing")
+
+
+TIMEOUT_RUN_KINDS = ("step-30b", "step-d", *contract.HIGH_POWER_KINDS, *contract.PLANNING_KINDS)
+
+
+# Smoke admission budget (RUN_STATE 276), on the kit's clock from its start.
+# Part A must fit the 30B predecessor (551.3 s in smoke 276), step D's start-up
+# to G0 entry (521.6 s; 518.1 and 516.0 s in the R1 night), the full 1,200 s
+# G0 cap and Part A's close after G0 (134.6 s in the R1 night): 2,407.5 s.
+# 3,000 s leaves 592.5 s of slack. Part B uses it up to G0 release, then
+# smoke_post_g0_budget. The 1,800 s it replaces predates RL-84 P-1's predecessor
+# in Part A. An engineering watchdog on the smoke only (RL-84 P-5: the ruled
+# 1,200 s is the G0 cap and nothing else); no production member reads it.
+SMOKE_ADMISSION_S = 3000
+# RUN_STATE 278: the smoke's watchdogs leave ITIMER_REAL to its one owner, the
+# episode deadman (budget.EpisodeDeadman.guard refuses to arm over an active
+# timer, WP8), and reach the main thread on this signal instead.
+SMOKE_WATCHDOG_SIGNAL = signal.SIGUSR1
+
+
+class SmokeWatchdog:
+    """Smoke-only wall watchdog on the monotonic clock, off ITIMER_REAL.
+
+    ``set(seconds)`` behaves like ``setitimer(ITIMER_REAL, seconds)`` did for
+    the smoke: a positive value (re)arms one deadline, 0 disarms. At the
+    deadline a daemon thread sends SMOKE_WATCHDOG_SIGNAL once to the main
+    thread, whose handler raises; ``stop()`` ends the thread, after which no
+    signal is sent and ``active`` is False (the handler ignores a late one)."""
+
+    def __init__(self, *, signum=SMOKE_WATCHDOG_SIGNAL, monotonic=time.monotonic,
+                 send=signal.pthread_kill, main_ident=None):
+        self.signum, self.monotonic, self.send = signum, monotonic, send
+        self.main_ident = main_ident if main_ident is not None else threading.main_thread().ident
+        self.active, self.deadline = True, None
+        self._wake = threading.Condition()
+        self._thread = threading.Thread(target=self._run, name="r1-smoke-watchdog", daemon=True)
+        self._thread.start()
+
+    def set(self, seconds):
+        with self._wake:
+            self.deadline = self.monotonic() + seconds if seconds > 0 else None
+            self._wake.notify_all()
+
+    def stop(self):
+        with self._wake:
+            self.active, self.deadline = False, None
+            self._wake.notify_all()
+        self._thread.join(timeout=5.0)
+
+    def _run(self):
+        with self._wake:
+            while self.active:
+                if self.deadline is None:
+                    self._wake.wait()
+                    continue
+                left = self.deadline - self.monotonic()
+                if left > 0:
+                    self._wake.wait(min(left, 1.0))
+                    continue
+                self.deadline = None
+                self.send(self.main_ident, self.signum)
+
+
+def smoke_post_g0_budget(quiet_s, rearm_s):
+    """Finite Part B watchdog, derived from the phases after G0 release."""
+    if rearm_s is None or not _finite(rearm_s) or rearm_s <= 0:
+        raise RuntimeFailure("smoke Part B requires a positive re-armed turn bound")
+    phases = {"quiet": quiet_s, "turn": rearm_s, "recovery": RECOVERY_CAP_S,
+              "classification_and_close": 120}
+    return {**phases, "total": sum(phases.values())}
+
+
+def allow_g0_timeout_run(session, row):
+    """RL-72 E3: no fault, no pseudo-reference, observed timeouts only."""
+    if row.get("outcome") != "timeout" or any(
+            flag.startswith(("thermal.state_unobserved", "thermal.collector_failed",
+                             "thermal.status_source_missing", "thermal.custody_invalid"))
+            for flag in session.flags):
+        return False
+    if "r1.g0_timeout_run" not in session.flags:
+        session.flags.append("r1.g0_timeout_run")
+    return True
 
 
 def incomplete_member_reasons(member):
@@ -132,7 +215,8 @@ def only_g0_unreleased(incomplete, g0_outcome):
     before turn 0, no turn, and the G0's own timeout or deadman flag). Any
     other reason (a collector, custody or member failure) still refuses."""
     allowed = {"episode.g0_unreleased:0", "turns:0"}
-    allowed |= {"timeout": {"thermal.start_gate_timeout"}, "deadman": {"episode.deadman:0"}}.get(g0_outcome, set())
+    allowed |= {"timeout": {"thermal.start_gate_timeout"}, "deadman": {"episode.deadman:0"},
+                "unobserved": {"thermal.state_unobserved"}}.get(g0_outcome, set())
     return "episode.g0_unreleased:0" in incomplete and set(incomplete) <= allowed
 
 
@@ -271,6 +355,89 @@ class InventoryJournal:
             return deepcopy(self._rows)
 
 
+def _inventory_process(path, stop, ready, reader_factory):
+    """Own the reader and ticker in a spawned process (RL-74/RL-76).
+
+    A blocked model thread cannot starve this interpreter. Reads are never
+    backfilled; the desk checks each actual one-second cell.
+    """
+    import importlib
+    from joulewise.clock import SystemClock
+    from joulewise.align.apple.sampler import monotonic_ns
+    reader = None
+    try:
+        module, name = reader_factory.split(":")
+        reader = getattr(importlib.import_module(module), name)()
+        clock = SystemClock()
+        journal = InventoryJournal(reader, lambda: monotonic_ns(clock.stamp()), path)
+        journal.start()
+        journal.sample()
+        ready.send((True, journal.inventory))
+        parent = os.getppid()
+        due = time.monotonic()
+        while not stop.is_set() and os.getppid() == parent:
+            due += 1.0
+            if stop.wait(max(0.0, due - time.monotonic())):
+                break
+            journal.sample()
+            # A slow sweep does not synthesize missed cells or catch up in a burst.
+            # The grid stays at 1.000 s (a sweep shorter than a tick costs no
+            # time); a sweep that overran whole ticks skips them, as the
+            # thermal sidecar's loop does (RUN_STATE 280).
+            now = time.monotonic()
+            if now - due >= 1.0:
+                due += (now - due) // 1.0
+    except BaseException as error:
+        try:
+            ready.send((False, f"{type(error).__name__}: {error}"))
+        finally:
+            raise
+    finally:
+        if reader is not None:
+            reader.close()
+        ready.close()
+
+
+class ProcessInventory:
+    """Parent handle; inventory rows are read only after the worker stops."""
+
+    def __init__(self, path, *, reader_factory="joulewise.align.apple.smc_reader:Reader"):
+        import multiprocessing
+        self.path = Path(path)
+        context = multiprocessing.get_context("spawn")
+        self.stop = context.Event()
+        self.receive, send = context.Pipe(duplex=False)
+        self.process = context.Process(target=_inventory_process,
+            args=(str(path), self.stop, send, reader_factory), name="r1-inventory")
+        self.process.start()
+        send.close()
+        if not self.receive.poll(20):
+            self.close()
+            raise RuntimeFailure("inventory process did not become ready")
+        ok, value = self.receive.recv()
+        if not ok:
+            self.close()
+            raise RuntimeFailure(f"inventory process: {value}")
+        self.inventory = value
+        self.keys = sorted(item["key"] for item in value["keys"])
+
+    def close(self):
+        self.stop.set()
+        self.process.join(5)
+        if self.process.is_alive():
+            self.process.terminate()
+            self.process.join(2)
+            raise RuntimeFailure("inventory process failed to stop")
+        code = self.process.exitcode
+        self.receive.close()
+        if code != 0:
+            raise RuntimeFailure(f"inventory process exited {code}")
+
+    @property
+    def rows(self):
+        return [json.loads(line) for line in self.path.read_text().splitlines() if line.strip()]
+
+
 # LEAD-RULINGS-2 R9-1: PR #692 classifier fields the R1 classification record
 # keeps verbatim from smc_enumeration.rank (inside classification_sha256).
 CLASSIFIER_RECORD_FIELDS = ("heat_ordering_indeterminate", "heat_ordering_wide_exclusion",
@@ -298,7 +465,8 @@ def classify_step(inventory, rows, *, prefill_ns, last_decode_ns, quiet_s=300, r
                "started": {"monotonic_ns": origin}}
     ranked = smc_enumeration.rank(capture, stage="r1")
     previous = {role: r0_sensors.get(role) for role in ("s_fast", "s_slow")}
-    changed = any(ranked[role] != previous[role] for role in previous)
+    changed = all(ranked[role] is not None for role in previous) and any(
+        ranked[role] != previous[role] for role in previous)
     # LEAD-RULINGS-2 R9-1: the record also carries PR #692's classifier
     # diagnostics (record only; no verdict reads them).
     result = {key: ranked[key] for key in ("rule", "s_fast", "s_slow", "die_candidates",
@@ -307,6 +475,8 @@ def classify_step(inventory, rows, *, prefill_ns, last_decode_ns, quiet_s=300, r
     result.update(status="pass" if ranked["s_fast"] is not None and ranked["s_slow"] is not None else "fail",
                   r0_sensors=previous, sensor_pick_changed=changed,
                   flags=["r1.sensor_pick_changed"] if changed else [], phases=phases, journal_rows=len(rows),
+                  phase_bounds_ns={"quiet": [origin, prefill_ns], "load": [prefill_ns, last_decode_ns],
+                                   "recovery": [last_decode_ns, recovery_end]},
                   # R7-13: aliased keys (identical series over this journal) are
                   # one thermometer; the kit refuses a policy that gates on two
                   # keys of one group.
@@ -326,6 +496,49 @@ def classify_step(inventory, rows, *, prefill_ns, last_decode_ns, quiet_s=300, r
 def resolve(path):
     path = Path(path)
     return path if path.is_absolute() else ROOT / path
+
+
+def sensor_admissibility(classification, picks, r0_keys):
+    """RL-78: confirm the fixed smoke pair, without consulting its new rank."""
+    rows = {r["key"]: r for r in classification["ranking"]}
+    reasons = []
+    fast, slow = picks.get("s_fast"), picks.get("s_slow")
+    aliases = classification.get("alias_groups", [])
+    if fast == slow or any(fast in g and slow in g for g in aliases):
+        reasons.append("picked keys are aliases")
+    for role, key in picks.items():
+        row = rows.get(key, {})
+        noise_max = 1/3 if role == "s_fast" else .15
+        if (key not in r0_keys or row.get("unit") != "degC" or row.get("above_junction")
+                or row.get("clamped") or row.get("heat_ordering_excluded")
+                or not row.get("resolving")
+                or not _finite(row.get("noise")) or row["noise"] > noise_max
+                or not _finite(row.get("t_band_s")) or not 0 <= row["t_band_s"] <= 300
+                or not _finite(row.get("tau_s")) or not 0 <= row["tau_s"] <= 300):
+            reasons.append(f"{role}: {key} is not admissible on D (rise/noise/return-time/R0/quality)")
+    if classification.get("reason"):
+        reasons.append(classification["reason"])
+    return {"ok": not reasons, "reasons": reasons, **picks,
+            "second_key_label": "near-die settling check", "authority": "RL-78"}
+
+
+def select_smoke_sensors(classification, r0_keys):
+    """Registered picks, with only RL-78's empty-slow-class fallback.
+
+    rank() remains unchanged. Class-edge margins and alternative classifiers
+    are disclosures and are never read here. Lexical ties match select_keys.
+    """
+    fast, slow = classification.get("s_fast"), classification.get("s_slow")
+    fallback = slow is None and not classification.get("heatsink_candidates")
+    if fallback:
+        candidates = []
+        for row in classification["ranking"]:
+            pair = {"s_fast": fast, "s_slow": row["key"]}
+            if sensor_admissibility(classification, pair, r0_keys)["ok"]:
+                candidates.append(row)
+        slow = min(candidates, key=lambda r: (-r["t_band_s"], r["key"]))["key"] if candidates else None
+    result = sensor_admissibility(classification, {"s_fast": fast, "s_slow": slow}, r0_keys)
+    return {**result, "fallback": fallback, "selected_at": "smoke_part_b"}
 
 
 class HashDeadline(Exception):
@@ -400,8 +613,18 @@ def reference_c(soak, sensors):
     return {"fast_c": values["s_fast"], "slow_c": values["s_slow"]}
 
 
-def bands_c(soak, sensors):
-    """FD 2.6 / slot S5: delta_k = max(1.0 C, 3 x the detrended soak SD of key k)."""
+def registered_s6():
+    """The ruled S6 and its receipt; unmeasured slots remain pending."""
+    return json.loads(R1_REGISTRATION.read_text())
+
+
+def bands_c(soak, sensors, *, slow_floor=None):
+    """Fast: max(1 C, 3 SD); slow: max(registered S6, 3 SD).
+
+    Pass slow_floor=1 C to retain the registered S5 formula separately.
+    """
+    if slow_floor is None:
+        slow_floor = registered_s6()["slots"]["S6"]
     out = {}
     for role, name in (("s_fast", "delta_fast_c"), ("s_slow", "delta_slow_c")):
         try:
@@ -410,7 +633,7 @@ def bands_c(soak, sensors):
             raise Refused(f"soak reference lacks the detrended SD of {sensors[role]}") from error
         if not math.isfinite(sd) or sd < 0:
             raise Refused("soak detrended SD must be finite and non-negative")
-        out[name] = max(BAND_FLOOR_C, 3.0 * sd)
+        out[name] = max(slow_floor if role == "s_slow" else BAND_FLOOR_C, 3.0 * sd)
     return out
 
 
@@ -419,10 +642,8 @@ def gate_policy(sensors, bands, *, turn_cap_s, chunk_tokens, heavy, per_turn, g0
     policy = {
         "sensors": sensors, "delta_fast_c": bands["delta_fast_c"], "delta_slow_c": bands["delta_slow_c"],
         "turn_cap_s": turn_cap_s, "chunk_tokens": chunk_tokens, "heavy": heavy, "per_turn": per_turn,
-        # The policy validator needs a role; no R1 model member keeps it. Every
-        # member installs its reference through a session hook before warmup
-        # (the soak R, or a designed start state), so capture_reference never
-        # replaces it with a self-captured warm value (LEAD-RULINGS-2 R5-1).
+        # Native captures for step-30B, each leg and step-D. Consumers install
+        # authenticated step-D R_D (or a designed offset) before warmup.
         "window_reference": {"role": "capture"}}
     if g0_cap_s is not None:
         policy["g0_cap_s"] = g0_cap_s   # R7-2: the R1 G0 timeout
@@ -765,13 +986,13 @@ def recovery_time(rows, sensors, reference, bands, peak_ns):
 
 
 def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_censored, bands,
-                        t_decline_s, t_decline_status, d_class):
+                        t_decline_s, t_decline_status, d_class, s5_bands=None):
     """Slot vocabulary S1-S9, B_D, I_D, T_dead, N_chunk, t_decline, class.
 
     S1-S4 are the R0-picked keys' step response (S1 fast delta T, S2 fast t63,
     S3 slow delta T, S4 slow tau); the key names and the class checks are in
-    the detail. S5 = delta_slow from the soak; S6 = the delta_slow R1 gates use
-    (the S6 tuning is the lead's after the gated runs); S7 = G_turn; S8 =
+    the detail. S5 retains max(1 C, 3 soak SD); S6 is the slow band R1 gates use
+    (including the 2026-11-10 tuning); S7 = G_turn; S8 =
     N_chunk; S9 = t_decline. A censored t_decline (no decline in the step)
     is the observed decode length and N_chunk is 2,048 (A1 A3.1).
     """
@@ -800,8 +1021,9 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
     g_turn = min(300.0, 3.0 * recovery_s)
     planning_turn_s = prefill_s + 4096 / r_decode
     fast, slow = responses["s_fast"], responses["s_slow"]
+    s5_bands = s5_bands or bands
     slots = {"S1": fast["delta_t_c"], "S2": fast["t63_s"], "S3": slow["delta_t_c"], "S4": slow["tau_s"],
-             "S5": bands["delta_slow_c"], "S5_fast": bands["delta_fast_c"], "S6": bands["delta_slow_c"], "S7": g_turn, "S8": float(n_chunk),
+             "S5": s5_bands["delta_slow_c"], "S5_fast": s5_bands["delta_fast_c"], "S6": bands["delta_slow_c"], "S7": g_turn, "S8": float(n_chunk),
              "S9": t_dec, "B_D": b_d, "I_D": i_d, "T_dead": t_dead, "N_chunk": n_chunk,
              "t_decline": t_dec, "class": d_class}
     detail = {
@@ -809,10 +1031,12 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
         "classification": {"s_fast_t63_le_5s": None if fast["t63_s"] is None else fast["t63_s"] <= 5.0,
                            "s_slow_delta_t_ge_3c": slow["delta_t_c"] >= 3.0,
                            "s_slow_tau_le_300s": slow["tau_s"] <= 300.0},
-        "responses": responses, "bands_c": bands, # LEAD-RULINGS-2 R5-7: S6 = delta_slow until the FD 2.6 tuning.
-        "S6_tuning": {"status": "TODO", "S6_now": "delta_slow (S5)", "rule": "FD 2.6 S6 tuning",
+        "responses": responses, "bands_c": bands,
+        "S6_tuning": {**registered_s6()["s6_tuning"], "status": "adopted", "S6_now": bands["delta_slow_c"],
+                      "from_c": slots["S5"], "to_c": slots["S6"],
+                      "rule": "max(S6, 3 x soak SD); further FD 2.6 tuning after R1",
                       "tied_to": "the median G1 wait of the R1 gated D runs (r1_slots.s6_tuning)",
-                      "authority": "LEAD-RULINGS-2 R5-7"},
+                      },
         "recovery_s": recovery_s, "recovery_censored": recovery_censored,
         "t_decline_status": t_decline_status, "t_decline_censored": censored,
         "r_decode_tok_per_s": r_decode, "r_prefill_tok_per_s": r_prefill,
@@ -1376,31 +1600,61 @@ class Segment:
     def sensors(self):
         return sensors_policy(self.config)
 
+    def consume_d_reference(self, session=None):
+        """Authenticate R_D with W1's verifier, including journal and config bytes."""
+        from joulewise.align.apple.thermal_gates import load_window_reference
+        step = self.accepted_result(STEP_D_SEGMENT, "step-d")
+        source = self.out.parent / STEP_D_SEGMENT / step["bundle"]
+        policy = self.observe_policy()
+        custody_record = json.loads((self.out.parent / STEP_D_SEGMENT / CUSTODY_NAME).read_text())
+        source_config = Path(step["bundle"]) / "config.json"
+        expected_config = custody_record["files"].get(source_config.as_posix())
+        if not expected_config:
+            raise Refused("step-D custody does not bind its source config")
+        policy["window_reference"] = {"role": "consume", "source_run_id": source.name,
+            "source_config_sha256": expected_config}
+        context = SimpleNamespace(bundle_path=source.parent / "r1-reference-consumer",
+                                  run_id="r1-reference-consumer")
+        reference, custody = load_window_reference(policy, context)
+        if session is not None:
+            session.reference, session.custody = reference, custody
+        return reference
+
     def reference(self):
         if self.soak is None:
             raise Refused(f"{self.kind} needs --soak-reference")
-        return reference_c(self.soak, self.sensors)
+        return self.consume_d_reference()
 
     def bands(self):
         if self.soak is None:
-            return {"delta_fast_c": BAND_FLOOR_C, "delta_slow_c": BAND_FLOOR_C}
-        return bands_c(self.soak, self.sensors)
+            return {"delta_fast_c": BAND_FLOOR_C, "delta_slow_c": registered_s6()["slots"]["S6"]}
+        floor = self.config.get("slow_band_floor_c", BAND_FLOOR_C)
+        if floor != BAND_FLOOR_C:
+            raise Refused("RL-78: arm at max(1 C, 3 soak idle SD); S6 receipt does not transfer")
+        return bands_c(self.soak, self.sensors, slow_floor=floor)
 
     def step_d_result(self):
         """The accepted step-d result, bound to its complete runtime custody
         (Sol wp15rev F3): its bytes must be the ones the step-d runtime's
         terminal record digested, so a post-close edit of B_D, N_chunk or
         T_dead, or a step-d whose custody did not complete, is refused."""
-        path = self.out.parent / STEP_D_SEGMENT / RESULT_NAME
+        value = self.accepted_result(STEP_D_SEGMENT, "step-d")
+        if not isinstance(value.get("slots"), dict):
+            raise Refused("accepted step-d result lacks slots")
+        return value
+
+    def accepted_result(self, segment, kind):
+        """Read the canonical accepted sibling, bound by complete custody."""
+        path = self.out.parent / segment / RESULT_NAME
         custody_path = path.parent / CUSTODY_NAME
         try:
             raw = path.read_bytes()
             value = json.loads(raw)
             custody = json.loads(custody_path.read_bytes())
         except (OSError, ValueError) as error:
-            raise Refused(f"{self.kind} needs the accepted step-d result and custody {path}") from error
-        if not isinstance(value, dict) or value.get("kind") != "step-d" or not isinstance(value.get("slots"), dict):
-            raise Refused(f"{path} is not an accepted step-d result")
+            raise Refused(f"{self.kind} needs the accepted {kind} result and custody {path}") from error
+        if not isinstance(value, dict) or value.get("kind") != kind:
+            raise Refused(f"{path} is not an accepted {kind} result")
         expected = (custody.get("files") or {}).get(RESULT_NAME) if isinstance(custody, dict) else None
         if (custody.get("schema") != CUSTODY_SCHEMA or custody.get("status") != "complete"
                 or expected != hashlib.sha256(raw).hexdigest()):
@@ -1421,7 +1675,7 @@ class Segment:
                                        f"r1-{self.kind}-{label}", pm_status=pm_status)
         self.open_sessions.append(managed)
         if reference is not None:
-            managed.session.reference = {**reference, "source_member": "r1_soak_reference", "span_ns": None}
+            managed.session.reference = dict(reference)
         return managed
 
     def close_session(self, managed):
@@ -1459,28 +1713,54 @@ class Segment:
                                status=summary.status.value,
                                failure_reason=getattr(summary.failure_reason, "value", None))
 
-    def reference_hook(self, reference, *, quiet_s=0, rearm_s=None):
-        """Gate against the soak R (never a self-captured warm reference).
+    def reference_hook(self, reference, *, quiet_s=0, rearm_s=None, capture=False):
+        """Use W1 native capture, or consume authenticated step-D R_D.
 
-        With ``rearm_s`` the G0 runs on its own cap (600 s; step-d's is the R7-2
-        timeout) with no deadman, and the member's deadman is re-armed for
+        With ``rearm_s`` the G0 runs on its own 1,200 s cap with no deadman,
+        and the member's deadman is re-armed for
         ``rearm_s`` after it (R5-2); with
         ``quiet_s`` a released G0 is followed by that much idle before the
         prefill, the step's quiet window (protocol v4 :243-251, R5-5)."""
         segment = self
 
         def hook(session):
-            session.reference = {**reference, "source_member": "r1_soak_reference", "span_ns": None}
-            if not quiet_s and rearm_s is None:
-                return
+            if not capture:
+                reference.update(segment.consume_d_reference(session))
+            if segment.kind in TIMEOUT_RUN_KINDS:
+                session.g0_timeout_hook = allow_g0_timeout_run
             original = session.wait
 
             def wait(kind, **kwargs):
                 if kind != "G0":
                     return original(kind, **kwargs)
+                if capture and session.reference is not None:
+                    reference.update(session.reference)
                 deadman = kwargs.pop("deadman", None) if rearm_s is not None else kwargs.get("deadman")
                 row = original(kind, **kwargs)
-                if quiet_s and row["outcome"] == "released":
+                if getattr(segment, "smoke_part", None):
+                    elapsed = time.monotonic() - segment.smoke_started
+                    segment.smoke_gate = {"admission_s": elapsed, "g0": row,
+                                          "reference": dict(reference), "rearmed": rearm_s is not None}
+                    (segment.out / "smoke_part_a.json").write_text(canonical(segment.smoke_gate) + "\n")
+                    if row["outcome"] != "released" or elapsed > SMOKE_ADMISSION_S:
+                        raise RuntimeFailure(f"smoke Part A did not release within {SMOKE_ADMISSION_S} s")
+                    # The 1,200 s cap belongs to G0. After G0 the smoke must
+                    # fit quiet, the re-armed turn, recovery, and close. This
+                    # engineering watchdog does not decide RL-72 E5's total.
+                    budget = smoke_post_g0_budget(quiet_s, rearm_s) if segment.smoke_part == "B" else None
+                    if budget is not None:
+                        segment.smoke_gate["post_g0_budget_s"] = budget
+                        (segment.out / "smoke_part_a.json").write_text(canonical(segment.smoke_gate) + "\n")
+                    segment.smoke_watchdog.set(budget["total"] if budget else 0)
+                    if segment.smoke_part == "A":
+                        rearm_deadman(deadman, 0, "R1_smoke_A_stop_after_G0")
+                        return row
+                # G1/H keep ThermalSession's episode reference (the G0 release
+                # temperatures). R_D is only the G0 reference;
+                # a fixed R_D under G1/H's 300 s turn cap would demand a cold
+                # restart between turns (lead fix, 2026-11-10).
+                if quiet_s and (row["outcome"] == "released" or
+                                row["outcome"] == "timeout" and segment.kind in TIMEOUT_RUN_KINDS):
                     start = segment.now_ns()
                     while (segment.now_ns() - start) / NS < quiet_s:
                         segment.clock.sleep(min(1.0, quiet_s - (segment.now_ns() - start) / NS))
@@ -1502,6 +1782,8 @@ class Segment:
         segment, slow_key = self, self.sensors["s_slow"]
 
         def hook(session):
+            reference.update(segment.consume_d_reference(session))
+            session.g0_timeout_hook = allow_g0_timeout_run
             session.reference = {"fast_c": PLANNING_FAST_CEILING_C, "slow_c": target_slow_c,
                                  "source_member": "r1_designed_start_state", "span_ns": None,
                                  "soak_reference_c": reference}
@@ -1523,6 +1805,15 @@ class Segment:
                             break
                         segment.clock.sleep(1.0)
 
+                    crossing = segment.now_ns()
+                    reached = (segment.latest(session, slow_key) is not None and
+                               segment.latest(session, slow_key) >= target_slow_c - PREHEAT_MARGIN_C)
+                    segment.preheat = {"entry_ns": start, "end_ns": crossing,
+                                       "target_slow_c": target_slow_c, "threshold_reached": reached,
+                                       "flags": [] if reached else ["r1.preheat_cap_reached"]}
+                    if not reached:
+                        session.flags.append("r1.preheat_cap_reached")
+
                     def control():
                         value = segment.latest(session, slow_key)
                         heater.set_duty(0.0 if value is None else 0.5 + 0.5 * (target_slow_c - value))
@@ -1533,6 +1824,7 @@ class Segment:
                     if stop is not None:
                         stop()
                     heater.stop()
+                    segment.preheat = {**getattr(segment, "preheat", {}), "heater_stop_ns": segment.now_ns()}
                     segment.heaters.remove(heater)
                     if deadman is not None:
                         rearm_deadman(deadman, rearm_s, "R1_after_preheat_and_G0")
@@ -1545,7 +1837,7 @@ class Segment:
 
     @property
     def g0_cap_s(self):
-        """R7-2: the G0 cap this segment's members arm (None = the 600 s default)."""
+        """All R1 model members use the timeout; release keeps the 600 s default."""
         return g0_timeout_s(self.config) if self.kind in G0_TIMEOUT_KINDS else None
 
     @property
@@ -1560,13 +1852,14 @@ class Segment:
         if source is not None:
             template = deepcopy(template)
             template["model"].update(source)
-        reference = self.reference()
+        reference = {}
         policy = gate_policy(self.sensors, self.bands(), turn_cap_s=300, chunk_tokens=256,
                              heavy=False, per_turn=False, g0_cap_s=self.g0_cap_s)
         step = self.config["step"]
         spec = step_spec(tspec, step, policy, deadman_s=step["deadman_s"])
         config = member_config(template, spec, run_id=f"align-v4-r1-{label}", kind=self.kind)
-        hook = self.reference_hook(reference, quiet_s=quiet_s, rearm_s=step["deadman_s"] if rearm else None)
+        hook = self.reference_hook(reference, quiet_s=quiet_s, rearm_s=step["deadman_s"] if rearm else None,
+                                   capture=True)
         return self.run_member(config, hook), reference
 
     # Kinds -----------------------------------------------------------------
@@ -1632,6 +1925,7 @@ class Segment:
         if not curve:
             raise RuntimeFailure("idle-until-soak observed no valid S_slow sample")
         return {"recovery_curve": curve, "released": released, "reference_c": reference["slow_c"],
+                "reference_source": reference.get("source_member", "r1_soak_reference"),
                 "delta_slow_c": bands["delta_slow_c"], "cap_s": cap}
 
     def k_g0_release_soak(self):
@@ -1642,6 +1936,7 @@ class Segment:
         flags = list(managed.session.flags)
         self.close_session(managed)
         return {"released": row["outcome"] == "released", "g0": row, "reference_c": reference["slow_c"],
+                "reference_source": reference.get("source_member", "r1_soak_reference"),
                 "release_c": row["release"]["slow_c"], "flags": flags,
                 **g0_wait_fields(row, self.armed_g0_cap_s)}
 
@@ -1654,7 +1949,7 @@ class Segment:
                 "reason": "G0 did not release before its cap (LEAD-RULINGS-2 R6-2)",
                 "bundle": str(member.bundle.relative_to(self.out)), "member_status": member.status,
                 "incomplete_reasons": incomplete, "episode_flags": list(member.ep.flags),
-                "ac_powermode": member.ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
+                "ac_powermode": member.ep.hardware.get("ac_powermode"), "reference_c": reference.get("slow_c")}
 
     def k_step(self, model_key, *, label, source=None, quiet_s=0, rearm=False, leg=False, g0_inconclusive=False):
         member, reference = self.step_member(model_key, label=label, source=source, quiet_s=quiet_s,
@@ -1663,8 +1958,15 @@ class Segment:
         thermal = ep.hardware.get("thermal") or {}
         g0 = next((r for r in thermal.get("intervals", []) if r["kind"] == "G0"), None)
         incomplete = incomplete_member_reasons(member)
-        if g0_inconclusive and (g0 is None or g0["outcome"] != "released") and g0_timeout_only(incomplete):
-            return member, self.g0_inconclusive_fields(member, g0, incomplete, reference)
+        if getattr(self, "smoke_part", None) == "A":
+            return member, {"bundle": str(member.bundle.relative_to(self.out)),
+                "operating_reference": reference, "g0_outcome": g0["outcome"],
+                "smoke_part_a": self.smoke_gate, **g0_wait_fields(g0, self.armed_g0_cap_s)}
+        if "r1.g0_timeout_run" in ep.flags:
+            incomplete = [r for r in incomplete if r != "thermal.start_gate_timeout"]
+        if g0 is not None and not ep.turns and only_g0_unreleased(incomplete, g0["outcome"]):
+            return member, {**self.g0_inconclusive_fields(member, g0, incomplete, reference),
+                            "reference_unobserved": not bool(reference)}
         if leg and g0 is not None and g0["outcome"] != "released" and only_g0_unreleased(incomplete, g0["outcome"]):
             # LEAD-RULINGS-2 R5-3 (ruling 16): an A-B-A leg whose own G0 did not
             # release has no turn and no t_decline. It is INCONCLUSIVE, not a
@@ -1676,7 +1978,7 @@ class Segment:
                 **g0_wait_fields(g0, self.armed_g0_cap_s),
                 "t_decline_status": "not_measured_g0_unreleased", "t_decline_s": None,
                 "incomplete_reasons": incomplete, "episode_flags": list(ep.flags),
-                "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
+                "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference.get("slow_c")}
         if incomplete:
             raise RuntimeFailure(f"{self.kind}: step member is not one complete turn: {incomplete}")
         turn = ep.turns[0]
@@ -1688,16 +1990,46 @@ class Segment:
             **g0_wait_fields(g0, self.armed_g0_cap_s), "t_decline_status": decline_status,
             "t_decline_s": decline_s, "decode_energy_j": joules, "decode_tokens": tokens,
             "prefill_tokens": turn.prefill_tokens, "energy_flags": flags, "episode_flags": list(ep.flags),
-            "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"]}
+            "ac_powermode": ep.hardware.get("ac_powermode"), "reference_c": reference["slow_c"],
+            "reference_source": reference.get("source_member", "r1_soak_reference"),
+            "operating_reference": reference,
+            "g0_release": g0.get("release") if g0 else None,
+            "bands_c": self.bands(),
+            "candidate_only": "r1.g0_timeout_run" in ep.flags}
+
+    def k_capture_predecessor_30b(self):
+        template, spec = self.template("model_30b")
+        if spec.get("thermal") is not None:
+            raise Refused("capture predecessor must be the ordinary unmodified 30B template")
+        # RL-84 P-1: W1's ordinary ungated 30B member has no sidecar.
+        # Removing the R1-inapplicable lineage tag is the only derivation.
+        template = deepcopy(template)
+        template["run_metadata"]["tags"] = [t for t in template["run_metadata"]["tags"]
+                                               if t != "launch_lineage_required"]
+        member = self.run_member(template, hook=None)
+        if member.status != "succeeded" or not member.ep.turns:
+            raise RuntimeFailure("capture predecessor did not complete")
+        return {"bundle": str(member.bundle.relative_to(self.out)),
+                "template_sha256": sha256_file(resolve(self.config["templates"]["model_30b"])),
+                "template_derivation": {"removed_run_metadata_tags": ["launch_lineage_required"]},
+                "ac_powermode": member.ep.hardware.get("ac_powermode"), "admitted_turns": len(member.ep.turns)}
 
     def k_step_30b(self):
         self.start_inventory()
         member, fields = self.k_step("model_30b", label="step-30b", quiet_s=STEP_QUIET_S, rearm=True)
+        if fields.get("segment_status") == "inconclusive":
+            self.stop_inventory()
+            return fields
         if fields["t_decline_status"] == "unobserved":
             raise RuntimeFailure("step-30b: no powermetrics GPU clock support for t_decline")
         self.observe_recovery(member)
         # Protocol v4: the 30B step is classified for the record only.
         fields["thermometry"] = self.thermometry(member, label="step-30b", record_only=True)
+        if self.soak is not None:
+            soak = reference_c(self.soak, self.sensors)
+            fields["operating_minus_soak_c"] = {
+                self.sensors[role]: fields["operating_reference"][name] - soak[name]
+                for role, name in (("s_fast", "fast_c"), ("s_slow", "slow_c"))}
         return fields
 
     def observe_recovery(self, member):
@@ -1716,6 +2048,10 @@ class Segment:
     def start_inventory(self):
         """Full-inventory 1 Hz journal from before the member (so the 300 s
         quiet before prefill is inside it) through the 600 s recovery."""
+        if self.backend.name == "production":
+            self.inventory = ProcessInventory(self.out / "inventory" / "inventory_journal.jsonl")
+            self._stop_inventory = self.inventory.close
+            return
         reader = self.backend.inventory_reader()
         self.inventory_readers.append(reader)
         self.inventory = InventoryJournal(reader, self.now_ns, self.out / "inventory" / "inventory_journal.jsonl")
@@ -1738,10 +2074,16 @@ class Segment:
         result = classify_step(self.inventory.inventory, self.inventory.rows, prefill_ns=turn.start_ns,
                                last_decode_ns=turn.end_ns, quiet_s=STEP_QUIET_S, recovery_s=RECOVERY_CAP_S,
                                r0_sensors=self.sensors)
+        confirmation = None
+        if not record_only and not getattr(self, "smoke_part", None):
+            picks = {r: self.sensors[r] for r in ("s_fast", "s_slow")}
+            confirmation = sensor_admissibility(result, picks,
+                self.config.get("r0_classified_keys", list(picks.values())))
         path = self.out / "inventory" / "r1_classification.json"
         # classification_sha256 = sha256 of canonical(classification without that field).
         path.write_text(json.dumps({"classification": result, "label": label, "for_record_only": record_only,
-                                    "inventory": self.inventory.inventory}, indent=2, sort_keys=True) + "\n")
+                                    "inventory": self.inventory.inventory,
+                                    "night_confirmation": confirmation}, indent=2, sort_keys=True) + "\n")
         reasons = [result["reason"]] if result.get("reason") else (
             [] if result["status"] == "pass" else ["null pick: " + ", ".join(
                 role for role in ("s_fast", "s_slow") if result[role] is None)])
@@ -1749,11 +2091,19 @@ class Segment:
                 "heatsink_candidates", "record_only", "phases", "journal_rows", "alias_groups", "alias_rule",
                 "classification_sha256")
         extra = {}
-        if not record_only and result["sensor_pick_changed"] and result["s_fast"] and result["s_slow"]:
+        if confirmation is None and not record_only and result["sensor_pick_changed"] and result["s_fast"] and result["s_slow"]:
             extra["s7_for_r1_picks"] = s7_for_picks(
                 self.inventory.rows, {"s_fast": result["s_fast"], "s_slow": result["s_slow"]},
                 prefill_ns=turn.start_ns, quiet_s=STEP_QUIET_S)
-        return {**{key: result.get(key) for key in keep}, **extra, "reasons": reasons,
+        summary = {key: result.get(key) for key in keep}
+        if confirmation is not None:
+            summary.update(status="pass" if confirmation["ok"] else "fail",
+                           **{r: confirmation[r] for r in ("s_fast", "s_slow")},
+                           registered_picks={r: result[r] for r in ("s_fast", "s_slow")},
+                           night_confirmation=confirmation, sensor_pick_changed=False,
+                           flags=[] if confirmation["ok"] else ["r1.sensor_inadmissible"])
+            reasons = confirmation["reasons"]
+        return {**summary, **extra, "reasons": reasons,
                 "classification_file": path.relative_to(self.out).as_posix(),
                 "keys_inventoried": len(self.inventory.keys), "for_record_only": record_only}
 
@@ -1761,13 +2111,16 @@ class Segment:
         self.start_inventory()
         member, fields = self.k_step("d_spam", label="step-d", quiet_s=STEP_QUIET_S, rearm=True,
                                      g0_inconclusive=True)
+        if getattr(self, "smoke_part", None) == "A":
+            self.stop_inventory()
+            return fields
         if fields.get("segment_status") == "inconclusive":
             # R6-2: no turn, so no step response, slots or classification.
             self.stop_inventory()
             return fields
         if fields["t_decline_status"] == "unobserved":
             raise RuntimeFailure("step-d: no powermetrics GPU clock support for t_decline (slot S9)")
-        reference, bands, sensors = self.reference(), self.bands(), self.sensors
+        reference, bands, sensors = fields["operating_reference"], self.bands(), self.sensors
         # Post-decode recovery (S4 tau, S7 G_turn), on the same monotonic clock.
         rows = self.observe_recovery(member)
         turn = member.ep.turns[0]
@@ -1776,8 +2129,12 @@ class Segment:
         recovery_s, censored = recovery_time(rows, sensors, reference, bands, responses["s_slow"]["peak_ns"])
         slots, detail = derive_step_d_slots(
             ep=member.ep, turn=turn, wall_s=member.wall_s, responses=responses, recovery_s=recovery_s,
-            recovery_censored=censored, bands=bands, t_decline_s=fields["t_decline_s"],
+            recovery_censored=censored, bands=bands,
+            s5_bands=bands_c(self.soak, sensors, slow_floor=BAND_FLOOR_C), t_decline_s=fields["t_decline_s"],
             t_decline_status=fields["t_decline_status"], d_class=self.config.get("d_class", "heavy"))
+        if self.backend.name == "production":
+            detail["S6_tuning"] = {"status": "new_sensor_default", "authority": "RL-78 default band",
+                                   "S6_now": bands["delta_slow_c"], "receipt_transferred": False}
         detail["quiet_before_prefill_s"] = STEP_QUIET_S
         detail["recovery_observed_s"] = RECOVERY_CAP_S
         fields["thermometry"] = self.thermometry(member, label="step-d", record_only=False)
@@ -1786,16 +2143,18 @@ class Segment:
                 "e_D_j_per_token": fields["decode_energy_j"] / fields["decode_tokens"]}
 
     def k_aba_leg(self):
-        _, fields = self.k_step("d_spam", label=self.kind, leg=True)
-        if fields["g0_released"] and fields["t_decline_status"] == "unobserved":
+        _, fields = self.k_step("d_spam", label=self.kind, leg=True, rearm=True)
+        if fields.get("g0_released") and fields.get("t_decline_status") == "unobserved":
             raise RuntimeFailure(f"{self.kind}: no powermetrics GPU clock support for t_decline")
+        if "t_decline_s" not in fields:
+            fields["t_decline_s"] = None
         return fields   # t_decline_s: seconds, or None for no decline (infinite) when g0_released
 
     def k_d_4bit(self):
         source = self.config.get("d_4bit_source")
         if _pending(source):
             raise Refused("d-4bit: r1 runtime config d_4bit_source is not set (R0.10 did not trigger)")
-        _, fields = self.k_step("d_spam", label="d-4bit", source=source)
+        _, fields = self.k_step("d_spam", label="d-4bit", source=source, rearm=True)
         return fields
 
     def gated_policy(self, slots, *, heavy, per_turn, chunk_tokens=256):
@@ -1815,8 +2174,8 @@ class Segment:
                                                                 chunk_tokens=int(slots["N_chunk"])),
                     warmup_condition="benign", max_episode_decode_tokens=b_d)
         config = member_config(template, spec, run_id=f"align-v4-r1-{self.kind}", kind=self.kind)
-        # LEAD-RULINGS-2 R5-1: gate against the soak R, as W1 members consume
-        # member 5's R. R6-1: no precool; the run follows a D turn with only
+        # Authenticated step-D R_D (RL-59/72).
+        # R6-1: no precool; the run follows a D turn with only
         # W1's inter-member schedule (this member's configured idle).
         reference = self.reference()
         member = self.run_member(config, self.reference_hook(reference))
@@ -1853,7 +2212,9 @@ class Segment:
         intervals = (ep.hardware.get("thermal") or {}).get("intervals", [])
         g0 = next((r for r in intervals if r["kind"] == "G0"), None)
         return {"reference_c": reference["slow_c"], "reference_fast_c": reference["fast_c"],
-                "reference_source": "r1_soak_reference",
+                "bands_c": self.bands(),
+                "reference_source": reference.get("source_member"),
+                "reference_custody": (ep.hardware.get("thermal") or {}).get("window_reference"),
                 "g0_reference": g0.get("reference") if g0 else None,
                 "g0_outcome": g0["outcome"] if g0 else None, **g0_wait_fields(g0, self.armed_g0_cap_s),
                 "gate_waits_s": {kind: [r["duration_s"] for r in intervals if r["kind"] == kind]
@@ -1878,7 +2239,9 @@ class Segment:
         if g0 is None:
             raise RuntimeFailure(f"{self.kind}: member has no G0 interval")
         incomplete = incomplete_member_reasons(member)
-        if g0["outcome"] != "released":
+        if "r1.g0_timeout_run" in member.ep.flags:
+            incomplete = [r for r in incomplete if r != "thermal.start_gate_timeout"]
+        if g0["outcome"] != "released" and "r1.g0_timeout_run" not in member.ep.flags:
             # Round-4 executing review HIGH-1: a G0 that timed out has no release
             # temperature (its "release" row is only the last sample), and the
             # g0_unreleased stop leaves a member with no turn, so energy_j is 0.
@@ -1895,7 +2258,10 @@ class Segment:
         if incomplete:
             # A deadman- or fault-cut planning turn is a partial energy (HIGH-1).
             raise RuntimeFailure(f"{self.kind}: planning member is not one complete turn: {incomplete}")
-        return {"reference_c": reference["slow_c"], "g0_release_c": g0["release"]["slow_c"],
+        return {"reference_c": reference["slow_c"], "g0_release_c": (
+                    g0["release"]["slow_c"] if g0["outcome"] == "released" else None),
+                "preheat": getattr(self, "preheat", {}), "bands_c": bands,
+                "candidate_only": "r1.g0_timeout_run" in member.ep.flags,
                 "delta_slow_c": bands["delta_slow_c"], "energy_j": record["turn_owned_j"],
                 "designed_offset_c": offset, "designed_release_c": target, "g0_outcome": g0["outcome"],
                 **g0_wait_fields(g0, self.armed_g0_cap_s),
@@ -1910,7 +2276,7 @@ class Segment:
         spec = dict(tspec)
         spec.update(thermal=self.gated_policy(step["slots"], heavy=False, per_turn=True), warmup_condition="benign")
         config = member_config(template, spec, run_id="align-v4-r1-x-g", kind=self.kind)
-        reference = self.reference()   # R5-1: the soak R, never a self-captured one
+        reference = self.reference()   # Authenticated step-D R_D (RL-59/72).
         member = self.run_member(config, self.reference_hook(reference))
         from joulewise.align.apple.thermal_desk import read_bundle_record
         record = read_bundle_record(member.bundle)
@@ -1952,6 +2318,8 @@ class Segment:
             return self.k_idle_until_soak()
         if kind == "g0-release-soak":
             return self.k_g0_release_soak()
+        if kind == "capture-predecessor-30b":
+            return self.k_capture_predecessor_30b()
         if kind == "step-30b":
             return self.k_step_30b()
         if kind == "step-d":
@@ -2001,11 +2369,15 @@ def parse_args(argv=None):
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--duration-s", type=float)
     parser.add_argument("--soak-reference", type=Path)
+    parser.add_argument("--host-lock-fd", type=int)
+    parser.add_argument("--smoke-part", choices=("A", "B"))
+    parser.add_argument("--smoke-started", type=float)
     return parser.parse_args(argv)
 
 
 def main(argv=None, *, backend_factory=None, stdout=None):
     args = parse_args(argv)
+    previous_smoke_signal = signal.getsignal(SMOKE_WATCHDOG_SIGNAL)
     term = Termination().install()
     out = Path(args.output).resolve()
     # Every print below this point (controller, adapters, mlx) goes to stderr;
@@ -2047,6 +2419,16 @@ def main(argv=None, *, backend_factory=None, stdout=None):
         backend = (backend_factory or make_backend)(config)
         segment = Segment(kind=args.r1_kind, out=out, duration_s=args.duration_s, soak=soak, config=config,
                           config_sha256=config_sha256, backend=backend)
+        segment.host_lock_fd = args.host_lock_fd
+        if args.smoke_part and args.r1_kind == "step-d":
+            segment.smoke_part = args.smoke_part
+            segment.smoke_started = args.smoke_started if args.smoke_started is not None else time.monotonic()
+            watchdog = segment.smoke_watchdog = SmokeWatchdog()
+            def smoke_timeout(_sig, _frame):
+                if watchdog.active:
+                    raise RuntimeFailure("smoke part wall cap reached; partial smoke is not a pass")
+            signal.signal(SMOKE_WATCHDOG_SIGNAL, smoke_timeout)
+            watchdog.set(max(.001, SMOKE_ADMISSION_S - (time.monotonic() - segment.smoke_started)))
         result = segment.run()
         (out / RESULT_NAME).write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False) + "\n")
         record["status"], code = "complete", 0
@@ -2061,6 +2443,10 @@ def main(argv=None, *, backend_factory=None, stdout=None):
                       traceback=traceback.format_exc()[-4000:])
         code = EXIT_FAILED
     finally:
+        if args.smoke_part:
+            if getattr(segment, "smoke_watchdog", None) is not None:
+                segment.smoke_watchdog.stop()
+            signal.signal(SMOKE_WATCHDOG_SIGNAL, previous_smoke_signal)
         try:
             if segment is not None:
                 for error in segment.close():

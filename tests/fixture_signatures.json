@@ -1,5 +1,10 @@
 [
   {
+    "id": "r1-smoke-synthetic-part",
+    "command_regex": "(?:^|\\s)\\S*/jw-r1-smoke-fixture-[a-z0-9_]{8}/measurement/scripts/align_r1_followup_kit\\.py\\s+smoke(?:\\s|$)",
+    "source": "tests/align/test_r1_smoke_launcher.py: LauncherTests.test_real_launchagent_handoff_runs_engine_and_cleans_on_term; fake kit under a uniquely prefixed tempfile root, never a production checkout"
+  },
+  {
     "id": "hazards-test-real-monitor",
     "command_regex": "(?:^|\\s)\\S*/scripts/hazard_monitor\\.py\\s+--config\\s+\\S*/tmp[a-z0-9_]{8}/(?:[^\\s/]+/)*hazards/monitor/config\\.json(?:\\s|$)",
     "source": "tests/hazards/test_monitor.py: SupervisorTests tempfile custody roots; real monitor launcher restricted to a tempfile-made path component"

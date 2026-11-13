@@ -5,6 +5,7 @@ The committed-source fixtures are shared; admission calls use the product arm.
 The battery clock-regression witness is intentionally red at 48a4d1d76; it
 specifies the required refusal for the lead's product repair.
 """
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 import copy
 import hashlib
 import json
@@ -51,7 +52,7 @@ class ArmWitnesses(Base):
             return session.arm_checks(
                 scenario.root, {}, next_arm_triage=supplied, now=lambda: now,
                 obc_off_attested_by='synthetic-delta4', battery_log=log,
-                runner=lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', ''),
+                watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, 'synthetic pmset', ''),
                 meter_probe=lambda root: {'live': meter_live, 'source': 'synthetic probe'})
 
     def test_exact_merged_entry_sources_and_strict_launch_inventory(self):
@@ -80,7 +81,10 @@ class ArmWitnesses(Base):
         from joulewise.align.apple import r1_runtime as runtime
         config, _ = runtime.load_config(ROOT / 'configs/align/v4/r1_runtime.json')
         sensors = runtime.sensors_policy(config)
-        self.assertEqual((sensors['s_fast'], sensors['s_slow']), ('TV0h', 'Tf08'))
+        # RL-119/RL-122 (rebinding RL-89's Th0C): the runtime pair is TV0h/TVh0;
+        # RL-94: R0's registered picks stay TV0h/Tf08.
+        self.assertEqual((config['r0_picks']['s_fast'], config['r0_picks']['s_slow']), ('TV0h', 'Tf08'))
+        self.assertEqual((sensors['s_fast'], sensors['s_slow']), ('TV0h', 'TVh0'))
         self.assertEqual(sensors['fan_keys'], ['F0Ac', 'F1Ac'])
         for key in ('d_spam', 'd_bank'):
             _, spec = runtime.read_template(config['templates'][key])

@@ -54,6 +54,7 @@ GAP_REFS = {
 }
 
 CHECKS = {}
+SYNTHETIC_RUNTIME_STACK = {'python': 'synthetic', 'packages': {'mlx': 'synthetic'}}
 
 
 def check(name, covers, gates='w1'):
@@ -129,11 +130,58 @@ class FakeHost:
     ``night_job_loaded`` makes launchd report a loaded night job.
     """
 
-    def __init__(self, mode=0, *, extra_mount=False, night_job_loaded=False, soc=100, charging=False, now=None):
+    def __init__(self, mode=0, *, extra_mount=False, night_job_loaded=False, soc=100, charging=False, now=None,
+                 watchdog_state='LAUNCHING', watchdog_post_state=None):
         self.now = now
         self.mode, self.extra_mount, self.night_job_loaded = mode, extra_mount, night_job_loaded
         self.soc, self.charging = soc, charging
         self.calls, self.installer_calls = [], []
+        self.watchdog_state = watchdog_state
+        self.watchdog_post_state = watchdog_post_state
+        self.installed_labels = set()
+
+    def watchdog_check(self, *, phase, plan=None, **_):
+        """Synthetic nested session/custody plan: only installed jobs expose it to discovery."""
+        from joulewise.night_agent_install import LABELS
+        from scripts import align_v4_session as session_mod
+        state = self.watchdog_post_state if phase == 'post_install' and self.watchdog_post_state else self.watchdog_state
+        found = phase == 'pre_install' or set(LABELS) <= self.installed_labels
+        span = (plan or {}).get('t0_epoch_s', (self.now or time.time()) + 3600) - session_mod.WATCHDOG_PLAN_LEAD_S
+        identity = {'source': 'installed_parser_on_plan_file' if phase == 'pre_install' else 'installed_load_plans',
+                    'found': found, 'span_start_epoch_s': span if found else None, 'expected': span, 'ok': found}
+        if phase == 'pre_install':
+            identity['discovered_by_scan'] = False
+        return {'ok': found and state in session_mod.WATCHDOG_ADMITTED,
+                'state': state, 'reason': 'PREQUAL synthetic watchdog' if found else 'plan_identity: arm plan missing',
+                'plan_identity': identity,
+                'argv': ['synthetic-watchdog', '--dry-run'], 'plan_read_proven': found,
+                'elapsed_s': 0.0, 'stopped': state == 'STOPPED'}
+
+    def frequency_check(self, *_, **__):
+        """Synthetic native frequency evidence for probes isolating other arm gates."""
+        return {'ok': True, 'synthetic': True, 'reason': 'PREQUAL synthetic frequency'}
+
+    def frequency_plan_check(self, state, **_):
+        """Run production plan validation, stopping at the synthetic native-reader seam."""
+        from scripts import align_v4_session as session_mod
+
+        class SyntheticRead(Exception):
+            pass
+
+        def reader():
+            raise SyntheticRead
+
+        try:
+            return session_mod.frequency_word_preflight(state, reader=reader, runner=self)
+        except SyntheticRead:
+            return self.frequency_check()
+
+    @staticmethod
+    def weight_identity(root):
+        """Explicit synthetic R0 identity seam; never inspect a real model."""
+        return {'status': 'ok', 'kind': 'file_set', 'root': str(root), 'folded_sha256': 'a' * 64,
+                'files': {'model.safetensors': 'b' * 64},
+                'inventory': [{'path': 'model.safetensors', 'size_bytes': 7}]}
 
     def __call__(self, argv, *args, **kwargs):
         import plistlib
@@ -152,8 +200,10 @@ class FakeHost:
         if argv == ('pmset', '-g', 'batt'):
             return done(0, 'synthetic: 100%; AC; not charging')
         if argv[:2] == ('launchctl', 'print'):
-            absent = f'Could not find service "com.joulewise.night" in domain for user gui: {os.getuid()}'
-            return done(0, 'loaded', '') if self.night_job_loaded else done(113, '', absent + '\n')
+            label = argv[-1].rsplit('/', 1)[-1]
+            absent = f'Could not find service "{label}" in domain for user gui: {os.getuid()}'
+            loaded = self.night_job_loaded or label in self.installed_labels
+            return done(0, 'loaded', '') if loaded else done(113, '', absent + '\n')
         if argv == ('/usr/bin/pmset', '-g', 'custom'):
             return done(0, f'Battery Power:\n powermode 0\nAC Power:\n lowpowermode 0\n powermode {self.mode}\n')
         if argv[:5] == ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode'):
@@ -172,7 +222,12 @@ class FakeHost:
                                            'WritableVolume': not image}).decode())
         if argv and argv[0].endswith('install_night_agent.sh'):
             self.installer_calls.append(argv)
-            return done(0, 'synthetic installer: nothing installed\n')
+            from joulewise.night_agent_install import LABELS
+            if '--uninstall' in argv:
+                self.installed_labels.difference_update(LABELS)
+            else:
+                self.installed_labels.update(LABELS)
+            return done(0, 'synthetic installer\n')
         raise AssertionError(f'FakeHost: unexpected command {argv}')
 
 
@@ -234,11 +289,13 @@ def _fresh(scenario, now):
     return scenario
 
 
-def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
+def arm_fixture(ctx, name, *, now, t0_offset_s=3600, ac_powermode=0):
     """A session the production install CLI accepts: an R1 -> W1 record series, plan, R0 disk config."""
+    from joulewise.b6 import plan_inputs
     from scripts import align_v4_kit as kit, bytes_h_session as h
     base = ctx.work / name
-    measurement, session, custody = base / 'measurement', base / 'session', base / 'custody'
+    measurement, session = base / 'measurement', base / 'night-align/session'
+    custody = session / 'custody'
     measurement.mkdir(parents=True)
     scenario = _scenario_class()(measurement, 'R1')
     scenario.next_plan.update(window='W1', role='development')
@@ -246,9 +303,18 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
     # The kit files the arm reads are committed with the records, so the desk-passed artifact set holds.
     (measurement / kit.KIT / 'registration').mkdir(parents=True, exist_ok=True)
     plan = json.loads((ctx.repo / kit.KIT / 'collection_plan.json').read_bytes())
-    plan.setdefault('runtime_requirements', {})['ac_powermode'] = 0
+    plan.setdefault('runtime_requirements', {})['ac_powermode'] = ac_powermode
     (measurement / kit.KIT / 'collection_plan.json').write_text(json.dumps(plan))
-    (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': 0}))
+    inventory = {}
+    for member in plan['members']:
+        weights = base / 'synthetic-weights' / member['model_id']
+        weights.mkdir(parents=True, exist_ok=True)
+        (weights / 'model.safetensors').write_bytes(b'fixture')
+        inventory[h.align_unit_id(member['model_id'], member['run_id'])] = FakeHost.weight_identity(weights)
+    h.write(measurement / kit.KIT / 'registration/model_artifact_inventory.json', {'artifacts': inventory})
+    h.write(measurement / kit.KIT / 'registration/identity_pins.json',
+            {'runtime_versions': SYNTHETIC_RUNTIME_STACK})
+    (measurement / kit.R1_SLOTS).write_text(json.dumps({'ac_powermode': ac_powermode}))
     series = ctx.repo / kit.KIT / 'series'
     if series.is_dir():                 # RUN_STATE 226 R15: every arm binds the frozen series
         shutil.copytree(series, measurement / kit.KIT / 'series')
@@ -256,10 +322,23 @@ def arm_fixture(ctx, name, *, now, t0_offset_s=3600):
     session.mkdir(parents=True)
     custody.mkdir(parents=True)
     night_plan = custody / 'night_plan.json'
-    night_plan.write_text(json.dumps({'t0_epoch_s': now + t0_offset_s, 'plan_id': 'w1-prequal-synthetic'}))
-    h.write(session / 'session.json', {
+    w1, _, _ = synthetic_w1_plan(ctx)
+    # Same registered threshold assembler and max(member_s) stream law as
+    # bytes_h_session.prepare / align_v4_kit.w1_sizing; planning inputs only.
+    stream_max = max(member['member_s'] for member in w1['align_v4']['members'])
+    thresholds = plan_inputs.thresholds(ctx.repo, ctx.repo / kit.KIT / 'registration')
+    thresholds['clock']['t_stream_max_s'] = stream_max  # writer's sized-key replacement
+    night_plan.write_text(json.dumps({
+        't0_epoch_s': now + t0_offset_s, 'plan_id': 'w1-prequal-synthetic',
+        'hazard_window': {'thresholds': thresholds, 'T_stream_max_s': stream_max}}))
+    state = {
         'measurement_root': str(measurement), 'plan_path': str(night_plan),
-        'plan_sha256': h.locator(night_plan)['sha256'], 'inputs': {'custody_root': str(custody)}})
+        'preparation_status': 'STAGED',
+        'plan_sha256': h.locator(night_plan)['sha256'], 'inputs': {'custody_root': str(custody)}}
+    from scripts import align_v4_session as session_mod
+    state['weight_digest_preflight'] = session_mod.weight_digest_preflight(
+        measurement / kit.KIT / 'registration', plan['members'], identity_fn=FakeHost.weight_identity)
+    h.write(session / 'session.json', state)
     config = json.loads((ctx.repo / 'configs/align/v4/r0_desk.json').read_bytes())
     if not config.get('offloads'):
         config['offloads_owed'] = 'none'
@@ -297,7 +376,7 @@ def DEAD_METER(root):
 
 
 def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=(), now=None, kind='completed',
-                meter_probe=None):
+                meter_probe=None, frequency_preflight=None):
     """Drive the production CLI (align_v4_session.main) with host seams only."""
     import functools
     from scripts import align_v4_kit as kit, align_v4_session as session_mod, bytes_h_session as h
@@ -321,7 +400,9 @@ def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=()
     from unittest import mock
     with mock.patch.object(session_mod, 'install', functools.partial(
             real_install, runner=host, volume_runner=host, disk_gate=gate, now=lambda: now,
-            meter_probe=meter_probe or LIVE_METER)), \
+            meter_probe=meter_probe or LIVE_METER, watchdog_check=host.watchdog_check,
+            frequency_preflight=frequency_preflight or host.frequency_check,
+            frequency_pre_t0=host.frequency_check)), \
             mock.patch.object(h, 'install', functools.partial(real_h_install, run=host, now=lambda: now)), \
             mock.patch.object(kit, 'generate', lambda *a, **k: None), \
             contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
@@ -336,6 +417,149 @@ def run_install(ctx, session, disk, packet, *, host, args_override=None, drop=()
 
 # ---------------------------------------------------------------------------
 # Checks
+
+
+@check('weight-digest-preflight', 'RL-62: synthetic prepare and arm carry matching registered digests; '
+       'changed weights refuse before install')
+def check_weight_digest_preflight(ctx):
+    from unittest import mock
+    from scripts import align_v4_session as session_mod, bytes_h_session as h
+    os.environ.setdefault('JOULEWISE_HOST_STATE_DIR', str(ctx.work / 'host-state'))
+    Path(os.environ['JOULEWISE_HOST_STATE_DIR']).mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    base, session, disk = arm_fixture(ctx, 'weight-digest', now=now)
+    packet = valid_packet(ctx, base, now)
+    host = FakeHost(now=now)
+    state = h.read(session / 'session.json')
+    with mock.patch.object(session_mod.pilot, 'prepare', return_value=state), \
+            mock.patch.object(session_mod.kit, 'generate'), \
+            mock.patch.object(session_mod, 'session_start_restore', return_value={'action': 'none'}), \
+            contextlib.redirect_stdout(io.StringIO()):
+        session_mod.prepare(base / 'measurement', session, weight_identity_fn=host.weight_identity,
+                            runtime_runner=lambda python: SYNTHETIC_RUNTIME_STACK,
+                            frequency_preflight=host.frequency_check)
+        control = run_install(ctx, session, disk, packet, host=host, now=now)
+        matching = (control['rc'] == 0 and bool(host.installer_calls) and
+                    control['arm']['weight_digests'] == state['weight_digest_preflight'])
+        refusal = ''
+        try:
+            session_mod.prepare(base / 'measurement', session,
+                runtime_runner=lambda python: SYNTHETIC_RUNTIME_STACK,
+                weight_identity_fn=lambda root: dict(host.weight_identity(root), folded_sha256='c' * 64),
+                frequency_preflight=host.frequency_check)
+        except ValueError as exc:
+            refusal = str(exc)
+        stored = h.read(session / 'session.json')['weight_digest_preflight']
+        fresh_host = FakeHost(now=now)
+        refused_arm = run_install(ctx, session, disk, packet, host=fresh_host, now=now)
+    mismatch = ('weight_digest_preflight: digest_mismatch:' in refusal and not stored['ok'] and
+                refused_arm['rc'] != 0 and not fresh_host.installer_calls)
+    return result(PASS if matching and mismatch else FAIL, 'matching prepare/arm and changed-weight refusal',
+                  matching_prepare_and_arm=matching, mismatch_refused=mismatch, refusal=refusal)
+
+
+@check('runtime-stack-preflight', 'RL-73: matching synthetic installed stack passes prepare and arm; '
+       'a changed Python version refuses and is carried to the arm')
+def check_runtime_stack_preflight(ctx):
+    from unittest import mock
+    from scripts import align_v4_session as session_mod, bytes_h_session as h
+    now = time.time()
+    base, session, disk = arm_fixture(ctx, 'runtime-stack', now=now)
+    packet = valid_packet(ctx, base, now)
+    host = FakeHost(now=now)
+    state = h.read(session / 'session.json')
+    with mock.patch.object(session_mod.pilot, 'prepare', return_value=state), \
+            mock.patch.object(session_mod.kit, 'generate'), \
+            mock.patch.object(session_mod, 'session_start_restore', return_value={'action': 'none'}):
+        session_mod.prepare(base / 'measurement', session, weight_identity_fn=host.weight_identity,
+            runtime_runner=lambda python: SYNTHETIC_RUNTIME_STACK, frequency_preflight=host.frequency_check)
+        control = run_install(ctx, session, disk, packet, host=host, now=now)
+        matching = (control['rc'] == 0 and bool(host.installer_calls) and
+                    control['arm']['runtime_stack'] == state['runtime_stack_preflight'])
+        refusal = ''
+        try:
+            session_mod.prepare(base / 'measurement', session, weight_identity_fn=host.weight_identity,
+                runtime_runner=lambda python: dict(SYNTHETIC_RUNTIME_STACK, python='changed'),
+                frequency_preflight=host.frequency_check)
+        except ValueError as exc:
+            refusal = str(exc)
+        fresh_host = FakeHost(now=now)
+        arm = run_install(ctx, session, disk, packet, host=fresh_host, now=now)
+    refused = ('runtime_stack_preflight: differs: python:' in refusal and arm['rc'] != 0
+               and not fresh_host.installer_calls and not arm['arm']['runtime_stack']['ok'])
+    return result(PASS if matching and refused else FAIL, 'matching stack and changed-stack refusal',
+                  matching=matching, refused=refused, refusal=refusal)
+
+
+@check('held-window', 'RL-79: an earlier final harvest hold refuses even when the previous window is provisional')
+def check_held_window(ctx):
+    from scripts import align_v4_session as session_mod
+    root = ctx.work / 'held-window-records'
+    root.mkdir()
+    now = time.time()
+    development = _fresh(_scenario_class()(root, 'W1'), now).finish()
+    scenario = _fresh(_scenario_class()(root, 'C1', previous=development), now).finish()
+    control = _arm_on_records(ctx, root, scenario.build(now=now), now=now)
+    scenario.provisional = True
+    scenario.sources['exclusions'].update(reasons=['records.source_changed_during_harvest'], claim_usable=False)
+    scenario.finish()
+    successor = _fresh(_scenario_class()(root, 'C2', previous=scenario, provisional=True,
+                                       previous_final=True), now)
+    successor.next_plan['window'] = 'C3'
+    successor.finish()
+    arm = _arm_on_records(ctx, root, successor.build(now=now), now=now)
+    matching = control['admitted'] and control['held_window_check']['ok']
+    refused = (not arm['admitted'] and
+               'held_window: C1: records.source_changed_during_harvest: no signed ruling' in arm['reasons']
+               and arm['held_window_check']['deferred'] == ['C2'])
+    return result(PASS if matching and refused else FAIL, 'clean final harvest and held final harvest',
+                  matching=matching, refused=refused, reasons=arm['reasons'])
+
+
+@check('watchdog-hold-rollback', 'RL-56: pre-install hold refuses before install; post-install hold '
+       'uninstalls this plan, verifies both labels absent and restores Automatic')
+def check_watchdog_hold_rollback(ctx):
+    from joulewise.night_agent_install import LABELS
+    from scripts import bytes_h_session as h
+    os.environ.setdefault('JOULEWISE_HOST_STATE_DIR', str(ctx.work / 'host-state'))
+    Path(os.environ['JOULEWISE_HOST_STATE_DIR']).mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    base, session, disk = arm_fixture(ctx, 'watchdog-hold', now=now, ac_powermode=2)
+    packet = valid_packet(ctx, base, now)
+    plan_path = h.read(session / 'session.json')['plan_path']
+    rows, failures = [], []
+    for phase in ('pre_install', 'post_install'):
+        host = FakeHost(now=now, watchdog_state='HOLD_PLAN_MALFORMED' if phase == 'pre_install' else 'LAUNCHING',
+                        watchdog_post_state='HOLD_PLAN_MALFORMED')
+        out = run_install(ctx, session, disk, packet, host=host, now=now)
+        refusal = f'watchdog_acceptance: {phase}: HOLD_PLAN_MALFORMED:'
+        row = {'phase': phase, 'refused': out['rc'] != 0 and refusal in out['stderr'],
+               'installer_called': bool(host.installer_calls)}
+        if phase == 'pre_install':
+            ok = row['refused'] and not row['installer_called']
+        else:
+            dwell = h.read(sorted((session / 'staging').glob('v4-arm-*.dwell.json'))[-1])
+            undo = dwell['quiet_dwell']['watchdog_post_install'].get('install_undo', {})
+            installs = host.installer_calls
+            uninstalls = [call for call in installs if '--uninstall' in call]
+            after_undo = host.calls[host.calls.index(uninstalls[0]) + 1:] if uninstalls else []
+            restored = [h.read(p) for p in (session / 'staging').glob('v4-arm-restore-*.json')]
+            row.update(uninstalled_this_plan=len(installs) == 2 and len(uninstalls) == 1
+                       and all('--plan' in call and call[call.index('--plan') + 1] == plan_path for call in installs),
+                       both_labels_verified_absent=bool(undo) and not undo.get('errors')
+                       and not undo.get('remaining_labels') and not host.installed_labels
+                       and all(any(call[:2] == ('launchctl', 'print') and call[-1].endswith('/' + label)
+                                   for call in after_undo) for label in LABELS),
+                       automatic_restored=host.mode == 0 and bool(restored) and all(r.get('ok') for r in restored)
+                       and ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '2') in host.calls
+                       and ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '0') in host.calls)
+            ok = row['refused'] and all(row[k] for k in
+                ('uninstalled_this_plan', 'both_labels_verified_absent', 'automatic_restored'))
+        rows.append(row)
+        if not ok:
+            failures.append(f'{phase}: {row}; {tail(out["stderr"])}')
+    return result(FAIL if failures else PASS, '; '.join(failures) if failures else
+                  'both holds refused; installed jobs removed and Automatic restored', cases=rows)
 
 
 @check('arm-cli', 'production arm CLI with every required arg: triage packet, top-up evidence, OBC '
@@ -376,6 +600,8 @@ def check_arm_cli(ctx):
         # name, packet mutation (None: no packet file), host kwargs, cli overrides, dropped flags,
         # battery log kind, expected (admitted?, refusal substring)
         ('control', lambda v: None, {}, {}, (), 'completed', (True, None)),
+        ('plan-hazard-window-missing', lambda v: None, {}, {}, (), 'completed',
+         (False, "clock.frequency_plan_invalid: ValueError: plan clock budget unavailable: 'hazard_window'")),
         ('triage-missing', None, {}, {}, (), 'completed', (False, 'next-arm triage packet missing or wrong schema')),
         # Packet faults: the arm's rebuild refuses a supplied packet that differs (or cannot be rebuilt).
         ('triage-edited', edited, {}, {}, (), 'completed', (False, ('does not match', 'triage capture_faults failed'))),
@@ -398,8 +624,17 @@ def check_arm_cli(ctx):
     for name, mutate, host_kwargs, overrides, drop, kind, (admit, needle) in cases:
         base, session, disk = arm_fixture(ctx, 'arm-' + name, now=now)
         host = FakeHost(now=now, **host_kwargs)
+        if name == 'plan-hazard-window-missing':
+            from scripts import bytes_h_session as h
+            state = h.read(session / 'session.json')
+            plan = h.read(state['plan_path'])
+            plan.pop('hazard_window', None)
+            h.write(state['plan_path'], plan)
+            state['plan_sha256'] = h.locator(state['plan_path'])['sha256']
+            h.write(session / 'session.json', state)
         out = run_install(ctx, session, disk, None if mutate is None else packet(base, mutate), host=host,
                           args_override=overrides, drop=drop, now=now, kind=kind,
+                          frequency_preflight=host.frequency_plan_check,
                           meter_probe=DEAD_METER if name == 'meter-not-live' else LIVE_METER)
         arm = out['arm'] or {}
         row = {'case': name, 'rc': out['rc'], 'admitted': arm.get('admitted'),
@@ -413,6 +648,8 @@ def check_arm_cli(ctx):
             needles = needle if isinstance(needle, tuple) else (needle,)
             ok = (out['rc'] != 0 and arm.get('admitted') is False and not out['installer_calls']
                   and any(n in text for n in needles))
+            if name == 'plan-hazard-window-missing':
+                ok = ok and arm.get('reasons') == [needle]
         if not ok:
             failures.append(f'{name}: expected {"admit" if admit else "refusal " + repr(needle)}; got {row} '
                             f'{tail(out["stderr"], 300)}')
@@ -433,7 +670,7 @@ def _arm_on_records(ctx, measurement, packet_or_path, *, now, quiet=True):
         return session_mod.arm_checks(measurement, {'runtime_requirements': {'ac_powermode': 0}}, runner=host,
                                       volume_runner=host, obc_off_attested_by='w1-prequal synthetic',
                                       battery_log=log, now=lambda: now, next_arm_triage=packet_or_path,
-                                      meter_probe=LIVE_METER)
+                                      meter_probe=LIVE_METER, watchdog_check=host.watchdog_check)
 
 
 # --- Packet-as-pointer design (lead ruling, 2026-11-08): the ARM REBUILDS the next-arm packet
@@ -932,6 +1169,10 @@ def executed_closure(root):
 
 SERIES_SCHEMA = 'joulewise.align_v4.smoke_series_plan.v1'
 BATCH_ENCOUNTER_S = 11164
+R1_BATCH_ENCOUNTER_S = 12964
+R1_FOLLOWUP_FLOOR_S = 99768
+R1_FOLLOWUP_SPAN_S = 108768
+R1_FOLLOWUP_WINDOW_S = 126480
 
 
 def _number(value, name):
@@ -1010,11 +1251,13 @@ def validate_deadline(plan):
             raise ValueError('batch_encounters must cover every attempt that can meet the blackout')
         retries += attempts - 1
         encounters += possible
-        total += attempts * _number(seg.get('bound_s'), 'segment bound_s') + possible * BATCH_ENCOUNTER_S
+        total += attempts * _number(seg.get('bound_s'), 'segment bound_s') + possible * (R1_BATCH_ENCOUNTER_S if budget['kind'] == 'r1' else BATCH_ENCOUNTER_S)
     overhead = sum(_number(budget.get(k), k) for k in ('bracket_s', 'close_s', 'harvest_s'))
     required = total + overhead
     if budget['kind'] == 'r1':
-        required = max(required, (96427 if retries else 67371) + overhead)
+        required = max(required, R1_FOLLOWUP_WINDOW_S)
+        if overhead < 9000:
+            raise ValueError('R1 follow-up needs its 9000 s overhead allowance')
     if maximum < required:
         raise ValueError(f'window_max_s {maximum} < corrected requirement {required} s')
     return {'required_s': required, 'window_max_s': maximum, 'kind': budget['kind'], 'encounters': encounters,
@@ -1156,8 +1399,9 @@ def check_deadline(ctx):
                       **evidence)
     required = plan_inputs.window_max_s({'programmed_span_s': {'seconds': span}})
     if kind == 'r1':
-        retries = bool(_find_key(hazard, 'retry') or _find_key(hazard, 'redo'))
-        required = max(required, 96427 if retries else 67371)
+        required = max(required, R1_FOLLOWUP_WINDOW_S)
+        if span < R1_FOLLOWUP_SPAN_S:
+            return result(FAIL, 'R1 follow-up span omits required whole-unit redos/encounters/overhead', **evidence)
     evidence.update(kind=kind, programmed_span_s=span, window_max_s=maximum, required_s=required)
     if maximum < required:
         return result(FAIL, f'window_max_s {maximum} < {required} s required by the plan\'s own span', **evidence)
@@ -1305,8 +1549,8 @@ def on_signal(number, _frame):
     stop["reason"] = "signal %d" % number
 for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
     signal.signal(number, on_signal)
-OFFSET = 7_000_000_000
 start = time.monotonic_ns()
+OFFSET = time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW) - start
 with open(out, "x") as handle:
     handle.write(json.dumps({"k": "h", "schema": "joulewise.km003c_stream.v1", "status": "streaming",
                              "rate_idx": 2, "start_raw_ns": start + OFFSET, "start_mono_ns": start}) + "\n")
@@ -1449,7 +1693,9 @@ def check_km003c_launch(ctx):
                 first = parsed[0]
                 second = parsed[1]
                 off2 = kp.raw_offset_ns(second) or 0
-                lo1 = first.poll_ns[0] - 7_000_000_000 if first.poll_ns else None
+                # The killed stream has no trailer: its start offset is the one the reader declared.
+                off1 = kp.raw_offset_ns(first, allow_unclosed=True) or 0
+                lo1 = first.poll_ns[0] - off1 if first.poll_ns else None
                 lo2, hi2 = second.host_ns[0] - off2, second.host_ns[-1] - off2
                 straddle = (lo1 + 100_000_000, lo2 + 500_000_000)
                 inside = (lo2 + 200_000_000, hi2 - 200_000_000)
@@ -1505,7 +1751,8 @@ def check_km003c_crash_radius(ctx):
         if code != harness.driver.EXIT_GO or len(streams) < 2:
             return result(FAIL, f'window did not run with a restarted meter (exit {code}, {len(streams)} streams)')
         first = kp.parse(harness.custody / streams[0]['path'])
-        polls = [t - 7_000_000_000 for t in first.poll_ns]
+        off1 = kp.raw_offset_ns(first, allow_unclosed=True) or 0
+        polls = [t - off1 for t in first.poll_ns]
         before = (polls[0] + 100_000_000, polls[0] + 900_000_000)
         runs = harness.root / 'synthetic-runs'
         plan = [_synthetic_member(runs, 'member-before-kill', before, (before[0], before[0] + 300_000_000))]

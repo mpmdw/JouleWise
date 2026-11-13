@@ -31,53 +31,23 @@ if str(ROOT) not in sys.path:
 from joulewise.align.apple import r1_runtime_contract as contract  # noqa: E402
 from joulewise.align.apple.powermode import parse_ac_powermode  # noqa: E402,F401  (re-exported)
 from joulewise.align.apple import external_volume  # noqa: E402
+from joulewise.align.apple.r1_phase_table import (  # noqa: E402,F401  (re-exported)
+    COOLDOWN_AFTER_D_MAX_S, GATED_D_RUNS, HIGH_POWER_LEGS,
+    PLANNING_RUN_ORDER_C, PRECOOL_SUFFIX, STEP_D_NAME, phase_plan,
+)
 
 SCHEMA = "joulewise.align.r1_slots.v1"
 SLOT_NAMES = tuple(f"S{i}" for i in range(1, 10)) + (
     "S5_fast", "B_D", "I_D", "T_dead", "N_chunk", "t_decline", "class",
 )
 PLANNING_START_OFFSETS_C = (0.0, 2.0, 4.0)
-# LEAD-RULINGS-2 R5-2: the designed start states run warmest first (R + 4,
-# R + 2, R + 0 C). R6-2 then precools S_slow to the G0 band of R before each
-# of them (the ruling 1(c) post-D cooldown before the first, a bounded precool
-# before the others), so each preheats from the same defined state.
-PLANNING_RUN_ORDER_C = (4.0, 2.0, 0.0)
-# A1 R1 item 4 replay pair (a, b) plus council ruling 1(b)'s bank/benign run.
-# LEAD-RULINGS-2 R7-1 (round-6 cold MEDIUM-1, exec LOW-6): they run in this
-# order, D_bank first, so both runs of the U5 replay pair follow a full gated
-# D episode with the same idle (matched predecessors, CHAIR 1(g)); D_bank
-# follows the R + 0 C planning turn and is not in the pair.
-GATED_D_RUNS = (
-    ("D_bank_benign_s1_gated_held", "d-bank-benign-s1"),
-    ("D_spam_benign_s1_gated_held_a", "d-spam-benign-s1-a"),
-    ("D_spam_benign_s1_gated_held_b", "d-spam-benign-s1-b"),
-)
 REPLAY_PAIR = ("D_spam_benign_s1_gated_held_a", "D_spam_benign_s1_gated_held_b")
-COOLDOWN_AFTER_D_MAX_S = 1500          # ruling 1(c)
-# LEAD-RULINGS-2 R6-1 (supersedes R5-1's cool-to-band): the duty bar must
-# reproduce W1's D-after-D G0. Every gated D run, and X-G, follows a D turn
-# with exactly W1's inter-member schedule: the member's own configured idle
-# (sampling.idle_seconds of the W1 kit config it runs), and nothing else; no
-# cool-to-band. They still consume the soak R (R5-1). A G0 timeout makes that
-# run INCONCLUSIVE (recorded), never a night refusal. They therefore run after
-# the designed start states: the R + 0 C planning turn (a D turn) precedes the
-# first (D_bank, R7-1), and X-G follows D_spam b (W1's D -> X transition).
-# R6-2: the calibration segments (step-d and each designed start state) start
-# from a defined state: a bounded idle-until-soak precool (cap from the runtime
-# config, calibration_precool_cap_s) to the G0 band of R. A G0 timeout there is
-# retried once after another precool, then recorded INCONCLUSIVE; the kit
-# decides downstream (fail closed at the kit, not mid-night).
-PRECOOL_SUFFIX = ".precool"
 PRECOOL_RETRY_SUFFIX = ".precool_retry"
 G0_TIMEOUT_SUFFIX = ".g0_timeout1"
 W1_PLAN_TEMPLATE = Path("configs/campaigns/align_v4/night_plan.template.json")   # = align_v4_kit.W1_PLAN_TEMPLATE
 # The W1 roster role each R1 gated member stands for, and the R1 runtime
 # config template it runs (R6-1: its configured idle must be W1's).
 W1_SCHEDULE_ROLES = {"d_spam": "D", "d_bank": "D", "x_g": "X-G"}
-# Ruling 16 legs: (label, AC powermode). LEAD-RULINGS-2 R5-5 (protocol v4
-# :243-251): the A-B-A decision precedes step-d, so the D step that fills the
-# slots, and every later D measurement, runs under the adopted series mode.
-HIGH_POWER_LEGS = (("A1", 0), ("B", 2), ("A2", 0))
 DEADMAN_PHASES = ("G0", "G1", "H", "decode", "prefill", "tool", "tail")  # ruling 1(a)
 # Ruling 1(d): pre-declared duty bar, fixed here before any R1 data are read.
 DUTY_BAR = {"x7": False, "min_admitted_turns": 3, "max_gate_hold_fraction_of_T_dead": 0.40}
@@ -111,9 +81,9 @@ PLANNING_PREHEAT_CAP_S = 900
 # 1,800 s member bound no longer contains either; both are added here.
 STEP_G0_CAP_S = 600
 STEP_QUIET_S = 300
-# LEAD-RULINGS-2 R7-2: step-d and the designed start states (the R6-2
-# calibration segments), the gated D runs and X-G arm the R1 G0 timeout, the
-# runtime config's g0_timeout_s (1,200 s); step-30b keeps the 600 s G0 cap.
+# LEAD-RULINGS-2 R7-2: step-d, the gated D runs and X-G arm the R1 G0 timeout,
+# the runtime config's g0_timeout_s (1,200 s). RL-59 ("1,200 s stays, for every
+# R1 gate"; follow-up kit a85ee8ec6): step-30b, the A-B-A legs and d-4bit arm it too.
 # The gated runs and X-G arm their G0 inside the member deadman, so their
 # 1,800 s member bound already contains it.
 G0_TIMEOUT_KEY = "g0_timeout_s"
@@ -147,10 +117,10 @@ def segment_bounds(g0_timeout_s, step_deadman_s):
 
     Round-8 disposition D8-3 (R1 round-8 exec LOW-2): step-30b's deadman is
     re-armed after its G0 and quiet too, so it takes the same construction:
-    the re-armed member plus its pre-deadman phases (the 600 s G0 cap it keeps
-    under R7-2, the 300 s quiet) and the 600 s recovery."""
+    the re-armed member plus its pre-deadman phases (the R1 G0 timeout, 1,200 s
+    under RL-59, the 300 s quiet) and the 600 s recovery."""
     member = rearmed_member_bound_s(step_deadman_s)
-    return {"step-30b": member + STEP_G0_CAP_S + STEP_QUIET_S + STEP_RECOVERY_S,
+    return {"step-30b": member + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
             "step-d": member + g0_timeout_s + STEP_QUIET_S + STEP_RECOVERY_S,
             **{f"d-planning-turn-r-plus-{int(o)}c": member + PLANNING_PREHEAT_CAP_S + g0_timeout_s
                for o in PLANNING_START_OFFSETS_C}}
@@ -165,8 +135,10 @@ T_95_DF1 = 12.706204736432095
 # Ruling 16: High Power adoption.
 HIGH_POWER_GAIN = 1.25
 HIGH_POWER_A_LEG_SPREAD = 0.25
-# A G0-style release against the soak precedes every A-B-A leg (ruling 16)
-# and every redo of a heavy quiet segment (ruling 8); FD:489 caps G0 at 600 s.
+# Earlier rounds: a G0-style release against the soak preceded every A-B-A leg
+# (ruling 16) and every redo of a heavy quiet segment (ruling 8); FD:489 caps
+# that G0 at 600 s. The follow-up night drops the leg release (RL-59) and redoes
+# whole admission units (RL-72 E2); only release_segment_bound_s keeps this.
 G0_RELEASE_BOUND_S = 600
 SOAK_REFERENCE_SCHEMA = "joulewise.align.r1_soak_reference.v1"
 # Lead ruling L2 (LEAD-RULINGS-1): U5 is |beta_T|_90 x delta_slow <= c x sigma_pair
@@ -337,6 +309,9 @@ _CHILD_HOST_LOCK = None
 _CHILD_TERMINATIONS: list = []
 
 
+_R1_WORK_DEADLINE = None
+
+
 def _run(argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
     # Not subprocess.run: on any exception (the one-shot signal handler raises
     # KeyboardInterrupt here) it SIGKILLs the child at once.
@@ -345,7 +320,17 @@ def _run(argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
     process = subprocess.Popen(list(argv), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                pass_fds=pass_fds)
     try:
-        stdout, stderr = process.communicate()
+        cap = 10.0
+        if "--r1-kind" in argv:
+            kind = argv[argv.index("--r1-kind") + 1]
+            cap = {"calibration-pre": 1800, "calibration-post": 1800, "harvest": 4500}.get(kind)
+            if cap is None:
+                bounds = segment_bounds(runtime_g0_timeout_s(argv), runtime_step_deadman_s(argv))
+                cap = (float(argv[argv.index("--duration-s") + 1]) + 30 if "--duration-s" in argv else
+                       bounds.get(kind, aba_leg_bound_s(argv) if kind in contract.HIGH_POWER_KINDS else 1800))
+        if "--r1-kind" in argv and _R1_WORK_DEADLINE is not None:
+            cap = min(cap, max(.001, _R1_WORK_DEADLINE - time.monotonic()))
+        stdout, stderr = process.communicate(timeout=cap)
     except BaseException:
         try:
             proof = _terminate(process)
@@ -492,52 +477,6 @@ class PowerModeGuard(AbstractContextManager):
         return False
 
 
-def phase_plan(include_4bit=False, precool_cap_s=COOLDOWN_AFTER_D_MAX_S):
-    """R1 phase table: (name, runtime kind, duration_s, class).
-
-    A1 R1 item 4 is a *replay pair* of D spam/benign seed 1 (U3, the R1 replay
-    pair for U5/E_ref, and the W1 cross-session reference).  Council ruling
-    1(b) adds a third gated, held D run on bank/benign (long prefill); ruling
-    1(c) extends the post-D cooldown until S_slow is within delta of the soak
-    or 1,500 s.  Ruling 6 (U5) adds D's planning-turn step from three designed
-    G0 release states; they sit inside the calibration brackets because their
-    energies feed beta_T.
-
-    Order (LEAD-RULINGS-2): the ruling 16 A-B-A legs run right after the 30B
-    step (R6-6: its 600 s recovery observation is the idle; no separate
-    cooldown), so step-d and every later D measurement run under the adopted
-    series mode (R5-5). Step-d and each designed start state are preceded by
-    a bounded precool to the G0 band of R (R6-2; the ruling 1(c) post-D
-    cooldown is the first state's), the states run warmest first (R5-2), and
-    the gated D runs and X-G follow the last state back to back, each after a
-    D turn with only W1's inter-member schedule (R6-1). ``precool_cap_s`` is
-    the runtime config's ``calibration_precool_cap_s``.
-    """
-    phases = [
-        ("pre_calibration_bracket", "calibration-pre", None, "light"),
-        ("idle_soak", "idle", 1800, "light"),
-        ("step_30b", "step-30b", None, "heavy"),
-    ]
-    phases += [(f"high_power_{label}", f"high-power-aba-{label.lower()}", None, "heavy")
-               for label, _ in HIGH_POWER_LEGS]
-    phases += [
-        (STEP_D_NAME + PRECOOL_SUFFIX, "idle-until-soak", precool_cap_s, "light"),
-        (STEP_D_NAME, "step-d", None, "heavy"),
-        ("cooldown_after_D", "idle-until-soak", COOLDOWN_AFTER_D_MAX_S, "light"),
-    ]
-    for index, offset in enumerate(PLANNING_RUN_ORDER_C):
-        name = f"planning_turn_R_plus_{int(offset)}C"
-        if index:
-            phases.append((name + PRECOOL_SUFFIX, "idle-until-soak", precool_cap_s, "light"))
-        phases.append((name, f"d-planning-turn-r-plus-{int(offset)}c", None, "heavy"))
-    phases += [(name, kind, None, "heavy") for name, kind in GATED_D_RUNS]
-    phases.append(("X_G_contrast", "x-g", None, "heavy"))
-    if include_4bit:
-        phases.append(("D_4bit_optional", "d-4bit", None, "heavy"))
-    phases.append(("post_calibration_bracket", "calibration-post", None, "light"))
-    return phases
-
-
 def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False, contract_key=None,
             watch=None):
     if watch is not None:
@@ -545,6 +484,8 @@ def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=
         # terminal record; check before every runtime invocation.
         watch.check(f"before:{kind}:{Path(output).name}")
     argv = list(runtime) + ["--r1-kind", kind, "--output", str(output)]
+    if _CHILD_HOST_LOCK is not None and _CHILD_HOST_LOCK.held:
+        argv += ["--host-lock-fd", str(_CHILD_HOST_LOCK.pass_fds()[0])]
     if duration is not None:
         argv += ["--duration-s", str(duration)]
     # Every segment after the accepted soak is handed its reference R; the
@@ -832,6 +773,9 @@ def gate_wait_medians(gated):
 def thermometry_record(name, result):
     """Protocol v4 :243-251 (R5-5): the R1 full-inventory classification of a step."""
     block = result.get("thermometry")
+    if result.get("segment_status") == "inconclusive" and block is None:
+        return {"status": "fail", "reasons": ["no turn; classification not measured"], "flags": [],
+                "s_fast": None, "s_slow": None}
     if not isinstance(block, dict) or block.get("status") not in ("pass", "fail"):
         raise Refusal(f"{name}: runtime omitted the full-inventory classification (thermometry.status)")
     digest = block.get("classification_sha256")
@@ -839,7 +783,7 @@ def thermometry_record(name, result):
         raise Refusal(f"{name}: thermometry.classification_sha256 must be a sha256 hex digest")
     keep = ("status", "s_fast", "s_slow", "r0_sensors", "sensor_pick_changed", "flags", "reasons",
             "die_candidates", "heatsink_candidates", "classification_sha256", "classification_file",
-            "s7_for_r1_picks", "alias_groups", "alias_rule")
+            "s7_for_r1_picks", "alias_groups", "alias_rule", "night_confirmation", "registered_picks")
     record = {key: block.get(key) for key in keep}
     if isinstance(record.get("s7_for_r1_picks"), dict):
         # LEAD-RULINGS-2 R6-4: the changed-pick S7's reference R comes from the
@@ -1047,68 +991,90 @@ def _fresh_name(output, stem, start):
     return f"{stem}{index}"
 
 
+def admission_units(runtime_argv=None):
+    """RL-72 E2: pair and precool+planning recipes are indivisible on redo."""
+    phases = phase_plan(precool_cap_s=runtime_precool_cap_s(runtime_argv))
+    units, index = [], 0
+    while index < len(phases):
+        row = phases[index]
+        count = 2 if row[1] == "capture-predecessor-30b" or row[1] == "idle-until-soak" else 1
+        units.append(phases[index:index + count])
+        index += count
+    return units
+
+
+def phase_bound(phase, runtime_argv=None):
+    _name, kind, duration, _class = phase
+    if kind in ("calibration-pre", "calibration-post"):
+        return 1800.0
+    if duration is not None:
+        return float(duration)
+    if kind in contract.HIGH_POWER_KINDS:
+        return aba_leg_bound_s(runtime_argv)
+    return segment_bounds(runtime_g0_timeout_s(runtime_argv), runtime_step_deadman_s(runtime_argv)).get(
+        kind, QUIET_SEGMENT_BOUND_S)
+
+
+def _admission_unit(args, output, unit, record, *, soak_reference=None, extra=None):
+    """Two CPU-load redos total; never wait or precool inside the capture pair."""
+    bound = math.fsum(phase_bound(p, args.runtime) for p in unit)
+    attempts = []
+    while True:
+        waited = wait_outside_os_batch(bound)
+        if waited:
+            args.batch_encounters = getattr(args, "batch_encounters", 0) + 1
+            if args.batch_encounters > 2:
+                raise Refusal("RL-72 E2: two OS-batch encounters exhausted")
+        rows, reasons = [], []
+        for name, kind, duration, workload_class in unit:
+            start = time.time_ns()
+            quiet = kind in QUIET_KINDS or kind in contract.HIGH_POWER_KINDS or kind == "capture-predecessor-30b"
+            print(f"R1 segment: {name}", flush=True)
+            result = _invoke(args.runtime, kind, output / name, duration, soak_reference=soak_reference,
+                             quiet=quiet, contract_key="idle_soak" if name == "idle_soak" else None,
+                             watch=getattr(args, "volume_watch", None))
+            row = {"name": name, "class": workload_class, "started_ns": start, "ended_ns": time.time_ns(),
+                   "attempt": len(attempts), "os_batch_wait_s": waited if not rows else 0,
+                   "output_dir": str(output / name), "result": result, **(extra or {})}
+            if quiet:
+                verdict = os_load_verdict(name, result, wall_s=(row["ended_ns"] - start) / 1e9)
+                row["os_load"] = verdict
+                if verdict["redo"]:
+                    reasons.append(name + ":cpu_load")
+            if name == "idle_soak":
+                row["soak_detrended"] = soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"),
+                                                       result.get("sensor_series_end_t_s"))
+                if not all(v["settled"] for v in row["soak_detrended"].values()):
+                    raise Refusal("idle soak has unresolved slope")
+            rows.append(row)
+        if not reasons:
+            for row in rows:
+                row["superseded_attempts"] = [r for recipe in attempts for r in recipe if r["name"] == row["name"]]
+                record["phases"].append(row)
+            return {row["name"]: (row["result"], row) for row in rows}
+        # Preserve every rejected recipe, including an otherwise clean predecessor.
+        for row in rows:
+            target = Path(row["output_dir"])
+            rejected = output / _fresh_name(output, row["name"] + ".rejected", len(attempts) + 1)
+            if target.exists():
+                target.rename(rejected)
+            row.update(output_dir=str(rejected), redo_reason=reasons)
+        attempts.append(rows)
+        args.load_redos_used = getattr(args, "load_redos_used", 0) + 1
+        record["load_redos_used"] = args.load_redos_used
+        if args.load_redos_used > 2:
+            record["phases"].extend(rows)
+            raise Refusal("RL-72 E2: two whole-unit load redos exhausted")
+
+
 def _segment(args, output, name, kind, duration, workload_class, record, *, quiet,
              soak_reference=None, release_first=False, contract_key=None, extra=None, bound_s=None):
-    """Invoke one runtime segment; quiet segments obey ruling 8 and are redone on load.
-
-    Every attempt runs in the canonical ``output/name``; a rejected attempt is
-    moved to ``output/name.rejectedN`` before the next one starts, so the
-    accepted attempt always owns the canonical directory. A redo of a heavy
-    segment (and every attempt when ``release_first``) starts only after a
-    G0-style release against the soak, never immediately after the load.
-    ``bound_s``, when given, is the whole attempt's wall bound (release
-    included) for the ruling 8 batch-window wait.
-    """
-    attempts = []
-    target = output / name
-    for attempt in range(MAX_SEGMENT_REDOS + 1):
-        release_now = release_first or (attempt > 0 and workload_class == "heavy")
-        if bound_s is None and duration is None and getattr(args, "segment_bounds", None) is None:
-            args.segment_bounds = segment_bounds(runtime_g0_timeout_s(args.runtime),
-                                                 runtime_step_deadman_s(args.runtime))
-        # R8-4: a release segment is its 65 s pre-roll plus its 600 s G0 cap.
-        bound = bound_s if bound_s is not None else (
-            (duration or (args.segment_bounds or {}).get(kind, QUIET_SEGMENT_BOUND_S))
-            + (release_segment_bound_s() if release_now else 0))
-        waited = wait_outside_os_batch(bound) if quiet else 0.0
-        release = (_release_against_soak(args, output, _fresh_name(output, f"{name}.g0_release", attempt),
-                                         soak_reference)
-                   if release_now else None)
-        started = time.time_ns()
-        result = _invoke(args.runtime, kind, target, duration, soak_reference=soak_reference,
-                         quiet=quiet, contract_key=contract_key, watch=getattr(args, "volume_watch", None))
-        row = {"name": name, "class": workload_class, "started_ns": started, "ended_ns": time.time_ns(),
-               "attempt": attempt, "os_batch_wait_s": waited, "output_dir": str(target), "result": result,
-               **(extra or {})}
-        if release is not None:
-            row["g0_release"] = release
-        if not quiet:
-            record["phases"].append(row)
-            return result, row
-        verdict = os_load_verdict(name, result, wall_s=(row["ended_ns"] - row["started_ns"]) / 1e9)
-        redo_reason = "cpu_load" if verdict["redo"] else None
-        if not redo_reason and contract_key == "idle_soak":
-            row["soak_detrended"] = soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"),
-                                                   result.get("sensor_series_end_t_s"))
-            if not all(v["settled"] for v in row["soak_detrended"].values()):
-                redo_reason = "soak_slope"
-        row.update(os_load=verdict, redo_reason=redo_reason)
-        attempts.append(row)
-        if not redo_reason:
-            row["superseded_attempts"] = attempts[:-1]
-            record["phases"].append(row)
-            return result, row
-        # R6-2: a retried calibration segment calls this twice, so take the
-        # next free name rather than overwrite (or fail on) an earlier one.
-        rejected = output / _fresh_name(output, f"{name}.rejected", attempt + 1)
-        if target.exists():
-            target.rename(rejected)
-        row["output_dir"] = str(rejected)
-    raise Refusal(f"{name}: segment still contaminated after {MAX_SEGMENT_REDOS} redos")
+    # Compatibility for existing callers; there are no soak releases or G0 redos.
+    return _admission_unit(args, output, [(name, kind, duration, workload_class)], record,
+                           soak_reference=soak_reference, extra=extra)[name]
 
 
 GATED_NAMES = frozenset(name for name, _ in GATED_D_RUNS)
-STEP_D_NAME = "step_D_prefill_10k_decode_4096"
 DEFAULT_RUNTIME_CONFIG = Path("configs/align/v4/r1_runtime.json")
 # Executing review round 3 LOW-1: an A-B-A leg's batch-window bound comes from
 # the configured values, not an assumed 1,800 + 600 s. The leg is one step
@@ -1272,100 +1238,32 @@ def _g0_inconclusive(name, kind, result):
 
 def _calibration_segment(args, output, name, kind, record, *, quiet, soak_reference, extra, precool_cap_s,
                          precools):
-    """LEAD-RULINGS-2 R6-2: step-d or a designed start state. A G0 timeout is
-    retried once, after another bounded precool to the G0 band of R; a second
-    timeout makes the segment INCONCLUSIVE (recorded), never a night refusal.
-    Returns (result, row, status) with status ``measured`` or ``inconclusive``."""
     result, row = _segment(args, output, name, kind, None, "heavy", record, quiet=quiet,
-                           soak_reference=soak_reference, extra=extra)
-    if not _g0_inconclusive(name, kind, result):
-        return result, row, "measured"
-    target, moved = output / name, output / (name + G0_TIMEOUT_SUFFIX)
-    if target.exists():
-        target.rename(moved)
-    row.update(output_dir=str(moved), segment_status="inconclusive", superseded_by="R6-2 retry")
-    retry = name + PRECOOL_RETRY_SUFFIX
-    precool, _ = _segment(args, output, retry, "idle-until-soak", precool_cap_s, "light", record, quiet=False,
-                          soak_reference=soak_reference)
-    precools[retry] = _check_precool(retry, precool)
-    first = dict(row)
-    result, row = _segment(args, output, name, kind, None, "heavy", record, quiet=quiet,
-                           soak_reference=soak_reference, extra=extra)
-    row["g0_timeout_attempt"] = first["output_dir"]
-    if _g0_inconclusive(name, kind, result):
-        row["segment_status"] = "inconclusive"
-        return result, row, "inconclusive"
-    return result, row, "measured"
+                          soak_reference=soak_reference, extra=extra)
+    return result, row, "inconclusive" if _g0_inconclusive(name, kind, result) else "measured"
 
 
 def aba_leg_bound_s(runtime_argv):
-    """One A-B-A attempt's wall bound: release segment + one step member.
-
-    R5-5 puts the A-B-A legs before step-d, so step-d's I_D is not yet known
-    when a leg is admitted; the bound uses the largest I_D the runtime admits
-    (``ABA_LEG_I_D_BOUND_S``, step-d refuses I_D >= 1,750 s). A larger bound
-    only waits longer for the ruling 8 batch window, never less.
-    """
-    from scripts.align_v4_kit import DEADMAN_FACTOR
-    return (release_segment_bound_s() + ABA_LEG_I_D_BOUND_S
-            + DEADMAN_FACTOR * runtime_step_deadman_s(runtime_argv) + LEG_BOUND_MARGIN_S)
+    return rearmed_member_bound_s(runtime_step_deadman_s(runtime_argv)) + runtime_g0_timeout_s(runtime_argv)
 
 
 def night_worst_case_s(runtime_argv=None, include_4bit=False):
-    """Round-5 cold pass LOW-6 (lead ruling R6-8): the all-caps wall of one
-    R1 night with no redo, from this phase table and its caps (a timed segment
-    its duration or cap, a quiet model segment its ruling 8 bound, an A-B-A
-    leg its release + member bound, any other model segment the 1,800 s
-    member bound). The calibration brackets and the harvest are not bounded
-    here. Each quiet-segment redo (MAX_SEGMENT_REDOS) adds a release and the
-    segment again, and one ruling 8 batch-window encounter adds up to the
-    segment's bound plus 5,400 s (11,164 s for step-d; RUN_STATE 215/216).
-
-    Round-6 integration: the table is the R6-1/R6-2/R6-6 one, with the
-    runtime config's calibration precool cap (as ``run`` builds it), and
-    ``r6_2_retry_max_s`` is the all-caps cost of the one R6-2 retry (precool +
-    segment again) that each G0-inconclusive-capable segment may take.
-    Round 7: step-d and the designed start states are bounded with the R7-2
-    G0 timeout (the runtime config's g0_timeout_s). Round 8 (R8-4): they also
-    carry their re-armed member's start-up and close, and a redo's release
-    is ``release_segment_bound_s()`` (``redo_release_s``); D8-3 extends the
-    re-armed member bound to step-30b."""
-    rows = []
-    precool_cap_s = runtime_precool_cap_s(runtime_argv)
-    g0_timeout = runtime_g0_timeout_s(runtime_argv)
-    bounds = segment_bounds(g0_timeout, runtime_step_deadman_s(runtime_argv))
-    retry_s = 0.0
-    for name, kind, duration, _class in phase_plan(include_4bit, precool_cap_s=precool_cap_s):
-        if kind in contract.HIGH_POWER_KINDS:
-            bound = aba_leg_bound_s(runtime_argv)
-        elif kind in ("calibration-pre", "calibration-post"):
-            bound = 0.0
-        elif duration is not None:
-            bound = float(duration)
-        else:
-            bound = float(bounds.get(kind, QUIET_SEGMENT_BOUND_S))
-        rows.append({"name": name, "kind": kind, "bound_s": bound})
-        if kind in contract.G0_INCONCLUSIVE_KINDS:
-            retry_s += precool_cap_s + bound
-    (h0, m0), (h1, m1) = OS_BATCH_WINDOW_LOCAL
-    total = math.fsum(row["bound_s"] for row in rows)
-    blackout = float((h1 * 60 + m1 - h0 * 60 - m0) * 60)
-    # RUN_STATE 215/216: wait_outside_os_batch waits to the blackout's end whenever a segment
-    # would overlap its start, so ONE encounter waits up to the segment's own
-    # bound plus the blackout width (a supremum), not the width alone. The
-    # largest bound is step-d's (5,763.9952 s): 11,163.9952 s per encounter.
-    encounter = max(row["bound_s"] for row in rows) + blackout
-    return {"segments": rows, "no_redo_s": total, "precool_cap_s": precool_cap_s, "g0_timeout_s": g0_timeout,
-            "redo_release_s": release_segment_bound_s(), "batch_blackout_s": blackout,
-            "batch_encounter_max_s": encounter,
-            # One-encounter, no-redo, no-retry phase subtotal (67,371 s): excludes the
-            # calibration brackets, close and harvest, and any second encounter.
-            "with_one_batch_encounter_s": total + encounter,
-            "r6_2_retry_max_s": retry_s,
-            # Floor when a redo/retry is planned (96,427 s): each retry segment that
-            # touches 11:45-13:15 can meet its own encounter, so size from the
-            # installed plan's actual segments.
-            "with_retries_and_one_batch_encounter_s": total + retry_s + encounter}
+    """RL-72 E2 bounds, not a prediction. Exactly two whole-unit load redos."""
+    units = [{"names": [p[0] for p in unit], "bound_s": math.fsum(phase_bound(p, runtime_argv) for p in unit)}
+             for unit in admission_units(runtime_argv) if unit[0][1] not in ("calibration-pre", "calibration-post")]
+    total = math.fsum(u["bound_s"] for u in units)
+    largest = max(u["bound_s"] for u in units)
+    blackout, encounters, redos, overhead = 5400, 2, 2, 9000
+    encounter = largest + blackout
+    floor = math.ceil(total + redos * largest + encounters * encounter)
+    span = floor + overhead
+    from joulewise.b6.plan_inputs import window_max_s
+    maximum = window_max_s({"programmed_span_s": {"seconds": span}})
+    return {"admission_units": units, "no_redo_s": total, "largest_unit_s": largest,
+            "redo_quota": redos, "encounters": encounters, "batch_blackout_s": blackout,
+            "batch_encounter_max_s": encounter, "overhead_s": overhead,
+            "overhead_caps_s": {"pre_bracket": 1800, "post_bracket": 1800, "close": 900, "harvest": 4500},
+            "floor_s": floor, "programmed_span_s": span, "window_max_s": maximum}
 
 
 def budget_fit_inputs(step_d, gated, deadman_rows=()):
@@ -1555,6 +1453,120 @@ def aba_adoption(legs, releases, leg_g0):
     return rule
 
 
+def aba_start_bars(legs):
+    """RL-72 E4: one-sided cross bands and B capture bracket are acceptance bars."""
+    cross = []
+    try:
+        for label, leg in legs.items():
+            if not leg.get("g0_released"):
+                raise ValueError("unreleased leg")
+            for other, baseline in legs.items():
+                if label == other:
+                    continue
+                for role in ("fast", "slow"):
+                    reading = _finite_number(leg["g0_release"][role + "_c"], "release")
+                    reference = _finite_number(baseline["operating_reference"][role + "_c"], "capture")
+                    band = _finite_number(baseline["bands_c"]["delta_" + role + "_c"], "band")
+                    cross.append({"leg": label, "against": other, "role": role,
+                                  "margin_c": reference + band - reading,
+                                  "pass": reading <= reference + band})
+        a1, b, a2 = [legs[k]["operating_reference"]["slow_c"] for k in ("A1", "B", "A2")]
+        bracket = min(a1, a2) - .5 <= b <= max(a1, a2) + .5
+        return {"pass": all(row["pass"] for row in cross) and bracket,
+                "cross_band": cross, "slow_capture_bracket": bracket}
+    except (KeyError, TypeError, ValueError, Refusal) as error:
+        return {"pass": False, "reason": str(error), "cross_band": cross, "slow_capture_bracket": False}
+
+
+def executed_commit(root):
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+
+
+def require_prepare_packet(path, root=ROOT):
+    """Bind RL-62/73 prepare evidence to this driver's committed sources."""
+    cause = "r1.prepare_packet"
+    if path is None:
+        raise Refusal(f"{cause}.missing: --prepare-packet is required")
+    path = Path(path).resolve()
+    try:
+        raw = path.read_bytes()
+        packet = json.loads(raw)
+    except (OSError, ValueError) as error:
+        raise Refusal(f"{cause}.unreadable: {error}") from error
+    if (not isinstance(packet, dict) or packet.get("schema") != "joulewise.align.r1_followup_prepare.v1"
+            or packet.get("status") != "FOR_LEAD_ARM"):
+        raise Refusal(f"{cause}.status: requires FOR_LEAD_ARM prepare evidence")
+    if packet.get("executed_commit") != executed_commit(root):
+        raise Refusal(f"{cause}.executed_commit: prepare does not name this commit")
+    for name in ("weight_digests", "runtime_stack"):
+        check = packet.get(name)
+        if not isinstance(check, dict) or check.get("ok") is not True:
+            raise Refusal(f"{cause}.{name}: missing or not ok")
+    from joulewise.align.apple import v4_registration
+    bound = packet.get("bound_files")
+    if not isinstance(bound, dict):
+        raise Refusal(f"{cause}.bound_files: missing source hashes")
+    for name in v4_registration.R1_EXECUTED_SOURCES:
+        try:
+            digest = hashlib.sha256((Path(root) / name).read_bytes()).hexdigest()
+        except OSError as error:
+            raise Refusal(f"{cause}.bound_files: source unavailable: {name}") from error
+        if bound.get(name) != digest:
+            raise Refusal(f"{cause}.bound_files: source differs: {name}")
+    return {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+            "executed_commit": packet["executed_commit"],
+            **{name: packet[name] for name in ("weight_digests", "runtime_stack")}}
+
+
+def inadmissible_slots(results, inconclusive, thermometry, duty, u5, g0_cap):
+    """The plan's per-slot bars; candidates never become admitted evidence by omission."""
+    step = results.get(STEP_D_NAME, {})
+    step_flags = list(step.get("episode_flags", []))
+    detail = step.get("slot_detail", {})
+    reasons = [f for f in step_flags if f == "r1.g0_timeout_run"]
+    if not step.get("slots"):
+        reasons.append("r1.step_incomplete")
+    if detail.get("recovery_censored"):
+        reasons.append("recovery_censored")
+    if any(v.get("tau_censored") for v in detail.get("responses", {}).values()):
+        reasons.append("tau_censored")
+    if step.get("t_decline_status") == "unobserved":
+        reasons.append("t_decline_unobserved")
+    out = {name: list(reasons) for name in ("S1", "S2", "S3", "S4", "S7", "S8", "S9", "N_chunk",
+                                           "t_decline", "B_D", "I_D", "T_dead", "class", "e_D")}
+    out.update(S5=[], S5_fast=[], S6=[], ac_powermode=[], planning_temperature=[], U5=[],
+               duty_bar=[], deadman_budget=[], l1=[], max_r1_tail_s=[], budget_fit_inputs=[], projected_mde=[],
+               x_g=[], g0_cap_w1=[], **{"thermometry.D": list(reasons)})
+    for name, reason in inconclusive.items():
+        if name.startswith("high_power") or name == "ac_powermode":
+            out["ac_powermode"].append(reason)
+        if name.startswith("planning"):
+            out["planning_temperature"].append(reason)
+            out["U5"].append(reason)
+    gated_timeout = any(results.get(name, {}).get("g0_outcome") != "released" for name, _ in GATED_D_RUNS)
+    if gated_timeout or any("thermal.hold_suppressed" in str(results.get(name, {}).get("episode_flags"))
+                            for name, _ in GATED_D_RUNS):
+        out["S6"].append("r1.gated_timeout_or_hold_suppression")
+    if u5.get("verdict") == "inconclusive":
+        out["U5"].append("r1.u5_inconclusive")
+    if duty.get("verdict") != "pass" or reasons:
+        for name in ("duty_bar", "deadman_budget", "l1", "max_r1_tail_s", "budget_fit_inputs", "projected_mde"):
+            out[name].append("r1.candidate_budget_or_duty_fallback")
+    if gated_timeout or results.get("X_G_contrast", {}).get("g0_outcome") != "released":
+        out["x_g"].append("r1.g0_cap_saturated")
+        out["g0_cap_w1"].append("r1.g0_cap_saturated")
+    if thermometry.get("bar") != "pass":
+        out["thermometry.D"].append("r1.thermometry_failed")
+    # The driver refuses structural failures; these feeds can make an otherwise
+    # complete night provisional. Keep their exact summary codes on every slot.
+    universal = []
+    if any("r1.battery_feed_invalid" in r.get("feed_flags", []) for r in results.values()):
+        universal.append("r1.battery_feed_invalid")
+    if any("r1.agent_feed_overlap" in r.get("feed_flags", []) for r in results.values()):
+        universal.append("r1.agent_feed_overlap")
+    return {name: sorted(set(flags + universal)) for name, flags in out.items()}
+
+
 def _set_powermode(guard, mode, label, refusal):
     guard.automatic(label) if mode == 0 else guard.high()
     observed = parse_ac_powermode(guard.records[-1].get("stdout"))
@@ -1572,19 +1584,11 @@ def _check_member_powermode(name, result, mode):
         raise Refusal(f"{name}: member recorded AC powermode {value!r}, series mode is {mode}")
 
 
-def _check_soak_reference_consumed(name, result, soak_reference):
-    """R5-1: the gated D runs and X-G must gate against the soak R, never a
-    self-captured warm reference."""
-    if result.get("reference_source") != "r1_soak_reference":
-        raise Refusal(f"{name}: gated run did not consume the soak reference R "
-                      f"(reference_source {result.get('reference_source')!r})")
-    reference = _finite_number(result.get("reference_c"), f"{name}.reference_c")
-    soak = json.loads(Path(soak_reference).read_text())
-    slow_key = (soak.get("sensor_roles") or {}).get("s_slow")
-    slow = (soak.get("sensors_c") or {}).get(slow_key)
-    if (isinstance(slow, bool) or not isinstance(slow, (int, float)) or not math.isfinite(slow)
-            or not math.isclose(reference, slow, rel_tol=0, abs_tol=1e-9)):
-        raise Refusal(f"{name}: reference_c {reference} is not the soak s_slow reference value")
+def _check_d_reference_consumed(name, result, step_d):
+    reference = step_d.get("operating_reference") or {}
+    if (result.get("reference_source") != reference.get("source_member") or
+            result.get("reference_c") != reference.get("slow_c")):
+        raise Refusal(f"{name}: did not consume authenticated step-D R_D")
 
 
 def _check_recovery_curve(name, curve):
@@ -1603,6 +1607,9 @@ QUIET_KINDS = ("idle", "step-30b", "step-d") + tuple(
 
 
 def run(args):
+    global _R1_WORK_DEADLINE
+    chain_started = time.monotonic()
+    span_cap = None   # set inside the refusal-handled region below (R7-2: a refusal is exit 3 with a record)
     marker = getattr(args, 'power_marker', None) or (args.output.parent / '.align-r1-high-power')
     marker = Path(marker).resolve()
     output = args.output.resolve()
@@ -1646,6 +1653,17 @@ def run(args):
         except FileExistsError as error:
             raise Refusal(f"output directory already exists: {output}") from error
         created = True
+        # RL-72 E2: complete records must fit the exact span, including startup,
+        # bracket/harvest/restore overhead. Reserve the declared 900 s for close.
+        # Read here, inside the handler, so a config error is a recorded refusal (R7-2).
+        span_cap = night_worst_case_s(args.runtime)["programmed_span_s"]
+        _R1_WORK_DEADLINE = chain_started + span_cap - 900
+        if not args.synthetic:
+            record["prepare_packet"] = require_prepare_packet(getattr(args, "prepare_packet", None))
+            from joulewise.align.apple import v4_registration
+            v4_registration.verify_r1_executed_sources(ROOT, {"executed_commit": executed_commit(ROOT)})
+            if runtime_config_path(args.runtime).read_bytes() != (ROOT / DEFAULT_RUNTIME_CONFIG).read_bytes():
+                raise Refusal("condition 13: runtime config differs from the bound config")
         try:
             locked = host_lock.acquire()
         except OSError as error:
@@ -1676,6 +1694,8 @@ def run(args):
             skipped = {}          # gated runs and X-G not run without step-d slots
             g0_ok = {}            # R6-1: gated run / X-G -> its G0 released
             follows = {}          # R6-1: gated run / X-G -> the D turn it follows (None: no D turn)
+            pending = {}
+            units = {unit[0][0]: unit for unit in admission_units(args.runtime)}
             last_d_turn = None    # the latest model segment, if it dispatched a D turn
             for name, kind, duration, workload_class in phase_plan(args.include_4bit, precool_cap_s=precool_cap):
                 if kind in contract.HIGH_POWER_KINDS:
@@ -1688,17 +1708,26 @@ def run(args):
                     mode = dict(HIGH_POWER_LEGS)[label]
                     _set_powermode(guard, mode, f"{label}.after_set", f"high_power.{label}")
                     results[name], row = _segment(args, output, name, kind, None, "heavy", record, quiet=True,
-                                                  soak_reference=soak_reference, release_first=True,
+                                                  soak_reference=soak_reference, release_first=False,
                                                   extra={"powermode": mode},
                                                   bound_s=aba_leg_bound_s(args.runtime))
                     _check_member_powermode(name, results[name], mode)
-                    releases[label] = row["g0_release"]["released"]
+                    releases[label] = True
                     leg_g0[label] = results[name].get("g0_released")
                     if not isinstance(leg_g0[label], bool):
                         raise Refusal(f"{name}: g0_released must be boolean")
                     legs[label] = results[name]["t_decline_s"] if leg_g0[label] else None
+                    if not leg_g0[label]:
+                        inconclusive[name] = "r1.g0_timeout_run" if "r1.g0_timeout_run" in results[name].get(
+                            "episode_flags", []) else "G0 unreleased"
                     if label == HIGH_POWER_LEGS[-1][0]:
                         adoption = aba_adoption(legs, releases, leg_g0)
+                        starts = aba_start_bars({label: results[f"high_power_{label}"] for label, _ in HIGH_POWER_LEGS})
+                        adoption["start_state_bars"] = starts
+                        if not starts["pass"]:
+                            adoption.update(verdict="inconclusive", reason="RL-72 E4: A-B-A start-state bars failed")
+                        if adoption["verdict"] == "inconclusive":
+                            inconclusive["ac_powermode"] = adoption["reason"]
                         # R5-5: the rest of R1's D measurements run under the
                         # adopted series mode (ruling 7 + 16).
                         series_mode = 2 if adoption["verdict"] == "adopt" else 0
@@ -1706,47 +1735,53 @@ def run(args):
                     continue
                 if kind == "calibration-post" and series_mode == 2:
                     _set_powermode(guard, 0, "series.restored", "series_restore")
-                if (name in GATED_NAMES or kind == "x-g") and STEP_D_NAME in inconclusive:
-                    # R6-2: without step-d's slots no gated run can be budgeted
-                    # (R5-4); recorded, and the kit refuses W1 downstream.
-                    skipped[name] = "step-d INCONCLUSIVE (G0 timeout after a retry): no slots to budget the run"
+                if (kind in contract.PLANNING_KINDS or kind in contract.GATED_D_KINDS or
+                    kind in ("x-g", "idle-until-soak")) and results.get(STEP_D_NAME, {}).get("reference_unobserved"):
+                    skipped[name] = "thermal.window_reference_unobserved"
+                    inconclusive[name] = skipped[name]
+                    record["phases"].append({"name": name, "class": workload_class, "skipped": skipped[name]})
+                    continue
+                if (name in GATED_NAMES or kind == "x-g") and not results.get(STEP_D_NAME, {}).get("slots"):
+                    skipped[name] = "step-D incomplete: no candidate budgets"
+                    inconclusive[name] = skipped[name]
                     record["phases"].append({"name": name, "class": workload_class, "skipped": skipped[name]})
                     continue
                 quiet = kind in QUIET_KINDS and not (kind == "idle" and name != "idle_soak")
                 model = kind not in ("calibration-pre", "calibration-post", "idle", "idle-until-soak")
                 extra = {"powermode": series_mode} if model and series_mode is not None else None
                 # (step_30b runs before the decision, in Automatic, unchecked as before.)
-                if kind in contract.G0_INCONCLUSIVE_KINDS:
-                    results[name], row, status = _calibration_segment(
-                        args, output, name, kind, record, quiet=quiet, soak_reference=soak_reference, extra=extra,
-                        precool_cap_s=precool_cap, precools=precool)
-                    if status == "inconclusive":
-                        inconclusive[name] = "G0 did not release, twice (each after a precool to the G0 band of R)"
-                else:
-                    results[name], row = _segment(
-                        args, output, name, kind, duration, workload_class, record, quiet=quiet,
-                        soak_reference=soak_reference,
-                        contract_key="idle_soak" if name == "idle_soak" else None, extra=extra)
+                if name not in pending:
+                    pending.update(_admission_unit(args, output, units[name], record,
+                                                   soak_reference=soak_reference, extra=extra))
+                results[name], row = pending.pop(name)
+                flags = results[name].get("episode_flags", [])
+                if "r1.g0_timeout_run" in flags or "r1.preheat_cap_reached" in flags:
+                    inconclusive[name] = ",".join(f for f in flags if f.startswith("r1."))
+                if _g0_inconclusive(name, kind, results[name]):
+                    inconclusive[name] = results[name].get("reason", "G0 unreleased")
                 if name == "idle_soak":
                     soak_reference = write_soak_reference(output, row)
                 if model and series_mode is not None:
                     _check_member_powermode(name, results[name], series_mode)
                 if name in GATED_NAMES or kind == "x-g":
-                    _check_soak_reference_consumed(name, results[name], soak_reference)
+                    _check_d_reference_consumed(name, results[name], results[STEP_D_NAME])
                     g0_ok[name] = _check_schedule(name, results[name], schedule,
                                                   "X-G" if kind == "x-g" else "D")
                     follows[name] = last_d_turn
+                    reason = schedule_inconclusive_reason(g0_ok[name], follows[name])
+                    if reason:
+                        inconclusive[name] = reason
                 if model:
                     # R6-1: did this segment end with a D turn? (A timed-out G0
                     # dispatches none, so the next gated run would not follow one.)
                     # A gated run counts only with observed D work (decode
                     # tokens): a released G0 alone may still dispatch nothing
                     # (Sol critique of round 6).
-                    last_d_turn = name if (kind in D_TURN_KINDS and name not in inconclusive
+                    last_d_turn = name if (kind in D_TURN_KINDS and not results[name].get("reference_unobserved")
                                            and not (name in GATED_NAMES and not (
                                                g0_ok[name] and type(results[name].get("decode_tokens")) is int
                                                and results[name]["decode_tokens"] > 0))) else None
-                if name == STEP_D_NAME and name not in inconclusive:
+                if name == STEP_D_NAME and not results[name].get("reference_unobserved"):
                     _check_step_d(results[name])
                 if name in GATED_NAMES:
                     _check_gated_t_dead(name, results[name], results.get(STEP_D_NAME))
@@ -1758,7 +1793,7 @@ def run(args):
             harvested = _invoke(args.runtime, "harvest", output / "harvest", soak_reference=soak_reference,
                                 watch=args.volume_watch)
             record["phases"].append({"name": "harvest", "class": "light", "result": harvested})
-        step_d_ok = STEP_D_NAME not in inconclusive
+        step_d_ok = isinstance(results.get(STEP_D_NAME, {}).get("slots"), dict)
         planning = {offset: f"planning_turn_R_plus_{int(offset)}C" for offset in PLANNING_START_OFFSETS_C}
         planning_inconclusive = sorted(name for name in planning.values() if name in inconclusive)
         if planning_inconclusive:
@@ -1767,7 +1802,12 @@ def run(args):
             temperature_summary = {"label": "PRINT_ONLY_R1_PLANNING_TEMPERATURE_SECONDARY", "status": "inconclusive",
                                    "inconclusive_states": planning_inconclusive}
         else:
-            temperature_summary = planning_temperature_summary([results[planning[o]] for o in PLANNING_START_OFFSETS_C])
+            try:
+                temperature_summary = planning_temperature_summary([results[planning[o]] for o in PLANNING_START_OFFSETS_C])
+            except Refusal as error:
+                inconclusive["planning_temperature"] = str(error)
+                planning_inconclusive = ["planning_temperature"]
+                temperature_summary = {"status": "inconclusive", "reason": str(error)}
         temperature_summary["run_order_offsets_c"] = list(PLANNING_RUN_ORDER_C)
         if step_d_ok:
             slots = derive_slots(results.get(STEP_D_NAME) or {})
@@ -1782,16 +1822,18 @@ def run(args):
                        for name, result in gated.items()]
             verdict = duty_verdict(deadman)
             duty = {"declared": DUTY_BAR, "pass": verdict == "pass", "verdict": verdict,
-                    "inconclusive_runs": uncooled, "reference": "soak R (LEAD-RULINGS-2 R5-1)",
+                    "inconclusive_runs": uncooled, "reference": "step-D R_D (RL-59)",
                     "schedule": schedule, "duty_T_dead_s": l1["effective_T_dead_s"],
                     "fallback_order": list(DUTY_FALLBACK_ORDER)}
             mde = projected_mde(results[STEP_D_NAME].get("e_D_j_per_token"), gated)
             u5 = (u5_verdict(temperature_summary, gated, inconclusive_runs=uncooled) if not planning_inconclusive else
                   {"criterion": "U5", "c": U5_C, "authority": "LEAD-RULINGS-1 L2", "verdict": "inconclusive",
                    "reason": "designed start state(s) INCONCLUSIVE (R6-2): " + ", ".join(planning_inconclusive)})
-            s6 = {"status": "TODO", "S6_c": slots["S6"], "rule": "S6 = delta_slow (S5) until the FD 2.6 tuning",
-                  "tied_to": "the gated D runs' median G1 wait (with the hold median, fallback step 1)",
-                  "authority": "LEAD-RULINGS-2 R5-7", **gate_wait_medians(gated)}
+            from joulewise.align.apple.r1_runtime import registered_s6
+            s6 = {**registered_s6()["s6_tuning"], "S6_c": slots["S6"], **gate_wait_medians(gated)}
+            if not args.synthetic and results[STEP_D_NAME].get("slot_detail", {}).get("S6_tuning", {}).get(
+                    "status") == "new_sensor_default":
+                s6 = {**results[STEP_D_NAME]["slot_detail"]["S6_tuning"], **gate_wait_medians(gated)}
             fit_inputs = budget_fit_inputs(results[STEP_D_NAME], gated, deadman)
             thermometry_d = thermometry_record(STEP_D_NAME, results[STEP_D_NAME])
             x_g = {"status": "inconclusive" if reasons["X_G_contrast"] else "measured",
@@ -1804,7 +1846,15 @@ def run(args):
         else:
             # R6-2: recorded, not refused mid-night. With no step-d slots the
             # kit refuses W1 (no slots, no thermometry bar, no duty bar).
-            slots = l1 = max_tail = mde = s6 = fit_inputs = thermometry_d = None
+            l1 = max_tail = mde = fit_inputs = thermometry_d = None
+            from joulewise.align.apple.r1_runtime import registered_s6
+            s6 = registered_s6()["s6_tuning"]
+            slots = {"S6": registered_s6()["slots"]["S6"]}
+            arm_config = json.loads(runtime_config_path(args.runtime).read_text())
+            if not args.synthetic:
+                slots = {"S6": arm_config.get("slow_band_floor_c", 1.0)}
+                s6 = {"status": "new_sensor_default", "authority": "RL-78 default band",
+                      "S6_c": slots["S6"], "receipt_transferred": False}
             deadman = []
             duty = {"declared": DUTY_BAR, "pass": False, "verdict": "inconclusive", "inconclusive_runs": [],
                     "reason": "step-d INCONCLUSIVE: the gated D runs did not run", "schedule": schedule,
@@ -1830,11 +1880,31 @@ def run(args):
             thermometry["bar_reason"] = ("s_fast and s_slow are one key or in one alias group "
                                          "(LEAD-RULINGS-2 R7-13, R8-6)")
             thermometry["flags"].append("r1.picks_aliased")
+        if thermometry_d and thermometry_d.get("sensor_pick_changed"):
+            inconclusive["thermometry.D"] = "r1.sensor_pick_changed: smoke selection not reproduced"
+        if thermometry["bar"] != "pass":
+            inconclusive["thermometry.D"] = "r1.thermometry_failed: research lead ruling required"
         # Ruling 7 + 16: the frozen series AC powermode is the A-B-A outcome.
-        ac_powermode = 2 if adoption["verdict"] == "adopt" else 0
+        ac_powermode = None if adoption["verdict"] == "inconclusive" else (2 if adoption["verdict"] == "adopt" else 0)
+        for name, result in results.items():
+            feed_flags = []
+            battery_feed = result.get("battery")
+            if isinstance(battery_feed, dict) and (battery_feed.get("valid_samples", 0) == 0 or any(
+                    not (battery_feed.get(edge) or {}).get("ac") or
+                    (battery_feed.get(edge) or {}).get("state") == "discharging" for edge in ("first", "last"))):
+                feed_flags.append("r1.battery_feed_invalid")
+            for census in result.get("census", []):
+                if any(Path(proc.get("comm", "")).name.lower().startswith(("codex", "claude", "t3"))
+                       for proc in census.get("processes", [])):
+                    feed_flags.append("r1.agent_feed_overlap")
+            result["feed_flags"] = sorted(set(feed_flags))
+            if feed_flags:
+                inconclusive[name] = ",".join(sorted(set(feed_flags + [inconclusive[name]] if name in inconclusive else feed_flags)))
         registration = {"schema": SCHEMA, "source": "R1 synthetic rehearsal" if args.synthetic else "R1 hardware rehearsal",
+                        "executed_commit": executed_commit(ROOT),
                         "slots": slots, "slot_names": list(SLOT_NAMES),
                         "slots_ac_powermode": series_mode,
+                        "mode_adoption_provisional": adoption["verdict"] == "inconclusive",
                         "planning_temperature": temperature_summary, "u5": u5, "ac_powermode": ac_powermode,
                         "high_power": {"t_decline_s": legs, "g0_released": releases, "leg_g0_released": leg_g0,
                                        **adoption},
@@ -1844,6 +1914,7 @@ def run(args):
                         "inconclusive_segments": inconclusive, "skipped_segments": skipped,
                         "calibration_precools": {name: released for name, released in precool.items()},
                         "thermometry": thermometry, "s6_tuning": s6,
+                        "inadmissible_slots": inadmissible_slots(results, inconclusive, thermometry, duty, u5, g0_cap),
                         "external_volumes": watch.records,
                         "projected_mde": mde, "battery": battery}
         reg = args.registration.resolve()
@@ -1872,6 +1943,7 @@ def run(args):
         # A second idempotent attempt covers setup failures before __enter__ and
         # exceptions raised by context teardown itself.
         _CHILD_HOST_LOCK = None
+        close_started = time.monotonic()
         try:
             if host_lock.held and not guard.deferred:
                 # Round-7 executing review: a deferred guard (no retake, or a
@@ -1899,12 +1971,19 @@ def run(args):
             watch.records.append({"point": "terminal", "verdict": "UNMEASURED",
                                   "reasons": [f"{type(error).__name__}: {error}"]})
         record["external_volumes"] = watch.records
+        record["close_s"] = time.monotonic() - close_started
+        record["chain_wall_s"] = time.monotonic() - chain_started
+        if record["close_s"] > 900 or (span_cap is not None and record["chain_wall_s"] > span_cap):
+            record.update(status="aborted", error="RL-72 E2: close/span overhead cap exceeded")
+        _R1_WORK_DEADLINE = None
         _write_result(output, record, created)
         if staged_registration is not None and record.get("status") == "complete":
             _commit_registration(*staged_registration)
         host_lock.release()
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
+        if staged_registration is not None and record.get("status") != "complete":
+            return 4
 
 
 def _commit_registration(path, text):
@@ -1944,6 +2023,8 @@ def main(argv=None):
                          help="read the runtime argv list from INPUTS_JSON WP15.runtime_entrypoint")
     parser.add_argument("--include-4bit", action="store_true")
     parser.add_argument("--synthetic", action="store_true")
+    parser.add_argument("--prepare-packet", type=Path,
+                        help="RL-62/73 FOR_LEAD_ARM packet from align_r1_followup_kit prepare")
     args = parser.parse_args(argv)
     if args.registration is None:
         args.registration = args.output / "r1_slots.json"
