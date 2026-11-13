@@ -54,7 +54,7 @@ branches built from it). The annotated tag is what keeps it reachable if those b
 | --- | --- | --- | --- |
 | `b6/collection` | `f31aca19f90473231c41cb31643afb0d6c85d355` | `db97a5409ecd3d99872ed725735bc02551a4eb76` | ready |
 | `b6/collection-n<k>` | none | none | not proposed: one code state (above) |
-| `b6/analysis` | `⟨CUT: S-14 commit, 40 hex⟩` | `⟨CUT: S-14 tree, 40 hex⟩` | cut at the S-14 pin (registration §14 row S-14, §17-R4), annotated tag object `⟨CUT: b6/analysis tag object, 40 hex⟩`; recorded 2026-11-13 |
+| `b6/analysis` | `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b` | `27770d960cc403989189e7fbfa2077ab2ef65225` | cut at the S-14 pin (registration §14 row S-14, §17-R4), annotated tag object `082652f25983ccd335acd834861f19455b9ff6fe`; recorded 2026-11-13 |
 
 ## 2. Calibration acceptance (F4)
 
