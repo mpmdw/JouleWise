@@ -8691,6 +8691,104 @@ Research lead (Fable 5.2), 2026-11-13 09:14 PST (from `date`). Cold review of `w
 
 Source: cold review of the slot-desk tools, /Volumes/JW-EXT/scratch/fable-rev-slot-desk.md.
 
+# RL-139. The Block 6 real-run tools are admitted with fixes; ten readings are ruled (2026-11-13 09:24 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 09:24 PST (`date`).
+
+**Read.** `scripts/b6_real_run.py`, `b6_structure_probe.py`, `b6_mapping_build.py`, `b6_release_record.py` and
+their four test modules at `fb1b817bb` (`analysis/2026-11-13-b6-real-run`). The runbook
+`/Volumes/JW-EXT/scratch/fable-b6-post-pin-runbook.md`. In the pinned files: `main`, `block_lines`,
+`check_block`, `desk_hazards`, the flag-code sets and the guard. §17-R7 at `27b6cacfd`. The term 7 checklist in
+the pin request and RL-133's replacements. The custody kit's option and receipt field names.
+
+**Executed** (synthetic only). The four test modules: 57 pass. The 24 embedded hashes against `b5ab6a71d`:
+equal. The R3 table through the probe's parser: 157 rows, every registry key resolved. The pinned hazard
+function's real traceback through the launcher's classifier. The probe on a synthetic output without its
+optional inputs.
+
+## 1. Admission
+
+**Ruled.** B-2 to B-5 are admitted with eight fixes. Fixes 1 to 6 land before the gate run. Fix 7 lands before
+the release check. Fix 8 is a commit by the lead before the predeclaration. A mechanical checker confirms each
+against its acceptance line in `/Volumes/JW-EXT/scratch/fable-rev-b6-real-run.md`; I do not review them again.
+
+| # | Tool | Fix |
+|---|---|---|
+| 1 | B-2 | The relay prints an exception type only when a frame was parsed, and a refusal code only when it is one identifier token outside `OUTCOME_WORDS` or the synthetic-only sentence. Otherwise `unparsed` |
+| 2 | B-2 | Class C is `AttributeError` with any frame at `b6_analysis_hazards.py:58`. The exception is raised at `:12`, so the built test never matched a real traceback |
+| 3 | B-2 | `RuntimeError` is class D only with `--workers` above 1; otherwise E |
+| 4 | B-2 | Preflight refuses when the ledger path is one of the program's argument paths |
+| 5 | B-3 | `--stage` is required. Dry: `--inputs`, `--loop-attempts`, `--block5-expected` are required. Gate: `--inputs` is required. A `not_checked` row is named on stdout and exits 5 |
+| 6 | B-3 | Any other exception prints `probe: refused <TypeName>`, exit 7, and writes nothing |
+| 7 | B-5 | `check` fails 4 on any `departs` or `not_checked` in the gate or dry structure file, and binds each to its run's restricted digest. It fails 3 unless the gate record is exit 0. `--gate-dir` and `--dry-dir` name the passing attempts |
+| 8 | lead | RL-134 items 4 to 18 are committed. The committed text stops at item 3 |
+
+**Why.** The tools control what the operator sees. On the pinned bytes I found no value that reaches the
+operator. Fixes 1 and 6 remove two places where that rested on how the pinned program happens to behave. Fixes
+5 and 7 close the case where a check that did not run, or a probe departure, still reads as a pass. Fixes 2 and
+3 make the printed class the one RL-134 item 11 gives.
+
+## 2. The ten readings
+
+1. **`PIN_TABLE` is embedded at `b5ab6a71d`.** Admitted. If the cut commit changes any of the 24 files, the
+   table is regenerated with `git show <cut>:<path> | shasum -a 256`. The probe's two program hashes and
+   registry hash, and B-4's verify-map hash, are regenerated in the same commit. A diff that touches only those
+   constants needs the table test green and no review.
+2. **`refused: TypeError` prints `class=C/E`.** Admitted. It is handled as class C first: run the kit's
+   `verify`. If `verify` fails, it is C. If it passes, it is E and comes to me.
+3. **Exit-1 classes.** Amended by fixes 2 and 3. C: `AttributeError` with a frame at
+   `b6_analysis_hazards.py:58`. D: `RuntimeError` in a pool run. E: everything else, including a `RuntimeError`
+   in a serial run.
+4. **The exit-4 print form** `refused: <code> class=<A-E>`. Admitted, with fix 1's token rule. A named code
+   that is not in RL-134 item 11's table is class E.
+5. **New B-3 flags.** `--block5-expected`, `--stage` and `--registry` are admitted. Fix 5 makes the first two
+   required where they apply. The runbook's step 7 and step 9 commands gain them, and step 7 gains
+   `--inputs $RUN/run-inputs-gate.json`.
+6. **Checklist step 7 as "compared plus listed equals the registry keys, class by class".** Admitted. The
+   probe may not read the comparison table, so it cannot test the two lists key by key. The program builds the
+   listed rows as the first program's rows minus the second's, so they are disjoint by construction; the count
+   identity shows that construction held. The whole-machine stop is sound on the same identity.
+7. **The P\* check as `power_removed` summing to 0 and `records` summing to 840, never reading a record.**
+   Admitted. A departure with 0 removed and fewer than 840 records comes to me with the per-session counts. I
+   expect to rule it reported if the missing runs are science members without a succeeded bundle.
+8. **"The three statements §17-R7 leaves open".** Admitted as built: the order of `r2-beta`, `r2-gamma` and
+   `r3-gamma` among themselves; each one's place relative to `r1-gamma`; and the resulting t0 order of the
+   nine. The seven stated orderings in the tool equal §17-R7's text.
+9. **`--relocation` applies to all sessions.** Admitted for today. No relocation is expected. If the kit
+   refuses `relocations_without_log` or `relocation_conflict`, that is class A: the lead writes the per-session
+   entries in `mapping.json` by hand and notes it in the ledger. A per-session form is an ordinary follow-up.
+10. **B-5 `check` defaults** (the kit at the `-r3` worktree, the custody root, the receipt name, the loop
+    directory taken from the dry run's argv, cited conditions passing by presence). Admitted, with fix 7. If
+    `check` is run a second time, `--receipt-out` must name a new file and the kit verify runs again.
+
+Also ruled:
+
+- **The unit fixtures' fpo base of 96 and 75.** Accepted. They carry no meter streams. The formula's 118, 118
+  and 79 are for sealed runs and equal the R3 table's label counts. The accounting stays reported, never a
+  stop.
+- **The registry check is meaningful only on sealed runs.** Accepted. The gate run and the dry run are sealed.
+- **Flag codes.** The probe prints every flag's code, session, scope and stop bit. RL-134 item 4 covers the
+  non-public codes too: they name data-quality states, never a contrast's outcome or direction.
+
+## 3. What is still unverified
+
+- The session id spelling in the real `harvest.json` and the field names in the real `attempts.jsonl`. A
+  difference shows as `nine_sessions` departing or B-4 exiting 5, and comes to me.
+- The sampler against a run longer than 60 s. The rehearsal P-2 or the gate run is its first evidence. It
+  cannot stop a run.
+- B-5's condition 4 gap was read, not executed.
+
+**Owner.** The builder seat: fixes 1 to 7. A mechanical checker (Sonnet or Haiku): each acceptance line. The
+lead: fix 8, and the runbook's step 7 and step 9 commands with the new flags in the predeclaration.
+
+**Gate.** Fixes 1 to 6 and 8 gate the gate run. Fix 7 gates the release check. Nothing here gates the cut.
+
+**Blind status.** Blind to Block 6: synthetic outputs, code and rulings only. Nothing under
+`/Volumes/JW-EXT/b6-custody*` was opened or listed, and no value of Block 5's release file was read.
+Block-5-aware.
+
+Source: cold review of B-2..B-5, /Volumes/JW-EXT/scratch/fable-rev-b6-real-run.md.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
