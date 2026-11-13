@@ -247,10 +247,14 @@ def aux_policy(inputs, phase_dir, session, gates, fallback):
     return pol, '; '.join(sources)
 
 
-def load_auxiliary(tg, inputs, root, path, fallback):
+def load_auxiliary(tg, inputs, root, path, fallback, empty):
     rel = path.relative_to(root)
     phase = rel.parts[0]
-    rows, gates, begins, off, start = project_journal(tg, inputs.read(path))
+    try:
+        rows, gates, begins, off, start = project_journal(tg, inputs.read(path))
+    except DeskError:
+        empty.append(str(rel))           # a session that journaled no reading: listed, not replayed
+        return None
     pol, source = aux_policy(inputs, root / phase, start, gates, fallback)
     return SimpleNamespace(seg=str(rel.parent), base=base_phase(phase), phase=phase, bundle=None, path=path,
                            kind='auxiliary', attempt='auxiliary', rows=rows, gates=gates, begins=begins,
@@ -274,11 +278,14 @@ def discover(tg, inputs, root):
         raise DeskError(f'{root}: no <phase>/runs/<run>/outputs/{JOURNAL}')
     step_d = next((m for m in members if m.seg == STEP_D), None)
     fallback = step_d.thermal if step_d is not None else None
+    empty = []
     for path in sorted(root.glob(f'*/**/{JOURNAL}')):
         if path in member_paths or 'runs' in path.relative_to(root).parts[1:2]:
             continue
-        aux.append(load_auxiliary(tg, inputs, root, path, fallback))
-    return members, aux
+        j = load_auxiliary(tg, inputs, root, path, fallback, empty)
+        if j is not None:
+            aux.append(j)
+    return members, aux, empty
 
 
 # ---------------------------------------------------------------- replay harness (11-12, lifted unchanged)
@@ -535,6 +542,17 @@ def gate_table(tg, inputs, root, journals, step_d_wref_fast):
         r_fast = r_fast_of(j, step_d_wref_fast)
         for g in j.gates:
             if g['kind'] not in ('G0', 'G1', 'H'):
+                continue
+            if not isinstance(g.get('reference'), dict) or any(
+                    type(g['reference'].get(k)) not in (int, float) for k in ('fast_c', 'slow_c')):
+                table.append({'member': j.seg, 'member_base': j.base, 'journal_kind': j.kind, 'attempt': j.attempt,
+                              'kind': g['kind'], 'turn': g['turn'], 'outcome': g['outcome'],
+                              'duration_s': g['duration_s'], 'planning_turn': is_planning(j),
+                              'gated_d': j.base in GATED_D_RUNS and j.kind == 'member',
+                              'x_g': j.base == X_G and j.kind == 'member', 'reference_unobserved': True,
+                              't2_samples': 0, 'clause_last': 'reference unobserved', 'last_violation_s': {},
+                              'exit_tv0h_c': None, 'exit_tvh0_c': None, 'exit_tf08_c': None, 's_slow': keys_of(j)[1],
+                              'start_ns': g['start_ns']})
                 continue
             rows = gate_rows(j, g)
             exit_ns = g['exit_sample_ns']
@@ -918,7 +936,7 @@ def desk(tg, replay, ssd, tree_info, run_dir, *, record=None, kit_desk=None, for
          tree_commit=NIGHT_COMMIT):
     root = Path(run_dir)
     inputs = inputs or Inputs(root)
-    members, aux = discover(tg, inputs, root)
+    members, aux, empty_aux = discover(tg, inputs, root)
     journals = members + aux
     validation, fails = validate(tg, journals)
     out = {'schema': SCHEMA, 'night': root.name, 'tree_commit': tree_commit, **{
@@ -945,6 +963,7 @@ def desk(tg, replay, ssd, tree_info, run_dir, *, record=None, kit_desk=None, for
                             'tf08_excess_agrees': tf_ok,
                             'tf08_excess_disagreements': tf_bad},
                policy_sources={j.seg: j.policy_source for j in journals},
+               auxiliary_without_readings=empty_aux,
                layout={'quiet_span': f'{QUIET_SPAN_FILE}:{".".join(QUIET_SPAN_FIELD)}'})
     out['inputs'] = inputs.listing()
     return out
@@ -971,6 +990,10 @@ def render(out):
              'member | attempt | kind | turn | outcome | dur_s | ref_f/ref_s | exit fast/slow/Tf08 | fast-R_f | '
              'slope fast | slope slow rec/re | on_step | clause_last | last_violation_s | t2 | Tf08 entry']
     for r in out['gates']:
+        if r.get('reference_unobserved'):
+            lines.append(f"{r['member']} | {r['attempt']} | {r['kind']} | {r['turn']} | {r['outcome']} | "
+                         f"{_f(r['duration_s'], '{:.2f}')} | reference unobserved: no clause table")
+            continue
         lv = ' '.join(f'{k}={_f(v, "{:.1f}")}' for k, v in r['last_violation_s'].items() if v is not None)
         lines.append(' | '.join([
             r['member'], r['attempt'], r['kind'], str(r['turn']), r['outcome'], _f(r['duration_s'], '{:.2f}'),

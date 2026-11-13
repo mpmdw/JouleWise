@@ -445,6 +445,27 @@ class AlternativeG0Tests(unittest.TestCase):
                 run_desk(root)
 
 
+
+class AuxiliaryJournalTests(unittest.TestCase):
+    def test_auxiliary_journals_are_tabled_and_empty_ones_listed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            step_d(root)
+            sensors = root / 'cooldown_after_D' / 'sensors'
+            sensors.mkdir(parents=True)
+            rows = [jrow('session_start', T0, {'thermal': {'s_fast': 'TV0h', 's_slow': 'TVh0'}})] + [
+                jrow('reading', T0 + i * NS, {'sensors': {'TV0h': 35.5, 'TVh0': 35.0}, 'errors': {}, 'status': {}})
+                for i in range(30)]
+            (sensors / gd.JOURNAL).write_text('\n'.join(json.dumps(r) for r in rows) + '\n')
+            empty = root / 'idle_soak' / 'g0'
+            empty.mkdir(parents=True)
+            (empty / gd.JOURNAL).write_text(json.dumps(rows[0]) + '\n')
+            out = run_desk(root)
+            self.assertIn('cooldown_after_D/sensors', out['floor_census']['by_journal'])
+            self.assertEqual(out['auxiliary_without_readings'], ['idle_soak/g0/align_thermal.jsonl'])
+            self.assertEqual(out['floor_census']['conditions']['stage']['auxiliary']['rows'], 30)
+
+
 class ValidationTests(unittest.TestCase):
     def shift(self, root, member):
         path = root / member / 'runs/r/outputs' / gd.JOURNAL
