@@ -131,9 +131,11 @@ jobs:
     # is shard_tests.py's watchdog: it prints TEST TIMEOUT <test id>, dumps
     # every thread's stack and fails the shard, so an overrun names its test.
     # The limit is 1200 s, not RL-127's 900 s (1.5 x the 10-minute unit
-    # budget), until test_controller_g2b_attachment.G2bAttachmentTests.
-    # test_tracked_bound_corpus_and_all_window_references_attach is split or
-    # sped up: it ran 802 s under four-worker contention (run 43463516682).
+    # budget), because four workers share a runner. test_controller_g2b_attachment.
+    # G2bAttachmentTests.test_tracked_bound_corpus_and_all_window_references_attach
+    # ran 802 s (run 43463516682) and then over 1200 s (run 43473235567) under
+    # that contention, so it has a named 2400 s limit in
+    # shard_tests.TEST_TIMEOUT_OVERRIDES_SECONDS until it is split or sped up.
     timeout-minutes: 60
     env:
       JW_TEST_TIMEOUT_SECONDS: "1200"
@@ -316,10 +318,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      # Same per-test limit as the test job: 1200 s until
-      # test_controller_g2b_attachment.G2bAttachmentTests.
-      # test_tracked_bound_corpus_and_all_window_references_attach (802 s
-      # under contention, run 43463516682) is split; RL-127's figure is 900 s.
+      # Same per-test limit as the test job (1200 s; RL-127's figure is 900 s).
+      # Named exceptions such as test_controller_g2b_attachment...
+      # test_tracked_bound_corpus_and_all_window_references_attach live in
+      # shard_tests.TEST_TIMEOUT_OVERRIDES_SECONDS.
       JW_TEST_TIMEOUT_SECONDS: "1200"
     strategy:
       fail-fast: false

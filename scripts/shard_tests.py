@@ -636,6 +636,23 @@ TEST_TIMEOUT_EXIT_CODE = 124
 # the watchdog thread must neither consume their values nor die on them.
 _watchdog_clock = time.monotonic
 
+# Named per-test limits that replace JW_TEST_TIMEOUT_SECONDS for one test.
+# Each entry is a known overrun, listed until the test is split or sped up.
+TEST_TIMEOUT_OVERRIDES_SECONDS = {
+    # 526 s with a runner to itself (lane run 43459892780), 802 s under four
+    # workers (run 43463516682), and over 1200 s under four workers (run
+    # 43473235567). RL-127 budgets a test at 10 minutes; split or speed it up.
+    "tests.test_controller_g2b_attachment.G2bAttachmentTests."
+    "test_tracked_bound_corpus_and_all_window_references_attach": 2400.0,
+}
+
+
+def _test_limit_seconds(test_id: str, default: float) -> float:
+    """The named override for ``test_id`` (either id form), else ``default``."""
+
+    canonical = test_id if test_id.startswith("tests.") else f"tests.{test_id}"
+    return TEST_TIMEOUT_OVERRIDES_SECONDS.get(canonical, default)
+
 
 def test_timeout_seconds() -> float | None:
     """Return the per-test limit from ``JW_TEST_TIMEOUT_SECONDS``; unset means none.
@@ -675,16 +692,19 @@ class _TestWatchdog:
         self.seconds = seconds
         self._condition = threading.Condition()
         self._label = None
+        self._limit = seconds
         self._deadline = None
         self._thread = threading.Thread(
             target=self._watch, name="shard-test-watchdog", daemon=True
         )
         self._thread.start()
 
-    def arm(self, label: str) -> None:
+    def arm(self, label: str, seconds: float | None = None) -> None:
+        limit = self.seconds if seconds is None else seconds
         with self._condition:
             self._label = label
-            self._deadline = _watchdog_clock() + self.seconds
+            self._limit = limit
+            self._deadline = _watchdog_clock() + limit
             self._condition.notify()
 
     def disarm(self) -> None:
@@ -702,13 +722,14 @@ class _TestWatchdog:
                 if remaining > 0:
                     self._condition.wait(remaining)
                     continue
-                label = self._label
+                label, limit = self._label, self._limit
                 break
-        self._expire(label)
+        self._expire(label, limit)
 
-    def _expire(self, label) -> None:
+    def _expire(self, label, limit=None) -> None:
+        limit = self.seconds if limit is None else limit
         message = (
-            f"TEST TIMEOUT {label} exceeded {self.seconds:g} s ({TEST_TIMEOUT_ENV}); "
+            f"TEST TIMEOUT {label} exceeded {limit:g} s ({TEST_TIMEOUT_ENV}); "
             f"every thread's stack follows and this process exits {TEST_TIMEOUT_EXIT_CODE}"
         )
         for stream in (sys.__stdout__, sys.__stderr__):
@@ -760,7 +781,7 @@ def _test_runner(watchdog) -> unittest.TextTestRunner:
 
     class WatchedTextTestResult(unittest.TextTestResult):
         def startTest(self, test):
-            watchdog.arm(test.id())
+            watchdog.arm(test.id(), _test_limit_seconds(test.id(), watchdog.seconds))
             super().startTest(test)
 
         def stopTest(self, test):

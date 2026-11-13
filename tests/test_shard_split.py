@@ -990,7 +990,7 @@ class TestTimeoutTests(unittest.TestCase):
             def __init__(self, seconds):
                 self.seconds = seconds
 
-            def arm(self, label):
+            def arm(self, label, seconds=None):
                 events.append(("arm", label))
 
             def disarm(self):
@@ -1021,6 +1021,33 @@ class TestTimeoutTests(unittest.TestCase):
                 f"fixtures after {test_id} (class or module setUp/tearDown)", labels
             )
         self.assertEqual(events[-1], ("disarm",))
+
+    def test_named_overrides_name_real_tests_and_replace_the_default(self):
+        self.assertTrue(shard_tests.TEST_TIMEOUT_OVERRIDES_SECONDS)
+        for test_id, seconds in shard_tests.TEST_TIMEOUT_OVERRIDES_SECONDS.items():
+            with self.subTest(test_id=test_id):
+                module = test_id.rsplit(".", 2)[0]
+                self.assertIn(test_id, shard_tests.discover_test_ids(module))
+                # Either id form (unittest's import name or the canonical one).
+                self.assertEqual(shard_tests._test_limit_seconds(test_id, 900.0), seconds)
+                self.assertEqual(
+                    shard_tests._test_limit_seconds(test_id[len("tests."):], 900.0), seconds
+                )
+                self.assertLess(seconds, 60 * 60)  # inside the shard job's timeout
+        self.assertEqual(shard_tests._test_limit_seconds("tests.test_x.T.test_y", 900.0), 900.0)
+
+    def test_an_override_sets_the_reported_limit(self):
+        code = (
+            "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests; "
+            "dog = shard_tests._TestWatchdog(30); "
+            "dog.arm('tests.fixture.Named.test_slow', 0.4); time.sleep(30)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code], cwd=ROOT, capture_output=True,
+            text=True, timeout=25,
+        )
+        self.assertEqual(result.returncode, shard_tests.TEST_TIMEOUT_EXIT_CODE)
+        self.assertIn("TEST TIMEOUT tests.fixture.Named.test_slow exceeded 0.4 s", result.stdout)
 
     def test_no_limit_means_no_watchdog(self):
         with mock.patch.dict(os.environ, {}, clear=False):
