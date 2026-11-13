@@ -67,7 +67,9 @@ def build_member(root, phase, temps, n, *, gates=(), condition='benign', pol=Non
     rows = [jrow('session_start', T0 - NS, {'thermal': pol['sensors']})]
     for i in range(n):
         t = T0 + i * NS
-        st = {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': t, 'monotonic_ns': t}
+        # The sidecar reads the status after the SMC read bracket (thermal.py tick): the powermetrics
+        # observation stamp follows the row's finished stamp (t + 1 ms) by 2 ms (RL-138 item 6).
+        st = {'os_level': 0, 'pm_state': 'Nominal', 'pm_observed_ns': t + 3_000_000, 'monotonic_ns': t + 3_100_000}
         if status:
             st.update(status(i))
         rows.append(jrow('reading', t, {'sensors': dict(temps(i)), 'errors': {}, 'status': st}))
@@ -236,8 +238,9 @@ def equal_rows(n=300, start=36.0):
 
 def t1(rows):
     classified = gd.census_rows(rows)
-    census = {'status': 'computed', 'total': gd.census_counts(classified)}
-    return gd.triggers([], census, {'tv0h_c': 0.0, 'tf08_release_range_c': None}, {})['T1'], census['total']
+    census = {'status': 'computed', 'strata': {'gate': gd.census_counts(classified), 'planning': None}}
+    return (gd.triggers([], census, {'tv0h_c': 0.0, 'tf08_release_range_c': None}, {})['T1'],
+            census['strata']['gate'])
 
 
 class FloorCensusTests(unittest.TestCase):
@@ -446,6 +449,187 @@ class AlternativeG0Tests(unittest.TestCase):
 
 
 
+
+def load_d_bank(root):
+    return gd.load_member(tg, gd.Inputs(root), 'D_bank_benign_s1_gated_held', root / 'D_bank_benign_s1_gated_held/runs/r',
+                          root / 'D_bank_benign_s1_gated_held/runs/r/outputs' / gd.JOURNAL)
+
+
+class ReviewFixTests(unittest.TestCase):
+    """Closing tests of the cold review (fable-rev-slot-desk.md) and RL-138."""
+
+    def status_fixture(self, root):
+        # Spec test 2's shape: TVh0 steps 40 -> 35 inside the 60 s window while TV0h is in band.
+        def temps(i):
+            v = 50.0 if i < 100 else max(34.5, 50.0 - 0.25 * (i - 100))
+            return {'TV0h': v, 'TVh0': die_tvh0(v), 'Tf08': 40.0}
+        step_d(root)
+        build_member(root, 'D_bank_benign_s1_gated_held', temps, 500,
+                     gates=[('G0', 100, {'fast_c': 34.7, 'slow_c': 34.7}, 0)])
+
+    def test_fix1_status_clause_has_no_lower_bound(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.status_fixture(root)
+            row = gate(run_desk(root), 'D_bank_benign_s1_gated_held')
+            self.assertEqual(row['outcome'], 'released')
+            self.assertEqual(row['clause_last'], 'slope_slow')
+            self.assertGreater(row['t2_samples'], 0)
+            self.assertIsNone(row['last_violation_s']['status'])
+            m = load_mutant("and type(pm) is int and t - pm <= PM_FRESH_NS)",
+                            "and type(pm) is int and 0 <= t - pm <= PM_FRESH_NS)")
+            member = m.load_member(tg, m.Inputs(root), 'D_bank_benign_s1_gated_held',
+                                   root / 'D_bank_benign_s1_gated_held/runs/r',
+                                   root / 'D_bank_benign_s1_gated_held/runs/r/outputs' / m.JOURNAL)
+            g = member.gates[0]
+            last, t2, final = m.last_violations(tg, member, g, m.gate_rows(member, g), delta_fast=1.0, delta_slow=1.0)
+            self.assertEqual(t2, 0)                                          # the mutant hides T2
+            self.assertEqual(m.clause_last_of(g, last, final)[0], 'status')
+
+    def step_g1_fixture(self, root):
+        """Fable's exp_slope: a G1 released five samples after TVh0 steps 40 -> 35."""
+        def temps(i):
+            if i < 300:
+                v = max(34.5, 50 - 0.0625 * (i - 20)) if i >= 20 else 50
+            else:
+                v = 47.0 if i < 330 else max(34.5, 47.0 - 0.0625 * (i - 330))
+            return {'TV0h': v, 'TVh0': die_tvh0(v), 'Tf08': 40 - 0.01 * i}
+        step_d(root)
+        return build_member(root, 'D_bank_benign_s1_gated_held', temps, 700,
+                            gates=[('G0', 20, {'fast_c': 34.7, 'slow_c': 34.7}, 0),
+                                   ('G1', 330, {'fast_c': 39.0, 'slow_c': 39.0}, 1),
+                                   ('G1', 330, {'fast_c': 34.6, 'slow_c': 34.6}, 2),
+                                   ('H', 330.2, {'fast_c': 38.0, 'slow_c': 38.0}, 3)])
+
+    def test_fix2_slope_check_uses_loop_time_candidates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            records = self.step_g1_fixture(root)
+            g1 = records[1]
+            self.assertEqual(g1['outcome'], 'released')
+            out = run_desk(root)
+            row = gate(out, 'D_bank_benign_s1_gated_held', 'G1', 1)
+            self.assertGreater(abs(row['slow_slope_recorded'] - row['slow_slope_recomputed']), 0.05)  # the old check
+            self.assertFalse(row['slope_recompute_mismatch'])
+            self.assertEqual(out['tool_checks']['slope_recompute_mismatch'], [])
+            self.assertAlmostEqual(row['slow_slope_matching_candidate']['slope_c_per_min'], row['slow_slope_recorded'],
+                                   places=9)
+            # The recorded slope moved by 0.06 C/min is flagged (validation reads only outcome and exit sample).
+            path = root / 'D_bank_benign_s1_gated_held/runs/r/outputs' / gd.JOURNAL
+            lines = path.read_text().splitlines()
+            for k, line in enumerate(lines):
+                rec = json.loads(line)
+                gate_rec = (rec.get('values') or {}).get('gate') or {}
+                if gate_rec.get('kind') == 'G1' and gate_rec.get('turn') == 1:
+                    gate_rec['slope_c_per_min'] += 0.06
+                    lines[k] = json.dumps(rec)
+            path.write_text('\n'.join(lines) + '\n')
+            out = run_desk(root)
+            self.assertTrue(gate(out, 'D_bank_benign_s1_gated_held', 'G1', 1)['slope_recompute_mismatch'])
+            self.assertEqual([(m['kind'], m['turn']) for m in out['tool_checks']['slope_recompute_mismatch']],
+                             [('G1', 1)])
+
+    def test_fix2_null_record_matches_only_a_null_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.step_g1_fixture(root)
+            j = load_d_bank(root)
+            g = dict(j.gates[1])
+            self.assertFalse(gd.slope_check(tg, j, g, 'TVh0')[0])
+            g['slope_c_per_min'] = None
+            self.assertTrue(gd.slope_check(tg, j, g, 'TVh0')[0])
+
+    def test_fix3_t1_strata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            step_d(root)
+            # The heater holds TVh0 off TV0h's floor in a planning turn: unexplained rows there only.
+            build_member(root, 'planning_turn_R_plus_2C', lambda i: {'TV0h': 40.0, 'TVh0': 36.3, 'Tf08': 40.0}, 400,
+                         gates=[('G0', 100, {'fast_c': 150.0, 'slow_c': 35.0}, 0)])
+            out = run_desk(root)
+            census = out['floor_census']
+            self.assertEqual(census['by_journal']['planning_turn_R_plus_2C']['stratum'], 'planning')
+            self.assertEqual(census['by_journal'][gd.STEP_D]['stratum'], 'gate')
+            self.assertFalse(out['triggers']['T1']['fired'])
+            self.assertTrue(out['triggers']['T1p']['fired'])
+            self.assertEqual(out['triggers']['T1p']['route'], 'SLOTS-PR-HOLD-SIGNING')
+            self.assertEqual(census['strata']['planning']['unexplained'], 400)
+            self.assertTrue(census['offending_rows']['planning'])
+            self.assertIn('T1p (planning stratum) fired True', gd.render(out))
+        with tempfile.TemporaryDirectory() as tmp:                    # no planning journal: T1p not computable
+            root = Path(tmp)
+            step_d(root)
+            out = run_desk(root)
+            self.assertIsNone(out['triggers']['T1p']['fired'])
+            self.assertEqual(out['tool_checks']['member_journals_without_both_keys'], [])
+
+    def test_member_journal_without_both_keys_is_listed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            step_d(root)
+            build_member(root, 'step_30b', lambda i: {'TV0h': 34.0, 'Tf08': 35.0}, 200)
+            out = run_desk(root)
+            self.assertEqual(out['tool_checks']['member_journals_without_both_keys'], ['step_30b'])
+
+    def timeout_fixture(self, root):
+        step_d(root)
+        return build_member(root, 'D_bank_benign_s1_gated_held', lambda i: {'TV0h': 40.0, 'TVh0': 40.0, 'Tf08': 40.0},
+                            400, pol=policy(g0_cap_s=100), gates=[('G0', 100, {'fast_c': 34.7, 'slow_c': 34.7}, 0)])
+
+    def edit_g0(self, root, **delta):
+        path = root / 'D_bank_benign_s1_gated_held/runs/r/outputs' / gd.JOURNAL
+        lines = path.read_text().splitlines()
+        rec = json.loads(lines[-1])
+        for k, v in delta.items():
+            rec['values']['gate'][k] += v
+        lines[-1] = json.dumps(rec)
+        path.write_text('\n'.join(lines) + '\n')
+
+    def test_fix4_timeout_may_hold_one_more_row(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(self.timeout_fixture(root)[0]['outcome'], 'timeout')
+            self.edit_g0(root, exit_sample_ns=NS, end_ns=NS)             # loop drift: one more row read by end_ns
+            out = run_desk(root)
+            self.assertTrue(out['validation']['all_agree'])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.timeout_fixture(root)
+            self.edit_g0(root, exit_sample_ns=NS)                       # a row not read by end_ns
+            with self.assertRaises(gd.ValidationFailedWith):
+                run_desk(root)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.timeout_fixture(root)
+            self.edit_g0(root, exit_sample_ns=-NS)                      # earlier than the replay's exit
+            with self.assertRaises(gd.ValidationFailedWith):
+                run_desk(root)
+
+    def test_auxiliary_band_default_is_a_tool_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            records = build_member(root, 'tmp_member', cooling(100, 34.5), 400,
+                                   gates=[('G0', 100, {'fast_c': 34.7, 'slow_c': 34.7}, 0)])
+            journal = (root / 'tmp_member/runs/r/outputs' / gd.JOURNAL).read_text()
+            shutil_dir = root / 'idle_soak.g0_release1' / 'g0'
+            shutil_dir.mkdir(parents=True)
+            (shutil_dir / gd.JOURNAL).write_text(journal)
+            import shutil
+            shutil.rmtree(root / 'tmp_member')
+            build_member(root, gd.STEP_D, cooling(100, 34.5), 400, gates=[], pol=policy())
+            # step-D config has bands, so the auxiliary G0 takes them from there: no default.
+            (root / gd.STEP_D / 'inventory').mkdir()
+            out = run_desk(root)
+            self.assertEqual(out['tool_checks']['auxiliary_policy_defaulted'], [])
+            self.assertIn('step-D member config', out['policy_sources']['idle_soak.g0_release1/g0'])
+            self.assertEqual(records[0]['outcome'], 'released')
+            # With no step-D member and no runtime_result.json, the band is defaulted: listed for X2.
+            shutil.rmtree(root / gd.STEP_D)
+            build_member(root, 'step_30b', cooling(100, 34.5), 200)
+            out = run_desk(root)
+            self.assertEqual(out['tool_checks']['auxiliary_policy_defaulted'], ['idle_soak.g0_release1/g0'])
+
+
 class AuxiliaryJournalTests(unittest.TestCase):
     def test_auxiliary_journals_are_tabled_and_empty_ones_listed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -577,7 +761,7 @@ class MutantTests(unittest.TestCase):
         m = load_mutant('T1_SKEW_FRACTION = 0.01 ', 'T1_SKEW_FRACTION = 0.1 ')
         rows = [census_row(i, 36.0 + 0.02 * i, 36.0 + 0.02 * (i - 1) if i % 50 == 0 and i else 36.0 + 0.02 * i)
                 for i in range(300)]
-        census = {'status': 'computed', 'total': m.census_counts(m.census_rows(rows))}
+        census = {'status': 'computed', 'strata': {'gate': m.census_counts(m.census_rows(rows))}}
         self.assertFalse(m.triggers([], census, {'tv0h_c': 0.0}, {})['T1']['fired'])
 
     def test_t3_inclusive(self):
@@ -707,6 +891,11 @@ class Step0Regression1112(unittest.TestCase):
         self.assertEqual(got, self.EXIT)
         aux = [r for r in self.out['validation']['rows'] if r['journal_kind'] == 'auxiliary']
         print('auxiliary validation rows:', len(aux), 'agree', sum(r['agree'] for r in aux))
+        self.assertTrue(self.out['validation']['all_agree'])                     # review L4: auxiliary too
+        self.assertEqual(self.out['tool_checks']['auxiliary_policy_defaulted'], [])
+
+    def test_no_slope_recompute_mismatch(self):
+        self.assertEqual(self.out['tool_checks']['slope_recompute_mismatch'], [])   # RL-138 items 3 and 12
 
     def test_g1_last_violations(self):
         for member, (fast, slow) in self.G1_LAST.items():

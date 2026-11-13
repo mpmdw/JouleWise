@@ -27,7 +27,11 @@ verdicts and the driver's G1 median; kit_desk.json for its Tf08 excess. No
 energy, power, meter, transcript or episode file is opened.
 
 Definitions: the desk spec (/Volumes/JW-EXT/scratch/fable-r1-slot-desk-spec.md
-section 2.1) and RL-135. Output is deterministic: sorted keys, no wall clock,
+section 2.1) and RL-135, as corrected by RL-138 (cold review
+/Volumes/JW-EXT/scratch/fable-rev-slot-desk.md): item 3 (slope cross-check on the
+loop-time candidates), 4 (T1 gate stratum, T1p planning stratum), 5 (timeout
+validation), 6 (status clause, no lower bound), 1 (auxiliary policy from recorded
+sources; a defaulted band is listed for X2) and 10 (quiet[1] censor point). Output is deterministic: sorted keys, no wall clock,
 every input file listed with its sha256.
 """
 import argparse
@@ -82,7 +86,8 @@ CLAUSE_TIE_ORDER = ('valid', 'status', 'band_fast', 'band_slow', 'slope_slow')
 # the code at a6a09e6d7 writes its absolute bounds only in the step's inventory
 # classification (classify_step phase_bounds_ns.quiet = [prefill - 300 s, prefill]);
 # runtime_result.json carries thermometry.phases in seconds relative to that origin
-# only. The span that starts at the G0's end ends at prefill = quiet[1].
+# only. The span that starts at the G0's end ends at prefill = quiet[1]. RL-138 item 10 accepts this
+# and amends spec 2.1(c): censor at quiet[1] only when quiet[0] >= that G0's end_ns, else at end_ns.
 QUIET_SPAN_FILE = 'inventory/r1_classification.json'      # relative to RUN_DIR/<phase>/
 QUIET_SPAN_FIELD = ('classification', 'phase_bounds_ns', 'quiet')
 QUIET_SPAN_MEMBERS = ('step_30b', STEP_D)                  # members whose driver idles quiet_s after G0
@@ -236,6 +241,7 @@ def aux_policy(inputs, phase_dir, session, gates, fallback):
             sources.append(f'{name}: step-D member config (fallback)')
         else:
             pol[name] = 1.0
+            pol.setdefault('_defaulted', []).append(name)       # RL-138 item 1: X2 when a gate uses it
             sources.append(f'{name}: 1.0 (default; no source)')
     cap = result.get('g0_timeout_s')
     if type(cap) in (int, float):
@@ -378,6 +384,40 @@ def slope_at(tg, j, t_ns, key):
     return tg.slow_slope(subset, t_ns, key)
 
 
+def slope_candidates(tg, j, g, key):
+    """RL-138 item 3: the slopes the gate could have recorded from this journal.
+
+    R_e = rows with monotonic_ns <= exit_sample_ns; f_e = the exit sample's finished stamp;
+    candidates f_e, end_ns, and s + 60 s + 1 ns for each row time s of R_e with
+    f_e - 60 s <= s < end_ns - 60 s. Returns [(t_ns, slope)] sorted by t."""
+    ex = g['exit_sample_ns']
+    hi = bisect.bisect_right(j.times, ex)
+    if hi == 0:
+        return []
+    f_e = j.fin[hi - 1]
+    instants = {f_e, g['end_ns']}
+    for s in j.times[:hi]:
+        if f_e - 60 * NS <= s < g['end_ns'] - 60 * NS:
+            instants.add(s + 60 * NS + 1)
+    out = []
+    for t in sorted(instants):
+        lo = bisect.bisect_left(j.times, t - 61 * NS, 0, hi)
+        subset = j.rows[:hi] if lo <= 1 else [j.rows[0]] + j.rows[lo:hi]
+        out.append((t, tg.slow_slope(subset, t, key)))
+    return out
+
+
+def slope_check(tg, j, g, key):
+    """(mismatch, matching candidate or None, number of candidates)."""
+    rec = g.get('slope_c_per_min')
+    cands = slope_candidates(tg, j, g, key) if g.get('exit_sample_ns') is not None else []
+    for t, v in cands:
+        if (rec is None and v is None) or (rec is not None and v is not None
+                                           and abs(rec - v) <= SLOPE_MISMATCH_C_PER_MIN):
+            return False, {'t_ns': t, 'slope_c_per_min': v}, len(cands)
+    return True, None, len(cands)
+
+
 def gate_rows(j, g):
     end = g['exit_sample_ns'] if g['outcome'] == 'released' else g['end_ns']
     if end is None:
@@ -402,6 +442,15 @@ def gate_cap(j, g):
 
 
 # ---------------------------------------------------------------- (a) validation
+def last_row_finished_by(j, t_ns):
+    """monotonic_ns of the last row whose read finished by t_ns (RL-138 item 5)."""
+    best = None
+    for r, fin in zip(j.rows, j.fin):
+        if fin <= t_ns and (best is None or r['monotonic_ns'] > best):
+            best = r['monotonic_ns']
+    return best
+
+
 def validate(tg, journals):
     rows, fails = [], []
     for j in journals:
@@ -416,8 +465,17 @@ def validate(tg, journals):
             if g['outcome'] == 'deadman':
                 # The replay has no deadman; it must not release before the recorded deadman exit.
                 ok = rep['outcome'] != 'released' or rep['exit_sample_ns'] > g['end_ns']
-            else:
+            elif g['outcome'] == 'released':
                 ok = rep['outcome'] == g['outcome'] and rep['exit_sample_ns'] == g['exit_sample_ns']
+            else:
+                # RL-138 item 5: the real loop runs later than the replay clock by its drift and
+                # can hold one more row: replay exit <= recorded exit <= last row read by end_ns.
+                bound = last_row_finished_by(j, g['end_ns'])
+                if g['exit_sample_ns'] is None or rep['exit_sample_ns'] is None:
+                    ok = rep['outcome'] == g['outcome'] and rep['exit_sample_ns'] == g['exit_sample_ns']
+                else:
+                    ok = (rep['outcome'] == g['outcome'] and bound is not None
+                          and rep['exit_sample_ns'] <= g['exit_sample_ns'] <= bound)
             rows.append({'member': j.seg, 'journal_kind': j.kind, 'kind': g['kind'], 'turn': g['turn'],
                          'bands': [pol['delta_fast_c'], pol['delta_slow_c']], 'policy_source': j.policy_source,
                          'recorded': [g['outcome'], g['duration_s'], g['exit_sample_ns']],
@@ -444,8 +502,10 @@ def clause_results(tg, j, g, row, *, delta_fast, delta_slow, reference=None):
     if g['kind'] == 'G0':
         status = row.get('status') or {}
         pm = status.get('pm_observed_ns')
+        # RL-138 item 6: no lower bound. The sidecar reads the status after the SMC read
+        # (thermal.py tick), so pm_observed_ns may follow the row's start stamp.
         out['status'] = (status.get('os_level') == 0 and status.get('pm_state') == 'Nominal'
-                         and type(pm) is int and 0 <= t - pm <= PM_FRESH_NS)
+                         and type(pm) is int and t - pm <= PM_FRESH_NS)
         s = slope_at(tg, j, t, slow)
         out['slope_slow'] = s is not None and abs(s) <= SLOPE_BAR_C_PER_MIN
     return out
@@ -563,8 +623,7 @@ def gate_table(tg, inputs, root, journals, step_d_wref_fast):
             slope_rec = g.get('slope_c_per_min')
             slope_re = slope_at(tg, j, exit_ns, slow) if exit_ns is not None else None
             tv0h_slope = slope_at(tg, j, exit_ns, fast) if exit_ns is not None else None
-            mismatch = ((slope_rec is None) != (slope_re is None) or
-                        (slope_rec is not None and abs(slope_rec - slope_re) > SLOPE_MISMATCH_C_PER_MIN))
+            mismatch, slope_match, n_cand = slope_check(tg, j, g, slow)
             e_fast, e_slow, e_tf = value(ex, fast), value(ex, slow), value(ex, TF08)
             entry = at_or_before(j, g['start_ns'])
             row = {'member': j.seg, 'member_base': j.base, 'journal': str(Path(j.path).relative_to(root)),
@@ -579,7 +638,8 @@ def gate_table(tg, inputs, root, journals, step_d_wref_fast):
                    'tv0h_minus_r_fast_c': (e_fast - r_fast) if e_fast is not None and r_fast is not None else None,
                    'tv0h_slope_c_per_min': tv0h_slope,
                    'slow_slope_recorded': slope_rec, 'slow_slope_recomputed': slope_re,
-                   'slope_recompute_mismatch': mismatch,
+                   'slope_recompute_mismatch': mismatch, 'slow_slope_matching_candidate': slope_match,
+                   'slope_candidates': n_cand,
                    'on_step_at_exit': (e_slow != e_fast) if e_fast is not None and e_slow is not None else None,
                    'last_violation_s': last, 'clause_last': clause_last, 'clause_last_ties': ties,
                    't2_samples': t2, 'tf08_entry_c': value(entry, TF08),
@@ -657,7 +717,7 @@ def census_rows(rows, *, stage_of=None, fan_keys=()):
             trend = 'rising' if d > 0.05 else 'falling' if d < -0.05 else 'flat'
         fans = [r['sensors'].get(k) for k in fan_keys if type(r['sensors'].get(k)) in (int, float)]
         status = r.get('status') or {}
-        out.append({'t': t, 'tv0h': tv0h, 'tvh0': tvh0, 'class': cls, 'trend': trend,
+        out.append({'t': t, 'tv0h': tv0h, 'tvh0': tvh0, 'class': cls, 'trend': trend, 'near_tv0h': near,
                     'stage': stage_of(t) if stage_of else None, 'fan': sum(fans) / len(fans) if fans else None,
                     'pm': f"{status.get('pm_state')}/{status.get('os_level')}"})
     return out
@@ -715,27 +775,48 @@ def stage_function(j):
     return stage
 
 
+def stratum_of(j):
+    """RL-138 item 4: planning-turn member journals (final or superseded) form the planning stratum."""
+    return 'planning' if is_planning(j) else 'gate'
+
+
+def offending(classified):
+    return [{'journal': c['journal'], 't_ns': c['t'], 'tv0h': c['tv0h'], 'tvh0': c['tvh0'], 'class': c['class'],
+             'neighbour_tv0h': c['near_tv0h']}
+            for c in classified if c['class'] == 'unexplained' or c['tvh0'] > c['tv0h']
+            or (c['class'] == 'floored' and c['tv0h'] < FLOORED_LOW_C)]
+
+
 def floor_census(journals):
     by_journal, everything = {}, []
-    skipped = []
+    strata = {'gate': [], 'planning': []}
+    skipped, members_skipped = [], []
     for j in journals:
         keys = set()
         for r in j.rows:
             keys |= set(r['sensors'])
         if not {FAST_KEY, SLOW_KEY} <= keys:
             skipped.append(j.seg)
+            if j.kind == 'member':
+                members_skipped.append(j.seg)
             continue
         classified = census_rows(j.rows, stage_of=stage_function(j), fan_keys=tuple(j.session.get('fan_keys') or ()))
-        by_journal[j.seg] = census_counts(classified)
+        for c in classified:
+            c['journal'] = j.seg
+        by_journal[j.seg] = {**census_counts(classified), 'stratum': stratum_of(j)}
         everything += classified
-    if not by_journal:
-        return {'status': f'not applicable: {SLOW_KEY} not journaled', 'total': None, 'by_journal': {},
-                'conditions': {}, 'journals_without_both_keys': sorted(skipped)}
-    return {'status': 'computed', 'total': census_counts(everything), 'by_journal': dict(sorted(by_journal.items())),
-            'conditions': census_conditions(everything), 'journals_without_both_keys': sorted(skipped),
-            'offending_rows': [{'journal_t_ns': c['t'], 'tv0h': c['tv0h'], 'tvh0': c['tvh0'], 'class': c['class']}
-                               for c in everything if c['class'] == 'unexplained' or c['tvh0'] > c['tv0h']
-                               or (c['class'] == 'floored' and c['tv0h'] < FLOORED_LOW_C)][:200]}
+        strata[stratum_of(j)] += classified
+    status = 'computed' if by_journal else f'not applicable: {SLOW_KEY} not journaled'
+    return {'status': status, 'total': census_counts(everything) if everything else None,
+            'strata': {name: (census_counts(rows) if rows else None) for name, rows in strata.items()},
+            'strata_definition': ('RL-138 item 4: planning = every reading row of a planning-turn member journal '
+                                  '(final or superseded); gate = every other member and auxiliary journal row'),
+            'by_journal': dict(sorted(by_journal.items())),
+            'conditions': census_conditions(everything) if everything else {},
+            'conditions_by_stratum': {name: census_conditions(rows) for name, rows in strata.items() if rows},
+            'journals_without_both_keys': sorted(skipped),
+            'member_journals_without_both_keys': sorted(members_skipped),
+            'offending_rows': {name: offending(rows)[:200] for name, rows in strata.items()}}
 
 
 def census_journal_file(path, classification=None):
@@ -893,21 +974,27 @@ def schedule(members):
 
 
 # ---------------------------------------------------------------- triggers
+def t1_arms(counts, label):
+    """RL-135 item 2's four arms on one stratum (RL-138 item 4); None when not computable."""
+    if counts is None:
+        return {'fired': None, 'reasons': [f'{label} stratum not computable: no row carries both '
+                                           f'{FAST_KEY} and {SLOW_KEY}']}
+    reasons = []
+    if counts['tvh0_above_tv0h'] > 0:
+        reasons.append(f"{counts['tvh0_above_tv0h']} row(s) with TVh0 > TV0h")
+    if counts['unexplained'] > 0:
+        reasons.append(f"{counts['unexplained']} unexplained row(s)")
+    if counts['floored_below_35'] > 0:
+        reasons.append(f"{counts['floored_below_35']} floored row(s) with TV0h < 35.0")
+    if counts['skew_fraction'] is not None and counts['skew_fraction'] > T1_SKEW_FRACTION:
+        reasons.append(f"skew fraction {counts['skew_fraction']:.4f} > {T1_SKEW_FRACTION}")
+    return {'fired': bool(reasons), 'reasons': reasons}
+
+
 def triggers(table, census, u2, duty):
-    total = census.get('total')
-    if total is None:
-        t1 = {'fired': None, 'reasons': [census['status']]}
-    else:
-        reasons = []
-        if total['tvh0_above_tv0h'] > 0:
-            reasons.append(f"{total['tvh0_above_tv0h']} row(s) with TVh0 > TV0h")
-        if total['unexplained'] > 0:
-            reasons.append(f"{total['unexplained']} unexplained row(s)")
-        if total['floored_below_35'] > 0:
-            reasons.append(f"{total['floored_below_35']} floored row(s) with TV0h < 35.0")
-        if total['skew_fraction'] is not None and total['skew_fraction'] > T1_SKEW_FRACTION:
-            reasons.append(f"skew fraction {total['skew_fraction']:.4f} > {T1_SKEW_FRACTION}")
-        t1 = {'fired': bool(reasons), 'reasons': reasons}
+    strata = census.get('strata') or {}
+    t1 = {**t1_arms(strata.get('gate'), 'gate'), 'stratum': 'gate', 'route': 'TO-RESEARCH-LEAD'}
+    t1p = {**t1_arms(strata.get('planning'), 'planning'), 'stratum': 'planning', 'route': 'SLOTS-PR-HOLD-SIGNING'}
     candidates = []
     for r in table:
         verdict = duty.get(r['member_base']) if r['attempt'] == 'final' else None
@@ -920,7 +1007,7 @@ def triggers(table, census, u2, duty):
           'note': 'before the planning exclusion of RL-135 item 1; B4 applies it with out/3a.json'}
     u = u2['tv0h_c']
     t3 = {'fired': None if u is None else u > T3_BAR_C, 'u2_tv0h_c': u, 'bar_c': T3_BAR_C}
-    return {'T1': t1, 'T2': t2, 'T3': t3}
+    return {'T1': t1, 'T1p': t1p, 'T2': t2, 'T3': t3}
 
 
 def record_fields(record):
@@ -959,6 +1046,10 @@ def desk(tg, replay, ssd, tree_info, run_dir, *, record=None, kit_desk=None, for
     out.update(gates=table, u2=u2, floor_census=census, s6=s6, start_state=disclosure, schedule=schedule(members),
                triggers=triggers(table, census, u2, duty),
                tool_checks={'slope_recompute_mismatch': mismatches,
+                            'member_journals_without_both_keys': census['member_journals_without_both_keys'],
+                            'auxiliary_policy_defaulted': sorted(
+                                j.seg for j in aux if j.thermal.get('_defaulted')
+                                and any(g['kind'] in ('G0', 'G1', 'H') for g in j.gates)),
                             's6_median_agrees': s6_agrees,
                             'tf08_excess_agrees': tf_ok,
                             'tf08_excess_disagreements': tf_bad},
@@ -1001,7 +1092,9 @@ def render(out):
             f"{_f(r['exit_tv0h_c'])}/{_f(r['exit_tvh0_c'])}/{_f(r['exit_tf08_c'])}",
             _f(r['tv0h_minus_r_fast_c'], '{:+.3f}'), _f(r['tv0h_slope_c_per_min'], '{:+.3f}'),
             f"{_f(r['slow_slope_recorded'], '{:+.3f}')}/{_f(r['slow_slope_recomputed'], '{:+.3f}')}"
-            + (' MISMATCH' if r['slope_recompute_mismatch'] else ''),
+            + (' MISMATCH' if r['slope_recompute_mismatch'] else
+               f" (loop-time match {_f((r['slow_slope_matching_candidate'] or {}).get('slope_c_per_min'), '{:+.3f}')}"
+               f" of {r['slope_candidates']})"),
             str(r['on_step_at_exit']), str(r['clause_last']) + (f" (ties {r['clause_last_ties']})"
                                                                  if r['clause_last_ties'] else ''),
             lv or '-', str(r['t2_samples']), _f(r['tf08_entry_c'])]))
@@ -1015,7 +1108,16 @@ def render(out):
               f"{_f(u['registered_tvh0_c'])} C; TV0h {_f(u['tv0h_c'])} C (bar {u['bar_c']}); Tf08 release range "
               f"{_f(u['tf08_release_range_c'])} C (no bar)"]
     c = out['floor_census']
-    lines += ['', f"FLOOR CENSUS (T1): {c['status']}"]
+    lines += ['', f"FLOOR CENSUS (T1 gate stratum, T1p planning stratum; RL-138 item 4): {c['status']}"]
+    for name, t in (c.get('strata') or {}).items():
+        lines.append(f"  stratum {name}: " + ('not computable' if t is None else
+                     f"rows {t['rows']} equal {t['equal']} floored {t['floored']} skew {t['skew']} unexplained "
+                     f"{t['unexplained']} above {t['tvh0_above_tv0h']} floored<35 {t['floored_below_35']} skew fraction "
+                     f"{_f(t['skew_fraction'], '{:.4f}')}"))
+    for name, rows in (c.get('offending_rows') or {}).items():
+        for o in rows[:20]:
+            lines.append(f"  offending [{name}] {o['journal']} t={o['t_ns']} TV0h {o['tv0h']} TVh0 {o['tvh0']} "
+                         f"{o['class']} neighbours {o['neighbour_tv0h']}")
     if c['total']:
         t = c['total']
         lines.append(f"  total rows {t['rows']}: equal {t['equal']}, floored {t['floored']}, skew {t['skew']}, "
@@ -1023,7 +1125,7 @@ def render(out):
                      f"{t['floored_below_35']}; skew fraction {_f(t['skew_fraction'], '{:.4f}')}; diff range "
                      f"{_f(t['min_diff_c'])}..{_f(t['max_diff_c'])}")
         for name, t in c['by_journal'].items():
-            lines.append(f"  {name}: rows {t['rows']} equal {t['equal']} floored {t['floored']} skew {t['skew']} "
+            lines.append(f"  {name} [{t['stratum']}]: rows {t['rows']} equal {t['equal']} floored {t['floored']} skew {t['skew']} "
                          f"unexplained {t['unexplained']} above {t['tvh0_above_tv0h']} floored<35 "
                          f"{t['floored_below_35']}")
         for dim, bins in c['conditions'].items():
@@ -1052,7 +1154,8 @@ def render(out):
     for r in out['schedule']:
         lines.append(f"  {r['member']} {r['keys']}: {r['warmup_entry']} / {r['g0_entry']}")
     tr = out['triggers']
-    lines += ['', 'TRIGGERS', f"  T1 fired {tr['T1']['fired']}: {tr['T1']['reasons']}",
+    lines += ['', 'TRIGGERS', f"  T1 (gate stratum) fired {tr['T1']['fired']}: {tr['T1']['reasons']}",
+              f"  T1p (planning stratum) fired {tr['T1p']['fired']}: {tr['T1p']['reasons']}",
               f"  T2 fired (before planning exclusion) {tr['T2']['fired']}: " + '; '.join(
                   f"{g['member']} {g['kind']}{g['turn']} {g['outcome']} t2={g['t2_samples']} duty={g['duty_verdict']}"
                   for g in tr['T2']['gates']),
@@ -1060,7 +1163,9 @@ def render(out):
     tc = out['tool_checks']
     lines += ['TOOL CHECKS', f"  slope_recompute_mismatch: {len(tc['slope_recompute_mismatch'])}",
               f"  s6_median_agrees: {tc['s6_median_agrees']}",
-              f"  tf08_excess_agrees: {tc['tf08_excess_agrees']}"]
+              f"  tf08_excess_agrees: {tc['tf08_excess_agrees']}",
+              f"  member_journals_without_both_keys: {tc['member_journals_without_both_keys']}",
+              f"  auxiliary_policy_defaulted: {tc['auxiliary_policy_defaulted']}"]
     return '\n'.join(lines)
 
 

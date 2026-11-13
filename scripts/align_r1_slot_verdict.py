@@ -16,8 +16,9 @@ unparseable input is X2 (TO-LEAD-TOOL-DEFECT), never a pass. It also fills
 RL-106's ``n_gate`` and applies T2's planning exclusion (RL-135 items 1, 4).
 
 Overall route, in precedence: TO-RESEARCH-LEAD if any such row fired; else
-TO-LEAD-TOOL-DEFECT; else SLOTS-PR-HOLD-SIGNING (S6c, S1); else
-SLOTS-AND-SIGNING. Exit 0 whenever the verdict was written.
+TO-LEAD-TOOL-DEFECT; else SLOTS-PR-HOLD-SIGNING (S6c, S1, T1p, C1, R1p; RL-138
+items 4, 7, 9); else SLOTS-AND-SIGNING, citable for signing only when B1x and S1
+were evaluated (RL-138 item 7). Exit 0 whenever the verdict was written.
 """
 import argparse
 import json
@@ -36,6 +37,7 @@ CLASS_3A, CLASS_LEAD = 'planning-release-3a', 'to-research-lead'
 S6_BAR_S = 90.0
 CAPTURE_SPAN_BAR_S = 30.0
 DECIDE_STEPS = ('CURRENT-RULE', 'R10-2(a)')
+RECORD_ONLY_ROWS = ('A1', 'D1', 'D2', 'D2i', 'F1', 'R1', 'X1', 'XG')   # RL-138 item 7
 IDLE_GAP_COLUMN = 'plist_mtime->warmup_start s'
 SUFFIX = re.compile(r'(\.(?:g0_timeout|g0_release|rejected)\d*)+$')
 NOT_EVALUATED = 'not evaluated: input missing or unreadable (X2)'
@@ -146,7 +148,8 @@ def evaluate(record, gate, three_a, kit, kit_rc, kit_stderr, idle_text, decide, 
     if rec_ok:
         ident = record.get('identity') or {}
         fired = ident.get('ok') is not True
-        hard = ident.get('status') in ('refused', 'aborted') or ident.get('chain_exit_code') != 0
+        # RL-138 item 8: any status other than complete, or a nonzero chain exit, is the research lead's.
+        hard = ident.get('status') != 'complete' or ident.get('chain_exit_code') != 0
         route = TRL if hard else TOOL
         rows.append(row('X1', fired, route, ['record.json', "the magistrate's report"],
                         {'identity': ident, 'note': None if hard or not fired else
@@ -167,8 +170,17 @@ def evaluate(record, gate, three_a, kit, kit_rc, kit_stderr, idle_text, decide, 
         kit_ran = kit_rc == 0
         if checks.get('tf08_excess_agrees') is False or (kit_ran and checks.get('tf08_excess_agrees') is not True):
             x2.append(f"tf08_excess_agrees is {checks.get('tf08_excess_agrees')!r} with the kit desk rc {kit_rc}")
+        if checks.get('member_journals_without_both_keys'):
+            x2.append(f"member journal(s) without both TV0h and TVh0 (RL-138 item 4): "
+                      f"{checks['member_journals_without_both_keys']}")
+        if checks.get('auxiliary_policy_defaulted'):
+            x2.append(f"auxiliary gate band from the tool default, no recorded source (RL-138 item 1): "
+                      f"{checks['auxiliary_policy_defaulted']}")
+        for key in ('member_journals_without_both_keys', 'auxiliary_policy_defaulted'):
+            if key not in checks:
+                x2.append(f'gate_desk tool_checks.{key} missing (B1 older than RL-138)')
         trig = gate.get('triggers') or {}
-        for t in ('T1', 'T3'):
+        for t in ('T1', 'T1p', 'T3'):
             if (trig.get(t) or {}).get('fired') is None:
                 x2.append(f'gate_desk triggers.{t}.fired is None (not computable: tool or layout defect)')
     if three_ok:
@@ -279,8 +291,13 @@ def evaluate(record, gate, three_a, kit, kit_rc, kit_stderr, idle_text, decide, 
     trig = (gate or {}).get('triggers') or {}
     t1 = (trig.get('T1') or {}).get('fired')
     rows.append(row('T1', t1 if gate_ok and t1 is not None else None, TRL,
-                    ['floor census', 'the offending rows with their neighbours'],
+                    ['floor census (gate stratum)', 'the offending rows with their neighbours'],
                     {'T1': trig.get('T1')}))
+    # RL-138 item 4: the planning (heater) stratum; the slots PR may be opened, signing waits.
+    t1p = (trig.get('T1p') or {}).get('fired')
+    rows.append(row('T1p', t1p if gate_ok and t1p is not None else None, HOLD,
+                    ["the planning stratum's census", 'the offending rows with their neighbours', '3a.txt'],
+                    {'T1p': trig.get('T1p')}))
     if gate_ok and three_ok:
         cands = (trig.get('T2') or {}).get('gates') or []
         kept = [c for c in cands if not (c.get('kind') == 'G0' and c.get('planning_turn')
@@ -310,15 +327,27 @@ def evaluate(record, gate, three_a, kit, kit_rc, kit_stderr, idle_text, decide, 
     # ---- C1
     if idle_rows is not None:
         over = [r for r in idle_rows if r['span_s'] >= CAPTURE_SPAN_BAR_S]
-        rows.append(row('C1', bool(over), TRL, ['idle_parse_gap.txt'],
+        # RL-138 item 7: C1 alone opens the slots PR and holds signing for the research lead.
+        rows.append(row('C1', bool(over), HOLD, ['idle_parse_gap.txt'],
                         {'members_ge_30s': over, 'max_span_s': max(r['span_s'] for r in idle_rows)}))
-        rows[-1]['note'] = 'TO-RESEARCH-LEAD before signing; the slots PR may be opened'
+        rows[-1]['note'] = 'to the research lead before signing; the slots PR may be opened'
     else:
-        rows.append(row('C1', None, TRL, ['idle_parse_gap.txt']))
+        rows.append(row('C1', None, HOLD, ['idle_parse_gap.txt']))
 
     # ---- R1
     rows.append(row('R1', (record.get('rl91') or {}).get('ok') is not True if rec_ok else None, TRL,
                     ['record.rl91'], {'rl91_ok': (record or {}).get('rl91', {}).get('ok')}))
+
+    # ---- R1p: RL-138 item 9, the RL-91 time-weighted load print is owed for members over 1 % short ticks
+    if rec_ok:
+        over = (((record.get('rl91') or {}).get('ticker') or {}).get('over_1pct_members'))
+        rows.append(row('R1p', bool(over) if isinstance(over, list) else None, HOLD,
+                        ['record.rl91.ticker', 'the time-weighted load print for each listed member'],
+                        {'over_1pct_members': over}))
+        rows[-1]['note'] = ('signing holds until the lead adds the time-weighted load print (same load journal) '
+                            'to the slots PR (RL-138 item 9)')
+    else:
+        rows.append(row('R1p', None, HOLD, ['record.rl91.ticker']))
 
     # ---- S6a / S6b / S6c
     s6 = (gate or {}).get('s6') or {}
@@ -415,11 +444,20 @@ def run(args):
                            ins.problems, args.decide is not None, args.proofs is not None)
     route = route_of(rows)
     fired = [r for r in rows if r['fired']]
+    x2_fired = any(r['row'] == 'X2' and r['fired'] for r in rows)
+    trl_rows = [r['row'] for r in fired if r['route'] == TRL]
+    evaluated = {r['row']: r['fired'] is not None for r in rows}
     out = {'schema': SCHEMA, 'route': route, 'fired_rows': [r['row'] for r in fired],
            'packets': {r['row']: r['packet'] for r in fired if r['route'] == TRL},
            'rows': rows, 'rl106_n': rl106,
            'note': ('X2 also fired: the TO-RESEARCH-LEAD rows were read from a desk with an open tool defect'
-                    if route == TRL and any(r['row'] == 'X2' and r['fired'] for r in rows) else None),
+                    if route == TRL and x2_fired else None),
+           # RL-138 item 7: with X2 beside research-lead rows, the lead makes the one fix and re-runs the
+           # verdict before sending a packet; rows read from record.json alone may be sent at once.
+           'send_now': (sorted(r for r in trl_rows if r in RECORD_ONLY_ROWS) if x2_fired else trl_rows),
+           'hold_until_x2_fixed': (sorted(r for r in trl_rows if r not in RECORD_ONLY_ROWS) if x2_fired else []),
+           # RL-138 item 7: SLOTS-AND-SIGNING is citable only from a verdict that evaluated B1x and S1.
+           'citable_for_signing': route == GO and evaluated.get('B1x', False) and evaluated.get('S1', False),
            'inputs': {k: str(v) if v is not None else None for k, v in sorted(vars(args).items())
                       if k != 'json_out'}}
     return out
@@ -429,6 +467,10 @@ def render(out):
     lines = [f"R1 slot verdict: route {out['route']}; fired {out['fired_rows'] or 'none'}"]
     if out['note']:
         lines.append(f"  note: {out['note']}")
+        lines.append(f"  send now (record-only rows): {out['send_now']}; hold until X2 is fixed and the verdict "
+                     f"re-run: {out['hold_until_x2_fixed']}")
+    if out['route'] == GO and not out['citable_for_signing']:
+        lines.append('  NOT CITABLE FOR SIGNING: B1x (step 8) and S1 (step 10) not both evaluated (RL-138 item 7)')
     for r in out['rows']:
         mark = {True: 'FIRED', False: 'clear', None: 'n/e'}[r['fired']]
         lines.append(f"{r['row']:5} {mark:6} {r['route_if_fired'] or '-':24} {r['status']}")

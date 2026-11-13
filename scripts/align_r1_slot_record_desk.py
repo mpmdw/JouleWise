@@ -281,7 +281,7 @@ def ticks(times_s):
             'over_1pct': bool(n) and short / n > SHORT_TICK_FRACTION}
 
 
-def rl91_block(reaps, unreadable, runtime_results, thermal_ticks):
+def rl91_block(reaps, unreadable, runtime_results, thermal_ticks, metadata_files=0):
     records, not_ok = [], []
     for bundle, items in sorted(reaps.items()):
         for item in items:
@@ -305,7 +305,11 @@ def rl91_block(reaps, unreadable, runtime_results, thermal_ticks):
     total_load = {'ticks': sum(v['ticks'] for v in load.values()), 'short': sum(v['short'] for v in load.values())}
     total_thermal = {'ticks': sum(v['ticks'] for v in thermal_ticks.values()),
                      'short': sum(v['short'] for v in thermal_ticks.values())}
-    return {'capture_reaps': records, 'capture_reaps_not_absent': sorted(set(not_ok)),
+    # RL-138 item 9: an empty list is "none recorded", not "none happened"; the census arm is the check.
+    summary = (f'no reap record in {metadata_files} {CAPTURE_REAPS_FILE} files' if not records else
+               f'{len(records)} reap record(s) in {metadata_files} {CAPTURE_REAPS_FILE} files')
+    return {'capture_reaps': records, 'capture_reaps_summary': summary, 'metadata_files_read': metadata_files,
+            'capture_reaps_not_absent': sorted(set(not_ok)),
             'capture_reaps_unreadable': unreadable,
             'root_powermetrics_in_census': pm,
             'ticker': {'load_journal': {'source': 'runtime_result.json cpu_busy_t_s (r1_runtime ticker)',
@@ -316,7 +320,8 @@ def rl91_block(reaps, unreadable, runtime_results, thermal_ticks):
                            [k for k, v in load.items() if v['over_1pct']]
                            + [k for k, v in thermal_ticks.items() if v['over_1pct']])),
                        'note': ('a member over 1% short ticks also needs its load statistics printed '
-                                'time-weighted (RL-91); this desk prints tick stamps only')},
+                                'time-weighted (RL-91); owed only for over_1pct_members, and signing holds '
+                                'until it is in the slots PR (RL-138 item 9; B4 row R1p)')},
             'ok': not not_ok and not pm}
 
 
@@ -372,7 +377,7 @@ def read_reaps(reader, run_dir):
         raise DeskInputError(
             f'CAPTURE_REAPS_FILE={CAPTURE_REAPS_FILE!r} keypath {".".join(CAPTURE_REAPS_KEYPATH[:-1])!r}: no '
             f'bundle under {run_dir}/*/runs/* has it; {LAYOUT_NOTE}')
-    return reaps, unreadable
+    return reaps, unreadable, found
 
 
 def read_thermal_ticks(reader, run_dir):
@@ -406,7 +411,7 @@ def build(run_dir, custody_root, night_commit, packet_sha):
     if not runtime_results and result.get('status') == 'complete':
         raise DeskInputError(f'RUNTIME_RESULT={RUNTIME_RESULT!r}: no {run_dir}/<phase>/{RUNTIME_RESULT}; '
                              f'{LAYOUT_NOTE}')
-    reaps, unreadable = read_reaps(reader, run_dir)
+    reaps, unreadable, metadata_files = read_reaps(reader, run_dir)
     thermal_ticks = read_thermal_ticks(reader, run_dir)
     record = {
         'schema': SCHEMA, 'night': run_dir.name,
@@ -422,7 +427,7 @@ def build(run_dir, custody_root, night_commit, packet_sha):
         'flags': flags_block(result),
         'non_planning_g0_not_released': non_planning_g0_not_released(result),
         'rl106_n': rl106_block(runtime_results),
-        'rl91': rl91_block(reaps, unreadable, runtime_results, thermal_ticks),
+        'rl91': rl91_block(reaps, unreadable, runtime_results, thermal_ticks, metadata_files),
         'implied_energy_band': implied_energy_band(result),
         'host': host_block(result),
         'runtime_g0_outcomes': {k: v.get('g0_outcome') for k, v in sorted(runtime_results.items())
@@ -466,6 +471,7 @@ def render(rec):
     lines.append(f"RL-106 n_flag={n['n_flag']} members={n['members']}")
     r = rec['rl91']
     lt, tt = r['ticker']['load_journal']['total'], r['ticker']['thermal_journal']['total']
+    lines.append(f"RL-91 capture_reaps: {r['capture_reaps_summary']}")
     lines.append(f"RL-91 ok={r['ok']} reaps={r['capture_reaps']} not_absent={r['capture_reaps_not_absent']} "
                  f"unreadable={r['capture_reaps_unreadable']} powermetrics_in_census={r['root_powermetrics_in_census']}")
     lines.append(f"    ticker load: {lt['short']} short in {lt['ticks']}; thermal: {tt['short']} short in {tt['ticks']}; "

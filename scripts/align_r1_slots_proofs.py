@@ -195,6 +195,13 @@ def prove(root, record_path, night):
         proofs.append(test_proof(root, 'proof4:' + test_id.split('.', 2)[2], test_id))
 
     dirty = git(root, 'status', '--porcelain', '--untracked-files=no')
+    # Review fix 7 (L1): the tests and the ten hashes are read from the working tree, so a checkout with
+    # tracked changes does not prove the head it names.
+    proofs.append({'id': 'head_clean', 'ok': dirty == '',
+                   'evidence_lines': (['no tracked change in the checkout'] if dirty == '' else
+                                      ['tracked changes in the checkout (or git status failed): the proofs are '
+                                       'not of head ' + str(head)]
+                                      + ['    ' + line for line in (dirty or '').splitlines()[:50]])})
     return {'schema': SCHEMA, 'head': head, 'night_commit': night,
             'worktree_tracked_changes': bool(dirty),
             'record': {'path': str(record_path), 'sha256': sha256_bytes(Path(record_path).read_bytes())},

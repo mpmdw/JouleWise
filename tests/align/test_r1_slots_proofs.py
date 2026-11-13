@@ -120,6 +120,16 @@ class SlotsProofTests(unittest.TestCase):
         self.assertEqual(json.loads(out.read_text())['schema'], proofs.SCHEMA)
         self.assertEqual(json.dumps(self.prove(), sort_keys=True), json.dumps(report, sort_keys=True))
 
+    def test_head_clean_fails_on_tracked_changes(self):
+        # Review fix 7 (L1): a tracked change outside the ten paths is not proven by the head.
+        self.assertTrue(self.by_id(self.prove())['head_clean']['ok'])
+        tracked = next(p for p in self.git('ls-files').splitlines() if p not in TEN)
+        (self.root / tracked).write_text((self.root / tracked).read_text() + '\n# uncommitted\n')
+        report = self.prove()
+        self.assertFalse(self.by_id(report)['head_clean']['ok'])
+        self.assertTrue(report['worktree_tracked_changes'])
+        self.assertFalse(report['all_ok'])
+
     def test_one_of_the_ten_differing_fails_proof_3(self):
         (self.root / TEN[3]).write_text('stray edit\n')
         self.commit('stray')

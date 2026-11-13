@@ -35,7 +35,8 @@ def clear():
               'x_g': {'status': 'measured', 'x7': False},
               'flags': {'inconclusive_segments': {}, 'inadmissible_slots': {}, 'skipped_segments': {},
                         'g0_waits': []},
-              'non_planning_g0_not_released': [], 'aba': {'ok': True}, 'rl91': {'ok': True},
+              'non_planning_g0_not_released': [], 'aba': {'ok': True},
+              'rl91': {'ok': True, 'ticker': {'over_1pct_members': []}},
               'rl106_n': {'n_flag': 0, 'n_gate': None, 'N': 0},
               'implied_energy_band': 'not estimable on this session: planning temperature inconclusive (RL-20)',
               's6': {'G1_median_s': 60.0},
@@ -46,10 +47,12 @@ def clear():
     gates += [gate('cooldown_after_D', attempt='auxiliary')]
     gate_desk = {'schema': 'joulewise.align_r1_slot_gate_desk.v1', 'validation': {'rows': [], 'all_agree': True},
                  'gates': gates, 's6': {'g1_median_s': 60.0, 's6_reachable_step_c': None},
-                 'triggers': {'T1': {'fired': False, 'reasons': []}, 'T2': {'fired': False, 'gates': []},
+                 'triggers': {'T1': {'fired': False, 'reasons': []}, 'T1p': {'fired': False, 'reasons': []},
+                              'T2': {'fired': False, 'gates': []},
                               'T3': {'fired': False, 'u2_tv0h_c': 0.3}},
                  'tool_checks': {'slope_recompute_mismatch': [], 's6_median_agrees': True,
-                                 'tf08_excess_agrees': True}}
+                                 'tf08_excess_agrees': True, 'member_journals_without_both_keys': [],
+                                 'auxiliary_policy_defaulted': []}}
     three_a = {'rule': {'precool_fast': {'option': 'rl131', 'authority': 'RL-131 item 2.4'}},
                'reconciliation': {'mismatches': []},
                'g0_intervals': [{'phase': p, 'planning_turn': True, 'superseded': False, 'outcome': 'released',
@@ -226,7 +229,7 @@ class VerdictTests(unittest.TestCase):
 
     def test_c1(self):
         out = self.assert_alone(lambda f: f.update(idle=IDLE + 'D_bank | 157.2 | 30.00 | 0.004 | 397.8 | 300.0 | 10.0\n'),
-                                'C1', v.TRL)
+                                'C1', v.HOLD)                      # RL-138 item 7 (review fix 6)
         self.assertEqual(by_row(out)['C1']['evidence']['max_span_s'], 30.0)
 
     def test_r1(self):
@@ -281,6 +284,75 @@ class VerdictTests(unittest.TestCase):
         out = run(fx)
         self.assertEqual(out['route'], v.TRL)
         self.assertIsNotNone(out['note'])
+
+
+class ReviewFixTests(unittest.TestCase):
+    """Closing tests of the cold review (fable-rev-slot-desk.md) for B4, and RL-138 items 1, 4, 7, 8, 9."""
+    assert_alone = VerdictTests.assert_alone
+
+    def test_fix5_x1_any_status_but_complete_is_the_research_leads(self):
+        for status, code in (('running', 0), ('refused', 0), ('aborted', 0), ('complete', 3)):
+            with self.subTest(status=status, code=code):
+                fx = clear()
+                fx['record']['identity'].update(ok=False, status=status, chain_exit_code=code)
+                out = run(fx)
+                self.assertEqual(out['fired_rows'], ['X1'])
+                self.assertEqual(out['route'], v.TRL)
+        fx = clear()
+        fx['record']['identity'].update(ok=False)                   # complete, exit 0, a hash mismatch
+        self.assertEqual(run(fx)['route'], v.TOOL)
+
+    def test_fix6_c1_alone_holds_signing(self):
+        fx = clear()
+        fx['idle'] = IDLE + 'D_bank | 157.2 | 31.00 | 0.004 | 397.8 | 300.0 | 10.0\n'
+        out = run(fx)
+        self.assertEqual((out['fired_rows'], out['route']), (['C1'], v.HOLD))
+        self.assertEqual(out['packets'], {})
+
+    def test_fix3_t1p_row(self):
+        out = self.assert_alone(lambda f: f['gate']['triggers']['T1p'].update(fired=True), 'T1p', v.HOLD)
+        self.assertIn('3a.txt', by_row(out)['T1p']['packet'])
+        fx = clear()
+        fx['gate']['triggers']['T1p'].update(fired=None)            # stratum not computable
+        out = run(fx)
+        self.assertEqual(out['route'], v.TOOL)
+        self.assertTrue(any('T1p' in r for r in by_row(out)['X2']['evidence']['reasons']))
+
+    def test_item4_member_journal_without_both_keys_is_x2(self):
+        fx = clear()
+        fx['gate']['tool_checks']['member_journals_without_both_keys'] = ['step_30b']
+        self.assertEqual(run(fx)['route'], v.TOOL)
+
+    def test_item1_defaulted_auxiliary_band_is_x2(self):
+        fx = clear()
+        fx['gate']['tool_checks']['auxiliary_policy_defaulted'] = ['idle_soak.g0_release1/g0']
+        out = run(fx)
+        self.assertEqual((out['fired_rows'], out['route']), (['X2'], v.TOOL))
+
+    def test_item9_ticker_print_owed_holds_signing(self):
+        fx = clear()
+        fx['record']['rl91']['ticker']['over_1pct_members'] = ['D_bank_benign_s1_gated_held']
+        out = run(fx)
+        self.assertEqual((out['fired_rows'], out['route']), (['R1p'], v.HOLD))
+
+    def test_item7_send_now_and_citable(self):
+        fx = clear()
+        fx['record']['aba'].update(ok=False)                        # A1: record-only, may be sent at once
+        fx['gate']['triggers']['T3'].update(fired=True)             # T3: read from the gate desk
+        fx['gate']['validation'].update(all_agree=False)            # X2 beside them
+        out = run(fx)
+        self.assertEqual(out['route'], v.TRL)
+        self.assertEqual(out['send_now'], ['A1'])
+        self.assertEqual(out['hold_until_x2_fixed'], ['T3'])
+        out = run(clear())
+        self.assertEqual(out['route'], v.GO)
+        self.assertFalse(out['citable_for_signing'])
+        self.assertIn('NOT CITABLE FOR SIGNING', v.render(out))
+        ten = [{'path': f'p{i}', 'sha256': 'a' * 64, 'equals_night': True} for i in range(10)]
+        out = run(clear(), decide={'step': 'CURRENT-RULE'}, proofs={'head': 'h', 'proofs': [{'id': '1', 'ok': True}],
+                                                                    'ten_paths': ten})
+        self.assertEqual(out['route'], v.GO)
+        self.assertTrue(out['citable_for_signing'])
 
 
 if __name__ == '__main__':

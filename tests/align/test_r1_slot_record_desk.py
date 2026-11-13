@@ -196,6 +196,9 @@ class Rl91Tests(unittest.TestCase):
         r = self.rl91()
         self.assertTrue(r['ok'])
         self.assertEqual(r['capture_reaps'], [])
+        # RL-138 item 9: "none recorded", not "none happened".
+        self.assertEqual(r['capture_reaps_summary'], f"no reap record in {r['metadata_files_read']} metadata.json files")
+        self.assertGreater(r['metadata_files_read'], 0)
 
     def test_absent_true_ok_and_listed(self):
         r = self.rl91(reaps={'step_30b': [{'absent': True}]})
