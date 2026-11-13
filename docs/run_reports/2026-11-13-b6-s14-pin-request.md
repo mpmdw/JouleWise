@@ -157,8 +157,8 @@ cites it by commit."
 | Item | Value |
 |---|---|
 | Commit | `b5ab6a71d798e168209fd66a0832f66f97a0b096` (`origin/analysis/2026-11-13-b6-s14-merge`), regenerated there under RL-129 §1 term 9. Generator branch `9f1b53767` (`origin/analysis/2026-11-12-b6-r3-table`); Fable delta review ADMIT (RL-125 preamble) |
-| Generator | `scripts/b6_r3_table.py` `30c31dc92c0342683edd7addd8084028af5a90b0aa553930e545660b3199f712` |
-| Its test | `tests/test_b6_r3_table.py` `8c9fd27511087eeda427923a39da7b87957277a947e52c467bee843c7e0b3565` |
+| Generator | `scripts/b6_r3_table.py` `d3106ecbc37b941b764efd1bbb51ccf3a99928081e324a602a1089616cb90609` at `b5ab6a71d` (`30c31dc9…f712` was `9f1b53767`'s) |
+| Its test | `tests/test_b6_r3_table.py` `95cf44148dc9037039be8f3079fc742fa8d3351bad69a434d0b8dcce7baf1f00` at `b5ab6a71d` (`8c9fd275…3565` was `9f1b53767`'s) |
 | Stdout SHA-256 | `1003d87e7b92bc28a38890d75860e0ea0e47ae65862e6d6dd09641d7b3f29840`, generated 2026-11-13 about 07:30 PST from a `git archive` of `b7c27d1f9` (the same generator inputs as `b5ab6a71d`; `python3.13 -I -B scripts/b6_r3_table.py`, exit 0, "Keys covered: 675 of 675; 149 groups; UNSTATED groups: 0"; 149 groups stated before regenerating) |
 | Check against `9f1b53767` (RL-129 §1 term 9 as amended by RL-133 §3 item 8) | Not byte-equal to `9f1b53767`'s `7b7920cf7315d0a435d1eaae2f5bf35e45e8158d4335c83f64aad2828260254c`, as predicted. With the RC-B6-1 and `b6_analysis_check.py` SHA-256 lines and every `RC:`/`CHK:` line number removed, and the label cell of the `contrast/<phase>/p`, `holm_p` and `outcome` rows replaced by a placeholder, the tables are byte-identical (normalised SHA-256 `82a0b33ad920d1d0a6577a4425597231745f8175c61c71c90ed9254441fd51f1`). The "Keys by label" counts follow from those three labels only (the RL-114 contrast label 10 to 6 keys; the new `p` and `holm_p` labels 2 each; the word label renamed, 2 keys). Checker kept outside the repository: `/Volumes/JW-EXT/scratch/rl133/r3_check_rl133.py`, SHA-256 `d4ff2deb6e46779ff8e54a1854e79baa2367bae9832f41ea41da0100f269ef09`. An intermediate table at `27eedc22c` (`7e002000…e565`) is superseded |
 | Inputs it prints | rows 1, 3, 19, 20 above, and `scripts/b6_r12_verify.py` `947d1c3d43eccf6ab6f19fb5bed785c2443b69899faa7a5c8efd356f834295c2` (the R12 verify map, the source of the copied-record file names; a fixture tool, not pinned) |
@@ -465,34 +465,45 @@ Notes 1 and 3 stand as written; notes 2, 4 and 5 are replaced by RL-125's text.
 
 ## 6. The open ⟨NINE⟩ slots and their predeclared values
 
-All slots are **OUTSTANDING**. Each is filled from the readers' records of `r12-r3-closed-air-25`, names and numbers
+All slots but N-14 are **OUTSTANDING** (RL-141, below). Each is filled from the readers' records of `r12-r3-closed-air-25`, names and numbers
 only. A slot that differs from its predeclared value goes to the research lead before the cut (RL-126 §4 (i),
 item 3). Predeclarations are from the R12 report @ `d38495791`, "Both nines — role, volume and predicted outcomes
 fixed before launch" and "Current pin-candidate result table and final dry-run prediction" (both written before the
 nine started), RL-123 and RL-126. N-1 is RL-129 §1 term 7's.
 
+**Amended under RL-141 §4 (2026-11-13), before the read.** The closed nine did not close: the generator parent
+exited 1 on its tick bound with the loop at `NEXT` and GAMMA held. The root is retired as a loop and read once as a
+seven-session block, with pairings made final by argument (RL-141 §3). N-14 is recorded **not met**; N-3, N-8,
+N-9, N-11, N-13 and N-15 are relabelled for seven sessions; N-20 and N-21 are new. N-1, N-2, N-4 to N-7, N-10,
+N-12 and N-16 to N-19 are unchanged. Every slot except N-14 is OUTSTANDING. The reduced finisher and the dry-run
+supervisor are not used (RL-141 §3 item 1); the slots are filled from the read launcher's step receipts
+(`/Volumes/JW-EXT/scratch/rl141-read-seven.zsh`). A slot that departs from these values goes to the research lead
+with the names only, and the release holds until the answer (RL-141 §4).
+
 | # | Slot | Predeclared value | Source |
 |---|---|---|---|
 | N-1 | program SHA-256 of the reads | `90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759`, the RC-B6-1 SHA-256 of the merge head `b5ab6a71d` (after RL-133), written here before the finisher starts (RL-129 §1 term 7; RL-133 §3 item 6) | RL-129 §1 term 7; RL-133 §3 item 6; RL-123 §2 items 2-3 |
 | N-2 | option (c) exit | `0` | R12 predeclaration ("Each named option (c) exits 0 with comparator agreement"); RL-126 §4 gate |
-| N-3 | compared rows | a count > 0, every compared row agreeing. No number was predeclared. | R12 predeclaration; RL-113 term 6 |
+| N-3 | compared rows | a count above 0 over **seven** sessions, every compared row agreeing. No number was predeclared. | R12 predeclaration; RL-113 term 6; RL-141 §4 |
 | N-4 | failed | `0` | comparator agreement |
 | N-5 | unmatched | `0` | comparator agreement |
 | N-6 | `first_program_only` count | no number predeclared. Every entry a session quantity key carrying a label that allows non-comparison; **0** `run_phase_energy` entries (RL-125 item 1); **0** `__block__` entries. Checked by section 7 | RL-113 term 7, RL-125 item 1 |
 | N-7 | serial/pool byte equality | identical ("Serial/pool numbers and public bytes are identical within each cohort") | R12 predeclaration; RL-126 §4 gate |
-| N-8 | wall, peak RSS (serial) | ≤ 2,400 s; ≤ 2 GiB | R12 final prediction |
-| N-9 | wall, peak RSS (pool-2) | ≤ 1,200 s; ≤ 4 GiB (process-group planning budget) | R12 final prediction |
+| N-8 | wall, peak RSS (serial) | ≤ 2,400 s; ≤ 2 GiB. Seven sessions, reduced volume | R12 final prediction; RL-141 §4 |
+| N-9 | wall, peak RSS (pool-2) | ≤ 1,200 s; ≤ 4 GiB (process-group planning budget). Seven sessions, reduced volume | R12 final prediction; RL-141 §4 |
 | N-10 | other R12 work on the Air during the reads | none, or named. Overlap is allowed (RL-126 item 7 dropped RL-123 §4's idle condition); the receipt names it. The supervisor receipt's `other_R12_work_allowed: false` is fixed text from before RL-126 and is not an observation (RL-129 §4) | RL-126 item 7, §4 (ii); RL-129 §4 |
-| N-11 | generation wall | reported, not a pass condition. Forecast about 12 native hours (R12 predeclaration); RL-126 forecasts the end of generation between about 11:30 and 14:00 PST | RL-126 §1, §4 (iii) |
+| N-11 | generation wall | reported: 9 h 18 min to the generator's exit 1. (Forecast before launch: about 12 native hours, R12 predeclaration; RL-126 forecast the end of generation between about 11:30 and 14:00 PST) | RL-126 §1, §4 (iii); RL-141 §4 |
 
 Cut-gate items read from the same finisher. They are not in Fable's paragraph, but RL-126 §4's gate names them:
 
 | # | Item | Predeclared value | Source |
 |---|---|---|---|
 | N-12 | denied-26 fixture, read by the pin candidate | OFF rc 126 and `network_time.off_output` retained; single-session option (c) 0, agrees | R12 predeclaration; RL-49 |
-| N-13 | the six shapes | A1 cap/budget skips; A2 waited runs with attempt-N telemetry; B2 `member.anchor_not_bounded`; mixed member and evaluation campaign-log rows; desk-compressed campaign logs and plists; a nonvacuous cross-session GAMMA unit. Each named option (c) exits 0 with comparator agreement, registered flags retained | R12 predeclaration; RL-48 item 2; §17-R12 |
-| N-14 | loop close | original DONE with **nine counting sessions** (possibly ten ordinary attempts, from the skipped A1) | R12 predeclaration |
-| N-15 | dry-run stop | under 10,800 s; otherwise stopped and profiled, never retried (`b6_r12_dry_supervise.py`, `stopped_profile_required`/124) | RL-98 term 2, RL-123 §1 |
+| N-13 | the six shapes | A1 cap/budget skips; A2 waited runs with attempt-N telemetry; B2 `member.anchor_not_bounded`; mixed member and evaluation campaign-log rows; desk-compressed campaign logs and plists; a nonvacuous cross-session GAMMA unit. Each named option (c) exits 0 with comparator agreement, registered flags retained. **RL-141:** all seven shape assertions exit 0. `cross_session_gamma` is predicted to pass on r1-gamma alone: its ALPHA floor must come from another round, because r1-alpha is excluded | R12 predeclaration; RL-48 item 2; §17-R12; RL-141 §4 |
+| N-14 | loop close | **Not met, recorded before the read:** loop at `NEXT`, nine attempts, seven counting (3/3/1), GAMMA held on `smoke_hold:stage_failed:gamma-reference-start`, generator exit 1. (Predeclared before launch: original DONE with nine counting sessions, possibly ten ordinary attempts, from the skipped A1) | R12 predeclaration; RL-141 §1 item 1, §4 |
+| N-15 | read stop | 10,800 s, by the lead's hand (RL-141 §3 item 6): if the read launcher is still running at 10,800 s it is stopped and profiled, never retried | RL-98 term 2, RL-123 §1; RL-141 §3 item 6, §4 |
+| N-20 | sessions read by the block (new) | 7: r2-alpha, r3-alpha, r4-alpha, r1-beta, r2-beta, r3-beta and r1-gamma, selected by `prepare_run_inputs` from the attempts file; `closed` true by argument | RL-141 §3 items 2-3, §4 |
+| N-21 | r2-gamma single-session option (c) (new) | exit 0, comparator agrees, `calibration.bracket_incomplete` retained | RL-141 §3 item 4 (read 5), §4 |
 | N-16 | term 7 check (section 7) on the nine's restricted output | no stop | RL-126 §4 gate |
 | N-18 | `time_wrapper_exit` in every term 7 receipt that carries it | `0`, with `exit_code` 0 (the orchestrator launches the read outside any seat sandbox, so `/usr/bin/time -l` works). Nonzero with `exit_code` 0 is a wrapper failure: reported with the `.time` text; it does not trigger term 7's `e17886bf…` differential read and the read is not repeated for it | RL-132 §1 items 6-7 |
 | N-19 | `both_null` on the nine (per class and total) | observed and reported, not predeclared; checklist steps 2 and 3's invariants (`both_null` ≤ `passed`; 0 in a class with no compared row). An `engine_below_minimum` family in the nine's output is reported, not a stop | RL-133 §3 item 6 |
