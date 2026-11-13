@@ -8758,6 +8758,119 @@ from `ae7eb01b3`. I do not review it again unless Opus finds the authentication 
 
 Runbook and build specs (§4): /Volumes/JW-EXT/scratch/fable-b6-post-pin-runbook.md.
 
+# RL-137. Paper 1: the Tier E variant is retired (2026-11-13 08:47 PST)
+
+Research lead (Fable 5.2). Entered by the lead from the second consistency pass, /Volumes/JW-EXT/scratch/fable-paper1-consistency.md, item A32, where the ruling was made.
+
+### B7. `paper1.md:1050` (§6.8): the sentence beside the single-source labels. Slot `B6-RELEASE`
+
+Insert after "...with each session's interval, kept units and flags."
+
+- Current text: none.
+- Insert: "Each replication value carries its producer label. The values labelled single-source, the cells and floors of the two floor packs and the dominance ratios copied from them, were computed by one program in this block; what stands behind them is stated in Section 6.7. A value labelled not independently recomputed was computed once and checked by a separate reader against the released records."
+- The last sentence is kept only if that reader check was done for Block 6 and is recorded. Otherwise it reads: "A value labelled not independently recomputed was computed once."
+- Follows from: RL-99 items 1 and 2; RL-101; RL-102 ("no claim word rests on one of them without its label").
+
+---
+
+## Claims in the draft that no ruling or record supports
+
+**U1. `paper1.md:666-667` (§5.6).** "no person or AI agent read a measured energy, power, phase duration, ... or calibration value."
+
+- It is a universal negative. No record can establish it, and the next paragraph and §8.2 control 2 disclose two departures, one of them a timing read.
+- For the replication block it is also stated in the past tense about a period that has not ended.
+- Fix: A19.
+
+**U2. `variants/tierC_block6_addendum.md:35`.** "No replication energy, floor, ratio, contrast estimate or outcome word has been read by any person or agent."
+
+- The same problem. Replacement: "Under the block's rule no replication energy, floor, ratio, contrast estimate or outcome word may be read before its release, and the project record shows no such read."
+- Not counted in (a). It is used only if tier C is used.
+
+**U3. `paper1.md:1836` (Appendix A).** "code sharing nothing with the analysis". Fix: A17.
+
+**U4. `paper1.md:578` (§5.4).** "on one afternoon". Contradicted by line 736 for the contrast session. Fix: A3.
+
+**U5. `paper1.md:533-534` (§5.2).** "no AI agent process on the machine", stated as a property of a session. §8.3 records sessions in which one was present. Fix: A1.
+
+**U6. `variants/tierC_block6_addendum.md:26`.** "every replication rule was fixed before the primary block was released". False since the §17 entries. Fix: A18.
+
+**Not verified in this pass, and not contradicted by anything I read.**
+
+- `paper1.md:1287`: the BYTES twin "written from the registration alone and sharing no code with it". I did not check it against the BYTES record.
+- `paper1.md:590-591`: "Twenty-five of the primary block's 32 session-removing codes became flags only."
+- Every claim in lines 300-504 and 848-1010, which I searched by term and did not read.
+
+---
+
+## Rulings in the range that change nothing in Paper 1
+
+| Ruling | Why no change |
+|---|---|
+| RL-111, RL-112 | W1 signing evidence. No paper text |
+| RL-116 to RL-120, RL-124 | W1 route, High Power, planning turns. v4 only; covered by B6 if §10 describes the design |
+| RL-128 | The probe count goes in the v4 methods. Paper 1's sessions ran without probes |
+| RL-130 | A side branch. Gates nothing |
+| RL-132 §1 | A process-wrapper record. No analysis quantity |
+| RL-125 item 2 | Copied-record file names. A pin-request matter; it reaches the paper only if a family fails RL-104 check 3 |
+| RL-129 §6 | The three items that bind a read to the pinned closure. They belong in the `P1-RELEASE` and `P1-AVAIL` fills at `B6-RELEASE`; the placeholders need no change now |
+
+## Guards for later fills (no edit now)
+
+- When Block 6 releases, the abstract fill `P1-ABS-PART1` and conclusion branch 9.C must not call the replication's check an "independent recomputation". The phrase stays with the primary block.
+- `paper1.md:162` and `:1109` use "blocks" for a model's expert weight blocks. That is a different sense and I leave it, since the two cannot be confused in context.
+- Appendix C keeps "window" inside the registered sentences. Line 1858 already says so.
+
+---
+
+# Second pass (2026-11-13)
+
+Research lead (Fable 5.2). Written 2026-11-13 08:47 PST (`date`). Same rulings (RL-111 to RL-136), same terminology rule, same file and commit. New items are written against `origin/main` text, not against the builder's branch.
+
+## Result
+
+- **(a) 15 more changes can be made now** (A20 to A34). None needs an outcome.
+- **(b) 2 more changes wait on a slot** (B8 on the Block 6 release, B9 on the S-14 cut).
+- **5 more claims have no support** (U7 to U11). Four have a fix in (a). U8, the provenance of Figure B1, needs a check first.
+- **A1 to A19 contradict nothing in the newly read ranges.** Two of them use words that the newly read methods text does not define, and one row of my first-pass table can be misread. The three amendments are under "Re-check of A1 to A19".
+- **One new ruling is made in this pass and needs entering:** Tier E is retired (A32).
+- **The two most important findings:**
+  1. §4.8 as written gives the wrong outcome word for a contrast in a session with an undefined drift screen. A reader would take "not estimable"; the registered plan and RL-114 give "not resolvable". A7 and B3 depend on this (A26, A27).
+  2. Figure B1's caption says the capture was re-derived under the current clock mapping. The figure file was last changed on 30 August 2026 and prints four values that the text still holds as placeholders (U8).
+
+## What I read, and what I did not
+
+**Read in full in this pass.**
+
+- `paper1.md` lines 300-504 (§4.2 to §4.8) and 848-1010 (§6.2 to §6.6).
+- `paper1.md` lines 1888-1971 (Appendix D). The file has 1,971 lines. My first-pass limits section stopped at 1887 and did not say that Appendix D was unread. It is read now.
+- Re-read for cross-checks: lines 549-575 and 596-612 (§5.3, §5.4), 1010-1046 (§6.7), 1244-1252 and 1280-1291 (§7.3), 1856-1887 (Appendix C), and every figure caption (lines 289-294, 542-548, 614-626, 1174-1180, 1449-1455, 1850-1854).
+- `variants/README.md`, `tierB_bytes_one_pass.md`, `tierD_bytes_registered_design.md`, `tierE_floor_version.md`, in full.
+- `figures/build_figures.py` in full, and every text label of the five `fig_p1_*.svg` files and of `docs/paper/figures/fig4_edge_excursions.svg` (Figure B1).
+- Rulings: RL-114, RL-121 (opening and ruling), RL-128 and RL-136 in full; the others by term. Decision log at `origin/audit/2026-11-10-fable` @ `fce872428`.
+- `configs/campaigns/v5_claim_25g83/analysis_plan_block5.md` lines 345-358 and 416-436; `docs/registrations/block6_replication_DRAFT.md` lines 237 and 575-579.
+
+**Arithmetic I checked, all consistent.**
+
+- Table 2 per-token values; Table 3 against Table 4 through the guard factors and the allowance; Table S5 drift terms against Table S6; Table S7 corpus and reference counts; Table 5 decision intervals, per-token values and the size of both Holm-adjusted p-values.
+- Every synthetic example in Appendix D.1 to D.6.
+
+**Not checked.**
+
+- `claims.py`, to confirm which reason code an undefined screen raises. A27 rests on RL-114's statement of the word and on the plan's list.
+- Whether Figure B1 was regenerated after August (U8).
+- The BYTES record behind Tier D's "nineteen" (U9).
+- `fill_check_b5.py`, `licence_check_b5.py` and `build_fill_index.py`. Where an item changes a table header that a fill program may emit, the item says so.
+
+**One action outside my file.** I ran `git fetch origin` in `/Volumes/JW-EXT/jw-wt/rs-main` to see whether the paper had moved. It updated that clone's remote-tracking refs. `origin/main` is now `32fd7c1e0`; nothing under `docs/paper/paper1/` changed between `62ca4197c` and it, so every line number stands. I should not have fetched in a shared clone without saying so first.
+
+**Blind status.** Unchanged: blind to Block 6 and to v4. No custody, archive, session or outcome path was opened. I ran no analysis program and no test. Block-5-aware. I modified no file but this one.
+
+---
+
+## (a) Changes that can be made now
+
+**Owner.** Lead: apply A32 (header comment and README row; the file's text is not repaired). **Gate.** None. **Blind status.** Blind: text only.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
