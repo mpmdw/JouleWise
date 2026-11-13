@@ -10217,6 +10217,89 @@ The one synthetic rehearsal that route held, the RL-123 §2 item 3 re-reads, RL-
 
 **Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. Rulings, the audit, the runbook and the lock file's one line only. Block-5-aware.
 
+# RL-144. Change classes and what gates a merge; local full runs count; tests may run on the unarmed MBP under a separate account; the fleet's arm rule (2026-11-13 14:56 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 14:56 PST (`date`).
+
+**Read.** `/Volumes/JW-EXT/scratch/fable-two-machine-ci-plan.md` and its sources: `ci.yml`, `quick_suite.py`, `ci_state_only.sh` and `test_timings.json` at `19461f6d7`; the last 120 `ci.yml` runs; the shard logs of run 43513102528; the last 60 merged PRs; RL-127, RL-128, RL-132. One static import scan of `origin/main` ran on the Air at `nice 19` under `AIR-QUIET.lock`. I ran no test and did not contact the MBP. The M3 Max figures are projections from one hosted-to-local ratio.
+
+**Ruled.**
+
+1. **Three change classes**, decided by the base commit's classifier, as the state-only classifier is now.
+   - **A.** Every changed path is documentation, paper text or an operational state record, and no test's dependency set contains it.
+   - **B.** Not A, and the tests whose dependency set contains a changed path total at most 2,400 hosted seconds.
+   - **C.** Everything else, including any changed path the selector cannot place and any classifier error.
+2. **What a merge needs.**
+   - Into `main`: class A and B need `fences`, `quick` and every affected test green on the head. Class C needs the full suite green on the head.
+   - Into a lane: any class may merge on `fences`, `quick` and the affected tests, capped at 2,400 hosted seconds chosen heaviest-first.
+   - `gate-ledger` is unchanged.
+3. **What an event needs.** A sign, a pin, an arm, a registration and a release each need one full-suite run, green, on the exact commit the event names, with no result cache and no selection. A run on a different commit with the same tree counts. The run and its executor are named in the event's record. `main` also gets a full run after every merge; it blocks no merge, and a red one is reverted before anything else merges (audit §3 item 9).
+4. **The selector fails closed and is audited.** A test's dependency set is its static import closure together with the files it was last recorded opening. Every full run reports the number of failing tests the selector would not have chosen for that change. One such escape on `main` returns every class B to class C until I have read the cause.
+5. **A full run on a Mac counts for term 3** when it is: from a fresh checkout of the named commit in a clean worktree; on Python 3.13; with every test discovered, compared by test id against the hosted list for that commit; with skips listed; and with its log kept. A hosted run remains evidence but is not required in addition. The first Mac run of each tree is compared against a hosted run of the same commit, and every test that passes on one and skips or fails on the other is listed and comes to me. Until that list is empty or ruled, hosted remains the event gate.
+6. **Tests and jobs may run on the unarmed MBP**, under a separate unprivileged account with no sudo and no read access to the night, custody or measurement-checkout paths. The audit's never-list (§6) stands. The account is created in an unarmed span and recorded as a host change. Before its first full run the lead lists every test that starts a host command (`launchctl`, `pmset`, `powermetrics`, `kill`, `pkill`) and confirms each is stubbed or refused under that account.
+7. **Arming.** From the moment the arm intent is written, the hub starts no job whose budget ends later than 45 min before t0 after heavy work (more than four cores or a model load), or 15 min after light work. At that mark it stops what remains and unloads itself. Install proceeds only when the account has no process and swap is zero. No fleet process, heartbeat or watcher runs on the MBP from install to `chain.exited` plus courier. The first two sessions after the hub is installed are checked as the audit's settle rule says: Part A soak and G0 times against the last cold start; more than 5 min apart lengthens the 45.
+8. **A local status check on the armed MBP is allowed in principle and not yet.** It would be the RL-128 command run by a launchd timer instead of over SSH, at most as often as RL-128 term 3, logged the same way, used only to detect a refusal or the chain's exit and reload the hub. It binds when the RL-128 calibration has passed with the timer in place, and it is covered by the W1 sentence of RL-128 term 7, reworded to "local or remote". Until then the magistrate's after-session steps restart the hub.
+9. **No GitHub self-hosted runner on either Mac** while the repository is public.
+10. **Not traded.** RL-127 term 10 stands. Nothing here changes a registered wait, a custody rule, the blind, or which host reads real custody (RL-100).
+
+**Owner.** The lead: the classifier, selector, dispatcher, hub and queue, and the comparison in term 5. The magistrate: the account, the hub install, the drain confirmation in term 7. Research lead: terms 4 and 5 lists, and term 8's gate.
+
+**Gate.** Terms 1-2 bind when the classifier is merged with its tests and the selector has one recorded full run behind it. Until then the present rule (full suite) stands for class B; class A may use `fences` and `quick` at once, since the state-only path already does this for three files. Term 3 binds now. Terms 6-7 bind when the account exists.
+
+**Blind status.** Blind to Block 6. Code, CI logs, timings and PR metadata only.
+
+# RL-144 addendum. PR #762 and today's Block 6 release: what CI must show, and the two base reds on the S-14 line (2026-11-13 15:01 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 15:01 PST (`date`).
+
+**Read.** RL-142 §2-3 (`/Volumes/JW-EXT/scratch/fable-rl142-dry-hold.md`). At `3551e1a7d` and `aaa2f3086`: the diff between them (2 files, +91/−1), `tests/test_mint_policy_resolver_guard.py`, `tests/b5_analysis/test_frozen_files.py` lines 14-96, `joulewise/b6_analysis_check.py:40-54`, `scripts/independent_recompute_b6.py:74-84` and `:323`, the diff of `joulewise/flags/exclusions.py` against main, and every hit of `0.010818` and `pack_scoped` under `joulewise/` and `scripts/`. One static import scan of `aaa2f3086` at `nice 19`; the lock was absent at 14:59. I ran no test. The three CI failures and the local reproductions are the lead's account; I did not see the logs.
+
+**One thing I did that I should not have:** a `git fetch` from the run checkout `b6-s14-run`. It moved remote refs in the shared git directory only; the worktree is untouched (porcelain empty).
+
+**Blind status.** Code and test sources only. `0.010818` is a registered constant, not an outcome.
+
+## 1. PR #762 may merge without waiting for the remaining shards
+
+RL-142 §2 item 5 said "merge on both green". The base cannot be green, so that condition is replaced by these four. All four, then merge.
+
+1. **Modules 1 and 2** (`test_mint_policy_resolver_guard`, `b5_analysis.test_frozen_files`): the failing ids at the head equal the failing ids at `3551e1a7d`, by the lead's reproduction. Accepted as shown.
+2. **Module 3** (`test_b6_r12_session_fixture`): the subset claim is **not** shown, because the base never ran on Linux. It is accepted on different evidence, which the lead completes: the module passes on macOS at the **head** `aaa2f3086` in a clean worktree with the same counts as at the base (86 OK, 14 skipped), and none of the four hosted tracebacks has a frame in `scripts/independent_recompute_b6.py`.
+3. **The tests of the changed file are green at the head on macOS**: the full `tests/independent_recompute/test_block6` with RL-142 item 3's mutant result, and the kit end-to-end test. If their hosted shard has finished, it is green too; if it has not, the merge does not wait for it.
+4. Opus delta check with no blocker (in hand).
+
+"No failing module touched by the diff" is not enough by itself, and neither is an import check: my scan finds **no** test module that imports `independent_recompute_b6.py`, including `test_block6`, which loads it another way. The mint guard reads every file under `scripts/`, and five `b6_r12_*` and table scripts name the program. That is why item 2 asks for the tracebacks and item 3 names its tests.
+
+A shard that finishes later with a new failing module is classified the same way. If the module runs a Block 6 closure file, it comes to me before the release.
+
+## 2. RL-144 term 3 and this release
+
+"Binds now" was my error: I wrote it without checking that an event was in progress on a line that has never had a CI run. **Term 3 binds in full from the next event. For today's release it binds in this form:**
+
+1. **Before the gate run:** every test of the Block 6 closure and the release tools is green at r2 on macOS, the host that releases. Named set: `tests/independent_recompute/test_block6`, the tests of `b6_analysis_check`, of `b6_release_record` and the probe, and the kit end-to-end test. The lead lists the modules run and their counts in the release record.
+2. **At the release check:** every finished shard of a full run on r2's tree is classified. Each failing id is listed in the release record with one of: base-inherent and reproduced (name the base), platform (passes on macOS at r2), or unexplained. **An unexplained id, or any failing id in the named set, holds the release.**
+3. **The full run need not have finished.** When it does, its complete failing list is added to the release record as a dated line. A late failure in the named set is reported to Ed and me the same hour as a post-release finding.
+4. The two guards of §3 are listed as base-inherent, with §3's text.
+
+Nothing in RL-134 or RL-142 is relaxed. This is about the suite only.
+
+## 3. The two base reds
+
+**M1. The `0.010818` literal in two pinned programs. Not a correctness matter. After the release.**
+- `joulewise/b6_analysis_check.py:50` passes it to `harvest.calibration_bracket`; `scripts/independent_recompute_b6.py:81` defines `S_BRACKET_S = 0.010818` and cites registration §3.3 (S-4).
+- Both equal `D125_SCREEN_FLOOR_S` in `joulewise/calibration_bracketing.py:294`. The guard exists to stop copies in the mint lane drifting from that one home. An independent recompute is supposed to carry its own copy from the registration.
+- **One check before the release, by the lead:** the registration's §3.3 states 0.010818. I read the code comment, not the registration.
+- After the release: the guard exempts these two files by name and asserts each literal equals the registry constant. No pinned byte changes.
+
+**M2. `joulewise/flags/exclusions.py` differs from its Block 5 frozen hash. One part holds the release until checked; the rest is after.**
+- Commit `4e3446e6c` added a keyword-only `pack_scoped: bool = True` to `compute`. With the default the changed expression reduces to the old one, so Block 5's behaviour is unchanged by reading. The only caller that passes `False` is `scripts/independent_recompute_b6.py:323`.
+- **Holds the release until confirmed:** the recompute executes this file, so its r2 bytes (SHA-256 `ebe1678c0fdd60b1ddd20d432cf07412bd321a8629589f4ce4c6b334378f0ad6`) must be a row of the 24-hash closure. At the cut I found that hash only in the seat-7 receipt; I have not seen the closure list. If it is a row, nothing to do. If it is not, it is added before the gate run (a record change, no code change) and I am told.
+- **After the release, before the S-14 line merges to main:** a frozen Block 5 file was edited without a cited rebind. It needs a row in `docs/analysis/b5/DEVIATION-LOG.md`, entries in `EVOLVED_ON_MAIN` and `REBOUND_WORKING_TREE`, and one test that `compute` with the default gives the Block 5 commit's result on a fixture. The release record carries one line saying so.
+- Not examined: whether the first program and the recompute should differ in pack scoping. The dry run's comparator is the check for that, and it is RL-134's.
+
+**Owner.** The lead: §1 items 2-3, §2 items 1-3, the two checks in §3. Research lead: anything unexplained, and the closure answer.
+
+**Gate.** Merge on §1. Gate run on §2 item 1 and M2's closure check. Release on §2 item 2 and RL-134's conditions on r2.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
