@@ -9496,6 +9496,230 @@ graphics and neural-engine idle power of nine runs. No phase energy, no estimate
 
 Source: review of `bc62db137`, /Volumes/JW-EXT/scratch/fable-rl140-s16.md.
 
+# RL-141. The R12 closed nine did not close: the root is retired as a loop and read once as a seven-session block; no relaunch, no hold release, no new loop; the cut follows the read (2026-11-13 12:13 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 12:13 PST (`date`).
+
+**Read.** RL-123, RL-126, RL-127, RL-129, RL-132, RL-134 §10, §14 and §18, and the head of RL-133. The pin
+request at `31072f2a6`, section 6. The R12 report at `d38495791`, lines 255-270, 466-490, 2876-2935 and
+3140-3160. In the synthetic root `r12-r3-closed-air-25`: `parent.json`, `declaration.json`, the step log,
+`loop/state.json`, `loop/attempts.jsonl`, `fixture-plan.json`, `b6_r12_orchestrate.py`,
+`pin/joulewise/b6/loop.py` (`_next`, `_smoke_desk`, `control`), `pin/joulewise/b6/queue.py` (all), and
+r2-gamma's derived flag rows and export record. At the merge head `b5ab6a71d`: `b6_r12_reduced_finish.py`,
+`b6_r12_dry_supervise.py`, `run_option_c`, `prepare_run_inputs`, `write_observations` and `main` in
+`b6_r12_verify.py`, every use of `closed` and `loop_state` in RC-B6-1, and the launcher
+`/Volumes/JW-EXT/scratch/rl129-read-nine.zsh`. I ran no generator, reader, test or program, and wrote nothing
+but this file.
+
+## 0. Two corrections to the facts as they reached me
+
+1. **The root has nine attempts, of which seven count.** `attempts.jsonl`, by outcome:
+
+   | Pack | Counting | Not counting |
+   |---|---|---|
+   | ALPHA | r2, r3, r4 | r1 (`cell.below_minimum`, the scripted A1) |
+   | BETA | r1, r2, r3 | none |
+   | GAMMA | r1 | r2 (`calibration.bracket_incomplete`) |
+
+   "Nine counting attempts, 4/3/2" is the attempt count. The counting composition is 3/3/1.
+2. **There are two departures from the plan, not one.** The plan scripts nothing for r2-gamma and the
+   prediction counted it. Its post-session calibration capture was invalid (`calibration.capture_invalid`,
+   slot `post`; then `calibration.binding_failed`), at about 07:42 PST, and the chain excluded the session.
+   The r3-gamma smoke failure at 08:55 is the second. Also unscripted: `member.anchor_not_bounded` in
+   r2-gamma, r2-alpha and r3-alpha (it was scripted for r2-beta only), and members not succeeded in r3-alpha
+   (119 of 125) and r3-beta (124 of 125).
+
+Consequence: releasing GAMMA and running r3-gamma would not close the loop. GAMMA's target is three counting
+sessions and it has one. The loop needs at least two more GAMMA sessions, each of which has to count.
+
+**Cause.** Not established. Host load is the lead's account and fits the times; I did not verify it, and I did
+not rule out a carry-over from the scripted r2-beta timestamp offset into the three sessions that followed
+it. Neither reading changes what is ruled below.
+
+## 1. What the root is
+
+**Ruled.**
+
+1. The loop did not close. The generator parent exited 1 on its tick bound, with the loop at `NEXT`, GAMMA
+   held and ALPHA and BETA at target. Slot N-14 ("original DONE with nine counting sessions") is **not met**
+   and is recorded so. No `DONE`, no `generator-parent-exit.txt` and no close record is written by anyone.
+2. The nine sessions are whole. Each was written by the real chain, each step exited 0, and each has its
+   original terminal record. The chain's two exclusions and its hold are correct responses to what it
+   observed. Nothing here is a chain or program failure.
+3. The root is retired as a loop. It is not relaunched, resumed or continued.
+
+## 2. The four options
+
+| Option | Ruling |
+|---|---|
+| (a) release the hold, finish this loop | **Refused** |
+| (b) read what was produced | **Ruled, in the form of section 3** |
+| (c) a short new loop | **Refused** |
+| (d) full relaunch | **Refused** |
+
+**(a).** The real chain has an operator path: `Loop.control("resume", pack="gamma")` reopens a held pack. The
+fixture has no way to use it. `b6_r12_courier_set.py` refuses an existing root (line 128), and the orchestrator
+exposes no control command. Using it would mean calling the loop by hand and then driving steps outside the
+generator parent: a hand-continued root, which the R12 report and RL-48 rule out. It would also not take one
+hour. Two more counting GAMMA sessions are at least two and a half hours, above the 100 min limit, on a root
+whose last four hours carry unexplained faults.
+
+**(c).** No existing generator mode closes a loop in fewer than nine counting sessions. A single-pack loop of
+three is about three hours and needs a new mode and its review (RL-126 §1, "Why not (C)").
+
+**(d).** Ten to twelve hours. RL-129 §7's pre-authorised relaunch was for an infrastructure loss, and it is
+now withdrawn. The rehearsal program total of RL-127 term 2 (8 machine-hours) is spent: this root took 9.3.
+**No further R12 cohort is generated before the cut.** After the cut none is needed.
+
+## 3. The read: one seven-session block, by the pinned bytes, with the tools that exist
+
+**Why this is enough.** RC-B6-1 never reads the loop's state value. `--loop-state` feeds `read_reharvested`
+only, and `--closed` only makes GAMMA pairings final (RC:1254). So the analysis program cannot tell a `DONE`
+loop from this one. What `DONE` would have shown is that the chain's loop closes, and S-14 does not pin the
+chain. What the pin needs from this root is the program's behaviour on chain-written archives, and the root
+has that for seven counting sessions over three packs and two excluded ones.
+
+**Ruled.**
+
+1. The root is read **once**, from the merge worktree at `b5ab6a71d`, by the existing harness command line.
+   No file in the repository is edited. The reduced finisher and the dry-run supervisor are not used: both
+   refuse a root that is not `DONE`, correctly.
+2. **The block read passes `--closed`.** That is `run_option_c`'s own behaviour with no session id. It is a
+   reader argument that makes pairings final. The record says "closed by argument; the loop did not close".
+3. The seven counting sessions are r2-alpha, r3-alpha, r4-alpha, r1-beta, r2-beta, r3-beta and r1-gamma.
+   `prepare_run_inputs` selects them from the attempts file; nobody lists them by hand.
+4. Reads, in this order, each stopping the launcher if its receipt is not `exit_code` 0 with
+   `option_c.comparator.pass` true:
+
+   | # | Command (after `air_python scripts/b6_r12_verify.py`) | Writes |
+   |---|---|---|
+   | 1 | `--root $M25 --run-option-c --workers 1 --stem option-c` | `option-c-*` |
+   | 2 | `--root $M25 --run-option-c --workers 2 --stem option-c` | `option-c-pool-*` |
+   | 3 | `cmp` of `option-c-numbers.json` with `option-c-pool-numbers.json`, and of the two `-public.json` | events line |
+   | 4 | `--root $M25 --run-option-c --session-id r1-alpha --stem option-c-skips` | A1 |
+   | 5 | `--root $M25 --run-option-c --session-id r2-gamma --stem option-c-r2-gamma` | the unscripted exclusion |
+   | 6 | `--root $M26 --run-option-c --session-id r1-alpha --stem option-c-denied` | denied-26 |
+   | 7 | `--root $M25 --observe-denied-root $M26` | `observations.json` |
+   | 8 | `air_python -m unittest` on the seven `DeclaredShapeTests` names of `b6_r12_reduced_finish.py:57-58`, with `R12_REAL_CHAIN_SET` and `R12_REDUCED_CHAIN_SET` set to `$M25` | shape assertions |
+
+   `ReducedSetTests` is not run. It tests the finisher's receipt, which does not exist.
+5. The launcher is `/Volumes/JW-EXT/scratch/rl141-read-seven.zsh`, made from `rl129-read-nine.zsh` with these
+   differences and no others:
+   - the generator-done check applies to denied-26 only; for root 25 it asserts `parent.json` status `failed`,
+     exit 1, loop state `NEXT`, and nine attempt rows;
+   - the `end label=closed-nine … exit=0` grep is removed;
+   - the supervisor call is replaced by the eight steps above;
+   - events and log are `rl141-read-seven.events` and `.log`;
+   - it writes and removes the quiet lock of section 6, and records `uptime` at start and end.
+   It keeps the head check, the two hash asserts, both closure checks, the read-once refusal, the overlap
+   census and the output SHA-256 lines. The lead launches it detached.
+6. **Stop.** The reads are predicted at most 2,400 s serial and 1,200 s pool (unchanged, now an upper bound
+   for seven). If the launcher is still running at 10,800 s the lead stops it and profiles it. It is not
+   retried.
+7. I did not run any of this. Two things are unverified: that `finalize_manifest` is harmless when called
+   once per step, and that `write_observations` accepts a seven-session block receipt. **If the harness refuses
+   for a reason tied to the root's state, the lead does not edit the harness. The refusal text comes to me and
+   I answer in one turn.**
+
+## 4. Predeclared values, written into the request before the launch
+
+A commit on `docs/2026-11-13-b6-s14-pin-request` amends section 6 as below, and the launcher's
+`REQUEST_COMMIT` is that commit. N-1, N-2, N-4 to N-7, N-10, N-12 and N-16 to N-19 are unchanged.
+
+| Slot | New predeclared value |
+|---|---|
+| N-3 | a count above 0 over **seven** sessions, every compared row agreeing |
+| N-8, N-9 | unchanged bounds, labelled "seven sessions, reduced volume" |
+| N-11 | reported: 9 h 18 min to the generator's exit 1 |
+| N-13 | all seven shape assertions exit 0. `cross_session_gamma` is predicted to pass on r1-gamma alone: its ALPHA floor must come from another round, because r1-alpha is excluded |
+| N-14 | **Not met, recorded before the read:** loop at `NEXT`, nine attempts, seven counting (3/3/1), GAMMA held on `smoke_hold:stage_failed:gamma-reference-start`, generator exit 1 |
+| N-15 | 10,800 s, by the lead's hand (item 6) |
+| N-20 (new) | sessions read by the block: 7, the ids of item 3; `closed` true by argument |
+| N-21 (new) | r2-gamma single-session option (c): exit 0, comparator agrees, `calibration.bracket_incomplete` retained |
+
+A slot that departs from these comes to me with the names only. The release holds until I answer. RL-129 §1
+term 7's differential read by `e17886bf…` applies to a departure in a read slot. It does not apply to N-14,
+which departed in generation.
+
+## 5. What is shown and what is not
+
+**Shown, if the reads pass:** the six registered shapes from the real chain, each with option (c) exit 0 and
+comparator agreement; block rows computed and compared over seven sessions and three packs; final pairings;
+serial and pool byte equality; the denied action; and two things the plan did not ask for, an excluded
+session of a second kind (r2-gamma) and sessions carrying unscripted member flags.
+
+**Not shown, and the record says each:**
+
+1. The chain's loop closing after nine counting sessions. No qualifying root shows it.
+2. A block with more than one counting GAMMA session. GAMMA's block rows across sessions rest on the
+   synthetic nine-session tests of `test_block6` and `test_b6_production`, not on chain-written archives.
+3. A nine-session wall time and peak memory. The numbers are for seven.
+4. Full volume inside a block (already stated in RL-123).
+
+The real nine-session read is therefore the first of its size on chain-written archives. RL-134's gate run,
+dry-run stop and class E route already cover a failure there, blind. I accept that risk in place of a third
+half-day of rehearsal.
+
+**§17-R12.** The registered content is the six shapes, before the cut (RL-123 §1), and section 3 keeps it. I
+did not reread the line today. The lead greps line 673 for "nine" and "closed". If either word is in the
+registered sentence, the deviation log gets a dated row with the text below, before the cut. If neither is,
+no deviation row is owed and the text goes in the R12 report and the pin paragraph only.
+
+**Replacement text** for the pin paragraph's nine sentence, and for the R12 report:
+
+> The closed loop was not obtained. The cohort `r12-r3-closed-air-25` ran nine sessions through the real
+> chain and stopped at nine attempts with seven counting (ALPHA 3, BETA 3, GAMMA 1): one GAMMA session was
+> excluded by the chain for an invalid calibration capture and the next GAMMA smoke failed, both unscripted
+> and with no cause established; the host was under other load. The loop held GAMMA and did not close. The
+> cohort was not relaunched. Its seven counting sessions were read once as a block by the pinned program
+> (⟨NINE: program SHA-256⟩), with pairings made final by argument: option (c) ⟨exit⟩, ⟨compared⟩ compared
+> rows, ⟨failed⟩ failed, ⟨unmatched⟩ unmatched, ⟨both_null⟩ null on both sides; serial and pool outputs
+> ⟨byte equality⟩. Not shown on chain-written archives: the loop's close, a block with more than one counting
+> GAMMA session, and nine-session cost.
+
+## 6. Contention on the Air
+
+**Ruled.** RL-126 item 7 stands for what it decided, which was reader timing. This is a different matter: the
+generators and the chain have real-time deadlines, and the real dry run has a stop at twice its prediction.
+
+1. **Quiet lock.** Every generator, every reader and every real Block 6 run on the Air writes
+   `/Volumes/JW-EXT/scratch/AIR-QUIET.lock` (label, pid, start time) before it starts and removes it at exit.
+2. **While the lock exists, no agent on the Air runs** a test suite or module, a mutant sweep, a build, a
+   model load, or anything with a worker pool. Git, file reads, editing, and single commands under a minute
+   are allowed.
+3. **Where tests go instead:** CI first. The MBP when it is unarmed. Otherwise they wait.
+4. **Every seat brief carries one line:** "Check `AIR-QUIET.lock`; if it exists, run no tests on the Air."
+5. **The launcher refuses to start** if `pgrep -f 'pytest|unittest|mutmut|xdist'` finds anything, and names
+   it in the events file.
+6. **The lead's watcher**, while the lock exists, runs that `pgrep` every two minutes and alarms the lead. It
+   signals no process (RL-127 term 8). The lead stops the offender.
+7. This binds the section 3 read, the RL-134 gate run and the dry run. A real run's receipt names any overlap
+   the watcher saw.
+
+## Amends
+
+- RL-123 §1 and RL-126 §1 item 1: the nine is not "run to completion". It is read as section 3 says.
+- RL-126 §1 item 6 and RL-129 §7 items 3-4: the pre-authorised relaunch is withdrawn. No R12 cohort is
+  generated before the cut.
+- RL-129 §1 term 7: "after the generator parent has exited 0" becomes "after the generator parent has
+  exited", for this root. Read once, by the merged program, stands.
+- The pin request's N-3, N-8, N-9, N-11, N-13, N-14, N-15; new N-20, N-21 (section 4).
+
+**Owner.** The lead: the request amendment, the launcher, the read, the slots, the §17 grep, the lock and the
+brief line. Me: any departure, and any harness refusal, each in one turn. A Sonnet seat, after the cut and
+gating nothing: one paragraph on the cause of the r2-gamma capture and the unscripted anchor flags.
+
+**Gate.** The cut waits for the section 3 read, the filled slots and the term 7 check. Nothing else here gates
+it. With the request accepted in every other respect, the cut follows the read with no further round unless a
+slot departs.
+
+**Reason.** The loop's close was the one thing this cohort could not deliver, and it is the one thing the
+analysis program does not read. Everything the pin needs from chain-written archives is in the nine sessions
+that exist, except a second counting GAMMA session, and that costs more hours than the risk it removes.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path of the real block was opened.
+Synthetic root only: control records, loop state, attempt lines, flag rows, code and rulings. Block-5-aware.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
