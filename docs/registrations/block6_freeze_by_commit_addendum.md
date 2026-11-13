@@ -54,7 +54,7 @@ branches built from it). The annotated tag is what keeps it reachable if those b
 | --- | --- | --- | --- |
 | `b6/collection` | `f31aca19f90473231c41cb31643afb0d6c85d355` | `db97a5409ecd3d99872ed725735bc02551a4eb76` | ready |
 | `b6/collection-n<k>` | none | none | not proposed: one code state (above) |
-| `b6/analysis` | UNRECORDED | UNRECORDED | later: S-14 is `OPEN` (`block6_replication_DRAFT.md:1207`; §13 line 1186). It is cut when the analysis commit is pinned before the blind dry run |
+| `b6/analysis` | `⟨CUT: S-14 commit, 40 hex⟩` | `⟨CUT: S-14 tree, 40 hex⟩` | cut at the S-14 pin (registration §14 row S-14, §17-R4), annotated tag object `⟨CUT: b6/analysis tag object, 40 hex⟩`; recorded 2026-11-13 |
 
 ## 2. Calibration acceptance (F4)
 
