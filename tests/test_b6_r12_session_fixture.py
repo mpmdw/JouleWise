@@ -1149,6 +1149,85 @@ class SinglePackVerifierTests(unittest.TestCase):
         self.assertFalse((self.outer / "control-check/receipt.json").exists())
 
 
+class ExternalInputPinTests(unittest.TestCase):
+    """RL-115: with --inputs, a pinned external input must be supplied and a supplied one must be pinned.
+
+    Beside the wrong-digest case above. One sealed synthetic BETA archive; no study file is read.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.independent_recompute.support_b6 import build_session, write_attempts
+        from tests.independent_recompute.support_b6_production import seal
+        cls.root = Path(tempfile.mkdtemp(prefix="r12-external-pins-")).resolve()
+        cls.archive, _ = build_session(cls.root, "BETA", 1, 0)
+        cls.pin = seal(cls.archive)
+        cls.attempts = write_attempts(cls.root / "attempts.jsonl", [("BETA", 1, True)])
+        cls.state = cls.root / "state.json"
+        cls.state.write_text(json.dumps({"reharvested": {}}))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def run_recompute(self, stem, command, external, *, attempts=True, state=False):
+        import contextlib
+        import io
+        from tests.independent_recompute.support_b6 import b6
+        sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+        out = self.root / stem
+        out.mkdir()
+        document = out / "run-inputs.json"
+        pins = {"loop_attempts": sha(self.attempts), "loop_state": sha(self.state)}
+        document.write_text(json.dumps({"host": "Air", "l9_audit": "not_run", "sessions": {self.archive.name: self.pin},
+                                        "external": {key: pins[key] for key in external}}) + "\n")
+        argv = [command, "--session", str(self.archive), "--inputs", str(document), "--inputs-sha256", sha(document),
+                "--restricted-out", str(out / "numbers.json"), "--public-out", str(out / "public.json")]
+        if attempts:
+            argv += ["--loop-attempts", str(self.attempts)]
+        if state:
+            argv += ["--loop-state", str(self.state)]
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            rc = b6.main(argv)
+        return rc, err.getvalue(), out
+
+    def assert_refused(self, result, code):
+        rc, err, out = result
+        self.assertEqual(rc, 4, err)
+        self.assertEqual(err.strip(), "refused: " + code)
+        self.assertFalse((out / "numbers.json").exists())
+        self.assertFalse((out / "public.json").exists())
+
+    def test_pinned_loop_state_omitted_refuses(self):
+        """Predict: loop_state pinned, --loop-state omitted: refused before any session is read, block and single."""
+        from unittest import mock
+        from tests.independent_recompute.support_b6 import b6
+        for command in ("block", "single"):
+            with self.subTest(command=command), \
+                    mock.patch.object(b6, "AuthenticatedInputs", side_effect=AssertionError("session read")):
+                self.assert_refused(self.run_recompute("state-omitted-" + command, command,
+                                                       ("loop_attempts", "loop_state")), "external_input_missing")
+
+    def test_pinned_loop_attempts_omitted_refuses_in_single_mode(self):
+        """Predict: loop_attempts pinned, single run without --loop-attempts: refused external_input_missing."""
+        self.assert_refused(self.run_recompute("attempts-omitted", "single", ("loop_attempts",), attempts=False),
+                            "external_input_missing")
+
+    def test_unpinned_loop_state_supplied_refuses(self):
+        """Predict: --loop-state given with no loop_state key refuses by name, not as a bare KeyError."""
+        self.assert_refused(self.run_recompute("state-unpinned", "block", ("loop_attempts",), state=True),
+                            "external_input_unpinned")
+
+    def test_waived_loop_state_runs_and_is_recorded(self):
+        """Predict: no loop_state key and no --loop-state: the run completes and records that it read no corrections."""
+        rc, err, out = self.run_recompute("state-waived", "single", ("loop_attempts",))
+        self.assertEqual(rc, 0, err)
+        numbers = json.loads((out / "numbers.json").read_bytes())
+        self.assertEqual(numbers["inputs"]["external_supplied"],
+                         {"loop_attempts": True, "loop_state": False, "block5": False})
+
+
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
 class DeclaredShapeTests(unittest.TestCase):
     """Integration expectations declared before any official named shape run.
