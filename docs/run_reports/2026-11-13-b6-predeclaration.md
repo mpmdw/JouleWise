@@ -265,10 +265,10 @@ launched. RL-134 items 11 to 15 then apply (section 7).
 
 | Item | Rule | Value |
 |---|---|---|
-| `w_gate` | measured wall of the passing gate run (its `record.json`, `wall_s`; `$RUN/gate-2/record.json` if attempt 2 passes) | `⟨GATE: w_gate s⟩` |
-| `W_pred` | 9.9 × `w_gate`, rounded up to the next 100 s; **3,400 s** if `w_gate` is missing | `⟨GATE: W_pred s⟩` |
-| Alarm | 1.5 × `W_pred`. Nothing is done on the alarm | `⟨GATE: alarm s⟩` |
-| Stop (`--limit-s`) | 2 × `W_pred` (with no `w_gate`: 6,800 s). This replaces the 10,800 s stop for the real run | `⟨GATE: stop s⟩` |
+| `w_gate` | measured wall of the passing gate run (its `record.json`, `wall_s`; `$RUN/gate-2/record.json` if attempt 2 passes) | `**322.427 s** (`$RUN/gate-2/record.json` `wall_s`; gate attempt 2, exit 0, `probe: ok`, 2026-11-13 13:29:31-13:34:53 PST)` |
+| `W_pred` | 9.9 × `w_gate`, rounded up to the next 100 s; **3,400 s** if `w_gate` is missing | `**3200 s** (9.9 × 322.427 = 3,192.0, rounded up)` |
+| Alarm | 1.5 × `W_pred`. Nothing is done on the alarm | `**4800 s**` |
+| Stop (`--limit-s`) | 2 × `W_pred` (with no `w_gate`: 6,800 s). This replaces the 10,800 s stop for the real run | `**6400 s** (`--limit-s 6400`)` |
 
 For example, `w_gate` = 400 s gives `W_pred` 4,000 s, an alarm at 6,000 s and a stop at 8,000 s.
 
