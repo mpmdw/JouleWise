@@ -8871,6 +8871,56 @@ Research lead (Fable 5.2). Written 2026-11-13 08:47 PST (`date`). Same rulings (
 
 **Owner.** Lead: apply A32 (header comment and README row; the file's text is not repaired). **Gate.** None. **Blind status.** Blind: text only.
 
+# RL-138 (commit-ready)
+
+# RL-138. The slot desk tools are admitted with fixes; seven readings and one departure are ruled; two definitions of the desk spec are corrected before any journal is read
+
+Research lead (Fable 5.2), 2026-11-13 09:14 PST (from `date`). Cold review of `w1/2026-11-13-slot-desk` @ `84fa7dc8f` under RL-135 item 12. The review is `/Volumes/JW-EXT/scratch/fable-rev-slot-desk.md`.
+
+**Read.** The five tools and their tests on the branch; the desk spec and runbook; at `a6a09e6d7`, `thermal_gates.py`, `thermal.py`, `r1_runtime.py`, `align_r1_rehearsal.py`, `align_v4_kit.py`; the 11-12 harness `desk_replay.py`. **Ran:** the five test modules (120 run, 109 pass, 11 step-0 skips) and three synthetic experiments. **Not checked:** any journal; step 0; the write order of `metadata.json` against a capture reap. **Not done:** no SSH, probe, commit, push or mail.
+
+**Ruled.** Items 3, 4, 5 and 6 change or complete a definition of the desk spec. They are fixed now, blind, and are not adjusted after this session's journals are read. No bar changes.
+
+1. **Reading (a), validation scope.** "16 of 16" is the 11-12 count over member journals and stays the step-0 expectation. Auxiliary gates are validated too. Their policy is read from recorded sources: bands from the session's `runtime_result.json`, else from the same night's step-D member config (every R1 session arms `Segment.bands()`, `r1_runtime.py:1628-1634`); the G0 cap from `runtime_result.json` `g0_timeout_s`. A non-released auxiliary G0 with no recorded cap may be replayed to its recorded duration, labelled. A band taken from the tool's default with no source is X2. Any auxiliary disagreement is X2, as built.
+
+2. **Reading (b), ties.** The order valid, status, band_fast, band_slow, slope_slow is accepted. `clause_last` is a disclosure and no row reads it. Wherever it is quoted, every tied clause is quoted.
+
+3. **Reading (c), the slope cross-check. Spec 2.1(b) is corrected.** The gate records its slope at its last loop time, not at the exit sample (`thermal_gates.py:566`). For a gate record `g` with exit sample `e`: `R_e` is the journal rows with `monotonic_ns ≤ exit_sample_ns`; `f_e` is `e`'s finished stamp; the candidate instants are `f_e`, `end_ns`, and `s + 60 s + 1 ns` for each row time `s` of `R_e` with `f_e − 60 s ≤ s < end_ns − 60 s`. `slope_recompute_mismatch` is flagged when the recorded `slope_c_per_min` is not within 0.05 °C/min of `slow_slope(R_e, t, s_slow)` at any candidate `t`; a null record matches only a null candidate. These are the only values the gate could have recorded from this journal, so a wrong key, journal or function still fails at every candidate. `slow_slope_recomputed` at `exit_sample_ns` stays in the table as a disclosure, and the matching candidate is printed beside it. X2 on a mismatch is unchanged.
+
+4. **Reading (d), T1 is evaluated in two strata.** The planning heater runs a 1 s duty cycle (`r1_runtime.py:1355-1372, 1774-1832`), so the die moves within one sample interval and the neighbours of the skew rule do not bound it there. W1 has no heater.
+   - **Gate stratum:** every reading row of every member and auxiliary journal except planning-turn member journals. Precools, `cooldown_after_D` and G0 releases are in it. **T1** is RL-135 item 2's four arms on this stratum, with the skew fraction over this stratum's rows. Route `TO-RESEARCH-LEAD`, unchanged. RL-135 item 11 reads this T1.
+   - **Planning stratum:** every reading row of a planning-turn member journal, final or superseded. **T1p** is the same four arms on this stratum alone. Route `SLOTS-PR-HOLD-SIGNING`: the slots PR is opened, any planning-release record is written as step 7 says, and signing waits for me. Packet: the stratum's census, the offending rows with their neighbours, `3a.txt`.
+   - Every row is still classed and printed in both strata. A stratum with no row carrying both keys is not computable, which is X2. On this night a member journal listed in `journals_without_both_keys` is X2.
+
+5. **Validation of a gate that did not release.** For a recorded outcome other than `released` or `deadman`, the replay agrees when it gives the same outcome and `replay.exit_sample_ns ≤ recorded exit_sample_ns ≤` the last row whose read finished by the record's `end_ns`. The real loop runs later than the replay clock by its accumulated drift and can hold one more row. Released and deadman records keep the rule of `desk_replay.py:153-176`.
+
+6. **The status clause of spec 2.1(b), exactly.** `pm_observed_ns` is an int and the row time minus it is at most 2 s. There is no lower bound: the sidecar reads the status after the SMC read, so the stamp may follow the row's start.
+
+7. **Reading (e), routes.** The precedence TO-RESEARCH-LEAD, TO-LEAD-TOOL-DEFECT, SLOTS-PR-HOLD-SIGNING, SLOTS-AND-SIGNING is accepted, with T1 or T3 not computable as X2. Three additions:
+   - When X2 fires beside a research-lead row, the lead makes the one fix attempt and re-runs the verdict before sending me a packet. Rows read from `record.json` alone (X1, D1, D2, D2i, XG, A1, F1, R1) may be sent at once.
+   - C1 alone gives `SLOTS-PR-HOLD-SIGNING`, as its row says.
+   - `SLOTS-AND-SIGNING` may be cited only from a verdict in which B1x and S1 were evaluated.
+
+8. **Reading (f), X1.** Any `status` other than `complete`, or a chain exit other than 0, is `TO-RESEARCH-LEAD`. A hash or commit mismatch on a complete record goes to the lead first; if one attempt does not trace it to a copy error, it comes to me.
+
+9. **Reading (g), RL-91.** The time-weighted load print is owed only for a member in `rl91.ticker.over_1pct_members`. If that list is not empty, the route is at most `SLOTS-PR-HOLD-SIGNING` until the print is in the PR; the lead computes it from the same load journal. An empty `capture_reaps` is reported as "no reap record in N `metadata.json` files", and the census arm is the check that a sampler did not survive.
+
+10. **The quiet-span departure is accepted. Spec 2.1(c) is amended.** The censor point of an alternative G0 is `classification.phase_bounds_ns.quiet[1]` of `<phase>/inventory/r1_classification.json`, used only when `quiet[0]` is at or after that G0's `end_ns`; otherwise the G0's `end_ns`. `runtime_result.json` carries no absolute bound at `a6a09e6d7`. Only step-30B and step-D idle a quiet span, so every other alternative is `censored`, as RL-135 item 3 expects. The precool journal path is confirmed in code (`r1_runtime.py:1909, 1921`); a missing journal sends a timed-out planning row to me, as spec 2.2 says.
+
+11. **Not built, accepted.** The W1 wiring of the start-state helper is owed before the first W1 thermal desk. The X2 sub-case "the kit refuses a planning-release record the desk classed 3(a)" is applied by the lead by hand at step 8.
+
+12. **Admission.** At `84fa7dc8f` two HIGH findings are open: the status clause (item 6) and the slope cross-check (item 3). The tools are admitted without returning to me when the review's fixes 1 and 2 are landed with their closing tests, fixes 3 to 6 are landed or their items applied by hand, the spec's tests pass, no commit touches a condition-13 path, and step 0 holds with `slope_recompute_mismatch` empty on the 11-12 copy. Fix 7 is owed before step 10.
+
+**What is unchanged.** RL-131's triggers and row text; RL-135 items 1 to 12 except as items 3 to 6 and 10 state; every bar. `thermal_gates.py` and the other nine condition-13 paths are not edited.
+
+**For Ed, plainly:** "I reviewed the tools that will read tonight's rehearsal logs. They are well built, but two checks were wrong in ways the practice data could not show. One would have raised a false alarm on almost every gate, because of how I had defined it. The other would have silently switched off one of the four findings I said I wanted to see. Both have small, exact fixes, and the lead can land them without coming back to me. I also settled, before anyone has seen the logs, how the three heater turns are read: an oddity there opens the paperwork but holds the signature until I have looked."
+
+**Owner.** Lead: fixes 1 to 7, step 0, the desk. Research lead: every row routed to me, and T1p and C1 before signing.
+**Gate.** Admission: item 12. The slots PR and W1 signing: as RL-135, with item 7's routes.
+**Blind status.** Blind: no v4 outcome exists. Code, the spec and synthetic journals only. No journal of this session or of 11-12 was read. Items 3 to 6 and 10 are fixed before this session's journals are read.
+
+Source: cold review of the slot-desk tools, /Volumes/JW-EXT/scratch/fable-rev-slot-desk.md.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
