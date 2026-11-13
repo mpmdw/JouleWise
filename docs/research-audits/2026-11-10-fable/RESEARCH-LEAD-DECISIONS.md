@@ -7152,6 +7152,14 @@ and for RL-107 at that night's commit. The Tf08 derivation gates the first W1 th
 only.
 
 
+### RL-122 amendment (PR #752 cold review, 2026-11-13; review file /Volumes/JW-EXT/scratch/fable-rev-752.md, committed on the PR branch as docs/run_reports/2026-11-13-pr752-review.md)
+
+- **Item 2 row text, one sentence inserted** after "That is TVh0 (RL-119, RL-122).": "On that step TV0h and TVh0 show the same rise (54.30 °C); the registered rule's lexical tie-break, not a measured difference, gave TV0h the fast role."
+- **Item 3(a) release measure, fixed:** the heater key's peak over the last 300 s of the G0 interval, ≥ band edge − 0.3 °C (the whole-G0 peak passes almost always on a die key and is not the 3(a) pattern).
+- **Item 7 "exactly one slow pick":** the RL-122 validator path pins the regenerated table's own sha256 (b2369b6c…2884).
+- If PR #752's fix commit does exactly F1-F3 (F4-F6 alongside), with the ten condition-13 hashes re-shown and CI green, the cold-review checklist line is met without returning to me.
+
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
