@@ -364,6 +364,7 @@
     "tests.test_rev6_prior_start_plan_id": 0.234,
     "tests.test_revision6_seal": 0.062,
     "tests.test_revision_five_b_readers": 0.004,
+    "tests.test_rl108_side_branch": 3.0,
     "tests.test_rpt001_report_slice": 2.128,
     "tests.test_rpt002_related_work": 0.004,
     "tests.test_run_campaign": 159.175,

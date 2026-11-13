@@ -24,6 +24,7 @@
     "docs/align/v4/DEVIATIONS.md": null,
     "docs/align/v4/W1-BLOCKERS-sol.md": null,
     "docs/align/v4/dynamic_closure_trace.json": null,
+    "configs/watchdog/transition_table.json": null,
     "joulewise/__init__.py": null,
     "joulewise/__main__.py": null,
     "joulewise/adapters/__init__.py": null,

@@ -62,6 +62,8 @@ _NAMED_ARTIFACTS = (
     'configs/launchd/com.joulewise.magistrate.plist.template', 'configs/launchd/com.joulewise.b6loop.plist.template',
     # RUN_STATE 226 R15: the frozen D/C/T series (order, roles, seeds) and its builder bind with W1.
     'scripts/align_v4_series.py', 'configs/campaigns/align_v4/series/series_manifest.json',
+    # RL-108 side branch (NOT FOR MERGE), W-6: the watchdog's declared transition table, read by path.
+    'configs/watchdog/transition_table.json',
 )
 
 
