@@ -93,9 +93,10 @@ def planning_slots(names, *, reason=kit.PLANNING_RELEASE_REASON):
 
 def release_for(slots, names, **row):
     segment = {'os_levels': [0], 'pm_states': ['Nominal'], 'heater_key': 'TVh0',
-               'band_edge_c': 36.018, 'heater_key_max_c': 36.4, **row}
+               'band_edge_c': 36.018, 'heater_key_max_last_300s_c': 36.4, **row}
     return {'schema': kit.R1_PLANNING_RELEASE_SCHEMA, 'authority': kit.PLANNING_RELEASE_AUTHORITY,
             'lead_signature': 'lead: synthetic-test 2026-11-12', 'r1_record': kit.r1_record_identity(slots),
+            'desk_print': {'path': 'docs/run_reports/synthetic/planning_desk.json', 'sha256': 'e' * 64},
             'segments': {name: dict(segment) for name in names}}
 
 
@@ -117,7 +118,7 @@ class PlanningReleaseTests(unittest.TestCase):
         for names in (['planning_turn_R_plus_0C'], ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C'],
                       list(kit.PLANNING_SEGMENTS)):
             inputs, slots = planning_slots(names)
-            for row in ({}, {'heater_key_max_c': 36.018 - 0.3}, {'heater_key_max_c': 35.95}):
+            for row in ({}, {'heater_key_max_last_300s_c': 36.018 - 0.3}, {'heater_key_max_last_300s_c': 35.95}):
                 with self.subTest(names=names, row=row):
                     kit.require_ready(inputs, slots, planning_release=release_for(slots, names, **row))
 
@@ -127,8 +128,8 @@ class PlanningReleaseTests(unittest.TestCase):
         cases = [
             (dict(os_levels=[0, 1]), 'OS level'),
             (dict(pm_states=['Nominal', 'Moderate']), 'non-Nominal'),
-            (dict(heater_key_max_c=36.018 - 0.31), 'band edge'),
-            (dict(heater_key_max_c=None), 'band edge'),
+            (dict(heater_key_max_last_300s_c=36.018 - 0.31), 'band edge'),
+            (dict(heater_key_max_last_300s_c=None), 'band edge'),
             (dict(heater_key='Th0C'), 'heater key'),
         ]
         for row, message in cases:
@@ -145,6 +146,55 @@ class PlanningReleaseTests(unittest.TestCase):
             mutate(bad)
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 kit.require_ready(inputs, slots, planning_release=bad)
+
+    def test_the_measure_is_the_last_300_s_peak(self):
+        # PR #752 cold review F1: the preheat overshoots the edge early in nearly
+        # every planning G0; only the last 300 s of the interval count.
+        self.assertEqual((kit.PLANNING_RELEASE_PEAK_FIELD, kit.PLANNING_RELEASE_WINDOW_S),
+                         ('heater_key_max_last_300s_c', 300))
+        names = ['planning_turn_R_plus_2C']
+        inputs, slots = planning_slots(names)
+        overshoot_then_inside = release_for(slots, names, heater_key_max_c=41.0,
+                                            heater_key_max_last_300s_c=36.018 - 1.0)
+        with self.assertRaisesRegex(ValueError, 'last 300 s of G0'):
+            kit.require_ready(inputs, slots, planning_release=overshoot_then_inside)
+        whole_g0_only = release_for(slots, names, heater_key_max_c=41.0)
+        whole_g0_only['segments'][names[0]].pop('heater_key_max_last_300s_c')
+        with self.assertRaisesRegex(ValueError, 'last 300 s of G0'):
+            kit.require_ready(inputs, slots, planning_release=whole_g0_only)
+        # RL-122 3(a): a steady hold 0.06 to 0.21 C under the edge, or a crossing, still passes.
+        for peak in (36.018 - 0.21, 36.018 - 0.06, 36.5):
+            with self.subTest(peak=peak):
+                kit.require_ready(inputs, slots, planning_release=release_for(
+                    slots, names, heater_key_max_last_300s_c=peak))
+
+    def test_the_record_cites_its_desk_print(self):
+        names = ['planning_turn_R_plus_0C']
+        inputs, slots = planning_slots(names)
+        for desk in (None, {}, {'path': '', 'sha256': 'e' * 64}, {'path': 'desk.json', 'sha256': 'e' * 63}):
+            record = release_for(slots, names)
+            if desk is None:
+                record.pop('desk_print')
+            else:
+                record['desk_print'] = desk
+            with self.subTest(desk=desk), self.assertRaisesRegex(ValueError, 'desk print'):
+                kit.require_ready(inputs, slots, planning_release=record)
+
+    def test_the_heater_key_comes_from_root(self):
+        # PR #752 cold review F4: require_w1_ready(root) reads the heater key from root.
+        names = ['planning_turn_R_plus_0C']
+        inputs, slots = planning_slots(names)
+        with tempfile.TemporaryDirectory() as tmp:
+            config = json.loads(CONFIG.read_bytes())
+            config['sensors']['s_slow'] = 'Tsyn'
+            target = Path(tmp) / 'configs/align/v4/r1_runtime.json'
+            target.parent.mkdir(parents=True)
+            target.write_text(json.dumps(config))
+            self.assertEqual(kit.planning_heater_key(tmp), 'Tsyn')
+            with self.assertRaisesRegex(ValueError, 'heater key'):
+                kit.check_r1_evidence(inputs, slots, planning_release=release_for(slots, names), root=Path(tmp))
+            kit.check_r1_evidence(inputs, slots, planning_release=release_for(slots, names, heater_key='Tsyn'),
+                                  root=Path(tmp))
 
     def test_other_flags_and_segments_stay_refused(self):
         names = ['planning_turn_R_plus_0C']

@@ -103,8 +103,32 @@ class SecondFastRuleTests(unittest.TestCase):
             self.validate(config, ruling)
         table = deepcopy(self.regen)
         table['selection']['fallback'] = True
-        with self.assertRaisesRegex(ValueError, 'fallback'):
+        with self.assertRaisesRegex(ValueError, 'regenerated table'):
             self.validate(table=table)
+
+    def test_only_the_regenerated_table_bytes_are_accepted(self):
+        # PR #752 cold review F2: with the declared classification digest left in
+        # place, an edited ranking or coverage would move the pick to Tf48.
+        self.assertEqual(sha(self.regen_raw), kit.SECOND_FAST_RULE_TABLE_SHA256)
+        def noisy(table):
+            for row in table['classification_table']['classification']['ranking']:
+                if row['key'] == 'TVh0':
+                    row['noise'] = 0.2
+        def uncovered(table):
+            table['coverage']['phases']['load']['TVh0']['pass'] = False
+        for mutate, name in ((noisy, 'TVh0 noise raised'), (uncovered, 'TVh0 fails a smoke phase')):
+            table = deepcopy(self.regen)
+            mutate(table)
+            with self.subTest(name):
+                self.assertEqual(table['classification_table']['classification']['classification_sha256'],
+                                 kit.SECOND_FAST_RULE_CLASSIFICATION_SHA256)
+                moved = kit.second_fast_rule_selection(table, self.config)
+                self.assertEqual(moved['s_slow'], 'Tf48')
+                config, ruling = deepcopy(self.config), deepcopy(self.ruling)
+                for record in (config['sensors'], ruling['sensors'], table['selection']):
+                    record['s_slow'] = moved['s_slow']
+                with self.assertRaisesRegex(ValueError, 'regenerated table'):
+                    self.validate(config, ruling, table)
 
     def test_table_regenerates_byte_stable(self):
         raw = kit.regenerate_second_fast_rule_table(self.saved_raw, self.config)

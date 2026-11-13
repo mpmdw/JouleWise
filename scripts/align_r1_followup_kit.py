@@ -102,6 +102,11 @@ def prepare_checks(root, config, *, weight_digest_check=None, runtime_stack_chec
 SECOND_FAST_RULE = "fast_rule_second_application"
 SECOND_FAST_RULE_RULING = "RL-122"
 SECOND_FAST_RULE_CLASSIFICATION_SHA256 = "0b9cdb9e136eee48c742a6bdfef3313373f795949027779353c31f717630e0a6"
+# The regenerated table (docs/run_reports/2026-11-12-rl122/smoke_part_b.rl122.json):
+# the RL-122 path accepts these exact bytes only, so an edited ranking or
+# coverage under the same declared classification digest cannot move the pick
+# (PR #752 cold review F2).
+SECOND_FAST_RULE_TABLE_SHA256 = "b2369b6c78d91b75299e10ff7249f1e8cae7304b48cf022e20b2c6a6f69f2884"
 
 
 def table_bytes(table):
@@ -197,6 +202,9 @@ def validate_sensor_ruling(config, ruling, smoke_sha256, table):
         label = "RL-78: policy must use the fixed smoke Part B selection: "
     elif (rule == SECOND_FAST_RULE and ruling.get("research_lead_ruling") == SECOND_FAST_RULE_RULING
           and ruling.get("classification_sha256") == digest == SECOND_FAST_RULE_CLASSIFICATION_SHA256):
+        if smoke_sha256 != SECOND_FAST_RULE_TABLE_SHA256:
+            raise ValueError(f"{SECOND_FAST_RULE_RULING}: the Part B table must be the regenerated table "
+                             f"{SECOND_FAST_RULE_TABLE_SHA256}, not {smoke_sha256}")
         selected = second_fast_rule_selection(table, config)
         if table.get("selection", {}).get("ok") is not True or table["selection"].get("fallback") is not False:
             raise ValueError("RL-122: the Part B selection must be ok with no fallback")
