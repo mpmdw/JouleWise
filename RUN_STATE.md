@@ -1042,11 +1042,40 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+308. **Magistrate 48ce8f17 (headless, Opus 5.5), 2026-11-13 06:50 PST (`date`): ITEM 306 ACTIVATION 2 DONE: Part A PASSED; the slot-producing R1 follow-up night is ARMED on `a6a09e6d7`. Plan `align-r1-20261113T1508Z`, t0 Fri 13 Nov 07:08 PST, latest end Sat 14 Nov 18:21 PST, dead-man 19:21 PST. One finding for the research lead: TVh0 is TV0h floored to 5 °C steps while the die cools. Record: `docs/process_traces/2026-11-13-w1-slot-night/MAGISTRATE-ARM-48ce8f17.md`.**
+
+```pointer
+owner: magistrate
+wait: results_branch_exists
+deadline: 2026-11-14T19:21:00-08:00
+on_early_or_refused: a REFUSED result or no `chain.started` by t0+10 min (07:18 PST 11-13): restore (uninstall, powermode 0), mail Ed and the lead. No chain.exited by the latest end: dead-man/restore path; mail Ed and the lead
+next_observable: after chain.exited, item 306's "After the night" with S=/Users/edr/night-align/r1fu-20261113T144743Z and PKT_SHA=80d2023cff9cb219e282f20c730ac2de541f156f096c05c06141ecec97e6946e (r1_result.json status first; then runbook §4; set network time OFF again and zero the frequency word); the report also carries the TVh0 finding below for the research lead
+```
+
+- **Part A: PASS.** G0 released in 113.18 s (cap 1,200 s).
+  - Release minus reference: TV0h +0.669 °C, TVh0 +0.304 °C (reference 34.696 / 34.696 °C).
+  - Slope at release 0.0 °C/min. Tf08 at entry 69.61 °C.
+  - Receipt rc 0, and every feed was stopped and hash-checked.
+- **Checklist:** every line holds (ticked in the record).
+  - (a) `RL-89 MAC CHECK OK e6231a8f…769b 60 16 44 24bad206…0bb1`.
+  - (b) `RL-89 RULING OK b2369b6c…2884 TV0h TVh0 24bad206…0bb1`.
+  - D-7: the old packet `8d63766d…` was deleted; the new packet is `80d2023c…946e`, and `arm.json` equals it. The wrapper is in the commit, and the sudo kill listing returned rc 0.
+- **Host.** The frequency word had drifted to +6.05 ppm since item 301's restore. It was zeroed (item 251 remedy), and the rate is +0.008 ppm. Network time is Off. AC power, powermode 0. 85 GiB free.
+- **Arm notice** via Gmail (`1a1d5618b8f3d6a1`), 06:48, before the install; `notice.ack` is written. Install rc 0 at 06:49:43. Gmail worked this session.
+- **Finding (reported, not decided).** In the step-D journal, TVh0 matches TV0h in two ways:
+  - At rest below 35 °C and under load it equals TV0h bit for bit.
+  - While the die cools above 35 °C it reads 5 × ⌊TV0h / 5⌋.
+  - So G0's slope clause, which is read on TVh0, sees exactly 0 while TV0h is between 35 and 40 °C. At release TV0h was still falling about 0.53 °C/min, against the ±0.2 bar.
+  - RL-122 accepted that G0 may release while TV0h is still cooling, so the night is armed on the checklist.
+  - The staircase was not stated in RL-122. It may bear on the alias rule, and so on the pick and on the slots: the research lead should see it before slots are entered or W1 is signed.
+  - TV0h is journaled on every sample, so the desk can print each gate with TV0h's own slope as a labelled alternative.
+- **Until chain.exited:** no agent on this Mac, no git in `$M`, no SSH, no desk job.
+
 307. **Magistrate c962500e (headless, Opus 5.5), 2026-11-13 05:42 PST (`date`): ITEM 306 ACTIVATION 1 DONE. The dry checks pass at `a6a09e6d7`. PART A IS LAUNCHED on the final bytes (a fresh TV0h/TVh0 soak, `--fresh-soak --parts A`) as this activation's last action. Nothing is armed. The next activation is item 306's activation 2.**
 
 ```pointer
 owner: magistrate
-wait: Part A smoke's desk fence (gone when the runner exits; soak 1,800 s + Part A, about 1 h)
+wait: watchdog_status_state
 deadline: 2026-11-13T19:26:00-08:00
 on_early_or_refused: as item 306: a G0 that does not release inside 1,200 s, or any failed checklist line, means NOTHING arms, and it goes to Ed and the research lead (RL-122 item 7). Any other refusal goes to the lead. Do not retry, and do not reuse OUT
 next_observable: item 306 activation 2: the template's check block on OUT (its find line prints the g0 fields outcome, duration_s, reference, release, slope_c_per_min, entry_sensors), then the RL-122 item 7 checklist, the 60-key check, D-7, then plan, notice (#349 issue route while Gmail is absent) and install, recorded in docs/process_traces/2026-11-13-w1-slot-night/MAGISTRATE-ARM-<activation>.md
