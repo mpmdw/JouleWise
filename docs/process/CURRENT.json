@@ -1,18 +1,13 @@
 {
-  "armed": {
-    "host": "MBP Mac15,9 (measurement Mac)",
-    "latest_end_epoch_s": 1794650640,
-    "plan_id": "align-r1-20261112T2251Z",
-    "t0_epoch_s": 1794523860
-  },
-  "next_observable": "after `chain.exited`, the next activation runs the arm draft's \"After the night\" block with S=/Users/edr/night-align/r1fu-20261112T223055Z and PKT_SHA=8d63766da71bcc85ade0a60672758793fe8b3c3a490dad405c948a85f232eab9, then runbook §4 (uninstall, powermode 0, no strays, KM003C capture present) and the RL-90/RL-78/RL-89-margin/RL-72-E4/RL-91 report; then item 295's item C (custody copy) once the lead posts it",
+  "armed": null,
+  "next_observable": "this activation runs item 300's item C (Block 6 custody copy to the Air) now and reports it as the next item. Separately, the research lead rules on the RL-89 margin (Th0C return time 315.2 s vs 300 s; G0 timeouts at planning R+4C and R+2C; G1 timeouts in D_spam a, D_spam b and X_G), on the one-sided G0 band (six releases 2.0-5.3 °C below the Th0C reference) and on the High Power `not_adopted` verdict, then names the W1 route",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "296",
+  "source_item": "301",
   "source_item_heading_date": "2026-11-12",
   "wait": {
-    "deadline_epoch_s": 1794654240,
-    "observable": "result_json_exists",
-    "on_early_or_refused": "a REFUSED result or no `chain.started` by t0+10 min (15:01 PST): restore (uninstall, powermode 0), mail Ed and the lead. No `chain.exited` by the latest end (Sat 14 Nov 02:04 PST; deadman 03:04): the deadman/restore path; mail Ed and the lead"
+    "deadline_epoch_s": null,
+    "observable": "none",
+    "on_early_or_refused": null
   }
 }

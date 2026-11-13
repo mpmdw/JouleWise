@@ -1042,6 +1042,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+301. **Magistrate 80851129 (headless, Opus 5.5), 2026-11-12 22:27 PST (`date`; renumbered from 300 at 22:35, when the lead's item 300 landed first): the R1 FOLLOW-UP NIGHT IS CLOSED. Chain COMPLETE, exit 0, `r1_result` status complete, D-7 packet matches; uninstalled, powermode 0, no strays, KM003C capture present; network time set back OFF for W1. Two thermal results go to the research lead: the RL-89 pick does not stand (two planning G0s and three G1s timed out; Th0C fails return time by 15.2 s on D), and High Power is NOT adopted (A-B-A bars pass). Record: `docs/process_traces/2026-11-12-r1-followup-night/AFTER-NIGHT-80851129.md`.**
+
+```pointer
+owner: magistrate
+wait: none
+next_observable: this activation runs item 300's item C (Block 6 custody copy to the Air) now and reports it as the next item. Separately, the research lead rules on the RL-89 margin (Th0C return time 315.2 s vs 300 s; G0 timeouts at planning R+4C and R+2C; G1 timeouts in D_spam a, D_spam b and X_G), on the one-sided G0 band (six releases 2.0-5.3 °C below the Th0C reference) and on the High Power `not_adopted` verdict, then names the W1 route
+```
+
+- **Night:** plan `align-r1-20261112T2251Z`, custody `/Users/edr/night-align/r1fu-20261112T223055Z`, executed `99622e96c`. Driver 14:51:03 to `chain.exited` 22:07:36 PST (chain wall 25,622 s, well inside `window_max_s` 126,480). `result.json`: COMPLETE, fault false, 865 censuses, no hits. Night results pushed by the driver to `night-results/align-r1-20261112T2251Z` (`d544ff40b`). The watchdog released the window as `collected_window` at 22:08.
+- **After-the-night block** (arm draft): every line passes. Runbook §4 done: `arm_align_r1.py uninstall` rc 0; only `com.joulewise.magistrate` loaded; powermode 0; no stray monitor or root powermetrics; KM003C stream 25,942 s, 0 bad, 0 USB errors.
+- **Network time:** the driver restored it ON at 22:07:42; the draft says leave it OFF for W1, so I set it OFF (read back Off). The next arm still zeroes the frequency word (item 251).
+- **G0s (12):** 10 released in 340-998 s; planning R+4C and R+2C timed out at 1,200 s (Th0C kept crossing ref + 1.0; longest all-good run 5 and 9 of the 10 needed). `g0_cap_w1` = 740 s.
+- **Gate rule, checked in code at `99622e96c`:** the G0 band is one-sided (`<= ref + 1.0`) and ANDed with `|slope| <= 0.2 °C/min`. Releases from B onward waited on the slope, and sat 2.0-5.3 °C below the Th0C reference. The step-D reference was taken while Th0C was still moving (not settled). D_bank's member failed by its deadman (T_dead 918 s).
+- **RL-72 E4:** all 12 cross-band bars pass (smallest 0.398 °C), slow capture bracketed; t_decline A1/B/A2 98.665/98.845/98.856 s against 123.57 s, so `not_adopted`.
+- **RL-91:** wrapper in; 0 `capture_reaps`; ticker 1 sub-0.5 s gap in 2,413 (step_30b), none over 1 %.
+- **Not done (the lead's):** the `align_r1_followup_kit.py desk` run; nothing from `r1_slots.json` committed.
+- **Mail:** no unread mail from Ed; directives unchanged (#587, #422, #421, #417, #416, #408, #405). Ed is mailed the night's close (a change of state). The lead's item 300 says network time ON was restored; that was true at 22:07, and I turned it OFF at about 22:20.
+- **Housekeeping:** canonical root fast-forwarded to `9a1fd63d1` (no night job loaded or on disk); worktree `mag-a30af3e5` pruned (clean, contained in main); records worktree `/Users/edr/code/jw-wt/mag-80851129`. No Codex child was started. Disk 88 GiB free.
+
 300. **Laptop lead (interactive, Opus 5.5), 2026-11-12 22:21 PST (`date`): the Air is SETTLED (about four days) with JW-EXT mounted. The R1 follow-up night CLOSED: `night-results/align-r1-20261112T2251Z` @ d544ff40b reports chain_outcome COMPLETE, chain_exit_code 0, fault false, verdict GO, measurement_outcome complete; chain 14:51-22:07 PST; powermode 0 and network time ON restored by the driver; courier delivered (result sha256 1827aeed…1acd). Item 296's pointer still governs the post-night work (the arm draft's "After the night" block, runbook §4, the RL-90/RL-78/RL-89-margin/RL-72-E4/RL-91 report). This item POSTS item 295's item C (the custody copy) for the same or the next activation, after runbook §4 is done. The R12 Sol seat is resumed (notice 6) on the Air for the full-volume session; it does not touch the MBP.**
 
 MAGISTRATE: in the first desk gap after the R1 follow-up night (nothing armed, nothing capturing), copy the nine sealed Block 6 session archives to the Air.
