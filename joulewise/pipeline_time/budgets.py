@@ -18,7 +18,7 @@ BUDGETS_S = {
     "state-only-ci": 5 * 60,       # state-only or docs-only commit, CI minutes
     "block-analysis": 60 * 60,     # real custody: copy, verify, inputs, reader
     "smoke": 75 * 60,              # smoke or Part A
-    "rehearsal": 2 * 60 * 60,      # term 1 states 2 h for Block 6 (4 x 25 min is 100 min; the ruling's figure is kept)
+    "rehearsal": 6000,             # RL-132: term 1 for Block 6 is 4 x 25 min = 100 min (floor 30 min, ceiling 4 h)
     "session-gap": 2 * 60 * 60,    # session close to next launch, no code change
     "session-gap-code": 4 * 60 * 60,  # session close to next launch, code or config change
     "notice": 30 * 60,             # refused or stranded session noticed

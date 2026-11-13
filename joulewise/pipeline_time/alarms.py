@@ -43,6 +43,7 @@ class Alarm:
     repeat: bool = True
     profile_pid: int | None = None
     stage: str | None = None
+    public: str = ""  # L3: the only alarm text an issue may carry (no argv, cwd, paths, host, user)
 
     def line(self) -> str:
         return f"{self.severity.upper()} {self.code} {self.summary}"
@@ -83,8 +84,13 @@ def save_state(path: Path, state: dict) -> None:
         raise
 
 
-def plan(alarms: list[Alarm], state: dict, now: float, repeat_s=None, issue_repeat_s=ISSUE_REPEAT_S) -> list[Action]:
-    """Decide what to send this poll and update `state` in place (the caller saves it)."""
+def plan(alarms: list[Alarm], state: dict, now: float, repeat_s=None, issue_repeat_s=ISSUE_REPEAT_S,
+         hold: tuple = ()) -> list[Action]:
+    """Decide what to send this poll and update `state` in place (the caller saves it).
+
+    Keys starting with a `hold` prefix belong to a source that was blind this poll; an
+    active one stays active and is not resolved (no false "resolved" or issue close).
+    """
     repeat_s = dict(REPEAT_S, **(repeat_s or {}))
     records = state.setdefault("alarms", {})
     actions: list[Action] = []
@@ -123,6 +129,8 @@ def plan(alarms: list[Alarm], state: dict, now: float, repeat_s=None, issue_repe
         actions.append(Action(alarm, kind if local_due else "quiet", alarm.key, issue=issue_due, record=rec))
     for key, rec in list(records.items()):
         if key in seen:
+            continue
+        if rec.get("active") and hold and key.startswith(tuple(hold)):
             continue
         if rec.get("active"):
             rec["active"] = False
@@ -166,6 +174,38 @@ def append_jsonl(path: Path, record: dict) -> bool:
         return False
 
 
+PRIVATE_PATH_RE = re.compile(r"(?:/Users|/Volumes|/private|/home|/var/folders|/tmp|/opt)/\S*|~/\S*")
+
+
+def _local_names() -> list[str]:
+    names = []
+    try:
+        import getpass
+        names.append(getpass.getuser())
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import socket
+        host = socket.gethostname()
+        names += [host, host.split(".")[0]]
+    except OSError:
+        pass
+    return [n for n in names if n and len(n) >= 3]
+
+
+def scrub(text: str, names=None) -> str:
+    """Defence in depth for public text: drop absolute paths, the host name and the user name."""
+    text = PRIVATE_PATH_RE.sub("<local path>", text)
+    for name in sorted(set(_local_names() if names is None else names), key=len, reverse=True):
+        text = re.sub(re.escape(name), "<local>", text, flags=re.I)
+    return text
+
+
+def public_text(alarm: Alarm) -> str:
+    """The detector's public line, scrubbed; never the summary or detail."""
+    return scrub(alarm.public or f"{alarm.code} for key {alarm.key}")
+
+
 class IssueChannel:
     """GitHub issues through `gh`. One open issue per key, found again by a body marker."""
 
@@ -192,12 +232,16 @@ class IssueChannel:
         return self._open
 
     def body(self, alarm: Alarm, now: float) -> str:
+        """L3: the repository is public. The issue carries the code, key, stage and the detector's
+        public line (budget and elapsed time) only; argv, cwd, detail and host stay local."""
         stamp = time.strftime("%Y-%m-%d %H:%M %Z", time.localtime(now))
-        return (f"**{alarm.code}** ({alarm.severity}) at {stamp}\n\n{alarm.summary}\n\n"
-                + (f"```\n{alarm.detail}\n```\n\n" if alarm.detail else "")
-                + "Raised by the non-agent Air pipeline watcher (RL-127 terms 6-8, "
-                  "`scripts/pipeline_watch.py`). It posts at most once per alarm key per 6 h "
-                  "and closes this issue when the condition clears.\n\n"
+        stage = f", stage `{alarm.stage}`" if alarm.stage else ""
+        return (f"**{alarm.code}** ({alarm.severity}{stage}) at {stamp}\n\n{public_text(alarm)}\n\n"
+                f"Alarm key `{alarm.key}`. Full detail is in the Air's local `ledger/alarms.jsonl`"
+                + (" and the named profile" if "profile " in (alarm.public or "") else "") + ".\n\n"
+                "Raised by the non-agent Air pipeline watcher (RL-127 terms 6-8, "
+                "`scripts/pipeline_watch.py`). It posts at most once per alarm key per 6 h "
+                "and closes this issue when the condition clears.\n\n"
                 + f"<!-- {KEY_MARKER} {alarm.key} -->\n")
 
     def raise_or_comment(self, alarm: Alarm, record: dict, now: float) -> bool:
@@ -209,7 +253,7 @@ class IssueChannel:
                 record["issue"] = int(number)
                 return True
             record["issue"] = None
-        title = f"[pipeline-alarm] {alarm.code}: {alarm.summary}"[:200]
+        title = f"[pipeline-alarm] {alarm.code}: {public_text(alarm)}"[:200]
         rc, out, _ = self.runner([self.gh, "issue", "create", "--repo", self.repo, "--label", ISSUE_LABEL,
                                   "--title", title, "--body", self.body(alarm, now)], timeout=60)
         if rc != 0:

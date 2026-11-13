@@ -43,8 +43,7 @@ def gather(args, runner=alarms.default_runner) -> report.Inputs:
     if args.run_state:
         text = Path(args.run_state).read_text()
     else:
-        rc, _, _ = runner(["git", "-C", str(REPO), "fetch", "--quiet", "--no-tags", "origin",
-                           f"+refs/heads/main:{sources.PRIVATE_REF}"], timeout=120)
+        runner(sources.fetch_argv(REPO), timeout=120)  # F1: private ref only; a failure reads the last copy
         rc, out, _ = runner(["git", "-C", str(REPO), "show", f"{sources.PRIVATE_REF}:RUN_STATE.md"], timeout=60)
         text = out if rc == 0 else None
     runs = gh_json(runner, ["gh", "run", "list", "--repo", args.repo, "--limit", str(args.run_limit), "--json",

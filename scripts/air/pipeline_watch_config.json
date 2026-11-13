@@ -6,7 +6,7 @@
      "pattern": "independent_recompute_b\\d|run_b5_analysis\\.py|release_b5\\.py|release_v4\\.py|b6_custody|custody_kit"},
     {"name": "local-suite", "stage": "pr-ci", "budget_s": 1800,
      "pattern": "shard_tests\\.py|-m (?:unittest|pytest)\\b"},
-    {"name": "rehearsal", "stage": "rehearsal", "budget_s": 7200,
+    {"name": "rehearsal", "stage": "rehearsal", "budget_s": 6000,
      "pattern": "b6_r12_|fixture_gen|_fixture\\.py|rehearsal"}
   ],
   "exempt": [

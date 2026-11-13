@@ -184,6 +184,15 @@ python3.13 -B scripts/pipeline_watch.py queue add --name r12-alpha --expected-en
 python3.13 -B scripts/pipeline_watch.py queue done --name r12-alpha
 ```
 
+Local-job rules match the executable and its script (argv[0..1], or `-m
+module`), never a shell's `-c` string or a seat prompt. Budgets: block
+analysis 1 h, local suite 30 min, rehearsal 100 min (6,000 s, RL-132:
+RL-127 term 1 for Block 6, 4 x 25 min); each alarms at 1.5x. Issues on the
+public repository carry only the alarm key, stage, budget, elapsed time and
+a JW-EXT-relative profile name; argv, cwd, paths and the host name stay in
+the local `alarms.jsonl` and profile. A poll that raises posts one
+rate-limited local `PIPELINE_WATCH_CRASH` alarm (hourly) and exits 0.
+
 Jobs the lead starts on the unarmed MBP go in the queue (`mbp-queue.json` in
 the ledger directory); without them the idle detector alarms after 30 min.
 Config: `scripts/air/pipeline_watch_config.json` (local-job patterns,

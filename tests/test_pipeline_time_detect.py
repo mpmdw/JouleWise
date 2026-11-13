@@ -152,7 +152,8 @@ class RunStateDetectorTests(unittest.TestCase):
         alarms = detect.session_checks(after, CONFIG)
         self.assertEqual(codes(alarms), ["SESSION_OVERDUE"])
         self.assertIn("results branch absent", alarms[0].summary)
-        closed = ARMED_SESSION.replace(HEADER, HEADER + item(311, "magistrate", "2026-11-14 18:25", "the NIGHT IS CLOSED"))
+        closed = ARMED_SESSION.replace(HEADER, HEADER + item(311, "magistrate", "2026-11-14 18:25",
+                                                            "the NIGHT IS CLOSED: `align-r1-20261113T1508Z`"))
         self.assertEqual(detect.session_checks(snap(closed, at("2026-11-14 18:30")), CONFIG), [])
 
     def test_close_item_missing_after_30_min_of_results_branch(self):
@@ -197,7 +198,8 @@ class RunStateDetectorTests(unittest.TestCase):
         self.assertEqual(codes(past), ["MBP_IDLE"])  # the magistrate's deadline passed 34 min ago
 
     def test_session_gap_budgets(self):
-        closed = HEADER + item(340, "magistrate", "2026-11-13 00:00", "the NIGHT IS CLOSED") + POINTER_ARMED[len(HEADER):]
+        closed = HEADER + item(340, "magistrate", "2026-11-13 00:00", "the NIGHT IS CLOSED (`align-r1-20261112T2251Z`)") \
+            + POINTER_ARMED[len(HEADER):]
         self.assertEqual(detect.session_gap(snap(closed, at("2026-11-13 02:59")), CONFIG), [])
         alarms = detect.session_gap(snap(closed, at("2026-11-13 03:01")), CONFIG)
         self.assertEqual([(a.code, a.severity, a.stage) for a in alarms], [("SESSION_GAP", "warn", "session-gap")])
@@ -398,6 +400,98 @@ class SourcesTests(unittest.TestCase):
         result = sources.rl128_probe({}, 0.0, deadline_fired=True, runner=runner)
         self.assertFalse(result["ran"])
         self.assertEqual(runner.calls, [])
+
+
+class ReviewFixTests(unittest.TestCase):
+    """PR #759 cold-review fixes F1, F3, F4, F6, L1 and RL-132."""
+
+    def test_f1_fetch_never_updates_the_shared_remote_tracking_ref(self):
+        argv = sources.fetch_argv(Path("/repo"))
+        self.assertIn("--refmap=", argv)
+        self.assertIn("--no-write-fetch-head", argv)
+        self.assertEqual(argv[-1], "+refs/heads/main:refs/pipeline-watch/main")
+        self.assertFalse(any("refs/remotes" in token for token in argv))
+        runner = FakeRunner([(["show"], (0, ARMED_SESSION, ""))])
+        with tempfile.TemporaryDirectory() as tmp:
+            sources.gather(Path(tmp), dict(CONFIG), {}, now=0.0, runner=runner,
+                           ledger_file=Path(tmp) / "l.jsonl", queue_file=Path(tmp) / "q.json")
+        fetches = [call for call in runner.calls if "fetch" in call]
+        self.assertEqual(fetches, [sources.fetch_argv(Path(tmp))])
+
+    def test_f1_report_fetch_uses_the_same_argv(self):
+        from scripts import pipeline_time_report as rep
+        runner = FakeRunner([(["show"], (0, ARMED_SESSION, "")), (["gh"], (0, "[]", ""))])
+        args = type("A", (), {"end": None, "days": 7, "run_state": None, "repo": "o/r", "run_limit": 5,
+                              "ledger": "/nonexistent/l.jsonl"})()
+        rep.gather(args, runner=runner)
+        fetches = [call for call in runner.calls if "fetch" in call]
+        self.assertEqual(fetches, [sources.fetch_argv(rep.REPO)])
+
+    def test_f3_failed_fetch_reads_the_last_fetched_copy_and_counts_the_failure(self):
+        runner = FakeRunner([(["fetch"], (128, "", "timeout")), (["show"], (0, ARMED_SESSION, ""))])
+        state = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot = sources.gather(Path(tmp), dict(CONFIG), state, now=0.0, runner=runner,
+                                      ledger_file=Path(tmp) / "l.jsonl", queue_file=Path(tmp) / "q.json")
+        self.assertIsNotNone(snapshot.run_state)
+        self.assertTrue(snapshot.run_state_stale)
+        self.assertEqual(state["sources"]["run_state"], 1)
+
+    def test_f3_blind_sources_hold_their_keys(self):
+        self.assertIn("session_overdue:", detect.held_prefixes(Snapshot(now=0.0)))
+        held = detect.held_prefixes(Snapshot(now=0.0, run_state=runstate.read(ARMED_SESSION), ci_runs=[], processes=[]))
+        self.assertEqual(held, ())
+
+    def test_f4_nothing_armed_is_not_an_arm(self):
+        self.assertEqual(runstate.classify("Part A FAILED; NOTHING ARMED"), frozenset({"fault"}))
+        self.assertEqual(runstate.classify("so NOTHING WAS ARMED"), frozenset())
+        self.assertEqual(runstate.classify("R1 is NOT YET ARMED"), frozenset())
+        self.assertEqual(runstate.classify("the night WAS NOT ARMED"), frozenset())
+        self.assertEqual(runstate.classify("R1 RE-ARMED, t0 13:46 PST"), frozenset({"armed"}))
+        text = HEADER + item(320, "magistrate", "2026-11-13 10:00", "Part A FAILED; NOTHING ARMED") \
+            + item(319, "lead", "2026-11-13 09:00", "the lead runs verify",
+                   {"owner": "lead", "wait": "none", "next_observable": "verify"})
+        self.assertIsNone(runstate.read(text).session())
+
+    def test_l1_only_an_item_naming_the_plan_closes_the_session(self):
+        plan = "align-r1-20261113T1508Z"
+        generic = ARMED_SESSION.replace(HEADER, HEADER + item(311, "lead", "2026-11-13 12:00", "R12 nine COMPLETE"))
+        self.assertIsNone(runstate.read(generic).session().closed_by)
+        named = ARMED_SESSION.replace(HEADER, HEADER + item(311, "lead", "2026-11-14 01:00",
+                                                            f"the night CLOSED: `night-results/{plan}` reports GO"))
+        self.assertEqual(runstate.read(named).session().closed_by.label, "311")
+        other_author = ARMED_SESSION.replace(HEADER, HEADER + item(311, "magistrate", "2026-11-14 01:00",
+                                                                   f"night CLOSED `{plan}`").replace(
+            "Magistrate abcd1234 (headless, Opus 5.5)", "Research lead"))
+        self.assertIsNone(runstate.read(other_author).session().closed_by)
+        planless = HEADER + item(252, "lead", "2026-11-10 19:15", "item 251's R1 re-arm REFUSED at 19:05") \
+            + item(251, "magistrate", "2026-11-10 17:26", "R1 RE-ARMED, t0 18:08 PST 11-10")
+        self.assertEqual(runstate.read(planless).session().closed_by.label, "252")
+
+    def test_f6_rules_match_the_executable_and_script_only(self):
+        self.assertEqual(detect.job_signature("/usr/bin/python3 -B -X importtime scripts/a.py --x b6_r12_"),
+                         "/usr/bin/python3 scripts/a.py")
+        self.assertEqual(detect.job_signature("Python -B -m unittest tests.x"), "Python -m unittest")
+        self.assertEqual(detect.job_signature("zsh -c until ! pgrep -f independent_recompute_b6; do sleep 60; done"),
+                         "zsh -c")
+        self.assertEqual(detect.job_signature("codex exec rehearsal b6_r12_ unittest"), "codex exec")
+        procs = sources.parse_ps(
+            "  700     1    09:00:00   0:01.00 /bin/zsh -c until ! pgrep -f independent_recompute_b6; do sleep 60; done\n"
+            "  701     1    09:00:00   0:01.00 /opt/bin/codex exec write the rehearsal fixture b6_r12_ -m unittest\n"
+            "  702     1    09:00:00   0:01.00 /usr/bin/env -u X python3 scripts/independent_recompute_b6.py block\n"
+            "  703   702    09:00:00   9:00.00 /usr/bin/python3 -B scripts/independent_recompute_b6.py block\n")
+        alarms = detect.local_jobs(Snapshot(now=0.0, host="air", processes=procs), CONFIG)
+        self.assertEqual([a.profile_pid for a in alarms], [703])
+
+    def test_rl132_rehearsal_budget(self):
+        import json as _json
+        from joulewise.pipeline_time import budgets
+        self.assertEqual(budgets.BUDGETS_S["rehearsal"], 6000)
+        self.assertEqual(budgets.rehearsal_budget_s(25 * 60), 6000)
+        rules = {r["name"]: r["budget_s"] for r in detect.DEFAULT_LOCAL_JOBS}
+        self.assertEqual(rules["rehearsal"], 6000)
+        config = _json.loads((Path(__file__).resolve().parents[1] / "scripts/air/pipeline_watch_config.json").read_text())
+        self.assertEqual({r["name"]: r["budget_s"] for r in config["local_jobs"]}["rehearsal"], 6000)
 
 
 if __name__ == "__main__":

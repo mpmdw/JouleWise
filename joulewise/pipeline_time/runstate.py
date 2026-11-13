@@ -25,7 +25,8 @@ TZ_AFTER_RE = re.compile(r"\b(PST|PDT|UTC)\b|\dZ\b")
 OFFSETS = {"PST": -8, "PDT": -7, "UTC": 0, "Z": 0}
 
 ARMED_RE = re.compile(r"(?<![A-Za-z])(?:RE-)?ARMED\b|\bINSTALLED\b")
-NEGATION_RE = re.compile(r"(?:\bNOT|\bNEVER|\bnot|\bnever|[Nn]othing is|\bNOTHING IS|\bNO)\s*$")
+NEGATION_RE = re.compile(r"(?:\bNOT(?: YET)?|\bNEVER|\bnot(?: yet)?|\bnever|\b[Nn]othing(?: (?:is|was))?"
+                         r"|\bNOTHING(?: (?:IS|WAS))?|\bWAS NOT|\bwas not|\bNO)\s*$")
 CLOSED_RE = re.compile(r"\bCLOSED\b|\bCOMPLETED?\b")
 CODE_SPAN_RE = re.compile(r"`[^`]*`")
 REFUSED_RE = re.compile(r"\bREFUSED\b|\bREFUSAL\b")
@@ -233,23 +234,42 @@ class RunState:
         if not arms:
             return None
         latest = arms[-1]
-        closer = next((other for other in self.after(latest) if other.classes & {"closed", "refused"}), None)
         fields = {"plan_id": None, "t0": None, "latest_end": None, "deadline": None}
+        labels = []
         for item in reversed(arms):
             if item is not latest and any(o.classes & {"closed", "refused"}
                                           for o in self.ordered() if item.key < o.key <= latest.key):
                 break
+            labels.append(item.label)
             for name, value in arm_fields(item).items():
                 if fields.get(name) is None and value is not None:
                     fields[name] = value
             if all(v is not None for v in fields.values()):
                 break
-        return Session(fields["plan_id"] or f"item-{latest.label}", latest, fields["t0"],
+        plan = fields["plan_id"]
+        closer = next((other for other in self.after(latest) if closes(other, plan, labels)), None)
+        return Session(plan or f"item-{latest.label}", latest, fields["t0"],
                        fields["latest_end"] or fields["deadline"], fields["deadline"], closer)
 
     def last_session_end(self) -> Item | None:
         found = [item for item in self.ordered() if item.classes & {"closed", "refused"}]
         return found[-1] if found else None
+
+
+def closes(item: Item, plan_id: str | None, arm_labels: list[str]) -> bool:
+    """L1: only a magistrate or lead CLOSED/COMPLETE/REFUSED item that names the session closes it.
+
+    It must name the plan id (a `night-results/<plan>` ref names it too). A
+    session whose plan id is unknown is closed only by an item that names one
+    of its arm items ("item 251's re-arm REFUSED"). A generic COMPLETE heading
+    about other work never closes an armed session.
+    """
+    if item.author not in ("magistrate", "lead") or not item.classes & {"closed", "refused"}:
+        return False
+    text = item.heading + " " + " ".join((item.pointer or {}).values())
+    if plan_id:
+        return plan_id in text
+    return any(re.search(rf"\bitem {re.escape(label)}\b", text) for label in arm_labels)
 
 
 def read(text: str) -> RunState:

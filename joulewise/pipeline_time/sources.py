@@ -28,6 +28,17 @@ from joulewise.pipeline_time.detect import Proc, Snapshot
 
 LEDGER_DIR = Path("/Volumes/JW-EXT/ledger")
 PRIVATE_REF = "refs/pipeline-watch/main"
+
+
+def fetch_argv(repo) -> list[str]:
+    """Fetch origin main into the private ref only (F1).
+
+    `--refmap=` turns off git's opportunistic update of refs/remotes/origin/main, so the
+    watcher never takes that ref's lock in the shared repository; `--no-write-fetch-head`
+    leaves FETCH_HEAD alone. The only shared writes are the private ref and new objects.
+    """
+    return ["git", "-C", str(repo), "-c", "maintenance.auto=false", "-c", "gc.auto=0", "fetch", "--quiet",
+            "--no-tags", "--refmap=", "--no-write-fetch-head", "origin", f"+refs/heads/main:{PRIVATE_REF}"]
 ETIME_RE = re.compile(r"^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)$")
 
 # --- RL-128 status probe: DISABLED until its calibration gate passes ---------------------
@@ -130,12 +141,13 @@ def gather(repo: Path, config: dict, state: dict, now: float | None = None, runn
     from joulewise.pipeline_time import runstate
     text = run_state_text
     if text is None and not offline:
-        rc, _, _ = runner(["git", "-C", str(repo), "-c", "maintenance.auto=false", "-c", "gc.auto=0",
-                           "fetch", "--quiet", "--no-tags", "origin", f"+refs/heads/main:{PRIVATE_REF}"], timeout=90)
-        if rc == 0:
-            rc, out, _ = runner(["git", "-C", str(repo), "show", f"{PRIVATE_REF}:RUN_STATE.md"], timeout=60)
-            text = out if rc == 0 else None
-        (ok if text is not None else failed)("run_state")
+        fetched, _, _ = runner(fetch_argv(repo), timeout=90)
+        # F3: a failed or stalled fetch still reads the last fetched copy (stale by a few polls at
+        # most), so RUN_STATE alarms are never resolved by an empty read. The failure still counts.
+        rc, out, _ = runner(["git", "-C", str(repo), "show", f"{PRIVATE_REF}:RUN_STATE.md"], timeout=60)
+        text = out if rc == 0 and out else None
+        snap.run_state_stale = fetched != 0 and text is not None
+        (ok if fetched == 0 and text is not None else failed)("run_state")
     if text is not None:
         snap.run_state = runstate.read(text)
 

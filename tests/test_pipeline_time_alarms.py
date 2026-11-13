@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from joulewise.pipeline_time import alarms, detect, report, runstate
 from joulewise.pipeline_time.alarms import Alarm
@@ -225,6 +226,114 @@ class ReportTests(unittest.TestCase):
         self.assertIn("CI run list unavailable", markdown)
         self.assertIn("RUN_STATE unavailable", markdown)
         self.assertIn("ledger: no rows in window", summary)
+
+
+class ReviewFixTests(unittest.TestCase):
+    """PR #759 cold-review fixes F2, F3, F5 and L3."""
+
+    def poll(self, tmp, now, run_state, runner=None, offline=True):
+        path = Path(tmp) / "RUN_STATE.md"
+        if run_state is not None:
+            path.write_text(run_state)
+        args = argparse.Namespace(now=now, state_dir=str(Path(tmp) / "state"), ledger_dir=str(Path(tmp) / "ledger"),
+                                  run_state=str(path) if run_state is not None else None, offline=offline,
+                                  dry_run=False)
+        runner = runner or Recorder([(["/bin/ps"], (0, "", "")),
+                                     (["issue", "create"], (0, "https://github.com/o/r/issues/3\n", ""))])
+        config = dict(detect.DEFAULT_CONFIG, channels={}, profile={"use_sample": False})
+        with contextlib.redirect_stdout(io.StringIO()):
+            pipeline_watch.once(args, config, runner=runner)
+        return runner
+
+    def test_f2_state_is_saved_before_delivery_and_a_failed_save_skips_issues(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "ledger").mkdir()
+            order = []
+            real_save = alarms.save_state
+
+            class OrderRunner(Recorder):
+                def __call__(self, argv, timeout=60, input_text=None):
+                    if argv[:2] == ["gh", "issue"]:
+                        order.append(("issue", (Path(tmp) / "state" / "state.json").exists()))
+                    return super().__call__(argv, timeout, input_text)
+
+            self.poll(tmp, at("2026-11-13 19:40"), ARM_PENDING,
+                      runner=OrderRunner([(["issue", "create"], (0, "https://github.com/o/r/issues/3\n", ""))]))
+            self.assertTrue(order and all(saved for _, saved in order))
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "ledger").mkdir()
+            with mock.patch.object(alarms, "save_state", side_effect=OSError("disk full")):
+                runner = self.poll(tmp, at("2026-11-13 19:40"), ARM_PENDING)
+                again = self.poll(tmp, at("2026-11-13 19:42"), ARM_PENDING)
+            self.assertFalse(any(c[:2] == ["gh", "issue"] for c in runner.calls + again.calls))
+            self.assertTrue((Path(tmp) / "ledger" / "alarms.jsonl").exists())
+        self.assertIs(alarms.save_state, real_save)
+
+    def test_f3_blind_run_state_never_resolves_its_alarms(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "ledger").mkdir()
+            self.poll(tmp, at("2026-11-13 19:40"), ARM_PENDING)
+            blind = Recorder([(["/bin/ps"], (0, "", "")), (["git"], (128, "", "")), (["gh"], (1, "", ""))])
+            self.poll(tmp, at("2026-11-13 19:42"), None, runner=blind, offline=False)
+            self.assertFalse(any(c[:3] == ["gh", "issue", "close"] for c in blind.calls))
+            state = alarms.load_state(Path(tmp) / "state" / "state.json")
+            self.assertTrue(state["alarms"]["arm_missing:309"]["active"])
+            events = [json.loads(line)["event"] for line in
+                      (Path(tmp) / "ledger" / "alarms.jsonl").read_text().splitlines()]
+            self.assertNotIn("resolve", events)
+
+    def test_f3_plan_hold(self):
+        state = {}
+        alarms.plan([alarm("session_overdue:p")], state, 0.0)
+        self.assertEqual(alarms.plan([], state, 60.0, hold=("session_overdue:",)), [])
+        self.assertTrue(state["alarms"]["session_overdue:p"]["active"])
+        self.assertEqual(kinds(alarms.plan([], state, 120.0)), [("resolve", "session_overdue:p", False)])
+
+    def test_f5_crash_guard_posts_a_rate_limited_local_alarm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger_dir = Path(tmp) / "ledger"
+            ledger_dir.mkdir()
+            argv = ["--state-dir", str(Path(tmp) / "state"), "--ledger-dir", str(ledger_dir), "once"]
+            runner = Recorder()
+            with mock.patch.object(pipeline_watch, "once", side_effect=KeyError("pattern")), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(pipeline_watch.main(argv, runner=runner), 0)
+                self.assertEqual(pipeline_watch.main(argv, runner=runner), 0)
+            notes = [c for c in runner.calls if c[0] == "/usr/bin/osascript"]
+            self.assertEqual(len(notes), 1)
+            self.assertIn("PIPELINE_WATCH_CRASH", notes[0][2])
+            self.assertFalse(any(c[0] == "gh" for c in runner.calls))
+            lines = (ledger_dir / "alarms.jsonl").read_text().splitlines()
+            self.assertEqual([json.loads(line)["code"] for line in lines], ["PIPELINE_WATCH_CRASH"])
+
+    def test_l3_issue_text_carries_no_local_detail(self):
+        from joulewise.pipeline_time import sources
+        procs = sources.parse_ps("  901     1    09:00:00   9:00.00 /Users/edr/venv/bin/python3 -B "
+                                 "scripts/independent_recompute_b6.py block --session /Users/edr/secret/s1\n")
+        found = detect.run_all(detect.Snapshot(now=0.0, host="Edrs-MacBook-Air", processes=procs))
+        self.assertEqual([a.code for a in found], ["LOCAL_JOB_OVER"])
+        job = found[0]
+        job.public += "; profile ledger/profiles/20261113T090000-block-analysis-901.txt"
+        runner = Recorder([(["issue", "create"], (0, "https://github.com/o/r/issues/4\n", ""))])
+        channel = alarms.IssueChannel("o/r", runner=runner)
+        channel.raise_or_comment(job, {}, 0.0)
+        create = [c for c in runner.calls if c[:3] == ["gh", "issue", "create"]][0]
+        text = create[create.index("--title") + 1] + create[create.index("--body") + 1]
+        for secret in ("/Users/", "edr", "secret", "Edrs-MacBook-Air", "--session", "python3", "cmd:"):
+            self.assertNotIn(secret, text)
+        self.assertIn("stage `block-analysis`", text)
+        self.assertIn("budget 1.0 h", text)
+        self.assertIn("ledger/profiles/20261113T090000-block-analysis-901.txt", text)
+        self.assertIn(job.key, text)
+        ledger_alarm = Alarm("ledger:r1", "LEDGER_OVER", "alarm", "reader on Edrs-MacBook-Air running 2 h",
+                             detail="cmd: x\ncwd: /Users/edr/w", public="")
+        body = channel.body(ledger_alarm, 0.0)
+        self.assertNotIn("Edrs", body)
+        self.assertNotIn("/Users", body)
+
+    def test_l3_scrub(self):
+        self.assertEqual(alarms.scrub("at /Users/edr/x and /Volumes/JW-EXT/y on host-a by bob", ["host-a", "bob"]),
+                         "at <local path> and <local path> on <local> by <local>")
 
 
 if __name__ == "__main__":

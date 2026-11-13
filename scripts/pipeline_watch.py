@@ -15,8 +15,9 @@ by macOS notification, /Volumes/JW-EXT/ledger/alarms.jsonl and a
 `pipeline-alarm` GitHub issue (deduplicated; see `alarms.py`). It needs no
 Claude session, never opens SSH and signals no process.
 
-`--dry-run` prints the state and the alarms it would raise and changes nothing:
-no state, no channel, no profile. `queue` edits the MBP queue file that the
+`--dry-run` prints the state and the alarms it would raise. It sends nothing,
+saves no alarm state and takes no profile; it still fetches origin main into the
+private ref and creates the state directory and its lock file. `queue` edits the MBP queue file that the
 idle detector reads (jobs the lead starts on the unarmed MBP).
 """
 from __future__ import annotations
@@ -76,6 +77,47 @@ def write_heartbeat(path: Path, now: float, status: list[str], active: list[str]
         pass
 
 
+def try_save(path: Path, state: dict) -> bool:
+    try:
+        alarms.save_state(path, state)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+CRASH_REPEAT_S = 3600
+
+
+def crash_alarm(state_dir: Path, ledger_dir: Path, exc: BaseException, now: float | None = None,
+                runner=None) -> bool:
+    """F5: one local PIPELINE_WATCH_CRASH alarm per hour (notification and alarms.jsonl), never an issue."""
+    now = time.time() if now is None else now
+    runner = runner or alarms.default_runner
+    stamp = Path(state_dir) / "crash.stamp"
+    try:
+        last = float(stamp.read_text().strip())
+    except (OSError, ValueError):
+        last = None
+    name = type(exc).__name__
+    when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
+    if last is not None and now - last < CRASH_REPEAT_S:
+        print(f"{when} INFO PIPELINE_WATCH_CRASH_SUPPRESSED {name}")
+        return False
+    line = f"ALARM PIPELINE_WATCH_CRASH {name}: the poll raised; see the watcher log"
+    ok = alarms.notify(line, runner=runner)
+    wrote = alarms.append_jsonl(Path(ledger_dir) / "alarms.jsonl",
+                                {"ts": round(now, 3), "event": "raise", "key": "watch_crash",
+                                 "code": "PIPELINE_WATCH_CRASH", "severity": "alarm",
+                                 "summary": f"{name}: {str(exc)[:200]}"})
+    try:
+        Path(state_dir).mkdir(parents=True, exist_ok=True)
+        stamp.write_text(f"{now}\n")
+    except OSError:
+        pass
+    print(f"{when} NOTIFY {'ok' if ok else 'failed'} jsonl {'ok' if wrote else 'failed'} PIPELINE_WATCH_CRASH {name}")
+    return True
+
+
 def once(args, config, runner=alarms.default_runner) -> int:
     now = time.time() if args.now is None else float(args.now)
     state_path = Path(args.state_dir) / "state.json"
@@ -102,7 +144,11 @@ def once(args, config, runner=alarms.default_runner) -> int:
                     print(f"    would profile pid {alarm.profile_pid}")
             return 0
         actions = alarms.plan(found, state, now, repeat_s=config.get("repeat_s"),
-                              issue_repeat_s=config.get("issue_repeat_s", alarms.ISSUE_REPEAT_S))
+                              issue_repeat_s=config.get("issue_repeat_s", alarms.ISSUE_REPEAT_S),
+                              hold=detect.held_prefixes(snap))
+        # F2: record the plan before any channel fires. If the state cannot be saved, the next
+        # poll would re-plan the same posts, so the public issue channel is skipped this poll.
+        saved = try_save(state_path, state)
         profile_cfg = config.get("profile") or {}
         for action in actions:
             alarm = action.alarm
@@ -116,10 +162,14 @@ def once(args, config, runner=alarms.default_runner) -> int:
                 if path:
                     action.record["profile"] = path
                     alarm.detail = (alarm.detail + "\n" if alarm.detail else "") + f"profile: {path}"
-        issues = alarms.IssueChannel(config["repo"], runner=runner)
+                    # L3: the public issue names the profile by its JW-EXT-relative name only.
+                    alarm.public = (alarm.public or "") + f"; profile {ledger_dir.name}/profiles/{Path(path).name}"
+        issues = alarms.IssueChannel(config["repo"], runner=runner) if saved else None
         log = alarms.deliver(actions, now, ledger_dir / "alarms.jsonl", config.get("channels") or {},
                              issues=issues, runner=runner, host=snap.host)
-        alarms.save_state(state_path, state)
+        if not saved:
+            log.append("issue skipped: state not saved (F2)")
+        try_save(state_path, state)
         active = sorted(key for key, rec in state["alarms"].items() if rec.get("active"))
         write_heartbeat(ledger_dir / "watch-heartbeat.json", now, status, active)
         stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
@@ -177,11 +227,20 @@ def parse(argv):
     return args
 
 
-def main(argv=None) -> int:
+def main(argv=None, runner=None) -> int:
     args = parse(sys.argv[1:] if argv is None else argv)
-    config = load_config([REPO_CONFIG, Path(args.ledger_dir) / "watch-config.json", *args.config])
     if args.mode == "once":
-        return once(args, config)
+        # F5: a persistent exception (a bad config override, a hand-edited queue file) must not
+        # leave the watcher silently dead: one rate-limited local crash alarm, one log line, exit 0.
+        try:
+            config = load_config([REPO_CONFIG, Path(args.ledger_dir) / "watch-config.json", *args.config])
+            return once(args, config, runner=runner or alarms.default_runner)
+        except Exception as exc:  # noqa: BLE001 - the guard is the point
+            import traceback
+            traceback.print_exc(limit=3)
+            crash_alarm(Path(args.state_dir), Path(args.ledger_dir), exc, runner=runner)
+            return 0
+    config = load_config([REPO_CONFIG, Path(args.ledger_dir) / "watch-config.json", *args.config])
     if args.mode == "status":
         args.dry_run, args.offline, args.run_state, args.now = True, False, None, None
         return once(args, config)

@@ -33,7 +33,7 @@ DEFAULT_LOCAL_JOBS = [
      "pattern": r"independent_recompute_b\d|run_b5_analysis\.py|release_b5\.py|release_v4\.py|b6_custody|custody_kit"},
     {"name": "local-suite", "stage": "pr-ci", "budget_s": 1800,
      "pattern": r"shard_tests\.py|-m (?:unittest|pytest)\b"},
-    {"name": "rehearsal", "stage": "rehearsal", "budget_s": 7200,
+    {"name": "rehearsal", "stage": "rehearsal", "budget_s": 6000,
      "pattern": r"b6_r12_|fixture_gen|_fixture\.py|rehearsal"},
 ]
 
@@ -77,6 +77,22 @@ class Snapshot:
     mbp_queue: list = field(default_factory=list)
     source_failures: dict = field(default_factory=dict)
     self_pid: int | None = None
+    run_state_stale: bool = False
+
+
+RUN_STATE_KEYS = ("arm_missing:", "session_overdue:", "close_missing:", "item:", "mbp_idle", "session_gap:")
+
+
+def held_prefixes(snap: Snapshot) -> tuple:
+    """Key prefixes whose source is blind this poll: they are neither raised nor resolved (F3)."""
+    held = []
+    if snap.run_state is None:
+        held += list(RUN_STATE_KEYS)
+    if snap.ci_runs is None:
+        held.append("ci:")
+    if snap.processes is None:
+        held += ["job:", "ledger_orphan:"]
+    return tuple(held)
 
 
 def fmt(epoch: float | None) -> str:
@@ -273,7 +289,9 @@ def ledger_checks(snap: Snapshot, config: dict) -> list[Alarm]:
                          f"{label} on {row.get('host')} running {hours(running)}, budget {hours(float(budget))} "
                          f"(alarm at 1.5x); run {row['run_id']}",
                          detail=f"cmd: {row.get('cmd', '')[:300]}\ncwd: {row.get('cwd', '')}",
-                         profile_pid=int(child) if local and child else None, stage=row.get("stage")))
+                         profile_pid=int(child) if local and child else None, stage=row.get("stage"),
+                         public=f"ledger {row.get('kind', 'run')} for stage {row.get('stage')} running "
+                                f"{hours(running)}, budget {hours(float(budget))} (alarm at 1.5x)"))
     for row in ended:
         budget = row.get("budget_s")
         end = row.get("end_epoch_s")
@@ -302,6 +320,38 @@ def _ancestors(proc: Proc, by_pid: dict) -> list[Proc]:
     return chain
 
 
+OPTIONS_WITH_VALUE = {"-X", "-W", "-Q"}
+
+
+def job_signature(command: str) -> str:
+    """F6: the executable plus its script path (argv[0..1]), or `-m <module>`, for rule matching.
+
+    Interpreter flags (`-B`, `-u`, `-X opt`) are skipped to reach the script. A shell's `-c`
+    string, a codex prompt, or a wrapper's later arguments never match a rule, so `zsh -c`
+    loops that mention a job and seats whose prompt names one are not jobs themselves; the
+    real job process under them matches by its own argv.
+    """
+    tokens = command.split()
+    if not tokens:
+        return ""
+    head = tokens[0]
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "-m" and index + 1 < len(tokens):
+            return f"{head} -m {tokens[index + 1]}"
+        if token == "-c":
+            return f"{head} -c"
+        if token in OPTIONS_WITH_VALUE:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        return f"{head} {token}"
+    return head
+
+
 def local_job_candidates(snap: Snapshot, config: dict) -> list[tuple]:
     """(proc, rule, status) for each top-level process tree a rule matches.
 
@@ -324,8 +374,9 @@ def local_job_candidates(snap: Snapshot, config: dict) -> list[tuple]:
     watcher = {snap.self_pid} if snap.self_pid else set()
 
     def rule_for(proc):
+        signature = job_signature(proc.command)
         for rule, pattern in rules:
-            if pattern.search(proc.command):
+            if pattern.search(signature):
                 return rule
         return None
 
@@ -363,7 +414,9 @@ def local_jobs(snap: Snapshot, config: dict) -> list[Alarm]:
         out.append(Alarm(f"job:{proc.pid}:{digest}", "LOCAL_JOB_OVER", "alarm",
                          f"{rule['name']} pid {proc.pid} running {hours(proc.elapsed_s)}, budget "
                          f"{hours(budget)} (alarm at 1.5x), cpu {hours(proc.cpu_s)}",
-                         detail=f"cmd: {proc.command[:300]}", profile_pid=proc.pid, stage=rule["stage"]))
+                         detail=f"cmd: {proc.command[:300]}", profile_pid=proc.pid, stage=rule["stage"],
+                         public=f"{rule['name']} job (stage {rule['stage']}) running {hours(proc.elapsed_s)}, "
+                                f"budget {hours(budget)} (alarm at 1.5x)"))
     return out
 
 
@@ -409,6 +462,11 @@ def run_all(snap: Snapshot, config: dict | None = None) -> list[Alarm]:
     alarms = []
     for detector in DETECTORS:
         alarms.extend(detector(snap, merged))
+    for alarm in alarms:
+        # RUN_STATE-derived summaries carry only item numbers, plan ids, times and budgets, which
+        # are already public in the repository; ledger and local-job alarms set their own line.
+        if not alarm.public:
+            alarm.public = alarm.summary
     return alarms
 
 
