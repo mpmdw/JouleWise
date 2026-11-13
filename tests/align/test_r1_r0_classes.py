@@ -39,10 +39,13 @@ class R0ClassesTests(unittest.TestCase):
         self.assertEqual(sorted(classes.values()).count('heatsink'), 44)
         self.assertEqual(derive_r0.main(['check-fixture', '--fixture', str(FIXTURE), '--config', str(CONFIG)]), 0)
 
-    def test_rl89_pair_and_record_key(self):
+    def test_rl122_pair_and_record_key(self):
+        # RL-119/RL-122: s_slow is the fast rule applied a second time (TVh0, R0 die),
+        # rebinding RL-89's Th0C; Th0C stays an R0 heatsink key, no longer a gate key.
         sensors = self.config['sensors']
-        self.assertEqual((sensors['s_fast'], sensors['s_slow'], sensors['record_keys']), ('TV0h', 'Th0C', ['Tf08']))
+        self.assertEqual((sensors['s_fast'], sensors['s_slow'], sensors['record_keys']), ('TV0h', 'TVh0', ['Tf08']))
         self.assertEqual(self.config['r0_classes']['TV0h'], 'die')
+        self.assertEqual(self.config['r0_classes']['TVh0'], 'die')
         self.assertEqual(self.config['r0_classes']['Th0C'], 'heatsink')
         self.assertEqual(self.config['r0_classes']['Tf08'], 'heatsink')
         # RL-94 (2): R0's own pair, fixed beside its record digest, for W1's recorded key.
