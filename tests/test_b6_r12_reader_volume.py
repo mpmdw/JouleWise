@@ -10,6 +10,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 from b6_r12_reader_volume import specification, prepare, exercise
+from b6_r12_verify import safe_root
 
 
 class ReaderVolumeControls(unittest.TestCase):
@@ -41,7 +42,7 @@ class ReaderVolumeControls(unittest.TestCase):
 class ProductionReaderTests(unittest.TestCase):
     def test_full_compressed_reader(self):
         """Predict RL-98 reader volume: original desk compression and read_bytes return byte-identical full 6351010-sample meter and 3350-frame/53600-CPU plist; record native wall/RSS, not an R12 fixture."""
-        root = Path(os.environ["R12_READER_VOLUME_ROOT"])
+        root = safe_root(Path(os.environ["R12_READER_VOLUME_ROOT"]))
         spec = json.loads((root / "declaration.json").read_bytes())
         self.assertEqual(spec["fraction"], "1/1 registered maximum")
         value = exercise(root)
