@@ -241,10 +241,27 @@ class WindowRecord:
         return self.evidence.source(self.commit, self.record.get('sources', {}).get(name),
                                     json_value=json_value)
 
-    def final_evidence(self):
-        """``None`` when the full desk's final adjudication is bound to this record, else why not.
+    # RL-108 condition 5 (RL-53 W-7, last sentence): the ONE finality writer. Every finality reader of a
+    # window record (``final_evidence``, ``is_final``, ``eligibility``, ``pilot_view``, the k+2 ``late`` list,
+    # the B bar, ``held_window_check``) derives from it. ``desk_failed`` is a VALUE only: no release, no new
+    # refusal and no new admission exist for it (RL-53: a failed desk comes to the research lead, blind).
+    FINALITY_VALUES = ('final', 'provisional', 'desk_failed')
 
-        R17 review F4 / delta D5 and D9: the sources (the record's own, or its successor's
+    def finality(self):
+        """``{'finality': 'final'|'provisional'|'desk_failed', 'reason': None|str}``.
+
+        ``final``: the predicate below passes. ``provisional``: no final sources are bound yet (the record's
+        own or a successor's ``previous_final``), or the bound desk is still ``running_off_mbp``.
+        ``desk_failed``: final sources are bound and the predicate refuses for any other reason (sources
+        unreadable, harvest not completed, not bound to the plan, no completed adjudication, exclusions
+        missing or disagreeing). The value is chosen from the branch structure, never from the message text;
+        ``reason`` is the exact message ``final_evidence`` has always returned.
+        """
+        kind, reason = self._finality_evidence()
+        return {'finality': kind, 'reason': reason}
+
+    def _finality_evidence(self):
+        """R17 review F4 / delta D5 and D9: the sources (the record's own, or its successor's
         ``previous_final``) must pass ``light_triage.final_adjudication_error``, the predicate the
         runner's ``final`` also applies. A record with NO capture at all (supplemental ones count as
         captures here; ``counted_captures`` stays the calibration predicate) has nothing to harvest:
@@ -257,16 +274,27 @@ class WindowRecord:
             if absent and 'light_triage' in names:
                 try:
                     self.light()
-                    return None
+                    return 'final', None
                 except (ValueError, KeyError, TypeError, AttributeError) as exc:
-                    return 'light triage unreadable: ' + str(exc)
-            return 'no final sources'
+                    return 'provisional', 'light triage unreadable: ' + str(exc)
+            return 'provisional', 'no final sources'
         try:
             desk, pilot, exclusions = self.source('desk'), self.source('pilot'), self.source('exclusions')
             plan_id = self.evidence.source(self.commit, names.get('plan'))['plan_id']
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
-            return 'final sources unreadable: ' + str(exc)
-        return light_triage.final_adjudication_error(desk, pilot, exclusions, plan_id, captured=not absent)
+            return 'desk_failed', 'final sources unreadable: ' + str(exc)
+        why = light_triage.final_adjudication_error(desk, pilot, exclusions, plan_id, captured=not absent)
+        if why is None:
+            return 'final', None
+        # The predicate's own first test: a desk still running off the MBP has not finished, it has not failed.
+        if isinstance(desk, dict) and desk.get('status') == 'running_off_mbp':
+            return 'provisional', why
+        return 'desk_failed', why
+
+    def final_evidence(self):
+        """``None`` when the full desk's final adjudication is bound to this record, else why not (from
+        ``finality``, the one writer)."""
+        return self.finality()['reason']
 
     def has_final_sources(self):
         names = self.record.get('sources', {})
@@ -281,7 +309,7 @@ class WindowRecord:
 
     def is_final(self):
         """Whether the full desk's final adjudication is bound to this record (own or successor's)."""
-        return self.final_evidence() is None
+        return self.finality()['finality'] == 'final'
 
     def light(self):
         light = self.source('light_triage')
@@ -387,8 +415,9 @@ class WindowRecord:
 
     def eligibility(self, *, allow_provisional=False):
         """Final counts from the full desk; provisional ones from the light triage only when allowed (R17)."""
-        why = self.final_evidence()
-        if why is None:
+        state = self.finality()
+        why = state['reason']
+        if state['finality'] == 'final':
             status = 'final'
             exclusions = self.source('exclusions') if self.has_final_sources() else {'members_excluded': []}
         else:
@@ -755,8 +784,9 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
             require(successor.sha256 == final_ref['sha256'], 'last desk-passed final record digest mismatch')
             last_record.bind_final(successor)
             require(last_record.final_from is not None, 'final record carries no previous_final')
-        require(last_record.is_final(), 'last desk-passed record has no final adjudication: '
-                + str(last_record.final_evidence()))
+        last_state = last_record.finality()
+        require(last_state['finality'] == 'final', 'last desk-passed record has no final adjudication: '
+                + str(last_state['reason']))
         last = effective_desk(last_record.source('desk'), last_record.source('exclusions'))
         require(desk_passes(last),
                 'last desk-passed state has no passing desk')
@@ -951,8 +981,11 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 'basis': 'R17: final eligibility of ' + ', '.join(late) + ' must be recorded before the arm '
                          'of the window after next (' + '; '.join(f'{r.window}: {r.final_evidence()}'
                                                              for r in chain[:-1] if r.window in late) + ')'}
+        # RL-108 condition 5: each entry carries the one finality value and its reason (record change).
         packet['window_chain'] = [{'window': r.window, 'commit': r.commit, 'path': r.path, 'sha256': r.sha256,
-                                   'previous_sha256': (r.previous_link or {}).get('sha256')} for r in chain]
+                                   'previous_sha256': (r.previous_link or {}).get('sha256'),
+                                   **{('finality_reason' if k == 'reason' else k): v
+                                      for k, v in r.finality().items()}} for r in chain]
         counted = []
         for record in chain:
             if record.record.get('role') != 'calibration':
