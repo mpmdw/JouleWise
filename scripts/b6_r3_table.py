@@ -17,7 +17,10 @@ Label rules (each row cites the rule it used; RL-101 to RL-104):
 - block-scope rows -> "§10-§11 arithmetic computed and compared; session
   inputs as labelled at session scope" (RL-102 item 4);
 - the key's result field is checked inside the option (c) gate but is not a
-  table row -> RL-103's gate label, with the gate's own bar;
+  table row -> RL-103's gate label as amended by RL-114, with the gate's own bar;
+- every GAMMA contrast label carries RL-114's "verdict is not `undefined`"
+  clause, which is printed only if check_block's undefined-screen branch
+  (no twin call, `engine_screen_undefined` guard) is found in its source;
 - the per-phase whole-machine line -> the literal RC-B6-1 stamps on it
   (§17-R8), which must also be b6_analysis_check's single_implementation;
 - one producer, value a field of the Block 5 cell or floor estimator's output
@@ -55,14 +58,21 @@ LABEL_COMPARED = "computed and compared (decision 6 (a))"
 # RL-110: two groups are compared only conditionally; exact strings, character for character.
 LABEL_NEG8 = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, "
               "otherwise not independently recomputed")
-LABEL_CONTRAST = ("computed and compared (decision 6 (a)) when the twin returns an estimate, otherwise not "
-                  "independently recomputed")
+# RL-114 amends RL-110 and RL-103 for the GAMMA contrast rows: a session whose NEG-8 verdict is `undefined` is
+# not fed to the engine twin; check_block guards its word instead (`engine_screen_undefined`).
+LABEL_CONTRAST = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined` and the "
+                  "twin returns an estimate, otherwise not independently recomputed")
 # RL-102 item 4: the second side recomputes §10-§11 arithmetic over RC-B6-1's session values.
 LABEL_BLOCK = "§10-§11 arithmetic computed and compared; session inputs as labelled at session scope"
-# RL-103: exact gate labels; the check family goes in the Source column.
-LABEL_GATE = "computed and compared in the option (c) gate; not an S-13 table row"
-LABEL_GATE_WORD = ("computed and compared in the option (c) gate when the twin refuses or the contrast has five or "
-                   "more quads, otherwise not independently recomputed; not an S-13 table row")
+# RL-103 as amended by RL-114: exact gate labels; the check family goes in the Source column.
+LABEL_GATE = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` and "
+              "the twin returns an estimate, otherwise not independently recomputed; not an S-13 table row")
+LABEL_GATE_WORD = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` "
+                   "and either the twin refuses or the contrast has five or more quads; with an undefined verdict the "
+                   "gate requires only that the word is `not_resolvable` or `not_estimable`; otherwise not "
+                   "independently recomputed; not an S-13 table row")
+ENGINE_FAMILIES = ("engine", "engine_refusal", "engine_word")
+SCREEN_GUARD = "engine_screen_undefined"
 LABEL_SINGLE_SOURCE = "`single-source` (RL-99 item 1)"
 LABEL_ONE = "not independently recomputed"
 # RL-104: decision 6 (b) rows, hand-entered. Never comparison keys; their record files are read from
@@ -139,6 +149,38 @@ def leftmost(node):
 
 def is_name(node, name):
     return isinstance(node, ast.Name) and node.id == name
+
+
+def is_undefined_test(test):
+    """``<x>["verdict"] == "undefined"``."""
+    return (isinstance(test, ast.Compare) and len(test.ops) == 1 and isinstance(test.ops[0], ast.Eq)
+            and isinstance(test.left, ast.Subscript) and isinstance(test.left.slice, ast.Constant)
+            and test.left.slice.value == "verdict" and len(test.comparators) == 1
+            and isinstance(test.comparators[0], ast.Constant) and test.comparators[0].value == "undefined")
+
+
+def check_calls(nodes, families):
+    return [c for n in nodes for c in ast.walk(n) if isinstance(c, ast.Call) and is_name(c.func, "check")
+            and c.args and isinstance(c.args[0], ast.Constant) and c.args[0].value in families]
+
+
+def read_screen_branch(fn):
+    """RL-114's GAMMA branch: ``if verdict == "undefined"`` guards the word and the else arm holds every engine check.
+
+    Returns {"if": line, "guard": line} or None when check_block does not have that shape."""
+    every = {id(c) for c in check_calls([fn], ENGINE_FAMILIES)}
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.If) and is_undefined_test(node.test)):
+            continue
+        guards = check_calls(node.body, (SCREEN_GUARD,))
+        words = set(strings(ast.Module(body=node.body, type_ignores=[])))
+        twin = any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr == "family"
+                   and is_name(c.func.value, "engine") for n in node.orelse for c in ast.walk(n))
+        inside = {id(c) for c in check_calls(node.orelse, ENGINE_FAMILIES)}
+        if (guards and {"not_resolvable", "not_estimable"} <= words and twin and every and inside == every
+                and not check_calls(node.body, ENGINE_FAMILIES)):
+            return {"if": node.lineno, "guard": guards[0].lineno}
+    return None
 
 
 # ---------------------------------------------------------------- the option (c) side
@@ -230,7 +272,7 @@ def read_check(path):
         raise SystemExit("b6_r3_table: contrast row form not found in check_block")
     return {"session_keys": session_keys, "contrast_fields": contrast_fields, "contrast_line": line,
             "phases": phases, "gate_fields": gate_fields, "default_bar": default_bar, "block_heads": block_heads, "single": single,
-            "lines": (fn.lineno, fn.end_lineno)}
+            "screen": read_screen_branch(fn), "lines": (fn.lineno, fn.end_lineno)}
 
 
 # ---------------------------------------------------------------- RC-B6-1
@@ -304,13 +346,22 @@ def classify_session(key, pack, check, rc):
         return (primary + "; second: `check_block` (CHK:{})".format(check["session_keys"][key]),
                 LABEL_NEG8 if key.startswith("neg8/") else LABEL_COMPARED,
                 "CHK:{}".format(check["session_keys"][key]))
+    # RL-114's first clause ("verdict is not `undefined`") must be read from check_block, not assumed.
+    screen = check["screen"]
+    no_screen = (UNSTATED, UNSTATED, "RL-114 undefined-screen branch (skip and `{}` guard) not found in "
+                 "check_block".format(SCREEN_GUARD))
     if key.startswith("contrast/") and field in check["contrast_fields"]:
+        if screen is None:
+            return no_screen
         return (primary + "; second: engine twin via `check_block` (CHK:{})".format(check["contrast_line"]),
-                LABEL_CONTRAST, "CHK:{}".format(check["contrast_line"]))
+                LABEL_CONTRAST, "CHK:{}; skipped when verdict undefined (CHK:{})".format(
+                    check["contrast_line"], screen["if"]))
     # 2. checked inside the gate on the result field the printed key reads
     if key.startswith("contrast/"):
         source = rc["printed"].get(field)
         if source in check["gate_fields"]:
+            if screen is None:
+                return no_screen
             fams, lines, bars = check["gate_fields"][source]
             line = ",".join(str(x) for x in lines)
             word = "engine_word" in fams
@@ -322,10 +373,12 @@ def classify_session(key, pack, check, rc):
                 return UNSTATED, UNSTATED, "gate bars differ for `{}`".format(source)
             gate_bar = ("gate: exact (word)" if word else
                         "gate: {:g} absolute, unrounded (CHK `check` bar)".format(bars[0]))
+            guard = ("; undefined verdict: `{}` CHK:{}".format(SCREEN_GUARD, screen["guard"]) if word else
+                     "; skipped when verdict undefined (CHK:{})".format(screen["if"]))
             return (primary + "; second: engine twin via `check_block` (CHK:{})".format(line),
                     LABEL_GATE_WORD if word else LABEL_GATE,
-                    "CHK:{}, check family {} (result field `{}`)".format(
-                        line, ", ".join("`" + f + "`" for f in fams), source), gate_bar)
+                    "CHK:{}, check family {} (result field `{}`){}".format(
+                        line, ", ".join("`" + f + "`" for f in fams), source, guard), gate_bar)
     # 3. the per-phase whole-machine line (R8)
     if key.startswith("lines/whole_machine/"):
         if not (rc["r8"] and any("per-phase whole-machine" in s for s in check["single"])):

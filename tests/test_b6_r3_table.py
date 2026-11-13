@@ -62,14 +62,18 @@ class R3TableTests(unittest.TestCase):
     RULED_ONE = "not independently recomputed"
     RULED_SINGLE = "`single-source` (RL-99 item 1)"
     RULED_BLOCK = "§10-§11 arithmetic computed and compared; session inputs as labelled at session scope"
-    RULED_GATE = "computed and compared in the option (c) gate; not an S-13 table row"
-    RULED_GATE_WORD = ("computed and compared in the option (c) gate when the twin refuses or the contrast has five or "
-                       "more quads, otherwise not independently recomputed; not an S-13 table row")
-    # RL-110, character for character.
+    # RL-114 (amends RL-103 and RL-110), character for character.
+    RULED_GATE = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` and "
+                  "the twin returns an estimate, otherwise not independently recomputed; not an S-13 table row")
+    RULED_GATE_WORD = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not "
+                       "`undefined` and either the twin refuses or the contrast has five or more quads; with an "
+                       "undefined verdict the gate requires only that the word is `not_resolvable` or "
+                       "`not_estimable`; otherwise not independently recomputed; not an S-13 table row")
+    RULED_CONTRAST = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined` and "
+                      "the twin returns an estimate, otherwise not independently recomputed")
+    # RL-110, character for character (unchanged by RL-114).
     RULED_NEG8 = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, "
                   "otherwise not independently recomputed")
-    RULED_CONTRAST = ("computed and compared (decision 6 (a)) when the twin returns an estimate, otherwise not "
-                      "independently recomputed")
     RULED_COPIED = '"copied from the harvest or acceptance record, bound by digest, not recomputed" (decision 6 (b))'
 
     def labels(self):
@@ -94,9 +98,17 @@ class R3TableTests(unittest.TestCase):
             self.assertEqual(rows[name], self.RULED_SINGLE, name)
         # RL-102 item 4, RL-103.
         self.assertEqual(rows["`summary/ALPHA/reported/<model>/<phase>/mean_j`"], self.RULED_BLOCK)
-        self.assertEqual(rows["`contrast/<phase>/s_d_j`"], self.RULED_GATE)
+        # RL-114: the three gate numbers, the gate word, and (below) the five S-13 contrast fields.
+        for field in ("s_d_j", "decision_lower_j", "decision_upper_j"):
+            self.assertEqual(rows["`contrast/<phase>/" + field + "`"], self.RULED_GATE, field)
         self.assertEqual(rows["`contrast/<phase>/outcome`"], self.RULED_GATE_WORD)
-        # RL-110: every neg8/* key and the five S-13 contrast fields carry the conditional labels.
+        self.assertEqual(sorted(k for k, v in rows.items() if v == self.RULED_GATE),
+                         ["`contrast/<phase>/decision_lower_j`", "`contrast/<phase>/decision_upper_j`",
+                          "`contrast/<phase>/s_d_j`"])
+        self.assertEqual([k for k, v in rows.items() if v == self.RULED_GATE_WORD], ["`contrast/<phase>/outcome`"])
+        self.assertEqual(sorted(k for k, v in rows.items() if v == self.RULED_CONTRAST),
+                         sorted("`contrast/<phase>/" + f + "`" for f in ("n", "dbar_j", "D_j", "p", "holm_p")))
+        # RL-110: every neg8/* key; RL-114: the five S-13 contrast fields.
         for name in ("`neg8/verdict`", "`neg8/bound_j`", "`neg8/allowance_j`"):
             self.assertEqual(rows[name], self.RULED_NEG8, name)
         for field in ("n", "dbar_j", "D_j", "p", "holm_p"):
@@ -111,8 +123,8 @@ class R3TableTests(unittest.TestCase):
             '- "single implementation; not independently recomputed" (§17-R8): 24',
             "- `single-source` (RL-99 item 1): 100",
             "- computed and compared (decision 6 (a)): 3",
-            "- " + self.RULED_NEG8 + ": 9",
             "- " + self.RULED_CONTRAST + ": 10",
+            "- " + self.RULED_NEG8 + ": 9",
             "- " + self.RULED_GATE_WORD + ": 2",
             "- " + self.RULED_GATE + ": 6",
             "- not independently recomputed: 183",
@@ -140,6 +152,27 @@ class R3TableTests(unittest.TestCase):
         for old in (word, refusal):
             result = self._classify(self._mutated(old, "pass"), key)
             self.assertEqual(result[:2], (b6_r3_table.UNSTATED, b6_r3_table.UNSTATED), old)
+
+    def test_rl114_clause_needs_the_undefined_screen_branch_in_check_block(self):
+        """RL-114: the 'verdict is not `undefined`' clause is printed only while check_block skips the twin and guards
+        the word for such a session. Without that branch the clause-bearing rows are UNSTATED; one-producer rows are not."""
+        check = b6_r3_table.read_check(REPO / b6_r3_table.DEFAULTS["check"])
+        self.assertIsNotNone(check["screen"])
+        guard = 'check("engine_screen_undefined", cid, guarded, True, 0)'
+        branch = 'if s.neg8["verdict"] == "undefined":\n                # RL-114'
+        for old, new in ((guard, "pass"), (branch, 'if False:\n                # RL-114'),
+                         ('"not_resolvable", "not_estimable"', '"not_estimable",')):
+            mutated = self._mutated(old, new)
+            self.assertIsNone(mutated["screen"], old)
+            for key in ("contrast/decode/n", "contrast/decode/D_j", "contrast/decode/s_d_j",
+                        "contrast/decode/decision_lower_j", "contrast/decode/outcome"):
+                result = self._classify(mutated, key)
+                self.assertEqual(result[:2], (b6_r3_table.UNSTATED, b6_r3_table.UNSTATED), (old, key))
+                self.assertIn("engine_screen_undefined", result[2])
+            self.assertEqual(self._classify(mutated, "contrast/decode/t")[1], self.RULED_ONE, old)
+        # The guard's line is named in the outcome row's Source column.
+        result = self._classify(check, "contrast/decode/outcome")
+        self.assertIn("`engine_screen_undefined` CHK:{}".format(check["screen"]["guard"]), result[2])
 
     def test_bar_passed_by_keyword_is_honoured_or_refused(self):
         old = 'check("engine", cid + "/" + key, original[key], expected)'
