@@ -7817,6 +7817,189 @@ directory was not listed. Code, rulings, synthetic fixtures and synthetic contro
 
 Replacement text for the request: /Volumes/JW-EXT/scratch/fable-rev-s14-pin-request.md, section "Replacement text for the request".
 
+# RL-131. The TVh0 staircase: the slot night runs, its slots stand as registered by default, and the desk prints TV0h's own slope beside every gate. No stand-down. The pair and the alias rule are not changed; the deviation row is
+
+Research lead (Fable 5.2), 2026-11-13 06:58 PST (from `date`). Urgent ruling on the finding in RUN_STATE 308
+(`origin/main` @ `f021e5256`), raised by magistrate 48ce8f17, who armed on the checklist and reported.
+
+**Read.** RUN_STATE 308 and `docs/process_traces/2026-11-13-w1-slot-night/MAGISTRATE-ARM-48ce8f17.md` on
+`origin/main`; RL-116 to RL-120, RL-122 and its amendment, RL-124, RL-128 on `origin/audit/2026-11-10-fable`;
+`brief.md`, `opus-memo.md`, `sol-memo.md` in `/Volumes/JW-EXT/scratch/w1-die-gate-round/`;
+`/Volumes/JW-EXT/scratch/r1fu-desk/REPORT.md` and `out/desk_replay.json`.
+
+**Checked myself at `a6a09e6d7`.**
+- `thermal_gates.py:282-293` (`slow_slope`: OLS over the preceding 60 s of one key) and `:515-652` (`_wait`).
+  Each sample must meet both one-sided bands; G0 alone adds `abs(slow_slope(..., s_slow)) <= .2` and the status
+  clauses (`:574-584`). The episode reference is the two release values (`:634-637`).
+- `configs/align/v4/r1_runtime.json`: `s_fast` TV0h, `s_slow` TVh0.
+- `r1_runtime.py:480-518`: the alias rule is "identical in every row"; `sensor_admissibility` tests aliases,
+  `clamped`, `resolving`, noise, `t_band_s` and `tau_s`. None of these sees a state-dependent floor.
+- `out/desk_replay.json`: on 11-12 TVh0 − TV0h is 0 in 300/300 quiet and 438/438 load rows and never positive.
+  Print 2 (slope on TV0h) released at slopes of −0.155 to −0.180 °C/min.
+
+**Not checked.** The Part A journal is on the MBP, which is armed; I have the magistrate's quoted values only.
+The floor is observed on two step-D journals and on no gated member. Section 1 is derived from the code plus
+the floor as reported. The night's journals are its first test.
+
+**Not done.** No SSH, no probe, no stand-down request, no commit, push or mail.
+
+---
+
+## 1. What the staircase changes
+
+**The gate that is actually running.** With TVh0 = TV0h below 35 °C and under load, and TVh0 = 5 × ⌊TV0h / 5⌋
+while the die cools above 35 °C:
+
+- **TVh0's band is redundant in G0, G1 and H.** Whenever TV0h meets its own band, TVh0 meets its band too. The
+  second key adds no temperature constraint anywhere. This settles the Opus-versus-Sol point of RL-122 in
+  Opus's favour, for a reason neither seat had.
+- **G0's slope clause carries no settling information above 35 °C.** It reads 0 once TVh0 has sat on the 35 °C
+  step for 60 s, so it acts as a timer: "TV0h has been under 40 °C for about a minute". Below 35 °C it reads
+  TV0h's real slope, diluted by whatever part of the 60 s window is still on the step.
+- **So G0 is band-decided.** It releases about 70 s after the die falls under 40 °C, or 10 samples after TV0h
+  enters R + 1.0 °C, whichever is later. Part A fits: 113.18 s, TV0h at R + 0.669 °C and falling at
+  0.53 °C/min. The 11-12 replay with the slope on TV0h released step-D at 212 s and −0.18 °C/min.
+
+**Consequences, one by one.**
+
+| Question | Answer |
+|---|---|
+| Duty bar | Unchanged in meaning. The night measures the gate W1 will run, on the same bytes. The floor is a property of the sensor, so W1 will see it too. G0 is shorter than the replay, which RL-122 expected ("probably shorter") |
+| G0 timing and start state | G0 releases on a die still cooling, up to R + 1.0 °C. Start states are set by the band and the schedule, not by a settled slope. They are less settled than print 2 showed (34.54 to 35.08 °C at slopes under 0.2) |
+| G1 and H | The episode reference on TV0h can sit up to about 0.9 °C higher than a settled release would give, so turn admission is bounded at R + 2.0 °C instead of about R + 1.2 °C. G1 is, if anything, shorter. TVh0 never binds |
+| The pair | Plainly one sensor. TVh0 is TV0h passed through a floor. RL-122 already said one thermometer; the mechanism is new, the conclusion is not |
+| TVh0's registered figures | Return time 69.6 s and τ 17.4 s are produced by the floor. They are not settling times. Its rise and noise are TV0h's |
+| Bias in the treatment comparison | No new channel. The gate reads temperatures and status only, is the same code for every condition, and every arm of every contrast passes the same G0. What early release adds is start-state spread tied to what ran before a member, which the fixed schedule and the Tf08 disclosure of RL-122 item 5 already address. One quantity is added to that disclosure (section 3) |
+| U2 | Reads TVh0 at G0 release, which is now 35.000 or just under. It passes trivially and says nothing. It needs TV0h beside it (section 3) |
+| Planning turns and precools (R1 harness only) | The heater regulates TVh0 and the precool waits on TVh0. With R at or above 34.0 °C a precool reports `released` as soon as TV0h is under 40 °C. RL-124 item 5(a) loses its meaning on this key (section 2, item 4) |
+
+**What is lost against RL-122 as written.** One sentence of it is wrong in substance: "G0's slope clause is
+read on TVh0" is true in the code and empty in effect. The registered clause "slow slope within ±0.2 °C/min"
+is met in letter by a rounding step. That must be said in the registration, and the gate must be described as
+what it is: a die band plus throttle status, with no settling claim.
+
+**What is not lost.** RL-119 and RL-122 chose a light gate that guards the die and the throttle state, with the
+schedule controlling the heatsink and Tf08 recording it. That design never relied on the slope of a die channel
+to settle a slow mass. The staircase removes a clause that had little work left to do.
+
+## 2. Decision: (b). The night runs; no stand-down; the slots stand as registered unless a named trigger fires
+
+1. **No stand-down, and no action on the MBP.** Nothing is sent: no SSH, no watchdog, no `standdown.request`.
+   RL-128 item 8 stands (no probe on this night). Reasons:
+   - The night is useful under every outcome I can reach. If the pair stands, it is the slot night. If I later
+     move the slope to TV0h, its G1 and H records are still native for that gate (TVh0 never binds in them), its
+     G0s replay on the validated harness because TV0h is journaled every second, and it gives the first TVh0
+     journals on gated members, turns 2 and 3, the A-B-A and the thermometry confirmation.
+   - Any fix needs a config commit, a kit and table change, a cold review and a fresh Part A. None of that uses
+     the MBP before it is ready, so standing down buys no MBP time I could spend.
+   - Waiting costs nothing that a stand-down would save. A stand-down costs an intervention in an armed span.
+
+2. **The slots are produced as registered.** RL-119 step 4 disposition 2 is unchanged: three admitted turns,
+   gates plus holds ≤ 0.40 × T_dead, no X7, no G1 or H timeout. RL-122 items 3 and 6 are unchanged.
+
+3. **The desk prints a labelled alternative beside the registered result** (lead; journals only; before the
+   slots PR). For every G0, G1 and H of every sidecar member:
+   - the registered duration and outcome, and which clause cleared last;
+   - at the exit sample: TV0h, TVh0, Tf08, TV0h − R_fast, and TV0h's own 60 s slope (the module's `slow_slope`
+     on TV0h);
+   - whether TVh0 was on a step at release (TVh0 ≠ TV0h);
+   - for each G0, labelled `alternative, not registered`: the release time and the TV0h and Tf08 values when
+     `_wait` is replayed with the slope read on TV0h (the 11-12 harness, validated 16 of 16);
+   - U2 computed on TV0h at G0 release, beside the registered U2;
+   - a floor census over all sidecar rows: counts of TVh0 = TV0h, TVh0 = 5 × ⌊TV0h / 5⌋, and neither; the
+     largest TVh0 − TV0h; and the conditions under which the floor is on (temperature, load, fan, power state).
+
+4. **Planning turns, this night only.** Under RL-124 item 5(a) the desk also prints TV0h at the precool's last
+   sample. A planning G0 timeout is `planning-release-3a` only if that TV0h is ≤ R_fast + 1.0 °C as well as the
+   precool reporting `released`. Otherwise it comes to me. I expect the planning block to be uninformative on
+   this key and U5 to print `inconclusive`; that is admitted (RL-20) and does not block W1.
+
+5. **Triggers, fixed now, blind. If none fires and disposition 2 passes, the slots are entered and W1 goes to
+   signing without returning to me.** Each trigger comes to me before any slots PR:
+   - **T1, the floor is not what was reported.** Any sidecar row with TVh0 above TV0h; or rows that are neither
+     equal nor floored beyond what read skew explains (the two keys are read in sequence; 11-12's largest gap,
+     5.47 °C, is such a row); or a floored value at rest below 35 °C.
+   - **T2, the staircase held a gate.** Any G0, G1 or H in which TVh0's band or slope clause was the failing
+     clause on a sample where TV0h's band and the status clauses were met, and that gate timed out or the
+     member failed the duty bar. That is a sensor defect, not gate infeasibility, and the registered ladder is
+     not the remedy.
+   - **T3, die start states are not comparable.** U2 on TV0h (the registered 3 °C bar, applied to the real die
+     value) fails across the night's non-planning released G0s.
+   - **T4, admissibility.** Any failed clause of the night's `sensor_admissibility` on the pair. Already ruled
+     (RL-119 disposition 1); restated because the floor makes TVh0's return time depend on where the baseline
+     sits relative to 34.0 °C.
+
+6. **The remedy held in reserve, not built now.** If a trigger fires, the candidate is a role swap in the same
+   pair (`s_slow` TV0h, `s_fast` TVh0): config only, slope and heater and precool on the real die value, TVh0's
+   band redundant. It is a pre-signing protocol amendment, because it assigns roles by hand against the
+   registered tie-break, and I rule on what it needs (Part A; a native night or the replay) only if it is
+   wanted. `thermal_gates.py` is not edited in any branch.
+
+## 3. Before W1 is signed
+
+1. **Slope key: no change by default.** The pair, the roles and the gate module stay as armed. A change is made
+   only through item 2.6.
+
+2. **Alias rule: not changed, and TVh0 is not ruled an alias.** The registered rule is mechanical ("identical
+   in every row") and does not fire. I adopted the pair in RL-122 knowing it was one thermometer. Re-reading
+   the rule by hand now would unseat the pick, and no other die key supports a per-turn gate inside T_dead
+   (print 3: none returns to within 1.0 °C in 600 s). The honest course is to keep the rule's output and say
+   what it selected.
+
+3. **Deviation row WP14(a)-R1-SLOW: two sentences replaced, one added.** Same PR as the slots, after the desk's
+   floor census confirms the wording on gated members.
+   - Replace "TV0h and TVh0 are two die-class channels, not two independent thermometers: … so the registered
+     alias rule does not join them." with:
+     > TV0h and TVh0 are one sensor. TVh0 equals TV0h at rest below 35 °C and under load; while the die cools
+     > above 35 °C it reads TV0h rounded down to a multiple of 5 °C. The registered alias rule joins only keys
+     > identical in every row, so it does not join them. TVh0's registered return time and τ are produced by
+     > that rounding and are not settling times.
+   - Replace "Both one-sided bands apply, each against its own reference, and G0's slope clause is read on
+     TVh0." with:
+     > Both one-sided bands apply; TVh0's is met whenever TV0h's is, so the second key adds no temperature
+     > constraint. G0's slope clause is read on TVh0 and is met by the rounding wherever the die is above
+     > 35 °C: it requires only that the die has been under 40 °C for about a minute. G0 is therefore decided
+     > by TV0h's band and the throttle status, and can release while the die is still cooling (0.53 °C/min at
+     > the 2026-11-13 smoke). The gate makes no settling claim.
+   - Add, after the Tf08 sentence:
+     > TV0h's own 60 s slope and its excess over R at each G0 release are derived from the journals and
+     > compared between conditions within each window, and U2 is also printed on TV0h, as disclosures.
+   - "U2's G0 slow-temperature range … read on TVh0" stays and is now literal: it reads a rounded value.
+
+4. **RL-122 item 5 is extended by those two quantities, fixed now.** TV0h's 60 s slope and TV0h − R_fast at the
+   G0 exit sample; medians by condition and their differences, within each window; U2 on TV0h with no bar. Desk
+   script side, none of the ten condition-13 paths, same owner and gate as item 5 (before the first W1 thermal
+   desk). Nothing is added after W1's first member runs.
+
+5. **Paper methods.** G0 is described as a die-temperature band with a throttle-state check. No sentence says
+   the start state was settled or slope-controlled. The second key is described as a rounded copy of the first.
+
+6. **RL-122 is corrected, not withdrawn.** Its verdict, config value and checklist stand. Its statements that
+   the slope clause "sits on the channel that settles first" and that TVh0's G1 band can be tighter by d(0) are
+   superseded by section 1.
+
+---
+
+**For Ed, plainly:** "The magistrate found that the second temperature reading we gate on is the first one
+rounded down to the nearest five degrees while the chip cools. We already knew it was the same thermometer;
+what is new is that one of the gate's two tests, 'has the temperature stopped falling', is always passed
+because a rounded number does not move. So the gate is simpler than its description: it waits until the chip
+is within one degree of its resting temperature and not throttled, and nothing more. That is still the gate we
+chose on purpose two days ago, the same for every condition, so it does not tilt any comparison. I am letting
+the session run. It measures the gate exactly as W1 would use it, and it is the only way to see the second and
+third turns. Stopping it would mean touching a machine that is mid-measurement and would save no time, because
+any fix needs a day of preparation that does not use that machine. At the desk afterwards we print every gate
+both ways, as it ran and as it would have run with the real slope, and I have written down in advance the four
+findings that would make me change the design. The registration will say plainly what the gate does."
+
+**Owner.** Lead: the desk table of item 2.3, the 5(a) print of item 2.4, the row edit of item 3.3, the desk
+derivation of item 3.4. Magistrate: the night, unchanged; nothing new is asked of it. Research lead: any
+trigger T1 to T4, and item 2.6 if wanted.
+**Gate.** The night: not gated, not stood down. The slots PR: waits for the desk table and for no trigger. W1
+signing: as RL-122, plus the row edit of item 3.3. The first W1 thermal desk: item 3.4.
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures, gate timings, classifier fields and code
+only. The triggers and the disclosure definition are fixed before the night's journals exist.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
