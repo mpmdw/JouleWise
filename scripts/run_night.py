@@ -51,6 +51,7 @@ from joulewise import arm_readiness as readiness
 from joulewise import arm_readiness_evidence_t0 as t0_author
 from joulewise import battery_float, night_gate, t0_rehearsal, quiet_admission, network_time_off
 from joulewise import timing_receipts
+from joulewise import exit_contract, window_journal  # RL-108 side branch, NOT FOR MERGE
 from joulewise.measurement_liveness import (  # noqa: E402
     observe_identity, pending_launch_closed, _start_token,
 )
@@ -499,6 +500,9 @@ def _record_chain_exit(
     _write_json(night_dir / "chain.exited", record)
     if (night_dir / "launch.pending").exists():
         _fsync_path(night_dir)
+    # RL-108 condition 4: chain.exited is written only once the group is proven gone (or never launched).
+    window_journal.append(night_dir, "ChainExited", writer="run_night",
+                          facts={"exit_code": exit_code, "launch_failed": launch_failed, "reaped_by": reaped_by})
 
 
 def _signal_group(pgid: int, number: int) -> None:
@@ -2274,6 +2278,43 @@ def _r1_refusal_summary(raw):
     return {"chain_refused_phase": phase, "chain_refusal_codes": sorted(tokens & _CHAIN_REFUSAL_CODES)}
 
 
+# RL-108 condition 2 (NOT FOR MERGE): which declared exit contract a night's chain answers to.
+# An R1 chain is the R1 driver (scripts/align_r1_rehearsal.py); a HAZARD_PACK chain is joulewise/b5/chain.py.
+# Any other chain declares nothing, so only 0 is success: today's rule, unchanged.
+UNDECLARED_CHAIN_CONTRACT = exit_contract.Contract((
+    exit_contract.ExitCode(0, "complete", exit_contract.ExitClass.SUCCESS,
+                           note="A chain without a declared contract: only 0 succeeds (the pre-RL-108 rule)."),))
+
+
+def _is_r1_night(plan, night_dir):
+    return (str(plan.plan_id).startswith("align-r1-")
+            or "align_r1_rehearsal" in str(getattr(plan, "chain_path", ""))
+            or (night_dir / "align-r1" / "r1_result.json").exists())
+
+
+def _chain_exit_contract_name(plan, is_r1):
+    if is_r1:
+        return "r1_driver"
+    if getattr(plan, "receipt_class", None) == night_gate.HAZARD_PACK:
+        return "b5_chain"
+    return "undeclared"
+
+
+def _classify_chain_exit(plan, is_r1, chain_exit_code):
+    name = _chain_exit_contract_name(plan, is_r1)
+    contract = UNDECLARED_CHAIN_CONTRACT if name == "undeclared" else exit_contract.CONTRACTS[name]
+    return name, exit_contract.classify(contract, chain_exit_code)
+
+
+def _chain_exit_fact(plan, night_dir, chain_exit_code):
+    """The journal's structural record of the contract class (never written into result.json)."""
+    if chain_exit_code is None:
+        return None
+    name, classified = _classify_chain_exit(plan, _is_r1_night(plan, night_dir), chain_exit_code)
+    return {"contract": name, "word": classified.word, "class": classified.exit_class.value,
+            "declared": classified.declared}
+
+
 def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=None):
     """Reporting only: keep the registered arm verdict and exit policy intact.
 
@@ -2283,9 +2324,7 @@ def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=Non
     reasons = []
     started = (night_dir / "chain.started").exists()
     payload = night_dir / "align-r1" / "r1_result.json"
-    is_r1 = (str(plan.plan_id).startswith("align-r1-")
-             or "align_r1_rehearsal" in str(getattr(plan, "chain_path", ""))
-             or payload.exists())
+    is_r1 = _is_r1_night(plan, night_dir)
     status = None
     refusal = {"chain_refused_phase": None, "chain_refusal_codes": []}
     if is_r1 and started:
@@ -2305,8 +2344,11 @@ def _chain_outcome(plan, night_dir, verdict, chain_exit_code, aborted_reason=Non
             status = "unreadable"
         if status != "complete":
             reasons.append("r1_status:" + status)
-    if chain_exit_code not in (0, None):
-        reasons.append(f"chain_exit_nonzero:{chain_exit_code}")
+    if chain_exit_code is not None:
+        # RL-108 condition 2: the exit is mapped through the chain's declared contract. Every
+        # declared code that is not SUCCESS, and every undeclared code, keeps today's reason.
+        if not _classify_chain_exit(plan, is_r1, chain_exit_code)[1].is_success:
+            reasons.append(f"chain_exit_nonzero:{chain_exit_code}")
     if verdict == "REFUSED" and not started:
         outcome = "REFUSED_PRE_CHAIN"
         reasons.append("refusal:" + str(aborted_reason or "unknown"))
@@ -2380,6 +2422,11 @@ def _write_result(
         document["fault_reasons"] = list(dict.fromkeys([*document["fault_reasons"], "host_restoration_incomplete"]))
         document["fault"] = True
     _write_json(night_dir / "result.json", document)
+    # RL-108 condition 4: refused by the journal itself while the chain may still be running.
+    window_journal.append(night_dir, "ResultWritten", writer="run_night", facts={
+        "verdict": verdict, "chain_outcome": document.get("chain_outcome"),
+        "chain_exit_code": chain_exit_code if isinstance(chain_exit_code, int) else None,
+        "chain_exit": _chain_exit_fact(plan, night_dir, chain_exit_code)})
     _resume_terminal_signals(_SIGNAL_CLOSING)
     return document
 
@@ -2633,9 +2680,12 @@ def _finish_reporting(
         }
         _write_courier_outcome(night_dir, outcome)
         _durable_record(custody_root, night_dir, plan)
+        window_journal.append(night_dir, "DeadmanTail", writer="run_night", facts={"sent": False})
         return EXIT_COURIER_FAILED
     issued = len(report["diagnostics"])  # everything before this reached the prompt
     optional("courier outcome", lambda: _write_courier_outcome(night_dir, outcome))
+    window_journal.append(night_dir, "Delivered" if outcome["sent"] else "DeadmanTail", writer="run_night",
+                          facts={"sent": bool(outcome["sent"])})
     error = optional("durable record after courier", lambda: _durable_record(custody_root, night_dir, plan))
     if error:
         report["diagnostics"].append(error)
@@ -4427,32 +4477,22 @@ def _restore_owed_on_exit(plan_path: Path, custody_root: str | Path | None, prob
     A marker another session owns is left alone (a late launchd fire of a
     released plan must not undo a retried night's High Power), and nothing
     is restored while a measuring night holds the host night lock. Never
-    raises; the outcome goes to the custody log when there is one."""
-    from joulewise.align.apple import powermode
-    if _HOST_STATE_CLOSE is not None:
-        record = _HOST_STATE_CLOSE()
-        if custody_root is not None:
-            try:
-                _append_log(Path(custody_root), f"ac powermode exit restore ({reason}): "
-                            + json.dumps(record, sort_keys=True))
-            except Exception:  # noqa: BLE001
-                pass
-        return record
+    raises; the outcome goes to the custody log when there is one.
 
-    def runner(argv):
-        return probes.run(tuple(argv))
-
-    try:
-        markers = [powermode.host_marker_path()]
-    except Exception as error:  # noqa: BLE001 - never raises (R7-10 refusal of an override)
-        record = {"reason": reason, "action": "error", "error": f"{type(error).__name__}: {error}"}
-    else:
-        record = powermode.restore_owed(markers, runner=runner, reason=reason, lock=lock,
-                                        owner={"custody_root": custody_root, "plan_path": plan_path})
-    if record.get("action") not in (None, "none") and custody_root is not None:
+    RL-108 condition 3 (NOT FOR MERGE): every terminal path restores through the one ``restore_owed``,
+    via the night's idempotent close. Inside ``run_night`` that close is always installed (the only
+    exception, ``--dry-arm``, never reaches an exit restore), so the former second restorer here
+    (``powermode.restore_owed`` on the host marker alone) could not run in production and is removed.
+    Outside ``run_night`` the same close runs on a stage built from these arguments."""
+    close = _HOST_STATE_CLOSE
+    if close is None:
+        ad_hoc: dict[str, Any] = {"probes": probes, "lock": lock}
+        close = lambda: _close_night_host(ad_hoc, plan_path)  # noqa: E731
+    record = close()
+    if custody_root is not None:
         try:
             _append_log(Path(custody_root), f"ac powermode exit restore ({reason}): "
-                        + json.dumps(record, sort_keys=True, default=str))
+                        + json.dumps(record, sort_keys=True))
         except Exception:  # noqa: BLE001
             pass
     return record
@@ -4540,9 +4580,14 @@ def _night_turned_network_time_off(plan: NightPlan) -> bool:
         return False
 
 
-def _close_ac_powermode(plan: NightPlan, probes: Probes, admission: Mapping[str, Any],
-                        lock: Any = None) -> dict[str, Any]:
+def restore_owed(plan: NightPlan, probes: Probes, admission: Mapping[str, Any],
+                 lock: Any = None) -> dict[str, Any]:
     """Restore Automatic and any network-time obligation under the host lock.
+
+    RL-108 condition 3 (NOT FOR MERGE): the night driver's ONE restorer (formerly
+    ``_close_ac_powermode``). Every terminal path reaches it: the night close
+    (``_close_night_host``, idempotent per night), the pre-admission exits
+    (``_restore_owed_on_exit``) and the dead-man (``_deadman_host_restore``).
 
     All plans close here, including mode-0 R1 chains that entered High Power
     internally. Never restore while chain termination is unproven, a child
@@ -4626,7 +4671,7 @@ def _close_night_host(stage: dict[str, Any], plan_path: Path) -> dict[str, Any]:
         _SIGNAL_CLOSING()
     plan = stage.get("plan") or _fallback_plan(plan_path)
     try:
-        record = _close_ac_powermode(plan, stage.get("probes") or make_probes(),
+        record = restore_owed(plan, stage.get("probes") or make_probes(),
                                      {"plan_path": plan_path,
                                       "skip_network_time_restore": stage.get("skip_network_time_restore", False)},
                                      stage.get("lock"))
@@ -4891,6 +4936,7 @@ def _run_night(
         return EXIT_REFUSED
 
     _append_census(night_dir / "censuses.jsonl", initial_probe, initial_refusal)
+    window_journal.append(night_dir, "DriverStarted", writer="run_night")  # RL-108 condition 4
     started_epoch_s = time.time()
     started_monotonic_ns = time.monotonic_ns()
     _append_log(custody_root, "night driver started")
@@ -5215,6 +5261,9 @@ def _run_night(
     # Pack launchers burn/replay the capability and recheck in the pinned
     # interpreter before asking _run_chain_once to make this same O_EXCL claim.
     claim_descriptor = None if is_pack else _claim_chain_start(night_dir)
+    if claim_descriptor is not None:
+        # RL-108 condition 4: the empty claim, before the chain (and so any member) exists.
+        window_journal.append(night_dir, "ChainOpen", writer="run_night")
     if claim_descriptor is None and not is_pack:
         _write_standard_refusal_result(
             custody_root,
@@ -5459,7 +5508,7 @@ def _deadman_host_restore(stage: dict[str, Any], plan_path: Path) -> dict[str, A
         # re-fence this abandoned span. The close writes only the custody log.
         safe = (not (night / "launch.pending").exists()
                 and (not (night / "chain.started").exists() or (night / "chain.exited").exists()))
-        record = (_close_ac_powermode(plan, make_probes(), {
+        record = (restore_owed(plan, make_probes(), {
             "plan_path": plan_path, "skip_network_time_restore": True}) if safe else
             {"ok": False, "deferred": "abandoned launch has an unproven chain"})
         stage["restoration"] = record
@@ -5480,7 +5529,7 @@ def _deadman_host_restore(stage: dict[str, Any], plan_path: Path) -> dict[str, A
         pass
     if stage.get("safe_to_restore"):
         try:
-            record = _close_ac_powermode(plan, make_probes(), {
+            record = restore_owed(plan, make_probes(), {
                 "plan_path": plan_path, "deadman_no_night_installed": stage.get("no_night_installed", False)})
         except BaseException as error:  # noqa: BLE001 - preserve the dead-man's terminal outcome
             record = {"ok": False, "error": f"{type(error).__name__}: {error}",

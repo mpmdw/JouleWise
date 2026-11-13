@@ -62,6 +62,8 @@ _NAMED_ARTIFACTS = (
     'configs/launchd/com.joulewise.magistrate.plist.template', 'configs/launchd/com.joulewise.b6loop.plist.template',
     # RUN_STATE 226 R15: the frozen D/C/T series (order, roles, seeds) and its builder bind with W1.
     'scripts/align_v4_series.py', 'configs/campaigns/align_v4/series/series_manifest.json',
+    # RL-108 side branch (NOT FOR MERGE), W-6: the watchdog's declared transition table, read by path.
+    'configs/watchdog/transition_table.json',
 )
 
 
@@ -215,6 +217,7 @@ EXECUTED_CLOSURE = (
     'joulewise/envelope_gate.py',
     'joulewise/environment.py',
     'joulewise/environment_admission.py',
+    'joulewise/exit_contract.py',
     'joulewise/external/__init__.py',
     'joulewise/external/km003c_parse.py',
     'joulewise/external/km003c_usb.py',
@@ -274,6 +277,7 @@ EXECUTED_CLOSURE = (
     'joulewise/v5_qualification.py',
     'joulewise/validation.py',
     'joulewise/whole_window.py',
+    'joulewise/window_journal.py',
     'joulewise/window_lineage.py',
     'joulewise/zero_capture_facts.py',
     'scripts/advance_b5_ledger_pin.py',

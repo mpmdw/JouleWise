@@ -2764,6 +2764,9 @@ def _run_hazard_night_body(rt: Any, plan_path: Path, plan: Any, probes: Any,
 
     # 6. The chain, once.
     claim = rt._claim_chain_start(night)
+    if claim is not None:
+        # RL-108 condition 4 (NOT FOR MERGE): the empty claim, before the chain and any member exist.
+        rt.window_journal.append(night, "ChainOpen", writer="b5.driver")
     if claim is None:
         hazard["monitor"] = monitor.stop()
         if meter is not None:

@@ -1,0 +1,68 @@
+{
+  "schema": "joulewise.watchdog_transition_table.v1",
+  "about": [
+    "RL-53 W-6 / RL-108 condition 6: the magistrate watchdog's states and transitions as bound data.",
+    "The watchdog re-decides every tick from the world (plans, locks, process table, clocks, STOP), not from its previous state, so every state in tick_targets is a legal successor of every declared state.",
+    "States that only the resident supervisor enters (supervisor_edges) are legal only from the states in which a supervised session can exist.",
+    "An undeclared state or edge never blocks a transition: the watchdog records an undeclared_transition event and queues one safety notice. Its own safety logic stays authoritative.",
+    "unsafe_holds keep the existing UNSAFE_HOLD_DWELL_S -> STRANDED rule. timing_holds are the states _hold_boundaries opens a hold span for. dwell_limits_s applies only to states that are not unsafe holds; expiry queues one notice per episode and changes no state, fence, launch or signal.",
+    "chain_open_past_completion: an open chain keeps a plan span active with no clock limit; past the limit the fence stays and one notice is queued."
+  ],
+  "initial_state": "BOOT",
+  "states": [
+    "BOOT", "LAUNCHING", "ACTIVE", "IDLE", "BACKOFF", "BACKOFF_USAGE",
+    "FENCED", "HOLD_CENSUS", "CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN", "STOPPED", "STOP_REQUESTED",
+    "STANDDOWN_REQUEST", "STANDDOWN_TERM", "STANDDOWN_KILL", "STANDDOWN_REQUESTED",
+    "HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED", "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT",
+    "HOLD_LOCK", "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT", "HOLD_MODEL_CHECK",
+    "HOLD_MODEL_REJECTED", "STRANDED"
+  ],
+  "unsafe_holds": [
+    "HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED", "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT",
+    "HOLD_LOCK", "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT", "HOLD_MODEL_CHECK",
+    "HOLD_MODEL_REJECTED", "STRANDED"
+  ],
+  "timing_holds": [
+    "FENCED", "HOLD_CENSUS", "HOLD_UNSAFE", "CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN", "BACKOFF", "BACKOFF_USAGE",
+    "STOPPED",
+    "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED", "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT",
+    "HOLD_LOCK", "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT", "HOLD_MODEL_CHECK",
+    "HOLD_MODEL_REJECTED", "STRANDED"
+  ],
+  "tick_targets": [
+    "LAUNCHING", "ACTIVE", "BACKOFF", "BACKOFF_USAGE",
+    "FENCED", "HOLD_CENSUS", "CLOCK_UNCERTAIN", "NETWORK_UNCERTAIN", "STOPPED",
+    "STANDDOWN_REQUEST", "STANDDOWN_TERM", "STANDDOWN_KILL",
+    "HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED", "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT",
+    "HOLD_LOCK", "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT", "HOLD_MODEL_CHECK",
+    "HOLD_MODEL_REJECTED", "STRANDED"
+  ],
+  "session_states": [
+    "LAUNCHING", "ACTIVE", "NETWORK_UNCERTAIN", "CLOCK_UNCERTAIN", "STOPPED", "STOP_REQUESTED",
+    "STANDDOWN_REQUEST", "STANDDOWN_TERM", "STANDDOWN_KILL", "STANDDOWN_REQUESTED", "FENCED", "HOLD_CENSUS",
+    "HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MALFORMED", "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT",
+    "HOLD_LOCK", "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT", "HOLD_MODEL_CHECK",
+    "HOLD_MODEL_REJECTED", "STRANDED"
+  ],
+  "supervisor_edges": [
+    {"to": "IDLE", "from": "session_states", "writer": "ResidentSupervisor._finish_child (clean exit, no stand-down request)"},
+    {"to": "STOP_REQUESTED", "from": "session_states", "writer": "ResidentSupervisor._step -> _enforce_drain (STOP file or remote stop ref)"},
+    {"to": "STANDDOWN_REQUESTED", "from": "session_states", "writer": "ResidentSupervisor._enforce_plan, REQUEST phase"}
+  ],
+  "dwell_limits_s": {
+    "LAUNCHING": {"limit_s": 900, "basis": "LAUNCH_LIVENESS_S (900): the bound the watchdog already gives a launch to leave a record"},
+    "ACTIVE": {"limit_s": 86400, "basis": "no session ceiling exists in code; one day of continuous ACTIVE without a clean exit or stand-down is reported. Liveness within it stays W-02 (HEARTBEAT_STALE_S, stream growth). Open question for the research lead."},
+    "IDLE": {"limit_s": 600, "basis": "clean-exit cooldown 300 s (_finish_child next_eligible) + one launchd StartInterval (300 s, LAUNCHD_START_INTERVAL_S)"},
+    "BACKOFF": {"limit_s": 3900, "basis": "max(GENERIC_BACKOFF_S) 3600 + one launchd StartInterval 300"},
+    "BACKOFF_USAGE": {"limit_s": 7620, "basis": "max(USAGE_BACKOFF_S) 7200 + max jitter_for_activation 120 + one launchd StartInterval 300"},
+    "STANDDOWN_REQUEST": {"limit_s": 390, "basis": "REQUEST_LEAD_S - TERM_LEAD_S (90) + one launchd StartInterval 300"},
+    "STANDDOWN_REQUESTED": {"limit_s": 390, "basis": "REQUEST_LEAD_S - TERM_LEAD_S (90) + one launchd StartInterval 300"},
+    "STANDDOWN_TERM": {"limit_s": 330, "basis": "TERM_LEAD_S - KILL_LEAD_S (30) + one launchd StartInterval 300"},
+    "STANDDOWN_KILL": {"limit_s": 360, "basis": "KILL_LEAD_S (60, kill to t0) + one launchd StartInterval 300"},
+    "STOP_REQUESTED": {"limit_s": 900, "basis": "STOP_COOPERATIVE_S + STOP_TERM_GRACE_S (600) + one launchd StartInterval 300"}
+  },
+  "chain_open_past_completion": {
+    "limit": "plan_completion_epoch",
+    "basis": "plan_completion_epoch(plan) = t0_epoch_s + window_max_s + COURIER_DEADLINE_S, the end of the window and its courier deadline; a chain still open after it keeps the span (and the fence) active with no clock limit"
+  }
+}

@@ -141,6 +141,101 @@ UNSAFE_STATES = frozenset({"HOLD_UNSAFE", "HOLD_PLAN_UNREADABLE", "HOLD_PLAN_MAL
                           "HOLD_PLIST_UNREADABLE", "HOLD_CONFLICT", "HOLD_LOCK",
                           "HOLD_PROCESS_TABLE", "HOLD_DESK_FENCE", "HOLD_STATUS_EXPORT",
                           "HOLD_MODEL_CHECK", "HOLD_MODEL_REJECTED", "STRANDED"})
+# RL-53 W-6 / RL-108 condition 6: the declared states, edges and non-hold dwell
+# limits, as bound data. Strict parse, loaded once per process. A table that
+# cannot be read holds (reason prefix ``transition_table:``, HOLD_UNSAFE); an
+# undeclared edge or an expired non-hold dwell only records and notifies.
+TRANSITION_TABLE_PATH = REPO_ROOT / "configs" / "watchdog" / "transition_table.json"
+TRANSITION_TABLE_SCHEMA = "joulewise.watchdog_transition_table.v1"
+TRANSITION_TABLE_REASON = "transition_table:"
+# The magistrate plist template's StartInterval (configs/launchd/
+# com.joulewise.magistrate.plist.template); the table's limits add one interval.
+LAUNCHD_START_INTERVAL_S = 300
+_TABLE_KEYS = frozenset({"schema", "about", "initial_state", "states", "unsafe_holds", "timing_holds",
+                         "tick_targets", "session_states", "supervisor_edges", "dwell_limits_s",
+                         "chain_open_past_completion"})
+_TABLE_CACHE: dict[str, Any] = {}
+
+
+class TransitionTableError(ValueError):
+    pass
+
+
+def _parse_transition_table(raw: bytes) -> dict[str, Any]:
+    def need(condition: bool, what: str) -> None:
+        if not condition:
+            raise TransitionTableError(what)
+
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeError, ValueError) as error:
+        raise TransitionTableError(f"unparseable: {error}") from error
+    need(isinstance(value, dict) and set(value) == _TABLE_KEYS, "key set")
+    need(value["schema"] == TRANSITION_TABLE_SCHEMA, "schema")
+
+    def names(key: str) -> frozenset[str]:
+        rows = value[key]
+        need(isinstance(rows, list) and bool(rows)
+             and all(isinstance(r, str) and re.fullmatch(r"[A-Z][A-Z_]*", r) for r in rows)
+             and len(set(rows)) == len(rows), key)
+        return frozenset(rows)
+
+    states = names("states")
+    groups = {key: names(key) for key in ("unsafe_holds", "timing_holds", "tick_targets", "session_states")}
+    need(all(group <= states for group in groups.values()), "groups outside states")
+    need(value["initial_state"] in states, "initial_state")
+    edges: dict[str, frozenset[str]] = {}
+    rows = value["supervisor_edges"]
+    need(isinstance(rows, list), "supervisor_edges")
+    for row in rows:
+        need(isinstance(row, dict) and set(row) == {"to", "from", "writer"} and row["to"] in states
+             and row["to"] not in edges and row["from"] == "session_states"
+             and isinstance(row["writer"], str) and bool(row["writer"].strip()), "supervisor_edges")
+        edges[row["to"]] = groups["session_states"]
+    limits: dict[str, int] = {}
+    dwell = value["dwell_limits_s"]
+    need(isinstance(dwell, dict), "dwell_limits_s")
+    for name, row in dwell.items():
+        need(name in states and name not in groups["unsafe_holds"] and isinstance(row, dict)
+             and set(row) == {"limit_s", "basis"} and type(row["limit_s"]) is int and row["limit_s"] > 0
+             and isinstance(row["basis"], str) and bool(row["basis"].strip()), f"dwell_limits_s.{name}")
+        limits[name] = row["limit_s"]
+    chain = value["chain_open_past_completion"]
+    need(isinstance(chain, dict) and set(chain) == {"limit", "basis"}
+         and chain["limit"] == "plan_completion_epoch" and isinstance(chain["basis"], str),
+         "chain_open_past_completion")
+    return {"states": states, **groups, "supervisor_edges": edges, "dwell_limits_s": limits}
+
+
+def transition_table() -> dict[str, Any]:
+    """The parsed table; raises TransitionTableError (cached) when it cannot be used."""
+    if "table" not in _TABLE_CACHE and "error" not in _TABLE_CACHE:
+        try:
+            _TABLE_CACHE["table"] = _parse_transition_table(TRANSITION_TABLE_PATH.read_bytes())
+        except OSError as error:
+            _TABLE_CACHE["error"] = f"unreadable: {type(error).__name__}: {error}"
+        except TransitionTableError as error:
+            _TABLE_CACHE["error"] = f"malformed: {error}"
+    if "error" in _TABLE_CACHE:
+        raise TransitionTableError(_TABLE_CACHE["error"])
+    return _TABLE_CACHE["table"]
+
+
+def transition_table_error() -> str | None:
+    try:
+        transition_table()
+    except TransitionTableError as error:
+        return str(error)
+    return None
+
+
+def declared_edge(table: Mapping[str, Any], old_state: str, new_state: str) -> bool:
+    if old_state not in table["states"] or new_state not in table["states"]:
+        return False
+    if new_state in table["tick_targets"]:
+        return True
+    return old_state in table["supervisor_edges"].get(new_state, frozenset())
+
 
 # Keep this launch shape in one place.  The magistrate can change one tuple
 # after the owed permission-prompt bench without touching supervisor logic.
@@ -1873,7 +1968,9 @@ def transition(
                 storage.append_jsonl(storage.root / "events.jsonl", boundaries, sync=False)
             except Exception as error:
                 sys.stderr.write(f"timing receipt missing: {error}\n")
+        _observe_dwell(storage, state, now)
         return
+    state.pop("dwell", None)
     sequence = int(state.get("transition_seq", 0)) + 1
     state["state"] = new_state
     state["transition_seq"] = sequence
@@ -1903,6 +2000,86 @@ def transition(
                     "reason": reason,
                 }
             )
+    _observe_declared_edge(storage, state, old_state, new_state, reason, now)
+
+
+def _observe_declared_edge(storage, state, old_state, new_state, reason, now):
+    """W-6: an undeclared state or edge is recorded and noticed, never refused."""
+    try:
+        table = transition_table()
+    except TransitionTableError:
+        return  # decide() holds on an unusable table; nothing to compare against
+    try:
+        if declared_edge(table, old_state, new_state):
+            return
+        storage.append_jsonl(storage.root / "events.jsonl", {
+            "schema": EVENT_SCHEMA, "kind": "undeclared_transition", "from": old_state, "to": new_state,
+            "sequence": state.get("transition_seq"), "reason": reason, "epoch_s": now.timestamp(),
+        })
+        _queue_safety_notice(storage, state, now, notice_id=f"undeclared-transition-{old_state}-{new_state}",
+                             kind="undeclared_transition",
+                             reason=f"transition {old_state} -> {new_state} is not in the declared table: {reason}")
+    except Exception as error:  # noqa: BLE001 - an observation, never a refusal
+        sys.stderr.write(f"transition table check failed: {error}\n")
+
+
+def _observe_dwell(storage, state, now):
+    """W-6: a non-hold state past its declared dwell limit: one event and one notice per episode.
+
+    Never changes the state, the fence, a launch or a signal. Unsafe holds keep
+    UNSAFE_HOLD_DWELL_S -> STRANDED in _surface_unsafe_decision.
+    """
+    try:
+        limit = transition_table()["dwell_limits_s"].get(str(state.get("state")))
+    except TransitionTableError:
+        return
+    try:
+        since = state.get("transition_epoch_s")
+        if limit is None or isinstance(since, bool) or not isinstance(since, (int, float)) or not math.isfinite(since):
+            state.pop("dwell", None)
+            return
+        name, sequence = str(state["state"]), state.get("transition_seq")
+        elapsed = now.timestamp() - since
+        exceeded = elapsed >= limit
+        state["dwell"] = {"state": name, "since_epoch_s": since, "limit_s": limit, "exceeded": exceeded}
+        if not exceeded:
+            return
+        notice_id = f"dwell-{name}-{sequence}"
+        if notice_id in state.get("safety_notice_ids", []):
+            return
+        storage.append_jsonl(storage.root / "events.jsonl", {
+            "schema": EVENT_SCHEMA, "kind": "dwell_exceeded", "state": name, "sequence": sequence,
+            "since_epoch_s": since, "limit_s": limit, "epoch_s": now.timestamp(),
+        })
+        _queue_safety_notice(storage, state, now, notice_id=notice_id, kind="dwell_exceeded",
+                             reason=f"{name} for {elapsed:.0f}s exceeds its declared dwell limit {limit}s")
+    except Exception as error:  # noqa: BLE001 - an observation, never a refusal
+        sys.stderr.write(f"dwell check failed: {error}\n")
+
+
+def _observe_open_chains(storage, state, plans, now_epoch_s):
+    """W-6: a chain still open after plan completion keeps its fence; one notice per plan."""
+    for plan in plans:
+        try:
+            night = Path(plan.custody_root) / "night"
+            if not (storage.exists(night / "chain.started") and not storage.exists(night / "chain.exited")):
+                continue
+            completion = plan_completion_epoch(plan)
+            if now_epoch_s <= completion:
+                continue
+            notice_id = f"chain-open-past-completion-{plan.plan_id}"
+            if notice_id in state.get("safety_notice_ids", []):
+                continue
+            storage.append_jsonl(storage.root / "events.jsonl", {
+                "schema": EVENT_SCHEMA, "kind": "chain_open_past_completion", "plan_id": plan.plan_id,
+                "completion_epoch_s": completion, "epoch_s": now_epoch_s,
+            })
+            _queue_safety_notice(storage, state, dt.datetime.fromtimestamp(now_epoch_s).astimezone(),
+                                 notice_id=notice_id, kind="chain_open_past_completion",
+                                 reason=f"plan {plan.plan_id}: chain.started without chain.exited "
+                                        f"{now_epoch_s - completion:.0f}s after plan completion; fence kept")
+        except Exception as error:  # noqa: BLE001 - an observation, never a refusal
+            sys.stderr.write(f"open chain check failed: {error}\n")
 
 
 def append_census_event(
@@ -2195,9 +2372,13 @@ def _decide(
     reset_backoff_after_reboot(storage, state, wall)
     if clock_uncertain(state, wall, monotonic):
         return Decision("CLOCK_UNCERTAIN", "wall and monotonic deltas disagree")
+    table_error = transition_table_error()
+    if table_error is not None:
+        return Decision("HOLD_UNSAFE", f"{TRANSITION_TABLE_REASON} {table_error}")
 
     snapshot = plan_snapshot or load_plans(storage, now_epoch_s=wall.timestamp())
     plans = list(snapshot.plans)
+    _observe_open_chains(storage, state, plans, wall.timestamp())
     # PLAN2 yield C: file reads only; never changes the decision below.
     try:
         queue_yield_alerts(plans, storage, state, wall)
