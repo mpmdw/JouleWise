@@ -1042,6 +1042,55 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+300. **Laptop lead (interactive, Opus 5.5), 2026-11-12 22:21 PST (`date`): the Air is SETTLED (about four days) with JW-EXT mounted. The R1 follow-up night CLOSED: `night-results/align-r1-20261112T2251Z` @ d544ff40b reports chain_outcome COMPLETE, chain_exit_code 0, fault false, verdict GO, measurement_outcome complete; chain 14:51-22:07 PST; powermode 0 and network time ON restored by the driver; courier delivered (result sha256 1827aeed…1acd). Item 296's pointer still governs the post-night work (the arm draft's "After the night" block, runbook §4, the RL-90/RL-78/RL-89-margin/RL-72-E4/RL-91 report). This item POSTS item 295's item C (the custody copy) for the same or the next activation, after runbook §4 is done. The R12 Sol seat is resumed (notice 6) on the Air for the full-volume session; it does not touch the MBP.**
+
+MAGISTRATE: in the first desk gap after the R1 follow-up night (nothing armed, nothing capturing), copy the nine sealed Block 6 session archives to the Air.
+- Read file NAMES and DIGESTS only, never content. Block 6 stays sealed.
+- Kit (R2 H1): on the MBP, K = a NEW directory under /Users or /Volumes (never /tmp or /var), `<repo>` = your clone; do not install into $M:
+  `mkdir -m 700 <K> && git -C <repo> fetch origin analysis/2026-11-12-b6-custody-kit && git -C <repo> archive ae7eb01b3f1240b6bad8a6e36fafef8c7d62bef0 scripts/b6_custody_kit.py tests/test_b6_custody_kit.py | tar -x -C <K>`
+  (branch analysis/2026-11-12-b6-custody-kit, head ae7eb01b3f1240b6bad8a6e36fafef8c7d62bef0; RL-100). Every kit command below is `python3.13 -I <K>/scripts/b6_custody_kit.py ...`. The kit worktree `/Volumes/JW-EXT/jw-wt/b6-custody-kit` on the Air must stay at that same head.
+- The one manifest file name everywhere is `b6-custody-manifest.json`.
+
+1. Source manifest, on the MBP: `python3.13 -I <K>/scripts/b6_custody_kit.py manifest --session <archive root> (x9) --loop-attempts <file> --loop-state <file> --out <dir mode 700>/b6-custody-manifest.json`.
+   - `--loop-state` is required; use `--no-loop-state` only with a stated reason (it is recorded in the manifest, and `inputs` later refuses it unless the lead passes `--accept-no-loop-state`). Both loop files must be in one directory.
+   - Do NOT pass `--rehearsal-source-host` on the real archives: the kit refuses it unless every session root carries the synthetic-fixture marker.
+   - The kit creates the manifest 0600 and refuses an output directory with group/other bits. All paths (manifest, loop, scratch) must be under `/Users` or `/Volumes`, never `/tmp` or `/var`.
+   - The kit prints one `session <copy_path> files= bytes= desk_files=` line per session and then the manifest's own SHA-256. Record those lines and ONLY that digest in RUN_STATE (RL-100 item 2); do not open, cat, commit or mail the manifest. It stays in the mode-700 custody directory.
+   - Optional (L3: skip unless the desk gap allows; it is a full decompressed read of about nine sessions): `python3.13 -I <K>/scripts/b6_custody_kit.py verify --self-check --manifest <manifest> --manifest-sha256 <printed> --root <sessions> --loop-dir <loop>` (writes no receipt).
+2. Copy, over the hostlink alias `air`. First check the tools, then rehearse, then copy.
+   - Check and record: `rsync --version; zstd --version; python3.13 --version` on the MBP. If zstd is missing, stop and record. The kit was probed only against the Air's openrsync 2.6.9 and zstd 1.5.7.
+   - REHEARSAL first (synthetic only; do NOT pass `--rehearsal-source-host`; NEVER use `/Volumes/JW-EXT/b6-custody` for it, because `verify` ignores stray siblings and the synthetic `attempts.jsonl` shares its name with the real one). Build the tree, manifest it, copy it to the named rehearsal destination, verify it on the Air:
+```
+cd <K> && python3.13 -B -c "
+from pathlib import Path; import tests.test_b6_custody_kit as t
+r = Path('<K>/reh'); t.mini_archive(r/'sessions/S1', 'archive', log='adjacent'); t.mini_archive(r/'sessions/S2', 'archive')
+t.write(r/'loop/attempts.jsonl', '{}\n'); t.write(r/'loop/state.json', '{}\n')"
+mkdir -m 700 <K>/reh/desk
+python3.13 -I <K>/scripts/b6_custody_kit.py manifest --session <K>/reh/sessions/S1/archive --session <K>/reh/sessions/S2/archive \
+  --loop-attempts <K>/reh/loop/attempts.jsonl --loop-state <K>/reh/loop/state.json --out <K>/reh/desk/b6-custody-manifest.json
+    # expect: session S1/archive files=11 ... desk_files=1 / session S2/archive files=12 ... desk_files=0 / manifest sessions=2 sha256=<D>
+ssh air 'mkdir -m 700 /Volumes/JW-EXT/tmp/b6-rehearsal-mbp'
+    # if the directory exists: continue only if it is empty, otherwise stop and record (L2)
+cd <K>/reh/sessions && rsync -aR S1/archive S1/archive.desk air:/Volumes/JW-EXT/tmp/b6-rehearsal-mbp/ \
+  && rsync -aR S2/archive air:/Volumes/JW-EXT/tmp/b6-rehearsal-mbp/
+rsync -a <K>/reh/loop/attempts.jsonl <K>/reh/loop/state.json <K>/reh/desk/b6-custody-manifest.json air:/Volumes/JW-EXT/tmp/b6-rehearsal-mbp/
+ssh air 'PATH=/opt/homebrew/bin:$PATH python3.13 -I /Volumes/JW-EXT/jw-wt/b6-custody-kit/scripts/b6_custody_kit.py verify \
+  --manifest /Volumes/JW-EXT/tmp/b6-rehearsal-mbp/b6-custody-manifest.json --manifest-sha256 <D> \
+  --root /Volumes/JW-EXT/tmp/b6-rehearsal-mbp --loop-dir /Volumes/JW-EXT/tmp/b6-rehearsal-mbp \
+  --out /Volumes/JW-EXT/tmp/b6-rehearsal-mbp/receipt.json'
+    # expect exit 0 and: verify sessions=2 loop_files=2 files=23 bytes=... receipt_sha256=...
+```
+     (The Homebrew PATH is needed: a non-interactive ssh shell on the Air has neither `python3.13` nor `zstd`.) Record every exit code. If any step does not give the expected line, stop, record the output, and do NOT copy the real archives.
+   - Only then the real copy. On the Air create the directory first, mode 700: `ssh air 'mkdir -m 700 /Volumes/JW-EXT/b6-custody'`. If it exists and is empty, continue; otherwise stop and record (L2). The Air must be online with JW-EXT mounted; if it is not, stop and record that.
+   - Per session, from the sessions directory (the `-R` form with a relative path is the only one that lands `<id>/archive`; do NOT pass absolute paths or `/./`, and do NOT copy all nine archives with one destination basename):
+     `cd <sessions> && rsync -aR <id>/archive [<id>/archive.desk] air:/Volumes/JW-EXT/b6-custody/`
+     Name `<id>/archive.desk` only for a session where that folder exists (an absent one makes rsync exit 23). Then the two loop files and the manifest: `rsync -a <loop>/attempts.jsonl <loop>/state.json <dir mode 700>/b6-custody-manifest.json air:/Volumes/JW-EXT/b6-custody/`.
+   - Never `--copy-links`. Record every rsync exit code; the expected value is 0 each time.
+3. Do NOT run `verify` (copy mode) or `inputs` on the real copy (the step-2 rehearsal is synthetic only, and its own `verify` on the Air is the only one you run): the lead runs those on the Air. The kit refuses a copy-mode verify on the source host, so a manifest re-run on the Air cannot stand in for this one; never re-run `manifest` on the copy (`--rehearsal-source-host` is refused on real archives, and `verify` compares tree identity, so no spelling of the path gets round it).
+4. THE ONE EXCEPTION to "names and digests only": for #748's OPEN[R7-SESSION-INDEX], read the Block 6 loop records (the attempts file) and list the nine session ids in t0 order, with each t0 and round. Fields: session id, t0, round only. No outcome field, no other content.
+
+RUN_STATE: the manifest SHA-256, the file count and total bytes per session, the rsync exit codes, the t0-ordered session list, and the time taken.
+
 299. **Laptop lead (interactive, Opus 5.5, session def7f153), 2026-11-12 16:08 PST (`date`): the Air is moved at about 16:50 and may move again until later tonight; from then it stays put for about four days. Item 296's pointer still governs the night. Nothing here is for the magistrate tonight. Owed-items list for the next lead: `/Volumes/JW-EXT/scratch/s14-pin-request-notes.md`.**
 - **R12** (`analysis/2026-11-11-b6-r12` @ `04eacce2a`): the courier regression and fresh source profile are done. **RL-98 term 1 (reader test at production size) PASSED:** meter 352,036,713 B and plist 16,719,849 B round-trip byte-equal through desk compression and `read_bytes`; wall 3.153 s; peak RSS 505,659,392 B. The first full-volume BETA session (root `r12-r3-full-beta-22`) was STOPPED by the lead at 15:53 because the Air moves; it is recorded as interrupted and ineligible (not a chain fault). **Next:** once the Air is settled tonight, start the fresh full-volume session in a new root with the exact command in the R12 report's hand-off section, then the remaining RL-48/49 items.
 - **Fable 5.2 (Ed: about 30 % more Fable).** Rulings RL-105..110 are on the audit branch at `fdada87d3`.
