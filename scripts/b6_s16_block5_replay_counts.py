@@ -15,9 +15,10 @@ Inputs, and nothing else, per session (a Block 5 harvest root):
 and the two flag catalogs (Block 5's, which the harvests used, and Block 6's at the pin). No energy, no estimate,
 no timing value is read.
 
-A rule whose condition Block 5's flags cannot show (its code has no Block 5 emitter, or its input is not a flag)
-prints ``not evaluated`` with the reason and, where one exists, the nearest Block 5 code's count. It never prints a
-silent 0.
+Each row has one state (RL-140): ``counted`` (read from the flags), ``derived`` (follows from a session having
+run and being claim-usable), ``no_replay_owed`` (grounds N, W, D, S and the pre-check hold), ``no_block5_input``
+(Block 5 did not record the input), ``not_counted_alternative`` (a labelled alternative that removes nothing in
+Block 6) or ``open`` (owed; the P* desk exclusion). A row that is not counted or derived never prints a 0.
 
 Usage::
 
@@ -72,15 +73,32 @@ PINS: dict[str, Any] = {
 PACK_ORDER = ("alpha", "beta", "gamma")
 EXCLUDING = ("EXCLUDE_MEMBER", "EXCLUDE_WINDOW")
 
-# Methods.
-FLAG_CODES = "flag_codes"            # evaluated: the codes' Block 6 effect applied to Block 5's flags
-NO_EMITTER = "no_b5_emitter"         # not evaluated unless Block 5's catalog has one of the codes
-NOT_A_FLAG = "input_not_a_flag"      # not evaluated: the rule's input is a value or raw byte, not a flag
-DISCLOSE_ONLY = "disclose_only"      # the rule removes nothing in Block 6 (a flag); Block 5 has no such condition
+# Methods, and the state each gives its row (RL-140 §1).
+FLAG_CODES = "flag_codes"            # counted: the codes' Block 6 effect applied to Block 5's flags
+DISCLOSE_ONLY = "disclose_only"      # counted: the rule removes nothing in Block 6 (a flag)
+GAMMA_MIDPOINT = "gamma_midpoint"    # counted: from neg8 reference counts in the flags
 CLOCK_HOLD = "clock_hold"            # derived: Block 5's arm frequency gate is stricter than Block 6's hold
-GAMMA_MIDPOINT = "gamma_midpoint"    # derived from neg8 reference counts in the flags
+BOP_STOP = "bop_stop"                # derived: a claim-usable session passed the phase check the stop line protects
+NO_REPLAY_OWED = "no_replay_owed"    # case A: grounds N, W, D, S and the pre-check hold
+NO_B5_INPUT = "no_block5_input"      # case B: Block 5 did not record the input
+ALTERNATIVE = "not_counted_alternative"   # case D: labelled alternative, removes nothing in Block 6
+OPEN = "open"                        # case E: owed
 
-SIX_FIVE_TWENTY = (
+STATE_OF = {
+    FLAG_CODES: "counted", DISCLOSE_ONLY: "counted", GAMMA_MIDPOINT: "counted",
+    CLOCK_HOLD: "derived", BOP_STOP: "derived",
+    NO_REPLAY_OWED: "no_replay_owed", NO_B5_INPUT: "no_block5_input", ALTERNATIVE: "not_counted_alternative",
+    OPEN: "open",
+}
+STATE_TEXT = {
+    "no_replay_owed": "no replay owed", "no_block5_input": "no Block 5 input",
+    "not_counted_alternative": "not counted (alternative)", "open": "OPEN",
+}
+NO_EMITTER_METHODS = (NO_REPLAY_OWED, NO_B5_INPUT)   # their codes must have no Block 5 emitter
+BOP_LINE_PACKS = ("alpha", "gamma")                  # §8.6 S-5: 139 ms for ALPHA and GAMMA, none for BETA
+CHANGED_RUN_RULES = ("8.3.1-CEU", "8.3.1-BIN", "8.3.1-MAL", "8.3.1-CAP", "8.3.3-CON")
+
+SESSION_CODES_TO_FLAGS = (
     "calibration.acceptance_mismatch", "calibration.binding_failed", "calibration.bracket_acceptance_failed",
     "calibration.capture_invalid", "calibration.historical_custody_mismatch", "calibration.ledger_snapshot_refused",
     "calibration.no_bracket", "calibration.session_not_bound", "clock.systematic", "code.executed_differs_from_sealed",
@@ -107,44 +125,47 @@ class Rule:
     reason: str = ""
 
 
+CASE_A = ("no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and "
+          "no rehearsal count stands beside them")
+
 RULES: tuple[Rule, ...] = (
     # §8.2 session exclusions and the §8.6 lines that feed them.
     Rule("8.2-P3", "§8.2 P3, §8.6 S-5", "b_op above the stop line (139 ms ALPHA and GAMMA; none for BETA)", "new",
-         "session", NOT_A_FLAG, ("calibration.operative_bound_above_stop",), b6_effect="EXCLUDE_WINDOW",
-         reason="needs each session's operative bound b_op (derived/bracket-binding.json), a value, not a flag; "
-                "Block 5's flags carry no b_op line"),
-    Rule("8.2-N1", "§8.2 N1", "calibration capture missing or its refit failing", "new", "session", NO_EMITTER,
+         "session", BOP_STOP, ("calibration.operative_bound_above_stop",), b6_effect="EXCLUDE_WINDOW",
+         reason="Each ALPHA and GAMMA session is claim-usable, so its smallest target phase passed the unchanged "
+                "phase check; above the line every run of that phase fails it (§8.6 S-5); and Block 6's s_bracket "
+                "(10.818 ms) is below Block 5's (14.531 ms), so Block 6's b_op is not larger. BETA has no line"),
+    Rule("8.2-N1", "§8.2 N1", "calibration capture missing or its refit failing", "new", "session", NO_REPLAY_OWED,
          ("calibration.bracket_incomplete",), b6_effect="EXCLUDE_WINDOW",
          counterparts=("calibration.no_bracket", "calibration.capture_invalid"),
-         reason="Block 5's harvest has no emitter for this code"),
+         reason=CASE_A),
     Rule("8.2-N2", "§8.2 N2", "fewer than 6 clean corpus runs or 2 surviving start or end references", "new",
-         "session", NO_EMITTER, ("neg8.survivor_screen_undefined",), b6_effect="EXCLUDE_WINDOW",
-         counterparts=("neg8.bound_not_derived",), reason="Block 5's harvest has no emitter for this code"),
-    Rule("8.2-W1", "§8.2 W1", "model files differ from the registered files", "new", "session", NO_EMITTER,
+         "session", NO_REPLAY_OWED, ("neg8.survivor_screen_undefined",), b6_effect="EXCLUDE_WINDOW",
+         counterparts=("neg8.bound_not_derived",), reason=CASE_A),
+    Rule("8.2-W1", "§8.2 W1", "model files differ from the registered files", "new", "session", NO_REPLAY_OWED,
          ("model.files_differ_from_registered",), b6_effect="EXCLUDE_WINDOW",
-         counterparts=("model.identity_mismatch",), reason="Block 5's harvest has no emitter for this code"),
+         counterparts=("model.identity_mismatch",), reason=CASE_A),
     Rule("8.2-W2", "§8.2 W2", "executed runtime stack differs from the registered one", "new", "session",
-         NO_EMITTER, ("model.stack_differs_from_registered",), b6_effect="EXCLUDE_WINDOW",
-         reason="Block 5's harvest has no emitter for this code"),
+         NO_REPLAY_OWED, ("model.stack_differs_from_registered",), b6_effect="EXCLUDE_WINDOW",
+         reason=CASE_A),
     Rule("8.2-W3", "§8.2 W3", "a number-bearing file changed without an executing review", "new", "session",
-         NO_EMITTER, ("code.number_bearing_unreviewed",), b6_effect="EXCLUDE_WINDOW",
-         counterparts=("code.executed_differs_from_sealed",), reason="Block 5's harvest has no emitter for this code"),
-    Rule("8.2-D1", "§8.2 D1", "the drift screen fails on the surviving references", "new", "session", NO_EMITTER,
+         NO_REPLAY_OWED, ("code.number_bearing_unreviewed",), b6_effect="EXCLUDE_WINDOW",
+         counterparts=("code.executed_differs_from_sealed",), reason=CASE_A),
+    Rule("8.2-D1", "§8.2 D1", "the drift screen fails on the surviving references", "new", "session", NO_REPLAY_OWED,
          ("neg8.survivor_screen_failed",), b6_effect="EXCLUDE_WINDOW", counterparts=("neg8.screen_failed",),
-         reason="Block 5's harvest has no emitter for this code"),
-    Rule("8.2-S1", "§8.2 S1", "structural failure (§4)", "new", "session", NO_EMITTER,
+         reason=CASE_A),
+    Rule("8.2-S1", "§8.2 S1", "structural failure (§4)", "new", "session", NO_REPLAY_OWED,
          ("structure.chain_crashed", "structure.missing_stage_bundles", "structure.no_capture_records",
-          "structure.no_roster"), b6_effect="EXCLUDE_WINDOW", reason="Block 5's harvest has no emitter for these codes"),
+          "structure.no_roster"), b6_effect="EXCLUDE_WINDOW", reason=CASE_A),
     Rule("8.2-PRE", "§8.2, §8.7 item 3", "pre-check certain exclusion (a hold before t0, never a session loss)",
-         "new", "session", NOT_A_FLAG, ("precheck.certain_exclusion",), b6_effect="EXCLUDE_WINDOW",
-         reason="computed before t0 from the registered acceptance on a nominal synthetic session; no Block 5 "
-                "flag carries it"),
+         "new", "session", NO_REPLAY_OWED, ("precheck.certain_exclusion",), b6_effect="EXCLUDE_WINDOW",
+         reason=CASE_A),
     Rule("8.6-S7", "§8.6 S-7", "clock-rate hold at |r| > 5 ms / 335 s - 0.25 ppm = 14.675 ppm", "changed",
          "session", CLOCK_HOLD,
          reason="each session passed Block 5's arm frequency gate (|f| <= 3.6306 ppm, B5-REG §4.2), stricter than "
-                "the hold; a session with clock.arm_unmeasured is not evaluated"),
+                "the hold; a session with clock.arm_unmeasured is not derived"),
     Rule("8.2-25", "§8.2", "25 of Block 5's 32 session-removing codes become flags", "changed", "session",
-         FLAG_CODES, SIX_FIVE_TWENTY, b5_effect="EXCLUDE_WINDOW", b6_effect="DISCLOSE"),
+         FLAG_CODES, SESSION_CODES_TO_FLAGS, b5_effect="EXCLUDE_WINDOW", b6_effect="DISCLOSE"),
     Rule("8.2-MID", "§8.2", "GAMMA: a lost midpoint reference no longer removes the session", "dropped",
          "session", GAMMA_MIDPOINT, ("neg8.midpoint_lost",)),
     # §8.3 run and unit exclusions.
@@ -160,19 +181,21 @@ RULES: tuple[Rule, ...] = (
     Rule("8.3.3-CON", "§8.3 item 3, S-8", "outside processor work in the request: a flag for round 1", "changed",
          "run", FLAG_CODES, ("contention.request_overlap",), b5_effect="EXCLUDE_MEMBER", b6_effect="DISCLOSE"),
     Rule("8.3.3-CONALT", "§8.3 item 3, S-8", "labelled alternative: C - k x 0.54 >= 0.0874 CPU-s", "new", "run",
-         NOT_A_FLAG, reason="needs every run's monitor outside CPU-seconds C and interval count k, not flags"),
-    Rule("8.3.2-SLP", "§8.3 item 2", "the machine slept more than 1 ms in the run", "new", "run", NO_EMITTER,
-         ("sleep.in_run",), b6_effect="EXCLUDE_MEMBER", reason="Block 5's harvest has no emitter for this code"),
-    Rule("8.3.2-AGT", "§8.3 item 2", "the run's unit overlapped an agent's presence", "new", "run", NO_EMITTER,
+         ALTERNATIVE, reason="not counted (RL-140 case D): it removes nothing in Block 6; Block 6's cells print it"),
+    Rule("8.3.2-SLP", "§8.3 item 2", "the machine slept more than 1 ms in the run", "new", "run", NO_B5_INPUT,
+         ("sleep.in_run",), b6_effect="EXCLUDE_MEMBER", reason="Block 5 did not record the input (RL-140 case B)"),
+    Rule("8.3.2-AGT", "§8.3 item 2", "the run's unit overlapped an agent's presence", "new", "run", NO_B5_INPUT,
          ("agent.presence", "agent.presence_overlap", "agent.unit_overlap"), b6_effect="EXCLUDE_MEMBER",
-         reason="Block 5's harvest has no emitter for these codes (Block 5 took no agent census)"),
+         reason="Block 5 took no agent census, so an agent's presence in Block 5 is unknown (RL-140 case B)"),
     Rule("8.3.2-SKP", "§8.3 item 2", "skipped at the 1,500 s wait cap or by the spent wait budget", "new", "run",
-         NO_EMITTER, ("idle.wait_cap_skip", "idle.wait_budget_skip"), b6_effect="EXCLUDE_MEMBER",
+         NO_B5_INPUT, ("idle.wait_cap_skip", "idle.wait_budget_skip"), b6_effect="EXCLUDE_MEMBER",
          counterparts=("member.admission_aborted",),
-         reason="Block 5 had no waiting admission; its admission aborted the run instead (a kept rule)"),
+         reason="Block 5 had no waiting admission and aborted runs at admission instead, a kept rule "
+                "(RL-140 case B)"),
     Rule("8.3.3-PST", "§8.3 item 3, S-9", "outside graphics or neural-engine power above P*, the desk exclusion",
-         "new", "run", NOT_A_FLAG,
-         reason="needs each bundle's preserved idle-baseline rails, raw bytes, not flags"),
+         "new", "run", OPEN,
+         reason="OPEN[S-16: P*] (RL-140 case E): needs each run's idle-baseline rails, read by the pinned desk "
+                "function"),
     Rule("8.3.3-WAI", "§8.3 item 3, S-6", "a run admitted after waiting: disclosed only (d = +0.180 J)",
          "new", "run", DISCLOSE_ONLY, ("idle.waited",), b6_effect="DISCLOSE",
          reason="Block 5 had no waiting admission"),
@@ -278,8 +301,8 @@ def check_rules_against_catalogs(b5: dict[str, Any], b6: dict[str, Any]) -> None
                 raise Refusal(f"rule_code_not_in_b6_catalog: {rule.rule_id}: {code}")
             if rule.b5_effect and b5.get(code, {}).get("effect") != rule.b5_effect:
                 raise Refusal(f"rule_b5_effect_differs: {rule.rule_id}: {code}")
-            if rule.method == NO_EMITTER and code in b5:
-                # Block 5 could emit it: then it must be evaluated, not printed as not evaluated.
+            if rule.method in NO_EMITTER_METHODS and code in b5:
+                # Block 5 could emit it: then it must be counted from the flags, not printed as uncounted.
                 raise Refusal(f"rule_marked_no_emitter_but_b5_has_code: {rule.rule_id}: {code}")
     covered = {c for r in RULES for c in r.codes}
     changed = {c for c in set(b5) & set(b6) if b5[c]["effect"] != b6[c]["effect"]}
@@ -310,8 +333,8 @@ def per_pack(sessions: list[Session], fn) -> dict[str, Any]:
 def evaluate_rule(rule: Rule, sessions: list[Session], b5: dict[str, Any], b6: dict[str, Any]) -> dict[str, Any]:
     row: dict[str, Any] = {
         "rule_id": rule.rule_id, "section": rule.section, "label": rule.label, "change": rule.change,
-        "scope": rule.scope, "method": rule.method, "codes": list(rule.codes),
-        "b6_effect": rule.b6_effect or ({b6[c]["effect"] for c in rule.codes if c in b6} or {None}).pop(),
+        "scope": rule.scope, "method": rule.method, "state": STATE_OF[rule.method], "codes": list(rule.codes),
+        "b6_effect": rule.b6_effect or ("/".join(sorted({b6[c]["effect"] for c in rule.codes if c in b6})) or None),
     }
     codes = set(rule.codes)
 
@@ -327,26 +350,31 @@ def evaluate_rule(rule: Rule, sessions: list[Session], b5: dict[str, Any], b6: d
             "codes": list(rule.counterparts),
             "runs": per_pack(sessions, lambda s: len(flagged_runs(s, cp))),
             "sessions_flagged": sum(flagged_session(s, cp) for s in sessions),
+            "sessions_by_pack": per_pack(sessions, lambda s: int(flagged_session(s, cp))),
         }
 
-    evaluable = rule.method in (FLAG_CODES, DISCLOSE_ONLY, CLOCK_HOLD, GAMMA_MIDPOINT)
-    if rule.method == NO_EMITTER and codes & set(b5):
-        evaluable = True   # unreachable while check_rules_against_catalogs holds; kept for safety
-    row["evaluated"] = evaluable
-    if not evaluable:
+    if row["state"] not in ("counted", "derived"):
         row["reason"] = rule.reason
+        return row
+
+    if rule.method == BOP_STOP:
+        by_pack = {s.pack: ((0 if s.claim_usable else None) if s.pack in BOP_LINE_PACKS else None) for s in sessions}
+        under_line = [s for s in sessions if s.pack in BOP_LINE_PACKS]
+        row.update(sessions_removed=sum(v or 0 for v in by_pack.values()), sessions_removed_by_pack=by_pack,
+                   runs_removed=sum(v or 0 for v in by_pack.values()), runs_removed_by_pack=dict(by_pack),
+                   sessions_with_line=len(under_line),
+                   sessions_not_derived=[s.pack for s in under_line if not s.claim_usable],
+                   basis=rule.reason)
         return row
 
     if rule.method == CLOCK_HOLD:
         unmeasured = [s.pack for s in sessions if "clock.arm_unmeasured" in s.session_codes]
         row["sessions_removed"] = 0
         row["sessions_removed_by_pack"] = {s.pack: (None if s.pack in unmeasured else 0) for s in sessions}
-        row["sessions_not_evaluated"] = unmeasured
+        row["sessions_not_derived"] = unmeasured
         row["runs_removed"] = 0
         row["runs_removed_by_pack"] = {s.pack: 0 for s in sessions}
         row["basis"] = rule.reason
-        if unmeasured:
-            row["evaluated"] = "partial"
         return row
 
     if rule.method == GAMMA_MIDPOINT:
@@ -417,6 +445,7 @@ def replay(sessions: list[Session], b5: dict[str, Any], b6: dict[str, Any]) -> d
         if s.session_codes & {c for c, v in b5.items() if v["effect"] == "EXCLUDE_WINDOW"}:
             raise Refusal(f"usable_session_carries_b5_window_exclusion: {s.plan_id}")
     rows = [evaluate_rule(r, sessions, b5, b6) for r in RULES]
+    changed_run_codes = {c for r in RULES if r.rule_id in CHANGED_RUN_RULES for c in r.codes}
 
     # Summary: Block 6's catalog over Block 5's flags, every member code at once.
     summary_runs: dict[str, Any] = {}
@@ -430,6 +459,7 @@ def replay(sessions: list[Session], b5: dict[str, Any], b6: dict[str, Any]) -> d
             "b5_runs_removed": len(b5_exc), "b6_catalog_runs_removed": len(b6_exc),
             "kept_by_block6_changes": len(released),
             "kept_by_block6_changes_science": len(released & s.runs_science),
+            "runs_with_changed_run_code": sum(1 for have in s.member_codes.values() if have & changed_run_codes),
             "b6_catalog_sessions_removed": int(bool(
                 {c for c in s.session_codes if b6.get(c, {}).get("effect") == "EXCLUDE_WINDOW"})),
         }
@@ -441,7 +471,10 @@ def replay(sessions: list[Session], b5: dict[str, Any], b6: dict[str, Any]) -> d
         "rules": rows,
         "summary_by_pack": summary_runs,
         "summary_totals": totals,
-        "not_evaluated": [r["rule_id"] for r in rows if r["evaluated"] is False],
+        "rows_by_state": {st: [r["rule_id"] for r in rows if r["state"] == st]
+                          for st in ("counted", "derived", "no_replay_owed", "no_block5_input",
+                                     "not_counted_alternative", "open")},
+        "open": [r["rule_id"] for r in rows if r["state"] == "open"],
     }
 
 
@@ -459,8 +492,9 @@ def render_markdown(result: dict[str, Any], *, commit: str, date: str) -> str:
         "# S-16, Block 5's half: replay counts of Block 6's new or changed §8 rules",
         "",
         f"Script `scripts/b6_s16_block5_replay_counts.py` @ `{commit}`, run {date}. Counts only, from the released "
-        "flags of Block 5's three usable sessions (RL-134 item 17). Per-pack counts are in the order ALPHA, BETA, "
-        "GAMMA.",
+        "flags of Block 5's three usable sessions (RL-134 item 17, RL-140). Per-pack counts are in the order ALPHA, "
+        "BETA, GAMMA; `-` is a pack the rule does not apply to. Row states: counted, derived, no replay owed, no "
+        "Block 5 input, not counted (alternative), OPEN.",
         "",
         "| Session | Runs | Science runs | Inputs (flags.jsonl SHA-256) |",
         "|---|---|---|---|",
@@ -475,15 +509,17 @@ def render_markdown(result: dict[str, Any], *, commit: str, date: str) -> str:
         "|---|---|---|---|---|---|---|",
     ]
     for r in result["rules"]:
-        codes = ", ".join(f"`{c}`" for c in r["codes"][:4]) + (" and 21 more" if len(r["codes"]) > 4 else "")
+        codes = ", ".join(f"`{c}`" for c in r["codes"][:4]) + (
+            f" and {len(r['codes']) - 4} more" if len(r["codes"]) > 4 else "")
         name = f"{r['section']}: {r['label']}" + (f" ({codes})" if codes else "")
         cp = r.get("b5_counterpart")
         cp_txt = ""
         if cp:
             cp_txt = (f"nearest Block 5 code {', '.join('`'+c+'`' for c in cp['codes'])}: "
                       f"{sum(cp['runs'].values())} runs, {cp['sessions_flagged']} sessions")
-        if r["evaluated"] is False:
-            lines.append(f"| {name} | {r['change']} | {r['b6_effect'] or '-'} | not evaluated | not evaluated | "
+        if r["state"] not in ("counted", "derived"):
+            st = STATE_TEXT[r["state"]]
+            lines.append(f"| {name} | {r['change']} | {r['b6_effect'] or '-'} | {st} | {st} | "
                          f"{cp_txt or '-'} | {r['reason']} |")
             continue
         if r["method"] in (FLAG_CODES, DISCLOSE_ONLY):
@@ -491,7 +527,7 @@ def render_markdown(result: dict[str, Any], *, commit: str, date: str) -> str:
                      f"{r['runs_flagged_science']} science; {r['sessions_flagged']} sessions")
             if r["b5_runs_removed"] or r["b5_sessions_removed"]:
                 b5txt += f"; Block 5 removed {r['b5_runs_removed']} runs, {r['b5_sessions_removed']} sessions"
-            basis = r.get("basis", "evaluated from flags, Block 6 catalog effect")
+            basis = r.get("basis", "counted from flags, Block 6 catalog effect")
         elif r["method"] == GAMMA_MIDPOINT:
             b5txt = (f"midpoint lost in {r['b5_rule_would_remove_sessions']} of {r['gamma_sessions']} GAMMA "
                      "sessions")
@@ -500,14 +536,16 @@ def render_markdown(result: dict[str, Any], *, commit: str, date: str) -> str:
             b5txt = "-"
             basis = r["basis"]
         sess = f"{r['sessions_removed']}{_by_pack(r['sessions_removed_by_pack'])}"
-        if r.get("sessions_not_evaluated"):
-            sess += f"; not evaluated: {', '.join(r['sessions_not_evaluated'])}"
+        if r["state"] == "derived":
+            sess += " (derived)"
+        if r.get("sessions_not_derived"):
+            sess += f"; not derived: {', '.join(r['sessions_not_derived'])}"
         lines.append(f"| {name} | {r['change']} | {r['b6_effect'] or '-'} | "
                      f"{r['runs_removed']}{_by_pack(r['runs_removed_by_pack'])} | {sess} | {b5txt} | {basis} |")
     sp = result["summary_by_pack"]
     lines += [
         "",
-        "Summary, Block 6's whole catalog over Block 5's flags (the not-evaluated rules excepted): Block 5 removed "
+        "Summary, Block 6's whole catalog over Block 5's flags (rows not counted are excepted): Block 5 removed "
         f"{tot['b5_runs_removed']} of {runs} runs{_by_pack({p: v['b5_runs_removed'] for p, v in sp.items()})}; "
         f"Block 6's catalog removes {tot['b6_catalog_runs_removed']}"
         f"{_by_pack({p: v['b6_catalog_runs_removed'] for p, v in sp.items()})}; the changes keep "
@@ -518,45 +556,87 @@ def render_markdown(result: dict[str, Any], *, commit: str, date: str) -> str:
     return "\n".join(lines)
 
 
-def section17_line(result: dict[str, Any], *, commit: str, date: str) -> str:
+def _pk(d: dict[str, Any]) -> str:
+    return ", ".join("-" if d.get(p) is None else str(d[p]) for p in PACK_ORDER if p in d)
+
+
+def section17_line(result: dict[str, Any], *, commit: str, date: str,
+                   pstar: dict[str, Any] | None = None) -> str:
+    """RL-140 §2's text, verbatim, with the counts and the commit filled.
+
+    The text states premises (only contention fired among the five run codes; the 28 kept runs are the runs
+    carrying a changed run code; every hold and stop is derivable). The line refuses rather than print a sentence
+    whose premise does not hold. ``pstar`` (tool, commit, removed, removed_by_pack, max_baseline_mw, lowest_line_w)
+    replaces clause (d) and the words "in part", as RL-140 §2 provides.
+    """
     tot = result["summary_totals"]
+    sp = result["summary_by_pack"]
     rows = {r["rule_id"]: r for r in result["rules"]}
     n = len(result["sessions"])
-    con = rows["8.3.3-CON"]
-    other_four = sum(rows[k]["runs_flagged"] for k in ("8.3.1-CEU", "8.3.1-BIN", "8.3.1-MAL", "8.3.1-CAP"))
-    sess25 = rows["8.2-25"]["sessions_flagged"]
-    mid = rows["8.2-MID"]
-    hold = rows["8.6-S7"]
-    ne = [rows[k] for k in result["not_evaluated"]]
-    ne_txt = "; ".join(f"{r['section']} ({', '.join('`'+c+'`' for c in r['codes']) or r['label']})" for r in ne)
+    con, mid, hold, bop, wai, skp = (rows[k] for k in ("8.3.3-CON", "8.2-MID", "8.6-S7", "8.2-P3", "8.3.3-WAI",
+                                                       "8.3.2-SKP"))
+    fired = [rows[k]["codes"][0] for k in CHANGED_RUN_RULES if rows[k]["runs_flagged"]]
+    if fired != ["contention.request_overlap"]:
+        raise Refusal("line_premise: the changed run codes that fired are " + (", ".join(fired) or "none"))
+    changed = tot["runs_with_changed_run_code"]
+    if changed != tot["kept_by_block6_changes"] or changed != con["runs_flagged"]:
+        raise Refusal(f"line_premise: runs carrying a changed run code ({changed}) differ from the runs Block 6 "
+                      f"keeps ({tot['kept_by_block6_changes']}) or from contention's ({con['runs_flagged']})")
+    if hold.get("sessions_not_derived") or bop.get("sessions_not_derived"):
+        raise Refusal("line_premise: a hold or stop is not derivable for every session")
+    case_a = [r for r in result["rules"] if r["state"] == "no_replay_owed"]
+    cp_codes = [c for r in case_a for c in (r.get("b5_counterpart") or {}).get("codes", [])]
+    cp_sessions = sum(1 for s in result["sessions"] if s["pack"] in {
+        p for r in case_a for p, v in ((r.get("b5_counterpart") or {}).get("sessions_by_pack") or {}).items() if v})
+    cs = result.get("catalog_sha256") or {}
+    b5sha, b6sha = (cs.get("b5", "")[:8] or "unknown"), (cs.get("b6", "")[:8] or "unknown")
     plan_ids = ", ".join(f"`{s['plan_id']}`" for s in result["sessions"])
-    b6sha = (result.get("catalog_sha256") or {}).get("b6", "")[:8] or "unknown"
-    if hold.get("sessions_not_evaluated"):
-        hold_txt = f" ({', '.join(hold['sessions_not_evaluated'])} not evaluated: `clock.arm_unmeasured`)"
+    aux = tot["runs"] - tot["science_runs"]
+    abt = skp["b5_counterpart"]["runs"]
+    if pstar:
+        in_part = ""
+        clause_d = (f"(d) The desk exclusion at P* (§8.3 item 3, S-9), replayed on each run's idle-baseline rails by "
+                    f"`{pstar['tool']}` @ `{pstar['commit']}`: removes {pstar['removed']} of {tot['runs']} runs "
+                    f"({_pk(pstar['removed_by_pack'])}); largest baseline mean {pstar['max_baseline_mw']} mW against "
+                    f"the lowest line {pstar['lowest_line_w']} W.")
     else:
-        hold_txt = " (each passed Block 5's stricter arm frequency gate)"
-    evaluated = [r for r in result["rules"] if r["evaluated"] is not False]
-    rem_runs = sum(r.get("runs_removed", 0) for r in evaluated)
-    rem_sess = sum(r.get("sessions_removed", 0) for r in evaluated)
-    con_by = ", ".join(str(con["runs_flagged_by_pack"][p]) for p in PACK_ORDER if p in con["runs_flagged_by_pack"])
-    if other_four:
-        four_txt = (f"of which {con['runs_flagged']} carry `contention.request_overlap` ({con_by}) and "
-                    f"{other_four} carry the other four codes")
-    else:
-        four_txt = f"all `contention.request_overlap` ({con_by}; {con['runs_flagged_science']} science)"
+        in_part = ", in part"
+        clause_d = ("(d) The desk exclusion at P* (§8.3 item 3, S-9) needs each run's idle-baseline rails: "
+                    "`OPEN[S-16: P*]`.")
     return (
-        f"- {date}, §17-S16 (RL-134 item 17). **Kind.** Slot fill: S-16, Block 5's half. Read after the Block 5 "
-        f"release (2026-11-08, `RUN_STATE.md` item 231); counts only, from the released flags of Block 5's {n} usable sessions ({plan_ids}; {tot['runs']} runs, "
-        f"{tot['science_runs']} science), by `scripts/b6_s16_block5_replay_counts.py` @ `{commit}` under the Block 6 "
-        f"catalog `{b6sha}…`. Where evaluated, the new or changed rules remove {rem_runs} of {tot['runs']} runs "
-        f"and {rem_sess} of {n} sessions. The five run codes that become flags fire on "
-        f"{tot['kept_by_block6_changes']} runs that Block 5 removed and Block 6 keeps, {four_txt}; Block 6's "
-        f"catalog over Block 5's flags "
-        f"removes {tot['b6_catalog_runs_removed']} runs where Block 5 removed {tot['b5_runs_removed']}. The 25 "
-        f"session codes that become flags fire on {sess25} of {n} sessions; GAMMA's dropped midpoint rule would have "
-        f"removed {mid['b5_rule_would_remove_sessions']} of {mid['gamma_sessions']}; the clock-rate hold holds "
-        f"{hold['sessions_removed']} of {n}{hold_txt}; `idle.waited` is disclosed "
-        f"only. Not evaluated from flags (no Block 5 emitter, or the input is not a flag): {ne_txt}. Outside the "
+        f"- {date}, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half{in_part}. Read "
+        f"after the Block 5 release (2026-11-08, `RUN_STATE.md` item 231). Counts only, from the released flags, "
+        f"rosters and exclusion lists of Block 5's {n} usable sessions ({plan_ids}; {tot['runs']} runs: "
+        f"{tot['science_runs']} science, {aux} auxiliary), by `scripts/b6_s16_block5_replay_counts.py` @ "
+        f"`{commit}`, under Block 5's catalog `{b5sha}…` and Block 6's `{b6sha}…`. Per-pack counts are ALPHA, "
+        f"BETA, GAMMA. "
+        f"**Rules that became flags (counted).** Block 6 turns 5 run codes and 25 session codes into flags and "
+        f"drops GAMMA's lost-midpoint rule. As flags they remove nothing. Of the 5 run codes only "
+        f"`contention.request_overlap` fired in Block 5: {con['runs_flagged']} runs "
+        f"({_pk(con['runs_flagged_by_pack'])}; {con['runs_flagged_science']} science). Block 5 removed all "
+        f"{con['b5_runs_removed']}, and none carries a code that still removes it. Over Block 5's flags, Block 6's "
+        f"catalog removes {tot['b6_catalog_runs_removed']} runs "
+        f"({_pk({p: v['b6_catalog_runs_removed'] for p, v in sp.items()})}) where Block 5 removed "
+        f"{tot['b5_runs_removed']} ({_pk({p: v['b5_runs_removed'] for p, v in sp.items()})}). The 25 session "
+        f"codes fired in {rows['8.2-25']['sessions_flagged']} of {n} sessions. The midpoint was lost in "
+        f"{mid['b5_rule_would_remove_sessions']} of {mid['gamma_sessions']} GAMMA sessions. `idle.waited`: "
+        f"{wai['runs_flagged']}; Block 5 had no waiting admission. "
+        f"**Derived, not read.** The clock-rate hold (14.675 ppm) holds {hold['sessions_removed']} of {n}: each "
+        f"session was armed under Block 5's gate, |f| ≤ 3.6306 ppm (B5-REG §4.2), and none carries "
+        f"`clock.arm_unmeasured`. The b_op stop (139 ms, ALPHA and GAMMA; §8.2 P3) stops {bop['sessions_removed']} "
+        f"of {bop['sessions_with_line']}: each session is claim-usable, so its smallest target phase passed the "
+        f"unchanged phase check, which every run fails above the line (§8.6 S-5), and Block 6's s_bracket is "
+        f"smaller than Block 5's. "
+        f"**Not replayed.** (a) Grounds N, W, D, S and the pre-check hold (§8.2 N1, N2, W1, W2, W3, D1, S1; "
+        f"`precheck.certain_exclusion`): no replay is owed and none stands beside them from the rehearsals; the "
+        f"nearest Block 5 codes ({', '.join('`' + c + '`' for c in cp_codes)}) fired in {cp_sessions} of {n} "
+        f"sessions. (b) Block 5 did not record the input: `sleep.in_run`; the agent rule (`agent.presence`, "
+        f"`agent.presence_overlap`, `agent.unit_overlap`), since Block 5 took no agent census and an agent's "
+        f"presence in it is unknown; the wait skips (`idle.wait_cap_skip`, `idle.wait_budget_skip`), since Block 5 "
+        f"had no waiting admission and aborted {sum(abt.values())} runs ({_pk(abt)}) at admission instead, a kept "
+        f"rule. (c) Contention's labelled alternative (C − k × 0.54 ≥ 0.0874 CPU-s): not counted; it removes "
+        f"nothing in Block 6. {clause_d} "
+        f"No excluding rule that is new in Block 6 was replayed on Block 5's runs by reading its input. Outside the "
         f"pinned program; changes no Block 6 number."
     )
 
@@ -605,7 +685,11 @@ def main(argv: list[str] | None = None) -> int:
     result["pinned"] = not args.unpinned
     result["catalog_sha256"] = {"b5": sha256_file(args.b5_catalog), "b6": sha256_file(args.b6_catalog)}
     md = render_markdown(result, commit=commit, date=date)
-    line = section17_line(result, commit=commit, date=date)
+    try:
+        line = section17_line(result, commit=commit, date=date)
+    except Refusal as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 4
     result["section17_line"] = line
     md += "\n## The §17 line (kind: slot fill)\n\n" + line + "\n"
     if args.json_out:

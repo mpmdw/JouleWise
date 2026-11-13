@@ -94,7 +94,7 @@ class Fixture:
             ]),
             self.session("beta", [
                 flag(b, "contention.request_overlap", run_id="s4"),
-                flag(b, "member.admission_aborted", run_id="s4"),   # also removed by a kept rule
+                flag(b, "member.admission_aborted", run_id="s5"),
                 flag(b, "whole_window.not_passed"),
             ]),
             self.session("gamma", [
@@ -136,23 +136,51 @@ class ReplayCounts(unittest.TestCase):
         tot = result["summary_totals"]
         self.assertEqual(tot["runs"], 10 + 10 + 8)
         self.assertEqual(tot["science_runs"], 8 + 8 + 6)
-        self.assertEqual(tot["b5_runs_removed"], 4)          # s1, x0, s2 (alpha); s4 (beta)
-        self.assertEqual(tot["b6_catalog_runs_removed"], 2)  # s2, s4 by member.admission_aborted
-        self.assertEqual(tot["kept_by_block6_changes"], 2)   # s1, x0; s4 stays removed
-        self.assertEqual(tot["kept_by_block6_changes_science"], 1)
+        self.assertEqual(tot["b5_runs_removed"], 5)          # s1, x0, s2 (alpha); s4, s5 (beta)
+        self.assertEqual(tot["b6_catalog_runs_removed"], 2)  # s2, s5 by member.admission_aborted
+        self.assertEqual(tot["kept_by_block6_changes"], 3)   # s1, x0, s4
+        self.assertEqual(tot["kept_by_block6_changes_science"], 2)
+        self.assertEqual(tot["runs_with_changed_run_code"], 3)
         self.assertEqual(tot["b6_catalog_sessions_removed"], 0)
 
-    def test_not_evaluated_rules_carry_no_count(self) -> None:
+    def test_row_states_and_no_count_outside_counted_or_derived(self) -> None:
         result = run_replay(self.fx, self.fx.standard())
+        self.assertEqual(result["open"], ["8.3.3-PST"])
+        by_state = result["rows_by_state"]
+        self.assertEqual(by_state["derived"], ["8.2-P3", "8.6-S7"])
+        self.assertEqual(by_state["no_replay_owed"],
+                         ["8.2-N1", "8.2-N2", "8.2-W1", "8.2-W2", "8.2-W3", "8.2-D1", "8.2-S1", "8.2-PRE"])
+        self.assertEqual(by_state["no_block5_input"], ["8.3.2-SLP", "8.3.2-AGT", "8.3.2-SKP"])
+        self.assertEqual(by_state["not_counted_alternative"], ["8.3.3-CONALT"])
         rows = self.rows(result)
-        for rule_id in ("8.2-P3", "8.2-N1", "8.2-S1", "8.3.2-SLP", "8.3.2-AGT", "8.3.3-PST", "8.3.3-CONALT"):
-            self.assertIn(rule_id, result["not_evaluated"])
-            self.assertIs(rows[rule_id]["evaluated"], False)
+        for rule_id in by_state["no_replay_owed"] + by_state["no_block5_input"] + ["8.3.3-CONALT", "8.3.3-PST"]:
             self.assertNotIn("runs_removed", rows[rule_id])
             self.assertNotIn("sessions_removed", rows[rule_id])
             self.assertTrue(rows[rule_id]["reason"])
         md = s16.render_markdown(result, commit="abc", date="2026-11-13")
-        self.assertIn("| not evaluated | not evaluated |", md)
+        self.assertIn("| OPEN | OPEN |", md)
+        self.assertIn("| no replay owed | no replay owed |", md)
+        self.assertIn("| no Block 5 input | no Block 5 input |", md)
+        self.assertIn("| not counted (alternative) | not counted (alternative) |", md)
+        self.assertNotIn("not evaluated", md)
+        self.assertNotIn("bracket-binding", md + json.dumps(result))
+
+    def test_bop_stop_is_derived_for_alpha_and_gamma_only(self) -> None:
+        result = run_replay(self.fx, self.fx.standard())
+        p3 = self.rows(result)["8.2-P3"]
+        self.assertEqual(p3["state"], "derived")
+        self.assertEqual(p3["sessions_removed_by_pack"], {"alpha": 0, "beta": None, "gamma": 0})
+        self.assertEqual(p3["sessions_with_line"], 2)
+        md = s16.render_markdown(result, commit="abc", date="2026-11-13")
+        self.assertIn("| 0 (0, -, 0) | 0 (0, -, 0) (derived) |", md)
+
+    def test_more_codes_count_is_computed(self) -> None:
+        result = run_replay(self.fx, self.fx.standard())
+        row = self.rows(result)["8.3.2-AGT"]
+        row["codes"] = [f"agent.c{i}" for i in range(6)]
+        md = s16.render_markdown(result, commit="abc", date="2026-11-13")
+        self.assertIn("`agent.c3` and 2 more", md)
+        self.assertIn("and 21 more", md)   # the 25 session codes
 
     def test_counterpart_counts_are_reported_beside_not_evaluated_rules(self) -> None:
         result = run_replay(self.fx, self.fx.standard())
@@ -184,22 +212,48 @@ class ReplayCounts(unittest.TestCase):
         with (roots[1] / "derived/flags.jsonl").open("a") as fh:
             fh.write(json.dumps(flag(b, "clock.arm_unmeasured")) + "\n")
         hold = self.rows(run_replay(self.fx, roots))["8.6-S7"]
-        self.assertEqual(hold["evaluated"], "partial")
-        self.assertEqual(hold["sessions_not_evaluated"], ["beta"])
+        self.assertEqual(hold["state"], "derived")
+        self.assertEqual(hold["sessions_not_derived"], ["beta"])
         self.assertIsNone(hold["sessions_removed_by_pack"]["beta"])
         self.assertEqual(hold["sessions_removed_by_pack"]["alpha"], 0)
 
     def test_section17_line(self) -> None:
         result = run_replay(self.fx, self.fx.standard())
-        result["catalog_sha256"] = {"b6": "b5bce6c64bbc"}
+        result["catalog_sha256"] = {"b5": "5d77c725d4bf", "b6": "b5bce6c64bbc"}
         line = s16.section17_line(result, commit="deadbeef1", date="2026-11-13")
-        self.assertTrue(line.startswith("- 2026-11-13, §17-S16 (RL-134 item 17). **Kind.** Slot fill: S-16"))
-        self.assertIn("@ `deadbeef1`", line)
-        self.assertIn("catalog `b5bce6c6…`", line)
-        self.assertIn("remove 0 of 28 runs and 0 of 3 sessions", line)
-        self.assertIn("fire on 2 runs that Block 5 removed and Block 6 keeps", line)
-        self.assertIn("Not evaluated from flags", line)
-        self.assertIn("`sleep.in_run`", line)
+        self.assertTrue(line.startswith("- 2026-11-13, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: "
+                                        "S-16, Block 5's half, in part. Read after the Block 5 release"))
+        self.assertIn("@ `deadbeef1`, under Block 5's catalog `5d77c725…` and Block 6's `b5bce6c6…`", line)
+        self.assertIn("28 runs: 22 science, 6 auxiliary", line)
+        self.assertIn("only `contention.request_overlap` fired in Block 5: 3 runs (2, 1, 0; 2 science). Block 5 "
+                      "removed all 3, and none carries a code that still removes it.", line)
+        self.assertIn("Block 6's catalog removes 2 runs (1, 1, 0) where Block 5 removed 5 (3, 2, 0).", line)
+        self.assertIn("The b_op stop (139 ms, ALPHA and GAMMA; §8.2 P3) stops 0 of 2:", line)
+        self.assertIn("aborted 2 runs (1, 1, 0) at admission instead", line)
+        self.assertIn("needs each run's idle-baseline rails: `OPEN[S-16: P*]`.", line)
+        self.assertNotIn("Where evaluated", line)
+
+    def test_section17_line_with_pstar(self) -> None:
+        result = run_replay(self.fx, self.fx.standard())
+        line = s16.section17_line(result, commit="c1", date="2026-11-13", pstar={
+            "tool": "scripts/x.py", "commit": "c2", "removed": 0, "removed_by_pack": {"alpha": 0, "beta": 0,
+                                                                                    "gamma": 0},
+            "max_baseline_mw": "1.23", "lowest_line_w": "0.24"})
+        self.assertIn("Block 5's half. Read after", line)
+        self.assertIn("(d) The desk exclusion at P* (§8.3 item 3, S-9), replayed on each run's idle-baseline rails by "
+                      "`scripts/x.py` @ `c2`: removes 0 of 28 runs (0, 0, 0); largest baseline mean 1.23 mW against "
+                      "the lowest line 0.24 W.", line)
+        self.assertNotIn("OPEN[S-16", line)
+
+    def test_line_refuses_when_another_changed_run_code_fired(self) -> None:
+        roots = self.fx.standard()
+        with (roots[0] / "derived/flags.jsonl").open("a") as fh:
+            fh.write(json.dumps(flag(PLANS["alpha"], "member.cooldown_cap_hit", run_id="s6")) + "\n")
+        (roots[0] / "derived/exclusions.json").write_text(json.dumps(
+            {"claim_usable": True, "members_excluded": [{}] * 4}))
+        result = run_replay(self.fx, roots)
+        with self.assertRaisesRegex(s16.Refusal, "line_premise: the changed run codes that fired"):
+            s16.section17_line(result, commit="c", date="2026-11-13")
 
 
 class Refusals(unittest.TestCase):
@@ -295,6 +349,17 @@ class Cli(unittest.TestCase):
         self.assertIn("| Rule | Change | Block 6 effect | Runs removed (of 28; 22 science)", md)
         self.assertIn("## The §17 line (kind: slot fill)", md)
         self.assertIn("@ `c0ffee000`", md)
+
+    def test_contention_run_with_a_kept_excluding_code_exits_4(self) -> None:
+        argv = self.argv()
+        alpha = self.tmp / f"harvest-{PLANS['alpha']}"
+        with (alpha / "derived/flags.jsonl").open("a") as fh:
+            fh.write(json.dumps(flag(PLANS["alpha"], "member.span_unknown", run_id="s1")) + "\n")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = s16.main(argv + ["--unpinned"])
+        self.assertEqual(code, 4)
+        self.assertIn("runs carrying a changed run code (3) differ from the runs Block 6 keeps (2)", err.getvalue())
 
     def test_pins_cover_the_three_released_sessions(self) -> None:
         self.assertEqual(sorted(s16.PINS["sessions"]), sorted(PLANS.values()))
