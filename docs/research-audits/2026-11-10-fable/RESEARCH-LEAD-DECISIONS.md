@@ -9234,6 +9234,161 @@ Block-5-aware.
 
 Source: cold review of B-2..B-5, /Volumes/JW-EXT/scratch/fable-rev-b6-real-run.md.
 
+# RL-140. S-16's Block 5 half: filled in part by the flags replay; one row stays open (the P* desk exclusion); the §17 line is replaced; four script fixes (2026-11-13 09:55 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 09:55 PST (`date`).
+
+**Read.** `scripts/b6_s16_block5_replay_counts.py` and its test module at `880e43628`
+(`docs/2026-11-13-b6-s16-block5`). `/Volumes/JW-EXT/scratch/s16-block5-counts.md` and its JSON. The registration
+on `origin/main`: §8.1 to §8.4, §8.6, §8.7, the S-16 row of §14. RL-134 item 17 and build B-6 in the runbook. Both
+catalogs. In Block 5's three released harvest roots: `derived/flags.jsonl`, `roster.json`, `exclusions.json`,
+`bracket-binding.json`, `neg8-clean-corpus.json`, `harvest-thresholds.json`.
+
+**Executed.** The test module under `taskpolicy -b`: 19 pass. The script on the released inputs: exit 0, JSON
+byte-equal to the builder's, table equal. My own recount, written separately from the script: every number
+below agrees. The nine pinned input digests: each is in `B5-BLIND-DRY-RUN-RECORD.json`. The catalog digests:
+`5d77c725…` and `b5bce6c6…` (the second from `git show b9de23a2c:configs/b6/flag_catalog_b6.json`).
+
+## 1. Is S-16 filled
+
+**Ruled.** In part. The line below is entered now as a slot fill. One row stays open: the desk exclusion at P*
+(§8.3 item 3, S-9). The release is not held for it (RL-134 item 17). If the P* count lands before the release
+check, the release record carries no `OPEN[S-16]`. If it does not, the record carries `OPEN[S-16: P*]` as RL-134
+item 17 words it, and the count is entered before Paper 1's §6.8 is filled.
+
+**Why not "filled".** Every row the script evaluates is a rule that became a flag, or the clock hold. A flag
+removes nothing, so "the new or changed rules remove 0 of 357 runs" is true by construction. It says nothing
+about an excluding rule. No rule that excludes in Block 6 and is new was replayed by reading its input. The line
+must say that, and the draft's lead sentence hides it.
+
+**Why not 14 open rows.** The 14 are four different cases. I rule each.
+
+| Case | Rows | Ruling |
+|---|---|---|
+| A. Grounds N, W, D, S and the pre-check hold | N1, N2, W1, W2, W3, D1, S1, `precheck.certain_exclusion` | No replay is owed. §8.7 item 1 exists to resize a line that removes known-good runs; these grounds have no line to size, and the registration prints no rehearsal count beside any of them. The row prints the nearest Block 5 codes' counts for information (all 0 of 3 sessions). Closed |
+| B. Block 5 did not record the input | `sleep.in_run`; the agent rule; the two wait skips | Cannot be replayed. The row says so. For the agent rule the line states that Block 5 took no census, so an agent's presence in Block 5 is unknown. Closed |
+| C. b_op stop (P3, S-5) | 1 row | Closed as derived, 0 of 2, the same standing as the clock hold. Each ALPHA and GAMMA session is claim-usable, so its smallest target phase passed the unchanged phase check; above the line every run of that phase fails it (§8.6 S-5); and Block 6's s_bracket (10.818 ms) is below Block 5's (14.531 ms), so Block 6's b_op is not larger. BETA has no line |
+| D. Contention's labelled alternative | 1 row | Not owed. It removes nothing in Block 6; Block 6's own cells print it. The rule in force is the flag, which is counted. A Block 5 count may be added later; it is in bounds |
+| E. The P* desk exclusion | 1 row | **Open.** It excludes in Block 6, the registration prints its rehearsal replay (0 of 77), and Block 5's bundles hold its input |
+
+**Inputs in bounds** (Block 5 is released; the test is fidelity to "structure only" as the rehearsal replay
+read it):
+
+- In, used: flags, roster, exclusion list.
+- In, for row E: each run's preserved idle-baseline rails, read by the pinned desk function with Block 6's
+  registered P* per pack and phase. This is the rule's own hazard input, and the rehearsal replay read the same
+  rails. Output: runs removed of 357, and the largest baseline mean beside the lowest line, as §8.3 item 3 prints
+  it for the rehearsals.
+- In, not needed: the monitor's C and k per run (row D); the calibration ledger's b_op (row C is derived).
+- Out: any target-phase or reference-run energy, any estimate, `recompute.json`. So D1 is not replayed.
+- Out: everything under Block 6 custody.
+
+**A correction to the builder's note 3.** Block 5's `derived/bracket-binding.json` holds digests and ids
+(`joulewise.calibration_bracket_binding.v1`). It has no b_op. The P3 row's reason text names the wrong file.
+
+**Readings ruled.** Scope: accepted, with the table above. Denominator: roster members (357; 280 science, 77
+auxiliary), accepted; units are not counted. Omitting "decided after Block 5 outcomes were known" from the
+fill line: accepted. The registration schedules this half after the release, so the fill is not a deviation.
+The label attaches only to `OPEN[S-16: P*]` if it is carried.
+
+## 2. The §17 line
+
+The builder's draft is not entered. This text is, with `<commit>` set to the fixed script's commit. The script
+prints it; the numbers are the ones at `880e43628`.
+
+> - 2026-11-13, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half, in part. Read
+>   after the Block 5 release (2026-11-08, `RUN_STATE.md` item 231). Counts only, from the released flags,
+>   rosters and exclusion lists of Block 5's 3 usable sessions (`v5-b5-alpha-a1-20261009T2312Z`,
+>   `v5-b5-beta-a6-20261011T2011Z`, `v5-b5-gamma-a1-20261012T0420Z`; 357 runs: 280 science, 77 auxiliary), by
+>   `scripts/b6_s16_block5_replay_counts.py` @ `<commit>`, under Block 5's catalog `5d77c725…` and Block 6's
+>   `b5bce6c6…`. Per-pack counts are ALPHA, BETA, GAMMA.
+>   **Rules that became flags (counted).** Block 6 turns 5 run codes and 25 session codes into flags and drops
+>   GAMMA's lost-midpoint rule. As flags they remove nothing. Of the 5 run codes only
+>   `contention.request_overlap` fired in Block 5: 28 runs (4, 14, 10; 18 science). Block 5 removed all 28, and
+>   none carries a code that still removes it. Over Block 5's flags, Block 6's catalog removes 11 runs (2, 4, 5)
+>   where Block 5 removed 39 (6, 18, 15). The 25 session codes fired in 0 of 3 sessions. The midpoint was lost
+>   in 0 of 1 GAMMA sessions. `idle.waited`: 0; Block 5 had no waiting admission.
+>   **Derived, not read.** The clock-rate hold (14.675 ppm) holds 0 of 3: each session was armed under Block
+>   5's gate, |f| ≤ 3.6306 ppm (B5-REG §4.2), and none carries `clock.arm_unmeasured`. The b_op stop (139 ms,
+>   ALPHA and GAMMA; §8.2 P3) stops 0 of 2: each session is claim-usable, so its smallest target phase passed
+>   the unchanged phase check, which every run fails above the line (§8.6 S-5), and Block 6's s_bracket is
+>   smaller than Block 5's.
+>   **Not replayed.** (a) Grounds N, W, D, S and the pre-check hold (§8.2 N1, N2, W1, W2, W3, D1, S1;
+>   `precheck.certain_exclusion`): no replay is owed and none stands beside them from the rehearsals; the
+>   nearest Block 5 codes (`calibration.no_bracket`, `calibration.capture_invalid`, `neg8.bound_not_derived`,
+>   `model.identity_mismatch`, `code.executed_differs_from_sealed`, `neg8.screen_failed`) fired in 0 of 3
+>   sessions. (b) Block 5 did not record the input: `sleep.in_run`; the agent rule (`agent.presence`,
+>   `agent.presence_overlap`, `agent.unit_overlap`), since Block 5 took no agent census and an agent's presence
+>   in it is unknown; the wait skips (`idle.wait_cap_skip`, `idle.wait_budget_skip`), since Block 5 had no
+>   waiting admission and aborted 9 runs (2, 3, 4) at admission instead, a kept rule. (c) Contention's labelled
+>   alternative (C − k × 0.54 ≥ 0.0874 CPU-s): not counted; it removes nothing in Block 6. (d) The desk
+>   exclusion at P* (§8.3 item 3, S-9) needs each run's idle-baseline rails: `OPEN[S-16: P*]`.
+>   No excluding rule that is new in Block 6 was replayed on Block 5's runs by reading its input. Outside the
+>   pinned program; changes no Block 6 number.
+
+If the P* count is in hand when the line is entered, clause (d) and the words "in part" are replaced by:
+
+> (d) The desk exclusion at P* (§8.3 item 3, S-9), replayed on each run's idle-baseline rails by `<tool>` @
+> `<commit>`: removes X of 357 runs (a, b, c); largest baseline mean Y mW against the lowest line Z W.
+
+If it lands later, that sentence is a second dated §17 line of kind "slot fill", and it closes the open row.
+
+## 3. The script
+
+**Counts: correct.** My recount from the same files gives 357 runs (125, 125, 107), 280 science (100, 100,
+80); Block 5 removed 39 (6, 18, 15), equal to each `exclusions.json`; `contention.request_overlap` on 28 runs
+(4, 14, 10), 18 science (3, 9, 6), none carrying another code that removes it under Block 6's catalog; 11
+removed under Block 6's catalog (2, 4, 5); no session-level flag with a Block 6 excluding effect; none of the
+25 session codes present; GAMMA's midpoint 1 of 1 present; no `clock.arm_unmeasured`;
+`member.admission_aborted` on 9 runs (2, 3, 4). The catalog difference is exactly 25 session codes and 5 run
+codes to DISCLOSE and 18 new excluding codes; none dropped. Every flag is at member or window level, and no
+window-level flag names a run.
+
+**"Not evaluated, no silent zero": the mechanism is right, the labelling is not.** The script never prints a 0
+for a rule it did not evaluate, refuses a "no emitter" row whose code Block 5 could emit, and refuses any
+catalog change no rule covers. Those three checks are what matter and they hold. What is wrong is that one
+label covers the four cases of §1, and the summary sentence reports a zero that is true by construction.
+
+**Fixes.** All four change text and row classes only. No count changes and no new input is read. A mechanical
+checker confirms them; I do not review again.
+
+| # | Fix | Accept when |
+|---|---|---|
+| 1 | Replace the single "not evaluated" state with the cases of §1: `no_replay_owed` (A), `no_block5_input` (B), `derived` (C, beside the clock hold), `not_counted_alternative` (D), `open` (E). The P3 row becomes derived, 0 of 2 with BETA "-", conditional on each session's `claim_usable`; its basis is §1 row C's sentence. Remove the reference to `derived/bracket-binding.json` | The table shows the five states; P3 prints `0 (0, -, 0)` sessions; the JSON lists `open: ["8.3.3-PST"]`; the string `bracket-binding` is gone |
+| 2 | `section17_line` prints the §2 text. The sentence "Where evaluated, the new or changed rules remove …" and the sums `rem_runs` and `rem_sess` behind it are deleted. (Summed across rows they would also count a run twice if it carried two codes.) | The printed line equals §2's with the commit filled; the line test is updated to match |
+| 3 | The "28 runs" in the line is the count of runs carrying a changed run code. The script refuses if that differs from the count Block 6's catalog keeps, instead of printing the second under the first's name | A fixture with a run carrying `contention.request_overlap` and a kept excluding code exits 4 from the line, or prints both counts |
+| 4 | `" and 21 more"` is computed from the code count | A rule with 6 codes prints "and 2 more" |
+
+Small, not required: `row["b6_effect"]` for a multi-code rule takes an arbitrary set element; the constant
+`SIX_FIVE_TWENTY` is misnamed.
+
+**The P\* row (E).** The same seat builds it; it is already Block-5-aware. It calls the pinned desk function
+on Block 5's bundles and writes no Block 6 analysis code. If the function cannot read a Block 5 bundle's
+baseline without a change, that comes to me before any change is made.
+
+## 4. What is not verified
+
+- Row C rests on the registration's own statement that every run of the smallest target phase fails its phase
+  check above the line. I did not read Block 5's b_op.
+- That Block 5's harvest ran every other member check on a run it had already flagged for contention. If it
+  did not, "none carries a code that still removes it" is an upper bound on the 28 kept. The line states the
+  count as read from flags.
+- The date 2026-11-08 for the release: `RUN_STATE.md` item 231 is Ed's unseal OK at 11:17 PST that day.
+- Whether Block 5's bundles keep idle-baseline rails in the shape the pinned desk function reads.
+
+**Owner.** The builder seat: fixes 1 to 4, then the P* row. A mechanical checker: the four acceptance lines.
+The lead: enters the line with the S-16 row of §14 marked "filled in part 2026-11-13 (§17-S16); P* open".
+
+**Gate.** Fixes 1 to 4 gate entering the line. Nothing here gates the cut, the gate run, the dry run or the
+release. Runbook condition (9) reads: the §17-S16 line is entered, and either the P* sentence is in it or the
+release record carries `OPEN[S-16: P*]`.
+
+**Blind status.** Blind to Block 6: nothing under Block 6 custody was opened or listed. Block-5-aware. Of
+Block 5 I read flag codes, scopes, contention offender names and CPU rates, reference counts, roster kinds,
+exclusion counts, binding digests and corpus member ids. No energy, no estimate, no value of the release file.
+
+Source: review of `880e43628`, /Volumes/JW-EXT/scratch/fable-rl140-s16.md.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
