@@ -378,12 +378,13 @@ class Launcher(unittest.TestCase):
 class EmbeddedTable(unittest.TestCase):
     def test_twenty_four_rows_and_the_three_changed_program_rows(self):
         self.assertEqual(len(rr.PIN_TABLE), 24)
-        self.assertEqual(rr.PIN_TABLE["scripts/independent_recompute_b6.py"][:8], "90e22603")
+        # RL-142: RC-B6-1 is r2's (90e22603 at b6/analysis dropped Block 5's whole-machine lines).
+        self.assertEqual(rr.PIN_TABLE["scripts/independent_recompute_b6.py"][:8], "4a9f5944")
         self.assertEqual(rr.PIN_TABLE["joulewise/b6_analysis_check.py"][:8], "634c991c")
         self.assertEqual(rr.PIN_TABLE["joulewise/b6_analysis_inputs.py"][:8], "283dfc78")
 
     def test_table_equals_the_pin_candidate_commit(self):
-        candidate = "b5ab6a71d798e168209fd66a0832f66f97a0b096"
+        candidate = "aaa2f30861a4e49c4b8d2b4746f770931d713e84"   # r2 fix commit (RL-142, PR #762)
         if subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", candidate + "^{commit}"],
                           capture_output=True).returncode != 0:
             self.skipTest("pin candidate commit not in this clone")

@@ -38,7 +38,7 @@ SCHEMA = "joulewise.b6_structure_probe.v1"
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "configs/b6/recompute/production_comparison_keys.json"
 REGISTRY_SHA256 = "62dbfaef9ebc5cfbbe5a00734f5eb8ad3d82389f54f28473ed63db6135b9174d"
-EXPECT_PROGRAM_SHA256 = "90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759"
+EXPECT_PROGRAM_SHA256 = "4a9f594471652581737b6cd02bd2922592f2e7cf9d575a164adb10162a5211ea"  # r2, RL-142
 EXPECT_B5_PROGRAM_SHA256 = "d49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0"
 
 # §17-R7 (PR #748 at 27b6cacfd): the nine counting sessions and the pairing fixed by counting alone.

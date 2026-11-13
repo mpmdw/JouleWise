@@ -72,6 +72,29 @@ def git(repo, *args):
                                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}).stdout.strip()
 
 
+# RL-142: pack_block5_keys at RC-B6-1 90e22603 (b6/analysis) and at r2 (b6/analysis-r2), verbatim.
+PRE_R2_FILTER = '    return {k: v for k, v in keys.items() if k.split("/")[1:2] == [tag]}\n'
+R2_FILTER = ('    return {k: v for k, v in keys.items()\n'
+             '            if k.split("/")[1:2] == [tag] or k.split("/")[:3] == ["lines", "whole_machine", tag]}\n')
+WHOLE_MACHINE = {"disclosures": {"whole_machine": {"windows": {
+    pack: {"cells": {"c-decode": {"mean_j": 49.0}, "c-prefill-p2048": {"mean_j": 50.5}}} for pack in ("ALPHA", "BETA")}}}}
+
+
+def variant_checkout(parent, fixed):
+    """A checkout whose RC-B6-1 is this line's program with pack_block5_keys at r2 (fixed) or before it."""
+    checkout = parent / ("checkout-r2" if fixed else "checkout-pre-r2")
+    (checkout / "scripts").mkdir(parents=True)
+    text = (ROOT / rr.PROGRAM).read_text()
+    if text.count(PRE_R2_FILTER) + text.count(R2_FILTER) != 1:
+        raise AssertionError("pack_block5_keys is neither the pre-r2 nor the r2 text")
+    text = text.replace(PRE_R2_FILTER, R2_FILTER) if fixed else text.replace(R2_FILTER, PRE_R2_FILTER)
+    (checkout / rr.PROGRAM).write_text(text)
+    shutil.copyfile(ROOT / "scripts/independent_recompute_b5.py", checkout / "scripts/independent_recompute_b5.py")
+    for name in ("joulewise", "configs"):
+        os.symlink(ROOT / name, checkout / name)
+    return checkout
+
+
 class Block5Probe(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="b6-b5probe-", dir=os.environ.get("TMPDIR")))
@@ -79,16 +102,55 @@ class Block5Probe(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def probe(self, block5, digest=None):
+    def probe(self, block5, digest=None, checkout=ROOT, extra=()):
         # The probe imports the program at this checkout; bind the table to these bytes, whatever the line.
-        patch = mock.patch.dict(rr.PIN_TABLE, {rr.PROGRAM: sha(ROOT / rr.PROGRAM)})
+        patch = mock.patch.dict(rr.PIN_TABLE, {rr.PROGRAM: sha(Path(checkout) / rr.PROGRAM)})
         patch.start()
         self.addCleanup(patch.stop)
         out = self.tmp / ("probe-" + str(len(list(self.tmp.glob("probe-*")))) + ".json")
         with contextlib.redirect_stdout(io.StringIO()) as buffer:
-            rc = rec.main(["b5-probe", "--checkout", str(ROOT), "--block5", str(block5), "--block5-sha256",
-                           digest or sha(block5), "--out", str(out)])
+            rc = rec.main(["b5-probe", "--checkout", str(checkout), "--block5", str(block5), "--block5-sha256",
+                           digest or sha(block5), "--out", str(out), *extra])
         return rc, buffer.getvalue().strip(), (json.loads(out.read_text()) if out.exists() else None)
+
+    def test_whole_machine_keys_are_assigned_at_r2(self):
+        """RL-142 item 4: at r2 each floor pack keeps its own two whole-machine keys and the unassigned list is empty."""
+        path = self.tmp / "b5-wm.json"
+        path.write_text(json.dumps({**B5_STUB, **WHOLE_MACHINE}))
+        rc, line, doc = self.probe(path, checkout=variant_checkout(self.tmp, fixed=True))
+        self.assertEqual(rc, 0, line)
+        self.assertEqual(doc["unassigned"], [])
+        self.assertEqual(doc["by_pack"], {"ALPHA": 3, "BETA": 2, "GAMMA": 1})
+        self.assertIn("lines/whole_machine/qwen3-8b/prefill-p2048/mean_j", doc["names"]["BETA"])
+        self.assertEqual(line, "b5-probe total=6 ALPHA=3 BETA=2 GAMMA=1")
+        self.assertNotIn("49.0", json.dumps(doc))
+        self.assertIsNone(doc["predeclared_by_pack"])
+
+    def test_unassigned_keys_are_a_hold(self):
+        """RL-142 item 4: the pre-r2 filter leaves the four whole-machine keys with no pack; the probe holds and names
+        them in its file, with no value."""
+        path = self.tmp / "b5-wm.json"
+        path.write_text(json.dumps({**B5_STUB, **WHOLE_MACHINE}))
+        rc, line, doc = self.probe(path, checkout=variant_checkout(self.tmp, fixed=False))
+        self.assertEqual((rc, line), (5, "b5-probe: hold unassigned=4"))
+        self.assertEqual(doc["unassigned"], sorted("lines/whole_machine/%s/%s/mean_j" % (tag, phase)
+                                                   for tag in ("qwen3-1p7b", "qwen3-8b")
+                                                   for phase in ("decode", "prefill-p2048")))
+        self.assertEqual(doc["by_pack"], {"ALPHA": 1, "BETA": 0, "GAMMA": 1})
+        self.assertNotIn("50.5", json.dumps(doc))
+
+    def test_predeclared_counts_hold_on_any_difference(self):
+        """RL-142 item 4: --predeclared holds unless the per-pack counts are ALPHA 22, BETA 22, GAMMA 4 (total 48)."""
+        self.assertEqual((rec.PREDECLARED_BY_PACK, sum(rec.PREDECLARED_BY_PACK.values())),
+                         ({"ALPHA": 22, "BETA": 22, "GAMMA": 4}, 48))
+        path = self.tmp / "b5.json"
+        path.write_text(json.dumps(B5_STUB))
+        rc, line, doc = self.probe(path, extra=("--predeclared",))
+        self.assertEqual((rc, line), (5, "b5-probe: hold predeclared total=2 ALPHA=1 BETA=0 GAMMA=1"))
+        self.assertEqual(doc["predeclared_by_pack"], {"ALPHA": 22, "BETA": 22, "GAMMA": 4})
+        with mock.patch.dict(rec.PREDECLARED_BY_PACK, {"ALPHA": 1, "BETA": 0, "GAMMA": 1}):
+            rc, line, _ = self.probe(path, extra=("--predeclared",))
+        self.assertEqual((rc, line), (0, "b5-probe total=2 ALPHA=1 BETA=0 GAMMA=1"))
 
     def test_counts_and_names_without_values_and_equal_to_the_block_run(self):
         path = self.tmp / "b5.json"

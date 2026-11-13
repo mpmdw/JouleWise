@@ -55,8 +55,11 @@ TIME = "/usr/bin/time"
 # analysis/2026-11-13-b6-s14-merge @ b5ab6a71d798e168209fd66a0832f66f97a0b096: rows 1, 3 and 5 as RL-133 section 3
 # item 7 and RL-129 changed them (runbook section 1). If the cut commit differs, this table is regenerated at the
 # cut (`git show <cut>:<path> | shasum -a 256`) before the gate run.
+# RL-142 (r2, tag b6/analysis-r2): row 1 only, RC-B6-1 at the fix commit
+# analysis/2026-11-13-b6-s14-r2 @ aaa2f30861a4e49c4b8d2b4746f770931d713e84 (PR #762); the other 23 rows are
+# unchanged from the S-14 cut 3551e1a7d (b6/analysis).
 PIN_TABLE = {
-    "scripts/independent_recompute_b6.py": "90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759",
+    "scripts/independent_recompute_b6.py": "4a9f594471652581737b6cd02bd2922592f2e7cf9d575a164adb10162a5211ea",  # r2, RL-142
     "scripts/independent_recompute_b5.py": "d49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0",
     "joulewise/b6_analysis_check.py": "634c991c527106d32a93197dc00af113636ce30789b1080431cfa1750d056b30",
     "joulewise/b6_analysis_hazards.py": "9a907a3671dbe210df4d417428c9108f0fdee1c16531bd0bef2fd39b0f27bb2b",

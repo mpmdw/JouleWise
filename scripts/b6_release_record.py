@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Block 6: Block 5 input probe, release check and release record (RL-134 items 2, 7, 10; runbook build B-5).
 
-    b6_release_record.py b5-probe --checkout W --block5 PATH --block5-sha256 HEX --out O
+    b6_release_record.py b5-probe --checkout W --block5 PATH --block5-sha256 HEX --out O [--predeclared]
     b6_release_record.py check --run-dir RUN --checkout W --expect-commit S --manifest M --manifest-sha256 H
                                --block5 PATH --block5-sha256 HEX --cite 1=TEXT --cite 2=TEXT --cite 9=TEXT
                                --cite 10=TEXT --cite 11=TEXT [--kit KIT] [--root ROOT] [--tag b6/analysis]
@@ -12,7 +12,11 @@
 `b5-probe` checks the Block 5 file's digest, imports the pinned RC-B6-1 from W in a separate `python -I -B`
 process, runs `block5_quantities` and `pack_block5_keys` on the file, and writes, per pack, the number of
 summarised keys with a finite Block 5 value and their key names. No value leaves that process. The total is the
-predeclared count of between-session rows with `block5_included` true (RL-134 item 2 term 2).
+predeclared count of between-session rows with `block5_included` true (RL-134 item 2 term 2). RL-142 item 4: it
+also lists, by name, the finite summarised keys of the unfiltered `block5_quantities` that no pack keeps; that list
+must be empty, or the probe holds (`b5-probe: hold unassigned=<n>`, exit 5). With `--predeclared` the per-pack
+counts must equal RL-142's predeclaration for r2 (ALPHA 22, BETA 22, GAMMA 4, total 48), or the probe holds
+(`b5-probe: hold predeclared`, exit 5).
 
 `check` is the release check of runbook step 11 (§17-R1: digest re-verification plus an input census; the program
 is not run again). It evaluates the eleven conditions; (1), (2), (9), (10) and (11) are supplied as `--cite`
@@ -59,6 +63,8 @@ CONDITIONS = {
     "11": "Ed's OK is on record",
 }
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
+# RL-142 item 4: predeclared for r2 (`b6/analysis-r2`); the count at RC-B6-1 90e22603… was 44 by the pack-filter defect.
+PREDECLARED_BY_PACK = {"ALPHA": 22, "BETA": 22, "GAMMA": 4}
 
 B5_SNIPPET = r"""
 import importlib.util, json, sys
@@ -70,7 +76,9 @@ spec.loader.exec_module(m)
 keys = m.block5_quantities(json.loads(block5.read_bytes()))
 out = {pack: sorted(k for k, v in m.pack_block5_keys(pack, keys).items() if m.summarized(k) and m.finite(v))
        for pack in m.PACKS}
-sys.stdout.write(json.dumps(out))
+kept = {k for pack in m.PACKS for k in m.pack_block5_keys(pack, keys)}
+unassigned = sorted(k for k, v in keys.items() if m.summarized(k) and m.finite(v) and k not in kept)
+sys.stdout.write(json.dumps({"names": out, "unassigned": unassigned}))
 """
 
 
@@ -109,19 +117,30 @@ def cmd_b5_probe(args):
     if result.returncode != 0:
         print("refused: probe_failed")  # stderr is not relayed: it may quote a value
         return 4
-    names = json.loads(result.stdout)
-    if any(not isinstance(k, str) or re.search(r"\s|=", k) for v in names.values() for k in v):
+    parsed = json.loads(result.stdout)
+    names, unassigned = parsed["names"], parsed["unassigned"]
+    if any(not isinstance(k, str) or re.search(r"\s|=", k) for v in [*names.values(), unassigned] for k in v):
         print("refused: probe_output_invalid")
         return 4
     doc = {"schema": PROBE_SCHEMA, "block5_sha256": args.block5_sha256, "program_sha256": sha256_file(program),
            "by_pack": {p: len(v) for p, v in names.items()}, "total": sum(len(v) for v in names.values()),
-           "names": names,
+           "names": names, "unassigned": unassigned,
+           "predeclared_by_pack": PREDECLARED_BY_PACK if args.predeclared else None,
            "meaning": "per pack, the summarised keys with a finite Block 5 value: the predeclared count of "
-                      "between-session rows with block5_included true (RL-134 item 2 term 2)"}
+                      "between-session rows with block5_included true (RL-134 item 2 term 2); unassigned: finite "
+                      "summarised Block 5 keys that no pack keeps, which must be none (RL-142 item 4)"}
     write_new(args.out, (json.dumps(doc, indent=1, sort_keys=True) + "\n").encode())
     if doc["total"] == 0:
         # Opus kit review F3: a predeclared count of 0 is a hold (an empty or falsy Block 5 file gives 0).
         print("b5-probe: hold total=0")
+        return 5
+    if unassigned:
+        # RL-142 item 4: a released Block 5 value that no pack's line would carry is a hold; names are in the file.
+        print("b5-probe: hold unassigned=" + str(len(unassigned)))
+        return 5
+    if args.predeclared and doc["by_pack"] != PREDECLARED_BY_PACK:
+        print("b5-probe: hold predeclared total=" + str(doc["total"]) + " "
+              + " ".join(p + "=" + str(n) for p, n in doc["by_pack"].items()))
         return 5
     print("b5-probe total=" + str(doc["total"]) + " " + " ".join(p + "=" + str(n) for p, n in doc["by_pack"].items()))
     return 0
@@ -373,6 +392,8 @@ def main(argv=None):
     p.add_argument("--block5", required=True)
     p.add_argument("--block5-sha256", required=True)
     p.add_argument("--out", required=True)
+    p.add_argument("--predeclared", action="store_true",
+                   help="hold unless the per-pack counts equal RL-142's predeclaration for r2 (22, 22, 4)")
     c = sub.add_parser("check", help="the release check of runbook step 11")
     c.add_argument("--run-dir", required=True)
     c.add_argument("--checkout", required=True)
