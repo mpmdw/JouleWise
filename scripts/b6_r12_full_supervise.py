@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Finish one full BETA fixture and its reader, preserving actual parent exits.
+"""Finish one full single-pack fixture and its reader, preserving actual parent exits.
 
 A killed supervisor leaves an explicit inflight journal. It must not be
 restarted on that root. It never writes an original session/loop record.
+With --generation-only it stops at the completed original ordinary desk: the
+production reader (whose run-input document names the Air as analysis host)
+is then run separately, on the Air, with b6_r12_full_verify.py.
 """
 from __future__ import annotations
 
@@ -39,8 +42,10 @@ def smoke_proof(root, control):
     return proof
 
 
-def run(outer, stem):
+def run(outer, stem, generation_only=False):
     outer = safe_root(outer)
+    if (stem is None) != generation_only:
+        raise ValueError("exactly one of a reader stem or generation-only is required")
     journal = outer / "full-reader-supervision.json"
     if journal.exists():
         raise ValueError("new supervision journal required; never restart an interrupted supervisor")
@@ -52,6 +57,7 @@ def run(outer, stem):
         if len(control["steps"]) != 1 or control["steps"][-1]["boundary"]["state"] != "SMOKE_RUN":
             raise ValueError("start after exactly one completed smoke driver")
         state = {"synthetic_only": True, "supervisor_sha256": sha(Path(__file__)),
+                 "generation_only": generation_only,
                  "smoke_writer_proof": smoke_proof(root, control), "steps": [], "status": "ready"}
 
         def record():
@@ -82,6 +88,11 @@ def run(outer, stem):
         boundary = control["steps"][-1]["boundary"]
         if boundary["state"] != "ROTATE" or boundary["attempt_count"] != 1:
             raise ValueError("full ordinary desk/attempt did not complete")
+        if generation_only:
+            state["status"] = "generated"
+            state["reader"] = "deferred: run b6_r12_full_verify.py on the Air (registered analysis host)"
+            record()
+            return 0
         code = invoke([sys.executable, "-B", str(REPO / "scripts/b6_r12_full_verify.py"),
                        "--cohort-root", str(outer), "--stem", stem], "production-size reader and named tests")
         state["status"] = "done" if code == 0 else "failed"
@@ -92,9 +103,10 @@ def run(outer, stem):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cohort-root", required=True, type=Path)
-    parser.add_argument("--stem", required=True)
+    parser.add_argument("--stem")
+    parser.add_argument("--generation-only", action="store_true")
     args = parser.parse_args()
-    return run(args.cohort_root, args.stem)
+    return run(args.cohort_root, args.stem, args.generation_only)
 
 
 if __name__ == "__main__":

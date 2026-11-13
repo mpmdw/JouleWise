@@ -249,6 +249,108 @@ print(count)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGreater(int(result.stdout.strip()), 50)
 
+    CONTRAST = "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+    RESOLVE = """import json, sys
+from pathlib import Path
+from runtime import source_root
+root = Path(sys.argv[1])
+pin = source_root(root)
+sys.path.insert(0, str(pin / 'scripts'))
+from run_campaign import resolve_prospective_analysis_manifest_v3, ProspectiveManifestResolutionError
+overlays = json.loads((root / 'input-overlays.json').read_text())
+pack = pin / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'
+assert str(pack / 'analysis_manifest_v3.json') in overlays
+stages = sorted(path for path in pack.iterdir() if (path / 'order_manifest.json').is_file())
+ids, refused = set(), set()
+for stage in stages:
+    try:
+        ids.add(resolve_prospective_analysis_manifest_v3(stage).manifest_id)
+    except ProspectiveManifestResolutionError as exc:
+        refused.add(exc.args[0].split(':')[0])
+print(json.dumps({'stages': len(stages), 'ids': sorted(ids), 'refused': sorted(refused),
+                  'manifest_id': json.loads((pack / 'analysis_manifest_v3.json').read_text())['manifest_id']}))
+"""
+    # Pin probes run with the pinned functions in a fixture child, before any
+    # overlay exists. They edit only this temporary test root's exported pin.
+    PROBE = """import json, sys
+from pathlib import Path
+from joulewise.analysis_manifest_v3 import analysis_semantics_sha256_v1, calculate_manifest_id, render_manifest
+root, kind = Path(sys.argv[1]), sys.argv[2]
+pin = root / 'pin'
+path = pin / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json'
+text = path.read_text()
+value = json.loads(text)
+frozen, manifest_id = value['frozen_semantics_sha256'], value['manifest_id']
+assert frozen == analysis_semantics_sha256_v1(value) and manifest_id == calculate_manifest_id(value)
+if kind == 'quote-frozen':
+    (pin / 'configs/r12-probe-quote.json').write_text(json.dumps({'quoted': frozen}) + '\\n')
+elif kind == 'quote-id-docs':
+    (pin / 'docs/r12-probe-quote.md').write_text('quoted ' + manifest_id.removeprefix('am-') + '\\n')
+elif kind == 'duplicate':
+    value['r12_probe_copy'] = frozen
+    assert analysis_semantics_sha256_v1(value) == frozen
+    value['manifest_id'] = calculate_manifest_id(value)
+    path.write_bytes(render_manifest(value))
+elif kind == 'inconsistent':
+    assert text.count(json.dumps(manifest_id)) == 1
+    path.write_text(text.replace(json.dumps(manifest_id), json.dumps('am-' + '0' * 64)))
+else:
+    raise SystemExit('unknown probe')
+print('probe', kind)
+"""
+
+    def _contrast_inputs(self, root, probe=None):
+        export_chain_inputs(root)
+        (root / "source-policy.json").write_text('{"volume":"reduced"}\n')
+        if probe:
+            made = subprocess.run(command(root, "code", self.PROBE, root, probe), capture_output=True,
+                                  text=True, timeout=60)
+            self.assertEqual(made.returncode, 0, made.stderr)
+        return subprocess.run(command(root, "make-inputs"), capture_output=True, text=True, timeout=120)
+
+    def _resolve(self, root):
+        result = subprocess.run(command(root, "code", self.RESOLVE, root), capture_output=True,
+                                text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_synthetic_inputs_keep_prospective_analysis_identity(self):
+        """Predict: all four GAMMA contrast stage dirs pass the pinned run_campaign prospective resolver over synthetic inputs (MBP GAMMA root -1 failed it: analysis_prospective_identity_mismatch); make-inputs names the one rebound manifest."""
+        made = self._contrast_inputs(self.root)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        self.assertIn(f"prospective analysis manifests: rebound ['{self.CONTRAST}/analysis_manifest_v3.json'] "
+                      "unchanged [] inconsistent pin left unrepaired []", made.stdout)
+        resolved = self._resolve(self.root)
+        self.assertEqual((resolved["stages"], len(resolved["ids"]), resolved["refused"]), (4, 1, []))
+
+    def test_prospective_identity_quoted_outside_manifest_is_refused(self):
+        """Predict: a pinned frozen_semantics_sha256 quoted in another config, or a manifest_id quoted in an exported doc, makes make-inputs refuse before any overlay is written."""
+        for probe in ("quote-frozen", "quote-id-docs"):
+            with self.subTest(probe=probe):
+                root = prepare(Path(self.temp.name).resolve() / probe)
+                made = self._contrast_inputs(root, probe)
+                self.assertNotEqual(made.returncode, 0, made.stdout)
+                self.assertIn("analysis manifest identity is quoted outside its manifest", made.stderr)
+                self.assertFalse((root / "input-overlays.json").exists())
+
+    def test_prospective_identity_must_be_a_unique_field(self):
+        """Predict: a self-consistent pinned manifest that repeats its frozen_semantics_sha256 value elsewhere is refused (not a unique field), not rewritten in both places."""
+        root = prepare(Path(self.temp.name).resolve() / "duplicate")
+        made = self._contrast_inputs(root, "duplicate")
+        self.assertNotEqual(made.returncode, 0, made.stdout)
+        self.assertIn("analysis manifest identity is not a unique field", made.stderr)
+        self.assertFalse((root / "input-overlays.json").exists())
+
+    def test_inconsistent_pinned_prospective_manifest_is_not_repaired(self):
+        """Predict: a pinned manifest whose manifest_id is already wrong is named, left unrepaired in the overlay, and the pinned resolver still refuses it."""
+        root = prepare(Path(self.temp.name).resolve() / "inconsistent")
+        made = self._contrast_inputs(root, "inconsistent")
+        self.assertEqual(made.returncode, 0, made.stderr)
+        self.assertIn(f"inconsistent pin left unrepaired ['{self.CONTRAST}/analysis_manifest_v3.json']", made.stdout)
+        resolved = self._resolve(root)
+        self.assertEqual(resolved["manifest_id"], "am-" + "0" * 64)
+        self.assertEqual((resolved["ids"], resolved["refused"]), ([], ["analysis_prospective_identity_mismatch"]))
+
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_source_pruning_preserves_raw_instrument_bytes(self):
         """Predict: waveform pruning and notification polling preserve complete plist bytes and every meter poll byte against unpruned, unthrottled inputs."""
@@ -1380,21 +1482,36 @@ class ReducedSetTests(unittest.TestCase):
         self.assertIs(receipt["full_volume_claim"], False)
 
 
+# Predeclared 2026-11-12 before the ALPHA/GAMMA full sessions, independent of
+# the verifier's own table: registered roster/primary counts from the pinned
+# plan_tree stage graphs (campaign_collection expected_count sums) and the
+# production key-registry label. BETA's values are unchanged from root 23.
+FULL_PACK_EXPECTATIONS = {"alpha": (125, "ALPHA"), "beta": (125, "BETA"), "gamma": (107, "GAMMA")}
+FULL_PACK_CAMPAIGNS = {"alpha": "d117_floor_qwen3-1p7b_v5", "beta": "d117_floor_qwen3-8b_v5",
+                       "gamma": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"}
+
+
 @unittest.skipUnless(os.environ.get("R12_FULL_SESSION"), "explicit completed full-volume profile fixture required")
 class FullProductionSessionTests(unittest.TestCase):
-    """Declared before the first courier-profile production-size collection."""
+    """Declared before the first courier-profile production-size collection (BETA)
+    and, for ALPHA and GAMMA, before their MBP collections on 2026-11-12."""
 
     def facts(self):
         from b6_r12_verify import safe_root
         root = safe_root(Path(os.environ["R12_FULL_SESSION"]))
-        return json.loads((root / "full-session-observations.json").read_bytes())
+        value = json.loads((root / "full-session-observations.json").read_bytes())
+        pack = value.get("pack", "beta")  # root-23 observations predate the pack field
+        self.assertIn(pack, FULL_PACK_EXPECTATIONS)
+        self.assertEqual(value["session_id"], "r1-" + pack)
+        return pack, value
 
     def test_registered_production_volume(self):
-        """Predict full-BETA-courier: 125 original roster members and executed primary streams, each >=334 s at 10 Hz with 16 CPU records/frame; 50 Hz meter with no drops/gaps/duplicates and registered monitor cadences/errors 0; original courier records file transport (RL-48 item 5; RL-98 term 1)."""
-        value = self.facts()
-        self.assertEqual(value["roster_members"], 125)
+        """Predict full-BETA-courier: 125 original roster members and executed primary streams, each >=334 s at 10 Hz with 16 CPU records/frame; 50 Hz meter with no drops/gaps/duplicates and registered monitor cadences/errors 0; original courier records file transport (RL-48 item 5; RL-98 term 1). Predict full-ALPHA-courier and full-GAMMA-courier identically with 125 and 107 members/primary streams."""
+        pack, value = self.facts()
+        members = FULL_PACK_EXPECTATIONS[pack][0]
+        self.assertEqual(value["roster_members"], members)
         volume = value["volume"]
-        self.assertEqual(len(volume["primary_plists"]), 125)
+        self.assertEqual(len(volume["primary_plists"]), members)
         for primary in volume["primary_plists"]:
             self.assertGreaterEqual(primary["duration_s"], 334, primary["path"])
             self.assertEqual(primary["cadence_ns"], [100_000_000])
@@ -1427,16 +1544,67 @@ class FullProductionSessionTests(unittest.TestCase):
             self.assertIs(courier["mail_sent"], False)
 
     def test_production_reader_at_full_size(self):
-        """Predict full-BETA-reader: actual option (c) exits 0/comparator agrees on the full original desk archive and emits every published production BETA quantity key; record native session/primary/meter ratios, reader wall and RSS separately (RL-98 terms 1 and 2)."""
-        value = self.facts()
+        """Predict full-BETA-reader: actual option (c) exits 0/comparator agrees on the full original desk archive and emits every published production BETA quantity key; record native session/primary/meter ratios, reader wall and RSS separately (RL-98 terms 1 and 2). Predict full-ALPHA-reader and full-GAMMA-reader identically against the published ALPHA (122) and GAMMA (93) session keys."""
+        pack, value = self.facts()
         self.assertEqual(value["production_exit"], 0)
         self.assertTrue(value["comparator_agrees"])
         registry = json.loads((REPO / "configs/b6/recompute/production_comparison_keys.json").read_bytes())
-        self.assertEqual(value["quantity_keys"], registry["session_quantity_keys"]["BETA"])
+        self.assertEqual(value["quantity_keys"], registry["session_quantity_keys"][FULL_PACK_EXPECTATIONS[pack][1]])
         native = value["volume"]["native_generation"]
         self.assertGreater(native["wall_s"], 0)
         self.assertTrue(native["includes_validation_and_compression"])
         self.assertFalse(native["injected_clock"])
+
+
+class FullPackExpectationTests(unittest.TestCase):
+    """Control-only tests for the ALPHA/GAMMA full sessions; not real-chain evidence."""
+
+    def test_expectations_match_pinned_plan_trees_and_registry(self):
+        """Predict: 125/125/107 equal the pinned campaign_collection counts; the verifier's table agrees; registry has 122/122/93 session keys."""
+        from b6_r12_full_verify import PACK_EXPECTATIONS, session_id
+        registry = json.loads((REPO / "configs/b6/recompute/production_comparison_keys.json").read_bytes())
+        for pack, (members, label) in FULL_PACK_EXPECTATIONS.items():
+            tree = json.loads(subprocess.check_output(["git", "show", f"{PIN}:configs/campaigns/{FULL_PACK_CAMPAIGNS[pack]}/plan_tree.json"], cwd=REPO))
+            counted = sum(row["expected_count"] for row in tree["stage_graph"] if row["kind"] == "campaign_collection")
+            self.assertEqual(counted, members, pack)
+            self.assertEqual(PACK_EXPECTATIONS[pack], {"members": members, "registry_pack": label})
+            self.assertEqual(session_id(pack), "r1-" + pack)
+        self.assertEqual({label: len(registry["session_quantity_keys"][label]) for _, label in FULL_PACK_EXPECTATIONS.values()},
+                         {"ALPHA": 122, "BETA": 122, "GAMMA": 93})
+
+    def test_profile_gate_admits_only_new_plain_full_pack_roots(self):
+        """Predict: fresh ALPHA/BETA/GAMMA plain/full reaches the unchanged single-pack scheduler with full volume; other scenarios/volumes, unknown packs and existing roots refuse before any write; BETA's declaration text is byte-identical to root 23's."""
+        import b6_r12_profile_session as profile
+        from unittest.mock import patch
+        self.assertEqual(profile.prediction("beta"), "original BETA roster/streams at full volume; completed production reader exits 0/comparator agrees; no closed-nine claim")
+        self.assertEqual(profile.smoke_text("beta"), "original supplier's reduced 65 s / one CPU; ordinary full BETA r1 remains 335 s / 16 CPUs")
+        with tempfile.TemporaryDirectory(prefix="r12-profile-gate-") as directory:
+            parent = Path(directory).resolve()
+            for pack in ("alpha", "beta", "gamma"):
+                calls = []
+                with patch.object(profile.single, "run", lambda *a, **k: calls.append((a, k)) or 0):
+                    self.assertEqual(profile.run(parent / ("new-" + pack), parent / "prior", pack, "plain", "full"), 0)
+                self.assertEqual(calls[0][0][2:], (pack, "plain"))
+                self.assertEqual(calls[0][1], {"declared_volume": "full"})
+                self.assertIn(pack.upper(), profile.prediction(pack))
+                self.assertFalse((parent / ("new-" + pack)).exists())
+            existing = parent / "existing"
+            existing.mkdir()
+            for args in ((parent / "a", "alpha", "anchor", "full"), (parent / "b", "gamma", "plain", "reduced"),
+                         (parent / "c", "delta", "plain", "full"), (existing, "alpha", "plain", "full")):
+                with self.subTest(args=args), self.assertRaisesRegex(ValueError, "requires new root"):
+                    profile.run(args[0], parent / "prior", *args[1:])
+            self.assertEqual(sorted(p.name for p in parent.iterdir()), ["existing"])
+
+    def test_supervisor_generation_only_requires_exclusive_mode(self):
+        """Predict: generation-only and a reader stem are exclusive and refuse before any journal; a reader stem alone keeps the original behaviour."""
+        from b6_r12_full_supervise import run
+        with tempfile.TemporaryDirectory(prefix="r12-full-supervisor-mode-") as directory:
+            root = Path(directory).resolve()
+            for stem, only in (("reader", True), (None, False)):
+                with self.subTest(stem=stem), self.assertRaisesRegex(ValueError, "exactly one"):
+                    run(root, stem, only)
+            self.assertEqual(list(root.iterdir()), [])
 
 
 @unittest.skipUnless(os.environ.get("R12_SINGLE_PACK_SET"), "explicit additional single-pack fixture required")
