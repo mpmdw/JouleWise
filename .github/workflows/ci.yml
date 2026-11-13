@@ -13,8 +13,9 @@ concurrency:
 jobs:
   # A state-only range (scripts/ci_state_only.sh) sets code=false, so every
   # shard and exclusive job reports success without running, and state=true,
-  # so this job runs the quick tier plus every module that names a changed
-  # state file (quick_suite.py --tier touched). fences always runs.
+  # so this job still runs the quick tier. The modules that read the live
+  # state files (test_gen_state, test_gen_current, test_docs_freshness) are
+  # in that tier (tests/test_ci_docs_only.py checks), and fences always runs.
   quick:
     needs: changes
     runs-on: ubuntu-latest
@@ -39,13 +40,8 @@ jobs:
           fi
           test -x /bin/zsh
       - name: Quick test tier
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
         run: python3 scripts/quick_suite.py --tier quick --workers 4
-      - name: State-only range - quick tier plus the modules that name the changed state files
-        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.state == 'true'
-        env:
-          BASE_SHA: ${{ needs.changes.outputs.base }}
-        run: python3 scripts/quick_suite.py --tier touched --since "$BASE_SHA" --workers 4
 
   # Select interpreters and skip expensive jobs only for proven docs-only ranges.
   changes:
@@ -54,7 +50,6 @@ jobs:
       pythons: ${{ steps.interpreters.outputs.pythons || '["3.13"]' }}
       code: ${{ steps.paths.outputs.code || 'true' }}
       state: ${{ steps.paths.outputs.state || 'false' }}
-      base: ${{ steps.paths.outputs.base }}
     steps:
       - name: Select Python interpreters
         id: interpreters
@@ -98,7 +93,7 @@ jobs:
           elif classify ci_state_only.sh; then
             code=false; state=true
           fi
-          printf 'code=%s\nstate=%s\nbase=%s\n' "$code" "$state" "$before" >> "$GITHUB_OUTPUT"
+          printf 'code=%s\nstate=%s\n' "$code" "$state" >> "$GITHUB_OUTPUT"
 
   # F2 state generation, F4 historical receipt semantics, and F5 CLI/strict
   # mock smokes ran identically inside every ordinary test-matrix shard; they

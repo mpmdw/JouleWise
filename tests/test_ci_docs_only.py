@@ -161,15 +161,33 @@ class StateOnlyClassifierTests(unittest.TestCase):
 
 
 class StateOnlyWorkflowTests(unittest.TestCase):
-    """The workflow runs the BASE commit's classifier and gives state-only ranges the touched tier."""
+    """The workflow runs the BASE commit's classifier; a state-only range keeps the quick tier."""
 
-    def test_workflow_wires_the_classifier_and_the_touched_tier(self):
+    # The modules that read the live RUN_STATE.md, TASK_QUEUE.md or CURRENT.json content.
+    LIVE_STATE_READERS = ("tests.test_gen_state", "tests.test_gen_current", "tests.test_docs_freshness")
+
+    def test_workflow_wires_the_classifier_into_the_quick_job(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn('git show "$before:scripts/$1" | bash -s -- "$before" "$after"', text)
         self.assertIn("elif classify ci_state_only.sh; then", text)
-        self.assertIn('quick_suite.py --tier touched --since "$BASE_SHA"', text)
         self.assertIn("state: ${{ steps.paths.outputs.state || 'false' }}", text)
+        self.assertIn("if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'\n"
+                      "        run: python3 scripts/quick_suite.py --tier quick --workers 4", text)
 
+    def test_live_state_readers_are_in_the_quick_tier(self):
+        import json
+        import sys
+        sys.path.insert(0, str(SCRIPT.parent))
+        import quick_suite
+        import shard_tests
+        modules = shard_tests.discover_test_modules()
+        payload = json.loads(shard_tests.DEFAULT_TIMINGS_PATH.read_text(encoding="utf-8"))
+        selected, excluded = quick_suite.select_modules(
+            modules, shard_tests.load_timing_map(), payload.get("exclusive_modules", {}),
+            shard_tests.load_split_declarations())
+        for module in self.LIVE_STATE_READERS:
+            with self.subTest(module=module):
+                self.assertIn(module, selected, excluded.get(module))
 
 if __name__ == "__main__":
     unittest.main()
