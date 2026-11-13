@@ -7563,6 +7563,95 @@ with a profile, and I would have asked for a shorter rotation or a shorter loop 
 
 Replacement texts: /Volumes/JW-EXT/scratch/fable-rl126-proportionality.md §4.
 
+# RL-127. A rehearsal is budgeted against the analysis it rehearses; every stage has a wall-time budget and an alarm
+
+Research lead (Fable 5.2). Written 2026-11-13 07:05 PST (`date`).
+
+**Read.** `fable-pipeline-time-audit.md` (this file) and its sources: the closed nine's `segments.json` and step files; `r12-nine-profile.md`; the R12 report at `d38495791`; RUN_STATE 227-307; the CI run list of 11-07 to 11-13; `docs/perf/SPEED-TOOLBOX.md`. I ran no test, reader or chain code. The CI and night figures are from two delegated profiles.
+
+**Ruled.**
+
+1. **Rehearsal ratio.** One attempt at a rehearsal, fixture or dry run takes at most **4 ×** the wall time of the analysis it rehearses, with a floor of 30 min and a ceiling of 4 h. The analysis time is the measured or predicted wall of the real run on its real host. For Block 6 that is 25 min, so 2 h.
+2. **Rehearsal program.** All attempts and regenerations for one analysis total at most **10 ×** that analysis or 8 machine-hours, whichever is larger. At the limit the seat stops and brings me a phase profile and a narrower design. More time is my ruling, not the seat's.
+3. **The running closed nine is exempt and stands** (RL-123). It is the last cohort generated for Block 6. If it is retired for an infrastructure cause, RL-123's substitution applies. If it exposes a chain or program defect, only the affected sessions are regenerated, from the last recorded boundary, once the generator can resume; until it can, the question comes to me before any full rerun. The MBP supplementary nine is not launched unless I ask for it after the Air nine reports.
+4. **Reuse before regenerating.** A fixture is keyed by the hashes of its generator, runtime and input pin. A change outside those does not regenerate it. A full-volume session is generated once per pack.
+5. **Fewest sessions.** A fixture has the fewest sessions and the smallest volume that produce the predeclared shapes. Volume is shown once, on one session per pack (RL-98), not on a cohort.
+6. **Stage budgets.** A stage that passes 1.5 × its budget raises an alarm and is profiled before it is retried.
+
+   | Stage | Budget |
+   |---|---|
+   | PR CI run, any tree | 30 min |
+   | One test unit | 10 min; shard timeout 60 min |
+   | `quick` tier, local or CI | 5 min |
+   | State-only or docs-only commit | 5 min of CI |
+   | Rehearsal attempt | Term 1 |
+   | Block analysis on real custody: copy, verify, `inputs`, reader | 1 h |
+   | Dry-run stop | 2 × the predicted wall |
+   | Night close to next launch, no code change | 2 h |
+   | Night close to next launch, with a code or config change | 4 h |
+   | Smoke or Part A | 75 min |
+   | Refused or stranded night noticed | 30 min |
+   | MBP unarmed with no job queued | 30 min |
+   | Seat with no output | 30 min (existing) |
+
+7. **Timing ledger.** Every long job runs under the timing wrapper and writes a start and an end marker with its stage and budget. No marker is added inside a measured window.
+8. **Watcher.** A non-agent watcher on the Air checks the ledger and night state every 2 min, alarms at 1.5 × budget, and saves a three-sample `ps` profile and a recent-files listing for the overrunning job. It signals no process.
+9. **Weekly time report**, each Monday: hours by stage, overruns, MBP capture and idle shares, PR cycle medians, top five sinks. The lead sends it to Ed; I review it and rule on class (c) items.
+10. **What a budget never buys.** Blinding, preregistration fidelity, custody digests, the registered estimand and batch-1 measured episodes are not traded for time. A budget overrun on a registered wait (a soak, a gate, a sampling duration) is reported and not shortened.
+11. **Frozen and pinned code.** A speedup there comes to me with its measured saving. Standing answers: the idle-plist parse-once waits for the next change that needs a fresh Part A, or until after W1; desk harvest workers and the census lookup land at the next night-code registration with a byte-equality test; the pinned reader `e17886bf…` is not touched.
+
+**Owner.** The lead: terms 6-9 (wrapper, watcher, CI limits, weekly report) and enforcing terms 1-5 in seat briefs. Each seat: stating the analysis time and its budget in its predeclaration. Research lead: terms 2, 3 and 11, and the weekly review.
+
+**Gate.** Terms 1-5 and 10-11 bind from this entry. Terms 6-9 bind when the wrapper and watcher exist; the target is one day. The first weekly report is due 11-16.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. Timings, code, logs and file metadata only. Block-5-aware.
+
+---
+
+Source: /Volumes/JW-EXT/scratch/fable-pipeline-time-audit.md (whole-pipeline time audit, 2026-11-13).
+
+# RL-128. A bounded read-only status probe is allowed during an armed span
+
+**Read.** `joulewise/hazards/contention.py` at `a6a09e6d7` (lines 1-80); the hazard monitor's module list; `scripts/run_night.py` constants; RUN_STATE 227, 249, 250, 305. I did not measure the probe. Every cost below is an estimate, and the gate is a measurement.
+
+**What the night already measures about outside work.** In the window the monitor takes a `ps` snapshot every 10 s (9.6 ms of CPU each) and journals every outside process above 0.005 CPU-s/s. It flags `contention.request_overlap` when an outside process exceeds 0.05 CPU-s/s in an interval that overlaps a member's request: 0.5 CPU-s in a 10 s interval, per process. The idle admission before each member judges the aggregate.
+
+**What one probe costs (estimate).**
+
+| Part | CPU | Note |
+|---|---|---|
+| `sshd` accept, key exchange, key auth | 30-80 ms | Two or three short processes |
+| Forced command: a shell, `tail -n 3`, `kill -0`, `stat`, `df` | 20-40 ms | |
+| Total | About 0.1 CPU-s, under 0.5 s wall | One fifth of the per-process flag limit, spread over several processes |
+| Energy | 1-3 J | Against a 300 s idle baseline, under 0.1% at any plausible idle power |
+| Radio | A few kB on a link `tailscaled` already keeps alive | No new radio state |
+| Heat | Not resolvable against 1.0 °C gate bands with 10-sample windows | |
+
+One probe is about ten of the monitor's own `ps` ticks, and the monitor takes 8,640 of those a day.
+
+**Against that:** an arm refused at t0 + 3 min went unnoticed for 60 h on 11-08 and for 3.4 h on 11-10. The night runs no agent, so a claude.ai or API incident cannot stop a chain. It can stop the magistrate from noticing the end, and the lead from noticing a refusal. One probe would have recovered either night.
+
+**Ruled.**
+
+1. **Allowed: one fixed command, by a dedicated key.** The MBP's `authorized_keys` entry for the probe key carries `command="…/night_status.sh"`, `no-pty`, no forwarding. Nothing else can be run with it. The ordinary key stays unused during armed spans, as now.
+2. **The command prints only:** the time; the boot session id; whether the driver pid is alive; the last three lines of `chain-stages.jsonl` (stage names and stamps); whether `chain.started`, `chain.exited` and `courier.sent` exist; free disk in GB. No energy, power, meter, temperature, transcript or result file is read. It writes nothing on the MBP.
+3. **How often:** at most one every 30 min on a schedule, plus one when a watcher's stage deadline fires. At most 60 in a night.
+4. **Who runs it:** a launchd job on the Air, not an agent. It works during an API incident. It alarms Ed and the lead by push and mail when the newest stage stamp is older than that stage's cap plus 10%, or when the driver pid is gone without `chain.exited`. A second, SSH-free check runs beside it: `git ls-remote` for the night-results branch, which appears 10 s after the chain exits.
+5. **Logged as host events.** The Air writes one line per probe (start and end time, exit code, bytes returned). The file is committed to the night-results branch after the night closes. On the MBP the hazard monitor journals the probe's processes by itself, inside custody.
+6. **No special treatment in analysis.** A member flagged `contention.request_overlap` is handled by the registered rule whatever caused it. The desk prints how many member requests overlapped a probe within 5 s, and the methods section states the probe count. No member is excluded for overlapping a probe.
+7. **W1.** The registration is not signed. Add one sentence before signing: bounded read-only status probes run during the window and are logged as host events. Then the probe is registered practice, not a deviation.
+8. **Not on the slot night now running.** It was armed under the old rule and the probe has not been calibrated.
+
+**Owner.** The lead (script, key, launchd job, watcher). The magistrate installs the `authorized_keys` line on the MBP in an unarmed span.
+
+**Gate.** One calibration on the unarmed MBP with the hazard monitor running: 20 probes, 30 s apart. Pass when, in the monitor's journal, no probe process exceeds 0.025 CPU-s/s in any interval (half the flag limit) and the DC-in trace's mean over the 20 probe intervals is within the idle trace's own interval-to-interval spread. On a fail, the probe goes to once an hour and comes back to me.
+
+**Blind status.** Code and RUN_STATE only. No night result read.
+
+---
+
+Source: /Volumes/JW-EXT/scratch/fable-pipeline-time-audit.md (whole-pipeline time audit, 2026-11-13).
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
