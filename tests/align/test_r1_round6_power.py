@@ -30,6 +30,15 @@ RESTORE = ('sudo', '-n', '/usr/bin/pmset', '-c', 'powermode', '0')
 
 class HostStateCase(unittest.TestCase):
     def setUp(self):
+        # r1.run() sets SIGINT/SIGTERM/SIGHUP to SIG_IGN in its teardown and
+        # restores them only at the end of its ``finally``. A test that makes
+        # the terminal-record write raise (OSError) skips that restore, and the
+        # in-process shard runner then leaks SIG_IGN into every later module:
+        # SIG_IGN survives exec, so their children ignore SIGTERM (CI run
+        # 43257905641 shard 10: test_b5_driver_p3 DeadManMeter x2 and
+        # test_codex_bridge_observer timed out). Put the dispositions back.
+        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            self.addCleanup(signal.signal, sig, signal.getsignal(sig))
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.tmp = Path(temporary.name)
@@ -359,6 +368,16 @@ class R1RegistrationAuthorityTests(HostStateCase):
         code, args = self.run_driver(failing)
         self.assertIsNone(code)
         self.assertFalse(args.registration.exists())
+
+    def test_the_driver_signal_dispositions_do_not_leak_past_a_test(self):
+        # Witness for the setUp cleanup: run the leaking path as its own case
+        # and check SIGTERM is back to what it was afterwards.
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)   # setUp's cleanup puts the outer value back
+        before = signal.getsignal(signal.SIGTERM)
+        result = unittest.TestResult()
+        type(self)('test_no_registration_without_a_terminal_record').run(result)
+        self.assertEqual([], result.errors + result.failures)
+        self.assertEqual(before, signal.getsignal(signal.SIGTERM))
 
     def test_a_signal_after_the_slots_are_built_leaves_no_registration(self):
         # A first signal between building r1_slots and the return records
