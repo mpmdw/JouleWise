@@ -1112,6 +1112,123 @@ class Mini(unittest.TestCase):
         self.assertEqual((rc, err), (0, ""))
 
 
+    # -- RL-134 items 2 and 3: --block5 and --only --
+
+    def block5_stub(self, data=b"\x00 not json: the kit never parses this file\n"):
+        stub = self.base / "b5-recompute.json"
+        stub.write_bytes(data)
+        return stub
+
+    def test_inputs_block5_pinned_in_external(self):
+        # Expected: exit 0; external.block5 equals the file's SHA-256 beside the loop pin; stdout gains
+        # " block5=pinned" before the digest. The stub is not JSON: the kit hashes it and parses nothing.
+        self.verified()
+        stub = self.block5_stub()
+        rc, out, err = self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]),
+                                   extra=("--block5", stub, "--block5-sha256", sha(stub)))
+        self.assertEqual((rc, err), (0, ""))
+        doc = self.base / "run-inputs.json"
+        self.assertEqual(json.loads(doc.read_bytes())["external"],
+                         {"loop_attempts": sha(self.attempts), "block5": sha(stub)})
+        self.assertEqual(out, "inputs sessions=2 loop_state=waived block5=pinned sha256=" + sha(doc) + "\n")
+
+    def test_inputs_without_block5_carries_none(self):
+        # Expected: exit 0; no block5 key in external and no block5 word on stdout.
+        self.verified()
+        rc, out, err = self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]))
+        self.assertEqual((rc, err), (0, ""))
+        self.assertNotIn("block5", json.loads((self.base / "run-inputs.json").read_bytes())["external"])
+        self.assertNotIn("block5", out)
+
+    def test_inputs_block5_wrong_digest_refused(self):
+        # Expected: block5_digest_mismatch (one byte changed after the digest was taken); no document written.
+        self.verified()
+        stub = self.block5_stub()
+        digest = sha(stub)
+        stub.write_bytes(b"\x01" + stub.read_bytes()[1:])
+        self.assertRefused(self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]),
+                                       extra=("--block5", stub, "--block5-sha256", digest)), "block5_digest_mismatch")
+        self.assertFalse((self.base / "run-inputs.json").exists())
+
+    def test_inputs_block5_both_or_neither(self):
+        # Expected: inputs_arguments_missing for --block5 alone and for --block5-sha256 alone.
+        self.verified()
+        stub = self.block5_stub()
+        for extra in (("--block5", stub), ("--block5-sha256", sha(stub))):
+            with self.subTest(extra=extra[0]):
+                self.assertRefused(self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]), extra=extra),
+                                   "inputs_arguments_missing")
+
+    def test_inputs_block5_symlink_and_fifo_refused(self):
+        # Expected: symlink for a symlinked Block 5 path; not_regular_file for a FIFO (never blocks).
+        self.verified()
+        stub = self.block5_stub()
+        link, fifo = self.base / "b5-link.json", self.base / "b5-fifo"
+        link.symlink_to(stub)
+        os.mkfifo(fifo)
+        for path, code in ((link, "symlink"), (fifo, "not_regular_file")):
+            with self.subTest(code=code):
+                self.assertRefused(self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]),
+                                               extra=("--block5", path, "--block5-sha256", sha(stub))), code)
+
+    def test_inputs_only_writes_exactly_the_named_session(self):
+        # Expected: exit 0, "inputs sessions=1"; sessions holds only the named copy path, its entry byte-equal
+        # to the full document's entry; external unchanged (loop pin and block5 pin alike).
+        self.verified()
+        stub = self.block5_stub()
+        mapping = mapping_for(["b6-alpha-r1", "b6-beta-r1"])
+        pin5 = ("--block5", stub, "--block5-sha256", sha(stub))
+        full, only = self.base / "full.json", self.base / "only.json"
+        self.assertEqual(self.inputs(mapping, out=full, extra=pin5)[0], 0)
+        for name, archive in (("b6-alpha-r1", self.ca), ("b6-beta-r1", self.cb)):
+            with self.subTest(only=name):
+                only.unlink(missing_ok=True)
+                rc, out, err = self.inputs(mapping, out=only, extra=("--only", name) + pin5)
+                self.assertEqual((rc, err), (0, ""))
+                self.assertTrue(out.startswith("inputs sessions=1 "), out)
+                f, o = json.loads(full.read_bytes()), json.loads(only.read_bytes())
+                self.assertEqual(list(o["sessions"]), [str(archive)])
+                self.assertEqual(json.dumps(o["sessions"][str(archive)], sort_keys=True),
+                                 json.dumps(f["sessions"][str(archive)], sort_keys=True))
+                self.assertEqual(o["external"], f["external"])
+                self.assertEqual({k: v for k, v in o.items() if k != "sessions"},
+                                 {k: v for k, v in f.items() if k != "sessions"})
+
+    def test_inputs_only_repeated_writes_both(self):
+        # Expected: --only twice names two sessions; both are written ("sessions=2"), equal to the full document.
+        self.verified()
+        mapping = mapping_for(["b6-alpha-r1", "b6-beta-r1"])
+        full, only = self.base / "full.json", self.base / "only.json"
+        self.assertEqual(self.inputs(mapping, out=full)[0], 0)
+        rc, out, err = self.inputs(mapping, out=only, extra=("--only", "b6-alpha-r1", "--only", "b6-beta-r1"))
+        self.assertEqual((rc, err), (0, ""))
+        self.assertTrue(out.startswith("inputs sessions=2 "), out)
+        self.assertEqual(full.read_bytes(), only.read_bytes())
+
+    def test_inputs_only_unknown_path_refused(self):
+        # Expected: session_unknown for a name that is not a manifest copy path, before any output is written.
+        self.verified()
+        for name in ("b6-gamma-r1", "dst/b6-alpha-r1", str(self.ca)):
+            with self.subTest(name=name):
+                self.assertRefused(self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]),
+                                               extra=("--only", "b6-alpha-r1", "--only", name)), "session_unknown")
+        self.assertFalse((self.base / "run-inputs.json").exists())
+
+    def test_inputs_only_mapping_still_covers_every_session(self):
+        # Expected: mapping_session_mismatch when the mapping covers only the --only session.
+        self.verified()
+        self.assertRefused(self.inputs(mapping_for(["b6-alpha-r1"]), extra=("--only", "b6-alpha-r1")),
+                           "mapping_session_mismatch")
+
+    def test_inputs_only_still_checks_every_mapped_session(self):
+        # Expected: a defect in a session left out by --only is still refused (the subset comes from a mapping
+        # that is checked whole): family_empty in b6-beta-r1 refuses a b6-alpha-r1-only document.
+        self.verified()
+        mapping = mapping_for(["b6-alpha-r1", "b6-beta-r1"])
+        mapping["sessions"]["b6-beta-r1"]["copied_records"]["g10_history"] = []
+        self.assertRefused(self.inputs(mapping, extra=("--only", "b6-alpha-r1")), "family_empty")
+
+
 class MultiChunk(unittest.TestCase):
     """Files larger than the kit's read chunk (cold review M5): a digest of the first chunk alone must not pass."""
 
@@ -1293,6 +1410,156 @@ class EndToEnd(unittest.TestCase):
         stripped = [self.fixture["public"].replace(json.loads(self.fixture["public"])["restricted_sha256"].encode(), b""),
                     self.kit["public"].replace(json.loads(self.kit["public"])["restricted_sha256"].encode(), b"")]
         self.assertEqual(stripped[0], stripped[1])
+
+
+class EndToEndPinned(unittest.TestCase):
+    """RL-134 items 2 and 3 (runbook B-1): kit documents with clock_journal, external.block5 and --only, read by the
+    pinned program (RC-B6-1) on the production-shaped synthetic block, with a synthetic Block 5 stub."""
+
+    ONLY = "b6-alpha-r1"   # the gate's shape: the first counting ALPHA session, alone (RL-134 item 1)
+    CLOCK = "sources/synthetic-clock/monitor/clock.jsonl"
+
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1":
+            raise unittest.SkipTest("needs JW_B5_SYNTHETIC_ONLY=1")
+        from tests.independent_recompute import support_b6_production as production
+        cls.b6 = production.b6
+        cls.tmp = tempfile.TemporaryDirectory(prefix="b6-custody-pinned-")
+        base = cls.base = Path(cls.tmp.name).resolve()
+        seal = production.seal
+
+        def seal_with_clock(archive, compress=False):
+            # A listed .../monitor/clock.jsonl makes the program require the clock_journal pin
+            # (clock_journal_required); its row has no clock stamps, so no meter offset is taken from it.
+            write(archive / cls.CLOCK, json.dumps({"schema": "synthetic", "module": "clock"}) + "\n")
+            return seal(archive, compress=compress)
+
+        with mock.patch.object(production, "seal", seal_with_clock):
+            archives, attempts, document = production.production_block(base / "src")
+        sealed = json.loads(document.read_bytes())["sessions"]
+        manifest = base / "manifest.json"
+        cls.kit_runs = [run("manifest", *[x for a in archives for x in ("--session", a)],
+                            "--loop-attempts", attempts, "--out", manifest)]
+        msha = cls.kit_runs[-1][1].strip().rsplit("=", 1)[1]
+        copy = cls.copy = base / "copy"
+        copy.mkdir()
+        for a in archives:
+            shutil.copytree(a, copy / a.name, symlinks=True)
+        cls.attempts = copy / "attempts.jsonl"
+        shutil.copyfile(attempts, cls.attempts)
+        cls.archives = [copy / a.name for a in archives]
+        receipt = base / "receipt.json"
+        cls.kit_runs.append(run("verify", "--manifest", manifest, "--manifest-sha256", msha, "--root", copy,
+                                "--loop-dir", copy, "--out", receipt))
+        mapping = {"sessions": {name: {"clock_journal": cls.CLOCK,
+                                       **{k: pin[k] for k in ("meter_streams", "contention_journal", "copied_records")}}
+                                for name, pin in sealed.items()}}
+        (base / "mapping.json").write_text(json.dumps(mapping))
+        # A synthetic Block 5 output: one reported cell per floor pack, in the shape block5_quantities reads.
+        cls.block5 = base / "b5-recompute.json"
+        cls.block5.write_text(json.dumps({"schema": "synthetic-block5-stub", "reported_cells": {
+            "stub-" + pack.lower(): {"model": cls.b6.MODELS[pack], "phase": "decode", "mean_j": 1.25}
+            for pack in cls.b6.FLOOR_PACKS}}))
+        pins = ["--manifest", manifest, "--manifest-sha256", msha, "--verify-receipt", receipt,
+                "--verify-receipt-sha256", sha(receipt), "--mapping", base / "mapping.json", "--l9-audit", "not_run"]
+        cls.full, cls.only = base / "run-inputs-block.json", base / "run-inputs-gate.json"
+        cls.kit_runs.append(run("inputs", *pins, "--block5", cls.block5, "--block5-sha256", sha(cls.block5),
+                                "--out", cls.full))
+        cls.kit_runs.append(run("inputs", *pins, "--only", cls.ONLY, "--out", cls.only))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def recompute(self, stem, archives, document, *extra):
+        r, p = self.base / (stem + "-restricted.json"), self.base / (stem + "-public.json")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = self.b6.main(["block", *[x for a in archives for x in ("--session", str(a))], *extra,
+                               "--loop-attempts", str(self.attempts), "--inputs", str(document),
+                               "--inputs-sha256", sha(document), "--workers", "1",
+                               "--restricted-out", str(r), "--public-out", str(p)])
+        return (rc, err.getvalue(), json.loads(r.read_bytes()) if r.exists() else None,
+                json.loads(p.read_bytes()) if p.exists() else None)
+
+    def assertGatePasses(self, restricted):
+        """RL-134 item 1's pass terms: option_c pass, no failure name, every judged class 0 failed and 0 unmatched."""
+        option_c = restricted["block"]["option_c"]
+        self.assertIs(option_c["pass"], True)
+        self.assertEqual(option_c["failures"], [])
+        self.assertTrue(option_c["families"])
+        judged = {c: row for c, row in option_c["comparator"]["classes"].items() if "pass" in row}
+        self.assertTrue(judged)
+        for cls, row in judged.items():
+            self.assertEqual((cls, row["pass"], row["failed"], row["unmatched"]), (cls, True, 0, 0))
+
+    def test_program_is_the_pinned_one(self):
+        # Expected: RC-B6-1 and the input module are the S-14 pins; the kit steps exited 0; both documents
+        # carry clock_journal for every written session; the block document pins block5, the gate one does not.
+        self.assertEqual(sha(ROOT / "scripts/independent_recompute_b6.py"),
+                         "90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759")
+        self.assertEqual(sha(ROOT / "joulewise/b6_analysis_inputs.py"),
+                         "283dfc78341742768dc210b9fd46da19cc0b1f883f316db8106e3db79f89219e")
+        self.assertEqual([(r[0], r[2]) for r in self.kit_runs], [(0, "")] * 4)
+        self.assertIn(" block5=pinned sha256=", self.kit_runs[2][1])
+        self.assertTrue(self.kit_runs[3][1].startswith("inputs sessions=1 "))
+        full, only = json.loads(self.full.read_bytes()), json.loads(self.only.read_bytes())
+        self.assertEqual(len(full["sessions"]), 10)
+        self.assertEqual(list(only["sessions"]), [str(self.copy / self.ONLY)])
+        for doc in (full, only):
+            self.assertTrue(all(pin["clock_journal"] == self.CLOCK for pin in doc["sessions"].values()))
+        self.assertEqual(full["external"], {"loop_attempts": sha(self.attempts), "block5": sha(self.block5)})
+        self.assertEqual(only["external"], {"loop_attempts": sha(self.attempts)})
+
+    def test_i_full_document_closed_block_with_block5(self):
+        # Expected: exit 0, block5_input true, option_c pass, no stop; the stub's values arrived (a between-session
+        # row of each floor pack has block5_included true).
+        rc, err, restricted, public = self.recompute("full", self.archives, self.full,
+                                                      "--closed", "--block5", str(self.block5))
+        self.assertEqual((rc, err), (0, ""))
+        self.assertIs(restricted["block5_input"], True)
+        self.assertIs(restricted["closed"], True)
+        self.assertIs(restricted["comparison_stopped"], False)
+        self.assertGatePasses(restricted)
+        self.assertEqual(restricted["inputs"]["external_supplied"],
+                         {"loop_attempts": True, "loop_state": False, "block5": True})
+        self.assertEqual(restricted["inputs"]["run_inputs_sha256"], sha(self.full))
+        self.assertEqual(len(public["sessions"]), 10)
+        for pack in self.b6.FLOOR_PACKS:
+            key = "reported/" + self.b6.MODEL_TAG[self.b6.MODELS[pack]] + "/decode/mean_j"
+            self.assertIs(restricted["block"]["between_session"][pack]["values"][key]["block5_included"], True)
+
+    def test_ii_block5_changed_one_byte_refused(self):
+        # Expected: exit 4, "refused: external_input_digest_mismatch", no output written.
+        changed = self.base / "b5-changed.json"
+        data = bytearray(self.block5.read_bytes())
+        data[-2] ^= 1
+        changed.write_bytes(bytes(data))
+        rc, err, restricted, public = self.recompute("changed", self.archives, self.full,
+                                                      "--closed", "--block5", str(changed))
+        self.assertEqual((rc, err), (4, "refused: external_input_digest_mismatch\n"))
+        self.assertEqual((restricted, public), (None, None))
+
+    def test_iii_only_document_one_session_block(self):
+        # Expected: exit 0 for the gate's shape (block, one session, no --closed, no --block5): option_c pass with
+        # no failure, no stop, one public session, external_supplied block5 false.
+        rc, err, restricted, public = self.recompute("only", [self.copy / self.ONLY], self.only)
+        self.assertEqual((rc, err), (0, ""))
+        self.assertIs(restricted["comparison_stopped"], False)
+        self.assertIs(restricted["closed"], False)
+        self.assertIs(restricted["block5_input"], False)
+        self.assertGatePasses(restricted)
+        self.assertEqual(restricted["inputs"]["external_supplied"],
+                         {"loop_attempts": True, "loop_state": False, "block5": False})
+        self.assertEqual(list(public["sessions"]), [self.ONLY])
+
+    def test_iv_full_document_one_session_left_out_refused(self):
+        # Expected: exit 4, "refused: session_input_unsupplied" (RL-133 §1b), no output written.
+        rc, err, restricted, public = self.recompute("short", self.archives[1:], self.full,
+                                                      "--closed", "--block5", str(self.block5))
+        self.assertEqual((rc, err), (4, "refused: session_input_unsupplied\n"))
+        self.assertEqual((restricted, public), (None, None))
 
 
 if __name__ == "__main__":

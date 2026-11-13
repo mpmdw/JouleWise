@@ -16,7 +16,9 @@ checked: at the source against itself, on the copy against the source manifest).
                              scripts/independent_recompute_b6.py; every digest
                              comes from the SOURCE manifest, never the copy; the
                              manifest and the receipt are each pinned by an
-                             out-of-band digest
+                             out-of-band digest; --block5 pins Block 5's released
+                             output (hashed, never parsed) as external.block5;
+                             --only writes a subset of the manifest's sessions
 
 Outputs are created mode 0600 and only in a directory without group/other bits
 (RL-100 item 2: the manifest and run-input document hold withheld/ digests).
@@ -497,21 +499,31 @@ def cmd_inputs(args):
         _, names = authenticated_names(root, by_path[args.list_names])
         sys.stdout.write("".join(n + "\n" for n in sorted(names)))
         return 0
-    if not (args.mapping and args.l9_audit and args.out):
+    if not (args.mapping and args.l9_audit and args.out) or bool(args.block5) != bool(args.block5_sha256):
         refuse("inputs_arguments_missing")
+    only = set(args.only or ())
+    if only - set(by_path):
+        refuse("session_unknown")   # RL-134 item 3: --only names manifest copy paths
     check_out(args.out)
+    external = {k: v["sha256"] for k, v in manifest["loop"].items()}
+    if args.block5:
+        # RL-134 item 2: Block 5's released output is pinned by its out-of-band digest. Hashed, never parsed.
+        if hash_file(no_symlink_components(args.block5))[0] != args.block5_sha256:
+            refuse("block5_digest_mismatch")
+        external["block5"] = args.block5_sha256
     _, mapping = read_json_artifact(args.mapping)
     if not isinstance(mapping.get("sessions"), dict) or set(mapping["sessions"]) != set(by_path):
-        refuse("mapping_session_mismatch")
+        refuse("mapping_session_mismatch")   # the mapping covers every manifest session, with or without --only
     sessions = {}
     for copy_path, entry in by_path.items():
         archive, names = located(copy_path, authenticated_names, root, entry)
-        sessions[str(archive)] = session_pin(archive, entry, mapping["sessions"][copy_path], names)
-    document = {"host": "Air", "l9_audit": args.l9_audit, "sessions": sessions,
-                "external": {k: v["sha256"] for k, v in manifest["loop"].items()}}
+        pin = session_pin(archive, entry, mapping["sessions"][copy_path], names)   # every session is checked
+        if not only or copy_path in only:
+            sessions[str(archive)] = pin
+    document = {"host": "Air", "l9_audit": args.l9_audit, "sessions": sessions, "external": external}
     digest = write_new(args.out, document)
     print("inputs sessions=" + str(len(sessions)) + (" loop_state=waived" if manifest.get("loop_state_waived") else "")
-          + " sha256=" + digest)
+          + (" block5=pinned" if args.block5 else "") + " sha256=" + digest)
     return 0
 
 
@@ -552,6 +564,11 @@ def main(argv=None):
                    help="accept a manifest that waived the loop-state file (the recompute then runs without re-harvest corrections)")
     i.add_argument("--l9-audit", choices=("not_run", "completed"))
     i.add_argument("--out", help="new run-input document")
+    i.add_argument("--block5", metavar="PATH", help="Block 5's released recompute output; hashed, never parsed, "
+                   "and pinned as external.block5 (RL-134 item 2)")
+    i.add_argument("--block5-sha256", metavar="HEX", help="its out-of-band SHA-256 (both or neither)")
+    i.add_argument("--only", action="append", metavar="COPY_PATH",
+                   help="write only this manifest session (repeat); the mapping still covers every session")
     i.add_argument("--list-names", metavar="COPY_PATH",
                    help="print the names one session's mapping may cite (RL-100 item 1) and exit")
     args = parser.parse_args(argv)

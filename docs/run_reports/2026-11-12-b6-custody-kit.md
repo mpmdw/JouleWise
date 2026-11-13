@@ -32,13 +32,19 @@ manifest. Exit 0 ok, 4 refusal (`refused: <code>` on stderr; for an unexpected e
 
 ## Schema targeted
 
-`joulewise/b6_analysis_inputs.py` and `session_input_pin` / `main` in `scripts/independent_recompute_b6.py` as of
-`b4e4df8ed` (sha256 `f46367d5…` and `ee00548d…`). Emitted per session: `harvest_sha256`, `acceptance_sha256`,
-`sha256sums_sha256`, `files` (source digests of every `derived/` and `withheld/` file), `meter_streams`,
-`contention_journal`, optional `clock_journal`, `copied_records` (eight families), and `compression` as
-`{"path", "sha256"}` (inside) or `{"external_path", "sha256", "relocations"}` (adjacent). Root `external` carries
-`loop_attempts` and optional `loop_state`. Neither pinned file nor `independent_recompute_b5.py`
-(`d49103e8…`, re-checked) was edited.
+Restated at round 3 (RL-100 item 4, RL-134 item 3). The kit now targets the S-14 program line
+`analysis/2026-11-13-b6-s14-merge` @ `b5ab6a71d`: `joulewise/b6_analysis_inputs.py` `283dfc78…` and
+`scripts/independent_recompute_b6.py` (RC-B6-1) `90e22603…`, both unchanged by this branch, as are the other 22 closure
+files and `independent_recompute_b5.py` (`d49103e8…`). Earlier rounds targeted `b4e4df8ed` (`f46367d5…`, `ee00548d…`).
+
+Emitted per session: `harvest_sha256`, `acceptance_sha256`, `sha256sums_sha256`, `files` (source digests of every
+`derived/` and `withheld/` file), `meter_streams`, `contention_journal`, `clock_journal` (required by the program when
+the archive lists a `…/monitor/clock.jsonl`), `copied_records` (eight families), and `compression` as
+`{"path", "sha256"}` (inside) or `{"external_path", "sha256", "relocations"}` (adjacent). Sessions are keyed by
+absolute copy path, which is one of the two names the program's `session_input_unsupplied` check accepts. Root
+`external` carries `loop_attempts`, optional `loop_state`, and (round 3) optional `block5`: the SHA-256 of Block 5's
+released recompute output, which the program checks against `--block5` (`external_input_unpinned` without it,
+`external_input_digest_mismatch` on a difference, `external_input_missing` when pinned and not supplied).
 
 ## Interpretations a reviewer should check
 
@@ -176,6 +182,10 @@ rsync -a <loop>/attempts.jsonl <loop>/state.json <desk>/b6-custody-manifest.json
 python3.13 -I scripts/b6_custody_kit.py verify --manifest /Volumes/JW-EXT/b6-custody/b6-custody-manifest.json --manifest-sha256 <sha from SOURCE> --root /Volumes/JW-EXT/b6-custody --loop-dir /Volumes/JW-EXT/b6-custody --out <run>/verify-receipt.json
 python3.13 -I scripts/b6_custody_kit.py inputs --manifest <...> --manifest-sha256 <sha from SOURCE> --verify-receipt <run>/verify-receipt.json --verify-receipt-sha256 <receipt_sha256 printed by verify> --list-names <id>/archive
 python3.13 -I scripts/b6_custody_kit.py inputs --manifest <...> --manifest-sha256 <...> --verify-receipt <...> --verify-receipt-sha256 <...> --mapping <run>/mapping.json --l9-audit not_run --out <run>/run-inputs.json   # add --accept-no-loop-state ONLY if the manifest waived loop-state; inputs then prints loop_state=waived
+# Round 3 (RL-134 items 1 to 3; the post-pin runbook's step 5 is authoritative). Block document: add --block5 <B5 recompute.json> --block5-sha256 <its
+# out-of-band digest>; the kit hashes the file (never parses it), refuses block5_digest_mismatch, writes external.block5 and prints block5=pinned.
+# Gate document: no --block5 flags, plus --only <id>/archive (repeatable); the mapping still covers every session, every session is still checked,
+# and only the named ones are written (stdout sessions=<written>). The gate run is then `block --session <that archive>` alone, without --closed.
 python3.13 -B scripts/independent_recompute_b6.py block --session /Volumes/JW-EXT/b6-custody/<id>/archive [...] --closed --loop-attempts /Volumes/JW-EXT/b6-custody/attempts.jsonl --loop-state /Volumes/JW-EXT/b6-custody/state.json --inputs <run>/run-inputs.json --inputs-sha256 <printed> --workers <n> --restricted-out <...> --public-out <...>
 ```
 
@@ -293,3 +303,74 @@ nine-session R12 fixtures were not run. No SSH.
 | L3 optional `--self-check` | Item text: skip unless the desk gap allows. |
 | L4 runbook PATH, manifest name, mode-700 `<run>` | Runbook comments above. |
 | L1 host name can change | No action beyond M1 change 2 (accepted by the review). |
+
+## Round 3 (runbook B-1; RL-100 item 4, RL-134 items 2 and 3)
+
+Opus 5.5 build seat, on the Air, 2026-11-13. Branch `analysis/2026-11-13-b6-custody-kit-r3`, worktree
+`/Volumes/JW-EXT/jw-wt/b6-custody-kit-r3`: the 21 kit commits from `ae7eb01b3`, rebased without conflict onto the S-14
+program line `analysis/2026-11-13-b6-s14-merge` @ `b5ab6a71d`. The diff from that base touches only
+`scripts/b6_custody_kit.py`, `tests/test_b6_custody_kit.py`, this report and the kit's line in `scripts/test_timings.json`;
+none of the 24 closure files. Synthetic archives only; no custody, archive, real-session or Block 5 file was opened.
+
+**`inputs --block5 PATH --block5-sha256 HEX`.** Both or neither (`inputs_arguments_missing`). `no_symlink_components`,
+regular file (`O_NOFOLLOW`, `not_regular_file` for a FIFO without blocking), streamed SHA-256; a difference refuses
+`block5_digest_mismatch`. On success `external.block5 = HEX` beside the loop pins and stdout gains ` block5=pinned` before
+` sha256=`. The file is not parsed (the unit test's stub is not JSON).
+
+**`inputs --only COPY_PATH`** (repeatable). Each value must be a manifest `copy_path` (`session_unknown`, checked before any
+output or mapping read). The mapping must still cover every manifest session (`mapping_session_mismatch` unchanged), and
+every session is still pinned and checked; only the named ones are written to `sessions`. A repeated value names the same
+session once. `external` is unchanged. Stdout's `sessions=` is the number written.
+
+### Tests
+
+| Run | Result |
+|---|---|
+| Module at the rebased head, before any round-3 change (`JW_B5_SYNTHETIC_ONLY=1`) | 110 tests OK, 96.4 s. The "63" of RL-100 is the round-1 count; rounds 1-2 grew it to 110 (107 + 3 EndToEnd) |
+| Module at the round-3 head (`JW_B5_SYNTHETIC_ONLY=1`) | 125 tests OK, 129.9 s: the 110, ten new unit tests, five in `EndToEndPinned` |
+| Module without the variable (the mutant runner's form) | 117 run, 2 classes skipped, OK, 11.1 s |
+
+New unit tests (`Mini`): block5 pinned and present in `external` (stdout exact); no `--block5`, no pin; wrong digest
+refuses, nothing written; both-or-neither; symlinked and FIFO Block 5 paths refused; `--only` writes exactly the named
+session, byte-equal to the full document's entry, `external` equal, for each of the two sessions; `--only` twice equals the
+full document; unknown `--only` refuses (`session_unknown`, three spellings); a mapping covering only the `--only` session
+refuses `mapping_session_mismatch`; a defect in an unnamed session still refuses.
+
+### End to end against the pinned program (`EndToEndPinned`)
+
+`production_block` (ten archives) with a synthetic `sources/synthetic-clock/monitor/clock.jsonl` added to each archive before
+it is sealed (its row carries no clock stamps, so the meter offset never comes from it); kit manifest, copy, verify,
+mapping with `clock_journal`, a synthetic Block 5 stub (one ALPHA and one BETA reported decode cell), then two documents:
+the block document (`--block5`) and the gate document (`--only b6-alpha-r1`, no `--block5`). Program and input module
+asserted at `90e22603…` and `283dfc78…`; the program is called in-process through its own `main`.
+
+| Test | Command shape | Result |
+|---|---|---|
+| (i) | `block` x10 `--closed --block5 <stub>`, full document | exit 0, stderr empty; `block5_input` true, `closed` true, `comparison_stopped` false; `option_c.pass` true, `failures` empty, every judged class pass with 0 failed and 0 unmatched; `external_supplied` `{loop_attempts: true, loop_state: false, block5: true}`; ten public sessions; the stub's values arrived: `between_session.<ALPHA,BETA>.values["reported/<tag>/decode/mean_j"].block5_included` true |
+| (ii) | as (i), the stub with one byte changed | exit 4, `refused: external_input_digest_mismatch`, no output |
+| (iii) | `block` x1 (`b6-alpha-r1`), gate document, no `--closed`, no `--block5` | exit 0, stderr empty; the same gate terms as (i); `closed` false, `block5_input` false, `external_supplied.block5` false; one public session |
+| (iv) | as (i) with the first `--session` left out | exit 4, `refused: session_input_unsupplied`, no output |
+
+### Mutants
+
+Runner `/Volumes/JW-EXT/scratch/b6-kit-r3-mutants.py` (not committed), kill table
+`/Volumes/JW-EXT/scratch/b6-kit-r3-kill-table.json`. Each mutant is a copy of the kit run through
+`B6_CUSTODY_KIT_UNDER_TEST`, one module at a time, under `taskpolicy -b`. No mutant kills, signals or reaps a process (the
+kit has no such path; the runner refuses a mutant whose added text names one). Real code passes under the same runner.
+
+| Set | Mutants | Killed |
+|---|---|---|
+| D, refusal deletions (now also those with a trailing comment, which `run_mutants2.py`'s pattern skipped) | 69 | 69 |
+| R, RL-100 citable names | 1 | 1 |
+| S1, the eight round-1 semantic mutants (m6 restated for the new `external` line) | 8 | 8 |
+| S2, the eight round-2 mutants (line diffs from `ae7eb01b3`'s kit) | 8 | 8 |
+| N, new: block5 digest check skipped, pin not written, symlink check bypassed, both-or-neither dropped; `--only` filter ignored, unknown path accepted, unnamed sessions unchecked | 7 | 7 |
+| E, new against the pinned program: `clock_journal` never pinned, block5 pin not written, `--only` filter ignored | 3 | 3 |
+| Total | 96 | 96 |
+
+### Program behaviour found
+
+None blocks the spec. Two observations for the lead. The program's `block5_input` is `bool(b5)` on the parsed file, so an
+empty JSON object would read as false while still being digest-pinned; Block 5's released file is not empty. The gate
+document carries `loop_state` in `external` when the manifest recorded one, so the gate run must be given `--loop-state`
+(step 7's command does), or it refuses `external_input_missing`.
