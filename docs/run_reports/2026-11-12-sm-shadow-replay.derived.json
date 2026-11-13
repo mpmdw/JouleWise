@@ -1,6 +1,10 @@
 {
  "custody": false,
  "derived": true,
+ "families": [
+  "align-r1-",
+  "align-pilot-"
+ ],
  "nights": [
   {
    "agreement": {
@@ -31,9 +35,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -44,9 +48,9 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
@@ -117,6 +121,7 @@
    ],
    "recorded": {
     "chain_exited": false,
+    "chain_outcome": null,
     "chain_started": false,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -124,6 +129,7 @@
     "exit_code_chain_exited": null,
     "exit_code_hazard_result": null,
     "exit_code_result": null,
+    "fault_boolean_present": false,
     "network_time_off_action_record": false,
     "refusal_present": true,
     "restore_record_in_delivered_tree": false,
@@ -178,9 +184,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -188,9 +194,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -201,13 +207,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -218,10 +229,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -289,6 +300,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -296,6 +308,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -353,9 +366,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -363,9 +376,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -376,13 +389,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -393,10 +411,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -464,6 +482,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -471,6 +490,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -528,9 +548,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -538,9 +558,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -551,13 +571,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -568,10 +593,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -639,6 +664,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -646,6 +672,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -703,9 +730,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -713,9 +740,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -726,13 +753,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -743,10 +775,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -814,6 +846,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -821,6 +854,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -878,9 +912,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -888,9 +922,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -901,13 +935,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -918,10 +957,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -989,6 +1028,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -996,6 +1036,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1053,9 +1094,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -1063,9 +1104,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -1076,13 +1117,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -1093,10 +1139,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -1164,6 +1210,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -1171,6 +1218,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1228,9 +1276,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -1238,9 +1286,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -1251,13 +1299,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -1268,10 +1321,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -1339,6 +1392,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -1346,6 +1400,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1403,9 +1458,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -1413,9 +1468,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -1426,13 +1481,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -1443,10 +1503,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -1514,6 +1574,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -1521,6 +1582,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1578,9 +1640,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -1588,9 +1650,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -1601,13 +1663,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -1618,10 +1685,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -1689,6 +1756,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -1696,6 +1764,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1753,9 +1822,9 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
       "id": "verdict_vs_exit_class",
-      "status": "agree"
+      "status": "note"
      },
      {
       "detail": "state matches courier records",
@@ -1763,9 +1832,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -1776,13 +1845,18 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
     "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
      {
       "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
       "id": "restore_records",
@@ -1793,10 +1867,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "success",
-    "declared": true,
-    "tool": "r1_runtime",
-    "word": "complete"
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
    },
    "files_present": [
     "arm_decision.json",
@@ -1864,6 +1938,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -1871,6 +1946,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1934,7 +2010,7 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word failed, class failed",
+      "detail": "GO is admission only; r1_driver word refused, class refused",
       "id": "verdict_vs_exit_class",
       "status": "agree"
      },
@@ -1950,9 +2026,9 @@
       "status": "disagree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -1975,9 +2051,9 @@
       "status": "disagree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
@@ -1992,10 +2068,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "failed",
+    "class": "refused",
     "declared": true,
-    "tool": "r1_runtime",
-    "word": "failed"
+    "tool": "r1_driver",
+    "word": "refused"
    },
    "files_present": [
     "arm_decision.json",
@@ -2063,6 +2139,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -2070,6 +2147,7 @@
     "exit_code_chain_exited": 3,
     "exit_code_hazard_result": 3,
     "exit_code_result": 3,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -2138,9 +2216,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -2151,9 +2229,9 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
@@ -2232,6 +2310,7 @@
    ],
    "recorded": {
     "chain_exited": false,
+    "chain_outcome": null,
     "chain_started": false,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -2239,6 +2318,7 @@
     "exit_code_chain_exited": null,
     "exit_code_hazard_result": null,
     "exit_code_result": null,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": true,
     "restore_record_in_delivered_tree": false,
@@ -2300,7 +2380,7 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word failed, class failed",
+      "detail": "GO is admission only; r1_driver word refused, class refused",
       "id": "verdict_vs_exit_class",
       "status": "agree"
      },
@@ -2316,9 +2396,9 @@
       "status": "disagree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -2341,9 +2421,9 @@
       "status": "disagree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
@@ -2358,10 +2438,10 @@
    "custody": false,
    "derived": true,
    "exit_class": {
-    "class": "failed",
+    "class": "refused",
     "declared": true,
-    "tool": "r1_runtime",
-    "word": "failed"
+    "tool": "r1_driver",
+    "word": "refused"
    },
    "files_present": [
     "arm_decision.json",
@@ -2429,6 +2509,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -2436,6 +2517,7 @@
     "exit_code_chain_exited": 3,
     "exit_code_hazard_result": 3,
     "exit_code_result": 3,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -2494,7 +2576,7 @@
       "status": "agree"
      },
      {
-      "detail": "GO is admission only; r1_runtime word complete, class success",
+      "detail": "GO is admission only; r1_driver word complete, class success",
       "id": "verdict_vs_exit_class",
       "status": "agree"
      },
@@ -2504,9 +2586,9 @@
       "status": "agree"
      },
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      },
      {
@@ -2517,9 +2599,9 @@
     ],
     "disagreements": [
      {
-      "detail": "pre-W1 courier: sent marker/field recorded, no delivery receipt (message id or git-push) in the delivered tree; the shadow reader needs a legacy-courier rule",
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
       "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
-      "kind": "fixture_gap",
+      "kind": "input_gap",
       "status": "disagree"
      }
     ],
@@ -2536,7 +2618,7 @@
    "exit_class": {
     "class": "success",
     "declared": true,
-    "tool": "r1_runtime",
+    "tool": "r1_driver",
     "word": "complete"
    },
    "files_present": [
@@ -2605,6 +2687,7 @@
    ],
    "recorded": {
     "chain_exited": true,
+    "chain_outcome": null,
     "chain_started": true,
     "courier_sent_field": true,
     "courier_sent_marker": true,
@@ -2612,6 +2695,7 @@
     "exit_code_chain_exited": 0,
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
+    "fault_boolean_present": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -2652,6 +2736,7 @@
   }
  ],
  "schema": "joulewise.sm_shadow_replay.v1",
+ "skipped_by_family_gate": 84,
  "structure_only": true,
  "summary": {
   "agree": 0,
