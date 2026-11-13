@@ -35,10 +35,12 @@ def sha(path):
 
 def run(*argv):
     argv = [str(a) for a in argv]
-    if argv[0] == "manifest" and "--source-host" not in argv:
-        argv += ["--source-host", "mbp-test"]   # tests run source and copy on one machine
+    if argv[0] == "manifest" and "--rehearsal-source-host" not in argv:
+        argv += ["--rehearsal-source-host", "mbp-test"]   # tests run source and copy on one machine
     if argv[0] == "manifest" and "--loop-state" not in argv and "--no-loop-state" not in argv:
         argv += ["--no-loop-state"]
+    if argv[0] == "inputs" and "--accept-no-loop-state" not in argv:
+        argv += ["--accept-no-loop-state"]   # the default fixtures waive loop-state; the R2 M2 tests use run_raw
     return run_raw(*argv)
 
 
@@ -57,6 +59,7 @@ def write(path, text):
 def mini_archive(parent, name, *, log="inside", marker=False, big=False):
     """A small sealed archive in the production layout (synthetic content only)."""
     a = parent / name
+    write(a / kit.SYNTHETIC_MARKER, "synthetic\n")   # the recompute's synthetic-fixture marker (R2 M1)
     planted = MARKER if marker else "plain"
     write(a / "sources/meter/stream-1.jsonl", json.dumps({"t": 1, "w": 10.0, "note": planted}) + "\n")
     write(a / "sources/meter/stream-2.jsonl", "".join(json.dumps({"t": i, "w": 11.0, "n": planted}) + "\n"
@@ -543,7 +546,7 @@ class Mini(unittest.TestCase):
         for extra in ([], ["--loop-state", self.attempts, "--no-loop-state"]):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
                 run_raw("manifest", "--session", str(self.a), "--loop-attempts", str(self.attempts), *extra,
-                        "--source-host", "h", "--out", str(self.base / "x.json"))
+                        "--rehearsal-source-host", "h", "--out", str(self.base / "x.json"))
             self.assertEqual(caught.exception.code, 2)
 
     def test_no_loop_state_is_recorded_and_inputs_carry_none(self):
