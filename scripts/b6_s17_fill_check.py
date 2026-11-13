@@ -13,13 +13,16 @@ addendum `docs/registrations/block6_freeze_by_commit_addendum.md`, read from `--
 
   Point 1 (scope). Every filled span is taken back to the text it replaced (the three OPEN markers S-14-PIN,
     R3-TABLE and R12-FULLSIZE-N, the 20 LOW 5 date stamps, the three LOW 6 pointers, the addendum's
-    `b6/analysis` row and, if filled, OPEN[R7-SESSION-INDEX]). The result must equal the base (`27b6cacfd`)
+    `b6/analysis` row, S-16 (§14's S-16 row and the §17-S16 line of RL-140 A4, taken back before LOW 5) and,
+    if filled, OPEN[R7-SESSION-INDEX]). The result must equal the base (`27b6cacfd`)
     byte for byte, and no other file may differ from the base (`--ignore-path` names exceptions).
   Point 2 (values). Each filled value equals git at the S-14 commit: `git rev-parse` for the commit, its tree
     and the `b6/analysis` tag object; `shasum -a 256` of `git show <S14>:<path>` for the four pinned files
     and the R3 generator; the generator's stdout (run with `-I -B` on a `git archive` of the S-14 commit) for
     the stdout SHA-256 and the "Keys covered" line. R12-FULLSIZE-N equals the number of full roots in the
-    pin request's section 3a. Every entry date equals `--entry-date` (default: today, local).
+    pin request's section 3a. Every entry date equals `--entry-date` (default: today, local). The §17-S16
+    line's commit token resolves to a commit whose `scripts/b6_s16_block5_pstar.py` is byte-identical to
+    `bc62db137`'s (RL-140 A4).
   Point 3 (R3 slot). The R3 stdout SHA-256 in the fill equals the pin request's section 2c slot.
 
 A `⟨CUT: …⟩` blank is reported, never guessed. With `--allow-blanks` a text whose only gaps are blanks exits
@@ -51,6 +54,45 @@ DEFAULT_PIN_REQUEST = "origin/docs/2026-11-13-b6-s14-pin-request"
 BASE = "27b6cacfd"
 OLD_DATE = "2026-11-12"
 PREDECLARED_R3_STDOUT = "1003d87e7b92bc28a38890d75860e0ea0e47ae65862e6d6dd09641d7b3f29840"  # b5ab6a71d
+S16_REVIEWED = "bc62db137"  # RL-140 A4: the commit the research lead read
+S16_PSTAR = "scripts/b6_s16_block5_pstar.py"
+# RL-140 A4's §17-S16 line, verbatim, with its two commit tokens as {S16C} and its entry date as {DATE}.
+S16_LINE = (
+    "\n- {DATE}, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half. Read after t"
+    "he Block 5 release (2026-11-08, `RUN_STATE.md` item 231), from Block 5's 3 usable sessions (`v5-b5-a"
+    'lpha-a1-20261009T2312Z`, `v5-b5-beta-a6-20261011T2011Z`, `v5-b5-gamma-a1-20261012T0420Z`; 357 runs: '
+    '280 science, 77 auxiliary). Counts from the released flags, rosters and exclusion lists, by `scripts'
+    "/b6_s16_block5_replay_counts.py` @ `{S16C}`, under Block 5's catalog `5d77c725…` and Block 6's `b5bc"
+    "e6c6…`. The desk exclusion from each run's idle-baseline rails, by `scripts/b6_s16_block5_pstar.py` "
+    '@ `{S16C}`. Per-pack counts are ALPHA, BETA, GAMMA. **Rules that became flags (counted).** Block 6 t'
+    "urns 5 run codes and 25 session codes into flags and drops GAMMA's lost-midpoint rule. As flags they"
+    ' remove nothing. Of the 5 run codes only `contention.request_overlap` fired in Block 5: 28 runs (4, '
+    '14, 10; 18 science). Block 5 removed all 28, and none carries a code that still removes it. Over Blo'
+    "ck 5's flags, Block 6's catalog removes 11 runs (2, 4, 5) where Block 5 removed 39 (6, 18, 15). The "
+    '25 session codes fired in 0 of 3 sessions. The midpoint was lost in 0 of 1 GAMMA sessions. `idle.wai'
+    'ted`: 0; Block 5 had no waiting admission. **Derived, not read.** The clock-rate hold (14.675 ppm) h'
+    "olds 0 of 3: each session was armed under Block 5's gate, |f| ≤ 3.6306 ppm (B5-REG §4.2), and none c"
+    'arries `clock.arm_unmeasured`. The b_op stop (139 ms, ALPHA and GAMMA; §8.2 P3) stops 0 of 2: each s'
+    'ession is claim-usable, so its smallest target phase passed the unchanged phase check, which every r'
+    "un fails above the line (§8.6 S-5), and Block 6's s_bracket is smaller than Block 5's. **Replayed on"
+    ' its input.** The desk exclusion at P* (§8.3 item 3, S-9), by the pinned `desk_hazards` (`b5ab6a71d`'
+    ") with Block 6's registered line per pack and phase: removes 0 of 357 runs (0, 0, 0); largest baseli"
+    'ne mean 1.11 mW against the lowest line 0.0723 W. The rule applies to science runs. 272 of the 280 w'
+    'ere examined (98, 98, 76); the other 8 (2, 2, 4) failed, and Block 5 had already removed them. The f'
+    "unction also reads each run's status, model name and request span, and the contention journal; its c"
+    'ontention result is not reported. **Not replayed.** (a) Grounds N, W, D, S and the pre-check hold (§'
+    '8.2 N1, N2, W1, W2, W3, D1, S1; `precheck.certain_exclusion`): no replay is owed and none stands bes'
+    'ide them from the rehearsals; the nearest Block 5 codes (`calibration.no_bracket`, `calibration.capt'
+    'ure_invalid`, `neg8.bound_not_derived`, `model.identity_mismatch`, `code.executed_differs_from_seale'
+    'd`, `neg8.screen_failed`) fired in 0 of 3 sessions. (b) Block 5 did not record the input: `sleep.in_'
+    'run`; the agent rule (`agent.presence`, `agent.presence_overlap`, `agent.unit_overlap`), since Block'
+    " 5 took no agent census and an agent's presence in it is unknown; the wait skips (`idle.wait_cap_ski"
+    'p`, `idle.wait_budget_skip`), since Block 5 had no waiting admission and aborted 9 runs (2, 3, 4) at'
+    " admission instead, a kept rule. (c) Contention's labelled alternative (C − k × 0.54 ≥ 0.0874 CPU-s)"
+    ': not counted; it removes nothing in Block 6. The desk exclusion is the only excluding rule new in B'
+    "lock 6 that was replayed on Block 5's runs by reading its input; the b_op stop is derived, and (a) a"
+    'nd (b) were not replayed. Outside the pinned program; changes no Block 6 number.'
+)
 
 BLANK = {
     "S14": "⟨CUT: S-14 commit, 40 hex⟩",
@@ -68,6 +110,7 @@ VALUE = {
     "KEYSLINE": r"Keys covered: \d+ of \d+; \d+ groups; UNSTATED groups: \d+\.",
     "N": r"\d", "DATE": r"\d{4}-\d{2}-\d{2}", "R7DATE": r"\d{4}-\d{2}-\d{2}",
     "S1": r"[a-z0-9 -]+", "S2": r"[a-z0-9 ,-]+", "S3": r"[a-z0-9 -]+",
+    "S16C": r"[0-9a-f]{9,40}",
 }
 
 # (file, filled template, base text, allowed match counts). Templates equal the staged fill byte for byte;
@@ -99,6 +142,11 @@ SPANS = [
           "§17-R1 and §17-R4: the analysis commit is the S-14 pin recorded in this row |",
      "| block 5's L9 release tag plus the block-6 additions, reviewed and cold-passed |", {1}, "LOW 6"),
     (REG, "`OPEN[S-14]`, filled: §14 row S-14 and §17-R1", "`OPEN[S-14]`", {2}, "LOW 6"),
+    # S-16 (RL-134 item 17, RL-140 A1 and A4): §14's S-16 row and the appended §17-S16 line. The line span is
+    # taken back before LOW 5's, so the line's own "\n- {DATE}, §17-" is not counted among LOW 5's 14 stamps.
+    (REG, "block 5's usable sessions after its release (structure only): filled {DATE} (§17-S16) |",
+     "block 5's usable sessions after its release (structure only) |", {1}, "S-16"),
+    (REG, S16_LINE, "", {1}, "S-16"),
     (REG, "\n- {DATE}, §17-", "\n- " + OLD_DATE + ", §17-", {14}, "LOW 5"),
     (REG, "\n- {DATE}: the §17 entries", "\n- " + OLD_DATE + ": the §17 entries", {1}, "LOW 5"),
     (REG, "*Corrected {DATE} (§17-R1", "*Corrected " + OLD_DATE + " (§17-R1", {1}, "LOW 5"),
@@ -312,6 +360,18 @@ def check(args):
             if keys != [v["KEYSLINE"]]:
                 p2.append("KEYSLINE " + repr(v["KEYSLINE"]) + " != generator " + repr(keys))
             detail.append("R3 generator stdout at S14 " + got)
+    if v["S16C"]:
+        s16 = git(args.repo, "rev-parse", "--verify", "--quiet", v["S16C"] + "^{commit}", check=False)
+        if not s16:
+            p2.append("S16C " + v["S16C"] + " is not a commit in this repository")
+        else:
+            got = git(args.repo, "show", s16 + ":" + S16_PSTAR, binary=True, check=False)
+            ref = git(args.repo, "show", S16_REVIEWED + ":" + S16_PSTAR, binary=True, check=False)
+            if got is None or ref is None or got != ref:
+                p2.append("S16C " + v["S16C"] + ": " + S16_PSTAR + " is not byte-identical to " + S16_REVIEWED
+                          + "'s (RL-140 A4)")
+            else:
+                detail.append("S16C = " + s16 + " (" + S16_PSTAR + " byte-identical to " + S16_REVIEWED + ")")
     request_rev = v["REQ"] if v["REQ"] and v["REQ"] != BLANK["REQ"] else args.pin_request
     if v["REQ"] and v["REQ"] != BLANK["REQ"]:
         if git(args.repo, "rev-parse", "--verify", "--quiet", v["REQ"] + "^{commit}", check=False) != v["REQ"]:
