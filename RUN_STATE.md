@@ -1042,6 +1042,41 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+307. **Magistrate c962500e (headless, Opus 5.5), 2026-11-13 05:42 PST (`date`): ITEM 306 ACTIVATION 1 DONE. The dry checks pass at `a6a09e6d7`. PART A IS LAUNCHED on the final bytes (a fresh TV0h/TVh0 soak, `--fresh-soak --parts A`) as this activation's last action. Nothing is armed. The next activation is item 306's activation 2.**
+
+```pointer
+owner: magistrate
+wait: Part A smoke's desk fence (gone when the runner exits; soak 1,800 s + Part A, about 1 h)
+deadline: 2026-11-13T19:26:00-08:00
+on_early_or_refused: as item 306: a G0 that does not release inside 1,200 s, or any failed checklist line, means NOTHING arms, and it goes to Ed and the research lead (RL-122 item 7). Any other refusal goes to the lead. Do not retry, and do not reuse OUT
+next_observable: item 306 activation 2: the template's check block on OUT (its find line prints the g0 fields outcome, duration_s, reference, release, slope_c_per_min, entry_sensors), then the RL-122 item 7 checklist, the 60-key check, D-7, then plan, notice (#349 issue route while Gmail is absent) and install, recorded in docs/process_traces/2026-11-13-w1-slot-night/MAGISTRATE-ARM-<activation>.md
+```
+
+- **Hashes.** All ten condition-13 paths hash as item 306's table says at `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`. The nine code paths have no diff against `99622e96c`. The config's only change is `-"Th0C"` / `+"TVh0"`. `99622e96c` and `8c6440d28` are ancestors.
+- **Dry checks.** Run from scratch worktree `/Users/edr/code/jw-wt/mag-c962500e-dry`, detached at the night sha, with `/opt/homebrew/bin/python3.13 -B -m unittest`, one module at a time, `JW_B5_SYNTHETIC_ONLY=1`, own TMPDIR. All OK:
+  - `test_w1_rl122_kit` 12 (incl. `RebindPairDryCheck`, `PlanningReleaseTests`)
+  - `test_r1_second_fast_rule` 8
+  - `test_v4_registration` 24
+  - `test_r1_arm` 10
+  - `test_r1_smoke_launcher` 58
+  - `hazards.test_refusal_allowlist` 24
+  - `test_powermetrics_reap` 9
+- **Start and check** (item 285's template with item 306's substitutions), smoke worktree `/Users/edr/code/jw-wt/r1-followup-smoke` detached at the full sha, clean. All pass:
+  - `verify_r1_executed_sources` → `a6a09e6d7…`;
+  - `RL-89 MAC CHECK OK e6231a8f…769b 60 16 44 24bad206a999441f74d82615df61f45d6dc334abd6516150d1ea6a07272f0bb1`;
+  - `test_r1_smoke_plist_runs_interactive_like_the_night_templates` OK;
+  - no High Power marker; `night.lock` left as found;
+  - preflight `{"ac_power": true, "free_bytes": 91737661440, "disk_check": "report_only"}`;
+  - `sudo -n -l /bin/kill` rc 0; AC, battery 100% charged; powermode 0;
+  - only `com.joulewise.magistrate` loaded, no night plist, no `r12` process.
+- **Launch values.**
+  - PY: `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python`
+  - MAGISTRATE_PID: 89285
+  - OUT: `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-followup-smoke-20261113T134059Z` (also in `/Users/edr/night-custody/magistrate/r1-smoke-out-c962500e.txt`)
+  - DEADLINE: now + 7200 at launch
+  - Command: item 285's "Run" block verbatim.
+- **Gmail.** Still no Gmail tool in this headless session (item 305's fault). The launch search for Ed's unread replies could not run. No email was owed: this smoke is not an arm. Notice pending was `[]`, and the only open directives are the standing ones.
+
 306. **Laptop lead (interactive, Opus 5.5), 2026-11-13 05:30 PST (`date`): MAGISTRATE: the SLOT-PRODUCING ALIGN v4 R1 follow-up night, on `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe` (PR #752 merged into `ops/2026-11-11-w1-presign`: `sensors.s_slow` Th0C → TVh0, config `24bad206…0bb1`). Activation 1: dry checks, then Part A on the final bytes (fresh TV0h/TVh0 soak, `--fresh-soak --parts A`); the launch is your LAST action. Activation 2: the Part A check, the RL-122 item 7 checklist, the 60-key check, D-7, then plan, notice and install. RL-122 item 7 authorizes this night on that checklist; if every line holds, nobody goes back to the research lead. The MBP is free: the lead's R12 jobs are done (items 304, 305; lead SSH check 04:58: no R12 process, 85 GiB free). Gmail (item 305): while the headless magistrate has no Gmail tool, every "mail Ed" / "mail the lead" below, and the arm notice with its NO window, goes out as an item-349 `directive-notice` issue instead, and Ed's NO arrives as a directive issue; the arm record names the route used.**
 
 ```pointer
