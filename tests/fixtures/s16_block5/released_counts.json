@@ -1,0 +1,829 @@
+{
+ "pstar": {
+  "examined_by_pack": {
+   "alpha": 98,
+   "beta": 98,
+   "gamma": 76
+  },
+  "lowest_line_w": "0.0723",
+  "max_baseline_mw": "1.11",
+  "not_examined_by_pack": {
+   "alpha": 2,
+   "beta": 2,
+   "gamma": 4
+  },
+  "removed": 0,
+  "removed_by_pack": {
+   "alpha": 0,
+   "beta": 0,
+   "gamma": 0
+  },
+  "tool": "scripts/b6_s16_block5_pstar.py"
+ },
+ "result": {
+  "catalog_sha256": {
+   "b5": "5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d",
+   "b6": "b5bce6c64bbc1d079ecf6fed02bf4c214b76a8f7d279d44eea5984e4a389a42b"
+  },
+  "open": [],
+  "pinned": true,
+  "rows_by_state": {
+   "counted": [
+    "8.2-25",
+    "8.2-MID",
+    "8.3.1-CEU",
+    "8.3.1-BIN",
+    "8.3.1-MAL",
+    "8.3.1-CAP",
+    "8.3.3-CON",
+    "8.3.3-WAI",
+    "8.3.3-PST"
+   ],
+   "derived": [
+    "8.2-P3",
+    "8.6-S7"
+   ],
+   "no_block5_input": [
+    "8.3.2-SLP",
+    "8.3.2-AGT",
+    "8.3.2-SKP"
+   ],
+   "no_replay_owed": [
+    "8.2-N1",
+    "8.2-N2",
+    "8.2-W1",
+    "8.2-W2",
+    "8.2-W3",
+    "8.2-D1",
+    "8.2-S1",
+    "8.2-PRE"
+   ],
+   "not_counted_alternative": [
+    "8.3.3-CONALT"
+   ],
+   "open": []
+  },
+  "rules": [
+   {
+    "b6_effect": "EXCLUDE_WINDOW",
+    "basis": "Each ALPHA and GAMMA session is claim-usable, so its smallest target phase passed the unchanged phase check; above the line every run of that phase fails it (§8.6 S-5); and Block 6's s_bracket (10.818 ms) is below Block 5's (14.531 ms), so Block 6's b_op is not larger. BETA has no line",
+    "change": "new",
+    "codes": [
+     "calibration.operative_bound_above_stop"
+    ],
+    "label": "b_op above the stop line (139 ms ALPHA and GAMMA; none for BETA)",
+    "method": "bop_stop",
+    "rule_id": "8.2-P3",
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": null,
+     "gamma": 0
+    },
+    "scope": "session",
+    "section": "§8.2 P3, §8.6 S-5",
+    "sessions_not_derived": [],
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": null,
+     "gamma": 0
+    },
+    "sessions_with_line": 2,
+    "state": "derived"
+   },
+   {
+    "b5_counterpart": {
+     "codes": [
+      "calibration.no_bracket",
+      "calibration.capture_invalid"
+     ],
+     "runs": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_by_pack": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_flagged": 0
+    },
+    "b6_effect": "EXCLUDE_WINDOW",
+    "change": "new",
+    "codes": [
+     "calibration.bracket_incomplete"
+    ],
+    "label": "calibration capture missing or its refit failing",
+    "method": "no_replay_owed",
+    "reason": "no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and no rehearsal count stands beside them",
+    "rule_id": "8.2-N1",
+    "scope": "session",
+    "section": "§8.2 N1",
+    "state": "no_replay_owed"
+   },
+   {
+    "b5_counterpart": {
+     "codes": [
+      "neg8.bound_not_derived"
+     ],
+     "runs": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_by_pack": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_flagged": 0
+    },
+    "b6_effect": "EXCLUDE_WINDOW",
+    "change": "new",
+    "codes": [
+     "neg8.survivor_screen_undefined"
+    ],
+    "label": "fewer than 6 clean corpus runs or 2 surviving start or end references",
+    "method": "no_replay_owed",
+    "reason": "no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and no rehearsal count stands beside them",
+    "rule_id": "8.2-N2",
+    "scope": "session",
+    "section": "§8.2 N2",
+    "state": "no_replay_owed"
+   },
+   {
+    "b5_counterpart": {
+     "codes": [
+      "model.identity_mismatch"
+     ],
+     "runs": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_by_pack": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_flagged": 0
+    },
+    "b6_effect": "EXCLUDE_WINDOW",
+    "change": "new",
+    "codes": [
+     "model.files_differ_from_registered"
+    ],
+    "label": "model files differ from the registered files",
+    "method": "no_replay_owed",
+    "reason": "no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and no rehearsal count stands beside them",
+    "rule_id": "8.2-W1",
+    "scope": "session",
+    "section": "§8.2 W1",
+    "state": "no_replay_owed"
+   },
+   {
+    "b6_effect": "EXCLUDE_WINDOW",
+    "change": "new",
+    "codes": [
+     "model.stack_differs_from_registered"
+    ],
+    "label": "executed runtime stack differs from the registered one",
+    "method": "no_replay_owed",
+    "reason": "no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and no rehearsal count stands beside them",
+    "rule_id": "8.2-W2",
+    "scope": "session",
+    "section": "§8.2 W2",
+    "state": "no_replay_owed"
+   },
+   {
+    "b5_counterpart": {
+     "codes": [
+      "code.executed_differs_from_sealed"
+     ],
+     "runs": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_by_pack": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_flagged": 0
+    },
+    "b6_effect": "EXCLUDE_WINDOW",
+    "change": "new",
+    "codes": [
+     "code.number_bearing_unreviewed"
+    ],
+    "label": "a number-bearing file changed without an executing review",
+    "method": "no_replay_owed",
+    "reason": "no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and no rehearsal count stands beside them",
+    "rule_id": "8.2-W3",
+    "scope": "session",
+    "section": "§8.2 W3",
+    "state": "no_replay_owed"
+   },
+   {
+    "b5_counterpart": {
+     "codes": [
+      "neg8.screen_failed"
+     ],
+     "runs": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_by_pack": {
+      "alpha": 0,
+      "beta": 0,
+      "gamma": 0
+     },
+     "sessions_flagged": 0
+    },
+    "b6_effect": "EXCLUDE_WINDOW",
+    "change": "new",
+    "codes": [
+     "neg8.survivor_screen_failed"
+    ],
+    "label": "the drift screen fails on the surviving references",
+    "method": "no_replay_owed",
+    "reason": "no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and no rehearsal count stands beside them",
+    "rule_id": "8.2-D1",
+    "scope": "session",
+    "section": "§8.2 D1",
+    "state": "no_replay_owed"
+   },
+   {
+    "b6_effect": "EXCLUDE_WINDOW",
+    "change": "new",
+    "codes": [
+     "structure.chain_crashed",
+     "structure.missing_stage_bundles",
+     "structure.no_capture_records",
+     "structure.no_roster"
+    ],
+    "label": "structural failure (§4)",
+    "method": "no_replay_owed",
+    "reason": "no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and no rehearsal count stands beside them",
+    "rule_id": "8.2-S1",
+    "scope": "session",
+    "section": "§8.2 S1",
+    "state": "no_replay_owed"
+   },
+   {
+    "b6_effect": "EXCLUDE_WINDOW",
+    "change": "new",
+    "codes": [
+     "precheck.certain_exclusion"
+    ],
+    "label": "pre-check certain exclusion (a hold before t0, never a session loss)",
+    "method": "no_replay_owed",
+    "reason": "no replay owed (RL-140 case A): grounds N, W, D, S and the pre-check hold have no line to size, and no rehearsal count stands beside them",
+    "rule_id": "8.2-PRE",
+    "scope": "session",
+    "section": "§8.2, §8.7 item 3",
+    "state": "no_replay_owed"
+   },
+   {
+    "b6_effect": null,
+    "basis": "each session passed Block 5's arm frequency gate (|f| <= 3.6306 ppm, B5-REG §4.2), stricter than the hold; a session with clock.arm_unmeasured is not derived",
+    "change": "changed",
+    "codes": [],
+    "label": "clock-rate hold at |r| > 5 ms / 335 s - 0.25 ppm = 14.675 ppm",
+    "method": "clock_hold",
+    "rule_id": "8.6-S7",
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "session",
+    "section": "§8.6 S-7",
+    "sessions_not_derived": [],
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "derived"
+   },
+   {
+    "b5_runs_removed": 0,
+    "b5_runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "b5_sessions_removed": 0,
+    "b6_effect": "DISCLOSE",
+    "change": "changed",
+    "codes": [
+     "calibration.acceptance_mismatch",
+     "calibration.binding_failed",
+     "calibration.bracket_acceptance_failed",
+     "calibration.capture_invalid",
+     "calibration.historical_custody_mismatch",
+     "calibration.ledger_snapshot_refused",
+     "calibration.no_bracket",
+     "calibration.session_not_bound",
+     "clock.systematic",
+     "code.executed_differs_from_sealed",
+     "code.identity_unmeasured",
+     "instrument.precal_screen_failed",
+     "lineage.plan_tree_digest_differs",
+     "model.identity_inconsistent_in_window",
+     "model.identity_mismatch",
+     "model.identity_unmeasured",
+     "model.identity_unpinned",
+     "neg8.bound_not_derived",
+     "neg8.screen_failed",
+     "pack.identity_mismatch",
+     "pack.identity_unmeasured",
+     "records.malformed_flag_exclusion_possible",
+     "roster.duplicate_run_id",
+     "whole_window.member_failures_unreadable",
+     "whole_window.verdict_absent"
+    ],
+    "label": "25 of Block 5's 32 session-removing codes become flags",
+    "method": "flag_codes",
+    "rule_id": "8.2-25",
+    "runs_flagged": 0,
+    "runs_flagged_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "runs_flagged_science": 0,
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "session",
+    "section": "§8.2",
+    "sessions_flagged": 0,
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   },
+   {
+    "b5_rule_would_remove_sessions": 0,
+    "b6_effect": "DISCLOSE",
+    "basis": "rule dropped in Block 6; midpoint read from neg8.midpoint_lost and the reference counts of neg8.reference_lost",
+    "change": "dropped",
+    "codes": [
+     "neg8.midpoint_lost"
+    ],
+    "gamma_sessions": 1,
+    "label": "GAMMA: a lost midpoint reference no longer removes the session",
+    "method": "gamma_midpoint",
+    "rule_id": "8.2-MID",
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "session",
+    "section": "§8.2",
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   },
+   {
+    "b5_runs_removed": 0,
+    "b5_runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "b5_sessions_removed": 0,
+    "b6_effect": "DISCLOSE",
+    "change": "changed",
+    "codes": [
+     "member.cooldown_evidence_unverified"
+    ],
+    "label": "member.cooldown_evidence_unverified becomes a flag",
+    "method": "flag_codes",
+    "rule_id": "8.3.1-CEU",
+    "runs_flagged": 0,
+    "runs_flagged_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "runs_flagged_science": 0,
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "run",
+    "section": "§8.3 item 1",
+    "sessions_flagged": 0,
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   },
+   {
+    "b5_runs_removed": 0,
+    "b5_runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "b5_sessions_removed": 0,
+    "b6_effect": "DISCLOSE",
+    "change": "changed",
+    "codes": [
+     "instrument.binary_identity_unmeasured"
+    ],
+    "label": "instrument.binary_identity_unmeasured becomes a flag",
+    "method": "flag_codes",
+    "rule_id": "8.3.1-BIN",
+    "runs_flagged": 0,
+    "runs_flagged_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "runs_flagged_science": 0,
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "run",
+    "section": "§8.3 item 1",
+    "sessions_flagged": 0,
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   },
+   {
+    "b5_runs_removed": 0,
+    "b5_runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "b5_sessions_removed": 0,
+    "b6_effect": "DISCLOSE",
+    "change": "changed",
+    "codes": [
+     "records.malformed_flag_member_exclusion_possible"
+    ],
+    "label": "records.malformed_flag_member_exclusion_possible becomes a flag",
+    "method": "flag_codes",
+    "rule_id": "8.3.1-MAL",
+    "runs_flagged": 0,
+    "runs_flagged_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "runs_flagged_science": 0,
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "run",
+    "section": "§8.3 item 1",
+    "sessions_flagged": 0,
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   },
+   {
+    "b5_runs_removed": 0,
+    "b5_runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "b5_sessions_removed": 0,
+    "b6_effect": "DISCLOSE",
+    "change": "changed",
+    "codes": [
+     "member.cooldown_cap_hit"
+    ],
+    "label": "a cooldown that reaches its 300 s cap becomes a flag",
+    "method": "flag_codes",
+    "rule_id": "8.3.1-CAP",
+    "runs_flagged": 0,
+    "runs_flagged_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "runs_flagged_science": 0,
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "run",
+    "section": "§8.3 item 1",
+    "sessions_flagged": 0,
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   },
+   {
+    "b5_runs_removed": 28,
+    "b5_runs_removed_by_pack": {
+     "alpha": 4,
+     "beta": 14,
+     "gamma": 10
+    },
+    "b5_sessions_removed": 0,
+    "b6_effect": "DISCLOSE",
+    "change": "changed",
+    "codes": [
+     "contention.request_overlap"
+    ],
+    "label": "outside processor work in the request: a flag for round 1",
+    "method": "flag_codes",
+    "rule_id": "8.3.3-CON",
+    "runs_flagged": 28,
+    "runs_flagged_by_pack": {
+     "alpha": 4,
+     "beta": 14,
+     "gamma": 10
+    },
+    "runs_flagged_science": 18,
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "run",
+    "section": "§8.3 item 3, S-8",
+    "sessions_flagged": 3,
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   },
+   {
+    "b6_effect": null,
+    "change": "new",
+    "codes": [],
+    "label": "labelled alternative: C - k x 0.54 >= 0.0874 CPU-s",
+    "method": "not_counted_alternative",
+    "reason": "not counted (RL-140 case D): it removes nothing in Block 6; Block 6's cells print it",
+    "rule_id": "8.3.3-CONALT",
+    "scope": "run",
+    "section": "§8.3 item 3, S-8",
+    "state": "not_counted_alternative"
+   },
+   {
+    "b6_effect": "EXCLUDE_MEMBER",
+    "change": "new",
+    "codes": [
+     "sleep.in_run"
+    ],
+    "label": "the machine slept more than 1 ms in the run",
+    "method": "no_block5_input",
+    "reason": "Block 5 did not record the input (RL-140 case B)",
+    "rule_id": "8.3.2-SLP",
+    "scope": "run",
+    "section": "§8.3 item 2",
+    "state": "no_block5_input"
+   },
+   {
+    "b6_effect": "EXCLUDE_MEMBER",
+    "change": "new",
+    "codes": [
+     "agent.presence",
+     "agent.presence_overlap",
+     "agent.unit_overlap"
+    ],
+    "label": "the run's unit overlapped an agent's presence",
+    "method": "no_block5_input",
+    "reason": "Block 5 took no agent census, so an agent's presence in Block 5 is unknown (RL-140 case B)",
+    "rule_id": "8.3.2-AGT",
+    "scope": "run",
+    "section": "§8.3 item 2",
+    "state": "no_block5_input"
+   },
+   {
+    "b5_counterpart": {
+     "codes": [
+      "member.admission_aborted"
+     ],
+     "runs": {
+      "alpha": 2,
+      "beta": 3,
+      "gamma": 4
+     },
+     "sessions_by_pack": {
+      "alpha": 1,
+      "beta": 1,
+      "gamma": 1
+     },
+     "sessions_flagged": 3
+    },
+    "b6_effect": "EXCLUDE_MEMBER",
+    "change": "new",
+    "codes": [
+     "idle.wait_cap_skip",
+     "idle.wait_budget_skip"
+    ],
+    "label": "skipped at the 1,500 s wait cap or by the spent wait budget",
+    "method": "no_block5_input",
+    "reason": "Block 5 had no waiting admission and aborted runs at admission instead, a kept rule (RL-140 case B)",
+    "rule_id": "8.3.2-SKP",
+    "scope": "run",
+    "section": "§8.3 item 2",
+    "state": "no_block5_input"
+   },
+   {
+    "b6_effect": null,
+    "basis": "pinned desk_hazards (b5ab6a71d, 9a907a36…) on each science run's idle-baseline rails; 272 science runs examined; largest baseline mean 1.11 mW, lowest line 0.0723 W",
+    "change": "new",
+    "codes": [],
+    "label": "outside graphics or neural-engine power above P*, the desk exclusion",
+    "method": "pinned_desk_function",
+    "rule_id": "8.3.3-PST",
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "science_runs_examined": 272,
+    "scope": "run",
+    "section": "§8.3 item 3, S-9",
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   },
+   {
+    "b5_runs_removed": 0,
+    "b5_runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "b5_sessions_removed": 0,
+    "b6_effect": "DISCLOSE",
+    "basis": "a flag in Block 6, so it removes nothing; Block 5 had no waiting admission",
+    "change": "new",
+    "codes": [
+     "idle.waited"
+    ],
+    "label": "a run admitted after waiting: disclosed only (d = +0.180 J)",
+    "method": "disclose_only",
+    "rule_id": "8.3.3-WAI",
+    "runs_flagged": 0,
+    "runs_flagged_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "runs_flagged_science": 0,
+    "runs_removed": 0,
+    "runs_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "scope": "run",
+    "section": "§8.3 item 3, S-6",
+    "sessions_flagged": 0,
+    "sessions_removed": 0,
+    "sessions_removed_by_pack": {
+     "alpha": 0,
+     "beta": 0,
+     "gamma": 0
+    },
+    "state": "counted"
+   }
+  ],
+  "schema": "joulewise.b6_s16_block5_replay.v1",
+  "sessions": [
+   {
+    "inputs_sha256": {
+     "derived/exclusions.json": "3c102f57cfe951af4b11a3726232ada164d106facee1083f5d1e90da4aa25189",
+     "derived/flags.jsonl": "ad97122ce352fadeccae267d833f46a33c8ebb35b391c0abe01c6434ae65d0a1",
+     "derived/roster.json": "f8170bf46cf976b246dad299967e38e0c4279fff41e056364d0ede6e834a184c"
+    },
+    "pack": "alpha",
+    "plan_id": "v5-b5-alpha-a1-20261009T2312Z",
+    "runs": 125,
+    "science_runs": 100
+   },
+   {
+    "inputs_sha256": {
+     "derived/exclusions.json": "ca547afa76f98294d54a97bcb2fc24a4791611c084cfde78a76f9d2f402bad87",
+     "derived/flags.jsonl": "e4e3fc49cff76a6cc3ff5d99313df85e423174a526dd6d415a5ec8fc0152df9a",
+     "derived/roster.json": "e67c15600998b1672e31ddbe795560ae989b42cb68411e55e1f7141b7edf3577"
+    },
+    "pack": "beta",
+    "plan_id": "v5-b5-beta-a6-20261011T2011Z",
+    "runs": 125,
+    "science_runs": 100
+   },
+   {
+    "inputs_sha256": {
+     "derived/exclusions.json": "a9954365ef44c1b8a65603dd0ba52140109b45569fc795783ca6663d54586f46",
+     "derived/flags.jsonl": "264999236a99d5f76a9deff86d011a0a4d837a0b8532555d1da9522a3fa2b321",
+     "derived/roster.json": "87961bc79d9d6c475ac6f4944047d27efddb88d5fbcdefad19bb69d985c502e2"
+    },
+    "pack": "gamma",
+    "plan_id": "v5-b5-gamma-a1-20261012T0420Z",
+    "runs": 107,
+    "science_runs": 80
+   }
+  ],
+  "summary_by_pack": {
+   "alpha": {
+    "b5_runs_removed": 6,
+    "b6_catalog_runs_removed": 2,
+    "b6_catalog_sessions_removed": 0,
+    "kept_by_block6_changes": 4,
+    "kept_by_block6_changes_science": 3,
+    "runs": 125,
+    "runs_with_changed_run_code": 4,
+    "science_runs": 100
+   },
+   "beta": {
+    "b5_runs_removed": 18,
+    "b6_catalog_runs_removed": 4,
+    "b6_catalog_sessions_removed": 0,
+    "kept_by_block6_changes": 14,
+    "kept_by_block6_changes_science": 9,
+    "runs": 125,
+    "runs_with_changed_run_code": 14,
+    "science_runs": 100
+   },
+   "gamma": {
+    "b5_runs_removed": 15,
+    "b6_catalog_runs_removed": 5,
+    "b6_catalog_sessions_removed": 0,
+    "kept_by_block6_changes": 10,
+    "kept_by_block6_changes_science": 6,
+    "runs": 107,
+    "runs_with_changed_run_code": 10,
+    "science_runs": 80
+   }
+  },
+  "summary_totals": {
+   "b5_runs_removed": 39,
+   "b6_catalog_runs_removed": 11,
+   "b6_catalog_sessions_removed": 0,
+   "kept_by_block6_changes": 28,
+   "kept_by_block6_changes_science": 18,
+   "runs": 357,
+   "runs_with_changed_run_code": 28,
+   "science_runs": 280
+  }
+ },
+ "rl140_a4_line": "- 2026-11-13, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half. Read after the Block 5 release (2026-11-08, `RUN_STATE.md` item 231), from Block 5's 3 usable sessions (`v5-b5-alpha-a1-20261009T2312Z`, `v5-b5-beta-a6-20261011T2011Z`, `v5-b5-gamma-a1-20261012T0420Z`; 357 runs: 280 science, 77 auxiliary). Counts from the released flags, rosters and exclusion lists, by `scripts/b6_s16_block5_replay_counts.py` @ `bc62db137`, under Block 5's catalog `5d77c725…` and Block 6's `b5bce6c6…`. The desk exclusion from each run's idle-baseline rails, by `scripts/b6_s16_block5_pstar.py` @ `bc62db137`. Per-pack counts are ALPHA, BETA, GAMMA. **Rules that became flags (counted).** Block 6 turns 5 run codes and 25 session codes into flags and drops GAMMA's lost-midpoint rule. As flags they remove nothing. Of the 5 run codes only `contention.request_overlap` fired in Block 5: 28 runs (4, 14, 10; 18 science). Block 5 removed all 28, and none carries a code that still removes it. Over Block 5's flags, Block 6's catalog removes 11 runs (2, 4, 5) where Block 5 removed 39 (6, 18, 15). The 25 session codes fired in 0 of 3 sessions. The midpoint was lost in 0 of 1 GAMMA sessions. `idle.waited`: 0; Block 5 had no waiting admission. **Derived, not read.** The clock-rate hold (14.675 ppm) holds 0 of 3: each session was armed under Block 5's gate, |f| ≤ 3.6306 ppm (B5-REG §4.2), and none carries `clock.arm_unmeasured`. The b_op stop (139 ms, ALPHA and GAMMA; §8.2 P3) stops 0 of 2: each session is claim-usable, so its smallest target phase passed the unchanged phase check, which every run fails above the line (§8.6 S-5), and Block 6's s_bracket is smaller than Block 5's. **Replayed on its input.** The desk exclusion at P* (§8.3 item 3, S-9), by the pinned `desk_hazards` (`b5ab6a71d`) with Block 6's registered line per pack and phase: removes 0 of 357 runs (0, 0, 0); largest baseline mean 1.11 mW against the lowest line 0.0723 W. The rule applies to science runs. 272 of the 280 were examined (98, 98, 76); the other 8 (2, 2, 4) failed, and Block 5 had already removed them. The function also reads each run's status, model name and request span, and the contention journal; its contention result is not reported. **Not replayed.** (a) Grounds N, W, D, S and the pre-check hold (§8.2 N1, N2, W1, W2, W3, D1, S1; `precheck.certain_exclusion`): no replay is owed and none stands beside them from the rehearsals; the nearest Block 5 codes (`calibration.no_bracket`, `calibration.capture_invalid`, `neg8.bound_not_derived`, `model.identity_mismatch`, `code.executed_differs_from_sealed`, `neg8.screen_failed`) fired in 0 of 3 sessions. (b) Block 5 did not record the input: `sleep.in_run`; the agent rule (`agent.presence`, `agent.presence_overlap`, `agent.unit_overlap`), since Block 5 took no agent census and an agent's presence in it is unknown; the wait skips (`idle.wait_cap_skip`, `idle.wait_budget_skip`), since Block 5 had no waiting admission and aborted 9 runs (2, 3, 4) at admission instead, a kept rule. (c) Contention's labelled alternative (C − k × 0.54 ≥ 0.0874 CPU-s): not counted; it removes nothing in Block 6. The desk exclusion is the only excluding rule new in Block 6 that was replayed on Block 5's runs by reading its input; the b_op stop is derived, and (a) and (b) were not replayed. Outside the pinned program; changes no Block 6 number.",
+ "source": "released Block 5 counts (scripts/b6_s16_block5_replay_counts.py, bc62db137); counts and digests only"
+}

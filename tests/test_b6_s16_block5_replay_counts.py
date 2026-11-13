@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -75,13 +76,29 @@ class Fixture:
                    + [{"kind": "auxiliary", "run_id": f"x{i}"} for i in range(n_aux)])
         (root / "derived/roster.json").write_text(json.dumps({"plan_id": plan_id, "members": members}))
         (root / "derived/flags.jsonl").write_text("".join(json.dumps(f) + "\n" for f in flags))
-        if members_excluded is None:
-            runs = {f["scope"]["run_id"] for f in flags
-                    if f["scope"]["run_id"] and self.b5.get(f["code"], {}).get("effect") == "EXCLUDE_MEMBER"}
-            members_excluded = len(runs)
+        runs = sorted({f["scope"]["run_id"] for f in flags
+                       if f["scope"]["run_id"] and self.b5.get(f["code"], {}).get("effect") == "EXCLUDE_MEMBER"})
+        excluded = [{"run_id": r} for r in runs]
+        if members_excluded is not None:
+            excluded = [{}] * members_excluded
         (root / "derived/exclusions.json").write_text(json.dumps(
-            {"claim_usable": claim_usable, "members_excluded": [{}] * members_excluded}))
+            {"claim_usable": claim_usable, "members_excluded": excluded}))
         return root
+
+    def add_bundles(self, root: Path, statuses: dict[str, str]) -> None:
+        """Science-run bundles (metadata.json, summary_metrics.json with a status) and sources/SHA256SUMS."""
+        roster = json.loads((root / "derived/roster.json").read_text())
+        sums = []
+        for m in roster["members"]:
+            if m["kind"] != "science":
+                continue
+            bundle = root / "sources/claim-runs" / m["run_id"]
+            bundle.mkdir(parents=True)
+            (bundle / "metadata.json").write_text("{}")
+            data = json.dumps({"status": statuses.get(m["run_id"], "succeeded")}).encode()
+            (bundle / "summary_metrics.json").write_bytes(data)
+            sums.append(f"{hashlib.sha256(data).hexdigest()}  claim-runs/{m['run_id']}/summary_metrics.json\n")
+        (root / "sources/SHA256SUMS").write_text("".join(sums))
 
     def standard(self) -> list[Path]:
         a, b, g = PLANS["alpha"], PLANS["beta"], PLANS["gamma"]
@@ -238,11 +255,14 @@ class ReplayCounts(unittest.TestCase):
         line = s16.section17_line(result, commit="c1", date="2026-11-13", pstar={
             "tool": "scripts/x.py", "commit": "c2", "removed": 0, "removed_by_pack": {"alpha": 0, "beta": 0,
                                                                                     "gamma": 0},
-            "max_baseline_mw": "1.23", "lowest_line_w": "0.24"})
+            "max_baseline_mw": "1.23", "lowest_line_w": "0.24", "examined_by_pack": {"alpha": 8, "beta": 8, "gamma": 5},
+            "not_examined_by_pack": {"alpha": 0, "beta": 0, "gamma": 1}})
         self.assertIn("Block 5's half. Read after", line)
-        self.assertIn("(d) The desk exclusion at P* (§8.3 item 3, S-9), replayed on each run's idle-baseline rails by "
-                      "`scripts/x.py` @ `c2`: removes 0 of 28 runs (0, 0, 0); largest baseline mean 1.23 mW against "
-                      "the lowest line 0.24 W.", line)
+        self.assertIn("by `scripts/x.py` @ `c2`. Per-pack counts", line)
+        self.assertIn("removes 0 of 28 runs (0, 0, 0); largest baseline mean 1.23 mW against the lowest line 0.24 W. "
+                      "The rule applies to science runs. 21 of the 22 were examined (8, 8, 5); the other 1 (0, 0, 1) "
+                      "failed", line)
+        self.assertLess(line.index("**Replayed on its input.**"), line.index("**Not replayed.**"))
         self.assertNotIn("OPEN[S-16", line)
 
     def test_line_refuses_when_another_changed_run_code_fired(self) -> None:
@@ -315,6 +335,25 @@ class Refusals(unittest.TestCase):
             run_replay(self.fx, roots)
 
 
+class ReleasedLine(unittest.TestCase):
+    """RL-140 addendum A4: the printed line equals Fable's text, string for string, from the released counts."""
+
+    def setUp(self) -> None:
+        fx = json.loads((ROOT / "tests/fixtures/s16_block5/released_counts.json").read_text())
+        self.result, self.pstar, self.a4 = fx["result"], fx["pstar"], fx["rl140_a4_line"]
+
+    def line(self, commit: str) -> str:
+        return s16.section17_line(json.loads(json.dumps(self.result)), commit=commit, date="2026-11-13",
+                                  pstar=dict(self.pstar, commit=commit))
+
+    def test_line_equals_a4(self) -> None:
+        self.assertEqual(self.line("bc62db137"), self.a4)
+
+    def test_line_equals_a4_with_the_commit_token_substituted(self) -> None:
+        self.assertEqual(self.a4.count("`bc62db137`"), 2)
+        self.assertEqual(self.line("0123abcde"), self.a4.replace("`bc62db137`", "`0123abcde`"))
+
+
 class Cli(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -361,22 +400,54 @@ class Cli(unittest.TestCase):
         self.assertEqual(code, 4)
         self.assertIn("runs carrying a changed run code (3) differ from the runs Block 6 keeps (2)", err.getvalue())
 
-    def test_pstar_result_closes_row_e(self) -> None:
+    def pstar_setup(self, *, gamma_failed: str | None = None, not_examined: dict | None = None) -> list[str]:
         argv = self.argv()
+        self.fx.add_bundles(self.tmp / f"harvest-{PLANS['alpha']}", {"s2": "failed"})
+        self.fx.add_bundles(self.tmp / f"harvest-{PLANS['beta']}", {"s5": "failed"})
+        self.fx.add_bundles(self.tmp / f"harvest-{PLANS['gamma']}", {gamma_failed: "failed"} if gamma_failed else {})
+        ne = not_examined or {"alpha": 1, "beta": 1, "gamma": 0}
+        sci = {"alpha": 8, "beta": 8, "gamma": 6}
         pstar = {"schema": "joulewise.b6_s16_block5_pstar.v1", "desk_sha256": s16.PSTAR_DESK_SHA256,
-                 "sessions": [{"plan_id": p} for p in PLANS.values()], "runs": 28, "science_runs_examined": 22,
+                 "sessions": [{"plan_id": PLANS[p], "science_runs_examined": sci[p] - ne[p],
+                               "science_runs_not_examined": ne[p]} for p in PLANS],
+                 "runs": 28, "science_runs_examined": 22 - sum(ne.values()),
                  "removed": 1, "removed_by_pack": {"alpha": 0, "beta": 1, "gamma": 0},
                  "max_baseline_mean_mw_text": "80.00", "lowest_line_w_text": "0.0723"}
         (self.tmp / "pstar.json").write_text(json.dumps(pstar))
-        self.assertEqual(s16.main(argv + ["--unpinned", "--pstar-json", str(self.tmp / "pstar.json"),
-                                          "--pstar-commit", "p1"]), 0)
+        return argv + ["--unpinned", "--pstar-json", str(self.tmp / "pstar.json"), "--pstar-commit", "p1"]
+
+    def test_pstar_result_closes_row_e(self) -> None:
+        self.assertEqual(s16.main(self.pstar_setup()), 0)
         out = json.loads((self.tmp / "out.json").read_text())
         self.assertEqual(out["open"], [])
         self.assertIn("8.3.3-PST", out["rows_by_state"]["counted"])
         line = out["section17_line"]
         self.assertIn("Slot fill: S-16, Block 5's half. Read after", line)
-        self.assertIn("by `scripts/b6_s16_block5_pstar.py` @ `p1`: removes 1 of 28 runs (0, 1, 0); largest baseline "
-                      "mean 80.00 mW against the lowest line 0.0723 W.", line)
+        self.assertIn("The desk exclusion from each run's idle-baseline rails, by `scripts/b6_s16_block5_pstar.py` @ "
+                      "`p1`. Per-pack counts", line)
+        self.assertIn("**Replayed on its input.** The desk exclusion at P* (§8.3 item 3, S-9), by the pinned "
+                      "`desk_hazards` (`b5ab6a71d`) with Block 6's registered line per pack and phase: removes 1 of "
+                      "28 runs (0, 1, 0); largest baseline mean 80.00 mW against the lowest line 0.0723 W. The rule "
+                      "applies to science runs. 20 of the 22 were examined (7, 7, 6); the other 2 (1, 1, 0) failed, "
+                      "and Block 5 had already removed them.", line)
+        self.assertIn("The desk exclusion is the only excluding rule new in Block 6 that was replayed", line)
+        self.assertNotIn("OPEN[S-16", line)
+        self.assertNotIn("No excluding rule that is new", line)
+
+    def test_unexamined_run_absent_from_exclusion_list_refuses(self) -> None:
+        argv = self.pstar_setup(gamma_failed="s3", not_examined={"alpha": 1, "beta": 1, "gamma": 1})
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(s16.main(argv), 4)
+        self.assertIn("pstar_unexamined_run_not_on_b5_exclusion_list", err.getvalue())
+        self.assertIn("s3", err.getvalue())
+
+    def test_unexamined_count_must_equal_the_tools(self) -> None:
+        argv = self.pstar_setup(not_examined={"alpha": 2, "beta": 1, "gamma": 0})
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(s16.main(argv), 4)
+        self.assertIn("pstar_not_examined_count_differs", err.getvalue())
 
     def test_pstar_result_from_another_function_refuses(self) -> None:
         argv = self.argv()

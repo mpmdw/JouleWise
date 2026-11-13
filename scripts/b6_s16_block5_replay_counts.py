@@ -218,6 +218,7 @@ class Session:
     reference_lost: list[dict[str, Any]] = field(default_factory=list)  # structural fields only
     claim_usable: bool = False
     b5_members_excluded: int = 0
+    b5_excluded_ids: set[str] = field(default_factory=set)
     digests: dict[str, str] = field(default_factory=dict)
 
 
@@ -275,6 +276,7 @@ def load_session(root: Path) -> Session:
     excl = json.loads((root / "derived/exclusions.json").read_text())
     s.claim_usable = bool(excl.get("claim_usable"))
     s.b5_members_excluded = len(excl.get("members_excluded") or [])
+    s.b5_excluded_ids = {m.get("run_id") for m in excl.get("members_excluded") or [] if isinstance(m, dict)}
     return s
 
 
@@ -594,22 +596,41 @@ def section17_line(result: dict[str, Any], *, commit: str, date: str,
     aux = tot["runs"] - tot["science_runs"]
     abt = skp["b5_counterpart"]["runs"]
     if pstar:
-        in_part = ""
-        clause_d = (f"(d) The desk exclusion at P* (§8.3 item 3, S-9), replayed on each run's idle-baseline rails by "
-                    f"`{pstar['tool']}` @ `{pstar['commit']}`: removes {pstar['removed']} of {tot['runs']} runs "
-                    f"({_pk(pstar['removed_by_pack'])}); largest baseline mean {pstar['max_baseline_mw']} mW against "
-                    f"the lowest line {pstar['lowest_line_w']} W.")
+        # RL-140 addendum A4: the filled line.
+        head = (
+            f"- {date}, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half. Read after the "
+            f"Block 5 release (2026-11-08, `RUN_STATE.md` item 231), from Block 5's {n} usable sessions ({plan_ids}; "
+            f"{tot['runs']} runs: {tot['science_runs']} science, {aux} auxiliary). Counts from the released flags, "
+            f"rosters and exclusion lists, by `scripts/b6_s16_block5_replay_counts.py` @ `{commit}`, under Block 5's "
+            f"catalog `{b5sha}…` and Block 6's `{b6sha}…`. The desk exclusion from each run's idle-baseline rails, "
+            f"by `{pstar['tool']}` @ `{pstar['commit']}`. Per-pack counts are ALPHA, BETA, GAMMA. ")
+        exam, nexam = pstar["examined_by_pack"], pstar["not_examined_by_pack"]
+        replayed = (
+            f"**Replayed on its input.** The desk exclusion at P* (§8.3 item 3, S-9), by the pinned `desk_hazards` "
+            f"(`b5ab6a71d`) with Block 6's registered line per pack and phase: removes {pstar['removed']} of "
+            f"{tot['runs']} runs ({_pk(pstar['removed_by_pack'])}); largest baseline mean {pstar['max_baseline_mw']} "
+            f"mW against the lowest line {pstar['lowest_line_w']} W. The rule applies to science runs. "
+            f"{sum(exam.values())} of the {tot['science_runs']} were examined ({_pk(exam)}); the other "
+            f"{sum(nexam.values())} ({_pk(nexam)}) failed, and Block 5 had already removed them. The function also "
+            f"reads each run's status, model name and request span, and the contention journal; its contention "
+            f"result is not reported. ")
+        clause_d = ""
+        closing = ("The desk exclusion is the only excluding rule new in Block 6 that was replayed on Block 5's runs "
+                   "by reading its input; the b_op stop is derived, and (a) and (b) were not replayed.")
     else:
-        in_part = ", in part"
-        clause_d = ("(d) The desk exclusion at P* (§8.3 item 3, S-9) needs each run's idle-baseline rails: "
+        head = (
+            f"- {date}, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half, in part. Read "
+            f"after the Block 5 release (2026-11-08, `RUN_STATE.md` item 231). Counts only, from the released flags, "
+            f"rosters and exclusion lists of Block 5's {n} usable sessions ({plan_ids}; {tot['runs']} runs: "
+            f"{tot['science_runs']} science, {aux} auxiliary), by `scripts/b6_s16_block5_replay_counts.py` @ "
+            f"`{commit}`, under Block 5's catalog `{b5sha}…` and Block 6's `{b6sha}…`. Per-pack counts are ALPHA, "
+            f"BETA, GAMMA. ")
+        replayed = ""
+        clause_d = (" (d) The desk exclusion at P* (§8.3 item 3, S-9) needs each run's idle-baseline rails: "
                     "`OPEN[S-16: P*]`.")
+        closing = "No excluding rule that is new in Block 6 was replayed on Block 5's runs by reading its input."
     return (
-        f"- {date}, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half{in_part}. Read "
-        f"after the Block 5 release (2026-11-08, `RUN_STATE.md` item 231). Counts only, from the released flags, "
-        f"rosters and exclusion lists of Block 5's {n} usable sessions ({plan_ids}; {tot['runs']} runs: "
-        f"{tot['science_runs']} science, {aux} auxiliary), by `scripts/b6_s16_block5_replay_counts.py` @ "
-        f"`{commit}`, under Block 5's catalog `{b5sha}…` and Block 6's `{b6sha}…`. Per-pack counts are ALPHA, "
-        f"BETA, GAMMA. "
+        head +
         f"**Rules that became flags (counted).** Block 6 turns 5 run codes and 25 session codes into flags and "
         f"drops GAMMA's lost-midpoint rule. As flags they remove nothing. Of the 5 run codes only "
         f"`contention.request_overlap` fired in Block 5: {con['runs_flagged']} runs "
@@ -627,6 +648,7 @@ def section17_line(result: dict[str, Any], *, commit: str, date: str,
         f"of {bop['sessions_with_line']}: each session is claim-usable, so its smallest target phase passed the "
         f"unchanged phase check, which every run fails above the line (§8.6 S-5), and Block 6's s_bracket is "
         f"smaller than Block 5's. "
+        + replayed +
         f"**Not replayed.** (a) Grounds N, W, D, S and the pre-check hold (§8.2 N1, N2, W1, W2, W3, D1, S1; "
         f"`precheck.certain_exclusion`): no replay is owed and none stands beside them from the rehearsals; the "
         f"nearest Block 5 codes ({', '.join('`' + c + '`' for c in cp_codes)}) fired in {cp_sessions} of {n} "
@@ -635,23 +657,67 @@ def section17_line(result: dict[str, Any], *, commit: str, date: str,
         f"presence in it is unknown; the wait skips (`idle.wait_cap_skip`, `idle.wait_budget_skip`), since Block 5 "
         f"had no waiting admission and aborted {sum(abt.values())} runs ({_pk(abt)}) at admission instead, a kept "
         f"rule. (c) Contention's labelled alternative (C − k × 0.54 ≥ 0.0874 CPU-s): not counted; it removes "
-        f"nothing in Block 6. {clause_d} "
-        f"No excluding rule that is new in Block 6 was replayed on Block 5's runs by reading its input. Outside the "
-        f"pinned program; changes no Block 6 number."
+        f"nothing in Block 6.{clause_d} {closing} Outside the pinned program; changes no Block 6 number."
     )
 
 
 PSTAR_DESK_SHA256 = "9a907a3671dbe210df4d417428c9108f0fdee1c16531bd0bef2fd39b0f27bb2b"
 
 
-def fill_pstar(result: dict[str, Any], ps: dict[str, Any]) -> dict[str, Any]:
-    """Close row E from the P* tool's output (RL-140 case E): the row becomes counted and leaves ``open``."""
+def not_examined_runs(s: Session) -> dict[str, str]:
+    """Science runs the pinned desk function skips (no metadata.json, or a status other than succeeded).
+
+    Reads each run's status only, every file checked against the root's sources/SHA256SUMS. Returns run_id ->
+    status ("no_metadata" when metadata.json is absent).
+    """
+    sums = {}
+    for line in (s.root / "sources/SHA256SUMS").read_text().splitlines():
+        if line.strip():
+            digest, rel = line.split(None, 1)
+            sums[rel.strip()] = digest
+    out = {}
+    for rid in sorted(s.runs_science):
+        bundle = s.root / "sources/claim-runs" / rid
+        if not (bundle / "metadata.json").is_file():
+            out[rid] = "no_metadata"
+            continue
+        data = (bundle / "summary_metrics.json").read_bytes()
+        if hashlib.sha256(data).hexdigest() != sums.get(f"claim-runs/{rid}/summary_metrics.json"):
+            raise Refusal(f"summary_metrics_digest_mismatch: {s.plan_id}: {rid}")
+        status = json.loads(data).get("status")
+        if status != "succeeded":
+            out[rid] = str(status)
+    return out
+
+
+def fill_pstar(result: dict[str, Any], ps: dict[str, Any], sessions: list[Session]) -> dict[str, Any]:
+    """Close row E from the P* tool's output (RL-140 case E): the row becomes counted and leaves ``open``.
+
+    RL-140 addendum A3: every science run the function did not examine must be on Block 5's exclusion list and
+    have failed, since the line says so; the count per pack must equal the tool's.
+    """
     if ps.get("schema") != "joulewise.b6_s16_block5_pstar.v1" or ps.get("desk_sha256") != PSTAR_DESK_SHA256:
         raise Refusal("pstar_result_not_from_the_pinned_desk_function")
     if sorted(s["plan_id"] for s in ps["sessions"]) != sorted(s["plan_id"] for s in result["sessions"]):
         raise Refusal("pstar_result_sessions_differ")
     if ps["runs"] != result["summary_totals"]["runs"]:
         raise Refusal("pstar_result_run_count_differs")
+    ps_by_plan = {x["plan_id"]: x for x in ps["sessions"]}
+    examined, not_examined = {}, {}
+    for s in sessions:
+        skipped = not_examined_runs(s)
+        tool = ps_by_plan[s.plan_id]
+        if len(skipped) != tool["science_runs_not_examined"]:
+            raise Refusal(f"pstar_not_examined_count_differs: {s.plan_id}: {len(skipped)} vs "
+                          f"{tool['science_runs_not_examined']}")
+        absent = sorted(set(skipped) - s.b5_excluded_ids)
+        if absent:
+            raise Refusal(f"pstar_unexamined_run_not_on_b5_exclusion_list: {s.plan_id}: {', '.join(absent)}")
+        not_failed = sorted(rid for rid, st in skipped.items() if st != "failed")
+        if not_failed:
+            raise Refusal(f"line_premise: unexamined run did not fail: {s.plan_id}: {', '.join(not_failed)}")
+        examined[s.pack] = tool["science_runs_examined"]
+        not_examined[s.pack] = len(skipped)
     row = next(r for r in result["rules"] if r["rule_id"] == "8.3.3-PST")
     by_pack = {p: ps["removed_by_pack"][p] for p in PACK_ORDER if p in ps["removed_by_pack"]}
     row.update(state="counted", runs_removed=ps["removed"], runs_removed_by_pack=by_pack, sessions_removed=0,
@@ -667,7 +733,9 @@ def fill_pstar(result: dict[str, Any], ps: dict[str, Any]) -> dict[str, Any]:
     result["rows_by_state"]["counted"].append("8.3.3-PST")
     result["open"] = []
     return {"tool": "scripts/b6_s16_block5_pstar.py", "removed": ps["removed"], "removed_by_pack": by_pack,
-            "max_baseline_mw": ps["max_baseline_mean_mw_text"], "lowest_line_w": ps["lowest_line_w_text"]}
+            "max_baseline_mw": ps["max_baseline_mean_mw_text"], "lowest_line_w": ps["lowest_line_w_text"],
+            "examined_by_pack": {p: examined[p] for p in PACK_ORDER if p in examined},
+            "not_examined_by_pack": {p: not_examined[p] for p in PACK_ORDER if p in not_examined}}
 
 
 def git_head(path: Path) -> str:
@@ -706,7 +774,7 @@ def main(argv: list[str] | None = None) -> int:
         result = replay(sessions, b5, b6)
         pstar = None
         if args.pstar_json:
-            pstar = fill_pstar(result, json.loads(args.pstar_json.read_text()))
+            pstar = fill_pstar(result, json.loads(args.pstar_json.read_text()), sessions)
     except Refusal as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 4
