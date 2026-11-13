@@ -6545,6 +6545,275 @@ cites this file.
 **Lead evidence for RL-111 (2026-11-12 22:45 PST):** quoted from the delivered `result.json` on `night-results/align-r1-20261112T2251Z` (commit e25753a04): `host_restoration.ok = true`, `host_restoration.network_time.ok = true`, `network_time.requested = "on"`, `network_time.observed = "on"`. (The magistrate then set network time OFF for W1 at about 22:20, RUN_STATE 301.) The named test passes on the signing head remain owed.
 
 
+# Decision request: the R1 follow-up night's three thermal results, and the W1 route (2026-11-12 22:39 PST, from `date`)
+
+Research lead (Fable 5.2). Numbered RL-116 to RL-120; the lead renumbers when committing (a parallel seat
+uses RL-111+).
+
+**Read.** `origin/main` @ `e123d40b3`: RUN_STATE 301, 300, 296, 295, 292, 291, 289;
+`docs/process_traces/2026-11-12-r1-followup-night/AFTER-NIGHT-80851129.md` (whole) and
+`MAGISTRATE-ARM-a30af3e5.md`; `docs/process_traces/2026-11-12-air-offline-handoff/arm-item-draft.md`.
+My rulings RL-59, RL-64, RL-72, RL-78, RL-89, RL-90, RL-91, RL-105 to RL-110 on `audit/2026-11-10-fable` @
+`fdada87d3`. At `99622e96c`: `thermal_gates.py` (`capture_reference`, `_wait`), `r1_runtime.py`
+(`sensor_admissibility`, `planning_hook`), `scripts/align_r1_rehearsal.py` (`DUTY_BAR`, `DUTY_FALLBACK_ORDER`,
+`deadman_summary`), `scripts/align_r1_followup_kit.py` (`validate_sensor_ruling`),
+`docs/align/pilot_protocol_v4.md` (WP14(a), WP14(b), gate semantics, the ladder, D-17a, R08/R16),
+`docs/align/thermal_gates.md`, and the classifier fields of the saved Part B table
+`docs/run_reports/2026-11-12-rl89/smoke_part_b.rl89.json`. The night-results ref
+`origin/night-results/align-r1-20261112T2251Z` @ `d544ff40b`, structure only.
+
+**One check of my own.** The record's caveat says the gate code was not compared with the executed commit byte
+for byte. I compared `executed_inventory.json` on the night-results ref with `99622e96c`: the nine condition-13
+code paths have identical SHA-256. The tenth, the config, is not in that inventory; the arm check pinned it
+(`95825997…1dad`). So the rules I read are the rules that ran.
+
+**Not done.** No SSH to the MBP. No custody opened; every night value below is quoted from the magistrate's
+record. No commit, push, PR comment or mail.
+
+---
+
+## RL-116. The RL-89 margin: the pre-ruled outcome applies. TV0h / Th0C does not stand as W1's gate pair. No bar is relaxed, and the same pair is not re-run
+
+**Ruling.** RL-89 rule 1 was fixed before the night: a return time above 300 s alone does not unseat the pick
+if step-D's G0 and every per-turn gate on the pair released inside its cap; "if any of those timed out, the
+slow role goes back to a design round and W1 does not sign on this pair". Three G1s hit the 300 s cap (D_spam
+a, D_spam b, X_G). The condition failed, so that outcome applies as written.
+
+- **Not "relax the 300 s bar".** The 15.2 s was never the problem. Had the gates released, 315.2 s would have
+  been forgiven by the rule. The registered bar stays.
+- **Not "re-run the same pair".** This is not noise. All four gated members got one turn: three G1s censored
+  at 300 s, the fourth released at 269.9 s and then met its deadman. A second night on these bytes would
+  show the same thing.
+- **Not a re-pick by hand.** The second key is re-selected by a rule, after one design round (RL-119).
+- The two planning G0 timeouts (R+4C, R+2C) are a different matter and do not count against the pair
+  (RL-120 item 3).
+
+**Why it failed, in the gate's own terms.** This is the finding, and it is not about Th0C in particular.
+
+1. On a heatsink-class key the slope clause decides G0, not the band. The gated members were inside the band
+   within 40 s of entering G0 and then waited 340 to 591 s for Th0C to fall slower than 0.2 °C/min. They released 4.9
+   to 5.3 °C below the window reference.
+2. G1 and H are referenced to the G0 release values (as registered). So after each turn the gate asks Th0C to
+   come back to within 1.0 °C of a state that took 340 to 591 s of cooling to reach, inside a 300 s cap. It
+   cannot. RL-78 found the same for Tf08; it holds for any key of that mass.
+3. G0 alone breaks the duty bar. The bar is gates plus holds ≤ 0.40 × T_dead; with T_dead 918.19 s that is
+   367 s. The four gated G0 waits were 591.4, 466.9, 445.4 and 339.9 s.
+4. The registered slow rule selects for this. "Longest return time not above 300 s" picks the key that needs
+   about the whole per-turn cap to return after a heavy step, and the registered G1 target is a 90 s median.
+
+**The registered ladder does not reach it.** Step 1 (δ_slow up to 2.0 °C) cannot shorten a G0 that the slope
+decides, so it cannot pass item 3 at any band. Steps 2 and 3 are refused by this kit and do not touch the
+slope wait either. Step 4 is "D screen-only; return to council". The design round in RL-119 is that council,
+and screen-only D is not accepted before the round has looked at a die gate.
+
+**Owner.** Research lead (closed here). The lead carries the consequence into RL-119.
+**Gate.** W1 does not sign or arm on TV0h / Th0C. `sensor_ruling_rl89.json` authorizes no further night.
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures, gate timings and code only.
+
+---
+
+## RL-117. G0 is implemented as registered and is not changed. The window reference is an upper guard, not a target, and it is only meaningful on a key that is settled at warmup entry
+
+**Ruling, the gate.** The one-sided band (`<= ref + δ`) ANDed with `|slope| <= 0.2 °C/min` is the registered
+rule (protocol "Ten consecutive samples must meet R+δ, slow slope within ±0.2 °C/min"; `thermal_gates.md`
+"both one-sided upper temperature bands"). It is correct. `thermal_gates.py` is not edited.
+
+- A two-sided band would be wrong: a machine that has cooled below `ref − δ` would never release.
+- "Band or slope" in RL-90 and the arm draft was my loose wording for "which clause cleared last". The
+  magistrate's last-to-clear reconstruction is the right reading and is accepted as the RL-90 print.
+- The deciding clause is derived at the desk from the journal. No field is added to the gate record.
+
+**Ruling, the reference.** WP14(b)'s rule (the 60 s median before warmup entry in the capture member) stands,
+unchanged. What changes is what we say it is.
+
+- It is one number per window that every member shares as an **upper guard**. It is not a settled value and
+  was never required to be one. On a hot machine the slope clause sets the start state.
+- On Th0C the five captures of this night span 26.86 to 35.02 °C (8.2 °C): wherever the cooldown happened to
+  stand. On TV0h they span 34.13 to 34.91 °C (0.8 °C). So the rule yields a usable guard on a die key and an
+  arbitrary point on a heatsink key. That is a second reason for RL-119's direction, independent of RL-116.
+- The releases are the good news: slope-set start states were tight. TV0h 34.42 to 34.50 °C and Th0C 29.71 to
+  30.63 °C across step-D and the gated block. The control worked; it cost more time than a member has.
+- Step-D's capture span contains about 13 s of rising Th0C at its end. A 60 s median tolerates that (the
+  uncontaminated samples span 34.64 to 35.29 and the stored median is 35.02). No code change. The lead
+  identifies from the journal what starts before the capture stamp. If it is R1-only harness work, it is
+  closed. If W1's own path loads the machine before the stamp, it is disclosed in the deviation row; if that
+  span can reach 30 s, it comes back to me before signing, because a median no longer protects against it.
+- `align_window_reference.json` names Tf08 under `record_keys` and stores no Tf08 value. Left as it is; the
+  desk derives it from the journal, as the magistrate did.
+
+**Why.** The code does what the registration says. The surprise was mine: I read "release minus reference" as
+a distance to a target. Changing the gate module to match that misreading would cost a cold review of W1's
+gate and buy nothing.
+
+**Owner.** Lead: the capture-span diagnosis (desk, journal only), and the methods wording ("upper guard") in
+the deviation row of RL-119.
+**Gate.** None on the gate module. The diagnosis is reported before signing.
+**Blind status.** Blind: rehearsal temperatures and code only.
+
+---
+
+## RL-118. High Power `not_adopted`: confirmed. The series mode is Automatic
+
+**Ruling.** Confirmed. Both RL-72 E4 bars were fixed before the night and both pass: all 12 cross-band rows
+(smallest margin 0.398 °C), and B's slow capture 32.523 °C inside [29.414, 33.303]. The adoption rule and its
+gain of 1.25 were also fixed beforehand. t_decline is 98.665 / 98.845 / 98.856 s for A1 / B / A2 against a
+threshold of 123.57 s; B is 0.9999 of the larger A leg.
+
+- The legs started from the same state more closely than the bars ask: at release TV0h 34.48 / 34.49 / 34.48,
+  Th0C 30.49 / 30.52 / 30.34 and Tf08 30.42 / 30.39 / 30.28 °C.
+- RL-116 does not touch this. The legs use G0 only, all three released, and t_decline is a decode-clock
+  quantity that no gate key enters.
+- W1 and the series run with AC powermode 0. The High Power marker is not used.
+
+**One term.** The slot is written by the slot-producing night (RL-119), which runs its own A-B-A. I expect
+the same verdict. If that night's A-B-A is `adopted` or inconclusive, the two nights disagree and it comes to
+me; nobody chooses between them.
+
+**Owner.** Research lead (closed).
+**Gate.** None.
+**Blind status.** Blind: rehearsal temperatures and decode-clock timings only.
+
+---
+
+## RL-119. The W1 route: a desk replay, one design round on a die gate, one config change, Part A, and one more rehearsal night that produces the slots
+
+### What this night is
+
+Complete and clean, and it produces **no slots**. The gated block has no passing duty record, no G_turn and
+no usable G0 cap. Protocol R08/R16 requires "a new, passing gated record"; nothing can be read off this
+night to stand in for one. So one more rehearsal night is owed whatever else is decided. This night is
+therefore not the slot-producing night, and RL-107's freeze to `99622e96c` attaches to the next night's commit
+instead.
+
+### Step 1. Desk replay on this night's journals (the lead; temperatures only; before the round)
+
+Remote on the MBP now that nothing is armed, or on a custody copy. Four prints, minutes each:
+
+1. **Every G1 and H of the gated members:** duration, outcome, the episode reference, each key at exit minus
+   that reference, and which key was last out of band. Also when Th0C would have released at δ_slow 1.5 and
+   2.0 °C (the ladder's step 1, for the record).
+2. **A die-gate replay, with TV0h standing in for both keys.** For step-D and the four gated members: when G0
+   would have released on TV0h alone (band against the window reference, slope on TV0h, ten samples), the
+   episode reference that gives, and when the turn-1 G1 would then have released (five samples).
+3. **The step-D inventory journal, for each R0 `die` key admissible there:** time from load end to within
+   1.0 °C of its own baseline and to the slope clause holding. This is the candidate table RL-76 asked for
+   and the smoke left `unobserved`.
+4. **What the schedule alone controls:** TV0h, Th0C and Tf08 at warmup entry and at G0 entry of each gated
+   member. (At member start the four already agree to about 1.3 °C on Th0C.)
+
+### Step 2. One design round (Opus xhigh and Sol xhigh, one round; I close it)
+
+W1's protocol is not open beyond the second gate key. The brief:
+
+- **The default, mine: a die gate, with the slow mass observed.** This is RL-78's option 3a as it was meant
+  before the classifier picked a heatsink key. Config only; the gate module is untouched.
+- **The rule for the second key (not a hand pick):** the registered fast rule applied a second time. Among
+  keys R0 classed `die` and eligible, admissible on the saved Part B D classification (`0b9cdb9e…e0a6`), not
+  the fast pick or its aliases: the largest rise, lexical ties. By my reading of the saved table that is
+  **TVh0** (return time 69.6 s, τ 17.4 s, noise 0.010 °C). The lead derives it by script from the saved
+  table; my reading is not the authority.
+- **The test, fixed now:** from print 2, in each of the four gated members, G0 + 2 × G1 ≤ 367 s
+  (0.40 × T_dead for three turns) and each G1 ≤ 300 s; and step-D's G0 releases. If it holds and neither
+  seat shows a defect, the default is adopted when I close. If it does not hold, no key on this machine
+  supports a per-turn gate inside T_dead, and that comes to me before anything is built.
+- **What the seats must attack:** whether TVh0 is a thermometer distinct from TV0h in the night's step-D
+  journal, beyond the registered alias rule; what the gated-versus-ungated contrast's treatment-delivery
+  clause will print under a die gate; whether anything simpler exists.
+- **Not on the table:** edits to `thermal_gates.py` (slope bar, G1 reference, two-sided band), T_dead, the
+  300 s return-time bar, B_D, quantization. Under D-17a none of these is a W1-to-C1 item either. If a seat
+  concludes one is needed, it is a pre-signing protocol amendment and comes to me first.
+
+### Step 3. What goes onto the W1 line, and what kind of change each is
+
+| Change | Path | Kind |
+|---|---|---|
+| `sensors.s_slow` → the rule's key. Nothing else in the file. `record_keys` stays `["Tf08"]`; bands, caps, `r0_picks`, the 60 keys unchanged | `configs/align/v4/r1_runtime.json` (condition 13) | **Cited rebind before signing**, citing this ruling and the round's close. Released from RL-107's freeze for this one edit. It needs the new slot-producing night, not a re-registration |
+| The other nine condition-13 paths | as RL-84 P-4 | **No change.** Byte-identical to `99622e96c` through the next night and signing. `second_key_label` stays, and becomes accurate |
+| WP14(a)-R1-SLOW row rewritten: Th0C picked by the registered rule and unseated under RL-89 rule 1, with the three G1 timeouts; both gate keys are die class; the gate does not hold the heatsink; Tf08 recorded and compared between conditions; R is an upper guard (RL-117) | `docs/align/v4/DEVIATIONS.md` | Registration text, before signing. Public deviation, decided blind |
+| The validator accepts a pick made by this rule under a named ruling; new ruling file; regenerated Part B table (not re-measured, RL-89's four identities with the selection line changed) | `scripts/align_r1_followup_kit.py`, `docs/run_reports/` | Ordinary engineering, not condition 13. Cold review of the rule's derivation and the table |
+| W-4, W-6 | | Unchanged: not in W1's bytes (RL-108) |
+
+**No W1-to-C1 re-registration is needed for any of this.** W1 is unsigned; these are in the signing set.
+Th0C is not added to `record_keys`: at every release without the heater tonight Tf08 and Th0C agreed to within 0.13 °C, so a
+second heatsink read each second inside measured members buys nothing.
+
+### Step 4. Smoke and night
+
+- **Part A, yes, on the final bytes** (fresh soak): G0 on the new pair at 1.0 / 1.0 °C releases inside
+  1,200 s. **Part B is not re-run**; the pick is re-derived from the saved table.
+- **One more R1 follow-up night: the full program, unchanged code.** It is the slot-producing night;
+  `r1_slots.json` `executed_commit` is its commit, and RL-107's three items are shown at that commit. A
+  shorter program would mean editing condition-13 code, which costs more than seven unattended hours.
+- **No other rehearsal.** No smoke night, no gated-block-only night. The G1 risk is covered by print 2,
+  which costs minutes.
+- **Authorization.** I authorize that night when: the round is closed by me; the config commit is reviewed
+  and green; the regenerated table is accepted; Part A passed at that commit; the Mac 60-key check with the
+  new pair; D-7. The lead does not come back to me if all hold.
+
+### Dispositions for that night, fixed now
+
+1. **Thermometry.** The night confirms the pair by admissibility, code as built (RL-78 item 3). Any failed
+   clause comes to me.
+2. **Gated block.** The duty bar as registered: three admitted turns, gates plus holds ≤ 0.40 × T_dead, no
+   X7, in every judged run; no G1 or H timeout on the pair. If it passes, the slots are entered and W1 goes
+   to signing with no further night. If the median G1 wait exceeds 90 s, the registered S6 rule applies. A
+   failure comes to me with the registered ladder.
+3. **Planning turns.** As RL-120 item 3.
+4. **A-B-A.** As RL-118.
+
+**For Ed, plainly:** "The rehearsal ran clean and the High Power question is answered: no. The temperature
+gate did not work, for a reason we now understand. It waited for the heatsink to stop cooling before each run,
+which takes six to ten minutes, and then asked the heatsink to return to that state within five minutes after
+every turn, which it cannot. No agent episode completed a second turn. I had written down before the night
+that this outcome would unseat the sensor, and it does. The fix is the one we had already reasoned our way to
+a few days ago: gate on the chip's own temperature, which settles in about a minute, and record the heatsink
+instead of trying to hold it. That is one line of configuration and no gate code. A replay of last night's
+logs will show within the hour whether it works; then a short design check, a fifty-minute test, and one more
+rehearsal night before W1."
+
+**Why.** Feasibility is the property the series cannot do without (RL-78). The night shows that a
+settled-heatsink start is reproducible to under a degree and unaffordable, and that the fixed idle
+schedule already brings the heatsink to within about 1.3 °C between like members. So the schedule controls
+the slow mass, a light gate guards the die and the throttle state, and the heatsink is recorded for the
+analysis. That is the simple measurement, and it changes one config value.
+
+**Owner.** Lead: prints, round, config commit, kit and row edits, Part A, the arm item. Research lead: closes
+the round. Magistrate: smoke and night.
+**Gate.** W1 arming waits for the slot-producing night to pass item 2 and for signing under RL-107 at that
+night's commit.
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures, classifier fields, gate timings, code.
+
+---
+
+## RL-120. What is kept from this night, and what is not
+
+1. **Slots: none entered.** Nothing from this night's `r1_slots.json` is committed. `g0_cap_w1` = 740 s is
+   not used: it was measured on a pair that has fallen. A short outcome record is committed (the structure,
+   the magistrate's tables, these rulings), as after RL-59.
+2. **Admissible as diagnostics:** the soak; every G0 wait and release; the A-B-A record (RL-118); step-D's
+   classification and inventory journal, which the round reads; the Tf08 disclosure values.
+3. **The planning G0 timeouts at R+4C and R+2C are an R1 harness artefact and say nothing about W1.** The
+   heater's control law reaches zero duty at target + 1.0 °C, which is exactly the gate's band edge, so it
+   holds Th0C at the edge and the ten-sample streak forms by luck (5, 9 and 10 samples in the three turns).
+   W1 has no heater. `r1_runtime.py` is not edited for it. **Fixed now for the next night:** a planning-turn
+   G0 timeout at R+2 or R+4 with OS level 0 and Nominal throughout, where the desk shows the gate key
+   crossing the band edge, does not block W1. U5 then prints `inconclusive`, which RL-20 already admits. A
+   timeout at R+0, or any other pattern, comes to me. The lead owns how the kit takes that release; if it
+   needs a kit change it is ordinary engineering, not condition 13.
+4. **D_bank's deadman** is RL-116's item 3 seen from the member's side (G0 591 s of a 918 s budget). Nothing
+   separate is owed.
+5. **RL-91 is discharged for W1.** The wrapper ran a full night: no `capture_reaps` record, and no `powermetrics`
+   process in any member's census. The ticker print (one short gap in 2,413) needs nothing.
+6. **RL-106's count N** is taken from the slot-producing night, not this one.
+7. **Network time** stays OFF, as the magistrate left it.
+
+**Owner.** Lead (the outcome record). Research lead (items 3 and 5 closed here).
+**Gate.** Item 1 before any slots PR.
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures and structure only.
+
+**Lead note (2026-11-12):** numbered RL-111T to RL-115T in the seat file, renumbered RL-116 to RL-120 here because RL-111 to RL-115 (decision request 65) landed first; text otherwise verbatim.
+
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
