@@ -130,6 +130,7 @@
     "exit_code_hazard_result": null,
     "exit_code_result": null,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": false,
     "refusal_present": true,
     "restore_record_in_delivered_tree": false,
@@ -163,7 +164,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "f3f9b34f3d1fe402ce87d3655b6c3b908bdcba73"
   },
   {
    "agreement": {
@@ -309,6 +311,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -345,7 +348,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "6cb7a025ad1d8cdd2358267c1b43583f15e25a9e"
   },
   {
    "agreement": {
@@ -491,6 +495,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -527,7 +532,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "234ea270899ec8a9c055e79049ee54dd409bc5b4"
   },
   {
    "agreement": {
@@ -673,6 +679,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -709,7 +716,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "6176903335edede9d8507ae63c9ba7d02e74a105"
   },
   {
    "agreement": {
@@ -855,6 +863,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -891,7 +900,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "5343f979096869b72c0c934b050918048d111b49"
   },
   {
    "agreement": {
@@ -1037,6 +1047,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1073,7 +1084,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "dda334736ded1f636b805b6a1bb5b1e49852c78e"
   },
   {
    "agreement": {
@@ -1219,6 +1231,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1255,7 +1268,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "4ce9d8e026ece2674a6acb0c116d3b8b8f40862d"
   },
   {
    "agreement": {
@@ -1401,6 +1415,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1437,7 +1452,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "f9b5a1380837807efde0866b5a60b6d7018729f6"
   },
   {
    "agreement": {
@@ -1583,6 +1599,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1619,7 +1636,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "1832b78fbd38953eedce9cceb7e92aade69dfb89"
   },
   {
    "agreement": {
@@ -1765,6 +1783,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1801,7 +1820,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "1e5942d1db5681722d0e2cf8688ab3e72aebb799"
   },
   {
    "agreement": {
@@ -1947,6 +1967,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -1983,7 +2004,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "bc50b8106221724cf75aba773aa4751e09d350d5"
   },
   {
    "agreement": {
@@ -1994,9 +2016,9 @@
       "status": "agree"
      },
      {
-      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01 pattern)",
+      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; in-chain refusal, not a crash)",
       "id": "verdict_masks_outcome",
-      "kind": "writer_candidate",
+      "kind": "known_writer_defect",
       "status": "disagree"
      },
      {
@@ -2020,9 +2042,9 @@
       "status": "agree"
      },
      {
-      "detail": "nonzero chain exit with neither a fault flag nor fault reasons recorded",
+      "detail": "pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.",
       "id": "invariant:NONZERO_EXIT_WITHOUT_FAULT",
-      "kind": "writer_candidate",
+      "kind": "known_writer_defect",
       "status": "disagree"
      },
      {
@@ -2039,15 +2061,15 @@
     ],
     "disagreements": [
      {
-      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01 pattern)",
+      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; in-chain refusal, not a crash)",
       "id": "verdict_masks_outcome",
-      "kind": "writer_candidate",
+      "kind": "known_writer_defect",
       "status": "disagree"
      },
      {
-      "detail": "nonzero chain exit with neither a fault flag nor fault reasons recorded",
+      "detail": "pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.",
       "id": "invariant:NONZERO_EXIT_WITHOUT_FAULT",
-      "kind": "writer_candidate",
+      "kind": "known_writer_defect",
       "status": "disagree"
      },
      {
@@ -2148,6 +2170,7 @@
     "exit_code_hazard_result": 3,
     "exit_code_result": 3,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -2185,7 +2208,8 @@
      "NONZERO_EXIT_WITHOUT_FAULT",
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "594770497626e8b9c175c2258ddcdff637215761"
   },
   {
    "agreement": {
@@ -2319,6 +2343,7 @@
     "exit_code_hazard_result": null,
     "exit_code_result": null,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": true,
     "restore_record_in_delivered_tree": false,
@@ -2353,7 +2378,8 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "d30fed4946874eeded34971e4014cbba583ab234"
   },
   {
    "agreement": {
@@ -2364,9 +2390,9 @@
       "status": "agree"
      },
      {
-      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01 pattern)",
+      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; in-chain refusal, not a crash)",
       "id": "verdict_masks_outcome",
-      "kind": "writer_candidate",
+      "kind": "known_writer_defect",
       "status": "disagree"
      },
      {
@@ -2390,9 +2416,9 @@
       "status": "agree"
      },
      {
-      "detail": "nonzero chain exit with neither a fault flag nor fault reasons recorded",
+      "detail": "pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.",
       "id": "invariant:NONZERO_EXIT_WITHOUT_FAULT",
-      "kind": "writer_candidate",
+      "kind": "known_writer_defect",
       "status": "disagree"
      },
      {
@@ -2409,15 +2435,15 @@
     ],
     "disagreements": [
      {
-      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01 pattern)",
+      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; in-chain refusal, not a crash)",
       "id": "verdict_masks_outcome",
-      "kind": "writer_candidate",
+      "kind": "known_writer_defect",
       "status": "disagree"
      },
      {
-      "detail": "nonzero chain exit with neither a fault flag nor fault reasons recorded",
+      "detail": "pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.",
       "id": "invariant:NONZERO_EXIT_WITHOUT_FAULT",
-      "kind": "writer_candidate",
+      "kind": "known_writer_defect",
       "status": "disagree"
      },
      {
@@ -2518,6 +2544,7 @@
     "exit_code_hazard_result": 3,
     "exit_code_result": 3,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -2555,7 +2582,8 @@
      "NONZERO_EXIT_WITHOUT_FAULT",
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "851661f7f64361eb9efadc0285cca6ab1735ee12"
   },
   {
    "agreement": {
@@ -2696,6 +2724,7 @@
     "exit_code_hazard_result": 0,
     "exit_code_result": 0,
     "fault_boolean_present": false,
+    "host_restoration_in_result": false,
     "network_time_off_action_record": true,
     "refusal_present": false,
     "restore_record_in_delivered_tree": false,
@@ -2732,16 +2761,182 @@
     "violated_invariants": [
      "COURIER_SENT_WITHOUT_DELIVERY"
     ]
-   }
+   },
+   "source_commit": "ad19c062d90f22d0e70b21ba17c36cdcfedfcfe6"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "record carries chain_outcome COMPLETE; shadow derives MEASURED_OK",
+      "id": "recorded_chain_outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; r1_driver word complete, class success",
+      "id": "verdict_vs_exit_class",
+      "status": "agree"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "restore_record: present (result.json carries a host_restoration object; presence only, values not inspected)",
+      "id": "restore_records",
+      "status": "n/a"
+     }
+    ],
+    "disagreements": [],
+    "notes": []
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "success",
+    "declared": true,
+    "tool": "r1_driver",
+    "word": "complete"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.delivery.json",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-r1-20261112T2251Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": "COMPLETE",
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": true,
+    "host_restoration_in_result": true,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.delivery.json",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": []
+   },
+   "source_commit": "d544ff40b4a5e1002dbb4da92625bc4705748746"
   }
  ],
  "schema": "joulewise.sm_shadow_replay.v1",
  "skipped_by_family_gate": 84,
  "structure_only": true,
  "summary": {
-  "agree": 0,
+  "agree": 1,
   "disagree": 15,
-  "nights": 15,
+  "nights": 16,
   "rows": [
    {
     "agree": false,
@@ -2879,6 +3074,13 @@
      "invariant:COURIER_SENT_WITHOUT_DELIVERY"
     ],
     "night": "align-r1-20261111T0453Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": true,
+    "disagreements": [],
+    "night": "align-r1-20261112T2251Z",
     "outcome": "MEASURED_OK",
     "state": "Delivered"
    }

@@ -65,6 +65,11 @@ def chain_contract_for(night_name: str) -> str:
     return "b5_chain"
 
 
+A01_DETAIL = ("pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, "
+              "99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word "
+              "for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.")
+
+
 # RL-108 item 6: each violated invariant is explained as module defect, fixture gap or writer defect.
 def explain_invariant(inv, rec, fault_reason_count):
     if inv == "COURIER_SENT_WITHOUT_DELIVERY":
@@ -79,6 +84,10 @@ def explain_invariant(inv, rec, fault_reason_count):
                     "fault recorded, cause unknown; the reasons need not relate to the nonzero exit (audit A-01)")
         if fault_reason_count:
             return ("writer_candidate", "boolean fault is false while fault reasons and a nonzero exit are recorded")
+        if rec.get("night", "").startswith("align-r1-") and rec.get("chain_outcome") is None:
+            return ("known_writer_defect", A01_DETAIL)
+        if rec["fault_boolean_present"]:
+            return ("writer_candidate", "nonzero chain exit with boolean fault false and no fault reasons recorded")
         return ("writer_candidate", "nonzero chain exit with neither a fault flag nor fault reasons recorded")
     return ("unclassified", "no explanation rule")
 
@@ -110,6 +119,8 @@ def project_doc(name, doc):
             out["faults"] = {"reasons": _reasons(doc["faults"]["reasons"])}
         elif "faults" in doc:
             out["faults"] = {}
+        if name == "result.json" and "host_restoration" in doc:
+            out["host_restoration"] = {}  # presence only (N3); no key or value inside is kept
         if name == "hazard_result.json" and isinstance(doc.get("chain"), dict):
             out["chain"] = _pick(doc["chain"], ("exit_code",))
         elif name == "hazard_result.json" and "chain" in doc:
@@ -145,6 +156,7 @@ def project_bytes(name, raw):
 class Files(dict):
     """name -> projected bytes for allowlisted files; .all_names = every file name listed (names only)."""
     all_names: frozenset = frozenset()
+    source_commit = None
 
 
 # --- sources -------------------------------------------------------------------
@@ -169,6 +181,8 @@ def load_git_night(ref: str, repo: Path):
     listed = {n for n in tree.stdout.decode().split("\n") if n}
     files = Files()
     files.all_names = frozenset(listed)
+    sha = _git(["rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], repo).stdout.decode().strip()
+    files.source_commit = sha or None  # a ref sha is structure, not content
     for f in sorted(listed & ALLOWLIST):
         if f in EXISTENCE_FILES:
             files[f] = b""  # M1: presence from ls-tree only; contents are never fetched
@@ -230,6 +244,7 @@ def recorded_facts(files):
         "courier_sent_marker": "courier.sent" in files,
         "courier_sent_field": courier.get("sent") if courier and isinstance(courier.get("sent"), bool) else None,
         "exit_census_survivor_count": len(surv) if isinstance(surv, list) else None,
+        "host_restoration_in_result": isinstance(res, dict) and isinstance(res.get("host_restoration"), dict),
         "network_time_off_action_record": act is not None or off_alt,
         # file NAMES only (full ls-tree listing); fields inside delivered files are not inspected
         "restore_record_in_delivered_tree": any("restore" in n.lower() for n in names),
@@ -297,9 +312,13 @@ def agreement(rec, report, exit_cls, night_name=""):
         add("recorded_chain_outcome", "agree" if rec_out in (got, "UNKNOWN") else "disagree",
             f"record carries chain_outcome {rec['chain_outcome']}; shadow derives {outcome}")
     elif rec["verdict"] == "GO" and outcome in {"CHAIN_FAILED", "ABORTED"}:
-        checks.append({"id": "verdict_masks_outcome", "status": "disagree", "kind": "writer_candidate",
+        known = night_name.startswith("align-r1-")
+        checks.append({"id": "verdict_masks_outcome", "status": "disagree",
+                       "kind": "known_writer_defect" if known else "writer_candidate",
                        "detail": f"result verdict GO (admission) while the derived outcome is {outcome}; "
-                                 "the record's verdict word does not carry the chain's failure (audit finding A-01 pattern)"})
+                                 "the record's verdict word does not carry the chain's failure (audit finding A-01"
+                                 + ("; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; "
+                                    "in-chain refusal, not a crash)" if known else " pattern)")})
     problems = []
     if rec["chain_exited"] and not rec["chain_started"]:
         problems.append("chain.exited without chain.started")
@@ -354,7 +373,10 @@ def agreement(rec, report, exit_cls, night_name=""):
         kind, why = explain_invariant(inv, rec, frc)
         checks.append({"id": "invariant:" + inv, "status": "disagree", "kind": kind, "detail": why})
 
-    if rec["network_time_off_action_record"] and not rec["restore_record_in_delivered_tree"]:
+    if rec["host_restoration_in_result"]:
+        add("restore_records", "n/a",
+            "restore_record: present (result.json carries a host_restoration object; presence only, values not inspected)")
+    elif rec["network_time_off_action_record"] and not rec["restore_record_in_delivered_tree"]:
         add("restore_records", "note",
             "network-time-off action recorded; no restore record is delivered (host effect unobserved)")
     else:
@@ -375,6 +397,7 @@ def replay_night(name, files, now_epoch_s):
     checks = agreement(rec, report, exit_cls, name)
     return {
         "night": name,
+        "source_commit": getattr(files, "source_commit", None),
         "derived": True,
         "custody": False,
         "files_present": sorted(files),

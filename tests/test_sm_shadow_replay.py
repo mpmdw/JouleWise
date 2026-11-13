@@ -291,6 +291,65 @@ def test_restore_check_sees_names_in_full_listing(tmp_path):
     assert replay.recorded_facts(loaded2)["restore_record_in_delivered_tree"]
 
 
+def test_a01_known_writer_defect_on_pre_w1_align_r1_refusal(tmp_path):
+    n = run(tmp_path, "align-r1-20261111T0208Z", go_night(exit_code=3))
+    by = {c["id"]: c for c in n["agreement"]["checks"]}
+    for cid in ("invariant:NONZERO_EXIT_WITHOUT_FAULT", "verdict_masks_outcome"):
+        assert by[cid]["status"] == "disagree" and by[cid]["kind"] == "known_writer_defect", cid
+        assert "A-01" in by[cid]["detail"] and "99622e96c" in by[cid]["detail"]
+    assert "in-chain refusal" in by["invariant:NONZERO_EXIT_WITHOUT_FAULT"]["detail"]
+    assert n["exit_class"]["word"] == "refused"
+    # the invariant itself is not loosened: still a disagreement, still in the list
+    assert "invariant:NONZERO_EXIT_WITHOUT_FAULT" in [d["id"] for d in n["agreement"]["disagreements"]]
+
+
+def test_nonzero_exit_wording_splits_boolean_false_from_absent(tmp_path):
+    files = go_night(exit_code=11)
+    files["result.json"]["fault"] = False
+    n = run(tmp_path, "b5-fb", files)
+    inv = [c for c in n["agreement"]["checks"] if c["id"] == "invariant:NONZERO_EXIT_WITHOUT_FAULT"][0]
+    assert "boolean fault false" in inv["detail"] and "neither" not in inv["detail"]
+
+
+def test_host_restoration_presence_is_read_not_its_contents(tmp_path):
+    files = go_night(**{"network_time_off.action.json": {}})
+    files["result.json"]["host_restoration"] = {"network_time": {"ok": True, "SECRET": "987654"}, "ok": True}
+    d = write(tmp_path, "align-r1-w1r", files)
+    _, loaded = replay.load_tree_night(d)
+    assert "SECRET" not in loaded["result.json"].decode() and "987654" not in loaded["result.json"].decode()
+    n = replay.replay_night("align-r1-w1r", loaded, NOW)
+    assert n["recorded"]["host_restoration_in_result"] is True
+    rr = [c for c in n["agreement"]["checks"] if c["id"] == "restore_records"][0]
+    assert rr["status"] == "n/a" and "restore_record: present" in rr["detail"]
+    assert "no restore record is delivered" not in json.dumps(n)
+    # without the object the names-only note still fires
+    n2 = run(tmp_path, "align-r1-old2", go_night(**{"network_time_off.action.json": {}}))
+    assert "restore_records" in ids(n2, "note")
+    assert n2["recorded"]["host_restoration_in_result"] is False
+
+
+def test_source_commit_recorded_per_git_night(tmp_path):
+    orig = replay._git
+
+    class R:
+        def __init__(self, out, rc=0):
+            self.stdout, self.returncode = out, rc
+
+    def fake(args, cwd):
+        if args[0] == "ls-tree":
+            return R(b"result.json\n")
+        if args[0] == "rev-parse":
+            return R(b"abc123def456\n")
+        return R(b'{"verdict": "GO"}')
+    replay._git = fake
+    try:
+        name, files = replay.load_git_night("origin/night-results/align-r1-q", tmp_path)
+    finally:
+        replay._git = orig
+    assert replay.replay_night(name, files, NOW)["source_commit"] == "abc123def456"
+    assert run(tmp_path, "align-r1-tree", go_night())["source_commit"] is None
+
+
 def test_cli_writes_json_and_summary(tmp_path):
     write(tmp_path / "tree", "b5-ok", go_night())
     write(tmp_path / "tree", "b5-empty", {})
