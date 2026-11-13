@@ -8463,6 +8463,141 @@ re-run the session probe or the both-null count; those rest on the code and on O
 
 Replacement texts and appendices: /Volumes/JW-EXT/scratch/fable-rl133.md.
 
+# RL-130 (commit-ready)
+
+# RL-130. The RL-108 side branch (draft PR #754): the build conditions are met in substance, with one edit to a pinned measurement-core file to undo; fifteen rulings on what it leaves open; what an adoption request still needs
+
+**Read.** PR #754 at `b95c9fa8f`, base `a6a09e6d7`: every changed line of the seven edited bound files and the
+three new ones, the three new test modules, the regenerated trace, the draft deviation row and the native-check
+plan. RL-53 (W-4, W-6, W-7), RL-107, RL-108, plan §13. Review file `/Volumes/JW-EXT/scratch/fable-rev-754.md`.
+
+**Ruling.** Conditions 1 to 6 of RL-108 are met in substance. The branch stays an unmerged draft. It is not
+installed on the measurement Mac and is not merged into any branch a night runs from. Finding H1 and findings M1
+to M7 of the review are fixed on the branch before an adoption request. Four test modules that pass at
+`a6a09e6d7` fail on this head (`test_measurement_core_boundary`, `test_smoke_delta3_sol1`,
+`test_smoke_delta3_sol2`, `hazards.test_refusal_allowlist`); the PR body is corrected to say so. RL-108's timing is unchanged: not in W1's bytes;
+earliest with a re-registration that happens for another reason between W1 and C1; never between claim windows.
+
+**The nine questions of the PR.**
+
+1. **A chain that is neither R1 nor HAZARD_PACK keeps the contract "only 0 succeeds".** No plan `exit_contract`
+   key is added at adoption. A plan key is a change to what a plan may say, and no v4 night would use it: every
+   v4 night is an R1 chain or a HAZARD_PACK chain. The fallback's label changes from `undeclared` to
+   `zero_only`, so a clean exit is not journaled as an undeclared contract with a declared code.
+2. **The non-int edge stays a fault.** `False` and `0.0` are not exit codes. Under the contract they are
+   undeclared, and undeclared is a failure. No writer produces them. The row lists the edge, as it does. The
+   journal's `chain_exit_code` fact uses the same exact-int test.
+3. **"One `restore_owed()`" is the night driver's terminal paths, as built.** Session start, the watchdog's
+   abandoned-launch restore and `post_window_unstrand.sh --restore-host` stay on `powermode.restore_owed` at
+   adoption. Moving them would make them restore network time, which they do not do today, and that is a change
+   to a host end state with no night behind it. The driver's docstring and the row say how the two differ. One
+   thing is owed to me as a finding, with no build: after an abandoned launch whose night had turned network
+   time off, what turns it back on, and when.
+4. **The journal is not published by the courier and is not added to `result.json`'s artifacts.** The result is
+   written before the journal's own ResultWritten line, so a digest of the journal in the result would be stale
+   by construction. No re-delivery is built. The journal reaches the Air with the offload copy, under the
+   offload's own digests. The Air replay keeps deriving the journal from the delivered records, and the
+   agreement check for a night written by these writers is the written journal against the derived one. The row
+   states the true reason it is unpublished and that no digest binds it to the result.
+5. **A night whose chain termination is unproven has no line after ChainOpen. Accepted.** That silence is the
+   guard working. The dead-man appends ChainExited and ResultWritten once it has proved the group gone, as
+   built. It must also append its own delivery line (review M1): the journal of a night the dead-man delivered
+   ends at Delivered, with the dead-man named as writer.
+6. **An undeclared edge is recorded and noticed, not refused.** This sets aside audit §8.2 item 2. The watchdog
+   decides each tick from the plans, locks, process table and clocks. Refusing a transition would hold it in a
+   state the world has left, and the stale state could be the less safe one. An unknown state name can come
+   only from code and table that disagree, and the test that every state literal in the module is declared
+   already fails the build on that. The row says, in one sentence, that the table declares names and dwell
+   limits and constrains only the three supervisor targets.
+7. **"Non-hold" means not an unsafe hold.** Unsafe holds keep `UNSAFE_HOLD_DWELL_S` and STRANDED.
+   - `HOLD_CENSUS`, `CLOCK_UNCERTAIN` and `NETWORK_UNCERTAIN` gain notice-only limits. Each takes its basis from
+     a constant in the code where one exists, and is otherwise marked "declared here".
+   - `FENCED` gets none: the plan's completion bounds it, and the open-chain notice covers the unbounded case.
+   - `STOPPED` gets none: it is the operator's act.
+   - `ACTIVE` keeps 86400 s, with its basis rewritten as "declared here, not derived". Liveness inside it stays
+     W-02.
+   - `state["dwell"]` is not exported now. It is exported when the status exporter is next edited for another
+     reason.
+8. **A table that cannot be read holds the watchdog. The hold stays.** The table is bound data. A watchdog
+   without it is not running the registered tree, and W-1's check at the arm then refuses, which is where a
+   wrong install should be caught. The hold launches nothing and keeps every fence. The table and the watchdog
+   reach the canonical root in one step, and native check N4 shows the hold once on purpose, on a scratch
+   checkout, before the install.
+9. **`desk_failed` does not enter the series ledger.** The ledger's history status stays `final` or
+   `provisional`, because the series equality binds it and no window's ledger row may change form inside the
+   series. The packet and the held-window rows carry the value. No release, refusal or admission is attached to
+   it (RL-53). One addition that is none of those: the arm transcript prints each `desk_failed` window on its
+   own line with its reason and the words "to the research lead (RL-53 W-7)".
+
+**The finality seat's further questions.**
+
+10. **A window with nothing captured and an unreadable light triage is `desk_failed`, not `provisional`.**
+    `provisional` means that waiting makes it final. Nothing will: there is no harvest to wait for, and the
+    record's own triage cannot be read. The reason text is unchanged. "No final sources" with nothing captured
+    and no light triage named stays `provisional`.
+11. **A desk source that is not a mapping gets its own message.** The builder tests for it before calling the
+    predicate and returns `desk_failed` with "final sources unreadable: desk is not a mapping". Today the
+    operator is told the desk is still running off the MBP, at the moment a failed desk should reach me.
+    `light_triage.py` is not edited. The row lists this as a changed refusal message.
+12. **The desk-side runner's `final` is not unified with the field, and `light_triage.py` is not edited for
+    it.** The requirement is one predicate, and there is one: `final_adjudication_error`. The runner's boolean
+    is the desk's statement at harvest time and is an input. The field is the packet's statement on the bound
+    sources. A test pins that the builder never reads the runner's `final` in place of the predicate.
+
+**Three rulings from the failing tests.**
+
+13. **`joulewise/b5/driver.py` is not edited.** It is pinned as measurement core at the W1 line's digest
+    (RL-35, RL-37), and the branch broke the pin without saying so. The ChainOpen append moves into
+    `scripts/run_night.py`, beside `_claim_chain_start`, which the hazard driver already calls. The two
+    transaction-pack claim sites, where a launcher already exists, do not append. The pin test passes unchanged
+    on the fixed branch. From now on a PR that edits a file named in `test_measurement_core_boundary` says so in
+    its impact statement, whatever the edit.
+14. **The packet probe's count becomes 508 at adoption, and not before.** It is 488 on every line a night runs
+    from. The two pinned tests change on the branch with a comment naming this ruling, as RL-28's did. The
+    adoption request says which recorded packets are compared with rebuilt ones across the adoption, and shows
+    that none is.
+15. **The hazard refusal census is brought up to date on the branch.** The `TransitionTableError` sites are
+    listed in `configs/gates/hazard_refusals.json` with their counts. `joulewise/exit_contract.py` and
+    `joulewise/window_journal.py` are scanned, or are listed in `not_scanned` with the reason that neither can
+    refuse a night. The census file is not in the receipt's artifact map, so no bound file is added by this.
+
+**What an adoption request still needs.**
+
+16. All of these, and I rule then:
+    - **The agreement report covering W1's own night.** It covers the R1 nights and the follow-up night today.
+    - **The branch rebased onto the W1 signing head**, with the verbatim copy of `_chain_outcome` and every
+      golden re-pinned and re-captured on that head, and the commit named in the test.
+    - **Review findings H1 and M1 to M7 fixed, and L1 to L13 each fixed or answered.** A cold review of the
+      delta after the rebase; this review covers `b95c9fa8f` only.
+    - **Every test module that imports an edited file run on the rebased head**, and each failure shown red at
+      the signing head or fixed. That includes `test_timing_receipts`' capture-equality test and
+      `test_r1_followup`, which I could not attribute.
+    - **The trace regenerated on the rebased head** with both closure modules and `test_v4_registration`
+      passing, and the four new `opened` paths explained (L7).
+    - **The deviation row corrected** (M4, and items 1, 4, 6, 7, 10, 11, 14 and 15 above).
+    - **The mutant diffs**, each with kill and reap calls stubbed (L10).
+    - **CI green on the rebased head**, the test shards included.
+    - **The native-check plan as drafted**, N1 to N6, remote, with the additions of item 8 and with N2 predicted
+      from the widened golden set.
+    - **The other reason.** Adoption rides a re-registration that is happening anyway. It is not its own
+      reason.
+
+**Why.** The branch does what RL-108 allowed: it shows the refactor leaves every reason and every host end state
+where it was, and it keeps the journal out of members by refusing in the writer and not by convention. Its
+faults are of two kinds. It was tested against the modules its builders chose and not against the pins that
+guard the files it edits, so it broke three of them unseen. And it is thin at the edges: the dead-man's
+delivery, the transaction-pack claim, the paths the goldens skip, and a row that describes the code as it is.
+All of that is cheap on an unmerged branch and expensive in a registered one.
+
+**Owner.** The state-machine lane: the fixes, the rebase, the row. The lead: the adoption request, when W1's
+night has closed. Research lead: the ruling on that request, and item 3's finding when it arrives.
+
+**Gate.** Nothing here gates W1, the signing or the Block 6 pin (RL-108 item 7).
+
+**Blind status.** Blind: no v4 outcome exists. Blind to Block 6. Code, tests, trace and draft documents only.
+
+Source: cold review of PR #754, /Volumes/JW-EXT/scratch/fable-rev-754.md.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
