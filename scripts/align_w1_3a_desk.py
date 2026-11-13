@@ -29,6 +29,16 @@ amendment):
   duplicate rows under one kit segment name. Superseded attempts (``.rejectedN``,
   ``.g0_timeoutN``) are classified by the same rule, labelled, never emitted.
 
+With ``--precool-fast-rule rl131`` (RL-131 item 2.4, made exact by RL-135
+item 7), every planning-turn row (superseded attempts too) also prints the
+precool's TV0h at its last valid sample against R_fast + 1.0 C (R_fast =
+``fast_c`` of step-D's window reference), and a planning G0 timeout whose
+precool TV0h is above that edge, or cannot be read (journal or reference
+absent, last valid sample older than 5 s before the journal's end, or the
+journal's last S_slow value not reproducing ``r1_result.json``'s last
+recovery-curve value), is ``to-research-lead``. The default ``none`` leaves
+the output byte-identical to the tool before the option existed.
+
 A released G0 is classified ``released`` (nothing to rule). The output is
 deterministic: no wall clock, sorted keys. ``kit_record_segments`` carries the
 rows the W1 kit's ``r1_planning_release.json`` expects for the 3(a) segments
@@ -57,6 +67,16 @@ FRESH_NS = 2 * NS         # thermal_gates.py: pm observation <= 2 s old
 CLASS_RELEASED, CLASS_3A, CLASS_LEAD = 'released', 'planning-release-3a', 'to-research-lead'
 KIT_SEGMENTS = tuple(f'planning_turn_R_plus_{n}C' for n in PLANNING_OFFSETS)
 OVERRIDE_SOURCE = '--delta-slow-c'
+# RL-131 item 2.4 / RL-135 item 7 (--precool-fast-rule rl131)
+PRECOOL_FAST_RULES = ('none', 'rl131')
+RL131_EDGE_C = 1.0                 # the ruling's constant, not the member's band
+RL131_MAX_AGE_S = 5.0              # last valid TV0h no more than 5 s before the journal's end
+RL131_SELF_CHECK_C = 1e-6
+STEP_D_PHASE = 'step_D_prefill_10k_decode_4096'
+# LAYOUT ASSUMPTION (spec "Not checked"; the lead confirms it in step 0): the
+# idle-until-soak session journal, r1_runtime.k_idle_until_soak
+# open_session("sensors") -> RUN_DIR/<precool phase>/sensors/align_thermal.jsonl.
+PRECOOL_JOURNAL = 'sensors/align_thermal.jsonl'
 
 
 class DeskError(RuntimeError):
@@ -171,6 +191,70 @@ def precool_record(fields, base):
             'last_curve_c': r6(last) if finite(last) else None}
 
 
+def precool_fast(root, base, start, record):
+    """RL-131 item 2.4 fields for one planning row (RL-135 item 7). record: precool_record(...)."""
+    out = {'journal': str(Path(record['phase']) / PRECOOL_JOURNAL), 'journal_sha256': None,
+           'fast_key': start.get('s_fast'), 'fast_last_c': None, 'fast_last_age_s': None, 'slow_last_c': None,
+           'r_fast_c': None, 'r_fast_source': None, 'delta_fast_edge_c': None, 'fast_margin_c': None,
+           'fast_ok': None, 'self_check': None, 'fast_unavailable': []}
+    refs = sorted((root / STEP_D_PHASE / 'runs').glob('*/outputs/align_window_reference.json'))
+    if len(refs) == 1:
+        try:
+            value = json.loads(refs[0].read_text()).get('fast_c')
+        except (OSError, ValueError):
+            value = None
+        if finite(value):
+            out['r_fast_c'] = r6(value)
+            out['r_fast_source'] = {'path': str(refs[0].relative_to(root)), 'sha256': sha256_file(refs[0])}
+            out['delta_fast_edge_c'] = r6(value + RL131_EDGE_C)
+        else:
+            out['fast_unavailable'].append('step-D window reference has no finite fast_c')
+    else:
+        out['fast_unavailable'].append('step-D window reference absent' if not refs else
+                                  f'{len(refs)} step-D window references')
+    path = root / record['phase'] / PRECOOL_JOURNAL
+    fast_key, slow_key = start.get('s_fast'), start.get('s_slow')
+    if not path.is_file():
+        out['fast_unavailable'].append(f'precool journal absent ({out["journal"]})')
+    else:
+        out['journal_sha256'] = sha256_file(path)
+        try:
+            _, _, readings = read_journal(path)
+        except (DeskError, ValueError, KeyError) as error:
+            readings = []
+            out['fast_unavailable'].append(f'precool journal unreadable ({error})')
+        fast = sample_points(readings, fast_key)
+        slow = sample_points(readings, slow_key)
+        valid_fast = [p for p in fast if p[1] is not None]
+        valid_slow = [p for p in slow if p[1] is not None]
+        if not readings:
+            out['fast_unavailable'].append('precool journal has no reading row')
+        elif not valid_fast:
+            out['fast_unavailable'].append(f'no valid {fast_key} sample in the precool journal')
+        else:
+            t_last, v_last = valid_fast[-1][0], valid_fast[-1][1]
+            out['fast_last_c'] = r6(v_last)
+            out['fast_last_age_s'] = r6((fast[-1][0] - t_last) / NS)
+            at = dict((t, v) for t, v, *_ in slow)
+            out['slow_last_c'] = r6(at.get(t_last))
+            if (fast[-1][0] - t_last) / NS > RL131_MAX_AGE_S:
+                out['fast_unavailable'].append('last valid %s sample is %.3f s before the journal\'s end (> %g s)'
+                                          % (fast_key, (fast[-1][0] - t_last) / NS, RL131_MAX_AGE_S))
+        curve = record.get('last_curve_c')
+        last_slow = valid_slow[-1][1] if valid_slow else None
+        agrees = (last_slow is not None and finite(curve) and abs(last_slow - curve) <= RL131_SELF_CHECK_C)
+        out['self_check'] = {'journal_last_slow_c': r6(last_slow), 'r1_result_last_curve_c': curve,
+                             'tolerance_c': RL131_SELF_CHECK_C, 'agrees': agrees}
+        if not agrees:
+            out['fast_unavailable'].append('self-check failed: the journal\'s last %s value %s does not reproduce '
+                                      'r1_result last_curve_c %s' % (slow_key, r6(last_slow), curve))
+    if out['fast_last_c'] is not None and out['delta_fast_edge_c'] is not None:
+        out['fast_margin_c'] = r6(round(out['delta_fast_edge_c'] - out['fast_last_c'], 9))
+    if not out['fast_unavailable'] and out['fast_margin_c'] is not None:
+        out['fast_ok'] = out['fast_margin_c'] >= 0
+    return out
+
+
 def analyse_gate(phase, gate, start, readings, delta_slow, delta_source, precool=None):
     label, planning, superseded, base = turn_info(phase)
     heater = start.get('s_slow')
@@ -250,6 +334,13 @@ def classify(row):
             reasons.append('precool %s did not report released: true (%s); RL-124 5(a)'
                            % ((row.get('precool') or {}).get('phase'),
                               'not available' if released is None else 'released false'))
+        fast = row.get('precool') or {}
+        if 'fast_ok' in fast:
+            if fast['fast_ok'] is False:
+                reasons.append('RL-131 2.4: precool TV0h last sample %.6f is %.6f above R_fast + 1.0'
+                               % (fast['fast_last_c'], -fast['fast_margin_c']))
+            elif fast['fast_ok'] is None:
+                reasons.append('RL-131 2.4: precool TV0h not available (%s)' % '; '.join(fast['fast_unavailable']))
     return (CLASS_LEAD, reasons) if reasons else (CLASS_3A, [])
 
 
@@ -286,7 +377,9 @@ def reconcile(phases, rows):
             'phases_with_g0_outcome': len(expected), 'desk_rows': rows_n, 'mismatches': mismatches}
 
 
-def desk(night_dir, delta_slow_override=None):
+def desk(night_dir, delta_slow_override=None, precool_fast_rule='none'):
+    if precool_fast_rule not in PRECOOL_FAST_RULES:
+        raise DeskError(f'--precool-fast-rule must be one of {PRECOOL_FAST_RULES}')
     root = Path(night_dir)
     phases = None
     if (root / 'r1_result.json').is_file():
@@ -300,8 +393,10 @@ def desk(night_dir, delta_slow_override=None):
         digest = sha256_file(journal)
         for gate in gates:
             base = turn_info(phase)[3]
-            row = analyse_gate(phase, gate, start, readings, delta, source,
-                               precool_record(phases, base) if turn_info(phase)[1] else None)
+            precool = precool_record(phases, base) if turn_info(phase)[1] else None
+            if precool is not None and precool_fast_rule == 'rl131':
+                precool = {**precool, **precool_fast(root, base, start, precool)}
+            row = analyse_gate(phase, gate, start, readings, delta, source, precool)
             row['journal'] = str(journal.relative_to(root))
             row['journal_sha256'] = digest
             rows.append(row)
@@ -324,11 +419,26 @@ def desk(night_dir, delta_slow_override=None):
     counts = {}
     for r in rows:
         counts[r['classification']] = counts.get(r['classification'], 0) + 1
-    return {'schema': SCHEMA, 'night': root.name, 'rule': {
-                'authority': 'RL-122 item 3(a), RL-122 amendment 2026-11-13, RL-124',
-                'measure': f'heater key peak over the last {WINDOW_S} s of the G0 interval >= band edge - {EDGE_C} C',
-                'band_edge': 'reference.slow_c (target) + delta_slow_c', 'heater_key': 'session s_slow',
-                'precool': 'preceding idle-until-soak phase must report released: true (RL-124 5(a))'},
+    rule = {'authority': 'RL-122 item 3(a), RL-122 amendment 2026-11-13, RL-124',
+            'measure': f'heater key peak over the last {WINDOW_S} s of the G0 interval >= band edge - {EDGE_C} C',
+            'band_edge': 'reference.slow_c (target) + delta_slow_c', 'heater_key': 'session s_slow',
+            'precool': 'preceding idle-until-soak phase must report released: true (RL-124 5(a))'}
+    if precool_fast_rule == 'rl131':
+        planning = [r for r in rows if r['planning_turn']]
+        found = sum(1 for r in planning if r['precool']['journal_sha256'] is not None)
+        rule['precool_fast'] = {
+            'option': 'rl131', 'authority': 'RL-131 item 2.4 (RL-135 item 7)',
+            'condition': ('a planning G0 timeout needs the precool journal\'s last valid s_fast sample, no more '
+                          f'than {RL131_MAX_AGE_S:g} s before its end, <= R_fast + {RL131_EDGE_C} C; R_fast = fast_c '
+                          'of step-D\'s align_window_reference.json; self-check: the journal\'s last s_slow value '
+                          'reproduces r1_result last_curve_c to 1e-6'),
+            'layout': {'precool_journal': PRECOOL_JOURNAL, 'planning_rows': len(planning),
+                       'journals_found': found,
+                       'confirmed': bool(planning) and found == len(planning),
+                       'note': ('LAYOUT ASSUMPTION NOT CONFIRMED: no precool journal at <precool phase>/'
+                                f'{PRECOOL_JOURNAL}; confirm PRECOOL_JOURNAL in step 0' if planning and not found
+                                else None)}}
+    return {'schema': SCHEMA, 'night': root.name, 'rule': rule,
             'reconciliation': reconciliation,
             'kit_record_segments_note': ('kit_record_segments withheld: reconciliation mismatch' if withheld
                                          else None),
@@ -362,8 +472,20 @@ def render(report):
         if pre is not None:
             lines.append(f"    precool {pre['phase']}: released {pre['released']}, last curve value "
                          f"{_f(pre['last_curve_c'])}")
+            fast = pre
+            if 'fast_ok' in fast:
+                lines.append(f"    RL-131 2.4 precool {fast['fast_key']}: last {_f(fast['fast_last_c'])} "
+                             f"(age {_f(fast['fast_last_age_s'], '{:.1f}')} s), R_fast {_f(fast['r_fast_c'])}, "
+                             f"edge {_f(fast['delta_fast_edge_c'])}, margin {_f(fast['fast_margin_c'], '{:+.3f}')}, "
+                             f"fast_ok {fast['fast_ok']}, self-check "
+                             f"{(fast['self_check'] or {}).get('agrees')}"
+                             + (f"; unavailable: {'; '.join(fast['fast_unavailable'])}" if fast['fast_unavailable']
+                                else ''))
         for reason in r['reasons']:
             lines.append(f'    -> {reason}')
+    note = ((report['rule'].get('precool_fast') or {}).get('layout') or {}).get('note')
+    if note:
+        lines.append(note)
     rec = report['reconciliation']
     lines.append(f"reconciliation: {rec['status']}")
     lines.extend(f'    !! {m}' for m in rec['mismatches'])
@@ -379,11 +501,13 @@ def main(argv=None):
     parser.add_argument('night_dir', type=Path)
     parser.add_argument('--delta-slow-c', type=float, default=None,
                         help='DISPLAY ONLY: a row whose band comes from this value is never planning-release-3a')
+    parser.add_argument('--precool-fast-rule', choices=PRECOOL_FAST_RULES, default='none',
+                        help='rl131: RL-131 item 2.4 precool TV0h condition on planning G0 timeouts (RL-135 item 7)')
     parser.add_argument('--format', choices=('text', 'json', 'both'), default='both')
     parser.add_argument('--json-out', type=Path, default=None)
     args = parser.parse_args(argv)
     try:
-        report = desk(args.night_dir, args.delta_slow_c)
+        report = desk(args.night_dir, args.delta_slow_c, args.precool_fast_rule)
     except (DeskError, OSError, ValueError) as error:
         print(f'3a desk: {error}', file=sys.stderr)
         return 2
