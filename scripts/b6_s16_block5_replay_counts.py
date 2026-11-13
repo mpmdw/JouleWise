@@ -641,6 +641,35 @@ def section17_line(result: dict[str, Any], *, commit: str, date: str,
     )
 
 
+PSTAR_DESK_SHA256 = "9a907a3671dbe210df4d417428c9108f0fdee1c16531bd0bef2fd39b0f27bb2b"
+
+
+def fill_pstar(result: dict[str, Any], ps: dict[str, Any]) -> dict[str, Any]:
+    """Close row E from the P* tool's output (RL-140 case E): the row becomes counted and leaves ``open``."""
+    if ps.get("schema") != "joulewise.b6_s16_block5_pstar.v1" or ps.get("desk_sha256") != PSTAR_DESK_SHA256:
+        raise Refusal("pstar_result_not_from_the_pinned_desk_function")
+    if sorted(s["plan_id"] for s in ps["sessions"]) != sorted(s["plan_id"] for s in result["sessions"]):
+        raise Refusal("pstar_result_sessions_differ")
+    if ps["runs"] != result["summary_totals"]["runs"]:
+        raise Refusal("pstar_result_run_count_differs")
+    row = next(r for r in result["rules"] if r["rule_id"] == "8.3.3-PST")
+    by_pack = {p: ps["removed_by_pack"][p] for p in PACK_ORDER if p in ps["removed_by_pack"]}
+    row.update(state="counted", runs_removed=ps["removed"], runs_removed_by_pack=by_pack, sessions_removed=0,
+               sessions_removed_by_pack={p: 0 for p in by_pack}, method="pinned_desk_function",
+               science_runs_examined=ps["science_runs_examined"],
+               basis=(f"pinned desk_hazards (b5ab6a71d, 9a907a36…) on each science run's idle-baseline rails; "
+                      f"{ps['science_runs_examined']} science runs examined; largest baseline mean "
+                      f"{ps['max_baseline_mean_mw_text']} mW, lowest line {ps['lowest_line_w_text']} W"))
+    row.pop("reason", None)
+    for st, ids in result["rows_by_state"].items():
+        if "8.3.3-PST" in ids:
+            ids.remove("8.3.3-PST")
+    result["rows_by_state"]["counted"].append("8.3.3-PST")
+    result["open"] = []
+    return {"tool": "scripts/b6_s16_block5_pstar.py", "removed": ps["removed"], "removed_by_pack": by_pack,
+            "max_baseline_mw": ps["max_baseline_mean_mw_text"], "lowest_line_w": ps["lowest_line_w_text"]}
+
+
 def git_head(path: Path) -> str:
     try:
         out = subprocess.run(["git", "-C", str(path), "rev-parse", "--short=9", "HEAD"], capture_output=True,
@@ -660,6 +689,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--date", default=None, help="date for the §17 line (default: today, local)")
     ap.add_argument("--commit", default=None, help="script commit for the §17 line (default: git HEAD)")
     ap.add_argument("--unpinned", action="store_true", help="skip the released-input pins (synthetic fixtures)")
+    ap.add_argument("--pstar-json", type=Path, help="row E's result from scripts/b6_s16_block5_pstar.py")
+    ap.add_argument("--pstar-commit", default=None, help="that tool's commit (default: --commit)")
     args = ap.parse_args(argv)
     try:
         b5 = load_catalog(args.b5_catalog)
@@ -673,6 +704,9 @@ def main(argv: list[str] | None = None) -> int:
         if not args.unpinned:
             check_pins(sessions, args.b5_catalog, args.b6_catalog)
         result = replay(sessions, b5, b6)
+        pstar = None
+        if args.pstar_json:
+            pstar = fill_pstar(result, json.loads(args.pstar_json.read_text()))
     except Refusal as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 4
@@ -686,7 +720,9 @@ def main(argv: list[str] | None = None) -> int:
     result["catalog_sha256"] = {"b5": sha256_file(args.b5_catalog), "b6": sha256_file(args.b6_catalog)}
     md = render_markdown(result, commit=commit, date=date)
     try:
-        line = section17_line(result, commit=commit, date=date)
+        if pstar is not None:
+            pstar["commit"] = args.pstar_commit or commit
+        line = section17_line(result, commit=commit, date=date, pstar=pstar)
     except Refusal as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 4

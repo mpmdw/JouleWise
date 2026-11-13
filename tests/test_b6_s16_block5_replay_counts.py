@@ -361,6 +361,32 @@ class Cli(unittest.TestCase):
         self.assertEqual(code, 4)
         self.assertIn("runs carrying a changed run code (3) differ from the runs Block 6 keeps (2)", err.getvalue())
 
+    def test_pstar_result_closes_row_e(self) -> None:
+        argv = self.argv()
+        pstar = {"schema": "joulewise.b6_s16_block5_pstar.v1", "desk_sha256": s16.PSTAR_DESK_SHA256,
+                 "sessions": [{"plan_id": p} for p in PLANS.values()], "runs": 28, "science_runs_examined": 22,
+                 "removed": 1, "removed_by_pack": {"alpha": 0, "beta": 1, "gamma": 0},
+                 "max_baseline_mean_mw_text": "80.00", "lowest_line_w_text": "0.0723"}
+        (self.tmp / "pstar.json").write_text(json.dumps(pstar))
+        self.assertEqual(s16.main(argv + ["--unpinned", "--pstar-json", str(self.tmp / "pstar.json"),
+                                          "--pstar-commit", "p1"]), 0)
+        out = json.loads((self.tmp / "out.json").read_text())
+        self.assertEqual(out["open"], [])
+        self.assertIn("8.3.3-PST", out["rows_by_state"]["counted"])
+        line = out["section17_line"]
+        self.assertIn("Slot fill: S-16, Block 5's half. Read after", line)
+        self.assertIn("by `scripts/b6_s16_block5_pstar.py` @ `p1`: removes 1 of 28 runs (0, 1, 0); largest baseline "
+                      "mean 80.00 mW against the lowest line 0.0723 W.", line)
+
+    def test_pstar_result_from_another_function_refuses(self) -> None:
+        argv = self.argv()
+        (self.tmp / "pstar.json").write_text(json.dumps({"schema": "joulewise.b6_s16_block5_pstar.v1",
+                                                         "desk_sha256": "0" * 64}))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(s16.main(argv + ["--unpinned", "--pstar-json", str(self.tmp / "pstar.json")]), 4)
+        self.assertIn("pstar_result_not_from_the_pinned_desk_function", err.getvalue())
+
     def test_pins_cover_the_three_released_sessions(self) -> None:
         self.assertEqual(sorted(s16.PINS["sessions"]), sorted(PLANS.values()))
         for files in s16.PINS["sessions"].values():
