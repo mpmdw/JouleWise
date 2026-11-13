@@ -9973,6 +9973,180 @@ refusal by name on a synthetic archive with a null post capture.
 **Blind status.** Unchanged. Synthetic roots 25 and 26 only: listings, receipts, capture key names, one
 attempt row, code and rulings. No Block 6 custody, archive or outcome path was opened. Block-5-aware.
 
+# RL-142. The Block 6 dry run's exit 3: a pack-filter defect in RC-B6-1 drops Block 5's whole-machine values; fix, `b6/analysis-r2`, one gate run and one dry run (2026-11-13 14:28 PST)
+
+Fable 5.2, research lead. Blind: I read code at `3551e1a7d`, the registration, the R3 table, my runbook and
+`dry/structure.json` (names and counts). I opened no custody file and no value of `restricted.json` or of Block
+5's `recompute.json`. One synthetic reproduction ran on the Air under `AIR-QUIET.lock` (taken 14:26, removed
+14:27), from a `git archive` of `3551e1a7d`; the run checkout is untouched (porcelain empty).
+
+## 1. Diagnosis
+
+**The first program is wrong. It is a scope defect in one function, not a Block 6 outcome.**
+
+`scripts/independent_recompute_b6.py:1033`, `pack_block5_keys`, keeps a Block 5 key for ALPHA or BETA when the
+model tag is the key's second segment (`k.split("/")[1:2] == [tag]`). That holds for `reported/<tag>/…`,
+`floor/<tag>/…` and `dominance/<tag>/…`. It does not hold for `lines/whole_machine/<tag>/<phase>/mean_j`, where
+the tag is the third segment. `block5_quantities` (RC:1024-1029) deliberately builds those four keys from Block
+5's `disclosures.whole_machine`; the filter then drops them. So in `block_lines` (RC:1050-1079), for the four
+whole-machine keys:
+
+- `between_session` and `flagged_inclusive` are formed without Block 5's value (n = 3, `block5_included` false);
+- `side_by_side` prints `block5: null`, `block5_label: "block 5: not computed"` and `delta: null`.
+
+The second side (`b6_analysis_check.py:154-159`) reads the unfiltered Block 5 keys, finds a finite value and
+forms a finite delta. Null against finite fails `section10` four times, and the comparator repeats the four at
+`__block__`. That is the eight names, all of them. The disagreement does not depend on any value.
+
+**The registration decides the side.** §10 defines the summary for "each whole-machine per-phase value" with
+"n = 1 + (counting block-6 sessions)". §11.1 prints Block 5's value and Δ "for every quantity of §9"; the
+whole-machine line is §9.5 item 5. The label "block 5: not computed" is false: Block 5 computed and released it.
+The second side is right. There is one reading, so no rule is chosen.
+
+**Reproduced, synthetic.** `/Volumes/JW-EXT/scratch/rl142-repro/repro.py`: the test support's nine sessions,
+a synthetic whole-machine `mean_j` on each ALPHA and BETA session, a synthetic Block 5 stub holding only
+`disclosures.whole_machine`. Pinned bytes (`90e22603…`, `634c991c…` confirmed): exit 3, the same eight failure
+names and no other, `block5_included` false, label "block 5: not computed". With the fix of §2: exit 0, failures
+empty, n = counting + 1, delta = Block 6 mean − Block 5 value, label null.
+
+**The lead's hypothesis: FALSE in its main clause, TRUE in its last two.**
+
+- FALSE: "the delta of those lines was never meant to be compared". `check_block` loops over every
+  between-session key; the production key registry lists the four `side_by_side/…/whole_machine/…/delta` keys;
+  R3 rows 24 and 32 label them "§10-§11 arithmetic computed and compared; session inputs as labelled at session
+  scope". §17-R8's literal and RL-125 item 3 cover the six *session* keys `lines/whole_machine/…`. Term 7
+  passed, correctly. The block-scope arithmetic over them is twinned by design, and it did its job here.
+- TRUE: no test or R12 read ever gave the program a Block 5 output with whole-machine cells and sessions that
+  carry the line. The toy sessions have none (n = 0), and the kit's stub held reported decode cells only.
+
+**Two faults of mine in RL-134, recorded.**
+
+1. Item 2 term 2's probe (B-5) counted through the pinned `pack_block5_keys`, so it predeclared the defect's
+   own count. 44 was wrong; the count is 48 (ALPHA 22, BETA 22, GAMMA 4). The check could not see this drop.
+2. `check_block` takes `block5_included` from the first program for the summary base (CHK:146), so the summary
+   rows agreed while four Block 5 values were missing. The delta check caught it. With the fix the delta check
+   covers every key with a finite Block 5 value, so the checker is not changed today (§2 item 2).
+
+`neg8_reference_lost` on `r2-beta` is not part of this hold: it does not stop and the fix does not touch it.
+
+## 2. Ruling
+
+1. **Class E route, admissible fix** (RL-134 item 11 term 4, item 12 row `option_c_disagrees`). It is a defect
+   in the first program. It is blind, it chooses no rule, and it turns the output into what §10 and §11.1
+   already state. **It changes printed numbers, and the entry says so:** for the four keys
+   `lines/whole_machine/{qwen3-1p7b,qwen3-8b}/{decode,prefill-p2048}/mean_j`, the summary and flagged-inclusive
+   n, mean and sd (n rises by 1), `block5_included`, and the side-by-side Block 5 value, label, delta and
+   session deltas. Nothing else.
+
+2. **The fix. One pinned file, one function.** `scripts/independent_recompute_b6.py`, `pack_block5_keys`:
+
+   ```python
+   def pack_block5_keys(pack, keys):
+       if pack == "GAMMA":
+           return {k: v for k, v in keys.items() if k.startswith("contrast/")}
+       tag = MODEL_TAG[MODELS[pack]]
+       return {k: v for k, v in keys.items()
+               if k.split("/")[1:2] == [tag] or k.split("/")[:3] == ["lines", "whole_machine", tag]}
+   ```
+
+   `joulewise/b6_analysis_check.py` stays `634c991c…`. No other pinned byte changes. If the lead's diff differs
+   from this text in anything but whitespace, it comes back to me.
+
+3. **Tests**, in `tests/independent_recompute/test_block6.py`:
+   - unit: `block5_quantities` on a stub with `disclosures.whole_machine` for ALPHA and BETA; each pack's
+     `pack_block5_keys` holds its own two `lines/whole_machine/<tag>/…/mean_j` keys and not the other pack's;
+     and every finite summarised key of `block5_quantities` belongs to exactly one pack;
+   - block: the reproduction as a test (patch `session_quantities` to add the line, `--block5` stub): exit 0,
+     failures empty, `block5_included` true, n = counting + 1, delta equal to mean − stub, label null;
+   - one mutant: the fix reverted. Both tests must fail on it (the block test with the eight names).
+
+4. **Tool changes, outside the pin** (`b6_release_record.py`, the probe): the expected program hash becomes
+   r2's; `b5-probe` also lists finite summarised keys of the unfiltered `block5_quantities` that no pack keeps,
+   and that list must be empty. This amends RL-134 item 2 term 2. **Predeclared now for r2: `block5_included`
+   ALPHA 22, BETA 22, GAMMA 4, total 48.** The four added values are known finite from the four `section10`
+   names, which need a finite Block 5 value to fail.
+
+5. **What is redone, minimised (RL-127). This amends RL-134 item 11 term 4.**
+   - Delta checks: mine is this ruling, for the exact text of item 2. Opus's runs beside CI.
+   - Tag `b6/analysis-r2` on the merge commit. The 24-hash closure is re-taken with one row changed (RC-B6-1).
+     The addendum row and the pin request get a dated revision line. The §17 line of §4 is entered.
+   - **The RL-123 §2 item 3 re-reads (three full archives, the nine serial and pool, the denied fixture) are
+     not repeated.** Reason: `pack_block5_keys` is called once, from `block_lines`, and returns `{}` under both
+     versions when no Block 5 output is given. Every one of those reads ran without `--block5`, so r2 gives
+     them the same bytes by construction, and repeating them would test nothing that changed. In their place,
+     two names-only comparisons on real data, each printing differing key paths and never a value:
+     (a) gate r2 against gate attempt 2: no difference except the program hash;
+     (b) dry run r2 against this dry run: differences only in the program hash, the fields of item 1 for the
+     four keys, their block quantities and comparator tallies, `failures`, `option_c.pass`,
+     `comparison_stopped` and the `option_c_disagrees` flags. A difference with no owner in this list holds the
+     release and comes to me (RL-123 §2 item 4's rule).
+     The pin report keeps its R12 rows under `90e22603…` and gains one line saying this.
+   - Kit: its end-to-end test is run once against r2. `run-inputs-*.json`, the manifest, the receipt and
+     `$B5SHA` are reused if they do not carry the program hash; if they do, `inputs` is re-run.
+   - Gate run again (step 7), then the dry run again (step 8), same arguments, serial, same `W_pred` and stop.
+     Both first attempts stay in the ledger. This dry run's outputs are kept, hashed and never released; they
+     are opened only by comparison (b).
+   - Unchanged: custody copy, verify receipt, mapping, loop files, S-16, #748's content, term 7's script.
+
+6. **Release conditions** are RL-134's, on r2, with 48 in place of 44 and comparisons (a) and (b) added.
+
+## 3. Time, and Ed's OK
+
+Measured walls: gate 322 s, dry run 2,821 s. From 14:30:
+
+| Step | Wall | Ends about |
+|---|---|---|
+| Patch, two tests, mutant | 20 min | 14:50 |
+| Full `test_block6`, kit e2e, CI on the PR, Opus delta check (parallel) | 25 min | 15:15 |
+| Merge, tag r2, closure, addendum and §17 lines, tool constants, `b5-probe` = 22/22/4 | 20 min | 15:35 |
+| Run checkout at r2, 24 hashes, gate run, probe, comparison (a) | 15 min | 15:50 |
+| Dry run | 47 min | 16:40 |
+| Probe, term 7, comparison (b), hashes | 10 min | 16:50 |
+| Records, release check (verify 250 s) | 15 min | 17:05 |
+| Release | 10 min | **about 17:15** (range 17:00 to 18:15) |
+
+**Today is still possible, and it needs Ed again.** His OK was for a run whose checks pass. This run's did
+not: a stop fired, a pinned program is being changed after the tag, and the change alters printed numbers
+(blind). The unseal is his (RUN_STATE item 231). The lead tells him now, in one message: what stopped, that
+the cause is a code defect found blind and reproduced on synthetic data, that r2 changes four Block 5
+side-by-side rows, and that the release would be about 17:15 on r2 if every check passes. The work does not
+wait for his answer. If his renewed OK is in hand when the release check passes, release today. If it is not,
+the release is tomorrow morning on the same r2 outputs, with no further run. A second stop of any kind today
+also sends it to tomorrow and comes to me.
+
+## 4. The §17 line (commit-ready)
+
+- 2026-11-13, §17-R13 (RL-142). **Kind.** Tooling defect, chooses no rule; found blind; **changes printed
+  numbers.** The first nine-session dry run at `b6/analysis` (`3551e1a7d`, RC-B6-1 `90e22603…`) completed and
+  exited 3: the second side disagreed on four side-by-side differences, the whole-machine per-phase value of
+  ALPHA and BETA, decode and prefill. Cause: `pack_block5_keys` matched the model tag in a key's second
+  segment only, so it dropped Block 5's four released whole-machine values (`lines/whole_machine/<model>/…`),
+  which §10 and §11.1 include. RC-B6-1 printed those rows as "block 5: not computed" with n one short; the
+  second side used the values. Fix: the function also keeps `lines/whole_machine/<its model>/…`; one function,
+  no other pinned byte; tag `b6/analysis-r2`, RC-B6-1 `<r2 sha256>`. Changed outputs: for those four
+  quantities, the between-session and flagged-inclusive n, mean and standard deviation, and the side-by-side
+  Block 5 value, difference and per-session differences. No other printed value changes, shown by a names-only
+  comparison of the two dry runs. Reproduced on synthetic inputs before the fix; no Block 6 value was read
+  before or after. Decided with Block 5's outcomes known and Block 6's unknown. The R12 reads stand under
+  `90e22603…`: the changed function returns nothing when no Block 5 output is supplied, as in every one of
+  them. The predeclared count of rows with a Block 5 value was 44 by the same defect and is 48. Gate run and
+  dry run repeated at r2; both first attempts are in the ledger.
+
+## 5. Exact next steps for the lead
+
+1. Message Ed now (§3).
+2. Branch from `3551e1a7d`; apply item 2's text; add item 3's tests and the mutant; run `test_block6` whole.
+3. PR; CI; Opus delta check on the diff with this file; merge on both green. Write "PR #N", no closing keyword.
+4. Tag `b6/analysis-r2`; re-take the 24 hashes; addendum row, pin-request revision line, §17-R13 with the r2 hash.
+5. Update the tools' expected hash; add the unassigned-key list to `b5-probe`; run it: 22, 22, 4, list empty.
+6. Kit e2e against r2. Recreate the run checkout at r2, clean, 24 of 24.
+7. Gate run, probe, comparison (a).
+8. Dry run, probe, term 7, comparison (b), hashes.
+9. Records and release check on r2. Release only with Ed's renewed OK; otherwise hold the outputs sealed to
+   tomorrow.
+
+Any departure from an expected value above comes to me with names only.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
