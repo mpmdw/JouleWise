@@ -9720,6 +9720,115 @@ that exist, except a second counting GAMMA session, and that costs more hours th
 **Blind status.** Blind to Block 6: no custody, archive, session or outcome path of the real block was opened.
 Synthetic root only: control records, loop state, attempt lines, flag rows, code and rulings. Block-5-aware.
 
+---
+
+# RL-141 addendum: the cross-session GAMMA unit (2026-11-13 12:23 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 12:23 PST (`date`), while the seven-session read was running under
+`AIR-QUIET.lock` (pid 92738, step `1-serial`). File reads and git only. I ran no test, build, reader or
+pool, and wrote nothing but this addendum.
+
+**Read.** The R12 row on `origin/main` (`5a8ea8e38`),
+`docs/registrations/block6_s17_entries_DRAFT_2026-11-10.md:668-673`, in full, and R7's exposure note at
+:418-419. At the merge head `b5ab6a71d`: `pair` and `attach_gamma` in `independent_recompute_b6.py`
+(:821-834, :1244-1287), `write_observations` in `b6_r12_verify.py` (:484-520), and
+`DeclaredShapeTests.test_cross_session_gamma` (`tests/test_b6_r12_session_fixture.py:1422-1430`). Root 25's
+`attempts.jsonl`. The attempts files, loop states and output listings of cohorts 16 and 17, and the listing
+of `r12-r3-full-gamma-mbp-2`. The request's N-13 at `47310785e`.
+
+## A1. Ruling: the must-cover is one unit, and the seven-session read shows it
+
+**Ruled.** "One cross-session GAMMA unit" is a registered must-cover. RL-141 does **not** leave it unmet. It
+is met by the seven-session read if N-13's `cross_session_gamma` assertion passes.
+
+1. **What the registered words mean.** One GAMMA unit whose floors are bound from other sessions' roots. R7
+   states the exposure: "the binder runs three times over cross-session roots". The row asks for one such
+   unit. It does not ask for more than one GAMMA session.
+2. **What the read shows for r1-gamma.** By `pair`, over the counting sessions in root 25:
+
+   | Floor pack | Counting sessions (round) | Paired session | Rule | Final |
+   |---|---|---|---|---|
+   | BETA | r1 (1), r2 (2), r3 (3) | r1-beta | `1_same_round` | yes |
+   | ALPHA | r2 (2), r3 (3), r4 (4) | r2-alpha | `2_next_counting` | yes, by `--closed` |
+
+   Both paired ids differ from `r1-gamma`. That is the test's whole condition, plus a non-empty
+   `kept_units` for the GAMMA round-1 session. The pairings are the ones a closed nine would have given
+   r1-gamma, because r1-alpha's exclusion was scripted.
+3. **RL-141 §5 "not shown" item 2 is a different thing.** A block with two or more counting GAMMA sessions
+   was never in the registered list. It stays "not shown", and the R12 report says so. I should have written
+   there that it is outside §17-R12. This addendum does.
+4. **Not established until the read ends:** that r1-gamma has at least one kept unit and that the block's
+   option (c) exits 0 with comparator agreement. Those are N-13 and N-3. I predicted them; I have not seen
+   them.
+
+## A2. Whether any other root shows it
+
+None does. Root 25 is the only one.
+
+| Root | State | Shows a cross-session GAMMA unit |
+|---|---|---|
+| `r12-r3-full-gamma-mbp-2` | one GAMMA session, single-session reads | No. No floor session in the read, so no pairing |
+| `r12-r3-cohort-16` | one attempt (r1-alpha, not counting), loop at `SESSION_RUN` | No. No GAMMA session exists |
+| `r12-r3-cohort-17` | one attempt (r1-alpha, not counting), loop at `ARM_WAIT` | No. No GAMMA session exists |
+| `test_block6`, `test_b6_production` | synthetic archives | Not chain-written; they do not count toward R12 |
+
+So the obligation rests on one read of one root, with no second source.
+
+## A3. The six registered shapes under the seven-session read
+
+| Registered shape | Session | Read | Still shown |
+|---|---|---|---|
+| waited runs, attempt-N telemetry | r2-alpha | block (step 1) | Yes |
+| wait-cap and budget skips | r1-alpha (not counting) | single-session (step 4) | Yes |
+| `anchor_not_bounded` members | r2-beta | block | Yes (also unscripted in r2-alpha, r3-alpha, r2-gamma) |
+| mixed member and evaluation rows | r1-beta | block | Yes |
+| compressed campaign logs and plists | r1-beta | block | Yes |
+| one cross-session GAMMA unit | r1-gamma | block | Yes, if N-13 passes (A1) |
+
+The seventh assertion, the denied action, is root 26 and is not in the registered list. All six carrier
+sessions are in root 25 and none of them is r2-gamma or r3-gamma. The seven-session read drops no
+registered shape.
+
+## A4. Deviation row
+
+**Ruled.** No deviation row is owed if the read passes. The registered obligation is met as written, so
+there is nothing to deviate from. RL-141 §5's replacement text goes in the R12 report and the pin paragraph,
+with one sentence added after "nine-session cost.":
+
+> The six shapes of §17-R12 are each covered by this cohort; its cross-session GAMMA unit is r1-gamma, paired
+> with r2-alpha (rule 2, next counting) and r1-beta (rule 1), and it is the only chain-written one.
+
+**Conditional.** If `test_cross_session_gamma` fails, or the block read does not exit 0 with comparator
+agreement, the must-cover is unmet and nothing else can meet it before the cut. That departure comes to me
+first (RL-141 §4). If I then rule the cut goes ahead, this entry goes on
+`docs/2026-11-13-b6-s17-fill-staged` after §17-R12, before the cut, with the angle-bracket slots filled
+from the receipts:
+
+> ## §17-R12-DEV. One R12 fixture obligation not met before the S-14 cut
+>
+> - **Label.** Entered 2026-11-13, after the Block 5 unseal. Decided after Block 5 outcomes were known.
+> - **Kind.** Deviation from a registered fixture obligation (§17-R12). Tooling or coverage; it chooses no
+>   rule and changes no printed number.
+> - **Status.** Ruled (RL-141 and its addendum).
+> - **Source.** RL-141 addendum A4; cohort `r12-r3-closed-air-25`; receipt ⟨SHA-256⟩.
+>
+> §17-R12 requires real-chain fixtures covering six shapes before S-14 is cut. Five are covered. The sixth,
+> one cross-session GAMMA unit, is not: the cohort's loop held GAMMA after one counting GAMMA session, and
+> that session's read gave ⟨observed result⟩. No other chain-written root holds a GAMMA session read
+> together with a floor session. S-14 is cut without it. GAMMA's cross-session pairing rests on synthetic
+> tests only (`test_block6`, `test_b6_production`). The alternative, a further cohort of about ten hours,
+> was refused in RL-141 §2. Blind to Block 6.
+
+Do not stage this entry now. It is written only if the condition occurs and I rule the cut proceeds.
+
+**Owner.** The lead: the added sentence in the R12 report and pin paragraph once N-13 is filled. Me: the
+conditional case, in one turn.
+
+**Gate.** Nothing new. The cut still waits only for the RL-141 §3 read, the slots and the term 7 check.
+
+**Blind status.** Unchanged. Synthetic roots only: attempts, loop states, listings, code and the registered
+text. No Block 6 custody, archive or outcome path was opened. Block-5-aware.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
