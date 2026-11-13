@@ -14,6 +14,13 @@ the pinned program has not been run on real custody.
 mapping digest, the step 7 to 9 argv lists (new documents; gate out-dir `$RUN/gate-2`) and the attempts ledger.
 Nothing predeclared for steps 7 to 10 changes.
 
+**Amended 2026-11-13 15:58 PST (`date`) under RL-142 (r2).** The program is RC-B6-1 `4a9f5944…11ea` at
+`b6/analysis-r2` (`6e6d1b18a9dffbba675c3abd28db2e4c6a484fde`, tag object `e11a600328e45d067c732c039c309c4a024f85f9`; merge of PR #762). The predeclared `block5_included` count is **48: ALPHA 22, BETA 22, GAMMA 4** (RL-142 §2
+item 4; 44 at `90e22603…` was the defect's count). The probe is `b5-probe … --predeclared`, output
+`$RUN/b5-probe-r2.json` (SHA-256 `99685e949aa7e7d94f9ad523c19ad9d66849aae5f15fa1edfd063031e489105e`; exit 0, `total=48 ALPHA=22 BETA=22 GAMMA=4`), unassigned list empty. Step 9's `--block5-expected` is that file. The gate
+out-dir is `$RUN/gate-r2` and the dry out-dir `$RUN/dry-r2`; `D_gate`, `D_block` and the `-2` input documents are reused unchanged (re-hashed equal; neither carries a program digest); `W_pred`, alarm and stop are unchanged (3200, 4800,
+6400 s). The first attempts (`gate`, `gate-2`, `dry`) stay in the ledger. Where rows below say 44 or 20/20/4, this amendment governs. Comparisons (a) and (b) use the comparer of record `compare_rl142.py` SHA-256 `eb82b6e25a9dc9a3cffcb4d2e859a19c2f2151a42ce3b4a98f2ea188887e02c1` under the J-item rulings (C1-C3).
+
 **Blanks.** A value that exists only after the S-14 cut and steps 1 to 5 is written `⟨CUT: …⟩`. One that exists
 only after the gate run is written `⟨GATE: …⟩`. `⟨LEAD-CONFIRM: …⟩` marks a value taken from a plan, which the
 lead confirms against the record named. Before the push, every `⟨CUT⟩` and `⟨LEAD-CONFIRM⟩` blank is filled.
