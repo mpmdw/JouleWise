@@ -123,8 +123,9 @@ class Production(unittest.TestCase):
             rc, numbers, public, _, _ = self.execute(1)
         output = json.loads(numbers)
         self.assertFalse(output["block"]["option_c"]["pass"])
-        # RL-121 made clean-corpus runs compared runs, so the comparator also
-        # sees the perturbed energy (RL-129 finding 3).
+        # The gate names failed comparator rows (cold-review finding 5, commit
+        # 10116d0d9), so one perturbed energy is named twice: once by
+        # `harvest_energy` and once by the comparator row for the same run and phase.
         self.assertEqual(output["block"]["option_c"]["failures"],
                          ["harvest_energy:neg8-refcorpus-r01/prefill",
                           "comparator:run_phase_energy:b6-alpha-r1:neg8-refcorpus-r01/prefill"])
@@ -359,6 +360,22 @@ class Production(unittest.TestCase):
             rc = b6.main([*args, "--workers", "1", "--restricted-out", str(restricted), "--public-out", str(public)])
         self.assertEqual(rc, 4)
         self.assertEqual(stderr.getvalue(), "refused: disclosure_record_missing\n")
+        self.assertFalse(restricted.exists())
+        self.assertFalse(public.exists())
+
+    def test_pinned_session_not_supplied_refuses_by_name(self):
+        # RL-133 §1b: every session the run-input document pins must be supplied before any session is read.
+        omitted = self.archives[1]
+        args = [x for x in self.args]
+        i = args.index(str(omitted))
+        self.assertEqual(args[i - 1], "--session")
+        del args[i - 1:i + 1]
+        restricted, public = self.root / "unsupplied-numbers.json", self.root / "unsupplied-public.json"
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            rc = b6.main([*args, "--workers", "1", "--restricted-out", str(restricted), "--public-out", str(public)])
+        self.assertEqual(rc, 4)
+        self.assertEqual(stderr.getvalue(), "refused: session_input_unsupplied\n")
         self.assertFalse(restricted.exists())
         self.assertFalse(public.exists())
 

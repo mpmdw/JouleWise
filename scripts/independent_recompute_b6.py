@@ -1338,7 +1338,7 @@ def recompute_block(archives, attempts_path, flags, b5_output=None, closed=False
     classes = public_comparator["classes"]
     for cls in by_class:
         # A class with no compared row gets counts only; compare() never judged it, so it carries no "pass".
-        classes.setdefault(cls, {"compared": 0, "passed": 0, "failed": 0, "unmatched": 0})
+        classes.setdefault(cls, {"compared": 0, "passed": 0, "failed": 0, "unmatched": 0, "both_null": 0})
     for cls, row in classes.items():
         row["first_program_only"] = by_class.get(cls, 0)
     public_comparator["classes"] = dict(sorted(classes.items()))
@@ -1561,7 +1561,7 @@ def compare(recompute_output, driver_table, spec=RATIFIED_COMPARISON_DECIMALS, s
     rows, classes = [], {}
 
     def tally(cls):
-        return classes.setdefault(cls, {"compared": 0, "passed": 0, "failed": 0, "unmatched": 0,
+        return classes.setdefault(cls, {"compared": 0, "passed": 0, "failed": 0, "unmatched": 0, "both_null": 0,
                                         "max_observed_difference": None})
     for key in sorted(set(own) | set(other)):
         kind, sid, name = key
@@ -1578,6 +1578,8 @@ def compare(recompute_output, driver_table, spec=RATIFIED_COMPARISON_DECIMALS, s
         rows.append(row)
         t["compared"] += 1
         t["passed" if row["pass"] else "failed"] += 1
+        # RL-133 §1c: a passed row with no value on either side agrees that a quantity is absent, not on a number.
+        t["both_null"] += int(row["pass"] and own[key] is None and other[key] is None)
         if finite(row["difference"]):
             t["max_observed_difference"] = max(t["max_observed_difference"] or 0.0, row["difference"])
     stopped = bool(recompute_output.get("comparison_stopped"))
@@ -1596,7 +1598,7 @@ def compare(recompute_output, driver_table, spec=RATIFIED_COMPARISON_DECIMALS, s
     public = {"schema": COMPARE_PUBLIC_SCHEMA, "pass": passed, "recompute_stopped": stopped,
               "release": release, "release_inputs_valid": release_inputs,
               "print_spec_ratified": spec_source == RATIFIED_SOURCE,
-              "classes": {cls: {k: t[k] for k in ("compared", "passed", "failed", "unmatched")} | {"pass": t["result"] == "pass"}
+              "classes": {cls: {k: t[k] for k in ("compared", "passed", "failed", "unmatched", "both_null")} | {"pass": t["result"] == "pass"}
                           for cls, t in sorted(classes.items())}}
     return restricted, public
 
@@ -1734,6 +1736,12 @@ def main(argv=None) -> int:
                 if hashlib.sha256((ROOT_DIR / name).read_bytes()).hexdigest() != sha:
                     raise InputRefusal("registration_digest_mismatch")
         archives = args.session if args.command == "block" else [args.session]
+        if args.inputs and args.command == "block":
+            # RL-133 §1b: every pinned session must be supplied, by the lookup session_input_pin uses,
+            # before any session is read.
+            supplied = {name for archive in archives for name in (str(Path(archive).absolute()), Path(archive).name)}
+            if any(key not in supplied for key in pins):
+                raise InputRefusal("session_input_unsupplied")
         contexts = []
         for archive in archives:
             pin = session_input_pin(pins, archive)

@@ -67,10 +67,21 @@ LABEL_BLOCK = "§10-§11 arithmetic computed and compared; session inputs as lab
 # RL-103 as amended by RL-114: exact gate labels; the check family goes in the Source column.
 LABEL_GATE = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` and "
               "the twin returns an estimate, otherwise not independently recomputed; not an S-13 table row")
+# RL-133 §1a amends RL-114 for `p`, `holm_p` and the word: below five quads the gate guards them
+# (`engine_below_minimum`) and the session's Holm family counts the short contrast at p = 1.0 on both sides.
 LABEL_GATE_WORD = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` "
-                   "and either the twin refuses or the contrast has five or more quads; with an undefined verdict the "
-                   "gate requires only that the word is `not_resolvable` or `not_estimable`; otherwise not "
-                   "independently recomputed; not an S-13 table row")
+                   "and either the twin refuses or the contrast has five or more quads; with two to four quads the "
+                   "gate requires only that the word is `not_estimable`; with an undefined verdict the gate requires "
+                   "only that the word is `not_resolvable` or `not_estimable`; otherwise not independently "
+                   "recomputed; not an S-13 table row")
+LABEL_CONTRAST_P = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, the "
+                    "twin returns an estimate and the contrast has five or more quads; with two to four quads the gate "
+                    "requires only that the value is 1.0; otherwise not independently recomputed")
+LABEL_CONTRAST_HOLM = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, the "
+                       "twin returns an estimate and the contrast has five or more quads, with a family member below "
+                       "five quads counted at p = 1.0 on both sides; with two to four quads the gate requires only "
+                       "that the value is 1.0; otherwise not independently recomputed")
+MINIMUM_GUARD = "engine_below_minimum"
 ENGINE_FAMILIES = ("engine", "engine_refusal", "engine_word")
 SCREEN_GUARD = "engine_screen_undefined"
 LABEL_SINGLE_SOURCE = "`single-source` (RL-99 item 1)"
@@ -272,7 +283,9 @@ def read_check(path):
         raise SystemExit("b6_r3_table: contrast row form not found in check_block")
     return {"session_keys": session_keys, "contrast_fields": contrast_fields, "contrast_line": line,
             "phases": phases, "gate_fields": gate_fields, "default_bar": default_bar, "block_heads": block_heads, "single": single,
-            "screen": read_screen_branch(fn), "lines": (fn.lineno, fn.end_lineno)}
+            "screen": read_screen_branch(fn), "lines": (fn.lineno, fn.end_lineno),
+            # RL-133: the below-minimum labels are printed only if check_block has the guard.
+            "below_minimum": bool(check_calls([fn], (MINIMUM_GUARD,)))}
 
 
 # ---------------------------------------------------------------- RC-B6-1
@@ -350,11 +363,15 @@ def classify_session(key, pack, check, rc):
     screen = check["screen"]
     no_screen = (UNSTATED, UNSTATED, "RL-114 undefined-screen branch (skip and `{}` guard) not found in "
                  "check_block".format(SCREEN_GUARD))
+    no_minimum = (UNSTATED, UNSTATED, "RL-133 below-minimum guard (`{}`) not found in check_block".format(MINIMUM_GUARD))
     if key.startswith("contrast/") and field in check["contrast_fields"]:
         if screen is None:
             return no_screen
+        if field in ("p", "holm_p") and not check["below_minimum"]:
+            return no_minimum
+        label = {"p": LABEL_CONTRAST_P, "holm_p": LABEL_CONTRAST_HOLM}.get(field, LABEL_CONTRAST)
         return (primary + "; second: engine twin via `check_block` (CHK:{})".format(check["contrast_line"]),
-                LABEL_CONTRAST, "CHK:{}; skipped when verdict undefined (CHK:{})".format(
+                label, "CHK:{}; skipped when verdict undefined (CHK:{})".format(
                     check["contrast_line"], screen["if"]))
     # 2. checked inside the gate on the result field the printed key reads
     if key.startswith("contrast/"):
@@ -371,6 +388,8 @@ def classify_session(key, pack, check, rc):
                     source, ", ".join(fams))
             if len(bars) != 1:
                 return UNSTATED, UNSTATED, "gate bars differ for `{}`".format(source)
+            if word and not check["below_minimum"]:
+                return no_minimum
             gate_bar = ("gate: exact (word)" if word else
                         "gate: {:g} absolute, unrounded (CHK `check` bar)".format(bars[0]))
             guard = ("; undefined verdict: `{}` CHK:{}".format(SCREEN_GUARD, screen["guard"]) if word else

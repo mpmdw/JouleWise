@@ -552,6 +552,162 @@ class GammaUndefinedScreen(unittest.TestCase):
                                      ["engine_screen_undefined:" + cid])
 
 
+SHORT_CIDS = {"decode": "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b",
+              "prefill-p2048": "ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b"}
+
+
+def below_minimum_block(parent, arm, kept, b_offset=None):
+    """RL-133 §1a: ALPHA r1, BETA r1 and GAMMA r1 whose `arm` contrast keeps only `kept` quads (2 to 4) after member
+    exclusions. The acceptance record lists `cell.below_minimum` at window scope, as the catalog derives it, so C3
+    agrees and `b6_exclusions_disagree` does not hide the result."""
+    specs = [("ALPHA", 1), ("BETA", 1), ("GAMMA", 1)]
+    archives = []
+    for k, (pack, rnd) in enumerate(specs):
+        options = {}
+        if pack == "GAMMA":
+            options = {"exclude": {f"fixture-{arm}-b{i:02}-a1": ["thermal.powermetrics_pressure_elevated"]
+                                   for i in range(kept + 1, 11)}, "b_offset": b_offset}
+        archive, _ = build_session(parent, pack, rnd, k, **options)
+        if pack == "GAMMA":
+            path = archive / "derived/b6-acceptance.json"
+            acceptance = json.loads(path.read_text())
+            acceptance["excluding"].append({"code": "cell.below_minimum", "scope": "window", "why": "cell.below_minimum"})
+            path.write_text(json.dumps(acceptance))
+        archives.append(archive)
+    return archives, write_attempts(parent / "attempts.jsonl", [(p, r, True) for p, r in specs])
+
+
+class GammaBelowMinimum(unittest.TestCase):
+    """RL-133 §1a: a GAMMA contrast with two to four kept quads is a registered state, and the block run completes."""
+    CASES = [(arm, kept) for arm in ("decode", "prefill-p2048") for kept in (2, 3, 4)]
+    # The other contrast's b side, alternating about a 1 W mean: its p is about 0.02, far above the short one's.
+    NOISY = {"prefill-p2048": lambda i: 1.0 + (1.1 if i % 2 else -1.1)}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="b6-below-minimum-"))
+        cls.blocks, cls.runs = {}, {}
+        for arm, kept in cls.CASES:
+            name = arm + "-" + str(kept)
+            cls.blocks[name] = below_minimum_block(cls.tmp / name, arm, kept)
+            patch, seen = capture_second_side()
+            with patch:
+                cls.runs[name] = run_block_capturing(*cls.blocks[name], cls.tmp / (name + "-out")) + (seen.get("table"),)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_gamma_below_minimum_contrast_block_run_completes(self):
+        sid = "b6-gamma-r1"
+        for arm, kept in self.CASES:
+            with self.subTest(arm=arm, kept=kept):
+                rc, err, R, second = self.runs[arm + "-" + str(kept)]
+                cid, phase = SHORT_CIDS[arm], arm
+                self.assertEqual(rc, 0, err)
+                gate = R["block"]["option_c"]
+                self.assertTrue(gate["pass"], gate["failures"])
+                self.assertNotIn("option_c_disagrees", {f["code"] for f in R["flags"]})
+                self.assertNotIn("b6_exclusions_disagree", {f["code"] for f in R["flags"]})
+                c = R["sessions"][sid]["contrasts"][cid]
+                self.assertEqual((c["n"], c["p"], c["holm_p"], c["outcome"]), (kept, 1.0, 1.0, "not_estimable"))
+                listed = {r["key"] for r in gate["first_program_only"] if r["session"] == sid}
+                self.assertLessEqual({"contrast/" + phase + "/p", "contrast/" + phase + "/holm_p"}, listed)
+                held = set(second["sessions"][sid]["quantities"])
+                self.assertFalse({"contrast/" + phase + "/p", "contrast/" + phase + "/holm_p"} & held)
+                self.assertLessEqual({"contrast/" + phase + "/" + f for f in ("n", "dbar_j", "D_j")}, held)
+                self.assertEqual(gate["families"]["engine_below_minimum"], 1)
+
+    def test_below_minimum_sibling_holm_uses_the_registered_rule(self):
+        """The short contrast's twin p is far smaller than the other's, which is above 1e-3. The other contrast's
+        Holm value must be taken with the short one at p = 1.0, as the first program does; computing it from the
+        short contrast's real p would halve it and fail the gate."""
+        from joulewise.twins import engine_twin as engine
+        real, seen = engine.family, {}
+
+        def family(*args, **kwargs):
+            seen["twins"] = real(*args, **kwargs)
+            return seen["twins"]
+        archives, attempts = below_minimum_block(self.tmp / "sibling", "decode", 4, self.NOISY)
+        with mock.patch.object(engine, "family", family):
+            rc, err, R = run_block_capturing(archives, attempts, self.tmp / "sibling-out")
+        short, other = SHORT_CIDS["decode"], SHORT_CIDS["prefill-p2048"]
+        short_p, other_p = seen["twins"][short]["estimate"].p, seen["twins"][other]["estimate"].p
+        self.assertLess(short_p, other_p)
+        self.assertGreater(other_p, 1e-3)
+        # The twin's own Holm over the real p-values differs from the registered rule by more than the bar.
+        self.assertGreater(abs(seen["twins"][other]["adjusted_p"] - min(1.0, 2 * other_p)), 1e-3)
+        self.assertEqual(rc, 0, err)
+        gate = R["block"]["option_c"]
+        self.assertTrue(gate["pass"], gate["failures"])
+        c = R["sessions"]["b6-gamma-r1"]["contrasts"][other]
+        self.assertAlmostEqual(c["holm_p"], b6.B5.holm([other_p, 1.0])[0], places=12)
+
+    def test_below_minimum_guard_fails_on_a_claim_word(self):
+        cid = SHORT_CIDS["decode"]
+        original = b6.attach_gamma
+        for i, (field, value) in enumerate((("outcome", "direction_supported"), ("p", 0.01))):
+            with self.subTest(field=field, value=value):
+                def forced(result, *args, **kwargs):
+                    original(result, *args, **kwargs)
+                    result["contrasts"][cid][field] = value
+                with mock.patch.object(b6, "attach_gamma", forced):
+                    rc, err, R = run_block_capturing(*self.blocks["decode-4"], self.tmp / ("forced-" + str(i)))
+                self.assertNotEqual(rc, 4, err)
+                gate = R["block"]["option_c"]
+                self.assertFalse(gate["pass"])
+                self.assertEqual([f for f in gate["failures"] if f.startswith("engine_below_minimum:")],
+                                 ["engine_below_minimum:" + cid])
+
+
+class BothNullCount(unittest.TestCase):
+    """RL-133 §1c: each class record counts its compared rows that passed with no value on either side."""
+
+    def test_both_null_counted_per_class_from_the_two_tables(self):
+        tmp = Path(tempfile.mkdtemp(prefix="b6-both-null-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        specs = [("ALPHA", 1), ("BETA", 1), ("GAMMA", 1)]
+        archives = [build_session(tmp / "block", p, r, k)[0] for k, (p, r) in enumerate(specs)]
+        attempts = write_attempts(tmp / "block/attempts.jsonl", [(p, r, True) for p, r in specs])
+        blanked = {}
+
+        def blank_one(table):
+            # One row null on the second side only: it fails and is not counted as both-null.
+            sid = "b6-alpha-r1"
+            key = "calibration/b_op_s"
+            blanked["row"] = ("quantity", sid, key)
+            table["sessions"][sid]["quantities"][key] = None
+        patch, seen = capture_second_side(blank_one)
+        with patch:
+            rc, err, R = run_block_capturing(archives, attempts, tmp / "out")
+        self.assertNotEqual(rc, 4, err)
+        first, second = b6.table_rows(R["comparison_table"]), b6.table_rows(seen["table"])
+        expected = {}
+        for row, value in second.items():
+            kind, _, name = row
+            cls = "run_phase_energy" if kind == "run_phase_energy" else b6.quantity_class(name)
+            expected.setdefault(cls, 0)
+            if kind != "run_phase_energy" and value is None and first.get(row) is None:
+                expected[cls] += 1
+        self.assertIsNotNone(first[blanked["row"]])
+        classes = R["block"]["option_c"]["comparator"]["classes"]
+        for cls, record in classes.items():
+            self.assertIn("both_null", record, cls)
+            self.assertLessEqual(record["both_null"], record["passed"], cls)
+            self.assertEqual(record["both_null"], expected.get(cls, 0), cls)
+        self.assertGreater(sum(expected.values()), 0)
+        self.assertEqual(classes["calibration"]["failed"], 1)
+        self.assertIn("comparator:calibration:b6-alpha-r1:calibration/b_op_s", R["block"]["option_c"]["failures"])
+        # A class with no compared row carries both_null 0.
+        for cls, record in classes.items():
+            if record["compared"] == 0:
+                self.assertEqual(record["both_null"], 0, cls)
+        # The CLI comparator's restricted and public class records carry it too.
+        restricted, public = b6.compare(R, seen["table"])
+        for cls, record in public["classes"].items():
+            self.assertEqual(record["both_null"], restricted["classes"][cls]["both_null"], cls)
+
+
 class ExcludedScreenRun(unittest.TestCase):
     """RL-121: an excluded drift-screen run is read but is not a compared run."""
     CASES = (("neg8-window-start-r1", {"start": 2, "midpoint": 1, "end": 3}),

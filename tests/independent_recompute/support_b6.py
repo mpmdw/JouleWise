@@ -55,8 +55,11 @@ def patch_metadata(path, pre):
         json.dumps({"elapsed_ns": 130_500_000, "rail_sum_power_w": IDLE_W}) + "\n" for _ in range(4)))
 
 
-def build_session(parent, pack, round_number, k, *, drift_fail=False, exclude=None, assist=(), waited=(), n=10):
-    """One session archive; k shifts every power so sessions differ. Returns (archive, closed-form energies)."""
+def build_session(parent, pack, round_number, k, *, drift_fail=False, exclude=None, assist=(), waited=(), n=10,
+                  b_offset=None):
+    """One session archive; k shifts every power so sessions differ. Returns (archive, closed-form energies).
+
+    b_offset: GAMMA only, {arm: f(i)} replacing the b side's power offset for quad i of that arm."""
     sid = session_id(pack, round_number)
     archive = parent / sid
     claim, bound = archive / "sources/claim-runs", archive / "sources/bound-runs"
@@ -85,7 +88,8 @@ def build_session(parent, pack, round_number, k, *, drift_fail=False, exclude=No
                     ids.append(rid)
                     if gamma:
                         model = b5.SIDE_MODELS[position[0]]
-                        power = 10. + .1 * i + .03 * k + (8. + .02 * i + .01 * k if position.startswith("b") else 0.)
+                        offset = (b_offset[arm](i) if b_offset and arm in b_offset else 8. + .02 * i + .01 * k)
+                        power = 10. + .1 * i + .03 * k + (offset if position.startswith("b") else 0.)
                         side_tag = "qwen3-1p7b" if position.startswith("a") else "qwen3-8b"
                         tag = f"df-condition=sw-{arm}-{position[0]}-{side_tag}"
                     else:

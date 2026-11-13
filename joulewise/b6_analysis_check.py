@@ -99,21 +99,34 @@ def check_block(sessions, results, lines, block5):
                         blocks.append(engine.Block(uid, tuple(sides["a"]), tuple(sides["b"])))
                     family[cid], floors[cid] = blocks, r["contrasts"][cid]["floor_gate_j"]
                 twins = engine.family(family, floors)
+                # RL-133 §1a: the registered minimum is five quads. A short contrast (two to four) enters the
+                # session's Holm family as p = 1.0 on both sides: its p is passed as None and the frozen family
+                # size is kept. One path, short contrast or not.
+                short = {cid for cid, blocks in family.items() if len(blocks) < 5}
+                ruled = engine.adjust({cid: None if cid in short or row["estimate"] is None else row["estimate"].p
+                                       for cid, row in twins.items()}, len(twins))
                 for cid, row in twins.items():
                     v, original = row["estimate"], r["contrasts"][cid]
                     if v is None:
                         check("engine_refusal", cid, original["outcome"], "not_estimable", 0)
                         continue
                     for key, expected in (("n", v.n), ("dbar_j", v.point), ("s_d_j", v.sd), ("se_j", v.se_total),
-                                          ("D_j", sum(v.bounds.values())), ("p", v.p), ("holm_p", row["adjusted_p"])):
+                                          ("D_j", sum(v.bounds.values())), ("p", v.p), ("holm_p", ruled[cid])):
+                        if cid in short and key in ("p", "holm_p"):
+                            continue  # below the minimum these are guarded, not compared (first_program_only)
                         check("engine", cid + "/" + key, original[key], expected)
                         exposed = {"n": "n", "dbar_j": "dbar_j", "D_j": "D_j", "p": "p", "holm_p": "holm_p"}
                         if key in exposed:
                             q["contrast/" + ("decode" if "decode" in cid else "prefill-p2048") + "/" + exposed[key]] = expected
                     for i in (0, 1):
                         check("engine", cid + "/decision", original["decision_interval_j"][i], v.decision[i])
-                    if len(family[cid]) >= 5:
-                        check("engine_word", cid, original["outcome"], row["outcome"], 0)
+                    if cid in short:
+                        # Below the minimum the first program prints p = holm_p = 1.0 and not_estimable.
+                        guarded = (original.get("p") == 1.0 and original.get("holm_p") == 1.0
+                                   and original.get("outcome") == "not_estimable")
+                        check("engine_below_minimum", cid, guarded, True, 0)
+                    else:
+                        check("engine_word", cid, original["outcome"], engine.outcome(v, floors[cid], ruled[cid]), 0)
             for pack in ("ALPHA", "BETA"):
                 candidates = [x for x in ordered if x.pack == pack and results[x.session_id]["counting"]]
                 same = [x for x in candidates if x.round == s.round]

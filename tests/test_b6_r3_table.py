@@ -65,10 +65,19 @@ class R3TableTests(unittest.TestCase):
     # RL-114 (amends RL-103 and RL-110), character for character.
     RULED_GATE = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` and "
                   "the twin returns an estimate, otherwise not independently recomputed; not an S-13 table row")
+    # RL-133 §1a (amends RL-114 for the word, `p` and `holm_p`), character for character.
     RULED_GATE_WORD = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not "
-                       "`undefined` and either the twin refuses or the contrast has five or more quads; with an "
-                       "undefined verdict the gate requires only that the word is `not_resolvable` or "
-                       "`not_estimable`; otherwise not independently recomputed; not an S-13 table row")
+                       "`undefined` and either the twin refuses or the contrast has five or more quads; with two to "
+                       "four quads the gate requires only that the word is `not_estimable`; with an undefined verdict "
+                       "the gate requires only that the word is `not_resolvable` or `not_estimable`; otherwise not "
+                       "independently recomputed; not an S-13 table row")
+    RULED_P = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, the twin "
+               "returns an estimate and the contrast has five or more quads; with two to four quads the gate requires "
+               "only that the value is 1.0; otherwise not independently recomputed")
+    RULED_HOLM = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, the twin "
+                  "returns an estimate and the contrast has five or more quads, with a family member below five quads "
+                  "counted at p = 1.0 on both sides; with two to four quads the gate requires only that the value is "
+                  "1.0; otherwise not independently recomputed")
     RULED_CONTRAST = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined` and "
                       "the twin returns an estimate, otherwise not independently recomputed")
     # RL-110, character for character (unchanged by RL-114).
@@ -107,11 +116,14 @@ class R3TableTests(unittest.TestCase):
                           "`contrast/<phase>/s_d_j`"])
         self.assertEqual([k for k, v in rows.items() if v == self.RULED_GATE_WORD], ["`contrast/<phase>/outcome`"])
         self.assertEqual(sorted(k for k, v in rows.items() if v == self.RULED_CONTRAST),
-                         sorted("`contrast/<phase>/" + f + "`" for f in ("n", "dbar_j", "D_j", "p", "holm_p")))
+                         sorted("`contrast/<phase>/" + f + "`" for f in ("n", "dbar_j", "D_j")))
+        # RL-133 §1a: `p` and `holm_p` carry the registered minimum.
+        self.assertEqual([k for k, v in rows.items() if v == self.RULED_P], ["`contrast/<phase>/p`"])
+        self.assertEqual([k for k, v in rows.items() if v == self.RULED_HOLM], ["`contrast/<phase>/holm_p`"])
         # RL-110: every neg8/* key; RL-114: the five S-13 contrast fields.
         for name in ("`neg8/verdict`", "`neg8/bound_j`", "`neg8/allowance_j`"):
             self.assertEqual(rows[name], self.RULED_NEG8, name)
-        for field in ("n", "dbar_j", "D_j", "p", "holm_p"):
+        for field in ("n", "dbar_j", "D_j"):
             self.assertEqual(rows["`contrast/<phase>/" + field + "`"], self.RULED_CONTRAST, field)
         self.assertEqual(sum(1 for k, v in rows.items() if k.startswith("`neg8/")), 3)
         for family in ("monitor_cost", "arm_host", "battery_phase", "subject_temperature", "reference_history",
@@ -123,8 +135,10 @@ class R3TableTests(unittest.TestCase):
             '- "single implementation; not independently recomputed" (§17-R8): 24',
             "- `single-source` (RL-99 item 1): 100",
             "- computed and compared (decision 6 (a)): 3",
-            "- " + self.RULED_CONTRAST + ": 10",
+            "- " + self.RULED_CONTRAST + ": 6",
             "- " + self.RULED_NEG8 + ": 9",
+            "- " + self.RULED_HOLM + ": 2",
+            "- " + self.RULED_P + ": 2",
             "- " + self.RULED_GATE_WORD + ": 2",
             "- " + self.RULED_GATE + ": 6",
             "- not independently recomputed: 183",
@@ -147,11 +161,26 @@ class R3TableTests(unittest.TestCase):
         key = "contrast/decode/outcome"
         whole = self._classify(b6_r3_table.read_check(REPO / b6_r3_table.DEFAULTS["check"]), key)
         self.assertEqual(whole[1], self.RULED_GATE_WORD)
-        word = 'check("engine_word", cid, original["outcome"], row["outcome"], 0)'
+        word = 'check("engine_word", cid, original["outcome"], engine.outcome(v, floors[cid], ruled[cid]), 0)'
         refusal = 'check("engine_refusal", cid, original["outcome"], "not_estimable", 0)'
         for old in (word, refusal):
             result = self._classify(self._mutated(old, "pass"), key)
             self.assertEqual(result[:2], (b6_r3_table.UNSTATED, b6_r3_table.UNSTATED), old)
+
+    def test_rl133_minimum_labels_need_the_below_minimum_guard_in_check_block(self):
+        """RL-133 §1a: `p`, `holm_p` and the word carry the two-to-four-quads clause only while check_block guards a
+        short contrast (`engine_below_minimum`). Without the guard those rows are UNSTATED; the other fields are not."""
+        check = b6_r3_table.read_check(REPO / b6_r3_table.DEFAULTS["check"])
+        self.assertTrue(check["below_minimum"])
+        mutated = self._mutated('check("engine_below_minimum", cid, guarded, True, 0)', "pass")
+        self.assertFalse(mutated["below_minimum"])
+        for key in ("contrast/decode/p", "contrast/decode/holm_p", "contrast/decode/outcome"):
+            result = self._classify(mutated, key)
+            self.assertEqual(result[:2], (b6_r3_table.UNSTATED, b6_r3_table.UNSTATED), key)
+            self.assertIn("engine_below_minimum", result[2])
+        self.assertEqual(self._classify(mutated, "contrast/decode/n")[1], self.RULED_CONTRAST)
+        self.assertEqual(self._classify(check, "contrast/decode/p")[1], self.RULED_P)
+        self.assertEqual(self._classify(check, "contrast/decode/holm_p")[1], self.RULED_HOLM)
 
     def test_rl114_clause_needs_the_undefined_screen_branch_in_check_block(self):
         """RL-114: the 'verdict is not `undefined`' clause is printed only while check_block skips the twin and guards
