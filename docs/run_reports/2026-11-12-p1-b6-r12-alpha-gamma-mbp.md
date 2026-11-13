@@ -367,7 +367,7 @@ new prediction for the smoke desk: both GAMMA science stages run (no
 `analysis_prospective_identity_mismatch`), the pack is not smoke-held, and the
 supervisor proceeds to "ordinary full driver".
 
-### Relaunch: live status (2026-11-12 23:41 PST)
+### Relaunch: live status (2026-11-12 23:40 PST)
 
 Launched 23:35:02 from `/Users/edr/code/jw-wt/r12-mbp-2` at `27897044d`
 (`/private/tmp/r12-mbp-tmp/r12-r3-full-gamma-mbp-2.launch.zsh`, launcher pid
