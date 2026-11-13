@@ -989,6 +989,38 @@ class SchedulerBoundaryTests(unittest.TestCase):
             self.assertEqual(journal.read_text(), '{"status":"inflight"}\n')
 
 
+class MonitorCoverageTests(unittest.TestCase):
+    """Tiny schema controls, not hand-assembled session fixtures."""
+
+    @staticmethod
+    def intervals(bounds):
+        return b"".join((json.dumps({"kind": "interval", "started": {"monotonic_ns": a * 10**9},
+            "values": {"interval": {"monotonic_ns": [a * 10**9, b * 10**9]}}}) + "\n").encode()
+            for a, b in bounds)
+
+    def test_interval_extent_includes_the_last_measured_interval(self):
+        """Predict: two original-schema adjacent intervals cover 20 s although their row starts span only 10 s; a 25 s stream is covered within one 10 s cadence."""
+        from b6_r12_monitor_coverage import interval_coverage
+        from b6_r12_verify import monitor_facts
+        raw = self.intervals([(0, 10), (10, 20)])
+        starts = monitor_facts(raw)["kinds"]["interval"]["span_s"]
+        self.assertEqual(starts, 10)
+        self.assertLess(starts, 25 - 10)
+        value = interval_coverage(raw)
+        self.assertEqual(value["coverage_s"], 20)
+        self.assertEqual(value["coverage_span_s"], 20)
+        self.assertEqual(value["coverage_gap_count"], 0)
+        self.assertGreaterEqual(value["coverage_s"], 25 - 10)
+
+    def test_missing_interval_is_not_counted_as_covered_time(self):
+        """Predict: [0,10] and [20,30] have a 30 s extent but only 20 s of coverage and one gap; missing coverage is never synthesized."""
+        from b6_r12_monitor_coverage import interval_coverage
+        value = interval_coverage(self.intervals([(0, 10), (20, 30)]))
+        self.assertEqual(value["coverage_s"], 20)
+        self.assertEqual(value["coverage_span_s"], 30)
+        self.assertEqual(value["coverage_gap_count"], 1)
+
+
 class CourierProfileTests(unittest.TestCase):
     def test_original_courier_preserves_stdin_argv_and_injected_clock(self):
         """Predict: exact f31 courier exits 0, writes file-transport bytes/argv and synthetic time; undeclared host argv still returns 126. Before the new executable input this fails with rc 126/no courier records (RL-49 rules 1, 4, 6)."""
@@ -1212,6 +1244,7 @@ class DeclaredShapeTests(unittest.TestCase):
         """Predict full ALPHA/BETA/GAMMA: 125/125/107 members, >=334 s per primary at 10 Hz with 16 CPUs; continuous 50 Hz meter, registered monitor cadences and no source errors (RL-48 item 5)."""
         root = Path(os.environ["R12_REAL_CHAIN_SET"])
         values = json.loads((root / "full-volume-observations.json").read_bytes())
+        interval_coverage = json.loads((root / "full-volume-interval-coverage.json").read_bytes())
         for sid, expected in (("r3-alpha", 125), ("r1-beta", 125), ("r1-gamma", 107)):
             value = values[sid]
             self.assertEqual(len(value["primary_plists"]), expected, sid)
@@ -1236,7 +1269,11 @@ class DeclaredShapeTests(unittest.TestCase):
                 series = value["monitor"][base + filename]["kinds"][kind]
                 cadence_s = value["registered_monitor_cadence"][cadence_key]
                 self.assertEqual(series["cadence_ns"], [round(cadence_s * 1e9)], sid)
-                self.assertGreaterEqual(series["span_s"], min(m["span_s"] for m in value["meter"]) - cadence_s, sid)
+                coverage = interval_coverage[sid] if kind == "interval" else series
+                if kind == "interval":
+                    self.assertEqual(coverage["coverage_gap_count"], 0, sid)
+                self.assertGreaterEqual(coverage.get("coverage_s", series["span_s"]),
+                                        min(m["span_s"] for m in value["meter"]) - cadence_s, sid)
 
 
 @unittest.skipUnless(os.environ.get("R12_REDUCED_CHAIN_SET"), "explicit reduced real-chain set required")
@@ -1292,7 +1329,10 @@ class FullProductionSessionTests(unittest.TestCase):
             series = volume["monitor"][base + filename]["kinds"][kind]
             cadence = volume["registered_monitor_cadence"][cadence_key]
             self.assertEqual(series["cadence_ns"], [round(cadence * 1e9)])
-            self.assertGreaterEqual(series["span_s"], min(m["span_s"] for m in volume["meter"]) - cadence)
+            if kind == "interval":
+                self.assertEqual(series["coverage_gap_count"], 0)
+            self.assertGreaterEqual(series.get("coverage_s", series["span_s"]),
+                                    min(m["span_s"] for m in volume["meter"]) - cadence)
         self.assertTrue(value["courier_records"])
         for courier in value["courier_records"]:
             self.assertEqual(courier["transport"], "file")

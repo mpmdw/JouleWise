@@ -16,6 +16,7 @@ import sys
 
 from b6_r12_finish import agree
 from b6_r12_segments import validate_resume
+from b6_r12_monitor_coverage import CONTENTION, session_interval_coverage
 from b6_r12_verify import (REPO, child, finalize_manifest, run_option_c,
                           safe_root, session_facts, sha, volume_facts)
 
@@ -55,6 +56,7 @@ def verify(outer, stem):
             snapshots[key] = {"snapshot": str(target), "sha256": sha(target)}
         declaration = {"synthetic_only": True, "verifier_sha256": LOADED_SHA,
             "verifier_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
+            "monitor_coverage_sha256": sha(Path(__file__).with_name("b6_r12_monitor_coverage.py")),
             "source_root": str(root), "source_generator_commit": manifest["generator_commit"],
             "literal_loop_inputs": snapshots, "boundary": boundary,
             "prediction": "the two predeclared FullProductionSessionTests pass at actual full BETA size",
@@ -68,6 +70,7 @@ def verify(outer, stem):
             raise ValueError("program loop pins differ from literal snapshots")
         facts = session_facts(root, "r1-beta")
         volume = volume_facts(root, "r1-beta")
+        volume["monitor"][CONTENTION]["kinds"]["interval"].update(session_interval_coverage(root, "r1-beta"))
         native = volume["native_generation"]
         meter_seconds = sum(item["span_s"] for item in volume["meter"])
         if not native or native["primary_stream_duration_s"] <= 0 or meter_seconds <= 0:
