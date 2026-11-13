@@ -1211,10 +1211,15 @@ def compute_session(session):
         if any(not isinstance(names, list) or not names or any(not isinstance(n, str) for n in names)
                for names in supplied.values()):
             raise InputRefusal("disclosure_coverage_invalid")
+        def disclosure_record(name):
+            data = session.reader.raw(session.archive / name, "disclosure")
+            if data is None:
+                raise InputRefusal("disclosure_record_missing")
+            return data.decode("utf-8")
         result["copied_disclosures"] = {
             "label": "copied from the harvest or acceptance record, bound by digest, not recomputed",
             "families": {family: [{"path": name, "sha256": session.inputs.expected.get(name),
-                                    "record": session.reader.raw(session.archive / name, "disclosure").decode("utf-8")}
+                                    "record": disclosure_record(name)}
                                    for name in supplied[family]] for family in families}}
     computable = finite(session.b["b_op_s"]) and finite(session.neg8["allowance_j"])
     groups = session.structure_group()

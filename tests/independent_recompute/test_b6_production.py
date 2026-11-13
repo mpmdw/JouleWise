@@ -123,7 +123,11 @@ class Production(unittest.TestCase):
             rc, numbers, public, _, _ = self.execute(1)
         output = json.loads(numbers)
         self.assertFalse(output["block"]["option_c"]["pass"])
-        self.assertEqual(len(output["block"]["option_c"]["failures"]), 1)
+        # RL-121 made clean-corpus runs compared runs, so the comparator also
+        # sees the perturbed energy (RL-129 finding 3).
+        self.assertEqual(output["block"]["option_c"]["failures"],
+                         ["harvest_energy:neg8-refcorpus-r01/prefill",
+                          "comparator:run_phase_energy:b6-alpha-r1:neg8-refcorpus-r01/prefill"])
         self.assertFalse(output["block"]["option_c"]["comparator"]["pass"])
         self.assertIn("option_c_disagrees", {f["code"] for f in output["flags"]})
         self.assertTrue(json.loads(public)["comparison_stopped"])
@@ -336,6 +340,27 @@ class Production(unittest.TestCase):
                 with mock.patch.object(session.reader, "raw", side_effect=raw):
                     with self.assertRaisesRegex(InputRefusal, "^" + refusal + "$"):
                         b6.add_session_machine(session, result, result["_selections"])
+
+    def test_listed_disclosure_record_absent_refuses_by_name(self):
+        # RL-125 item 4 term 3: a copied-record file that the run-input document
+        # lists and the archive lacks is a named refusal (exit 4, no output),
+        # not an AttributeError at the record's decode.
+        document = json.loads(self.document.read_bytes())
+        archive = self.archives[0]
+        absent = "derived/synthetic-absent-record.json"
+        self.assertFalse((archive / absent).exists())
+        document["sessions"][archive.name]["copied_records"]["monitor_cost"].append(absent)
+        listed = self.root / "run-inputs-absent-record.json"
+        listed.write_text(json.dumps(document))
+        args = [*self.args[:self.args.index("--inputs")], "--inputs", str(listed), "--inputs-sha256", sha(listed)]
+        restricted, public = self.root / "absent-numbers.json", self.root / "absent-public.json"
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            rc = b6.main([*args, "--workers", "1", "--restricted-out", str(restricted), "--public-out", str(public)])
+        self.assertEqual(rc, 4)
+        self.assertEqual(stderr.getvalue(), "refused: disclosure_record_missing\n")
+        self.assertFalse(restricted.exists())
+        self.assertFalse(public.exists())
 
     def test_member_pool_refuses_paths_outside_authenticated_contexts(self):
         pool = b6.MemberPool(2, [types.SimpleNamespace(archive=self.archives[0])])
