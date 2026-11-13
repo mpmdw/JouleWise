@@ -9389,6 +9389,113 @@ exclusion counts, binding digests and corpus member ids. No energy, no estimate,
 
 Source: review of `880e43628`, /Volumes/JW-EXT/scratch/fable-rl140-s16.md.
 
+---
+
+## RL-140 addendum: the filled line (2026-11-13 10:18 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 10:18 PST (`date`). This addendum supersedes §2's line and §1's
+"in part". Nothing else in RL-140 changes.
+
+**Read.** `scripts/b6_s16_block5_pstar.py` and its test module at `bc62db137`. The pinned
+`joulewise/b6_analysis_hazards.py` and `hazard_sizing.json` at `b5ab6a71d`. `s16-block5-counts.md`,
+`s16-block5-pstar.json`. In the three harvest roots: roster, exclusion list, each science run's status, and nine
+idle-baseline files.
+
+**Executed.** Under `taskpolicy -b`: `tests.test_b6_s16_block5_pstar`, 6 pass, none skipped (the test on the
+pinned function ran); `tests.test_b6_s16_block5_replay_counts`, 26 pass. Run with `unittest`; this Python has no
+`pytest`. `git show b5ab6a71d:` digests: `9a907a36…` and `bf399bec…`, equal to the script's pins. My own recount,
+separate code: 280 science runs, 272 examined (98, 98, 76), 8 not (2, 2, 4). My own baseline means for nine
+runs, three per pack: 0.15 to 1.08 mW; one of them is ALPHA's largest and equals the script's value
+(1.0761625856652057 mW). I did not recompute all 272 means.
+
+### A1. Row E is closed. S-16's Block 5 half is filled
+
+The line in A4 is entered. The S-16 row of §14 reads "filled 2026-11-13 (§17-S16)". The release record carries
+no `OPEN[S-16]`. Runbook condition (9) is met by the P* sentence in the line.
+
+### A2. Point 1: the closing sentence is replaced, and (d) moves
+
+The sentence "No excluding rule that is new in Block 6 was replayed on Block 5's runs by reading its input." is
+now false. It is not deleted. Its job is to tell the reader how much of the fill rests on a real replay, and
+that still needs saying: one rule was replayed, the b_op stop is derived, and the rest were not replayed. The
+replacement says that.
+
+My swap text in §2 also left the P* result under the heading "Not replayed", which is wrong for the same
+reason. It becomes its own part, "Replayed on its input", before "Not replayed". "Not replayed" keeps (a), (b)
+and (c).
+
+The lead sentence said "Counts only, from the released flags, rosters and exclusion lists". The P* row read
+baseline rails and prints a power. The lead sentence now names both tools and what each read.
+
+### A3. Point 2: the denominator is stated
+
+"0 of 357" is true and stays, because 357 is the denominator of every other count in the line. Alone it
+overstates what was examined, so the line adds the count examined and the reason for the rest:
+
+- 77 auxiliary runs: the rule does not apply to them (the pinned function takes science runs only).
+- 8 science runs (2, 2, 4): each has status `failed`, and each is on Block 5's exclusion list. I checked both.
+  None lacks `metadata.json`; the "no metadata" branch of the function was not taken.
+- 272 science runs examined (98, 98, 76).
+
+The result does not depend on the phase assigned to a run: the largest baseline mean (1.11 mW) is 65 times
+below the lowest line of any pack and phase (72.3 mW).
+
+**Inputs, ruled in bounds.** §1 listed the rails. The pinned function also needs each run's status, model name
+and request span, and the contention journal. All four are structure: no energy and no estimate. The adapter
+passes only those fields. The contention result is not reported, as case D ruled. The line states these reads.
+
+### A4. The §17 line, final
+
+Entered as written. It replaces §2's text.
+
+> - 2026-11-13, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half. Read after the Block 5 release (2026-11-08, `RUN_STATE.md` item 231), from Block 5's 3 usable sessions (`v5-b5-alpha-a1-20261009T2312Z`, `v5-b5-beta-a6-20261011T2011Z`, `v5-b5-gamma-a1-20261012T0420Z`; 357 runs: 280 science, 77 auxiliary). Counts from the released flags, rosters and exclusion lists, by `scripts/b6_s16_block5_replay_counts.py` @ `bc62db137`, under Block 5's catalog `5d77c725…` and Block 6's `b5bce6c6…`. The desk exclusion from each run's idle-baseline rails, by `scripts/b6_s16_block5_pstar.py` @ `bc62db137`. Per-pack counts are ALPHA, BETA, GAMMA. **Rules that became flags (counted).** Block 6 turns 5 run codes and 25 session codes into flags and drops GAMMA's lost-midpoint rule. As flags they remove nothing. Of the 5 run codes only `contention.request_overlap` fired in Block 5: 28 runs (4, 14, 10; 18 science). Block 5 removed all 28, and none carries a code that still removes it. Over Block 5's flags, Block 6's catalog removes 11 runs (2, 4, 5) where Block 5 removed 39 (6, 18, 15). The 25 session codes fired in 0 of 3 sessions. The midpoint was lost in 0 of 1 GAMMA sessions. `idle.waited`: 0; Block 5 had no waiting admission. **Derived, not read.** The clock-rate hold (14.675 ppm) holds 0 of 3: each session was armed under Block 5's gate, |f| ≤ 3.6306 ppm (B5-REG §4.2), and none carries `clock.arm_unmeasured`. The b_op stop (139 ms, ALPHA and GAMMA; §8.2 P3) stops 0 of 2: each session is claim-usable, so its smallest target phase passed the unchanged phase check, which every run fails above the line (§8.6 S-5), and Block 6's s_bracket is smaller than Block 5's. **Replayed on its input.** The desk exclusion at P* (§8.3 item 3, S-9), by the pinned `desk_hazards` (`b5ab6a71d`) with Block 6's registered line per pack and phase: removes 0 of 357 runs (0, 0, 0); largest baseline mean 1.11 mW against the lowest line 0.0723 W. The rule applies to science runs. 272 of the 280 were examined (98, 98, 76); the other 8 (2, 2, 4) failed, and Block 5 had already removed them. The function also reads each run's status, model name and request span, and the contention journal; its contention result is not reported. **Not replayed.** (a) Grounds N, W, D, S and the pre-check hold (§8.2 N1, N2, W1, W2, W3, D1, S1; `precheck.certain_exclusion`): no replay is owed and none stands beside them from the rehearsals; the nearest Block 5 codes (`calibration.no_bracket`, `calibration.capture_invalid`, `neg8.bound_not_derived`, `model.identity_mismatch`, `code.executed_differs_from_sealed`, `neg8.screen_failed`) fired in 0 of 3 sessions. (b) Block 5 did not record the input: `sleep.in_run`; the agent rule (`agent.presence`, `agent.presence_overlap`, `agent.unit_overlap`), since Block 5 took no agent census and an agent's presence in it is unknown; the wait skips (`idle.wait_cap_skip`, `idle.wait_budget_skip`), since Block 5 had no waiting admission and aborted 9 runs (2, 3, 4) at admission instead, a kept rule. (c) Contention's labelled alternative (C − k × 0.54 ≥ 0.0874 CPU-s): not counted; it removes nothing in Block 6. The desk exclusion is the only excluding rule new in Block 6 that was replayed on Block 5's runs by reading its input; the b_op stop is derived, and (a) and (b) were not replayed. Outside the pinned program; changes no Block 6 number.
+
+**The commit token.** `bc62db137` is the commit that produced every number. If the builder changes
+`section17_line` to print this text, the two tokens become that commit, on two conditions:
+`scripts/b6_s16_block5_pstar.py` is byte-identical to `bc62db137`'s, and the counts JSON is equal apart from
+the line. No other character of the line changes.
+
+### A5. The P* script
+
+**It uses the pinned function unchanged.** It takes `joulewise/` and the sizing file from a `git archive` of
+`b5ab6a71d`, checks both digests, refuses if a `joulewise` module is already imported, and checks that the
+imported module's file is the extracted one. It calls `desk_hazards(session, sizing)` and nothing else from the
+package. It writes no rule of its own: removal is the function's `power_removed`.
+
+**It reads nothing beyond the inputs ruled in A3.** The adapter refuses any JSON, line or raw read other than
+the six named files, and cuts `summary_metrics.json` to `status`, `metadata.json` to `model.name`, and
+`spans.json` to each run's request span. Every `sources/` file is checked against `SHA256SUMS`, which is pinned.
+No phase energy reaches the function.
+
+**Not gating, text or small:**
+
+| # | Finding | Action |
+|---|---|---|
+| 1 | The printed sentence and the counts table give "0 of 357" without the examined count in the sentence | `section17_line` prints A4's text. The script refuses if a science run the function did not examine is absent from Block 5's exclusion list, since the line says Block 5 removed them. Accept when the printed line equals A4's string for string. A mechanical checker confirms; I do not review again |
+| 2 | `withheld/spans.json` is pinned "at first read" today, not from the dry run's census, and `SHA256SUMS` does not cover it | No action. It feeds only the unreported contention pass and a refusal check; the P* result does not depend on it |
+| 3 | `files_read` counts the journal and spans once per worker | No action |
+| 4 | The script's docstring and the builder's note say runs are skipped for "no `metadata.json` or a status other than `succeeded`" | Correct as a description of the function. In this data all 8 are `failed` |
+
+### A6. What is not verified
+
+- 263 of the 272 baseline means. I recomputed nine. The count of 0 rests on the pinned function's run.
+- That "on Block 5's exclusion list" means removed for the failure itself. I matched run ids in each
+  `exclusions.json`; I did not read the reason codes.
+- RL-140 §4's other three items stand. Its fourth (whether the pinned function reads Block 5's baseline) is
+  now answered: it does, with no change.
+
+**Owner.** The builder seat: finding 1. A mechanical checker: its acceptance line. The lead: enters A4's line
+and marks the S-16 row filled.
+
+**Gate.** Finding 1 gates nothing but the script's printed line; the lead may enter A4's text now. Nothing here
+gates the cut, the gate run, the dry run or the release.
+
+**Blind status.** Blind to Block 6: nothing under Block 6 custody was opened or listed. Block-5-aware. Of
+Block 5 I read, beyond RL-140's list: science run ids, run status, the exclusion lists' run ids, and the
+graphics and neural-engine idle power of nine runs. No phase energy, no estimate.
+
+Source: review of `bc62db137`, /Volumes/JW-EXT/scratch/fable-rl140-s16.md.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
