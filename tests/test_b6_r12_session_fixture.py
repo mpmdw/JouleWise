@@ -1165,12 +1165,14 @@ class ExternalInputPinTests(unittest.TestCase):
         cls.attempts = write_attempts(cls.root / "attempts.jsonl", [("BETA", 1, True)])
         cls.state = cls.root / "state.json"
         cls.state.write_text(json.dumps({"reharvested": {}}))
+        cls.block5 = cls.root / "block5-recompute.json"
+        cls.block5.write_text(json.dumps({"synthetic": True}))
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.root, ignore_errors=True)
 
-    def run_recompute(self, stem, command, external, *, attempts=True, state=False):
+    def run_recompute(self, stem, command, external, *, attempts=True, state=False, block5=False):
         import contextlib
         import io
         from tests.independent_recompute.support_b6 import b6
@@ -1178,7 +1180,7 @@ class ExternalInputPinTests(unittest.TestCase):
         out = self.root / stem
         out.mkdir()
         document = out / "run-inputs.json"
-        pins = {"loop_attempts": sha(self.attempts), "loop_state": sha(self.state)}
+        pins = {"loop_attempts": sha(self.attempts), "loop_state": sha(self.state), "block5": sha(self.block5)}
         document.write_text(json.dumps({"host": "Air", "l9_audit": "not_run", "sessions": {self.archive.name: self.pin},
                                         "external": {key: pins[key] for key in external}}) + "\n")
         argv = [command, "--session", str(self.archive), "--inputs", str(document), "--inputs-sha256", sha(document),
@@ -1187,6 +1189,8 @@ class ExternalInputPinTests(unittest.TestCase):
             argv += ["--loop-attempts", str(self.attempts)]
         if state:
             argv += ["--loop-state", str(self.state)]
+        if block5:
+            argv += ["--block5", str(self.block5)]
         err = io.StringIO()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
             rc = b6.main(argv)
@@ -1212,6 +1216,11 @@ class ExternalInputPinTests(unittest.TestCase):
     def test_pinned_loop_attempts_omitted_refuses_in_single_mode(self):
         """Predict: loop_attempts pinned, single run without --loop-attempts: refused external_input_missing."""
         self.assert_refused(self.run_recompute("attempts-omitted", "single", ("loop_attempts",), attempts=False),
+                            "external_input_missing")
+
+    def test_pinned_block5_omitted_refuses_in_block_mode(self):
+        """Predict (cold review finding 3): block5 pinned, --block5 omitted in block: refused external_input_missing."""
+        self.assert_refused(self.run_recompute("block5-omitted", "block", ("loop_attempts", "block5")),
                             "external_input_missing")
 
     def test_unpinned_loop_state_supplied_refuses(self):

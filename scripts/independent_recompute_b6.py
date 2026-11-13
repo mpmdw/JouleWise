@@ -495,7 +495,8 @@ class Session:
                 "drift_s": drift, "s_bracket_s": S_BRACKET_S, "source": source}
 
     def reference(self, run_id, which):
-        m = self.member(run_id, which, compared=True)
+        # RL-121: an excluded screen run is still read (census and flags unchanged) but is not a compared run.
+        m = self.member(run_id, which, compared=run_id not in self.excluded)
         clean = (run_id not in self.excluded and m.usable and m.model == REFERENCE_MODEL
                  and finite(m.energies.get("request")))
         return m if clean else None
@@ -1338,6 +1339,9 @@ def recompute_block(archives, attempts_path, flags, b5_output=None, closed=False
     public_comparator["classes"] = dict(sorted(classes.items()))
     checks["comparator"] = public_comparator
     checks["pass"] = checks["pass"] and comparator["pass"]
+    # Cold review finding 5: name each failed or unmatched comparator row (class, session, key; no value).
+    checks["failures"] += ["comparator:" + row["class"] + ":" + row["session"] + ":" + row["key"]
+                           for row in comparator["rows"] if not row["pass"]]
     for s in sessions.values():
         if not checks["pass"]:
             s.reader.flag("option_c_disagrees", "block", checks["failures"])
