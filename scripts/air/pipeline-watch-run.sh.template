@@ -1,0 +1,24 @@
+#!/bin/sh
+# Rendered by scripts/air/install_pipeline_watch.sh onto the internal disk, so launchd
+# can always start it. If the checkout or JW-EXT is missing, post one notification
+# per hour and exit; otherwise run one watcher poll.
+REPO='@REPO@'
+PYTHON='@PYTHON@'
+LOG='@LOG@'
+STAMP='@STATEDIR@/repo-missing.stamp'
+OSA=${JW_OSASCRIPT:-/usr/bin/osascript}
+if [ -f "$REPO/scripts/pipeline_watch.py" ] && [ -x "$PYTHON" ] && [ -d /Volumes/JW-EXT/ledger ]; then
+  [ -d /Volumes/JW-EXT/tmp ] && TMPDIR=/Volumes/JW-EXT/tmp && export TMPDIR
+  exec "$PYTHON" -B "$REPO/scripts/pipeline_watch.py" --state-dir '@STATEDIR@' once
+fi
+mkdir -p "$(dirname "$LOG")" "$(dirname "$STAMP")"
+now=$(date '+%Y-%m-%d %H:%M:%S')
+if [ -z "$(find "$STAMP" -mmin -60 2>/dev/null)" ]; then
+  "$OSA" -e 'display notification "ALARM PIPELINE_WATCH_DOWN checkout or JW-EXT ledger missing" with title "JouleWise pipeline"' >/dev/null 2>&1 \
+    && status=ok || status=failed
+  echo "$now NOTIFY $status ALARM PIPELINE_WATCH_DOWN repo_or_ledger_missing" >> "$LOG"
+  touch "$STAMP"
+else
+  echo "$now INFO PIPELINE_WATCH_DOWN_SUPPRESSED repo_or_ledger_missing" >> "$LOG"
+fi
+exit 0
