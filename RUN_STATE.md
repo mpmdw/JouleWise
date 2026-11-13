@@ -1042,6 +1042,111 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+306. **Laptop lead (interactive, Opus 5.5), 2026-11-13 05:30 PST (`date`): MAGISTRATE: the SLOT-PRODUCING ALIGN v4 R1 follow-up night, on `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe` (PR #752 merged into `ops/2026-11-11-w1-presign`: `sensors.s_slow` Th0C → TVh0, config `24bad206…0bb1`). Activation 1: dry checks, then Part A on the final bytes (fresh TV0h/TVh0 soak, `--fresh-soak --parts A`); the launch is your LAST action. Activation 2: the Part A check, the RL-122 item 7 checklist, the 60-key check, D-7, then plan, notice and install. RL-122 item 7 authorizes this night on that checklist; if every line holds, nobody goes back to the research lead. The MBP is free: the lead's R12 jobs are done (items 304, 305; lead SSH check 04:58: no R12 process, 85 GiB free). Gmail (item 305): while the headless magistrate has no Gmail tool, every "mail Ed" / "mail the lead" below, and the arm notice with its NO window, goes out as an item-349 `directive-notice` issue instead, and Ed's NO arrives as a directive issue; the arm record names the route used.**
+
+```pointer
+owner: magistrate
+wait: none
+on_early_or_refused: Part A's G0 does not release inside 1,200 s, or any checklist line fails: NOTHING arms; mail Ed and the lead (it goes to the research lead, RL-122 item 7). Any other refusal (receipt, prepare, install rc≠0, t0 later than 19:26 PST): nothing arms; do not retry, do not reuse OUT; mail the lead. A REFUSED result or no `chain.started` by t0+10 min: restore (uninstall, powermode 0), mail Ed and the lead
+next_observable: activation 1: RUN_STATE item (dry checks, Part A launch values). Activation 2: RUN_STATE item + docs/process_traces/2026-11-13-w1-slot-night/MAGISTRATE-ARM-<activation>.md (Part A result, the ticked checklist, the (a)/(b) lines, PKT_SHA, plan id, t0, window_max_s, latest end, deadman), and the arm notice to Ed before install
+```
+
+**Night commit `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`.** It must contain `99622e96c` (the last night's commit) and `8c6440d28` (PR #752's head). The ten condition-13 paths (`v4_registration.R1_EXECUTED_SOURCES`) must hash as follows; nine are unchanged from `99622e96c`:
+
+| Path | sha256 |
+|---|---|
+| `scripts/align_r1_rehearsal.py` | `2ba005b14bd687a87e749c2ec6f162a603b7e76674924bb282a766164070a710` |
+| `scripts/align_r1_runtime.py` | `7403e69d9aedb54887bfc4218a45db84faa653329ca977bcf97edf20af88f923` |
+| `joulewise/align/apple/r1_runtime.py` | `472aff96b63640e47ffa18c1b629cc719fffc1d7b35f855e5375d27e00ab22bc` |
+| `joulewise/align/apple/r1_runtime_contract.py` | `4b9d1c69b0459a0382dfdd5e3aee56366e99f770ed2320cfff90539647ab6591` |
+| `joulewise/align/apple/smc_enumeration.py` | `0132579cc33f8a997cdfd5f3dd84466352cdeeeebf9ca7de8dc1ec7990cea0a9` |
+| `joulewise/align/apple/thermal_gates.py` | `c72937bd8bf7b5553c1ffd70e76018ffbf25f32578533c8749aa88419837918d` |
+| `joulewise/align/apple/r1_phase_table.py` | `ffd6c025f4691771ea348f5d0f670c8f4bbfcb61afe67b83831afdd6c3d6f1ea` |
+| `joulewise/align/apple/workload.py` | `837b74be97616c48c26b0c1277fe2a605b575d5cfc4396dc05e1139079daf1ba` |
+| `joulewise/align/apple/thermal.py` | `b9b46f9ede50b265c245dcc05d3503139632ae129e313675622fa1dce25d39d7` |
+| `configs/align/v4/r1_runtime.json` (**the rebind**) | `24bad206a999441f74d82615df61f45d6dc334abd6516150d1ea6a07272f0bb1` |
+
+```sh
+for p in scripts/align_r1_rehearsal.py scripts/align_r1_runtime.py joulewise/align/apple/r1_runtime.py joulewise/align/apple/r1_runtime_contract.py joulewise/align/apple/smc_enumeration.py joulewise/align/apple/thermal_gates.py joulewise/align/apple/r1_phase_table.py joulewise/align/apple/workload.py joulewise/align/apple/thermal.py configs/align/v4/r1_runtime.json; do
+  printf '%s %s\n' "$(git show "a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe:$p" | shasum -a 256 | cut -c1-64)" "$p"; done        # compare with the table
+git diff --word-diff=porcelain 99622e96c a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe -- configs/align/v4/r1_runtime.json | grep -E '^[-+]"'   # exactly -"Th0C", and +"TVh0",
+```
+
+**Activation 1: dry checks, then Part A on the final bytes.**
+1. **Dry checks** from a scratch worktree detached at `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe` (NOT `$M`, NOT the smoke worktree), `python3.13 -B -m unittest`, one module at a time; all OK:
+   - `tests.align.test_w1_rl122_kit` (`RebindPairDryCheck`: the W1 kit accepts TV0h / TVh0 given an `ok` RL-78 confirmation, `align_v4_kit.py:258-266`; `PlanningReleaseTests`: the kit takes RL-122 3(a)'s release and refuses every other pattern);
+   - `tests.align.test_r1_second_fast_rule` (the script-derived pick is TVh0);
+   - `tests.align.test_v4_registration` (incl. both `R1ExecutedSourceTests`), `tests.align.test_r1_arm`, `tests.align.test_r1_smoke_launcher`, `tests.hazards.test_refusal_allowlist`, `tests.test_powermetrics_reap`.
+2. **Part A:** item 289/294's procedure, from `partA-smoke-item-template.md` (handoff dir), with these substitutions only:
+   - `__SHORT__` / `__FULL__` → `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`;
+   - in the 60-key heredoc: `("TV0h", "Th0C", ["Tf08"])` → `("TV0h", "TVh0", ["Tf08"])`, and `assert classes["Th0C"] == "heatsink" and classes["TV0h"] == "die"` → `assert classes["TVh0"] == "die" and classes["TV0h"] == "die"`. It must print `RL-89 MAC CHECK OK e6231a8f…769b 60 16 44 24bad206a999441f74d82615df61f45d6dc334abd6516150d1ea6a07272f0bb1`;
+   - in the check's `find … smoke_part_a.json` line, print `g["g0"]` fields `outcome`, `duration_s`, `reference`, `release`, `slope_c_per_min`, `entry_sensors`.
+   - Fresh soak; `sudo -n -l /bin/kill` rc 0; no High Power marker; leave `night.lock` as found. Launch outside 11:05–13:15 PST (the soak refuses if it would end in the batch window), and early enough that activation 2 can reach t0 ≤ 19:26.
+
+**Part A: expected outcome and pass (RL-119 step 4, RL-122 item 7 step 3).** G0 on TV0h / TVh0 at 1.0 / 1.0 °C; its slope clause now reads TVh0.
+- **PASS:** receipt asserts hold, and step D's G0 is `released` with `duration_s` ≤ 1,200, release − reference ≤ +1.0 °C on both keys, slope at release within ±0.2 °C/min. **Expected, not a bar:** the desk replay of the 11-12 night cleared TVh0's band and slope at 154 s and the TV0h-as-both-keys step-D G0 at 212 s. Item 296's 837 s was the heatsink key's slope wait.
+- **State, for the checklist:** the G0 duration and the two release values (TV0h, TVh0), each minus the reference, the slope at release, and Tf08 at entry.
+- **Comes back to the LEAD before arming:** a G0 record naming any key but TV0h / TVh0. (No duration bar below 1,200 s: RL-122 sets none; the duration is stated, not judged.)
+- **Comes back to the RESEARCH LEAD; nothing arms:** a G0 timeout (RL-122 item 7).
+
+**Activation 2: checklist, then the arm.** Tick each line in the arm record. Any unticked line: nothing arms.
+
+- [ ] Config is one token (`s_slow` Th0C → TVh0); the new hash `24bad206…0bb1` is the one the arm check (b) pins.
+- [ ] The nine other condition-13 paths hash as at `99622e96c` (table above).
+- [ ] Cold review has no open finding, and the pick is TVh0: `docs/run_reports/2026-11-13-pr752-review.md` (Fable, ADMIT-WITH-FIXES). The fix commit `5e3c9cccc` does F1–F6 and nothing else, with the ten hashes re-shown and CI green, so under the RL-122 amendment the line is met without returning to Fable.
+- [ ] Part A passed at `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`: G0 `__s` s; release TV0h `__` °C, TVh0 `__` °C (reference `__` / `__`).
+- [ ] 60-key check (a) and D-7 (packet deleted, `prepare`, sha256 recorded, `arm.json` packet sha256 equal, no `r1.prepare_packet_absent_at_arm` flag) passed.
+- [ ] Dry check: the W1 kit accepts TV0h / TVh0 given an `ok` night confirmation (`RebindPairDryCheck`, activation 1).
+- [ ] The kit handles the 3(a) planning release (`PlanningReleaseTests`, activation 1). Ruled met by RL-124 item 7 (audit `69137053e`) on the kit code at `8c6440d28`: refuses without a lead-signed `r1_planning_release.json`, accepts with one.
+- [ ] The dispositions below are in this item.
+
+**The arm:** `arm-item-draft.md` (handoff dir) with `arm-notes.md` and Fable F1, as item 296 ran it, with these substitutions only:
+- `NIGHT_SHA=a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`. `T0MAX="$(date -j -f '%Y-%m-%d %H:%M:%S' "$(date +%Y-%m-%d) 19:26:00" +%s)"` (19:26 PST on the arm day, RL-72; carried over because the phase program is unchanged: the nine condition-13 code paths are byte-identical to `99622e96c`), and the same value in place of `1794540360` in the PLAN heredoc. If t0 cannot be ≤ 19:26, the arm moves to the next day; Part A still covers the bytes.
+- Step 4: add `git -C "$M" merge-base --is-ancestor 99622e96c HEAD` and `… 8c6440d284348abfe26cdcece467cec6b8fbbd71 HEAD`.
+- (a): the same two edits as Part A; same expected line.
+- (b): config sha `24bad206a999441f74d82615df61f45d6dc334abd6516150d1ea6a07272f0bb1`; ruling `docs/run_reports/2026-11-12-rl122/sensor_ruling_rl122.json` with `research_lead_ruling == "RL-122"`; table sha `b2369b6c78d91b75299e10ff7249f1e8cae7304b48cf022e20b2c6a6f69f2884`; `(True, "TV0h", "TVh0")`. It must print `RL-89 RULING OK b2369b6c…2884 TV0h TVh0 24bad206…0bb1`.
+- D-7 `prepare`: `--sensor-ruling docs/run_reports/2026-11-12-rl122/sensor_ruling_rl122.json --smoke-table docs/run_reports/2026-11-12-rl122/smoke_part_b.rl122.json`; in PACKET OK, `s_slow == "TVh0"`.
+- The notice names this night "slot-producing" and carries the checklist.
+- Everything else is verbatim: host state, network time Off with word 0, `sudo -n -l` pmset and kill rules, AC with powermode 0, no external volume, `night.lock` left as found, no agent, desk job or R12 process (`pgrep -fl 'b6_r12|r12'` empty).
+
+**The night (RL-119 step 4): the full R1 follow-up program, unchanged code.** Plan `align-r1-<t0 UTC>` through `scripts/arm_align_r1.py` `size` → `prepare` → `render` → `install`, from `$M` with `$M`'s Python. Custody `S=/Users/edr/night-align/r1fu-<UTC>`. Its own idle soak; no soak reference passed (RL-94). `r1_slots.json` `executed_commit` will be `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`.
+- **Latest end** = t0 + W + 300 s, where W = the `window_max_s` that `prepare` and `arm.json` record (126,480 expected). **Deadman** = latest end + 3,600 s. Example: t0 19:26 Fri 13 Nov gives latest end Sun 15 Nov 06:39 PST and deadman 07:39. Soft "likely redo" mark: T0 + 70,000 s. Put the real values in the arm item's pointer, as item 296 did.
+- From install until `chain.exited`: no agent on this Mac, no git in `$M`, no SSH, no desk job.
+
+**Dispositions, fixed before the night (RL-119 step 4 as amended by RL-122 items 3 and 6). The magistrate reports; it never decides.**
+1. **Thermometry (RL-119 disp. 1).** The night confirms TV0h / TVh0 by admissibility, code as built (RL-78 item 3). Any failed clause goes to the research lead.
+2. **Duty bar passes (RL-119 disp. 2).** The bar is three admitted turns, gates + holds ≤ 0.40 × T_dead and no X7, in every judged run, and no G1 or H timeout on the pair. If it passes as registered: the slots are entered and W1 goes to signing at `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`, with no further night.
+3. **Duty bar fails (RL-122 item 6).** No slots are entered. W1 does not sign. No further night is armed. It goes to the research lead, and the lead brings the journal table. The rest of the night is kept as diagnostics.
+4. **Planning turns (RL-120 item 3, extended by RL-122 3(a) and its amendment).** A G0 timeout at planning R+0, R+2 or R+4 does not block, and U5 and the planning temperature print `inconclusive`, when all of these hold:
+   - OS level 0 and Nominal throughout;
+   - the heater's key (TVh0) peaks over the last 300 s of the G0 interval at ≥ band edge − 0.3 °C (band edge = target + δ_slow);
+   - the preceding idle-until-soak reported `released: true` (`cooldown_after_D` for R+4, `<turn>.precool` for R+2 and R+0) (RL-124 5(a)); the G0 interval is ≥ 300 s with ≥ 270 valid samples in its last 300 s; δ_slow comes from the night's own config (RL-124 items 2-3).
+   Any other pattern goes to the research lead: OS level above 0, a non-Nominal state, or a key well inside the band that still does not release. So does any G0 timeout outside the planning turns.
+5. **S6 (RL-122 3(b)).** A median G1 wait above 90 s in the gated D runs does not block the slots or signing; the lead replays it at the desk.
+6. **A-B-A (RL-118).** Expected `not_adopted`. A result of `adopted` or inconclusive goes to the research lead; nobody chooses between the two nights.
+7. **Host.** Network time stays OFF (RL-120 item 7). High Power is not used. AC powermode 0 (RL-118).
+8. **Any other failure shape** goes to the research lead: X7, a G0 timeout outside the planning turns, a failed admissibility clause.
+
+**After the night (next activation, after `chain.exited`).**
+- The arm draft's "After the night" block with this night's `S` and `PKT_SHA`. `r1_result.json` `status` comes first; then the packet sha. Then runbook §4: uninstall; powermode 0; no stray `km003c_monitor.py`, `hazard_monitor.py` or root `powermetrics`; KM003C capture present. **Set network time OFF again**: the driver restores it ON (item 301).
+- **Report (temperatures and structure only):**
+  - every G0's duration, the clause last to clear (from the journal), and release − reference for TV0h, TVh0 and Tf08 (RL-90);
+  - the thermometry confirmation and `r1.sensor_inadmissible`;
+  - per judged gated run: each G0, G1 and H duration and outcome, gates + holds against 0.40 × T_dead, any X7, and `duty_bar`;
+  - each planning G0: outcome, OS levels, pm states, and TVh0's peak over its last 300 s against the band edge;
+  - the median G1 wait of the gated D runs; the A-B-A bars and verdict; RL-91 (`capture_reaps`, ticker); the flags `r1.g0_timeout_run` and `inconclusive_segments`, with counts;
+  - each disposition above, applied by number.
+- **The lead, at the desk:**
+  - `align_r1_followup_kit.py desk --run-dir "$S/night/align-r1"`, plus `scripts/align_w1_3a_desk.py "$S/night/align-r1" --format both` (branch `w1/2026-11-13-3a-desk` @ `215e048ed`, Fable-admitted under RL-124; the lead runs it read-only after `chain.exited`).
+  - If a planning segment is inconclusive in the 3(a) pattern, the lead writes the signed, canonical `configs/campaigns/align_v4/registration/r1_planning_release.json`. It is bound to `r1_record_identity` and covers exactly the inconclusive planning segments, with `desk_print` {path, sha256} of that print. Then `align_w1_budget_procedure.py decide --planning-release …`.
+  - If disposition 2 holds, the lead enters the slots under RL-107 at `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`, showing three things:
+    - both `R1ExecutedSourceTests` pass by name on the signing head;
+    - `r1_slots.json` `executed_commit` = `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`;
+    - `verify_r1_executed_sources` returns `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe` on the signing head's tree.
+  - RL-106's N is taken from this night. The magistrate commits nothing from `r1_slots.json`.
+
+**The MBP.** It is free: the lead's R12 MBP jobs (item 304) are done. The lead holds RL-123's supplementary R12 registered-schedule nine until this night closes. Leave `/Users/edr/code/jw-wt/r12-mbp`, `/Users/edr/code/jw-wt/lead-desk-r1fu` and `/private/tmp/r12-mbp-tmp/` as they are. They are not strays, and nothing in them runs.
+
 305. **Magistrate 10a81fc5 (headless, Opus 5.5), 2026-11-13 05:26 PST (`date`): FAULT: no Gmail tool in the headless magistrate. Activations a8798fee (05:15) and 10a81fc5 (05:25) both launched without `mcp__claude_ai_Gmail__*`, and a fresh `claude -p` also lacked it. So the launch search for Ed's unread replies cannot run, and no email can go out. The connector probably needs re-authorization in claude.ai connector settings (Ed's action). Intended message: `/Users/edr/night-custody/magistrate/intended-email-10a81fc5-gmail-fault.txt`. Nothing is armed, and item 304's pointer still governs (lead owns; nothing arms until RL-119 step 4).**
 
 - R12 MBP jobs (item 304) are DONE and nothing of theirs is alive. ALPHA `r12-r3-full-alpha-mbp-1` exit 0 at 01:20:02 PST. GAMMA-1 supervisor exit 1 at 23:12:51. The lead relaunched it as GAMMA-2 (`r12-r3-full-gamma-mbp-2`), which exited 0 at 01:31:21. The roots are under `/private/tmp/r12-mbp-tmp/`, and the production-size reader is the lead's, on the Air.
