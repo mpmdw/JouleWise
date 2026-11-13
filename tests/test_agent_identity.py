@@ -37,8 +37,11 @@ def _stand_in() -> str:
     ``claude`` or ``run_campaign`` finds no such utility and exits at once (the CI
     reds of ``test_the_hazard_arm_census_uses_the_same_matcher``, whose listed
     processes were gone by the time the census read them).  There the stand-in is
-    this interpreter, which ignores argv[0] and runs the script named ``60``
-    (``setUp`` writes it into the test's directory; see ``_STAND_IN_SCRIPT``).
+    this interpreter, which (as a non-framework build, e.g. CI's Linux Python)
+    ignores argv[0] and runs the script named ``60`` (``setUp`` writes it into the
+    test's directory; see ``_STAND_IN_SCRIPT``).  A macOS framework Python re-execs
+    ``Python.app`` and rewrites argv[0], so it would not serve; the probe never
+    selects it on macOS, where ``/bin/sleep`` is a real program.
     """
 
     global _STAND_IN
@@ -102,14 +105,14 @@ class AgentIdentityTests(unittest.TestCase):
         return process
 
     def marker(self, name: str) -> str:
-        # A symlink to sleep: the kernel executable is sleep, the process name
-        # (argv[0]) is the agent's name.
+        # A symlink to the stand-in (``/bin/sleep``, or this interpreter where sleep
+        # dispatches on argv[0]): the process name (argv[0]) is the agent's name.
         path = Path(self.tmp.name) / name
         path.symlink_to(_stand_in())
         return str(path)
 
     def window_process(self) -> subprocess.Popen:
-        """A window process: sleep started from an attempt3 custody path as ``run_campaign``."""
+        """A window process: the stand-in started from an attempt3 custody path as ``run_campaign``."""
 
         root = Path(self.tmp.name) / "night-custody" / "b5-gamma-attempt3" / "custody"
         root.mkdir(parents=True, exist_ok=True)
