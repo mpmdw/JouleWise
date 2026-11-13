@@ -64,13 +64,22 @@
     },
     "tests.test_bytes_analysis": {
       "granularity": "test",
-      "awaiting_lane": "lane/2026-11-05-align-v4-assembled (PR #682); also carried by lane/2026-11-05-align-flashnext-port and lane/2026-11-05-align-flashnext-realparity",
-      "reason": "One method, CampaignWordRates.test_twenty_production_shaped_campaigns_per_world, runs 60 synthetic campaigns at ~96 s each on a hosted runner (5,742 s of the module's 9,122 s). Whole-module packing puts 9,122 s on one ordinary shard; declaring that method alone moves it to its own unit and lets the 111 other tests ride one remainder unit (3,380 s). Independence: CampaignWordRates has no setUpClass/setUp, the module has no setUpModule and no module-level mutable state, and the method reads tests/fixtures/bytes/campaign_design.json and writes only inside its own TemporaryDirectory per seed; no other test reads anything it produces. The remainder keeps every class with a setUpClass (Addendum4RegressionTests, Addendum7RegressionTests, BatteryCampaignTests) whole in one process. The method itself is indivisible by this runner, so it is the suite's wall-time floor until the test is split (for example per world) in tests/test_bytes_analysis.py.",
+      "awaiting_lane": "ops/2026-11-11-w1-presign (PR #755 split this module into three world methods there); also carried by lane/2026-11-05-align-v4-assembled (PR #682), lane/2026-11-05-align-flashnext-port and lane/2026-11-05-align-flashnext-realparity",
+      "reason": "CampaignWordRates is three world methods (bytes, time, resident), each running all twenty of its world's seeds and every original per-world aggregate assertion; no assertion crossed worlds, and the module asserts the design declares exactly those three worlds. Inside a method the seeds run in a spawn process pool (JW_BYTES_CAMPAIGN_WORKERS, default one per CPU): each seed owns its TemporaryDirectory and seeded random streams and reads nothing another seed writes, and the per-seed outputs are asserted in seed order in the test process. The six other declared methods belong to classes with no setUp/setUpClass (ReviewerProbeTests, SubsetReleaseChainTests, ProductionArchiveTests, Q2CommitmentCLIChainTests, ReviewInputTests); each builds its own TemporaryDirectory fixture. The module has no setUpModule and no module-level mutable state. Every class with a setUpClass (Addendum4RegressionTests, Addendum7RegressionTests, BatteryCampaignTests) stays whole in the computed remainder, which also holds every undeclared test.",
       "declared": {
-        "tests.test_bytes_analysis.CampaignWordRates.test_twenty_production_shaped_campaigns_per_world": 5741.949
+        "tests.test_bytes_analysis.CampaignWordRates.test_twenty_production_shaped_campaigns_per_world_bytes": 454.21,
+        "tests.test_bytes_analysis.CampaignWordRates.test_twenty_production_shaped_campaigns_per_world_resident": 648.71,
+        "tests.test_bytes_analysis.CampaignWordRates.test_twenty_production_shaped_campaigns_per_world_time": 478.968,
+        "tests.test_bytes_analysis.ReviewerProbeTests.test_p02_p05_p06_p08_p10_fixed_tree": 507.971,
+        "tests.test_bytes_analysis.SubsetReleaseChainTests.test_three_worlds_full_synthetic_cli_chain_and_clock_removal": 408.075,
+        "tests.test_bytes_analysis.ProductionArchiveTests.test_nr1_offset_term_covers_constant_label_offset": 192.464,
+        "tests.test_bytes_analysis.Q2CommitmentCLIChainTests.test_changed_module_evaluates_original_commitment_and_labels_rebuild": 191.431,
+        "tests.test_bytes_analysis.ProductionArchiveTests.test_full_size_real_reducer_harvest_and_export_ingress": 143.508,
+        "tests.test_bytes_analysis.ReviewInputTests.test_twelve_in_place_session_exports_match_single_directory_cli": 121.556
       },
-      "remainder_weight_seconds": 3379.853,
-      "_evidence": "Per-test seconds from GitHub log line timestamps (each 'test_x (...) ... ok' line's time minus the previous result line's) in runs 42022192283 (job 127232198657) and 42025676611 (job 127242907606); the per-run totals reproduce the MODULE PASS seconds (9,130.964 and 9,112.624). Declared weight and remainder are medians of the two runs; the remainder is the module total minus the declared method."
+      "remainder_weight_seconds": 1482.641,
+      "_evidence": "Hosted per-test seconds from GitHub log line timestamps (each 'test_x (...) ... ok' line's time minus the previous result line's) in lane PR run 43386791770 (head 880e7fca0, shard 4, ubuntu-latest, Python 3.13), where the module ran whole: module 9218.414 s, the unsplit 60-seed method 5802.360 s. The six heavy methods carry their own seconds from that run; the remainder is the module total minus the 60-seed method and the six.",
+      "_world_weights_measured_2026_11_13": "Single hosted observations from this PR's run 43447555594 (head 91b8a61c1, ubuntu-latest, Python 3.13, four-process pool on four vCPUs): resident 648.710 s (its shard's MODULE PASS line, units=1/114); bytes 454.210 s and time 478.968 s (MODULE START to the world's seed-19 line, since each shared its MODULE line with another declared method). The three worlds total 1,582 s against the unsplit method's 5,802 s. The remainder weight is that run's units=105/114 MODULE PASS seconds (1,482.641 s). The six other declared weights stay from run 43386791770."
     },
     "tests.b6.test_cold_pass_fixes": {
       "granularity": "test",
@@ -809,7 +818,6 @@
     "tests.independent_recompute.test_release_b5": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.independent_recompute.test_release_trace_20261107": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.test_analysis_engine_campaign_log_members": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
-    "tests.test_bytes_campaign_split": "New offline regression for the pending ALIGN patch; no hosted timing yet. Discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.test_pipeline_time_alarms": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s.",
     "tests.test_pipeline_time_detect": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s.",
     "tests.test_pipeline_time_ledger": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s."
