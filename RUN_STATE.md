@@ -1097,6 +1097,11 @@ next_observable: (was waiting on: the lead) the lead runs copy-mode `verify` and
 
 - **Time taken:** 22:30:16 (kit) to 22:41:49 (last rsync), 11 min 33 s.
 - **Left in place:** the kit directory `/Users/edr/b6-custody-kit-80851129` with its synthetic `reh/` tree. The MBP custody desk directory holds the manifest. The Air rehearsal directory holds the synthetic copy and receipt. Delete any of them at the lead's word.
+- **Pruning list (this activation):**
+  - After-the-night D-7 packet check: passed; no catch.
+  - Runbook §4 restore checks: passed; no catch.
+  - Custody-kit synthetic rehearsal: passed; no catch.
+  - The executing check that touched a number was reading the gate code against the report. It found that the G0 band is one-sided, which reframes how the RL-90 "release minus reference" values read. That goes to the research lead in item 301.
 
 301. **Magistrate 80851129 (headless, Opus 5.5), 2026-11-12 22:27 PST (`date`; renumbered from 300 at 22:35, when the lead's item 300 landed first): the R1 FOLLOW-UP NIGHT IS CLOSED. Chain COMPLETE, exit 0, `r1_result` status complete, D-7 packet matches; uninstalled, powermode 0, no strays, KM003C capture present; network time set back OFF for W1. Two thermal results go to the research lead: the RL-89 pick does not stand (two planning G0s and three G1s timed out; Th0C fails return time by 15.2 s on D), and High Power is NOT adopted (A-B-A bars pass). Record: `docs/process_traces/2026-11-12-r1-followup-night/AFTER-NIGHT-80851129.md`.**
 
