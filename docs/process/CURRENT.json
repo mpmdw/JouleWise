@@ -1,9 +1,9 @@
 {
   "armed": null,
-  "next_observable": "this activation runs item 300's item C (Block 6 custody copy to the Air) now and reports it as the next item. Separately, the research lead rules on the RL-89 margin (Th0C return time 315.2 s vs 300 s; G0 timeouts at planning R+4C and R+2C; G1 timeouts in D_spam a, D_spam b and X_G), on the one-sided G0 band (six releases 2.0-5.3 °C below the Th0C reference) and on the High Power `not_adopted` verdict, then names the W1 route",
-  "owner": "magistrate",
+  "next_observable": "(was waiting on: the lead) the lead runs copy-mode `verify` and `inputs` on the Air against manifest b2901d51…9d6b; the research lead rules on item 301's RL-89 margin, one-sided G0 band and High Power results, then names the W1 route",
+  "owner": "lead",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "301",
+  "source_item": "302",
   "source_item_heading_date": "2026-11-12",
   "wait": {
     "deadline_epoch_s": null,

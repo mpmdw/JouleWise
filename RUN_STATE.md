@@ -1042,6 +1042,62 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+302. **Magistrate 80851129 (headless, Opus 5.5), 2026-11-12 22:42 PST (`date`): ITEM 300's ITEM C IS DONE. The nine sealed Block 6 archives, both loop files and the source manifest are on the Air at `/Volumes/JW-EXT/b6-custody` (mode 700). Every rsync exited 0, and the synthetic rehearsal verified first. Manifest SHA-256 `b2901d51990812f6c2dadce1a763d90502d85b58a9d5b5b358d4cbb2ba9a9d6b`. Only file names, digests and the session index fields were read. Copy-mode `verify` and `inputs` are the lead's, on the Air.**
+
+```pointer
+owner: lead
+wait: none
+next_observable: (was waiting on: the lead) the lead runs copy-mode `verify` and `inputs` on the Air against manifest b2901d51…9d6b; the research lead rules on item 301's RL-89 margin, one-sided G0 band and High Power results, then names the W1 route
+```
+
+- **Kit:** `ae7eb01b3f1240b6bad8a6e36fafef8c7d62bef0` (`scripts/b6_custody_kit.py`, `tests/test_b6_custody_kit.py`), extracted by `git archive` into the new directory `/Users/edr/b6-custody-kit-80851129` (mode 700), not into `$M`. The Air's kit worktree `/Volumes/JW-EXT/jw-wt/b6-custody-kit` is at the same head (checked).
+- **Tools:**
+  - MBP: `openrsync: protocol version 29` (rsync 2.6.9 compatible), zstd v1.5.7, Python 3.13.1.
+  - Air: openrsync protocol 29, zstd v1.5.7.
+- **The nine** (block 6 closed at alpha 3, beta 3, gamma 3; items 57-60). Paths are `/Users/edr/night-b6/sessions/<id>/archive`, and every one has `archive.desk`.
+- **Loop files:** `/Users/edr/night-b6/loop/attempts.jsonl` and `state.json`, in one directory. `--loop-state` was passed.
+- **Step 1, manifest** (22:30:25 to 22:30:32, rc 0). Out: `/Users/edr/night-custody/b6-custody-desk/b6-custody-manifest.json` (0600, in a mode-700 directory; not opened, committed or mailed). No `--rehearsal-source-host`. `--self-check` was skipped (optional, L3). Per session:
+
+| session | files | bytes | desk_files |
+|---|---|---|---|
+| r1-alpha | 18,987 | 913,668,633 | 2 |
+| r3-alpha | 18,992 | 911,418,016 | 2 |
+| r4-alpha | 19,056 | 916,455,314 | 2 |
+| r1-beta | 19,129 | 923,834,273 | 2 |
+| r2-beta | 19,141 | 927,284,344 | 2 |
+| r3-beta | 19,161 | 925,412,104 | 2 |
+| r1-gamma | 18,188 | 846,153,036 | 2 |
+| r2-gamma | 18,222 | 852,845,222 | 2 |
+| r3-gamma | 18,194 | 849,932,294 | 2 |
+
+  `manifest sessions=9 sha256=b2901d51990812f6c2dadce1a763d90502d85b58a9d5b5b358d4cbb2ba9a9d6b`
+- **Step 2, rehearsal** (synthetic, `<K>/reh`). Every line was as expected:
+  - Manifest: `S1/archive files=11 bytes=1157 desk_files=1`, `S2/archive files=12 bytes=1356 desk_files=0`, `sessions=2 sha256=8dbd3222…e3c6`.
+  - On the Air: `mkdir /Volumes/JW-EXT/tmp/b6-rehearsal-mbp` rc 0 (new). rsync rc 0, 0, 0.
+  - Verify on the Air: rc 0, `verify sessions=2 loop_files=2 files=23 bytes=2513 receipt_sha256=e397f547…4495`.
+- **Step 2, real copy:**
+  - `mkdir -m 700 /Volumes/JW-EXT/b6-custody` rc 0 (new) at 22:31:16.
+  - One `rsync -aR <id>/archive <id>/archive.desk` per session, from the sessions directory, with no `--copy-links`. All rc 0: r1-alpha 74 s, r3-alpha 73, r4-alpha 71, r1-beta 69, r2-beta 74, r3-beta 72, r1-gamma 66, r2-gamma 67, r3-gamma 64.
+  - Then the loop files and manifest: rc 0 at 22:41:49.
+  - The Air directory holds exactly the nine `<id>/` folders, `attempts.jsonl`, `state.json` and `b6-custody-manifest.json` (names listed only). Log: `/Users/edr/night-custody/b6-custody-desk/copy-log.txt`.
+- **Step 3:** no copy-mode `verify`, no `inputs`, and no `manifest` run on the copy.
+- **Step 4, session index** for #748 OPEN[R7-SESSION-INDEX], from `attempts.jsonl`. I read the fields session_id, t0 and round only (9 lines), in t0 order:
+
+| # | session | t0 (epoch s) | t0 (PDT) | round |
+|---|---|---|---|---|
+| 1 | r1-alpha | 1792295475.987381 | 2026-10-17 20:51:15 | 1 |
+| 2 | r1-beta | 1792326496.4392982 | 2026-10-18 05:28:16 | 1 |
+| 3 | r1-gamma | 1792358992.907156 | 2026-10-18 14:29:52 | 1 |
+| 4 | r2-beta | 1792387386.7664661 | 2026-10-18 22:23:06 | 2 |
+| 5 | r2-gamma | 1792419733.769807 | 2026-10-19 07:22:13 | 2 |
+| 6 | r3-gamma | 1792454490.720161 | 2026-10-19 17:01:30 | 3 |
+| 7 | r3-alpha | 1792483679.3508182 | 2026-10-20 01:07:59 | 3 |
+| 8 | r3-beta | 1792514932.054891 | 2026-10-20 09:48:52 | 3 |
+| 9 | r4-alpha | 1792548851.157265 | 2026-10-20 19:14:11 | 4 |
+
+- **Time taken:** 22:30:16 (kit) to 22:41:49 (last rsync), 11 min 33 s.
+- **Left in place:** the kit directory `/Users/edr/b6-custody-kit-80851129` with its synthetic `reh/` tree. The MBP custody desk directory holds the manifest. The Air rehearsal directory holds the synthetic copy and receipt. Delete any of them at the lead's word.
+
 301. **Magistrate 80851129 (headless, Opus 5.5), 2026-11-12 22:27 PST (`date`; renumbered from 300 at 22:35, when the lead's item 300 landed first): the R1 FOLLOW-UP NIGHT IS CLOSED. Chain COMPLETE, exit 0, `r1_result` status complete, D-7 packet matches; uninstalled, powermode 0, no strays, KM003C capture present; network time set back OFF for W1. Two thermal results go to the research lead: the RL-89 pick does not stand (two planning G0s and three G1s timed out; Th0C fails return time by 15.2 s on D), and High Power is NOT adopted (A-B-A bars pass). Record: `docs/process_traces/2026-11-12-r1-followup-night/AFTER-NIGHT-80851129.md`.**
 
 ```pointer
