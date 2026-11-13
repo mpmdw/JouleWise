@@ -1563,6 +1563,36 @@ class FullProductionSessionTests(unittest.TestCase):
 
 
 class DryRunLimitTests(unittest.TestCase):
+    def test_reduced_finisher_accepts_bound_courier_profile_only(self):
+        """Predict RL-123: a bound courier_set reduced declaration reaches authenticated finalization; registered or altered-bootstrap declarations refuse before it. Tiny control unit only, not a generated session."""
+        from b6_r12_reduced_finish import finish
+        from b6_r12_verify import sha
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory(prefix="r12-courier-finish-") as directory:
+            parent = Path(directory).resolve()
+            root, denied = parent / "main", parent / "denied"
+            for p in (root, denied):
+                p.mkdir()
+                (p / "generator-parent-exit.txt").write_text('0\n')
+            (root / "loop").mkdir()
+            (root / "loop/state.json").write_text('{"state":"DONE"}')
+            (root / "bootstrap.py").write_text('external input supplier')
+            profile = {"full_volume_claim": False, "schedule": "reduced", "bootstrap_sha256": sha(root / "bootstrap.py")}
+            manifest = {"courier_set": profile}
+            (root / "manifest.json").write_text(json.dumps(manifest))
+            with patch("b6_r12_reduced_finish.finalize_manifest", side_effect=RuntimeError("profile accepted")):
+                with self.assertRaisesRegex(RuntimeError, "profile accepted"):
+                    finish(root, denied)
+                profile["schedule"] = "registered"
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, "reduced source schedule"):
+                    finish(root, denied)
+                profile["schedule"] = "reduced"
+                profile["bootstrap_sha256"] = "f" * 64
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, "supplier changed"):
+                    finish(root, denied)
+
     def test_three_hour_limit_stops_only_owned_group_and_requires_profile(self):
         """Predict RL-123: timeout is unconditionally 10,800 native seconds; stop only the newly owned group, return 124/profile-required and never retry."""
         from b6_r12_dry_supervise import wait_owned
