@@ -896,7 +896,12 @@ Labelled lines printed beside each cell, none of which replaces it:
 All four published floors of Table 3, which are the arm gates of the two contrasts, are attribution-limited: each one's issued floor class is `attribution_limited`, with floor source `E_clock_anchor_shift_bound_j`, the clock-anchor timing bound. Their repeatability-only floors are the point floors that Table 4 gives as denominators, before the small-sample guard and the drift allowance. For the absolute forms, which set all four published floors, these are 0.591, 0.945, 0.827 and 0.771 J; with the guard they lie between 0.59 and 1.01 J.
 <!-- FACT H14: RL-5 item 1; l9-rulings/RULING.md J5(b),(e); detection_floor.py:1818-1838. -->
 
-### 6.4 Is the floor limited by timing attribution?
+In plain terms: the clock-anchor timing bound, not run-to-run repeatability, sets each of the four published floors, and each is several times its repeatability-only value. "Attribution-limited" here is the name of a floor class (Section 4.5) and describes how these four numbers were formed. It is not the registered dominance statement, which Section 6.4 tests separately and does not make.
+<!-- Interpretive text (research lead, 2026-11-12), not a registered sentence. Authority: analysis plan §6;
+RL-4(viii); docs/analysis/b5/RESULTS.md "not licensed" list (the D-078 floor class must not be written as the
+D-165 subtitle). No ledger value is added. -->
+
+### 6.4 Does timing movement at least double every floor?
 
 | Model | Phase | R, absolute (corner ÷ point, J), n | R, comparative (corner ÷ point, J), n | R_cm, comparative (numerator ÷ denominator, J), n |
 |---|---|---|---|---|
@@ -915,6 +920,11 @@ Branch 5.4.A is deleted. Second fill (2026-11-11): the eight R (rows 540-593, al
 R_cm of row 1846 (RL-55) confirm it: three of the four R_cm fail, every R passes. -->
 
 Timing movement did not at least double every detection floor. All eight independent-corner ratios R are at least 2. Three of the four shared-sign replays are not: R_cm = 1.7046 for 1.7B decode (1.34 ÷ 0.785 J, n = 8), R_cm = 1.99975 for 1.7B prefill (1.62854 ÷ 0.81437 J, n = 8) and R_cm = 1.7616 for 8B decode (1.71 ÷ 0.972 J, n = 7). The registered condition for stating that timing attribution dominates the detection floor is therefore not met, and no contingent subtitle is printed. Where a ratio is at least 2, it is reported as that component's diagnostic only. This is a different question from the floor class of Section 6.3: the class says which term sets each published floor, and the dominance branch requires every one of the twelve ratios to reach 2.
+
+Sections 6.3 and 6.4 do not conflict. The four published floors are set by the clock-anchor timing bound, and a reader should use them as printed. The registered statement that timing attribution dominates the detection floor needed all twelve ratios to reach 2 and is not made; its opposite is not made either. The outcome does not rest on the near-threshold value: the 1.7B prefill replay falls just short of 2, and the 1.7B decode and 8B decode replays are short of it by a wider margin. Each ratio is a point diagnostic with no interval, so a value just below the threshold is reported as below it and is not read as a near-pass.
+<!-- Interpretive text (research lead, 2026-11-12), not a registered sentence. Authority: analysis plan §6
+(branch B reports each failed component with null framing; R >= 2, equality passes); RL-4(viii). No ledger
+value is added. -->
 
 <!-- BRANCH 5.4.R not selected (second fill, 2026-11-11): from the table, all twelve ratio statuses (ledger rows 807-862) are complete; from the registered rule (analysis plan §6, "A zero denominator refuses"), all twelve denominators (rows 805-860) are positive and every input is present. No ratio was refused. The branch and P1-B5-DOM-REFUSED are deleted. -->
 
@@ -1673,8 +1683,10 @@ timing domain; it is not a bound on the physical energy of a phase.
 
 **Pulse-to-inference transfer is untested.** The timing bound comes from long, square GPU pulses. Inference has a
 different sequence of work at the prefill-to-decode transition, which could make the bound too narrow or
-unnecessarily wide. A registered inserted-gap experiment, which would pause between prefill and decode and compare
-independently stamped edges with the power record, was not run.
+unnecessarily wide. An inserted-gap experiment, which would pause between prefill and decode and compare
+independently stamped edges with the power record, was not run. It is a proposed design, not yet a runnable
+protocol: its sleep actuation, command-stamp method and fitted-edge selection remain to be fixed.
+<!-- Wording follows docs/paper/protocol/prospective-comparison-protocol.md P.7 (TRANSFER-FIDUCIAL-01 is a kernel task row, shelved under D-174; it is not a pre-registration); "registered" removed 2026-11-12. -->
 
 **Calibration coverage is a design rationale.** The 59-pulse maximum is a 95/95 bound only if pulse displacements
 are independent and identically distributed; pulses of one capture are not, and empirical coverage was not
@@ -1742,6 +1754,10 @@ independent recomputation; the registered replication was collected in further s
 (analysis plan §6): all eight R pass and three required R_cm fail, so branch A cannot hold. The registered
 branch-B sentence prints with the failing components named. -->
 Allowing each value to move within its registered timing uncertainty at least doubled the detection floor in all eight independent-corner ratios, and did not in three of the four shared-sign replays (1.7B decode, 1.7B prefill, 8B decode). The registered condition for stating that timing attribution dominates the detection floor is therefore not met, and we make no statement about which source limits these measurements.
+
+That sentence withholds the registered dominance statement; it does not withdraw the floor accounting of Section 6.3. Each of the four published detection floors is set by the clock-anchor timing bound and is several times its repeatability-only value. The registered statement that timing attribution dominates the detection floor needed all twelve ratios to be at least 2; three are not, so it is not made, and its opposite is not made either.
+<!-- Interpretive text (research lead, 2026-11-12), not a registered sentence; the branch-B sentence above is
+unchanged. Authority: analysis plan §6; RL-4(viii). -->
 
 **[BRANCH 9.C — contrasts]** {{FILL: CP-X08-decode-a-conclusion | one sentence per contrast in the registered wording for its outcome and claim level (Section 6.5 branch), with the replication word (Section 6.8)}} **[END BRANCH 9.C]**
 <!-- FACT H22: RL-5 item 5; R2P P11; paper-audit C-10. Unconditional resolution gloss removed. -->
