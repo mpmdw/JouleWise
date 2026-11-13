@@ -1486,8 +1486,8 @@ nothing under the block-5 restricted paths listed above.
   BETA `r1-beta`, `r2-beta`, `r3-beta`; GAMMA `r1-gamma`, `r2-gamma`, `r3-gamma`. t0 order: `r1-alpha`, then
   `r1-beta`, then `r1-gamma` (items 45, 49 to 51); `r2-beta`, `r2-gamma` and `r3-gamma` all finished before
   `r3-alpha` (item 53); then `r3-alpha`, `r3-beta`, `r4-alpha`, in that order (items 53 to 59).
-  OPEN[R7-SESSION-INDEX: the t0 order of `r2-beta`, `r2-gamma` and `r3-gamma` among themselves and relative to
-  `r1-gamma`; committed text on `main` does not give it].
+  R7-SESSION-INDEX, filled 2026-11-13 from the copy's `attempts.jsonl` by `scripts/b6_mapping_build.py` (`mapping-report.json` SHA-256 `562f65f146cc414bc504541b252960d1ba88a06982ebc88ccc0d0d5a3ad082eb`; structure only): order of the three: r2-beta then r2-gamma then r3-gamma; relative to `r1-gamma`: all three after r1-gamma;
+  t0 order of the nine: r1-alpha then r1-beta then r1-gamma then r2-beta then r2-gamma then r3-gamma then r3-alpha then r3-beta then r4-alpha.
   Pairing, fixed by counting alone (§6.2; S17 §17-R7, the audit's exposure note): `r1-gamma` ↔ (`r1-alpha`,
   `r1-beta`); `r2-gamma` ↔ (`r3-alpha`, `r2-beta`); `r3-gamma` ↔ (`r3-alpha`, `r3-beta`); `r4-alpha` floor-only.
   Tie rule: earlier t0.
