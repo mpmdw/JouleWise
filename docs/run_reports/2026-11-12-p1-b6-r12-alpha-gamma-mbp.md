@@ -397,7 +397,7 @@ running. Root -1 GAMMA remains in place, ineligible.
 
 ## Review disposition: Fable 5.2 cold review of the GAMMA runtime fix
 
-Written 2026-11-12 23:58 PST (`/bin/date`). Review:
+Written 2026-11-12 23:59 PST (`/bin/date`). Review:
 `/Volumes/JW-EXT/scratch/fable-rev-r12-runtime-gamma.md`, at `b5855bb93`,
 verdict **ADMIT-WITH-FIXES**. It confirmed the diagnosis, found that the
 rebind hides no pipeline check, and **accepted mixed runtime hashes as a
