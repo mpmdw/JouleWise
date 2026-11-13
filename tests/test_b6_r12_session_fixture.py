@@ -19,6 +19,12 @@ from b6_r12_session_fixture import command, prepare, export_chain_inputs, prepar
 from b6_r12_runtime import SharedClock
 from b6_r12_chain_fixture import PIN
 
+ADDITIONAL_MONITOR_SERIES = (
+    ("battery.jsonl", "reading", "battery_s"),
+    ("contention.jsonl", "interval", "contention_s"),
+    ("disk.jsonl", "reading", "disk_s"),
+)
+
 
 class BootstrapTests(unittest.TestCase):
     def setUp(self):
@@ -1455,7 +1461,7 @@ class DeclaredShapeTests(unittest.TestCase):
                 self.assertEqual(journal["errors"], 0, sid)
             base = "sources/night-custody/hazards/monitor/"
             from b6_r12_verify import FULL_VOLUME_MONITOR_SERIES
-            for filename, kind, cadence_key in FULL_VOLUME_MONITOR_SERIES:
+            for filename, kind, cadence_key in (*FULL_VOLUME_MONITOR_SERIES, *ADDITIONAL_MONITOR_SERIES):
                 series = value["monitor"][base + filename]["kinds"][kind]
                 cadence_s = value["registered_monitor_cadence"][cadence_key]
                 self.assertEqual(series["cadence_ns"], [round(cadence_s * 1e9)], sid)
@@ -1530,7 +1536,7 @@ class FullProductionSessionTests(unittest.TestCase):
             self.assertEqual(journal["errors"], 0)
         from b6_r12_verify import FULL_VOLUME_MONITOR_SERIES
         base = "sources/night-custody/hazards/monitor/"
-        for filename, kind, cadence_key in FULL_VOLUME_MONITOR_SERIES:
+        for filename, kind, cadence_key in (*FULL_VOLUME_MONITOR_SERIES, *ADDITIONAL_MONITOR_SERIES):
             series = volume["monitor"][base + filename]["kinds"][kind]
             cadence = volume["registered_monitor_cadence"][cadence_key]
             self.assertEqual(series["cadence_ns"], [round(cadence * 1e9)])
@@ -1554,6 +1560,49 @@ class FullProductionSessionTests(unittest.TestCase):
         self.assertGreater(native["wall_s"], 0)
         self.assertTrue(native["includes_validation_and_compression"])
         self.assertFalse(native["injected_clock"])
+
+
+class CourierSetControlTests(unittest.TestCase):
+    def test_reduced_source_preserves_scripted_shapes(self):
+        """Predict: reduced input supplier changes only dwell/token inputs; wait/skip/skew sequences survive, and no pinned function is substituted."""
+        from b6_r12_courier_set import source_bootstrap
+        import b6_r12_orchestrate as scheduler
+        from unittest.mock import patch
+        original = scheduler.session_policy
+        prefix = source_bootstrap("reduced").split("from b6_r12_courier_profile", 1)[0]
+        with patch.object(scheduler, "session_policy", original):
+            exec(prefix, {})
+            for pack, round_number in (("alpha", 1), ("alpha", 2), ("beta", 2), ("gamma", 1)):
+                expected = original(pack, round_number, {})
+                expected.update(volume="reduced", primary_stream_duration_s=65,
+                                token_first_s=.5, token_next_s=.001)
+                self.assertEqual(scheduler.session_policy(pack, round_number, {}), expected)
+        self.assertIs(scheduler.session_policy, original)
+        self.assertNotIn("session_policy", source_bootstrap("registered"))
+
+    def test_existing_root_is_never_restarted(self):
+        """Predict: an existing root is refused before any declaration or child; partial output is not resumed."""
+        from b6_r12_courier_set import run
+        with tempfile.TemporaryDirectory(prefix="r12-courier-set-") as directory:
+            root = Path(directory).resolve()
+            with self.assertRaisesRegex(ValueError, "never resume"):
+                run(root, root / "prior", "nine", "reduced")
+            self.assertFalse((root / "declaration.json").exists())
+
+    def test_failed_actual_child_has_no_success_marker(self):
+        """Predict: actual generator child exit 7 records failed/7 and cannot create a successful parent marker, regardless of plausible state elsewhere."""
+        from b6_r12_courier_set import run
+        from unittest.mock import patch, Mock
+        with tempfile.TemporaryDirectory(prefix="r12-courier-set-") as directory:
+            parent = Path(directory).resolve()
+            outer = parent / "fixture"
+            process = Mock(pid=123)
+            process.wait.return_value = 7
+            with patch("b6_r12_courier_set.subprocess.Popen", return_value=process):
+                self.assertEqual(run(outer, parent / "prior", "denied", "reduced"), 7)
+            receipt = json.loads((outer / "parent.json").read_bytes())
+            self.assertEqual((receipt["status"], receipt["exit_code"]), ("failed", 7))
+            self.assertFalse(Path(json.loads((outer / "declaration.json").read_bytes())["main"]).exists())
 
 
 class FullPackExpectationTests(unittest.TestCase):
