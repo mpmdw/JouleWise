@@ -31,12 +31,14 @@ def relative(value):
 
 class AuthenticatedInputs:
     def __init__(self, archive, pin):
-        self.archive = Path(archive).absolute()
-        cursor = Path(self.archive.anchor)
-        for part in self.archive.parts[1:]:
-            cursor /= part
-            if cursor.is_symlink():
-                raise InputRefusal("input_symlink")
+        self.supplied_archive = Path(archive).absolute()
+        if ".." in self.supplied_archive.parts:
+            raise InputRefusal("input_path_invalid")
+        if self.supplied_archive.is_symlink():
+            raise InputRefusal("input_symlink")
+        # Ancestors such as macOS /var and /tmp are outside the archive's
+        # trust boundary. Resolve them once; never resolve a member path.
+        self.archive = self.supplied_archive.resolve()
         self.expected, self.compressed = {}, {}
         self.external_expected = {}
         self.zstd = None
@@ -51,6 +53,9 @@ class AuthenticatedInputs:
         for line in sums.decode().splitlines():
             sha, name = line.split("  ", 1)
             self.add("sources/" + relative(name), sha)
+        clocks = {name for name in self.expected if name.endswith("/monitor/clock.jsonl")}
+        if clocks and pin.get("clock_journal") not in clocks:
+            raise InputRefusal("clock_journal_required")
         for name, sha in harvest["outputs"].items():
             self.add(relative(name), sha)
         # Extra collection products (notably the B6 flags and spans) may be
@@ -128,10 +133,12 @@ class AuthenticatedInputs:
         return data
 
     def local(self, path):
-        try:
-            name = str(Path(path).absolute().relative_to(self.archive))
-        except ValueError:
+        path = Path(path).absolute()
+        root = next((root for root in (self.archive, self.supplied_archive)
+                     if path.is_relative_to(root)), None)
+        if root is None:
             raise InputRefusal("input_outside_archive") from None
+        name = str(path.relative_to(root))
         relative(name)
         # Reject symlinks component by component, before accessing a target.
         cursor = self.archive
@@ -157,6 +164,7 @@ class AuthenticatedInputs:
 
     def read(self, path):
         name = self.local(path)
+        path = self.archive / name
         compressed = Path(str(path) + ".zst")
         self.local(compressed)
         if not Path(path).is_file() and compressed.is_file():

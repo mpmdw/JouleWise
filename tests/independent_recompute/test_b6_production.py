@@ -1,6 +1,7 @@
 """RL-24 seat 7: synthetic-only production, 7b and authenticated zstd witnesses."""
 import contextlib
 import copy
+from dataclasses import replace
 import hashlib
 import io
 import json
@@ -21,7 +22,7 @@ class Production(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory(prefix="b6-production-synthetic-")
-        cls.root = Path(cls.tmp.name)
+        cls.root = Path(cls.tmp.name).resolve()
         cls.archives, cls.attempts, cls.document = production_block(cls.root / "block")
         cls.args = ["block", *[x for a in cls.archives for x in ("--session", str(a))],
                     "--loop-attempts", str(cls.attempts), "--closed", "--inputs", str(cls.document),
@@ -56,7 +57,7 @@ class Production(unittest.TestCase):
         self.assertTrue(all(r["exclusions_rederivation"]["status"] == "agrees" for r in output["sessions"].values()))
         self.assertTrue(output["inputs"]["census"][self.archives[0].name]["zstd"]["version"])
         self.assertAlmostEqual(output["sessions"][self.archives[0].name]["quantities"]
-                               ["lines/whole_machine/qwen3-1p7b/prefill-p2048/mean_j"], 50.)
+                               ["lines/whole_machine/qwen3-1p7b/prefill-p2048/mean_j"], 40.)
         b6.require_production_coverage(output["sessions"], output["block"])
         del output["sessions"][self.archives[0].name]["quantities"]["calibration/b_op_s"]
         with self.assertRaisesRegex(InputRefusal, "comparison_session_coverage_mismatch"):
@@ -85,7 +86,7 @@ class Production(unittest.TestCase):
         # B5's OWN complete function and reader run a second time, directly.
         # Restore only authenticated meter bytes in a fresh synthetic scratch.
         with tempfile.TemporaryDirectory(prefix="b6-7b-witness-") as directory:
-            meter = Path(directory)
+            meter = Path(directory).resolve()
             stream = pin["meter_streams"][0]
             (meter / Path(stream).name).write_bytes(session.inputs.read(archive / stream))
             oracle = {"disclosures": {}}
@@ -95,12 +96,77 @@ class Production(unittest.TestCase):
             proxy.reader = b6.Reader(session.pack, session.session_id, flags)
             b6.B5.add_machine(oracle, selected, {session.pack: proxy}, meter)
         self.assertEqual(result["whole_machine"], oracle["disclosures"]["whole_machine"])
+        cells = oracle["disclosures"]["whole_machine"]["windows"][session.pack]["cells"]
+        quantities = b6.session_quantities(result)
+        labels = {"boundary", "implementation", "request_assisted_members", "request_assisted_count"}
         for cid, line in result["lines"].items():
-            if "p42" in cid:
-                continue
-            self.assertEqual(len(line["whole_machine"]["edge_shift_sensitivity"]["corners"]), 4)
-            self.assertIsNotNone(line["whole_machine"]["mean_j"])
-            self.assertEqual(line["whole_machine"]["boundary"], b6.PHASE_BOUNDARY)
+            with self.subTest(cell=cid):
+                printed, expected = line["whole_machine"], cells[cid]
+                # B6 replaces the boundary sentence and adds three labels;
+                # every arithmetic field, including all corners, must match.
+                self.assertEqual({k: v for k, v in printed.items() if k not in labels},
+                                 {k: v for k, v in expected.items() if k not in labels})
+                self.assertEqual(len(printed["edge_shift_sensitivity"]["corners"]), 4)
+                self.assertEqual(printed["boundary"], b6.PHASE_BOUNDARY)
+                if "p42" not in cid:
+                    key = "lines/whole_machine/" + b6.tag_of(b6.MODELS[session.pack]) + "/" + b6.contrast_key(cid) + "/mean_j"
+                    self.assertEqual(quantities[key], expected["mean_j"])
+        self.assertNotEqual(cells["df-ph-decode-qwen3-1p7b"]["mean_j"],
+                            cells["df-ph-prefill-p2048-qwen3-1p7b"]["mean_j"])
+
+    def test_option_c_second_producer_disagreement_stops_with_exit_three(self):
+        from joulewise.b6_analysis_check import harvest
+        original = harvest.overlap_energy
+        # Change an actual second-producer energy, rather than its verdict.
+        deltas = iter([.01])
+        with mock.patch.object(harvest, "overlap_energy", side_effect=lambda *a: original(*a) + next(deltas, 0.)):
+            rc, numbers, public, _, _ = self.execute(1)
+        output = json.loads(numbers)
+        self.assertFalse(output["block"]["option_c"]["pass"])
+        self.assertEqual(len(output["block"]["option_c"]["failures"]), 1)
+        self.assertFalse(output["block"]["option_c"]["comparator"]["pass"])
+        self.assertIn("option_c_disagrees", {f["code"] for f in output["flags"]})
+        self.assertTrue(json.loads(public)["comparison_stopped"])
+        self.assertEqual(rc, 3)
+
+    def test_option_c_checker_only_disagreement_stops_with_exit_three(self):
+        from joulewise.b6_analysis_check import harvest
+        original = harvest.anchor_envelope
+        deltas = iter([.01])
+        def changed_bound(*args):
+            envelope = original(*args)
+            # Only harvest_bound consumes this field; the comparison table
+            # contains phase energies, which remain unchanged.
+            return replace(envelope, max_abs_delta_j=envelope.max_abs_delta_j + next(deltas, 0.))
+        with mock.patch.object(harvest, "anchor_envelope", side_effect=changed_bound):
+            rc, numbers, public, _, _ = self.execute(1)
+        output = json.loads(numbers)
+        checks = output["block"]["option_c"]
+        self.assertTrue(checks["comparator"]["pass"])
+        self.assertEqual(len(checks["failures"]), 1)
+        self.assertTrue(checks["failures"][0].startswith("harvest_bound:"), checks["failures"])
+        self.assertFalse(checks["pass"])
+        self.assertIn("option_c_disagrees", {f["code"] for f in output["flags"]})
+        self.assertTrue(json.loads(public)["comparison_stopped"])
+        self.assertEqual(rc, 3)
+
+    def test_c3_gamma_window_midpoint_loss_has_no_pack_scoped_primary_reason(self):
+        with tempfile.TemporaryDirectory(prefix="b6-gamma-window-synthetic-") as folder:
+            archive, _ = build_session(Path(folder).resolve(), "GAMMA", 1, 0)
+            path = archive / "derived/flags.jsonl"
+            path.write_text(json.dumps({"code": "neg8.midpoint_lost", "flag_id": "synthetic-midpoint",
+                "scope": {"level": "window", "plan_id": archive.name, "attempt": 1},
+                "interval": {"monotonic_ns": None}}) + "\n")
+            session = b6.Session(archive, [])
+            self.assertNotIn("neg8.midpoint_lost_primary", session.window_codes)
+            self.assertEqual(session.exclusion_check["status"], "agrees")
+            compute = b6.compute_exclusions
+            def pack_scoped(*args, **kwargs):
+                return compute(*args, **{**kwargs, "pack_scoped": True})
+            with mock.patch.object(b6, "compute_exclusions", side_effect=pack_scoped):
+                check = session.check_exclusions()
+            self.assertEqual(check["status"], "disagrees")
+            self.assertIn("neg8.midpoint_lost_primary", check["reasons"])
 
     def test_zst_bytes_checked_before_parser_and_bad_digest_stops(self):
         archive = self.archives[0]
@@ -127,7 +193,7 @@ class Production(unittest.TestCase):
 
     def test_c3_disagreement_and_reducer_disagreement_are_stops(self):
         with tempfile.TemporaryDirectory(prefix="b6-c3-synthetic-") as folder:
-            archive, _ = build_session(Path(folder), "ALPHA", 1, 0)
+            archive, _ = build_session(Path(folder).resolve(), "ALPHA", 1, 0)
             acceptance = archive / "derived/b6-acceptance.json"
             doc = json.loads(acceptance.read_bytes())
             doc["excluding"].append({"code": "thermal.os_level_nonzero", "scope": "member", "run_id": "fixture-decode-r01"})
@@ -184,10 +250,121 @@ class Production(unittest.TestCase):
         inputs = AuthenticatedInputs(archive, pin)
         with self.assertRaisesRegex(InputRefusal, "input_path_invalid"):
             inputs.read(archive / ".." / "external-file")
-        alias = self.root / "synthetic-alias"
-        alias.symlink_to(archive.parent, target_is_directory=True)
+        alias = archive / "synthetic-alias"
+        alias.symlink_to(archive / "harvest.json")
         with self.assertRaisesRegex(InputRefusal, "input_symlink"):
-            AuthenticatedInputs(alias / archive.name, pin)
+            inputs.read(alias)
+        directory_alias = archive / "synthetic-directory-alias"
+        directory_alias.symlink_to(archive / "derived", target_is_directory=True)
+        with self.assertRaisesRegex(InputRefusal, "input_symlink"):
+            inputs.read(directory_alias / "roster.json")
+        root_alias = self.root / "synthetic-root-alias"
+        root_alias.symlink_to(archive, target_is_directory=True)
+        with self.assertRaisesRegex(InputRefusal, "^input_path_invalid$"):
+            AuthenticatedInputs(root_alias / "derived" / "..", pin)
+        with self.assertRaisesRegex(InputRefusal, "input_symlink"):
+            AuthenticatedInputs(root_alias, pin)
+        ancestor = self.root / "synthetic-ancestor-alias"
+        ancestor.symlink_to(archive.parent, target_is_directory=True)
+        relocated = AuthenticatedInputs(ancestor / archive.name, pin)
+        self.assertEqual(relocated.archive, archive)
+        self.assertEqual(relocated.read(ancestor / archive.name / "harvest.json"),
+                         inputs.read(archive / "harvest.json"))
+
+    def test_compression_and_digest_refusals(self):
+        archive = self.archives[0]
+        pin = json.loads(self.document.read_bytes())["sessions"][archive.name]
+        bad = copy.deepcopy(pin)
+        del bad["compression"]
+        inputs = AuthenticatedInputs(archive, bad)
+        with self.assertRaisesRegex(InputRefusal, "^compression_record_missing$"):
+            inputs.read(archive / pin["meter_streams"][0])
+        for relocations, refusal in (({"sources": "/synthetic-absolute"}, "input_path_invalid"),
+                                     ({"sources": "sources", "sources/night-custody": "sources/night-custody"},
+                                      "compression_relocation_ambiguous")):
+            with self.subTest(relocations=relocations):
+                bad = copy.deepcopy(pin)
+                bad["compression"]["relocations"] = relocations
+                with self.assertRaisesRegex(InputRefusal, "^" + refusal + "$"):
+                    AuthenticatedInputs(archive, bad)
+        bad = copy.deepcopy(pin)
+        bad["files"] = {"harvest.json": "0" * 64}
+        with self.assertRaisesRegex(InputRefusal, "^input_digest_conflict$"):
+            AuthenticatedInputs(archive, bad)
+
+        # Absolute collection locators are string inputs only. An explicit,
+        # unique relocation admits them without probing that old location.
+        record_path = archive / pin["compression"]["path"]
+        rows = [json.loads(line) for line in record_path.read_text().splitlines()]
+        relocated = "".join(json.dumps({**row, "path": "/synthetic-collection/" + row["path"].removeprefix("sources/")}) + "\n"
+                            for row in rows).encode()
+        bad = copy.deepcopy(pin)
+        bad["compression"]["sha256"] = hashlib.sha256(relocated).hexdigest()
+        from joulewise import desk_compress
+        read = desk_compress.read_bytes
+        with mock.patch.object(desk_compress, "read_bytes", side_effect=lambda p: relocated if p == record_path else read(p)):
+            with self.assertRaisesRegex(InputRefusal, "^compression_relocation_ambiguous$"):
+                AuthenticatedInputs(archive, bad)
+            bad["compression"]["relocations"] = {"/synthetic-collection": "sources"}
+            admitted = AuthenticatedInputs(archive, bad)
+            self.assertEqual(set(admitted.compressed), {row["path"] for row in
+                             (json.loads(line) for line in record_path.read_text().splitlines())})
+
+    def test_request_comparison_and_disclosure_refusals(self):
+        archive = self.archives[0]
+        pin = json.loads(self.document.read_bytes())["sessions"][archive.name]
+        session = b6.Session(archive, [], inputs=AuthenticatedInputs(archive, pin), input_pin=pin)
+        for supplied, refusal in (({}, "disclosure_coverage_missing"),
+                                  ({**pin["copied_records"], "monitor_cost": []}, "disclosure_coverage_invalid"),
+                                  ({**pin["copied_records"], "monitor_cost": "record"}, "disclosure_coverage_invalid"),
+                                  ({**pin["copied_records"], "monitor_cost": [None]}, "disclosure_coverage_invalid")):
+            with self.subTest(refusal=refusal, supplied=supplied):
+                session.input_pin = {**pin, "copied_records": supplied}
+                with self.assertRaisesRegex(InputRefusal, "^" + refusal + "$"):
+                    b6.compute_session(session)
+        session.input_pin = pin
+        result = b6.compute_session(session)
+        original = session.reader.raw
+        record_path = archive / "withheld/meter.json"
+        record = json.loads(original(record_path, "test"))
+        del record["members"]["fixture-decode-r01"]
+        for data, refusal in ((None, "request_comparison_record_missing"),
+                              (json.dumps(record).encode(), "request_comparison_member_missing")):
+            with self.subTest(refusal=refusal):
+                def raw(path, scope, required=True):
+                    return data if path == record_path else original(path, scope, required)
+                with mock.patch.object(session.reader, "raw", side_effect=raw):
+                    with self.assertRaisesRegex(InputRefusal, "^" + refusal + "$"):
+                        b6.add_session_machine(session, result, result["_selections"])
+
+    def test_member_pool_refuses_paths_outside_authenticated_contexts(self):
+        pool = b6.MemberPool(2, [types.SimpleNamespace(archive=self.archives[0])])
+        def probe(_pool):
+            reader = b6.B5.Reader("ALPHA", [])
+            with mock.patch.object(b6.Reader, "raw", side_effect=AssertionError("unauthenticated fallback")):
+                with self.assertRaisesRegex(InputRefusal, "^input_outside_archive$"):
+                    reader.raw(self.root / "outside-archive", "test")
+        with mock.patch.object(b6.B5.MemberPool, "_start", probe):
+            pool._start()
+
+    def test_listed_clock_journal_requires_pin_and_is_authenticated(self):
+        from .support_b6_production import seal
+        with tempfile.TemporaryDirectory(prefix="b6-clock-synthetic-") as folder:
+            archive, _ = build_session(Path(folder).resolve(), "ALPHA", 1, 0, n=1)
+            name = "sources/synthetic/monitor/clock.jsonl"
+            path = archive / name
+            path.parent.mkdir(parents=True)
+            path.write_text('{"synthetic": true}\n')
+            pin = seal(archive)
+            with self.assertRaisesRegex(InputRefusal, "^clock_journal_required$"):
+                AuthenticatedInputs(archive, pin)
+            with self.assertRaisesRegex(InputRefusal, "^clock_journal_required$"):
+                AuthenticatedInputs(archive, {**pin, "clock_journal": "sources/wrong/monitor/clock.jsonl"})
+            inputs = AuthenticatedInputs(archive, {**pin, "clock_journal": name})
+            self.assertEqual(inputs.read(path), b'{"synthetic": true}\n')
+            path.write_text('{"synthetic": false}\n')
+            with self.assertRaisesRegex(InputRefusal, "^input_digest_mismatch$"):
+                inputs.read(path)
 
 
 if __name__ == "__main__":

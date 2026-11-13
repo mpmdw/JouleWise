@@ -223,7 +223,7 @@ class Session:
 
     def __init__(self, archive, flags, attempts=None, claim_root=None, bound_root=None, reharvested=None,
                  inputs=None, pool=None, input_pin=None):
-        self.archive = Path(archive)
+        self.archive = inputs.archive if inputs is not None else Path(archive)
         self.pool, self.inputs = pool, inputs
         self.input_pin = input_pin or {}
         self.reharvested = mapping(reharvested)
