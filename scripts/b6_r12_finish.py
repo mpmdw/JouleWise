@@ -15,6 +15,8 @@ import sys
 import time
 
 from b6_r12_verify import REPO, finalize_manifest, rows, run_option_c, safe_root, sha, write_observations
+from b6_r12_monitor_coverage import session_interval_coverage
+from b6_r12_reader_roots import reader_root, denied_reader_environment
 LOADED_FINISHER_SHA256 = sha(Path(__file__))
 
 
@@ -65,9 +67,14 @@ def finish(root, denied):
     for sid, stem in selected.items():
         run_option_c(root, 1, stem=stem, session_id=sid)
         agree(root, stem)
-    run_option_c(denied, 1, stem="option-c-denied", session_id="r1-alpha")
+    with denied_reader_environment(denied):
+        run_option_c(denied, 1, stem="option-c-denied", session_id="r1-alpha")
     denied_receipt = agree(denied, "option-c-denied")
     observed = write_observations(root, denied)
+    interval_coverage = {sid: session_interval_coverage(root, sid)
+                        for sid in ("r3-alpha", "r1-beta", "r1-gamma")}
+    interval_file = root / "full-volume-interval-coverage.json"
+    interval_file.write_text(json.dumps(interval_coverage, indent=2, sort_keys=True) + "\n")
     result = subprocess.run([sys.executable, "-B", "-m", "unittest",
         "tests.test_b6_r12_session_fixture.DeclaredShapeTests"], cwd=REPO,
         env={**os.environ, "R12_REAL_CHAIN_SET": str(root)}, check=False)
@@ -78,6 +85,7 @@ def finish(root, denied):
         "denied_receipt_sha256": sha(denied / "option-c-denied-receipt.json"),
         "shape_observations_sha256": sha(root / "observations.json"),
         "full_volume_observations_sha256": sha(root / "full-volume-observations.json"),
+        "full_volume_interval_coverage_sha256": sha(interval_file),
         "shapes": sorted(observed), "timing": serial["process_measurement"],
         "time_wrapper_exit": serial["time_wrapper_exit"],
         "denied_timing": denied_receipt["process_measurement"]}
@@ -92,7 +100,7 @@ def main():
     parser.add_argument("--root", required=True)
     parser.add_argument("--denied-root", required=True)
     args = parser.parse_args()
-    roots = (safe_root(args.root), safe_root(args.denied_root))
+    roots = (safe_root(args.root), reader_root(args.denied_root))
     # A readiness observer can see original DONE just before the native
     # generator exits. Do not hash receipts while its cleanup can append.
     deadline = time.monotonic() + 60

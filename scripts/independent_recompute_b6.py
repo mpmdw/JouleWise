@@ -232,21 +232,27 @@ class Session:
             raise InputRefusal("authenticated_inputs_required")
         self.reader = r = Reader("", "", flags, inputs)
         self.acceptance = r.json(self.archive / "derived/b6-acceptance.json", "derived/b6-acceptance.json")
+        self.roster = r.json(self.archive / "derived/roster.json", "derived/roster.json")
+        self.harvest = r.json(self.archive / "harvest.json", "harvest.json", False)
+        # Bind the final session ID (the copied plan's outer ID) before any
+        # session flag is raised, so every stop flag is filed under it. The
+        # bracket ID is kept only for the harvest comparison below.
+        self.bracket_session_id = (self.acceptance.get("session_id") or self.harvest.get("session_id")
+                                   or self.archive.name)
+        self.session_id = r.session = self.bracket_session_id
+        self.pack = pack_of(self.acceptance.get("pack_id")) or pack_of(self.roster.get("pack_id"))
+        r.pack = self.pack or ""
+        self.plan_refused = not self.bind_plan()
         if not self.acceptance:
             r.flag("acceptance_record_missing", "session", "no readable acceptance record")
         elif self.acceptance.get("schema") != ACCEPTANCE_SCHEMA:
             r.flag("acceptance_schema_unknown", "session", {"schema": self.acceptance.get("schema")})
-        self.roster = r.json(self.archive / "derived/roster.json", "derived/roster.json")
-        self.harvest = r.json(self.archive / "harvest.json", "harvest.json", False)
-        self.session_id = self.acceptance.get("session_id") or self.harvest.get("session_id") or self.archive.name
-        self.pack = pack_of(self.acceptance.get("pack_id")) or pack_of(self.roster.get("pack_id"))
-        r.pack, r.session = self.pack or "", self.session_id
         if self.pack is None:
             r.flag("acceptance_pack_unknown", "session", {"pack_id": self.acceptance.get("pack_id")})
         roster_pack = pack_of(self.roster.get("pack_id"))
         if roster_pack is not None and self.pack is not None and roster_pack != self.pack:
             r.flag("acceptance_session_mismatch", "session", {"acceptance_pack": self.pack, "roster_pack": roster_pack})
-        if self.harvest.get("session_id") not in (None, self.session_id):
+        if self.harvest.get("session_id") not in (None, self.bracket_session_id):
             r.flag("acceptance_session_mismatch", "session", {"harvest_session_id": self.harvest.get("session_id")})
         self.claim_root = Path(claim_root) if claim_root else self.archive / "sources/claim-runs"
         self.bound_root = Path(bound_root) if bound_root else self.archive / "sources/bound-runs"
@@ -332,11 +338,12 @@ class Session:
         return {get(f, "scope", "run_id") for f in self.flag_rows if f.get("code") == code
                 and isinstance(get(f, "scope", "run_id"), str)}
 
-    def loop_attempt(self, attempts):
+    def bind_plan(self):
         # The collection writers identify acceptance/harvest by the ledger
         # bracket, while the loop records the enclosing plan's session ID.
         # Bind them through the copied, authenticated plan, never a suffix
         # convention or an archive directory name. Legacy toy inputs omit it.
+        # Returns False (session keeps the bracket ID) when the plan refuses.
         plan_path = self.archive / "sources/night-custody/night_plan.json"
         if present(plan_path):
             plan = mapping(self.reader.json(plan_path, "night_plan"))
@@ -345,8 +352,13 @@ class Session:
             if not isinstance(outer, str) or not outer or bracket != self.session_id:
                 self.reader.flag("acceptance_session_mismatch", "session",
                                  {"plan_id": outer, "bracket_session_id": bracket})
-                return None
+                return False
             self.session_id = self.reader.session = outer
+        return True
+
+    def loop_attempt(self, attempts):
+        if getattr(self, "plan_refused", False):
+            return None
         if attempts is None:
             return None
         rows = [a for a in attempts if a.get("session_id") == self.session_id]
@@ -483,7 +495,8 @@ class Session:
                 "drift_s": drift, "s_bracket_s": S_BRACKET_S, "source": source}
 
     def reference(self, run_id, which):
-        m = self.member(run_id, which, compared=True)
+        # RL-121: an excluded screen run is still read (census and flags unchanged) but is not a compared run.
+        m = self.member(run_id, which, compared=run_id not in self.excluded)
         clean = (run_id not in self.excluded and m.usable and m.model == REFERENCE_MODEL
                  and finite(m.energies.get("request")))
         return m if clean else None
@@ -1307,8 +1320,28 @@ def recompute_block(archives, attempts_path, flags, b5_output=None, closed=False
     projected["block"]["quantities"] = {k: primary["block"]["quantities"].get(k)
                                         for k in expected["block"]["quantities"]}
     comparator, public_comparator = compare(projected, expected)
+    # RL-113: keys only the first program prints are reported, never compared, counted or refused on.
+    second = table_rows(expected)
+    first_only = sorted(({"class": "run_phase_energy" if kind == "run_phase_energy" else quantity_class(name),
+                          "session": sid, "key": name}
+                         for kind, sid, name in table_rows(primary) if (kind, sid, name) not in second),
+                        key=lambda row: (row["class"], row["session"], row["key"]))
+    checks["first_program_only"] = first_only
+    by_class = {}
+    for row in first_only:
+        by_class[row["class"]] = by_class.get(row["class"], 0) + 1
+    classes = public_comparator["classes"]
+    for cls in by_class:
+        # A class with no compared row gets counts only; compare() never judged it, so it carries no "pass".
+        classes.setdefault(cls, {"compared": 0, "passed": 0, "failed": 0, "unmatched": 0})
+    for cls, row in classes.items():
+        row["first_program_only"] = by_class.get(cls, 0)
+    public_comparator["classes"] = dict(sorted(classes.items()))
     checks["comparator"] = public_comparator
     checks["pass"] = checks["pass"] and comparator["pass"]
+    # Cold review finding 5: name each failed or unmatched comparator row (class, session, key; no value).
+    checks["failures"] += ["comparator:" + row["class"] + ":" + row["session"] + ":" + row["key"]
+                           for row in comparator["rows"] if not row["pass"]]
     for s in sessions.values():
         if not checks["pass"]:
             s.reader.flag("option_c_disagrees", "block", checks["failures"])
@@ -1674,12 +1707,21 @@ def main(argv=None) -> int:
             if document.get("host") != "Air" or document.get("l9_audit") not in ("not_run", "completed"):
                 raise InputRefusal("run_host_or_audit_invalid")
             pins = document["sessions"]
-            for field in ("loop_attempts", "loop_state", "block5"):
+            # RL-115: a pinned external input must be supplied, and a supplied one must be pinned,
+            # before any session is read. Only the arguments this command has are considered.
+            external = document.get("external", {})
+            fields = [f for f in ("loop_attempts", "loop_state", "block5") if hasattr(args, f)]
+            supplied = {f: bool(getattr(args, f, None)) for f in ("loop_attempts", "loop_state", "block5")}
+            if any(f in external and not supplied[f] for f in fields):
+                raise InputRefusal("external_input_missing")
+            if any(supplied[f] and f not in external for f in fields):
+                raise InputRefusal("external_input_unpinned")
+            for field in fields:
                 path = getattr(args, field, None)
-                if path and hashlib.sha256(Path(path).read_bytes()).hexdigest() != document["external"][field]:
+                if path and hashlib.sha256(Path(path).read_bytes()).hexdigest() != external[field]:
                     raise InputRefusal("external_input_digest_mismatch")
             input_record = {"host": "Air", "l9_audit": document["l9_audit"],
-                            "run_inputs_sha256": args.inputs_sha256}
+                            "run_inputs_sha256": args.inputs_sha256, "external_supplied": supplied}
             for name, sha in {
                 "configs/b6/registration/acceptance.json": "ea130c87ece4e8b557a6357f1f75df045b5a0a738db18fe5ee990a7b539ce2a8",
                 "configs/b6/registration/identity_pins.json": "513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d",

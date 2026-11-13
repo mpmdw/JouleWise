@@ -19,6 +19,12 @@ from b6_r12_session_fixture import command, prepare, export_chain_inputs, prepar
 from b6_r12_runtime import SharedClock
 from b6_r12_chain_fixture import PIN
 
+ADDITIONAL_MONITOR_SERIES = (
+    ("battery.jsonl", "reading", "battery_s"),
+    ("contention.jsonl", "interval", "contention_s"),
+    ("disk.jsonl", "reading", "disk_s"),
+)
+
 
 class BootstrapTests(unittest.TestCase):
     def setUp(self):
@@ -248,6 +254,108 @@ print(count)
                                 text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGreater(int(result.stdout.strip()), 50)
+
+    CONTRAST = "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+    RESOLVE = """import json, sys
+from pathlib import Path
+from runtime import source_root
+root = Path(sys.argv[1])
+pin = source_root(root)
+sys.path.insert(0, str(pin / 'scripts'))
+from run_campaign import resolve_prospective_analysis_manifest_v3, ProspectiveManifestResolutionError
+overlays = json.loads((root / 'input-overlays.json').read_text())
+pack = pin / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'
+assert str(pack / 'analysis_manifest_v3.json') in overlays
+stages = sorted(path for path in pack.iterdir() if (path / 'order_manifest.json').is_file())
+ids, refused = set(), set()
+for stage in stages:
+    try:
+        ids.add(resolve_prospective_analysis_manifest_v3(stage).manifest_id)
+    except ProspectiveManifestResolutionError as exc:
+        refused.add(exc.args[0].split(':')[0])
+print(json.dumps({'stages': len(stages), 'ids': sorted(ids), 'refused': sorted(refused),
+                  'manifest_id': json.loads((pack / 'analysis_manifest_v3.json').read_text())['manifest_id']}))
+"""
+    # Pin probes run with the pinned functions in a fixture child, before any
+    # overlay exists. They edit only this temporary test root's exported pin.
+    PROBE = """import json, sys
+from pathlib import Path
+from joulewise.analysis_manifest_v3 import analysis_semantics_sha256_v1, calculate_manifest_id, render_manifest
+root, kind = Path(sys.argv[1]), sys.argv[2]
+pin = root / 'pin'
+path = pin / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json'
+text = path.read_text()
+value = json.loads(text)
+frozen, manifest_id = value['frozen_semantics_sha256'], value['manifest_id']
+assert frozen == analysis_semantics_sha256_v1(value) and manifest_id == calculate_manifest_id(value)
+if kind == 'quote-frozen':
+    (pin / 'configs/r12-probe-quote.json').write_text(json.dumps({'quoted': frozen}) + '\\n')
+elif kind == 'quote-id-docs':
+    (pin / 'docs/r12-probe-quote.md').write_text('quoted ' + manifest_id.removeprefix('am-') + '\\n')
+elif kind == 'duplicate':
+    value['r12_probe_copy'] = frozen
+    assert analysis_semantics_sha256_v1(value) == frozen
+    value['manifest_id'] = calculate_manifest_id(value)
+    path.write_bytes(render_manifest(value))
+elif kind == 'inconsistent':
+    assert text.count(json.dumps(manifest_id)) == 1
+    path.write_text(text.replace(json.dumps(manifest_id), json.dumps('am-' + '0' * 64)))
+else:
+    raise SystemExit('unknown probe')
+print('probe', kind)
+"""
+
+    def _contrast_inputs(self, root, probe=None):
+        export_chain_inputs(root)
+        (root / "source-policy.json").write_text('{"volume":"reduced"}\n')
+        if probe:
+            made = subprocess.run(command(root, "code", self.PROBE, root, probe), capture_output=True,
+                                  text=True, timeout=60)
+            self.assertEqual(made.returncode, 0, made.stderr)
+        return subprocess.run(command(root, "make-inputs"), capture_output=True, text=True, timeout=120)
+
+    def _resolve(self, root):
+        result = subprocess.run(command(root, "code", self.RESOLVE, root), capture_output=True,
+                                text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_synthetic_inputs_keep_prospective_analysis_identity(self):
+        """Predict: all four GAMMA contrast stage dirs pass the pinned run_campaign prospective resolver over synthetic inputs (MBP GAMMA root -1 failed it: analysis_prospective_identity_mismatch); make-inputs names the one rebound manifest."""
+        made = self._contrast_inputs(self.root)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        self.assertIn(f"prospective analysis manifests: rebound ['{self.CONTRAST}/analysis_manifest_v3.json'] "
+                      "unchanged [] inconsistent pin left unrepaired []", made.stdout)
+        resolved = self._resolve(self.root)
+        self.assertEqual((resolved["stages"], len(resolved["ids"]), resolved["refused"]), (4, 1, []))
+
+    def test_prospective_identity_quoted_outside_manifest_is_refused(self):
+        """Predict: a pinned frozen_semantics_sha256 quoted in another config, or a manifest_id quoted in an exported doc, makes make-inputs refuse before any overlay is written."""
+        for probe in ("quote-frozen", "quote-id-docs"):
+            with self.subTest(probe=probe):
+                root = prepare(Path(self.temp.name).resolve() / probe)
+                made = self._contrast_inputs(root, probe)
+                self.assertNotEqual(made.returncode, 0, made.stdout)
+                self.assertIn("analysis manifest identity is quoted outside its manifest", made.stderr)
+                self.assertFalse((root / "input-overlays.json").exists())
+
+    def test_prospective_identity_must_be_a_unique_field(self):
+        """Predict: a self-consistent pinned manifest that repeats its frozen_semantics_sha256 value elsewhere is refused (not a unique field), not rewritten in both places."""
+        root = prepare(Path(self.temp.name).resolve() / "duplicate")
+        made = self._contrast_inputs(root, "duplicate")
+        self.assertNotEqual(made.returncode, 0, made.stdout)
+        self.assertIn("analysis manifest identity is not a unique field", made.stderr)
+        self.assertFalse((root / "input-overlays.json").exists())
+
+    def test_inconsistent_pinned_prospective_manifest_is_not_repaired(self):
+        """Predict: a pinned manifest whose manifest_id is already wrong is named, left unrepaired in the overlay, and the pinned resolver still refuses it."""
+        root = prepare(Path(self.temp.name).resolve() / "inconsistent")
+        made = self._contrast_inputs(root, "inconsistent")
+        self.assertEqual(made.returncode, 0, made.stderr)
+        self.assertIn(f"inconsistent pin left unrepaired ['{self.CONTRAST}/analysis_manifest_v3.json']", made.stdout)
+        resolved = self._resolve(root)
+        self.assertEqual(resolved["manifest_id"], "am-" + "0" * 64)
+        self.assertEqual((resolved["ids"], resolved["refused"]), ([], ["analysis_prospective_identity_mismatch"]))
 
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_source_pruning_preserves_raw_instrument_bytes(self):
@@ -600,11 +708,13 @@ class DeskInputBoundaryTests(unittest.TestCase):
             session.archive, session.session_id = archive, "distinct-ledger-name"
             session.reader = b6.Reader("ALPHA", session.session_id, flags)
             attempt = {"session_id": "outer-loop-name", "round": 2}
+            session.plan_refused = not session.bind_plan()
             self.assertEqual(session.loop_attempt([attempt]), attempt)
             self.assertEqual(session.session_id, "outer-loop-name")
             self.assertEqual(session.reader.session, "outer-loop-name")
             self.assertEqual(flags, [])
             session.session_id = "wrong-ledger-name"
+            session.plan_refused = not session.bind_plan()
             self.assertIsNone(session.loop_attempt([attempt]))
             self.assertIn("acceptance_session_mismatch", {flag["code"] for flag in flags})
 
@@ -959,6 +1069,313 @@ class SchedulerBoundaryTests(unittest.TestCase):
                 verify(outer, outer / "absent-denied", "control-probe")
             self.assertFalse((outer / "control-probe").exists())
 
+    def test_full_verifier_refuses_completed_smoke_boundary(self):
+        """Predict: a successful original smoke desk cannot authorize the production-size reader or create a full-volume report view."""
+        from b6_r12_full_verify import verify
+        from b6_r12_segments import snapshot
+        with tempfile.TemporaryDirectory(prefix="r12-full-guard-") as directory:
+            outer = Path(directory).resolve()
+            main = prepare(outer / "main")
+            (main / "loop").mkdir()
+            (main / "loop/state.json").write_text(json.dumps({
+                "state": "ARM_WAIT", "session": {"id": "control-only", "smoke_done": True}}))
+            (outer / "segments.json").write_text(json.dumps({"main": str(main),
+                "steps": [{"exit_code": 0, "boundary": snapshot(main)}]}))
+            with self.assertRaisesRegex(ValueError, "ordinary desk"):
+                verify(outer, "control-check")
+            self.assertFalse((outer / "control-check").exists())
+
+    def test_full_supervisor_never_restarts_inflight_journal(self):
+        """Predict: an existing inflight supervisor refuses before reading a session or starting a child; interruption cannot silently become success."""
+        from b6_r12_full_supervise import run
+        with tempfile.TemporaryDirectory(prefix="r12-full-supervisor-guard-") as directory:
+            root = Path(directory).resolve()
+            journal = root / "full-reader-supervision.json"
+            journal.write_text('{"status":"inflight"}\n')
+            with self.assertRaisesRegex(ValueError, "never restart"):
+                run(root, "control-reader")
+            self.assertEqual(journal.read_text(), '{"status":"inflight"}\n')
+
+
+class MonitorCoverageTests(unittest.TestCase):
+    """Tiny schema controls, not hand-assembled session fixtures."""
+
+    @staticmethod
+    def intervals(bounds):
+        return b"".join((json.dumps({"kind": "interval", "started": {"monotonic_ns": a * 10**9},
+            "values": {"interval": {"monotonic_ns": [a * 10**9, b * 10**9]}}}) + "\n").encode()
+            for a, b in bounds)
+
+    def test_interval_extent_includes_the_last_measured_interval(self):
+        """Predict: two original-schema adjacent intervals cover 20 s although their row starts span only 10 s; a 25 s stream is covered within one 10 s cadence."""
+        from b6_r12_monitor_coverage import interval_coverage
+        from b6_r12_verify import monitor_facts
+        raw = self.intervals([(0, 10), (10, 20)])
+        starts = monitor_facts(raw)["kinds"]["interval"]["span_s"]
+        self.assertEqual(starts, 10)
+        self.assertLess(starts, 25 - 10)
+        value = interval_coverage(raw)
+        self.assertEqual(value["coverage_s"], 20)
+        self.assertEqual(value["coverage_span_s"], 20)
+        self.assertEqual(value["coverage_gap_count"], 0)
+        self.assertGreaterEqual(value["coverage_s"], 25 - 10)
+
+    def test_missing_interval_is_not_counted_as_covered_time(self):
+        """Predict: [0,10] and [20,30] have a 30 s extent but only 20 s of coverage and one gap; missing coverage is never synthesized."""
+        from b6_r12_monitor_coverage import interval_coverage
+        value = interval_coverage(self.intervals([(0, 10), (20, 30)]))
+        self.assertEqual(value["coverage_s"], 20)
+        self.assertEqual(value["coverage_span_s"], 30)
+        self.assertEqual(value["coverage_gap_count"], 1)
+
+
+class CourierProfileTests(unittest.TestCase):
+    def test_original_courier_preserves_stdin_argv_and_injected_clock(self):
+        """Predict: exact f31 courier exits 0, writes file-transport bytes/argv and synthetic time; undeclared host argv still returns 126. Before the new executable input this fails with rc 126/no courier records (RL-49 rules 1, 4, 6)."""
+        from b6_r12_courier_profile import prepare_profile, export_prompt, COURIER, PROMPT
+        with tempfile.TemporaryDirectory(prefix="r12-courier-source-") as directory:
+            root = prepare_profile(prepare(Path(directory).resolve() / "fixture"))
+            export_chain_inputs(root)
+            export_prompt(root)
+            prepare_interpreters(root)
+            code = '''import json, subprocess, sys, time
+from pathlib import Path
+root = Path(sys.argv[1])
+custody = root / "courier-unit" / "custody"
+prompt = "Custody root: " + str(custody) + "; plan: synthetic."
+before = time.time_ns()
+p = subprocess.run([str(root / "pin/scripts/b6_courier.sh"), "-p", prompt],
+    input=b"R12 exact stdin\\x00\\xff\\n", capture_output=True)
+assert p.returncode == 0, (p.returncode, p.stderr)
+records = list((custody.parent / "courier-program").glob("*.json"))
+assert len(records) == 1, records
+record = json.loads(records[0].read_bytes())
+assert record["argv"] == ["-p", prompt], record
+assert record["transport"] == "file" and record["mail_sent"] is False
+assert (records[0].parent / record["stdin"]).read_bytes() == b"R12 exact stdin\\x00\\xff\\n"
+stamp = int(records[0].stem)
+assert before <= stamp <= time.time_ns(), (before, stamp, time.time_ns())
+assert (custody / "night/courier.sent").is_file()
+# Tiny launcher input matching the pinned smoke writer's template; this is
+# a bootstrap unit, not a hand-assembled session or real-chain fixture.
+import shlex
+base = root / "smoke-launcher-unit"
+target = base / "measurement/scripts/b6_courier.sh"
+target.parent.mkdir(parents=True)
+target.write_bytes((root / "pin/scripts/b6_courier.sh").read_bytes())
+wrapper = base / "bin/smoke-courier"
+wrapper.parent.mkdir()
+wrapper.write_text('#!/bin/sh\\nexec /bin/sh ' + shlex.quote(str(target)) + ' "$@"\\n')
+wrapper.chmod(0o755)
+smoke_custody = base / "custody"
+smoke_prompt = "Custody root: " + str(smoke_custody) + "; plan: synthetic."
+wrapped = subprocess.run([str(wrapper), "-p", smoke_prompt], input=b"smoke stdin", capture_output=True)
+assert wrapped.returncode == 0, ("smoke-wrapper", wrapped.returncode, wrapped.stderr)
+assert (smoke_custody / "night/courier.sent").is_file()
+# Exercise the production courier's own wait judgment, not communicate().
+# An inherited-stdin launch must see the night job's declared EOF input.
+from scripts.run_night import _wait_for_courier
+wait_custody = base / "wait-custody"
+wait_prompt = "Custody root: " + str(wait_custody) + "; plan: synthetic."
+waiting = subprocess.Popen([str(target), "-p", wait_prompt])
+heartbeat, sent = _wait_for_courier(wait_custody / "night/courier.heartbeat",
+                                    wait_custody / "night/courier.sent")
+waiting.wait()
+assert heartbeat and sent, ("original-wait", heartbeat, sent)
+wrapper.write_text(wrapper.read_text() + "exit 42\\n")
+changed = subprocess.run([str(wrapper), "-p", smoke_prompt], input=b"", capture_output=True)
+assert changed.returncode == 126, ("changed launcher", changed.returncode)
+denied = subprocess.run(["/usr/bin/r12-undeclared-host-action"], capture_output=True)
+assert denied.returncode == 126, denied.returncode
+print("original_courier")
+'''
+            result = subprocess.run(command(root, "code", code, str(root)), capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), "original_courier")
+            manifest = json.loads((root / "manifest.json").read_bytes())
+            self.assertEqual(hashlib.sha256((root / "pin" / COURIER).read_bytes()).hexdigest(),
+                             manifest["source_sha256"][COURIER])
+            self.assertEqual(hashlib.sha256((root / "pin" / PROMPT).read_bytes()).hexdigest(),
+                             manifest["pinned_input_sha256"][PROMPT])
+
+
+class SinglePackVerifierTests(unittest.TestCase):
+    """Control-only verifier tests; no session collection or archive evidence."""
+
+    def setUp(self):
+        from b6_r12_segments import snapshot
+        self.temp = tempfile.TemporaryDirectory(prefix="r12-single-verify-control-")
+        self.addCleanup(self.temp.cleanup)
+        self.outer = Path(self.temp.name).resolve()
+        self.main = self.outer / "main"
+        (self.main / "loop").mkdir(parents=True)
+        (self.main / "loop/state.json").write_text('{"state":"ROTATE"}\n')
+        (self.main / "loop/attempts.jsonl").write_text('{"control_only":true}\n')
+        (self.main / "manifest.json").write_text(json.dumps({
+            "pin": PIN, "synthetic_only": True, "generator_files_sha256": {}}))
+        (self.main / "generator-parent-exit.txt").write_text("0\n")
+        self.control = {"main": str(self.main), "pack": "beta", "scenario": "anchor",
+                        "steps": [{"exit_code": 0, "boundary": snapshot(self.main)}]}
+        self.save_control()
+
+    def save_control(self):
+        (self.outer / "segments.json").write_text(json.dumps(self.control))
+
+    def program_inputs(self, root, workers, *, stem, session_id):
+        """Stand in for analysis only, never for the chain or its judgments."""
+        from b6_r12_verify import sha
+        self.assertEqual((root, workers, session_id), (self.main, 1, "r1-beta"))
+        pins = {key: sha(root / "loop" / name) for key, name in (
+            ("loop_state", "state.json"), ("loop_attempts", "attempts.jsonl"))}
+        (root / (stem + "-inputs.json")).write_text(json.dumps({"external": pins}))
+        (root / (stem + "-receipt.json")).write_text('{"control_only":true}\n')
+
+    def test_failed_parent_refuses_before_analysis(self):
+        """Predict: a failed parent refuses before creating a view or running analysis, even with plausible desk bytes."""
+        from unittest.mock import patch
+        import b6_r12_single_verify as verifier
+        self.control["steps"][-1]["exit_code"] = 143
+        self.save_control()
+        with patch.object(verifier, "run_option_c") as program:
+            with self.assertRaisesRegex(ValueError, "interrupted/failed phase"):
+                verifier.verify(self.outer, "control-check")
+        program.assert_not_called()
+        self.assertFalse((self.outer / "control-check").exists())
+
+    def test_literal_loop_pins_and_failed_shape_exit_are_preserved(self):
+        """Predict: verifier preserves exact original loop bytes/pins and returns the shape-test failure; this mocked control run is no fixture evidence."""
+        from unittest.mock import patch
+        import b6_r12_single_verify as verifier
+        originals = {name: (self.main / "loop" / name).read_bytes()
+                     for name in ("state.json", "attempts.jsonl")}
+        receipt = {"exit_code": 0, "option_c": {"comparator": {"pass": True}},
+                   "process_measurement": {"control_only": True}, "time_wrapper_exit": 1}
+        with patch.object(verifier, "finalize_manifest") as finalize, \
+             patch.object(verifier, "run_option_c", side_effect=self.program_inputs), \
+             patch.object(verifier, "agree", return_value=receipt), \
+             patch.object(verifier, "session_facts", return_value={"control_only": True}), \
+             patch.object(verifier.subprocess, "run", return_value=subprocess.CompletedProcess([], 7)) as tests:
+            self.assertEqual(verifier.verify(self.outer, "control-check"), 7)
+        finalize.assert_called_once_with(self.main)
+        self.assertEqual(tests.call_args.kwargs["env"]["R12_SINGLE_PACK_SET"],
+                         str(self.outer / "control-check"))
+        for name, data in originals.items():
+            self.assertEqual((self.main / "loop" / name).read_bytes(), data)
+            self.assertEqual((self.outer / "control-check" / name).read_bytes(), data)
+        observed = json.loads((self.outer / "control-check/receipt.json").read_text())
+        self.assertEqual(observed["test_exit"], 7)
+        self.assertFalse(observed["full_volume_claim"])
+        self.assertFalse(observed["closed_nine_claim"])
+
+    def test_changed_program_loop_pin_refuses_before_shape_tests(self):
+        """Predict: mismatched program loop pins refuse before any shape assertion, even after a successful analysis receipt."""
+        from unittest.mock import patch
+        import b6_r12_single_verify as verifier
+
+        def wrong_pin(root, workers, *, stem, session_id):
+            self.program_inputs(root, workers, stem=stem, session_id=session_id)
+            path = root / (stem + "-inputs.json")
+            value = json.loads(path.read_text())
+            value["external"]["loop_state"] = "0" * 64
+            path.write_text(json.dumps(value))
+
+        with patch.object(verifier, "finalize_manifest"), \
+             patch.object(verifier, "run_option_c", side_effect=wrong_pin), \
+             patch.object(verifier, "agree", return_value={}), \
+             patch.object(verifier.subprocess, "run") as tests:
+            with self.assertRaisesRegex(ValueError, "program loop pins"):
+                verifier.verify(self.outer, "control-check")
+        tests.assert_not_called()
+        self.assertFalse((self.outer / "control-check/receipt.json").exists())
+
+
+class ExternalInputPinTests(unittest.TestCase):
+    """RL-115: with --inputs, a pinned external input must be supplied and a supplied one must be pinned.
+
+    Beside the wrong-digest case above. One sealed synthetic BETA archive; no study file is read.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from tests.independent_recompute.support_b6 import build_session, write_attempts
+        from tests.independent_recompute.support_b6_production import seal
+        cls.root = Path(tempfile.mkdtemp(prefix="r12-external-pins-")).resolve()
+        cls.archive, _ = build_session(cls.root, "BETA", 1, 0)
+        cls.pin = seal(cls.archive)
+        cls.attempts = write_attempts(cls.root / "attempts.jsonl", [("BETA", 1, True)])
+        cls.state = cls.root / "state.json"
+        cls.state.write_text(json.dumps({"reharvested": {}}))
+        cls.block5 = cls.root / "block5-recompute.json"
+        cls.block5.write_text(json.dumps({"synthetic": True}))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.root, ignore_errors=True)
+
+    def run_recompute(self, stem, command, external, *, attempts=True, state=False, block5=False):
+        import contextlib
+        import io
+        from tests.independent_recompute.support_b6 import b6
+        sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+        out = self.root / stem
+        out.mkdir()
+        document = out / "run-inputs.json"
+        pins = {"loop_attempts": sha(self.attempts), "loop_state": sha(self.state), "block5": sha(self.block5)}
+        document.write_text(json.dumps({"host": "Air", "l9_audit": "not_run", "sessions": {self.archive.name: self.pin},
+                                        "external": {key: pins[key] for key in external}}) + "\n")
+        argv = [command, "--session", str(self.archive), "--inputs", str(document), "--inputs-sha256", sha(document),
+                "--restricted-out", str(out / "numbers.json"), "--public-out", str(out / "public.json")]
+        if attempts:
+            argv += ["--loop-attempts", str(self.attempts)]
+        if state:
+            argv += ["--loop-state", str(self.state)]
+        if block5:
+            argv += ["--block5", str(self.block5)]
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            rc = b6.main(argv)
+        return rc, err.getvalue(), out
+
+    def assert_refused(self, result, code):
+        rc, err, out = result
+        self.assertEqual(rc, 4, err)
+        self.assertEqual(err.strip(), "refused: " + code)
+        self.assertFalse((out / "numbers.json").exists())
+        self.assertFalse((out / "public.json").exists())
+
+    def test_pinned_loop_state_omitted_refuses(self):
+        """Predict: loop_state pinned, --loop-state omitted: refused before any session is read, block and single."""
+        from unittest import mock
+        from tests.independent_recompute.support_b6 import b6
+        for command in ("block", "single"):
+            with self.subTest(command=command), \
+                    mock.patch.object(b6, "AuthenticatedInputs", side_effect=AssertionError("session read")):
+                self.assert_refused(self.run_recompute("state-omitted-" + command, command,
+                                                       ("loop_attempts", "loop_state")), "external_input_missing")
+
+    def test_pinned_loop_attempts_omitted_refuses_in_single_mode(self):
+        """Predict: loop_attempts pinned, single run without --loop-attempts: refused external_input_missing."""
+        self.assert_refused(self.run_recompute("attempts-omitted", "single", ("loop_attempts",), attempts=False),
+                            "external_input_missing")
+
+    def test_pinned_block5_omitted_refuses_in_block_mode(self):
+        """Predict (cold review finding 3): block5 pinned, --block5 omitted in block: refused external_input_missing."""
+        self.assert_refused(self.run_recompute("block5-omitted", "block", ("loop_attempts", "block5")),
+                            "external_input_missing")
+
+    def test_unpinned_loop_state_supplied_refuses(self):
+        """Predict: --loop-state given with no loop_state key refuses by name, not as a bare KeyError."""
+        self.assert_refused(self.run_recompute("state-unpinned", "block", ("loop_attempts",), state=True),
+                            "external_input_unpinned")
+
+    def test_waived_loop_state_runs_and_is_recorded(self):
+        """Predict: no loop_state key and no --loop-state: the run completes and records that it read no corrections."""
+        rc, err, out = self.run_recompute("state-waived", "single", ("loop_attempts",))
+        self.assertEqual(rc, 0, err)
+        numbers = json.loads((out / "numbers.json").read_bytes())
+        self.assertEqual(numbers["inputs"]["external_supplied"],
+                         {"loop_attempts": True, "loop_state": False, "block5": False})
+
 
 @unittest.skipUnless(os.environ.get("R12_REAL_CHAIN_SET"), "explicit generated R12 set required")
 class DeclaredShapeTests(unittest.TestCase):
@@ -1023,6 +1440,7 @@ class DeclaredShapeTests(unittest.TestCase):
         """Predict full ALPHA/BETA/GAMMA: 125/125/107 members, >=334 s per primary at 10 Hz with 16 CPUs; continuous 50 Hz meter, registered monitor cadences and no source errors (RL-48 item 5)."""
         root = Path(os.environ["R12_REAL_CHAIN_SET"])
         values = json.loads((root / "full-volume-observations.json").read_bytes())
+        interval_coverage = json.loads((root / "full-volume-interval-coverage.json").read_bytes())
         for sid, expected in (("r3-alpha", 125), ("r1-beta", 125), ("r1-gamma", 107)):
             value = values[sid]
             self.assertEqual(len(value["primary_plists"]), expected, sid)
@@ -1043,11 +1461,15 @@ class DeclaredShapeTests(unittest.TestCase):
                 self.assertEqual(journal["errors"], 0, sid)
             base = "sources/night-custody/hazards/monitor/"
             from b6_r12_verify import FULL_VOLUME_MONITOR_SERIES
-            for filename, kind, cadence_key in FULL_VOLUME_MONITOR_SERIES:
+            for filename, kind, cadence_key in (*FULL_VOLUME_MONITOR_SERIES, *ADDITIONAL_MONITOR_SERIES):
                 series = value["monitor"][base + filename]["kinds"][kind]
                 cadence_s = value["registered_monitor_cadence"][cadence_key]
                 self.assertEqual(series["cadence_ns"], [round(cadence_s * 1e9)], sid)
-                self.assertGreaterEqual(series["span_s"], min(m["span_s"] for m in value["meter"]) - cadence_s, sid)
+                coverage = interval_coverage[sid] if kind == "interval" else series
+                if kind == "interval":
+                    self.assertEqual(coverage["coverage_gap_count"], 0, sid)
+                self.assertGreaterEqual(coverage.get("coverage_s", series["span_s"]),
+                                        min(m["span_s"] for m in value["meter"]) - cadence_s, sid)
 
 
 @unittest.skipUnless(os.environ.get("R12_REDUCED_CHAIN_SET"), "explicit reduced real-chain set required")
@@ -1064,6 +1486,385 @@ class ReducedSetTests(unittest.TestCase):
         self.assertTrue(receipt["serial_pool_byte_identical"])
         self.assertEqual(receipt["shape_assertion_exit"], 0)
         self.assertIs(receipt["full_volume_claim"], False)
+
+
+# Predeclared 2026-11-12 before the ALPHA/GAMMA full sessions, independent of
+# the verifier's own table: registered roster/primary counts from the pinned
+# plan_tree stage graphs (campaign_collection expected_count sums) and the
+# production key-registry label. BETA's values are unchanged from root 23.
+FULL_PACK_EXPECTATIONS = {"alpha": (125, "ALPHA"), "beta": (125, "BETA"), "gamma": (107, "GAMMA")}
+FULL_PACK_CAMPAIGNS = {"alpha": "d117_floor_qwen3-1p7b_v5", "beta": "d117_floor_qwen3-8b_v5",
+                       "gamma": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"}
+
+
+@unittest.skipUnless(os.environ.get("R12_FULL_SESSION"), "explicit completed full-volume profile fixture required")
+class FullProductionSessionTests(unittest.TestCase):
+    """Declared before the first courier-profile production-size collection (BETA)
+    and, for ALPHA and GAMMA, before their MBP collections on 2026-11-12."""
+
+    def facts(self):
+        from b6_r12_verify import safe_root
+        root = safe_root(Path(os.environ["R12_FULL_SESSION"]))
+        value = json.loads((root / "full-session-observations.json").read_bytes())
+        pack = value.get("pack", "beta")  # root-23 observations predate the pack field
+        self.assertIn(pack, FULL_PACK_EXPECTATIONS)
+        self.assertEqual(value["session_id"], "r1-" + pack)
+        return pack, value
+
+    def test_registered_production_volume(self):
+        """Predict full-BETA-courier: 125 original roster members and executed primary streams, each >=334 s at 10 Hz with 16 CPU records/frame; 50 Hz meter with no drops/gaps/duplicates and registered monitor cadences/errors 0; original courier records file transport (RL-48 item 5; RL-98 term 1). Predict full-ALPHA-courier and full-GAMMA-courier identically with 125 and 107 members/primary streams."""
+        pack, value = self.facts()
+        members = FULL_PACK_EXPECTATIONS[pack][0]
+        self.assertEqual(value["roster_members"], members)
+        volume = value["volume"]
+        self.assertEqual(len(volume["primary_plists"]), members)
+        for primary in volume["primary_plists"]:
+            self.assertGreaterEqual(primary["duration_s"], 334, primary["path"])
+            self.assertEqual(primary["cadence_ns"], [100_000_000])
+            self.assertEqual(primary["elapsed_fields"], primary["frames"])
+            self.assertEqual(primary["cpu_fields"], 16 * primary["frames"])
+        self.assertTrue(volume["meter"])
+        self.assertGreaterEqual(sum(m["span_s"] for m in volume["meter"]),
+                                sum(p["duration_s"] for p in volume["primary_plists"]))
+        for meter in volume["meter"]:
+            self.assertEqual((meter["sps"], meter["step_ms"]), (50, 20))
+            self.assertEqual(meter["duplicates"], 0)
+            self.assertEqual(meter["drops"]["dropped"], 0)
+            self.assertEqual(meter["drops"]["irregular_gaps"], 0)
+        self.assertTrue(volume["monitor"])
+        for journal in volume["monitor"].values():
+            self.assertEqual(journal["errors"], 0)
+        from b6_r12_verify import FULL_VOLUME_MONITOR_SERIES
+        base = "sources/night-custody/hazards/monitor/"
+        for filename, kind, cadence_key in (*FULL_VOLUME_MONITOR_SERIES, *ADDITIONAL_MONITOR_SERIES):
+            series = volume["monitor"][base + filename]["kinds"][kind]
+            cadence = volume["registered_monitor_cadence"][cadence_key]
+            self.assertEqual(series["cadence_ns"], [round(cadence * 1e9)])
+            if kind == "interval":
+                self.assertEqual(series["coverage_gap_count"], 0)
+            self.assertGreaterEqual(series.get("coverage_s", series["span_s"]),
+                                    min(m["span_s"] for m in volume["meter"]) - cadence)
+        self.assertTrue(value["courier_records"])
+        for courier in value["courier_records"]:
+            self.assertEqual(courier["transport"], "file")
+            self.assertIs(courier["mail_sent"], False)
+
+    def test_production_reader_at_full_size(self):
+        """Predict full-BETA-reader: actual option (c) exits 0/comparator agrees on the full original desk archive and emits every published production BETA quantity key; record native session/primary/meter ratios, reader wall and RSS separately (RL-98 terms 1 and 2). Predict full-ALPHA-reader and full-GAMMA-reader identically against the published ALPHA (122) and GAMMA (93) session keys."""
+        pack, value = self.facts()
+        self.assertEqual(value["production_exit"], 0)
+        self.assertTrue(value["comparator_agrees"])
+        registry = json.loads((REPO / "configs/b6/recompute/production_comparison_keys.json").read_bytes())
+        self.assertEqual(value["quantity_keys"], registry["session_quantity_keys"][FULL_PACK_EXPECTATIONS[pack][1]])
+        native = value["volume"]["native_generation"]
+        self.assertGreater(native["wall_s"], 0)
+        self.assertTrue(native["includes_validation_and_compression"])
+        self.assertFalse(native["injected_clock"])
+
+
+class CrossTempReaderTests(unittest.TestCase):
+    def test_only_named_completed_denied_root_and_scoped_child_environment(self):
+        """Predict RL-123: only the named denied root may cross TMPDIR after parent/manifest authentication; sibling and inflight roots refuse, child TMPDIR still passes strict checks and is restored."""
+        import b6_r12_reader_roots as reader
+        from b6_r12_verify import safe_root, sha
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory(prefix="r12-reader-roots-") as directory:
+            base = Path(directory).resolve()
+            outer, active = base / "denied-26", base / "active"
+            root = outer / "main"
+            root.mkdir(parents=True)
+            active.mkdir()
+            (root / "generator-parent-exit.txt").write_text('0\n')
+            (outer / "declaration.json").write_text(json.dumps({"main": str(root), "pin": PIN,
+                "synthetic_only": True, "mode": "denied", "schedule": "reduced"}))
+            parent = {"status": "done", "exit_code": 0, "declaration_sha256": sha(outer / "declaration.json")}
+            (outer / "parent.json").write_text(json.dumps(parent))
+            with patch.object(reader, "DENIED_OUTER", outer), \
+                 patch.dict(os.environ, {"TMPDIR": str(active)}), patch.object(tempfile, "tempdir", str(active)):
+                with self.assertRaises(ValueError):
+                    safe_root(root)
+                self.assertEqual(reader.reader_root(root), root)
+                with self.assertRaisesRegex(ValueError, "unlisted"):
+                    reader.reader_root(base / "sibling")
+                with reader.denied_reader_environment(root):
+                    self.assertEqual(safe_root(root), root)
+                    self.assertEqual(os.environ["TMPDIR"], str(base))
+                self.assertEqual(os.environ["TMPDIR"], str(active))
+                self.assertEqual(tempfile.tempdir, str(active))
+                parent["status"] = "inflight"
+                (outer / "parent.json").write_text(json.dumps(parent))
+                with self.assertRaisesRegex(ValueError, "completed authenticated"):
+                    reader.reader_root(root)
+
+
+class DryRunLimitTests(unittest.TestCase):
+    def test_reduced_finisher_accepts_bound_courier_profile_only(self):
+        """Predict RL-123: a bound courier_set reduced declaration reaches authenticated finalization; registered or altered-bootstrap declarations refuse before it. Tiny control unit only, not a generated session."""
+        from b6_r12_reduced_finish import finish
+        from b6_r12_verify import sha
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory(prefix="r12-courier-finish-") as directory:
+            parent = Path(directory).resolve()
+            root, denied = parent / "main", parent / "denied"
+            for p in (root, denied):
+                p.mkdir()
+                (p / "generator-parent-exit.txt").write_text('0\n')
+            (root / "loop").mkdir()
+            (root / "loop/state.json").write_text('{"state":"DONE"}')
+            (root / "bootstrap.py").write_text('external input supplier')
+            profile = {"full_volume_claim": False, "schedule": "reduced", "bootstrap_sha256": sha(root / "bootstrap.py")}
+            manifest = {"courier_set": profile}
+            (root / "manifest.json").write_text(json.dumps(manifest))
+            with patch("b6_r12_reduced_finish.finalize_manifest", side_effect=RuntimeError("profile accepted")):
+                with self.assertRaisesRegex(RuntimeError, "profile accepted"):
+                    finish(root, denied)
+                profile["schedule"] = "registered"
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, "reduced source schedule"):
+                    finish(root, denied)
+                profile["schedule"] = "reduced"
+                profile["bootstrap_sha256"] = "f" * 64
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, "supplier changed"):
+                    finish(root, denied)
+
+    def test_three_hour_limit_stops_only_owned_group_and_requires_profile(self):
+        """Predict RL-123: timeout is unconditionally 10,800 native seconds; stop only the newly owned group, return 124/profile-required and never retry."""
+        from b6_r12_dry_supervise import wait_owned
+        from unittest.mock import Mock, patch, call
+        import signal
+        process = Mock(pid=987654)
+        process.wait.side_effect = [subprocess.TimeoutExpired("owned-reader", 10800), 0]
+        with patch("b6_r12_dry_supervise.os.killpg") as stop:
+            self.assertEqual(wait_owned(process), (124, True))
+        self.assertEqual(process.wait.call_args_list, [call(timeout=10800), call(timeout=5)])
+        stop.assert_called_once_with(987654, signal.SIGTERM)
+
+    def test_normal_exit_is_preserved_without_signal(self):
+        """Predict: actual child exit 7 is preserved; no timeout signal or invented success."""
+        from b6_r12_dry_supervise import wait_owned
+        from unittest.mock import Mock, patch
+        with patch("b6_r12_dry_supervise.os.killpg") as stop:
+            self.assertEqual(wait_owned(Mock(wait=Mock(return_value=7))), (7, False))
+            stop.assert_not_called()
+
+
+class ReaderContextTests(unittest.TestCase):
+    def test_native_interval_uses_authenticated_mbp_nanoseconds(self):
+        """Predict: MBP endpoints 100.000000123 and 160.000000456 yield 60.000000333 s despite an Air-copy interval of 999 s; changing endpoint bytes refuses."""
+        from b6_r12_reader_context import mbp_native_interval
+        from b6_r12_verify import sha
+        with tempfile.TemporaryDirectory(prefix="r12-mbp-native-") as directory:
+            outer = Path(directory).resolve() / "fixture"
+            root = outer / "main"
+            session = root / "sessions/r1-alpha"
+            session.mkdir(parents=True)
+            archive = session / "archive"
+            (session / "session.json").write_text(json.dumps({"paths": {"archive": str(archive)}}))
+            paths = [root / "fixture-manifests/r1-alpha.json", Path(str(archive) + ".desk/compression.jsonl")]
+            for p in paths:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_bytes(b"unit")
+            mtimes, hashes = Path(str(outer) + ".mbp-mtimes.txt"), Path(str(outer) + ".mbp-sha256.txt")
+            names = [str(p.relative_to(outer.parent)) for p in paths]
+            mtimes.write_text(''.join(stamp + ' 4 ' + name + '\n' for stamp, name in zip(
+                ("100.000000123", "160.000000456"), names)))
+            hashes.write_text(''.join(sha(p) + '  ' + name + '\n' for p, name in zip(paths, names)))
+            original = {"wall_s": 999, "primary_stream_duration_s": 500}
+            value = mbp_native_interval(outer, root, "r1-alpha", original, mtimes, hashes)
+            self.assertEqual(value["wall_s"], 60.000000333)
+            self.assertEqual(value["air_copy_native_interval"], original)
+            self.assertEqual(value["generation_host"], "MBP Mac15,9")
+            paths[1].write_bytes(b"edit")
+            with self.assertRaisesRegex(ValueError, "endpoint bytes"):
+                mbp_native_interval(outer, root, "r1-alpha", original, mtimes, hashes)
+
+
+class RereadAttributionTests(unittest.TestCase):
+    def outputs(self):
+        from copy import deepcopy
+        from b6_r12_compare_reread import OLD_PROGRAM
+        old = {"program_sha256": OLD_PROGRAM, "inputs": {"host": "Air"},
+            "sessions": {"r1-beta": {"quantities": {"unit": 1.0}}},
+            "block": {"option_c": {"pass": True, "failures": [], "comparator": {"pass": True,
+                "classes": {"energy": {"compared": 1, "passed": 1, "failed": 0, "unmatched": 0, "pass": True}}}}}}
+        new = deepcopy(old)
+        new["program_sha256"] = "f" * 64
+        new["inputs"]["external_supplied"] = {"loop_attempts": True, "loop_state": True, "block5": False}
+        gate = new["block"]["option_c"]
+        gate["first_program_only"] = [{"class": "reported", "session": "r1-beta", "key": "unit"}]
+        gate["comparator"]["classes"]["energy"]["first_program_only"] = 0
+        gate["comparator"]["classes"]["reported"] = {
+            "compared": 0, "passed": 0, "failed": 0, "unmatched": 0, "first_program_only": 1}
+        return old, new, {"restricted_sha256": "old", "flag_count": 0}, {"restricted_sha256": "new", "flag_count": 0}
+
+    def test_only_predeclared_reporting_changes_are_attributed(self):
+        """Predict: program identity, RL-113 names/counts and RL-115 supply metadata attribute; no scientific value is normalized away."""
+        from b6_r12_compare_reread import compare_outputs
+        result = compare_outputs(*self.outputs(), "old", "new", "f" * 64)
+        self.assertTrue(result["pass"])
+        self.assertEqual(result["unattributed"], [])
+
+    def test_numeric_or_comparator_change_stops_attribution(self):
+        """Predict: a quantity change and a changed compared-class verdict each produce an unattributed path and fail; zero-compared pass=true refuses."""
+        from b6_r12_compare_reread import compare_outputs
+        old, new, ap, bp = self.outputs()
+        new["sessions"]["r1-beta"]["quantities"]["unit"] = 2.0
+        value = compare_outputs(old, new, ap, bp, "old", "new", "f" * 64)
+        self.assertFalse(value["pass"])
+        self.assertIn("/sessions/r1-beta/quantities/unit", value["unattributed"])
+        new["block"]["option_c"]["comparator"]["classes"]["reported"]["pass"] = True
+        with self.assertRaisesRegex(ValueError, "was judged"):
+            compare_outputs(old, new, ap, bp, "old", "new", "f" * 64)
+
+
+class HistoricalProfileTests(unittest.TestCase):
+    def test_exact_three_profiles_and_source_copy_integrity(self):
+        """Predict RL-123: each named historical profile passes Git/blob/copy authentication; a changed recorded generator digest or copied runtime refuses, and the list has exactly three entries."""
+        from b6_r12_historical_profile import PROFILES, COPIES, source_hashes, validate_completed_profile
+        from b6_r12_segments import snapshot
+        self.assertEqual(len(PROFILES), 3)
+        for commit, (_name, pack, runtime) in PROFILES.items():
+            with self.subTest(pack=pack), tempfile.TemporaryDirectory(prefix="r12-history-positive-") as directory:
+                root = Path(directory).resolve()
+                (root / "loop").mkdir()
+                (root / "loop/state.json").write_text(json.dumps({"state": "ROTATE", "session": {"id": "r1-" + pack}}))
+                (root / "loop/attempts.jsonl").write_text('{}\n')
+                (root / "generator-parent-exit.txt").write_text('0\n')
+                manifest = {"pin": PIN, "synthetic_only": True, "generator_commit": commit,
+                    "runtime_sha256": runtime, "generator_files_sha256": source_hashes(commit)}
+                for copy, original in COPIES.items():
+                    (root / copy).write_bytes(subprocess.check_output(
+                        ["git", "--no-replace-objects", "show", commit + ":scripts/" + original], cwd=REPO))
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                control = {"steps": [{"exit_code": 0, "boundary": snapshot(root)}]}
+                proof = validate_completed_profile(root, control)
+                self.assertEqual(proof["pack"], pack)
+                self.assertFalse(proof["generation_resume_authorized"])
+                manifest["generator_files_sha256"]["b6_r12_profile_session.py"] = "f" * 64
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, "Git blobs"):
+                    validate_completed_profile(root, control)
+                manifest["generator_files_sha256"] = source_hashes(commit)
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                (root / "runtime.py").write_text("altered source copy")
+                with self.assertRaisesRegex(ValueError, "source copy altered"):
+                    validate_completed_profile(root, control)
+
+    def test_unlisted_commit_and_altered_runtime_are_refused(self):
+        """Predict RL-123: even CWD-matching generator hashes cannot admit an unlisted generator commit or altered recorded runtime; both refuse before archive reading."""
+        from b6_r12_historical_profile import validate_completed_profile
+        from b6_r12_segments import snapshot
+        from b6_r12_verify import sha
+        with tempfile.TemporaryDirectory(prefix="r12-history-refusal-") as directory:
+            root = Path(directory).resolve()
+            (root / "loop").mkdir()
+            (root / "loop/state.json").write_text('{"state":"ROTATE","session":{"id":"r1-beta"}}')
+            (root / "loop/attempts.jsonl").write_text('{}\n')
+            (root / "generator-parent-exit.txt").write_text('0\n')
+            control = {"steps": [{"exit_code": 0, "boundary": snapshot(root)}]}
+            for commit, runtime in (("f" * 40, sha(REPO / "scripts/b6_r12_runtime.py")),
+                                    ("04eacce2afb5a5b7e5abae12d2d17ba11d39d9f8", "f" * 64)):
+                with self.subTest(commit=commit, runtime=runtime):
+                    (root / "manifest.json").write_text(json.dumps({"pin": PIN, "synthetic_only": True,
+                        "generator_commit": commit, "runtime_sha256": runtime,
+                        "generator_files_sha256": {"b6_r12_runtime.py": sha(REPO / "scripts/b6_r12_runtime.py")}}))
+                    with self.assertRaisesRegex(ValueError, "unlisted|runtime"):
+                        validate_completed_profile(root, control)
+
+
+class CourierSetControlTests(unittest.TestCase):
+    def test_reduced_source_preserves_scripted_shapes(self):
+        """Predict: reduced input supplier changes only dwell/token inputs; wait/skip/skew sequences survive, and no pinned function is substituted."""
+        from b6_r12_courier_set import source_bootstrap
+        import b6_r12_orchestrate as scheduler
+        from unittest.mock import patch
+        original = scheduler.session_policy
+        prefix = source_bootstrap("reduced").split("from b6_r12_courier_profile", 1)[0]
+        with patch.object(scheduler, "session_policy", original):
+            exec(prefix, {})
+            for pack, round_number in (("alpha", 1), ("alpha", 2), ("beta", 2), ("gamma", 1)):
+                expected = original(pack, round_number, {})
+                expected.update(volume="reduced", primary_stream_duration_s=65,
+                                token_first_s=.5, token_next_s=.001)
+                self.assertEqual(scheduler.session_policy(pack, round_number, {}), expected)
+        self.assertIs(scheduler.session_policy, original)
+        self.assertNotIn("session_policy", source_bootstrap("registered"))
+
+    def test_existing_root_is_never_restarted(self):
+        """Predict: an existing root is refused before any declaration or child; partial output is not resumed."""
+        from b6_r12_courier_set import run
+        with tempfile.TemporaryDirectory(prefix="r12-courier-set-") as directory:
+            root = Path(directory).resolve()
+            with self.assertRaisesRegex(ValueError, "never resume"):
+                run(root, root / "prior", "nine", "reduced")
+            self.assertFalse((root / "declaration.json").exists())
+
+    def test_failed_actual_child_has_no_success_marker(self):
+        """Predict: actual generator child exit 7 records failed/7 and cannot create a successful parent marker, regardless of plausible state elsewhere."""
+        from b6_r12_courier_set import run
+        from unittest.mock import patch, Mock
+        with tempfile.TemporaryDirectory(prefix="r12-courier-set-") as directory:
+            parent = Path(directory).resolve()
+            outer = parent / "fixture"
+            process = Mock(pid=123)
+            process.wait.return_value = 7
+            with patch("b6_r12_courier_set.subprocess.Popen", return_value=process):
+                self.assertEqual(run(outer, parent / "prior", "denied", "reduced"), 7)
+            receipt = json.loads((outer / "parent.json").read_bytes())
+            self.assertEqual((receipt["status"], receipt["exit_code"]), ("failed", 7))
+            self.assertFalse(Path(json.loads((outer / "declaration.json").read_bytes())["main"]).exists())
+
+
+class FullPackExpectationTests(unittest.TestCase):
+    """Control-only tests for the ALPHA/GAMMA full sessions; not real-chain evidence."""
+
+    def test_expectations_match_pinned_plan_trees_and_registry(self):
+        """Predict: 125/125/107 equal the pinned campaign_collection counts; the verifier's table agrees; registry has 122/122/93 session keys."""
+        from b6_r12_full_verify import PACK_EXPECTATIONS, session_id
+        registry = json.loads((REPO / "configs/b6/recompute/production_comparison_keys.json").read_bytes())
+        for pack, (members, label) in FULL_PACK_EXPECTATIONS.items():
+            tree = json.loads(subprocess.check_output(["git", "show", f"{PIN}:configs/campaigns/{FULL_PACK_CAMPAIGNS[pack]}/plan_tree.json"], cwd=REPO))
+            counted = sum(row["expected_count"] for row in tree["stage_graph"] if row["kind"] == "campaign_collection")
+            self.assertEqual(counted, members, pack)
+            self.assertEqual(PACK_EXPECTATIONS[pack], {"members": members, "registry_pack": label})
+            self.assertEqual(session_id(pack), "r1-" + pack)
+        self.assertEqual({label: len(registry["session_quantity_keys"][label]) for _, label in FULL_PACK_EXPECTATIONS.values()},
+                         {"ALPHA": 122, "BETA": 122, "GAMMA": 93})
+
+    def test_profile_gate_admits_only_new_plain_full_pack_roots(self):
+        """Predict: fresh ALPHA/BETA/GAMMA plain/full reaches the unchanged single-pack scheduler with full volume; other scenarios/volumes, unknown packs and existing roots refuse before any write; BETA's declaration text is byte-identical to root 23's."""
+        import b6_r12_profile_session as profile
+        from unittest.mock import patch
+        self.assertEqual(profile.prediction("beta"), "original BETA roster/streams at full volume; completed production reader exits 0/comparator agrees; no closed-nine claim")
+        self.assertEqual(profile.smoke_text("beta"), "original supplier's reduced 65 s / one CPU; ordinary full BETA r1 remains 335 s / 16 CPUs")
+        with tempfile.TemporaryDirectory(prefix="r12-profile-gate-") as directory:
+            parent = Path(directory).resolve()
+            for pack in ("alpha", "beta", "gamma"):
+                calls = []
+                with patch.object(profile.single, "run", lambda *a, **k: calls.append((a, k)) or 0):
+                    self.assertEqual(profile.run(parent / ("new-" + pack), parent / "prior", pack, "plain", "full"), 0)
+                self.assertEqual(calls[0][0][2:], (pack, "plain"))
+                self.assertEqual(calls[0][1], {"declared_volume": "full"})
+                self.assertIn(pack.upper(), profile.prediction(pack))
+                self.assertFalse((parent / ("new-" + pack)).exists())
+            existing = parent / "existing"
+            existing.mkdir()
+            for args in ((parent / "a", "alpha", "anchor", "full"), (parent / "b", "gamma", "plain", "reduced"),
+                         (parent / "c", "delta", "plain", "full"), (existing, "alpha", "plain", "full")):
+                with self.subTest(args=args), self.assertRaisesRegex(ValueError, "requires new root"):
+                    profile.run(args[0], parent / "prior", *args[1:])
+            self.assertEqual(sorted(p.name for p in parent.iterdir()), ["existing"])
+
+    def test_supervisor_generation_only_requires_exclusive_mode(self):
+        """Predict: generation-only and a reader stem are exclusive and refuse before any journal; a reader stem alone keeps the original behaviour."""
+        from b6_r12_full_supervise import run
+        with tempfile.TemporaryDirectory(prefix="r12-full-supervisor-mode-") as directory:
+            root = Path(directory).resolve()
+            for stem, only in (("reader", True), (None, False)):
+                with self.subTest(stem=stem), self.assertRaisesRegex(ValueError, "exactly one"):
+                    run(root, stem, only)
+            self.assertEqual(list(root.iterdir()), [])
 
 
 @unittest.skipUnless(os.environ.get("R12_SINGLE_PACK_SET"), "explicit additional single-pack fixture required")
