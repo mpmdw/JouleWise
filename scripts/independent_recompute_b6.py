@@ -1034,7 +1034,8 @@ def pack_block5_keys(pack, keys):
     if pack == "GAMMA":
         return {k: v for k, v in keys.items() if k.startswith("contrast/")}
     tag = MODEL_TAG[MODELS[pack]]
-    return {k: v for k, v in keys.items() if k.split("/")[1:2] == [tag]}
+    return {k: v for k, v in keys.items()
+            if k.split("/")[1:2] == [tag] or k.split("/")[:3] == ["lines", "whole_machine", tag]}
 
 
 def block_lines(results, b5_keys):
