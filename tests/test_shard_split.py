@@ -1110,6 +1110,15 @@ class ShardWorkerTests(unittest.TestCase):
                 self.assertIn(f"WORKER 2/2 FAILED {reason}", text)
                 self.assertTrue(text.rstrip().endswith("result=FAIL"))
 
+    def test_the_childs_last_summary_counts_not_one_a_test_printed(self):
+        nested = _summary(9, 9, modules=7, tests=999)
+        code, text = self.run_workers(
+            [([nested, "MODULE PASS tests.test_a", _summary(3, 6, modules=2)], 0),
+             ([_summary(3, 6, modules=2)], 0)]
+        )
+        self.assertEqual(code, 0)
+        self.assertIn(_summary(3, 6, modules=4, tests=4), text)
+
     def test_one_worker_or_one_unit_runs_in_process(self):
         with mock.patch.object(shard_tests, "run_units", return_value=0) as run_units:
             self.assertEqual(
@@ -1159,6 +1168,26 @@ class ShardWorkerTests(unittest.TestCase):
                     2,
                 )
             run_units.assert_not_called()
+
+
+class WorkflowShardSlotTests(unittest.TestCase):
+    """Review F2: a matrix slot is retired only when it is above SHARD_COUNT."""
+
+    def test_slot_conditions_follow_shard_count_and_the_retired_step_checks_it(self):
+        import re
+        text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        job = text[text.index("\n  test:\n"):text.index("\n  calibration-exits-exclusive:\n")]
+        self.assertNotRegex(job, r"matrix\.shard\s*(<=|>|<|>=)\s*\d")
+        conditions = re.findall(r"if: (.*matrix\.shard.*)", job)
+        self.assertTrue(conditions)
+        for condition in conditions:
+            self.assertIn("fromJSON(env.SHARD_COUNT)", condition)
+        self.assertIn('if [ "$SLOT" -le "$SHARD_COUNT" ]; then', job)
+        self.assertIn("exit 1", job)
+        count = int(re.search(r'SHARD_COUNT: "(\d+)"', job).group(1))
+        slots = [int(v) for v in re.search(r"shard: \[([\d, ]+)\]", job).group(1).split(",")]
+        self.assertEqual(slots, list(range(1, len(slots) + 1)))
+        self.assertLessEqual(count, len(slots))
 
 
 if __name__ == "__main__":

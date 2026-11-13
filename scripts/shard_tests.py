@@ -1196,7 +1196,9 @@ def run_units_in_workers(
     total_modules = total_tests = total_failures = total_errors = total_skipped = 0
     failed = []
     for number, process, _ in children:
-        match = SHARD_SUMMARY_RE.search("".join(outputs[number]))
+        # The child's own summary is its last one; a test could print another.
+        matches = list(SHARD_SUMMARY_RE.finditer("".join(outputs[number])))
+        match = matches[-1] if matches else None
         if match is None or match.group("result") != "PASS" or process.returncode != 0:
             failed.append(number)
             print(

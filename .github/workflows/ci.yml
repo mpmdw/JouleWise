@@ -127,13 +127,16 @@ jobs:
   test:
     needs: [changes]
     runs-on: ubuntu-latest
-    # RL-127: a shard has 60 minutes (the default is 360), and one test 15
-    # (1.5 x the 10-minute unit budget). The per-test limit is
-    # shard_tests.py's watchdog: it prints TEST TIMEOUT <test id>, dumps every
-    # thread's stack and fails the shard, so an overrun names its test.
+    # RL-127: a shard has 60 minutes (the default is 360). The per-test limit
+    # is shard_tests.py's watchdog: it prints TEST TIMEOUT <test id>, dumps
+    # every thread's stack and fails the shard, so an overrun names its test.
+    # The limit is 1200 s, not RL-127's 900 s (1.5 x the 10-minute unit
+    # budget), until test_controller_g2b_attachment.G2bAttachmentTests.
+    # test_tracked_bound_corpus_and_all_window_references_attach is split or
+    # sped up: it ran 802 s under four-worker contention (run 43463516682).
     timeout-minutes: 60
     env:
-      JW_TEST_TIMEOUT_SECONDS: "900"
+      JW_TEST_TIMEOUT_SECONDS: "1200"
       # CI-12 (2026-10-05): hosted runners are free for this public repo, so
       # the ordinary suite is packed from hosted per-module medians
       # (scripts/test_timings.json _provenance). Audit item 5.4 (2026-11-13):
@@ -153,33 +156,43 @@ jobs:
         # local dev and is exercised by every seat's local module runs, not CI.
         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    # Matrix slots 7-12 are retired (SHARD_COUNT is 6) but stay so the
+    # Matrix slots above SHARD_COUNT (7-12 today) are retired but stay so the
     # required contexts test (3.13, 7)..(3.13, 12) keep reporting; each runs
-    # only the echo step below. Drop them once branch protection drops those
-    # contexts. Keep the literal 6 in the step conditions equal to SHARD_COUNT.
+    # only the retired-slot step below. Every condition compares against
+    # fromJSON(env.SHARD_COUNT), and the retired-slot step re-checks it and
+    # fails if its slot is not above SHARD_COUNT, so raising SHARD_COUNT
+    # cannot silently skip a shard. Drop the slots once branch protection
+    # drops those contexts (contexts first, then the matrix).
     steps:
       - name: Docs-only range (required contexts report success without running tests)
         if: needs.changes.outputs.code != 'true'
         run: echo "No code changes in this range; tests skipped."
-      - name: Retired shard slot (required context reports success; SHARD_COUNT is 6)
-        if: needs.changes.outputs.code == 'true' && matrix.shard > 6
-        run: echo "Shard slot ${{ matrix.shard }} is retired; the suite runs in shards 1-6."
+      - name: Retired shard slot (required context reports success when the slot is above SHARD_COUNT)
+        if: needs.changes.outputs.code == 'true' && matrix.shard > fromJSON(env.SHARD_COUNT)
+        env:
+          SLOT: ${{ matrix.shard }}
+        run: |
+          if [ "$SLOT" -le "$SHARD_COUNT" ]; then
+            echo "slot $SLOT <= SHARD_COUNT=$SHARD_COUNT but marked retired; refusing to skip a shard"
+            exit 1
+          fi
+          echo "Shard slot $SLOT is retired; the suite runs in shards 1-$SHARD_COUNT."
       - uses: actions/checkout@v5
-        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
         with:
           # Golden provenance sidecars replay `git archive` against their
           # pinned base commit; a shallow checkout lacks that object.
           fetch-depth: 0
       - uses: actions/setup-python@v6
-        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
         with:
           python-version: ${{ matrix.python-version }}
       # Once-per-run state, receipt, and CLI/mock checks live in fences.
       - name: Compile Python sources
-        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
         run: python -m compileall -q joulewise tests
       - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
-        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
         run: |
           # Tests require /bin/zsh: /usr/bin/zsh without that symlink is insufficient.
           if [ ! -x /bin/zsh ]; then
@@ -188,7 +201,7 @@ jobs:
           fi
           test -x /bin/zsh
       - name: Unit tests (stdlib core only, per D-009/D-017)
-        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
         # test_calibration_exits AND test_calibration_writer_crash_matrix
         # are intentionally absent here (both carry exclusive_modules
         # declarations); each runs once in its exclusive job below, while
@@ -303,7 +316,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      JW_TEST_TIMEOUT_SECONDS: "900"
+      # Same per-test limit as the test job: 1200 s until
+      # test_controller_g2b_attachment.G2bAttachmentTests.
+      # test_tracked_bound_corpus_and_all_window_references_attach (802 s
+      # under contention, run 43463516682) is split; RL-127's figure is 900 s.
+      JW_TEST_TIMEOUT_SECONDS: "1200"
     strategy:
       fail-fast: false
       matrix:
