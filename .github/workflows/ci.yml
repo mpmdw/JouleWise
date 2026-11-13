@@ -11,23 +11,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A state-only range (scripts/ci_state_only.sh) sets code=false, so every
+  # shard and exclusive job reports success without running, and state=true,
+  # so this job runs the quick tier plus every module that names a changed
+  # state file (quick_suite.py --tier touched). fences always runs.
   quick:
     needs: changes
     runs-on: ubuntu-latest
     steps:
       - name: Docs-only range (required contexts report success without running tests)
-        if: needs.changes.outputs.code != 'true'
+        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.state != 'true'
         run: echo "No code changes in this range; tests skipped."
       - uses: actions/checkout@v5
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v6
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
         with:
           python-version: "3.13"
       - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
         run: |
           if [ ! -x /bin/zsh ]; then
             sudo apt-get update -q
@@ -37,6 +41,11 @@ jobs:
       - name: Quick test tier
         if: needs.changes.outputs.code == 'true'
         run: python3 scripts/quick_suite.py --tier quick --workers 4
+      - name: State-only range - quick tier plus the modules that name the changed state files
+        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.state == 'true'
+        env:
+          BASE_SHA: ${{ needs.changes.outputs.base }}
+        run: python3 scripts/quick_suite.py --tier touched --since "$BASE_SHA" --workers 4
 
   # Select interpreters and skip expensive jobs only for proven docs-only ranges.
   changes:
@@ -44,6 +53,8 @@ jobs:
     outputs:
       pythons: ${{ steps.interpreters.outputs.pythons || '["3.13"]' }}
       code: ${{ steps.paths.outputs.code || 'true' }}
+      state: ${{ steps.paths.outputs.state || 'false' }}
+      base: ${{ steps.paths.outputs.base }}
     steps:
       - name: Select Python interpreters
         id: interpreters
@@ -67,24 +78,27 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # Only a successful, non-empty, unreferenced docs-only diff may suppress tests
-          # (scripts/ci_docs_only.sh; tests/test_ci_docs_only.py). Errors run CI.
-          docs_only() {
-            local before after
-            [[ "${CHECKOUT_OUTCOME:-}" == success ]] || return 1
-            case "${GITHUB_EVENT_NAME:-}" in
-              push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
-              pull_request) before=${PR_BASE_SHA:-}; after=${PR_HEAD_SHA:-} ;;
-              *) return 1 ;;
-            esac
-            # Run the BASE commit's classifier so a range cannot rewrite its own gate.
-            git cat-file -e "$before:scripts/ci_docs_only.sh" 2>/dev/null || return 1
-            git show "$before:scripts/ci_docs_only.sh" | bash -s -- "$before" "$after"
+          # (scripts/ci_docs_only.sh; tests/test_ci_docs_only.py). A state-only diff
+          # (scripts/ci_state_only.sh; tests/test_ci_state_only.py) runs quick plus the
+          # modules that name the changed files instead of the shards. Errors run CI.
+          before=; after=
+          case "${GITHUB_EVENT_NAME:-}" in
+            push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
+            pull_request) before=${PR_BASE_SHA:-}; after=${PR_HEAD_SHA:-} ;;
+          esac
+          # Run the BASE commit's classifier so a range cannot rewrite its own gate.
+          classify() {
+            [[ "${CHECKOUT_OUTCOME:-}" == success && -n "$before" && -n "$after" ]] || return 1
+            git cat-file -e "$before:scripts/$1" 2>/dev/null || return 1
+            git show "$before:scripts/$1" | bash -s -- "$before" "$after"
           }
-          code=true
-          if docs_only; then
+          code=true; state=false
+          if classify ci_docs_only.sh; then
             code=false
+          elif classify ci_state_only.sh; then
+            code=false; state=true
           fi
-          printf 'code=%s\n' "$code" >> "$GITHUB_OUTPUT"
+          printf 'code=%s\nstate=%s\nbase=%s\n' "$code" "$state" "$before" >> "$GITHUB_OUTPUT"
 
   # F2 state generation, F4 historical receipt semantics, and F5 CLI/strict
   # mock smokes ran identically inside every ordinary test-matrix shard; they
