@@ -312,7 +312,7 @@ class TerminalRestoreTests(DriverCase):
                     powermode.write_host_marker(marker, tag=powermode.W1_MARKER_TAG,
                                                 owner={'custody_root': h.root / 'other'})
                 try:
-                    record = h.driver._close_ac_powermode(h.plan, h.driver.make_probes(), {})
+                    record = h.driver.restore_owed(h.plan, h.driver.make_probes(), {})
                 finally:
                     if holder:
                         holder.release()

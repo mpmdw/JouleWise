@@ -17,7 +17,7 @@ class HostTests(r2.DriverCase):
         def run(argv):
             result = host(argv)
             return dataclasses.replace(result, exit_code=1) if tuple(argv) == h.driver.NETWORK_TIME_QUERY_ARGV else result
-        record = h.driver._close_ac_powermode(h.plan, dataclasses.replace(h.census.probes(), run=run), {})
+        record = h.driver.restore_owed(h.plan, dataclasses.replace(h.census.probes(), run=run), {})
         self.assertFalse(record['ok'])
         self.assertFalse(record['network_time']['verified'])
         self.assertIsNone(record['network_time']['observed'])

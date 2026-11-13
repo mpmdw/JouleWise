@@ -125,7 +125,7 @@ class HostCloseTests(r2.DriverCase):
         action = json.loads(path.read_bytes())
         action['stdout'] = 'You need administrator access\n'
         path.write_text(json.dumps(action))
-        record = h.driver._close_ac_powermode(h.plan, h.driver.make_probes(), {})
+        record = h.driver.restore_owed(h.plan, h.driver.make_probes(), {})
         self.assertEqual(record['network_time']['action'], 'left_off')
         self.assertNotIn(h.driver.NETWORK_TIME_ON_ARGV, host.calls)
 
