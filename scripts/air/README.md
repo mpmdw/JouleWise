@@ -91,31 +91,61 @@ After `--failure-limit` consecutive failures for the same ref and commit,
 `REF_READ_FAILING` alarms once more with the count. Counters survive restart and
 reset on success, a changed commit or ref deletion.
 
-For launchd, adapt this example to absolute Air paths and save it yourself.
-This example is text only; nothing is installed by this tool. `SuccessfulExit`
-keeps launchd from immediately restarting after a normal 26-hour quiet finish;
-an alarm exit starts a new bounded watch, with deduplication from the state file.
-An external harness may instead own restarts and react to exit 20.
+## Install as a launch agent
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.joulewise.air-results-watch</string>
-  <key>ProgramArguments</key><array>
-    <string>/absolute/path/to/python3.13</string>
-    <string>/absolute/path/to/JouleWise/scripts/air/night_results_watch.py</string>
-    <string>--loop</string><string>--interval</string><string>120</string>
-    <string>--hours</string><string>26</string>
-    <string>--min-expected-s</string><string>3600</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
-  <key>ThrottleInterval</key><integer>120</integer>
-  <key>StandardOutPath</key><string>/absolute/path/to/air-watch.log</string>
-  <key>StandardErrorPath</key><string>/absolute/path/to/air-watch.err</string>
-</dict></plist>
+Persistent services need Ed's approval; only Ed runs the installer. Use a
+dedicated checkout of `main` (not a lane worktree that may be pruned):
+
+```sh
+git -C /Volumes/JW-EXT/jw-wt/presign-ci fetch origin && git -C /Volumes/JW-EXT/jw-wt/presign-ci worktree add --detach /Volumes/JW-EXT/jw-wt/air-watch origin/main && sh /Volumes/JW-EXT/jw-wt/air-watch/scripts/air/install_air_watch.sh
+sh scripts/air/install_air_watch.sh --dry-run    # print rendered plist + commands; changes nothing
+sh scripts/air/install_air_watch.sh --uninstall  # idempotent
 ```
+
+The installer renders `com.joulewise.air-watch.plist.template` into
+`~/Library/LaunchAgents/com.joulewise.air-watch.plist` and
+`air-watch-run.sh.template` into
+`~/Library/Application Support/JouleWise/air-watch/air-watch-run.sh`, using
+the checkout path, `python3.13` (override with `JW_AIR_PYTHON`) and the log
+path. Then it runs `launchctl bootstrap gui/$UID`. The plist's program and
+working directory are the internal-disk wrapper, so launchd can always start it.
+If the checkout (on JW-EXT) is missing, the wrapper posts
+`ALARM WATCHER_EXIT agent repo_missing` at most once an hour through
+`/usr/bin/osascript`, logs it and exits. Otherwise it execs
+`air_watch_agent.py run`, which:
+
+- starts `night_results_watch.py --loop --keep-going --interval 120 --hours 24
+  --current-from-origin` as a child and exits with the child's status;
+  `KeepAlive` restarts it (`ThrottleInterval` 60 s), and the state file
+  deduplicates across restarts. On a child failure (status other than 0, 10 or
+  20: bad CURRENT, Git or notifier error, SSD gone mid-run) or a spawn failure,
+  the agent itself posts `ALARM WATCHER_EXIT agent status=N` (once per status
+  per hour; state `.../air-watch/agent-exit.json`);
+- with `--current-from-origin`, each poll fetches origin `main` into the private
+  ref `refs/air-watch/main` (same HTTPS/file-only Git boundary, no working-tree
+  change) and reads `docs/process/CURRENT.json` there. If that fails, it uses
+  the local file and prints `INFO CURRENT_STALE` once per stale spell;
+- every 900 s runs `main_ci_watch.py`: the newest completed `ci.yml` push run
+  on `main` alarms `MAIN_CI_RED` once per run id if `fences`, `quick` or any
+  `test (...)` shard failed or was cancelled (state `.../air-watch/main-ci-state.json`).
+  If `gh` is missing or unauthenticated, one `INFO GH_UNAVAILABLE` and no alarm;
+- delivers each NOTICE/ALARM as a macOS notification (`/usr/bin/osascript
+  display notification`) carrying only level, code and subject, and appends
+  `NOTIFY ok|failed ...` to the log. Notification failure is logged, not fatal.
+  `NOTIFY ok` does not prove a banner was shown; after installing, run
+  `python3.13 scripts/air/air_watch_agent.py notify "2026-01-01 00:00:00 ALARM INSTALL_TEST air"`
+  once and confirm the banner appears.
+
+Everything logs to `~/Library/Logs/JouleWise/air-watch.log` (internal disk).
+**Ejecting JW-EXT:** the running agent holds its Python files and the
+checkout on JW-EXT, so macOS reports the volume busy. Run
+`sh install_air_watch.sh --uninstall` (or
+`launchctl bootout gui/$UID/com.joulewise.air-watch`) before ejecting, and
+reinstall after remounting. If the SSD disappears without that, expect
+`WATCHER_EXIT` banners (hourly), not silence. `--uninstall` always runs
+`bootout`, so it also stops a job whose plist was removed by hand.
+`main_ci_watch.py` also runs standalone
+(`python3.13 scripts/air/main_ci_watch.py`; exit 0 quiet, 20 alarm).
 
 Stop the old scratch watcher **only after the current night's chain has exited**.
 Review the synthetic tests and choose the current armed timing before replacing it.

@@ -26,6 +26,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from joulewise import window_state as ws
 
+MAIN_REF = "refs/heads/main:refs/air-watch/main"
 EXIT_CODES = {"quiet": 0, "notice": 10, "alarm": 20, "error": 2}
 PREFIX = "refs/heads/night-results/"
 ROOT = Path(__file__).resolve().parents[2]
@@ -144,6 +145,13 @@ class Git:
                 if header.startswith((b"100644 blob ", b"100755 blob ")):
                     paths.add(os.fsdecode(path))
         return paths
+
+    def fetch_main(self):
+        """Refresh a private ref only; never touches the working tree or branches."""
+        self._run("fetch", "--no-tags", "--no-write-fetch-head", "origin", "+" + MAIN_REF)
+
+    def current_from_main(self):
+        return self._run("cat-file", "blob", MAIN_REF.split(":", 1)[1] + ":docs/process/CURRENT.json")
 
     def show(self, ref, path):
         if not oid(ref):
@@ -534,7 +542,21 @@ def read_current(path):
     # gen_current is intentionally not imported; CURRENT is an optional data API.
     if not path.is_file():
         return {}
-    doc = parse_object(path.read_bytes())
+    return parse_current(path.read_bytes())
+
+
+def fresh_current(git, path):
+    """CURRENT from origin/main via a private ref; else the local file. Returns (doc, stale)."""
+    try:
+        git.fetch_main()
+        raw = git.current_from_main()
+    except WatchError:
+        return read_current(path), True
+    return parse_current(raw), False
+
+
+def parse_current(raw):
+    doc = parse_object(raw)
     if any(doc.get(k) is not None and not isinstance(doc[k], dict) for k in ("armed", "wait")):
         raise WatchError("INVALID_CURRENT")
     armed, wait = doc.get("armed") or {}, doc.get("wait") or {}
@@ -562,6 +584,9 @@ def main(argv=None):
         parser.add_argument("--" + name, type=float, default=default)
     parser.add_argument("--failure-limit", type=int, default=3)
     parser.add_argument("--keep-going", action="store_true")
+    parser.add_argument("--current-from-origin", action="store_true",
+                        help="fetch origin main into refs/air-watch/main and read CURRENT there; "
+                             "fall back to --current with INFO CURRENT_STALE")
     parser.add_argument("--notify-cmd", nargs=argparse.REMAINDER, help="last option; argv, with event line appended")
     try:
         args = parser.parse_args(argv)
@@ -582,8 +607,15 @@ def main(argv=None):
                           exit_module=optional_exit_module())
         stop = time.monotonic() + args.hours * 3600
         status = EXIT_CODES["quiet"]
+        stale = False
         while True:
-            current = read_current(args.current)
+            if args.current_from_origin:
+                current, now_stale = fresh_current(git, args.current)
+                if now_stale and not stale:
+                    print(Event("INFO", "CURRENT_STALE", "-").line(time.time()), flush=True)
+                stale = now_stale
+            else:
+                current = read_current(args.current)
             if args.plan_id:
                 current = dict(current, armed={"plan_id": args.plan_id,
                                               "t0_epoch_s": args.t0, "latest_end_epoch_s": args.latest_end})
