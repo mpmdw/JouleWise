@@ -7652,6 +7652,171 @@ One probe is about ten of the monitor's own `ps` ticks, and the monitor takes 8,
 
 Source: /Volumes/JW-EXT/scratch/fable-pipeline-time-audit.md (whole-pipeline time audit, 2026-11-13).
 
+# RL-129. The S-14 pin request: seat 7's fixes are merged before the pin, the nine is read once on the merged program, and five smaller rulings (2026-11-13 06:39 PST)
+
+**Read.** The pin request at `b1d64bc2b`. RL-48, RL-98, RL-123, RL-125, RL-126. The R12 generator and reader
+scripts at `d38495791`, the seat-7 diff `da0a03145..7c8251b28`, the chain pin's `analysis_lane.py`, and the
+custody kit's `session_pin`. I ran two trial merges with `git merge-tree`, the production and block test modules
+on the pin candidate and on the trial merge, one open-file trace of a synthetic block, and the R3 table
+generator. Review file: `/Volumes/JW-EXT/scratch/fable-rev-s14-pin-request.md`.
+
+## 1. G-1: merge seat 7's fixes now. The nine stands and is read once, by the merged program
+
+**Does generation load the analysis program? No.**
+
+- The generator parent imports only harness modules from its checkout. `b6_r12_verify.py` imports
+  `joulewise.b6_analysis_inputs` inside `session_facts` and `volume_facts` (lines 239 and 369), which are reader
+  functions that generation never calls.
+- Each step child runs `bootstrap.py` from the fixture root, with the root's own copies of the runtime,
+  orchestrator and courier profile, and `joulewise` from the root's export of the chain pin `f31aca19f`. That
+  tree has neither `scripts/independent_recompute_b6.py` nor any `b6_analysis_*` module.
+- The chain's `AnalysisLane` at the pin returns `None` and runs no program.
+- The root's `generator_files_sha256` lists nine `scripts/b6_r12_*.py` files. None is in the 24-file closure,
+  and the seat-7 merge touches none of them.
+
+So the nine's archive bytes do not depend on RC-B6-1 or `b6_analysis_inputs.py`, and RL-123 §2 item 3's
+regeneration clause is not triggered.
+
+**Ruled: merge.** RL-48 stands as written. F3 and F8 are fixes to the authenticated-input boundary that Opus
+and I have both admitted, and the 7b condition is mine. Before the pin the merge is a fix; after it, a dated
+deviation. Its cost is reader minutes.
+
+**Terms.**
+
+1. **Where.** A new branch off `9f1b53767` (which is `d38495791` plus the R3 generator), in a new worktree. No
+   fetch, checkout, commit or edit in `/Volumes/JW-EXT/jw-wt/sol-p1-b6-r12c` until the nine's `parent.json`
+   says `done`, and no seat is resumed with that directory as its working directory before then.
+2. **What the branch changes.** The merge of `7c8251b28`. The one stale test expectation (review finding 3),
+   corrected to assert the two failure names exactly. `disclosure_record_missing` with one test, in
+   `tests/independent_recompute/test_b6_production.py` (RL-125 item 4 term 3). The R12 report's "include block
+   rows" correction. Nothing else inside the 24-file closure.
+3. **What it must not change.** Any `scripts/b6_r12_*.py`, `tests/test_b6_r12_session_fixture.py`, the runtime,
+   a seam or the chain pin. A change there comes to me before it is made.
+4. **Tests at the merge head**, exit 0 each: `tests.independent_recompute.test_b6_production`,
+   `tests.independent_recompute.test_block6`, `tests.flags.test_flags_exclusions`, `tests.twins.test_harvest_twin`,
+   `tests.twins.test_engine_twin`, `tests.test_b6_r12_session_fixture`, `tests.test_b6_r3_table`. The request
+   carries the F2 witness as: the two 7b test ids, their result, and the SHA-256 of
+   `support_b6_production.py` and `test_b6_production.py` at the S-14 commit.
+5. **Review.** Section 2 below. The re-reads of term 6 may start as soon as term 4 is green; if review changes a
+   closure byte they are repeated.
+6. **Re-reads of the three full roots** (RL-123 §2 item 3), under new stems, with the `e17886bf…` outputs kept.
+   Before running them the lead writes the expected difference: the program SHA-256 wherever an output records
+   it, and any digest of an output that contains it. Nothing else. The counts 122/699/118, 122/699/118 and
+   93/649/79 are predicted unchanged. The comparison is a plain difference of the old and new JSON outputs, made
+   outside the repository, with the script's SHA-256 recorded. Any other difference stops the work and comes to
+   me. These reads may overlap the nine's generation and are labelled so.
+7. **The nine and denied-26 are read once, by the merged program**, from the merge worktree, after the
+   generator parent has exited 0. The slots are filled from those reads. Slot N-1's predeclared value is the
+   merge head's RC-B6-1 SHA-256, written into the request before the finisher starts. The nine is not also read
+   by `e17886bf…`. If a slot departs from its prediction, the first outputs are copied aside and hashed, the
+   nine is read by `e17886bf…` from the untouched generator checkout to tell a merge effect from a fixture
+   effect, and both come to me.
+8. **RL-125 item 4 is amended.** Its gate sentence, "The nine now running at `e17886bf…` stands", now means
+   the nine's generation. Terms 1 and 4 lapse once the fix is in. Term 2 stays: any exit other than 0 or 3 is a
+   refusal.
+9. **The R3 table is regenerated at the S-14 commit and is not byte-equal to `9f1b53767`'s.** Its difference
+   from the `7b7920cf…` output must be confined to the RC-B6-1 SHA-256 line and `RC:<line>` citations. The
+   check: remove that line and every `RC:` number from both outputs and compare bytes. Keys 675 of 675, 149
+   groups, 0 UNSTATED. The term 7 check and the PR #748 fill use the regenerated table and its SHA-256.
+
+**Owner.** The lead: the branch (by whichever seat, under term 1), terms 4, 6, 7 and 9, and the request's
+revision. Me: the delta check of section 2.
+**Gate.** The cut. Not the nine's generation, which is not touched.
+
+## 2. C-1 and G-2: the Opus cold review comes before the cut, on the final bytes, and does not wait for the nine
+
+**Ruled.** RL-126 item 3 did not repeal RL-48 item 7. "No further review round" is about the nine's evidence.
+
+1. The Opus cold review runs now, Block-5-naive, on `d38495791` and the evidence that exists. It is an
+   executing pass: it runs the test modules and at least the decode/prefill swap mutant against the 7b test. It
+   adds the merge delta when the merge head exists. It is not restarted for the merge.
+2. I check the closure delta `d38495791..<merge head>` (the 24 files and the two production test files) in
+   one turn, with the two test modules run.
+3. These two are §13's "one blind executing cold pass by Fable and one by Opus" for the pinned bytes. Mine
+   rests also on the seat-7 round-3 review and the RL-113..115 review, both executed.
+4. A finding that changes a closure byte is fixed before the pin and the reads of section 1 are repeated.
+5. Nothing reviews the nine's evidence before the cut except the slot comparison and the term 7 check. That is
+   intended: the evidence is exit codes, byte equality and counts against values stated in advance. I check the
+   #748 fill delta afterwards, as already planned.
+
+**Owner.** The lead (the Opus seat); me (item 2). **Gate.** The cut.
+
+## 3. C-3: the RL-98 deadline row is struck
+
+**Ruled.** RL-98 term 2's date has had no force since RL-123 §1. In the open-items table the row "The S-14 pin
+request for Block 6, under RL-98 (volume, deadline 13 November 20:00 PST) and RL-99" is replaced by: "The S-14
+pin request for Block 6 (RL-98 as amended by RL-123, RL-99, RL-125, RL-126, RL-129) | The merge head, the Opus
+cold review, the three re-reads, the nine's slots". The row "`R` and `R_cm` in the Block 5 comparison record
+(RL-101 condition)" is removed: discharged in the R3 report at `9f1b53767` and cited in the request §3d.
+
+**Owner.** Me, in the rulings file. **Gate.** None.
+
+## 4. C-4: RL-126 item 7 governs. No idle-host condition
+
+**Ruled.** Confirmed. RL-123 §4's kept clause, the R12 predeclaration's sentence and the handoff command's
+"with no other R12 generator or reader on the Air" are superseded. `b6_r12_dry_supervise.py:60-61` still
+writes `"other_R12_work_allowed": false` into its receipt. That is fixed text, not an observation, and the
+harness is not edited for it. Slot N-10 states what actually overlapped and says the field is a literal.
+
+**Owner.** The lead (N-10). **Gate.** None.
+
+## 5. C-5: "inside the program hash" means the 24 files of the request's §2a and §2b
+
+**Ruled.** Confirmed as the builder read it, not narrowed. A change to any of the 24 files before the pin
+triggers RL-123 §2 item 3's re-reads and RL-125 item 4 term 3. Rows 14 to 18 stay in: they are executed at
+import, and they are cheap to keep.
+
+The list is complete. A synthetic nine-session block, serial and pooled, opened exactly those 24 repository
+files. The Block 5 script's three reads of the analysis checkout (B5:925, B5:964, B5:2559) are not reached from
+RC-B6-1. The pin is the commit; the 24 hashes are its check.
+
+**Owner.** None. **Gate.** None.
+
+## 6. G-3: the commit binds the closure. No program change
+
+**Ruled.** `program_sha256` covering RC-B6-1 only is accepted. The program is not changed to record more.
+A read counts as "by the pinned closure" when three things are recorded for it:
+
+1. the receipt's `verifier_commit` (`b6_r12_verify.py:415, 439`) is the S-14 commit, or a commit whose 24 files
+   hash the same;
+2. the reader worktree is clean (`git status --porcelain` empty) before the first read and after the last;
+3. the 24 SHA-256 values, recomputed from the reader worktree's files at both times, equal the request's table.
+
+The same three are recorded for the blind dry run and the release run, from a clean detached checkout of the
+S-14 commit.
+
+**Owner.** The lead. **Gate.** The cut, for the R12 reads. The agreement sentence, for the real run.
+
+## 7. The MBP registered nine is withdrawn. An Air infrastructure loss is covered by a pre-authorised relaunch
+
+**Ruled.**
+
+1. **No MBP nine is launched as a fallback.** It would take 12 to 13 MBP hours. The Air nine has closed three
+   sessions in 3 h 06 min and should end between about 11:45 and 13:00. A fallback started after R1 closes
+   would finish hours after the Air nine does, and no earlier than a relaunch on the Air after a loss. The MBP
+   stays on W1.
+2. **RL-123 §1's supplementary nine is withdrawn**, with its items 1 to 5. The paragraph's sentence, "no
+   full-volume session went through a closed loop", stands. Nothing registered asked for that nine.
+3. **If the Air nine is lost to an infrastructure cause before DONE**, the lead relaunches the same declared
+   command at once, under a new root name, from an untouched checkout at `d38495791`, and tells me. This is
+   pre-authorised once. At the same time the lead sends me the session profile, and I rule in one turn on
+   whether a shorter loop replaces the relaunch. A chain or program failure is never handled this way: it
+   comes to me.
+4. **RL-126 item 6 is amended** to read: after one relaunch, no further nine is launched without a ruling.
+
+**Owner.** The lead. **Gate.** None now.
+
+**Reason.** The fixes are small, reviewed and registered as owed before the pin, and the fixture that takes
+ten hours does not have to be made again for them. Everything that the merge costs fits inside the hours the
+nine still needs.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened, and the custody
+directory was not listed. Code, rulings, synthetic fixtures and synthetic control records only. Block-5-aware.
+
+---
+
+Replacement text for the request: /Volumes/JW-EXT/scratch/fable-rev-s14-pin-request.md, section "Replacement text for the request".
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
