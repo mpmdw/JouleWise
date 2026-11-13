@@ -366,3 +366,23 @@ is never resumed. Predictions for GAMMA are unchanged from the table above;
 new prediction for the smoke desk: both GAMMA science stages run (no
 `analysis_prospective_identity_mismatch`), the pack is not smoke-held, and the
 supervisor proceeds to "ordinary full driver".
+
+### Relaunch: live status (2026-11-12 23:41 PST)
+
+Launched 23:35:02 from `/Users/edr/code/jw-wt/r12-mbp-2` at `27897044d`
+(`/private/tmp/r12-mbp-tmp/r12-r3-full-gamma-mbp-2.launch.zsh`, launcher pid
+59617, detached). Root `r12-r3-full-gamma-mbp-2`.
+
+- first step (profile session / smoke driver) pid 59624: 23:35:02 →
+  23:37:36, **exit 0**;
+- supervisor `--generation-only` pid 60930, started 23:37:36 after that exit:
+  "smoke desk" **exit 0** (~2 min), smoke courier sent with heartbeat; at
+  23:39 it began "ordinary full driver" (journal `inflight`).
+- Smoke stage yield: GAMMA science-01 decode and science-03 prefill `rc 0`,
+  2/20 present each (`LOW`, the reduced-smoke shape; ALPHA's smoke shows 1/10
+  for its stages); references 1/3. No `analysis_prospective_identity_mismatch`
+  in any operator log. Loop: `SESSION_RUN r1-gamma`, pack `gamma` `open`,
+  `hold_reason null`. The prediction above for the smoke desk holds.
+
+ALPHA root -1 (subshell 54912, supervisor 56239) was not touched and is still
+running. Root -1 GAMMA remains in place, ineligible.
