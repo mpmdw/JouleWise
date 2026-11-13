@@ -1853,7 +1853,7 @@ transfer to inference nor future coverage.*
 
 ## Appendix C. Fixed disclosure sentences
 
-These are the registered fixed sentences, printed from the literals the disclosure producer uses (`joulewise/b5_analysis/disclosures.py`), so that each is verbatim; only the first letter is capitalized and a closing full stop supplied. X, Δ, k and S are filled where a sentence is used. Internal labels stay in the sentence and are glossed in brackets after it. The registered sentences say "window"; the body says "session" for the same thing. One registered sentence says "block" for a quad; the body says "quad". A sentence marked "not triggered" has a condition that did not occur in the primary block; it is listed so that the inventory is complete. The body prints a sentence in these words, or paraphrases it and cites its label here.
+These are the registered fixed sentences, printed from the literals the disclosure producer uses (`joulewise/b5_analysis/disclosures.py`), so that each is verbatim; only the first letter is capitalized and a closing full stop supplied. X, Δ, k and S are filled where a sentence is used. Internal labels stay in the sentence and are glossed in brackets after it. The registered sentences say "window"; the body says "session" for the same thing. A sentence marked "not triggered" has a condition that did not occur in the primary block; it is listed so that the inventory is complete. The body prints a sentence in these words, or paraphrases it and cites its label here.
 
 - *Conditionality*: "These numbers are conditional on a window that passed the registered physical-hazard checks at arm and kept at least 5 of 10 units per stratum after the registered exclusions; the kept units of each cell are printed beside it."
 - *Single window*: "The units of this cell were measured in one window; the interval covers variation within that window, not between days or windows. The repeats and quads are modelled as independent units; that is an assumption (D-179 dependence caveat)." [D-179: the registered dependence caveat]
@@ -1864,7 +1864,7 @@ These are the registered fixed sentences, printed from the literals the disclosu
 - *Decision interval against the floor* (not triggered in the primary block): "The estimate exceeds the floor, but its decision interval reaches below the floor."
 - *Leave-one-quad-out magnitude* (not triggered in the primary block): "Leaving out quad k moves the estimate by X J, more than a quarter of the floor; the direction, the floor status and the multiplicity decision are unchanged."
 - *Order*: "Every quad ran 1.7B, 8B, 8B, 1.7B in that fixed order; the order was not randomized, and the p-value assumes the quad differences are independent."
-- *Floor transfer assumption*: "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale." [block: a quad]
+- *Floor transfer assumption*: "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale."
 
 - *Floor transfer limit*: "The historical corpus records bounds, not realized member-level boundary errors."
 - *Separate windows*: "The 1.7B and 8B reported cells were collected in separate windows in a fixed order; their difference is not a comparison (claims ladder: forced order stays below L2)."
@@ -1877,6 +1877,8 @@ These are the registered fixed sentences, printed from the literals the disclosu
 - *Lost midpoint* (not triggered in the primary block): "The midpoint reference was lost, so drift inside this window that reverted by its end was not measured; the drift allowance uses the start and end references only."
 - *Battery temperature* (not triggered in the primary block): "Stage S warmed by X K without levelling off; the window's NEG-8 screen [passed/failed], and the reported numbers rest on that screen, not on this reading." [NEG-8: the drift screen of Section 4.7]
 - *Whole-machine boundary*: "Whole-machine DC input plus the battery term, measured at the USB-C input; the adapter's AC-to-DC loss is not included."
+
+One registered sentence above says "block" for a quad (*Floor transfer assumption* [block: a quad]); the body says "quad".
 
 Part 2 (BYTES) registered sentences:
 
