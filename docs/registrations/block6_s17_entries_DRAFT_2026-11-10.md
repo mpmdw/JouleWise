@@ -9,6 +9,10 @@ dispositions are applied below. It is still a draft: nothing here is entered in 
 entries goes to the research lead (RL-30), and REG is unchanged by the commits that add this file. REG §17 ends with the
 2026-10-17 activation entry (`2a4e5149c`).
 
+**Status, 2026-11-12.** Entered in REG §17 on branch `docs/2026-11-12-b6-s17-enter`, for the research lead's review
+(RL-30). Each REG line points here for the full text; nothing below is changed by that commit. Two rulings made after
+this file are cited in the REG lines, not here: RL-98 (R12's full-size deviation) and RL-99 (L9 audit: not run).
+
 **The rulings it implements.** RL-6 (b), RL:146-153:
 
 > - (b) The registration's §17 entries are entered now. The default for each is the recommended option of the
