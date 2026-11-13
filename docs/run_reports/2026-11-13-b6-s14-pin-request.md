@@ -12,6 +12,11 @@ left as open ⟨NINE: …⟩ slots. S-14 is cut only after the nine's finisher h
 RL-113 term 7 check has been run on the nine's output (section 7). The two items that section 9 had marked
 **GATING** (G-1, G-2) are ruled: RL-129 §1 and §2.
 
+**Slots filled and term 7 run, 2026-11-13 12:40 PST (`date`).** The seven-session block read under RL-141 is complete
+(section 6). Every slot is filled; none departs from its prediction except N-14 (recorded not met before the read)
+and N-21 (ruled, RL-141 addendum 2 B1). The term 7 check on the block's restricted output has no stop (section 7a).
+RL-141's text corrections are applied to the paragraph (section 4).
+
 **Blind status.** Blind to Block 6. No custody, archive, session or outcome path was opened. The one Block 6 custody
 file read is `/Volumes/JW-EXT/b6-custody-run/verify-receipt.json`: its SHA-256 and its non-outcome fields only
 (schema, producer, `loop_state_waived`, session count). Everything else is code, rulings, run reports, synthetic R12
@@ -399,13 +404,23 @@ single-pack archives were each read on the Air, with production exit 0 and the c
 
 The four right-hand columns count comparison-table rows, not registry keys. On a single-pack root most
 block rows are null on both sides by construction: one session gives no between-session spread, the other
-two packs have no session, and no Block 5 output was supplied. On the closed nine
-(`r12-r3-closed-air-25`, program ⟨NINE: program SHA-256 of the reads⟩): option (c) ⟨NINE: option (c) exit⟩,
-⟨NINE: compared rows⟩ compared rows with ⟨NINE: failed⟩ failed and ⟨NINE: unmatched⟩ unmatched, of which
-⟨NINE: both_null⟩ are null on both sides, and ⟨NINE: first_program_only count⟩ `first_program_only` rows. Serial and pool outputs:
-⟨NINE: serial/pool byte equality⟩. Dry-run cost on the Air: ⟨NINE: wall, peak RSS⟩ (serial), ⟨NINE: wall, peak RSS⟩ (pool-2), against the
+two packs have no session, and no Block 5 output was supplied. The closed loop was not obtained. The cohort
+`r12-r3-closed-air-25` ran nine sessions through the real chain and stopped at nine attempts with seven counting
+(ALPHA 3, BETA 3, GAMMA 1): one GAMMA session was excluded by the chain for an invalid calibration capture and the
+next GAMMA smoke failed, both unscripted and with no cause established; the host was under other load. The loop
+held GAMMA and did not close. The cohort was not relaunched. Its seven counting sessions were read once as a block
+by the pinned program (`90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759`), with pairings made final by argument: option (c)
+exit 0, 2,743 compared rows, 0 failed, 0 unmatched, 58 null on both sides; serial and pool outputs byte-identical.
+Not shown on chain-written archives: the loop's close, a block with more than one counting GAMMA session, and
+nine-session cost. The six shapes of §17-R12 are each covered by this cohort; its cross-session GAMMA unit is
+r1-gamma, paired with r2-alpha (rule 2, next counting) and r1-beta (rule 1), and it is the only chain-written one.
+The cohort's calibration-excluded session, r2-gamma, was read alone and the program refused it by name
+(`calibration_capture_missing`, exit 4): with authenticated inputs it does not take a missing capture from the
+acceptance record. It was predicted to exit 0; the prediction was wrong. Dry-run cost on the Air: 100.4 s and
+1.24 GiB peak RSS, seven sessions, reduced volume (serial), 82.4 s and 1.28 GiB peak RSS, seven sessions, reduced
+volume (pool-2), against the
 predeclared 2,400 s / 1,200 s and 2 GiB / 4 GiB; other R12 work running on the Air during these reads:
-⟨NINE: none, or named⟩.
+none.
 
 **What the closed nine does not show.** The canonical closed nine is a reduced-volume cohort (65 s streams in
 every ordinary session; RL-123 §1, option (a)). No full-volume session went through a closed loop on it.
@@ -417,8 +432,17 @@ real-size run of the whole program over a closed block is the blind dry run, whi
 stop at 10,800 s of wall time. This departs from §13's "full-size … through the real stage chain" as RL-98
 term 3 records; it changes no arithmetic and nothing about blinding, and it was decided after Block 5
 outcomes were known. The R12 fixtures, the closed nine among them, were generated and read before S-14 was cut, as §17-R12
-requires. Generating the nine took ⟨NINE: generation wall⟩ on the Air. That is the chain's own waits and
+requires. Generating the nine took 9 h 18 min on the Air, to the generator's exit 1. That is the chain's own waits and
 rotation over nine synthetic sessions; it is not analysis time, which is the dry-run cost above.
+
+[Lead's note, 2026-11-13: the ⟨NINE⟩ slots are filled from section 6. RL-141 §5's replacement text took the place of
+the paragraph's nine sentence and its serial/pool sentence, with addendum A4's sentence after "nine-session cost."
+and addendum 2 B1's sentence after that, as ruled; no other word of the paragraph changed. RL-141 §5's "Shown" and
+"Not shown" lists, as addendum 2 corrected them, are in the R12 report's RL-141 section at the S-14 commit (section
+8). Two points for the research lead, not changed here: (1) the replacement sentence carries `both_null` but not the
+`first_program_only` count that RL-133's agreement rule puts beside agreement; that count is 787 (slot N-6); (2)
+addendum 2's "Not shown" item 5 (a recompute of a calibration-excluded session) is carried by the B1 sentence, not
+added to the replacement's "Not shown" list.]
 
 **The copied-record files.** The eight decision 6 (b) rows of the §17-R3 table name their record files from the list the R12 fixtures ran with (`scripts/b6_r12_verify.py:89-97`). The real run reads the list in the run-input document's `copied_records`, which the custody kit writes from the operator's `mapping.json` and refuses unless every path has a source digest. The two lists are required to be equal, family by family. The comparison is owed at the release, with the item-83 hand check, by the lead. If they differ, the run-input document governs, the table rows are reprinted with the names read, and the difference is logged as a deviation.
 
@@ -480,34 +504,49 @@ supervisor are not used (RL-141 §3 item 1); the slots are filled from the read 
 (`/Volumes/JW-EXT/scratch/rl141-read-seven.zsh`). A slot that departs from these values goes to the research lead
 with the names only, and the release holds until the answer (RL-141 §4).
 
+**Filled 2026-11-13 12:40 PST (`date`), after the read.** Every slot below is filled from the two read launchers'
+records, names and numbers only: events `/Volumes/JW-EXT/scratch/rl141-read-seven.events`
+(`8f0ff2ddb036f5fb566096f5148802d2479c5e7f9704672d668d63078284c352`, steps 1-5, `read end exit=15 hard_stopped=0`, the designed stop
+at step 5) and `rl141-read-seven-cont.events` (`72e05c9d2db51a537152ab8618d3e153bcf7031775d4eb1035bbc36e747a7d3c`, steps 6-8, `read end exit=0
+hard_stopped=0`); logs `rl141-read-seven.log` (`03bbc8a58519dbfa7f521f6a7a57b5bc1587c2afa7650a9fed661f249e8c364b`) and `rl141-read-seven-cont.log`
+(`1a1cfad29cde87e553b1c12b9326f67f66c04f77869ca8d6e5e8e879bdc04ad0`). Files of root 25 are in its main segment directory
+(`declaration.json["main"]`); "denied" files are in root 26's. File SHA-256 values: serial receipt
+`option-c-receipt.json` `bf08e58e8780fa8accdc4a190aca215ac3d4d10bbb476d8157bff522ea244825`, pool receipt `option-c-pool-receipt.json`
+`370058b0c9e4ca94245150d779c4d1398382dab3a2ff49416eaa4272383ea571`, skips receipt `5af039ce08886a6dc58ccc9ff37da8459a1e6a266d7a69eda2eee38d3aa1fde5`, r2-gamma receipt
+`33438ddf96964679a25ca256fc2f93c3c291ef89deb7861484856c01fc573539`, denied receipt `option-c-denied-receipt.json`
+`186e188a87d15991a7d875952caf2c5766ce776dc484b8c7ce1d85301c015421`, `observations.json` `3cbfecd4de5ae5337320ebaadf2788652167764ba7965bb97bf4cf2668fd7d9d`,
+root 25 `parent.json` `737e9b14582688b85bb103970039cd41f2d0790a654062a51635ac5a9bc800fe`. **No slot departs from its prediction** other than
+N-14 (recorded not met before the read) and N-21 (ruled, RL-141 addendum 2 B1). Each row below keeps its predeclared
+text and gains its observed value.
+
 | # | Slot | Predeclared value | Source |
 |---|---|---|---|
-| N-1 | program SHA-256 of the reads | `90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759`, the RC-B6-1 SHA-256 of the merge head `b5ab6a71d` (after RL-133), written here before the finisher starts (RL-129 §1 term 7; RL-133 §3 item 6) | RL-129 §1 term 7; RL-133 §3 item 6; RL-123 §2 items 2-3 |
-| N-2 | option (c) exit | `0` | R12 predeclaration ("Each named option (c) exits 0 with comparator agreement"); RL-126 §4 gate |
-| N-3 | compared rows | a count above 0 over **seven** sessions, every compared row agreeing. No number was predeclared. | R12 predeclaration; RL-113 term 6; RL-141 §4 |
-| N-4 | failed | `0` | comparator agreement |
-| N-5 | unmatched | `0` | comparator agreement |
-| N-6 | `first_program_only` count | no number predeclared. Every entry a session quantity key carrying a label that allows non-comparison; **0** `run_phase_energy` entries (RL-125 item 1); **0** `__block__` entries. Checked by section 7 | RL-113 term 7, RL-125 item 1 |
-| N-7 | serial/pool byte equality | identical ("Serial/pool numbers and public bytes are identical within each cohort") | R12 predeclaration; RL-126 §4 gate |
-| N-8 | wall, peak RSS (serial) | ≤ 2,400 s; ≤ 2 GiB. Seven sessions, reduced volume | R12 final prediction; RL-141 §4 |
-| N-9 | wall, peak RSS (pool-2) | ≤ 1,200 s; ≤ 4 GiB (process-group planning budget). Seven sessions, reduced volume | R12 final prediction; RL-141 §4 |
-| N-10 | other R12 work on the Air during the reads | none, or named. Overlap is allowed (RL-126 item 7 dropped RL-123 §4's idle condition); the receipt names it. The supervisor receipt's `other_R12_work_allowed: false` is fixed text from before RL-126 and is not an observation (RL-129 §4) | RL-126 item 7, §4 (ii); RL-129 §4 |
-| N-11 | generation wall | reported: 9 h 18 min to the generator's exit 1. (Forecast before launch: about 12 native hours, R12 predeclaration; RL-126 forecast the end of generation between about 11:30 and 14:00 PST) | RL-126 §1, §4 (iii); RL-141 §4 |
+| N-1 | program SHA-256 of the reads | `90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759`, the RC-B6-1 SHA-256 of the merge head `b5ab6a71d` (after RL-133), written here before the finisher starts (RL-129 §1 term 7; RL-133 §3 item 6) **Observed:** `90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759` as `program_sha256` in all five read receipts (serial, pool, skips, r2-gamma, denied), each with `verifier_commit` `b5ab6a71d798e168209fd66a0832f66f97a0b096`. **Met.** | RL-129 §1 term 7; RL-133 §3 item 6; RL-123 §2 items 2-3 |
+| N-2 | option (c) exit | `0` **Observed:** `0`, with `option_c.pass` true (serial receipt `bf08e58e…4825`; pool receipt `370058b0…a572` the same). **Met.** | R12 predeclaration ("Each named option (c) exits 0 with comparator agreement"); RL-126 §4 gate |
+| N-3 | compared rows | a count above 0 over **seven** sessions, every compared row agreeing. No number was predeclared. **Observed:** 2,743 compared rows over 7 sessions, 2,743 passed (the public comparator, `joulewise.b6_s13_comparison.public.v1`, in the serial receipt `bf08e58e…4825`). **Met.** | R12 predeclaration; RL-113 term 6; RL-141 §4 |
+| N-4 | failed | `0` **Observed:** `0` (serial receipt `bf08e58e…4825`). **Met.** | comparator agreement |
+| N-5 | unmatched | `0` **Observed:** `0` (serial receipt `bf08e58e…4825`). **Met.** | comparator agreement |
+| N-6 | `first_program_only` count | no number predeclared. Every entry a session quantity key carrying a label that allows non-comparison; **0** `run_phase_energy` entries (RL-125 item 1); **0** `__block__` entries. Checked by section 7 **Observed:** 787 (six ALPHA and BETA sessions at 118, r1-gamma at 79); 0 `run_phase_energy` entries; 0 `__block__` entries; every entry's label allowed (section 7 record). **Met.** | RL-113 term 7, RL-125 item 1 |
+| N-7 | serial/pool byte equality | identical ("Serial/pool numbers and public bytes are identical within each cohort") **Observed:** identical. `cmp` found `option-c-numbers.json` = `option-c-pool-numbers.json` (both `907ce159d6970f9dbbfd07d3f3add18e0c77c562b8b40ccf365631da47196434`) and `option-c-public.json` = `option-c-pool-public.json` (both `65ed15a0363f5a9fb1dc5ba1f372e464943774eeacc6ae58365ee48c578529e3`) (events, step 3). **Met.** | R12 predeclaration; RL-126 §4 gate |
+| N-8 | wall, peak RSS (serial) | ≤ 2,400 s; ≤ 2 GiB. Seven sessions, reduced volume **Observed:** wall 100.40 s (`process_measurement.wall_s` 100.395937959; `/usr/bin/time -l` 100.43 real, `option-c.time` `e82ce4e36079c871654bf74a39a099c21dc9cc4deb6e5c6d01c365ee52839886`); peak RSS 1,330,790,400 bytes (1.24 GiB). Serial receipt `bf08e58e…4825`. **Met.** | R12 final prediction; RL-141 §4 |
+| N-9 | wall, peak RSS (pool-2) | ≤ 1,200 s; ≤ 4 GiB (process-group planning budget). Seven sessions, reduced volume **Observed:** wall 82.40 s (`wall_s` 82.395397583; `time -l` 82.42 real, `option-c-pool.time` `5bd9f7fab7ef9d8e1487ce2793b466980e1104b56234c986e75aff49e043faad`); peak RSS 1,378,320,384 bytes (1.28 GiB). Pool receipt `370058b0…a572`. The RSS is the largest single process (`getrusage(RUSAGE_CHILDREN)`, as `time -l`), not a process-group sum; three processes at that peak would be 3.85 GiB, inside 4 GiB. **Met.** | R12 final prediction; RL-141 §4 |
+| N-10 | other R12 work on the Air during the reads | none, or named. Overlap is allowed (RL-126 item 7 dropped RL-123 §4's idle condition); the receipt names it. The supervisor receipt's `other_R12_work_allowed: false` is fixed text from before RL-126 and is not an observation (RL-129 §4) **Observed:** none. The overlap census at the start and end of both launchers is empty; the contention check (`pgrep -f 'pytest|unittest|mutmut|xdist'`) found nothing before each; both held `AIR-QUIET.lock` and removed it at exit. **Met.** | RL-126 item 7, §4 (ii); RL-129 §4 |
+| N-11 | generation wall | reported: 9 h 18 min to the generator's exit 1. (Forecast before launch: about 12 native hours, R12 predeclaration; RL-126 forecast the end of generation between about 11:30 and 14:00 PST) **Observed:** 33,467.6 s = 9 h 17 min 48 s from `started_native_ns` to `ended_native_ns`, status `failed`, `exit_code` 1 (root 25 `parent.json` `737e9b14…00fe`). **As reported.** | RL-126 §1, §4 (iii); RL-141 §4 |
 
 Cut-gate items read from the same finisher. They are not in Fable's paragraph, but RL-126 §4's gate names them:
 
 | # | Item | Predeclared value | Source |
 |---|---|---|---|
-| N-12 | denied-26 fixture, read by the pin candidate | OFF rc 126 and `network_time.off_output` retained; single-session option (c) 0, agrees | R12 predeclaration; RL-49 |
-| N-13 | the six shapes | A1 cap/budget skips; A2 waited runs with attempt-N telemetry; B2 `member.anchor_not_bounded`; mixed member and evaluation campaign-log rows; desk-compressed campaign logs and plists; a nonvacuous cross-session GAMMA unit. Each named option (c) exits 0 with comparator agreement, registered flags retained. **RL-141:** all seven shape assertions exit 0. `cross_session_gamma` is predicted to pass on r1-gamma alone: its ALPHA floor must come from another round, because r1-alpha is excluded | R12 predeclaration; RL-48 item 2; §17-R12; RL-141 §4 |
+| N-12 | denied-26 fixture, read by the pin candidate | OFF rc 126 and `network_time.off_output` retained; single-session option (c) 0, agrees **Observed:** denied-26 r1-alpha read: `exit_code` 0, comparator `pass` true, `time_wrapper_exit` 0 (denied receipt `186e188a…5421`); `observations.json` (`3cbfecd4…7d9d`) `r12-denied-action`: `off_action_returncode` 126, `network_time.off_output` in its flags; `test_denied_action_ordinary_session` ok. **Met.** | R12 predeclaration; RL-49 |
+| N-13 | the six shapes | A1 cap/budget skips; A2 waited runs with attempt-N telemetry; B2 `member.anchor_not_bounded`; mixed member and evaluation campaign-log rows; desk-compressed campaign logs and plists; a nonvacuous cross-session GAMMA unit. Each named option (c) exits 0 with comparator agreement, registered flags retained. **RL-141:** all seven shape assertions exit 0. `cross_session_gamma` is predicted to pass on r1-gamma alone: its ALPHA floor must come from another round, because r1-alpha is excluded **Observed:** all seven `DeclaredShapeTests` OK ("Ran 7 tests … OK", step 8 exit 0, continuation log). Each carrier has `production_exit` 0 and `comparator_agrees` true in `observations.json` (`3cbfecd4…7d9d`). `r12-gamma-cross`: r1-gamma, `cross_session_gamma` true, pairing ALPHA r2-alpha `2_next_counting` and BETA r1-beta `1_same_round`, both `provisional` false, kept units non-empty. Skips carrier r1-alpha read alone (skips receipt `5af039ce…66e5`, exit 0, agrees). **Met.** | R12 predeclaration; RL-48 item 2; §17-R12; RL-141 §4 |
 | N-14 | loop close | **Not met, recorded before the read:** loop at `NEXT`, nine attempts, seven counting (3/3/1), GAMMA held on `smoke_hold:stage_failed:gamma-reference-start`, generator exit 1. (Predeclared before launch: original DONE with nine counting sessions, possibly ten ordinary attempts, from the skipped A1) | R12 predeclaration; RL-141 §1 item 1, §4 |
-| N-15 | read stop | 10,800 s, by the lead's hand (RL-141 §3 item 6): if the read launcher is still running at 10,800 s it is stopped and profiled, never retried | RL-98 term 2, RL-123 §1; RL-141 §3 item 6, §4 |
-| N-20 | sessions read by the block (new) | 7: r2-alpha, r3-alpha, r4-alpha, r1-beta, r2-beta, r3-beta and r1-gamma, selected by `prepare_run_inputs` from the attempts file; `closed` true by argument | RL-141 §3 items 2-3, §4 |
+| N-15 | read stop | 10,800 s, by the lead's hand (RL-141 §3 item 6): if the read launcher is still running at 10,800 s it is stopped and profiled, never retried **Observed:** not reached. 199 s to the first launcher's designed stop after step 5, and 19 s for the continuation (steps 6-8); `hard_stopped=0` in both. **Met.** | RL-98 term 2, RL-123 §1; RL-141 §3 item 6, §4 |
+| N-20 | sessions read by the block (new) | 7: r2-alpha, r3-alpha, r4-alpha, r1-beta, r2-beta, r3-beta and r1-gamma, selected by `prepare_run_inputs` from the attempts file; `closed` true by argument **Observed:** 7: r1-beta, r1-gamma, r2-alpha, r2-beta, r3-alpha, r3-beta, r4-alpha (serial and pool receipts' `archives`; `sessions` 7, `closed` true, `session_id` null); public `counting_by_pack` ALPHA 3, BETA 3, GAMMA 1. **Met.** | RL-141 §3 items 2-3, §4 |
 | N-21 | r2-gamma single-session option (c) (new) | Predeclared (RL-141 §4): exit 0, comparator agrees, `calibration.bracket_incomplete` retained. **Observed:** exit 4, `refused: calibration_capture_missing`; no numbers or public output; comparator not reached; `time_wrapper_exit` 4, equal to `exit_code`. **Departed. Ruled a prediction error (RL-141 addendum 2 B1):** the pinned program refuses, by name, a session whose post-session capture is invalid when inputs are authenticated (RC:481). Program `90e22603…`, receipt `33438ddf…3539`. | RL-141 §3 item 4 (read 5), §4; RL-141 addendum 2 B1 |
-| N-16 | term 7 check (section 7) on the nine's restricted output | no stop | RL-126 §4 gate |
-| N-18 | `time_wrapper_exit` in every term 7 receipt that carries it | `0`, with `exit_code` 0 (the orchestrator launches the read outside any seat sandbox, so `/usr/bin/time -l` works). Nonzero with `exit_code` 0 is a wrapper failure: reported with the `.time` text; it does not trigger term 7's `e17886bf…` differential read and the read is not repeated for it | RL-132 §1 items 6-7 |
-| N-19 | `both_null` on the nine (per class and total) | observed and reported, not predeclared; checklist steps 2 and 3's invariants (`both_null` ≤ `passed`; 0 in a class with no compared row). An `engine_below_minimum` family in the nine's output is reported, not a stop | RL-133 §3 item 6 |
-| N-17 | output SHA-256s: restricted, public, serial and pool | recorded (section 7 step 8): the reduced finisher's `option-c-numbers.json`, `option-c-public.json`, `option-c-pool-numbers.json`, `option-c-pool-public.json`, with its `reduced-finish-receipt.json` | RL-113 term 7 step 8 |
+| N-16 | term 7 check (section 7) on the nine's restricted output | no stop **Observed:** no stop (section 7 record). **Met.** | RL-126 §4 gate |
+| N-18 | `time_wrapper_exit` in every term 7 receipt that carries it | `0`, with `exit_code` 0 (the orchestrator launches the read outside any seat sandbox, so `/usr/bin/time -l` works). Nonzero with `exit_code` 0 is a wrapper failure: reported with the `.time` text; it does not trigger term 7's `e17886bf…` differential read and the read is not repeated for it **Observed:** `time_wrapper_exit` 0 with `exit_code` 0 in the serial, pool, skips and denied receipts. (r2-gamma's 4 with `exit_code` 4 is N-21's and does not engage this slot, RL-141 addendum 2.) **Met.** | RL-132 §1 items 6-7 |
+| N-19 | `both_null` on the nine (per class and total) | observed and reported, not predeclared; checklist steps 2 and 3's invariants (`both_null` ≤ `passed`; 0 in a class with no compared row). An `engine_below_minimum` family in the nine's output is reported, not a stop **Observed:** `both_null` inclusive 4, replication 2, side_by_side 48, summary 4, every other class 0; total 58. `both_null` ≤ `passed` in every class, and 0 in every class with no compared row. No `engine_below_minimum` family (families: calibration, counting, engine, engine_word, harvest_bound, harvest_drift, harvest_energy, pairing, section10, section11_replication, section11_short). **Reported.** | RL-133 §3 item 6 |
+| N-17 | output SHA-256s: restricted, public, serial and pool | recorded (section 7 step 8): the reduced finisher's `option-c-numbers.json`, `option-c-public.json`, `option-c-pool-numbers.json`, `option-c-pool-public.json`, with its `reduced-finish-receipt.json` **Observed:** `option-c-numbers.json` `907ce159d6970f9dbbfd07d3f3add18e0c77c562b8b40ccf365631da47196434`, `option-c-public.json` `65ed15a0363f5a9fb1dc5ba1f372e464943774eeacc6ae58365ee48c578529e3`, `option-c-pool-numbers.json` `907ce159…6434`, `option-c-pool-public.json` `65ed15a0…29e3`; receipts serial `bf08e58e…4825` and pool `370058b0…a572`. There is no `reduced-finish-receipt.json`: the reduced finisher was not used (RL-141 §3 item 1). **Recorded.** | RL-113 term 7 step 8 |
 
 ## 7. The RL-113 term 7 checklist (verbatim, with the RL-125 replacements)
 
@@ -566,6 +605,45 @@ the merge head `b5ab6a71d`, stdout SHA-256 `1003d87e7b92bc28a38890d75860e0ea0e47
 [Lead's note: the preface says term 7 "does not gate the pin" (RL-113 term 7, about the real block run). RL-126 §4's
 gate makes "the term 7 check on [the nine's] output has no stop" a condition of the **cut**. Both hold: the rehearsal
 on the nine gates the cut; the real-run check (step 9) gates the agreement sentence, not the pin.]
+
+### 7a. Term 7 on the seven-session block read: run 2026-11-13, no stop (slot N-16)
+
+Run on the serial block read's restricted output `option-c-numbers.json` (`907ce159d6970f9dbbfd07d3f3add18e0c77c562b8b40ccf365631da47196434`),
+program `90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759`, against the R3 table regenerated at `b5ab6a71d`
+(`/Volumes/JW-EXT/scratch/rl133/r3/new.out`, stdout SHA-256 `1003d87e7b92bc28a38890d75860e0ea0e47ae65862e6d6dd09641d7b3f29840`). Key names and counts only; no
+value was read or copied. Steps 2 to 8 by the structure probe B-3 (`scripts/b6_structure_probe.py` on
+`/Volumes/JW-EXT/jw-wt/b6-real-run` @ `5c53850f6`, file SHA-256 `185a05059e4bb7afe7fa6bc9091d5621e0a7ec18dcce6f2b71668d0bba7cc922`), whose input shape fits
+this output: `python3.13 -I -B scripts/b6_structure_probe.py --restricted … --public option-c-public.json --r3-table
+… --inputs option-c-inputs.json --stage gate --term7`, output `/Volumes/JW-EXT/scratch/s14-cut/b3-term7-nine.json`
+(`be4fa0d0aa9f6b212fb1044101fb1e1e02336fe98e45f4049adfc1ae9de5ee50`). Stdout `term7: pass`. Its separate structure line, `probe: departs
+closed,public_one_session,public_session_shape`, is the gate stage's predeclared one-session shape (runbook step 7)
+and does not apply to a closed seven-session block; it is not part of term 7. B-3 skips step 1 (one run), so step 1
+was run separately.
+
+1. Step 1. The pool read's `block.option_c.first_program_only` list equals the serial one, entry for entry (787
+   and 787; the two restricted files are byte-identical, section 6 N-7).
+2. Step 2. Every class's listed count equals its `first_program_only` in the public comparator
+   (`joulewise.b6_s13_comparison.public.v1`, serial and pool receipts; equal to the restricted output's records).
+   Totals: compared 2,743, `both_null` 58, agreeing on a value 2,685, `first_program_only` 787. `both_null` ≤
+   `passed` in every class.
+3. Step 3. Every class record is one of the two kinds: with `pass` (calibration, contrast, inclusive, neg8,
+   replication, run_phase_energy, side_by_side, summary), each with `compared` > 0; without `pass` (attribution_floor,
+   contrast_word, cross_session, descriptive, dominance, floor, lines, per_token, reported), each with all five counts 0.
+4. Steps 4 to 6. 0 `run_phase_energy` entries; 0 `__block__` entries; no copied-family name; every listed key has
+   an R3 row. Distinct keys by label kind: `single-source` 100, "not independently recomputed" 183, the §17-R8
+   literal 24, gate label 8; no plain "computed and compared" label, no block-scope label, no conditional label, no
+   UNSTATED. No `lines/whole_machine/…` session key in a compared row.
+5. Step 7. Per class, `compared` plus the listed session rows equals the registry's session keys for the seven
+   sessions, so no key is both compared and listed for a session. Per session, `first_program_only` is 118 (the six
+   ALPHA and BETA sessions) and 79 (r1-gamma), equal to the registry keys less the compared keys (122 and 93).
+6. Step 8. Per class (`compared` / `both_null` / listed): attribution_floor 0/0/12, calibration 7/0/0, contrast
+   10/0/14, contrast_word 0/0/6, cross_session 0/0/28, descriptive 0/0/8, dominance 0/0/37, floor 0/0/156, inclusive
+   144/4/0, lines 0/0/430, neg8 21/0/0, per_token 0/0/12, replication 2/2/0, reported 0/0/84, run_phase_energy
+   2,367/0/0, side_by_side 48/48/0, summary 144/4/0. R3 table commit `b5ab6a71d`.
+
+B-3 also ran the real-run steps 10 and 12 as a by-product (host `Air`; copied disclosures with the eight families in
+every session; the seven sessions equal the run-input document's pins). They passed and are not part of the
+rehearsal's gate.
 
 ## 8. The cut procedure
 
