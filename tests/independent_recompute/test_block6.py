@@ -444,7 +444,8 @@ class Block6(unittest.TestCase):
                                        "print_spec_ratified", "classes", "restricted_sha256"})
         self.assertTrue(public["print_spec_ratified"])
         for row in public["classes"].values():
-            self.assertEqual(set(row), {"compared", "passed", "failed", "unmatched", "pass"})
+            # RL-133 §1c: both_null sits beside compared; still counts only, no value.
+            self.assertEqual(set(row), {"compared", "passed", "failed", "unmatched", "both_null", "pass"})
         restricted = json.loads((self.tmp / "cmp-r.json").read_text())
         self.assertTrue(all("difference" in r for r in restricted["rows"]))
 
