@@ -29,8 +29,37 @@ from joulewise.hazards import arm, base
 ATTEMPT3_ROOT = "/Users/edr/night-custody/b5-gamma-attempt3/custody"
 
 
-def _live(argv: list[str]) -> subprocess.Popen:
-    process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def _stand_in() -> str:
+    """The executable the symlinked stand-in processes run, and what it does with ``60``.
+
+    ``/bin/sleep`` where it is a real program.  On Ubuntu 26.04 it is a link into
+    uutils' multi-call ``coreutils``, which dispatches on argv[0]: a process named
+    ``claude`` or ``run_campaign`` finds no such utility and exits at once (the CI
+    reds of ``test_the_hazard_arm_census_uses_the_same_matcher``, whose listed
+    processes were gone by the time the census read them).  There the stand-in is
+    this interpreter, which ignores argv[0] and runs the script named ``60``
+    (``setUp`` writes it into the test's directory; see ``_STAND_IN_SCRIPT``).
+    """
+
+    global _STAND_IN
+    if _STAND_IN is None:
+        with tempfile.TemporaryDirectory(prefix="stand-in-") as directory:
+            link = Path(directory) / "not-a-coreutils-name"
+            link.symlink_to("/bin/sleep")
+            try:
+                works = subprocess.run([str(link), "0"], capture_output=True, timeout=10).returncode == 0
+            except OSError:
+                works = False
+        _STAND_IN = "/bin/sleep" if works else os.path.realpath(sys.executable)
+    return _STAND_IN
+
+
+_STAND_IN: str | None = None
+_STAND_IN_SCRIPT = "import time\ntime.sleep(60)\n"
+
+
+def _live(argv: list[str], cwd: str | None = None) -> subprocess.Popen:
+    process = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd)
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:  # wait for the exec to land in the kernel's argv
         info = agent_identity.inspect(process.pid)
@@ -60,6 +89,7 @@ class AgentIdentityTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(prefix="agent-identity-")
         self.addCleanup(self.tmp.cleanup)
         self.addCleanup(self._reap)
+        (Path(self.tmp.name) / "60").write_text(_STAND_IN_SCRIPT, encoding="utf-8")
 
     def _reap(self) -> None:
         for process in self.processes:
@@ -67,7 +97,7 @@ class AgentIdentityTests(unittest.TestCase):
             process.wait()
 
     def spawn(self, argv: list[str]) -> subprocess.Popen:
-        process = _live(argv)
+        process = _live(argv, cwd=self.tmp.name)
         self.processes.append(process)
         return process
 
@@ -75,7 +105,7 @@ class AgentIdentityTests(unittest.TestCase):
         # A symlink to sleep: the kernel executable is sleep, the process name
         # (argv[0]) is the agent's name.
         path = Path(self.tmp.name) / name
-        path.symlink_to("/bin/sleep")
+        path.symlink_to(_stand_in())
         return str(path)
 
     def window_process(self) -> subprocess.Popen:
@@ -85,7 +115,7 @@ class AgentIdentityTests(unittest.TestCase):
         root.mkdir(parents=True, exist_ok=True)
         runner = root / "run_campaign"
         if not runner.exists():
-            runner.symlink_to("/bin/sleep")
+            runner.symlink_to(_stand_in())
         return self.spawn([str(runner), "60"])
 
     def test_a_listed_window_process_is_not_an_agent(self):
@@ -322,7 +352,8 @@ class AgentIdentityTests(unittest.TestCase):
         marker = self.marker("claude")
         shell = subprocess.run(["/bin/sh", "-c", f"'{marker}' 60 "
                                 "</dev/null >/dev/null 2>&1 & echo $!"],
-                               capture_output=True, text=True, start_new_session=True, check=True)
+                               capture_output=True, text=True, start_new_session=True, check=True,
+                               cwd=self.tmp.name)
         pid = int(shell.stdout.strip())
         self.addCleanup(os.kill, pid, 9)
         deadline = time.monotonic() + 10
@@ -463,7 +494,7 @@ class AncestorCensusLiveTests(unittest.TestCase):
         agent = root / "claude"
         agent.symlink_to("/bin/zsh")
         own_marker = root / "codex"
-        own_marker.symlink_to("/bin/sleep")
+        own_marker.symlink_to(_stand_in())
         # Under a .claude directory, so pgrep lists the foreign run_campaign by
         # argv substring alone (before the T3 prune the attempt3 id did).
         custody = root / ".claude" / "night-custody" / "b5-gamma-attempt3" / "custody"
@@ -474,14 +505,14 @@ class AncestorCensusLiveTests(unittest.TestCase):
         child = root / "census_child.py"
         child.write_text(_ANCESTOR_CENSUS_CHILD, encoding="utf-8")
         runner = custody / "run_campaign"
-        runner.symlink_to("/bin/sleep")
-        foreign = _live([str(runner), "60"])
+        runner.symlink_to(_stand_in())
+        foreign = _live([str(runner), "60"], cwd=self.tmp.name)
         self.processes.append(foreign)
 
         env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
         command = f"'{chain}' '{sys.executable}' '{child}' '{own_marker}'; :"
         session = subprocess.Popen([str(agent), "-f", "-c", command], stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, text=True, env=env)
+                                   stderr=subprocess.PIPE, text=True, env=env, cwd=self.tmp.name)
         self.processes.append(session)
         stdout, stderr = session.communicate(timeout=120)
         self.assertEqual(0, session.returncode, stderr)
