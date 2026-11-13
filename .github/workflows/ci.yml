@@ -135,12 +135,15 @@ jobs:
     env:
       JW_TEST_TIMEOUT_SECONDS: "900"
       # CI-12 (2026-10-05): hosted runners are free for this public repo, so
-      # the ordinary suite is packed into twelve shards from hosted
-      # per-module medians (scripts/test_timings.json _provenance). The
-      # wall-time floor is then the calibration-exits exclusive job, not an
-      # ordinary shard. Each selected interpreter runs the full suite across
-      # ordinary and exclusive jobs.
-      SHARD_COUNT: "12"
+      # the ordinary suite is packed from hosted per-module medians
+      # (scripts/test_timings.json _provenance). Audit item 5.4 (2026-11-13):
+      # six shards, each dealing its units to four child processes
+      # (shard_tests.run_units_in_workers, one per hosted vCPU), instead of
+      # twelve one-process shards: fewer jobs queue for the account's job
+      # slots and each runner's cores are used. Each selected interpreter
+      # runs the full suite across ordinary and exclusive jobs.
+      SHARD_COUNT: "6"
+      SHARD_WORKERS: "4"
     strategy:
       # Preserve coverage and timing observations when another shard fails.
       fail-fast: false
@@ -150,26 +153,33 @@ jobs:
         # local dev and is exercised by every seat's local module runs, not CI.
         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    # Matrix slots 7-12 are retired (SHARD_COUNT is 6) but stay so the
+    # required contexts test (3.13, 7)..(3.13, 12) keep reporting; each runs
+    # only the echo step below. Drop them once branch protection drops those
+    # contexts. Keep the literal 6 in the step conditions equal to SHARD_COUNT.
     steps:
       - name: Docs-only range (required contexts report success without running tests)
         if: needs.changes.outputs.code != 'true'
         run: echo "No code changes in this range; tests skipped."
+      - name: Retired shard slot (required context reports success; SHARD_COUNT is 6)
+        if: needs.changes.outputs.code == 'true' && matrix.shard > 6
+        run: echo "Shard slot ${{ matrix.shard }} is retired; the suite runs in shards 1-6."
       - uses: actions/checkout@v5
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
         with:
           # Golden provenance sidecars replay `git archive` against their
           # pinned base commit; a shallow checkout lacks that object.
           fetch-depth: 0
       - uses: actions/setup-python@v6
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
         with:
           python-version: ${{ matrix.python-version }}
       # Once-per-run state, receipt, and CLI/mock checks live in fences.
       - name: Compile Python sources
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
         run: python -m compileall -q joulewise tests
       - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
         run: |
           # Tests require /bin/zsh: /usr/bin/zsh without that symlink is insufficient.
           if [ ! -x /bin/zsh ]; then
@@ -178,12 +188,12 @@ jobs:
           fi
           test -x /bin/zsh
       - name: Unit tests (stdlib core only, per D-009/D-017)
-        if: needs.changes.outputs.code == 'true'
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= 6
         # test_calibration_exits AND test_calibration_writer_crash_matrix
         # are intentionally absent here (both carry exclusive_modules
         # declarations); each runs once in its exclusive job below, while
-        # the twelve ordinary shards keep deterministic LPT balance from the
-        # ordinary timing map. Timing weights are scheduling hints only, so
+        # the six ordinary shards (and each shard's four workers) keep
+        # deterministic LPT balance from the ordinary timing map. Timing weights are scheduling hints only, so
         # no step asserts their values; the guards kept here are coverage
         # guards (every exclusive module is still discovered, and every
         # declared split test id still exists).
@@ -234,7 +244,10 @@ jobs:
           )
           print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
           index = int(os.environ["SHARD_INDEX"])
-          raise SystemExit(shard_tests.run_units(partitions[index - 1], count, index))
+          raise SystemExit(shard_tests.run_units_in_workers(
+              partitions[index - 1], weights, count, index,
+              int(os.environ.get("SHARD_WORKERS", "1")), unknown_weight=unknown,
+          ))
           PY
 
   calibration-exits-exclusive:
