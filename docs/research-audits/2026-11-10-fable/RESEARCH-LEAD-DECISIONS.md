@@ -8000,6 +8000,107 @@ signing: as RL-122, plus the row edit of item 3.3. The first W1 thermal desk: it
 **Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures, gate timings, classifier fields and code
 only. The triggers and the disclosure definition are fixed before the night's journals exist.
 
+# RL-132. The RL-129 term 6 stop on `time_wrapper_exit`: a wrapper record, predicted 0 from now on; and one rehearsal budget in place of two (2026-11-13 07:07 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 07:07 PST (`date`).
+
+**Read.** RL-126 §3, RL-127, RL-129 §1. The expected-difference document
+`/Volumes/JW-EXT/scratch/rl129-expected-diff.md`, the comparer `compare_rl129.py` and its result
+`compare-alpha.json` (comparer SHA-256 `728bd155…`). In the merge worktree at `91359b2b2`:
+`scripts/b6_r12_verify.py` lines 411-480, `scripts/b6_r12_full_verify.py` lines 95-138, and every use of
+`time_wrapper_exit` under `scripts/` and `tests/`. Both ALPHA `.time` files (synthetic full root; process
+text only). The rehearsal constants in the PR #759 diff. I ran no reader, test or program.
+
+## 1. The stop: `time_wrapper_exit` and the `.time` text are wrapper records
+
+**What I checked.**
+
+- `time_wrapper_exit` is the return code of `/usr/bin/time -l` around the reader child
+  (`b6_r12_verify.py:434-438`). `b6_r12_full_verify.py:137` copies it into the view receipt. Those are the two
+  paths the comparer flagged, and it flagged nothing else.
+- The program's own exit is a separate field, `exit_code`, taken from `<stem>-process.json`. It is 0 in both
+  reads.
+- The old `.time` is two lines: the `real/user/sys` line and
+  `time: sysctl kern.clockrate: Operation not permitted`. The new one is the full 18-line rusage block. So the
+  old 1 was `time` failing after the child had exited 0, and the new 0 is `time` working.
+- No analysis quantity is taken from the wrapper. `peak_rss` comes from `getrusage(RUSAGE_CHILDREN)` in both
+  reads (`b6_r12_verify.py:478`), so old and new timings were measured the same way.
+- Nothing gates on the field. The finisher and the checkpoint verifier copy it into their receipts; no test
+  asserts its value on a real read.
+- I did not reproduce the sandbox failure. The cause rests on the old `.time` text and the lead's account of
+  where each read ran.
+
+**Ruled.**
+
+1. **Class.** `time_wrapper_exit` (both receipts) and the whole `.time` text are process-wrapper records:
+   section B of the expected-difference document, not section A. They describe the host that ran the read,
+   not the program or the fixture.
+2. **The prediction was wrong, and the stop was right.** Section B predicted the field equal without checking
+   that the old value was a failure. That is recorded as a prediction error in the R12 report, with the two
+   `.time` texts as its evidence. "Not widened after observation" bound the lead and still does. This entry
+   is the ruling that clause asked for, and it allows this field only.
+3. **New prediction, every pack and every later read:** `time_wrapper_exit` is **0** and `exit_code` is 0.
+   The field may differ from the old read only where the old value is 1 and the old `.time` carries the
+   `sysctl kern.clockrate` line. The `.time` text stays hashed only.
+4. **ALPHA stands and is not re-read.** It is compared again with the amended comparer, into a new result
+   file. `compare-alpha.json` is kept as the record of the stop.
+5. **BETA and GAMMA resume** under their own stems, after two things are written:
+   - the amendment to the expected-difference document, dated, naming this entry, with each pack's old value
+     of the field;
+   - the amended comparer, with its new SHA-256. Its change is confined to item 3.
+   Any other unlisted difference still stops the work and comes to me.
+6. **Term 7 (the nine and denied-26): the wrapper works.** These reads are launched by the orchestrator
+   outside any seat sandbox, and any slot or receipt that carries `time_wrapper_exit` is predeclared 0. There
+   is no old read of the nine to match, and matching a broken wrapper would mean breaking a measurement on
+   purpose. The working wrapper also gives `time -l`'s own peak-memory line beside the `getrusage` figure for
+   RL-48's timing.
+7. **If a term 7 read shows `time_wrapper_exit` nonzero with `exit_code` 0:** it is a wrapper failure. It is
+   reported with the `.time` text. It does not trigger term 7's `e17886bf…` differential read, and the read
+   is not repeated for it.
+8. **No script changes.** The `peak_rss_method` string still says "fallback, not time -l" on a read where
+   `time -l` worked. It is accurate about where `peak_rss` comes from and stays (RL-129 §1 term 3).
+
+**Owner.** The lead: items 2, 4, 5 and the launch placement of item 6.
+**Gate.** BETA and GAMMA re-reads wait only for item 5's two writes. The cut is unchanged.
+
+## 2. One rehearsal budget
+
+RL-126 §3 and RL-127 term 1 disagreed, and RL-127's Block 6 figure was my arithmetic error (4 × 25 min is
+100 min, not 2 h). This replaces RL-126 §3 items 2 and 4 and RL-127 term 1. Everything else in both stands.
+
+*A* is the wall time of the analysis being rehearsed, measured or predicted, on its real host. *F* is the
+forecast wall time of one rehearsal attempt, generation and reads together.
+
+| | Value | What happens |
+|---|---|---|
+| **Limit *L*** | 4 × *A*, not below 30 min, not above 4 h | The budget of one attempt, and the watcher's budget. *F* above *L* comes to me before launch (RL-126 §3 item 4's three lines) |
+| **Free launch** | *F* at most the larger of 2 × *A* and 1 h, and at most *L* | Launch |
+| **Between** | above the free-launch line, at most *L* | Profile one unit first (RL-126 §3 item 3), then launch |
+| **Program total** | the larger of 10 × *A* and 8 machine-hours | Unchanged (RL-127 term 2) |
+| **Running overrun** | 1.5 × *L* | Watcher alarm; profiled before any retry (RL-127 term 6, RL-126 §3 item 9) |
+
+**Block 6.** *A* is 25 min, the predicted nine-session read. So:
+
+- *L* = **100 min**;
+- free launch up to 60 min;
+- alarm at 150 min;
+- program total 8 h.
+
+RL-126's "half an hour to two hours" for *A* is withdrawn. When the term 7 read gives a measured wall at normal
+priority on its real host, that number replaces 25 min once, and *L* follows it.
+
+**PR #759.** The `rehearsal` default becomes 6000 s in the stage table, the watch entry, the document row and
+the test that pins it. `rehearsal_budget_s` already computes *L* and is not changed. This is a constant
+correction and needs no review round beyond the PR's own.
+
+**The running closed nine** stays exempt (RL-127 term 3). A watcher alarm on it is expected and is not acted
+on.
+
+**Owner.** The lead: the PR #759 constant and seat briefs. **Gate.** Binds from this entry.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. Synthetic R12
+roots (comparer output and two `.time` texts), code and rulings only. Block-5-aware.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
