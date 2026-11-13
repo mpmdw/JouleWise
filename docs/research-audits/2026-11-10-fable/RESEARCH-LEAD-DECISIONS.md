@@ -8687,6 +8687,77 @@ Research lead (Fable 5.2), 2026-11-13 08:39 PST (from `date`). Written with the 
 
 Desk spec (tools B1-B5, procedure, decision table): /Volumes/JW-EXT/scratch/fable-r1-slot-desk-spec.md.
 
+# RL-134. Block 6 from the S-14 cut to the release: the gate run, the dry run and its stop, Block 5's output as a pinned input, what the release check is, when term 7 runs, and what happens on each failure (2026-11-13 08:43 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 08:43 PST (`date`).
+
+**Read.** RL-6, RL-25, RL-30, RL-48, RL-49, RL-98 to RL-104, RL-110, RL-113 to RL-115, RL-121, RL-123,
+RL-125 to RL-127, RL-129, RL-132, RL-133. The pin request at `b1d64bc2b` and its revision script. The
+registration's §1.10, §12, §13 and §14, and the §17 entries as PR #748 enters them at `27b6cacfd`. DLE-1 and
+DLE-2 in `docs/analysis/b5/DEVIATION-LOG.md`. At `b5ab6a71d`: `main`, `recompute_block`, `finish_recompute`,
+`public_session`, `stops_comparison`, `compare`, `block5_quantities` and the flag-code sets in
+`scripts/independent_recompute_b6.py` (`90e22603…`); `AuthenticatedInputs.__init__` and `verify_census`;
+`run_option_c` in `b6_r12_verify.py`; `b6_r12_dry_supervise.py`. `scripts/b6_custody_kit.py` at `ae7eb01b3`
+(`cmd_inputs`, `session_pin`). The custody verify receipt's non-outcome fields. The key names and entry counts
+of Block 5's released `recompute.json`. Paper 1 §5.6, §5.7 and §6.8 on `main`. I ran no reader, test or program.
+
+## 1. The §17-DLE2 gate on the first counting session is a one-session `block` run
+
+**Ruled.** The gate of RL-99 item 3 is the `block` command on `r1-alpha` alone, without `--closed`, with its own
+run-input document that pins that one session and the two loop files, and without `--block5`. It is not the
+`single` command.
+
+**Why.** `single` never calls `check_block`, so it cannot show "every family agreeing, 0 unmapped". The
+one-session `block` form is the one R12 exercised for every shape (`run_option_c` with a session id). It needs
+its own document because RL-133 §1b makes the program refuse a pinned session that is not supplied. `r1-alpha`
+is the first counting session by t0 (§17-R7).
+
+**Passes when:** exit 0, `comparison_stopped` false, `option_c.pass` true, no failure name, and every class with
+`pass` has 0 failed and 0 unmatched. If it does not pass, the nine-session run is not launched.
+
+## 2. Block 5's released recompute output is a pinned input of the dry run
+
+**Ruled.** The closed nine-session run is given `--block5` with Block 5's released `recompute.json`, SHA-256
+`c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc` (`docs/analysis/b5/RESULTS.md`, source
+table, row RC). The run-input document carries that digest as `external.block5`. The file is passed by path
+and is not edited, re-run or re-derived.
+
+**Why.** §10's all-sessions summary, §11.1's side-by-side table and §11.2's replication word need Block 5's
+values, and RL-25's principle is that they come from Block 5's release and are never computed anew. The program
+already has the argument and the pin (RL-115). The kit never writes the pin, and R12 never supplied the file.
+So the first run with a Block 5 output would have been the real one, with no check that the values arrived.
+
+**Terms.**
+
+1. The kit gains `--block5 PATH --block5-sha256 HEX` on `inputs` (build B-1). It hashes the file, refuses
+   `block5_digest_mismatch` on a difference, and writes `external.block5`. It parses nothing.
+2. Before the dry run, a names-only probe (build B-5) runs the pinned `block5_quantities` on the file and
+   prints, per pack, how many summarised keys have a finite Block 5 value. That count is predeclared. After the
+   dry run the number of between-session rows with `block5_included` true must equal it. A smaller number means
+   Block 5 values were silently dropped: the release holds and it comes to me.
+3. The gate run of item 1 does not take `--block5`. It then has the shape of R12's single-pack reads.
+4. The replication word is computed into the restricted output by the dry run and is read by nobody before the
+   release.
+
+## 3. The custody kit follows the final program before it is used again
+
+**Ruled.** RL-100 item 4's condition has been met by the program changing, so its consequence is owed now: the
+kit is rebased onto the S-14 line, its 63 tests and its mutant run are repeated against
+`b6_analysis_inputs.py` `283dfc78…` and RC-B6-1 `90e22603…`, and "Schema targeted" is restated. The rebase
+also carries item 2's option and `--only COPY_PATH` (repeatable), which writes a document for a subset of the
+manifest's sessions from a mapping that still covers all of them.
+
+One end-to-end test is added: a kit document with `clock_journal`, `external.block5` and `--only`, read by the
+pinned program on a synthetic archive, exit 0; and the same with the Block 5 file changed by one byte, exit 4,
+`refused: external_input_digest_mismatch`.
+
+The kit stays outside the pin set (RL-100 item 4). Its cold review is one executing pass by Opus on the delta
+from `ae7eb01b3`. I do not review it again unless Opus finds the authentication chain wider than RL-100 item 1.
+
+**Gate.** Step 5 of the runbook. Not the cut.
+
+Runbook and build specs (§4): /Volumes/JW-EXT/scratch/fable-b6-post-pin-runbook.md.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
