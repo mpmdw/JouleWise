@@ -127,7 +127,13 @@ jobs:
   test:
     needs: [changes]
     runs-on: ubuntu-latest
+    # RL-127: a shard has 60 minutes (the default is 360), and one test 15
+    # (1.5 x the 10-minute unit budget). The per-test limit is
+    # shard_tests.py's watchdog: it prints TEST TIMEOUT <test id>, dumps every
+    # thread's stack and fails the shard, so an overrun names its test.
+    timeout-minutes: 60
     env:
+      JW_TEST_TIMEOUT_SECONDS: "900"
       # CI-12 (2026-10-05): hosted runners are free for this public repo, so
       # the ordinary suite is packed into twelve shards from hosted
       # per-module medians (scripts/test_timings.json _provenance). The
@@ -283,6 +289,8 @@ jobs:
     # See docs/process_traces/2026-08-23-speed/.
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      JW_TEST_TIMEOUT_SECONDS: "900"
     strategy:
       fail-fast: false
       matrix:
