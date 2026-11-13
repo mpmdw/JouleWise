@@ -95,6 +95,89 @@ def prepare_checks(root, config, *, weight_digest_check=None, runtime_stack_chec
     return checks
 
 
+# RL-119 step 2 / RL-122: after RL-116 unseated the registered slow pick on the
+# saved Part B D classification, the second gate key is the registered fast
+# rule applied a second time to that same classification, under ruling RL-122
+# only. No other slow rule, and no hand pick, is accepted.
+SECOND_FAST_RULE = "fast_rule_second_application"
+SECOND_FAST_RULE_RULING = "RL-122"
+SECOND_FAST_RULE_CLASSIFICATION_SHA256 = "0b9cdb9e136eee48c742a6bdfef3313373f795949027779353c31f717630e0a6"
+
+
+def table_bytes(table):
+    """The kit's own Part B serialization (smoke() writes exactly this)."""
+    return (json.dumps(table, indent=2, sort_keys=True) + "\n").encode()
+
+
+def second_fast_rule_selection(table, config):
+    """RL-119 step 2 / RL-122 item 7: the fast rule applied a second time.
+
+    On the saved Part B table: among keys R0 classed ``die`` (the config's
+    ``r0_classes``) that pass every smoke phase (the filter the registered fast
+    pick itself went through) and are admissible for the slow role beside the
+    registered fast pick as ``sensor_admissibility`` tests it, excluding the
+    fast pick and its aliases and clamped keys: the largest observed rise,
+    lexical ties (``select_keys``'s order). Derived here, never supplied.
+    """
+    classification = table["classification_table"]["classification"]
+    coverage, r0_keys = table["coverage"], config["r0_classified_keys"]
+    fast = smoke_selection(classification, coverage, r0_keys)["s_fast"]
+    excluded = {fast, *classification.get("selected_key_aliases", {}).get(fast, [])}
+    excluded.update(k for group in classification.get("alias_groups", []) if fast in group for k in group)
+    phases = coverage.get("phases") or {}
+    candidates = sorted(
+        (row for row in classification["ranking"]
+         if config["r0_classes"].get(row["key"]) == "die" and row["key"] not in excluded
+         and not row.get("clamped") and rt._finite(row.get("observed_rise"))
+         and phases and all(p.get(row["key"], {}).get("pass", False) for p in phases.values())
+         and rt.sensor_admissibility(classification, {"s_fast": fast, "s_slow": row["key"]}, r0_keys)["ok"]),
+        key=lambda r: (-r["observed_rise"], r["key"]))
+    slow = candidates[0]["key"] if candidates else None
+    result = rt.sensor_admissibility(classification, {"s_fast": fast, "s_slow": slow}, r0_keys)
+    return {**result, "ok": result["ok"] and fast is not None and slow is not None, "fallback": False,
+            "selected_at": "smoke_part_b", "slow_rule": SECOND_FAST_RULE,
+            "candidates": [r["key"] for r in candidates]}
+
+
+def second_fast_rule_table_identities(saved, regenerated, config):
+    """RL-89's four identities, with only ``selection.s_slow`` changed (RL-122 item 7 step 2)."""
+    pick = second_fast_rule_selection(saved, config)
+    failures = []
+    digests = {t["classification_table"]["classification"].get("classification_sha256") for t in (saved, regenerated)}
+    if digests != {SECOND_FAST_RULE_CLASSIFICATION_SHA256}:
+        failures.append("1: classification_sha256 is not the saved D classification's")
+    if saved.get("coverage") != regenerated.get("coverage") or not saved.get("coverage", {}).get("pass"):
+        failures.append("2: coverage differs or did not pass")
+    selection = regenerated.get("selection", {})
+    if not (pick["ok"] and selection.get("ok") is True and selection.get("fallback") is False
+            and selection.get("reasons") == [] and selection.get("s_fast") == pick["s_fast"]
+            and selection.get("s_slow") == pick["s_slow"]):
+        failures.append("3: selection is not ok / no fallback / the rule's pair")
+    others = [k for k in set(saved) | set(regenerated) if k != "selection" and saved.get(k) != regenerated.get(k)]
+    others += [f"selection.{k}" for k in set(saved.get("selection", {})) | set(selection)
+               if k != "s_slow" and saved.get("selection", {}).get(k) != selection.get(k)]
+    if others:
+        failures.append("4: fields other than selection.s_slow changed: " + ", ".join(sorted(others)))
+    if failures:
+        raise ValueError("RL-122: regenerated Part B table fails RL-89's identities: " + "; ".join(failures))
+    return pick
+
+
+def regenerate_second_fast_rule_table(saved_raw, config):
+    """Re-derive (never re-measure) the Part B table: only the selection's slow key changes."""
+    saved = json.loads(saved_raw)
+    if table_bytes(saved) != saved_raw:
+        raise ValueError("RL-122: the saved Part B table is not in the kit's own serialization")
+    pick = second_fast_rule_selection(saved, config)
+    if not pick["ok"]:
+        raise ValueError("RL-122: the fast rule's second application gives no admissible pair: "
+                         + "; ".join(pick["reasons"]))
+    regenerated = json.loads(saved_raw)
+    regenerated["selection"]["s_slow"] = pick["s_slow"]
+    second_fast_rule_table_identities(saved, regenerated, config)
+    return table_bytes(regenerated)
+
+
 def validate_sensor_ruling(config, ruling, smoke_sha256, table):
     if (not ruling.get("research_lead_ruling") or ruling.get("smoke_part_b_sha256") != smoke_sha256
             or ruling.get("sensors") != config["sensors"] or ruling.get("authorizes_night") is not True):
@@ -104,10 +187,29 @@ def validate_sensor_ruling(config, ruling, smoke_sha256, table):
     if table.get("r0_classified_keys") != config["r0_classified_keys"]:
         raise ValueError("RL-78: smoke R0 key set changed; selection is made once")
     classification = table["classification_table"]["classification"]
-    selected = smoke_selection(classification, table["coverage"], config["r0_classified_keys"])
-    if not selected["ok"] or any(selected[r] != config["sensors"][r]
-                                 or selected[r] != table.get("selection", {}).get(r) for r in ("s_fast", "s_slow")):
-        raise ValueError("RL-78: policy must use the fixed smoke Part B selection: " + "; ".join(selected["reasons"]))
+    digest = classification.get("classification_sha256")
+    rule = ruling.get("slow_rule")
+    if rule is None:
+        if digest == SECOND_FAST_RULE_CLASSIFICATION_SHA256:
+            raise ValueError("RL-116: the registered slow pick on this D classification was unseated; only "
+                             f"ruling {SECOND_FAST_RULE_RULING}'s {SECOND_FAST_RULE} pick is accepted")
+        selected = smoke_selection(classification, table["coverage"], config["r0_classified_keys"])
+        label = "RL-78: policy must use the fixed smoke Part B selection: "
+    elif (rule == SECOND_FAST_RULE and ruling.get("research_lead_ruling") == SECOND_FAST_RULE_RULING
+          and ruling.get("classification_sha256") == digest == SECOND_FAST_RULE_CLASSIFICATION_SHA256):
+        selected = second_fast_rule_selection(table, config)
+        if table.get("selection", {}).get("ok") is not True or table["selection"].get("fallback") is not False:
+            raise ValueError("RL-122: the Part B selection must be ok with no fallback")
+        label = f"{SECOND_FAST_RULE_RULING}: policy must use the fast rule's second application: "
+    else:
+        raise ValueError(f"slow rule {rule!r} refused: only the registered rule, or {SECOND_FAST_RULE} under "
+                         f"ruling {SECOND_FAST_RULE_RULING} on its own D classification, is accepted")
+    mismatched = [r for r in ("s_fast", "s_slow")
+                  if selected[r] != config["sensors"][r] or selected[r] != table.get("selection", {}).get(r)]
+    if not selected["ok"] or mismatched:
+        raise ValueError(label + "; ".join(selected["reasons"] + [
+            f"{r}: policy {config['sensors'][r]!r} / table {table.get('selection', {}).get(r)!r} "
+            f"is not the derived {selected[r]!r}" for r in mismatched]))
     if config.get("slow_band_floor_c") != 1.0:
         raise ValueError("RL-78: default max(1 C, 3 soak idle SD); no S6 receipt transfer")
     if "Tf08" not in config["sensors"].get("record_keys", []):
@@ -334,9 +436,18 @@ def main(argv=None):
     p.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
     p = sub.add_parser("desk")
     p.add_argument("--run-dir", type=Path, required=True)
+    p = sub.add_parser("regenerate-table", help="RL-122: re-derive (not re-measure) the Part B selection")
+    p.add_argument("--saved-table", type=Path, required=True)
+    p.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "prepare":
         prepare(args.output, ruling=json.loads(args.sensor_ruling.read_text()), smoke_table=args.smoke_table)
+    elif args.command == "regenerate-table":
+        config, _ = rt.load_config(ROOT / r1.DEFAULT_RUNTIME_CONFIG)
+        raw = regenerate_second_fast_rule_table(args.saved_table.read_bytes(), config)
+        with args.output.open("xb") as handle:
+            handle.write(raw)
+        print(hashlib.sha256(raw).hexdigest())
     elif args.command == "smoke":
         smoke(args.output, args.part, r1.runtime_argv_from_inputs(args.inputs), soak_reference=args.soak_reference)
     else:

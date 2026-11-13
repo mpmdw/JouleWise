@@ -123,13 +123,18 @@ def _draft(branch, derived, view):
                               "--signature 'lead: <name/session> <ISO date>'`"}
 
 
-def decide(r1_slots, x_max_turns):
-    """Run R10-2's steps on the timing view. Returns the decision record."""
+def decide(r1_slots, x_max_turns, planning_release=None):
+    """Run R10-2's steps on the timing view. Returns the decision record.
+
+    ``planning_release`` is the lead's RL-122 3(a) record or None: planning-turn
+    G0 timeouts it releases do not call for an R1 re-run (kit.check_r1_evidence
+    applies the same record)."""
     view = timing_view(r1_slots)
     inconclusive = view.get('inconclusive_segments')
     if not isinstance(inconclusive, dict):
         raise ValueError('r1_slots.inconclusive_segments must be recorded (R6-2)')
-    deciding_inconclusive = {k: v for k, v in inconclusive.items() if k != 'X_G_contrast'}
+    released = kit.planning_released_segments(r1_slots, planning_release)
+    deciding_inconclusive = {k: v for k, v in inconclusive.items() if k != 'X_G_contrast' and k not in released}
     if deciding_inconclusive:
         return {'step': 'R1-RERUN', 'branch': None, 'receipt_draft': None,
                 'reason': ('inconclusive segment(s) ' + ', '.join(sorted(inconclusive))
@@ -285,6 +290,8 @@ def main(argv=None):
     p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
     p.add_argument('--inputs', type=Path, default=ROOT / kit.INPUTS, help='read for WP18.X.max_turns only')
     p.add_argument('--draft-out', type=Path, help='where to write the receipt draft (branch (a) or (b))')
+    p.add_argument('--planning-release', type=Path, default=ROOT / kit.R1_PLANNING_RELEASE,
+                   help='the lead\'s RL-122 3(a) record; used only if the file exists')
     p = sub.add_parser('sign')
     p.add_argument('draft', type=Path)
     p.add_argument('--signature', required=True)
@@ -313,7 +320,8 @@ def main(argv=None):
             print(f'wrote {args.out}')
         elif args.command == 'decide':
             x_max_turns = _load(args.inputs)['WP18']['X']['max_turns']
-            out = decide(_load(args.r1_slots), x_max_turns)
+            release = _load(args.planning_release) if args.planning_release.is_file() else None
+            out = decide(_load(args.r1_slots), x_max_turns, planning_release=release)
             draft = out.pop('receipt_draft')
             if draft is not None:
                 if args.draft_out is None:
