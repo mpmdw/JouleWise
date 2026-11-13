@@ -43,7 +43,7 @@ LAKEBED_PLATFORM_CAP_BYTES = 1_048_576
 DECISION_LOG_ENTRY_RE = re.compile(r"(?m)^## (?P<decision_id>D-\d{3}):")
 DECISION_LOG_SUBSECTION_RE = re.compile(r"(?m)^### ")
 MARKED_VERSION = "18.0.6"
-MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"
+MARKED_LOCAL_EXECUTABLE = ROOT / "site_capsule" / "node_modules" / ".bin" / "marked"
 
 
 class SiteBuildError(RuntimeError):
