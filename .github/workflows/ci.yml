@@ -74,8 +74,8 @@ jobs:
         run: |
           # Only a successful, non-empty, unreferenced docs-only diff may suppress tests
           # (scripts/ci_docs_only.sh; tests/test_ci_docs_only.py). A state-only diff
-          # (scripts/ci_state_only.sh; tests/test_ci_state_only.py) runs quick plus the
-          # modules that name the changed files instead of the shards. Errors run CI.
+          # (scripts/ci_state_only.sh; also tested in tests/test_ci_docs_only.py) runs the
+          # plain quick tier and fences instead of the shards. Errors run CI.
           before=; after=
           case "${GITHUB_EVENT_NAME:-}" in
             push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
