@@ -12,6 +12,13 @@ SPEC = importlib.util.spec_from_file_location(
 replay = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(replay)
 
+import atexit
+import shutil
+
+_TMP = Path(tempfile.mkdtemp(prefix="sm-shadow-test-"))
+atexit.register(shutil.rmtree, _TMP, True)
+replay.TMP_ROOT = _TMP  # tests never touch the SSD scratch root
+
 NOW = 2_000_000_000.0
 GOOD_COURIER = {"sent": True, "exit_code": 0}
 
@@ -187,6 +194,70 @@ def test_only_allowlisted_files_are_read(tmp_path):
     d = write(tmp_path, "b5-extra", {**go_night(), "meter_supervision.jsonl": "x", "censuses.jsonl": "x"})
     _, files = replay.load_tree_night(d)
     assert "meter_supervision.jsonl" not in files
+
+
+def test_no_non_allowlisted_key_or_content_reaches_temp_dir_or_output(tmp_path):
+    files = go_night(**{"network_time_off.action.json": {"returncode": 0, "stdout": "SECRET-STDOUT"},
+                        "courier.json": {"sent": True, "message_id": "MSGID-SECRET"},
+                        "chain.exit-census.json": {"survivors": [{"cmd": "SECRET-CMD"}]},
+                        "censuses.jsonl": "SECRET-CENSUS", "go-census.json": "SECRET-GO"})
+    files["result.json"].update({"energy_j": 123456.789, "note": "SECRET-NOTE", "fault_reasons": ["SECRET-REASON"]})
+    files["hazard_result.json"].update({"meter": {"watts": 987654.321}, "monitor": "SECRET-MON",
+                                        "faults": {"reasons": ["SECRET-R2"], "detail": "SECRET-D"}})
+    d = write(tmp_path, "align-r1-secret", files)
+    _, loaded = replay.load_tree_night(d)
+    blob = b"".join(loaded.values()).decode()
+    assert not any(x in blob for x in ("SECRET", "123456", "987654"))
+    assert loaded["censuses.jsonl"] == b"" and loaded["go-census.json"] == b""
+    seen = []
+    orig = replay.window_state.observe_night_dir
+
+    def spy(root, *a, **k):
+        for p in Path(root).rglob("*"):
+            if p.is_file():
+                seen.append(p.read_text())
+        return orig(root, *a, **k)
+    replay.window_state.observe_night_dir = spy
+    try:
+        n = replay.replay_night("align-r1-secret", loaded, NOW)
+    finally:
+        replay.window_state.observe_night_dir = orig
+    assert seen and not any(x in "".join(seen) for x in ("SECRET", "123456", "987654", "energy_j", "meter"))
+    assert not any(x in json.dumps(n) for x in ("SECRET", "123456", "987654"))
+
+
+def test_existence_files_are_never_fetched_from_git(tmp_path):
+    calls = []
+    orig = replay._git
+
+    class R:
+        def __init__(self, out, rc=0):
+            self.stdout, self.returncode = out, rc
+
+    def fake(args, cwd):
+        calls.append(args)
+        if args[0] == "ls-tree":
+            return R(b"censuses.jsonl\nresult.json\nrestore.json\n")
+        return R(b'{"verdict": "GO", "x": "SECRET"}')
+    replay._git = fake
+    try:
+        _, files = replay.load_git_night("origin/night-results/align-r1-q", tmp_path)
+    finally:
+        replay._git = orig
+    shown = [c[1] for c in calls if c[0] == "show"]
+    assert shown and all(s.endswith("/result.json") for s in shown)
+    assert files["censuses.jsonl"] == b"" and "SECRET" not in files["result.json"].decode()
+    assert "restore.json" in files.all_names
+
+
+def test_restore_check_sees_names_in_full_listing(tmp_path):
+    d = write(tmp_path, "align-r1-a", go_night(**{"network_time_off.json": {"x": 1}}))
+    _, loaded = replay.load_tree_night(d)
+    rec = replay.recorded_facts(loaded)
+    assert rec["network_time_off_action_record"] and not rec["restore_record_in_delivered_tree"]
+    d2 = write(tmp_path, "align-r1-b", go_night(**{"network_time_off.json": {}, "ntp_restore.json": {}}))
+    _, loaded2 = replay.load_tree_night(d2)
+    assert replay.recorded_facts(loaded2)["restore_record_in_delivered_tree"]
 
 
 def test_cli_writes_json_and_summary(tmp_path):

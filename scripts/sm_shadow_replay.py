@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -79,6 +80,70 @@ def explain_invariant(inv, rec, fault_reason_count):
     return ("unclassified", "no explanation rule")
 
 
+# --- projection (M2) -------------------------------------------------------------
+# Every JSON is reduced to the keys the checks read BEFORE it is kept or written anywhere.
+# Free-text and identifier values are replaced by placeholders that keep only presence/count.
+TMP_ROOT = Path(os.environ.get("SM_SHADOW_TMP", "/Volumes/JW-EXT/tmp"))
+_RESULT_KEYS = ("verdict", "chain_exit_code", "fault", "measurement_outcome", "chain_outcome", "ended_epoch_s")
+
+
+def _reasons(v):
+    return ["r"] * len(v) if isinstance(v, list) else v
+
+
+def _pick(doc, keys):
+    return {k: doc[k] for k in keys if k in doc}
+
+
+def project_doc(name, doc):
+    """Return the allowlisted-key projection of a parsed JSON object (or None if not an object)."""
+    if not isinstance(doc, dict):
+        return None
+    if name in ("result.json", "hazard_result.json"):
+        out = _pick(doc, _RESULT_KEYS)
+        if "fault_reasons" in doc:
+            out["fault_reasons"] = _reasons(doc["fault_reasons"])
+        if isinstance(doc.get("faults"), dict) and "reasons" in doc["faults"]:
+            out["faults"] = {"reasons": _reasons(doc["faults"]["reasons"])}
+        elif "faults" in doc:
+            out["faults"] = {}
+        if name == "hazard_result.json" and isinstance(doc.get("chain"), dict):
+            out["chain"] = _pick(doc["chain"], ("exit_code",))
+        elif name == "hazard_result.json" and "chain" in doc:
+            out["chain"] = {}
+        if name == "hazard_result.json":
+            out.pop("ended_epoch_s", None)
+        return out
+    if name == "chain.exited":
+        return _pick(doc, ("exit_code",))
+    if name == "courier.json":
+        out = _pick(doc, ("sent",))
+        for k in ("message_id", "mail_message_id"):
+            if isinstance(doc.get(k), str):
+                out[k] = "x" if doc[k].strip() else ""
+        return out
+    if name == "courier.delivery.json":
+        return _pick(doc, ("transport", "commit", "result_sha256", "ref"))
+    if name == "chain.exit-census.json":
+        surv = doc.get("survivors")
+        return {"survivors": [None] * len(surv)} if isinstance(surv, list) else {}
+    return {}  # presence-only JSON (chain.started, refusal.json, network_time_off.action.json, ...)
+
+
+def project_bytes(name, raw):
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        return b"not-json"  # keep "unreadable" visible to the reader without keeping content
+    proj = project_doc(name, doc)
+    return b"[]" if proj is None else json.dumps(proj).encode()
+
+
+class Files(dict):
+    """name -> projected bytes for allowlisted files; .all_names = every file name listed (names only)."""
+    all_names: frozenset = frozenset()
+
+
 # --- sources -------------------------------------------------------------------
 
 def _git(args, cwd):
@@ -98,19 +163,24 @@ def load_git_night(ref: str, repo: Path):
     tree = _git(["ls-tree", "--name-only", f"{ref}:{NIGHT_SUBDIR}/{name}"], repo)
     if tree.returncode != 0:
         return name, None
-    present = set(tree.stdout.decode().split("\n")) & ALLOWLIST
-    files = {}
-    for f in sorted(present):
-        files[f] = _git(["show", f"{base}/{f}"], repo).stdout
+    listed = {n for n in tree.stdout.decode().split("\n") if n}
+    files = Files()
+    files.all_names = frozenset(listed)
+    for f in sorted(listed & ALLOWLIST):
+        if f in EXISTENCE_FILES:
+            files[f] = b""  # M1: presence from ls-tree only; contents are never fetched
+        else:
+            files[f] = project_bytes(f, _git(["show", f"{base}/{f}"], repo).stdout)
     return name, files
 
 
 def load_tree_night(path: Path):
-    files = {}
+    files = Files()
+    files.all_names = frozenset(p.name for p in path.iterdir())
     for f in sorted(ALLOWLIST):
         p = path / f
         if p.is_file() and not p.is_symlink():
-            files[f] = p.read_bytes()
+            files[f] = b"" if f in EXISTENCE_FILES else project_bytes(f, p.read_bytes())
     return path.name, files
 
 
@@ -140,6 +210,8 @@ def recorded_facts(files):
     hz_chain = haz.get("chain") if isinstance(haz, dict) and isinstance(haz.get("chain"), dict) else {}
     surv = cen.get("survivors") if isinstance(cen, dict) else None
     act = _json(files, "network_time_off.action.json")
+    names = getattr(files, "all_names", None) or frozenset(files)
+    off_alt = "network_time_off.json" in names
     return {
         "result_present": "result.json" in files,
         "refusal_present": "refusal.json" in files,
@@ -152,17 +224,21 @@ def recorded_facts(files):
         "courier_sent_marker": "courier.sent" in files,
         "courier_sent_field": courier.get("sent") if courier and isinstance(courier.get("sent"), bool) else None,
         "exit_census_survivor_count": len(surv) if isinstance(surv, list) else None,
-        "network_time_off_action_record": act is not None,
-        "restore_record_in_delivered_tree": any("restore" in n for n in files),
+        "network_time_off_action_record": act is not None or off_alt,
+        # file NAMES only (full ls-tree listing); fields inside delivered files are not inspected
+        "restore_record_in_delivered_tree": any("restore" in n.lower() for n in names),
     }
 
 
 def shadow_replay(files, now_epoch_s):
-    with tempfile.TemporaryDirectory(prefix="sm-shadow-") as tmp:
+    if not TMP_ROOT.is_dir():
+        raise SystemExit(f"temp root {TMP_ROOT} is missing; mount the SSD or set SM_SHADOW_TMP "
+                         "(the internal disk is deliberately not a fallback)")
+    with tempfile.TemporaryDirectory(prefix="sm-shadow-", dir=TMP_ROOT) as tmp:
         night = Path(tmp) / "night"
         night.mkdir()
         for name, raw in files.items():
-            (night / name).write_bytes(raw if name in JSON_FILES else b"")
+            (night / name).write_bytes(raw if name in JSON_FILES else b"")  # raw is already projected
         obs = window_state.observe_night_dir(Path(tmp))
     report = window_state.derive_window_state(obs, now_epoch_s)
     host = host_effects.HostFacts(result_present="result.json" in files)
