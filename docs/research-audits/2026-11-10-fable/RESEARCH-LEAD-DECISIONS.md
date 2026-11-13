@@ -9829,6 +9829,150 @@ conditional case, in one turn.
 **Blind status.** Unchanged. Synthetic roots only: attempts, loop states, listings, code and the registered
 text. No Block 6 custody, archive or outcome path was opened. Block-5-aware.
 
+---
+
+# RL-141 addendum 2: N-21 and steps 6-8 (2026-11-13 12:29 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 12:29 PST (`date`), after the seven-session launcher stopped at
+step 5 (exit 15) and removed its lock. File reads and git only. I ran no test, build, reader, program or pool,
+and wrote nothing but this addendum.
+
+**Read.** The launcher, its events file and its step log. In synthetic root 25: the output listing,
+`option-c-r2-gamma.time`, `option-c-r2-gamma-receipt.json` (field names and exit values), the two
+`instrument_evidence.json` files of r2-gamma (key names and whether `b_fiducial_s` is set), and r2-gamma's
+attempt row. At the merge head `b5ab6a71d`: `Session.__init__` and `Session.calibration` (RC:224-310,
+:445-497), `main`'s exit handling (RC:1740-1795), `recompute_block` (RC:1289-1302), and `prepare_run_inputs`,
+`run_option_c`, `write_observations` and `main` in `b6_r12_verify.py`. `DeclaredShapeTests`
+(`tests/test_b6_r12_session_fixture.py:1381-1440`). The R12 report at the merge head, lines 235-240. The
+program at `d38495791` (SHA-256 `e17886bf…`), `calibration` only. My RL-134 §1 and §11. The request's
+section 6 at `47310785e`.
+
+## B1. `calibration_capture_missing` is the program's named behaviour. N-21's prediction was wrong
+
+**Ruled.** The program is right and my prediction was wrong.
+
+1. **The path.** r2-gamma's archive has no `derived/bracket-binding.json`. The name fallback finds one
+   `-cal-post` capture, and its `b_fiducial_s` is null. `calibration` then has no post value. With
+   authenticated inputs it raises `InputRefusal("calibration_capture_missing")` (RC:481) instead of taking
+   the captures from the acceptance record, which is what the unauthenticated path does. `main` prints
+   `refused: calibration_capture_missing` and returns 4 (RC:1786-1788). The receipt shows exactly that:
+   `exit_code` 4, no numbers file, empty stdout, 2.7 s.
+2. **It is deliberate and it was already named.** The refusal came in with the authenticated program
+   (`4e3446e6c`). The R12 report records the same refusal on a non-counting archive with a missing binding
+   (lines 236-237). My own RL-134 §11 lists it in class E. I wrote N-21 without reading `calibration`, on
+   the model of r1-alpha, which is not counting for a cell reason and has both captures.
+3. **Why refusing is the right behaviour for this state.** The acceptance record's captures are the primary
+   chain's own numbers. A second program that falls back to them is not independent. A session with an
+   incomplete bracket has no operative bound, so nothing in it can be recomputed.
+4. **Term 7's differential read is not owed.** RL-141 §4 applied it to a departure in a read slot. Its
+   purpose is to tell a merge effect from a fixture effect. Here that is answered by the bytes:
+   `calibration` is identical in `e17886bf…` and `90e22603…` (same hash of the function body, same call at
+   `Session.__init__`), and no hunk of the merge delta touches the path before it. The older program would
+   refuse the same way. No second read of the root is made.
+5. **Not verified.** No test asserts this refusal by name. That is a coverage gap, owed after the release,
+   gating nothing.
+
+**N-21, corrected recorded value** (the predeclared text stays in the row, struck or labelled, not replaced):
+
+> Predeclared (RL-141 §4): exit 0, comparator agrees, `calibration.bracket_incomplete` retained.
+> **Observed:** exit 4, `refused: calibration_capture_missing`; no numbers or public output; comparator not
+> reached; `time_wrapper_exit` 4, equal to `exit_code`. **Departed. Ruled a prediction error (RL-141
+> addendum 2 B1):** the pinned program refuses, by name, a session whose post-session capture is invalid
+> when inputs are authenticated (RC:481). Program `90e22603…`, receipt `33438ddf…3539`.
+
+N-18 is not engaged: its wrapper-failure clause is for a nonzero wrapper exit with `exit_code` 0.
+
+**Deviation.** None. This is a recorded slot result with its ruling. N-21 was a slot I added today, not
+registered content. No §17-R12 shape is carried by r2-gamma (addendum A3), and no registered sentence
+promises a read of a calibration-excluded session. Nothing goes in the deviation log.
+
+**Corrections to RL-141 that follow.**
+
+- §5 "Shown": strike "an excluded session of a second kind (r2-gamma)". Sessions carrying unscripted member
+  flags stay shown, by r2-alpha and r3-alpha in the block.
+- §5 "Not shown" gains item 5: a recompute of a calibration-excluded session. The program refuses it by
+  name, so no root can show it.
+- Addendum A3's anchor row: the unscripted carriers read are r2-alpha and r3-alpha, not r2-gamma.
+- One sentence is added to the R12 report and the pin paragraph, after the sentence of addendum A4:
+
+  > The cohort's calibration-excluded session, r2-gamma, was read alone and the program refused it by name
+  > (`calibration_capture_missing`, exit 4): with authenticated inputs it does not take a missing capture
+  > from the acceptance record. It was predicted to exit 0; the prediction was wrong.
+
+## B2. Steps 6-8: option (i), a continuation launcher
+
+**Ruled: (i).** Steps 6, 7 and 8 run once, from a continuation launcher, with the same asserts and lock and a
+new events file.
+
+**Why not (ii).** It reads root 25 a second time and writes steps 1-5 again. The launcher refuses that
+(existing events file, existing `option-c-*` outputs), and the refusals would have to be removed or the
+first outputs moved. That is the retry RL-141 ruled out, and the first read is good.
+
+**Why (i) is not a retry.** Steps 6-8 have not run. The stop at step 5 was the designed hold for my answer
+(RL-141 §4), and this is the answer. Nothing in steps 6-8 reads step 5's output: `write_observations` takes
+the block receipt, the block numbers, the skips receipt and the denied receipt, and all six shape carriers
+are in the block or skips receipts. The seven shape tests read `observations.json` only.
+
+**The launcher.** `/Volumes/JW-EXT/scratch/rl141-read-seven-cont.zsh`, made from `rl141-read-seven.zsh` with
+these differences and no others:
+
+1. Events, log and profile names end `-cont`. Lock label `rl141-read-seven-cont`. It refuses if its own
+   events file exists.
+2. It requires the first events file, containing `end label=5-r2-gamma … exit=4`, `read end exit=15
+   hard_stopped=0`, and no `start label=6`.
+3. The "a finisher output already exists" refusal is replaced by four asserts, each a refusal if false:
+   - each of the eight `sha256 <hash> <path>` lines of the first events file still matches its file;
+   - the first line of `$M25/option-c-r2-gamma.time` is exactly `refused: calibration_capture_missing`;
+   - `$M25` holds 33 `option-c*` names, and no `observations.json`, `full-volume-observations.json`,
+     `reduced-finish-receipt*` or `$STEM`;
+   - `$M26` holds no `option-c*` name.
+4. Before the launch, the lead commits N-21's row as B1 gives it to `docs/2026-11-13-b6-s14-pin-request`,
+   changing no other slot. `REQUEST_COMMIT` is that commit, and the launcher also greps its request for
+   `calibration_capture_missing` in the N-21 row.
+5. `HARD_STOP_S=10601` (10,800 less the 199 s used).
+6. `read_steps` holds steps 6, 7 and 8 only, with their command lines, the step 6 receipt check and the
+   return codes 16, 17 and 18, all unchanged.
+7. After the steps it checks the eight first-read hashes again and writes a `STOP` line on any mismatch.
+
+Unchanged: the traps, `air_python`, the contention refusal, the head check, the two hash asserts, the
+generator-state assert, both closure checks, the overlap census, `run_step`, `receipt_ok`, the test list and
+the closing SHA-256 and wrapper lines. The lead checks the result with `diff` against the first launcher and
+`zsh -n`. No review round.
+
+**Predeclared, unchanged from `47310785e`:** N-12 (denied-26: option (c) 0, agrees, OFF rc 126,
+`network_time.off_output` retained) and N-13 (all seven shape assertions exit 0). Step 7 exits 0. I do not
+predict step 7's time: `volume_facts` over three full sessions has not been timed by me.
+
+**If step 6, 7 or 8 does not pass:** the launcher stops, nothing is retried, and the names come to me.
+Addendum A4's conditional entry applies only to `test_cross_session_gamma` or the block read.
+
+## B3. The cut, the gate run and the release path
+
+**Ruled.** Nothing changes.
+
+1. **The cut.** The pinned bytes are unchanged. The gate is as RL-141 wrote it: the read (now steps 6-8),
+   the filled slots and the term 7 check on the block's restricted output. N-21's row is filled as B1 gives
+   it. The cut does not wait for a test of the refusal.
+2. **The gate run.** It reads real `r1-alpha`, a counting session. A counting session has a complete
+   bracket by the chain's own rule.
+3. **The dry run and the release.** The custody copy holds nine archives, the nine counting sessions
+   (RL-134 facts table). A calibration-excluded session is not in the copy and is never supplied. If the
+   refusal appeared there, the chain and the program would disagree about a capture, and RL-134 §11 class E
+   already names `calibration_capture_missing` and routes it to me. It would appear within seconds:
+   `calibration` runs in `Session.__init__`, before any member is read, and `recompute_block` builds every
+   session before it computes one. No new probe is added.
+4. **What the result adds.** The R12 cohort now shows, on a chain-written archive, that the class E refusal
+   fires by name and early. That is the behaviour RL-134 assumed.
+
+**Owner.** The lead: the request commit, the continuation launcher, its launch, the slots, the three text
+corrections. Me: any step 6-8 departure, in one turn. After the release, any seat: one test asserting the
+refusal by name on a synthetic archive with a null post capture.
+
+**Gate.** Unchanged in kind: steps 6-8 pass, slots filled, term 7 check, then the cut.
+
+**Blind status.** Unchanged. Synthetic roots 25 and 26 only: listings, receipts, capture key names, one
+attempt row, code and rulings. No Block 6 custody, archive or outcome path was opened. Block-5-aware.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
