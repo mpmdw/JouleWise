@@ -5,6 +5,11 @@ Draft, 2026-11-13 09:46 PST (`date`). Builder seat (Claude Opus 5.5) for the lea
 `docs/run_reports/2026-11-13-b6-blind-dry-run.md`. It is written and pushed before the first launch of the pinned
 program on real custody (step 7). It holds every value predeclared for steps 7 to 10.
 
+**Filled 2026-11-13 12:53 PST (`date`)** by the builder seat for the lead (runbook steps 2 to 6): every `⟨CUT⟩` and
+`⟨LEAD-CONFIRM⟩` blank. The `⟨GATE⟩` blanks stay open until step 7. Steps 4 and 5 touched custody through the kit
+and `b6_mapping_build.py` only: names, digests and the session index fields. No session content was opened and
+the pinned program has not been run on real custody.
+
 **Blanks.** A value that exists only after the S-14 cut and steps 1 to 5 is written `⟨CUT: …⟩`. One that exists
 only after the gate run is written `⟨GATE: …⟩`. `⟨LEAD-CONFIRM: …⟩` marks a value taken from a plan, which the
 lead confirms against the record named. Before the push, every `⟨CUT⟩` and `⟨LEAD-CONFIRM⟩` blank is filled.
@@ -25,12 +30,12 @@ Block-5-aware.
 
 | Item | Value | Check |
 |---|---|---|
-| `$S14` | `⟨CUT: S-14 commit, 40 hex⟩` | `git rev-parse b6/analysis^{commit}` |
-| Tree | `⟨CUT: S-14 tree, 40 hex⟩` | `git rev-parse $S14^{tree}` |
-| Tag | `b6/analysis`, annotated, object `⟨CUT: b6/analysis tag object, 40 hex⟩` | `git rev-parse refs/tags/b6/analysis` |
+| `$S14` | `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b` | `git rev-parse b6/analysis^{commit}` |
+| Tree | `27770d960cc403989189e7fbfa2077ab2ef65225` | `git rev-parse $S14^{tree}` |
+| Tag | `b6/analysis`, annotated, object `082652f25983ccd335acd834861f19455b9ff6fe` | `git rev-parse refs/tags/b6/analysis` |
 | Pin candidate it must equal on the 24 files | `b5ab6a71d798e168209fd66a0832f66f97a0b096` | `git show <commit>:<path> \| shasum -a 256`: 24 of 24 equal the table below at `b5ab6a71d` (recomputed 09:45) |
-| Pin request with the nine's slots filled | `docs/run_reports/2026-11-13-b6-s14-pin-request.md` @ `⟨CUT: pin request commit at the cut, 40 hex⟩` | |
-| R3 table (step 7 and 9 `--r3-table`) | stdout of `scripts/b6_r3_table.py` at `$S14`: SHA-256 `1003d87e7b92bc28a38890d75860e0ea0e47ae65862e6d6dd09641d7b3f29840`, "Keys covered: 675 of 675; 149 groups; UNSTATED groups: 0." The file is `$R3` = `⟨CUT: path of the R3 stdout file generated at $S14⟩` | regenerated at `b5ab6a71d` 09:39: the same SHA-256 |
+| Pin request with the nine's slots filled | `docs/run_reports/2026-11-13-b6-s14-pin-request.md` @ `9a98eb5b1043643562f772b418cf92a4bce3d1f6` | |
+| R3 table (step 7 and 9 `--r3-table`) | stdout of `scripts/b6_r3_table.py` at `$S14`: SHA-256 `1003d87e7b92bc28a38890d75860e0ea0e47ae65862e6d6dd09641d7b3f29840`, "Keys covered: 675 of 675; 149 groups; UNSTATED groups: 0." The file is `$R3` = `/Volumes/JW-EXT/b6-custody-run/r3-table-s14.txt`, generated 12:52 PST with `$PY -I -B scripts/b6_r3_table.py` on a `git archive` of `$S14`: exit 0, SHA-256 `1003d87e…9840`, that "Keys covered" line; generator `d3106ecb…0609` at `$S14` | regenerated at `b5ab6a71d` 09:39: the same SHA-256 |
 | R3 generator | `scripts/b6_r3_table.py` `d3106ecbc37b941b764efd1bbb51ccf3a99928081e324a602a1089616cb90609` at `b5ab6a71d` | Note: the pin request's §2c gives `30c31dc9…`. That is the generator's digest at `9f1b53767`, before RL-133 changed its label strings |
 
 ### The 24 closure hashes (pin request §2a and §2b; RL-129 §6)
@@ -66,30 +71,30 @@ launcher's `PIN_TABLE`.
 | 24 | `configs/b6/registration/identity_pins.json` | `513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d` |
 
 **Step 2 record (before step 7).** Checkout `$W` is detached at `$S14`. `git status --porcelain` is empty, and
-24 of 24 hashes are equal: `⟨CUT: time from date; porcelain empty yes/no; 24 of 24 yes/no⟩`.
+24 of 24 hashes are equal: 2026-11-13 12:46 PST (`date` 12:46:39, after the hashes); porcelain empty: yes; 24 of 24: yes (`/Volumes/JW-EXT/scratch/rl129-diff/closure_hashes.zsh $W $S14`, every row `wt-ok`; the 24 also equal the launcher's `PIN_TABLE` at `5c53850f6` and appear in the pin request at `9a98eb5b1`).
 
 **The closed nine's slots** (pin request §6, N-1 to N-19), as filled at the cut. They are context here and are not
 re-predicted:
-`⟨CUT: pin request §6 at the commit above; each slot equal to its predeclared value, or the ruling cited⟩`.
+pin request §6 at `9a98eb5b1`, filled 2026-11-13 12:40 PST. N-1 to N-13, N-15 to N-20 are met or as reported. N-14 (loop close) is not met, recorded before the read (RL-141 §1 item 1, §4). N-21 (r2-gamma) departed: exit 4, `refused: calibration_capture_missing`, ruled a prediction error (RL-141 addendum 2 B1). The cut is §8a of that request.
 
 ## 2. Inputs and their digests
 
 | Variable | Value |
 |---|---|
 | `W` | `/Volumes/JW-EXT/jw-wt/b6-s14-run` (clean detached checkout of `$S14`) |
-| `KITW` | `/Volumes/JW-EXT/jw-wt/b6-custody-kit-r3` (kit at `⟨CUT: kit commit used for step 5⟩`) |
-| `TOOLS` | `/Volumes/JW-EXT/jw-wt/b6-real-run/scripts` at `⟨CUT: real-run tools commit, with RL-139 fixes 1 to 6⟩` |
-| `PY` | `/opt/homebrew/opt/python@3.13/bin/python3.13` (`⟨CUT: python3.13 --version⟩`) |
+| `KITW` | `/Volumes/JW-EXT/jw-wt/b6-custody-kit-r3` (kit at `e1f4f805288ede026980852814af2512a58b4c74`, porcelain empty) |
+| `TOOLS` | `/Volumes/JW-EXT/jw-wt/b6-real-run/scripts` at `5c53850f6aad6301b2c74cb0cf0c03fdc404eee8` ("RL-139 fixes 1-7 and the Opus kit review F3"; porcelain empty) |
+| `PY` | `/opt/homebrew/opt/python@3.13/bin/python3.13` (`Python 3.13.18`) |
 | `ROOT` | `/Volumes/JW-EXT/b6-custody` |
-| `RUN` | `/Volumes/JW-EXT/b6-custody-run` (mode 700; it holds `.metadata_never_index`, or Ed has run `mdutil -i off`: `⟨CUT: which⟩`) |
-| `MANIFEST` | `⟨LEAD-CONFIRM: /Volumes/JW-EXT/b6-custody/b6-custody-manifest.json, the custody kit report's verify command (line 182), against RUN_STATE 302⟩` |
+| `RUN` | `/Volumes/JW-EXT/b6-custody-run` (mode 700; it holds `.metadata_never_index`, or Ed has run `mdutil -i off`: `.metadata_never_index`, created 12:46 PST) |
+| `MANIFEST` | `/Volumes/JW-EXT/b6-custody/b6-custody-manifest.json`. Confirmed: the custody kit report's verify command (`docs/run_reports/2026-11-12-b6-custody-kit.md:182` at the kit commit) names it, RUN_STATE 302 puts the manifest at `/Volumes/JW-EXT/b6-custody`, and it re-hashed to `MSHA` at 12:46 PST |
 | `MSHA` | `b2901d51990812f6c2dadce1a763d90502d85b58a9d5b5b358d4cbb2ba9a9d6b` (RUN_STATE 302) |
 | `RSHA` (verify receipt 1) | `57df8a76361ba9d299383c2248e3ba6497dd33fd92dd74be33ec5d89a4830c91` (RUN_STATE 303) |
-| `LOOP` | `⟨LEAD-CONFIRM: /Volumes/JW-EXT/b6-custody, the kit report's `--loop-dir`, against RUN_STATE 303's verify⟩`. It is not `$RUN` (RL-139 fix 4) |
+| `LOOP` | `/Volumes/JW-EXT/b6-custody`. Confirmed: the kit report's line 182 gives it as `--loop-dir`; RUN_STATE 302 puts both loop files there; receipt 1 (`RSHA`, re-hashed 12:46 PST, the RUN_STATE 303 verify) lists `loop_files` `attempts.jsonl`, `state.json`, `loop_state_waived` false. It is not `$RUN` (RL-139 fix 4) |
 | `B5OUT` | `/Volumes/JW-EXT/air-home/jw-b5-custody/release-check-final-20261108T0942Z/recompute.json` |
 | `B5SHA` | `c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc` (`docs/analysis/b5/RESULTS.md`, row RC; RL-134 item 2) |
-| `D_gate` | `⟨CUT: step 5 stdout "inputs sessions=1 sha256=<D_gate>"⟩` |
-| `D_block` | `⟨CUT: step 5 stdout "inputs sessions=9 block5=pinned sha256=<D_block>"⟩` |
+| `D_gate` | `3bea5b2aec906248f229ebb04b64c4954cfcbb1d7dcc35b997c31f96917d2d9d` (step 5, 12:51 PST, exit 0: `inputs sessions=1 sha256=3bea5b2a…2d9d`; `$RUN/run-inputs-gate.json`, mode 600) |
+| `D_block` | `eb834c47b5f34c88784a57665cc1ae344d7fe309a4bcbe7a05b91f078d6b4c8f` (step 5, 12:51 PST, exit 0: `inputs sessions=9 block5=pinned sha256=eb834c47…4c8f`; `$RUN/run-inputs-block.json`, mode 600) |
 | `ORDER` | `r1-alpha r1-beta r1-gamma r2-beta r2-gamma r3-gamma r3-alpha r3-beta r4-alpha` (the order of the arguments only) |
 
 **Step 4 record (structure, before step 6).** The runbook's step 4 and the corrected commands predeclare these
@@ -99,7 +104,13 @@ values:
 - `copied_records_equal: true`;
 - exit 0.
 
-Observed: `⟨CUT: the four stdout lines of b6_mapping_build.py, and mapping-report.json's SHA-256⟩`. The
+Observed (2026-11-13 12:49 PST, after the nine kit `--list-names` calls, each exit 0): exit 0, and stdout
+`mapping sessions=9`, `clock_journal: 9 of 9`, `copied_records_equal: true`, `session_index: r1-alpha then r1-beta
+then r1-gamma then r2-beta then r2-gamma then r3-gamma then r3-alpha then r3-beta then r4-alpha`. Report
+`$RUN/mapping-report.json` SHA-256 `562f65f146cc414bc504541b252960d1ba88a06982ebc88ccc0d0d5a3ad082eb`; `$RUN/mapping.json`
+SHA-256 `79fbf41168049d44ca017c1617b11a1e15c7a453215014a4d562354c97319cf6`. The report's §17-R7 fields:
+`stated_order_holds`, `pairing_equals_r7` and `nine_counting` true, no contradiction, the implied pairing equal to
+§17-R7's; one meter stream per session; every family equal to the verify map; no flags-file substitution. The
 `session_index:` line fills `OPEN[R7-SESSION-INDEX]` (RL-134 item 9; `scripts/b6_s17_fill_check.py r7-text`).
 
 ### Block 5's input, predeclared (RL-134 item 2 term 2; build B-5)
@@ -109,7 +120,7 @@ Observed: `⟨CUT: the four stdout lines of b6_mapping_build.py, and mapping-rep
 | Probe | `$PY -I -B $TOOLS/b6_release_record.py b5-probe --checkout <checkout> --block5 $B5OUT --block5-sha256 $B5SHA --out <file>`, run by the lead 2026-11-13 09:30 PST |
 | Output | `/Volumes/JW-EXT/scratch/b6-run-prep/b5-probe.json`, SHA-256 `aa120b23c051a77ff01da0778bf469447e577362e1339d735ff0dfb50ed208a1` (re-hashed by me before 09:38, equal) |
 | `block5_included` count | **total 44: ALPHA 20, BETA 20, GAMMA 4** (from the probe's stdout `b5-probe total=44`) |
-| Step 9's `--block5-expected` | this file, or a copy in `$RUN` that hashes to `aa120b23…08a1` |
+| Step 9's `--block5-expected` | this file, or a copy in `$RUN` that hashes to `aa120b23…08a1`. **Used:** `$RUN/b5-probe.json`, re-run 12:47 PST from `$W` at `$S14` by the corrected command: exit 0, `b5-probe total=44 ALPHA=20 BETA=20 GAMMA=4`, byte-identical to the file above (`aa120b23…08a1`) |
 | Hold rule | an observed count below 44 holds the release and goes to the research lead (RL-134 item 2 term 2; item 14). A total of 0 is a hold whether predeclared or observed (Opus F3; probe `block5_included`) |
 
 ## 3. The two argv lists, verbatim
