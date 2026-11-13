@@ -21,9 +21,9 @@ collected under its own registration and remains blinded; its results will follo
 ## §5.4, closing paragraph (adds)
 
 At submission the replication block had closed with {{FILL: P1-B6-COUNT-STRUCT | per pack: counting sessions of the 3 targeted, attempts, non-counting causes; structure only}}, and its release
-conditions (primary release done, blind dry run complete, independent recomputation agreeing) were not yet all met
+conditions (primary release done, blind dry run complete, second-side comparison agreeing) were not yet all met
 ({{FILL: P1-B6-RELEASE-STATE | which release conditions were met at submission}}). Because replication values estimate the same quantities as the primary ones, and
-because every replication rule was fixed before the primary block was released, reporting the primary results now
+because the replication's counting rules, estimators and agreement word were fixed before the primary block was released, and the entries made after that release change which program prints and how agreement is shown, not the registered arithmetic, reporting the primary results now
 does not alter what the replication can show.
 
 ## §6.8 (replaces the section)
@@ -36,8 +36,7 @@ No replication energy, floor, ratio, contrast estimate or outcome word has been 
 registered analysis (each counting session analysed separately with the primary block's estimators; the
 replication word "replicated" requiring the same outcome word and sign of d̄ in every counting session; the
 between-session summary; the flagged-inclusive line; and the scaled drift, single-step, whole-machine,
-contention-rule and waited-run lines) will be released in an addendum to this paper, with the independent
-recomputation's agreement table, as soon as its registered release conditions hold. The addendum will print
+contention-rule and waited-run lines) will be released in an addendum to this paper, with the agreement table of its second-side comparison (Section 5.7), as soon as its registered release conditions hold. The addendum will print
 every quantity of Sections 6.2 to 6.5 side by side with the primary values and will change no number printed here.
 
 ## §9, Limitations (adds)

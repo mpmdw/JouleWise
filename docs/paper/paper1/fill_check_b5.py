@@ -531,14 +531,14 @@ METER_ROWS = [  # (session, model, n, median, min, max, iqr0, iqr1, spread, outs
 ]
 METER = '\n'.join([
     'Table S1 gives, for each analysed session and model, the rails\' share ρ = ΔE_rail / ΔE_machine over the '
-    'model\'s member windows: its median, range and interquartile range, and the within-model spread '
-    '(max ρ − min ρ) ÷ median ρ. No member window fell outside the hard plausibility band, so none is listed; every '
+    'model\'s member runs: its median, range and interquartile range, and the within-model spread '
+    '(max ρ − min ρ) ÷ median ρ. No member run fell outside the hard plausibility band, so none is listed; every '
     'spread is at most 0.2 and is described, as registered, as "consistent". No session was clean ({r528:n} clean '
     'sessions): no clean session, no central band. A session is clean, for this cross-check, when it carries no '
     'session-level meter flag and none of its members carries the meter\'s battery-activity flag; the central band '
     'is set only from the first clean session.',
     '',
-    cells('Session', 'Model', 'Member windows', 'Median ρ', 'Range', 'Interquartile range', 'Spread',
+    cells('Session', 'Model', 'Member runs', 'Median ρ', 'Range', 'Interquartile range', 'Spread',
           'Outside hard band', 'Word'),
     cells(*['---'] * 9),
     *[cells(s, m, f'{{r{n}:n}}', f'{{r{md}:sh4}}', f'[{{r{lo}:sh4}}, {{r{hi}:sh4}}]',

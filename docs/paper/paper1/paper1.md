@@ -245,9 +245,9 @@ and rest is reported as not measured, and every rails and rest statement carries
 
 ### 3.4 Whole-machine cross-check
 
-Table S1 gives, for each analysed session and model, the rails' share ρ = ΔE_rail / ΔE_machine over the model's member windows: its median, range and interquartile range, and the within-model spread (max ρ − min ρ) ÷ median ρ. No member window fell outside the hard plausibility band, so none is listed; every spread is at most 0.2 and is described, as registered, as "consistent". No session was clean (0 clean sessions): no clean session, no central band. A session is clean, for this cross-check, when it carries no session-level meter flag and none of its members carries the meter's battery-activity flag; the central band is set only from the first clean session.
+Table S1 gives, for each analysed session and model, the rails' share ρ = ΔE_rail / ΔE_machine over the model's member runs: its median, range and interquartile range, and the within-model spread (max ρ − min ρ) ÷ median ρ. No member run fell outside the hard plausibility band, so none is listed; every spread is at most 0.2 and is described, as registered, as "consistent". No session was clean (0 clean sessions): no clean session, no central band. A session is clean, for this cross-check, when it carries no session-level meter flag and none of its members carries the meter's battery-activity flag; the central band is set only from the first clean session.
 
-| Session | Model | Member windows | Median ρ | Range | Interquartile range | Spread | Outside hard band | Word |
+| Session | Model | Member runs | Median ρ | Range | Interquartile range | Spread | Outside hard band | Word |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1.7B floor | Qwen3-1.7B | 98 | 0.3779 | [0.3509, 0.3839] | [0.3574, 0.3798] | 0.0873 | 0 | consistent |
 | 1.7B floor | Qwen2.5-1.5B (reference) | 25 | 0.3895 | [0.3798, 0.3977] | [0.3858, 0.3920] | 0.0459 | 0 | consistent |
@@ -530,8 +530,7 @@ A **pack** is a frozen, hash-pinned plan for one measurement session. Three pack
 - the **8B floor pack** does the same for Qwen3-8B;
 - the **contrast pack** measures the two contrasts, decode and prefill, in contrast quads.
 
-A **session** is one unattended collection of a whole pack on the laptop, of roughly six hours, with no other
-workload and no AI agent process on the machine. Its shape is fixed (Figure 2): a 60 s settle; the opening
+A **session** is one armed span on the measurement laptop: one unattended collection of a whole pack, of roughly six hours. Its runs are its **member runs**. No other workload is permitted, and a live AI agent process is treated as a hazard (Sections 5.3 and 8.3). Its shape is fixed (Figure 2): a fixed 60 s idle wait (registered as the settle; it is a duration, not a test of the machine's state); the opening
 calibration capture; the 18-run reference corpus; the start triplet; the decode half; the midpoint reference;
 the prefill half; the end triplet; and the closing calibration capture. In each floor pack each half holds 10
 absolute repeats followed by 10 null quads (50 runs); in the contrast pack each half holds 10 contrast quads (40
@@ -548,7 +547,7 @@ one diagnostic reference. Widths are not to scale.*
 
 ### 5.3 The primary block
 
-The primary block (registered internally as measurement block 5) collected one analysed session of each pack.
+A **block** is a registered set of sessions. The primary block (registered internally as measurement block 5) collected one analysed session of each pack.
 Its registration, analysis plan, flag catalog and an inventory of the SHA-256 digest of every code and
 configuration file a session reads were committed together and sealed by an independent judgment before the
 first session armed. There were two seals: prospective Erratum 1 required a second seal; Errata 2 and 3 later
@@ -575,9 +574,7 @@ pack is printed with the results (Section 6.1).
 
 ### 5.4 The replication block
 
-A single session says how much a number moves from run to run on one afternoon, and nothing about whether it
-holds on another day. The replication block (registered internally as block 6) was designed before any
-primary-block number was seen, so that it would be collected whatever the primary block showed. Its rules are:
+A single session says how much a number moves from run to run within about six hours, and nothing about whether it holds on another day. The replication block (registered internally as block 6) was designed, registered and collected before any primary-block number was seen, so that it would be collected whatever the primary block showed. Which program prints its numbers, and how agreement with a second computation is shown, were fixed later, by dated entries made after the primary release and labelled as decided after primary-block outcomes were known (Sections 5.5 and 5.7). No entry changes the registered arithmetic. Its rules are:
 
 - **Same experiment.** The same three packs and session shape, with no change inside a run: same models,
   workloads, prompts, token counts, idle baseline, cooldown rule and stage order. The four estimator source files
@@ -663,8 +660,7 @@ L9-RULING-ADDENDUM.md; decision_log.md D-188-D-190; docs/analysis/b5/DEVIATION-L
 
 ### 5.6 Blinding and release
 
-From each block's first session until its release, no person or AI agent read a measured energy, power, phase
-duration, floor, ratio, contrast, outcome word or calibration value. The collection and analysis programs wrote
+The rule for each block, from its first session until its release, is that no person or AI agent reads a measured energy, power, phase duration, floor, ratio, contrast, outcome word or calibration value. Two recorded departures are stated below and in Section 8.2. For the replication block, which is not released, this is the rule in force, not a completed record. The collection and analysis programs wrote
 these into restricted files listed in a custody map; everything released during collection was **structure**
 only: verdicts, whether a session counted, flag counts by code, kept-unit counts, hazard measurements, and timing
 that is not a phase duration. A unit removed by a restricted code was reported only as "removed (restricted
@@ -712,7 +708,13 @@ printed beside the applicable bars, never used to choose them. Part 2 uses an in
 <!-- FACT H12: R2P P1/P3; RUN_STATE item 83 ruling 1; recompute_bars.json; DEVIATION-LOG.md DLE-0/DLE-6;
 LEAN-COVERAGE-AUDIT.md §§2-4. No agreement or completion verdict is asserted here. -->
 
-{{FILL: P1-RECOMPUTE | per block and compared family: applicable bar, number compared, observed largest difference and agreement word; name uncovered quantities and their separate reader checks; Block 5 uses recompute_bars.json fixed blind under DLE-0, Block 6 uses §12.3; checked by one executing reader before printing}}
+**Replication block.** A different program prints the replication block's numbers. The printing program, here the *first program*, is the lean recomputation; it loads the primary block's recomputation functions, pinned by digest. The *second side* is a harvest twin, a contrast-engine twin, a checker for counting, floor pairing and the between-session arithmetic, and a reducer cross-check. Exclusions are re-derived from the stored flags under the replication catalog, which, as in the primary block, is not an independent detection of the hazards. The heavy registered pipeline was not run as an audit for this block.
+
+The comparison is made over the second side's keys only. A quantity that only the first program prints is not compared and not counted: it is recorded as *first-program-only*, with a count per class beside the compared, passed, failed and unmatched counts, and it does not change the verdict. A key that only the second side holds, with a value, fails. A row where both sides hold no value passes and is counted separately as *null on both sides*; that is agreement that a quantity is absent, not agreement on a number. Agreement is therefore stated over compared rows only, with those two counts beside it, and the rows agreeing on a value are the compared rows minus the null-on-both-sides rows. A class with no compared row carries no verdict. An excluded drift-screen run is read but is not a compared run, and its trace flags do not stop the comparison; a screen run that is not excluded stays a compared run, and a missing trace on it stops the comparison. A pinned input or a pinned session that is not supplied refuses the run by name.
+
+The second side has limits that are fixed by design. The cell and floor estimators of the two floor packs, and the dominance ratios copied from their output, have one producer in this block and print with the label *single-source*; the same pinned functions agreed with the registered analysis on the primary block in every compared family (Table S8). The labelled lines that rerun the estimators on another unit set, the scaled-allowance and single-step lines, the per-phase whole-machine line, and a contrast's ratio, per-token, t and cross-session fields print as *not independently recomputed*. For a session whose drift screen is undefined, the second side compares neither the screen row nor any contrast field, and requires only that the outcome word is not resolvable or not estimable. For a contrast with two to four kept quads it compares the count, the mean difference, its spread and the bounds; it does not compare p or the Holm-adjusted p, and requires that both are 1.0 and the word is not estimable. The Holm value of that session's other contrast is computed on both sides with p = 1.0 for the short one. Two inputs are shared and not independent: the engine twin is given the first program's floor gate, and the block check takes primary-block inclusion and the floor-binding defect mark from the first program.
+
+{{FILL: P1-RECOMPUTE | Block 5, per compared family: applicable bar (recompute_bars.json, fixed blind under DLE-0), number compared, observed largest difference and agreement word. Block 6, per class: the S-13 bar (1 mJ for run phase energies, half a last printed digit otherwise), then compared, passed, failed, unmatched, null on both sides, agreeing on a value (compared minus null on both sides) and first-program-only; no agreement word for a class with no compared row. Both: name uncovered quantities and their separate reader checks; checked by one executing reader before printing}}
 
 ## 6. Results I, instrument validation: phase energy, floors and contrasts
 
@@ -1049,7 +1051,7 @@ rows 523 and 1651-1793 under RL-4 (vii); the replication block keeps its own pla
 Table 6 places the primary block's value of every Part 1 quantity beside each counting replication session's
 value, under the same estimators, with each session's interval, kept units and flags.
 
-{{FILL: P1-B6-SIDEBYSIDE | Table 6: for each pack and each quantity of Sections 6.2-6.5 (reported means, per-token values, attribution floors, operative floors, dominance ratios, d̄ and energy ratios): the primary value; each counting replication session's value with interval, kept units, flags and its floor pairing (including any "floor from the primary block"); the difference Δ = (mean over counting replication sessions) − (primary value) and each session's own difference; and the between-session summary "between-session summary (n sessions): mean, standard deviation"}}
+{{FILL: P1-B6-SIDEBYSIDE | Table 6: for each pack and each quantity of Sections 6.2-6.5 (reported means, per-token values, attribution floors, operative floors, dominance ratios, d̄ and energy ratios): the primary value; each counting replication session's value with interval, kept units, flags, its floor pairing (including any "floor from the primary block") and its producer label from the registered printed-quantity table (computed and compared; single-source; not independently recomputed; or the conditional label with the clause that applied to that session); the difference Δ = (mean over counting replication sessions) − (primary value) and each session's own difference; and the between-session summary "between-session summary (n sessions): mean, standard deviation"}}
 
 The rules for which runs and sessions enter differ between the blocks (the replication block turned most record
 conditions into flags), and each block's calibration acceptance sets its own operative timing bound; both facts
@@ -1459,14 +1461,14 @@ standing authority over when to collect.
 
 | Collection | Sessions armed by | Agent's part |
 |---|---|---|
-| Primary block, 8 to 12 October 2026 | An agent. Each of the 11 recorded arms was performed by a headless supervisory agent activation. | Under the block's written brief, the activation ran the pre-arm checks, sent the arm notice and installed two launchd jobs: a night job that started the session program at a calendar t0, and a dead-man job. It armed only packs that a program-read release line, set by recorded gates, released. |
+| Primary block, 8 to 12 October 2026 | An agent. Each of the 11 recorded arms was performed by a headless supervisory agent activation. | Under the block's written brief, the activation ran the pre-arm checks, sent the arm notice and installed two launchd jobs: a launch job that started the session program at a calendar t0, and a dead-man job. It armed only packs that a program-read release line, set by recorded gates, released. |
 | Replication, 17 to 21 October 2026 | The scheduled loop program. | An activation loaded the loop on 17 October and reloaded it after a fix the same evening. The loop then pre-checked each session, sent the arm notice, waited at least 1,800 s for the researcher's veto, checked again and started the session, until its terminal state, reached once nine sessions counted. |
 | BYTES, 25 to 30 October 2026 | The scheduled loop program, under its BYTES configuration. | An activation loaded the loop for pass 1 on 25 October; another resumed it for pass 2 on 28 October. The loop armed the BYTES sessions as above until all 12 sub-packs counted. |
 
 The loop runs every 300 s under launchd. It could also start a headless agent session at fixed desk points, and
 supervisory activations held or resumed packs through the loop's own commands. Standing authority over when and
-whether to run, re-run, schedule and arm measurement windows passed to the headless supervisory agent on
-6 November 2026, after all three collections had closed. It covers a later study's windows on the same laptop, not
+whether to run, re-run, schedule and arm measurement sessions passed to the headless supervisory agent on
+6 November 2026, after all three collections had closed. It covers a later study's sessions on the same laptop, not
 these collections.
 <!-- FACT S9-02 (R-5; RL-40). Primary block: 11 arm records, docs/process_traces/2026-10-block5/{alpha-a1,alpha-a2,
 alpha-a3}-arm.md and seal2-{alpha-a1,beta-a1..a6,gamma-a1}-arm.md, each headed "Magistrate activation <id> (Opus
@@ -1523,7 +1525,7 @@ these failure modes; each is mechanical, recorded, or both.
    that the test fails without the change.
 5. **Independent recomputation and a twin.** Separate code recomputes the primary block's core arithmetic with
    recorded collection-time judgments as inputs; uncovered quantities require separate checks (Section 5.7).
-   BYTES requires agreement with its independent twin (Section 7.3), against a tolerance fixed in advance.
+   In the replication block that recomputation's functions print the numbers, and a second side of twins and a checker covers named families only; the floor-pack cell and floor estimators have one producer there and are labelled so (Section 5.7). BYTES requires agreement with its independent twin (Section 7.3), against a tolerance fixed in advance.
 6. **Fail-closed refusals with reasons.** In the primary block's registered analysis, a refusal at any step stops
    the steps after it. A tooling refusal is repaired blind and the step re-runs on identical bytes; a refusal that
    is a registered scientific outcome is the result and is printed as such.
@@ -1548,7 +1550,7 @@ number, with what each taught. The record runs to 10 November 2026.
   session or held the loop ({{FILL: P1-AUTO-LOST | estimated quiet-machine hours lost to agent presence during the three collections, and the sessions affected, counted from the census refusal, stop and pause records outside custody (arm records, RUN_STATE items, harvest verdict codes); structure only}}). In the primary block, an interactive agent
   session opened at the keyboard stopped a chain 2 h 32 min after its t0, and that attempt did not count. In BYTES,
   a software update left an agent's background daemon running; the session paused for two hours, then ended, and
-  did not count. In other windows on the same laptop, agent sessions alive at t0 caused refused arms with nothing
+  did not count. In other measurement sessions on the same laptop, agent processes alive at t0 caused refused arms with nothing
   captured. The headless supervisory
   agent's own sessions were bound by the same rule: while the loop was pre-checking, arming or collecting, an
   activation had to exit at once.
@@ -1613,9 +1615,7 @@ number, with what each taught. The record runs to 10 November 2026.
   <!-- FACT S9-05: RUN_STATE item 42 (pid 43816, "an orphaned `scripts/hazard_monitor.py` that a test in the s3-cold
   lane leaked on 10-15"; the constant "measured without Spotify and an orphaned process"); item 198 ("The
   watchdog's fixture-orphan census had counted them"). The constant's value is not printed here. -->
-- **A record can say GO when nothing was measured.** On a later study's night on the same laptop, the session
-  program refused before measuring, because a directory it needed had been created with the wrong owner. The
-  night's top-level result still read GO and its courier sent normally, so nothing flagged the loss, and the
+- **A record can say GO when nothing was measured.** In a session of a later study on the same laptop, the session program refused before measuring, because a directory it needed had been created with the wrong owner. The session's top-level result still read GO and its courier sent normally, so nothing flagged the loss, and the
   supervisory watchdog was itself holding on an unparsable key. The loss sat for 2.5 days until an activation read
   the program's own result. A verdict has to be computed from what was captured, not carried from an earlier
   stage.
@@ -1700,6 +1700,8 @@ replication is across sessions and days on the same machine, not across machines
 **Counter gain.** The rail energies are on the sampler's own scale, whose gain was not checked against an external
 instrument at the rail boundary. The whole-machine meter checks plausibility at a wider boundary; it neither
 validates the rail gain nor the phase split, and it excludes the adapter's conversion loss.
+
+**Replication comparison.** In the replication block the cell and floor estimators of the two floor packs have no second producer; they were compared on the primary block only. The second side covers counting, calibration, run phase energies, harvest bounds, the drift screen, the contrast engine, floor pairing and the between-session arithmetic. Its agreement counts cover compared rows only, and some compared rows agree that a value is absent, not on a number (Section 5.7).
 
 **Workload.** One fixed decode prompt, one prefill length of 2,048 tokens and greedy generation of exactly 512
 tokens. No claim is made about other prompts, lengths, sampling settings, batch sizes or concurrent requests.
@@ -1829,11 +1831,11 @@ protected it were mechanical.
 | Metrology interval; decision interval | Statistical interval of d̄; the same widened by the deterministic bounds D (4.8) |
 | Outcome words | Not estimable; not resolvable; unresolved; direction supported (4.8) |
 | L1, L2 | Instrument result; comparative result (4.8) |
-| Pack; session; attempt | Frozen plan for one session; one unattended collection; one try at a session (5.2, 5.3) |
+| Block; pack; session; member run; attempt | A registered set of sessions; frozen plan for one session; one armed span on the laptop, an unattended collection of a whole pack; one run of a session; one try at a session (5.2, 5.3) |
 | Flag; physical hazard | Recorded code with one registered effect; a measured machine state that refuses collection (5.3) |
 | Counting session; replicated | A replication session with no stop and no session-excluding condition; same outcome word and sign in every counting session (5.4) |
 | Blind dry run; release event | End-to-end run writing only structure; the recorded moment after which numbers may be read (5.6) |
-| Independent recomputation; twin | Second computation of headline numbers by code sharing nothing with the analysis (5.7, 7.3) |
+| Independent recomputation; second side; twin | Primary block: a second computation of the core arithmetic by separate code, with recorded collection-time judgments as inputs. Replication block: the twins, checker and reducer cross-check set against the printing program; it covers named families only and takes two named inputs from that program. BYTES: a second implementation written from the registration (5.7, 7.3) |
 | Format-derived bytes b; resident size R; decode time τ | BYTES regressors (7.1) |
 | Fit set; held-out; word; active or resident | Models the lines are drawn through; models predicted from them; the H1 verdict per model; the MoE answer (7.2, 7.3) |
 
