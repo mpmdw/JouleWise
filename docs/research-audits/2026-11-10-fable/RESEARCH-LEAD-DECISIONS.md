@@ -7430,6 +7430,139 @@ Zero `__block__` entries in the three full roots' `first_program_only`, and ever
 
 Pin-paragraph and term-7 checklist replacement text: /Volumes/JW-EXT/scratch/fable-rev-r3-table-delta.md, section "Changes to the pin paragraph and the term-7 checklist".
 
+# RL-126. The R12 closed nine and Ed's proportionality directive: the nine stays before the cut, nothing else waits for it, and a standing budget for rehearsals
+
+Research lead (Fable 5.2). Written 2026-11-13 06:10 PST (`date`).
+
+**Read.** Ed's directive of 2026-11-13 06:10 PST as relayed by the lead. RL-48 (`RL.md` lines 2096-2175),
+RL-123, my S-14 pin paragraph (05:50). The R12 report at `9f1b53767`
+(`docs/run_reports/2026-11-11-p1-b6-r12-r3.md`): the reduced-set and checkpoint sections (lines 1720-2056),
+"Both nines" (3110-3177) and the pin-candidate table (3409-3497). The step records of
+`r12-r3-closed-air-25.log`: state names, exit codes and native times only. The profiler's file
+`r12-nine-profile.md` did not exist when I wrote this, so nothing here rests on it. I ran no program and no
+test, and touched no process. The per-stage times and the existing-root facts are the lead's; I did not
+recheck them beyond the step records.
+
+## 1. Path: (D). The nine stays the gate for cutting S-14. The pin request does not wait for it
+
+**Ruled.**
+
+1. **The closed nine `r12-r3-closed-air-25` runs to completion and is read before S-14 is cut.** It is not
+   stopped and not replaced.
+2. **The pin request goes out as soon as the R3 table delta review and RL-125 close**, with the ⟨NINE⟩ slots
+   open and marked outstanding. Its review, the lead's checks, my reading and Ed's reading all happen while
+   the nine generates. Nothing on the list of pin work waits for the nine except the cut itself.
+3. **The cut is the last step**: the nine's finisher runs (predicted at most 2,400 s serial plus 1,200 s
+   pool), the slots are filled, the term 7 label check is run on its output, and S-14 is cut. If the request
+   has been accepted in every other respect by then, the cut follows the finisher with no further review
+   round, unless a slot shows something other than its predeclared value.
+4. **No Block 6 custody path is read by the program before the cut.** That is unchanged.
+5. **The pin is not held for the MBP registered nine** (RL-123 §1 item 1 stands). If the Air nine is lost to
+   an infrastructure cause, RL-123 §1 item 4 already lets a completed MBP nine stand in.
+6. **If both nines are lost, no nine is relaunched without a ruling from me.** A third twelve-hour attempt is
+   not the default.
+7. **Dropped as not worth its cost:** RL-123 §4's condition that the nine's readers run on an Air idle of
+   other R12 work. The number decides nothing (about 25 to 40 minutes against a 10,800 s stop). The receipt
+   names any overlap, as for the other readers.
+8. **Optional, not a gate:** single-session option (c) probes of sessions the nine has already closed, as was
+   done for cohort-17's checkpoint, so that a program defect on a shape is seen hours early. Only if the
+   existing checkpoint tooling can do it without taking the generator's lock and without writing under the
+   live root. If that cannot be confirmed in a few minutes, skip it. A probe failure comes to me and may end
+   the nine early.
+
+**Why not (B).** (B) is the move RL-48 refused two days ago, on the same entry. §17-R12 is titled "Fixtures
+before S-14 is cut". The order is the registered content: Block 5's floor-binder defect was found after its
+pin and had to be repaired as a disclosed post-collection change. Ed's guidance keeps prereg fidelity and
+makes the other guards negotiable, and this one is prereg. Item 2 above gets (B)'s parallelism without the
+deviation. What (B) would add is cutting a few hours earlier, and nothing I know of is waiting on the cut
+during those hours.
+
+**Why not (C).** No cheaper fixture meets §17-R12 today. Four of the six shapes exist on a qualifying
+profile only inside this root (section 2). A shorter closed loop (say three sessions) needs a new generator
+mode, its review and a new predeclaration, which is more than the hours left, and the 3.5 sessions already
+written would be thrown away. A handmade or assembled nine is what RL-48 and my runtime review item 6 rule
+out.
+
+**The four options against the paper.**
+
+| Path | Evidence kept or lost | Blinding | Prereg fidelity |
+|---|---|---|---|
+| (A) wait, everything behind it | All kept | Unchanged | Kept. Costs about 8 h of idle pin work |
+| (B) pin now, nine before release | All kept if the nine passes. The sentence "R12 fixtures preceded the pin" is lost | Unchanged: no Block 6 read either way | §17-R12's order is broken: one more dated deviation, decided after Block 5 outcomes were known. A defect the nine finds becomes a post-pin repair |
+| (C) stop and replace | Lost: four of six registered shapes, the closed loop, block arithmetic over nine sessions and three packs, serial/pool byte equality | Unchanged | §17-R12's content is not met, or is met late by a new fixture |
+| (D) ruled | All kept | Unchanged | Kept. No new deviation |
+
+**What this costs in wall time.** From the lead's stage times, the remaining sessions put the end of
+generation between roughly 11:30 and 14:00 PST, then at most about an hour of finisher. That is a forecast
+from 3.5 sessions, not a measurement.
+
+**What I got wrong in RL-123.** I ruled (a) on a twelve-hour forecast without asking where a session's hour
+goes. A 65 s reduced session spends 34 to 41 minutes in SESSION_RUN and 12 to 23 minutes in ROTATE, so the
+cost is chain waits and rotation, not volume, and "reduced" bought little. A profile of one session before
+launch would have shown that. Section 3 makes that the rule. The profiler's findings apply to the next
+fixture only: nothing is changed on the live root, because any generator change retires it.
+
+## 2. RL-123's obligations: what existing roots already show
+
+Counting only reads by the pin candidate (`e17886bf…`), per RL-123 §2 item 5. Cohorts 16, 17 and 18 are
+diagnostic only: they predate the courier fix and were read by program `ee00548d…`. The report says they
+"cannot discharge the complete production-shaped chain requirement".
+
+| Obligation | Already shown | Only the closed nine shows it |
+|---|---|---|
+| Shape: A1 cap and budget skips | No qualifying root (cohort-17's skip is diagnostic) | Yes |
+| Shape: A2 waited runs, attempt-N telemetry | No | Yes |
+| Shape: B2 `member.anchor_not_bounded` | No | Yes |
+| Shape: cross-session GAMMA unit | No. It cannot exist in a single-pack root | Yes |
+| Shapes: mixed campaign-log rows; desk-compressed logs and plists | Probably, at full volume, by root 23 (B1) and the two MBP roots. I have not confirmed their named shape tests ran against those roots | The nine shows them in any case |
+| Denied action (RL-49) | Yes: root 26, exit 0 | Not needed from the nine |
+| One closed loop, nine counting sessions, production keys, option (c) exit 0, comparator agreement | No. Three single-pack roots are not a loop and may not be assembled into one | Yes |
+| Block rows (§10-§11) computed and compared over more than one session and pack | No. The single-pack roots' block rows are one-session blocks | Yes |
+| Serial/pool byte equality | No. A one-session pool read is not a test of it | Yes |
+| RL-48 timing: wall and peak memory | For every decision it feeds, yes: three full readers at 143 to 165 s and 1.28 to 1.31 GB. Nine times the largest is about 25 minutes | Only the literal nine-session number, at reduced volume |
+| RL-48 item 6: generation bound to real time | Yes: root 23, 0.240 | No |
+| Full volume through the real chain, per pack | Yes: 3 of 3 | No. The nine is reduced |
+| `first_program_only` has no block row | Yes on the three full roots (lead's count: 0) | Repeated by the term 7 check |
+
+So the nine is the only evidence for four registered shapes, the closed loop, multi-session block
+arithmetic and byte equality. Its timing is the one obligation that existing roots already cover in
+substance, and it comes free with the read.
+
+## 3. Standing rule: a rehearsal's budget
+
+For every rehearsal, fixture or dry run from now on. *F* is the forecast wall time of the fixture, generation
+and reads together. *A* is the wall time of the analysis step it rehearses.
+
+1. **Forecast first.** The predeclaration states *F* and *A* with their arithmetic.
+2. **Target: *F* at most the larger of 2 × *A* and one hour.** Inside it, launch.
+3. **Above the target: profile before launching.** Run one unit (one session, one member), record stage
+   times, and take the fixes that do not change what the chain judges or writes: shorter simulated sources,
+   independent roots in parallel, the second host, no idle-host condition.
+4. **Still above the larger of 4 × *A* and four hours: it comes to me before launch**, with three lines:
+   which obligation only this fixture carries, whether that obligation is registered, and the cheapest
+   fixture that carries it. I rule in one turn.
+   - Not registered: the default is the cheaper fixture, or none.
+   - Registered: it runs, off the critical path, with whatever it gates reduced to the last possible step
+     and early probes where they are free.
+5. **No obligation is shown twice.** Before building, list which existing roots, read by the current program
+   bytes, already show each obligation. Build only for the rest.
+6. **Regenerate only when the generator, a seam, the runtime or the chain pin changes.** A program change
+   means re-reads, which are minutes (RL-123 §2 item 3).
+7. **A fixture forecast over two hours is not launched as all-or-nothing.** It has a fallback named in
+   advance or usable checkpoints.
+8. **Never traded for time:** blinding, and the content and order of registered entries. Everything else is
+   negotiable under this rule, and the lead may drop such a guard and tell me after.
+9. **When a running fixture overruns its forecast by half**, the lead profiles it from its logs and tells me
+   and Ed. It is not silently waited out.
+
+For Block 6's analysis *A* is about half an hour (the nine-session read) to two hours, so the target is one
+to four hours and the ceiling four to eight. The present nine, at twelve, would have come to me under item 4
+with a profile, and I would have asked for a shorter rotation or a shorter loop before launch.
+
+## 4. The pin paragraph
+
+Replacement texts: /Volumes/JW-EXT/scratch/fable-rl126-proportionality.md §4.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
