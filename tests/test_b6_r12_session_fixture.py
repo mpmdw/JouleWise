@@ -1562,6 +1562,41 @@ class FullProductionSessionTests(unittest.TestCase):
         self.assertFalse(native["injected_clock"])
 
 
+class CrossTempReaderTests(unittest.TestCase):
+    def test_only_named_completed_denied_root_and_scoped_child_environment(self):
+        """Predict RL-123: only the named denied root may cross TMPDIR after parent/manifest authentication; sibling and inflight roots refuse, child TMPDIR still passes strict checks and is restored."""
+        import b6_r12_reader_roots as reader
+        from b6_r12_verify import safe_root, sha
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory(prefix="r12-reader-roots-") as directory:
+            base = Path(directory).resolve()
+            outer, active = base / "denied-26", base / "active"
+            root = outer / "main"
+            root.mkdir(parents=True)
+            active.mkdir()
+            (root / "generator-parent-exit.txt").write_text('0\n')
+            (outer / "declaration.json").write_text(json.dumps({"main": str(root), "pin": PIN,
+                "synthetic_only": True, "mode": "denied", "schedule": "reduced"}))
+            parent = {"status": "done", "exit_code": 0, "declaration_sha256": sha(outer / "declaration.json")}
+            (outer / "parent.json").write_text(json.dumps(parent))
+            with patch.object(reader, "DENIED_OUTER", outer), \
+                 patch.dict(os.environ, {"TMPDIR": str(active)}), patch.object(tempfile, "tempdir", str(active)):
+                with self.assertRaises(ValueError):
+                    safe_root(root)
+                self.assertEqual(reader.reader_root(root), root)
+                with self.assertRaisesRegex(ValueError, "unlisted"):
+                    reader.reader_root(base / "sibling")
+                with reader.denied_reader_environment(root):
+                    self.assertEqual(safe_root(root), root)
+                    self.assertEqual(os.environ["TMPDIR"], str(base))
+                self.assertEqual(os.environ["TMPDIR"], str(active))
+                self.assertEqual(tempfile.tempdir, str(active))
+                parent["status"] = "inflight"
+                (outer / "parent.json").write_text(json.dumps(parent))
+                with self.assertRaisesRegex(ValueError, "completed authenticated"):
+                    reader.reader_root(root)
+
+
 class DryRunLimitTests(unittest.TestCase):
     def test_reduced_finisher_accepts_bound_courier_profile_only(self):
         """Predict RL-123: a bound courier_set reduced declaration reaches authenticated finalization; registered or altered-bootstrap declarations refuse before it. Tiny control unit only, not a generated session."""

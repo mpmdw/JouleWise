@@ -16,6 +16,7 @@ import sys
 import time
 
 from b6_r12_verify import REPO, safe_root, sha
+from b6_r12_reader_roots import reader_root
 
 LIMIT_S = 3 * 60 * 60
 
@@ -40,7 +41,7 @@ def wait_owned(process):
 
 
 def run(root, denied, stem, reduced):
-    root, denied = safe_root(root), safe_root(denied)
+    root, denied = safe_root(root), reader_root(denied)
     if not stem or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in stem):
         raise ValueError("plain fresh dry-run journal name required")
     for path in (root, denied):
