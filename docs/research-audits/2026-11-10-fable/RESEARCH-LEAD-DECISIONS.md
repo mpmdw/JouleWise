@@ -7428,47 +7428,7 @@ Zero `__block__` entries in the three full roots' `first_program_only`, and ever
 
 **Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. Block-5-aware. Items 1 and 4 rest on code reading and one synthetic probe; item 1's counts are the R12 report's.
 
-## Changes to the pin paragraph and the term-7 checklist
-
-File: `/Volumes/JW-EXT/scratch/fable-s14-pin-paragraph.md`. Replacement text follows; the rest stands.
-
-### Pin paragraph, first part: insert after "…because most first-program keys have one producer by registered design."
-
-> Run phase energies are the exception. Every run in the registered run set (each run of a kept unit, the surviving drift-screen references and the clean corpus) is compared at 1 mJ under §17-R2, with no condition, so a run-phase-energy row in `first_program_only` is not an expected state. It is reported like any other, and it stops the agreement sentence until the research lead has ruled on it. On the three full-volume roots every `first_program_only` row is a session quantity key: none is a run phase energy and none is a block row.
-
-### Pin paragraph: new part, after "What the closed nine does not show."
-
-> **The copied-record files.** The eight decision 6 (b) rows of the §17-R3 table name their record files from the list the R12 fixtures ran with (`scripts/b6_r12_verify.py:89-97`). The real run reads the list in the run-input document's `copied_records`, which the custody kit writes from the operator's `mapping.json` and refuses unless every path has a source digest. The two lists are required to be equal, family by family. ⟨LEAD: "They were compared on file names on ⟨date⟩ and are equal." or "The comparison is owed at the release, with the item-83 hand check, by ⟨name⟩."⟩ If they differ, the run-input document governs, the table rows are reprinted with the names read, and the difference is logged as a deviation.
->
-> **Known defect, not fixed before the pin.** If a file listed in `copied_records` is absent from the archive, the pinned program does not print a named refusal. It exits 1 with a Python traceback ending `AttributeError: 'NoneType' object has no attribute 'decode'` in `compute_session`, and writes no output. This is a stop, and it is read as a refusal. The custody kit refuses the same condition by name (`listed_file_missing`) before the program runs, so reaching it means the archive changed after it was verified. The fix, a named refusal `disclosure_record_missing`, changes the program hash and is made after the release (RL-125 item 4).
-
-### Notes for the lead: replace notes 2, 4 and 5
-
-> 2. **"All agreeing" for the three full roots: confirmed by the lead** (0 failed and 0 unmatched in every class with `pass`). One more count is owed from the same public comparators: `run_phase_energy.first_program_only` is 0 in each (RL-125 item 1).
-> 4. **The term 7 check runs against the table at `9f1b53767`** on `origin/analysis/2026-11-12-b6-r3-table` (stdout SHA-256 `7b7920cf…254c`; inputs `c9d0c893…`, `e17886bf…`, `62dbfaef…`). It carries RL-114's three strings. PR #748 is filled from this table.
-> 5. **Block rows in `first_program_only`: checked by the lead, zero** on the three full roots. The R12 report's sentence is corrected by the R12 seat.
-
-### Term-7 checklist: replace steps 4, 5 and 6, and add steps 10 and 11
-
-> 4. Split the list by class. Set the `run_phase_energy` entries aside for step 6; they have no R3 row. Reduce the rest to distinct key names (drop the session) and look each one up in the R3 table at `9f1b53767` (stdout SHA-256 `7b7920cf…254c`).
-> 5. A key passes if its label is one of:
->    - `single-source` (RL-99 item 1);
->    - "not independently recomputed";
->    - the §17-R8 literal "single implementation; not independently recomputed" (RL-125 item 3);
->    - a gate label ("computed and compared in the option (c) gate …; not an S-13 table row");
->    - a conditional label, and the session it is listed for meets the label's second clause: for `neg8/*`, that session's NEG-8 verdict is `undefined`; for the contrast fields, the verdict is `undefined` or the twin returned no estimate. Check the condition per session, not per key.
-> 6. **Stops, each to me:**
->    - any entry of class `run_phase_energy`, with the run's role and no value (RL-125 item 1);
->    - a key in the list labelled plain "computed and compared (decision 6 (a))";
->    - a key in the list with a block-scope label ("§10-§11 arithmetic computed and compared …"), or any entry with session `__block__`;
->    - a conditional-label key listed for a session whose screen is defined and whose twin estimated;
->    - a key in the list with no row in the R3 table, or labelled UNSTATED;
->    - a decision 6 (b) copied-family name in the list (those are never comparison-table keys);
->    - in the other direction: a `lines/whole_machine/<model>/<phase>/*` session key in a compared row (RL-125 item 3).
-> 10. Real block run only. Confirm the restricted output's `inputs.host` is `Air`, and that every session carries `copied_disclosures` with the eight families. Compare each family's `path` list with rows 150 to 157 of the R3 table. A difference is handled as RL-125 item 2 says. A session without `copied_disclosures` is a stop.
-> 11. If the block command exits 1 with the traceback of RL-125 item 4, that is a refusal. Stop, check the archive against the kit's verify record, and tell me. Do not edit the program.
-
-Steps 1 to 3 and 7 to 9 stand. In step 8, "the R3 table's commit" is `9f1b53767`.
+Pin-paragraph and term-7 checklist replacement text: /Volumes/JW-EXT/scratch/fable-rev-r3-table-delta.md, section "Changes to the pin paragraph and the term-7 checklist".
 
 ## Open items routed to me, not yet ruled
 
