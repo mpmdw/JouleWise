@@ -815,7 +815,7 @@ for _label, _tok, (_ra, _na, _da, _nn), (_rc, _nc, _dc, _cn), (_rcm, _mn, _md, _
                    f'{{r{_rcm}:R}} ({_term(_mn)} ÷ {_term(_md)}), n = {{r{_mnn}:n}} |'))
 
 FLOOR_CLASS = (
-    'All four published floors of Table 3, which are the arm gates of the two contrasts, are attribution-limited: '
+    'All four published floors of Table 3, which are the floor gates of the two contrasts\' sides (Section 4.5), are attribution-limited: '
     'each one\'s issued floor class is `{r869:id}`, with floor source `{r870:id}`, the clock-anchor timing bound. Their '
     'repeatability-only floors are the point floors that Table 4 gives as denominators, before the small-sample guard '
     'and the drift allowance. For the absolute forms, which set all four published floors, these are {r542:e}, '
@@ -823,10 +823,10 @@ FLOOR_CLASS = (
 TABLE3_CAPTION = (
     '*Table 3. Detection floors, primary block, M3 Max / MLX / powermetrics SoC rails (Section 4.5). Each absolute and '
     'comparative value includes its small-sample guard where n < 10, followed by the floor session\'s whole gross '
-    'drift allowance; the operative column is the larger of those drift-widened values. The allowance is each floor '
+    'drift allowance; the floor-gate column is the larger of those drift-widened values (Section 4.5). The allowance is each floor '
     'session\'s own drift allowance from its reference requests (Section 4.7, Table S6), and the guarded value of '
     'each form is the tabulated value less that allowance. A floor is a property of this machine, stack, boundary and '
-    'session; it does not rank hardware or validate absolute scale. ' + D177 + '*')
+    'session; it does not rank hardware or validate absolute scale. Floors are rounded up. ' + D177 + '*')
 TABLE4_CAPTION = (
     '*Table 4. Dominance ratios, primary block, M3 Max / MLX / powermetrics SoC rails, each over the kept units, with '
     'its numerator, denominator (J) and n. Point diagnostic; no interval. Each ratio is computed from the unrounded '
@@ -1028,7 +1028,7 @@ PROSE = [
     ('Section 6.5, leave-one-quad-out', ['P1-B5-CTR-LOO'],
      '**Leave-one-quad-out.** Decode: no single quad changes the verdict; the {r62:n} leave-one-out estimates run '
      'from {r63:lo} to {r64:hi} J. Prefill: no single quad changes the verdict; the {r65:n} leave-one-out estimates '
-     'run from {r67:lo} to {r68:hi} J, each over {r66:n} quads, one fewer than the cell minimum of {r505:n}; the '
+     'run from {r67:lo} to {r68:hi} J, each over {r66:n} quads, one fewer than a contrast\'s minimum of {r505:n} kept quads (Section 4.8); the '
      'registered check recomputes the contrast on the remaining quads and does not re-apply that minimum. ' + D177, []),
     ('Section 6.5, decision interval against the floor', ['P1-B5-CTR-DIFLOOR'],
      '**Decision interval against the floor.** In both contrasts the near end of the decision interval lies beyond '
@@ -1047,8 +1047,8 @@ PROSE = [
      'the collection record\'s battery-assist flags; not re-derived), so this line equals the primary estimate: '
      'd̄ = {r15:e} J, metrology interval [{r36:lo}, {r37:hi}] J, n = {r11:n} for decode, and d̄ = {r16:e} J, '
      'metrology interval [{r38:lo}, {r39:hi}] J, n = {r13:n} for 2,048-token prefill. *Load-correlated exclusions '
-     'not applied:* the registered pipeline could not compute this line; the independent recomputation\'s value, '
-     'uncompared, is d̄ = {r376:e} J (metrology interval [{r377:lo}, {r378:hi}] J, n = {r379:n}, {r380:n} quads '
+     'not applied:* the registered pipeline refused this line (refused, `member_code_on_kept_unit`); the independent '
+     'recomputation\'s value, recompute only; not compared, is d̄ = {r376:e} J (metrology interval [{r377:lo}, {r378:hi}] J, n = {r379:n}, {r380:n} quads '
      'restored) for decode and {r381:e} J ([{r382:lo}, {r383:hi}] J, n = {r384:n}, {r385:n} restored) for 2,048-token '
      'prefill.', ['from the collection record', LBL_RJ]),
 ]

@@ -23,7 +23,7 @@ analysis applies the registered pass rule per model. Both extension models were 
 For a model with one usable pass, its point is that pass with its own (h + B), labelled *one pass*, under the
 registered fallback. A model with two usable passes follows the registration's two-pass rule, including the
 pass mean and difference; H2 is also printed over models with two passes as a labelled sensitivity line.
-<!-- FACT H28: paper-audit F-20; RL-7(f); the registration's per-model rule also appears in paper1.md §6.3. -->
+<!-- FACT H28: paper-audit F-20; RL-7(f); the registration's per-model rule also appears in paper1.md §7.3. -->
 
 ## §7.4 (replaces the section)
 
