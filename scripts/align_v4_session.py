@@ -1273,9 +1273,11 @@ def held_window_check(measurement_root, packet, *, ruling_path=None):
                     previous.bind_final(successor)
                     builder.require(previous.final_from is not None, 'final record carries no previous_final')
         for window in chain:
-            final_error = window.final_evidence()
-            row = {'window': window.window, 'final': final_error is None, 'held_reasons': [],
-                   'released_by': None}
+            # RL-108 condition 5: the one finality writer (builder.WindowRecord.finality); ``final`` stays.
+            finality = window.finality()
+            final_error = finality['reason']
+            row = {'window': window.window, 'final': finality['finality'] == 'final',
+                   'finality': finality['finality'], 'held_reasons': [], 'released_by': None}
             record['windows'].append(row)
             # Only R1 is a rehearsal without a v4 desk harvest.
             if window.window == 'R1':
