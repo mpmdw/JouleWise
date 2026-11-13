@@ -149,3 +149,81 @@ reinstall after remounting. If the SSD disappears without that, expect
 
 Stop the old scratch watcher **only after the current night's chain has exited**.
 Review the synthetic tests and choose the current armed timing before replacing it.
+
+# Pipeline watcher and timing ledger (RL-127 terms 6-9)
+
+A second, independent LaunchAgent, `com.joulewise.pipeline-watch`, finds
+bottlenecks and stranded sessions without an agent. It runs one poll
+(`scripts/pipeline_watch.py once`) every 120 s (RL-127 term 8) from an
+internal-disk wrapper; it needs no Claude session, never opens SSH and signals
+no process. If the checkout or `/Volumes/JW-EXT/ledger` is missing, the
+wrapper posts `PIPELINE_WATCH_DOWN` at most once an hour.
+
+Each poll reads origin `main` RUN_STATE.md (fetched into the private ref
+`refs/pipeline-watch/main`; headings and pointer blocks only), the
+`directive-notice` issues and in-progress CI runs (`gh`), the armed plan's
+`night-results/<plan>` ref name (`git ls-remote`), the timing ledger, the MBP
+queue file and `ps`. The detectors and thresholds are listed at the top of
+`joulewise/pipeline_time/detect.py`; budgets are in `budgets.py`. Alarms go
+to a macOS notification, `/Volumes/JW-EXT/ledger/alarms.jsonl` (the lead's
+session watches it) and, for `alarm` severity, a GitHub issue labelled
+`pipeline-alarm`. Each alarm key posts an issue at most once per 6 h and the
+issue is closed when the condition clears. Gmail is not used (an optional
+`channels.mail_cmd` argv can be added when it works). An over-budget local job
+gets one profile under `/Volumes/JW-EXT/ledger/profiles/`: three `ps` samples
+10 s apart, its cwd, files written in the last 5 min by directory, and a 3 s
+`sample` stack (set `profile.use_sample` false in the config to skip it).
+The RL-128 MBP status probe is a disabled hook in `sources.py`; it stays off
+until its calibration gate passes and a reviewed PR enables it.
+
+```sh
+python3.13 -B scripts/pipeline_watch.py once --dry-run     # print state and the alarms it would raise; changes nothing
+python3.13 -B scripts/pipeline_watch.py status             # same as above
+python3.13 -B scripts/pipeline_watch.py notify-test        # one banner and one alarms.jsonl line
+python3.13 -B scripts/pipeline_watch.py queue add --name r12-alpha --expected-end 2026-11-13T12:00:00-08:00
+python3.13 -B scripts/pipeline_watch.py queue done --name r12-alpha
+```
+
+Jobs the lead starts on the unarmed MBP go in the queue (`mbp-queue.json` in
+the ledger directory); without them the idle detector alarms after 30 min.
+Config: `scripts/air/pipeline_watch_config.json` (local-job patterns,
+exemptions, channels), overridden by `/Volumes/JW-EXT/ledger/watch-config.json`.
+State: `~/Library/Application Support/JouleWise/pipeline-watch/state.json`.
+Log: `~/Library/Logs/JouleWise/pipeline-watch.log`.
+
+Install from a dedicated checkout of `main` (not a lane worktree), the same way
+as the results watcher above:
+
+```sh
+sh scripts/air/install_pipeline_watch.sh --dry-run    # print the plist, wrapper and commands; changes nothing
+sh scripts/air/install_pipeline_watch.sh              # render, create the pipeline-alarm label, bootstrap
+sh scripts/air/install_pipeline_watch.sh --uninstall  # idempotent; keeps state and the ledger
+```
+
+Uninstall before ejecting JW-EXT (the running poll holds files on it).
+
+## Timing ledger
+
+```sh
+python3.13 -B scripts/timing_ledger.py run --stage block-analysis --budget-s 3600 -- <command...>
+python3.13 -B scripts/timing_ledger.py run --stage dry-run --predicted-s 1500 -- <command...>   # budget 2 x prediction
+python3.13 -B scripts/timing_ledger.py tail -n 5
+```
+
+The wrapper appends a start marker and an end row (start, end, wall, CPU,
+exit, host, stage, budget) to `/Volumes/JW-EXT/ledger/timing.jsonl` and exits
+exactly as the command did (same code, or the same signal). Without
+`--budget-s` the stage's RL-127 default applies. Long Python jobs can record
+their own phases with `joulewise.pipeline_time.ledger.phase(...)`. Never use
+either inside a measured window (RL-127 term 7).
+
+## Weekly report
+
+```sh
+python3.13 -B scripts/pipeline_time_report.py            # writes docs/run_reports/<date>-pipeline-time.md
+python3.13 -B scripts/pipeline_time_report.py --no-write # summary only
+```
+
+Each Monday (the first is due 11-16): hours by stage, overruns, CI medians and
+run-hours, state-only share, PR open-to-merge medians, MBP session/other/idle
+shares estimated from item stamps, session gaps, and the top five sinks.

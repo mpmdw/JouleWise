@@ -1,0 +1,20 @@
+{
+  "_comment": "Pipeline watcher config (scripts/pipeline_watch.py). Merged over joulewise.pipeline_time.detect.DEFAULT_CONFIG; /Volumes/JW-EXT/ledger/watch-config.json is merged over this. Budgets are RL-127 term 6.",
+  "repo": "mpmdw/JouleWise",
+  "local_jobs": [
+    {"name": "block-analysis", "stage": "block-analysis", "budget_s": 3600,
+     "pattern": "independent_recompute_b\\d|run_b5_analysis\\.py|release_b5\\.py|release_v4\\.py|b6_custody|custody_kit"},
+    {"name": "local-suite", "stage": "pr-ci", "budget_s": 1800,
+     "pattern": "shard_tests\\.py|-m (?:unittest|pytest)\\b"},
+    {"name": "rehearsal", "stage": "rehearsal", "budget_s": 7200,
+     "pattern": "b6_r12_|fixture_gen|_fixture\\.py|rehearsal"}
+  ],
+  "exempt": [
+    {"pattern": "r12-r3-closed-air-25|launch-closed-25\\.zsh",
+     "reason": "RL-127 term 3 / RL-123: the running closed nine is exempt. Remove this row when it reports."}
+  ],
+  "profile": {"samples": 3, "interval_s": 10, "use_sample": true, "sample_s": 3, "recent_window_s": 300},
+  "repeat_s": {"alarm": 3600, "warn": 21600},
+  "issue_repeat_s": 21600,
+  "channels": {"notification": true, "jsonl": true, "issue": true, "mail_cmd": null}
+}
