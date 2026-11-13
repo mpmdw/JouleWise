@@ -1194,6 +1194,17 @@ class Mini(unittest.TestCase):
                 self.assertEqual({k: v for k, v in o.items() if k != "sessions"},
                                  {k: v for k, v in f.items() if k != "sessions"})
 
+    def test_inputs_only_same_value_twice_writes_it_once(self):
+        # Expected: --only X --only X names one session once: "sessions=1" and a document byte-equal to --only X.
+        self.verified()
+        mapping = mapping_for(["b6-alpha-r1", "b6-beta-r1"])
+        once, twice = self.base / "once.json", self.base / "twice.json"
+        self.assertEqual(self.inputs(mapping, out=once, extra=("--only", "b6-alpha-r1"))[0], 0)
+        rc, out, err = self.inputs(mapping, out=twice, extra=("--only", "b6-alpha-r1", "--only", "b6-alpha-r1"))
+        self.assertEqual((rc, err), (0, ""))
+        self.assertTrue(out.startswith("inputs sessions=1 "), out)
+        self.assertEqual(once.read_bytes(), twice.read_bytes())
+
     def test_inputs_only_repeated_writes_both(self):
         # Expected: --only twice names two sessions; both are written ("sessions=2"), equal to the full document.
         self.verified()
