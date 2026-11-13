@@ -6252,6 +6252,299 @@ rests on which branches of `check_block` make a comparison.
 
 ---
 
+# Decision request 65: four code-reading findings before W1 signing and the S-14 pin (2026-11-12 22:29 PST)
+
+**Read.** `/Volumes/JW-EXT/scratch/presign-code-reading-20261112.md` (a Sonnet reader's notes), and the code it
+cites, myself, in a detached worktree off a fresh fetch (removed):
+
+- W1 line at `99622e96c`: `scripts/run_night.py` (`_artifact_list`, `_write_result`, `_chain_outcome`,
+  `_restore_network_time`, `_close_ac_powermode`, `_close_night_host`, `_publish_terminal_result`, the dead-man
+  record), `joulewise/b5/driver.py` around 2922 to 2992, `tests/test_w1_reliability.py`,
+  `tests/test_w1_reliability_r2.py`, `tests/test_w1_reliability_r4.py`, `R1_EXECUTED_SOURCES`.
+- R12 head `04eacce2a` (`analysis/2026-11-11-b6-r12`): `joulewise/b6_analysis_check.py` whole,
+  `scripts/independent_recompute_b6.py` (`recompute_block`, `compare`, `require_production_coverage`, the screen
+  result, `read_reharvested`, `main`), `contrast_inputs`, `contrast_stats` and `evaluate_outcome` in
+  `scripts/independent_recompute_b5.py`, `joulewise/twins/engine_twin.py`, `scripts/b6_r12_verify.py:128, 422-426`.
+- My own earlier notes: the shadow-replay review Part B (B1 to B3), the PR #751 round-2 review (N3), the custody
+  kit round-2 review (M2), RL-102, RL-103, RL-107, RL-110.
+
+Not opened: any Block 6 custody, archive, session or outcome path; the delivered night ref (I rely on my PR #751
+round-2 reading of its key names and on the reader's file list). No SSH. Nothing was run; these are rulings from
+code reading.
+
+Two corrections to the reader's notes, neither changing an answer:
+
+- `joulewise/b5/driver.py:2992` (`"fault": bool(fault_reasons)`) is in the courier report's facts, not in the
+  hazard record. `hazard_result.json` has no top-level `fault` flag. It carries `chain_outcome` and
+  `faults.reasons`.
+- On the R12 head the lines are `recompute_block` 1283 to 1330 (projection 1312 to 1320, `compare` call 1321),
+  `compare` 1531 to 1575, `require_production_coverage` 1622 to 1628, `main` 1633 on, the external digest loop
+  1689 to 1692.
+
+## RL-111. W1 restore record (B3): the copy inside `result.json` is the delivered record. The separate file is not published and need not be
+
+**Ruling.** Sufficient. No change to the W1 line. B3 closes on evidence, listed below.
+
+**What the code does.**
+
+- Every `_write_result` in a real night goes through `_HOST_STATE_CLOSE` (`run_night.py:2344`, set at 4768), which
+  is `_close_night_host`. The record it returns is put in `result.json` as `host_restoration` (2369-2370), and a
+  record that is not `ok` adds `host_restoration_incomplete` and sets `fault` (2379-2381). The courier copies it
+  into its facts (2607-2612).
+- `night/host_restoration-<ns>.json` (4641) is the same dictionary, written once more to custody. It holds
+  nothing the result does not.
+- `result.json` is in `_artifact_list` (1486), and `_publish_terminal_result` raises if it cannot read it. So a
+  delivery always carries the restore record, and there is no delivery without it.
+- The exception path writes a result after the close (4807-4816). SIGKILL is the dead-man's case, and
+  `deadman_host_restoration-*.json` is published (1483).
+- `ok` for network time rests on the read-back (`observed == "on"`) and both exit codes, not on stderr. The
+  `Error:-99` line the reader saw on stderr does not weaken it.
+
+Publishing the separate file would add a second copy of the same record in exactly the cases where the first is
+already delivered. It buys nothing.
+
+**B3 closes when the lead shows two things.**
+
+1. By name, on the signing head: `tests.test_w1_reliability_r2.TerminalRestoreTests` passes, in particular
+   `test_normal_mode_zero_r1_chain_restores_both_before_delivery` (the result and the courier facts both carry
+   `host_restoration.ok`) and `test_refusal_and_failed_readbacks_are_recorded_and_keep_owed_marker` (a failed
+   read-back faults the result); and from `tests/test_w1_reliability_r4.py`,
+   `test_hazard_unproven_chain_defers_both_settings_through_real_result_close` and
+   `test_pre_off_refusal_does_not_enable_network_time`.
+2. From `result.json` on `night-results/align-r1-20261112T2251Z`: `host_restoration.ok` true,
+   `host_restoration.network_time.ok` true, `requested` and `observed` both `on`. These are host-state fields,
+   not outcomes. My PR #751 review read the key names only; the lead quotes the four values.
+
+**Consequences.**
+
+- PR #751's N3 fix stands: the shadow replay reads `host_restoration` from `result.json`. The owed-effect row for
+  a W1 night is then answerable from the Air.
+- If someone later wants the file on the ref anyway: `run_night.py` is not one of the ten condition-13 paths, so
+  the slots would survive, and it would be a cited rebind under A-05 with a deviation row, not a W1 to C1
+  re-registration. I am not asking for it and it does not go into the bytes signed for W1.
+
+**Who changes what.** Nobody. **Gates.** W1 signing: items 1 and 2. Not the S-14 pin, not the custody verify.
+
+**Blind status.** Blind: no v4 outcome exists. Blind to Block 6. Code, tests and host-state key names only.
+
+## RL-112. B1 and B2 (non-zero chain exit): closed by one test id on the signing head
+
+**Ruling.** Confirmed by my own reading. `_chain_outcome` (`run_night.py:2277-2325`) adds
+`chain_exit_nonzero:<rc>` for any exit other than 0 or None, the outcome is then `CHAIN_FAILED`, and `fault` is
+`bool(reasons)`. The driver keeps `GO` (`driver.py:2927-2928`) and merges the reasons into the hazard record and
+the courier facts (2959-2963).
+
+**Evidence that closes both.** The line
+`tests.test_w1_reliability.OutcomeTests.test_nonzero_chain_exit_faults_result_hazard_and_courier_without_changing_go ... ok`
+for the signing head's full commit: from the CI shard log, or from a local run on that tree recorded with the
+commit. A green shard is not the evidence and a red shard elsewhere does not defeat it; the named line is. A skip
+is not a pass.
+
+**One correction to my own B1 wording.** I asked for `fault: true` "in both `result.json` and
+`hazard_result.json`". The hazard record has no `fault` flag. What it carries, and what the test asserts, is
+`chain_outcome: CHAIN_FAILED` and the reason in `faults.reasons`. The boolean is asserted on the result. That is
+enough: the flag is one expression over the reasons list. B1 is read with that wording from now on. No test is
+added on the frozen line.
+
+**Who changes what.** Nobody. **Gates.** W1 signing: add this id to the RL-107 list (`DefaultBundleTests`,
+`DispatchTests`, both `R1ExecutedSourceTests`). Nothing else.
+
+**Blind status.** Blind, as RL-111.
+
+## RL-113. RL-110 term 3 answered: the option (c) gate must report first-program-only keys. It must not refuse on them
+
+**What the code does** (`04eacce2a`). Under option (c) the S-13 comparison is the `compare(projected, expected)`
+call at `independent_recompute_b6.py:1321`. `projected` is the first program's table cut down to the second
+side's keys (1312-1320). So:
+
+- a key only the first program prints is in neither table. It is not compared, not counted and not reported;
+- a key only the second side holds is projected as `None`, compared, and fails. That direction is safe;
+- `require_production_coverage` checks the first program's keys against the registered list. It says nothing
+  about which of them the second side held on this run.
+
+**Ruling.** Not acceptable as it stands, but narrowly. The count is honest: no dropped key is counted as compared,
+so RL-110 term 3's forbidden case does not occur. What is missing is the statement. RL-110 gave two acceptable
+answers, report or refuse, and the gate does neither. Refusal is the wrong one here: most first-program keys are
+one-producer by registered design (RL-101, RL-102), so a refusing gate would refuse every run. **The gate
+reports.**
+
+**Required behaviour.**
+
+1. In `recompute_block`, after `expected` and `primary` exist: the set `table_rows(primary)` minus
+   `table_rows(expected)` is recorded in the `option_c` record as `first_program_only`.
+   - Restricted: a sorted list of `{class, session, key}`. Key names only, no values.
+   - Public comparator: a count per class, beside `compared`, `passed`, `failed` and `unmatched`.
+2. These keys do not enter `compared`, and they do not change `pass`. `unmatched` keeps its present meaning.
+3. The second-side-only direction stays as it is: compared against `None`, fails, `option_c_disagrees`.
+4. `compare()` itself is unchanged. The projection stays; the comment at 1308-1309 gives the right reason for it.
+
+**Tests** (R12 line, `tests/independent_recompute/test_block6.py`).
+
+- `test_gate_reports_first_program_only_keys_without_counting_them`: a block run where the second side's table
+  lacks a key the first program prints (a session with an undefined screen does it naturally; a stubbed
+  `check_block` table with one key removed is also fine). Assert the key is in `first_program_only` with its
+  class, the class's `compared` count excludes it, the public count matches the restricted list, and `pass` is
+  unchanged.
+- `test_gate_fails_on_second_side_only_key`: the second side's table holds a key the first program does not
+  print. Assert a failed comparison and `option_c_disagrees`.
+- `test_compare_reports_only_in_driver`: the standalone `compare()` with a key deleted from the recompute's
+  side. Assert `unmatched` 1, reason `only_in_driver`, `pass` false. The existing test pins only the other
+  direction.
+
+**Terms for the pin request and the paper.**
+
+5. The S-14 pin request states this behaviour in one paragraph, from the code. That discharges RL-110 term 3.
+6. The agreement sentence is over `compared` only. It is written beside the `first_program_only` count.
+7. After the real block run, whoever writes the agreement sentence checks that every key in
+   `first_program_only` carries an R3 label that allows non-comparison (`single-source`, "not independently
+   recomputed", the gate-only labels, or the second clause of a conditional label). A key labelled plain
+   "computed and compared" in that list is a stop and comes to me. This check runs on the restricted output,
+   outside the pinned bytes, and does not gate the pin.
+
+**Amends.** RL-102's "`b6_analysis_check.py` and `independent_recompute_b6.py` do not change" is lifted for this
+ruling and RL-114 and RL-115 only. RL-102's substance stands: no new compared quantity, no new twin code.
+
+**Who changes what.** The R12 line: `scripts/independent_recompute_b6.py` and the three tests, inside R12's
+review. **Gates.** The S-14 pin: yes, the pinned program changes. Not the custody verify. Not W1 signing.
+
+**Blind status.** Blind to Block 6. Block-5-aware. The ruling rests on which keys enter `compare`.
+
+## RL-114. A GAMMA session with an undefined screen: the block run completes, the engine comparison is skipped for that session, and its word is guarded
+
+**What the code does** (`04eacce2a`). RL-110 term 5's case is reachable and it does not fail usefully.
+
+- The first program handles an undefined screen. `contrast_inputs` puts `None` in the allowance kind, `D_j` is
+  `None`, the decision interval is `[None, None]`, and `evaluate_outcome` returns `not_resolvable` (or
+  `not_estimable` below five quads). It prints a row.
+- `check_block` line 88 then computes `s.neg8["allowance_j"] / 2` with `None`. `main` prints
+  `refused: TypeError` and exits 4.
+- The refusal is for the whole block run, not for the session. One GAMMA session with too few corpus members or
+  references would stop the Block 6 analysis after the pin, and the only way out would be a change to pinned
+  bytes after the data is in hand. That is the outcome to avoid, so this is fixed before the pin.
+
+**Ruling.** An undefined screen is a registered result with a registered word. The run must complete, and the
+second side must say plainly that it compared nothing for that session's contrasts.
+
+**The fix** (`joulewise/b6_analysis_check.py`, GAMMA branch).
+
+1. When `s.neg8["verdict"] == "undefined"`: do not build engine inputs and do not call the twin for that session.
+   No `contrast/*` key enters the second side's table. With RL-113 those keys appear in `first_program_only`.
+2. In place of the comparison, one guard per contrast, family `engine_screen_undefined`: the first program's
+   `outcome` is `not_resolvable` or `not_estimable`, its `D_j` is `None`, and its decision interval is
+   `[None, None]`. Anything else fails the gate. This is the property that matters: no claim word and no finite
+   decision interval from a session without a drift allowance.
+3. The pairing checks in the same branch (lines 108-118) still run for that session.
+4. The twin is not changed and is not fed a partial bound set. It has an unknown-bound state, but only by omitting
+   a kind from some runs; using that here would be new second-producer logic, which RL-102 ruled out.
+
+I considered keeping the allowance-free fields (`n`, `dbar_j`, `p`, `holm_p`) compared for such a session. Not
+required. The session's contrast cannot carry a claim, and the skip is four lines against a new branch through the
+twin.
+
+**Labels** (R3 generator; amends RL-103 and RL-110).
+
+- `contrast/<phase>/{n, dbar_j, D_j, p, holm_p}`:
+  "computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined` and the twin returns
+  an estimate, otherwise not independently recomputed"
+- `s_d_j`, `decision_lower_j`, `decision_upper_j`:
+  "computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` and the twin
+  returns an estimate, otherwise not independently recomputed; not an S-13 table row"
+- `outcome`:
+  "computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` and either the
+  twin refuses or the contrast has five or more quads; with an undefined verdict the gate requires only that the
+  word is `not_resolvable` or `not_estimable`; otherwise not independently recomputed; not an S-13 table row"
+
+The second label also closes a gap in RL-103: those three fields were never compared when the twin returned no
+estimate, and the label did not say so. The `neg8/*` label of RL-110 is unchanged.
+
+**Tests** (R12 line; a synthetic block fixture with a GAMMA session whose screen is undefined and at least one
+selected quad; run it for both reasons, `corpus_insufficient` and `references_insufficient`).
+
+- `test_gamma_undefined_screen_block_run_completes`: the `block` command does not exit 4, stderr has no
+  `refused: TypeError`, `option_c.pass` is true, and no `option_c_disagrees` flag is raised.
+- In the same fixture: the second side's table holds no `contrast/*` and no `neg8/*` key for that session, those
+  keys are in `first_program_only`, the `engine_screen_undefined` family count equals the number of contrasts,
+  and the `pairing` family still counts that session.
+- `test_gamma_undefined_screen_guard_fails_on_a_claim_word`: force the first program's row for that session to
+  `direction_supported`, then separately to a finite `D_j`. Each fails the gate with `engine_screen_undefined:<cid>`
+  in the failures.
+- Generator: the existing label test pins the three new strings and their keys.
+
+**Paper.** RL-110 term 4 stands and now covers the contrast rows: for a session with an undefined screen the
+agreement sentence does not cover its screen row or any of its contrast fields.
+
+**Who changes what.** The R12 line: `joulewise/b6_analysis_check.py` and the tests. The R3 table seat: three label
+strings and the regenerated table for PR #748. **Gates.** The S-14 pin: yes. Not the custody verify. Not W1
+signing.
+
+**Blind status.** Blind to Block 6. I do not know whether any session has an undefined screen. Block-5-aware.
+
+## RL-115. A pinned external input that is not supplied: the recompute refuses
+
+**What the code does** (`04eacce2a`). With `--inputs`, the loop at 1689-1692 checks a digest only for a path that
+was given. `read_reharvested(None)` returns `{}`. A run that omits `--loop-state` while `external.loop_state` is
+pinned uses the attempt record's original outcomes. `check_block` reads the same source (line 47), so the two
+sides agree on the uncorrected value. A session that a re-harvest moved in or out of `counting` would be counted
+wrongly and the gate would pass. `b6_r12_verify.py:425` always passes the flag; a hand invocation need not. This
+is the item my custody kit round-2 review (M2) routed to R12.
+
+**Ruling.** Yes, it refuses. A pin is a statement that the file is part of the run. Omitting a pinned file changes
+what is counted and leaves no trace.
+
+**Required behaviour** (`scripts/independent_recompute_b6.py`, `main`, when `--inputs` is given).
+
+1. For every key present in `document["external"]`: the matching argument must be supplied. If not,
+   `InputRefusal("external_input_missing")`, before any session is read. This holds for `loop_attempts`,
+   `loop_state` and `block5` alike, in `block` and in `single`, for the arguments the command has.
+2. An argument supplied with no key in `external` refuses by name, `external_input_unpinned`. Today that case is
+   a bare `refused: KeyError`.
+3. Neither pinned nor supplied: the run proceeds. That is the kit's waived loop state, which the kit already
+   makes explicit. The restricted `inputs` record gains `external_supplied`, three booleans, so the output says
+   whether re-harvest corrections were read.
+4. Without `--inputs` (synthetic) nothing changes.
+
+**Tests** (R12 line, `tests/test_b6_r12_session_fixture.py`, beside the wrong-digest case).
+
+- `test_pinned_loop_state_omitted_refuses`: `block`, and again `single`. Exit 4, stderr
+  `refused: external_input_missing`, no output file written.
+- `test_pinned_loop_attempts_omitted_refuses_in_single_mode`.
+- `test_unpinned_loop_state_supplied_refuses`: stderr `refused: external_input_unpinned`.
+- `test_waived_loop_state_runs_and_is_recorded`: no key, no flag; the run completes and
+  `inputs.external_supplied.loop_state` is false.
+
+**Who changes what.** The R12 line. The custody kit's own M2 fix (`inputs` refuses a waived manifest without
+`--accept-no-loop-state`) is separate and stays the kit's. **Gates.** The S-14 pin: yes. The custody verify: no;
+the kit's `verify` does not run the recompute, and its gate is the kit's M1 and M2 as already ruled. Not W1
+signing.
+
+**Blind status.** Blind to Block 6. I do not know whether any session was re-harvested.
+
+---
+
+## Summary of gates
+
+| Ruling | Change | Owner | W1 signing | S-14 pin | Custody verify |
+|---|---|---|---|---|---|
+| RL-111 | None. Four test ids and four values from the delivered `result.json` | Lead (evidence) | Yes | No | No |
+| RL-112 | None. One test id on the signing head | Lead (evidence) | Yes | No | No |
+| RL-113 | Gate records `first_program_only`; three tests; a paragraph in the pin request | R12 line | No | Yes | No |
+| RL-114 | `check_block` skips and guards an undefined-screen GAMMA session; tests; three labels | R12 line; R3 table seat | No | Yes | No |
+| RL-115 | Recompute refuses a pinned input that is not supplied; four tests | R12 line | No | Yes | No |
+
+RL-113 to RL-115 are one small round on two R12 files. They go through R12's review together and the pin request
+cites this file.
+
+## Open-items table: changes
+
+- Remove: "The S-13 comparison's treatment of a key absent on the second side" (ruled, RL-113).
+- Add: "A key labelled plain `computed and compared` found in `first_program_only` (RL-113 term 7)", waiting on
+  the real block run.
+- Unchanged: "A change to any of the ten condition-13 files after the slot-producing night". None is asked for
+  here.
+
+**Lead evidence for RL-111 (2026-11-12 22:45 PST):** quoted from the delivered `result.json` on `night-results/align-r1-20261112T2251Z` (commit e25753a04): `host_restoration.ok = true`, `host_restoration.network_time.ok = true`, `network_time.requested = "on"`, `network_time.observed = "on"`. (The magistrate then set network time OFF for W1 at about 22:20, RUN_STATE 301.) The named test passes on the signing head remain owed.
+
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
@@ -6272,4 +6565,4 @@ rests on which branches of `check_block` make a comparison.
 | The S-14 pin request for Block 6, under RL-98 (volume, deadline 13 November 20:00 PST) and RL-99 | The R12 seat's report with its generation ratio, and the Opus cold review |
 | An adoption request for W-4 or W-6 (RL-108) | The agreement report over real nights, the branch's cold review and the draft deviation row |
 | A change to any of the ten condition-13 files after the slot-producing night (RL-107 item 3) | The event |
-| The S-13 comparison's treatment of a key absent on the second side, if it counts such a key as compared (RL-110 term 3) | The S-14 pin request |
+| A key in `first_program_only` that carries a plain "computed and compared" label (RL-113) | The real Block 6 block run |
