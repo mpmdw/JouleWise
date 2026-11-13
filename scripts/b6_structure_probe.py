@@ -28,7 +28,6 @@ import json
 import os
 from pathlib import Path
 import re
-import sys
 
 SCHEMA = "joulewise.b6_structure_probe.v1"
 ROOT = Path(__file__).resolve().parents[1]

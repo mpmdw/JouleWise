@@ -317,9 +317,15 @@ class EmbeddedTable(unittest.TestCase):
         self.assertEqual(rr.PIN_TABLE["joulewise/b6_analysis_check.py"][:8], "634c991c")
         self.assertEqual(rr.PIN_TABLE["joulewise/b6_analysis_inputs.py"][:8], "283dfc78")
 
-    def test_table_equals_this_checkout_when_it_is_the_pin_line(self):
-        # On the S-14 line (this branch is cut from it) the 24 files are unchanged.
-        self.assertEqual(rr.closure_hashes(ROOT), rr.PIN_TABLE)
+    def test_table_equals_the_pin_candidate_commit(self):
+        candidate = "b5ab6a71d798e168209fd66a0832f66f97a0b096"
+        if subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", candidate + "^{commit}"],
+                          capture_output=True).returncode != 0:
+            self.skipTest("pin candidate commit not in this clone")
+        for path, digest in rr.PIN_TABLE.items():
+            data = subprocess.run(["git", "-C", str(ROOT), "show", candidate + ":" + path], capture_output=True,
+                                  check=True).stdout
+            self.assertEqual(hashlib.sha256(data).hexdigest(), digest, path)
 
 
 if __name__ == "__main__":

@@ -29,7 +29,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import sys
 
 SCHEMA = "joulewise.b6_mapping_build.report.v1"
 # scripts/b6_r12_verify.py at the S-14 line, the R3 table's input of the same name (pin request section 2c).

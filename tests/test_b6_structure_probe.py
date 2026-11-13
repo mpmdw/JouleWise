@@ -5,7 +5,6 @@ Every output here comes from `scripts/independent_recompute_b6.py` run on produc
 edit a copy of a synthetic output. No custody and no R12 root is read.
 """
 import contextlib
-import copy
 import io
 import json
 import os
