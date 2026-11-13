@@ -8645,6 +8645,48 @@ A19).
 
 **Owner.** Lead: apply A19 now; apply B5 at the S-14 cut, filling its slots. **Gate.** None. **Blind status.** Blind: text only.
 
+# RL-135. The slot-session desk: twelve definitions that make RL-119 step 4, RL-122 and RL-131 mechanical, and one correction to RL-131
+
+Research lead (Fable 5.2), 2026-11-13 08:39 PST (from `date`). Written with the desk spec `/Volumes/JW-EXT/scratch/fable-r1-slot-desk-spec.md`, which is its companion and carries the tool definitions and the decision table.
+
+**Read.** As listed at the head of the spec. **Not checked:** no journal of any night; the layout assumptions the spec lists. **Not done:** no SSH, probe, commit or mail. The session (`align-r1-20261113T1508Z`, `a6a09e6d7`) is running and none of its output has been read by anyone.
+
+**Ruled.** Each item fixes a reading that RL-119, RL-122, RL-124 or RL-131 left to judgment. None changes a bar.
+
+1. **T2 is evaluated per sample, and it does not cover a planning G0 released under 3(a).** A T2 sample is one where both keys are valid, TV0h's band is met, the status clauses are met (G0), and TVh0's band fails or (G0) TVh0's slope clause fails. T2 fires when a gate has at least one such sample and that gate timed out or its member failed the duty bar. A planning-turn G0 that the 3(a) desk classes `planning-release-3a` under item 7 is excluded: its fast reference is the 150 °C ceiling, so "TV0h's band is met" is empty there, and the heater holds the die itself at the edge. Every other planning timeout already comes to me.
+
+2. **T1's "beyond what read skew explains" is fixed as a rule.** A row is `equal`, `floored`, `skew` or `unexplained` as the spec's 2.1(e) defines them; `skew` allows TVh0 to match the equal or the floored reading of any TV0h value seen in the row and its neighbours within 2.5 s, with 0.05 °C of slack on the equal reading. T1 fires on any row with TVh0 above TV0h, any `unexplained` row, any `floored` row with TV0h below 35.0 °C, or `skew` rows above 1% of all rows. The definition is not adjusted after this session's journals are read.
+
+3. **Correction to RL-131 item 2.1 and 2.3: the alternative G0 is mostly not observable.** I wrote that the session's G0s "replay on the validated harness because TV0h is journaled every second". That holds only up to the moment the member starts work. A slope read on TV0h is stricter than the registered clause, so the alternative releases later than the registered gate, and after the registered release the journal shows a working die. The desk therefore prints the alternative as `released` where it falls inside a post-release quiet span, and `censored` otherwise, with TV0h's slope at the registered exit. Nothing in the decision table reads the alternative. Consequence for RL-131 item 2.6: if the role swap is ever wanted, its evidence is a fresh Part A and a native session, not this replay.
+
+4. **RL-106's N is a count of dispatches.** N is the number of member sessions, superseded attempts included, whose flags contain `r1.g0_timeout_run`. A flag that appears in several places of one member's record counts once (the 11-12 record had six occurrences for two dispatches). The desk cross-checks N against the count of G0 `timeout` records in the members that carry the callback. A disagreement is a tool defect for the lead.
+
+5. **Scope of the duty bar and of "no G1 or H timeout".** The judged runs are the three gated D runs, as the driver computes the bar (`duty_bar`, against min(armed, L1) T_dead). The no-timeout clause covers those three and X_G. Any G1 or H there that ends other than `released` (`timeout`, `deadman`, `unobserved`) comes to me. X_G's turn count and gate share are printed and not judged by the duty bar; X_G with `status` other than `measured`, or with X7, comes to me under disposition 8.
+
+6. **S6.** The median is the driver's `G1_median_s` over the three gated D runs, which the desk must reproduce. The H median is printed with no bar. The replay at 1.5 and 2.0 °C uses the gate module on the recorded references. A reachable step lets the slots PR be opened; signing waits for me. The "implied energy band" is `|β_T| × δ_slow`, point and 90% bound, as the driver already computes for U5 from the planning turns; when the planning temperature is `inconclusive` the disclosure is the sentence "not estimable on this session: planning temperature inconclusive (RL-20)". That is admitted and blocks nothing.
+
+7. **RL-131 item 2.4, exactly.** R_fast is `fast_c` of step-D's window reference, the reference the precools consume. "TV0h at the precool's last sample" is TV0h in the last reading row of the precool's own journal in which it is valid, no more than 5 s before the journal's end. The condition is TV0h ≤ R_fast + 1.0 °C. If the journal or the reference cannot be read, or the journal's last TVh0 value does not reproduce the precool's recorded last curve value, the timeout comes to me. The 3(a) peak measure is unchanged: TVh0 never reads above TV0h, so a rounded value cannot satisfy it falsely.
+
+8. **RL-91 on this session.** RL-120 item 5 discharged RL-91 for W1; this session only reports. A `capture_reaps` record with `absent: true` is the fix working and is a disclosure. A record with `absent` not true, or a `powermetrics` process in any member's census, comes to me. The ticker print is as RL-91 wrote it.
+
+9. **T3's set.** U2 on TV0h is the range of TV0h at the G0 exit sample over the final-attempt, released, non-planning G0s of member journals: the 30B step, the three A-B-A legs, step-D, the three gated D runs and X_G, as many as released. The bar is the registered 3 °C; T3 fires above it.
+
+10. **Tool defects go to the lead, findings come to me.** A desk that cannot reproduce a recorded gate, a cross-check that disagrees with the driver, or a missing desk output is the lead's to fix. It comes to me only if it survives one fix, as "the desk cannot reproduce the session". No row of the decision table is waived by the lead, and a row that fires is not re-derived with a changed definition.
+
+11. **The row edit of RL-131 item 3.3 is confirmed when T1 has not fired.** RL-131 made the edit wait on the desk's floor census "confirming the wording on gated members". That confirmation is T1 not firing over all sidecar rows. The three edits then go in verbatim. If the census shows no `floored` row at all on gated members, the wording stands on the step-D journals and the PR says so in one line.
+
+12. **Admission of the desk tools.** B1, B2 and B3 are admitted without returning to me when: the tests of the spec pass; the 11-12 regressions of step 0 hold; a cold review (a Fable seat) has no open high finding; and no commit of the branch touches a condition-13 path. A print from a tool that has not met this may be read by the lead and shown to me, and may not be cited in a signed `r1_planning_release.json` or in the slots PR. If the tools are not admitted when the chain exits, the session's output waits on the MBP; nothing is lost by the wait.
+
+**What is unchanged.** RL-119 step 4's dispositions, RL-122 items 3 and 6, RL-124, and RL-131's decision, triggers and row text. `thermal_gates.py` and the other nine condition-13 paths are not edited. If no row of the spec's decision table fires, the slots are entered and W1 goes to signing under RL-107 at `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe` without returning to me.
+
+**For Ed, plainly:** "The rehearsal that produces W1's settings is running. I have written down, before anyone has seen its logs, exactly how they will be read: which tables, which thresholds, and for each possible finding whether we go straight to signing or it comes back to me. Three small tools have to be built for that today and checked against Thursday's logs first. I also corrected one thing I said this morning. I said we could replay every gate 'as it would have run with the real slope'. In most cases we cannot, because once the gate opens the laptop starts working and the log no longer shows it cooling. The desk will say so on each line. It does not affect the decision."
+
+**Owner.** Lead: tools B1 to B5, the step-0 regression, the desk, the slots PR. Research lead: the cold review seat of item 12; every row routed to me.
+**Gate.** The slots PR: the decision table with no row fired, on admitted tools. W1 signing: as RL-122 and RL-131, plus RL-107's proofs on the signing head.
+**Blind status.** Blind: no v4 outcome exists. Code, registration text and the saved outputs of the 11-12 rehearsal desk only. Every definition here is fixed before this session's journals are read.
+
+Desk spec (tools B1-B5, procedure, decision table): /Volumes/JW-EXT/scratch/fable-r1-slot-desk-spec.md.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
