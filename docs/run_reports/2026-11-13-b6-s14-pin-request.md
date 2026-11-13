@@ -12,6 +12,10 @@ left as open ⟨NINE: …⟩ slots. S-14 is cut only after the nine's finisher h
 RL-113 term 7 check has been run on the nine's output (section 7). The two items that section 9 had marked
 **GATING** (G-1, G-2) are ruled: RL-129 §1 and §2.
 
+**CUT 2026-11-13 12:42 PST (`date`): S-14 = `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b`, annotated tag `b6/analysis` (object
+`082652f25983ccd335acd834861f19455b9ff6fe`).** Sections 1 and 8a record it. The "REQUEST, NOT A PIN" status above is the request as it
+circulated.
+
 **Slots filled and term 7 run, 2026-11-13 12:40 PST (`date`).** The seven-session block read under RL-141 is complete
 (section 6). Every slot is filled; none departs from its prediction except N-14 (recorded not met before the read)
 and N-21 (ruled, RL-141 addendum 2 B1). The term 7 check on the block's restricted output has no stop (section 7a).
@@ -102,6 +106,11 @@ S-4 and S-18 files, and the precision and comparison-key tables", with
 
 The S-14 commit itself is not yet chosen. It is the analysis-line commit at the cut (section 8), and it must hold
 every byte in section 2 unchanged.
+
+**Cut 2026-11-13 12:42 PST (`date`).** S-14 is `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b` on `origin/analysis/2026-11-13-b6-s14-merge`
+(tree `27770d960cc403989189e7fbfa2077ab2ef65225`), the merge head `b5ab6a71d` plus one commit that adds the R12 report's RL-141
+section (`docs/run_reports/2026-11-11-p1-b6-r12-r3.md` only). Annotated tag `b6/analysis`, tag object
+`082652f25983ccd335acd834861f19455b9ff6fe`, pushed. Section 8 holds the step records.
 
 ## 2. The exact bytes to pin
 
@@ -698,6 +707,31 @@ unless a step names someone else.
    fill delta before #748 merges.
 9. **After the cut.** The blind dry run runs from the S-14 commit with the RL-98 term 2 stop. No Block 6 custody path
    is read by the program before step 7 (RL-126 item 4).
+
+### 8a. The cut, as performed (2026-11-13, 12:37-12:42 PST)
+
+Steps 2 and 3 ran in the form RL-141 §3 gives them (the read launchers, not the reduced finisher); section 6 holds
+the slots. Every step below was done by the lead on the Air, with no `AIR-QUIET.lock` held and no test suite run.
+
+- **Step 3.** Slots filled; none departs except N-14 and N-21, both ruled before the cut (section 6, pin request
+  commit `96446e31a`).
+- **Step 4.** At `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b`, `shasum -a 256` of `git show <S-14>:<path>` for the 24 files of sections 2a
+  and 2b: 24 of 24 equal, 0 mismatches. RL-129 §6's three records for the read: `verifier_commit`
+  `b5ab6a71d798e168209fd66a0832f66f97a0b096` in all five receipts, a commit whose 24 files hash the same as S-14's (the S-14 commit
+  differs from it in the R12 report only); the reader worktree's `git status --porcelain` empty before the first
+  read and after the last, in both launchers; the 24 files (with five harness files, 29 in all) recomputed from the
+  reader worktree before and after, 0 mismatches, in both launchers' events.
+- **Step 5.** Term 7, no stop (section 7a).
+- **Step 6.** `python3.13 -I -B scripts/b6_r3_table.py` on a `git archive` of S-14: exit 0, stdout SHA-256
+  `1003d87e7b92bc28a38890d75860e0ea0e47ae65862e6d6dd09641d7b3f29840`, byte-identical to the stdout at `b5ab6a71d` (generator inputs unchanged; generator
+  `d3106ecbc37b941b764efd1bbb51ccf3a99928081e324a602a1089616cb90609`), "Keys covered: 675 of 675; 149 groups; UNSTATED groups: 0."
+- **Step 7.** S-14 `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b`, tree `27770d960cc403989189e7fbfa2077ab2ef65225`; the merge branch pushed; annotated tag
+  `b6/analysis` (object `082652f25983ccd335acd834861f19455b9ff6fe`) naming the commit, the tree, RC-B6-1's and the Block 5 script's
+  SHA-256, and this request @ `96446e31a`; pushed.
+- **Step 8.** Staged, not on PR #748: the four `⟨CUT⟩` blanks of the pre-staged fill branch
+  `docs/2026-11-13-b6-s17-fill-staged` (registration S-14-PIN and the addendum's `b6/analysis` row) are written by
+  `scripts/b6_s17_fill_check.py fill-cut` from git, with this request's commit at the cut, and checked by its `check`.
+  PR #748 itself is not pushed; Fable checks the fill delta before #748 merges.
 
 ## 9. Owed items, with owners
 
