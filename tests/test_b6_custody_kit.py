@@ -626,6 +626,98 @@ class Mini(unittest.TestCase):
         self.assertRefused(run("verify", "--self-check", "--manifest", self.manifest, "--manifest-sha256", self.msha,
                                "--root", self.src, "--loop-dir", self.src), "digest_mismatch")
 
+    # -- cold review R2: M1 (source-host binding, identity), M2 (waiver), M3 (surviving mutants) --
+
+    def test_rehearsal_source_host_refused_on_an_unmarked_archive(self):
+        # Expected (R2 M1): without the SYNTHETIC_BLOCK6_FIXTURE marker in every --session root, the override is
+        # refused source_host_on_real_archive, and no manifest is written.
+        (self.b / kit.SYNTHETIC_MARKER).unlink()
+        out = self.base / "unmarked.json"
+        rc = run("manifest", "--session", self.a, "--session", self.b, "--loop-attempts", self.attempts,
+                 "--rehearsal-source-host", "mbp-test", "--out", out)
+        self.assertRefused(rc, "source_host_on_real_archive")
+        self.assertFalse(out.exists())
+        # Without the override the same archives are manifested (a real archive is never refused for lacking it).
+        self.assertEqual(run_raw("manifest", "--session", self.a, "--session", self.b, "--loop-attempts", self.attempts,
+                                 "--no-loop-state", "--out", self.base / "plain.json")[0], 0)
+
+    def test_rehearsal_source_host_is_normalised(self):
+        # Expected: a declared name is recorded as its first label, lower case (the host check compares that form).
+        out = self.base / "norm.json"
+        self.assertEqual(run("manifest", "--session", self.a, "--loop-attempts", self.attempts,
+                             "--rehearsal-source-host", "MBP-Test.Local", "--out", out)[0], 0)
+        self.assertEqual(json.loads(out.read_bytes())["host"], "mbp-test")
+
+    def test_copy_is_source_by_identity_not_spelling(self):
+        # Expected (R2 M1): a case-respelled root and a `..` root of the source tree are the same directory:
+        # copy_is_source. A missing source path is not the same tree.
+        respelled = Path(str(self.src).upper())
+        if not respelled.exists():
+            self.skipTest("case-sensitive volume")
+        for n, root in enumerate((respelled, self.src / ".." / "src")):
+            rc = run("verify", "--manifest", self.manifest, "--manifest-sha256", self.msha, "--root", root,
+                     "--loop-dir", self.src, "--out", self.base / ("ident-%d.json" % n))
+            self.assertRefused(rc, "copy_is_source")
+        self.assertFalse(kit.same_tree(self.base / "absent", self.src))
+
+    def test_loop_state_waiver_is_carried_and_must_be_accepted(self):
+        # Expected (R2 M2): the receipt carries loop_state_waived; inputs refuses a waived manifest unless
+        # --accept-no-loop-state, and then prints loop_state=waived. An unwaived manifest prints no such word.
+        self.verified()
+        self.assertIs(json.loads(self.receipt.read_bytes())["loop_state_waived"], True)
+        path = self.base / "mapping-w.json"
+        path.write_text(json.dumps(mapping_for(["b6-alpha-r1", "b6-beta-r1"])))
+        args = ["inputs", *self.ia(), "--mapping", path, "--l9-audit", "not_run"]
+        self.assertRefused(run_raw(*args, "--out", self.base / "w1.json"), "loop_state_waived")
+        self.assertFalse((self.base / "w1.json").exists())
+        rc, out, err = run_raw(*args, "--accept-no-loop-state", "--out", self.base / "w2.json")
+        self.assertEqual((rc, err), (0, ""))
+        self.assertIn("loop_state=waived", out)
+        out2, (rc, mout, err) = self.loop_manifest()
+        msha = mout.strip().rsplit("=", 1)[1]
+        shutil.copyfile(self.src / "state.json", self.dst / "state.json")
+        receipt = self.base / "r-unwaived.json"
+        self.assertEqual(self.verify(manifest=out2, msha=msha, out=receipt)[0], 0)
+        self.assertIs(json.loads(receipt.read_bytes())["loop_state_waived"], False)
+
+    def test_self_check_covers_the_loop_files(self):
+        # Expected (R2 M3): a changed loop file is refused digest_mismatch under --self-check too.
+        out, (rc, mout, err) = self.loop_manifest()
+        msha = mout.strip().rsplit("=", 1)[1]
+        (self.src / "state.json").write_text('{"state": 9}\n')
+        self.assertRefused(run("verify", "--self-check", "--manifest", out, "--manifest-sha256", msha,
+                               "--root", self.src, "--loop-dir", self.src), "digest_mismatch")
+
+    def test_receipt_names_the_loop_files(self):
+        # Expected (R2 M3): loop_files lists the loop file names the manifest pinned, sorted; loop_files= is printed.
+        out, (rc, mout, err) = self.loop_manifest()
+        msha = mout.strip().rsplit("=", 1)[1]
+        shutil.copyfile(self.src / "state.json", self.dst / "state.json")
+        receipt = self.base / "r-loop-names.json"
+        rc, vout, err = self.verify(manifest=out, msha=msha, out=receipt)
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual(json.loads(receipt.read_bytes())["loop_files"], ["attempts.jsonl", "state.json"])
+        self.assertIn("loop_files=2", vout)
+
+    def test_receipt_bytes_alone_wrong_is_refused(self):
+        # Expected (R2 M3): receipt_invalid when only a session's bytes count differs from the manifest's.
+        self.verified()
+        r = json.loads(self.receipt.read_bytes())
+        r["sessions"]["b6-alpha-r1"]["bytes"] += 1
+        bad = self.base / "receipt-bytes.json"
+        bad.write_text(json.dumps(r))
+        self.assertRefused(self.inputs(mapping_for(["b6-alpha-r1", "b6-beta-r1"]), receipt=bad), "receipt_invalid")
+
+    def test_unexpected_desk_is_refused_for_an_empty_directory_and_a_file(self):
+        # Expected (R2 M3): unexpected_desk_folder for an empty archive.desk directory and for a regular file of
+        # that name beside a session whose source had none.
+        desk = Path(str(self.ca) + ".desk")
+        desk.mkdir()
+        self.assertRefused(self.verify(), "unexpected_desk_folder")
+        desk.rmdir()
+        desk.write_text("x")
+        self.assertRefused(self.verify(out=self.base / "r-desk-file.json"), "unexpected_desk_folder")
+
     def test_verify_needs_out_unless_self_check(self):
         # Expected: verify_out_missing.
         self.assertRefused(run("verify", "--manifest", self.manifest, "--manifest-sha256", self.msha,
