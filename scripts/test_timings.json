@@ -424,6 +424,7 @@
     "tests.test_validate_powermetrics_fiducial": 8.76,
     "tests.test_validate_powermetrics_fiducial_derivation_only": 374.72,
     "tests.test_vllm_runtime": 0.013,
+    "tests.test_watchdog_transition_table": 1.0,
     "tests.test_whole_window": 0.327,
     "tests.test_whole_window_selection": 203.331,
     "tests.test_window_duration_margins": 19.589,
