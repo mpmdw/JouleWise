@@ -8756,122 +8756,353 @@ from `ae7eb01b3`. I do not review it again unless Opus finds the authentication 
 
 **Gate.** Step 5 of the runbook. Not the cut.
 
+## 4. What the operator may see before the release, and the structure probe
+
+**Ruled.** Before the release the operator sees, from the program: the exit code, the one stdout line, a
+`refused:` line, the public output. From a traceback: the frame lines (file, line, function) and the exception
+type. The exception's message is not shown, because it can quote a value.
+
+The restricted output is opened before the release by one program only, the structure probe (build B-3). It
+prints:
+
+- identity fields: the two program hashes, `inputs` (host, audit word, document digest, the three
+  `external_supplied` booleans, the census file counts), `closed`, `block5_input`;
+- from `block.option_c`: `pass`, the family counts, the failure names, the public comparator's class records,
+  and `first_program_only` as class, session and key;
+- flags as code, session, scope and `stops_comparison`. Never `detail`;
+- per session: the NEG-8 verdict word, the kept-quad count of each contrast, the names in
+  `copied_disclosures`, and the count-type fields of the desk hazard record;
+- the count of between-session rows with `block5_included` true.
+
+Its output must pass the pinned program's `require_structure_only`, with key names and code names allowed. A
+stop-flag code that is not in `PUBLIC_FLAG_CODES` (`option_c_disagrees`, `stored_energy_mismatch` and the
+others) is printed by name here.
+
+**Why that is structure.** The names of a failed comparison say that two programs disagree on a key. They do
+not say what either value is or which way a result falls. RL-113 put key names without values into the record
+for this use, RL-125 item 1 asks for "the run id's role and no value", and Block 5's release check printed pass
+and fail counts per family. §12.1 already releases the drift screen's verdict word, kept-unit counts and hazard
+measurements. A hold cannot be traced blind without the names.
+
+## 5. The dry run: serial, normal priority, and a stop at twice the prediction
+
+**Ruled.**
+
+1. **Mode.** `--workers 1`, normal priority, on an Air with no other heavy job. Serial is the mode of the
+   outputs that are released. RL-123's pool condition is not used for the first attempt.
+2. **Prediction.** `W_pred` is `9.9 × w_gate`, rounded up to the next 100 s, where `w_gate` is the measured wall
+   of the gate run on one real session. If that number is missing, `W_pred` is 3,400 s (3 GAMMA sessions at
+   316 s and 6 others at 400 s). It is written into the predeclaration before the dry run starts.
+3. **Stop.** `2 × W_pred` (RL-127 term 6). At 3,400 s that is 6,800 s. **This replaces the 10,800 s stop** of
+   RL-98 term 2, RL-123 §1 and the request's slot N-15 for the real run. The three-hour figure was a fallback
+   for the case with no full-volume session, and RL-123 said that case had ended. The watcher alarms at
+   `1.5 × W_pred` and nothing is done on the alarm.
+4. **RL-127's one-hour stage budget** for "copy, verify, `inputs`, reader" is read as: from the start of the
+   run-input documents (step 5) to the dry run's exit. The copy and the verify were done on 12 November. At the
+   central prediction the stage is 70 to 75 minutes, so it is over budget by plan. That is reported in the
+   weekly time report and not acted on: the first real-size read is not shortened for a budget (RL-127 term
+   10's sense). RL-132's *A* for Block 6 becomes the measured dry-run wall once it exists.
+5. **`JW_B5_SYNTHETIC_ONLY` is unset** in the launcher's environment. `TMPDIR` is `$RUN/analysis-tmp`, mode 700,
+   created by the launcher and removed by it after the exit is recorded: the pinned Block 5 reader may place
+   decompressed meter streams there (RL-30 7b), and they are restricted.
+
+## 6. One dry run is the record; every attempt is in a ledger
+
+**Ruled.** §12.3 item 3, "completed over every block-6 session with no tooling refusal", is met by one run of the
+closed nine-session command that exits 0. Every launch of the pinned program on real custody before it, the gate
+run included, is entered in an attempts ledger in the dry-run record: time, argv digest, exit code, refusal code
+or class, wall, and the output digests if any were written. A refused or stopped attempt does not disqualify a
+later clean run. It is disclosed, and the release record carries the ledger.
+
+Outputs of an attempt that exited 3 are kept, hashed, and never opened except by the probe.
+
+## 7. The release check is digest re-verification and an input census. The program is not run twice
+
+**Ruled.** §17-R1 replaced §13's release re-run with "digest re-verification plus an input census" and dropped
+the determinism repeats. For Block 6 that means, after the dry run and before the release record:
+
+1. the restricted and public outputs re-hash to the digests the launcher recorded at exit, and the public
+   output's `restricted_sha256` equals the restricted file's;
+2. the custody copy is verified again by the kit's `verify` against the same manifest digest, into a second
+   receipt: verdict `verified`, the same nine sessions, the same file and byte counts as the first;
+3. the run-input document, the two loop files and the Block 5 file re-hash to the values the run used;
+4. RL-129 §6's three records hold: the run checkout is at the S-14 commit, clean, with 24 of 24 hashes, before
+   the gate run and after the dry run.
+
+The pin request's "release run" is this check. A second execution of the program is not required and gates
+nothing. If the lead wants one as audit work it may run after the release.
+
+**Why.** The program's own census (`verify_census`) already re-reads every authenticated file during the dry
+run. What the release has to show is that nothing changed between that run and the release, and items 1 to 3
+show it in about five minutes. Serial and pool byte equality is shown on the closed nine.
+
+## 8. Term 7 runs by script, on the dry run's output, before the release, and a stop holds the release
+
+**Ruled.** RL-113 term 7 is run by the structure probe's `--term7` mode on the dry run's restricted output,
+before the release record. It applies the checklist as RL-125 and RL-133 left it, steps 1 to 8 and 10 to 13. Its
+output is names, counts and `pass` or `stop <class>`.
+
+- RL-113 term 7's "does not gate the pin" stands. It now gates the release: with a stop outstanding, no release
+  record is made.
+- The checklist's step 9 (repeat by whoever writes the agreement sentence) becomes: that person confirms the
+  restricted file's SHA-256 is the one the script ran on and cites the script's record. The bytes are the same,
+  so the check is not done twice.
+- For the conditional labels the script uses the first program's own structure: the session's NEG-8 verdict
+  word, and each contrast's kept-quad count *n*. "The twin returned no estimate" is *n* below 2. A short
+  contrast is *n* from 2 to 4. This replaces the flag test in RL-133's step 5 bullet (`cell_below_minimum`),
+  which can miss a cell that desk removals shortened after the acceptance record was written.
+
+**Why before the release.** A term 7 stop means a label in the registered table and the program disagree about
+what was compared. Finding that after the numbers are open would mean ruling on it with the outcome known. The
+check reads key names, so it can run blind.
+
+## 9. PR #748's fill merges on a mechanical check
+
+**Ruled.** I have reviewed #748's entries twice and the R3 generator's labels through RL-133. The fill is
+admitted in advance if a checker confirms three things: the diff from `27b6cacfd` touches only the three `OPEN`
+markers, LOW 5, LOW 6 and the `b6/analysis` addendum row; every filled value equals the output of `git
+rev-parse`, `shasum` or the generator at the S-14 commit; and the R3 table's stdout SHA-256 is the one in the
+pin request's slot. The lead then merges on green CI and tells me. I read the delta afterwards, and a defect I
+find is a dated correction.
+
+`OPEN[R7-SESSION-INDEX]` is filled from the copy's `attempts.jsonl` (id, pack, round, t0, counting status:
+structure) before the gate run. If that order contradicts the order or the pairing table §17-R7 already states,
+it comes to me before any run.
+
+#748, with the session index, merges before the gate run: S-9, S-11, S-14 and S-15 are registered as due before
+the blind dry run.
+
+## 10. The moment of unblinding
+
+**Ruled.** The release event is the commit on `main` of the release record, made by the lead when all eleven
+conditions of the runbook's step 11 hold. It needs no further ruling from me. Until that commit, nobody opens
+the restricted outputs, the two runs' stdout and stderr files, the analysis temporary directory or any file
+under the custody root, except the pinned program, the kit and the probe.
+
+Ed's OK is condition 11. I found the precedent (Block 5 was unsealed by Ed, RUN_STATE item 231) and no rule
+that says the same for Block 6. I am not waiving it. The lead asks him today for an OK conditional on the other
+ten conditions, so that the record does not wait for him.
+
+RL-6 (d)'s call is condition 10: one `RUN_STATE.md` line, by date, before any Block 6 number is read.
+
+## 11. Failures: any exit other than 0 or 3 is a refusal, and refusals fall in four classes
+
+No ruling is needed for classes A, B and D below unless the text says "comes to me". Every attempt goes in the
+ledger (item 6).
+
+**Class A, the invocation or the document. Remedy: correct the command or `mapping.json`, write a new document
+under a new name, launch again. The lead decides and tells me after. After three class A attempts in total it
+comes to me.**
+
+| Refusal | Meaning | Remedy |
+|---|---|---|
+| exit 2 | argument error | correct the command |
+| `JW_B5_SYNTHETIC_ONLY=1 and the archive carries no synthetic fixture marker` | the variable was set | unset it |
+| `run_inputs_digest_mismatch` | wrong `--inputs-sha256` or wrong document | pass the kit's printed digest |
+| `run_host_or_audit_invalid` | document not from the kit's `inputs` | rebuild the document |
+| `external_input_missing` | a pinned loop file or `--block5` not supplied | supply it |
+| `external_input_unpinned` | an argument supplied that the document does not pin (for example `--block5` on the gate run) | drop the argument, or use the right document |
+| `session_input_unsupplied` | the document pins a session not on the command line | use the gate document for the gate run, all nine sessions for the block run |
+| `session_input_pin_missing`, `session_input_pin_ambiguous` | an archive path that is not the kit's spelling | pass `$ROOT/<id>/archive` exactly |
+| `authenticated_inputs_required` | `--inputs` missing | supply it |
+| `clock_journal_required` | `mapping.json` lacks `clock_journal` for that session (O-14) | add it |
+| `disclosure_coverage_missing`, `disclosure_coverage_invalid` | a family missing or empty in the pin | correct the mapping (the kit refuses this first) |
+| `meter_streams_not_supplied` | no meter stream in the pin | correct the mapping |
+| `input_path_invalid`, `compression_input_path_invalid`, `compression_relocation_ambiguous`, `compression_record_missing` | relocations incomplete or a path spelled wrongly | complete `relocations` (RL-100) |
+| `input_digest_missing`, `input_digest_invalid`, `input_digest_conflict` | a file the program reads has no usable digest in the document | first check the mapping; if the name is one the kit should have emitted, it comes to me (kit and program disagree on the authentication set) |
+
+**Class B, the pin closure. Remedy: recreate the run checkout at the S-14 commit and check the 24 hashes. A
+second occurrence comes to me.**
+
+`b5_script_digest_mismatch`, `hazard_sizing_digest_mismatch`, `b6_catalog_digest_mismatch`,
+`print_precision_digest_mismatch`, `comparison_key_registry_digest_mismatch`, `registration_digest_mismatch`,
+`placeholder_print_precision`.
+
+**Class C, custody. Remedy: stop; run the kit's `verify` on the copy; act on its result.**
+
+| Refusal | |
+|---|---|
+| `input_digest_mismatch`, `input_symlink`, `input_outside_archive`, `input_decompression_failed`, `external_input_digest_mismatch` | a file differs from its source digest |
+| `disclosure_record_missing`, `meter_stream_missing`, `request_comparison_record_missing` | a listed file is absent |
+| exit 1 with a traceback ending in `AttributeError` at `b6_analysis_hazards.py:58`; exit 4 `refused: TypeError` from the clock-journal read | the two unnamed archive signatures of RL-133 |
+| `zstd_unavailable` | the binary is missing: restore `/opt/homebrew/bin/zstd` v1.5.7, the version in the receipt, and launch again. A different version comes to me |
+
+- `verify` fails: the named session is copied again from the MBP source by the magistrate, in a desk gap,
+  remotely, and verified. The MBP is armed until the R1 slot session's chain exits, so this can cost a day. No
+  other remedy is allowed: nothing in the copy is repaired by hand.
+- `verify` passes and the program still refuses: the kit and the program disagree about a file. That is a
+  tooling defect and comes to me with the code and the file's name.
+- The program is not edited (RL-125 item 4 term 4).
+
+**Class D, the process. Remedy: one relaunch, pre-authorised, after the cause is written in the ledger.**
+
+A signal, a reboot, the volume unmounting, exit 1 with a traceback ending in `RuntimeError` from a dead pool
+worker (only if a pool run was authorised under item 13). A second class D failure comes to me.
+
+**Class E, a state the pinned program does not handle. This comes to me.**
+
+`calibration_capture_missing`, `calibration_acceptance_bound_missing`, `neg8_idle_family_unavailable`,
+`request_comparison_member_missing`, `comparison_session_coverage_mismatch`,
+`comparison_block_coverage_mismatch`, and any `refused: <TypeName>` (`KeyError`, `ValueError`, `TypeError`,
+`ArithmeticError`, `OSError`) or traceback that is not one of the signatures above.
+
+1. The release holds. Nothing is relaunched.
+2. The launcher's frame lines and exception type, and the session being read (from the launcher's sampler), are
+   sent to me. No value.
+3. A blind seat, Block-5-naive, starts at once to reproduce the state on a synthetic fixture. That is
+   pre-authorised. It does not open custody.
+4. I rule in one turn. The rule I will apply, stated now: a change to pinned bytes is admissible as a dated §17
+   entry of kind "tooling defect, chooses no rule" (RL-25 flag 3) when it turns the refusal into the behaviour
+   the registration's text already gives for that state, is made blind, and leaves the three full roots and the
+   closed nine unchanged apart from the program hash. It then gets my delta check and Opus's, the re-reads of
+   RL-123 §2 item 3, a new tag `b6/analysis-r2`, and the gate run and dry run again. Anything that chooses
+   between two readings of the registration carries "decided after Block 5 outcomes were known" and prints the
+   alternative.
+
+## 12. Exit 3: the run completed and a stop flag fired. The release holds
+
+**Ruled.** Exit 3 is a hold in every case (§17-R1: "a disagreement holds the release, decided by the defect
+found"; DLE-2 item 4). The outputs are kept and hashed. The probe prints the stop flags and the failure names.
+What follows depends on the code.
+
+| Stop flag | First action, by the lead | Then |
+|---|---|---|
+| `loop_attempt_missing`, `session_id_duplicate`, `acceptance_record_missing`, `acceptance_session_mismatch`, `acceptance_pack_unknown`, `acceptance_schema_unknown` | check the arguments and the mapping once, as class A (a wrong loop file or a repeated archive gives these) | if the command was right, it comes to me |
+| `trace_plist_missing`, `trace_plist_unreadable` on a compared run | run the kit's `verify`. If the file is a `SHA256SUMS` row and is absent or differs, class C | if the archive never held the trace: a registered STOP (§17-R11, RL-121 item 3). It comes to me with the session and the run's role (unit, start, midpoint, end, corpus). I do not expect to lift it |
+| `option_c_disagrees` | send me the failure names grouped by family (`harvest_energy`, `harvest_bound`, `harvest_drift`, `engine`, `engine_refusal`, `engine_screen_undefined`, `engine_below_minimum`, `pairing`, `section10`, `section11_*`, `counting`, `calibration`, `comparator:<class>`) | a blind seat reproduces on a synthetic fixture, pre-authorised. Which side is wrong is decided by the defect, never by a value. A defect in the second side changes no printed number: fix, `b6/analysis-r2`, run again, dated §17 line. A defect in the first program changes a printed number: the same, and the entry says so |
+| `counting_disagrees`, `acceptance_kept_count_mismatch`, `b6_exclusions_disagree`, `b6_exclusions_unclassified`, `kept_unit_not_validated`, `neg8_verdict_disagrees`, `neg8_corpus_count_mismatch`, `b_op_mismatch`, `stored_energy_mismatch`, `meter_request_mismatch`, and Block 5's own stop codes | none | comes to me with code, session and scope. These are the registered "both programs refuse on disagreement" checks (§17-R5, §17-R6) and the reducer cross-check. Same route as `option_c_disagrees` |
+
+§17-R4's sentence about exit 3 ("counts as completion only if a structure-only probe shows the refused
+resolutions are not binding failures") was written for the L9 pipeline. Under option (c) I apply it as: an exit 3
+is never completion for the release. `pairing_floor_unavailable` on a GAMMA session whose registered pair
+counted is the "all serving cells unbound" class: a hold that comes to me, never an outcome.
+
+**On the gate run** the same table applies, and the nine-session run waits.
+
+## 13. The dry run over budget
+
+**Ruled.** At `2 × W_pred` the launcher stops its own process group and exits 124. Nothing was written, since
+the program writes at the end. It is not relaunched before a profile (RL-98 term 2, RL-127 term 6). The profile
+is the launcher's sampler record: every 60 s the process's CPU time, RSS and the session directory it has open.
+
+Pre-authorised, without me, at most one relaunch from this list:
+
+1. The sampler shows the process at background priority, or another heavy job on the Air (a reader, a
+   generator, Dropbox, Spotlight indexing): clear it, relaunch serial with the same stop.
+2. Progress was steady, *k* sessions in *t* seconds, and the projection `9t/k` is at most 14,400 s: relaunch
+   with `--workers 2` and a stop of `1.2 × 9t/k`. Pool-2 is the one pool size with byte-equality evidence. The
+   peak RSS of the stopped run times 2 must be under 16 GiB.
+
+It comes to me when: the projection is over 14,400 s; one session held the process for more than `3 × w_gate`;
+RSS passed 16 GiB; or the relaunch also stops. RL-127 term 2 caps all attempts at 8 machine-hours.
+
+A pool run's outputs are the released outputs if it is the run that completes. The record says which mode ran.
+
+## 14. A term 7 stop, or a departure from a predeclared structure value
+
+**Ruled.** The release holds and the probe's output comes to me. I rule on names alone, in one turn. By class:
+
+| Stop | What I expect to rule |
+|---|---|
+| a `run_phase_energy` entry in `first_program_only` | RL-125 item 1. A program defect until shown otherwise: class E route |
+| a key labelled plain "computed and compared" in the list | the R3 label is wrong or the second side dropped a key. If the label: a dated correction of the table, generator only, no pinned byte. If the program: class E route |
+| a block-scope key or a `__block__` entry in the list | as the row above |
+| a conditional-label key for a session that does not meet the second clause (item 8's test) | as the row above |
+| a key with no R3 row | the table is incomplete: generator fix, dated correction, no run |
+| a copied-family name in the list; a `lines/whole_machine/…` session key in a compared row | program defect: class E route |
+| a class record that is neither kind | program defect: class E route |
+| a session without `copied_disclosures`, or `inputs.host` not `Air` | the run was launched without `--inputs`. It is a synthetic-route run: discard it, launch correctly (class A) |
+| a session missing against the pins or the counting attempts (step 12) | if the mapping left it out: class A. If the manifest has no such session: the custody copy is incomplete, comes to me |
+| `block5_included` count below the predeclared count | item 2 term 2: hold, comes to me |
+| pairing differs from §17-R7's table, or a `pairing_*` flag is non-zero | hold, comes to me. Pairing is registered structure |
+| P* desk removals not 0 of 840 | hold, comes to me: the pinned hazard code and the registered replay of §17-R10 disagree |
+
+Not stops, already ruled: a difference in a copied family's file names (RL-125 item 2); a session whose pin
+lacks flags, spans or bracket binding (checklist step 13, reported); an `engine_screen_undefined` or
+`engine_below_minimum` family (reported); the per-session quantity accounting departing from the probe's formula
+(reported to me before the release, a stop only through the label rules).
+
+## 15. The gate run and the dry run disagree with each other
+
+**Ruled.** If the gate run passes and the dry run then fails on `r1-alpha` alone, that is reported with both
+probe outputs. It is handled by the dry run's own code under items 11 to 14. The gate run's pass is not evidence
+against the dry run's result.
+
+## 16. After the release
+
+1. **The pinned run is not repeated after the release** for any reason short of a ruling from me. The numbers
+   that print are the dry run's.
+2. **RL-104 check 3 fails for a family** (the named file does not hold its disclosure). That family's row does
+   not print from the program's output. Its disclosure is read from the correct source file by a separate reader
+   and printed with the label "read from the source record; not bound by the run-input document", and the
+   deviation log gets one line. No new document and no new run: the copied families enter no computed number.
+3. **RL-125 item 4 term 3's ordinary follow-ups** (and any class A to D lessons) are made after the release, on
+   `main`, and are not applied to the pinned run.
+
+## 17. S-16
+
+**Ruled.** S-16's Block 5 half (replay counts of each changed §8 rule over Block 5's three usable sessions,
+structure only) is registered as due before the Block 6 release. The lead checks today whether it exists. If
+not, it is produced before the release from the released Block 5 sessions' flags, counts only, and entered as a
+dated §17 line of kind "slot fill". It is outside the pinned program and changes no Block 6 number.
+
+If it cannot be produced by the time the other conditions hold, the release is not held for it. The release
+record then carries `OPEN[S-16]` as a dated deviation (kind: deviation from the registered release procedure;
+"decided after Block 5 outcomes were known"), and the counts are entered before Paper 1's §6.8 is filled. I
+would rather it were simply done today.
+
+## 18. The S-14 line and `main`
+
+**Ruled.** The pin is the commit and its tag. The gate run and the dry run do not wait for the S-14 line to
+merge into `main`. The PR is opened at the cut and merges on its own CI. After the merge the 24 files on `main`
+must hash to the pinned values; if a conflict resolution changes one, the merge is redone. A red test in a
+module that executes one of the 24 files is told to me at once; it does not stop a run already launched.
+
+## Amends
+
+- RL-98 term 2, RL-123 §1 and the pin request's slot N-15: the real dry run's stop is `2 × W_pred`, not
+  10,800 s (item 5). The closed nine's read keeps its 10,800 s supervisor as built.
+- RL-99 item 3: the gate's form is stated (item 1).
+- RL-100 item 4: discharged by the rebase of item 3, with two kit options added.
+- RL-113 term 7 and the checklist's step 9: scripted, before the release, gating the release (item 8). The
+  checklist's step 5 test for `p` and `holm_p` uses the kept-quad count.
+- RL-127 term 6: the one-hour stage is read as item 5 term 4 says.
+- The pin request's O-4, O-5, O-6, O-11, O-12, O-13 and O-14 are placed in the runbook's steps 13, 4, 7 and 8,
+  9, 7, 5 and 4.
+
+**Owner.** The lead: every step, the builds, the ledger and the release record. Builder seats: B-1 to B-6. Opus:
+the kit delta's cold pass. Me: the rulings marked "comes to me", each in one turn. Ed: the unseal OK.
+
+**Gate.** Nothing here gates the cut. Items 1 to 3 and 9 gate the gate run. Items 4 to 8 and 10 gate the release.
+
+**Reason.** Block 5's analysis met its defects at first contact with real archives, after its pin. The R12 work
+moved most of that contact before the pin. What is left is the part R12 could not rehearse: the kit's real
+documents, Block 5's output as an input, and an operator who may not look at the result. Each of those now has a
+tool, an expected value and a ruled response, so that a failure after the cut is handled by the table and not by
+a new round.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened, and the custody
+directories were not listed. The verify receipt's non-outcome fields, code, rulings and synthetic records only.
+From Block 5's released output I read key names and entry counts. Block-5-aware. Every choice here was made
+from the code and the registration's text.
+
+---
+
 Runbook and build specs (§4): /Volumes/JW-EXT/scratch/fable-b6-post-pin-runbook.md.
 
 # RL-137. Paper 1: the Tier E variant is retired (2026-11-13 08:47 PST)
 
-Research lead (Fable 5.2). Entered by the lead from the second consistency pass, /Volumes/JW-EXT/scratch/fable-paper1-consistency.md, item A32, where the ruling was made.
+Research lead (Fable 5.2). Entered by the lead from the second consistency pass, /Volumes/JW-EXT/scratch/fable-paper1-consistency.md, item A32, where the ruling was made. (Corrected entry: the first commit of RL-137 quoted the wrong passage.)
 
-### B7. `paper1.md:1050` (§6.8): the sentence beside the single-source labels. Slot `B6-RELEASE`
+**A32. `variants/tierE_floor_version.md:3` and `variants/README.md:13`. Ruling, made in this pass: Tier E is retired.**
 
-Insert after "...with each session's interval, kept units and flags."
-
-- Current text: none.
-- Insert: "Each replication value carries its producer label. The values labelled single-source, the cells and floors of the two floor packs and the dominance ratios copied from them, were computed by one program in this block; what stands behind them is stated in Section 6.7. A value labelled not independently recomputed was computed once and checked by a separate reader against the released records."
-- The last sentence is kept only if that reader check was done for Block 6 and is recorded. Otherwise it reads: "A value labelled not independently recomputed was computed once."
-- Follows from: RL-99 items 1 and 2; RL-101; RL-102 ("no claim word rests on one of them without its label").
-
----
-
-## Claims in the draft that no ruling or record supports
-
-**U1. `paper1.md:666-667` (§5.6).** "no person or AI agent read a measured energy, power, phase duration, ... or calibration value."
-
-- It is a universal negative. No record can establish it, and the next paragraph and §8.2 control 2 disclose two departures, one of them a timing read.
-- For the replication block it is also stated in the past tense about a period that has not ended.
-- Fix: A19.
-
-**U2. `variants/tierC_block6_addendum.md:35`.** "No replication energy, floor, ratio, contrast estimate or outcome word has been read by any person or agent."
-
-- The same problem. Replacement: "Under the block's rule no replication energy, floor, ratio, contrast estimate or outcome word may be read before its release, and the project record shows no such read."
-- Not counted in (a). It is used only if tier C is used.
-
-**U3. `paper1.md:1836` (Appendix A).** "code sharing nothing with the analysis". Fix: A17.
-
-**U4. `paper1.md:578` (§5.4).** "on one afternoon". Contradicted by line 736 for the contrast session. Fix: A3.
-
-**U5. `paper1.md:533-534` (§5.2).** "no AI agent process on the machine", stated as a property of a session. §8.3 records sessions in which one was present. Fix: A1.
-
-**U6. `variants/tierC_block6_addendum.md:26`.** "every replication rule was fixed before the primary block was released". False since the §17 entries. Fix: A18.
-
-**Not verified in this pass, and not contradicted by anything I read.**
-
-- `paper1.md:1287`: the BYTES twin "written from the registration alone and sharing no code with it". I did not check it against the BYTES record.
-- `paper1.md:590-591`: "Twenty-five of the primary block's 32 session-removing codes became flags only."
-- Every claim in lines 300-504 and 848-1010, which I searched by term and did not read.
-
----
-
-## Rulings in the range that change nothing in Paper 1
-
-| Ruling | Why no change |
-|---|---|
-| RL-111, RL-112 | W1 signing evidence. No paper text |
-| RL-116 to RL-120, RL-124 | W1 route, High Power, planning turns. v4 only; covered by B6 if §10 describes the design |
-| RL-128 | The probe count goes in the v4 methods. Paper 1's sessions ran without probes |
-| RL-130 | A side branch. Gates nothing |
-| RL-132 §1 | A process-wrapper record. No analysis quantity |
-| RL-125 item 2 | Copied-record file names. A pin-request matter; it reaches the paper only if a family fails RL-104 check 3 |
-| RL-129 §6 | The three items that bind a read to the pinned closure. They belong in the `P1-RELEASE` and `P1-AVAIL` fills at `B6-RELEASE`; the placeholders need no change now |
-
-## Guards for later fills (no edit now)
-
-- When Block 6 releases, the abstract fill `P1-ABS-PART1` and conclusion branch 9.C must not call the replication's check an "independent recomputation". The phrase stays with the primary block.
-- `paper1.md:162` and `:1109` use "blocks" for a model's expert weight blocks. That is a different sense and I leave it, since the two cannot be confused in context.
-- Appendix C keeps "window" inside the registered sentences. Line 1858 already says so.
-
----
-
-# Second pass (2026-11-13)
-
-Research lead (Fable 5.2). Written 2026-11-13 08:47 PST (`date`). Same rulings (RL-111 to RL-136), same terminology rule, same file and commit. New items are written against `origin/main` text, not against the builder's branch.
-
-## Result
-
-- **(a) 15 more changes can be made now** (A20 to A34). None needs an outcome.
-- **(b) 2 more changes wait on a slot** (B8 on the Block 6 release, B9 on the S-14 cut).
-- **5 more claims have no support** (U7 to U11). Four have a fix in (a). U8, the provenance of Figure B1, needs a check first.
-- **A1 to A19 contradict nothing in the newly read ranges.** Two of them use words that the newly read methods text does not define, and one row of my first-pass table can be misread. The three amendments are under "Re-check of A1 to A19".
-- **One new ruling is made in this pass and needs entering:** Tier E is retired (A32).
-- **The two most important findings:**
-  1. §4.8 as written gives the wrong outcome word for a contrast in a session with an undefined drift screen. A reader would take "not estimable"; the registered plan and RL-114 give "not resolvable". A7 and B3 depend on this (A26, A27).
-  2. Figure B1's caption says the capture was re-derived under the current clock mapping. The figure file was last changed on 30 August 2026 and prints four values that the text still holds as placeholders (U8).
-
-## What I read, and what I did not
-
-**Read in full in this pass.**
-
-- `paper1.md` lines 300-504 (§4.2 to §4.8) and 848-1010 (§6.2 to §6.6).
-- `paper1.md` lines 1888-1971 (Appendix D). The file has 1,971 lines. My first-pass limits section stopped at 1887 and did not say that Appendix D was unread. It is read now.
-- Re-read for cross-checks: lines 549-575 and 596-612 (§5.3, §5.4), 1010-1046 (§6.7), 1244-1252 and 1280-1291 (§7.3), 1856-1887 (Appendix C), and every figure caption (lines 289-294, 542-548, 614-626, 1174-1180, 1449-1455, 1850-1854).
-- `variants/README.md`, `tierB_bytes_one_pass.md`, `tierD_bytes_registered_design.md`, `tierE_floor_version.md`, in full.
-- `figures/build_figures.py` in full, and every text label of the five `fig_p1_*.svg` files and of `docs/paper/figures/fig4_edge_excursions.svg` (Figure B1).
-- Rulings: RL-114, RL-121 (opening and ruling), RL-128 and RL-136 in full; the others by term. Decision log at `origin/audit/2026-11-10-fable` @ `fce872428`.
-- `configs/campaigns/v5_claim_25g83/analysis_plan_block5.md` lines 345-358 and 416-436; `docs/registrations/block6_replication_DRAFT.md` lines 237 and 575-579.
-
-**Arithmetic I checked, all consistent.**
-
-- Table 2 per-token values; Table 3 against Table 4 through the guard factors and the allowance; Table S5 drift terms against Table S6; Table S7 corpus and reference counts; Table 5 decision intervals, per-token values and the size of both Holm-adjusted p-values.
-- Every synthetic example in Appendix D.1 to D.6.
-
-**Not checked.**
-
-- `claims.py`, to confirm which reason code an undefined screen raises. A27 rests on RL-114's statement of the word and on the plan's list.
-- Whether Figure B1 was regenerated after August (U8).
-- The BYTES record behind Tier D's "nineteen" (U9).
-- `fill_check_b5.py`, `licence_check_b5.py` and `build_fill_index.py`. Where an item changes a table header that a fill program may emit, the item says so.
-
-**One action outside my file.** I ran `git fetch origin` in `/Volumes/JW-EXT/jw-wt/rs-main` to see whether the paper had moved. It updated that clone's remote-tracking refs. `origin/main` is now `32fd7c1e0`; nothing under `docs/paper/paper1/` changed between `62ca4197c` and it, so every line number stands. I should not have fetched in a shared clone without saying so first.
-
-**Blind status.** Unchanged: blind to Block 6 and to v4. No custody, archive, session or outcome path was opened. I ran no analysis program and no test. Block-5-aware. I modified no file but this one.
-
----
-
-## (a) Changes that can be made now
+- Its condition is that the primary-block release slips. The primary block is released and §6 prints its values, so the condition cannot occur. The README says a tier is chosen "by date and by what has finished".
+- Line 3, prepend to the comment: "Retired 2026-11-13: the primary block is released, so this tier's condition cannot occur. Historical template, not maintained."
+- README line 13, "Use when" cell, current: "Primary-block release itself slips past about 20 November". Replacement: "Retired 2026-11-13: the primary block is released".
+- The file's text is not edited. It holds three claims that are now false (U10) and uses "block" for a quad (line 53). Retiring it costs less than repairing it. Deleting it, with `fill_index.md` rows 100 and 101, is the lead's choice.
+- Precedent: Tier B, which the decision log already calls a historical contingency template.
 
 **Owner.** Lead: apply A32 (header comment and README row; the file's text is not repaired). **Gate.** None. **Blind status.** Blind: text only.
-
-# RL-138 (commit-ready)
 
 # RL-138. The slot desk tools are admitted with fixes; seven readings and one departure are ruled; two definitions of the desk spec are corrected before any journal is read
 
