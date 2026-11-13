@@ -94,8 +94,29 @@ def test_gap_nonzero_exit_without_fault_is_writer_candidate(tmp_path):
     n = run(tmp_path, "r1-nofault", go_night(exit_code=3))
     inv = [c for c in n["agreement"]["checks"] if c["id"] == "invariant:NONZERO_EXIT_WITHOUT_FAULT"]
     assert inv and inv[0]["kind"] == "writer_candidate"
-    assert n["exit_class"]["tool"] == "r1_runtime" and n["exit_class"]["class"] == "failed"
+    assert n["exit_class"]["tool"] == "b5_chain"  # explicit non-ALIGN family keeps b5_chain
     assert n["shadow"]["outcome"] == "CHAIN_FAILED"
+
+
+def test_align_r1_chain_is_read_under_r1_driver_exit_3_is_refused(tmp_path):
+    n = run(tmp_path, "align-r1-20261111T0208Z", go_night(exit_code=3))
+    assert n["exit_class"]["tool"] == "r1_driver" and n["exit_class"]["class"] == "refused"
+    assert replay.chain_contract_for("r1-alpha") == "b5_chain"
+    assert replay.chain_contract_for("align-pilot-1") == "unknown"
+
+
+def test_non_align_ref_is_skipped_by_default_and_named_family_is_explicit(tmp_path):
+    write(tmp_path / "tree", "b5-ok", go_night())
+    write(tmp_path / "tree", "r1-alpha", go_night())
+    write(tmp_path / "tree", "align-r1-x", go_night())
+    write(tmp_path / "tree", "align-pilot-y", go_night())
+    out = tmp_path / "out.json"
+    assert replay.main(["--tree", str(tmp_path / "tree"), "--out", str(out), "--now", str(NOW)]) == 0
+    doc = json.loads(out.read_text())
+    assert [r["night"] for r in doc["summary"]["rows"]] == ["align-pilot-y", "align-r1-x"]
+    assert doc["skipped_by_family_gate"] == 2
+    assert replay.main(["--tree", str(tmp_path / "tree"), "--family", "b5-", "--out", str(out), "--now", str(NOW)]) == 0
+    assert [r["night"] for r in json.loads(out.read_text())["summary"]["rows"]] == ["b5-ok"]
 
 
 def test_go_verdict_masking_chain_failure_is_listed(tmp_path):
@@ -172,7 +193,7 @@ def test_cli_writes_json_and_summary(tmp_path):
     write(tmp_path / "tree", "b5-ok", go_night())
     write(tmp_path / "tree", "b5-empty", {})
     out = tmp_path / "out.json"
-    assert replay.main(["--tree", str(tmp_path / "tree"), "--out", str(out), "--now", str(NOW)]) == 0
+    assert replay.main(["--tree", str(tmp_path / "tree"), "--family", "b5-", "--out", str(out), "--now", str(NOW)]) == 0
     doc = json.loads(out.read_text())
     assert doc["summary"]["nights"] == 2 and doc["structure_only"] is True
 

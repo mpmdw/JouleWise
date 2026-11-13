@@ -42,12 +42,26 @@ DELIVERED_STATES = {"Delivered", "Stranded", "Uninstalled"}
 # GO is admission only (exit_contract note), so it constrains nothing about the chain class.
 VERDICT_CLASS = {"REFUSED": {"refused"}, "ABORTED": {"stopped"},
                  "CHAIN_STOPPED": {"stopped", "failed", "refused"}}
-R1_FAMILY_PREFIXES = ("align-r1", "align-pilot", "r1-")
+# M4 family gate: closed ALIGN nights only by default. Any other family needs an explicit --family.
+DEFAULT_FAMILIES = ("align-r1-", "align-pilot-")
+
+
+def family_allowed(night_name: str, families) -> bool:
+    return night_name.startswith(tuple(families))
 
 
 def chain_contract_for(night_name: str) -> str:
-    """Which chain exit vocabulary a night's chain.exited code is read under."""
-    return "r1_runtime" if night_name.startswith(R1_FAMILY_PREFIXES) else "b5_chain"
+    """Which chain exit vocabulary a night's chain.exited code is read under.
+
+    align-r1-* nights are driven by the R1 driver (exit_contract "r1_driver": 3 = refused).
+    What ran the align-pilot-* chains is not established, so their exit codes are not classed.
+    Families passed explicitly via --family keep the old b5_chain reading.
+    """
+    if night_name.startswith("align-r1-"):
+        return "r1_driver"
+    if night_name.startswith("align-pilot-"):
+        return "unknown"
+    return "b5_chain"
 
 
 # RL-108 item 6: each violated invariant is explained as module defect, fixture gap or writer defect.
@@ -163,6 +177,8 @@ def classify_exit(rec, night_name=""):
     if code is None:
         return None
     tool = chain_contract_for(night_name)
+    if tool == "unknown":
+        return {"tool": tool, "word": "unclassed", "class": "unknown", "declared": False}
     c = exit_contract.classify(tool, code)
     return {"tool": tool, "word": c.word, "class": c.exit_class.value, "declared": c.declared}
 
@@ -328,23 +344,35 @@ def main(argv=None):
     src.add_argument("--tree", type=Path, help="directory of night directories")
     ap.add_argument("--repo", type=Path, default=REPO, help="git repo (git mode)")
     ap.add_argument("--night", action="append", help="restrict to these night names")
+    ap.add_argument("--family", action="append", default=None,
+                    help="night-name prefix to replay; default is only align-r1-* and align-pilot-* "
+                         "(closed ALIGN nights). Any other family must be named here explicitly.")
     ap.add_argument("--exclude", action="append", default=[], help="night names to exclude")
     ap.add_argument("--out", type=Path, help="write derived JSON here (default stdout)")
     ap.add_argument("--now", type=float, default=None, help="epoch for now-dependent invariants")
     args = ap.parse_args(argv)
     now = args.now if args.now is not None else time.time()
-    loaded = []
+    families = tuple(args.family) if args.family else DEFAULT_FAMILIES
+    loaded, skipped = [], 0
+    # The gate runs on the name BEFORE anything is loaded: gated-out nights are never opened.
     if args.git_ref_glob:
         for ref in list_git_nights(args.git_ref_glob, args.repo):
+            if not family_allowed(ref.split("night-results/", 1)[-1], families):
+                skipped += 1
+                continue
             loaded.append(load_git_night(ref, args.repo))
     else:
         for d in sorted(p for p in args.tree.iterdir() if p.is_dir()):
+            if not family_allowed(d.name, families):
+                skipped += 1
+                continue
             loaded.append(load_tree_night(d))
     loaded = [(n, f) for n, f in loaded
               if (not args.night or n in args.night) and n not in args.exclude]
     nights = [replay_night(n, f, now) for n, f in loaded]
     doc = {"schema": "joulewise.sm_shadow_replay.v1", "derived": True, "custody": False,
-           "structure_only": True, "summary": summarize(nights), "nights": nights}
+           "structure_only": True, "families": list(families),
+           "skipped_by_family_gate": skipped, "summary": summarize(nights), "nights": nights}
     text = json.dumps(doc, indent=1, sort_keys=True)
     if args.out:
         args.out.write_text(text + "\n")
