@@ -8101,6 +8101,368 @@ on.
 **Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. Synthetic R12
 roots (comparer output and two `.time` texts), code and rulings only. Block-5-aware.
 
+# RL-133. The Opus cold review of R12: three changes go in before the pin, HIGH-1's fix is wider than the review asked, and the agreement sentence gains a both-null count (2026-11-13 07:17 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 07:17 PST (`date`).
+
+**Read.** `/Volumes/JW-EXT/scratch/opus-cold-review-r12.md`, all of it, and its three probes. In the merge
+worktree `/Volumes/JW-EXT/jw-wt/rl129-s14-merge` at `91359b2b2` (RC-B6-1 `2d540a40…3723c`, checked by
+`shasum`; `b6_analysis_check.py` `c9d0c893…`): `check_block`; `gamma_inputs`, `finish_gamma`,
+`recompute_block`, `compare_value`, `compare`, `stops_comparison`, `session_input_pin` and `main` in RC-B6-1;
+`finish_contrast` and `holm` in the Block 5 script; `estimate`, `adjust`, `outcome` and `family` in the engine
+twin; `flags/exclusions.py:349-370` and the catalog entry `cell.below_minimum`;
+`b6_r12_verify.prepare_run_inputs`; `b6_analysis_hazards.py:50-62`. RL-113, RL-114, RL-115, RL-125, RL-129,
+RL-132, the pin paragraph (05:50) and its RL-125 changes.
+
+**Executed** (synthetic only, worktree not written).
+
+- The HIGH-1 probe's fixture with 4 kept quads, once on each arm: exit 3 both times, the failures being that
+  contrast's `p` and `holm_p` in the `engine` family and in the comparator.
+- The twin's own `estimate`, `adjust` and `outcome` on made-up numbers, against the first program's Holm rule
+  (below).
+
+## 1. What is fixed before the pin
+
+| Finding | Ruling | Program bytes |
+|---|---|---|
+| HIGH-1 | Fixed, and wider than proposed: the other contrast's Holm value is affected too | `b6_analysis_check.py` |
+| HIGH-2 | Fixed: `session_input_unsupplied` | RC-B6-1 |
+| MEDIUM-1 | Fixed in the program: a `both_null` count per class | RC-B6-1 |
+| MEDIUM-2 | Not done. RL-129 §6 stands | none |
+| LOW-1 | No code change. The paragraph is reworded | none |
+| LOW-2 | No code change. The checklist stop stays, on purpose | none |
+| LOW-3 | No code change. Three signatures go in the pin request | none |
+| LOW-4 | No code change. One checklist step on the real run | none |
+| LOW-5 | Already corrected (RL-129 §1 term 2) | none |
+| LOW-6 | One sentence in the paragraph | none |
+| Test comment | Corrected in the same commit | test file only |
+
+### 1a. HIGH-1: confirmed, and the proposed fix is not enough
+
+**What the code does.**
+
+- The first program sets `p = 1.0` for a contrast with fewer than five quads (RC:770-771) and hands that 1.0
+  to the other contrast as `other_p` (`finish_gamma`, RC:787). So the registered minimum changes two things:
+  the short contrast's own `p` and `holm_p`, and **the other contrast's `holm_p`**.
+- The twin estimates from two quads up and runs Holm on the real p-values (`family`, engine_twin:240-241).
+- `check_block` compares `p` and `holm_p` for every contrast with an estimate. Only the word is guarded by
+  `len(family[cid]) >= 5` (CHK:115).
+
+**The part the review missed.** Skipping `p` and `holm_p` for the short contrast leaves the other contrast
+compared against a Holm value computed from the short contrast's real p. With made-up numbers through the
+twin's own functions: a 4-quad contrast with p = 9.5e-6 beside a 10-quad contrast with p = 0.0172 gives the
+10-quad contrast `holm_p` 0.0344 in the first program and 0.0172 in the twin. That fails the gate. With the
+10-quad p between 0.025 and 0.05 the two sides would also print different words. Opus's fixture could not
+show this, because both of its p-values are near 1e-20.
+
+**Reachability.** Two routes, both registered states.
+
+- Member exclusions leave 2 to 4 quads. `cell.below_minimum` is then a window exclusion, but `check_block`'s
+  GAMMA branch runs for every GAMMA session, counting or not.
+- With `--inputs`, P* desk removals shrink a cell after the acceptance record was written (RC:298-300). That
+  session can still count.
+
+**Required behaviour** (`joulewise/b6_analysis_check.py`, GAMMA estimate branch). The condition is the second
+side's own count, `len(family[cid]) < 5`, the same test CHK:115 uses. Call such a contrast *short*.
+
+1. **The Holm step follows the registered minimum.** The second side's `holm_p` for every contrast is taken
+   from `engine.adjust` over the session's family with a short contrast's p passed as `None` and the family
+   size kept. I checked that this equals the first program's rule (p = 1.0 for the short member) over a sweep
+   of p from 0 to 1. The word for a contrast with five or more quads is `engine.outcome(v, floor, that holm_p)`.
+2. **One path.** Item 1 is computed the same way whether or not any contrast is short. With no short
+   contrast it returns the values `engine.family` returns today, so the three full roots exercise it.
+3. **A short contrast with an estimate (2 to 4 quads):**
+   - `n`, `dbar_j`, `s_d_j`, `se_j`, `D_j` and the two decision bounds are compared as now;
+   - `p` and `holm_p` are not compared and are not written to the second side's table, so they appear in
+     `first_program_only`;
+   - one guard, family `engine_below_minimum`, scope the contrast id: the first program's `p` is 1.0, its
+     `holm_p` is 1.0 and its `outcome` is `not_estimable`. Anything else fails the gate.
+4. **Fewer than two quads:** unchanged (`engine_refusal`).
+5. **The twin is not edited.** `check_block` calls `adjust` and `outcome`, which exist. The registered minimum
+   is an evidence gate, and the twin's docstring puts those with the caller. RL-102's substance stands.
+6. **Not changed:** the first program's `missing` clause (p = 1.0 with five or more quads). It needs a kept
+   unit that `select` dropped, which raises the stop flag `kept_unit_not_validated` (RC:440). That run exits 3
+   for a named reason either way.
+
+A form that meets items 1 to 3, after `twins = engine.family(family, floors)`:
+
+```
+short = {cid for cid, blocks in family.items() if len(blocks) < 5}
+ruled = engine.adjust({cid: None if cid in short or row["estimate"] is None else row["estimate"].p
+                       for cid, row in twins.items()}, len(twins))
+```
+
+then `holm_p` expects `ruled[cid]`, `p` and `holm_p` are skipped when `cid in short`, the word expects
+`engine.outcome(v, floors[cid], ruled[cid])`, and the guard replaces the word check for a short contrast.
+
+**Labels** (R3 generator; amends RL-114).
+
+- `contrast/<phase>/{n, dbar_j, D_j}`: unchanged.
+- `contrast/<phase>/p`:
+  "computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, the twin returns
+  an estimate and the contrast has five or more quads; with two to four quads the gate requires only that the
+  value is 1.0; otherwise not independently recomputed"
+- `contrast/<phase>/holm_p`:
+  "computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, the twin returns
+  an estimate and the contrast has five or more quads, with a family member below five quads counted at
+  p = 1.0 on both sides; with two to four quads the gate requires only that the value is 1.0; otherwise not
+  independently recomputed"
+- `outcome`:
+  "computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` and either
+  the twin refuses or the contrast has five or more quads; with two to four quads the gate requires only that
+  the word is `not_estimable`; with an undefined verdict the gate requires only that the word is
+  `not_resolvable` or `not_estimable`; otherwise not independently recomputed; not an S-13 table row"
+- `s_d_j`, `decision_lower_j`, `decision_upper_j`: unchanged.
+
+**Tests** (`tests/independent_recompute/test_block6.py`).
+
+- `test_gamma_below_minimum_contrast_block_run_completes`: 2, 3 and 4 kept quads, on each arm. The fixture's
+  acceptance record lists `cell.below_minimum` at window scope, so `b6_exclusions_disagree` does not fire (it
+  fires in Opus's probe, and would hide the result). Assert exit 0, `option_c.pass` true, no
+  `option_c_disagrees`, the short contrast's `p` and `holm_p` in `first_program_only`, and the
+  `engine_below_minimum` count equal to the number of short contrasts.
+- `test_below_minimum_sibling_holm_uses_the_registered_rule`: the short contrast's twin p is smaller than the
+  other contrast's, and the other's p is above 1e-3. Assert the gate passes. It must fail when the
+  substitution is removed (run that mutant once and record it). If the block fixture cannot produce such
+  p-values, a direct test of the family step with `engine.Block` inputs is acceptable.
+- `test_below_minimum_guard_fails_on_a_claim_word`: force the short contrast's first-program row to
+  `direction_supported`, then separately to p = 0.01. Each fails with `engine_below_minimum:<cid>`.
+- Generator: the label test pins the three new strings.
+
+### 1b. HIGH-2: confirmed. `session_input_unsupplied`
+
+`main` reads only the `--session` arguments and never compares them with `document["sessions"]`. This is
+RL-115's rule for a session: a pin says the archive is part of the run.
+
+**Required behaviour** (RC-B6-1, `main`, command `block`, with `--inputs`).
+
+1. Every key of `document["sessions"]` must be matched by a supplied archive, by the lookup
+   `session_input_pin` already uses (the absolute path, or the basename). An unmatched key raises
+   `InputRefusal("session_input_unsupplied")` before any session is read: exit 4, stderr
+   `refused: session_input_unsupplied`, no output written.
+2. The other direction is unchanged (`session_input_pin_missing`).
+3. `single` is unchanged: it reads one session and may be given a block's document.
+4. Without `--inputs` nothing changes. No output field is added.
+5. The R12 readers are not affected: `prepare_run_inputs` writes one document per read, pinning exactly the
+   archives it supplies.
+
+**Not in the program:** a check that every counting attempt row has a session. The run-input document is the
+statement of the block, and the kit writes it. It is checklist step 12 below.
+
+**Test** (`tests/independent_recompute/test_b6_production.py`):
+`test_pinned_session_not_supplied_refuses_by_name`, on `production_block` with one `--session` left out.
+Exit 4, the stderr line, neither output file.
+
+### 1c. MEDIUM-1: the program counts it
+
+`compare_value` passes a row when both sides are `None` (RC:1553). That is agreement that a quantity is
+absent, which is real (a value on one side fails), but it is not agreement on a number.
+
+**Required behaviour** (RC-B6-1, `compare` and `recompute_block`).
+
+1. Each class record gains `both_null`: the number of its compared rows that passed with `None` on both
+   sides. It is in the restricted comparator, the public comparator and the `option_c` record, wherever
+   `compared` is.
+2. A class with no compared row carries `both_null: 0`.
+3. `compared`, `passed`, `failed`, `unmatched`, `pass` and `first_program_only` keep their meaning and their
+   values. `both_null` never exceeds `passed`. A run-phase-energy row cannot be both-null, since `None`
+   against `None` fails there.
+4. RL-113 item 4 ("`compare()` itself is unchanged") is lifted for this field only.
+
+In the program and not by hand, because the count goes into a paper sentence, and the restricted output does
+not keep the comparator's rows.
+
+**Test:** one block fixture asserting, per class, `both_null` against a count made from the two tables in the
+test, with at least one both-null row and one row that is null on one side only (which fails and is not
+counted).
+
+`scripts/b6_r12_compare_reread.py:60` compares a class record with an exact four-key dictionary. It is not
+used by the finisher or by these re-reads, and it is not edited (RL-129 §1 term 3).
+
+### 1d. MEDIUM-2: declined
+
+RL-129 §6 stands. A per-module record would be built from the process's loaded modules, so it would differ
+between a command-line run and an in-process test, and it is a new way for serial and pool outputs to
+differ. The three recorded items of §6 already bind a read to the 24 files.
+
+### 1e. The LOW findings
+
+- **LOW-1.** Unreachable in the pinned code, and a sentinel would change what `unmatched` and `failed` mean
+  for RL-113's second-side-only test. The paragraph is reworded (section 2).
+- **LOW-2.** The stop stays in the checklist, not in the program. RL-125 item 1 made it a stop that comes to
+  me. If the program enforced it and I then ruled the state harmless, the pinned program would still exit 3
+  and the only way out would be a change to pinned bytes with data in hand.
+- **LOW-3.** Confirmed by reading: `b6_analysis_hazards.py:58` (a traceback, exit 1), RC:1162
+  (`refused: TypeError`, exit 4) and a dead pool worker (a traceback, exit 1). Each is a stop with nothing
+  written, and each needs an archive changed after the kit verified it, or a dead process. They are not
+  changed. A pool-death test would have to kill a live process, which we do not do. The pin request names the
+  three signatures (section 2). RL-125 item 4's terms 2 and 4 apply to them: any exit other than 0 or 3 is a
+  refusal, and the program is not edited on the real run.
+- **LOW-4.** No silent number change was found. Checklist step 13.
+- **Test comment.** Replace with: "The gate names failed comparator rows (cold-review finding 5, commit
+  10116d0d9), so one perturbed energy is named twice: once by `harvest_energy` and once by the comparator row
+  for the same run and phase."
+
+**What the branch may change.** `scripts/independent_recompute_b6.py`, `joulewise/b6_analysis_check.py`,
+their tests and test support, `scripts/b6_r3_table.py` and its test. Nothing else in the 24-file closure, no
+twin, and no `scripts/b6_r12_*.py`. New commits on `analysis/2026-11-13-b6-s14-merge`, in the merge
+worktree. RL-102's lift is extended to this ruling.
+
+**Owner.** The R12 line, by whichever seat the lead assigns. **Gate.** The cut.
+
+## 2. The agreement sentence changes
+
+RL-113 term 6 now reads: the agreement sentence is over `compared` only, and gives `both_null` and
+`first_program_only` beside it, with the number of rows agreeing on a value (`compared` minus `both_null`)
+stated.
+
+### Pin paragraph, first part: two replacements and one insertion
+
+Replace "A key that only the second side holds is compared against nothing and fails the gate." with:
+
+> A key that only the second side holds is compared against nothing and fails the gate, unless the second
+> side's own value for it is null, in which case the row passes as null on both sides. The cold review found
+> no route to such a key in the pinned code, and with `--inputs` the first program's keys are checked against
+> the registered list before the comparison.
+
+Insert after the run-phase-energy sentences (RL-125):
+
+> A GAMMA contrast with fewer than five kept quads is a registered state: the first program prints p = 1.0
+> and `not_estimable` for it. With two to four quads the second side still compares the count, the mean
+> difference, its spread and the bounds. It does not compare `p` or `holm_p`, which are listed in
+> `first_program_only`, and it requires that both are 1.0 and the word is `not_estimable`. The Holm value of
+> the session's other contrast is computed on both sides with p = 1.0 for the short one. Two inputs are
+> shared and not independent: the engine twin is given the first program's floor gate (floors are
+> single-source), and the block check takes Block 5 inclusion and the binding-defect mark from the first
+> program. It checks the rule and the arithmetic on those inputs. (RL-133.)
+
+### Pin paragraph, "Agreement": replace the part down to "Serial and pool outputs"
+
+> **Agreement.** Agreement is stated over `compared` rows only, with two counts beside it. `both_null` is the
+> number of compared rows where both sides hold no value: agreement that a quantity is absent, not agreement
+> on a number. `first_program_only` is the number of rows not compared. It is not a statement that every
+> class passed, since a class with no compared row carries no verdict. On the pinned program
+> (`scripts/independent_recompute_b6.py`, SHA-256 ⟨FINAL: RC-B6-1 SHA-256⟩) the three full-volume
+> single-pack archives were each read on the Air, with production exit 0 and the comparator agreeing:
+>
+> | Pack (root, generating host) | Registry keys | Compared rows, all agreeing | Null on both sides | Agreeing on a value | `first_program_only` rows |
+> |---|---:|---:|---:|---:|---:|
+> | ALPHA (MBP -1, MBP) | 122 | ⟨REREAD⟩ | ⟨REREAD⟩ | ⟨REREAD⟩ | ⟨REREAD⟩ |
+> | BETA (root 23, Air) | 122 | ⟨REREAD⟩ | ⟨REREAD⟩ | ⟨REREAD⟩ | ⟨REREAD⟩ |
+> | GAMMA (MBP -2, MBP) | 93 | ⟨REREAD⟩ | ⟨REREAD⟩ | ⟨REREAD⟩ | ⟨REREAD⟩ |
+>
+> The four right-hand columns count comparison-table rows, not registry keys. On a single-pack root most
+> block rows are null on both sides by construction: one session gives no between-session spread, the other
+> two packs have no session, and no Block 5 output was supplied. On the closed nine
+> (`r12-r3-closed-air-25`, program ⟨NINE: program SHA-256 of the reads⟩): option (c) ⟨NINE: option (c) exit⟩,
+> ⟨NINE: compared rows⟩ compared rows with ⟨NINE: failed⟩ failed and ⟨NINE: unmatched⟩ unmatched, of which
+> ⟨NINE: both_null⟩ are null on both sides, and ⟨NINE: first_program_only count⟩ `first_program_only` rows.
+
+Predicted for the ⟨REREAD⟩ slots: compared 699, 699, 649 and `first_program_only` 118, 118, 79, unchanged.
+The both-null column is predeclared by section 3 item 3.
+
+### Pin paragraph: replace "Known defect, not fixed before the pin."
+
+> **Unnamed refusals.** Three conditions stop the pinned program without a named refusal, and write no
+> output: a member's `raw/powermetrics_idle.plist` absent (exit 1, a traceback ending
+> `AttributeError: 'NoneType' object has no attribute 'split'`); a pinned clock journal absent (exit 4,
+> `refused: TypeError`); a pool worker that died (exit 1, a traceback ending `RuntimeError`). Each is read as
+> a refusal. The first two mean the archive changed after the custody kit verified it. Any exit other than 0
+> or 3 is a refusal. (RL-125 item 4, RL-133.)
+
+### Term-7 checklist
+
+Replace steps 2 and 3:
+
+> 2. Count the list per class. Each count must equal that class's `first_program_only` in the public
+>    comparator, and the total must equal the number in the agreement sentence. For each class also take
+>    `compared` and `both_null`. `both_null` must not exceed `passed`. The agreement sentence's three numbers
+>    are the totals of `compared`, `both_null` and their difference.
+> 3. Confirm every public class record is one of two kinds: with `pass` and `compared` > 0, or without `pass`
+>    and with `compared`, `passed`, `failed`, `unmatched` and `both_null` all 0. Any other record is a stop.
+
+In step 5, replace the conditional-label bullet:
+
+> - a conditional label, and the session it is listed for meets the label's second clause: for `neg8/*`, that
+>   session's NEG-8 verdict is `undefined`; for the contrast fields, the verdict is `undefined` or the twin
+>   returned no estimate; for `p` and `holm_p` also when that session's flags carry `cell_below_minimum` for
+>   that contrast's cell (code and scope only). Check the condition per session, not per key.
+
+In step 6, replace the conditional-label stop:
+
+> - a conditional-label key listed for a session whose screen is defined, whose twin estimated and, for `p`
+>   and `holm_p`, whose contrast has five or more quads;
+
+In step 8, add `both_null` per class to the record. Replace step 11 and add steps 12 and 13:
+
+> 11. If the block command exits with anything other than 0 or 3, that is a refusal, including the three
+>     unnamed signatures in the pin request. Stop, check the archive against the kit's verify record, and
+>     tell me. Do not edit the program.
+> 12. Real block run only. Confirm that the output's session ids are the run-input document's pinned
+>     sessions, one for one, and that every attempt row with a counting outcome for a pack has that pack's
+>     session of that round in the output. Names only. A missing session is a stop.
+> 13. Real block run only. For each session, note whether its pin lists `derived/b6-flags.jsonl`,
+>     `withheld/spans.json` and `derived/bracket-binding.json`. A session without one is reported to me with
+>     its pack and round. It is not a stop by itself.
+
+The R3 table named in steps 4 and 8 is the one regenerated at the S-14 commit.
+
+## 3. The expected-difference rule for the reads on the final bytes
+
+1. **Base.** Each full root's new output is compared with its `e17886bf…` output. ALPHA's read at
+   `2d540a40…` is kept as a record and is not the base. BETA and GAMMA are not read at `2d540a40…`.
+2. **May differ, and nothing else:**
+   - `program_sha256`, which becomes the final RC-B6-1 SHA-256;
+   - any digest of an output that contains it (`restricted_sha256`, the receipts' output hashes);
+   - a new key `both_null` in every class record, in the restricted `option_c` comparator and in the public
+     comparator;
+   - the receipt's `verifier_commit`, and the wrapper records as RL-132 item 3 rules them.
+3. **`both_null` is predeclared, not observed.** Before each read the lead computes it per class from the
+   old restricted output: the rows of `comparison_table` whose value is null and whose key is not in
+   `first_program_only`. Every compared row passed in those outputs, so a null on the first side is a null
+   on both. The new output must equal that count, class by class. Opus's count for GAMMA's block rows is 234;
+   the lead's count is the one that binds.
+4. **Must not differ:** every number, word and flag; `compared`, `passed`, `failed`, `unmatched`, `pass` and
+   `first_program_only` in every class; the `first_program_only` list; `option_c.families`, including no
+   `engine_below_minimum` entry on these three roots; exit 0.
+5. The lead writes items 2 and 3 into the expected-difference document, with the amended comparer's SHA-256,
+   before the first read. Any other difference stops the work and comes to me.
+6. **The nine and denied-26** are read once, on the final bytes (RL-129 §1 term 7). Slot N-1's predeclared
+   value is the final RC-B6-1 SHA-256. Their `both_null` counts are observed and reported, with the
+   invariants of checklist steps 2 and 3. An `engine_below_minimum` family in the nine's output is reported,
+   not a stop.
+7. **The request's 24-hash table** changes in two rows, RC-B6-1 and `b6_analysis_check.py`.
+8. **The R3 table** (RL-129 §1 term 9): its difference from the `7b7920cf…` output is confined to the two
+   SHA-256 lines, `RC:` and `CHK:` line citations, and the three label strings of section 1a on their keys.
+   Keys 675 of 675, 0 UNSTATED. The seat states the expected group count before regenerating.
+
+**Owner.** The lead. **Gate.** The cut.
+
+## 4. Review of the fix delta
+
+1. **Tests first**, exit 0 each at the new head: the seven modules of RL-129 §1 term 4.
+2. **My delta check**, one turn, on `91359b2b2..<final head>`: the two program files, the tests and the label
+   strings, with the two test modules run and Opus's two probes re-run. Expected: the session probe exits 4
+   with `refused: session_input_unsupplied`; the below-minimum probe's failure list holds no `engine:` or
+   `comparator:` name. That probe still exits 3 on `b6_exclusions_disagree`, which is its fixture.
+3. **Opus re-checks, one turn, the delta only.** Not a restart. The HIGH-1 fix goes beyond what Opus
+   proposed, so it gets a reader who did not design it. Opus runs the new tests and the sibling-Holm mutant
+   of section 1a. This is its §13 executing pass on the final bytes.
+4. Items 2 and 3 run in parallel. **The reads of section 3 start when both have closed**, so each root is
+   read once. This replaces RL-129 §1 term 5's "may start as soon as term 4 is green" for this delta.
+5. A further finding that changes a closure byte comes to me before any read.
+
+**Owner.** The lead (the Opus seat, the order); me (item 2). **Gate.** The cut.
+
+**Amends.** RL-113 item 4 and term 6. RL-114's labels for `p`, `holm_p` and `outcome`. RL-125 item 4's pin
+text. RL-129 §1 terms 2, 5, 6 and 9 as stated above. RL-129 §6 is confirmed.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. Code, rulings,
+synthetic fixtures built in a temporary directory, and made-up numbers only. Block-5-aware. I did not
+re-run the session probe or the both-null count; those rest on the code and on Opus's executed results.
+
+Replacement texts and appendices: /Volumes/JW-EXT/scratch/fable-rl133.md.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
