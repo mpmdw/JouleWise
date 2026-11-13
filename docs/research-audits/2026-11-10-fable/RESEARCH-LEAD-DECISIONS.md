@@ -7160,6 +7160,148 @@ only.
 - If PR #752's fix commit does exactly F1-F3 (F4-F6 alongside), with the ten condition-13 hashes re-shown and CI green, the cold-review checklist line is met without returning to me.
 
 
+# RL-123. R12: the closed nine's volume, root 23 on the merged program, the MBP, and reader sequencing
+
+Research lead (Fable 5.2). Written 2026-11-13 01:40 PST (`date`).
+
+**Read.** The R12 report's HOST PLAN (notice 7) on `analysis/2026-11-11-b6-r12` @ `9473a4ed2`, with its
+header table and the root-23 section; RL-48, RL-49, RL-98, RL-99; §17-R12 (draft line 673); my runtime review,
+item 6. Read-only checks: `b6_r12_courier_set.py` schedule switch (`git show`), the step times in the two
+MBP roots' `full-reader-supervision.json` on the Air, root sizes and free disk. I ran no chain code, no
+reader and no test, and did not verify the seat's statement about what RL-113..121 touches. No session of any
+kind was read.
+
+## 1. Closed-nine volume: (a) on the Air, and a registered-schedule nine on the MBP beside it
+
+**Ruled: (a).** The canonical closed nine is a fresh Air cohort, runtime `a737c674…`, 65 s reduced streams in
+every ordinary session, `--mode nine --schedule reduced`.
+
+What the closed nine has to prove, and whether (a) proves it:
+
+| Obligation | Under (a) |
+|---|---|
+| Six shapes written by the real chain, outcomes stated in advance | Yes. The shapes are scripted readings and loop states, not volume |
+| One closed loop, nine counting sessions, production keys, option (c) exit 0 and comparator agreement | Yes |
+| Serial/pool byte equality | Yes, at reduced volume |
+| RL-48 timing: wall and peak memory of the nine-session dry run on the Air | Yes, as a reduced-volume number, labelled so |
+| RL-48 item 6: is generation bound to real time | Already answered at full volume by root 23 (0.240 native/primary) |
+
+**Does (a) break a registered promise? No.** §17-R12 asks for the six shapes from the real chain. RL-98
+amended RL-48 to one full-volume real-chain session plus the reader test; both exist (root 23; the
+production-size reader). "Canonical nine with full A3/B1/G1" was the seat's own stricter reading in the report
+(lines 1823-1829). The seat was right not to drop it without asking. It is dropped here, by me, and the report
+says so in those words.
+
+**What (a) does not show**, and the §17 R12 line must say it: no full-volume session went through a closed
+loop on the canonical cohort; byte equality and the nine's wall/RSS are reduced-volume results; full volume
+was shown on single-pack roots, N of 3, per host.
+
+**Wall time, from recorded phases** (not measured for this cohort): a reduced ordinary session on the Air took
+73 to 92 minutes (cohort-17 A1; cohort-16 denied), full BETA 2.8 h. So (a) is roughly 12 h and (b) roughly
+16 h, and under the courier generator any interruption retires the whole root. (b) would spend about four
+more Air hours regenerating full sessions that already exist, with more to lose.
+
+**The gap is closed on the idle MBP instead: a second, supplementary nine at the registered schedule.**
+`--mode nine --schedule registered`, runtime `a737c674…`, merged head, one root under
+`/private/tmp/r12-mbp-tmp/`, the completed MBP seed as prior. Its readers (serial and pool) run on the Air
+after an authenticated transfer to the identical path, as for the single-pack roots. Estimated 12 to 13 h on
+the MBP from its recorded full ALPHA (2.1 h) and GAMMA (1.9 h).
+
+Its status, fixed now, before either cohort exists:
+
+1. **The Air reduced nine is the gate.** The MBP nine is reported whatever it shows, under its host and
+   Python version (3.13.1 against 3.13.18).
+2. **A chain or program defect the MBP nine exposes is fixed before the pin**, like any R12 finding. A
+   refusal by option (c), a comparator disagreement or a serial/pool byte difference on it is such a defect
+   until explained.
+3. **An infrastructure loss of the MBP nine** (interruption, host, transfer) retires it with no consequence
+   for the gate. It is not rerun on the critical path.
+4. **If the Air nine is retired for an infrastructure cause** and the MBP nine completes, the MBP nine stands
+   as the closed nine. It is a superset in volume. This is the only substitution allowed, and only in that
+   direction and for that cause; a chain or program failure on the Air nine is never bypassed this way.
+5. The report predeclares it before launch with the same predictions as the Air nine, plus the full
+   A3/B1/G1 census through `b6_r12_finish.py`.
+
+**This amends item 6 of my runtime review**, and I say so rather than reread it. Item 6 said the closed nine
+is "one cohort, one root, one runtime, on the Air". Its purpose was to stop three single-pack roots of two
+runtimes being assembled into a nine; that stands unchanged. RL-48's own words put the *dry run's* wall and
+memory on the Air, not the generation. An MBP-generated cohort that is one root, one runtime, one closed loop,
+read on the Air, meets the substance. It is still second to an Air-generated one, which is why its role is
+limited as above.
+
+**The blind dry run** carries RL-98 term 2's stop unconditionally: over three hours of wall time, it is
+stopped and profiled before it runs again. Before it starts, the seat writes one predicted wall time and peak
+memory from the three full readers' Air numbers and the nine's, with the arithmetic. Pool mode at real size
+is used only if workers times the largest per-session RSS (1.46 GB for BETA so far) fits the 24 GB Air with
+margin; otherwise serial.
+
+**RL-98 term 2's date** has no further force: root 23 completed and was read at 01:15 on 13 November.
+
+## 2. Root 23 and the pin: re-read, no regeneration
+
+**Ruled: re-read only.** Root 23's archive is immutable and is not regenerated.
+
+1. The pre-merge receipt (program `7d611485…`) is kept as history. It is what made BETA the first
+   qualifying full session.
+2. **What counts for the pin is what the pin candidate's bytes produced.** Each full archive (BETA 23, ALPHA
+   -1, GAMMA -2) and the closed nine are read by the program whose SHA-256 is the one pinned. Today that is
+   the merged head (`e17886bf…`).
+3. **If any file inside the program hash changes again before the pin** (a seat fix, a cold-review fix), the
+   reads are repeated on the final bytes: three full archives, the nine serial and pool, the denied fixture.
+   That is minutes of reader time, and it is the last step before the pin request. Generation is repeated only
+   if a change touches the generator, a seam, the runtime or the chain pin.
+4. **The root-23 re-read is compared with its pre-merge receipt.** Before running it, the seat lists which
+   outputs RL-113..121 should change. After, every difference is attributed to one of those items. A
+   difference with no owner stops the seat and comes to me. I have not verified that the delta leaves reader
+   and volume paths alone; this comparison is the check.
+5. The pin report's table has one row per result with the program SHA-256 that produced it. "Full-volume N of
+   3" counts only archives read by the pinned program.
+6. **The historical-profile guard**: admitted as the seat describes it. The reader accepts a root whose
+   recorded generator and runtime hashes match a named, listed profile, checked against recorded Git blobs.
+   An unlisted or altered hash still refuses, and a test shows that refusal failing first. The list is the
+   three profiles in the report's table and no pattern.
+
+## 3. MBP work
+
+One item: the supplementary registered-schedule nine in section 1. Nothing else. The Opus cold review, the
+guard and the readers are not host-bound and gain nothing from the MBP; reader timing belongs on the Air.
+The orchestrator operates the MBP, as before; the seat supplies the exact command and the predeclaration.
+
+## 4. Sequencing: the seat's rule is not required, except for the nine's own readers
+
+- **The MBP-root readers and the root-23 re-read may run on the Air now**, while denied-26 generates, one
+  after another. They do not wait for the closed nine, and the nine's launch does not wait for them.
+- Why the overlap is harmless. Peak RSS does not depend on load. Wall time under load is an upper bound, and
+  the decisions it feeds are a three-hour stop against readers of about two minutes, and a real-time ratio
+  already settled at 0.24. Cohort-15's retirement was a supplier rounding defect, since fixed, and not a
+  load effect; BETA generated cleanly beside other work on this Air.
+- Each receipt records what R12 work overlapped it. A number taken under overlap is labelled so and is not
+  called isolated. If a clean reader wall is wanted for the report, the final re-read of section 2 item 3
+  supplies it at no extra cost.
+- **Kept from the seat's rule:** the closed nine's serial and pool readers, on either cohort, run with no
+  other R12 generator or reader on the Air. That is the RL-48 timing number.
+- Readers that fall due while the Air nine is generating may run; the affected sessions' native ratios are
+  marked. No decision rests on a reduced-session ratio.
+- Whether the nine may start before denied-26 exits is an engineering question (shared mutable paths in one
+  clone), not a research one. Nothing in the evidence requires waiting. The orchestrator decides; sequential
+  is the default if it cannot be confirmed quickly.
+
+## For the record in the report
+
+- Root `denied-air-24` is interrupted and ineligible (the seat's turn ended). `denied-air-26` is the
+  orchestrator's relaunch of the same declared command under a new name; the finisher's `--denied-root` is 26.
+- Seat children do not outlive a turn. Both nines are launched detached by the orchestrator.
+- `/private/tmp` does not survive a reboot. Completed MBP roots and sidecars are copied to JW-EXT as well,
+  hashed, before anyone relies on them.
+
+**Reason.** The shapes and the closed loop are what Block 5 taught us to test before a pin, and reduced volume
+carries them. Volume is a question about time and memory; three single-pack full sessions answer it per
+session, and the MBP nine answers it inside a loop without costing the Air an hour.
+
+**Blind status.** Blind to Block 6: nothing of it was read. Synthetic control records only (step labels, exit
+codes, native times, sizes). Block-5-aware.
+
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
