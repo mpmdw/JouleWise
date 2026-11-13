@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from types import SimpleNamespace
 import types
@@ -17,6 +18,7 @@ import unittest
 import unittest.mock
 from unittest.mock import patch
 
+from joulewise.align.apple import r1_runtime as rt
 from scripts import launch_align_r0 as launcher
 from scripts import run_align_r1_smoke as smoke
 
@@ -882,12 +884,14 @@ class SmokeTimerOwnerTests(unittest.TestCase):
 
         for extra in (["--r1-kind", "step-d"], ["--r1-kind", "step-30b"],
                       ["--r1-kind", "step-30b", "--smoke-part", "A", "--smoke-started", "0"]):
-            before = signal.getsignal(signal.SIGUSR1)
+            before = signal.getsignal(rt.SMOKE_WATCHDOG_SIGNAL)
+            alarm_before = signal.getsignal(signal.SIGALRM)
+            threads_before = threading.active_count()
             with self.subTest(argv=extra), tempfile.TemporaryDirectory() as tmp, \
                     patch.object(rt, "read_soak_reference", return_value={}), \
                     patch.object(rt, "Segment", side_effect=segment), \
                     patch.object(rt.signal, "setitimer") as timer, \
-                    patch.object(rt, "SmokeWatchdog") as watchdog:
+                    patch.object(rt, "SmokeWatchdog", wraps=rt.SmokeWatchdog) as watchdog:
                 code = rt.main(["--config", str(REPO / "configs/align/v4/r1_runtime.json"),
                                 "--output", str(Path(tmp) / "out"), *extra],
                                backend_factory=lambda _config: SimpleNamespace(close=lambda: None),
@@ -895,7 +899,9 @@ class SmokeTimerOwnerTests(unittest.TestCase):
                 self.assertNotEqual(code, 0)
                 timer.assert_not_called()
                 watchdog.assert_not_called()
-                self.assertEqual(signal.getsignal(signal.SIGUSR1), before)
+                self.assertEqual(signal.getsignal(rt.SMOKE_WATCHDOG_SIGNAL), before)   # handler unchanged
+                self.assertEqual(signal.getsignal(signal.SIGALRM), alarm_before)
+                self.assertEqual(threading.active_count(), threads_before)           # no watchdog thread
 
     def test_watchdog_fires_once_on_the_main_thread_and_disarms_and_stops(self):
         from joulewise.align.apple import r1_runtime as rt
@@ -922,6 +928,77 @@ class SmokeTimerOwnerTests(unittest.TestCase):
         time.sleep(0.3)
         self.assertFalse(watchdog.active)
         self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+
+    # RUN_STATE 278 review F-1: drive the real smoke_timeout handler through main.
+    def run_main_smoke_b(self, run, admission=None):
+        from joulewise.align.apple import r1_runtime as rt
+        fake = SimpleNamespace(run=lambda: run(fake), close=lambda: [])
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(rt, "read_soak_reference", return_value={}), \
+                patch.object(rt, "Segment", return_value=fake), \
+                patch.object(rt, "SMOKE_ADMISSION_S", admission or rt.SMOKE_ADMISSION_S):
+            code = rt.main(["--config", str(REPO / "configs/align/v4/r1_runtime.json"),
+                            "--r1-kind", "step-d", "--output", str(Path(tmp) / "out"),
+                            "--smoke-part", "B", "--smoke-started", str(time.monotonic())],
+                           backend_factory=lambda _config: SimpleNamespace(close=lambda: None),
+                           stdout=io.StringIO())
+            return code, json.loads((Path(tmp) / "out" / rt.CUSTODY_NAME).read_text())
+
+    def test_admission_cap_fails_the_run_with_the_wall_cap_record(self):
+        from joulewise.align.apple import r1_runtime as rt
+        code, record = self.run_main_smoke_b(lambda fake: time.sleep(5), admission=0.2)
+        self.assertEqual(code, rt.EXIT_FAILED)
+        self.assertIn("smoke part wall cap reached", record["error"])
+
+    def test_cap_inside_a_real_deadman_guard_is_reported_as_the_wall_cap(self):
+        from joulewise.align.apple import r1_runtime as rt
+        from joulewise.align.apple.budget import EpisodeDeadman
+        from joulewise.clock import SystemClock
+
+        def run(fake):
+            clock = SystemClock()
+            fake.smoke_watchdog.set(0.2)
+            with EpisodeDeadman(clock, clock.stamp(), 5).guard():
+                time.sleep(5)
+
+        code, record = self.run_main_smoke_b(run)
+        self.assertEqual(code, rt.EXIT_FAILED)
+        self.assertIn("RuntimeFailure: smoke part wall cap reached", record["error"])
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+
+    def test_a_late_signal_after_stop_is_ignored(self):
+        from joulewise.align.apple import r1_runtime as rt
+
+        def run(fake):
+            fake.smoke_watchdog.stop()
+            signal.raise_signal(rt.SMOKE_WATCHDOG_SIGNAL)
+            return {"ok": True}
+
+        code, record = self.run_main_smoke_b(run)
+        self.assertEqual(code, 0, record)
+
+
+class SmokeAdmissionScopeTests(unittest.TestCase):
+    def test_non_smoke_g0_return_ignores_the_admission_budget(self):
+        for outcome in ("released", "timeout"):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as tmp:
+                segment = object.__new__(rt.Segment)
+                segment.kind, segment.out, segment.quiet_spans = "step-d", Path(tmp), []
+                session = SimpleNamespace(reference={"fast_c": 40., "slow_c": 40.}, flags=[],
+                                          wait=lambda *a, **kw: {"outcome": outcome})
+                with patch.object(rt.time, "monotonic", return_value=rt.SMOKE_ADMISSION_S + 500.0), \
+                        patch.object(rt.signal, "setitimer") as timer, \
+                        patch.object(rt, "rearm_deadman") as rearm:
+                    segment.reference_hook({}, quiet_s=0, rearm_s=1580, capture=True)(session)
+                    self.assertEqual(session.wait("G0", deadman="d")["outcome"], outcome)
+                timer.assert_not_called()
+                rearm.assert_called_once_with("d", 1580, "R1_after_G0_release")
+                self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_launcher_caps_follow_the_constant(self):
+        with patch.object(rt, "SMOKE_ADMISSION_S", 3333):
+            self.assertEqual(launcher.r1_part_caps(), {"A": 3333 + 120, "B": 3333 + 2600 + 120})
+
 
 
 class MutantTests(unittest.TestCase):

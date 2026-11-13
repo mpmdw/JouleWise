@@ -1145,7 +1145,9 @@ class PrivilegeTests(unittest.TestCase):
 
     def test_each_rule_missing_refuses_and_names_it(self):
         rules = session.host_privilege_rules()
-        self.assertEqual(len(rules), 6)
+        self.assertEqual(len(rules), 7)
+        # RL-96: the RL-91 capture reaper's privileged kill is listed at the arm.
+        self.assertIn(('powermetrics_reap_kill', ('sudo', '-n', '/bin/kill')), rules)
         for name, argv in rules:
             with self.subTest(rule=name):
                 record, _ = self.run_preflight(missing=tuple(argv[2:]))
@@ -1157,7 +1159,7 @@ class PrivilegeTests(unittest.TestCase):
             record, calls = self.run_preflight(network=f'Network Time: {state}\n')
             self.assertTrue(record['ok'], record)
             self.assertEqual(record['network_time']['observed'], state.lower())
-            self.assertEqual(len(calls), 7)
+            self.assertEqual(len(calls), 8)
             self.assertTrue(all('-l' in argv for argv in calls[:-1]))
 
     def test_network_read_failure_refuses(self):
@@ -1171,7 +1173,7 @@ class PrivilegeTests(unittest.TestCase):
             raise subprocess.TimeoutExpired(argv, 10)
         record = session.host_privilege_preflight(runner=timeout)
         self.assertFalse(record['ok'])
-        self.assertEqual(sum('sudo_rule_missing' in reason for reason in record['reasons']), 6)
+        self.assertEqual(sum('sudo_rule_missing' in reason for reason in record['reasons']), 7)
         self.assertIsNone(record['network_time'])
 
     def test_prepare_records_failure_and_keeps_old_host_lock_refusal(self):

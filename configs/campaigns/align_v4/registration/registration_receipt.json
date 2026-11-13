@@ -35,6 +35,7 @@
     "joulewise/adapters/node_client.py": null,
     "joulewise/adapters/nvidia_smi.py": null,
     "joulewise/adapters/powermetrics.py": null,
+    "joulewise/adapters/powermetrics_reap.py": null,
     "joulewise/adapters/suite_control.py": null,
     "joulewise/agent_identity.py": null,
     "joulewise/aggregate.py": null,

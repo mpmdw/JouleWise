@@ -117,7 +117,7 @@ class MeasurementCoreBoundaryTests(unittest.TestCase):
         expected = {
             'scripts/run_campaign.py': '734820b2467a4296d07001ead3af4f8f0def451bb1a4ab130f3d87457716efc7',
             'joulewise/controller.py': '3f0535c976463da1ae99718cfcde2b0ef92241cda36973baaf4b1a6ebe1b12db',   # timing receipts (item 6)
-            'joulewise/adapters/__init__.py': '32917f9f483bf66158a38318e05f751dc976443dc1c234b534ccdb3ffdbad54a',
+            'joulewise/adapters/__init__.py': 'ccea835260b2f1781382394f1b745ec62a8588ab5bb502c949cd23562cccf05c',   # RL-96: resolve_telemetry builds the RL-91 reaping subclass
             'joulewise/__main__.py': 'fb8ca2a72fae8f2b3a725b457d7befd8f9761620922457166553d0eaaa95c33e',
             'joulewise/bundle.py': 'db2d7626d1b4e07148947ba5cbe7508630f9c8184caa72ba96cd04806a245dd6',   # timing receipts (item 6): one attribute
         }
