@@ -873,6 +873,95 @@ class PreRebindStopFlags(unittest.TestCase):
         self.assertEqual([(f["session"], f["pack"]) for f in refusal], [(bracket, "GAMMA")])
 
 
+def block5_whole_machine_stub(**extra):
+    """Synthetic Block 5 output holding a whole-machine per-phase value for each floor pack (RL-142)."""
+    windows = {pack: {"cells": {"c-decode": {"mean_j": 49.0 + k}, "c-prefill-p2048": {"mean_j": 50.5 + k}}}
+               for k, pack in enumerate(b6.FLOOR_PACKS)}
+    return {"disclosures": {"whole_machine": {"windows": windows}}, **extra}
+
+
+class Block5WholeMachine(unittest.TestCase):
+    """RL-142: Block 5's released whole-machine values reach their own pack's section 10 and 11.1 lines."""
+
+    def test_pack_filter_keeps_each_packs_whole_machine_keys(self):
+        """Predict: each floor pack keeps its own two lines/whole_machine/<tag>/.../mean_j keys and not the
+        other pack's, and every finite summarised Block 5 key belongs to exactly one pack."""
+        reported, floors, ratios = {}, {}, {}
+        for k, pack in enumerate(b6.FLOOR_PACKS):
+            model = b6.MODELS[pack]
+            for phase in b6.PHASE_LABEL:
+                reported["c-%s-%s" % (pack, phase)] = {"model": model, "phase": phase, "mean_j": 10.0 + k,
+                                                       "per_token": {"j_per_token": 0.1}}
+                floors["%s/%s/t1" % (model, phase)] = {"operative_unguarded_floor_j": 1.0,
+                                                       "drift_widened_guarded_floor_j": 1.5}
+                ratios["%s/%s/t1" % (model, phase)] = {"R": 0.5}
+        contrasts = {cid: {"n": 4, "dbar_j": 2.0, "energy_ratio": 1.1}
+                     for cid in ("ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b", "ctr-d117-prefill-qwen3-1p7b-vs-qwen3-8b")}
+        q = b6.block5_quantities(block5_whole_machine_stub(
+            reported_cells=reported, floors=floors, dominance={"ratios": ratios}, contrasts=contrasts, descriptive={}))
+        machine = {pack: {"lines/whole_machine/%s/%s/mean_j" % (b6.MODEL_TAG[b6.MODELS[pack]], phase)
+                          for phase in ("decode", "prefill-p2048")} for pack in b6.FLOOR_PACKS}
+        for pack in b6.FLOOR_PACKS:
+            self.assertTrue(machine[pack] <= set(q), machine[pack])
+        kept = {pack: b6.pack_block5_keys(pack, q) for pack in b6.PACKS}
+        for pack in b6.FLOOR_PACKS:
+            other = [p for p in b6.FLOOR_PACKS if p != pack][0]
+            self.assertTrue(machine[pack] <= set(kept[pack]), sorted(machine[pack] - set(kept[pack])))
+            self.assertFalse(machine[other] & set(kept[pack]))
+        self.assertFalse((machine["ALPHA"] | machine["BETA"]) & set(kept["GAMMA"]))
+        summarised = [k for k, v in q.items() if b6.summarized(k) and b6.finite(v)]
+        self.assertTrue({"reported", "floor", "dominance", "contrast", "lines"} <= {k.split("/")[0] for k in summarised})
+        owners = {k: [p for p in b6.PACKS if k in kept[p]] for k in summarised}
+        self.assertEqual({k: v for k, v in owners.items() if len(v) != 1}, {})
+
+    def test_block_with_block5_whole_machine_values(self):
+        """Predict (the RL-142 reproduction as a test): with a whole-machine per-phase line on each ALPHA and
+        BETA session and a Block 5 output holding only those values, the block exits 0 with no failures; each
+        of the four rows has block5_included true, n = counting + 1, delta = Block 6 mean - Block 5 value and
+        no 'not computed' label."""
+        tmp = Path(tempfile.mkdtemp(prefix="b6-rl142-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        archives, attempts, _ = nine_sessions(tmp / "block")
+        real = b6.session_quantities
+
+        def with_machine(result):
+            q = real(result)
+            if result["pack"] in b6.FLOOR_PACKS:
+                tag = b6.tag_of(b6.MODELS[result["pack"]])
+                for i, phase in enumerate(("decode", "prefill-p2048")):
+                    q["lines/whole_machine/%s/%s/mean_j" % (tag, phase)] = 50.0 + i + 0.25 * (result.get("round") or 0)
+            return q
+
+        stub = block5_whole_machine_stub()
+        (tmp / "b5.json").write_text(json.dumps(stub))
+        with mock.patch.object(b6, "session_quantities", with_machine):
+            rc, R, _ = recompute_block(archives, attempts, tmp / "out", extra=("--block5", tmp / "b5.json"))
+        gate = R["block"]["option_c"]
+        self.assertEqual(gate["failures"], [], gate["failures"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(gate["pass"])
+        self.assertNotIn("option_c_disagrees", {f["code"] for f in R["flags"]})
+        for k, pack in enumerate(b6.FLOOR_PACKS):
+            tag = b6.MODEL_TAG[b6.MODELS[pack]]
+            block = R["block"]["between_session"][pack]
+            counting = [sid for sid, r in R["sessions"].items() if r["pack"] == pack and r["counting"]]
+            self.assertEqual(block["n_counting"], len(counting))
+            for phase, b5_value in (("decode", 49.0 + k), ("prefill-p2048", 50.5 + k)):
+                key = "lines/whole_machine/%s/%s/mean_j" % (tag, phase)
+                values = [R["sessions"][sid]["quantities"][key] for sid in counting]
+                row = block["values"][key]
+                self.assertTrue(row["block5_included"], key)
+                self.assertEqual(row["n"], len(counting) + 1, key)
+                self.assertEqual(row["mean"], statistics.fmean([b5_value] + values))
+                self.assertTrue(R["block"]["flagged_inclusive"][pack]["values"][key]["block5_included"])
+                side = R["block"]["side_by_side"][pack][key]
+                self.assertEqual(side["block5"], b5_value)
+                self.assertIsNone(side["block5_label"])
+                self.assertEqual(side["delta"], statistics.fmean(values) - b5_value)
+                self.assertEqual(side["session_deltas"], {sid: R["sessions"][sid]["quantities"][key] - b5_value
+                                                          for sid in counting})
+
+
 
 if __name__ == "__main__":
     unittest.main()
