@@ -155,7 +155,10 @@ makes every manifest-hashed file citable again), 50 killed. Line numbers are at 
 # a path through the /tmp or /var symlinks (cold review L4).
 # SOURCE (MBP desk gap, nothing armed): manifest. It prints one "session <copy_path> files= bytes= desk_files=" line per session, then
 # its own sha256 (note that OUT OF BAND; nobody needs to open the file). --loop-state is required unless --no-loop-state (recorded) is stated;
-# both loop files must sit in one directory. --source-host is for rehearsals only.
+# both loop files must sit in one directory. --rehearsal-source-host is for synthetic rehearsals only: the kit refuses it unless every
+# --session root carries the SYNTHETIC_BLOCK6_FIXTURE marker (cold review R2 M1).
+# PATH (R2 H1/L4): over a non-interactive ssh the Air has no python3.13 or zstd; prefix PATH=/opt/homebrew/bin:$PATH. <run> must be made
+# with mkdir -m 700 (a default mkdir gives 755 and the kit refuses out_dir_mode). The manifest file is always b6-custody-manifest.json.
 python3.13 -I scripts/b6_custody_kit.py manifest --session <sessions>/<id>/archive [...x each session] \
   --loop-attempts <loop>/attempts.jsonl --loop-state <loop>/state.json --out <dir mode 700>/b6-custody-manifest.json
 # Optional, at the source: rehash the source against its own manifest. Writes no receipt; reads every byte (decompresses .zst rows).
@@ -172,7 +175,7 @@ rsync -a <loop>/attempts.jsonl <loop>/state.json <desk>/b6-custody-manifest.json
 # absolute copy path (cold review L7); if it moves, re-run verify and inputs.
 python3.13 -I scripts/b6_custody_kit.py verify --manifest /Volumes/JW-EXT/b6-custody/b6-custody-manifest.json --manifest-sha256 <sha from SOURCE> --root /Volumes/JW-EXT/b6-custody --loop-dir /Volumes/JW-EXT/b6-custody --out <run>/verify-receipt.json
 python3.13 -I scripts/b6_custody_kit.py inputs --manifest <...> --manifest-sha256 <sha from SOURCE> --verify-receipt <run>/verify-receipt.json --verify-receipt-sha256 <receipt_sha256 printed by verify> --list-names <id>/archive
-python3.13 -I scripts/b6_custody_kit.py inputs --manifest <...> --manifest-sha256 <...> --verify-receipt <...> --verify-receipt-sha256 <...> --mapping <run>/mapping.json --l9-audit not_run --out <run>/run-inputs.json
+python3.13 -I scripts/b6_custody_kit.py inputs --manifest <...> --manifest-sha256 <...> --verify-receipt <...> --verify-receipt-sha256 <...> --mapping <run>/mapping.json --l9-audit not_run --out <run>/run-inputs.json   # add --accept-no-loop-state ONLY if the manifest waived loop-state; inputs then prints loop_state=waived
 python3.13 -B scripts/independent_recompute_b6.py block --session /Volumes/JW-EXT/b6-custody/<id>/archive [...] --closed --loop-attempts /Volumes/JW-EXT/b6-custody/attempts.jsonl --loop-state /Volumes/JW-EXT/b6-custody/state.json --inputs <run>/run-inputs.json --inputs-sha256 <printed> --workers <n> --restricted-out <...> --public-out <...>
 ```
 
@@ -180,13 +183,13 @@ python3.13 -B scripts/independent_recompute_b6.py block --session /Volumes/JW-EX
 
 Synthetic two-session tree built with the test module's `mini_archive` under `/Volumes/JW-EXT/tmp/b6-rehearsal-*`
 (NOT `/tmp` or `/var`): `S1/archive` with an adjacent `archive.desk`, `S2/archive` with an inside log and no `.desk`.
-A local directory on JW-EXT stood in for `air:`; `--source-host mbp-rehearsal` stood in for a manifest made on another
+A local directory on JW-EXT stood in for `air:`; `--rehearsal-source-host mbp-rehearsal` stood in for a manifest made on another
 machine. Host: Air, openrsync 2.6.9, zstd 1.5.7. No SSH to the MBP. The MBP's own `rsync --version; zstd --version` and a
 real MBP -> Air synthetic rehearsal are still to be done by the magistrate (written into the draft item). Run twice: at the
 H1 commit with the then-current flags (`manifest`, rsync, `verify`: all exit 0), and again at the fixed head:
 
 ```
-$ python3.13 -I scripts/b6_custody_kit.py manifest --session <T>/sessions/S1/archive --session <T>/sessions/S2/archive --loop-attempts <T>/loop/attempts.jsonl --loop-state <T>/loop/state.json --source-host mbp-rehearsal --out <T>/desk/b6-custody-manifest.json
+$ python3.13 -I scripts/b6_custody_kit.py manifest --session <T>/sessions/S1/archive --session <T>/sessions/S2/archive --loop-attempts <T>/loop/attempts.jsonl --loop-state <T>/loop/state.json --rehearsal-source-host mbp-rehearsal --out <T>/desk/b6-custody-manifest.json
 exit 0   session S1/archive files=10 bytes=1147 desk_files=1 / session S2/archive files=11 bytes=1349 desk_files=0 / manifest sessions=2 sha256=dd15c6ee...
 $ mkdir -m 700 <T>/air-custody                                                       exit 0
 $ cd <T>/sessions && rsync -aR S1/archive S1/archive.desk <T>/air-custody/            exit 0
@@ -277,3 +280,16 @@ restricted or real-session path; `docs/analysis/b5/RESULTS.md`, `REDERIVATION.md
 `hand_checks_phase2.tsv`, `RUN_STATE.md`, `docs/paper/paper1/`, RL-38 to RL-42; §2-§5 of the release-path file.
 Nothing was written to or run in `/Volumes/JW-EXT/jw-wt/sol-p1-b6-r12c` (one read-only `git fetch` from it). The
 nine-session R12 fixtures were not run. No SSH.
+
+## Round 2 cold review (Fable 5.2, ADMIT-WITH-FIXES) and disposition
+
+| Finding | Disposition |
+|---|---|
+| H1 draft item not executable (no synthetic builder, no rehearsal destination, ssh PATH, kit path, manifest name, `--out`) | Fixed in the lead's draft item (scratch): builder command using the test module's `mini_archive`, named destination `/Volumes/JW-EXT/tmp/b6-rehearsal-mbp`, Homebrew PATH for the ssh verify, kit path `<K>/scripts/b6_custody_kit.py`, one manifest name, receipt `--out`. The synthetic marker adds one file per session: expected counts are files=11 and 12 (verify files=23). Builder run here: S1 files=11 bytes=1157, S2 files=12 bytes=1346. No separate builder script was needed. |
+| M1 `--source-host` reopens M2 | Fixed. Renamed `--rehearsal-source-host`; `manifest` refuses it (`source_host_on_real_archive`) unless every `--session` root has the `SYNTHETIC_BLOCK6_FIXTURE` marker (name check; `mini_archive` writes it); copy-is-source now uses `os.path.samefile` (a missing path is not the same tree). Tests: unmarked refused, host normalised, case-respelled and `..` roots refused. |
+| M2 waived loop-state silent | Fixed. `verify` receipt carries `loop_state_waived` and prints `loop_files=<n>`; `inputs` refuses a waived manifest (`loop_state_waived`) unless `--accept-no-loop-state`, and prints `loop_state=waived`. Test covers refuse, accept, and the unwaived receipt. Recompute-side refusal of a pinned `loop_state` with no `--loop-state` is for the R12 review (not touched here). |
+| M3 five surviving mutants | Fixed by four tests (self-check loop file; receipt loop_files names; receipt bytes alone; empty `.desk` directory and regular file) plus the host-normalisation test. All five now die, plus three more on the new code (string compare, marker not required, waiver silent). See the mutant table in the delivery message. The "all refusal mutants die" line covers the refusal deletions and the eight R1 mutants only. |
+| L2 `mkdir -m 700` when the directory exists | Item text: continue only if it exists and is empty, otherwise stop and record. |
+| L3 optional `--self-check` | Item text: skip unless the desk gap allows. |
+| L4 runbook PATH, manifest name, mode-700 `<run>` | Runbook comments above. |
+| L1 host name can change | No action beyond M1 change 2 (accepted by the review). |
