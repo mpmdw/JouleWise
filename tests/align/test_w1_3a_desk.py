@@ -185,6 +185,7 @@ class Desk3aTests(unittest.TestCase):
         self.assertEqual(row['classification'], 'to-research-lead')
         self.assertIsNone(row['precool']['released'])
         self.assertIn('not reconciled', report['reconciliation']['status'])
+        self.assertIsNone(report['kit_record_segments_note'])
 
     def test_precool_phase_names_follow_the_phase_table(self):
         from joulewise.align.apple import r1_phase_table
@@ -229,6 +230,10 @@ class Desk3aTests(unittest.TestCase):
                                 'step_30b': {'g0_outcome': 'released'}})
             report = desk.desk(tmp)
             self.assertEqual(len(report['reconciliation']['mismatches']), 2)   # outcome + missing step_30b
+            self.assertEqual(report['kit_record_segments'], {})
+            self.assertEqual(report['kit_record_segments_note'],
+                             'kit_record_segments withheld: reconciliation mismatch')
+            self.assertIn('kit_record_segments withheld: reconciliation mismatch', desk.render(report))
             out = root / 'out.json'
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(desk.main([tmp, '--format', 'json', '--json-out', str(out)]), 2)

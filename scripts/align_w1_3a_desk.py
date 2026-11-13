@@ -317,6 +317,10 @@ def desk(night_dir, delta_slow_override=None):
                              PEAK_FIELD: r[PEAK_FIELD], 'os_levels': r['os_levels'], 'pm_states': r['pm_states']}
                 for r in rows if r['classification'] == CLASS_3A and not r['superseded']
                 and r['phase'] in KIT_SEGMENTS}
+    reconciliation = reconcile(phases, rows)
+    withheld = bool(reconciliation['mismatches'])
+    if withheld:
+        segments = {}
     counts = {}
     for r in rows:
         counts[r['classification']] = counts.get(r['classification'], 0) + 1
@@ -325,7 +329,9 @@ def desk(night_dir, delta_slow_override=None):
                 'measure': f'heater key peak over the last {WINDOW_S} s of the G0 interval >= band edge - {EDGE_C} C',
                 'band_edge': 'reference.slow_c (target) + delta_slow_c', 'heater_key': 'session s_slow',
                 'precool': 'preceding idle-until-soak phase must report released: true (RL-124 5(a))'},
-            'reconciliation': reconcile(phases, rows),
+            'reconciliation': reconciliation,
+            'kit_record_segments_note': ('kit_record_segments withheld: reconciliation mismatch' if withheld
+                                         else None),
             'g0_intervals': rows, 'counts': dict(sorted(counts.items())),
             'kit_record_segments': dict(sorted(segments.items()))}
 
@@ -361,6 +367,8 @@ def render(report):
     rec = report['reconciliation']
     lines.append(f"reconciliation: {rec['status']}")
     lines.extend(f'    !! {m}' for m in rec['mismatches'])
+    if report['kit_record_segments_note']:
+        lines.append(report['kit_record_segments_note'])
     lines.append('margin = last-300-s peak - (band edge - 0.3); >= 0 meets the pattern. '
                  '* whole-G0 peak and + columns: disclosure only.')
     return '\n'.join(lines)
