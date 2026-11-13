@@ -1046,7 +1046,7 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 ```pointer
 owner: magistrate
-wait: chain.exited of align-r1-20261113T1508Z (latest end 2026-11-14T18:21:00-08:00; dead-man 19:21)
+wait: results_branch_exists
 deadline: 2026-11-14T19:21:00-08:00
 on_early_or_refused: a REFUSED result or no `chain.started` by t0+10 min (07:18 PST 11-13): restore (uninstall, powermode 0), mail Ed and the lead. No chain.exited by the latest end: dead-man/restore path; mail Ed and the lead
 next_observable: after chain.exited, item 306's "After the night" with S=/Users/edr/night-align/r1fu-20261113T144743Z and PKT_SHA=80d2023cff9cb219e282f20c730ac2de541f156f096c05c06141ecec97e6946e (r1_result.json status first; then runbook §4; set network time OFF again and zero the frequency word); the report also carries the TVh0 finding below for the research lead
@@ -1075,7 +1075,7 @@ next_observable: after chain.exited, item 306's "After the night" with S=/Users/
 
 ```pointer
 owner: magistrate
-wait: Part A smoke's desk fence (gone when the runner exits; soak 1,800 s + Part A, about 1 h)
+wait: watchdog_status_state
 deadline: 2026-11-13T19:26:00-08:00
 on_early_or_refused: as item 306: a G0 that does not release inside 1,200 s, or any failed checklist line, means NOTHING arms, and it goes to Ed and the research lead (RL-122 item 7). Any other refusal goes to the lead. Do not retry, and do not reuse OUT
 next_observable: item 306 activation 2: the template's check block on OUT (its find line prints the g0 fields outcome, duration_s, reference, release, slope_c_per_min, entry_sensors), then the RL-122 item 7 checklist, the 60-key check, D-7, then plan, notice (#349 issue route while Gmail is absent) and install, recorded in docs/process_traces/2026-11-13-w1-slot-night/MAGISTRATE-ARM-<activation>.md
