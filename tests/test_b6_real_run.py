@@ -64,6 +64,27 @@ if mode == "sleep":
     sys.exit(0)
 if mode == "abort":
     os.abort()
+if mode == "bare_token":
+    print("replicated", file=sys.stderr)
+    sys.exit(1)
+if mode == "runtime":
+    def pool():
+        raise RuntimeError("worker died at 12.5")
+    pool()
+if mode == "hazard":
+    # The real RL-133 signature: the pinned desk_hazards reads an absent idle plist (raw() gives None), and the
+    # pinned idle_graphics_power raises AttributeError at its line 12, called from desk_hazards at line 58.
+    import types
+    sys.path.insert(0, opt("--stub-root"))
+    from joulewise.b6_analysis_hazards import desk_hazards
+    run = Path(os.environ["TMPDIR"]) / "claim" / "run-1"
+    run.mkdir(parents=True)
+    (run / "metadata.json").write_text("{}")
+    reader = types.SimpleNamespace(json=lambda path, label: {"status": "succeeded"}, lines=lambda path, label: [],
+                                   raw=lambda path, label: None)
+    session = types.SimpleNamespace(reader=reader, archive=run.parent, input_pin={"contention_journal": "c.jsonl"},
+                                    roster={"members": [{"run_id": "run-1"}]}, claim_root=run.parent, pack="ALPHA")
+    desk_hazards(session, {})
 '''
 
 
@@ -195,12 +216,40 @@ class Launcher(unittest.TestCase):
         for secret in ("12.5", "secret", "first line", "NameError"):
             self.assertNotIn(secret, text)
 
-    def test_traceback_classes(self):
-        hazards = [{"file": "/w/joulewise/b6_analysis_hazards.py", "line": 58, "function": "desk_hazards"}]
-        self.assertEqual(rr.traceback_class(hazards, "AttributeError"), "C")
-        self.assertEqual(rr.traceback_class(hazards, "KeyError"), "E")
-        self.assertEqual(rr.traceback_class([], "RuntimeError"), "D")
-        self.assertEqual(rr.traceback_class([], "ZeroDivisionError"), "E")
+    def test_hazard_signature_from_the_pinned_function_is_class_c(self):
+        """RL-139 fix 2: a real traceback, raised inside the pinned idle_graphics_power (line 12) under the pinned
+        desk_hazards (line 58)."""
+        rc, lines, out = self.launch("hazard", extra=("--stub-root", str(ROOT)))
+        self.assertEqual(rc, 1)
+        self.assertEqual((lines[0], lines[-1]), ("refused: traceback class=C", "AttributeError"))
+        frames = self.record(out)["frames"]
+        hazard = [(f["line"], f["function"]) for f in frames if f["file"].endswith("joulewise/b6_analysis_hazards.py")]
+        self.assertEqual(hazard, [(58, "desk_hazards"), (12, "idle_graphics_power")])
+        self.assertEqual(rr.traceback_class(frames, "KeyError"), "E")
+
+    def test_runtime_error_is_d_only_in_a_pool_run(self):
+        """RL-139 fix 3."""
+        rc, lines, out = self.launch("runtime", stem="serial", extra=("--workers", "1"))
+        self.assertEqual((rc, lines[0], lines[-1]), (1, "refused: traceback class=E", "RuntimeError"))
+        rc, lines, out = self.launch("runtime", stem="pool", extra=("--workers", "2"))
+        self.assertEqual((lines[0], self.record(out)["class"]), ("refused: traceback class=D", "D"))
+        self.assertNotIn("12.5", "\n".join(lines))
+        rc, lines, _ = self.launch("runtime", stem="default")
+        self.assertEqual(lines[0], "refused: traceback class=E")
+
+    def test_a_bare_token_without_frames_is_not_relayed(self):
+        """RL-139 fix 1: exit 1 with no frame prints `unparsed`, never the token."""
+        rc, lines, out = self.launch("bare_token")
+        self.assertEqual((rc, lines), (1, ["refused: traceback class=E", "unparsed"]))
+        self.assertNotIn("replicated", json.dumps(self.record(out)))
+
+    def test_refusal_lines_that_are_not_one_identifier_are_not_relayed(self):
+        """RL-139 fix 1: `refused: x 12.5` and `refused: replicated` print `unparsed`."""
+        for i, code in enumerate(("x 12.5", "replicated", "a=1", "not_estimable", "x.y")):
+            with self.subTest(code=code):
+                rc, lines, out = self.launch("refuse:" + code, stem="u" + str(i))
+                self.assertEqual((rc, lines), (4, ["refused: unparsed class=E"]))
+                self.assertEqual(self.record(out)["code"], "unparsed")
 
     def test_exit_2_is_usage(self):
         rc, lines, _ = self.launch("usage")
@@ -293,6 +342,22 @@ class Launcher(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()) as buffer:
             rc = rr.main(argv)
         self.assertEqual((rc, buffer.getvalue().strip()), (9, "launch refused: output_outside_out_dir"))
+
+    def test_ledger_that_is_a_program_input_refuses_and_is_not_written(self):
+        """RL-139 fix 4: a run directory whose parent is the loop directory would append to the pinned
+        attempts.jsonl; the launch is refused and that file is untouched."""
+        loop = self.tmp / "loop"
+        loop.mkdir(mode=0o700)
+        os.chmod(loop, 0o700)
+        attempts = loop / "attempts.jsonl"
+        attempts.write_text('{"session_id": "r1-alpha"}\n')
+        before = sha(attempts)
+        for form in (("--loop-attempts", str(attempts)), ("--loop-attempts=" + str(attempts),)):
+            with self.subTest(form=form[0][:16]):
+                rc, lines, _ = self.launch("ok", out=loop / "gate", extra=form)
+                self.assertEqual((rc, lines), (9, ["launch refused: ledger_is_program_input"]))
+                self.assertEqual(sha(attempts), before)
+                self.assertFalse((loop / "gate").exists())
 
     def test_synthetic_only_variable_refuses(self):
         with mock.patch.dict(os.environ, {"JW_B5_SYNTHETIC_ONLY": "1"}):

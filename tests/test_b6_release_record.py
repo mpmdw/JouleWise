@@ -109,6 +109,13 @@ class Block5Probe(unittest.TestCase):
                     for p, row in restricted["block"]["between_session"].items()}
         self.assertEqual(observed, doc["by_pack"])
 
+    def test_an_empty_block5_file_is_a_hold(self):
+        """Opus kit review F3: a pinned `{}` gives a predeclared count of 0, which is a hold."""
+        path = self.tmp / "b5-empty.json"
+        path.write_text("{}")
+        rc, line, doc = self.probe(path)
+        self.assertEqual((rc, line, doc["total"]), (5, "b5-probe: hold total=0", 0))
+
     def test_wrong_digest_refuses(self):
         path = self.tmp / "b5.json"
         path.write_text(json.dumps(B5_STUB))
@@ -155,23 +162,33 @@ class ReleaseCheck(unittest.TestCase):
                         sha(self.manifest), "--root", str(self.root), "--out", str(self.run_dir / "verify-receipt.json")],
                        check=True)
         for stem in ("gate", "dry"):
-            doc = self.run_dir / ("run-inputs-" + stem + ".json")
+            self.launch(stem)
+
+    def launch(self, stem, kind=None):
+        """One launcher attempt into RUN/<stem>, then its probe output (structure.json) bound to its digest."""
+        kind = kind or ("gate" if stem.startswith("gate") else "dry")
+        doc = self.run_dir / ("run-inputs-" + kind + ".json")
+        if not doc.exists():
             external = {"loop_attempts": sha(self.loop / "attempts.jsonl"), "loop_state": sha(self.loop / "state.json")}
-            if stem == "dry":
+            if kind == "dry":
                 external["block5"] = sha(self.block5)
             doc.write_text(json.dumps({"host": "Air", "external": external, "sessions": {}}))
-            out = self.run_dir / stem
-            program = ["block", *[x for s in IDS for x in ("--session", str(self.root / s / "archive"))],
-                       "--loop-attempts", str(self.loop / "attempts.jsonl"), "--loop-state", str(self.loop / "state.json"),
-                       *(["--block5", str(self.block5)] if stem == "dry" else []),
-                       "--inputs", str(doc), "--inputs-sha256", sha(doc), "--stub-ids", ",".join(IDS),
-                       "--restricted-out", str(out / "restricted.json"), "--public-out", str(out / "public.json")]
-            with contextlib.redirect_stdout(io.StringIO()):
-                rc = rr.main(["--checkout", str(self.checkout), "--expect-commit", self.commit, "--stem", stem,
-                              "--limit-s", "60", "--out-dir", str(out), "--", *program])
-            assert rc == 0
-        record = json.loads((self.run_dir / "dry/record.json").read_text())
-        (self.run_dir / "dry/structure.json").write_text(json.dumps({
+        out = self.run_dir / stem
+        program = ["block", *[x for s in IDS for x in ("--session", str(self.root / s / "archive"))],
+                   "--loop-attempts", str(self.loop / "attempts.jsonl"), "--loop-state", str(self.loop / "state.json"),
+                   *(["--block5", str(self.block5)] if kind == "dry" else []),
+                   "--inputs", str(doc), "--inputs-sha256", sha(doc), "--stub-ids", ",".join(IDS),
+                   "--restricted-out", str(out / "restricted.json"), "--public-out", str(out / "public.json")]
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = rr.main(["--checkout", str(self.checkout), "--expect-commit", self.commit, "--stem", stem,
+                          "--limit-s", "60", "--out-dir", str(out), "--", *program])
+        assert rc == 0
+        record = json.loads((out / "record.json").read_text())
+        (out / "structure.json").write_text(json.dumps({
+            "stage": kind + "_run", "checks": {"option_c_pass": {"result": "ok"},
+                                               "copied_paths_equal_r3": {"result": "reported", "equal": False},
+                                               **({"block5_included": {"result": "ok", "observed": 2, "expected": 2}}
+                                                  if kind == "dry" else {})},
             "identity": {"comparison_stopped": False, "inputs": {"l9_audit": "not_run"}},
             "option_c": {"pass": True, "comparator": {"classes": {"neg8": {"compared": 3, "failed": 0, "unmatched": 0,
                                                                            "pass": True}}}},
@@ -180,14 +197,14 @@ class ReleaseCheck(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def check(self, *, cites=None, receipt="verify-receipt-release.json", root=None):
+    def check(self, *, cites=None, receipt="verify-receipt-release.json", root=None, extra=()):
         cites = cites if cites is not None else ["1=RUN_STATE 59", "2=RUN_STATE 231", "9=PR #748 merged",
                                                  "10=RUN_STATE RL-6 (d) line", "11=Ed OK on record"]
         argv = ["check", "--run-dir", str(self.run_dir), "--checkout", str(self.checkout), "--expect-commit",
                 self.commit, "--manifest", str(self.manifest), "--manifest-sha256", sha(self.manifest), "--block5",
                 str(self.block5), "--block5-sha256", sha(self.block5), "--kit", str(self.kit), "--root",
                 str(root or self.root), "--receipt-out", str(self.run_dir / receipt),
-                *[x for c in cites for x in ("--cite", c)]]
+                *[x for c in cites for x in ("--cite", c)], *extra]
         with contextlib.redirect_stdout(io.StringIO()) as buffer:
             rc = rec.main(argv)
         return rc, buffer.getvalue().strip(), json.loads((self.run_dir / "release-record-draft.json").read_text())
@@ -255,6 +272,67 @@ class ReleaseCheck(unittest.TestCase):
         (self.run_dir / "attempts.jsonl").write_text((self.run_dir / "attempts.jsonl").read_text().splitlines()[1] + "\n")
         rc, line, _ = self.check()
         self.assertEqual(line, "release-check: fail 3,5")
+
+    def edit_structure(self, stem, edit):
+        path = self.run_dir / stem / "structure.json"
+        doc = json.loads(path.read_text())
+        edit(doc)
+        path.write_text(json.dumps(doc))
+
+    def test_a_probe_departure_fails_4(self):
+        """RL-139 fix 7: a seeded pairing_as_r7 departure in the dry probe fails condition 4."""
+        self.edit_structure("dry", lambda d: d["checks"].update(pairing_as_r7={"result": "departs"}))
+        rc, line, draft = self.check()
+        self.assertEqual((rc, line), (5, "release-check: fail 4"))
+        self.assertEqual(draft["conditions"]["4"]["probes"]["dry"]["departs"], ["pairing_as_r7"])
+
+    def test_a_not_checked_row_in_the_gate_probe_fails_4(self):
+        self.edit_structure("gate", lambda d: d["checks"].update(run_inputs_sha256={"result": "not_checked"}))
+        rc, line, draft = self.check()
+        self.assertEqual(line, "release-check: fail 4")
+        self.assertEqual(draft["conditions"]["4"]["probes"]["gate"]["not_checked"], ["run_inputs_sha256"])
+
+    def test_a_probe_on_other_bytes_or_the_wrong_stage_fails_4(self):
+        for stem, edit in (("gate", lambda d: d["digests"].update(restricted_file="0" * 64)),
+                           ("dry", lambda d: d.update(stage="gate_run"))):
+            with self.subTest(stem=stem):
+                original = (self.run_dir / stem / "structure.json").read_text()
+                self.edit_structure(stem, edit)
+                receipt = "receipt-" + stem + ".json"
+                rc, line, _ = self.check(receipt=receipt)
+                self.assertEqual(line, "release-check: fail 4")
+                (self.run_dir / stem / "structure.json").write_text(original)
+
+    def test_a_block5_count_of_zero_is_a_hold(self):
+        """Opus kit review F3: a predeclared or observed Block 5 count of 0 fails condition 4, even when equal."""
+        for i, counts in enumerate(({"observed": 0, "expected": 0}, {"observed": 0, "expected": 2},
+                                    {"observed": 2, "expected": 0})):
+            with self.subTest(counts=counts):
+                self.edit_structure("dry", lambda d: d["checks"]["block5_included"].update(counts))
+                rc, line, draft = self.check(receipt="receipt-b5-" + str(i) + ".json")
+                self.assertEqual(line, "release-check: fail 4")
+                self.assertEqual(draft["conditions"]["4"]["block5_count"], counts)
+
+    def test_a_gate_record_at_exit_4_fails_3(self):
+        """RL-139 fix 7: condition 3 needs the gate record at exit 0, status complete."""
+        path = self.run_dir / "gate/record.json"
+        record = json.loads(path.read_text())
+        record.update(exit_code=4, status="refused", code="session_input_unsupplied", **{"class": "A"})
+        path.write_text(json.dumps(record))
+        rc, line, draft = self.check()
+        self.assertEqual(line, "release-check: fail 3")
+        self.assertEqual(draft["conditions"]["3"]["gate_exit_code"], 4)
+
+    def test_a_relaunched_dry_run_in_dry2_passes_with_dry_dir(self):
+        """RL-139 fix 7: after a relaunch the passing attempt lives in a new directory; --dry-dir names it."""
+        with open(self.run_dir / "dry/public.json", "ab") as stream:  # the first attempt no longer verifies
+            stream.write(b" ")
+        self.launch("dry2", "dry")
+        rc, line, _ = self.check(receipt="receipt-default.json")
+        self.assertEqual(line, "release-check: fail 6")
+        rc, line, draft = self.check(receipt="receipt-dry2.json", extra=("--dry-dir", str(self.run_dir / "dry2")))
+        self.assertEqual((rc, line), (0, "release-check: pass"), json.dumps(draft["conditions"], indent=1))
+        self.assertEqual(len(draft["ledger"]), 3)
 
     def test_record_refuses_a_failing_draft(self):
         with open(self.run_dir / "dry/public.json", "ab") as stream:

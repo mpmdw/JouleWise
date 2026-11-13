@@ -119,6 +119,10 @@ def cmd_b5_probe(args):
            "meaning": "per pack, the summarised keys with a finite Block 5 value: the predeclared count of "
                       "between-session rows with block5_included true (RL-134 item 2 term 2)"}
     write_new(args.out, (json.dumps(doc, indent=1, sort_keys=True) + "\n").encode())
+    if doc["total"] == 0:
+        # Opus kit review F3: a predeclared count of 0 is a hold (an empty or falsy Block 5 file gives 0).
+        print("b5-probe: hold total=0")
+        return 5
     print("b5-probe total=" + str(doc["total"]) + " " + " ".join(p + "=" + str(n) for p, n in doc["by_pack"].items()))
     return 0
 
@@ -170,11 +174,14 @@ def cmd_check(args):
     for n in CITED:
         cond(n, n in cites, cited=cites.get(n), checked=False)
 
-    dry_record = load_json(run / "dry/record.json") if (run / "dry/record.json").is_file() else {}
-    gate_record = load_json(run / "gate/record.json") if (run / "gate/record.json").is_file() else {}
-    structure = load_json(run / "dry/structure.json") if (run / "dry/structure.json").is_file() else {}
-    public_path = Path(option(dry_record.get("argv"), "--public-out") or run / "dry/public.json")
-    restricted_path = Path(option(dry_record.get("argv"), "--restricted-out") or run / "dry/restricted.json")
+    # RL-139 fix 7: the passing attempts are named; a relaunch lives in a new directory.
+    gate_dir = Path(args.gate_dir) if args.gate_dir else run / "gate"
+    dry_dir = Path(args.dry_dir) if args.dry_dir else run / "dry"
+    optional = lambda path: load_json(path) if path.is_file() else {}
+    dry_record, gate_record = optional(dry_dir / "record.json"), optional(gate_dir / "record.json")
+    structure, gate_structure = optional(dry_dir / "structure.json"), optional(gate_dir / "structure.json")
+    public_path = Path(option(dry_record.get("argv"), "--public-out") or dry_dir / "public.json")
+    restricted_path = Path(option(dry_record.get("argv"), "--restricted-out") or dry_dir / "restricted.json")
     public = load_json(public_path) if public_path.is_file() else {}
     ledger = ledger_rows(run)
 
@@ -183,18 +190,36 @@ def cmd_check(args):
     ledgered = {row.get("record") for row in ledger}
     unledgered = [p.parent.name for p in records if str(p) not in ledgered and str(p.resolve()) not in ledgered]
     sessions = sorted(public.get("sessions", {}))
-    cond("3", dry_record.get("exit_code") == 0 and dry_record.get("status") == "complete"
+    gate_complete = gate_record.get("exit_code") == 0 and gate_record.get("status") == "complete"
+    cond("3", dry_record.get("exit_code") == 0 and dry_record.get("status") == "complete" and gate_complete
          and sessions == sorted(NINE) and not unledgered and bool(ledger),
-         exit_code=dry_record.get("exit_code"), sessions=len(sessions), unledgered_attempts=unledgered,
-         ledger_rows=len(ledger))
+         exit_code=dry_record.get("exit_code"), gate_exit_code=gate_record.get("exit_code"), sessions=len(sessions),
+         unledgered_attempts=unledgered, ledger_rows=len(ledger))
 
     # (4) and (5) from the structure probe's output on the same restricted bytes.
     classes = structure.get("option_c", {}).get("comparator", {}).get("classes", {})
     dirty = sorted(c for c, r in classes.items() if "pass" in r and (r.get("failed") != 0 or r.get("unmatched") != 0))
     probed_same = structure.get("digests", {}).get("restricted_file") == dry_record.get("outputs_sha256", {}).get("restricted")
+    # RL-139 fix 7: both probe outputs, each at its stage, with no check departing or not run, each bound to its
+    # own run's restricted digest.
+    probes = {}
+    for label, doc, record, stage in (("gate", gate_structure, gate_record, "gate_run"),
+                                      ("dry", structure, dry_record, "dry_run")):
+        rows = doc.get("checks", {})
+        probes[label] = {"stage_ok": doc.get("stage") == stage,
+                         "departs": sorted(k for k, v in rows.items() if v.get("result") == "departs"),
+                         "not_checked": sorted(k for k, v in rows.items() if v.get("result") == "not_checked"),
+                         "bound": bool(record.get("outputs_sha256", {}).get("restricted"))
+                         and doc.get("digests", {}).get("restricted_file") == record["outputs_sha256"]["restricted"]}
+    # Opus kit review F3: a predeclared or observed Block 5 count of 0 is a hold, not a pass.
+    b5row = structure.get("checks", {}).get("block5_included", {})
+    b5_counts = {"observed": b5row.get("observed"), "expected": b5row.get("expected")}
+    b5_ok = all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in b5_counts.values())
+    probes_ok = b5_ok and all(p["stage_ok"] and not p["departs"] and not p["not_checked"] and p["bound"] for p in probes.values())
     cond("4", structure.get("option_c", {}).get("pass") is True
-         and structure.get("identity", {}).get("comparison_stopped") is False and not dirty and probed_same,
-         classes_not_clean=dirty, probe_ran_on_these_bytes=probed_same)
+         and structure.get("identity", {}).get("comparison_stopped") is False and not dirty and probed_same
+         and probes_ok, classes_not_clean=dirty, probe_ran_on_these_bytes=probed_same, probes=probes,
+         block5_count=b5_counts)
     cond("5", structure.get("term7", {}).get("result") == "pass", term7=structure.get("term7", {}).get("result"))
 
     # (6) output digests.
@@ -359,6 +384,8 @@ def main(argv=None):
     c.add_argument("--cite", action="append", metavar="N=TEXT", help="conditions 1, 2, 9, 10, 11, as cited")
     c.add_argument("--kit", default=DEFAULT_KIT, help="the custody kit used for the second verify")
     c.add_argument("--root", default=DEFAULT_ROOT, help="the custody copy root")
+    c.add_argument("--gate-dir", help="the passing gate attempt's out dir (default RUN/gate)")
+    c.add_argument("--dry-dir", help="the passing dry-run attempt's out dir (default RUN/dry)")
     c.add_argument("--receipt-out", help="the second receipt (default RUN/verify-receipt-release.json; must be new)")
     c.add_argument("--tag", help="the pin tag, checked to resolve to the commit")
     r = sub.add_parser("record", help="render the step 12 record from a passing draft")

@@ -105,12 +105,17 @@ class ProbeCase(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
-    def run_probe(self, block, *, restricted=None, term7=True, extra=(), constants=None):
+    def run_probe(self, block, *, restricted=None, term7=True, extra=(), constants=None, stage="dry", omit=()):
         type(self).n += 1
         out = self.tmp / ("probe-" + str(self.n) + ".json")
         argv = ["--restricted", str(restricted or block["restricted"]), "--public", str(block["public"]),
                 "--r3-table", str(self.r3), "--inputs", str(block["inputs"]), "--loop-attempts",
                 str(block["attempts"]), "--out", str(out), *extra] + (["--term7"] if term7 else [])
+        if stage:
+            argv += ["--stage", stage]
+        for flag in omit:  # drop a flag and its value
+            i = argv.index(flag)
+            del argv[i:i + 2]
         patches = [mock.patch.object(probe, k, v) for k, v in (constants or {}).items()]
         for p in patches:
             p.start()
@@ -227,7 +232,7 @@ class DryRun(ProbeCase):
             "program_sha256": lambda d: d.update(program_sha256="0" * 64),
             "closed": lambda d: d.update(closed=False),
         }
-        stage = ("--block5-expected", str(self.expected5), "--stage", "dry")
+        stage = ("--block5-expected", str(self.expected5))
         for name, edit in cases.items():
             with self.subTest(check=name):
                 rc, lines, out, _ = self.dry(restricted=self.edited(self.block, edit), extra=stage)
@@ -265,8 +270,70 @@ class DryRun(ProbeCase):
         _, _, _, path = self.dry()
         with contextlib.redirect_stdout(io.StringIO()) as buffer:
             rc = probe.main(["--restricted", str(self.block["restricted"]), "--public", str(self.block["public"]),
-                             "--r3-table", str(self.r3), "--out", str(path)])
+                             "--r3-table", str(self.r3), "--stage", "gate", "--out", str(path)])
         self.assertEqual((rc, buffer.getvalue().strip()), (2, "probe: refused out_exists"))
+
+    def test_each_stage_requires_its_inputs(self):
+        """RL-139 fix 5: --stage is required; dry needs --inputs, --loop-attempts, --block5-expected; gate --inputs."""
+        for flag in ("--inputs", "--loop-attempts", "--block5-expected"):
+            with self.subTest(stage="dry", flag=flag):
+                rc, lines, out, path = self.dry(omit=(flag,))
+                self.assertEqual((rc, lines), (2, ["probe: refused dry_stage_requires " + flag]))
+                self.assertFalse(path.exists())
+        rc, lines, _, path = self.run_probe(self.block, stage="gate", omit=("--inputs",))
+        self.assertEqual((rc, lines), (2, ["probe: refused gate_stage_requires --inputs"]))
+        self.assertFalse(path.exists())
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            self.dry(stage=None)
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_a_check_that_did_not_run_is_named_and_is_not_a_pass(self):
+        """RL-139 fix 5: a not_checked row is named on stdout and exits 5."""
+        with mock.patch.object(probe, "hazard_checks", lambda c, x: c.skip("pstar_desk_removals", "test")):
+            rc, lines, out, _ = self.dry()
+        self.assertEqual(rc, 5)
+        self.assertEqual(lines[0], "probe: not_checked pstar_desk_removals")
+        self.assertNotIn("probe: ok", lines)
+
+    def test_an_unexpected_exception_prints_its_type_only_and_writes_nothing(self):
+        """RL-139 fix 6."""
+        def broken(restricted):
+            raise KeyError("12.5 replicated")
+        with mock.patch.object(probe, "extract", broken), contextlib.redirect_stderr(io.StringIO()) as err:
+            rc, lines, out, path = self.dry()
+        self.assertEqual((rc, lines, err.getvalue()), (7, ["probe: refused KeyError"], ""))
+        self.assertFalse(path.exists())
+
+
+class EmptyBlock5(ProbeCase):
+    """Opus kit review F3: a pinned Block 5 file that parses to `{}`. The pinned program exits 0 with
+    block5_input false while external_supplied.block5 is true; the dry stage departs and exits 5."""
+
+    def test_pinned_empty_block5_departs(self):
+        block = sealed_block(self.tmp / "empty-b5", NINE, block5={})
+        self.assertEqual(block["rc"], 0, block["err"])
+        expected = self.tmp / "b5-empty-expected.json"
+        expected.write_text(json.dumps({"total": 0, "by_pack": {"ALPHA": 0, "BETA": 0, "GAMMA": 0}}))
+        restricted = json.loads(block["restricted"].read_text())
+        science = sum(len(s["desk_hazards"]["records"]) for s in restricted["sessions"].values())
+        rc, lines, out, _ = self.run_probe(block, extra=("--block5-expected", str(expected)),
+                                           constants={**DRY_CONSTANTS, "SCIENCE_RUNS": science})
+        self.assertEqual(rc, 5)
+        self.assertEqual(out["checks"]["block5_supplied"]["result"], "ok")
+        self.assertEqual(out["checks"]["block5_input"]["result"], "departs")
+        self.assertEqual(out["checks"]["block5_included"]["result"], "departs")  # 0 of 0 is a hold
+        self.assertTrue(lines[0].startswith("probe: departs "), lines)
+
+    def test_block5_supplied_false_departs(self):
+        block = sealed_block(self.tmp / "b5-flag", NINE, block5=B5_STUB)
+        self.assertEqual(block["rc"], 0, block["err"])
+        expected = self.tmp / "b5-flag-expected.json"
+        expected.write_text(json.dumps({"total": 1, "by_pack": {"ALPHA": 0, "BETA": 0, "GAMMA": 1}}))
+        edited = self.edited(block, lambda d: d["inputs"]["external_supplied"].update(block5=False))
+        rc, _, out, _ = self.run_probe(block, restricted=edited, extra=("--block5-expected", str(expected)),
+                                       constants=DRY_CONSTANTS)
+        self.assertEqual(rc, 5)
+        self.assertEqual(out["checks"]["block5_supplied"]["result"], "departs")
 
 
 class GateRun(ProbeCase):
@@ -280,7 +347,7 @@ class GateRun(ProbeCase):
         assert cls.block["rc"] == 0, cls.block["err"]
 
     def test_gate_checks_and_accounting(self):
-        rc, lines, out, _ = self.run_probe(self.block, term7=False,
+        rc, lines, out, _ = self.run_probe(self.block, term7=False, stage="gate",
                                            constants={"GATE_SESSION": ("b6-alpha-r1", "ALPHA", 1)})
         self.assertEqual((rc, lines), (0, ["probe: ok"]), json.dumps(out["checks"]))
         self.assertEqual(out["stage"], "gate_run")
@@ -292,7 +359,7 @@ class GateRun(ProbeCase):
         self.assertTrue(out["accounting"]["run_closes"])
 
     def test_gate_departs_on_the_wrong_session(self):
-        rc, lines, out, _ = self.run_probe(self.block, term7=False)  # the literal is r1-alpha
+        rc, lines, out, _ = self.run_probe(self.block, term7=False, stage="gate")  # the literal is r1-alpha
         self.assertEqual(rc, 5)
         self.assertEqual(out["checks"]["public_one_session"]["result"], "departs")
 
@@ -304,7 +371,9 @@ class Conditional(ProbeCase):
 
     def check(self, block, formula_extra):
         self.assertEqual(block["rc"], 0, block["err"])
-        rc, lines, out, _ = self.run_probe(block, constants={"GATE_SESSION": ("b6-alpha-r1", "ALPHA", 1)})
+        expected = self.tmp / ("b5-none-" + str(self.n) + ".json")
+        expected.write_text(json.dumps({"total": 0, "by_pack": {"ALPHA": 0, "BETA": 0, "GAMMA": 0}}))
+        rc, lines, out, _ = self.run_probe(block, extra=("--block5-expected", str(expected)))
         self.assertEqual(out["term7"]["result"], "pass", json.dumps(out["names"]["term7_offending"]))
         self.assertEqual(lines[-1], "term7: pass")
         row = out["accounting"]["sessions"][GAMMA]

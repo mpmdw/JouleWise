@@ -105,7 +105,13 @@ SYNTHETIC_REFUSAL = "JW_B5_SYNTHETIC_ONLY=1 and the archive carries no synthetic
 # The launcher cannot tell the two apart from the refusal line, so it prints both and the sampler names the session.
 AMBIGUOUS = {"TypeError": "C/E"}
 
-REFUSAL_LINE = re.compile(r"^refused: [A-Za-z0-9_ =.]+$")
+# RL-139 fix 1: a refusal code is relayed only as one identifier token outside OUTCOME_WORDS, or as the exact
+# synthetic-only sentence; anything else prints `unparsed`.
+REFUSAL_CODE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# RC-B6-1 `OUTCOME_WORDS`, copied.
+OUTCOME_WORDS = frozenset({"direction_supported", "unresolved", "not_resolvable", "not_estimable",
+                           "replicated", "not replicated", "not_replicated", "positive", "negative",
+                           "agree", "L1", "L2"})
 STDOUT_LINE = re.compile(r"^recompute sessions=\d+ flags=\d+ comparison_stopped=(true|false) "
                          r"restricted_sha256=[0-9a-f]{64}$")
 FRAME_LINE = re.compile(r'^\s*File "([^"\n]+)", line (\d+), in ([A-Za-z0-9_<>.]+)\s*$')
@@ -162,6 +168,13 @@ def preflight(args, program_argv):
         raise LaunchRefusal("synthetic_only_set")
     if not program_argv:
         raise LaunchRefusal("program_argv_missing")
+    out_dir = Path(os.path.abspath(args.out_dir))
+    # RL-139 fix 4: the ledger must never be a file the program reads (the loop's attempts.jsonl shares its name).
+    ledger = os.path.realpath(out_dir.parent / "attempts.jsonl")
+    for item in program_argv:
+        for value in (item, item.split("=", 1)[1] if item.startswith("--") and "=" in item else None):
+            if value and not value.startswith("-") and os.path.realpath(value) == ledger:
+                raise LaunchRefusal("ledger_is_program_input")
     if git(checkout, "rev-parse", "HEAD").strip() != args.expect_commit:
         raise LaunchRefusal("checkout_commit_mismatch")
     if git(checkout, "status", "--porcelain").strip():
@@ -169,7 +182,6 @@ def preflight(args, program_argv):
     before = closure_hashes(checkout)
     if before != PIN_TABLE:
         raise LaunchRefusal("closure_hash_mismatch")
-    out_dir = Path(os.path.abspath(args.out_dir))
     if os.path.lexists(out_dir):
         raise LaunchRefusal("out_dir_exists")
     parent = out_dir.parent
@@ -220,22 +232,33 @@ def traceback_summary(path):
     final = next((line for line in lines[last + 1:] if line.strip() and not line.startswith((" ", "\t"))
                   and not line.startswith("Traceback (")), "")
     kind = final.split(":", 1)[0].strip()
-    if not TYPE_NAME.match(kind):
+    # RL-139 fix 1: a type is printed only when at least one frame was parsed.
+    if not frames or not TYPE_NAME.match(kind) or kind in OUTCOME_WORDS:
         kind = "unparsed"
     return frames, kind
 
 
-def traceback_class(frames, kind):
-    """RL-134 item 11: class C for the hazard-code AttributeError signature, D for a dead pool worker, else E."""
-    last = frames[-1] if frames else None
-    if kind == "AttributeError" and last and last["file"].endswith("b6_analysis_hazards.py") and last["line"] == 58:
+def traceback_class(frames, kind, workers=1):
+    """RL-134 item 11 as RL-139 fixes 2 and 3 read it: C for an AttributeError with any frame at
+    b6_analysis_hazards.py:58 (it is raised at :12, inside the call made there); D for a RuntimeError only in a
+    pool run (--workers above 1); E for everything else."""
+    if kind == "AttributeError" and any(f["file"].endswith("b6_analysis_hazards.py") and f["line"] == 58
+                                        for f in frames):
         return "C"
-    if kind == "RuntimeError":
+    if kind == "RuntimeError" and workers > 1:
         return "D"
     return "E"
 
 
-def outcome(exit_code, out_dir):
+def workers_of(program_argv):
+    values = option_values(program_argv or [], "--workers")
+    try:
+        return int(values[-1]) if values else 1
+    except ValueError:
+        return 1
+
+
+def outcome(exit_code, out_dir, workers=1):
     """The printed lines and the record's status, class and code, from the program's exit and its two files."""
     stdout, stderr = out_dir / "stdout", out_dir / "stderr"
     if exit_code == STOPPED:
@@ -253,14 +276,14 @@ def outcome(exit_code, out_dir):
         return ["hold: comparison_stopped"], {"status": "hold", "class": None, "code": "comparison_stopped"}
     if exit_code == 4:
         line = last_line(stderr) or ""
-        if REFUSAL_LINE.match(line):
-            code = line[len("refused: "):]
+        code = line[len("refused: "):] if line.startswith("refused: ") else None
+        if code is not None and (code == SYNTHETIC_REFUSAL or (REFUSAL_CODE.match(code) and code not in OUTCOME_WORDS)):
             cls = classify(code)
             return ["refused: " + code + " class=" + cls], {"status": "refused", "class": cls, "code": code}
         return ["refused: unparsed class=E"], {"status": "refused", "class": "E", "code": "unparsed"}
     if exit_code == 1:
         frames, kind = traceback_summary(stderr)
-        cls = traceback_class(frames, kind)
+        cls = traceback_class(frames, kind, workers)
         lines = ["refused: traceback class=" + cls]
         lines += ['  File "' + f["file"] + '", line ' + str(f["line"]) + ", in " + f["function"] for f in frames]
         lines.append(kind)
@@ -390,7 +413,7 @@ def record_refusal(args, program_argv, reason):
     record = {"schema": SCHEMA, "stem": args.stem, "status": "launch_refused", "code": reason, "class": None,
               "start_time_ns": now, "argv_sha256": argv_sha256(program_argv), "exit_code": REFUSE_LAUNCH,
               "wall_s": 0.0, "outputs_sha256": {}, "record_path": None}
-    if out_dir.parent.is_dir():
+    if out_dir.parent.is_dir() and reason != "ledger_is_program_input":
         append_line(out_dir.parent / "attempts.jsonl", ledger_row(record))
     print("launch refused: " + reason)
     return REFUSE_LAUNCH
@@ -449,7 +472,7 @@ def launch(args, program_argv, before):
     else:
         exit_code = None
     shutil.rmtree(tmp, ignore_errors=True)
-    lines, result = outcome(exit_code, out_dir)
+    lines, result = outcome(exit_code, out_dir, workers_of(program_argv))
     outputs = {}
     for label, path in (("stdout", out_dir / "stdout"), ("stderr", out_dir / "stderr")):
         if path.is_file():

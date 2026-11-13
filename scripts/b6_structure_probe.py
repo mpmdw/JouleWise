@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Block 6 structure probe and the scripted term 7 check (RL-134 items 4, 8, 14; runbook build B-3).
 
-    b6_structure_probe.py --restricted R --public P --r3-table T [--inputs DOC] [--loop-attempts A]
-                          [--block5-expected B5PROBE] [--stage gate|dry] [--term7] --out O
+    b6_structure_probe.py --restricted R --public P --r3-table T --stage gate|dry --inputs DOC
+                          [--loop-attempts A] [--block5-expected B5PROBE] [--term7] --out O
+
+--stage is required. The gate stage requires --inputs; the dry stage requires --inputs, --loop-attempts and
+--block5-expected (RL-139 fix 5).
 
 Before the release this is the one program besides the pinned program that opens the restricted output. It reads
 a whitelist of paths only (identity, `inputs`, `block.option_c`'s pass, families, failure names, first-program-only
@@ -20,7 +23,9 @@ token, no outcome word). Key and failure names go under `names`, checked to hold
 values go under `digests`, checked to be 64 hex digits. If the guard fails, nothing is written.
 
 stdout: `probe: ok` or `probe: departs <check,...>`, and with --term7 `term7: pass` or `term7: stop <class,...>`.
-Exit 0 when everything holds; 5 on a departure or a term 7 stop; 6 when the guard refuses; 2 on usage.
+A check that could not run is named on stdout (`probe: not_checked <check,...>`) and exits 5.
+Exit 0 when everything holds; 5 on a departure, a not_checked row or a term 7 stop; 6 when the guard refuses;
+7 on any other exception (`probe: refused <TypeName>`, nothing written, no traceback); 2 on usage.
 """
 import argparse
 import hashlib
@@ -364,6 +369,9 @@ class Checks:
     def departs(self):
         return [k for k, v in self.rows.items() if v["result"] == "departs"]
 
+    def not_checked(self):
+        return [k for k, v in self.rows.items() if v["result"] == "not_checked"]
+
 
 def identity_checks(c, x, digests, closed, inputs_sha256):
     ident = x["identity"]
@@ -381,7 +389,11 @@ def identity_checks(c, x, digests, closed, inputs_sha256):
     c.add("closed", ident["closed"] is bool(closed), observed=ident["closed"])
     c.add("comparison_stopped", ident["comparison_stopped"] is False, observed=ident["comparison_stopped"])
     if closed:
+        # Opus kit review F3: both must hold. The pinned program exits 0 with block5_input false when the pinned
+        # Block 5 file parses to an empty value ({}, [], null, 0, "", false) while external_supplied.block5 is true.
         c.add("block5_input", ident["block5_input"] is True, observed=ident["block5_input"])
+        c.add("block5_supplied", (ident["inputs"]["external_supplied"] or {}).get("block5") is True,
+              observed=(ident["inputs"]["external_supplied"] or {}).get("block5"))
 
 
 def gate_checks(c, x, closed):
@@ -491,7 +503,10 @@ def block5_checks(c, x, expected):
     if expected is None:
         c.skip("block5_included", "no --block5-expected given")
         return
-    c.add("block5_included", observed == expected["total"], observed=observed, expected=expected["total"],
+    # Opus kit review F3: a count of 0 (predeclared or observed) is a hold, never a pass; it is what an empty or
+    # falsy pinned Block 5 file produces.
+    c.add("block5_included", observed == expected["total"] and observed > 0, observed=observed,
+          expected=expected["total"],
           by_pack=x["block5_included"], expected_by_pack=expected["by_pack"])
 
 
@@ -680,7 +695,7 @@ def probe(args):
     if args.block5_expected:
         doc = json.loads(Path(args.block5_expected).read_bytes())
         block5_expected = {"total": doc["total"], "by_pack": doc["by_pack"]}
-    closed = args.stage == "dry" if args.stage else x["identity"]["closed"] is True
+    closed = args.stage == "dry"
     inputs_sha = sha256_file(args.inputs) if args.inputs else None
     c = Checks()
     identity_checks(c, x, x["digests"], closed, inputs_sha)
@@ -712,9 +727,14 @@ def probe(args):
     fd = os.open(args.out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as stream:
         stream.write(data)
-    departs = c.departs()
-    print("probe: ok" if not departs else "probe: departs " + ",".join(departs))
-    status = 0 if not departs else 5
+    departs, unchecked = c.departs(), c.not_checked()
+    if departs:
+        print("probe: departs " + ",".join(departs))
+    if unchecked:  # RL-139 fix 5: a check that did not run is named and is never a pass
+        print("probe: not_checked " + ",".join(unchecked))
+    if not departs and not unchecked:
+        print("probe: ok")
+    status = 0 if not departs and not unchecked else 5
     if args.term7:
         t7 = out["term7"]
         print("term7: pass" if t7["result"] == "pass" else "term7: stop " + ",".join(t7["stop_classes"]))
@@ -732,13 +752,19 @@ def main(argv=None):
     parser.add_argument("--loop-attempts", help="the loop's attempts.jsonl (session id, round, status words)")
     parser.add_argument("--block5-expected", help="b6_release_record.py b5-probe output (the predeclared count)")
     parser.add_argument("--registry", default=str(REGISTRY), help="production_comparison_keys.json (digest-checked)")
-    parser.add_argument("--stage", choices=("gate", "dry"),
-                        help="which predeclared values apply (step 7 or step 9); default: dry if the output is closed")
+    parser.add_argument("--stage", choices=("gate", "dry"), required=True,
+                        help="which predeclared values apply: gate (step 7) or dry (step 9)")
     parser.add_argument("--term7", action="store_true", help="run the RL-113 term 7 checklist")
     parser.add_argument("--out", required=True, help="new structure file (refused if it exists)")
     args = parser.parse_args(argv)
     if os.path.lexists(args.out):
         print("probe: refused out_exists")
+        return 2
+    # RL-139 fix 5: each stage's inputs are required, so no predeclared check is silently skipped.
+    needed = {"gate": ("inputs",), "dry": ("inputs", "loop_attempts", "block5_expected")}[args.stage]
+    missing = [n for n in needed if not getattr(args, n)]
+    if missing:
+        print("probe: refused " + args.stage + "_stage_requires " + ",".join("--" + n.replace("_", "-") for n in missing))
         return 2
     try:
         return probe(args)
@@ -748,6 +774,9 @@ def main(argv=None):
     except Usage as exc:
         print("probe: refused " + str(exc))
         return 2
+    except Exception as exc:  # RL-139 fix 6: never a traceback from the process holding the restricted output
+        print("probe: refused " + type(exc).__name__)
+        return 7
 
 
 if __name__ == "__main__":
