@@ -1255,21 +1255,36 @@ class ReducedSetTests(unittest.TestCase):
         self.assertIs(receipt["full_volume_claim"], False)
 
 
+# Predeclared 2026-11-12 before the ALPHA/GAMMA full sessions, independent of
+# the verifier's own table: registered roster/primary counts from the pinned
+# plan_tree stage graphs (campaign_collection expected_count sums) and the
+# production key-registry label. BETA's values are unchanged from root 23.
+FULL_PACK_EXPECTATIONS = {"alpha": (125, "ALPHA"), "beta": (125, "BETA"), "gamma": (107, "GAMMA")}
+FULL_PACK_CAMPAIGNS = {"alpha": "d117_floor_qwen3-1p7b_v5", "beta": "d117_floor_qwen3-8b_v5",
+                       "gamma": "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"}
+
+
 @unittest.skipUnless(os.environ.get("R12_FULL_SESSION"), "explicit completed full-volume profile fixture required")
 class FullProductionSessionTests(unittest.TestCase):
-    """Declared before the first courier-profile production-size collection."""
+    """Declared before the first courier-profile production-size collection (BETA)
+    and, for ALPHA and GAMMA, before their MBP collections on 2026-11-12."""
 
     def facts(self):
         from b6_r12_verify import safe_root
         root = safe_root(Path(os.environ["R12_FULL_SESSION"]))
-        return json.loads((root / "full-session-observations.json").read_bytes())
+        value = json.loads((root / "full-session-observations.json").read_bytes())
+        pack = value.get("pack", "beta")  # root-23 observations predate the pack field
+        self.assertIn(pack, FULL_PACK_EXPECTATIONS)
+        self.assertEqual(value["session_id"], "r1-" + pack)
+        return pack, value
 
     def test_registered_production_volume(self):
-        """Predict full-BETA-courier: 125 original roster members and executed primary streams, each >=334 s at 10 Hz with 16 CPU records/frame; 50 Hz meter with no drops/gaps/duplicates and registered monitor cadences/errors 0; original courier records file transport (RL-48 item 5; RL-98 term 1)."""
-        value = self.facts()
-        self.assertEqual(value["roster_members"], 125)
+        """Predict full-BETA-courier: 125 original roster members and executed primary streams, each >=334 s at 10 Hz with 16 CPU records/frame; 50 Hz meter with no drops/gaps/duplicates and registered monitor cadences/errors 0; original courier records file transport (RL-48 item 5; RL-98 term 1). Predict full-ALPHA-courier and full-GAMMA-courier identically with 125 and 107 members/primary streams."""
+        pack, value = self.facts()
+        members = FULL_PACK_EXPECTATIONS[pack][0]
+        self.assertEqual(value["roster_members"], members)
         volume = value["volume"]
-        self.assertEqual(len(volume["primary_plists"]), 125)
+        self.assertEqual(len(volume["primary_plists"]), members)
         for primary in volume["primary_plists"]:
             self.assertGreaterEqual(primary["duration_s"], 334, primary["path"])
             self.assertEqual(primary["cadence_ns"], [100_000_000])
@@ -1299,16 +1314,67 @@ class FullProductionSessionTests(unittest.TestCase):
             self.assertIs(courier["mail_sent"], False)
 
     def test_production_reader_at_full_size(self):
-        """Predict full-BETA-reader: actual option (c) exits 0/comparator agrees on the full original desk archive and emits every published production BETA quantity key; record native session/primary/meter ratios, reader wall and RSS separately (RL-98 terms 1 and 2)."""
-        value = self.facts()
+        """Predict full-BETA-reader: actual option (c) exits 0/comparator agrees on the full original desk archive and emits every published production BETA quantity key; record native session/primary/meter ratios, reader wall and RSS separately (RL-98 terms 1 and 2). Predict full-ALPHA-reader and full-GAMMA-reader identically against the published ALPHA (122) and GAMMA (93) session keys."""
+        pack, value = self.facts()
         self.assertEqual(value["production_exit"], 0)
         self.assertTrue(value["comparator_agrees"])
         registry = json.loads((REPO / "configs/b6/recompute/production_comparison_keys.json").read_bytes())
-        self.assertEqual(value["quantity_keys"], registry["session_quantity_keys"]["BETA"])
+        self.assertEqual(value["quantity_keys"], registry["session_quantity_keys"][FULL_PACK_EXPECTATIONS[pack][1]])
         native = value["volume"]["native_generation"]
         self.assertGreater(native["wall_s"], 0)
         self.assertTrue(native["includes_validation_and_compression"])
         self.assertFalse(native["injected_clock"])
+
+
+class FullPackExpectationTests(unittest.TestCase):
+    """Control-only tests for the ALPHA/GAMMA full sessions; not real-chain evidence."""
+
+    def test_expectations_match_pinned_plan_trees_and_registry(self):
+        """Predict: 125/125/107 equal the pinned campaign_collection counts; the verifier's table agrees; registry has 122/122/93 session keys."""
+        from b6_r12_full_verify import PACK_EXPECTATIONS, session_id
+        registry = json.loads((REPO / "configs/b6/recompute/production_comparison_keys.json").read_bytes())
+        for pack, (members, label) in FULL_PACK_EXPECTATIONS.items():
+            tree = json.loads(subprocess.check_output(["git", "show", f"{PIN}:configs/campaigns/{FULL_PACK_CAMPAIGNS[pack]}/plan_tree.json"], cwd=REPO))
+            counted = sum(row["expected_count"] for row in tree["stage_graph"] if row["kind"] == "campaign_collection")
+            self.assertEqual(counted, members, pack)
+            self.assertEqual(PACK_EXPECTATIONS[pack], {"members": members, "registry_pack": label})
+            self.assertEqual(session_id(pack), "r1-" + pack)
+        self.assertEqual({label: len(registry["session_quantity_keys"][label]) for _, label in FULL_PACK_EXPECTATIONS.values()},
+                         {"ALPHA": 122, "BETA": 122, "GAMMA": 93})
+
+    def test_profile_gate_admits_only_new_plain_full_pack_roots(self):
+        """Predict: fresh ALPHA/BETA/GAMMA plain/full reaches the unchanged single-pack scheduler with full volume; other scenarios/volumes, unknown packs and existing roots refuse before any write; BETA's declaration text is byte-identical to root 23's."""
+        import b6_r12_profile_session as profile
+        from unittest.mock import patch
+        self.assertEqual(profile.prediction("beta"), "original BETA roster/streams at full volume; completed production reader exits 0/comparator agrees; no closed-nine claim")
+        self.assertEqual(profile.smoke_text("beta"), "original supplier's reduced 65 s / one CPU; ordinary full BETA r1 remains 335 s / 16 CPUs")
+        with tempfile.TemporaryDirectory(prefix="r12-profile-gate-") as directory:
+            parent = Path(directory).resolve()
+            for pack in ("alpha", "beta", "gamma"):
+                calls = []
+                with patch.object(profile.single, "run", lambda *a, **k: calls.append((a, k)) or 0):
+                    self.assertEqual(profile.run(parent / ("new-" + pack), parent / "prior", pack, "plain", "full"), 0)
+                self.assertEqual(calls[0][0][2:], (pack, "plain"))
+                self.assertEqual(calls[0][1], {"declared_volume": "full"})
+                self.assertIn(pack.upper(), profile.prediction(pack))
+                self.assertFalse((parent / ("new-" + pack)).exists())
+            existing = parent / "existing"
+            existing.mkdir()
+            for args in ((parent / "a", "alpha", "anchor", "full"), (parent / "b", "gamma", "plain", "reduced"),
+                         (parent / "c", "delta", "plain", "full"), (existing, "alpha", "plain", "full")):
+                with self.subTest(args=args), self.assertRaisesRegex(ValueError, "requires new root"):
+                    profile.run(args[0], parent / "prior", *args[1:])
+            self.assertEqual(sorted(p.name for p in parent.iterdir()), ["existing"])
+
+    def test_supervisor_generation_only_requires_exclusive_mode(self):
+        """Predict: generation-only and a reader stem are exclusive and refuse before any journal; a reader stem alone keeps the original behaviour."""
+        from b6_r12_full_supervise import run
+        with tempfile.TemporaryDirectory(prefix="r12-full-supervisor-mode-") as directory:
+            root = Path(directory).resolve()
+            for stem, only in (("reader", True), (None, False)):
+                with self.subTest(stem=stem), self.assertRaisesRegex(ValueError, "exactly one"):
+                    run(root, stem, only)
+            self.assertEqual(list(root.iterdir()), [])
 
 
 @unittest.skipUnless(os.environ.get("R12_SINGLE_PACK_SET"), "explicit additional single-pack fixture required")

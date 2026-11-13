@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read a completed full-volume courier-profile archive at production size.
+"""Read a completed full-volume courier-profile archive (any pack) at production size.
 
 No session is generated or changed. All analysis/observation receipts live
 outside original session/archive trees. An interrupted generator is refused.
@@ -20,6 +20,16 @@ from b6_r12_verify import (REPO, child, finalize_manifest, run_option_c,
                           safe_root, session_facts, sha, volume_facts)
 
 LOADED_SHA = sha(Path(__file__))
+# Per-pack production expectations, predeclared before collection: registered
+# roster/primary counts from the pinned plan_tree stage graph and the published
+# production key registry label. The full single-pack session is round 1.
+PACK_EXPECTATIONS = {"alpha": {"members": 125, "registry_pack": "ALPHA"},
+                     "beta": {"members": 125, "registry_pack": "BETA"},
+                     "gamma": {"members": 107, "registry_pack": "GAMMA"}}
+
+
+def session_id(pack):
+    return "r1-" + pack
 
 
 def verify(outer, stem):
@@ -38,12 +48,14 @@ def verify(outer, stem):
             raise ValueError("one completed original ordinary desk/attempt required")
         profile = json.loads((outer / "profile-inputs.json").read_bytes())
         manifest = json.loads((root / "manifest.json").read_bytes())
-        if ((profile["pack"], profile["scenario"], profile["volume"]) != ("beta", "plain", "full")
+        pack = profile["pack"]
+        if (pack not in PACK_EXPECTATIONS or (profile["scenario"], profile["volume"]) != ("plain", "full")
                 or not manifest["profile_session"]["full_volume_claim"]
                 or not manifest["single_pack"]["full_volume_claim"]
                 or not manifest.get("courier_profile")
                 or (root / "generator-parent-exit.txt").read_text().strip() != "0"):
-            raise ValueError("completed pinned full BETA courier-profile parent required")
+            raise ValueError("completed pinned full ALPHA/BETA/GAMMA courier-profile parent required")
+        sid = session_id(pack)
         view = outer / stem
         view.mkdir(exist_ok=False)
         snapshots = {}
@@ -57,17 +69,18 @@ def verify(outer, stem):
             "verifier_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
             "source_root": str(root), "source_generator_commit": manifest["generator_commit"],
             "literal_loop_inputs": snapshots, "boundary": boundary,
-            "prediction": "the two predeclared FullProductionSessionTests pass at actual full BETA size",
+            "prediction": "the two predeclared FullProductionSessionTests pass at actual full " + pack.upper() + " size",
+            "pack": pack, "session_id": sid, "expectations": PACK_EXPECTATIONS[pack],
             "closed_nine_claim": False}
         (view / "declaration.json").write_text(json.dumps(declaration, indent=2, sort_keys=True) + "\n")
         finalize_manifest(root)
-        run_option_c(root, 1, stem=stem, session_id="r1-beta")
+        run_option_c(root, 1, stem=stem, session_id=sid)
         receipt = agree(root, stem)
         pins = json.loads((root / (stem + "-inputs.json")).read_bytes())["external"]
         if any(pins[key] != data["sha256"] for key, data in snapshots.items()):
             raise ValueError("program loop pins differ from literal snapshots")
-        facts = session_facts(root, "r1-beta")
-        volume = volume_facts(root, "r1-beta")
+        facts = session_facts(root, sid)
+        volume = volume_facts(root, sid)
         native = volume["native_generation"]
         meter_seconds = sum(item["span_s"] for item in volume["meter"])
         if not native or native["primary_stream_duration_s"] <= 0 or meter_seconds <= 0:
@@ -76,7 +89,7 @@ def verify(outer, stem):
             "primary_seconds": native["primary_stream_duration_s"], "sum_meter_span_s": meter_seconds,
             "native_over_primary": native["wall_s"] / native["primary_stream_duration_s"],
             "native_over_meter_span": native["wall_s"] / meter_seconds}
-        courier = root / "sessions/r1-beta/courier-program"
+        courier = root / "sessions" / sid / "courier-program"
         courier_records = []
         for path in sorted(courier.glob("*.json")):
             value = json.loads(path.read_bytes())
@@ -84,7 +97,8 @@ def verify(outer, stem):
             courier_records.append({**value, "record_sha256": sha(path), "stdin_sha256": sha(stdin)})
         numbers = json.loads((root / (stem + "-numbers.json")).read_bytes())
         facts.update(volume=volume, native_time_ratios=ratios, courier_records=courier_records,
-                     quantity_keys=sorted(numbers["sessions"]["r1-beta"]["quantities"]),
+                     quantity_keys=sorted(numbers["sessions"][sid]["quantities"]),
+                     pack=pack, expectations=PACK_EXPECTATIONS[pack],
                      production_exit=receipt["exit_code"],
                      comparator_agrees=receipt["option_c"]["comparator"]["pass"])
         observations = view / "full-session-observations.json"
