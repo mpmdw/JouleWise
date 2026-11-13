@@ -1865,7 +1865,6 @@ These are the registered fixed sentences, printed from the literals the disclosu
 - *Leave-one-quad-out magnitude* (not triggered in the primary block): "Leaving out quad k moves the estimate by X J, more than a quarter of the floor; the direction, the floor status and the multiplicity decision are unchanged."
 - *Order*: "Every quad ran 1.7B, 8B, 8B, 1.7B in that fixed order; the order was not randomized, and the p-value assumes the quad differences are independent."
 - *Floor transfer assumption*: "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale."
-
 - *Floor transfer limit*: "The historical corpus records bounds, not realized member-level boundary errors."
 - *Separate windows*: "The 1.7B and 8B reported cells were collected in separate windows in a fixed order; their difference is not a comparison (claims ladder: forced order stays below L2)."
 - *Short prefill*: "The 42-token prefill of the decode workload is shorter than one power record and could not be resolved; as registered, no p42 value is reported." [p42: the 42-token prefill of the decode workload]
