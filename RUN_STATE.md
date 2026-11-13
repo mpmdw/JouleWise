@@ -1042,6 +1042,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+299. **Laptop lead (interactive, Opus 5.5, session def7f153), 2026-11-12 16:08 PST (`date`): the Air is moved at about 16:50 and may move again until later tonight; from then it stays put for about four days. Item 296's pointer still governs the night. Nothing here is for the magistrate tonight. Owed-items list for the next lead: `/Volumes/JW-EXT/scratch/s14-pin-request-notes.md`.**
+- **R12** (`analysis/2026-11-11-b6-r12` @ `04eacce2a`): the courier regression and fresh source profile are done. **RL-98 term 1 (reader test at production size) PASSED:** meter 352,036,713 B and plist 16,719,849 B round-trip byte-equal through desk compression and `read_bytes`; wall 3.153 s; peak RSS 505,659,392 B. The first full-volume BETA session (root `r12-r3-full-beta-22`) was STOPPED by the lead at 15:53 because the Air moves; it is recorded as interrupted and ineligible (not a chain fault). **Next:** once the Air is settled tonight, start the fresh full-volume session in a new root with the exact command in the R12 report's hand-off section, then the remaining RL-48/49 items.
+- **Fable 5.2 (Ed: about 30 % more Fable).** Rulings RL-105..110 are on the audit branch at `fdada87d3`.
+  - §12.2 items closed (RL-105..107).
+  - W-4/W-6 adoption may ride a W1→C1 re-registration; shadow work is allowed now (RL-108).
+  - Track W status table (RL-109).
+  - Conditional labels for neg8/contrast (RL-110).
+  - **Correction to item 295:** Wave 3 does not need rulings W-1, W-2 and W-7. Only a W-4/W-6 adoption request is open (RL-109).
+  - Applied: RL-110 in the R3 generator (`45fc7f9df`); RL-106 in DEVIATIONS on presign (`5a6b15831`); PLAN §12.2 closed (`8f91ab3a8`).
+- **Block 6 tools, all with cold reviews applied:**
+  - **R3 generator:** Fable ADMIT-WITH-FIXES. The tests now pin the ruled labels (`ff89bc672`).
+  - **Custody kit:** two Fable rounds, all applied (`ae7eb01b3`, 110 tests). The draft item is now first-try executable; it was rehearsed on the Air, but MBP→Air is untested. Gates: the item is posted after the night; M1/M2 hold before the lead runs copy-mode `verify` on the real copy.
+- **PRs:**
+  - **Merged:** #749 (`583a5d929`; Ed runs the installer in its body when convenient) and #746 (`deecd01d5`).
+  - **On green:** #745 (Fable fixes verbatim) and #747 (Fable ADMIT).
+  - **Presign line:** #742, #743 and #744, all Fable-reviewed with fixes applied. #750 (`test_agent_identity` on Ubuntu 26.04) awaits its Fable quick review. Merge each when no failing id is new beyond the base. Together they cover every base red at 99622e96c.
+  - **Draft #751:** shadow replay (RL-108). Fable round 1 is applied; round 2 is pending.
+- **Shadow replay first results (15 ALIGN nights).** Writer findings were routed to the research lead and ruled known: A-01 and A-05, fixed on the W1 line. Two pre-signing checks are in the owed list.
+
 298. **Laptop lead (interactive, Opus 5.5, session def7f153), 2026-11-12 15:19 PST (`date`): the Air is BACK ONLINE (SSD mounted). Item 296's pointer still governs the night; nothing here is for the magistrate tonight. Item 295's item C (custody copy) can now run when the night closes, once the lead posts it.**
 - **R12:** the reviewed F1 fix is fast-forwarded into the R12 line (`analysis/2026-11-11-b6-r12` @ `eed511fa8`). The R12 Sol seat is resumed (resume 4, thread `01a1c9f2…`, xhigh, no priority tier). RL-98's 14:10 no-generation cutoff applied only to today's 15:00 shutdown and is lifted; the seat works the report's "next exact step" list: the courier regression and new source profile, then one full-volume real-chain session, then the production-size reader test. It also owns the pre-existing `test_key_contract_matches_published_file` red (test-side fix only, or report).
 - **PR #749:** the two CI reds are fixed: the README `launchctl` prose sites are allowlisted, and the PR body now has the Impact statement and gate ledger (cold review copied to `docs/run_reports/2026-11-12-pr749-cold-review.md`). Merge when CI is green; Ed then runs the installer.
