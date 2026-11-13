@@ -495,7 +495,8 @@ class Session:
                 "drift_s": drift, "s_bracket_s": S_BRACKET_S, "source": source}
 
     def reference(self, run_id, which):
-        m = self.member(run_id, which, compared=True)
+        # RL-121: an excluded screen run is still read (census and flags unchanged) but is not a compared run.
+        m = self.member(run_id, which, compared=run_id not in self.excluded)
         clean = (run_id not in self.excluded and m.usable and m.model == REFERENCE_MODEL
                  and finite(m.energies.get("request")))
         return m if clean else None
@@ -1319,8 +1320,28 @@ def recompute_block(archives, attempts_path, flags, b5_output=None, closed=False
     projected["block"]["quantities"] = {k: primary["block"]["quantities"].get(k)
                                         for k in expected["block"]["quantities"]}
     comparator, public_comparator = compare(projected, expected)
+    # RL-113: keys only the first program prints are reported, never compared, counted or refused on.
+    second = table_rows(expected)
+    first_only = sorted(({"class": "run_phase_energy" if kind == "run_phase_energy" else quantity_class(name),
+                          "session": sid, "key": name}
+                         for kind, sid, name in table_rows(primary) if (kind, sid, name) not in second),
+                        key=lambda row: (row["class"], row["session"], row["key"]))
+    checks["first_program_only"] = first_only
+    by_class = {}
+    for row in first_only:
+        by_class[row["class"]] = by_class.get(row["class"], 0) + 1
+    classes = public_comparator["classes"]
+    for cls in by_class:
+        # A class with no compared row gets counts only; compare() never judged it, so it carries no "pass".
+        classes.setdefault(cls, {"compared": 0, "passed": 0, "failed": 0, "unmatched": 0})
+    for cls, row in classes.items():
+        row["first_program_only"] = by_class.get(cls, 0)
+    public_comparator["classes"] = dict(sorted(classes.items()))
     checks["comparator"] = public_comparator
     checks["pass"] = checks["pass"] and comparator["pass"]
+    # Cold review finding 5: name each failed or unmatched comparator row (class, session, key; no value).
+    checks["failures"] += ["comparator:" + row["class"] + ":" + row["session"] + ":" + row["key"]
+                           for row in comparator["rows"] if not row["pass"]]
     for s in sessions.values():
         if not checks["pass"]:
             s.reader.flag("option_c_disagrees", "block", checks["failures"])
@@ -1686,12 +1707,21 @@ def main(argv=None) -> int:
             if document.get("host") != "Air" or document.get("l9_audit") not in ("not_run", "completed"):
                 raise InputRefusal("run_host_or_audit_invalid")
             pins = document["sessions"]
-            for field in ("loop_attempts", "loop_state", "block5"):
+            # RL-115: a pinned external input must be supplied, and a supplied one must be pinned,
+            # before any session is read. Only the arguments this command has are considered.
+            external = document.get("external", {})
+            fields = [f for f in ("loop_attempts", "loop_state", "block5") if hasattr(args, f)]
+            supplied = {f: bool(getattr(args, f, None)) for f in ("loop_attempts", "loop_state", "block5")}
+            if any(f in external and not supplied[f] for f in fields):
+                raise InputRefusal("external_input_missing")
+            if any(supplied[f] and f not in external for f in fields):
+                raise InputRefusal("external_input_unpinned")
+            for field in fields:
                 path = getattr(args, field, None)
-                if path and hashlib.sha256(Path(path).read_bytes()).hexdigest() != document["external"][field]:
+                if path and hashlib.sha256(Path(path).read_bytes()).hexdigest() != external[field]:
                     raise InputRefusal("external_input_digest_mismatch")
             input_record = {"host": "Air", "l9_audit": document["l9_audit"],
-                            "run_inputs_sha256": args.inputs_sha256}
+                            "run_inputs_sha256": args.inputs_sha256, "external_supplied": supplied}
             for name, sha in {
                 "configs/b6/registration/acceptance.json": "ea130c87ece4e8b557a6357f1f75df045b5a0a738db18fe5ee990a7b539ce2a8",
                 "configs/b6/registration/identity_pins.json": "513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d",

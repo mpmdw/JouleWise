@@ -56,6 +56,72 @@ def perturb(table, fraction):
     return table
 
 
+def capture_second_side(mutate=None):
+    """Wrap check_block: keep a copy of the second side's table, optionally mutated before the gate compares it."""
+    from joulewise import b6_analysis_check
+    real, seen = b6_analysis_check.check_block, {}
+
+    def wrapped(*args, **kwargs):
+        checks = real(*args, **kwargs)
+        if mutate is not None:
+            mutate(checks["comparison_table"])
+        seen["table"] = copy.deepcopy(checks["comparison_table"])
+        return checks
+    return mock.patch.object(b6_analysis_check, "check_block", wrapped), seen
+
+
+def undefined_screen_block(parent, reason):
+    """ALPHA, BETA and a GAMMA session whose drift screen is undefined; the screen runs are lost, not excluded."""
+    specs = [("ALPHA", 1), ("BETA", 1), ("GAMMA", 1)]
+    archives = []
+    for k, (pack, rnd) in enumerate(specs):
+        archive, _ = build_session(parent, pack, rnd, k)
+        if pack == "GAMMA":
+            path = archive / "derived/b6-acceptance.json"
+            acceptance = json.loads(path.read_text())
+            if reason == "corpus_insufficient":
+                for i in range(1, 14):
+                    shutil.rmtree(archive / f"sources/bound-runs/neg8-refcorpus-r{i:02}")
+                acceptance["neg8"].update(verdict="undefined", corpus_clean_n=5)
+            else:
+                for i in (1, 2):
+                    shutil.rmtree(archive / f"sources/claim-runs/neg8-window-start-r{i}")
+                acceptance["neg8"].update(verdict="undefined", survivors={"start": 1, "midpoint": 1, "end": 3})
+            path.write_text(json.dumps(acceptance))
+        archives.append(archive)
+    return archives, write_attempts(parent / "attempts.jsonl", [(p, r, True) for p, r in specs])
+
+
+def screen_exclusion_block(parent, run_id, *, exclude=True, drop_trace=False, survivors=None):
+    """RL-121: ALPHA r1, BETA r1 and GAMMA r1; one BETA screen run excluded and/or without its trace."""
+    specs = [("ALPHA", 1), ("BETA", 1), ("GAMMA", 1)]
+    archives = []
+    for k, (pack, rnd) in enumerate(specs):
+        options = {"exclude": {run_id: ["member.status_not_succeeded"]}} if pack == "BETA" and exclude else {}
+        archive, _ = build_session(parent, pack, rnd, k, **options)
+        if pack == "BETA":
+            root = "bound-runs" if run_id.startswith("neg8-refcorpus") else "claim-runs"
+            if drop_trace:
+                (archive / "sources" / root / run_id / "raw/powermetrics.plist").unlink()
+            if survivors is not None:
+                path = archive / "derived/b6-acceptance.json"
+                acceptance = json.loads(path.read_text())
+                acceptance["neg8"]["survivors"] = survivors
+                path.write_text(json.dumps(acceptance))
+        archives.append(archive)
+    return archives, write_attempts(parent / "attempts.jsonl", [(p, r, True) for p, r in specs])
+
+
+def run_block_capturing(archives, attempts, out_dir):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    restricted, public = out_dir / "restricted.json", out_dir / "public.json"
+    err = io.StringIO()
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+        rc = b6.main(["block", *[str(x) for a in archives for x in ("--session", a)], "--loop-attempts", str(attempts),
+                      "--restricted-out", str(restricted), "--public-out", str(public)])
+    return rc, err.getvalue(), (json.loads(restricted.read_text()) if restricted.exists() else None)
+
+
 class Block6(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -189,6 +255,79 @@ class Block6(unittest.TestCase):
         restricted, public = b6.compare(self.R, table, spec=(("reported/*", 4),), spec_source="test")
         self.assertFalse(public["pass"])
         self.assertTrue(any(r.get("reason") == "print_precision_unspecified" for r in restricted["rows"]))
+
+
+    # ---------------------------------------------------------------- RL-113: first-program-only keys
+
+    def test_gate_reports_first_program_only_keys_without_counting_them(self):
+        """RL-113: a key the second side lacks is listed with its class, not compared, counted in public, pass unchanged."""
+        def drop(table):
+            del table["sessions"]["b6-beta-r1"]["quantities"]["calibration/b_op_s"]
+        patch, _ = capture_second_side(drop)
+        with patch:
+            rc, R, _ = recompute_block(self.archives, self.attempts, self.tmp / "rl113-drop")
+        base, gate = self.R["block"]["option_c"], R["block"]["option_c"]
+        row = {"class": "calibration", "session": "b6-beta-r1", "key": "calibration/b_op_s"}
+        self.assertIn(row, gate["first_program_only"])
+        self.assertNotIn(row, base["first_program_only"])
+        self.assertEqual(gate["first_program_only"],
+                         sorted(gate["first_program_only"], key=lambda r: (r["class"], r["session"], r["key"])))
+        self.assertEqual(set(gate["first_program_only"][0]), {"class", "session", "key"})
+        classes, base_classes = gate["comparator"]["classes"], base["comparator"]["classes"]
+        self.assertEqual(classes["calibration"]["compared"], base_classes["calibration"]["compared"] - 1)
+        self.assertEqual(classes["calibration"]["unmatched"], 0)
+        self.assertEqual(classes["calibration"]["first_program_only"],
+                         base_classes["calibration"]["first_program_only"] + 1)
+        listed = {}
+        for r in gate["first_program_only"]:
+            listed[r["class"]] = listed.get(r["class"], 0) + 1
+        self.assertEqual({c: v["first_program_only"] for c, v in classes.items() if v["first_program_only"]}, listed)
+        self.assertEqual((rc, gate["pass"], gate["comparator"]["pass"]), (self.rc, base["pass"], base["comparator"]["pass"]))
+        self.assertTrue(gate["pass"])
+        # Cold review finding 2: a class compare() never judged carries no "pass"; every judged class carries one.
+        self.assertTrue(any(v["compared"] == 0 for v in classes.values()))
+        for cls, v in classes.items():
+            self.assertEqual("pass" in v, v["compared"] > 0, cls)
+
+    def test_gate_fails_on_second_side_only_key(self):
+        """RL-113 item 3: a key only the second side holds is compared against None and fails the gate."""
+        def add(table):
+            table["sessions"]["b6-beta-r1"]["quantities"]["neg8/second_side_only"] = 0
+        patch, _ = capture_second_side(add)
+        with patch:
+            _, R, _ = recompute_block(self.archives, self.attempts, self.tmp / "rl113-add")
+        gate = R["block"]["option_c"]
+        self.assertFalse(gate["comparator"]["pass"])
+        self.assertFalse(gate["pass"])
+        self.assertGreaterEqual(gate["comparator"]["classes"]["neg8"]["failed"], 1)
+        self.assertIn("option_c_disagrees", {f["code"] for f in R["flags"]})
+        self.assertNotIn("neg8/second_side_only", {r["key"] for r in gate["first_program_only"]})
+
+    def test_gate_names_failed_comparator_rows(self):
+        """Cold review finding 5: a comparator failure is named in option_c.failures by class, session and key,
+        with no value, and the option_c_disagrees flag carries it."""
+        def add(table):
+            table["sessions"]["b6-beta-r1"]["quantities"]["neg8/second_side_only"] = 0
+        patch, _ = capture_second_side(add)
+        with patch:
+            _, R, _ = recompute_block(self.archives, self.attempts, self.tmp / "rl113-named")
+        gate = R["block"]["option_c"]
+        named = [f for f in gate["failures"] if f.startswith("comparator:")]
+        self.assertEqual(named, ["comparator:neg8:b6-beta-r1:neg8/second_side_only"])
+        flags = [f for f in R["flags"] if f["code"] == "option_c_disagrees"]
+        self.assertTrue(flags)
+        self.assertTrue(all("comparator:neg8:b6-beta-r1:neg8/second_side_only" in f["detail"] for f in flags))
+        self.assertEqual([f for f in self.R["block"]["option_c"]["failures"] if f.startswith("comparator:")], [])
+
+    def test_compare_reports_only_in_driver(self):
+        """RL-113: standalone compare() with a key deleted from the recompute's side reports only_in_driver."""
+        own = copy.deepcopy(self.R)
+        del own["comparison_table"]["sessions"]["b6-beta-r2"]["quantities"]["floor/qwen3-8b/decode/absolute/floor_j"]
+        restricted, public = b6.compare(own, self.R["comparison_table"])
+        self.assertEqual(public["classes"]["floor"]["unmatched"], 1)
+        self.assertEqual([r["reason"] for r in restricted["rows"] if "reason" in r and r["class"] == "floor"],
+                         ["only_in_driver"])
+        self.assertFalse(public["pass"])
 
     def test_single_session_equals_block_session(self):
         archive = self.by_id["b6-alpha-r1"]
@@ -335,6 +474,134 @@ class Block6(unittest.TestCase):
         contrast["outcome"] = "unresolved"
         lines = b6.block_lines(self.R["sessions"], b6.block5_quantities(b5))
         self.assertEqual(lines["replication"]["decode"]["word"], "not replicated")
+
+
+class GammaUndefinedScreen(unittest.TestCase):
+    """RL-114: a GAMMA session whose NEG-8 screen is undefined, for both registered reasons."""
+    REASONS = ("corpus_insufficient", "references_insufficient")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp(prefix="b6-undefined-"))
+        cls.blocks, cls.runs = {}, {}
+        for reason in cls.REASONS:
+            cls.blocks[reason] = undefined_screen_block(cls.tmp / reason, reason)
+            patch, seen = capture_second_side()
+            with patch:
+                rc, err, R = run_block_capturing(*cls.blocks[reason], cls.tmp / (reason + "-out"))
+            cls.runs[reason] = (rc, err, R, seen.get("table"))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_gamma_undefined_screen_block_run_completes(self):
+        for reason in self.REASONS:
+            with self.subTest(reason=reason):
+                rc, err, R, _ = self.runs[reason]
+                self.assertNotEqual(rc, 4, err)
+                self.assertNotIn("refused: TypeError", err)
+                g = R["sessions"]["b6-gamma-r1"]
+                self.assertEqual((g["neg8"]["verdict"], g["neg8"]["reason"]), ("undefined", reason))
+                self.assertTrue(any(units["quad"] for units in g["kept_units"].values()))  # a selected quad
+                self.assertTrue(R["block"]["option_c"]["pass"], R["block"]["option_c"])
+                self.assertNotIn("option_c_disagrees", {f["code"] for f in R["flags"]})
+
+    def test_gamma_undefined_screen_skips_engine_and_keeps_pairing(self):
+        """RL-114 items 1 to 3, in the same fixture: no contrast/neg8 key on the second side, one guard per
+        contrast, and the pairing checks still count the session."""
+        for reason in self.REASONS:
+            with self.subTest(reason=reason):
+                _, _, R, second = self.runs[reason]
+                sid = "b6-gamma-r1"
+                held = set(second["sessions"][sid]["quantities"])
+                self.assertFalse({k for k in held if k.startswith(("contrast/", "neg8/"))})
+                first = {k for k in R["comparison_table"]["sessions"][sid]["quantities"]
+                         if k.startswith(("contrast/", "neg8/"))}
+                self.assertTrue(first)
+                gate = R["block"]["option_c"]
+                listed = {r["key"] for r in gate["first_program_only"] if r["session"] == sid}
+                self.assertLessEqual(first, listed)
+                families = gate["families"]
+                self.assertEqual(families["engine_screen_undefined"], len(R["sessions"][sid]["contrasts"]))
+                self.assertGreaterEqual(families["engine_screen_undefined"], 1)
+                self.assertNotIn("engine", families)
+                self.assertNotIn("engine_word", families)
+                self.assertNotIn("engine_refusal", families)
+                self.assertEqual(families["pairing"], 4)  # one GAMMA session x (ALPHA, BETA) x (session, rule)
+
+    def test_gamma_undefined_screen_guard_fails_on_a_claim_word(self):
+        """RL-114 item 2: a claim word or a finite D_j from a session without a drift allowance fails the gate."""
+        cid = "ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b"
+        original = b6.attach_gamma
+        for reason in self.REASONS:
+            # Cold review finding 1: a finite decision interval and a word outside the two are each refused.
+            for i, (field, value) in enumerate((("outcome", "direction_supported"), ("D_j", 1.0),
+                                                ("decision_interval_j", [0.0, 1.0]), ("outcome", "unresolved"))):
+                with self.subTest(reason=reason, field=field, value=value):
+                    def forced(result, *args, **kwargs):
+                        original(result, *args, **kwargs)
+                        result["contrasts"][cid][field] = value
+                    with mock.patch.object(b6, "attach_gamma", forced):
+                        rc, err, R = run_block_capturing(*self.blocks[reason], self.tmp / (reason + "-forced-" + str(i)))
+                    self.assertNotEqual(rc, 4, err)
+                    gate = R["block"]["option_c"]
+                    self.assertFalse(gate["pass"])
+                    self.assertIn("engine_screen_undefined:" + cid, gate["failures"])
+                    self.assertEqual([f for f in gate["failures"] if f.startswith("engine_screen_undefined:")],
+                                     ["engine_screen_undefined:" + cid])
+
+
+class ExcludedScreenRun(unittest.TestCase):
+    """RL-121: an excluded drift-screen run is read but is not a compared run."""
+    CASES = (("neg8-window-start-r1", {"start": 2, "midpoint": 1, "end": 3}),
+             ("neg8-window-midpoint", {"start": 3, "midpoint": 0, "end": 3}),
+             ("neg8-refcorpus-r01", {"start": 3, "midpoint": 1, "end": 3}))
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="b6-rl121-"))
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_excluded_screen_run_is_not_compared(self):
+        for run_id, survivors in self.CASES:
+            with self.subTest(run_id=run_id):
+                block = screen_exclusion_block(self.tmp / run_id, run_id, survivors=survivors)
+                patch, seen = capture_second_side()
+                with patch:
+                    rc, err, R = run_block_capturing(*block, self.tmp / (run_id + "-out"))
+                self.assertEqual(rc, 0, err)
+                gate = R["block"]["option_c"]
+                self.assertTrue(gate["pass"], gate["comparator"])
+                self.assertNotIn("option_c_disagrees", {f["code"] for f in R["flags"]})
+                self.assertNotIn(run_id, seen["table"]["sessions"]["b6-beta-r1"]["run_phase_energy_j"])
+                self.assertNotIn(run_id, R["comparison_table"]["sessions"]["b6-beta-r1"]["run_phase_energy_j"])
+                first_rows = sum(len(phases) for body in R["comparison_table"]["sessions"].values()
+                                 for phases in body["run_phase_energy_j"].values())
+                self.assertEqual(gate["comparator"]["classes"]["run_phase_energy"]["compared"], first_rows)
+
+    def test_excluded_screen_run_without_trace_does_not_stop(self):
+        run_id = "neg8-window-start-r1"
+        block = screen_exclusion_block(self.tmp / "excluded", run_id, drop_trace=True,
+                                       survivors={"start": 2, "midpoint": 1, "end": 3})
+        rc, err, R = run_block_capturing(*block, self.tmp / "excluded-out")
+        missing = [f for f in R["flags"] if f["code"] == "trace_plist_missing" and f["scope"] == run_id]
+        self.assertTrue(missing)
+        self.assertTrue(all(f["stops_comparison"] is False for f in missing))
+        self.assertFalse(R["comparison_stopped"])
+        self.assertEqual(rc, 0, err)
+
+    def test_unexcluded_screen_run_without_trace_still_stops(self):
+        run_id = "neg8-window-start-r1"
+        block = screen_exclusion_block(self.tmp / "kept", run_id, exclude=False, drop_trace=True,
+                                       survivors={"start": 2, "midpoint": 1, "end": 3})
+        rc, err, R = run_block_capturing(*block, self.tmp / "kept-out")
+        missing = [f for f in R["flags"] if f["code"] == "trace_plist_missing" and f["scope"] == run_id]
+        self.assertTrue(missing)
+        self.assertTrue(all(f["stops_comparison"] is True for f in missing))
+        self.assertTrue(R["comparison_stopped"])
+        self.assertEqual(rc, 3, err)
 
 
 class Block6Guards(unittest.TestCase):
