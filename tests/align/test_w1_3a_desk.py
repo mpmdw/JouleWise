@@ -2,6 +2,8 @@
 
 Temperature journals only, built in a temp dir; no host or study data.
 """
+import contextlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -9,6 +11,7 @@ import unittest
 
 from scripts import align_v4_kit as kit
 from scripts import align_w1_3a_desk as desk
+from tests.align.test_w1_rl122_kit import planning_slots, release_for
 
 NS = desk.NS
 T0 = 1_000 * NS
@@ -16,31 +19,51 @@ TARGET, DELTA = 30.0, 1.5          # band edge 31.5; threshold 31.2
 
 
 def build_member(root, phase, *, outcome='timeout', duration_s=1200, key='TVh0', target=TARGET, os_level=0,
-                 pm_state='Nominal', early=40.0, late=30.0, last_s=None, delta=DELTA):
+                 pm_state='Nominal', early=40.0, late=30.0, last_s=None, delta=DELTA, step_s=1, run='m',
+                 pm_observed=True):
     """One member journal: `early` for the first part of G0, `late` for the last 300 s (or last_s)."""
     last_s = desk.WINDOW_S if last_s is None else last_s
     start, end = T0, T0 + int(duration_s * NS)
     rows = [{'kind': 'session_start', 'values': {'thermal': {'s_fast': 'TV0h', 's_slow': key}}}]
-    for second in range(0, int(duration_s) + 1):
+    for second in range(0, int(duration_s) + 1, step_s):
         t = start + second * NS
         value = late if t >= end - last_s * NS else early
         rows.append({'kind': 'reading', 'started': {'monotonic_ns': t},
                      'values': {'sensors': {'TV0h': 34.0, key: value}, 'errors': {},
-                                'status': {'os_level': os_level, 'pm_state': pm_state}}})
+                                'status': {'os_level': os_level, 'pm_state': pm_state,
+                                           'pm_observed_ns': t if pm_observed else None}}})
     rows.append({'kind': 'align_thermal_gate', 'values': {'state': 'end', 'gate': {
         'kind': 'G0', 'turn': 0, 'outcome': outcome, 'start_ns': start, 'end_ns': end,
         'duration_s': duration_s, 'reference': {'fast_c': 150.0, 'slow_c': target}}}})
-    out = root / phase / 'runs' / 'm' / 'outputs'
+    out = root / phase / 'runs' / run / 'outputs'
     out.mkdir(parents=True)
     (out / desk.JOURNAL).write_text('\n'.join(json.dumps(r) for r in rows) + '\n')
-    (root / phase / 'runs' / 'm' / 'config.json').write_text(json.dumps({'workload_profile': {
+    (root / phase / 'runs' / run / 'config.json').write_text(json.dumps({'workload_profile': {
         'prompt_text': json.dumps({'thermal': {'delta_slow_c': delta}})}}))
 
 
+def write_result(root, phases):
+    """A minimal r1_result.json: {phase name: result dict}."""
+    (root / 'r1_result.json').write_text(json.dumps({'phases': [
+        {'name': name, 'result': result} for name, result in phases.items()]}))
+
+
+def base_phase(phase):
+    return desk.turn_info(phase)[3]
+
+
 class Desk3aTests(unittest.TestCase):
-    def run_desk(self, phase='planning_turn_R_plus_2C', **kwargs):
+    def run_desk(self, phase='planning_turn_R_plus_2C', precool=True, **kwargs):
+        """precool True/False: r1_result.json carries the preceding idle-until-soak; None: no r1_result.json."""
         with tempfile.TemporaryDirectory() as tmp:
-            build_member(Path(tmp), phase, **kwargs)
+            root = Path(tmp)
+            build_member(root, phase, **kwargs)
+            if precool is not None:
+                phases = {phase: {'g0_outcome': kwargs.get('outcome', 'timeout')}}
+                if desk.turn_info(phase)[1]:
+                    phases[desk.precool_phase(base_phase(phase))] = {
+                        'released': precool, 'recovery_curve': [[0, 33.0], [100, 30.5]]}
+                write_result(root, phases)
             report = desk.desk(tmp)
         self.assertEqual(len(report['g0_intervals']), 1)
         return report, report['g0_intervals'][0]
@@ -114,12 +137,15 @@ class Desk3aTests(unittest.TestCase):
                 self.assertEqual(row['classification'], 'to-research-lead')
                 self.assertTrue(any('outside the planning turns' in r for r in row['reasons']))
 
-    def test_custody_copy_suffix_is_still_a_planning_turn(self):
-        report, row = self.run_desk('planning_turn_R_plus_0C.g0_timeout1', late=31.4)
-        self.assertEqual(row['turn_label'], 'planning R+0')
-        self.assertEqual(row['classification'], 'planning-release-3a')
-        # Only the kit's own segment names go into the record rows.
-        self.assertEqual(report['kit_record_segments'], {})
+    def test_superseded_attempts_are_labelled_and_never_emitted(self):
+        for phase in ('planning_turn_R_plus_0C.g0_timeout1', 'planning_turn_R_plus_0C.rejected1'):
+            with self.subTest(phase=phase):
+                report, row = self.run_desk(phase, late=31.4)
+                self.assertEqual(row['turn_label'], 'planning R+0')
+                self.assertTrue(row['superseded'])
+                self.assertEqual(row['classification'], 'planning-release-3a')   # same rule as its turn
+                self.assertEqual(report['kit_record_segments'], {})
+                self.assertIn('(superseded)', desk.render(report))
 
     def test_interval_shorter_than_300s_goes_to_the_lead(self):
         _, row = self.run_desk(duration_s=200, late=31.4)
@@ -127,15 +153,109 @@ class Desk3aTests(unittest.TestCase):
         self.assertEqual(row['classification'], 'to-research-lead')
         self.assertTrue(any('shorter than 300 s' in r for r in row['reasons']))
 
-    def test_missing_delta_slow_goes_to_the_lead(self):
+    def test_override_is_display_only_and_never_releases(self):
         with tempfile.TemporaryDirectory() as tmp:
-            build_member(Path(tmp), 'planning_turn_R_plus_2C', late=31.4)
-            (Path(tmp) / 'planning_turn_R_plus_2C/runs/m/config.json').unlink()
-            row = desk.desk(tmp)['g0_intervals'][0]
-            self.assertEqual(row['classification'], 'to-research-lead')
-            row = desk.desk(tmp, delta_slow_override=DELTA)['g0_intervals'][0]
-            self.assertEqual(row['classification'], 'planning-release-3a')
+            root = Path(tmp)
+            build_member(root, 'planning_turn_R_plus_2C', late=31.4)
+            write_result(root, {'planning_turn_R_plus_2C': {'g0_outcome': 'timeout'},
+                                'planning_turn_R_plus_2C.precool': {'released': True}})
+            (root / 'planning_turn_R_plus_2C/runs/m/config.json').unlink()
+            report = desk.desk(tmp)
+            self.assertEqual(report['g0_intervals'][0]['classification'], 'to-research-lead')
+            self.assertIsNone(report['g0_intervals'][0]['band_edge_c'])
+            report = desk.desk(tmp, delta_slow_override=DELTA)
+            row = report['g0_intervals'][0]
             self.assertEqual(row['delta_slow_source'], '--delta-slow-c')
+            self.assertEqual(row['band_edge_c'], 31.5)                        # shown
+            self.assertEqual(row['classification'], 'to-research-lead')
+            self.assertTrue(any('override' in r for r in row['reasons']))
+            self.assertEqual(report['kit_record_segments'], {})
+
+    def test_precool_must_have_released(self):
+        report, row = self.run_desk(late=31.4, precool=True)
+        self.assertEqual(row['classification'], 'planning-release-3a')
+        self.assertEqual(row['precool'], {'phase': 'planning_turn_R_plus_2C.precool', 'released': True,
+                                          'last_curve_c': 30.5})
+        report, row = self.run_desk(late=31.4, precool=False)
+        self.assertEqual(row['classification'], 'to-research-lead')
+        self.assertFalse(row['precool']['released'])
+        self.assertTrue(any('precool' in r for r in row['reasons']))
+        self.assertEqual(report['kit_record_segments'], {})
+        report, row = self.run_desk(late=31.4, precool=None)               # no r1_result.json
+        self.assertEqual(row['classification'], 'to-research-lead')
+        self.assertIsNone(row['precool']['released'])
+        self.assertIn('not reconciled', report['reconciliation']['status'])
+
+    def test_precool_phase_names_follow_the_phase_table(self):
+        from joulewise.align.apple import r1_phase_table
+        names = [n for n, *_ in r1_phase_table.phase_plan()]
+        for offset in desk.PLANNING_OFFSETS:
+            turn = f'planning_turn_R_plus_{offset}C'
+            self.assertEqual(names[names.index(turn) - 1], desk.precool_phase(turn))
+
+    def test_cooldown_after_d_is_the_r_plus_4_precool(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_member(root, 'planning_turn_R_plus_4C', late=31.4)
+            write_result(root, {'planning_turn_R_plus_4C': {'g0_outcome': 'timeout'},
+                                'cooldown_after_D': {'released': True, 'recovery_curve': [[0, 36.0]]},
+                                'planning_turn_R_plus_4C.precool': {'released': False}})
+            row = desk.desk(tmp)['g0_intervals'][0]
+            self.assertEqual(row['classification'], 'planning-release-3a')
+            self.assertEqual(row['precool']['phase'], 'cooldown_after_D')
+
+    def test_unobserved_and_deadman_exits_go_to_the_lead(self):
+        for outcome in ('unobserved', 'deadman'):
+            with self.subTest(outcome=outcome):
+                _, row = self.run_desk(late=31.4, outcome=outcome)
+                self.assertEqual(row['classification'], 'to-research-lead')
+                self.assertTrue(any('not a timeout' in r for r in row['reasons']))
+
+    def test_fewer_than_270_samples_in_the_last_300s_goes_to_the_lead(self):
+        _, row = self.run_desk(late=31.4, step_s=2)            # 151 samples
+        self.assertEqual(row['samples_last_300s'], 151)
+        self.assertEqual(row['classification'], 'to-research-lead')
+        self.assertTrue(any('valid heater-key sample' in r for r in row['reasons']))
+
+    def test_reconciliation_counts_and_mismatches(self):
+        report, _ = self.run_desk(late=31.4)
+        self.assertEqual(report['reconciliation']['status'],
+                         'reconciled: 1 r1_result phase(s) with g0_outcome, 1 desk row(s)')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_member(root, 'planning_turn_R_plus_2C', late=31.4)
+            write_result(root, {'planning_turn_R_plus_2C': {'g0_outcome': 'released'},
+                                'planning_turn_R_plus_2C.precool': {'released': True},
+                                'step_30b': {'g0_outcome': 'released'}})
+            report = desk.desk(tmp)
+            self.assertEqual(len(report['reconciliation']['mismatches']), 2)   # outcome + missing step_30b
+            out = root / 'out.json'
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(desk.main([tmp, '--format', 'json', '--json-out', str(out)]), 2)
+            self.assertTrue(out.is_file())
+
+    def test_duplicate_rows_for_one_segment_release_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build_member(root, 'planning_turn_R_plus_2C', late=31.4, run='a')
+            build_member(root, 'planning_turn_R_plus_2C', late=31.4, run='b')
+            write_result(root, {'planning_turn_R_plus_2C.precool': {'released': True}})
+            report = desk.desk(tmp)
+            rows = report['g0_intervals']
+            self.assertEqual([r['classification'] for r in rows], ['to-research-lead'] * 2)
+            self.assertTrue(all(any('G0 rows under one segment' in x for x in r['reasons']) for r in rows))
+            self.assertEqual(report['kit_record_segments'], {})
+
+    def test_disclosure_columns_do_not_change_the_class(self):
+        report, row = self.run_desk(late=31.4)
+        self.assertEqual(row['last_300s_median_c'], 31.4)
+        self.assertEqual(row['last_300s_count_ge_threshold'], 301)
+        self.assertEqual(row['stale_power_state_samples'], 0)
+        self.assertIsNone(row['exit_slope_c_per_min'])
+        self.assertEqual(len(row['journal_sha256']), 64)
+        _, stale = self.run_desk(late=31.4, pm_observed=False)
+        self.assertEqual(stale['stale_power_state_samples'], stale['samples'])
+        self.assertEqual(stale['classification'], 'planning-release-3a')
 
     def test_output_is_deterministic_and_has_no_wall_clock(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -151,12 +271,29 @@ class Desk3aTests(unittest.TestCase):
         self.assertEqual(sorted(f'planning_turn_R_plus_{n}C' for n in desk.PLANNING_OFFSETS),
                          sorted(kit.PLANNING_SEGMENTS))
 
-    def test_a_3a_row_passes_the_kit_check_for_the_same_numbers(self):
-        # The desk's record rows are exactly what planning_released_segments inspects.
-        report, row = self.run_desk('planning_turn_R_plus_2C', late=31.2)
-        segment = report['kit_record_segments']['planning_turn_R_plus_2C']
-        self.assertFalse(segment[desk.PEAK_FIELD] < segment['band_edge_c'] - kit.PLANNING_RELEASE_EDGE_C)
-        self.assertEqual(segment['heater_key'], 'TVh0')
+    def test_the_emitted_rows_pass_the_kits_own_check(self):
+        names = ['planning_turn_R_plus_2C', 'planning_turn_R_plus_4C']
+        inputs, slots = planning_slots(names)
+        for late in (31.2, 31.4, 32.0):                                    # boundary, edge, crossing
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                phases = {}
+                for name in names:
+                    build_member(root, name, late=late)
+                    phases[name] = {'g0_outcome': 'timeout'}
+                    phases[desk.precool_phase(name)] = {'released': True}
+                write_result(root, phases)
+                report = desk.desk(tmp)
+            with self.subTest(late=late):
+                self.assertEqual(sorted(report['kit_record_segments']), names)
+                record = release_for(slots, names)
+                record['segments'] = report['kit_record_segments']
+                self.assertEqual(kit.planning_released_segments(slots, record), set(names))
+                kit.require_ready(inputs, slots, planning_release=record)
+        # Just below the boundary the desk emits nothing, and the kit would refuse the same numbers.
+        record = release_for(slots, names, heater_key_max_last_300s_c=31.19)
+        with self.assertRaisesRegex(ValueError, 'band edge'):
+            kit.planning_released_segments(slots, record)
 
 
 if __name__ == '__main__':
