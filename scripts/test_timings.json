@@ -809,7 +809,10 @@
     "tests.independent_recompute.test_release_b5": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.independent_recompute.test_release_trace_20261107": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
     "tests.test_analysis_engine_campaign_log_members": "Added on main after the 2026-11-06 harvest; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s).",
-    "tests.test_bytes_campaign_split": "New offline regression for the pending ALIGN patch; no hosted timing yet. Discovered and packed at the conservative unknown weight (26.98 s)."
+    "tests.test_bytes_campaign_split": "New offline regression for the pending ALIGN patch; no hosted timing yet. Discovered and packed at the conservative unknown weight (26.98 s).",
+    "tests.test_pipeline_time_alarms": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s.",
+    "tests.test_pipeline_time_detect": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s.",
+    "tests.test_pipeline_time_ledger": "Added by PR #759 (RL-127 watcher) on 2026-11-13; pending hosted timing. Still discovered and packed at the conservative unknown weight (26.98 s). Local run: all three modules together take about 3 s."
   },
   "untimed_module_allowance": {
     "_what_this_is": "Read only by tests/test_shard_tests.py's completeness guard, never by the packer. A discovered module with no weight in seconds_by_module (and no timing_exemptions entry) passes the guard only if its name starts with one of these prefixes AND its source file is no larger than max_source_bytes. Such a module is packed at unknown_module_weight_seconds (26.98 s, the mean hosted ordinary-module weight) until the next CI harvest weighs it. Purpose: many align/qwen4 lanes add small modules in parallel, and a guard that demands a weight before any CI run has measured the module breaks every merge order but one.",
