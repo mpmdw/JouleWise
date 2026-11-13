@@ -7302,6 +7302,41 @@ session, and the MBP nine answers it inside a loop without costing the Air an ho
 codes, native times, sizes). Block-5-aware.
 
 
+# RL-124. The 3(a) desk tool: five rulings on the planning release, and the precool condition
+
+Research lead (Fable 5.2), 2026-11-13 05:06 PST (from `date`). Cold review of `w1/2026-11-13-3a-desk` @ `ffcb6865d`; review file `/Volumes/JW-EXT/scratch/fable-rev-3a-desk.md`.
+
+**Read.** `scripts/align_w1_3a_desk.py` and `tests/align/test_w1_3a_desk.py` at `ffcb6865d`; `scripts/align_v4_kit.py:180-312`; `joulewise/align/apple/thermal_gates.py:515-647`; `joulewise/align/apple/r1_runtime.py:1774-1822, 1906-1941, 2222-2264`; `joulewise/align/apple/r1_phase_table.py`; `scripts/align_r1_rehearsal.py:977-1073, 1521-1560, 1700-1810, 1913-1917`; the 11-12 and 11-10 desk prints in `/Volumes/JW-EXT/scratch/w1-3a-desk/`; RL-120 item 3, RL-122 item 3(a) and its amendment. The two test modules ran: 28 tests, OK. I did not read the night's journals.
+
+**Ruled.**
+
+1. **The heater's key is the session's `s_slow`. Confirmed.** The planning heater regulates `self.sensors["s_slow"]` (`r1_runtime.py:1782, 1819`), which is the key the gate's slow band reads. Under the RL-122 pair that is TVh0. The desk takes it from the member journal's `session_start`; the kit takes it from the committed runtime config; the two must agree and the kit refuses if they do not. That it is a die key is known and accepted. The measure stays as amended: the peak over the last 300 s, ≥ band edge − 0.3 °C. The desk adds the last-300-s median and the count of samples at or over the threshold as disclosure, because a single spike can carry a peak on a die key. I read them on the first TVh0 night; they change no classification.
+
+2. **A G0 interval shorter than 300 s comes to me. Confirmed.** The measure is not defined there. A G0 that times out at the R1 cap of 1,200 s cannot be that short, so a short interval is itself another pattern. A G0 that ends `unobserved` or `deadman` is not a timeout and also comes to me. A last-300-s window with fewer than 270 valid samples of the heater key comes to me as well (the gate's own 0.9 coverage).
+
+3. **A missing `delta_slow_c` comes to me. Confirmed, and tightened.** The band is the one the member armed: its `config.json` thermal policy, or the runtime's own `bands_c` in `r1_result.json`. A value typed on the command line is shown for reading only. It never yields `planning-release-3a` and never enters the kit record.
+
+4. **A G0 sample with unobserved OS level or power state counts as not Nominal throughout. Confirmed.** This is not stricter than the gate: the gate also refuses such a sample (`thermal_gates.py:583-584`). "Throughout" means every reading in the interval was observed at level 0 and Nominal. The desk also prints how many samples had a power-state observation more than 2 s old; that is disclosure and changes no classification.
+
+5. **Precools have no G0. They are not listed as G0 intervals, and RL-122 3(a)'s "any G0 timeout outside the planning turns" does not cover them.** A precool is an `idle-until-soak` phase (`r1_runtime.py:1906-1929`): it idles until `s_slow` is inside R + δ_slow or its cap ends, and it calls no gate. The desk's omission is right. The test case that fakes a G0 inside a `.precool` directory may stay as a fail-closed case. Three things follow.
+   - **(a) The precool's result is part of the 3(a) pattern from now on.** A planning turn's G0 timeout is `planning-release-3a` only if the idle-until-soak phase just before it reported `released: true`: `cooldown_after_D` for R+4, `<turn>.precool` for R+2 and R+0. If it did not release, or `r1_result.json` is not available to show it, the timeout comes to me. The reason: with the key already over the band edge and the heater at zero duty, a timeout is the host failing to cool, which bears on W1's own G0. It is not the harness artefact of RL-120 item 3. The amended measure has no upper bound and cannot tell the two apart. The desk prints each precool's `released` flag and its last curve value.
+   - **(b) An unreleased precool on its own does not come to me.** When its planning turn releases, it is recorded as the driver records it and nothing more is owed.
+   - **(c) The other two classes stand as the tool has them.** R+6, and any G0 timeout in a member that is not a planning turn, come to me. A superseded attempt of a planning turn (`<turn>.rejectedN`, or `.g0_timeout1` on the old nights) is classified by the same rule as its turn, is labelled superseded, and never enters the kit record. Only the final attempt under the kit's segment name does. If a kit segment name has more than one G0 row, none is released and it comes to me.
+
+6. **The kit is not changed for item 5(a).** The control is the desk classification and the lead's signature: the lead does not sign a record for a segment the desk classes `to-research-lead`. The kit may later check `r1_slots.calibration_precools` for the released segments, as ordinary engineering. It gates nothing.
+
+7. **The checklist line of RL-122 item 7, "the kit handles item 3a's planning release", is met** by the kit code at `8c6440d28` (PR #752 head), provided the night's commit contains it. I read `align_v4_kit.py:220-312` and passed the tool's rows through `planning_released_segments` and `require_ready` in memory. The night does not wait for the desk tool's fixes.
+
+8. **The desk tool is admitted with fixes F1 to F7 of the review file.** F1, F2, F4 and F6 are owed before any print of the tool is cited in a signed `r1_planning_release.json`. If the fix commit does F1 to F7 as written, with the two test modules and CI green, it is admitted without returning to me. The record is then made from a print of the fixed tool, run on the closed night's output directory with its `r1_result.json`, and the record cites that print's sha256.
+
+9. **The two prints already made release nothing.** The 11-12 print (R+2 and R+4 classed 3(a) on Th0C, margins +0.798 and +1.208 °C) and the 11-10 print are exercises of the tool. Neither night entered slots (RL-120 item 1), and RL-120 item 3 already disposed of the 11-10 timeouts.
+
+**For Ed, plainly:** "The small tool that reads a night's temperature logs and says which start-of-run timeouts are the known heater quirk works, and the signing kit accepts its output. I found one real hole, and it was in my own rule, not the builder's code: the rule could not tell 'the heater held the chip at the limit' from 'the laptop never cooled down in the first place'. The second would matter for the real experiment. The night already records which case it was, so the tool now reads that, and the second case comes to me. The other fixes are small. None of this delays the night."
+
+**Owner.** Lead: the fix commit (F1 to F7), the re-run of the two prints, and the planning-release record after the slot night. Research lead: any segment the desk classes `to-research-lead`.
+**Gate.** The night: not gated by this ruling. A signed `r1_planning_release.json`: waits for the fix commit and a print from it. W1 signing: as RL-122.
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures, gate timings and code only.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
