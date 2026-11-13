@@ -242,3 +242,127 @@ No native MLX/Metal, weights, network or real data is used by any of these.
 ## Live status
 
 (Appended after launch: pids, start times and first-step state.)
+
+## GAMMA root -1 failure and relaunch
+
+Written 2026-11-12 23:30 PST (`/bin/date`), **before any collection in the
+replacement GAMMA root**. ALPHA root `r12-r3-full-alpha-mbp-1` is untouched
+and still running from clone `/Users/edr/code/jw-wt/r12-mbp` at `68be80a79`.
+
+### What failed
+
+`r12-r3-full-gamma-mbp-1`: seed exit 0 (shared with ALPHA); first step
+(profile session, smoke driver) exit 0 at 23:11:02; supervisor step
+"smoke desk" exit **1** at 23:12:51 with `b6_r12_orchestrate.loop_fixture`
+`RuntimeError: development tick bound reached` after `loop 1..299 NEXT`.
+
+The tick bound is **not** the cause and raising it would not help. The
+pinned loop's own records show it is idle, not progressing:
+
+- `loop/state.json`: `state NEXT`, `session null`, pack `gamma`
+  `status held`, `hold_reason smoke_hold:roster.no_science_bundles,
+  stage_failed:gamma-science-01-decode-contrast-blocks-01-05,
+  stage_failed:gamma-science-03-prefill-p2048-contrast-blocks-01-05,
+  structure.missing_stage_bundles`; no attempts.
+- The original smoke desk held the only open pack (`Loop._hold_packs`, first
+  occurrence → `NEXT`); `Loop._next` then gets `queue.Idle` every tick and
+  waits for an operator resume. No terminal state can follow, so
+  `loop_fixture`'s 300-tick guard is the correct way this scheduler reports
+  "no progress".
+- The smoke night itself: `verdict GO`, chain exit 0, but
+  `night/stage_yield.jsonl` has both GAMMA science stages `rc 1`, `ZERO`
+  (0/20 present); the two reference stages ran (`LOW`, 1/3, as reduced smoke
+  does). Each science stage log
+  (`operator-logs/04-…decode…log`, `05-…prefill…log`) ends:
+  `analysis_prospective_identity_mismatch: manifest.frozen_semantics_sha256
+  does not match the frozen projection; analysis_prospective_identity_mismatch:
+  manifest.manifest_id does not match canonical content`, collection verdict
+  `invalid`, i.e. the pinned `run_campaign.resolve_prospective_analysis_manifest_v3`
+  refused the stage before any member ran.
+
+### Root cause (generator input defect, not session shape)
+
+GAMMA's contrast campaign is the only B6 pack with a prospective
+`analysis_manifest_v3.json`. That manifest quotes raw config digests
+(`config_sha256`, `manifest_sha256`, …) **and** binds two canonical content
+identities over them: `frozen_semantics_sha256`
+(`analysis_semantics_sha256_v1`) and `manifest_id` (`calculate_manifest_id`).
+`b6_r12_runtime.make_synthetic_inputs` rebinds model/tokenizer identities
+and then propagates raw-file digests through the input graph, so the overlaid
+manifest gets new `config_sha256` values but keeps the pinned semantic
+identities. The pinned resolver recomputes both and refuses. The same function
+already recomputes the analogous canonical digest for suite manifests; the
+analysis manifest case was simply missing.
+
+This is independent of session order. It is not the stated "floor
+unavailable" risk (that concerns reader-side `attach_gamma` keys, after
+collection) and GAMMA r1 alone is a valid loop shape: the pinned loop
+selected `r1-gamma`, prechecked it and ran its smoke. Every R12 root built by
+the old runtime would refuse every GAMMA science stage the same way, including
+the nine-session cohorts, which never reached GAMMA (all GAMMA rows in the R12
+seat report are still "pending"). ALPHA and BETA science stages never consult
+this manifest, which is why they passed.
+
+Reproduced off-MBP before the fix: new test
+`BootstrapTests.test_synthetic_inputs_keep_prospective_analysis_identity`
+(make-inputs, then the pinned resolver over all four contrast stage dirs)
+**failed, 12.2 s**, with exactly the root -1 refusal text.
+
+### Fix — DECLARED PROFILE DIFFERENCE for MBP GAMMA
+
+**`scripts/b6_r12_runtime.py` changed — a file BETA root 23 hashes.** No other
+root-23-hashed file (courier profile, orchestrate, session fixture, verify,
+chain fixture, single pack, reduced set) changed. Runtime SHA-256 is now
+`a08bc6ea3984a1f60ab92d92ca8662e2d0622d2c1e0b4671d019ee12110f0ad1`
+(root 23 / ALPHA root -1 / GAMMA root -1: `14ec9e7dfd31…`). Root 23 is
+unaffected: its runtime copy lives in its own root and the seat worktree.
+
+`make_synthetic_inputs` (`scripts/b6_r12_runtime.py:1228-1263`, called inside
+the digest-propagation loop at `:1283`): for each pinned
+`joulewise.analysis_manifest.v3.prospective` config whose pinned
+`frozen_semantics_sha256` and `manifest_id` were self-consistent, recompute
+both with the pinned functions after each propagation pass (semantics first,
+then the id over it) and replace exactly those two field values; the raw digest
+of the rebound manifest then propagates like any other. It refuses if either
+identity is quoted by any other config or is not a unique field. No pinned
+file, judgment, threshold, roster or registry is edited; a pinned manifest
+that was already inconsistent would not be "repaired".
+
+Scope of the input difference, measured (same root path, old vs new runtime,
+deterministic: new vs new again differs in 0 files): 403 overlays either way,
+**8 overlay files differ**: the contrast `analysis_manifest_v3.json`,
+`plan_tree.json`, `plan_tree.sha256`; `configs/b6/registration/identity_pins.json`
+and `sizing_b5.json`; `configs/campaigns/v5_claim_25g83/{identity_pins,
+sealed_inventory,sizing_b5}.json`. These differ only by the propagated digests
+of the GAMMA manifest. Consequence: MBP GAMMA root -2 has different runtime
+bytes and these 8 input files relative to ALPHA root -1 and BETA root 23; no
+byte-equality claim across them is made (none was made before either). Any
+future R12 root that runs GAMMA (including the closed nine-session set) needs
+this runtime.
+
+### Tests (Air, sanitized env, `TMPDIR=/Volumes/JW-EXT/tmp/r12-ag-fix`, `nice -n 10`)
+
+- New `test_synthetic_inputs_keep_prospective_analysis_identity`: before fix
+  1 failure (12.2 s, root -1's refusal); after fix it and the existing
+  `test_synthetic_inputs_keep_canonical_suite_bindings`: **2 passed, 24.7 s**.
+- `BootstrapTests FullPackExpectationTests SchedulerBoundaryTests
+  FullProductionSessionTests`: **35 tests, 33 passed, 2 skips** (full-session
+  tests need a completed root), 46.1 s, exit 0. `git diff --check` clean.
+
+### Relaunch plan (declared before launch)
+
+The ALPHA supervisor re-invokes `scripts/b6_r12_profile_session.py` (and its
+imports) from `/Users/edr/code/jw-wt/r12-mbp` and checks hashes against its
+root, so that clone stays at `68be80a79`. GAMMA uses a **second clone**
+`/Users/edr/code/jw-wt/r12-mbp-2` at this commit. New root
+`/private/tmp/r12-mbp-tmp/r12-r3-full-gamma-mbp-2`, same seed
+`r12-r3-mbp-seed-1` (read-only, hash-checked), same sanitized environment and
+step order as the launcher: profile session (`--pack gamma --scenario plain
+--volume full`), then, only after its actual exit 0,
+`b6_r12_full_supervise.py --generation-only`. Receipts:
+`/private/tmp/r12-mbp-tmp/r12-r3-full-gamma-mbp-2.events` / `.log`.
+Root -1 stays in place, **ineligible** (failed smoke desk, cause above), and
+is never resumed. Predictions for GAMMA are unchanged from the table above;
+new prediction for the smoke desk: both GAMMA science stages run (no
+`analysis_prospective_identity_mismatch`), the pack is not smoke-held, and the
+supervisor proceeds to "ordinary full driver".

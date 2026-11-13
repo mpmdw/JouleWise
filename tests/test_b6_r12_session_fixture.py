@@ -249,6 +249,33 @@ print(count)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGreater(int(result.stdout.strip()), 50)
 
+    def test_synthetic_inputs_keep_prospective_analysis_identity(self):
+        """Predict: all four GAMMA contrast stage dirs pass the pinned run_campaign prospective resolver over synthetic inputs (MBP GAMMA root -1 failed it: analysis_prospective_identity_mismatch)."""
+        export_chain_inputs(self.root)
+        (self.root / "source-policy.json").write_text('{"volume":"reduced"}\n')
+        made = subprocess.run(command(self.root, "make-inputs"), capture_output=True, text=True, timeout=120)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        code = '''import json, sys
+from pathlib import Path
+from runtime import source_root
+root = Path(sys.argv[1])
+pin = source_root(root)
+sys.path.insert(0, str(pin / 'scripts'))
+from run_campaign import resolve_prospective_analysis_manifest_v3
+overlays = json.loads((root / 'input-overlays.json').read_text())
+pack = pin / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'
+assert str(pack / 'analysis_manifest_v3.json') in overlays
+stages = sorted(path for path in pack.iterdir() if (path / 'order_manifest.json').is_file())
+ids = set()
+for stage in stages:
+    ids.add(resolve_prospective_analysis_manifest_v3(stage).manifest_id)
+print(len(stages), len(ids))
+'''
+        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+                                text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split(), ["4", "1"])
+
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_source_pruning_preserves_raw_instrument_bytes(self):
         """Predict: waveform pruning and notification polling preserve complete plist bytes and every meter poll byte against unpruned, unthrottled inputs."""

@@ -1223,6 +1223,43 @@ def make_synthetic_inputs(root):
                 changed = transform(value)
                 for canonical in (canonical_effective_manifest, migrate_suite_manifest):
                     replacements[suite_manifest_sha256(canonical(value))] = suite_manifest_sha256(canonical(changed))
+    # Prospective analysis manifests (GAMMA's contrast pack) likewise bind
+    # two canonical content identities, frozen_semantics_sha256 and
+    # manifest_id, over bytes that include raw config digests. Rebind them
+    # with the pinned functions only for a pinned manifest whose identities
+    # were self-consistent, and only inside that manifest; any other config
+    # quoting them is refused below rather than left stale.
+    from joulewise.analysis_manifest_v3 import (PROSPECTIVE_SCHEMA_VERSION,
+        analysis_semantics_sha256_v1, calculate_manifest_id)
+    analysis_identities = {}
+    for relative, raw in originals.items():
+        if relative.endswith(".json"):
+            value = json.loads(raw)
+            if (isinstance(value, dict) and value.get("schema_version") == PROSPECTIVE_SCHEMA_VERSION
+                    and value.get("frozen_semantics_sha256") == analysis_semantics_sha256_v1(value)
+                    and value.get("manifest_id") == calculate_manifest_id(value)):
+                analysis_identities[relative] = (value["frozen_semantics_sha256"], value["manifest_id"])
+    for relative, identities in analysis_identities.items():
+        quoting = sorted(other for other, raw in originals.items() if other != relative
+                         and any(identity.encode() in raw for identity in identities))
+        if quoting:
+            raise ValueError("analysis manifest identity is quoted outside its manifest: " + repr(quoting))
+
+    def rebind_analysis(relative, text):
+        if relative not in analysis_identities:
+            return text
+        value = json.loads(text)
+        for key, identity in (("frozen_semantics_sha256", analysis_semantics_sha256_v1),
+                              ("manifest_id", calculate_manifest_id)):
+            current = identity(value)
+            if value[key] != current:
+                quoted = json.dumps(value[key])
+                if text.count(quoted) != 1:
+                    raise ValueError("analysis manifest identity is not a unique field: " + relative)
+                text = text.replace(quoted, json.dumps(current))
+                value = json.loads(text)
+        return text
+
     payloads = {}
     for relative, raw in originals.items():
         if not relative.endswith(".json"):
@@ -1243,6 +1280,7 @@ def make_synthetic_inputs(root):
             text = raw.decode()
             for old, new in digest_map.items():
                 text = text.replace(old, new)
+            text = rebind_analysis(relative, text)
             encoded = text.encode()
             if encoded != raw:
                 changed = True
