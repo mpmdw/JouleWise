@@ -73,11 +73,11 @@ b.append(T(30,296,'blue/orange squares are science runs (blue = side A, orange =
 svg('fig_p1_session_shape.svg',900,340,'\n'.join(b),'Session shape, schematic')
 
 # Fig 3 session ledger (no outcomes)
-b=[T(20,26,'Order of collection (registered rotation; outcomes are filled from harvest records)','t')]
+b=[T(20,26,'Order of collection (registered rotation; attempt verdicts are filled from harvest records)','t')]
 cols=['round','1st','2nd','3rd','then']
 xs=[20,140,320,500,680]
 for c,x in zip(cols,xs): b.append(T(x,60,c,'s'))
-rows=[('Primary block','1.7B floor','8B floor','contrast','re-arm a pack until claim-usable'),
+rows=[('Primary block','1.7B floor','8B floor','contrast','re-arm a pack until it has an analysed session'),
       ('Replication 1','1.7B floor','8B floor','contrast','BYTES sub-packs'),
       ('Replication 2','8B floor','contrast','1.7B floor','BYTES sub-packs'),
       ('Replication 3','contrast','1.7B floor','8B floor','BYTES sub-packs'),
@@ -91,7 +91,7 @@ for i,r in enumerate(rows):
             w=170 if j<4 else 190
             if 'rotation' in r[j]: w=530
             b.append(R(xs[j],y,w,32,c)); b.append(T(xs[j]+8,y+15,r[j],'xs'))
-            if j<4 and 'rotation' not in r[j]: b.append(T(xs[j]+8,y+28,'outcome: filled at release','xs'))
+            if j<4 and 'rotation' not in r[j]: b.append(T(xs[j]+8,y+28,'verdict: filled at release','xs'))
 b.append(R(20,310,860,48,'box'))
 b.append(T(30,328,'Each replication contrast session takes floors from the same round\'s counting floor sessions, else the next, else the previous,','xs'))
 b.append(T(30,344,'else the primary block\'s. The replication block closes at 3 counting sessions per pack or at the end of 1 November 2026 (Pacific).','xs'))
@@ -138,7 +138,7 @@ b.append(R(20,50,280,300,'blue',6)); b.append(T(30,70,'DEVELOPMENT (cloud + loca
 for i,t in enumerate(['registrations, judged and refuted','code, executing reviews (2 families)','synthetic full-size tests, CI','independent recompute and twin (built)','paper text with placeholders']):
     b.append(R(35,84+i*50,250,38,'box')); b.append(T(45,107+i*50,t,'xs'))
 b.append(R(330,50,260,300,'orange',6)); b.append(T(340,70,'MEASUREMENT LAPTOP','s'))
-for i,t in enumerate(['headless supervisory agent between sessions','agent census + hazard arm','collection: no agent alive','harvest: flags, exclusions','hash-verified packaging']):
+for i,t in enumerate(['headless supervisory agent between sessions','agent census + hazard arm','collection: no agent may be alive','harvest: flags, exclusions','hash-verified packaging']):
     b.append(R(345,84+i*50,230,38,'box')); b.append(T(355,107+i*50,t,'xs'))
 b.append(R(620,50,260,300,'green',6)); b.append(T(630,70,'ANALYSIS HOST (custody rules)','s'))
 for i,t in enumerate(['agents: blind dry run, outputs sealed','release event: verify dry-run bytes','independent recompute + compare','separate checks of uncovered items','fill after print gate']):

@@ -32,7 +32,7 @@ text{font-family:Helvetica,Arial,sans-serif;fill:#1a1a1a}
 <rect x="345" y="134" width="230" height="38" class="box" rx="4"/>
 <text x="355" y="157" class="xs" text-anchor="start">agent census + hazard arm</text>
 <rect x="345" y="184" width="230" height="38" class="box" rx="4"/>
-<text x="355" y="207" class="xs" text-anchor="start">collection: no agent alive</text>
+<text x="355" y="207" class="xs" text-anchor="start">collection: no agent may be alive</text>
 <rect x="345" y="234" width="230" height="38" class="box" rx="4"/>
 <text x="355" y="257" class="xs" text-anchor="start">harvest: flags, exclusions</text>
 <rect x="345" y="284" width="230" height="38" class="box" rx="4"/>

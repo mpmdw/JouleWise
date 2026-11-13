@@ -83,7 +83,7 @@ We treat the instrument's limits as results. Every reported phase energy carries
 - an **attribution floor**: the largest amount by which phase-edge timing alone could move the energy assigned
   to one request's phase (Section 4.4);
 - a **detection floor**: the largest energy difference the instrument produces between runs that do the same
-  thing, and hence the smallest real difference it can resolve (Section 4.5);
+  thing, and hence the smallest difference the registered analysis will call resolved in one session (Section 4.5);
 - a **dominance ratio**: the factor by which allowing each value to move within its timing uncertainty
   enlarges the detection floor. A ratio of at least 2 means that timing movement at least doubles that floor. The statement that
   timing attribution dominates the detection floor is licensed only when every registered ratio is at least 2
@@ -383,7 +383,7 @@ on the physical energy of the phase."*
 ### 4.5 The detection floor (example in Appendix D.4)
 
 The **detection floor** of a model and phase is the largest difference the registered estimator allows between
-runs that do the same thing; hence the smallest real difference the instrument can resolve. It has two forms.
+runs that do the same thing; hence the smallest difference that this analysis will call resolved in that session. It has two forms.
 
 - **Absolute form**, from the kept repeats v₁ … v_n: deviations are vᵢ − mean(v); the prediction term is
   t × s × √(1 + 1/n), with s the sample standard deviation of the deviations and t the two-sided 95% Student-t
@@ -413,7 +413,7 @@ For each model and phase, `floor_abs_j` and `floor_cmp_j` are those two drift-wi
 `floor_gate_j` is their maximum; the contrast uses the larger gate of its two sides. The allowance is added
 after the guard, once per form. It does not enter the point or corner-widened diagnostics, the dominance ratios,
 or the attribution floor. Each floor is disclosed with the guarded operative value, the allowance and its source,
-and the resulting minted floor. The contrast's decision interval separately carries the contrast session's
+and the resulting published floor. The contrast's decision interval separately carries the contrast session's
 allowance (Section 4.7). The blind ruling of 12 October corrected the analysis plan's contrary description
 without changing the code (Section 5.5). A detection floor is *attribution-limited* (class `attribution_limited`
 under D-078) when its published value is set by the clock-anchor timing bound.
@@ -429,8 +429,7 @@ R ≥ 2 (equality passes) means that letting each value move within its timing b
 A threshold merely above 1
 would let any positive timing width decide the answer, so the registered threshold is a doubling.
 
-For the comparative form we also print R_cm, a sensitivity replay in which a block-level energy allowance
-derived from shared edge movements is applied with *one* sign across all quads, and each quad's own local
+For the comparative form we also print R_cm, a sensitivity replay in which each quad's energy allowance, derived from shared edge movements, is applied with *one* sign across all quads, and each quad's own local
 uncertainty with its own sign, over every sign combination. R_cm retains one shared sign for scalar energy
 allowances; it does not replay one physical time shift in every quad, and passing it licenses no claim of
 robustness to a common physical timing error.
@@ -454,8 +453,7 @@ The instrument may read differently at the end of a session than at its start. E
 and prefill halves, and an **end triplet** of three. The reference energies are never science measurements.
 
 **Drift screen.** The session passes when the absolute difference between the end-triplet and start-triplet
-means is at most the bound, on gross energies and again on idle-subtracted energies. A session that fails is
-excluded; one that cannot compute the screen (too few survivors) cannot count.
+means is at most the bound, on gross energies and again on idle-subtracted energies. A session that fails is excluded. A session with too few clean corpus runs or too few surviving references has an **undefined** screen (Appendix D.6): it has no drift allowance, and it cannot count.
 
 **Drift allowance.** A = max(bound, spread), where the spread is the largest minus the smallest of the start
 mean, the midpoint energy and the end mean. Each run carries ½A into its cell's B, so a contrast, which differs
@@ -485,9 +483,8 @@ moves d̄ by more than a quarter of the floor gate, that is reported.
 
 The outcome is one of four registered words, decided in this order of precedence:
 
-- **not estimable**: a required input is missing or invalid;
-- **not resolvable**: there is no floor, or |d̄| does not exceed the floor gate, or the decision interval
-  contains zero while the metrology interval does not;
+- **not estimable**: a required input is missing or invalid, which includes fewer than five kept quads;
+- **not resolvable**: there is no floor, or a required error term is unknown, or |d̄| does not exceed the floor gate, or the decision interval contains zero while the metrology interval does not. A session with an undefined drift screen (Section 4.7) has no allowance, so no deterministic bound D and no decision interval, and its contrast falls here;
 - **unresolved**: the metrology interval contains zero, or Holm's correction does not reject;
 - **direction supported**: otherwise; the direction is the sign of d̄.
 
@@ -530,7 +527,7 @@ A **pack** is a frozen, hash-pinned plan for one measurement session. Three pack
 - the **8B floor pack** does the same for Qwen3-8B;
 - the **contrast pack** measures the two contrasts, decode and prefill, in contrast quads.
 
-A **session** is one armed span on the measurement laptop: one unattended collection of a whole pack, of roughly six hours. Its runs are its **member runs**. No other workload is permitted, and a live AI agent process is treated as a hazard (Sections 5.3 and 8.3). Its shape is fixed (Figure 2): a fixed 60 s idle wait (registered as the settle; it is a duration, not a test of the machine's state); the opening
+A **session** is one armed span (armed: allowed to start, Section 5.3) on the measurement laptop: one unattended collection of a whole pack, of roughly six hours. Its runs are its **member runs**. No other workload is permitted, and a live AI agent process is treated as a hazard (Sections 5.3 and 8.3). Its shape is fixed (Figure 2): a fixed 60 s idle wait (registered as the settle; it is a duration, not a test of the machine's state); the opening
 calibration capture; the 18-run reference corpus; the start triplet; the decode half; the midpoint reference;
 the prefill half; the end triplet; and the closing calibration capture. In each floor pack each half holds 10
 absolute repeats followed by 10 null quads (50 runs); in the contrast pack each half holds 10 contrast quads (40
@@ -616,7 +613,7 @@ facts; the replication's numerical results remain sealed, and Section 6.8 remain
 
 ![Figure 3. Order of measurement sessions (schematic ledger).](figures/fig_p1_session_ledger.svg)
 
-*Figure 3. Schematic of the registered ordering, with no outcomes. Rows are rounds of the replication block;
+*Figure 3. Schematic of the registered ordering, with no outcomes. Rows are the primary block and the rounds of the replication block;
 cells are the attempts of each pack in the registered rotation, with BYTES sessions interleaved between rounds
 (Section 7.2). Which attempts counted is filled from the harvest records
 ({{FILL: P1-LEDGER | per-attempt verdicts (counting or not, with cause family) for every primary, replication and BYTES attempt, from the harvest verdicts and attempt histories}}).*
@@ -710,7 +707,7 @@ LEAN-COVERAGE-AUDIT.md §§2-4. No agreement or completion verdict is asserted h
 
 **Replication block.** A different program prints the replication block's numbers. The printing program, here the *first program*, is the lean recomputation; it loads the primary block's recomputation functions, pinned by digest. The *second side* is a harvest twin, a contrast-engine twin, a checker for counting, floor pairing and the between-session arithmetic, and a reducer cross-check. Exclusions are re-derived from the stored flags under the replication catalog, which, as in the primary block, is not an independent detection of the hazards. The heavy registered pipeline was not run as an audit for this block.
 
-The comparison is made over the second side's keys only. A quantity that only the first program prints is not compared and not counted: it is recorded as *first-program-only*, with a count per class beside the compared, passed, failed and unmatched counts, and it does not change the verdict. A key that only the second side holds, with a value, fails. A row where both sides hold no value passes and is counted separately as *null on both sides*; that is agreement that a quantity is absent, not agreement on a number. Agreement is therefore stated over compared rows only, with those two counts beside it, and the rows agreeing on a value are the compared rows minus the null-on-both-sides rows. A class with no compared row carries no verdict. An excluded drift-screen run is read but is not a compared run, and its trace flags do not stop the comparison; a screen run that is not excluded stays a compared run, and a missing trace on it stops the comparison. A pinned input or a pinned session that is not supplied refuses the run by name.
+The comparison is made over the second side's keys only. A quantity that only the first program prints is not compared and not counted: it is recorded as *first-program-only*, with a count per class beside the compared, passed, failed and unmatched counts, and it does not change the verdict. A key that only the second side holds, with a value, fails. A row where both sides hold no value passes and is counted separately as *null on both sides*; that is agreement that a quantity is absent, not agreement on a number. Agreement is therefore stated over compared rows only, with those two counts beside it, and the rows agreeing on a value are the compared rows minus the null-on-both-sides rows. A class with no compared row carries no verdict. An excluded reference or corpus run of the drift screen (Section 4.7) is read but is not a compared run, and its trace flags do not stop the comparison; a reference or corpus run that is not excluded stays a compared run, and a missing trace on it stops the comparison. A pinned input or a pinned session that is not supplied refuses the run by name.
 
 The second side has limits that are fixed by design. The cell and floor estimators of the two floor packs, and the dominance ratios copied from their output, have one producer in this block and print with the label *single-source*; the same pinned functions agreed with the registered analysis on the primary block in every compared family (Table S8). The labelled lines that rerun the estimators on another unit set, the scaled-allowance and single-step lines, the per-phase whole-machine line, and a contrast's ratio, per-token, t and cross-session fields print as *not independently recomputed*. For a session whose drift screen is undefined, the second side compares neither the screen row nor any contrast field, and requires only that the outcome word is not resolvable or not estimable. For a contrast with two to four kept quads it compares the count, the mean difference, its spread and the bounds; it does not compare p or the Holm-adjusted p, and requires that both are 1.0 and the word is not estimable. The Holm value of that session's other contrast is computed on both sides with p = 1.0 for the short one. Two inputs are shared and not independent: the engine twin is given the first program's floor gate, and the block check takes primary-block inclusion and the floor-binding defect mark from the first program.
 
@@ -856,8 +853,7 @@ more often. This reading is not established.
 | Qwen3-8B | prefill (2,048) | 128.28 | [125.19, 131.38] | 0.06264 | 2.85 |
 
 *Table 2. Reported gross phase energy per request, M3 Max / MLX / powermetrics SoC rails (CPU + GPU + ANE as reported by
-`powermetrics`), primary block, one session per model; the kept units of each cell are in Table 1. Interval =
-m ± (h + B) (Section 4.3). The attribution-floor column is the X of the attribution-floor sentence (Appendix C,
+`powermetrics`), primary block, one session per model; the kept units of each cell are in Table 1. Interval = m ± (h + B) (Section 4.3). Means are rounded to nearest, interval ends outward and floors up, so a printed interval can be one last digit wider at each end than the printed terms give. The attribution-floor column is the X of the attribution-floor sentence (Appendix C,
 Attribution floor), which applies to each row; the floor is printed beside the cell and is not added to the
 interval. Decode per-token values divide by the 512 runtime-observed output tokens, 511 of them generated in the
 decode phase. The two models were measured in separate sessions in a fixed order, and the 42-token prefill of the
@@ -886,16 +882,16 @@ Labelled lines printed beside each cell, none of which replaces it:
 
 ### 6.3 Detection floors
 
-| Model | Phase | Absolute floor (J) | Comparative floor (J) | Operative floor (J) | Drift allowance included (J) | n (abs / cmp) |
+| Model | Phase | Absolute floor (J) | Comparative floor (J) | Floor gate (J) | Drift allowance included (J) | n (abs / cmp) |
 |---|---|---|---|---|---|---|
 | Qwen3-1.7B | decode | 5.77 | 2.97 | 5.77 | 0.973 | 10 / 8 |
 | Qwen3-1.7B | prefill (2,048) | 8.22 | 3.41 | 8.22 | 0.973 | 9 / 8 |
 | Qwen3-8B | decode | 10.18 | 3.80 | 10.18 | 1.17 | 7 / 7 |
 | Qwen3-8B | prefill (2,048) | 8.84 | 4.39 | 8.84 | 1.17 | 9 / 6 |
 
-*Table 3. Detection floors, primary block, M3 Max / MLX / powermetrics SoC rails (Section 4.5). Each absolute and comparative value includes its small-sample guard where n < 10, followed by the floor session's whole gross drift allowance; the operative column is the larger of those drift-widened values. The allowance is each floor session's own drift allowance from its reference requests (Section 4.7, Table S6), and the guarded value of each form is the tabulated value less that allowance. A floor is a property of this machine, stack, boundary and session; it does not rank hardware or validate absolute scale. Phase attribution is reported without a measured instrument phase-accounting check.*
+*Table 3. Detection floors, primary block, M3 Max / MLX / powermetrics SoC rails (Section 4.5). Each absolute and comparative value includes its small-sample guard where n < 10, followed by the floor session's whole gross drift allowance; the floor-gate column is the larger of those drift-widened values (Section 4.5). The allowance is each floor session's own drift allowance from its reference requests (Section 4.7, Table S6), and the guarded value of each form is the tabulated value less that allowance. A floor is a property of this machine, stack, boundary and session; it does not rank hardware or validate absolute scale. Floors are rounded up. Phase attribution is reported without a measured instrument phase-accounting check.*
 
-All four published floors of Table 3, which are the arm gates of the two contrasts, are attribution-limited: each one's issued floor class is `attribution_limited`, with floor source `E_clock_anchor_shift_bound_j`, the clock-anchor timing bound. Their repeatability-only floors are the point floors that Table 4 gives as denominators, before the small-sample guard and the drift allowance. For the absolute forms, which set all four published floors, these are 0.591, 0.945, 0.827 and 0.771 J; with the guard they lie between 0.59 and 1.01 J.
+All four published floors of Table 3, which are the floor gates of the two contrasts' sides (Section 4.5), are attribution-limited: each one's issued floor class is `attribution_limited`, with floor source `E_clock_anchor_shift_bound_j`, the clock-anchor timing bound. Their repeatability-only floors are the point floors that Table 4 gives as denominators, before the small-sample guard and the drift allowance. For the absolute forms, which set all four published floors, these are 0.591, 0.945, 0.827 and 0.771 J; with the guard they lie between 0.59 and 1.01 J.
 <!-- FACT H14: RL-5 item 1; l9-rulings/RULING.md J5(b),(e); detection_floor.py:1818-1838. -->
 
 In plain terms: the clock-anchor timing bound, not run-to-run repeatability, sets each of the four published floors, and each is several times its repeatability-only value. "Attribution-limited" here is the name of a floor class (Section 4.5) and describes how these four numbers were formed. It is not the registered dominance statement, which Section 6.4 tests separately and does not make.
@@ -944,8 +940,7 @@ floor packs' sessions, collected separately; its transfer to the contrast sessio
 assumption, quoted in Section 9, that the shared-edge treatment calibrated on floor quads applies unchanged at the
 same quad timescale. Both contrasts reach level L2 under the registered gate; the claim level is the gate's
 recorded output. The gate's eligibility inputs (selection, the absence of top-ups, replacement validity,
-transport and current checks) are collection-time records; we did not re-derive them. Phase attribution is
-reported without a measured instrument phase-accounting check.*
+transport and current checks) are collection-time records; we did not re-derive them. Interval ends are rounded outward. Phase attribution is reported without a measured instrument phase-accounting check.*
 
 <!-- BRANCH 5.5.1 selected for both contrasts (seat 12, 2026-11-11). From the table: decode rows 530
 (direction_supported), 531 (positive) and 532 (L2); prefill rows 533, 534 and 535. From the registered rule
@@ -962,13 +957,13 @@ analysis_engine/claims.py:333-382. These are code glosses, not selected outcomes
 <!-- RL-66: the reason-code table for unselected branches 5.5.4 and 5.5.5, with its lead-in, is cut; the outcome
 words stay defined in Section 4.8. -->
 
-**Leave-one-quad-out.** Decode: no single quad changes the verdict; the 6 leave-one-out estimates run from 146.57 to 146.67 J. Prefill: no single quad changes the verdict; the 5 leave-one-out estimates run from 101.68 to 101.87 J, each over 4 quads, one fewer than the cell minimum of 5; the registered check recomputes the contrast on the remaining quads and does not re-apply that minimum. Phase attribution is reported without a measured instrument phase-accounting check.
+**Leave-one-quad-out.** Decode: no single quad changes the verdict; the 6 leave-one-out estimates run from 146.57 to 146.67 J. Prefill: no single quad changes the verdict; the 5 leave-one-out estimates run from 101.68 to 101.87 J, each over 4 quads, one fewer than a contrast's minimum of 5 kept quads (Section 4.8); the registered check recomputes the contrast on the remaining quads and does not re-apply that minimum. Phase attribution is reported without a measured instrument phase-accounting check.
 
 **Decision interval against the floor.** In both contrasts the near end of the decision interval lies beyond the floor gate: 141.35 J against 10.18 J for decode, and 95.80 J against 8.84 J for 2,048-token prefill. Phase attribution is reported without a measured instrument phase-accounting check.
 
 **Registered descriptive estimates** (decide nothing). The 8B-to-1.7B ratio of phase energies was 3.858 (the geometric mean over kept quads of the per-quad ratio; t interval [3.849, 3.866]) for decode and 4.884 (same quantity; t interval [4.858, 4.910]) for 2,048-token prefill; recorded timing bounds are not propagated into these t intervals. Per token, the difference was 0.2864 (metrology interval [0.2860, 0.2868]; decision interval [0.2760, 0.2967]) J per output token and 0.04971 (metrology interval [0.04953, 0.04990]; decision interval [0.04678, 0.05265]) J per prompt token. Phase energy is gross:
 it includes the machine's baseline power over the phase, and the 8B phase lasts longer, so part of the difference
-is baseline power times the extra duration. *Without quads holding battery-assisted runs:* no quad held a battery-assisted run (0 such quads, from the collection record's battery-assist flags; not re-derived), so this line equals the primary estimate: d̄ = 146.63 J, metrology interval [146.44, 146.82] J, n = 6 for decode, and d̄ = 101.81 J, metrology interval [101.44, 102.18] J, n = 5 for 2,048-token prefill. *Load-correlated exclusions not applied:* the registered pipeline could not compute this line; the independent recomputation's value, uncompared, is d̄ = 146.80 J (metrology interval [146.43, 147.17] J, n = 8, 2 quads restored) for decode and 101.66 J ([101.22, 102.09] J, n = 8, 3 restored) for 2,048-token prefill. Phase attribution is reported without a measured instrument
+is baseline power times the extra duration. *Without quads holding battery-assisted runs:* no quad held a battery-assisted run (0 such quads, from the collection record's battery-assist flags; not re-derived), so this line equals the primary estimate: d̄ = 146.63 J, metrology interval [146.44, 146.82] J, n = 6 for decode, and d̄ = 101.81 J, metrology interval [101.44, 102.18] J, n = 5 for 2,048-token prefill. *Load-correlated exclusions not applied:* the registered pipeline refused this line (refused, `member_code_on_kept_unit`); the independent recomputation's value, recompute only; not compared, is d̄ = 146.80 J (metrology interval [146.43, 147.17] J, n = 8, 2 quads restored) for decode and 101.66 J ([101.22, 102.09] J, n = 8, 3 restored) for 2,048-token prefill. Phase attribution is reported without a measured instrument
 phase-accounting check.
 
 ### 6.6 Consistency checks beside the claims
@@ -1051,7 +1046,7 @@ rows 523 and 1651-1793 under RL-4 (vii); the replication block keeps its own pla
 Table 6 places the primary block's value of every Part 1 quantity beside each counting replication session's
 value, under the same estimators, with each session's interval, kept units and flags.
 
-{{FILL: P1-B6-SIDEBYSIDE | Table 6: for each pack and each quantity of Sections 6.2-6.5 (reported means, per-token values, attribution floors, operative floors, dominance ratios, d̄ and energy ratios): the primary value; each counting replication session's value with interval, kept units, flags, its floor pairing (including any "floor from the primary block") and its producer label from the registered printed-quantity table (computed and compared; single-source; not independently recomputed; or the conditional label with the clause that applied to that session); the difference Δ = (mean over counting replication sessions) − (primary value) and each session's own difference; and the between-session summary "between-session summary (n sessions): mean, standard deviation"}}
+{{FILL: P1-B6-SIDEBYSIDE | Table 6: for each pack and each quantity of Sections 6.2-6.5 (reported means, per-token values, attribution floors, floor gates, dominance ratios, d̄ and energy ratios): the primary value; each counting replication session's value with interval, kept units, flags, its floor pairing (including any "floor from the primary block") and its producer label from the registered printed-quantity table (computed and compared; single-source; not independently recomputed; or the conditional label with the clause that applied to that session); the difference Δ = (mean over counting replication sessions) − (primary value) and each session's own difference; and the between-session summary "between-session summary (n sessions): mean, standard deviation"}}
 
 The rules for which runs and sessions enter differ between the blocks (the replication block turned most record
 conditions into flags), and each block's calibration acceptance sets its own operative timing bound; both facts
@@ -1450,11 +1445,11 @@ by the file system"); RL-5 item 3. -->
 
 ![Figure 5. The research pipeline (schematic).](figures/fig_p1_pipeline.svg)
 
-*Figure 5. Schematic of the permitted activities. Agents develop and review code in cloud and local sessions,
+*Figure 5. Schematic of the permitted activities. Agents develop and review code in the cloud and locally,
 run on the measurement laptop between sessions, and run blind processing on the analysis laptop under custody
 rules. No agent process may remain alive during collection. Primary-block L9 outputs are produced in the blind
 dry run and verified at release (Section 5.6); printing additionally requires the independent comparison and
-separate checks of uncovered quantities (Section 5.7).*
+separate checks of uncovered quantities (Section 5.7). The analysis-host column shows the primary block. In the replication block the recomputation's functions print the numbers and a second side is compared with them (Section 5.7).*
 
 **What armed each collection.** The record separates two questions: what performed each arm, and who held
 standing authority over when to collect.
@@ -1712,7 +1707,7 @@ replication reports between-session variation descriptively and pools nothing. C
 order; a curved drift does not cancel within a quad.
 
 **Floor transfer.** Contrasts are judged against floors measured in separate sessions, under the registered
-assumption that "the shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the
+assumption that "the shared onset and offset edge treatment calibrated on floor blocks [quads] transfers unchanged to the
 consuming contrast at the same block timescale"; the historical evidence for it records bounds, not realized
 run-level boundary errors (Appendix C: Floor transfer assumption, Floor transfer limit).
 
@@ -1854,10 +1849,11 @@ tested explanation, so no correction is applied and the symmetric timing domain 
 *Figure B1. Fitted edge excursions of one historical GPU pulse capture under the current clock mapping (retained
 figure of the methods draft). Historical, diagnostic only; it establishes neither phase-energy dominance nor
 transfer to inference nor future coverage.*
+<!-- Figure B1 source: docs/paper/figures/fig4_edge_excursions.svg, generated by scripts/paper_excursion_decomposition.py at commit 49b258d23 (2026-08-30) under anchor method powermetrics_native_second_rate_aware_set_membership_v1 (CLOCK_METHOD_V3; the rate-aware mapping landed 2026-08-18, commit 4efea1344). Provenance: docs/paper/figures/fig4-verification.md. Values for DX-010 to DX-013 must still be compared with the figure's printed values when filled. -->
 
 ## Appendix C. Fixed disclosure sentences
 
-These are the registered fixed sentences, printed from the literals the disclosure producer uses (`joulewise/b5_analysis/disclosures.py`), so that each is verbatim; only the first letter is capitalized and a closing full stop supplied. X, Δ, k and S are filled where a sentence is used. Internal labels stay in the sentence and are glossed in brackets after it. The registered sentences say "window"; the body says "session" for the same thing. A sentence marked "not triggered" has a condition that did not occur in the primary block; it is listed so that the inventory is complete. The body prints a sentence in these words, or paraphrases it and cites its label here.
+These are the registered fixed sentences, printed from the literals the disclosure producer uses (`joulewise/b5_analysis/disclosures.py`), so that each is verbatim; only the first letter is capitalized and a closing full stop supplied. X, Δ, k and S are filled where a sentence is used. Internal labels stay in the sentence and are glossed in brackets after it. The registered sentences say "window"; the body says "session" for the same thing. One registered sentence says "block" for a quad; the body says "quad". A sentence marked "not triggered" has a condition that did not occur in the primary block; it is listed so that the inventory is complete. The body prints a sentence in these words, or paraphrases it and cites its label here.
 
 - *Conditionality*: "These numbers are conditional on a window that passed the registered physical-hazard checks at arm and kept at least 5 of 10 units per stratum after the registered exclusions; the kept units of each cell are printed beside it."
 - *Single window*: "The units of this cell were measured in one window; the interval covers variation within that window, not between days or windows. The repeats and quads are modelled as independent units; that is an assumption (D-179 dependence caveat)." [D-179: the registered dependence caveat]
@@ -1868,7 +1864,8 @@ These are the registered fixed sentences, printed from the literals the disclosu
 - *Decision interval against the floor* (not triggered in the primary block): "The estimate exceeds the floor, but its decision interval reaches below the floor."
 - *Leave-one-quad-out magnitude* (not triggered in the primary block): "Leaving out quad k moves the estimate by X J, more than a quarter of the floor; the direction, the floor status and the multiplicity decision are unchanged."
 - *Order*: "Every quad ran 1.7B, 8B, 8B, 1.7B in that fixed order; the order was not randomized, and the p-value assumes the quad differences are independent."
-- *Floor transfer assumption*: "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale."
+- *Floor transfer assumption*: "The shared onset and offset edge treatment calibrated on floor blocks transfers unchanged to the consuming contrast at the same block timescale." [block: a quad]
+
 - *Floor transfer limit*: "The historical corpus records bounds, not realized member-level boundary errors."
 - *Separate windows*: "The 1.7B and 8B reported cells were collected in separate windows in a fixed order; their difference is not a comparison (claims ladder: forced order stays below L2)."
 - *Short prefill*: "The 42-token prefill of the decode workload is shorter than one power record and could not be resolved; as registered, no p42 value is reported." [p42: the 42-token prefill of the decode workload]

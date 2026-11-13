@@ -38,8 +38,7 @@ continuity, the battery-term timing, the clock-rate hold, the disk budget and a 
 longest regimes. {{FILL: P1-BYD-CHECKS | per check: what was measured, its registered use, and its outcome word (for the drift-transfer test, "pass not established" for all three regimes and the registered scale retained); no energy from these checks is used for any claim}} These checks set gates and sensitivity lines only.
 
 **Synthetic validation.** The analysis and its independent twin agreed on every printed field in nineteen synthetic
-agreement campaigns, and the HC3 intervals' plain 95% coverage in 400 synthetic campaigns per simulated world was
-at least 0.9475, above the registered floor of 0.93.
+agreement campaigns, and in synthetic campaigns of 400 draws per simulated world, the HC3 intervals' plain 95% coverage was at least 0.9475 in every world and fit, above a pre-set floor of 0.93.
 
 **When results follow.** {{FILL: P1-BYD-WHEN | the planned dates of the stage-1 commitment and stage-2 release, conditional on completion, never on results}}
 
