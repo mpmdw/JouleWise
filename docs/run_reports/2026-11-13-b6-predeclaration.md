@@ -10,6 +10,10 @@ program on real custody (step 7). It holds every value predeclared for steps 7 t
 and `b6_mapping_build.py` only: names, digests and the session index fields. No session content was opened and
 the pinned program has not been run on real custody.
 
+**Amended 2026-11-13 13:28 PST (`date`) after gate attempt 1** (class A, section 2a): `D_gate`, `D_block`, the
+mapping digest, the step 7 to 9 argv lists (new documents; gate out-dir `$RUN/gate-2`) and the attempts ledger.
+Nothing predeclared for steps 7 to 10 changes.
+
 **Blanks.** A value that exists only after the S-14 cut and steps 1 to 5 is written `⟨CUT: …⟩`. One that exists
 only after the gate run is written `⟨GATE: …⟩`. `⟨LEAD-CONFIRM: …⟩` marks a value taken from a plan, which the
 lead confirms against the record named. Before the push, every `⟨CUT⟩` and `⟨LEAD-CONFIRM⟩` blank is filled.
@@ -93,8 +97,8 @@ pin request §6 at `9a98eb5b1`, filled 2026-11-13 12:40 PST. N-1 to N-13, N-15 t
 | `LOOP` | `/Volumes/JW-EXT/b6-custody`. Confirmed: the kit report's line 182 gives it as `--loop-dir`; RUN_STATE 302 puts both loop files there; receipt 1 (`RSHA`, re-hashed 12:46 PST, the RUN_STATE 303 verify) lists `loop_files` `attempts.jsonl`, `state.json`, `loop_state_waived` false. It is not `$RUN` (RL-139 fix 4) |
 | `B5OUT` | `/Volumes/JW-EXT/air-home/jw-b5-custody/release-check-final-20261108T0942Z/recompute.json` |
 | `B5SHA` | `c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc` (`docs/analysis/b5/RESULTS.md`, row RC; RL-134 item 2) |
-| `D_gate` | `3bea5b2aec906248f229ebb04b64c4954cfcbb1d7dcc35b997c31f96917d2d9d` (step 5, 12:51 PST, exit 0: `inputs sessions=1 sha256=3bea5b2a…2d9d`; `$RUN/run-inputs-gate.json`, mode 600) |
-| `D_block` | `eb834c47b5f34c88784a57665cc1ae344d7fe309a4bcbe7a05b91f078d6b4c8f` (step 5, 12:51 PST, exit 0: `inputs sessions=9 block5=pinned sha256=eb834c47…4c8f`; `$RUN/run-inputs-block.json`, mode 600) |
+| `D_gate` | `ace8bfb4f8ceb0b007d0641933ad78f2d469f73af3f159feb63b617bdebf7b9a` (13:26 PST, exit 0: `inputs sessions=1 sha256=ace8bfb4…7b9a`; `$RUN/run-inputs-gate-2.json`, mode 600). Attempt 1's document, superseded: `3bea5b2a…2d9d`, now `$RUN/run-inputs-gate.attempt1.json` |
+| `D_block` | `0a1a149cc9403e956121eec2daaf7c852eae1a83ea1c079562c80c4e4cc66a8e` (13:26 PST, exit 0: `inputs sessions=9 block5=pinned sha256=0a1a149c…6a8e`; `$RUN/run-inputs-block-2.json`, mode 600). Superseded, never launched: `eb834c47…4c8f`, now `$RUN/run-inputs-block.attempt1.json` |
 | `ORDER` | `r1-alpha r1-beta r1-gamma r2-beta r2-gamma r3-gamma r3-alpha r3-beta r4-alpha` (the order of the arguments only) |
 
 **Step 4 record (structure, before step 6).** The runbook's step 4 and the corrected commands predeclare these
@@ -112,6 +116,47 @@ SHA-256 `79fbf41168049d44ca017c1617b11a1e15c7a453215014a4d562354c97319cf6`. The 
 `stated_order_holds`, `pairing_equals_r7` and `nine_counting` true, no contradiction, the implied pairing equal to
 §17-R7's; one meter stream per session; every family equal to the verify map; no flags-file substitution. The
 `session_index:` line fills `OPEN[R7-SESSION-INDEX]` (RL-134 item 9; `scripts/b6_s17_fill_check.py r7-text`).
+That `mapping.json` is attempt 1's, now `$RUN/mapping.attempt1.json`; section 2a gives the current one.
+
+### 2a. Gate attempt 1 and the relocation correction (class A; RL-134 item 11, RL-139 reading 9)
+
+**Attempt 1.** Launched by the lead 2026-11-13 13:24:02 PST (wrapper `/Volumes/JW-EXT/scratch/b6-gate-launch.zsh`,
+out-dir `$RUN/gate`, `D_gate` `3bea5b2a…2d9d`): exit 4, `refused: compression_relocation_ambiguous class=A`, wall
+0.331 s, peak RSS 64.5 MB, closure unchanged, stdout empty. The refusal is raised in input authentication
+(`joulewise/b6_analysis_inputs.py:86-99` at `$S14`) before any session is read. No restricted or public output was
+written. Class A attempts so far: 1 of 3.
+
+**Cause.** Each session's desk log (`<archive>.desk/compression.jsonl`) holds two `compress` rows per file. One
+row has the sealed archive path, which the kit relocates (`<source_path>` → `.`). The other has the live,
+pre-harvest path under `/Users/edr/night-b6/sessions/<id>/runs-parent/<runs root>` or `…/<id>/custody`. The
+program never probes an absolute path, and that second row matched no relocation, so it had 0 matches. No row
+matched two.
+
+**Correction.** The per-session entries follow R12's own rule (`archive_pin`, `scripts/b6_r12_verify.py:98-104` at
+`$S14`, the form the program was exercised on): custody → `sources/night-custody`, the `_bound` runs root →
+`sources/bound-runs`, the other runs root → `sources/claim-runs`. They were written by hand into `mapping.json`
+under each session's `relocations`; the kit adds `<source_path>` → `.` itself. The B-4 output was rebuilt first
+and is byte-equal to attempt 1's (`mapping-report.json` unchanged, `562f65f1…82eb`, so `OPEN[R7-SESSION-INDEX]`'s
+fill stands). The new `$RUN/mapping.json` is SHA-256
+`fb6271d209e50322a99c156ec939160b9ac6f99685abd41a2eac818045de0d2f`. It equals attempt 1's apart from the
+`relocations` keys. Each new document equals attempt 1's apart from `compression.relocations`.
+
+| Session | `…/sessions/<id>/custody` → | runs root → `sources/claim-runs` | `<runs root>_bound` → `sources/bound-runs` |
+|---|---|---|---|
+| `r1-alpha`, `r3-alpha`, `r4-alpha` | `sources/night-custody` | `…/<id>/runs-parent/runs_d117_floor_qwen3-1p7b_v5` | `…_v5_bound` |
+| `r1-beta`, `r2-beta`, `r3-beta` | `sources/night-custody` | `…/<id>/runs-parent/runs_d117_floor_qwen3-8b_v5` | `…_v5_bound` |
+| `r1-gamma`, `r2-gamma`, `r3-gamma` | `sources/night-custody` | `…/<id>/runs-parent/runs_d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5` | `…_v5_bound` |
+
+`…` is `/Users/edr/night-b6/sessions`. Each session's entries name only its own `<id>`.
+
+**Offline resolution (not RC-B6-1).** A copy of `:86-99`, with `relative()` from `:25-29`, read only each row's
+`event` and `path`. The new gate document resolves 1,628 of 1,628 `r1-alpha` rows to exactly one path (814
+distinct). The new block document resolves every row of the nine to exactly one path (14,426 rows; 0 with 0 or
+2+ matches). Every relocated name is in that session's kit `--list-names` list.
+
+**Disclosure.** To find the prefixes, the builder seat read the `event` and `path` fields of the nine desk logs
+under `$ROOT`, on the lead's instruction under RL-139 reading 9. These are file names, which is structure. No
+digest, size or other field was read.
 
 ### Block 5's input, predeclared (RL-134 item 2 term 2; build B-5)
 
@@ -126,18 +171,19 @@ SHA-256 `79fbf41168049d44ca017c1617b11a1e15c7a453215014a4d562354c97319cf6`. The 
 ## 3. The two argv lists, verbatim
 
 The corrected commands of `/Volumes/JW-EXT/scratch/b6-real-run-commands.md` (RL-139), with the variables of
-section 2. A relaunch uses a new `--out-dir` (`$RUN/gate2`, `$RUN/dry2`, …), and step 11 names that directory.
+section 2. A relaunch uses a new `--out-dir` (`$RUN/gate-2`, `$RUN/dry-2`, …), and step 11 names that directory.
+As amended after attempt 1 (section 2a), the gate run uses `$RUN/gate-2` and the `-2` documents.
 
 **Step 7, the gate run** (one-session `block` on `r1-alpha`, not `--closed`, no `--block5`; RL-134 item 1):
 
 ```
 nohup $PY -I -B $TOOLS/b6_real_run.py --checkout $W --expect-commit $S14 --stem gate --limit-s 1800 \
-    --out-dir $RUN/gate -- block --session $ROOT/r1-alpha/archive --loop-attempts $LOOP/attempts.jsonl \
-    --loop-state $LOOP/state.json --inputs $RUN/run-inputs-gate.json --inputs-sha256 <D_gate> --workers 1 \
-    --restricted-out $RUN/gate/restricted.json --public-out $RUN/gate/public.json &
-$PY -I -B $TOOLS/b6_structure_probe.py --stage gate --restricted $RUN/gate/restricted.json \
-    --public $RUN/gate/public.json --r3-table $R3 --inputs $RUN/run-inputs-gate.json \
-    --out $RUN/gate/structure.json
+    --out-dir $RUN/gate-2 -- block --session $ROOT/r1-alpha/archive --loop-attempts $LOOP/attempts.jsonl \
+    --loop-state $LOOP/state.json --inputs $RUN/run-inputs-gate-2.json --inputs-sha256 <D_gate> --workers 1 \
+    --restricted-out $RUN/gate-2/restricted.json --public-out $RUN/gate-2/public.json &
+$PY -I -B $TOOLS/b6_structure_probe.py --stage gate --restricted $RUN/gate-2/restricted.json \
+    --public $RUN/gate-2/public.json --r3-table $R3 --inputs $RUN/run-inputs-gate-2.json \
+    --out $RUN/gate-2/structure.json
 ```
 
 **Step 8, the dry run** (closed nine, serial, normal priority, Block 5 pinned; RL-134 items 2 and 5):
@@ -146,7 +192,7 @@ $PY -I -B $TOOLS/b6_structure_probe.py --stage gate --restricted $RUN/gate/restr
 nohup $PY -I -B $TOOLS/b6_real_run.py --checkout $W --expect-commit $S14 --stem dry --limit-s <2 × W_pred> \
     --out-dir $RUN/dry -- block $(for s in $ORDER; do echo --session $ROOT/$s/archive; done) --closed \
     --loop-attempts $LOOP/attempts.jsonl --loop-state $LOOP/state.json --block5 $B5OUT \
-    --inputs $RUN/run-inputs-block.json --inputs-sha256 <D_block> --workers 1 \
+    --inputs $RUN/run-inputs-block-2.json --inputs-sha256 <D_block> --workers 1 \
     --restricted-out $RUN/dry/restricted.json --public-out $RUN/dry/public.json &
 ```
 
@@ -158,7 +204,7 @@ The `--session` arguments expand, in order, to: `$ROOT/r1-alpha/archive`, `$ROOT
 
 ```
 $PY -I -B $TOOLS/b6_structure_probe.py --stage dry --restricted $RUN/dry/restricted.json \
-    --public $RUN/dry/public.json --r3-table $R3 --inputs $RUN/run-inputs-block.json \
+    --public $RUN/dry/public.json --r3-table $R3 --inputs $RUN/run-inputs-block-2.json \
     --loop-attempts $LOOP/attempts.jsonl --block5-expected $RUN/b5-probe.json --term7 \
     --out $RUN/dry/structure.json
 ```
@@ -219,7 +265,7 @@ launched. RL-134 items 11 to 15 then apply (section 7).
 
 | Item | Rule | Value |
 |---|---|---|
-| `w_gate` | measured wall of the passing gate run (`$RUN/gate/record.json`, `wall_s`) | `⟨GATE: w_gate s⟩` |
+| `w_gate` | measured wall of the passing gate run (its `record.json`, `wall_s`; `$RUN/gate-2/record.json` if attempt 2 passes) | `⟨GATE: w_gate s⟩` |
 | `W_pred` | 9.9 × `w_gate`, rounded up to the next 100 s; **3,400 s** if `w_gate` is missing | `⟨GATE: W_pred s⟩` |
 | Alarm | 1.5 × `W_pred`. Nothing is done on the alarm | `⟨GATE: alarm s⟩` |
 | Stop (`--limit-s`) | 2 × `W_pred` (with no `w_gate`: 6,800 s). This replaces the 10,800 s stop for the real run | `⟨GATE: stop s⟩` |
@@ -308,7 +354,7 @@ Step 1's serial-against-pool comparison is skipped: there is one run. The `run_p
   Every launch goes in the ledger (RL-134 item 6).
 - **Unblinding** (RL-134 item 10). The release event is the commit of the release record on `main`. Until then,
   nobody opens the following, except through the pinned program, the kit and the probe:
-  - `$RUN/gate/restricted.json` and `$RUN/dry/restricted.json`;
+  - every gate and dry attempt's `restricted.json` (`$RUN/gate-2/…`, `$RUN/dry/…` and any later out-dir);
   - either run's `stdout` or `stderr`;
   - `analysis-tmp`;
   - any file under `$ROOT`.
@@ -319,5 +365,7 @@ The launcher appends one line per launch to `$RUN/attempts.jsonl`. It is copied 
 
 | # | Stem, out-dir | Start (`date`) | argv SHA-256 | Exit | Refusal code, class | Wall s | Restricted, public SHA-256 |
 |---|---|---|---|---|---|---|---|
+| 1 | `gate`, `$RUN/gate` | 2026-11-13 13:24:02 PST (`time_ns` 1794605042392810000) | `e8efd54fa133a891a78e17ac63f48fce141a0dac9bfa6f6536c7f2b27b48df85` | 4 | `compression_relocation_ambiguous`, A (status `refused`) | 0.331 | none written (stdout `e3b0c442…b855`, empty; stderr `4ccb1393…fc12`) |
 
-(empty)
+Row 1 is copied from `$RUN/attempts.jsonl` line 1 (`joulewise.b6_real_run.attempt.v1`) and `$RUN/gate/record.json`
+(`closure_unchanged` true, `time_wrapper_exit` 0). Section 2a gives the remedy.
