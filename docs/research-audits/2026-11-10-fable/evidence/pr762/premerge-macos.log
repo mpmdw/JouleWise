@@ -1,0 +1,50 @@
+aaa2f3086 -> /Volumes/JW-EXT/jw-wt/r2head head aaa2f3086 clean=0
+3551e1a7d -> /Volumes/JW-EXT/jw-wt/r2base head 3551e1a7d clean=0
+f19f36081 -> /Volumes/JW-EXT/jw-wt/r2tools head f19f36081 clean=0
+rc sha 4a9f594471652581
+== A. HEAD test_block6 + test_b6_production
+Ran 62 tests in 380.475s
+OK
+== B. TOOLS test_b6_release_record + test_b6_structure_probe
+Ran 40 tests in 200.043s
+OK
+== C. HEAD tests.test_git_fixture_maintenance
+FAIL: test_every_test_module_routes_git_initialization_through_shared_helper (tests.test_git_fixture_maintenance.GitFixtureMaintenanceTests.test_every_test_module_routes_git_initialization_through_shared_helper)
+Ran 6 tests in 90.396s
+FAILED (failures=1)
+== C. BASE tests.test_git_fixture_maintenance
+FAIL: test_every_test_module_routes_git_initialization_through_shared_helper (tests.test_git_fixture_maintenance.GitFixtureMaintenanceTests.test_every_test_module_routes_git_initialization_through_shared_helper)
+Ran 6 tests in 91.682s
+FAILED (failures=1)
+== C. HEAD tests.test_install_night_agent
+Ran 67 tests in 428.495s
+OK
+== C. BASE tests.test_install_night_agent
+Ran 67 tests in 423.001s
+OK
+== C. HEAD tests.test_run_night
+FAIL: test_blocked_journal_never_blocks_deadline_or_grants_go (tests.test_run_night.BindSupervisionProcessTests.test_blocked_journal_never_blocks_deadline_or_grants_go)
+FAIL: test_blocking_join_startup_and_post_publication (tests.test_run_night.BindSupervisionProcessTests.test_blocking_join_startup_and_post_publication)
+FAIL: test_pending_exec_returns_receipt_then_launcher_reaps_late_child (tests.test_run_night.BindSupervisionProcessTests.test_pending_exec_returns_receipt_then_launcher_reaps_late_child)
+FAIL: test_pre_send_local_timeout_and_late_global_expiry (tests.test_run_night.BindSupervisionProcessTests.test_pre_send_local_timeout_and_late_global_expiry)
+FAIL: test_signalled_child_cannot_hold_cleanup_past_budget (tests.test_run_night.BindSupervisionProcessTests.test_signalled_child_cannot_hold_cleanup_past_budget)
+FAIL: test_startup_hang_is_nonblocking (tests.test_run_night.BindSupervisionProcessTests.test_startup_hang_is_nonblocking)
+FAIL: test_supervised_worker_is_reaped_on_cancellation (tests.test_run_night.QuietDriverIntegrationTests.test_supervised_worker_is_reaped_on_cancellation)
+Ran 292 tests in 419.307s
+FAILED (failures=7)
+== C. BASE tests.test_run_night
+FAIL: test_blocked_journal_never_blocks_deadline_or_grants_go (tests.test_run_night.BindSupervisionProcessTests.test_blocked_journal_never_blocks_deadline_or_grants_go)
+FAIL: test_blocking_join_startup_and_post_publication (tests.test_run_night.BindSupervisionProcessTests.test_blocking_join_startup_and_post_publication)
+FAIL: test_pending_exec_returns_receipt_then_launcher_reaps_late_child (tests.test_run_night.BindSupervisionProcessTests.test_pending_exec_returns_receipt_then_launcher_reaps_late_child)
+FAIL: test_pre_send_local_timeout_and_late_global_expiry (tests.test_run_night.BindSupervisionProcessTests.test_pre_send_local_timeout_and_late_global_expiry)
+FAIL: test_signalled_child_cannot_hold_cleanup_past_budget (tests.test_run_night.BindSupervisionProcessTests.test_signalled_child_cannot_hold_cleanup_past_budget)
+FAIL: test_startup_hang_is_nonblocking (tests.test_run_night.BindSupervisionProcessTests.test_startup_hang_is_nonblocking)
+FAIL: test_supervised_worker_is_reaped_on_cancellation (tests.test_run_night.QuietDriverIntegrationTests.test_supervised_worker_is_reaped_on_cancellation)
+Ran 292 tests in 414.586s
+FAILED (failures=7)
+== D. comparer tests
+test_compare_rl142 (unittest.loader._FailedTest.test_compare_rl142) ... ERROR
+ERROR: test_compare_rl142 (unittest.loader._FailedTest.test_compare_rl142)
+Ran 1 test in 0.000s
+FAILED (errors=1)
+done 15:55:45
