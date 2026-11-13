@@ -10147,6 +10147,76 @@ also sends it to tomorrow and comes to me.
 
 Any departure from an expected value above comes to me with names only.
 
+# RL-143. Rehearsal is for a measurement session that cannot be redone, not for analysis of sealed custody; RL-126 §3, RL-127 and RL-132 §2 are narrowed to that (2026-11-13 14:47 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 14:47 PST (`date`).
+
+**Read.** RL-126 §3, RL-127, RL-132, RL-134 and RL-142 as committed at `origin/audit/2026-11-10-fable`; the pipeline time audit; the runbook's section 2 (rows P-1 to P-4) and section 4 headings. Ed's correction of 11-13: "the rehearsal was meant to prevent defects on a 10 hour actual block of measurements, not a standing rule to rehearse everything and waste time". `AIR-QUIET.lock` was present (`rl142-r2-tests`, 14:32). I ran no test, reader or program.
+
+**The error is mine.** RL-126 §3, RL-127 and RL-132 §2 set a price for rehearsals and never asked where one is needed. They took Ed's practice for the MBP (smoke before a long block) and made it a standing budget for analysis. The evidence against that is now in hand:
+
+- The R12 fixture program cost about 37 seat-hours over 53 calendar hours and a 12 h closed nine that did not close, in part because of agent test load on the Air. It never gave the program a Block 5 output, so it could not see the `pack_block5_keys` defect.
+- The blind dry run on real custody found that defect in 47 min (RL-142). The real analysis is about 25 min and can be run again. A session on the MBP is about 10 h and cannot.
+- R12 did find defects before the pin (RL-133). This entry does not say it found nothing. It says a fixture cohort is not the standing way to find them.
+
+**Ruled.**
+
+1. **Where rehearsal applies.** Before arming a measurement session on the MBP, after a change to night code, config, kit or host state: one smoke and the prequalification that trips the likely flags, run off the MBP first wherever the check is not hardware-bound (audit §3 item 7). With no such change since the last clean session, nothing is rehearsed. Budget: the "Smoke or Part A" row, 75 min.
+2. **Where it does not apply.** Analysis of sealed custody. It is replaced by four things, in this order:
+   - **(a) Unit tests on the pinned program**, with a mutant for each function that selects, filters or joins keys. Before the pin, an **input inventory**: every argument and input family the real command will receive (each `--block5`-type external, each pack, each line family) is listed beside the test that supplies it. A row with no test blocks the pin. This is the check that would have caught RL-142's defect, in seconds, from a stub.
+   - **(b) The registered one-session gate run, then the blind dry run, on real custody**, read only through the structure probe. This is the first-contact test. A stop there is expected sometimes and is handled by RL-134 items 11 to 14.
+   - **(c) The release check** (RL-134 item 7), which guards the release.
+   - **(d) Guard tests on every tool that opens restricted output** (launcher, probe, record builder): on a small synthetic output, a planted value makes the tool refuse. A leak is the other irreversible step, so these stay mandatory before a tool touches custody. They are tests of minutes, not roots.
+3. **Synthetic fixture cohorts for analysis: none by default.** One is built only on my ruling, which names the defect class, says why (a) to (d) cannot catch it, and sets its budget. A minimal synthetic reproduction of a named stop (RL-142 §1's script) is a test under (a), not a cohort: 30 min, and if it does not reproduce by then it comes to me with names.
+4. **The cost of this, stated.** More defects will be met after the pin, each as a dated §17 line and a new tag, as RL-142's was. That is accepted. Blinding, the admissibility rule of RL-134 item 11 term 4 and the deviation log are what make it safe, and none of them is relaxed.
+5. **Registered obligations are untouched.** A fixture or read that a signed registration names as a condition still runs. From now on no registration I review makes a synthetic cohort a release condition.
+6. **No agent test load on the Air during a gate run or dry run** (RL-134 item 5 term 1, now explicit). Tests on the Air run under `AIR-QUIET.lock` by its holder only.
+
+**RL-127, term by term.**
+
+| Term | Status |
+|---|---|
+| 1 Rehearsal ratio | Already replaced by RL-132 §2; see below |
+| 2 Program total (10 × *A* or 8 machine-hours) | **Narrowed.** It stays as the cap on attempts of the real run (RL-134 item 13). It no longer licenses fixture spend: for analysis that allowance is zero without a ruling under item 3 |
+| 3 Closed nine exempt; MBP supplementary nine | **Spent.** RL-141 closed it. The MBP nine is not launched |
+| 4 Reuse before regenerating | Kept. The existing R12 roots are kept and not regenerated |
+| 5 Fewest sessions | Kept, for a cohort ruled under item 3 |
+| 6 Stage budgets and the 1.5 × alarm | **Kept**, every row. "Rehearsal attempt" now means item 1 and item 3 only. The dry run is not a rehearsal: its row is "Dry-run stop, 2 × the predicted wall" |
+| 7 Timing ledger, 8 Watcher, 9 Weekly report | **Kept**, unchanged |
+| 10 What a budget never buys | Kept |
+| 11 Frozen and pinned code | Kept |
+
+**RL-132.** §1 (`time_wrapper_exit`) is untouched. §2: the table's arithmetic stays for a cohort ruled under item 3. **"Free launch" is withdrawn for analysis fixtures**: none launches without a ruling, whatever its forecast. *A* = measured dry-run wall (RL-134 item 5 term 4) stands. The PR #759 constant stays 6000 s; no code changes for this entry. **RL-126 §3:** items 5, 7 and 8 stay; item 6's "a program change means re-reads" becomes RL-142 item 5's rule (item 9 below).
+
+**7. The live Block 6 r2 path (RL-142 §5 steps 1 to 9): confirmed, nothing dropped, nothing delayed.**
+
+| Step | Kind | Status |
+|---|---|---|
+| Patch tests, the mutant, `test_block6` whole | Unit tests, item 2(a) | Stay |
+| Kit end-to-end against r2 | One test on a small synthetic archive, inside the parallel 25 min step | Stays. It is a test, not a cohort |
+| CI, Opus delta check | Review | Stay |
+| Gate run (about 5 min), probe, comparison (a) | Real custody, blind; registered (RL-99 item 3, §17-DLE2) | Stays |
+| Dry run (about 47 min), probe, term 7, comparison (b) | Real custody, blind | Stays |
+| Records, release check, Ed's renewed OK | Item 2(c) | Stay |
+
+The one synthetic rehearsal that route held, the RL-123 §2 item 3 re-reads, RL-142 item 5 already removed. RL-142 stands as written.
+
+**For future blocks (amends RL-134 and the runbook).**
+
+8. **No R12-style program and no closed nine before a pin.** The pre-pin work is item 2(a) and 2(d). The pin is followed by the gate run and the dry run as soon as the custody copy verifies.
+9. **RL-134 item 11 term 4** (and item 12's `option_c_disagrees` row): after a fix to pinned bytes, a synthetic root is re-read only if its execution reaches the changed code. Otherwise the evidence is names-only comparisons of the gate and dry outputs before and after, as RL-142 item 5 (a) and (b). Term 3's blind reproduction stays, sized by item 3.
+10. **Runbook row P-2** (rehearse the whole post-cut chain on a cohort root) is withdrawn for future blocks. The gate run is that chain's first run. **Runbook §4's** "rehearsed on synthetic roots before it touches custody" reads: unit and guard tests on small synthetic outputs; no root is built for a tool.
+11. **RL-134 item 2 term 2's probe** counts from the unfiltered key set (RL-142 item 4), on every block.
+12. Everything else in RL-134 stands: the gate's form, the stop at 2 × `W_pred`, the attempts ledger, the release check, term 7 before the release, the failure classes, the moment of unblinding.
+
+**Owner.** The lead: items 1, 6, the input inventory of 2(a) in the next block's pin request, and seat briefs (no seat is asked for a fixture cohort without a ruling number). Research lead: item 3 rulings, in one turn. The magistrate: item 1 on the MBP, as now.
+
+**Gate.** Binds from entry. It gates nothing on the live r2 path. The next block's pin request carries the input inventory.
+
+**Not checked.** I did not count what R12 found against what it cost, so "R12 found defects before the pin" rests on RL-133 alone. I did not re-read the registration for fixture obligations (item 5 is conditional for that reason). The 37 seat-hours, 53 h, 12 h, 47 min and 25 min figures are the audit's and RL-142's.
+
+**Blind status.** Blind to Block 6: no custody, archive, session or outcome path was opened. Rulings, the audit, the runbook and the lock file's one line only. Block-5-aware.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
