@@ -247,6 +247,20 @@ def _invoke(original, *args, **kwargs):
     return original(*args, **kwargs)
 
 
+def independent_process_environment(environ):
+    """Return a copy of ``environ`` for a separate test process with its own report.
+
+    A test's subprocesses inherit its report, so their refusals fail that test.
+    An independent test process (a shard_tests.py worker) must not share it:
+    one worker's deliberate refusals (this module's own witnesses) would fail
+    tests in the others. Without the key, its install() makes a fresh report.
+    """
+
+    environment = dict(environ)
+    environment.pop("JW_TEST_HOST_GUARD_REPORT", None)
+    return environment
+
+
 def install():
     global _report
     if _originals:

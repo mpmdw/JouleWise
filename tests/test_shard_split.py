@@ -948,6 +948,27 @@ class TestTimeoutTests(unittest.TestCase):
         self.assertIn("TEST TIMEOUT tests.fixture.SlowTests.test_hangs", result.stderr)
         self.assertIn("Thread", result.stderr)  # faulthandler's all-threads dump
 
+    def test_a_patched_time_monotonic_neither_feeds_nor_stops_the_watchdog(self):
+        # tests/test_run_night.py patches time.monotonic with a two-value
+        # side_effect; the watchdog must keep its own clock.
+        code = (
+            "import sys, time; from unittest import mock; sys.path.insert(0, 'scripts'); "
+            "import shard_tests; dog = shard_tests._TestWatchdog(0.5); "
+            "patch = mock.patch.object(time, 'monotonic', side_effect=[100.0, 350.0]); "
+            "patch.start(); dog.arm('tests.fixture.PatchedClock.test_x'); "
+            "[dog.arm('tests.fixture.PatchedClock.test_x') for _ in range(3)]; "
+            "assert time.monotonic() == 100.0 and time.monotonic() == 350.0; "
+            "time.sleep(30)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code], cwd=ROOT, capture_output=True,
+            text=True, timeout=25,
+        )
+        self.assertEqual(
+            result.returncode, shard_tests.TEST_TIMEOUT_EXIT_CODE, result.stdout + result.stderr
+        )
+        self.assertIn("TEST TIMEOUT tests.fixture.PatchedClock.test_x", result.stdout)
+
     def test_rearming_and_disarming_keep_the_process_alive(self):
         code = (
             "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests; "
@@ -1045,6 +1066,7 @@ class ShardWorkerTests(unittest.TestCase):
         output = io.StringIO()
         with (
             mock.patch.object(shard_tests.subprocess, "Popen", _ScriptedPopen),
+            mock.patch.dict(os.environ, {"JW_TEST_HOST_GUARD_REPORT": "/tmp/parent.jsonl"}),
             redirect_stdout(output),
         ):
             code = shard_tests.run_units_in_workers(
@@ -1066,6 +1088,8 @@ class ShardWorkerTests(unittest.TestCase):
             self.assertEqual(argv[argv.index("--shards") + 1], "6")
             self.assertEqual(argv[argv.index("--index") + 1], "3")
             self.assertEqual(launch["env"]["PYTHONUNBUFFERED"], "1")
+            # Each worker gets its own host-command-guard report.
+            self.assertNotIn("JW_TEST_HOST_GUARD_REPORT", launch["env"])
         self.assertIn("WORKER ESTIMATES 50.000,50.000", text)
         self.assertIn("[w1/2] MODULE PASS tests.test_a", text)
         self.assertIn("[w2/2] MODULE PASS tests.test_b", text)

@@ -632,6 +632,9 @@ def _result_counts(result: unittest.TestResult) -> tuple[int, int, int, int]:
 
 TEST_TIMEOUT_ENV = "JW_TEST_TIMEOUT_SECONDS"
 TEST_TIMEOUT_EXIT_CODE = 124
+# Bound at import: tests patch time.monotonic (e.g. side_effect lists), and
+# the watchdog thread must neither consume their values nor die on them.
+_watchdog_clock = time.monotonic
 
 
 def test_timeout_seconds() -> float | None:
@@ -681,7 +684,7 @@ class _TestWatchdog:
     def arm(self, label: str) -> None:
         with self._condition:
             self._label = label
-            self._deadline = time.monotonic() + self.seconds
+            self._deadline = _watchdog_clock() + self.seconds
             self._condition.notify()
 
     def disarm(self) -> None:
@@ -695,7 +698,7 @@ class _TestWatchdog:
                 if self._deadline is None:
                     self._condition.wait()
                     continue
-                remaining = self._deadline - time.monotonic()
+                remaining = self._deadline - _watchdog_clock()
                 if remaining > 0:
                     self._condition.wait(remaining)
                     continue
@@ -1139,7 +1142,15 @@ def run_units_in_workers(
     totals = partition_totals(groups, weights, unknown_weight=unknown_weight)
     print("WORKER ESTIMATES", ",".join(f"{value:.3f}" for value in totals), flush=True)
     command_prefix = [sys.executable, "-B", os.fspath(Path(__file__).resolve())]
-    environment = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    # Each worker installs its own host-command-guard report. Inheriting this
+    # process's report would let one worker's deliberate refusals (the guard's
+    # own witnesses) fail tests running in the other workers (run 43455573327).
+    _ensure_import_paths()
+    from tests import host_command_guard
+
+    environment = host_command_guard.independent_process_environment(
+        {**os.environ, "PYTHONUNBUFFERED": "1"}
+    )
     lock = threading.Lock()
     outputs: dict[int, list[str]] = {}
 
