@@ -1562,6 +1562,152 @@ class FullProductionSessionTests(unittest.TestCase):
         self.assertFalse(native["injected_clock"])
 
 
+class DryRunLimitTests(unittest.TestCase):
+    def test_three_hour_limit_stops_only_owned_group_and_requires_profile(self):
+        """Predict RL-123: timeout is unconditionally 10,800 native seconds; stop only the newly owned group, return 124/profile-required and never retry."""
+        from b6_r12_dry_supervise import wait_owned
+        from unittest.mock import Mock, patch, call
+        import signal
+        process = Mock(pid=987654)
+        process.wait.side_effect = [subprocess.TimeoutExpired("owned-reader", 10800), 0]
+        with patch("b6_r12_dry_supervise.os.killpg") as stop:
+            self.assertEqual(wait_owned(process), (124, True))
+        self.assertEqual(process.wait.call_args_list, [call(timeout=10800), call(timeout=5)])
+        stop.assert_called_once_with(987654, signal.SIGTERM)
+
+    def test_normal_exit_is_preserved_without_signal(self):
+        """Predict: actual child exit 7 is preserved; no timeout signal or invented success."""
+        from b6_r12_dry_supervise import wait_owned
+        from unittest.mock import Mock, patch
+        with patch("b6_r12_dry_supervise.os.killpg") as stop:
+            self.assertEqual(wait_owned(Mock(wait=Mock(return_value=7))), (7, False))
+            stop.assert_not_called()
+
+
+class ReaderContextTests(unittest.TestCase):
+    def test_native_interval_uses_authenticated_mbp_nanoseconds(self):
+        """Predict: MBP endpoints 100.000000123 and 160.000000456 yield 60.000000333 s despite an Air-copy interval of 999 s; changing endpoint bytes refuses."""
+        from b6_r12_reader_context import mbp_native_interval
+        from b6_r12_verify import sha
+        with tempfile.TemporaryDirectory(prefix="r12-mbp-native-") as directory:
+            outer = Path(directory).resolve() / "fixture"
+            root = outer / "main"
+            session = root / "sessions/r1-alpha"
+            session.mkdir(parents=True)
+            archive = session / "archive"
+            (session / "session.json").write_text(json.dumps({"paths": {"archive": str(archive)}}))
+            paths = [root / "fixture-manifests/r1-alpha.json", Path(str(archive) + ".desk/compression.jsonl")]
+            for p in paths:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_bytes(b"unit")
+            mtimes, hashes = Path(str(outer) + ".mbp-mtimes.txt"), Path(str(outer) + ".mbp-sha256.txt")
+            names = [str(p.relative_to(outer.parent)) for p in paths]
+            mtimes.write_text(''.join(stamp + ' 4 ' + name + '\n' for stamp, name in zip(
+                ("100.000000123", "160.000000456"), names)))
+            hashes.write_text(''.join(sha(p) + '  ' + name + '\n' for p, name in zip(paths, names)))
+            original = {"wall_s": 999, "primary_stream_duration_s": 500}
+            value = mbp_native_interval(outer, root, "r1-alpha", original, mtimes, hashes)
+            self.assertEqual(value["wall_s"], 60.000000333)
+            self.assertEqual(value["air_copy_native_interval"], original)
+            self.assertEqual(value["generation_host"], "MBP Mac15,9")
+            paths[1].write_bytes(b"edit")
+            with self.assertRaisesRegex(ValueError, "endpoint bytes"):
+                mbp_native_interval(outer, root, "r1-alpha", original, mtimes, hashes)
+
+
+class RereadAttributionTests(unittest.TestCase):
+    def outputs(self):
+        from copy import deepcopy
+        from b6_r12_compare_reread import OLD_PROGRAM
+        old = {"program_sha256": OLD_PROGRAM, "inputs": {"host": "Air"},
+            "sessions": {"r1-beta": {"quantities": {"unit": 1.0}}},
+            "block": {"option_c": {"pass": True, "failures": [], "comparator": {"pass": True,
+                "classes": {"energy": {"compared": 1, "passed": 1, "failed": 0, "unmatched": 0, "pass": True}}}}}}
+        new = deepcopy(old)
+        new["program_sha256"] = "f" * 64
+        new["inputs"]["external_supplied"] = {"loop_attempts": True, "loop_state": True, "block5": False}
+        gate = new["block"]["option_c"]
+        gate["first_program_only"] = [{"class": "reported", "session": "r1-beta", "key": "unit"}]
+        gate["comparator"]["classes"]["energy"]["first_program_only"] = 0
+        gate["comparator"]["classes"]["reported"] = {
+            "compared": 0, "passed": 0, "failed": 0, "unmatched": 0, "first_program_only": 1}
+        return old, new, {"restricted_sha256": "old", "flag_count": 0}, {"restricted_sha256": "new", "flag_count": 0}
+
+    def test_only_predeclared_reporting_changes_are_attributed(self):
+        """Predict: program identity, RL-113 names/counts and RL-115 supply metadata attribute; no scientific value is normalized away."""
+        from b6_r12_compare_reread import compare_outputs
+        result = compare_outputs(*self.outputs(), "old", "new", "f" * 64)
+        self.assertTrue(result["pass"])
+        self.assertEqual(result["unattributed"], [])
+
+    def test_numeric_or_comparator_change_stops_attribution(self):
+        """Predict: a quantity change and a changed compared-class verdict each produce an unattributed path and fail; zero-compared pass=true refuses."""
+        from b6_r12_compare_reread import compare_outputs
+        old, new, ap, bp = self.outputs()
+        new["sessions"]["r1-beta"]["quantities"]["unit"] = 2.0
+        value = compare_outputs(old, new, ap, bp, "old", "new", "f" * 64)
+        self.assertFalse(value["pass"])
+        self.assertIn("/sessions/r1-beta/quantities/unit", value["unattributed"])
+        new["block"]["option_c"]["comparator"]["classes"]["reported"]["pass"] = True
+        with self.assertRaisesRegex(ValueError, "was judged"):
+            compare_outputs(old, new, ap, bp, "old", "new", "f" * 64)
+
+
+class HistoricalProfileTests(unittest.TestCase):
+    def test_exact_three_profiles_and_source_copy_integrity(self):
+        """Predict RL-123: each named historical profile passes Git/blob/copy authentication; a changed recorded generator digest or copied runtime refuses, and the list has exactly three entries."""
+        from b6_r12_historical_profile import PROFILES, COPIES, source_hashes, validate_completed_profile
+        from b6_r12_segments import snapshot
+        self.assertEqual(len(PROFILES), 3)
+        for commit, (_name, pack, runtime) in PROFILES.items():
+            with self.subTest(pack=pack), tempfile.TemporaryDirectory(prefix="r12-history-positive-") as directory:
+                root = Path(directory).resolve()
+                (root / "loop").mkdir()
+                (root / "loop/state.json").write_text(json.dumps({"state": "ROTATE", "session": {"id": "r1-" + pack}}))
+                (root / "loop/attempts.jsonl").write_text('{}\n')
+                (root / "generator-parent-exit.txt").write_text('0\n')
+                manifest = {"pin": PIN, "synthetic_only": True, "generator_commit": commit,
+                    "runtime_sha256": runtime, "generator_files_sha256": source_hashes(commit)}
+                for copy, original in COPIES.items():
+                    (root / copy).write_bytes(subprocess.check_output(
+                        ["git", "--no-replace-objects", "show", commit + ":scripts/" + original], cwd=REPO))
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                control = {"steps": [{"exit_code": 0, "boundary": snapshot(root)}]}
+                proof = validate_completed_profile(root, control)
+                self.assertEqual(proof["pack"], pack)
+                self.assertFalse(proof["generation_resume_authorized"])
+                manifest["generator_files_sha256"]["b6_r12_profile_session.py"] = "f" * 64
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, "Git blobs"):
+                    validate_completed_profile(root, control)
+                manifest["generator_files_sha256"] = source_hashes(commit)
+                (root / "manifest.json").write_text(json.dumps(manifest))
+                (root / "runtime.py").write_text("altered source copy")
+                with self.assertRaisesRegex(ValueError, "source copy altered"):
+                    validate_completed_profile(root, control)
+
+    def test_unlisted_commit_and_altered_runtime_are_refused(self):
+        """Predict RL-123: even CWD-matching generator hashes cannot admit an unlisted generator commit or altered recorded runtime; both refuse before archive reading."""
+        from b6_r12_historical_profile import validate_completed_profile
+        from b6_r12_segments import snapshot
+        from b6_r12_verify import sha
+        with tempfile.TemporaryDirectory(prefix="r12-history-refusal-") as directory:
+            root = Path(directory).resolve()
+            (root / "loop").mkdir()
+            (root / "loop/state.json").write_text('{"state":"ROTATE","session":{"id":"r1-beta"}}')
+            (root / "loop/attempts.jsonl").write_text('{}\n')
+            (root / "generator-parent-exit.txt").write_text('0\n')
+            control = {"steps": [{"exit_code": 0, "boundary": snapshot(root)}]}
+            for commit, runtime in (("f" * 40, sha(REPO / "scripts/b6_r12_runtime.py")),
+                                    ("04eacce2afb5a5b7e5abae12d2d17ba11d39d9f8", "f" * 64)):
+                with self.subTest(commit=commit, runtime=runtime):
+                    (root / "manifest.json").write_text(json.dumps({"pin": PIN, "synthetic_only": True,
+                        "generator_commit": commit, "runtime_sha256": runtime,
+                        "generator_files_sha256": {"b6_r12_runtime.py": sha(REPO / "scripts/b6_r12_runtime.py")}}))
+                    with self.assertRaisesRegex(ValueError, "unlisted|runtime"):
+                        validate_completed_profile(root, control)
+
+
 class CourierSetControlTests(unittest.TestCase):
     def test_reduced_source_preserves_scripted_shapes(self):
         """Predict: reduced input supplier changes only dwell/token inputs; wait/skip/skew sequences survive, and no pinned function is substituted."""

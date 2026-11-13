@@ -21,9 +21,12 @@ def finish(root, denied):
     if json.loads((root / "loop/state.json").read_bytes())["state"] != "DONE":
         raise ValueError("original reduced-set loop is not DONE")
     manifest = json.loads((root / "manifest.json").read_bytes())
-    if manifest.get("reduced_set", {}).get("full_volume_claim") is not False:
+    profile = manifest.get("courier_set", manifest.get("reduced_set", {}))
+    if profile.get("full_volume_claim") is not False:
         raise ValueError("explicit reduced-volume declaration required")
-    if sha(root / "bootstrap.py") != manifest["reduced_set"]["bootstrap_sha256"]:
+    if profile.get("schedule", "reduced") != "reduced":
+        raise ValueError("explicit reduced source schedule required")
+    if sha(root / "bootstrap.py") != profile["bootstrap_sha256"]:
         raise ValueError("declared external source supplier changed")
     for path in (root, denied):
         finalize_manifest(path)
@@ -63,7 +66,9 @@ def finish(root, denied):
         "serial_receipt_sha256": sha(root / "option-c-receipt.json"),
         "timing": serial["process_measurement"], "time_wrapper_exit": serial["time_wrapper_exit"],
         "finisher_sha256": sha(Path(__file__)),
-        "remaining_gates": ["three full-volume sessions", "canonical nine-session benchmark including full-volume sessions",
+        "registered_ruling": "RL-123: canonical closed nine and byte equality are reduced-volume results",
+        "full_volume_through_canonical_closed_loop": False,
+        "remaining_gates": ["final-program full-volume single-pack reads", "supplementary MBP nine disposition",
                             "Opus cold review"]}
     (root / "reduced-finish-receipt.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     if assertions.returncode:
