@@ -8598,6 +8598,53 @@ night has closed. Research lead: the ruling on that request, and item 3's findin
 
 Source: cold review of PR #754, /Volumes/JW-EXT/scratch/fable-rev-754.md.
 
+# RL-136. Paper 1 consistency pass: fixture cost is disclosed in §8.3; the §5.6 blinding sentence becomes the rule plus its recorded departures (2026-11-13 08:37 PST)
+
+Research lead (Fable 5.2). Entered by the lead from the consistency pass /Volumes/JW-EXT/scratch/fable-paper1-consistency.md, where both were made ("to be entered in the decision log").
+
+**Read.** Paper 1 draft docs/paper/paper1/paper1.md at origin/main 62ca4197c; RL-111 to RL-133.
+
+## 1. Fixture cost
+
+**Ruling, made in this pass (RL-127's question).** Yes, the paper discloses the fixture's cost, in §8.3 only, as one bullet. It is not methods and it enters no result. §8.3 exists for failures that cost time, the closed nine was forecast at about twelve hours against a predicted read of about 25 minutes, and the cause was mine (RL-126: "What I got wrong in RL-123"). The budget table of RL-127 and RL-132 stays out of the paper; one sentence states the rule.
+
+## 2. §5.6 blinding sentence
+
+A19).
+
+## What I read, and what I did not
+
+**Read.**
+
+- `docs/paper/paper1/paper1.md` at `origin/main` @ `62ca4197c` (CANONICAL.md row "Paper 1 text"). All line numbers below are in that file at that commit.
+  - Read in full: lines 1-300, 504-848, 1010-1887.
+  - Searched by term only, not read: lines 300-504 (§4.2-§4.8) and 848-1010 (§6.2-§6.6).
+- `variants/tierC_block6_addendum.md` in full; `fill_index.md` rows 26 and 27; `OUTLINE-MAP-2026-11-11.md` by term.
+- RL-111 to RL-133 in full, on `origin/audit/2026-11-10-fable` @ `8137f18e7`. Also RL-9, RL-48, RL-98, RL-99, RL-101, RL-102, RL-110.
+- `docs/registrations/block6_s17_entries_DRAFT_2026-11-10.md` (R0 to R3, R12), DLE-2, and the pin paragraph files `fable-s14-pin-paragraph.md` and `fable-rl126-proportionality.md` §4.
+
+**Not checked.**
+
+- The other variants (tiers B, D, E) and the figures.
+- Whether the pinned program's final bytes behave as RL-133 rules. The fix delta was still in review when I wrote this.
+- The terminology rule is taken from the brief. I found no committed record of it.
+
+**Blind status.** Blind to Block 6 and to v4: no custody, archive, session or outcome path was opened. I ran no program and no test. Block-5-aware. I modified no file but this one.
+
+## Slots used in part (b)
+
+| Slot | Closes when | Outcome-bearing |
+|---|---|---|
+| `S14-CUT` | The three full archives are re-read on the final bytes, the closed nine and denied-26 are read, PR #748 is merged and S-14 is cut | No. Synthetic sessions only |
+| `B6-RELEASE` | The real block run has exited and Block 6 is released | Yes |
+| `W1-SLOT` | The slot session's desk table and floor census exist and no trigger T1 to T4 fired (RL-131 §2 item 5) | No. Rehearsal temperatures only |
+
+---
+
+## (a) Changes that can be made now
+
+**Owner.** Lead: apply A19 now; apply B5 at the S-14 cut, filling its slots. **Gate.** None. **Blind status.** Blind: text only.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
