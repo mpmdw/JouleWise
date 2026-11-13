@@ -20,11 +20,15 @@ Examples:
   python3 scripts/shard_tests.py --shards 4 --index 1
   python3 scripts/shard_tests.py --workers 4
   python3 scripts/shard_tests.py --shards 8 --index 1 --split
+
+CI sets JW_TEST_TIMEOUT_SECONDS (a per-test limit that names the overrunning
+test) and SHARD_WORKERS (child processes per shard; run_units_in_workers).
 """
 
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import fnmatch
 import importlib
 import json
@@ -36,6 +40,7 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -625,6 +630,169 @@ def _result_counts(result: unittest.TestResult) -> tuple[int, int, int, int]:
     )
 
 
+TEST_TIMEOUT_ENV = "JW_TEST_TIMEOUT_SECONDS"
+TEST_TIMEOUT_EXIT_CODE = 124
+# Bound at import: tests patch time.monotonic (e.g. side_effect lists), and
+# the watchdog thread must neither consume their values nor die on them.
+_watchdog_clock = time.monotonic
+
+# Named per-test limits that replace JW_TEST_TIMEOUT_SECONDS for one test.
+# Each entry is a known overrun, listed until the test is split or sped up.
+TEST_TIMEOUT_OVERRIDES_SECONDS = {
+    # 526 s with a runner to itself (lane run 43459892780), 802 s under four
+    # workers (run 43463516682), and over 1200 s under four workers (run
+    # 43473235567). RL-127 budgets a test at 10 minutes; split or speed it up.
+    "tests.test_controller_g2b_attachment.G2bAttachmentTests."
+    "test_tracked_bound_corpus_and_all_window_references_attach": 2400.0,
+}
+
+
+def _test_limit_seconds(test_id: str, default: float) -> float:
+    """The named override for ``test_id`` (either id form), else ``default``."""
+
+    canonical = test_id if test_id.startswith("tests.") else f"tests.{test_id}"
+    return TEST_TIMEOUT_OVERRIDES_SECONDS.get(canonical, default)
+
+
+def test_timeout_seconds() -> float | None:
+    """Return the per-test limit from ``JW_TEST_TIMEOUT_SECONDS``; unset means none.
+
+    RL-127 budgets one test unit at 10 minutes and alarms at 1.5 times that, so
+    CI sets 900.  Local runs leave it unset and are never limited.
+    """
+
+    raw = os.environ.get(TEST_TIMEOUT_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        seconds = float(raw)
+    except ValueError:
+        raise ValueError(
+            f"{TEST_TIMEOUT_ENV} must be a number of seconds; got {raw!r}"
+        ) from None
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError(f"{TEST_TIMEOUT_ENV} must be finite and positive; got {raw!r}")
+    return seconds
+
+
+class _TestWatchdog:
+    """End this process, naming what was running, when one phase overruns.
+
+    One daemon thread per process (so a test that counts threads sees a
+    constant number). The runner re-arms it at every phase boundary: a module's
+    import, each test, and the fixtures between tests (setUpClass, tearDownClass,
+    module fixtures). The label always names the test or module in progress.
+    On expiry it prints ``TEST TIMEOUT <label>`` to the real stdout and stderr,
+    dumps every thread's stack, and exits with code 124 without cleanup: a hung
+    test cannot be trusted to unwind, and the job's own timeout would name
+    nothing. It signals no other process.
+    """
+
+    def __init__(self, seconds: float):
+        self.seconds = seconds
+        self._condition = threading.Condition()
+        self._label = None
+        self._limit = seconds
+        self._deadline = None
+        self._thread = threading.Thread(
+            target=self._watch, name="shard-test-watchdog", daemon=True
+        )
+        self._thread.start()
+
+    def arm(self, label: str, seconds: float | None = None) -> None:
+        limit = self.seconds if seconds is None else seconds
+        with self._condition:
+            self._label = label
+            self._limit = limit
+            self._deadline = _watchdog_clock() + limit
+            self._condition.notify()
+
+    def disarm(self) -> None:
+        with self._condition:
+            self._label = self._deadline = None
+            self._condition.notify()
+
+    def _watch(self) -> None:
+        with self._condition:
+            while True:
+                if self._deadline is None:
+                    self._condition.wait()
+                    continue
+                remaining = self._deadline - _watchdog_clock()
+                if remaining > 0:
+                    self._condition.wait(remaining)
+                    continue
+                label, limit = self._label, self._limit
+                break
+        self._expire(label, limit)
+
+    def _expire(self, label, limit=None) -> None:
+        limit = self.seconds if limit is None else limit
+        message = (
+            f"TEST TIMEOUT {label} exceeded {limit:g} s ({TEST_TIMEOUT_ENV}); "
+            f"every thread's stack follows and this process exits {TEST_TIMEOUT_EXIT_CODE}"
+        )
+        for stream in (sys.__stdout__, sys.__stderr__):
+            try:
+                print(message, file=stream, flush=True)
+            except Exception:
+                pass
+        try:
+            faulthandler.dump_traceback(file=sys.__stderr__, all_threads=True)
+        except Exception:
+            pass
+        os._exit(TEST_TIMEOUT_EXIT_CODE)
+
+
+_WATCHDOG = None
+_WATCHDOG_CLAIMED = False
+
+
+def _claim_watchdog():
+    """Return the process watchdog for the outermost runner, or None.
+
+    None when no limit is set, or when an outer runner in this process already
+    owns it (a test that calls run_shard or run_units in process), so a nested
+    run never disarms its caller's limit.
+    """
+
+    global _WATCHDOG, _WATCHDOG_CLAIMED
+    seconds = test_timeout_seconds()
+    if seconds is None or _WATCHDOG_CLAIMED:
+        return None
+    if _WATCHDOG is None or _WATCHDOG.seconds != seconds:
+        _WATCHDOG = _TestWatchdog(seconds)
+    _WATCHDOG_CLAIMED = True
+    return _WATCHDOG
+
+
+def _release_watchdog(watchdog) -> None:
+    global _WATCHDOG_CLAIMED
+    if watchdog is not None:
+        watchdog.disarm()
+        _WATCHDOG_CLAIMED = False
+
+
+def _test_runner(watchdog) -> unittest.TextTestRunner:
+    """The shard's verbose runner; with a watchdog, each test re-arms it."""
+
+    if watchdog is None:
+        return unittest.TextTestRunner(stream=sys.stdout, verbosity=2)
+
+    class WatchedTextTestResult(unittest.TextTestResult):
+        def startTest(self, test):
+            watchdog.arm(test.id(), _test_limit_seconds(test.id(), watchdog.seconds))
+            super().startTest(test)
+
+        def stopTest(self, test):
+            super().stopTest(test)
+            watchdog.arm(f"fixtures after {test.id()} (class or module setUp/tearDown)")
+
+    return unittest.TextTestRunner(
+        stream=sys.stdout, verbosity=2, resultclass=WatchedTextTestResult
+    )
+
+
 def _unittest_import_name(module: str) -> str:
     """Translate the canonical repo name to discover's top-level import name."""
 
@@ -656,6 +824,14 @@ def run_shard(modules, shard_count: int, shard_index: int) -> int:
         sys.path.insert(0, tests_path)
     from tests import host_command_guard  # This launch path also bypasses tests-qualified module names.
     host_command_guard.install()
+    watchdog = _claim_watchdog()
+    try:
+        return _run_shard_modules(modules, shard_count, shard_index, watchdog)
+    finally:
+        _release_watchdog(watchdog)
+
+
+def _run_shard_modules(modules, shard_count: int, shard_index: int, watchdog) -> int:
     loader = unittest.TestLoader()
     total_tests = total_failures = total_errors = total_skipped = 0
     successful = bool(modules)
@@ -665,6 +841,8 @@ def run_shard(modules, shard_count: int, shard_index: int) -> int:
 
     for module in modules:
         print(f"MODULE START {module}", flush=True)
+        if watchdog is not None:
+            watchdog.arm(f"module {module} (import and load)")
         try:
             imported_module = importlib.import_module(_unittest_import_name(module))
             suite = loader.loadTestsFromModule(
@@ -684,7 +862,7 @@ def run_shard(modules, shard_count: int, shard_index: int) -> int:
             )
             continue
         started = time.monotonic()
-        result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
+        result = _test_runner(watchdog).run(suite)
         elapsed = time.monotonic() - started
         tests_run, failures, errors, skipped = _result_counts(result)
         total_tests += tests_run
@@ -793,6 +971,14 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
 
     _ensure_import_paths()
     _detach_unfileable_main()
+    watchdog = _claim_watchdog()
+    try:
+        return _run_unit_groups(units, shard_count, shard_index, watchdog)
+    finally:
+        _release_watchdog(watchdog)
+
+
+def _run_unit_groups(units, shard_count: int, shard_index: int, watchdog) -> int:
     loader = unittest.TestLoader()
     total_tests = total_failures = total_errors = total_skipped = 0
     unit_list = list(units)
@@ -811,6 +997,8 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
     )
     for module, whole_module, unit_ids in groups:
         print(f"MODULE START {module}", flush=True)
+        if watchdog is not None:
+            watchdog.arm(f"module {module} (import and load)")
         try:
             imported_module = importlib.import_module(_unittest_import_name(module))
             if whole_module:
@@ -848,7 +1036,7 @@ def run_units(units, shard_count: int, shard_index: int) -> int:
             )
             continue
         started = time.monotonic()
-        result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(suite)
+        result = _test_runner(watchdog).run(suite)
         elapsed = time.monotonic() - started
         tests_run, failures, errors, skipped = _result_counts(result)
         total_tests += tests_run
@@ -939,6 +1127,122 @@ def run_workers(worker_count: int, *, split: bool = False) -> int:
     return 0 if successful else 1
 
 
+SHARD_WORKERS_ENV = "SHARD_WORKERS"
+
+
+def run_units_in_workers(
+    units,
+    weights: dict[str, float],
+    shard_count: int,
+    shard_index: int,
+    workers: int,
+    *,
+    unknown_weight: float,
+) -> int:
+    """Run one shard's units in ``workers`` concurrent child processes.
+
+    The shard's units are dealt to the workers with the same deterministic LPT
+    packer, so a unit still runs whole in exactly one process and a split
+    module's units stay as independent as their declaration says. Each child is
+    ``shard_tests.py --units-file`` (run_units on its share). Its lines are
+    relayed live with a ``[wK/N] `` prefix; after every child exits, one
+    unprefixed SHARD SUMMARY aggregates them (``modules=`` sums each worker's
+    distinct modules). The shard passes only if every child printed a passing
+    SHARD SUMMARY and exited 0. ``workers`` of 1, or a single unit, is exactly
+    run_units in this process.
+    """
+
+    unit_list = list(units)
+    if workers < 1:
+        raise ValueError("worker count must be at least 1")
+    workers = min(workers, len(unit_list))
+    if workers <= 1:
+        return run_units(unit_list, shard_count, shard_index)
+
+    groups = partition_modules(unit_list, weights, workers, unknown_weight=unknown_weight)
+    totals = partition_totals(groups, weights, unknown_weight=unknown_weight)
+    print("WORKER ESTIMATES", ",".join(f"{value:.3f}" for value in totals), flush=True)
+    command_prefix = [sys.executable, "-B", os.fspath(Path(__file__).resolve())]
+    # Each worker installs its own host-command-guard report. Inheriting this
+    # process's report would let one worker's deliberate refusals (the guard's
+    # own witnesses) fail tests running in the other workers (run 43455573327).
+    _ensure_import_paths()
+    from tests import host_command_guard
+
+    environment = host_command_guard.independent_process_environment(
+        {**os.environ, "PYTHONUNBUFFERED": "1"}
+    )
+    lock = threading.Lock()
+    outputs: dict[int, list[str]] = {}
+
+    def relay(number, process):
+        prefix = f"[w{number}/{workers}] "
+        lines = outputs[number]
+        for line in process.stdout:
+            lines.append(line)
+            with lock:
+                sys.stdout.write(prefix + line if line.endswith("\n") else prefix + line + "\n")
+                sys.stdout.flush()
+
+    with tempfile.TemporaryDirectory(prefix="joulewise-shard-workers-") as temp_dir:
+        children = []
+        for number, group in enumerate(groups, 1):
+            units_path = Path(temp_dir) / f"units-{number}.json"
+            units_path.write_text(json.dumps(list(group)), encoding="utf-8")
+            process = subprocess.Popen(
+                [
+                    *command_prefix,
+                    "--units-file",
+                    os.fspath(units_path),
+                    "--shards",
+                    str(shard_count),
+                    "--index",
+                    str(shard_index),
+                ],
+                cwd=ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                errors="replace",
+            )
+            outputs[number] = []
+            thread = threading.Thread(target=relay, args=(number, process), daemon=True)
+            thread.start()
+            children.append((number, process, thread))
+        for _, process, thread in children:
+            process.wait()
+            thread.join()
+
+    total_modules = total_tests = total_failures = total_errors = total_skipped = 0
+    failed = []
+    for number, process, _ in children:
+        # The child's own summary is its last one; a test could print another.
+        matches = list(SHARD_SUMMARY_RE.finditer("".join(outputs[number])))
+        match = matches[-1] if matches else None
+        if match is None or match.group("result") != "PASS" or process.returncode != 0:
+            failed.append(number)
+            print(
+                f"WORKER {number}/{workers} FAILED exit={process.returncode} "
+                f"summary={'missing' if match is None else match.group('result')}",
+                flush=True,
+            )
+        if match is not None:
+            total_modules += int(match.group("modules"))
+            total_tests += int(match.group("tests"))
+            total_failures += int(match.group("failures"))
+            total_errors += int(match.group("errors"))
+            total_skipped += int(match.group("skipped"))
+    successful = not failed
+    print(
+        f"SHARD SUMMARY index={shard_index}/{shard_count} modules={total_modules} "
+        f"tests={total_tests} failures={total_failures} errors={total_errors} "
+        f"skipped={total_skipped} result={'PASS' if successful else 'FAIL'}",
+        flush=True,
+    )
+    return 0 if successful else 1
+
+
 def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
@@ -952,6 +1256,14 @@ def parse_args(argv=None):
     mode.add_argument("--shards", type=_positive_int, help="total shard count")
     mode.add_argument("--workers", type=_positive_int, help="run N shards concurrently")
     parser.add_argument("--index", type=_positive_int, help="1-based shard index")
+    parser.add_argument(
+        "--units-file",
+        type=Path,
+        help=(
+            "with --shards/--index: run exactly the units listed in this JSON "
+            "array (a run_units_in_workers child)"
+        ),
+    )
     parser.add_argument(
         "--split",
         action="store_true",
@@ -969,6 +1281,8 @@ def parse_args(argv=None):
             parser.error("--index cannot exceed --shards")
     elif args.index is not None:
         parser.error("--index is only valid with --shards")
+    if args.units_file is not None and args.shards is None:
+        parser.error("--units-file requires --shards and --index")
     return args
 
 
@@ -984,6 +1298,13 @@ def main(argv=None) -> int:
 
     if args.workers is not None:
         return run_workers(args.workers, split=args.split)
+
+    if args.units_file is not None:
+        units = json.loads(args.units_file.read_text(encoding="utf-8"))
+        if not isinstance(units, list) or not all(isinstance(u, str) for u in units):
+            print("error: --units-file must hold a JSON array of unit ids", file=sys.stderr)
+            return 2
+        return run_units(units, args.shards, args.index)
 
     timings = load_timing_map()
     if not args.split:
