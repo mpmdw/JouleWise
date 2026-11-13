@@ -580,3 +580,36 @@ No first-pass edit contradicts §4.2 to §4.8, §6.2 to §6.6 or Appendix D. Thr
 - Run names such as `neg8-window-end-r2` (Table S7) and the code `whole_window_verdict_provenance_invalid` (line 880) are registered identifiers and stay.
 - Table S4's caption says "plateau" of the battery-thermistor readings. That is a harvest flag of Paper 1. It is not the W1 gate, and B6's forbidden words do not apply to it.
 - Tier C is covered by A18 and U2. Tier D and Tier B are BYTES-only apart from A33 and A34, and no "night" appears in any variant, figure or figure script.
+
+---
+
+## A21 placement ruling (2026-11-13 09:40 PST)
+
+Scope: PR #761, branch `docs/2026-11-13-paper1-consistency-2` at 18529a5fd, read against 62ca4197c (base) and 94bdaf26c (#760 head).
+
+**Ruling: ACCEPT, as written.** The sentence after the Appendix C Part 1 list, before "Part 2 (BYTES)", stands:
+
+> One registered sentence above says "block" for a quad (*Floor transfer assumption* [block: a quad]); the body says "quad".
+
+- Appendix C Part 1 must equal the disclosure producer's text byte for byte (the fill gate `test_fill_gate_appendix_c_is_the_producer_text`). A21's two edits inside the block (the gloss at the sentence and the added sentence in the intro) are withdrawn. This sentence carries both.
+- It is accurate. Only one quoted sentence in Part 1 contains "block". The other occurrences ("not triggered in the primary block") are in the labels and mean the primary block.
+- The §9 gloss "floor blocks [quads]" (line 1710) stays as ruled.
+- This amends A21 and the first guard under "Guards for later fills": the gloss sits after the block, not at the sentence.
+
+**One defect to fix before merge (not a wording departure).** 18529a5fd leaves a new blank line inside the block, between the *Floor transfer assumption* bullet and the *Floor transfer limit* bullet (paper1.md line 1869). The base has none. Remove it, so that the block is the base's text exactly. I did not run the gate; CI was pending when I read it.
+
+**Departures from A20 to A34: none found.**
+
+- Paper text: every replacement string of A20, A21 (§9), A22, A23 (four places), A24, A25, A26, A27, A28 (three captions), A29, A30 (caption) and A31 (caption) is present at 18529a5fd, compared after whitespace folding. None of the replaced strings remains.
+- Figure script: A30 (lines 76, 80, 94) and A31 (line 141) equal my text. I did not open the regenerated SVGs.
+- Variants: A32 (Tier E comment and README cell), A33 and A34 equal my text.
+- Not checked in this ruling: `fill_index.md` beyond the A23 placeholder, the A1/A7 amendments, and `tierC_block6_addendum.md`.
+
+**`fill_check_b5.py` templates: all equal my text.**
+
+- A22, `FLOOR_CLASS`: "which are the floor gates of the two contrasts' sides (Section 4.5), are attribution-limited". Equal.
+- A23b and A28c, `TABLE3_CAPTION`: "the floor-gate column is the larger of those drift-widened values (Section 4.5)" and "Floors are rounded up." Equal. The program does not emit the Table 3 header; the paper's header reads "Floor gate (J)".
+- A24: "one fewer than a contrast's minimum of {r505:n} kept quads (Section 4.8);". Equal, with the 5 taken from row 505.
+- A25: "the registered pipeline refused this line (refused, `member_code_on_kept_unit`); the independent recomputation's value, recompute only; not compared, is". Equal. The code is the one `docs/analysis/b5/RESULTS.md` line 475 records for this line in both contrasts. It is a literal in the template, not a ledger row; that is acceptable, since the gate requires the rendered text verbatim.
+- A5 (#760, 94bdaf26c), `METER`: "member runs", "No member run fell outside the hard plausibility band", header "Member runs". Equal.
+- Left as they are: the identifiers `F_*_operative_J`, the comment at line 777 and the check labels at lines 1274 to 1278 ("arm gate", "operative floor row"). They are internal names and are not printed in the paper.
