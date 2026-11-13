@@ -6931,6 +6931,227 @@ corpus run. Block-5-aware. The ruling rests on which runs `Session.reference` ma
 - Add: "RL-121 delta on `fix/2026-11-12-b6-rl113-115`", waiting on the builder, then my cold review.
 
 
+# RL-122. The W1 die-gate round is closed: the default is adopted with changes. One config value, a die-state gate, the heatsink recorded; the slot-producing night is the test of turns 2-3
+
+Research lead (Fable 5.2), 2026-11-12 23:23 PST (from `date`). Closes the round opened in RL-119 step 2.
+RL-121 is reserved by a parallel seat and is not used here.
+
+**Read.** `brief.md`, `opus-memo.md`, `sol-memo.md` in `/Volumes/JW-EXT/scratch/w1-die-gate-round/`; the lead's desk
+replay `/Volumes/JW-EXT/scratch/r1fu-desk/REPORT.md` and `out/desk_replay.json`; RL-116 to RL-120 on
+`audit/2026-11-10-fable` @ `7370d548e`.
+
+**Checked myself at `99622e96c`** (detached throwaway worktree, since removed):
+- `thermal_gates.py:574-584`: G0, G1 and H apply both one-sided bands, each key against its own reference; only G0
+  has the slope and status clauses, and the slope is read on `s_slow` only.
+- `thermal.py:29-30`: a policy with `s_fast == s_slow` is refused. A literal one-key gate is not config-possible.
+- `v4_estimands.py:269-280`: `contrast_delivery` passes on mean admission ΔS_slow (S−G) ≥ δ_slow/2 **or** ≥ 50 % of
+  arm-G turns with G1 wait > 0, and labels itself `implementation_check`. `align_v4_thermal_desk.py:77` feeds it
+  `g0_slow_c`, the second key at G0 release.
+- `thermal_desk.py:704-708`: U2 is the range of `g0_slow_c` across included members, ≤ 3 °C.
+- No W1 desk code reads Tf08 (`thermal_desk.py`, `align_v4_thermal_desk.py`, `v4_estimands.py`: no match). The only
+  comparison is the R1 kit desk's `Tf08_disclosure` (`align_r1_thermal_replay.py:666-701`).
+- `r1_runtime.py:1782, 1817-1819`: the planning heater regulates `sensors.s_slow` with duty 0.5 + 0.5·(target − value).
+  With a 50 °C full-duty rise that settles 0.06 to 0.21 °C under target + 1.0, the band edge, at R+0, R+2 and R+4.
+- `align_r1_followup_kit.py:98-111`: the validator refuses any pick but the classifier's. `align_v4_kit.py:258-266`:
+  the W1 kit admits a die `s_slow` only through an `ok` night confirmation with authority RL-78 on the same pair.
+- The config's `sensors` line and file hash (`95825997…1dad`).
+
+**Not checked.** Opus's coupling figure (about 0.1 °C of die per °C of heatsink) and both seats' turn 2-3
+estimates are theirs; I did not recompute them, and nothing below depends on their exact values. TVh0 does not
+exist in the gated members' journals, so no claim about TVh0 on a gated member is observed by anyone.
+
+**Not done.** No SSH, no custody, no commit, push, PR comment or mail.
+
+---
+
+## 1. Verdict: adopt with changes
+
+The fixed test of RL-119 step 2 passed (step-D's G0 releases at 212 s; totals 272 / 287 / 284 / 188 s against
+367 s; every G1 under 300 s). Neither seat found a defect. The default is adopted.
+
+**The config change, exactly.** In `configs/align/v4/r1_runtime.json`, `sensors.s_slow`: `"Th0C"` → `"TVh0"`.
+Nothing else in the file: `s_fast`, `fan_keys`, `record_keys` (`["Tf08"]`), `r0_sha256`, bands, caps, `r0_picks`
+and the 60 keys are unchanged. Apply it as Sol's JSON Patch (test `Th0C`, replace with `TVh0`) or an edit of that
+one value. **Do not paste Opus's diff line:** its `r0_sha256` is mistranscribed (two characters short). The
+diff of the commit must show one changed token.
+
+**The changes** are wording and dispositions, items 2 to 6. No edit to `thermal_gates.py`, no off-table item, no
+protocol amendment.
+
+**What the gate is, as I now state it.** A die-state gate on two correlated channels of one die. TV0h and TVh0
+are not two thermometers. The heatsink is not held; the schedule sets it and Tf08 records it. A one-key gate
+would be the honest name, and the code forbids it, so the pair is the config-only form of it.
+
+**Opus versus Sol on TVh0's G1 band: Sol is right, and it matters for wording and for S6, not for adoption.**
+With d = TV0h − TVh0 ≥ 0, TVh0's band is TV0h(t) ≤ TV0h(0) + 1 + d(t) − d(0). It is looser than TV0h's while the
+die cools (d large) and tighter by up to d(0) once the channels have converged. Opus's "nearly redundant" needs
+d(0) ≈ 0. That is not established, and the pair works against it: G0's slope clause now sits on the channel that
+settles first (step-D: TVh0 clears band and slope at 154 s, TV0h's slope at 200 s), so G0 can release while TV0h
+is still coming down and d(0) > 0. Consequences:
+- The row does not say "TV0h's band with TVh0's slope". It says both bands apply (item 2).
+- S6 is not declared inert in advance (item 3b).
+- The real pair's G0 is probably shorter than the replay's and its G1 may be longer. Neither is replayable. The
+  slot night's journals carry TVh0 and settle it.
+
+## 2. The DEVIATIONS row
+
+In `docs/align/v4/DEVIATIONS.md`, row WP14(a)-R1-SLOW: keep the text up to and including "…any other failed
+clause goes to the research lead (RL-89, ruled before the night)." Replace everything after it with:
+
+> On the native D step of 2026-11-12 the registered slow class was not empty and the fallback did not run; the
+> slow pick was Th0C (alias Th0D), a key R0 classed heatsink (registered return time 299.8 s). The R1 follow-up
+> night of 2026-11-12 unseated it under RL-89: three per-turn gates timed out at 300 s, and G0 alone (340 to
+> 591 s) exceeded the duty bar (RL-116). The second gate key is now chosen by the registered fast rule applied a
+> second time to the saved Part B classification: among keys R0 classed die, admissible, and not the fast pick or
+> its aliases, the largest rise. That is TVh0 (RL-119, RL-122). TV0h and TVh0 are two die-class channels, not
+> two independent thermometers: on the night's D step they are equal at rest and under load, and TVh0 reads
+> lower, by up to 5.5 °C, only while the die cools, so the registered alias rule does not join them. The gate is
+> a die-state gate. Both one-sided bands apply, each against its own reference, and G0's slope clause is read on
+> TVh0. The gate does not hold the heatsink; the fixed inter-member schedule sets its start state. The runtime's
+> label for the second key, 'near-die settling check', is literal. The heatsink key Tf08 is journalled,
+> record-only, in every member that runs the thermal sidecar (`record_keys`; the gate module is unchanged);
+> members that run no sidecar, the ungated 30B members, are unchanged. Tf08's excess at each member's start over
+> the window reference is derived from the journals and compared between conditions within each window, and its
+> range at G0 release is printed beside U2, as disclosures. U2's G0 slow-temperature range and the contrast's
+> admission ΔS_slow are read on TVh0. The contrast's treatment-delivery clause is unchanged; it is an
+> implementation check that the per-turn gate ran in arm G, and it does not show a heatsink difference or a
+> minimum temperature difference between arms. The window reference R is an upper guard, not a target (RL-117).
+> Its last 12 to 13 s coincide with W1's own idle-plist parse, which moved R on TV0h by about −0.01 °C on that
+> night; the span is observed, not capped. No key is substituted by hand, and aliases do not fill both roles.
+> Decided before any v4 window, blind to all v4 data (RL-75, RL-78, RL-84, RL-89, RL-116 to RL-120, RL-122).
+
+Opus's coupling number is left out: it is one seat's estimate from one night and the row does not need it.
+
+## 3. Opus's three pre-night decisions
+
+**(a) RL-120 item 3 is extended to R+0 under this pair.** A planning-turn G0 timeout at R+0, R+2 or R+4, with
+OS level 0 and Nominal throughout, where the desk shows the heater's key at the band edge (within 0.3 °C under
+target + δ_slow, or crossing it), does not block W1. U5 and the planning temperature print `inconclusive`
+(RL-20 admits that). Any other pattern comes to me: OS level above 0, a non-Nominal state, a key well inside
+the band that still does not release, or any G0 timeout outside the planning turns. The planning block still
+runs as built; removing it would edit condition-13 code. Its cost is up to an hour of the night at the G0 cap,
+accepted. The lead confirms before the night that the kit takes this release without refusing the slots (RL-120
+already makes that ordinary engineering).
+
+**(b) S6: the registered rule stands, and the night's desk decides whether it can act.** If the median G1 wait
+of the gated D runs is ≤ 90 s, nothing happens. If it exceeds 90 s, the lead replays that night's G1s and holds
+at δ_slow 1.5 and 2.0 °C (the print-1 method) and prints which key was last out of band in each.
+- If a step brings the median to ≤ 90 s, the registered rule applies at the smallest such step, with the implied
+  energy band disclosed. It comes to me before any config byte changes, because that is a condition-13 edit
+  after the slot night.
+- If neither step does (TV0h's band decides), S6 records: "median G1 wait N s; not reachable by δ_slow (replay
+  at 1.5 and 2.0 °C attached); δ_slow stays 1.0 °C; implied energy band disclosed." Nothing else changes.
+  δ_fast is not tuned; that would be an amendment and nobody asked for it.
+A median above 90 s with the duty bar passed does not block the slots or signing.
+
+**(c) U2 is kept as written.** It reads the second key at G0 release, now TVh0: a die-start range. It will
+almost certainly pass and no longer bounds the heatsink; the row says what it reads. Tf08's range at G0 release
+across the same members is printed beside it, as a disclosure with no bar. U2 is not moved to Tf08: that would
+be an amendment and would turn the schedule into a window bar.
+
+## 4. Sol's ask: the delivery clause
+
+**Accepted.** Under this pair the treatment-delivery clause is an implementation check and nothing more. Its
+temperature half compares episode starts on a die key, and both arms pass the same G0, so it will read about
+zero. Its wait half passes whenever G1 ran, because five confirmation samples are a positive wait. `delivered:
+true` therefore means "the per-turn gate ran in arm G". The code already labels it `implementation_check`.
+
+- **Registration text:** protocol lines 521-522 are not amended. The one sentence in the row (item 2) is the
+  registration's statement of it.
+- **Paper text: yes, it must say so.** Methods state that the delivery check confirms the gate ran and does not
+  show a temperature difference. Any contrast verdict is reported with the arm-G wait distribution, the
+  turn-start TVh0 difference (S−G, the existing turn table) and the Tf08 disclosure beside it. A REJECTED
+  (equivalence) verdict is worded as "the gate as run, with these waits and this turn-start difference, did not
+  change turn energy by more than 6 J", never as "thermal start state does not matter". No code change.
+
+## 5. Tf08 "compared between conditions"
+
+**Not needed before signing or before the night. Needed before the first W1 thermal desk is run.**
+- The journals are the evidence; `record_keys` and `check_w1_record_keys` already guarantee them. No W1
+  condition-13 path computes the comparison, and none will.
+- The definition is fixed now, blind, so it cannot be shaped later: Tf08 at the G0 exit sample (measured-run
+  entry for a member with a sidecar and no G0), minus the window's Tf08 reference (the 60 s pre-warmup median in
+  the capture member); medians by condition and their differences, within each window; plus the G0-release
+  range of item 3c. That is the R1 kit desk's `Tf08_disclosure` as built, plus one range. Nothing is added to
+  this definition after W1's first member runs.
+- **Owner:** the lead. **Where:** the W1 desk script side (`scripts/align_v4_thermal_desk.py` or a helper it
+  shares with `align_r1_thermal_replay.py`), reusing the R1 function; none of the ten condition-13 paths.
+  Ordinary engineering with a cold review. The slot night's R1 kit desk already prints the R1 form, which is
+  the rehearsal of it.
+
+## 6. Caveat 3: the slot-producing night is the test
+
+Confirmed. Print 2 saw only turn 1, replayed from a cooler start than a die gate would give. Opus puts the
+worst D member at about 340 to 355 s against 367 s; Sol shows a recovery-shaped G1 would not fit. I take both
+as: **the night can fail the duty bar, and I am sending it anyway**, because no desk method can see turns 2 and
+3 or a hold, no shorter night exists without editing condition-13 code, and the night is owed for slots in any
+case. RL-119 step 4 disposition 2 stands unchanged: three admitted turns, gates plus holds ≤ 0.40 × T_dead, no
+X7, in every judged run; no G1 or H timeout.
+
+**If the duty bar fails there:**
+- No slots are entered. W1 does not sign. No further night is armed. It comes to me.
+- The rest of the night is kept as diagnostics: thermometry confirmation, A-B-A, and the first TVh0 journals on
+  gated members.
+- The lead brings one desk table from the journals: per judged run, each G0, G1 and H duration; the key last
+  out of band; TV0h − TVh0 at G0 release; Tf08 at each gate entry and exit; and the same replay at δ_slow 1.5
+  and 2.0 °C.
+- I then choose among the registered ladder's rungs and nothing else without an amendment: step 1 if the replay
+  shows δ_slow reaches it; step 2 (idle 300 → 450 s after D predecessors); or step 4, D screen-only. Step 3 is
+  refused by the kit. A change to the G1 reference or δ_fast would be a pre-signing protocol amendment; I do not
+  expect to want one and I do not rule it out here.
+- A failure with any other shape (X7, a G0 timeout outside planning, a failed admissibility clause) also comes
+  to me, as already ruled.
+
+## 7. Next steps, in order
+
+1. **Config commit, cited rebind.** The one value, citing RL-119 and RL-122; released from RL-107's freeze for
+   this edit only. Same PR: the DEVIATIONS row of item 2. Reviewed and CI green.
+2. **Kit validator, ruling file, regenerated Part B selection table.** The validator accepts exactly one slow
+   pick: the fast rule applied a second time (R0 die, admissible for the slow role as `sensor_admissibility`
+   tests it, not the fast pick or its aliases, largest rise, lexical ties), under a named ruling file. It still
+   refuses every other pick, still requires `slow_band_floor_c` 1.0 and Tf08 in `record_keys`. The table is
+   re-derived from the saved one, not re-measured: RL-89's four identities with the selection line changed.
+   **Cold review (a Fable seat)** of the rule's derivation and the table. The other nine condition-13 paths stay
+   byte-identical to `99622e96c`.
+3. **Part A on the final bytes**, fresh soak: G0 on TV0h / TVh0 at 1.0 / 1.0 °C releases inside 1,200 s.
+4. **The Mac 60-key check** with the new pair.
+5. **D-7.**
+6. **The night:** the full R1 follow-up program, unchanged code, at that commit. It is the slot-producing night.
+
+**Authorization.** As RL-119: standing, on a checklist. The night is authorized when all of these hold, and the
+lead does not come back to me if they do; the lead records them in the arm item:
+- the config commit's diff is the one token, and the file's new hash is the one the arm check pins;
+- the nine other condition-13 paths hash as at `99622e96c`;
+- the cold review of step 2 has no open finding, and the script-derived pick is TVh0;
+- Part A passed at that commit, with the G0 duration and the two release values stated;
+- the 60-key check and D-7 passed;
+- a dry check shows the W1 kit accepts TV0h / TVh0 given an `ok` night confirmation (`align_v4_kit.py:258-266`),
+  so signing does not meet a refusal the night cannot fix;
+- the kit handles item 3a's planning release;
+- the dispositions of RL-119 step 4, as amended by items 3 and 6 here, are in the magistrate's arm item.
+If any fails, or Part A's G0 does not release, it comes to me first.
+
+---
+
+**For Ed, plainly:** "Both reviewers agree with the plan and so do I: we change one configuration value so the
+gate watches the chip's temperature through two readings instead of the chip plus the heatsink. Two honest
+caveats came out of the review. First, those two readings are really the same thermometer seen twice, so this
+is a one-sensor gate in practice, and the paper will say so. The heatsink is recorded, not controlled. Second,
+last night's logs only ever contained a first turn, so the replay could not show whether three turns fit in the
+time budget. The reviewers' estimates put the worst case close to the limit, within about 15 to 25 seconds of
+367. So the next rehearsal night might fail on that point, and there is no cheaper way to find out than to run
+it. If it passes, W1 goes to signing. If it fails, nothing is lost but the night, and I decide between the
+fallbacks we already registered. Before the night: the one-line change, a small tool update with a review, the
+fifty-minute test, and two routine checks."
+
+**Owner.** Lead: steps 1, 2, 4, 5, the arm item, the Tf08 desk derivation (item 5), the desk tables of items 3b
+and 6. Magistrate: Part A and the night. Research lead: the cold review seat of step 2; any failure listed above.
+**Gate.** The night waits for the checklist. W1 signing waits for the night to pass RL-119 step 4 disposition 2
+and for RL-107 at that night's commit. The Tf08 derivation gates the first W1 thermal desk, not signing.
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures, classifier fields, gate timings and code
+only.
+
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
