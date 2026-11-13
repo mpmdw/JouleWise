@@ -1227,23 +1227,33 @@ def make_synthetic_inputs(root):
     # two canonical content identities, frozen_semantics_sha256 and
     # manifest_id, over bytes that include raw config digests. Rebind them
     # with the pinned functions only for a pinned manifest whose identities
-    # were self-consistent, and only inside that manifest; any other config
-    # quoting them is refused below rather than left stale.
+    # were self-consistent, and only inside that manifest; any exported pin
+    # file quoting them is refused below rather than left stale. A pinned
+    # manifest that is already inconsistent is never repaired: it is named
+    # here and the pinned resolver refuses it, as it would in production.
     from joulewise.analysis_manifest_v3 import (PROSPECTIVE_SCHEMA_VERSION,
         analysis_semantics_sha256_v1, calculate_manifest_id)
     analysis_identities = {}
+    inconsistent_analysis = []
     for relative, raw in originals.items():
         if relative.endswith(".json"):
             value = json.loads(raw)
-            if (isinstance(value, dict) and value.get("schema_version") == PROSPECTIVE_SCHEMA_VERSION
-                    and value.get("frozen_semantics_sha256") == analysis_semantics_sha256_v1(value)
+            if not (isinstance(value, dict) and value.get("schema_version") == PROSPECTIVE_SCHEMA_VERSION):
+                continue
+            if (value.get("frozen_semantics_sha256") == analysis_semantics_sha256_v1(value)
                     and value.get("manifest_id") == calculate_manifest_id(value)):
                 analysis_identities[relative] = (value["frozen_semantics_sha256"], value["manifest_id"])
-    for relative, identities in analysis_identities.items():
-        quoting = sorted(other for other, raw in originals.items() if other != relative
-                         and any(identity.encode() in raw for identity in identities))
+            else:
+                inconsistent_analysis.append(relative)
+    exported = {path.relative_to(pin).as_posix(): path.read_bytes()
+                for path in pin.rglob("*") if path.is_file()} if analysis_identities else {}
+    for relative, (frozen, manifest_id) in analysis_identities.items():
+        needles = (frozen.encode(), manifest_id.removeprefix("am-").encode())
+        quoting = sorted(other for other, raw in exported.items() if other != relative
+                         and any(needle in raw for needle in needles))
         if quoting:
             raise ValueError("analysis manifest identity is quoted outside its manifest: " + repr(quoting))
+    rebound = set()
 
     def rebind_analysis(relative, text):
         if relative not in analysis_identities:
@@ -1258,6 +1268,7 @@ def make_synthetic_inputs(root):
                     raise ValueError("analysis manifest identity is not a unique field: " + relative)
                 text = text.replace(quoted, json.dumps(current))
                 value = json.loads(text)
+                rebound.add(relative)
         return text
 
     payloads = {}
@@ -1289,6 +1300,8 @@ def make_synthetic_inputs(root):
             break
     else:
         raise ValueError("synthetic input digest graph did not converge")
+    print("prospective analysis manifests: rebound", sorted(rebound), "unchanged",
+          sorted(set(analysis_identities) - rebound), "inconsistent pin left unrepaired", sorted(inconsistent_analysis))
     overlays = {}
     for relative, raw in payloads.items():
         if raw == originals[relative]:

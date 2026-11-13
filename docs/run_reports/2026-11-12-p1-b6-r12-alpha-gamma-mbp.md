@@ -299,9 +299,17 @@ unavailable" risk (that concerns reader-side `attach_gamma` keys, after
 collection) and GAMMA r1 alone is a valid loop shape: the pinned loop
 selected `r1-gamma`, prechecked it and ran its smoke. Every R12 root built by
 the old runtime would refuse every GAMMA science stage the same way, including
-the nine-session cohorts, which never reached GAMMA (all GAMMA rows in the R12
-seat report are still "pending"). ALPHA and BETA science stages never consult
-this manifest, which is why they passed.
+the nine-session cohorts. *(Corrected after review, see "Review disposition"
+below.)* No R12 root reached a GAMMA science stage: `r12-r3-nine-01`
+(11 Nov, runtime `8f38ecbb…`) selected `r1-gamma`, passed precheck and started
+its smoke driver, then ended at `WAIT_PHYSICS` with empty `operator-logs`, no
+stage yield and no GAMMA science stage attempted; the R12 seat report already
+excludes nine-01. All other roots' `used_ids` stop at `r1-alpha`/`r1-beta`.
+ALPHA and BETA science stages never consult this manifest, which is why they
+passed. The defect was latent in every multi-pack root: cohort-15/16/17 and
+reduced-18 had GAMMA `open` and passed precheck with the inconsistent manifest
+in their inputs, because precheck does not resolve the prospective manifest
+(only the science stages do).
 
 Reproduced off-MBP before the fix: new test
 `BootstrapTests.test_synthetic_inputs_keep_prospective_analysis_identity`
@@ -386,3 +394,82 @@ Launched 23:35:02 from `/Users/edr/code/jw-wt/r12-mbp-2` at `27897044d`
 
 ALPHA root -1 (subshell 54912, supervisor 56239) was not touched and is still
 running. Root -1 GAMMA remains in place, ineligible.
+
+## Review disposition: Fable 5.2 cold review of the GAMMA runtime fix
+
+Written 2026-11-12 23:58 PST (`/bin/date`). Review:
+`/Volumes/JW-EXT/scratch/fable-rev-r12-runtime-gamma.md`, at `b5855bb93`,
+verdict **ADMIT-WITH-FIXES**. It confirmed the diagnosis, found that the
+rebind hides no pipeline check, and **accepted mixed runtime hashes as a
+declared profile difference for RL-98 term 3 / RL-48 item 5 only**. They are
+not accepted for the closed nine-session dry run or serial/pool byte equality.
+GAMMA root -2 keeps running; neither MBP clone nor any running root was
+touched for this disposition.
+
+1. **Report wording (required): done.** The "never reached GAMMA" sentence
+   above now records nine-01's GAMMA smoke start (precheck passed, smoke
+   driver started, `WAIT_PHYSICS`, no science stage attempted, already
+   excluded), and that the defect was latent in cohort-15/16/17 and
+   reduced-18 (GAMMA `open`, precheck passed).
+   **The closed nine must be a fresh cohort generated on the fixed runtime**
+   (this commit's runtime or a later one that keeps the rebind), as one root on
+   the Air. No old-runtime root can be continued into GAMMA. That includes
+   cohort-17: its remaining GAMMA sessions and the cross-session GAMMA unit
+   cannot run on its inputs.
+2. **Refusal-branch tests (required before the closed nine): done.** These are
+   new `BootstrapTests` cases, using the review's probe recipes. Each probe
+   edits only a temporary test root's exported pin, with the pinned
+   functions, before `make-inputs`.
+   - `test_prospective_identity_quoted_outside_manifest_is_refused`: frozen
+     sha quoted in another config, and the manifest_id hex quoted in an
+     exported doc. `make-inputs` must refuse with no `input-overlays.json`
+     written.
+   - `test_prospective_identity_must_be_a_unique_field`: a self-consistent
+     pinned manifest that repeats its frozen sha in an extra top-level field
+     (projection unchanged, id recomputed) must be refused.
+   - `test_inconsistent_pinned_prospective_manifest_is_not_repaired`: a pinned
+     `manifest_id` of `am-000…`. Expected: `make-inputs` exits 0 and names the
+     manifest as left unrepaired, the overlay keeps `am-000…`, and the pinned
+     resolver refuses all four stages with `analysis_prospective_identity_mismatch`.
+   - The positive test now also requires the rebound-manifest line.
+   - Mutants, each on a temporary copy of the runtime, all **killed**:
+     - M1 (quote refusal removed): quote test 2 failures, 36.9 s.
+     - M2 (scan narrowed back to configs): quote test 1 failure (docs case), 20.7 s.
+     - M3 (uniqueness check removed): unique test 1 failure, 18.6 s.
+     - M4 (consistency guard removed): not-repaired test 1 failure, 18.7 s.
+     - M5 (rebind call removed): positive test 1 failure, 17.3 s.
+     The runtime was restored and its sha re-checked afterwards.
+3. **Optional gaps: done, behaviour identical for the current pin.**
+   - Gap A: the quote scan now covers every exported pin file (`pin/**`,
+     including code and docs, not only `configs/*.json|.sha256`). It checks the
+     frozen sha and the manifest_id hex.
+   - Gap B: `make-inputs` now prints
+     `prospective analysis manifests: rebound […] unchanged […] inconsistent pin left unrepaired […]`.
+     An inconsistent pin still fails closed at the pinned resolver, as in
+     production; it is not refused or repaired by the fixture.
+   - Overlays from the previous runtime (`a08bc6ea…`) vs this one, same root
+     path: 403 = 403 files, **0 differ**, under both reduced and full policy.
+
+**Runtime sha256.** `scripts/b6_r12_runtime.py` is now
+`a737c67453f5a5e1fc307df59e2904e96584bc6625c33f60f7ea8a61b5a65841`. The fix's
+code is at `scripts/b6_r12_runtime.py:1226-1272`; the rebind call is at
+`:1294` and the summary print at `:1303`. Runtime hashes per session:
+
+| Session | Runtime |
+|---|---|
+| BETA root 23 | `14ec9e7d…` |
+| ALPHA root -1 | `14ec9e7d…` |
+| GAMMA root -1 (ineligible) | `14ec9e7d…` |
+| GAMMA root -2 | `a08bc6ea…` |
+
+`a08bc6ea…` and `a737c674…` produce byte-identical overlays. GAMMA -2's runtime
+is therefore a declared difference from both the older sessions and the
+current runtime. The closed nine must use `a08bc6ea…` or later, and preferably
+`a737c674…`, which carries the tested refusals.
+
+**Tests** (Air, sanitized env, `TMPDIR=/Volumes/JW-EXT/tmp/r12-ag-fix`,
+`nice -n 10`, BETA root 23 generating concurrently):
+- The 4 prospective-identity tests: 4 passed, 49.6 s.
+- `BootstrapTests FullPackExpectationTests SchedulerBoundaryTests
+  FullProductionSessionTests`: **38 tests, 36 passed, 2 skips**, 78.6 s, exit 0.
+- `git diff --check` clean.

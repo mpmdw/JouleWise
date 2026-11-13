@@ -249,32 +249,107 @@ print(count)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGreater(int(result.stdout.strip()), 50)
 
-    def test_synthetic_inputs_keep_prospective_analysis_identity(self):
-        """Predict: all four GAMMA contrast stage dirs pass the pinned run_campaign prospective resolver over synthetic inputs (MBP GAMMA root -1 failed it: analysis_prospective_identity_mismatch)."""
-        export_chain_inputs(self.root)
-        (self.root / "source-policy.json").write_text('{"volume":"reduced"}\n')
-        made = subprocess.run(command(self.root, "make-inputs"), capture_output=True, text=True, timeout=120)
-        self.assertEqual(made.returncode, 0, made.stderr)
-        code = '''import json, sys
+    CONTRAST = "configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+    RESOLVE = """import json, sys
 from pathlib import Path
 from runtime import source_root
 root = Path(sys.argv[1])
 pin = source_root(root)
 sys.path.insert(0, str(pin / 'scripts'))
-from run_campaign import resolve_prospective_analysis_manifest_v3
+from run_campaign import resolve_prospective_analysis_manifest_v3, ProspectiveManifestResolutionError
 overlays = json.loads((root / 'input-overlays.json').read_text())
 pack = pin / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5'
 assert str(pack / 'analysis_manifest_v3.json') in overlays
 stages = sorted(path for path in pack.iterdir() if (path / 'order_manifest.json').is_file())
-ids = set()
+ids, refused = set(), set()
 for stage in stages:
-    ids.add(resolve_prospective_analysis_manifest_v3(stage).manifest_id)
-print(len(stages), len(ids))
-'''
-        result = subprocess.run(command(self.root, "code", code, self.root), capture_output=True,
+    try:
+        ids.add(resolve_prospective_analysis_manifest_v3(stage).manifest_id)
+    except ProspectiveManifestResolutionError as exc:
+        refused.add(exc.args[0].split(':')[0])
+print(json.dumps({'stages': len(stages), 'ids': sorted(ids), 'refused': sorted(refused),
+                  'manifest_id': json.loads((pack / 'analysis_manifest_v3.json').read_text())['manifest_id']}))
+"""
+    # Pin probes run with the pinned functions in a fixture child, before any
+    # overlay exists. They edit only this temporary test root's exported pin.
+    PROBE = """import json, sys
+from pathlib import Path
+from joulewise.analysis_manifest_v3 import analysis_semantics_sha256_v1, calculate_manifest_id, render_manifest
+root, kind = Path(sys.argv[1]), sys.argv[2]
+pin = root / 'pin'
+path = pin / 'configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/analysis_manifest_v3.json'
+text = path.read_text()
+value = json.loads(text)
+frozen, manifest_id = value['frozen_semantics_sha256'], value['manifest_id']
+assert frozen == analysis_semantics_sha256_v1(value) and manifest_id == calculate_manifest_id(value)
+if kind == 'quote-frozen':
+    (pin / 'configs/r12-probe-quote.json').write_text(json.dumps({'quoted': frozen}) + '\\n')
+elif kind == 'quote-id-docs':
+    (pin / 'docs/r12-probe-quote.md').write_text('quoted ' + manifest_id.removeprefix('am-') + '\\n')
+elif kind == 'duplicate':
+    value['r12_probe_copy'] = frozen
+    assert analysis_semantics_sha256_v1(value) == frozen
+    value['manifest_id'] = calculate_manifest_id(value)
+    path.write_bytes(render_manifest(value))
+elif kind == 'inconsistent':
+    assert text.count(json.dumps(manifest_id)) == 1
+    path.write_text(text.replace(json.dumps(manifest_id), json.dumps('am-' + '0' * 64)))
+else:
+    raise SystemExit('unknown probe')
+print('probe', kind)
+"""
+
+    def _contrast_inputs(self, root, probe=None):
+        export_chain_inputs(root)
+        (root / "source-policy.json").write_text('{"volume":"reduced"}\n')
+        if probe:
+            made = subprocess.run(command(root, "code", self.PROBE, root, probe), capture_output=True,
+                                  text=True, timeout=60)
+            self.assertEqual(made.returncode, 0, made.stderr)
+        return subprocess.run(command(root, "make-inputs"), capture_output=True, text=True, timeout=120)
+
+    def _resolve(self, root):
+        result = subprocess.run(command(root, "code", self.RESOLVE, root), capture_output=True,
                                 text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.split(), ["4", "1"])
+        return json.loads(result.stdout)
+
+    def test_synthetic_inputs_keep_prospective_analysis_identity(self):
+        """Predict: all four GAMMA contrast stage dirs pass the pinned run_campaign prospective resolver over synthetic inputs (MBP GAMMA root -1 failed it: analysis_prospective_identity_mismatch); make-inputs names the one rebound manifest."""
+        made = self._contrast_inputs(self.root)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        self.assertIn(f"prospective analysis manifests: rebound ['{self.CONTRAST}/analysis_manifest_v3.json'] "
+                      "unchanged [] inconsistent pin left unrepaired []", made.stdout)
+        resolved = self._resolve(self.root)
+        self.assertEqual((resolved["stages"], len(resolved["ids"]), resolved["refused"]), (4, 1, []))
+
+    def test_prospective_identity_quoted_outside_manifest_is_refused(self):
+        """Predict: a pinned frozen_semantics_sha256 quoted in another config, or a manifest_id quoted in an exported doc, makes make-inputs refuse before any overlay is written."""
+        for probe in ("quote-frozen", "quote-id-docs"):
+            with self.subTest(probe=probe):
+                root = prepare(Path(self.temp.name).resolve() / probe)
+                made = self._contrast_inputs(root, probe)
+                self.assertNotEqual(made.returncode, 0, made.stdout)
+                self.assertIn("analysis manifest identity is quoted outside its manifest", made.stderr)
+                self.assertFalse((root / "input-overlays.json").exists())
+
+    def test_prospective_identity_must_be_a_unique_field(self):
+        """Predict: a self-consistent pinned manifest that repeats its frozen_semantics_sha256 value elsewhere is refused (not a unique field), not rewritten in both places."""
+        root = prepare(Path(self.temp.name).resolve() / "duplicate")
+        made = self._contrast_inputs(root, "duplicate")
+        self.assertNotEqual(made.returncode, 0, made.stdout)
+        self.assertIn("analysis manifest identity is not a unique field", made.stderr)
+        self.assertFalse((root / "input-overlays.json").exists())
+
+    def test_inconsistent_pinned_prospective_manifest_is_not_repaired(self):
+        """Predict: a pinned manifest whose manifest_id is already wrong is named, left unrepaired in the overlay, and the pinned resolver still refuses it."""
+        root = prepare(Path(self.temp.name).resolve() / "inconsistent")
+        made = self._contrast_inputs(root, "inconsistent")
+        self.assertEqual(made.returncode, 0, made.stderr)
+        self.assertIn(f"inconsistent pin left unrepaired ['{self.CONTRAST}/analysis_manifest_v3.json']", made.stdout)
+        resolved = self._resolve(root)
+        self.assertEqual(resolved["manifest_id"], "am-" + "0" * 64)
+        self.assertEqual((resolved["ids"], resolved["refused"]), ([], ["analysis_prospective_identity_mismatch"]))
 
     @unittest.skipUnless(sys.platform == "darwin", "pinned USB protocol uses CommonCrypto")
     def test_source_pruning_preserves_raw_instrument_bytes(self):
