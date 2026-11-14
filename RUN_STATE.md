@@ -1042,6 +1042,13 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+312. **Laptop lead (interactive, Opus 5.5), 2026-11-13 18:55 PST (`date`): BLOCK 6 IS RELEASED. PR #769 (the release record) merged to `main` at 2026-11-13 18:54:57 PST (merge commit `66469ccf4d575e770b6a72de0d670105bbd95124`); that commit is the release event (RL-134 item 10, runbook step 12). Recorded BEFORE any restricted output is opened (RL-146 §2 step 8).**
+
+- **RL-6 (d):** "Block 6 is released under its registration on 2026-11-13; Paper 1 prints the replication." The date in item 309 stands (the merge landed on 2026-11-13 PST).
+- **Record on `main` at `66469ccf4d575e770b6a72de0d670105bbd95124`:** `docs/registrations/block6_release_record.md` SHA-256 `8d5da6351cfdd0ecbb334f164d62590959aac0fd9c0adef12583c68feff34f30`; `docs/registrations/block6_release_record.json` SHA-256 `41e6ebd7fa07d1cee24beffaf96de6de0a7be201fe4ab1c6eeefb78bce0d5385`. Registration `docs/registrations/block6_replication_DRAFT.md` SHA-256 `7243a2bc1e43207d756ba9eacc6c93622968edd73a6ebe0648afaba563324ead` (unchanged).
+- **Under:** Ed's OK, items 309 and 311 (311 verbatim); RL-134 checks all PASS on r2; Mythos 5.2 cold audit admit-with-fixes and RL-146 (audit branch `7d2e38bb2`), every RL-146 §2 step done; step 6 checks re-run immediately before the merge: registration hash, 8 of 8 r2 output digests, item 311 quoted.
+- **Next (lead):** runbook steps 13-17 on the Air (they read the restricted outputs, now allowed); RL-146 §3 post-release list (commit the comparison evidence, kept-log re-runs of the kit end-to-end and comparer tests, M1/M2 follow-ups, then the S-14 line PR to `main`). PRs #765-#767 may now merge on their own gates.
+
 311. **Laptop lead (interactive, Opus 5.5), 2026-11-13 18:13 PST (`date`): BLOCK 6: ED'S RELEASE OK IN HIS OWN WORDS (release condition 11; Mythos finding 6, RL-146 §2 step 1). Recorded BEFORE the release and before any Block 6 outcome is read.**
 
 - **Context.** Ed asked for a cold audit of the release record (PR #769) by Claude Mythos 5.2: ADMIT WITH FIXES (report SHA-256 `9ba5c89d…6862`). The research lead's RL-146 agrees: the fixes are record text, one re-render and CI only; no program is run on custody, `check` is not re-run. #769 is held as a draft until RL-146 §2 is done.
