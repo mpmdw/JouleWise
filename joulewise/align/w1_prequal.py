@@ -1553,8 +1553,8 @@ def on_signal(number, _frame):
     stop["reason"] = "signal %d" % number
 for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
     signal.signal(number, on_signal)
-OFFSET = 7_000_000_000
 start = time.monotonic_ns()
+OFFSET = time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW) - start
 with open(out, "x") as handle:
     handle.write(json.dumps({"k": "h", "schema": "joulewise.km003c_stream.v1", "status": "streaming",
                              "rate_idx": 2, "start_raw_ns": start + OFFSET, "start_mono_ns": start}) + "\n")
@@ -1697,7 +1697,9 @@ def check_km003c_launch(ctx):
                 first = parsed[0]
                 second = parsed[1]
                 off2 = kp.raw_offset_ns(second) or 0
-                lo1 = first.poll_ns[0] - 7_000_000_000 if first.poll_ns else None
+                # The killed stream has no trailer: its start offset is the one the reader declared.
+                off1 = kp.raw_offset_ns(first, allow_unclosed=True) or 0
+                lo1 = first.poll_ns[0] - off1 if first.poll_ns else None
                 lo2, hi2 = second.host_ns[0] - off2, second.host_ns[-1] - off2
                 straddle = (lo1 + 100_000_000, lo2 + 500_000_000)
                 inside = (lo2 + 200_000_000, hi2 - 200_000_000)
@@ -1753,7 +1755,8 @@ def check_km003c_crash_radius(ctx):
         if code != harness.driver.EXIT_GO or len(streams) < 2:
             return result(FAIL, f'window did not run with a restarted meter (exit {code}, {len(streams)} streams)')
         first = kp.parse(harness.custody / streams[0]['path'])
-        polls = [t - 7_000_000_000 for t in first.poll_ns]
+        off1 = kp.raw_offset_ns(first, allow_unclosed=True) or 0
+        polls = [t - off1 for t in first.poll_ns]
         before = (polls[0] + 100_000_000, polls[0] + 900_000_000)
         runs = harness.root / 'synthetic-runs'
         plan = [_synthetic_member(runs, 'member-before-kill', before, (before[0], before[0] + 300_000_000))]
