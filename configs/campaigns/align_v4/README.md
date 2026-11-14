@@ -22,18 +22,15 @@ R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
 W1's g0_cap_s binds r1_slots.g0_cap_w1.value_s (LEAD-RULINGS-2 R7-2, R7-12):
 clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600 s, R1 g0_timeout_s).
 Unreleased G0s count at the full R1 timeout; an inconclusive X-G records
-x_g_fallback. Ruling 1(f) uses this cap + max(G1 + H) + max(prefill + tool)
-+ (B_D + turn_cap_tokens) / min(step-d and gated decode rates), and refuses
-when that misses T_dead. Only a signed lead receipt
-(registration/ruling_1f_receipt.json, LEAD-RULINGS-2 R10-2(a), drafted by
-scripts/align_w1_budget_procedure.py) changes that, and only when the 600 s
-rule fits at no B_D: D then arms G0* = T_dead - holds projected to 10,240
-tokens - prefill/tool - 10,240 / r, below 600 s, named in
-thermal_policy.g0_cap_receipt; contrast members arm their own
-thermal_policy.contrast_g0_cap_s and contrast_fit on EVERY path (R11, RUN_STATE 212).
-Failed/incomplete proof predeclares non-veto INCONCLUSIVE. Missing/nonpositive
-available cap gives immediate G0 timeout; changed predecessor heat is disclosed.
-D sizing/receipt checks remain unchanged. The kit re-derives every number.
+x_g_fallback. Ruling 1(f) (this cap + max(G1 + H) + max(prefill + tool)
++ (B_D + turn_cap_tokens) / min(step-d and gated decode rates)) is printed
+only: RL-148 section 2 withdrew it for D, and the typical case must fit.
+There is no ruling 1(f) receipt: a file at registration/ruling_1f_receipt.json
+or a thermal_policy.g0_cap_receipt is refused (RL-156 section 3.1). Contrast
+members arm their own thermal_policy.contrast_g0_cap_s and contrast_fit
+(R11, RUN_STATE 212). Failed/incomplete proof predeclares non-veto
+INCONCLUSIVE. Missing/nonpositive available cap gives immediate G0 timeout;
+changed predecessor heat is disclosed. The kit re-derives every number.
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
 I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.

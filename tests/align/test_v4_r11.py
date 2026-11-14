@@ -7,7 +7,7 @@ from joulewise.align.apple import v4_registration as reg, v4_estimands as est
 from joulewise.align.apple import thermal_desk, thermal_gates
 from scripts import align_v4_kit as kit, align_w1_budget_procedure as proc
 from tests.align.test_v4_kit import ready_inputs
-from tests.align.test_w1_kit_r10 import eight_bit_case, signed_receipt, arm_receipt
+from tests.align.test_w1_kit_r10 import eight_bit_case
 from tests.align.test_thermal_desk import contrast, member
 
 
@@ -65,13 +65,11 @@ class R11Tests(unittest.TestCase):
             self.assertTrue(result['predeclared'].startswith('INCONCLUSIVE'))
             self.assertIn('predecessor', result['history_disclosure'])
 
-    def test_contrast_failure_never_vetoes_an_otherwise_valid_d_receipt(self):
-        inputs, slots = eight_bit_case()
+    def test_contrast_failure_is_predeclared_inconclusive(self):
+        # RL-156 section 3.1 retired the D receipt this test once verified; the contrast stays non-veto.
+        _inputs, slots = eight_bit_case()
         slots['x_g']['phases_s']['decode'] = 2000
-        receipt = signed_receipt(slots)
-        # The D receipt stays verifiable; the contrast conclusion is explicitly unavailable.
-        derived = kit.verify_ruling_1f_receipt(receipt, slots, inputs['R1']['T_dead'], 12)
-        self.assertTrue(derived['contrast']['predeclared'].startswith('INCONCLUSIVE'))
+        self.assertTrue(kit.w1_contrast_g0_cap(slots, 12)['predeclared'].startswith('INCONCLUSIVE'))
 
     def test_contrast_cap_record_is_required_on_receipt_and_no_receipt_paths(self):
         inputs, slots = ready_inputs()
