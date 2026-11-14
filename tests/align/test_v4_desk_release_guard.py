@@ -56,6 +56,23 @@ CAL_EXCLUSIONS = {1: ['episode.deadman:871.5'],
                       'thermal.os_level_nonzero', 'thermal.powermetrics_non_nominal']}
 SUFFIXES = {1: ['871.5'], 2: ['983.1', 'G1 turn 2 waited 300.0s', 'waited 300.0s']}
 G1_TIMEOUT = (0, 2, 5)          # R10 G1 timeouts: one benign, the two sabotage members (W1's 11 and 14 analog)
+# PR #774 Sol seat: real-shaped inputs for the recovery attacks.
+NS = 10**9
+DURATION_S = {0: 1201, 1: 1213, 2: 1237, 3: 1249, 4: 1259, 5: 1571}        # coverage spans (expected samples)
+RUNTIME_FLAGS = {1: ['episode.end_task:3'],                                  # benign control
+                 2: ['episode.end_task:7', 'ended_in_unclosed_reasoning', 'cache.rebuilt_untrimmable:4',
+                     'episode.context_limit:5']}
+BEHAVIOUR_CODES = ('episode.end_task', 'ended_in_unclosed_reasoning', 'cache.rebuilt_untrimmable',
+                   'episode.context_limit', 'battery.assist')
+TOOL_EVENTS = {0: 3, 2: 8}                       # unsupported XML tool-call turns: benign 3, sabotage 8 (11 - 3)
+ASSISTED = 5                                     # battery assist on a non-benign, non-excluded member
+SECRET_TOKENS = [{'prompt_token_ids': [101, 102], 'output_token_ids': [202]}]   # member 2
+
+
+def coverage_for(seconds):
+    rows = [{'monotonic_ns': i * NS, 'finished': {'monotonic_after_ns': i * NS + 1}, 'sensors': {'Ts0P': 40.0},
+             'errors': {}} for i in range(seconds + 3)]
+    return thermal_desk._coverage(rows, 0, seconds * NS, ['Ts0P'])
 # The per-member allowlist as reviewed (PR #774 row-1 F5), pinned literally so a widened allowlist fails.
 MEMBER_KEYS = {'run_id', 'ordinal', 'pool_role', 'excluded', 'exclusion_codes', 'disclosed_exclusion_codes', 'withheld'}
 
@@ -157,14 +174,18 @@ class Fixture:
     def record(self, path):
         run_id = Path(path).name
         v = plant(self.index[run_id])
+        i = self.index[run_id]
+        tools = [f'episode.unsupported_tool_call_format:{t}' for t in range(TOOL_EVENTS.get(i, 0))]
         return {'id': run_id, 'gated': True, 'model': 'm',
-                'flags': [f'thermal.planted:{v["seconds"]}', *self.planted_flags(run_id, 'thermal')],
-                'tokens': [{'prompt_token_ids': [self.index[run_id]], 'output_token_ids': [v['calls']]}],
+                'flags': [f'thermal.planted:{v["seconds"]}', *self.planted_flags(run_id, 'thermal'),
+                          *RUNTIME_FLAGS.get(i, []), *tools],
+                'tokens': (copy.deepcopy(SECRET_TOKENS) if i == 2 else
+                           [{'prompt_token_ids': [self.index[run_id]], 'output_token_ids': [v['calls']]}]),
                 'intervals': [{'kind': 'G1', 'outcome': 'released', 'duration_s': 1.0},
                               *([{'kind': 'G1', 'outcome': 'timeout', 'duration_s': 300.0}]
                                 if self.index[run_id] in G1_TIMEOUT[1:] else [])],
                 'turn_observation': [{'os_nominal': True, 'pm_nominal': True, 'pm_max_gap_s': .1}],
-                'coverage': [], 'pm_period_s': .1, 'pm_max_gap_s': .1,
+                'coverage': [coverage_for(DURATION_S[i])], 'pm_period_s': .1, 'pm_max_gap_s': .1,
                 'calibration_exclusions': list(CAL_EXCLUSIONS.get(self.index[run_id], [])),
                 'turn_owned_j': v['owned'], 'gross_episode_j': v['gross'], 'gross_latency_s': v['latency'],
                 'status': 'completed', 'turns': 4, 'x_flags': [],
@@ -181,18 +202,12 @@ class Fixture:
                     'U4': {'status': 'inconclusive'}, 'U5': {'status': 'inconclusive'}, 'U6': {'status': 'inconclusive'},
                     'hardware_control': 'pass', 'monitoring_calibration': 'inconclusive', 'consequence': 'under control'}},
                 'deciding_experiment': {'arm_effect_j': plant(0)['arm']}, 'members': records,
-                'tool_call_flags': {'members': [{'id': r['id'], 'malformed_json_turns': [plant(self.index[r['id']])['tool_turn']]}
-                                                for r in records],
-                                    'turn_totals': {'malformed_json_turns': len(records)}}}
+                'tool_call_flags': thermal_desk.tool_call_table(records)}
 
     def diagnostics(self, records, **_):
         window = records[0]['window']
         return {'sentinel': {'ordinal': None, 'candidates': {}},
-                'battery_windows': {f'm/{window}': {
-                    'B_count': 0, 'unobserved_count': 0, 'assist_count': 0, 'assist_outside_request_count': 0,
-                    'bar_pass': True, 'status': 'pass', 'consequence': 'retain',
-                    'no_assist_sensitivity': {'status': 'print_only', 'member_ids': [r['id'] for r in records]},
-                    'members': [{'id': r['id'], **r['battery']} for r in records]}},
+                'battery_windows': v4_battery.window_consequences(records, None),       # the production builder
                 'warm_reference': {'status': 'print_only', 'R_minus_R1_soak_c': {'slow': 1.5}, 'thermal.reference_warm': True,
                                    'wait_against_ordinal': [{'ordinal': r['ordinal'], 'G0_wait_s': 0,
                                                              'G1_wait_s': plant(self.index[r['id']])['warm']}
@@ -202,8 +217,11 @@ class Fixture:
                 'rebuilds': [{'id': r['id'], 'cache_statistics': {'rebuilds': r['turns']}} for r in records]}
 
     def battery(self, record, path, journal):
-        v = plant(self.index[Path(path).name])
-        record['battery'] = {'status': 'observed', 'discharge_j': v['thermal_battery'], 'flags': []}
+        i = self.index[Path(path).name]
+        flags = ['battery.assist'] if i == ASSISTED else []
+        record['battery'] = {'status': 'observed', 'discharge_j': plant(i)['thermal_battery'], 'flags': flags,
+                             'source_sha256': 'a' * 64}
+        record.setdefault('flags', []).extend(f for f in flags if f not in record['flags'])   # as v4_battery.attach
         return record
 
     def x2_report(self, original):
@@ -366,7 +384,7 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertEqual(eligibility['status'], 'pass')
         self.assertEqual(light_triage.thermal_escalation(thermal)['status'], 'pass')
         tokens = {m['id']: m['tokens'] for m in thermal['members']}
-        self.assertTrue(all(isinstance(t, str) and t.startswith('sha256:') for t in tokens.values()))
+        self.assertTrue(all(isinstance(t, str) and t.startswith('hmac:') for t in tokens.values()))
         self.assertTrue(report['extra_checks']['km003c']['members'][self.fx.rows[0]['run_id']]['sealed'])
         self.assertEqual(report['extra_checks']['balance_check']['status'], seal.WITHHELD)
         self.assertIn('full_desk_gate: ', printed)
@@ -397,7 +415,7 @@ class ReleaseGuardTests(unittest.TestCase):
                                                                                'battery', 'dc_in_energy_j')), [])
         self.assertEqual(leaks({**self.texts(printed, report, desk), **triage}, suffixes, keys=()), [])
         record = json.loads(triage['triage_record'])
-        self.assertTrue(all(m['tokens'].startswith('sha256:') for m in record['thermal']['members']))
+        self.assertTrue(all(m['tokens'].startswith('hmac:') for m in record['thermal']['members']))
         self.assertEqual(record['member_eligibility']['status'], 'pass')
         return printed, report, desk
 
@@ -620,6 +638,262 @@ class SentinelDetectorTests(unittest.TestCase):
                 self.assertEqual(self.detect(texts, values), [], window)
                 control = self.detect({'full': (output / 'archive/withheld/PILOT.full.json').read_text()}, values)
                 self.assertGreater(len(control), 20, window)
+
+
+def numbers(text):
+    import re
+    text = re.sub(r'[0-9a-f]{64}', '', text)                 # digests are not values
+    return [float(m.group()) for m in re.finditer(r'-?\d+(?:\.\d+)?', text)]
+
+
+class RecoveryAttackTests(unittest.TestCase):
+    """PR #774 Sol seat: each attack recovers its secret from the unsealed control and fails on the sealed head."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix='jw-desk-recovery-')
+        cls.fx = Fixture(cls.tmp.name)
+        cls.runs = {}
+        for name, series_state in (('C3', {'window_id': 'C3', 'role': 'calibration'}),
+                                   ('T2', {'window_id': 'T2', 'role': 'test'}), ('W1', None)):
+            root = cls.fx.session('attack-' + name, series_state)
+            printed, report, desk, output = cls.fx.run_desk(root)
+            triage = cls.fx.run_triage(root, name)
+            full = json.loads((output / 'archive/withheld/PILOT.full.json').read_text())
+            cls.runs[name] = dict(printed=printed, report=report, desk=desk, triage=triage, full=full,
+                                  texts={'stdout': printed, 'PILOT.json': json.dumps(report, sort_keys=True),
+                                         'desk.json': json.dumps(desk, sort_keys=True), **triage})
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def targets(self, window):
+        """The members whose secrets must not be recoverable: all in C/T, the non-benign ones in W1."""
+        return [i for i, r in enumerate(self.fx.rows) if window != 'W1' or r['run_id'] in self.fx.nonbenign]
+
+    def thermal_views(self, run):
+        yield run['report']['extra_checks']['thermal']
+        yield json.loads(run['triage']['triage_record'])['thermal']
+
+    # F2 ------------------------------------------------------------------------------------------
+    @staticmethod
+    def recover_duration(member):
+        """Attack: elapsed seconds from the coverage grid (expected or valid samples, or fraction x span)."""
+        for span in member.get('coverage') or ():
+            if isinstance(span, dict):
+                for key in ('expected_samples', 'valid_samples'):
+                    if isinstance(span.get(key), (int, float)):
+                        return span[key]
+        return None
+
+    def test_duration_cannot_be_recovered_from_coverage(self):
+        for window, run in self.runs.items():
+            control = {m['id']: self.recover_duration(m) for m in run['full']['extra_checks']['thermal']['members']}
+            for view in self.thermal_views(run):
+                members = {m['id']: m for m in view['members']}
+                for i in self.targets(window):
+                    rid = self.fx.rows[i]['run_id']
+                    self.assertEqual(control[rid], DURATION_S[i])                    # the attack works on the control
+                    self.assertIsNone(self.recover_duration(members[rid]), (window, rid))
+                    self.assertEqual(members[rid]['coverage'], [{'verdict': 'pass', 'reasons': []}])
+            if window != 'W1':                  # C/T: no member's duration anywhere in what the desk prints or records
+                for i in self.targets(window):
+                    for name, text in run['texts'].items():
+                        self.assertNotIn(float(DURATION_S[i]), numbers(text), (window, name, i))
+            else:                               # W1: benign rows print whole; scan every non-benign member's view
+                for i in self.targets(window):
+                    rid = self.fx.rows[i]['run_id']
+                    views = [m for view in self.thermal_views(run) for m in view['members'] if m['id'] == rid]
+                    views += [m for m in run['report']['members'] if m['run_id'] == rid]
+                    self.assertNotIn(float(DURATION_S[i]), numbers(json.dumps(views)), (window, i))
+
+    # F3 ------------------------------------------------------------------------------------------
+    def test_behavioural_runtime_flags_are_withheld_per_member(self):
+        for window, run in self.runs.items():
+            for view in self.thermal_views(run):
+                members = {m['id']: m for m in view['members']}
+                for i in self.targets(window):
+                    flags = members[self.fx.rows[i]['run_id']]['flags']
+                    self.assertEqual([c for c in flags if c.startswith(BEHAVIOUR_CODES)], [], (window, i, flags))
+                    self.assertLessEqual(set(flags), set(seal.FLAG_ALLOWLIST), (window, i))
+            if window != 'W1':
+                for name, text in run['texts'].items():
+                    self.assertEqual([c for c in BEHAVIOUR_CODES if c in text], [], (window, name))
+        self.assertIn('episode.end_task', ' '.join(self.runs['W1']['full']['extra_checks']['thermal']['members'][2]['flags']))
+
+    # F4 ------------------------------------------------------------------------------------------
+    @staticmethod
+    def subtract(table, key='unsupported_xml_turns'):
+        """Attack: window total minus the visible rows = the hidden members' count."""
+        visible = sum(len(r.get(key) or ()) for r in table.get('members') or () if isinstance(r, dict) and 'id' in r)
+        return (table.get('turn_totals') or {}).get(key, 0) - visible
+
+    def test_w1_tool_totals_minus_visible_rows_recover_nothing(self):
+        run = self.runs['W1']
+        # Control: the pre-fix seal printed the all-member totals beside the benign rows: 11 - 3 = 8.
+        full = run['full']['extra_checks']['thermal']['tool_call_flags']
+        benign_rows = [r for r in full['members'] if r['id'] not in self.fx.nonbenign]
+        self.assertEqual(self.subtract({'turn_totals': full['turn_totals'], 'members': benign_rows}), 8)
+        for view in self.thermal_views(run):
+            table = view['tool_call_flags']
+            self.assertEqual(table['population'], 'benign')
+            self.assertEqual(self.subtract(table), 0)
+            self.assertEqual(table['turn_totals']['unsupported_xml_turns'], 3)
+            self.assertNotIn(self.fx.rows[2]['run_id'], json.dumps(table['members']))
+        for window in ('C3', 'T2'):
+            table = self.runs[window]['report']['extra_checks']['thermal']['tool_call_flags']
+            self.assertNotIn('members', table)                                       # no rows to subtract
+
+    # F5 ------------------------------------------------------------------------------------------
+    def infer_assisted(self, report):
+        """Attack: a non-benign member that is observed and not excluded but absent from a list covering it was
+        assisted; and the window assist count minus the visible benign assists gives the non-benign assists."""
+        thermal = report['extra_checks']['thermal']
+        observed = {m['id'] for m in thermal['members'] if not m.get('excluded')}
+        row = next(iter(report['extra_checks']['registration_diagnostics']['battery_windows'].values()))
+        sensitivity = row['no_assist_sensitivity']
+        covers_non_benign = sensitivity.get('population') != 'benign'
+        listed = set(sensitivity['member_ids'])
+        named = ((observed & self.fx.nonbenign) - listed) if covers_non_benign else set()
+        visible_benign = sum('battery.assist' in (m.get('flags') or ()) for m in row['members']
+                             if isinstance(m, dict) and m.get('id') not in self.fx.nonbenign)
+        return named, row['assist_count'] - visible_benign
+
+    def test_w1_battery_assist_membership_cannot_be_inferred(self):
+        run = self.runs['W1']
+        assisted = self.fx.rows[ASSISTED]['run_id']
+        self.assertEqual(self.infer_assisted(run['full']), ({assisted}, 1))          # control: both attacks work
+        named, by_subtraction = self.infer_assisted(run['report'])
+        row0 = next(iter(run['report']['extra_checks']['registration_diagnostics']['battery_windows'].values()))
+        self.assertEqual(set(row0['no_assist_sensitivity']['member_ids']) & self.fx.nonbenign, set())
+        self.assertEqual(named, set())                                   # the list holds benign ids only
+        self.assertEqual(by_subtraction, 0)                              # assist counts are benign-only
+        row = next(iter(run['report']['extra_checks']['registration_diagnostics']['battery_windows'].values()))
+        self.assertEqual(row['no_assist_sensitivity']['population'], 'benign')
+        self.assertEqual(row['assist_population'], 'benign')
+        line = next(l for l in run['printed'].splitlines() if l.startswith('m/W1 battery: '))
+        self.assertEqual(json.loads(line.split(': ', 1)[1])['assist_count'], 0)
+        thermal = {m['id']: m for m in run['report']['extra_checks']['thermal']['members']}
+        self.assertNotIn('battery.assist', thermal[assisted]['flags'])
+
+    # F6 ------------------------------------------------------------------------------------------
+    def test_token_commitments_resist_a_candidate_dictionary(self):
+        def commitments(tokens):
+            raw = json.dumps(tokens, sort_keys=True, separators=(',', ':')).encode()
+            return {'sha256:' + hashlib.sha256(raw).hexdigest(), hashlib.sha256(raw).hexdigest(),
+                    'hmac:' + hmac.new(b'\0' * 32, raw, hashlib.sha256).hexdigest()}
+        candidates = [[{'prompt_token_ids': [101, 102], 'output_token_ids': [out]}] for out in range(195, 210)]
+        dictionary = {c: cand[0]['output_token_ids'][0] for cand in candidates for c in commitments(cand)}
+        for window, run in self.runs.items():
+            for view in self.thermal_views(run):
+                sealed = {m['id']: m for m in view['members']}[self.fx.rows[2]['run_id']]['tokens']
+                self.assertTrue(sealed.startswith('hmac:'))
+                self.assertNotIn(sealed, dictionary, window)                         # recovery fails
+            for name, text in run['texts'].items():
+                self.assertEqual([c for c in dictionary if c in text], [], (window, name))
+
+    def test_med4_dc_digest_is_keyed(self):
+        row = {**km003c._empty(), 'status': 'available', 'dc_in_energy_j': 12.0}
+        sealed = km003c.seal_non_benign({'members': {'s': row}}, [{'run_id': 's', 'condition': 'sabotage'}])
+        digest = sealed['members']['s']['sealed_hmac_sha256']
+        plain = hashlib.sha256(json.dumps(row, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()
+        self.assertNotEqual(digest, plain)
+        self.assertNotIn('sealed_sha256', sealed['members']['s'])
+
+
+class EntryPointTests(unittest.TestCase):
+    """PR #774 Sol F1: every v4 desk entry point installs the guard (keyed on the stored session identity)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix='jw-desk-entry-')
+        cls.fx = Fixture(cls.tmp.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def check(self, texts, report, window='C3'):
+        targets = [self.fx.values(r['run_id'])[0] for r in self.fx.rows
+                   if window != 'W1' or r['run_id'] in self.fx.nonbenign]
+        self.assertEqual(leaks(texts, planted_values(targets, ('gpu_j', 'cpu_j', 'turn_j', 'main', 'side', 'bank',
+                                                               'calls', 'seconds', 'battery', 'owned', 'gross')),
+                               keys=() if window == 'W1' else FORBIDDEN_KEYS), [])
+        self.assertEqual(report['release_guard']['status'], seal.WITHHELD)
+
+    def test_the_common_pilot_cli_on_a_v4_session_installs_the_guard(self):
+        root = self.fx.session('entry-cli', {'window_id': 'C3', 'role': 'calibration'})
+        with ExitStack() as stack:
+            self.fx.patches(stack)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                pilot.main(['desk', '--session-root', str(root), '--no-harvest'])
+        report_path = next((root / 'inspection').rglob('PILOT.json'))
+        report = json.loads(report_path.read_text())
+        self.check({'stdout': out.getvalue(), 'PILOT.json': report_path.read_text(),
+                    'desk.json': (report_path.parent / 'desk.json').read_text()}, report)
+
+    def test_the_v4_wrapper_with_an_explicit_none_installs_the_guard(self):
+        root = self.fx.session('entry-none', {'window_id': 'C3', 'role': 'calibration'})
+        with ExitStack() as stack:
+            self.fx.patches(stack)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                status = session.desk(root, harvest=False, print_policy=None)
+        report = json.loads(Path(status['pilot']).read_text())
+        self.check({'stdout': out.getvalue(), 'PILOT.json': Path(status['pilot']).read_text(),
+                    'desk.json': (Path(status['pilot']).parent / 'desk.json').read_text()}, report)
+
+    def test_a_custom_policy_on_a_v4_session_is_refused(self):
+        root = self.fx.session('entry-custom', {'window_id': 'C3', 'role': 'calibration'})
+        with ExitStack() as stack:
+            self.fx.patches(stack)
+            with redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, 'release guard'):
+                pilot.desk(root, harvest=False, print_policy=lambda pilot_, lines, output: (pilot_, lines))
+
+    def run_thermal_desk(self, window):
+        registration = self.fx.root / f'thermal-reg-{window}'
+        registration.mkdir(exist_ok=True)
+        (registration / 'inputs.json').write_text(json.dumps({'R1': {'thermal_policy': {}}}))
+        manifest = self.fx.root / f'thermal-manifest-{window}.json'
+        manifest.write_text(json.dumps({'members': [
+            {'id': r['run_id'], 'bundle': 'runs/' + r['run_id'], 'window': window, 'ordinal': r['ordinal'],
+             'role': 'D'} for r in self.fx.rows]}))
+        prints = {'schema': 'joulewise.align.rl145_prints.v1', 'members': [
+            {'id': r['run_id'], 'turns': [{'duration_s': plant(i)['seconds'], 'tokens': plant(i)['calls']}]}
+            for i, r in enumerate(self.fx.rows)], 'residual_by_decode_bin': [{'residual_j': plant(0)['gpu_j']}]}
+        conditions = {r['run_id']: r['condition'] for r in self.fx.rows}
+
+        def record(path, **_):
+            rec = self.fx.record(path)
+            return {**rec, 'condition': conditions[Path(path).name]}
+        output = self.fx.root / f'thermal-out-{window}'
+        with ExitStack() as stack:
+            enter = stack.enter_context
+            enter(patch.object(v4_thermal, 'registration_evidence', return_value=({'policy': {}}, {})))
+            enter(patch.object(v4_thermal, 'read_bundle_record', side_effect=record))
+            enter(patch.object(v4_thermal, 'enrich_record', side_effect=lambda r, p: r))
+            enter(patch.object(v4_thermal, 'window_report', side_effect=self.fx.window_report))
+            enter(patch.object(v4_thermal, 'contrast_predeclaration', return_value=None))
+            enter(patch.object(v4_thermal, 'rl145_prints_report', return_value=prints))
+            enter(patch.object(v4_thermal.registration, 'desk_diagnostics', side_effect=self.fx.diagnostics))
+            enter(patch.object(v4_battery, 'attach', side_effect=self.fx.battery))
+            with redirect_stdout(io.StringIO()) as out:
+                v4_thermal.main(['--manifest', str(manifest), '--output', str(output),
+                                 '--registration-dir', str(registration)])
+        texts = {name: (output / name).read_text() for name in ('PILOT.json', 'THERMAL.md', 'RL145_PRINTS.json')}
+        texts['stdout'] = out.getvalue()
+        return texts, json.loads(texts['PILOT.json']), output
+
+    def test_the_standalone_thermal_desk_installs_the_guard(self):
+        for window in ('C3', 'W1'):
+            texts, report, output = self.run_thermal_desk(window)
+            self.check(texts, report, window)
+            self.assertEqual(report['release_guard']['entry_point'], 'scripts/align_v4_thermal_desk.py')
+            self.assertTrue((output / 'archive/withheld/PILOT.full.json').is_file())
+            self.assertTrue((output / 'archive/withheld/RL145_PRINTS.full.json').is_file())
+            self.assertNotIn(str(plant(0)['gpu_j']), texts['RL145_PRINTS.json'])        # residual bins withheld
 
 
 class SealUnitTests(unittest.TestCase):

@@ -286,6 +286,22 @@ def apply_exclusion_policy(entries, policy=None):
 
 def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None, exclusion_policy=None,
          kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None, print_policy=None):
+    """The common desk entry. A session whose STORED identity is ALIGN v4 runs only under the v4 release guard,
+    whatever the entry point or kit argument (PR #774 Sol F1): an explicit ``None`` installs it and any other
+    policy is refused. Other sessions are unchanged."""
+    kwargs = dict(run=run, harvest=harvest, compare_session=compare_session, exclusion_policy=exclusion_policy,
+                  kit=kit, desk_schema=desk_schema, extra_checks=extra_checks, harvest_workers=harvest_workers)
+    state = h.read(Path(session_root).resolve() / 'session.json')
+    from joulewise.align.apple import v4_desk_seal
+    if not v4_desk_seal.is_v4_session(state):
+        return _desk(session_root, print_policy=print_policy, **kwargs)
+    print_policy = v4_desk_seal.enforce(state, print_policy, lambda: _member_rows(state, kit=kit))
+    with v4_desk_seal.keyed(getattr(print_policy, 'key', None)):
+        return _desk(session_root, print_policy=print_policy, **kwargs)
+
+
+def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None, exclusion_policy=None,
+          kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None, print_policy=None):
     """The common desk. ``print_policy(pilot, member_lines, *, output) -> (pilot, member_lines)`` is applied
     before PILOT.json is written and before every print below (v4 release guard,
     ``joulewise.align.apple.v4_desk_seal``); ``None`` is the identity, so the v3 desk is unchanged."""

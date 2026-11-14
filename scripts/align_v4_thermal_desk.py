@@ -179,8 +179,12 @@ def main(argv=None):
     result['K_session_read'] = compared or {'status': 'inconclusive', 'reason': 'no --compare-session inputs'}
     args.output.mkdir(parents=True, exist_ok=False)
     # RL-145 addendum row 6: per-turn prints for the first W1 thermal desk. Print-only; no verdict.
-    (args.output/'RL145_PRINTS.json').write_text(json.dumps(
-        rl145_prints_report(manifest, root, journal), indent=2, sort_keys=True, allow_nan=False)+'\n')
+    prints = rl145_prints_report(manifest, root, journal)
+    # Desk release guard at this output boundary (PR #774 Sol F1): before release the written PILOT, the
+    # RL-145 prints and THERMAL.md carry the C/T or W1 seal; the full ones go to the withheld archive.
+    from joulewise.align.apple import v4_desk_seal
+    result, prints, sealed = v4_desk_seal.guard_thermal_desk(result, prints, members, args.registration_dir, args.output)
+    (args.output/'RL145_PRINTS.json').write_text(json.dumps(prints, indent=2, sort_keys=True, allow_nan=False)+'\n')
     (args.output/'PILOT.json').write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
     battery_rows = ['\n## Battery window consequences', '',
                     '| Model/window | B | Missing | Assist | Verdict | Consequence |',
@@ -188,7 +192,8 @@ def main(argv=None):
     for name, row in result['registration_diagnostics']['battery_windows'].items():
         battery_rows.append(f"| {name} | {row['B_count']} | {row['unobserved_count']} | {row['assist_count']} | "
                             f"{row['status']} | {row['consequence']} |")
-    (args.output/'THERMAL.md').write_text(markdown_report(result)+'\n'.join(battery_rows)+'\n')
+    report = v4_desk_seal.sealed_markdown(result) if sealed else markdown_report(result)
+    (args.output/'THERMAL.md').write_text(report+'\n'.join(battery_rows)+'\n')
     return 0
 
 

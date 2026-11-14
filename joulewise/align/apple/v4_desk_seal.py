@@ -213,9 +213,59 @@ def _code(flag):
     return str(flag).split(':')[0] if flag is not None else None
 
 
+# PR #774 Sol seat F3: per-member flags print from an explicit ALLOWLIST of instrument and identity codes, each
+# with the consumer that reads it after sealing; every other code (completion, unfinished reasoning, cache
+# rebuilds, context termination, battery assist, tool behaviour, carved codes, anything unknown) is withheld in
+# the member's digest. Eligibility-required exclusions keep their ruled path (``calibration_exclusions``,
+# ``exclusion_codes``, ``members_excluded``), not this one.
+FLAG_ALLOWLIST = {
+    'thermal.start_gate_timeout': 'RL-149 section 3: a G0 timeout ends a member before its first turn and decides '
+                                  'eligibility; thermal_desk.thermal_exclusions (X2/G0)',
+    'thermal.state_unobserved': 'X4 state-unobserved instrument fault; thermal_desk.state_unobserved, the packet '
+                                "builder's X1-X8 fault tabulation (align_v4_next_arm_packet faults)",
+    'thermal.custody_invalid': 'instrument custody fault; thermal_desk.calibration_exclusions, the packet '
+                               "builder's fault tabulation",
+    'member.runtime_failure': 'runtime failure (X6-class instrument fault); calibration_exclusions, fault tabulation',
+    'member.artifact_missing': 'missing episode artifact; align_v4_thermal_desk roster row, fault tabulation',
+}
+IDENTITY_MARKER = 'identity_mismatch'   # X5 identity codes: align_v4_next_arm_packet eligibility ('identity X5')
+# Sealed DC rows keep the meter's health codes only (RL-151 section 4 table: "The meter's health fields stay
+# visible"; align_v4_next_arm_packet meter_coverage tabulates them); fit flags are withheld.
+METER_PREFIX = 'meter.'
+
+
+def allowed_code(code):
+    return code in FLAG_ALLOWLIST or (isinstance(code, str) and IDENTITY_MARKER in code)
+
+
 def _codes(flags):
-    """Per-member flag codes: instrument and identity faults only (the carve-out is counted, never listed)."""
+    """Per-member flag codes from the allowlist only; unknown and behavioural codes are withheld."""
+    return sorted({c for c in (_code(f) for f in flags or ()) if c and allowed_code(c)})
+
+
+def _session_codes(flags):
+    """Session-scoped harvest flags (no member): codes without suffix text, carved codes counted elsewhere."""
     return sorted({c for c in (_code(f) for f in flags or ()) if c and c not in CARVE_OUT_CODES})
+
+
+def _meter_codes(flags):
+    return list(dict.fromkeys(c for c in (_code(f) for f in flags or ()) if c and c.startswith(METER_PREFIX)))
+
+
+def coverage_verdicts(coverage):
+    """PR #774 Sol F2: per coverage span, the verdict and a reason code only. Sample counts, fractions, gaps
+    and intervals encode elapsed time on the sampler grid, so they go into the member's withheld digest.
+    The rule is ``thermal_desk.acceptance``'s U1 coverage check (>= 99 % of samples, no interval > 2 s)."""
+    if not isinstance(coverage, list):
+        return coverage
+    out = []
+    for span in coverage:
+        span = span if isinstance(span, dict) else {}
+        fraction, interval = span.get('sample_fraction'), span.get('max_interval_ns')
+        reasons = ([] if fraction is not None and fraction >= .99 else ['coverage.samples_below_99pct']) + \
+                  ([] if interval is not None and interval <= 2 * 10**9 else ['coverage.interval_over_2s'])
+        out.append({'verdict': 'fail' if reasons else 'pass', 'reasons': reasons})
+    return out
 
 
 def _strip(codes):
@@ -472,10 +522,10 @@ def _seal_dc_rows(dc, run_ids):
     for rid, row in (dc.get('members') or {}).items():
         if rid in run_ids and isinstance(row, dict) and not row.get('sealed'):
             row = {'label': row.get('label'), 'print_only': True, 'sealed': True, 'sealed_hmac_sha256': keyed_digest(row),
-                   'status': row.get('status'), 'flags': _strip(list(row.get('flags') or ())),
+                   'status': row.get('status'), 'flags': _meter_codes(row.get('flags')),
                    'sealed_until': 'series_complete'}
-        elif rid in run_ids and isinstance(row, dict):          # MED-4-sealed: codes only (RL-151 C1(a))
-            row = {**row, 'flags': _strip(list(row.get('flags') or ()))}
+        elif rid in run_ids and isinstance(row, dict):          # MED-4-sealed: meter codes only (RL-151 C1(a), Sol F3)
+            row = {**row, 'flags': _meter_codes(row.get('flags'))}
         members[rid] = row
     return {**dc, 'members': members}
 
@@ -511,13 +561,17 @@ def balance_lines(report):
 
 def _seal_thermal_member(record):
     view = {k: record[k] for k in THERMAL_MEMBER_ALLOWLIST if k in record}
-    view['flags'] = _codes(record.get('flags'))
+    view['flags'] = _codes(record.get('flags'))                # Sol F3: allowlisted codes only
     if 'calibration_exclusions' in view:                     # RL-151 C1(a): codes only, no suffix text
         view['calibration_exclusions'] = _strip(view['calibration_exclusions'])
+    if 'coverage' in view:                                   # Sol F2: verdicts only
+        view['coverage'] = coverage_verdicts(view['coverage'])
     if 'tokens' in record:
-        view['tokens'] = None if record['tokens'] is None else 'sha256:' + canonical_sha256(record['tokens'])
+        # Sol F6: a keyed commitment (equal digests iff equal tokens within one desk's key), so a candidate
+        # dictionary cannot identify the tokens without the withheld key.
+        view['tokens'] = None if record['tokens'] is None else 'hmac:' + keyed_digest(record['tokens'])
     view['withheld'] = withheld({k: v for k, v in record.items()
-                                 if k not in view or k in ('flags', 'tokens', 'calibration_exclusions')})
+                                 if k not in view or k in ('flags', 'tokens', 'calibration_exclusions', 'coverage')})
     return view
 
 
@@ -560,9 +614,22 @@ def seal_thermal(thermal, run_ids=None):
         # W1: the deciding contrast is in RL-149's exception class and prints as registered (W1_EXCEPTIONS).
         for key, value in rest.items():
             if key == 'tool_call_flags' and isinstance(value, dict):
-                value = {**value, 'members': [withheld(r) if r.get('id') in run_ids else r
-                                              for r in value.get('members') or ()]}
+                value = seal_w1_tool_table(value, run_ids)
             out[key] = value
+    return out
+
+
+def seal_w1_tool_table(table, run_ids):
+    """PR #774 Sol F4 (lead disposition): W1's tool-call table prints the benign rows and turn totals over the
+    benign rows only, labelled ``population: benign``. The non-benign rows and their aggregate are one withheld
+    digest; no per-row placeholder is left, since a row exists only for a member that carried a flag."""
+    rows = list(table.get('members') or ())
+    benign = [r for r in rows if r.get('id') not in run_ids]
+    keys = sorted({k for r in rows for k in r if k not in ('id', 'model')} | set(table.get('turn_totals') or {}))
+    out = {k: v for k, v in table.items() if k not in ('members', 'turn_totals')}
+    out.update(members=benign, population='benign',
+               turn_totals={k: sum(len(r.get(k) or ()) for r in benign) for k in keys},
+               withheld_non_benign=withheld([r for r in rows if r.get('id') in run_ids]))
     return out
 
 
@@ -662,9 +729,18 @@ def _seal_extra_w1(extra, plan_members, withhold):
     if isinstance(diag, dict):
         diag = dict(diag)
         if isinstance(diag.get('battery_windows'), dict):
-            diag['battery_windows'] = {k: {**row, 'members': [
-                withheld(m) if m.get('id') in nonbenign else m for m in row.get('members') or ()]}
-                if isinstance(row, dict) else row for k, row in diag['battery_windows'].items()}
+            def battery_row(row):
+                if withhold:
+                    row = benign_assist_counts(row, nonbenign)
+                row = {**row, 'members': [withheld(m) if m.get('id') in nonbenign else m for m in row.get('members') or ()]}
+                sensitivity = row.get('no_assist_sensitivity')
+                if withhold and isinstance(sensitivity, dict):
+                    # Sol F5: the no-assist list would name which non-benign members were (not) assisted.
+                    row['no_assist_sensitivity'] = {**sensitivity, 'population': 'benign', 'member_ids': [
+                        i for i in sensitivity.get('member_ids') or () if i not in nonbenign], 'withheld': withheld(sensitivity)}
+                return row
+            diag['battery_windows'] = {k: battery_row(row) if isinstance(row, dict) else row
+                                       for k, row in diag['battery_windows'].items()}
         if withhold and isinstance(diag.get('rebuilds'), list):
             diag['rebuilds'] = [withheld(r) if r.get('id') in nonbenign else r for r in diag['rebuilds']]
         sensitivity = diag.get('no_rebuild_sensitivity')
@@ -698,7 +774,7 @@ def seal_pilot(pilot, plan_members, window_id_, *, scope=None, w1_withhold=None)
         elif key in pooled:
             out[key] = _sealed_block(value, pooled[key](value))
         elif key == 'session_harvest_flags':
-            out[key] = {'flag_codes': _codes(value), 'withheld': withheld(value)}
+            out[key] = {'flag_codes': _session_codes(value), 'withheld': withheld(value)}
         elif key == 'extra_checks':
             out[key] = seal_extra(value, plan_members, scope)
         elif key == 'cross_pilot_token_identity' and value is None:
@@ -885,6 +961,29 @@ def desk_policy(state, plan_members, *, w1_withhold=None):
     return DeskSeal(plan_members, window_id(state), window_scope(state), w1_withhold=w1_withhold)
 
 
+def benign_assist_counts(row, nonbenign):
+    """W1 (PR #774 Sol F5, the C2 invariant applied to battery): with the benign battery rows printed whole, a
+    window assist count over all members gives the non-benign members' assist count by subtraction, so the
+    assist counts are over the benign members only and labelled so. B and unobserved counts decide eligibility
+    (exclusion codes, per member already) and the bar verdict is registered, so they stay."""
+    if not isinstance(row, dict):
+        return row
+    benign = [m for m in row.get('members') or () if isinstance(m, dict) and m.get('id') not in nonbenign]
+    def count(code):
+        return sum(code in (m.get('flags') or ()) for m in benign)
+    return {**row, 'assist_count': count('battery.assist'),
+            'assist_outside_request_count': count('battery.assist_outside_request'),
+            'assist_population': 'benign', 'assist_counts_all_members': withheld(
+                {k: row.get(k) for k in ('assist_count', 'assist_outside_request_count')})}
+
+
+def battery_print_row(state, row, plan_members):
+    """The row the desk prints for a battery window: W1 under the switch prints benign-only assist counts."""
+    if sealed_scope(state) == 'W1' and W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES:
+        return benign_assist_counts(row, _nonbenign(plan_members))
+    return row
+
+
 def seals_balance(state):
     """Whether the R22-3 balance print is withheld now: C/T, and W1 with the switch on (RL-149 3)."""
     scope = sealed_scope(state)
@@ -894,3 +993,124 @@ def seals_balance(state):
 def sealed_scope(state):
     """The scope whose extra report and prints are sealed now, or ``None`` once released."""
     return None if released(state) else window_scope(state)
+
+
+# --- the shared output boundary (PR #774 Sol seat F1) ---------------------------------------------
+
+def is_v4_session(state):
+    """Whether the STORED session/registration identity is ALIGN v4 (never the entry point or its kit argument).
+
+    Any one of: a frozen series window; a v4 session id (``align-v4-`` prefix); a registration or pack path
+    under an ``align_v4`` kit; a v4 registration receipt in the session's registration directory.
+    """
+    state = state or {}
+    if state.get('v4_series'):
+        return True
+    if str(state.get('session_id', '')).startswith('align-v4'):
+        return True
+    paths = [state.get('registration_dir'), (state.get('inputs') or {}).get('pack_root')]
+    for path in paths:
+        if path and any(p == 'align_v4' or p.startswith(('align_v4_', 'align-v4')) for p in Path(str(path)).parts):
+            return True
+    registration = state.get('registration_dir')
+    if registration:
+        try:
+            receipt = json.loads((Path(registration) / 'registration_receipt.json').read_bytes())
+        except (OSError, ValueError):
+            receipt = None
+        if isinstance(receipt, dict) and str(receipt.get('schema', '')).startswith('joulewise.align_v4'):
+            return True
+    return False
+
+
+def enforce(state, policy, plan_members):
+    """The policy a v4 desk must run under: the given guard, or the guard installed now. An explicit ``None``
+    installs it (it never disables protection); any other policy is refused."""
+    if isinstance(policy, (DeskSeal, ReleasedDesk)):
+        return policy
+    if policy is None:
+        return desk_policy(state, plan_members)
+    raise ValueError('ALIGN v4 session (stored identity): the desk runs only under the release guard '
+                     '(joulewise.align.apple.v4_desk_seal); a custom print_policy is refused')
+
+
+def _thermal_desk_state(registration_dir):
+    """The release-event root for the standalone thermal desk: the checkout holding its registration dir."""
+    path = Path(registration_dir).resolve()
+    parts = path.parts
+    if len(parts) >= 4 and parts[-4:-1] == ('configs', 'campaigns', parts[-2]) and parts[-1] == 'registration':
+        return {'measurement_root': str(path.parents[3])}
+    return {'measurement_root': str(Path(__file__).resolve().parents[3])}
+
+
+def guard_thermal_desk(result, prints, records, registration_dir, output):
+    """``align_v4_thermal_desk`` output boundary (Sol F1): (PILOT, RL145_PRINTS, sealed?) to write.
+
+    Before release the full PILOT and RL-145 prints go to ``<output>/archive/withheld/`` with the desk key; the
+    written PILOT carries the C/T or W1 seal (scope from the members' windows; conditions from the records,
+    an unknown condition counting as non-benign) and ``release_guard``. After release both open, with the
+    released ``release_guard`` record.
+    """
+    state = _thermal_desk_state(registration_dir)
+    if released(state):
+        record = release_record(state)
+        print('release_guard: released ' + json.dumps({k: record[k] for k in
+              ('ruling', 'series_complete_sha256', 'release_receipt_sha256')}, sort_keys=True))
+        return {**result, 'release_guard': record}, prints, False
+    windows = {str(r.get('window')) for r in records if r.get('window') is not None}
+    scope = ('T' if any(re.match(r'T[1-9]', w) for w in windows) else
+             'C' if any(re.match(r'[CD][1-9]', w) for w in windows) else 'W1')
+    plan = [{'run_id': r.get('id'), 'condition': r.get('condition'), 'ordinal': r.get('ordinal')} for r in records]
+    nonbenign = _nonbenign(plan)
+    key = secrets.token_bytes(32)
+    output = Path(output)
+    digest = _write_json(output / WITHHELD_PILOT, result)
+    _write_json(output / 'archive/withheld/RL145_PRINTS.full.json', prints)
+    _write_json(output / WITHHELD_KEY, {'schema': GUARD_SCHEMA + '.key', 'algorithm': DIGEST, 'key_hex': key.hex()})
+    thermal_keys = ('schema', 'model_windows', 'deciding_experiment', 'members', 'tool_call_flags')
+    with keyed(key):
+        extra = seal_extra({'thermal': {k: result[k] for k in thermal_keys if k in result},
+                            'registration_diagnostics': result.get('registration_diagnostics')}, plan, scope)
+        sealed = {**extra['thermal'], 'registration_diagnostics': extra['registration_diagnostics'],
+                  'u3_bar': result.get('u3_bar'), 'u3_pending': result.get('u3_pending'), 'wp19': result.get('wp19'),
+                  'K_session_read': withheld(result.get('K_session_read'))}
+        for key_name, value in result.items():
+            if key_name not in sealed and key_name not in thermal_keys:
+                sealed[key_name] = withheld(value)
+        rows = prints.get('members') or [] if isinstance(prints, dict) else []
+        sealed_prints = {k: prints[k] for k in ('schema', 'authority', 'print_only') if k in prints}
+        if scope == 'W1' and not W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES:
+            sealed_prints['members'] = rows
+        else:
+            visible = [] if scope in ('C', 'T') else [r for r in rows if r.get('id') not in nonbenign]
+            sealed_prints.update(members=visible, population='benign' if scope == 'W1' else None,
+                                 withheld_members=withheld([r for r in rows if r not in visible]))
+        bins = {k: prints.get(k) for k in ('residual_by_decode_bin', 'residual_by_load_bin')}
+        sealed_prints['residual_bins'] = withheld(bins)
+    sealed['release_guard'] = {
+        'schema': GUARD_SCHEMA, 'status': WITHHELD, 'entry_point': 'scripts/align_v4_thermal_desk.py',
+        'scope': scope, 'w1_withhold_sabotage_gpu_and_outcomes': W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES if scope == 'W1' else None,
+        'authority': 'desk-leak audit 2026-11-13; RL-149 section 3; RL-151 section 4; PR #774 Sol F1',
+        'withheld_pilot': WITHHELD_PILOT, 'withheld_pilot_sha256': digest,
+        'withheld_prints': 'archive/withheld/RL145_PRINTS.full.json', 'digest': DIGEST, 'digest_key': WITHHELD_KEY,
+        'opens': 'release run (registered series_complete record plus lead-signed release receipt)'}
+    return sealed, sealed_prints, True
+
+
+def sealed_markdown(sealed):
+    """THERMAL.md for a sealed thermal desk: the U verdicts, the contrast verdict where it prints (W1), and each
+    member's exclusion codes; every value is in PILOT.json's allowlist or withheld."""
+    rows = ['# ALIGN v4 thermal desk (release guard: ' + WITHHELD + ')', '',
+            '| Model/window | U1 | U2 | U3 | U4 | U5 | U6 |', '|---|---|---|---|---|---|---|']
+    for key, result in (sealed.get('model_windows') or {}).items():
+        rows.append('| ' + key + ' | ' + ' | '.join(str((result.get(f'U{k}') or {}).get('status')) for k in range(1, 7)) + ' |')
+    contrast = sealed.get('deciding_experiment')
+    if isinstance(contrast, dict) and 'verdict' in contrast:
+        rows.extend(['', 'Deciding contrast: ' + str(contrast.get('verdict')) + ' (printed as registered; RL-149 section 3).'])
+    rows.extend(['', '| Member | Excluded | Exclusion codes |', '|---|---|---|'])
+    for member in sealed.get('members') or ():
+        rows.append('| ' + str(member.get('id')) + ' | ' + str(member.get('excluded')) + ' | ' +
+                    ', '.join(_strip(member.get('calibration_exclusions') or [])) + ' |')
+    rows.extend(['', 'Member energy, gates, tokens and tool tables are withheld until series_complete '
+                     '(archive/withheld/PILOT.full.json).', ''])
+    return '\n'.join(rows)

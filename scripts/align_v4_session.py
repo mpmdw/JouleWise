@@ -1087,6 +1087,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     checks.update(light_triage.u_checks(report['thermal']))
     checks['v4_B_bar'] = battery_windows_pass(report['registration_diagnostics']['battery_windows'])
     for name, row in report['registration_diagnostics']['battery_windows'].items():
+        row = v4_desk_seal.battery_print_row(state, row, plan['members'])      # PR #774 Sol F5
         print(f'{name} battery: '+json.dumps({k: row[k] for k in
               ('B_count', 'unobserved_count', 'assist_count', 'bar_pass', 'consequence')}, sort_keys=True))
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
@@ -1123,7 +1124,7 @@ def desk(session_root, **kwargs):
     # Desk release guard (desk-leak audit 2026-11-13; protocol B0/B2/B9/B7, DC seal, R27/A25): before the
     # registered release event a C/T desk prints and records only the allowlist; W1 its configured scope.
     from joulewise.align.apple import v4_desk_seal
-    if 'print_policy' not in kwargs:
+    if kwargs.get('print_policy') is None:          # an explicit None installs the guard (PR #774 Sol F1)
         kit_path = kwargs['kit']
         kwargs['print_policy'] = v4_desk_seal.desk_policy(state, lambda: pilot._member_rows(state, kit=kit_path))
     seal = kwargs['print_policy']
