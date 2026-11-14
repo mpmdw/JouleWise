@@ -993,3 +993,25 @@ to the research lead for review before merge.
   rebind. Line cites into the record that moved by 66 lines were updated: DLE-6's two `SEAL_RECORD.md` line ranges
   (631-638 and 635-638 became 697-704 and 701-704).
 - **Effect on estimands.** None. The event and the released bytes are unchanged.
+
+## DLE-14. `joulewise/flags/exclusions.py`: the keyword-only `pack_scoped` parameter, a cited rebind after the fact (RL-144 addendum M2)
+
+- **Status.** RECORDED, 2026-11-13, on `fix/2026-11-13-b6-m1-m2` (lead, under RL-144 addendum section 3 M2 and
+  RL-146 section 2 item 4). It is owed before the S-14 line merges to `main`.
+- **What happened.** Commit `4e3446e6c` (Block 6 option-c analysis) edited `joulewise/flags/exclusions.py`, a file
+  frozen by Block 5 (seal inventory, `joulewise/flags/`), without a cited rebind. `compute` gained a keyword-only
+  `pack_scoped: bool = True`. The one changed expression is
+  `PACK_SCOPED_WINDOW_REASONS.get(pack_id, {}) if pack_scoped and isinstance(pack_id, str) else {}`. With the
+  default it reduces to Block 5's expression. The only caller that passes `False` is
+  `scripts/independent_recompute_b6.py` (line 323).
+- **Rebind.** The file is now in `EVOLVED_ON_MAIN` (the freeze binds the Block 5 analysis commit `b13a510dc`'s
+  bytes) and in `REBOUND_WORKING_TREE` (working-tree sha256
+  `ebe1678c0fdd60b1ddd20d432cf07412bd321a8629589f4ce4c6b334378f0ad6`, a row of the Block 6 24-file closure). A
+  further edit fails until it carries its own cited rebind. `tests/test_whole_window_inverted_corner_clamp.py`
+  `FROZEN_FILES_TEST_SHA256` is rebound to the edited `test_frozen_files.py`.
+- **Test.** `tests/flags/test_flags_exclusions.py`, `Block5DefaultEquivalenceTests`: `compute` with the default
+  (and with `pack_scoped=True`) equals the Block 5 commit's `compute` (loaded by `git show`) on a fixture, for
+  GAMMA, BETA and no pack, with and without a `neg8.midpoint_lost` flag; `pack_scoped=False` differs only on GAMMA
+  with that flag.
+- **Effect on estimands.** None. Block 5's behaviour is unchanged. Whether the first program and the recompute
+  should differ in pack scoping is not decided here; the dry run's comparator is the check (RL-134).

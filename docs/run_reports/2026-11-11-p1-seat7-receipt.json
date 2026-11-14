@@ -1,0 +1,136 @@
+{
+ "archives": 10,
+ "comparison_stopped": false,
+ "counting_by_pack": {
+  "ALPHA": 3,
+  "BETA": 3,
+  "GAMMA": 3
+ },
+ "ephemeral_inputs": {
+  "path": "/private/tmp/b6-p1-seat7-20261111-final-v2/archives/run-inputs.json",
+  "sha256": "637001dfd87379cd2b81bc4518551fa5e6740159813a070a01f6cabc2813b1aa"
+ },
+ "ephemeral_profile": {
+  "note": "Earlier synthetic profile; no production-speed inference",
+  "path": "/private/tmp/b6-p1-seat7-dryrun.prof",
+  "sha256": "356383b05b5efa96559e85882bfed91cac9a1001542d596e9817754e7bc054cb"
+ },
+ "exit_codes": [
+  0,
+  0
+ ],
+ "flags": 0,
+ "numbers_public_stdout_byte_identical": true,
+ "option_c": {
+  "comparator": {
+   "classes": {
+    "calibration": {
+     "compared": 10,
+     "failed": 0,
+     "pass": true,
+     "passed": 10,
+     "unmatched": 0
+    },
+    "contrast": {
+     "compared": 30,
+     "failed": 0,
+     "pass": true,
+     "passed": 30,
+     "unmatched": 0
+    },
+    "inclusive": {
+     "compared": 144,
+     "failed": 0,
+     "pass": true,
+     "passed": 144,
+     "unmatched": 0
+    },
+    "neg8": {
+     "compared": 30,
+     "failed": 0,
+     "pass": true,
+     "passed": 30,
+     "unmatched": 0
+    },
+    "replication": {
+     "compared": 2,
+     "failed": 0,
+     "pass": true,
+     "passed": 2,
+     "unmatched": 0
+    },
+    "run_phase_energy": {
+     "compared": 3363,
+     "failed": 0,
+     "pass": true,
+     "passed": 3363,
+     "unmatched": 0
+    },
+    "side_by_side": {
+     "compared": 48,
+     "failed": 0,
+     "pass": true,
+     "passed": 48,
+     "unmatched": 0
+    },
+    "summary": {
+     "compared": 144,
+     "failed": 0,
+     "pass": true,
+     "passed": 144,
+     "unmatched": 0
+    }
+   },
+   "pass": true,
+   "print_spec_ratified": true,
+   "recompute_stopped": false,
+   "release": false,
+   "release_inputs_valid": true,
+   "schema": "joulewise.b6_s13_comparison.public.v1"
+  },
+  "failures": [],
+  "families": {
+   "calibration": 10,
+   "counting": 10,
+   "engine": 54,
+   "engine_word": 6,
+   "harvest_bound": 1777,
+   "harvest_drift": 40,
+   "harvest_energy": 3363,
+   "pairing": 12,
+   "section10": 336,
+   "section11_replication": 2,
+   "section11_short": 3
+  },
+  "pass": true,
+  "single_implementation": [
+   "per-phase whole-machine (R8)"
+  ]
+ },
+ "output_sha256": "c6bae5e4cb58078af1bc18afcd5ad1d88e72abb51eb61cae21a28e7af7fec809",
+ "public_sha256": "18e265b66632667b347cc9aedccba7c66601665fb946fb627596c1a8b301d5d1",
+ "python": "3.13.18",
+ "raw_records_per_member": 16,
+ "serial_seconds": 5.756446624873206,
+ "source_sha256": {
+  "configs/b6/recompute/hazard_sizing.json": "bf399bec4195b9237f53c747c6fc9cd24066610eba933a0fad767534d970d29b",
+  "configs/b6/recompute/precision.json": "e242cab6bb311a9c23d5c6dc06374ed3094a351e36d6954c3589e2b535cc63b0",
+  "configs/b6/recompute/production_comparison_keys.json": "62dbfaef9ebc5cfbbe5a00734f5eb8ad3d82389f54f28473ed63db6135b9174d",
+  "joulewise/b6_analysis_check.py": "8bf0d17c9eee4b4237b1d6f00708c2e7e143febfa8108ab5e994e7692465ac83",
+  "joulewise/b6_analysis_hazards.py": "9a907a3671dbe210df4d417428c9108f0fdee1c16531bd0bef2fd39b0f27bb2b",
+  "joulewise/b6_analysis_inputs.py": "cf093dbc3a1692a777ba9f028ccbbf2313260baf422fba272e327737042285de",
+  "joulewise/desk_compress.py": "ac770c9407dad936cc742957b6f5673a1b69523156aa2be9baf7de8eb2b56777",
+  "joulewise/flags/exclusions.py": "ebe1678c0fdd60b1ddd20d432cf07412bd321a8629589f4ce4c6b334378f0ad6",
+  "joulewise/twins/engine_twin.py": "5cd6977d79b2951a6e4351a9e8f95b4f91bc38af50eeb4c5bf2d5115ffedbff8",
+  "joulewise/twins/harvest_twin.py": "df39036b24eab0d015c198686e3ed03ae0add341e487636d34ed622fa0695af0",
+  "scripts/b6_synthetic_dry_run.py": "2f02a6d8d13a2e636d002de7356a95b0ab4200c245924cebb012587da2d6bb4d",
+  "scripts/independent_recompute_b5.py": "d49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0",
+  "scripts/independent_recompute_b6.py": "de2c1644994768ba8b666b16f228b9e283fd2c0a9d1315a6744fa89ad4fb55be"
+ },
+ "synthetic_only": true,
+ "two_worker_seconds": 4.451137207914144,
+ "zstd": {
+  "path": "/opt/homebrew/bin/zstd",
+  "version": "*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***"
+ }
+}
