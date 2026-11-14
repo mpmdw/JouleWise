@@ -1103,10 +1103,9 @@ DELETED_WITH_BRANCH = ['P1-B5-NOPACK', 'P1-B5-NOPACK-REASON', 'P1-B5-CELL-REFUSE
                        'P1-B5-DOM-REFUSED']
 DROPPED = ['P1-B5-B-SHARE']  # RL-52 (5): dropped with its sentence
 
-# Block 5 ids left as placeholders (reasons in the run report), and what is left of the Block 6 half of the recompute
-# summary after fill_check_b6.py filled it (2026-11-13): the per-class largest observed difference.
-PENDING = ['P1-ABS-PART1', 'CP-X08-decode-a-conclusion',
-           'P1-RECOMPUTE-SUMMARY-B6-MAXDIFF']
+# Block 5 ids left as placeholders (reasons in the run report). The Block 6 half of the recompute summary is
+# fill_check_b6.py's; its largest-difference residual was replaced by RL-147 §1's sentence (2026-11-13).
+PENDING = ['P1-ABS-PART1', 'CP-X08-decode-a-conclusion']
 
 GONE = ['[BRANCH 5.1.a', '[END BRANCH 5.1]', '[BRANCH 5.2.a', '[END BRANCH 5.2]', '[BRANCH 5.4.A', '[END BRANCH 5.4.A]',
         '[BRANCH 5.4.B', '[END BRANCH 5.4.B]', '**[BRANCH 5.4.R', '[END BRANCH 5.4.R]', '[BRANCH 9.D',

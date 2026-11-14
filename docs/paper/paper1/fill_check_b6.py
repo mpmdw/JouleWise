@@ -34,7 +34,14 @@ registered threshold 2; magnitude ratios (energy ratio, scaling factor) three de
 running text. Estimates and every operand of a difference printed beside it (Table 6) round to nearest; interval
 ends outward; uncertainties and limits (half-widths, standard deviations, floors outside Table 6) up.
 
-Standard library only. Exit status 0 when every check passes, 1 otherwise.
+RL-147 (2026-11-13 19:22 PST) amended the fill: the largest-difference sentence (§1); the carried primary-block
+codes, derived here from the copied flag records against Block 5's catalog (§2); the whole-machine definition and
+edge-shift sensitivities (§3); the P1-RELEASE split (§4); R_cm 1.99975 and the floor caption sentence (§5); the
+floor-gate rows, the 8a sentence and three amended sentences (§6); the reader report pinned (§7); the load-correlated
+and battery-assist lines and the paragraph on what the replication shows (§10). The template edits that carry the new
+markers were made once, on main's paper, before --apply.
+
+Standard library only (and `git show` for two pinned files). Exit status 0 when every check passes, 1 otherwise.
 """
 from __future__ import annotations
 
@@ -44,6 +51,7 @@ import hashlib
 import json
 import pathlib
 import re
+import subprocess
 import sys
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
@@ -58,6 +66,19 @@ STRUCTURE_SHA256 = '18a129f218d002516cc2bbf2a13243ea7e977ce90328e63c29a46bb78132
 CHECK3 = pathlib.Path('/Volumes/JW-EXT/scratch/b6-rr3/step13-rl104-check3.md')
 CHECK3_SHA256 = 'bc0fce5608b7d9fad707295202ac9e2864d9400476318f18f6fd2a9014a4a0be'
 CHECK3_RESULT = '72 of 72 (family x session) rows PASS; 0 FAIL.'
+# RL-147 §7 item 2: the separate reader's report on head a2563016e, committed by the lead to the audit branch.
+READER_COMMIT = '9611d5fd13d3b8d843f09144b91cc56c17359135'
+READER_PATH = 'docs/research-audits/2026-11-10-fable/evidence/pr772/reader-pr772.md'
+READER_SHA256 = '4239c9146ff06ae180f2d67ba090db3509a7e140df7daa3e07908cfdc7af4a63'
+# RL-147 §2: Block 5's catalog; its 32 session-removing codes are those with effect EXCLUDE_WINDOW.
+B5_CATALOG = ROOT / 'configs/campaigns/v5_claim_25g83/flag_catalog.json'
+B5_CATALOG_SHA256 = '5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d'
+# Block 5's released output, the run's pinned --block5 input (release record row "Block 5 released output").
+B5_OUTPUT = pathlib.Path('/Volumes/JW-EXT/air-home/jw-b5-custody/release-check-final-20261108T0942Z/recompute.json')
+# The definition's constants (RL-147 §3), read from the pinned Block 5 functions the Block 6 program loads.
+B5_PROGRAM = 'scripts/independent_recompute_b5.py'
+B5_PROGRAM_SHA256 = 'd49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0'
+S14_COMMIT = '6e6d1b18a9dffbba675c3abd28db2e4c6a484fde'
 
 FAILURES: list[str] = []
 
@@ -126,13 +147,38 @@ def check_side_inputs() -> list[dict]:
     return [json.loads(line) for line in ATTEMPTS.read_text().splitlines() if line.strip()]
 
 
+def load_extras() -> dict:
+    """The reader report, Block 5's catalog, Block 5's released output and the pinned Block 5 program text."""
+    report = subprocess.run(['git', 'show', f'{READER_COMMIT}:{READER_PATH}'], cwd=ROOT, check=True,
+                            capture_output=True).stdout
+    if hashlib.sha256(report).hexdigest() != READER_SHA256:
+        fail('reader report SHA-256 differs from the pinned one (RL-147 §7 item 2)')
+    m_rows = re.search(r'^- Rows checked: ([0-9,]+)$', report.decode(), re.M)
+    m_agree = re.search(r'^- Agree: ([0-9,]+)$', report.decode(), re.M)
+    m_dis = re.search(r'^- Disagree: ([0-9,]+)$', report.decode(), re.M)
+    if not (m_rows and m_agree and m_dis) or m_dis.group(1) != '0':
+        fail('reader report result lines missing, or a disagreement reported')
+    if sha256(B5_CATALOG) != B5_CATALOG_SHA256:
+        fail('Block 5 catalog SHA-256 differs')
+    want = re.search(r'^\| Block 5 released output \| `([0-9a-f]{64})` \|$', RELEASE_RECORD.read_text(), re.M)
+    if not want or sha256(B5_OUTPUT) != want.group(1):
+        fail('Block 5 released output differs from the release record\'s digest')
+    program = subprocess.run(['git', 'show', f'{S14_COMMIT}:{B5_PROGRAM}'], cwd=ROOT, check=True,
+                             capture_output=True).stdout
+    if hashlib.sha256(program).hexdigest() != B5_PROGRAM_SHA256:
+        fail('pinned Block 5 program SHA-256 differs')
+    return {'reader': {'rows': m_rows.group(1), 'agree': m_agree.group(1)},
+            'catalog': json.loads(B5_CATALOG.read_text()), 'b5': json.loads(B5_OUTPUT.read_text()),
+            'program': program.decode()}
+
+
 # ---------------------------------------------------------------- rounding (RL-52, RL-60)
 
 MODE = {'near': ROUND_HALF_UP, 'down': ROUND_FLOOR, 'up': ROUND_CEILING}
 # format -> (kind, digits, direction); 'J' = two decimals or three significant figures, whichever shows more.
 ROUNDERS = {
     'e': ('J', 0, 'near'), 'lo': ('J', 0, 'down'), 'hi': ('J', 0, 'up'), 'up': ('J', 0, 'up'),
-    'tok': ('sf', 4, 'near'), 'tokup': ('sf', 4, 'up'),
+    'tok': ('sf', 4, 'near'), 'tokup': ('sf', 4, 'up'), 'R5': ('dp', 5, 'near'),
     'R': ('dp', 4, 'near'), 'Rd': ('dp', 4, 'near'), 'Rup': ('dp', 4, 'up'),
     'mr': ('dp', 3, 'near'), 'mrlo': ('dp', 3, 'down'), 'mrhi': ('dp', 3, 'up'), 'mrup': ('dp', 3, 'up'),
     'sh2': ('dp', 2, 'near'),
@@ -184,7 +230,10 @@ CURRENT = {'marker': ''}
 class Src:
     def __init__(self, name: str, data: dict):
         self.name, self.data = name, data
-        self.file = {'attempts': 'attempts.jsonl'}.get(name, name + '.json')
+        self.file = {'attempts': 'attempts.jsonl', 'block5': 'Block 5 recompute.json (c06ee7c8…)',
+                     'catalog': 'configs/campaigns/v5_claim_25g83/flag_catalog.json',
+                     'reader': READER_PATH + '@' + READER_COMMIT[:9],
+                     'program': B5_PROGRAM + '@' + S14_COMMIT[:9]}.get(name, name + '.json')
 
     def get(self, path: str):
         o = self.data
@@ -231,7 +280,7 @@ CELL = {('ALPHA', 'decode'): 'df-ph-decode-qwen3-1p7b', ('ALPHA', 'prefill-p2048
 LABEL_SS = 'single-source'
 LABEL_NIR = 'not independently recomputed'
 LABEL_R8 = 'single implementation; not independently recomputed'
-LABEL_CC = 'computed and compared (decision 6 (a))'
+LABEL_CC = 'computed and compared'  # RL-147 §9: the internal name "decision 6 (a)" is dropped
 LABEL_COPIED = 'copied from the harvest or acceptance record, bound by digest, not recomputed'
 LABEL_BLOCK = '§10-§11 arithmetic computed and compared'
 
@@ -278,7 +327,7 @@ def fill_rep(R: Src, phase: str) -> dict[str, str]:
         word(R, f'{base}|sessions|{i}|direction')
     word(R, f'{base}|block5_outcome')
     word(R, f'{base}|block5_direction')
-    return {'word': word(R, f'{base}|word'), 'n': record(R, f'{base}|sessions', len(rep['sessions']),
+    return {'word': '"' + word(R, f'{base}|word') + '"', 'n': record(R, f'{base}|sessions', len(rep['sessions']),
                                                           str(len(rep['sessions'])), 'n'),
             'outcome': word(R, f'{base}|sessions|0|outcome')}
 
@@ -291,13 +340,16 @@ def fill_flaginc(R: Src) -> str:
         record(R, f'{base}|flagged_inclusive_sessions', added, 'none', 'list')
         if added:
             raise SystemExit('flagged-inclusive sessions exist: their words and flags are owed')
-        out.append(f'{word(R, f"{base}|word")} for {name}')
+        out.append(f'"{word(R, f"{base}|word")}" for {name}')
+    n_added = 0
     for pack in ('ALPHA', 'BETA', 'GAMMA'):
         added = R.get(f'block|flagged_inclusive|{pack}|added_sessions')
         record(R, f'block|flagged_inclusive|{pack}|added_sessions', added, 'none', 'list')
+        n_added += len(added)
         if added:
             raise SystemExit('flagged-inclusive sessions exist')
-    return f'the same, {join(out)}, with no session added, since every attempt counted'
+    return (f'Including sessions that did not count (n = {n_added}): every attempt counted, so no session is added and '
+            f'the flagged-inclusive words are the registered ones, {join(out)}; they do not enter the registered word.')
 
 
 def r_short(R: Src, sid: str, key: str) -> str:
@@ -330,11 +382,34 @@ def fill_dom(R: Src) -> str:
             items.append(f'{names[model]} {"prefill (2,048)" if phase == "prefill" else phase} {modes[mode]}')
         record(R, f'sessions|{sid}|pairing_dominance|failed', failed, '; '.join(items), 'list', LABEL_NIR)
         pairings.append(f'{sid} (floors from {pair[0]} and {pair[1]}): {join(items)}')
+    # RL-147 §10 (c), placed here by §6 ("with the sentence of §10 item (c) added").
+    b5 = [R.get(f'block|side_by_side|{pk}|dominance/{PACK_MODEL[pk][0]}/{ph}/{mode}/R|block5')
+          for pk in ('ALPHA', 'BETA') for ph, _, _ in PHASES for mode in ('absolute', 'comparative')]
+    b5_all = record(R, 'block|side_by_side|<ALPHA,BETA>|dominance/<m>/<phase>/<absolute,comparative>/R|block5 (count >= 2)',
+                    sum(v >= 2 for v in b5), 'eight' if len(b5) == 8 and all(v >= 2 for v in b5) else '?', 'n')
+    if b5_all != 'eight':
+        fail('not every primary-block independent-corner R is at least 2')
+    below = [(sid, key) for pk in ('ALPHA', 'BETA') for sid in sessions_of(R, pk)
+             for key, v in R.get(f'sessions|{sid}|quantities').items()
+             if key.startswith('dominance/') and key.endswith('/R') and v < 2]
+    if {k for _, k in below} != {'dominance/qwen3-8b/decode/comparative/R'}:
+        fail(f'replication R below 2 is not only the 8B decode comparative R: {below}')
+    beta = sessions_of(R, 'BETA')
+    vals = [r_short(R, sid, 'dominance/qwen3-8b/decode/comparative/R') for sid, _ in below]
+    count = {2: 'two', 1: 'one', 3: 'three'}[len(below)]
+    failed_sets = {json.dumps(sorted(R.get(f'sessions|{g}|pairing_dominance|failed'))) for g in sessions_of(R, 'GAMMA')}
+    if len(failed_sets) < 2:
+        fail('the failed components are the same in every pairing; "not stable" does not hold')
+    c_text = (f'In the primary block all {b5_all} independent-corner ratios R were at least 2. In the replication the 8B '
+              f'decode comparative R is below 2 in {count} of the {"three" if len(beta) == 3 else len(beta)} 8B floor '
+              f'sessions ({join(vals)}). The '
+              'branch is B in the primary block and in all three replication pairings; which components fail is not '
+              'stable from session to session.')
     return ('Per floor session, the four R per model and its two R_cm: ' + '; '.join(sentences) + '. '
             'Every contrast pairing is branch B: timing movement did not at least double every detection floor. '
             'The failed components were, per pairing, ' + '; '.join(pairings) + '. Each ratio is a point '
             'diagnostic with no interval, labelled single-source; the branch is labelled not independently '
-            'recomputed.')
+            'recomputed. ' + c_text)
 
 
 def cell_line(R: Src, sid: str, pack: str, phase: str, line: str, label: str) -> str:
@@ -397,7 +472,25 @@ def fill_contention(R: Src) -> str:
     lbl = word(R, 'sessions|r1-alpha|lines|df-ph-decode-qwen3-1p7b|outside_processor_alternative|label', LABEL_NIR,
                mapping={'registered outside-processor rule (w = 5.432 J per CPU-s, c_q = 0.54 CPU-s)':
                         'registered outside-processor rule (w = 5.432 J per CPU-s, c_q = 0.54 CPU-s)'})
-    return f'{lbl}: ' + fill_floor_and_contrast_lines(R, 'outside_processor_alternative', LABEL_NIR)
+    cells = [(sid, CELL[(pk, ph)]) for pk in ('ALPHA', 'BETA') for sid in sessions_of(R, pk) for ph, _, _ in PHASES]
+    computed = sum(R.get(f'sessions|{sid}|lines|{c}|outside_processor_alternative|status') == 'computed'
+                   for sid, c in cells)
+    if computed:
+        fail('a floor cell is computable under the registered contention rule; §10 (d) does not hold')
+    ns = [R.get(f'sessions|{sid}|lines|{cid}|outside_processor_alternative|n')
+          for sid in sessions_of(R, 'GAMMA') for _, _, cid in CONTRASTS]
+    record(R, 'sessions|<sid>|lines|<cell>|outside_processor_alternative|status (computed, of 12 floor cells)',
+           computed, 'none', 'n', LABEL_NIR)
+    record(R, 'sessions|<gamma sid>|lines|<cid>|outside_processor_alternative|n (min, max over 6 contrasts)',
+           [min(ns), max(ns)], f'{min(ns)} to {max(ns)}', 'n', LABEL_NIR)
+    if max(ns) >= 5:
+        fail('a contrast keeps 5 quads under the registered contention rule')
+    d_text = (f'Applied as registered, the outside-processor exclusion leaves none of the {len(cells)} floor cells with '
+              f'the registered minimum of units, and leaves the {len(ns)} contrasts {min(ns)} to {max(ns)} quads of the 5 '
+              'required. It was not adopted for this block for that reason, as registered, and the replication\'s '
+              'sessions confirm it would have removed most of the data. ')
+    d_text = d_text.replace(f'the {len(ns)} contrasts', 'the six contrasts' if len(ns) == 6 else f'the {len(ns)} contrasts')
+    return d_text + f'{lbl[0].upper() + lbl[1:]}: ' + fill_floor_and_contrast_lines(R, 'outside_processor_alternative', LABEL_NIR)
 
 
 def fill_step(R: Src) -> str:
@@ -427,10 +520,12 @@ def fill_wm(R: Src) -> str:
                 assisted = num(R, base + '|battery_assist_count', 'n', LABEL_R8)
                 parts.append(f'{sid} {short} {pname}: {num(R, base + "|mean_j", "e", LABEL_R8)} J '
                              f'[{num(R, base + "|lower_j", "lo", LABEL_R8)}, {num(R, base + "|upper_j", "hi", LABEL_R8)}], '
+                             f'edge-shift sensitivity ± {num(R, base + "|edge_shift_sensitivity|max_abs_change_j", "up", LABEL_R8)} J, '
                              f'rails\' share {num(R, base + "|gross_share|median", "sh2", LABEL_R8)} (median over '
                              f'{num(R, base + "|gross_share|n", "n", LABEL_R8)} kept runs), '
                              f'{assisted} battery-assisted')
-    return '; '.join(parts) + f', each labelled "{LABEL_R8}"'
+    return ('intervals are statistical half-widths only; the timing sensitivity is printed beside each: '
+            + '; '.join(parts) + f', each labelled "{LABEL_R8}"')
 
 
 def fill_scaled(R: Src) -> str:
@@ -452,7 +547,8 @@ def fill_scaled(R: Src) -> str:
                          f'[{num(R, base + "|decision_interval_j|0", "lo", LABEL_NIR)}, '
                          f'{num(R, base + "|decision_interval_j|1", "hi", LABEL_NIR)}] J, outcome word '
                          f'{word(R, base + "|outcome", LABEL_NIR)} ({changed})')
-    return '; '.join(parts)
+    return ('; '.join(parts) + '. The plain-mean factor, registered to print beside this one where a cell lost '
+            'unequal numbers of units, is not in the released output and is not printed')
 
 
 def fill_xsess(R: Src) -> str:
@@ -473,6 +569,214 @@ def fill_xsess(R: Src) -> str:
                                  f'h_F = {num(R, base + "/h_F_j", "up", LABEL_NIR)} J (between-session variation the '
                                  'intervals do not cover; timing bounds B not included)')
     return '; '.join(parts)
+
+
+# ---------------------------------------------------------------- RL-147 §2: the carried primary-block codes
+
+def carried(R: Src, X: dict) -> dict[str, dict]:
+    """RL-147 §2 rule: each session's copied flags.jsonl codes, intersected with Block 5's 32 EXCLUDE_WINDOW codes;
+    neg8.screen_failed goes to a disclosure; neg8.midpoint_lost (GAMMA only) is the dropped lost-midpoint rule."""
+    C = Src('catalog', X['catalog'])
+    ex32 = sorted(code for code, v in X['catalog']['codes'].items() if v.get('effect') == 'EXCLUDE_WINDOW')
+    record(C, 'codes|<code>|effect == EXCLUDE_WINDOW (count)', len(ex32), str(len(ex32)), 'n')
+    out = {}
+    for sid, s in R.data['sessions'].items():
+        path = f'sessions|{sid}|copied_disclosures|families|block5_codes_carried|0|record'
+        rows = [json.loads(line) for line in R.get(path).splitlines() if line.strip()]
+        codes = {r['code'] for r in rows}
+        hit = codes & set(ex32)
+        out[sid] = {'carried': sorted(hit - {'neg8.screen_failed'}), 'disclosed': sorted(hit & {'neg8.screen_failed'}),
+                    'dropped_rule': s['pack'] == 'GAMMA' and 'neg8.midpoint_lost' in codes, 'rows': rows,
+                    'n32': len(ex32)}
+        record(R, path + ' (codes in the 32, carried)', out[sid]['carried'], ', '.join(out[sid]['carried']), 'list',
+               LABEL_COPIED)
+    return out
+
+
+def fill_carried(R: Src, X: dict) -> str:
+    c = carried(R, X)
+    expected = {sid: ['code.executed_differs_from_sealed'] for sid in R.data['sessions']}
+    if {sid: v['carried'] for sid, v in c.items()} != expected:
+        fail('carried codes differ from RL-147 §2\'s derivation')
+    if [sid for sid, v in c.items() if v['disclosed']] != ['r2-beta']:
+        fail('neg8.screen_failed is not in r2-beta alone')
+    if [sid for sid, v in c.items() if v['dropped_rule']] != ['r2-gamma']:
+        fail('neg8.midpoint_lost is not in r2-gamma alone')
+    rec = next(r for r in c['r2-beta']['rows'] if r['code'] == 'neg8.screen_failed')
+    if rec['observed']['decision'] != 'failed':
+        fail('r2-beta bracket decision is not "failed"')
+    conds = rec['observed']['conditions']
+    record(R, 'sessions|r2-beta|copied_disclosures|families|block5_codes_carried|0|record (neg8.screen_failed observed.conditions)',
+           conds, ', '.join(conds), 'list', LABEL_COPIED)
+    mid = next(r for r in c['r2-gamma']['rows'] if r['code'] == 'neg8.midpoint_lost')
+    lost = mid['observed']['lost']
+    if [x['reason'] for x in lost] != ['contention.request_overlap']:
+        fail('r2-gamma midpoint was not lost to contention.request_overlap')
+    record(R, 'sessions|r2-gamma|copied_disclosures|families|block5_codes_carried|0|record (neg8.midpoint_lost observed.lost[0].reason)',
+           lost[0]['reason'], 'overlapped outside processor work', 'word', LABEL_COPIED)
+    n_mid = num(R, 'sessions|r2-gamma|neg8|n_mid', 'n', LABEL_CC)
+    if n_mid != '1':
+        fail('the r2-gamma drift screen did not use its midpoint')
+    verdicts = [R.get(f'sessions|{sid}|quantities|neg8/verdict') for sid in R.data['sessions']]
+    if set(verdicts) != {'passed'}:
+        fail('a registered drift screen did not pass')
+    record(R, 'sessions|<sid>|quantities|neg8/verdict (all nine)', verdicts, 'passed', 'word', LABEL_CC)
+    nine = {9: 'nine'}[len(c)]
+    return (f'Of the primary block\'s {c["r1-alpha"]["n32"]} session-removing codes, one is carried, by all {nine} '
+            'replication sessions: `code.executed_differs_from_sealed`. The comparison it records is against the '
+            'primary block\'s sealed file inventory, and the replication was collected from its own registered '
+            'checkout, so the code fires by construction and is a flag in this block. One primary-block session rule '
+            'that the replication dropped would have applied: r2-gamma\'s midpoint reference run overlapped outside '
+            'processor work, which the primary block\'s rules would have removed, and on the contrast pack a lost '
+            'midpoint removed the session (`neg8.midpoint_lost`); under the replication\'s rules the run is kept and '
+            'the drift screen used it. Disclosed and, as registered, not listed as carried: r2-beta\'s stored bracket '
+            'decision of the old drift screen is "failed" (`neg8.screen_failed`; conditions '
+            + ', '.join(f'`{x}`' for x in conds) + f'); the registered drift screen passed in that session, as in all '
+            f'{nine}.')
+
+
+# ---------------------------------------------------------------- RL-147 §3: the whole-machine definition
+
+WM_DEF = ('For each run and phase, the phase\'s two edges are placed on the meter\'s clock by the meter stream\'s '
+          'clock fit, and the phase\'s whole-machine energy is the mean of the meter\'s power samples (50 a second) '
+          'that fall between the edges, multiplied by the phase length. It is gross: no idle baseline is subtracted '
+          'and the battery term is not added. Per model and phase the runs are summarised with estimator 1\'s '
+          'arithmetic (0.2 × the mean over repeats + 0.8 × the mean over quad means), and the interval printed is '
+          'that estimator\'s statistical half-width only, with no timing bound. The rails\' share is the median, '
+          'over the kept runs, of the run\'s gross rail energy over the same phase divided by its whole-machine '
+          'energy. The meter\'s clock-fit residual and the alignment bound do not enter the interval. They enter one '
+          'labelled sensitivity: each edge is moved by ±(b_op + the stream\'s largest clock-fit residual), in the '
+          'four sign combinations, and the largest change of the cell\'s mean is printed as the edge-shift '
+          'sensitivity.')
+
+
+def fill_wm_def(X: dict) -> str:
+    Pg = Src('program', {})
+    prog = X['program']
+    checks = {'50 a second': '+/-2 samples at 50 Hz', '0.2': '.2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)',
+              '0.8': '.2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)'}
+    for printed, needle in checks.items():
+        if needle not in prog:
+            fail(f'WM-DEF constant {printed!r}: {needle!r} not in the pinned program')
+        record(Pg, f'text "{needle}"', needle, printed, 'constant', LABEL_R8)
+    return WM_DEF
+
+
+# ---------------------------------------------------------------- RL-147 §10: the two missing lines and the paragraph
+
+def fill_equal_line(R: Src, line: str, lead: str) -> str:
+    n_cells = 0
+    for pack in ('ALPHA', 'BETA'):
+        tag = PACK_MODEL[pack][0]
+        for sid in sessions_of(R, pack):
+            for phase, _, _ in PHASES:
+                base = f'sessions|{sid}|lines|{CELL[(pack, phase)]}|{line}'
+                row = R.get(base)
+                moved = row.get('restored_by_stratum') or row.get('removed_by_stratum')
+                same = all(row[k] == R.get(f'sessions|{sid}|quantities|reported/{tag}/{phase}/{k}')
+                           for k in ('mean_j', 'lower_j', 'upper_j', 'n_r', 'n_b'))
+                if row['status'] != 'computed' or any(moved.values()) or not same:
+                    raise SystemExit(f'{base}: differs from the cell; the per-cell form is owed')
+                record(R, base + ' (equals the cell; units moved 0)', row['mean_j'], 'equal', 'equal', LABEL_NIR)
+                n_cells += 1
+    n_ctr = 0
+    for sid in sessions_of(R, 'GAMMA'):
+        for phase, _, cid in CONTRASTS:
+            base = f'sessions|{sid}|lines|{cid}|{line}'
+            row = R.get(base)
+            moved = row.get('restored_by_stratum') or row.get('removed_by_stratum')
+            same = (row['dbar_j'] == R.get(f'sessions|{sid}|quantities|contrast/{phase}/dbar_j')
+                    and row['n'] == R.get(f'sessions|{sid}|quantities|contrast/{phase}/n'))
+            if row['status'] != 'computed' or any(moved.values()) or not same:
+                raise SystemExit(f'{base}: differs from the contrast; the per-contrast form is owed')
+            record(R, base + ' (equals the contrast; units moved 0)', row['dbar_j'], 'equal', 'equal', LABEL_NIR)
+            n_ctr += 1
+    return (f'{lead} and the line equals the registered estimate in each of the {n_cells} floor cells and the {n_ctr} '
+            'contrasts')
+
+
+def fill_shows(R: Src, X: dict) -> str:
+    B = Src('block5', X['b5'])
+    rows = []
+    for sid in sessions_of(R, 'GAMMA'):
+        for pack in ('ALPHA', 'BETA'):
+            tag = PACK_MODEL[pack][0]
+            for phase, _, _ in PHASES:
+                q = R.get(f'sessions|{sid}|quantities')
+                k = f'cross_session/{tag}/{phase}'
+                rows.append((sid, pack, phase, q[k + '/agree'], q[k + '/delta_j'], q[k + '/F_j'], k))
+    differ = [r for r in rows if not r[3]]
+    b8 = [r for r in rows if r[1] == 'BETA']
+    a17 = [r for r in rows if r[1] == 'ALPHA']
+    if not all(not r[3] and r[4] < 0 for r in b8) or sum(not r[3] for r in a17) != 1:
+        fail('§10 (a) does not hold: every 8B comparison differs and reads lower, one 1.7B comparison differs')
+    words = {12: '12', 6: 'six', 1: 'one', 7: '7'}
+    n_diff = record(R, 'sessions|<gamma sid>|quantities|cross_session/<m>/<phase>/agree (count false)', len(differ),
+                    str(len(differ)), 'n', LABEL_NIR)
+    mags = sorted(abs(r[4]) for r in b8)
+    lo8 = record(R, 'min |cross_session/qwen3-8b/<phase>/delta_j| over GAMMA sessions', mags[0],
+                 text(quantize(mags[0], 'e')), 'e', LABEL_NIR)
+    hi8 = record(R, 'max |cross_session/qwen3-8b/<phase>/delta_j| over GAMMA sessions', mags[-1],
+                 text(quantize(mags[-1], 'e')), 'e', LABEL_NIR)
+    a_diff = next(r for r in a17 if not r[3])
+    a_val = num(R, f'sessions|{a_diff[0]}|quantities|{a_diff[6]}/delta_j', 'e', LABEL_NIR, sign=True)
+    b5 = {}
+    for ph, b5ph in (('decode', 'decode'), ('prefill-p2048', 'prefill')):
+        base = f'disclosures|cross_window|Qwen3-8B-4bit/{b5ph}'
+        b5[ph] = (num(B, base + '|delta_j', 'e', 'Block 5 released output', sign=True),
+                  record(B, base + '|agree', B.get(base + '|agree'), 'agreed' if B.get(base + '|agree') else 'differed',
+                         'word', 'Block 5 released output'))
+        if B.get(base + '|delta_j') >= 0:
+            fail('a primary-block 8B cross-window difference is not negative')
+    pct8 = [abs(r[4]) / r[5] * 100 for r in b8]
+    pct = lambda x: text(Decimal(repr(x)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP))
+    p8lo = record(R, 'min over 8B comparisons of |delta_j| / F_j × 100 (percent, one decimal, nearest)', min(pct8),
+                  pct(min(pct8)), 'pct')
+    p8hi = record(R, 'max over 8B comparisons of |delta_j| / F_j × 100 (percent, one decimal, nearest)', max(pct8),
+                  pct(max(pct8)), 'pct')
+    p17 = record(R, f'{a_diff[0]} {a_diff[6]}: |delta_j| / F_j × 100 (percent, one decimal, nearest)',
+                 abs(a_diff[4]) / a_diff[5] * 100, pct(abs(a_diff[4]) / a_diff[5] * 100), 'pct')
+    half = min(min(R.get(f'sessions|{g}|quantities|contrast/{ph}/dbar_j') - R.get(f'sessions|{g}|quantities|contrast/{ph}/decision_lower_j'),
+                   R.get(f'sessions|{g}|quantities|contrast/{ph}/decision_upper_j') - R.get(f'sessions|{g}|quantities|contrast/{ph}/dbar_j'))
+               for g in sessions_of(R, 'GAMMA') for ph, _, _ in CONTRASTS)
+    if max(abs(r[4]) for r in rows) >= half:
+        fail('a cross-session difference is not inside every decision interval')
+    a_text = (f'*Between sessions.* In {n_diff} of the {len(rows)} cross-session comparisons the contrast session and its '
+              f'paired floor session differ by more than their statistical half-widths. All {words[len(b8)]} comparisons '
+              f'for the 8B model do, and in each the contrast session reads lower, by {lo8} to {hi8} J (primary block: '
+              f'{b5["decode"][0]} J for decode, which {b5["decode"][1]}, and {b5["prefill-p2048"][0]} J for prefill, which '
+              f'{b5["prefill-p2048"][1]}); {words[1]} of the {words[len(a17)]} for the 1.7B model does ({a_val} J). The sign '
+              'is the same in every 8B comparison of both blocks, so this is a systematic difference between a model '
+              'measured alone and the same model measured in alternation, not scatter; we did not test a cause. The 8B '
+              f'differences are {p8lo}% to {p8hi}% of the phase energy and the 1.7B one {p17}%; all are far inside every '
+              'decision interval, and the two separately collected cells are not differenced into any claim.')
+    # (b) floors
+    side = 'block|side_by_side|BETA'
+    ranges, deltas, prim = [], [], []
+    for ph, _, _ in PHASES:
+        key = f'floor/qwen3-8b/{ph}/absolute/floor_j'
+        vals = [R.get(f'{side}|{key}|sessions|{sid}') for sid in sessions_of(R, 'BETA')]
+        ranges.append((record(R, f'min {side}|{key}|sessions', min(vals), text(quantize(min(vals), 'e')), 'e', LABEL_SS),
+                       record(R, f'max {side}|{key}|sessions', max(vals), text(quantize(max(vals), 'e')), 'e', LABEL_SS)))
+        deltas += [R.get(f'{side}|{key}|session_deltas|{sid}') for sid in sessions_of(R, 'BETA')]
+        prim.append(num(R, f'{side}|{key}|block5', 'e', 'Block 5 released output'))
+    if max(deltas) >= 0:
+        fail('an 8B absolute floor is not below the primary block\'s')
+    dlo = record(R, f'min |{side}|floor/qwen3-8b/<phase>/absolute/floor_j|session_deltas|<sid>|', min(abs(x) for x in deltas),
+                 text(quantize(min(abs(x) for x in deltas), 'e')), 'e', LABEL_BLOCK)
+    dhi = record(R, f'max |{side}|floor/qwen3-8b/<phase>/absolute/floor_j|session_deltas|<sid>|', max(abs(x) for x in deltas),
+                 text(quantize(max(abs(x) for x in deltas), 'e')), 'e', LABEL_BLOCK)
+    label = R.get('block|between_session|BETA|values|floor/qwen3-8b/decode/absolute/floor_j|timing_regime_label')
+    bound = re.search(r'up to ([0-9.]+) J of floor', label).group(1)
+    record(R, 'block|between_session|BETA|values|floor/qwen3-8b/decode/absolute/floor_j|timing_regime_label ("up to x J of floor")',
+           bound, bound, 'text')
+    b_text = (f'*Floors.* The replication\'s 8B absolute floors ({ranges[0][0]} to {ranges[0][1]} J for decode, '
+              f'{ranges[1][0]} to {ranges[1][1]} J for prefill) are {dlo} to {dhi} J below the primary block\'s '
+              f'({prim[0]} and {prim[1]} J). The calibration-acceptance difference between the blocks accounts for at '
+              f'most {bound} J of that. The rest is a difference between sessions that the registered rule does not '
+              'explain, and it is the reason the between-session summary is printed for the replication sessions alone '
+              'as well.')
+    return '**What the replication shows.** ' + a_text + '\n\n' + b_text
 
 
 # ---------------------------------------------------------------- Table 6 and Table 6a
@@ -504,7 +808,10 @@ INTERVALS = {'reported/{m}/{p}/mean_j': ('reported/{m}/{p}/lower_j', 'reported/{
              'contrast/{p}/energy_ratio': ('contrast/{p}/energy_ratio_lower', 'contrast/{p}/energy_ratio_upper')}
 
 
-def table6(R: Src, pack: str) -> str:
+R5_KEYS = {'dominance/qwen3-1p7b/prefill-p2048/comparative/R_cm'}  # RL-147 §5 item 2: five decimals for its Block 5 value
+
+
+def table6(R: Src, pack: str, X: dict) -> str:
     sids = sessions_of(R, pack)
     rows_def = GAMMA_ROWS if pack == 'GAMMA' else ROWS
     m = PACK_MODEL.get(pack, ('', '', '', ''))[0]
@@ -517,7 +824,8 @@ def table6(R: Src, pack: str) -> str:
         for phase, pn in phases:
             key = tmpl.format(m=m, p=phase)
             est, lo, hi, up = FAMILY_FMT[fam]
-            cells = [name.format(pn=pn), num(R, f'{side}|{key}|block5', est, 'Block 5 released output')]
+            cells = [name.format(pn=pn), num(R, f'{side}|{key}|block5', 'R5' if key in R5_KEYS else est,
+                                             'Block 5 released output')]
             for sid in sids:
                 v = num(R, f'{side}|{key}|sessions|{sid}', est, label)
                 same = num(R, f'sessions|{sid}|quantities|{key}', est, label)
@@ -547,12 +855,21 @@ def table6(R: Src, pack: str) -> str:
             cells.append(summ)
             cells.append(label)
             out.append('| ' + ' | '.join(cells) + ' |')
+    if pack == 'GAMMA':
+        # RL-147 §6: the floor gate (§9.4) rows; not a §10 quantity, so no Δ or summary.
+        B = Src('block5', X['b5'])
+        for phase, cname, cid in CONTRASTS:
+            cells = [f'Floor gate, {cname} (J)', num(B, f'contrasts|{cid}|floor_gate_j', 'up', 'Block 5 released output')]
+            cells += [num(R, f'sessions|{sid}|quantities|contrast/{phase}/floor_gate_j', 'up', LABEL_NIR) for sid in sids]
+            cells += ['—', '—', LABEL_NIR]
+            out.append('| ' + ' | '.join(cells) + ' |')
     return '\n'.join(out)
 
 
-def table6a(R: Src, P: Src) -> str:
+def table6a(R: Src, P: Src, X: dict) -> str:
     head = ['Session', 'Pack', 'Round', 'Kept units (n_r / n_b, or quads)', 'Program flags', 'Drift screen',
-            'Floor pairing']
+            'Floor pairing', 'Primary-block codes carried']
+    c = carried(R, X)
     out = ['| ' + ' | '.join(head) + ' |', '|' + '---|' * len(head)]
     flags = R.get('flags')
     for pack in ('ALPHA', 'BETA', 'GAMMA'):
@@ -579,18 +896,35 @@ def table6a(R: Src, P: Src) -> str:
                 record(R, f'flags|{i}|code', flags[i]['code'], flags[i]['code'], 'word')
             flagtext = ', '.join(f'`{c}` × {n}' for c, n in sorted(codes.items())) or 'none'
             screen = word(R, f'sessions|{sid}|quantities|neg8/verdict', LABEL_CC)
+            car = ', '.join(f'`{x}`' for x in c[sid]['carried']) + ('; lost-midpoint rule (dropped)'
+                                                                     if c[sid]['dropped_rule'] else '')
             out.append(f'| {sid} | {pack} | {num(R, f"sessions|{sid}|round", "n")} | {kept} | {flagtext} | '
-                       f'{screen} | {pairing} |')
+                       f'{screen} | {pairing} | {car} |')
     return '\n'.join(out)
 
 
-def fill_sidebyside(R: Src, P: Src) -> str:
+def fill_sidebyside(R: Src, P: Src, X: dict) -> str:
     regime = R.get('block|between_session|ALPHA|values|floor/qwen3-1p7b/decode/absolute/floor_j|timing_regime_label')
     record(R, 'block|between_session|ALPHA|values|floor/qwen3-1p7b/decode/absolute/floor_j|timing_regime_label',
            regime, regime, 'text')
     parts = []
     for pack, model in (('ALPHA', 'Qwen3-1.7B'), ('BETA', 'Qwen3-8B'), ('GAMMA', 'contrast, Qwen3-8B − Qwen3-1.7B')):
-        parts.append(f'**{pack} ({model}).**\n\n' + table6(R, pack))
+        parts.append(f'**{pack} ({model}).**\n\n' + table6(R, pack, X))
+    es = [(f'sessions|{sid}|whole_machine|windows|{pk}|cells|{CELL[(pk, ph)]}|edge_shift_sensitivity|max_abs_change_j')
+          for pk in ('ALPHA', 'BETA') for sid in sessions_of(R, pk) for ph, _, _ in PHASES]
+    ev = [R.get(k) for k in es]
+    es_lo = record(R, 'min ' + '|'.join(es[0].split('|')[:1]) + '|<sid>|whole_machine|...|edge_shift_sensitivity|max_abs_change_j (12 cells)',
+                   min(ev), text(quantize(min(ev), 'lo')), 'lo', LABEL_R8)
+    es_hi = record(R, 'max sessions|<sid>|whole_machine|...|edge_shift_sensitivity|max_abs_change_j (12 cells)',
+                   max(ev), text(quantize(max(ev), 'hi')), 'hi', LABEL_R8)
+    B = Src('block5', X['b5'])
+    b5k = [f'disclosures|whole_machine|windows|{pk}|cells|{CELL[(pk, ph)]}|edge_shift_sensitivity|max_abs_change_j'
+           for pk in ('ALPHA', 'BETA') for ph, _, _ in PHASES]
+    bv = [B.get(k) for k in b5k]
+    b5_lo = record(B, 'min disclosures|whole_machine|...|edge_shift_sensitivity|max_abs_change_j (4 cells)', min(bv),
+                   text(quantize(min(bv), 'lo')), 'lo', 'Block 5 released output')
+    b5_hi = record(B, 'max disclosures|whole_machine|...|edge_shift_sensitivity|max_abs_change_j (4 cells)', max(bv),
+                   text(quantize(max(bv), 'hi')), 'hi', 'Block 5 released output')
     caption = (
         '*Table 6. The primary block\'s value of every Part 1 quantity beside each counting replication session\'s '
         'value, M3 Max / MLX / powermetrics SoC rails, under the same estimators. Intervals: the mean\'s interval, '
@@ -598,15 +932,20 @@ def fill_sidebyside(R: Src, P: Src) -> str:
         'and 5; the energy ratio\'s t interval; floors and ratios are point values with no interval. Δ is the mean '
         'over the counting replication sessions minus the primary value, then each session\'s own difference. The '
         'between-session summary is over the primary session and the counting replication sessions. Values, '
-        'differences and means round to nearest, interval ends outward, standard deviations up. Label: each '
+        'differences and means round to nearest, interval ends outward, standard deviations up. A floor printed here '
+        'to nearest can be one unit in its last digit below the same floor in Tables 2 to 4, where it stands as a limit '
+        'and rounds up. The whole-machine interval is the statistical half-width only; its edge-shift sensitivity, '
+        f'{es_lo} to {es_hi} J per cell (primary block: {b5_lo} to {b5_hi} J), is in the labelled lines. The floor-gate '
+        'rows are not a §10 quantity and carry no Δ or summary; they round up. Label: each '
         'session value\'s producer label from the registered printed-quantity table (§17-R3); for d̄ the first '
         'clause of the conditional label applied in every session (drift screen passed, the twin estimated, and '
         'every contrast kept 5 or more quads); Δ and the summaries are labelled "' + LABEL_BLOCK + '". Floors: '
-        + regime + '*')
-    return '\n\n'.join(parts) + '\n\n' + caption + '\n\n' + table6a(R, P) + (
+        + regime + ' That bound is small beside several of the floor differences in the table; see the text.*')
+    return '\n\n'.join(parts) + '\n\n' + caption + '\n\n' + table6a(R, P, X) + (
         '\n\n*Table 6a. The counting replication sessions: kept units per cell, the program\'s flags (none stops '
-        'the comparison), the drift-screen verdict and, for each contrast session, its floor sessions with the '
-        'pairing rule. Every pairing is final, none provisional.*')
+        'the comparison), the drift-screen verdict, for each contrast session its floor sessions with the pairing '
+        'rule, and the primary block\'s session-removing codes each session carries (derived from the copied flag '
+        'record against the primary block\'s catalog; see the text). Every pairing is final, none provisional.*')
 
 
 # ---------------------------------------------------------------- the agreement sentence (runbook step 15)
@@ -624,7 +963,15 @@ CLASS_BARS = {  # the S-13 bar per class: 1 mJ per run phase energy, otherwise h
 }
 
 
-def fill_summary_b6(R: Src, S: Src) -> str:
+MAXDIFF_SENTENCE = ('The largest observed difference per class is not printed: the pinned program computed it and did '
+                    'not write it to its output, and the run was not repeated after the release. What the released '
+                    'output shows is that every compared row passed, so in each class the largest difference is no '
+                    'larger than that class\'s bar. This departs from the registration\'s §12.3 item 4, which says the '
+                    'observed agreement is printed beside the tolerance; the counts are printed and the largest '
+                    'difference is not.')
+
+
+def fill_summary_b6(R: Src, S: Src, X: dict) -> str:
     classes = R.get('block|option_c|comparator|classes')
     probe = S.get('option_c|comparator|classes')
     for cls, c in classes.items():
@@ -675,6 +1022,9 @@ def fill_summary_b6(R: Src, S: Src) -> str:
     n_classes = record(R, base, len(classes), str(len(classes)), 'n')
     restricted_sha = S.get('digests|restricted_file')
     record(S, 'digests|restricted_file', restricted_sha, restricted_sha, 'sha256')
+    Rd = Src('reader', {})
+    agreed = record(Rd, '"- Agree: N" line', X['reader']['agree'], X['reader']['agree'], 'n')
+    checked = record(Rd, '"- Rows checked: N" line', X['reader']['rows'], X['reader']['rows'], 'n')
     para = (
         f'**Replication block.** The comparator set the first program\'s values against the second side\'s in '
         f'{n_classes} classes, under the replication registration\'s S-13 bars (Block 6 §12.3 item 4): each run\'s '
@@ -700,9 +1050,9 @@ def fill_summary_b6(R: Src, S: Src) -> str:
         f'{kinds["gate"]} compared in the gate only; it ran on the released restricted output, SHA-256 '
         f'`{restricted_sha}`, the digest that the release record and the check\'s own record '
         f'(`structure.json`) both give. The eight copied disclosure families were read against their source files '
-        f'by a separate reader (72 of 72 family and session rows hold their disclosure), and every printed value of '
-        f'Section 6.8 is rendered by key from the released output by `docs/paper/paper1/fill_check_b6.py` and '
-        f're-read by key by a separate reader. One disclosed repair changed printed numbers before the release, '
+        f'by a separate reader (8 families in 9 sessions: 72 of 72 rows hold their disclosure), and every printed value '
+        f'of Section 6.8 is rendered by key from the released output by `docs/paper/paper1/fill_check_b6.py` and '
+        f're-read by key by a separate reader ({agreed} of {checked} printed elements agreed). One disclosed repair changed printed numbers before the release, '
         f'adopted on 13 November 2026 (registration §17-R13, analysis revision r2): the first program had dropped the '
         f'primary block\'s four released whole-machine per-phase values from the side-by-side rows and printed them '
         f'as not computed; the repaired program includes them, which changes, for those four quantities only, the '
@@ -712,26 +1062,27 @@ def fill_summary_b6(R: Src, S: Src) -> str:
     caption = ('*Table S9. Agreement of the first program with the second side, replication block, per comparator '
                'class (dry run at r2). Bar: the S-13 bar from the ratified print specification; "—": a class with no '
                'compared row, which carries no verdict. Agreeing on a value = compared − null on both sides.*')
-    return para + '\n\n' + table + '\n\n' + caption + '\n\n' + MAXDIFF_PLACEHOLDER
-
-
-MAXDIFF_PLACEHOLDER = ('{{FILL: P1-RECOMPUTE-SUMMARY-B6-MAXDIFF | the largest observed difference per compared '
-                       'class beside its bar (Block 6 §12.3 item 4; runbook step 15): the pinned compare() computes '
-                       'max_observed_difference, but recompute_block keeps only the public comparator, so the '
-                       'released dry-r2 outputs do not hold it; source to be ruled by the research lead}}')
+    return para + '\n\n' + table + '\n\n' + caption + '\n\n' + MAXDIFF_SENTENCE
 
 
 # ---------------------------------------------------------------- assembly
 
-PENDING = {'P1-B6-CARRIED', 'P1-B6-WM-DEF', 'P1-RELEASE', 'P1-RECOMPUTE', 'P1-ABS-PART1',
-           'P1-RECOMPUTE-SUMMARY-B6-MAXDIFF'}
+PENDING = {'P1-RELEASE', 'P1-RELEASE-BYTES', 'P1-B6-DISCLOSURES', 'P1-RECOMPUTE', 'P1-ABS-PART1'}
 END_574 = '**[END BRANCH 5.7.4]**'
 
 
-def render_all(R: Src, P: Src, S: Src, attempts: list[dict]) -> tuple[dict[str, str], str]:
+def render_all(R: Src, P: Src, S: Src, attempts: list[dict], X: dict) -> tuple[dict[str, str], str]:
     fills: dict[str, str] = {}
-    for marker, fn in (('P1-RECOMPUTE-SUMMARY-B6', lambda: fill_summary_b6(R, S)),
-                       ('P1-B6-SIDEBYSIDE', lambda: fill_sidebyside(R, P)),
+    for marker, fn in (('P1-RECOMPUTE-SUMMARY-B6', lambda: fill_summary_b6(R, S, X)),
+                       ('P1-B6-SIDEBYSIDE', lambda: fill_sidebyside(R, P, X)),
+                       ('P1-B6-CARRIED', lambda: fill_carried(R, X)),
+                       ('P1-B6-WM-DEF', lambda: fill_wm_def(X)),
+                       ('P1-B6-SHOWS', lambda: fill_shows(R, X)),
+                       ('P1-B6-LOADSENS', lambda: fill_equal_line(
+                           R, 'load_sensitivity', 'no kept unit was removed only by thermal or contention codes, so '
+                           'no unit is restored')),
+                       ('P1-B6-BATT', lambda: fill_equal_line(
+                           R, 'battery_assist', 'no kept unit held a battery-assisted run, so no unit is removed')),
                        ('P1-B6-COUNT', lambda: fill_count(R, attempts)),
                        ('P1-B6-FLAGINC-WORDS', lambda: fill_flaginc(R)),
                        ('P1-B6-DOM', lambda: fill_dom(R)),
@@ -789,7 +1140,7 @@ def check(paper: str, fills: dict[str, str], branch: str) -> None:
         if flat.count(norm(txt)) != 1:
             fail(f'{fid}: rendered text appears {flat.count(norm(txt))} times in paper1.md, not once')
     sentence = (f'The replication words were {fills["P1-B6-REPWORD-decode"]} for decode and '
-                f'{fills["P1-B6-REPWORD-prefill"]} for prefill.')
+                f'{fills["P1-B6-REPWORD-prefill"]} for 2,048-token prefill.')
     if flat.count(norm(sentence)) != 1:
         fail('the replication-word sentence is not in paper1.md once')
     if flat.count(norm(branch)) != 1:
@@ -817,8 +1168,9 @@ def main() -> int:
     args = ap.parse_args()
     restricted, public, structure = load_outputs(args.outputs)
     attempts = check_side_inputs()
+    X = load_extras()
     R, P, S = Src('restricted', restricted), Src('public', public), Src('structure', structure)
-    fills, branch = render_all(R, P, S, attempts)
+    fills, branch = render_all(R, P, S, attempts, X)
     paper = PAPER.read_text()
     if args.apply:
         paper = apply(paper, fills, branch)

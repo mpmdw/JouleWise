@@ -85,6 +85,8 @@ P1-RECOMPUTE-SUMMARY-B6	structure.json	term7|distinct_keys_by_label_kind|r8_sing
 P1-RECOMPUTE-SUMMARY-B6	structure.json	term7|distinct_keys_by_label_kind|single_source	100	100	n	
 P1-RECOMPUTE-SUMMARY-B6	restricted.json	block|option_c|comparator|classes	17	17	n	
 P1-RECOMPUTE-SUMMARY-B6	structure.json	digests|restricted_file	"""92e67c389bb71813d1e57b962e98eb6dcacf65d2bc3957332a36881c821c14bb"""	92e67c389bb71813d1e57b962e98eb6dcacf65d2bc3957332a36881c821c14bb	sha256	
+P1-RECOMPUTE-SUMMARY-B6	docs/research-audits/2026-11-10-fable/evidence/pr772/reader-pr772.md@9611d5fd1	"""- Agree: N"" line"	"""1,417"""	1,417	n	
+P1-RECOMPUTE-SUMMARY-B6	docs/research-audits/2026-11-10-fable/evidence/pr772/reader-pr772.md@9611d5fd1	"""- Rows checked: N"" line"	"""1,417"""	1,417	n	
 P1-RECOMPUTE-SUMMARY-B6	restricted.json	block|option_c|families	"{""calibration"": 9, ""counting"": 9, ""engine"": 54, ""engine_word"": 6, ""harvest_bound"": 1745, ""harvest_drift"": 36, ""harvest_energy"": 2892, ""pairing"": 12, ""section10"": 336, ""section11_replication"": 2, ""section11_short"": 3}"	"{""calibration"": 9, ""counting"": 9, ""engine"": 54, ""engine_word"": 6, ""harvest_bound"": 1745, ""harvest_drift"": 36, ""harvest_energy"": 2892, ""pairing"": 12, ""section10"": 336, ""section11_replication"": 2, ""section11_short"": 3}"	list	
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|ALPHA|values|floor/qwen3-1p7b/decode/absolute/floor_j|timing_regime_label	"""Block 5's floors were formed under its own calibration acceptance (minimum bracket allowance 14.531 ms) and Block 6's under its own (10.818 ms). The difference, up to 3.713 ms of timing bound and up to 0.175 J of floor by the registration's sizing, comes from the registered rule and not from the machine. The summary over Block 6 sessions alone is printed beside the summary over all sessions."""	Block 5's floors were formed under its own calibration acceptance (minimum bracket allowance 14.531 ms) and Block 6's under its own (10.818 ms). The difference, up to 3.713 ms of timing bound and up to 0.175 J of floor by the registration's sizing, comes from the registered rule and not from the machine. The summary over Block 6 sessions alone is printed beside the summary over all sessions.	text	
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|ALPHA|reported/qwen3-1p7b/decode/mean_j|block5	51.206427649590914	51.21	e	Block 5 released output
@@ -395,7 +397,7 @@ P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|ALPHA|dominance/qwen3-1p7b/d
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|ALPHA|values|dominance/qwen3-1p7b/decode/comparative/R_cm|n	4	4	n	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|ALPHA|values|dominance/qwen3-1p7b/decode/comparative/R_cm|mean	1.9896765239930427	1.9897	R	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|ALPHA|values|dominance/qwen3-1p7b/decode/comparative/R_cm|sd	0.3099893207575893	0.3100	Rup	§10-§11 arithmetic computed and compared
-P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|ALPHA|dominance/qwen3-1p7b/prefill-p2048/comparative/R_cm|block5	1.9997482608118822	1.9997	R	Block 5 released output
+P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|ALPHA|dominance/qwen3-1p7b/prefill-p2048/comparative/R_cm|block5	1.9997482608118822	1.99975	R5	Block 5 released output
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|ALPHA|dominance/qwen3-1p7b/prefill-p2048/comparative/R_cm|sessions|r1-alpha	2.190543166169883	2.1905	R	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|quantities|dominance/qwen3-1p7b/prefill-p2048/comparative/R_cm	2.190543166169883	2.1905	R	single-source
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|ALPHA|dominance/qwen3-1p7b/prefill-p2048/comparative/R_cm|sessions|r3-alpha	1.6942635430416662	1.6943	R	single-source
@@ -812,24 +814,24 @@ P1-B6-SIDEBYSIDE	restricted.json	block|between_session|BETA|values|lines/whole_m
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|BETA|values|lines/whole_machine/qwen3-8b/prefill-p2048/mean_j|mean	286.93166302205486	286.93	e	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|BETA|values|lines/whole_machine/qwen3-8b/prefill-p2048/mean_j|sd	0.8798109558356598	0.880	up	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|block5	146.62940003377432	146.63	e	Block 5 released output
-P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|sessions|r1-gamma	147.3849174950298	147.38	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/dbar_j	147.3849174950298	147.38	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/metrology_lower_j	147.23705432737438	147.23	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/metrology_upper_j	147.53278066268524	147.54	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/decision_lower_j	141.7916791131464	141.79	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/decision_upper_j	152.97815587691323	152.98	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|sessions|r2-gamma	147.3668332719414	147.37	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/dbar_j	147.3668332719414	147.37	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/metrology_lower_j	147.08416309767154	147.08	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/metrology_upper_j	147.64950344621127	147.65	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/decision_lower_j	143.1029987797368	143.10	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/decision_upper_j	151.630667764146	151.64	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|sessions|r3-gamma	147.31177422179945	147.31	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/dbar_j	147.31177422179945	147.31	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/metrology_lower_j	147.12007641175174	147.12	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/metrology_upper_j	147.50347203184717	147.51	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/decision_lower_j	142.9025407537896	142.90	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/decision_upper_j	151.7210076898093	151.73	hi	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|sessions|r1-gamma	147.3849174950298	147.38	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/dbar_j	147.3849174950298	147.38	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/metrology_lower_j	147.23705432737438	147.23	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/metrology_upper_j	147.53278066268524	147.54	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/decision_lower_j	141.7916791131464	141.79	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/decision_upper_j	152.97815587691323	152.98	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|sessions|r2-gamma	147.3668332719414	147.37	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/dbar_j	147.3668332719414	147.37	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/metrology_lower_j	147.08416309767154	147.08	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/metrology_upper_j	147.64950344621127	147.65	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/decision_lower_j	143.1029987797368	143.10	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/decision_upper_j	151.630667764146	151.64	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|sessions|r3-gamma	147.31177422179945	147.31	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/dbar_j	147.31177422179945	147.31	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/metrology_lower_j	147.12007641175174	147.12	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/metrology_upper_j	147.50347203184717	147.51	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/decision_lower_j	142.9025407537896	142.90	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/decision_upper_j	151.7210076898093	151.73	hi	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|session_deltas|r1-gamma	0.7555174612554936	+0.756	e	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|session_deltas|r2-gamma	0.7374332381670854	+0.737	e	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|session_deltas|r3-gamma	0.6823741880251362	+0.682	e	§10-§11 arithmetic computed and compared
@@ -838,24 +840,24 @@ P1-B6-SIDEBYSIDE	restricted.json	block|between_session|GAMMA|values|contrast/dec
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|GAMMA|values|contrast/decode/dbar_j|mean	147.17323125563624	147.17	e	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|GAMMA|values|contrast/decode/dbar_j|sd	0.36388613421011695	0.364	up	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|block5	101.80943451529679	101.81	e	Block 5 released output
-P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|sessions|r1-gamma	101.66753736535694	101.67	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/dbar_j	101.66753736535694	101.67	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/metrology_lower_j	101.42952931511904	101.42	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/metrology_upper_j	101.90554541559483	101.91	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/decision_lower_j	95.52920239310112	95.52	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/decision_upper_j	107.80587233761275	107.81	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|sessions|r2-gamma	102.05445479981007	102.05	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/dbar_j	102.05445479981007	102.05	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/metrology_lower_j	101.81402503460113	101.81	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/metrology_upper_j	102.29488456501902	102.30	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/decision_lower_j	97.01071967850635	97.01	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/decision_upper_j	107.0981899211138	107.10	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|sessions|r3-gamma	101.76973920981939	101.77	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/dbar_j	101.76973920981939	101.77	e	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/metrology_lower_j	101.57747283329881	101.57	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/metrology_upper_j	101.96200558633997	101.97	hi	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/decision_lower_j	96.77307492702252	96.77	lo	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/decision_upper_j	106.76640349261626	106.77	hi	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|sessions|r1-gamma	101.66753736535694	101.67	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/dbar_j	101.66753736535694	101.67	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/metrology_lower_j	101.42952931511904	101.42	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/metrology_upper_j	101.90554541559483	101.91	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/decision_lower_j	95.52920239310112	95.52	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/decision_upper_j	107.80587233761275	107.81	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|sessions|r2-gamma	102.05445479981007	102.05	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/dbar_j	102.05445479981007	102.05	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/metrology_lower_j	101.81402503460113	101.81	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/metrology_upper_j	102.29488456501902	102.30	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/decision_lower_j	97.01071967850635	97.01	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/decision_upper_j	107.0981899211138	107.10	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|sessions|r3-gamma	101.76973920981939	101.77	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/dbar_j	101.76973920981939	101.77	e	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/metrology_lower_j	101.57747283329881	101.57	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/metrology_upper_j	101.96200558633997	101.97	hi	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/decision_lower_j	96.77307492702252	96.77	lo	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/decision_upper_j	106.76640349261626	106.77	hi	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|session_deltas|r1-gamma	-0.14189714993985092	−0.142	e	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|session_deltas|r2-gamma	0.24502028451328783	+0.245	e	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048/dbar_j|session_deltas|r3-gamma	-0.03969530547739453	−0.0397	e	§10-§11 arithmetic computed and compared
@@ -903,6 +905,28 @@ P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/prefill-p2048
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|GAMMA|values|contrast/prefill-p2048/energy_ratio|n	4	4	n	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|GAMMA|values|contrast/prefill-p2048/energy_ratio|mean	4.866486674047198	4.866	mr	§10-§11 arithmetic computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	block|between_session|GAMMA|values|contrast/prefill-p2048/energy_ratio|sd	0.03450587946930414	0.035	mrup	§10-§11 arithmetic computed and compared
+P1-B6-SIDEBYSIDE	Block 5 recompute.json (c06ee7c8…)	contrasts|ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b|floor_gate_j	10.178068053540303	10.18	up	Block 5 released output
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/floor_gate_j	7.786865730264561	7.79	up	not independently recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/floor_gate_j	7.205976478616348	7.21	up	not independently recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/floor_gate_j	6.950820500073229	6.96	up	not independently recomputed
+P1-B6-SIDEBYSIDE	Block 5 recompute.json (c06ee7c8…)	contrasts|ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b|floor_gate_j	8.830264809671169	8.84	up	Block 5 released output
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/floor_gate_j	7.979780076059631	7.98	up	not independently recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/floor_gate_j	7.785419519288497	7.79	up	not independently recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/floor_gate_j	7.785419519288497	7.79	up	not independently recomputed
+P1-B6-SIDEBYSIDE	restricted.json	min sessions|<sid>|whole_machine|...|edge_shift_sensitivity|max_abs_change_j (12 cells)	6.451039828732142	6.45	lo	single implementation; not independently recomputed
+P1-B6-SIDEBYSIDE	restricted.json	max sessions|<sid>|whole_machine|...|edge_shift_sensitivity|max_abs_change_j (12 cells)	11.122476737741636	11.13	hi	single implementation; not independently recomputed
+P1-B6-SIDEBYSIDE	Block 5 recompute.json (c06ee7c8…)	min disclosures|whole_machine|...|edge_shift_sensitivity|max_abs_change_j (4 cells)	6.796958384091788	6.79	lo	Block 5 released output
+P1-B6-SIDEBYSIDE	Block 5 recompute.json (c06ee7c8…)	max disclosures|whole_machine|...|edge_shift_sensitivity|max_abs_change_j (4 cells)	12.17168044951336	12.18	hi	Block 5 released output
+P1-B6-SIDEBYSIDE	configs/campaigns/v5_claim_25g83/flag_catalog.json	codes|<code>|effect == EXCLUDE_WINDOW (count)	32	32	n	
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-beta|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-beta|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-alpha|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-beta|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r4-alpha|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|quantities|reported/qwen3-1p7b/decode/n_r	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|quantities|reported/qwen3-1p7b/decode/n_b	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|quantities|reported/qwen3-1p7b/prefill-p2048/n_r	9	9	n	single-source
@@ -910,7 +934,7 @@ P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|quantities|reported/qwen3-1p7
 P1-B6-SIDEBYSIDE	restricted.json	flags|1|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|2|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|3|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-alpha|round	1	1	n	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-alpha|quantities|reported/qwen3-1p7b/decode/n_r	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-alpha|quantities|reported/qwen3-1p7b/decode/n_b	9	9	n	single-source
@@ -918,7 +942,7 @@ P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-alpha|quantities|reported/qwen3-1p7
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-alpha|quantities|reported/qwen3-1p7b/prefill-p2048/n_b	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	flags|16|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|17|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-alpha|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-alpha|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-alpha|round	3	3	n	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r4-alpha|quantities|reported/qwen3-1p7b/decode/n_r	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r4-alpha|quantities|reported/qwen3-1p7b/decode/n_b	9	9	n	single-source
@@ -926,14 +950,14 @@ P1-B6-SIDEBYSIDE	restricted.json	sessions|r4-alpha|quantities|reported/qwen3-1p7
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r4-alpha|quantities|reported/qwen3-1p7b/prefill-p2048/n_b	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	flags|18|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|19|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r4-alpha|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r4-alpha|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r4-alpha|round	4	4	n	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-beta|quantities|reported/qwen3-8b/decode/n_r	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-beta|quantities|reported/qwen3-8b/decode/n_b	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-beta|quantities|reported/qwen3-8b/prefill-p2048/n_r	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-beta|quantities|reported/qwen3-8b/prefill-p2048/n_b	9	9	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	flags|4|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-beta|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-beta|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-beta|round	1	1	n	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-beta|quantities|reported/qwen3-8b/decode/n_r	9	9	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-beta|quantities|reported/qwen3-8b/decode/n_b	8	8	n	single-source
@@ -946,26 +970,26 @@ P1-B6-SIDEBYSIDE	restricted.json	flags|9|code	"""trace_csv_plist_mismatch"""	tra
 P1-B6-SIDEBYSIDE	restricted.json	flags|10|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|11|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|12|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-beta|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-beta|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-beta|round	2	2	n	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-beta|quantities|reported/qwen3-8b/decode/n_r	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-beta|quantities|reported/qwen3-8b/decode/n_b	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-beta|quantities|reported/qwen3-8b/prefill-p2048/n_r	10	10	n	single-source
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-beta|quantities|reported/qwen3-8b/prefill-p2048/n_b	10	10	n	single-source
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-beta|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-beta|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-beta|round	3	3	n	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/n	10	10	n	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/n	8	8	n	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/n	10	10	n	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/prefill-p2048/n	8	8	n	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|pairing|ALPHA|session_id	"""r1-alpha"""	r1-alpha	word	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|pairing|ALPHA|rule	"""1_same_round"""	same round	word	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|pairing|BETA|session_id	"""r1-beta"""	r1-beta	word	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|pairing|BETA|rule	"""1_same_round"""	same round	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|5|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|6|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|round	1	1	n	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/n	10	10	n	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/n	9	9	n	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/decode/n	10	10	n	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|contrast/prefill-p2048/n	9	9	n	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|pairing|ALPHA|session_id	"""r3-alpha"""	r3-alpha	word	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|pairing|ALPHA|rule	"""2_next_counting"""	next counting session	word	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|pairing|BETA|session_id	"""r2-beta"""	r2-beta	word	
@@ -973,16 +997,89 @@ P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|pairing|BETA|rule	"""1_same_r
 P1-B6-SIDEBYSIDE	restricted.json	flags|13|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|14|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
 P1-B6-SIDEBYSIDE	restricted.json	flags|15|code	"""trace_csv_plist_mismatch"""	trace_csv_plist_mismatch	word	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r2-gamma|round	2	2	n	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/n	10	10	n	computed and compared (decision 6 (a))
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/n	10	10	n	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/n	10	10	n	computed and compared
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/n	10	10	n	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|pairing|ALPHA|session_id	"""r3-alpha"""	r3-alpha	word	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|pairing|ALPHA|rule	"""1_same_round"""	same round	word	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|pairing|BETA|session_id	"""r3-beta"""	r3-beta	word	
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|pairing|BETA|rule	"""1_same_round"""	same round	word	
-P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared
 P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|round	3	3	n	
+P1-B6-CARRIED	configs/campaigns/v5_claim_25g83/flag_catalog.json	codes|<code>|effect == EXCLUDE_WINDOW (count)	32	32	n	
+P1-B6-CARRIED	restricted.json	sessions|r1-alpha|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r1-beta|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r1-gamma|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r2-beta|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r2-gamma|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r3-alpha|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r3-beta|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r3-gamma|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r4-alpha|copied_disclosures|families|block5_codes_carried|0|record (codes in the 32, carried)	"[""code.executed_differs_from_sealed""]"	code.executed_differs_from_sealed	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r2-beta|copied_disclosures|families|block5_codes_carried|0|record (neg8.screen_failed observed.conditions)	"[""neg8_bracket_reference_invalid"", ""neg8_drift_bound_underived"", ""neg8_idle_sub_drift_bound_underived""]"	neg8_bracket_reference_invalid, neg8_drift_bound_underived, neg8_idle_sub_drift_bound_underived	list	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r2-gamma|copied_disclosures|families|block5_codes_carried|0|record (neg8.midpoint_lost observed.lost[0].reason)	"""contention.request_overlap"""	overlapped outside processor work	word	copied from the harvest or acceptance record, bound by digest, not recomputed
+P1-B6-CARRIED	restricted.json	sessions|r2-gamma|neg8|n_mid	1	1	n	computed and compared
+P1-B6-CARRIED	restricted.json	sessions|<sid>|quantities|neg8/verdict (all nine)	"[""passed"", ""passed"", ""passed"", ""passed"", ""passed"", ""passed"", ""passed"", ""passed"", ""passed""]"	passed	word	computed and compared
+P1-B6-WM-DEF	scripts/independent_recompute_b5.py@6e6d1b18a	"text ""+/-2 samples at 50 Hz"""	"""+/-2 samples at 50 Hz"""	50 a second	constant	single implementation; not independently recomputed
+P1-B6-WM-DEF	scripts/independent_recompute_b5.py@6e6d1b18a	"text "".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	""".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	0.2	constant	single implementation; not independently recomputed
+P1-B6-WM-DEF	scripts/independent_recompute_b5.py@6e6d1b18a	"text "".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	""".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	0.8	constant	single implementation; not independently recomputed
+P1-B6-SHOWS	restricted.json	sessions|<gamma sid>|quantities|cross_session/<m>/<phase>/agree (count false)	7	7	n	not independently recomputed
+P1-B6-SHOWS	restricted.json	min |cross_session/qwen3-8b/<phase>/delta_j| over GAMMA sessions	0.3518663458490039	0.352	e	not independently recomputed
+P1-B6-SHOWS	restricted.json	max |cross_session/qwen3-8b/<phase>/delta_j| over GAMMA sessions	0.5487388257890302	0.549	e	not independently recomputed
+P1-B6-SHOWS	restricted.json	sessions|r1-gamma|quantities|cross_session/qwen3-1p7b/prefill-p2048/delta_j	0.3719576483073759	+0.372	e	not independently recomputed
+P1-B6-SHOWS	Block 5 recompute.json (c06ee7c8…)	disclosures|cross_window|Qwen3-8B-4bit/decode|delta_j	-0.42166644668992603	−0.422	e	Block 5 released output
+P1-B6-SHOWS	Block 5 recompute.json (c06ee7c8…)	disclosures|cross_window|Qwen3-8B-4bit/decode|agree	false	differed	word	Block 5 released output
+P1-B6-SHOWS	Block 5 recompute.json (c06ee7c8…)	disclosures|cross_window|Qwen3-8B-4bit/prefill|delta_j	-0.2610101682502375	−0.261	e	Block 5 released output
+P1-B6-SHOWS	Block 5 recompute.json (c06ee7c8…)	disclosures|cross_window|Qwen3-8B-4bit/prefill|agree	true	agreed	word	Block 5 released output
+P1-B6-SHOWS	restricted.json	min over 8B comparisons of |delta_j| / F_j × 100 (percent, one decimal, nearest)	0.17676936075020944	0.2	pct	
+P1-B6-SHOWS	restricted.json	max over 8B comparisons of |delta_j| / F_j × 100 (percent, one decimal, nearest)	0.35608264133602857	0.4	pct	
+P1-B6-SHOWS	restricted.json	r1-gamma cross_session/qwen3-1p7b/prefill-p2048: |delta_j| / F_j × 100 (percent, one decimal, nearest)	1.4199839016228821	1.4	pct	
+P1-B6-SHOWS	restricted.json	min block|side_by_side|BETA|floor/qwen3-8b/decode/absolute/floor_j|sessions	6.950820500073229	6.95	e	single-source
+P1-B6-SHOWS	restricted.json	max block|side_by_side|BETA|floor/qwen3-8b/decode/absolute/floor_j|sessions	7.786865730264561	7.79	e	single-source
+P1-B6-SHOWS	restricted.json	block|side_by_side|BETA|floor/qwen3-8b/decode/absolute/floor_j|block5	10.178068053540303	10.18	e	Block 5 released output
+P1-B6-SHOWS	restricted.json	min block|side_by_side|BETA|floor/qwen3-8b/prefill-p2048/absolute/floor_j|sessions	6.754374075774084	6.75	e	single-source
+P1-B6-SHOWS	restricted.json	max block|side_by_side|BETA|floor/qwen3-8b/prefill-p2048/absolute/floor_j|sessions	7.141024299703505	7.14	e	single-source
+P1-B6-SHOWS	restricted.json	block|side_by_side|BETA|floor/qwen3-8b/prefill-p2048/absolute/floor_j|block5	8.830264809671169	8.83	e	Block 5 released output
+P1-B6-SHOWS	restricted.json	min |block|side_by_side|BETA|floor/qwen3-8b/<phase>/absolute/floor_j|session_deltas|<sid>|	1.6892405099676635	1.69	e	§10-§11 arithmetic computed and compared
+P1-B6-SHOWS	restricted.json	max |block|side_by_side|BETA|floor/qwen3-8b/<phase>/absolute/floor_j|session_deltas|<sid>|	3.2272475534670733	3.23	e	§10-§11 arithmetic computed and compared
+P1-B6-SHOWS	restricted.json	"block|between_session|BETA|values|floor/qwen3-8b/decode/absolute/floor_j|timing_regime_label (""up to x J of floor"")"	"""0.175"""	0.175	text	
+P1-B6-LOADSENS	restricted.json	sessions|r1-alpha|lines|df-ph-decode-qwen3-1p7b|load_sensitivity (equals the cell; units moved 0)	51.30937655380149	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r1-alpha|lines|df-ph-prefill-p2048-qwen3-1p7b|load_sensitivity (equals the cell; units moved 0)	26.194497549040527	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r3-alpha|lines|df-ph-decode-qwen3-1p7b|load_sensitivity (equals the cell; units moved 0)	51.26205188192489	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r3-alpha|lines|df-ph-prefill-p2048-qwen3-1p7b|load_sensitivity (equals the cell; units moved 0)	26.274932457305212	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r4-alpha|lines|df-ph-decode-qwen3-1p7b|load_sensitivity (equals the cell; units moved 0)	51.154316448718205	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r4-alpha|lines|df-ph-prefill-p2048-qwen3-1p7b|load_sensitivity (equals the cell; units moved 0)	26.246536641378857	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r1-beta|lines|df-ph-decode-qwen3-8b|load_sensitivity (equals the cell; units moved 0)	199.05392221575198	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r1-beta|lines|df-ph-prefill-p2048-qwen3-8b|load_sensitivity (equals the cell; units moved 0)	128.64615782936195	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r2-beta|lines|df-ph-decode-qwen3-8b|load_sensitivity (equals the cell; units moved 0)	199.02846852868427	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r2-beta|lines|df-ph-prefill-p2048-qwen3-8b|load_sensitivity (equals the cell; units moved 0)	128.65067379395555	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r3-beta|lines|df-ph-decode-qwen3-8b|load_sensitivity (equals the cell; units moved 0)	199.08652234659633	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r3-beta|lines|df-ph-prefill-p2048-qwen3-8b|load_sensitivity (equals the cell; units moved 0)	128.6386180250135	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r1-gamma|lines|ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b|load_sensitivity (equals the contrast; units moved 0)	147.3849174950298	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r1-gamma|lines|ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b|load_sensitivity (equals the contrast; units moved 0)	101.66753736535694	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r2-gamma|lines|ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b|load_sensitivity (equals the contrast; units moved 0)	147.3668332719414	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r2-gamma|lines|ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b|load_sensitivity (equals the contrast; units moved 0)	102.05445479981007	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r3-gamma|lines|ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b|load_sensitivity (equals the contrast; units moved 0)	147.31177422179945	equal	equal	not independently recomputed
+P1-B6-LOADSENS	restricted.json	sessions|r3-gamma|lines|ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b|load_sensitivity (equals the contrast; units moved 0)	101.76973920981939	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r1-alpha|lines|df-ph-decode-qwen3-1p7b|battery_assist (equals the cell; units moved 0)	51.30937655380149	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r1-alpha|lines|df-ph-prefill-p2048-qwen3-1p7b|battery_assist (equals the cell; units moved 0)	26.194497549040527	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r3-alpha|lines|df-ph-decode-qwen3-1p7b|battery_assist (equals the cell; units moved 0)	51.26205188192489	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r3-alpha|lines|df-ph-prefill-p2048-qwen3-1p7b|battery_assist (equals the cell; units moved 0)	26.274932457305212	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r4-alpha|lines|df-ph-decode-qwen3-1p7b|battery_assist (equals the cell; units moved 0)	51.154316448718205	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r4-alpha|lines|df-ph-prefill-p2048-qwen3-1p7b|battery_assist (equals the cell; units moved 0)	26.246536641378857	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r1-beta|lines|df-ph-decode-qwen3-8b|battery_assist (equals the cell; units moved 0)	199.05392221575198	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r1-beta|lines|df-ph-prefill-p2048-qwen3-8b|battery_assist (equals the cell; units moved 0)	128.64615782936195	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r2-beta|lines|df-ph-decode-qwen3-8b|battery_assist (equals the cell; units moved 0)	199.02846852868427	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r2-beta|lines|df-ph-prefill-p2048-qwen3-8b|battery_assist (equals the cell; units moved 0)	128.65067379395555	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r3-beta|lines|df-ph-decode-qwen3-8b|battery_assist (equals the cell; units moved 0)	199.08652234659633	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r3-beta|lines|df-ph-prefill-p2048-qwen3-8b|battery_assist (equals the cell; units moved 0)	128.6386180250135	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r1-gamma|lines|ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b|battery_assist (equals the contrast; units moved 0)	147.3849174950298	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r1-gamma|lines|ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b|battery_assist (equals the contrast; units moved 0)	101.66753736535694	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r2-gamma|lines|ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b|battery_assist (equals the contrast; units moved 0)	147.3668332719414	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r2-gamma|lines|ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b|battery_assist (equals the contrast; units moved 0)	102.05445479981007	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r3-gamma|lines|ctr-d117-decode-qwen3-1p7b-vs-qwen3-8b|battery_assist (equals the contrast; units moved 0)	147.31177422179945	equal	equal	not independently recomputed
+P1-B6-BATT	restricted.json	sessions|r3-gamma|lines|ctr-d117-prefill-p2048-qwen3-1p7b-vs-qwen3-8b|battery_assist (equals the contrast; units moved 0)	101.76973920981939	equal	equal	not independently recomputed
 P1-B6-COUNT	attempts.jsonl	"rows with packs == [""alpha""] (count)"	3	3	n	
 P1-B6-COUNT	restricted.json	block|short|ALPHA|counting	3	3	n	
 P1-B6-COUNT	attempts.jsonl	"rows with packs == [""beta""] (count)"	3	3	n	
@@ -1044,6 +1141,9 @@ P1-B6-DOM	restricted.json	sessions|r3-gamma|pairing_dominance|branch	"""B"""	B	w
 P1-B6-DOM	restricted.json	sessions|r3-gamma|pairing|ALPHA|session_id	"""r3-alpha"""	r3-alpha	word	
 P1-B6-DOM	restricted.json	sessions|r3-gamma|pairing|BETA|session_id	"""r3-beta"""	r3-beta	word	
 P1-B6-DOM	restricted.json	sessions|r3-gamma|pairing_dominance|failed	"[""Qwen3-1.7B-4bit/decode/common_mode"", ""Qwen3-1.7B-4bit/prefill/common_mode"", ""Qwen3-8B-4bit/decode/common_mode"", ""Qwen3-8B-4bit/decode/comparative""]"	1.7B decode R_cm; 1.7B prefill (2,048) R_cm; 8B decode R_cm; 8B decode comparative R	list	not independently recomputed
+P1-B6-DOM	restricted.json	block|side_by_side|<ALPHA,BETA>|dominance/<m>/<phase>/<absolute,comparative>/R|block5 (count >= 2)	8	eight	n	
+P1-B6-DOM	restricted.json	sessions|r2-beta|quantities|dominance/qwen3-8b/decode/comparative/R	1.3107932658913495	1.3108	R	single-source
+P1-B6-DOM	restricted.json	sessions|r3-beta|quantities|dominance/qwen3-8b/decode/comparative/R	1.686484598538609	1.6865	R	single-source
 P1-B6-SCALED	restricted.json	sessions|r1-alpha|quantities|lines/scaled_allowance/qwen3-1p7b/decode/factor	1.519214158366303	1.519	mr	not independently recomputed
 P1-B6-SCALED	restricted.json	sessions|r1-alpha|quantities|lines/scaled_allowance/qwen3-1p7b/decode/lower_j	48.52800726002437	48.52	lo	not independently recomputed
 P1-B6-SCALED	restricted.json	sessions|r1-alpha|quantities|lines/scaled_allowance/qwen3-1p7b/decode/upper_j	54.09074584757862	54.10	hi	not independently recomputed
@@ -1150,75 +1250,89 @@ P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|mean_j	150.05949607466897	150.06	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|lower_j	149.9437192742062	149.94	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|upper_j	150.17527287513175	150.18	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|edge_shift_sensitivity|max_abs_change_j	8.816560584266767	8.82	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|gross_share|median	0.3420603090279121	0.34	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|gross_share|n	50	50	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|mean_j	57.983025210326154	57.98	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|lower_j	57.74326162128371	57.74	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|upper_j	58.2227887993686	58.23	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|edge_shift_sensitivity|max_abs_change_j	6.656029830271372	6.66	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|gross_share|median	0.4503078788732315	0.45	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|gross_share|n	45	45	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|mean_j	150.2607025347586	150.26	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|lower_j	149.97373899839647	149.97	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|upper_j	150.54766607112072	150.55	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|edge_shift_sensitivity|max_abs_change_j	9.314315860074828	9.32	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|gross_share|median	0.3410428656485065	0.34	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|gross_share|n	46	46	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|mean_j	58.113918493289574	58.11	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|lower_j	57.91684020035582	57.91	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|upper_j	58.31099678622333	58.32	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|edge_shift_sensitivity|max_abs_change_j	7.17369823581312	7.18	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|gross_share|median	0.4524723658356369	0.45	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|gross_share|n	50	50	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|mean_j	149.88553203691123	149.89	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|lower_j	149.7695142712555	149.76	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|upper_j	150.00154980256696	150.01	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|edge_shift_sensitivity|max_abs_change_j	8.519010117957151	8.52	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|gross_share|median	0.34097038224079523	0.34	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-decode-qwen3-1p7b|gross_share|n	46	46	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|mean_j	58.1668842478062	58.17	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|lower_j	58.00108856391622	58.00	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|upper_j	58.332679931696184	58.34	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|edge_shift_sensitivity|max_abs_change_j	6.451039828732142	6.46	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|gross_share|median	0.450351915191032	0.45	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r4-alpha|whole_machine|windows|ALPHA|cells|df-ph-prefill-p2048-qwen3-1p7b|gross_share|n	50	50	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|mean_j	593.0589820813755	593.06	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|lower_j	592.6993978597995	592.69	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|upper_j	593.4185663029514	593.42	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|edge_shift_sensitivity|max_abs_change_j	11.122476737741636	11.13	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|gross_share|median	0.33550768550962295	0.34	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|gross_share|n	50	50	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|mean_j	287.46130465495355	287.46	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|lower_j	287.1497724848598	287.14	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|upper_j	287.7728368250473	287.78	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|edge_shift_sensitivity|max_abs_change_j	6.959023019090864	6.96	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|gross_share|median	0.44760704418552894	0.45	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r1-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|gross_share|n	46	46	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|mean_j	593.2674419414836	593.27	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|lower_j	592.5726724108861	592.57	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|upper_j	593.9622114720812	593.97	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|edge_shift_sensitivity|max_abs_change_j	11.092404984102586	11.10	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|gross_share|median	0.3353713826293902	0.34	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|gross_share|n	41	41	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|mean_j	287.35470099648506	287.35	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|lower_j	286.7878596596874	286.78	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|upper_j	287.92154233328273	287.93	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|edge_shift_sensitivity|max_abs_change_j	6.754744539987257	6.76	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|gross_share|median	0.44745037912896113	0.45	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r2-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|gross_share|n	42	42	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|mean_j	593.2745507655259	593.27	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|lower_j	592.9746058192725	592.97	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|upper_j	593.5744957117793	593.58	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|edge_shift_sensitivity|max_abs_change_j	10.923318007115427	10.93	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|gross_share|median	0.335463502369749	0.34	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-decode-qwen3-8b|gross_share|n	50	50	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|battery_assist_count	0	0	n	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|mean_j	287.2946447747101	287.29	e	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|lower_j	286.9663945233793	286.96	lo	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|upper_j	287.6228950260409	287.63	hi	single implementation; not independently recomputed
+P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|edge_shift_sensitivity|max_abs_change_j	6.681730751401574	6.69	up	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|gross_share|median	0.4475058979911842	0.45	sh2	single implementation; not independently recomputed
 P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|gross_share|n	50	50	n	single implementation; not independently recomputed
 P1-B6-CONTENTION	restricted.json	sessions|r1-alpha|lines|df-ph-decode-qwen3-1p7b|outside_processor_alternative|label	"""registered outside-processor rule (w = 5.432 J per CPU-s, c_q = 0.54 CPU-s)"""	registered outside-processor rule (w = 5.432 J per CPU-s, c_q = 0.54 CPU-s)	word	not independently recomputed
+P1-B6-CONTENTION	restricted.json	sessions|<sid>|lines|<cell>|outside_processor_alternative|status (computed, of 12 floor cells)	0	none	n	not independently recomputed
+P1-B6-CONTENTION	restricted.json	sessions|<gamma sid>|lines|<cid>|outside_processor_alternative|n (min, max over 6 contrasts)	[0, 4]	0 to 4	n	not independently recomputed
 P1-B6-CONTENTION	restricted.json	sessions|r1-alpha|lines|df-ph-decode-qwen3-1p7b|outside_processor_alternative|n_r	5	5	n	not independently recomputed
 P1-B6-CONTENTION	restricted.json	sessions|r1-alpha|lines|df-ph-decode-qwen3-1p7b|outside_processor_alternative|n_b	1	1	n	not independently recomputed
 P1-B6-CONTENTION	restricted.json	sessions|r1-alpha|lines|df-ph-decode-qwen3-1p7b|outside_processor_alternative|reason	"""insufficient_units"""	insufficient units	word	not independently recomputed

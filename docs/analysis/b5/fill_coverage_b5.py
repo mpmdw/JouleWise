@@ -46,9 +46,8 @@ PENDING_AT_SNAPSHOT += [f'F_{c}_cmp_J' for c in ('1p7B_decode', '1p7B_prefill_p2
 PENDING_AT_SNAPSHOT += [f'{p}{c}_{f}{s}' for c in ('1p7B_decode', '1p7B_prefill_p2048', '8B_decode', '8B_prefill_p2048')
                         for f in ('abs', 'cmp') for p, s in (('R_', ''), ('TERM_A_', '_J'), ('TERM_B_', '_J'))]
 MIXED = {'P1-ID-OS','P1-M-RECORD-WIDTH','P1-M-ACCEPT','P1-LEDGER','P1-DEV-LIST','P1-RELEASE','P1-RECOMPUTE','P1-AVAIL'}
-# Placeholders the second fill created (RL-52 (4): the Block 6 half of P1-RECOMPUTE-SUMMARY), and the residual the
-# Block 6 fill left of it (fill_check_b6.py, 2026-11-13).
-NEW_AFTER_SNAPSHOT = {'P1-RECOMPUTE-SUMMARY-B6', 'P1-RECOMPUTE-SUMMARY-B6-MAXDIFF'}
+# Placeholders the second fill created (RL-52 (4): the Block 6 half of P1-RECOMPUTE-SUMMARY).
+NEW_AFTER_SNAPSHOT = {'P1-RECOMPUTE-SUMMARY-B6'}
 FILL_ID = re.compile(r'\{\{FILL:\s*([^|]+?)\s*\|')
 
 
