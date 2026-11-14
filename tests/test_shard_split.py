@@ -929,6 +929,36 @@ class TestTimeoutTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, shard_tests.TEST_TIMEOUT_ENV):
                     shard_tests.test_timeout_seconds()
 
+    def test_watchdog_thread_reads_no_clock(self):
+        # A clock inventory test traces every clock call in every thread
+        # (tests/b5_analysis/test_leaf_whole_window.py ClockGuard); the
+        # watchdog's own reads made it flaky on PR #764. It waits on its
+        # condition with a timeout instead, and no shard_tests frame may call
+        # a time function while it is armed, re-armed and disarmed.
+        import inspect
+        import threading
+        import time as time_module
+        source = inspect.getsource(shard_tests._TestWatchdog)
+        for name in ("monotonic", "perf_counter", "time.time", "_watchdog_clock"):
+            self.assertNotIn(name, source)
+        seen = []
+        real = time_module.monotonic
+
+        def traced():
+            frame = sys._getframe(1)
+            if frame.f_code.co_filename.endswith("shard_tests.py"):
+                seen.append((threading.current_thread().name, frame.f_code.co_qualname))
+            return real()
+
+        with mock.patch.object(time_module, "monotonic", traced):
+            dog = shard_tests._TestWatchdog(30)
+            for index in range(20):
+                dog.arm(f"t{index}")
+                time_module.sleep(0.005)
+            dog.disarm()
+            time_module.sleep(0.05)
+        self.assertEqual(seen, [])
+
     def test_expiry_names_the_label_dumps_stacks_and_exits_124(self):
         code = (
             "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests; "
