@@ -1,0 +1,639 @@
+name: ci-reusable
+
+# ==================================================================
+# THE ONE CI DEFINITION (RL-144 step 1c). Every branch's .github/workflows/ci.yml
+# is a thin caller of this file pinned to @main, so a lane no longer carries its
+# own stale jobs. What comes from where:
+#   * this workflow (jobs, matrix, shard count, timeouts): main.
+#   * scripts/test_timings.json: main's copy at ONE commit resolved by the
+#     `changes` job (main_sha), merged under the lane's own map (main wins on
+#     every key it has; lane-only modules and splits keep their lane weights).
+#     One commit for every shard is load-bearing: each shard partitions
+#     independently, so two maps would drop or duplicate tests.
+#   * the code under test, shard_tests.py and the classifiers: the PR's own
+#     checkout (merge ref), exactly as before. A lane whose scripts lack what
+#     this file calls fails in a `Preflight` step that names the missing piece
+#     and says to merge main; it does not die in an AttributeError.
+# A PR that edits this file is tested with MAIN's copy by the required `ci`
+# caller; ci-selftest.yml (path-filtered) runs the PR's own copy via a local
+# `uses: ./...`; a CI-changing PR is merged only with ci-selftest green.
+# Required check names are "ci / <job name>" (the caller job id is `ci`), e.g.
+# "ci / test (3.13, 1)", "ci / quick", "ci / fences". The caller (the whole of
+# every branch's ci.yml after step 2) is:
+#   name: ci
+#   on: {push: {branches: [main]}, pull_request: null}
+#   concurrency: {group: "ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}",
+#                 cancel-in-progress: "${{ github.event_name == 'pull_request' }}"}
+#   permissions: {contents: read}
+#   jobs: {ci: {uses: mpmdw/JouleWise/.github/workflows/ci-reusable.yml@main}}
+# ==================================================================
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  # A state-only range (scripts/ci_state_only.sh) sets code=false, so every
+  # shard and exclusive job reports success without running, and state=true,
+  # so this job still runs the quick tier. The modules that read the live
+  # state files (test_gen_state, test_gen_current, test_docs_freshness) are
+  # in that tier (tests/test_ci_docs_only.py checks), and fences always runs.
+  quick:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Docs-only range (required contexts report success without running tests)
+        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.state != 'true'
+        run: echo "No code changes in this range; tests skipped."
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
+        with:
+          python-version: "3.13"
+      - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
+        run: |
+          if [ ! -x /bin/zsh ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q zsh
+          fi
+          test -x /bin/zsh
+      - name: Preflight (this branch must carry the scripts main's CI calls)
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
+        shell: bash
+        run: |
+          missing=0
+          for f in scripts/quick_suite.py scripts/shard_tests.py; do
+            [ -f "$f" ] || { echo "::error::$f is missing on this branch; main's CI calls it. Merge origin/main into this branch."; missing=1; }
+          done
+          [ "$missing" -eq 0 ]
+      - name: Quick test tier
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
+        run: python3 scripts/quick_suite.py --tier quick --workers 4
+
+  # Select interpreters and skip expensive jobs only for proven docs-only ranges.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      pythons: ${{ steps.interpreters.outputs.pythons || '["3.13"]' }}
+      code: ${{ steps.paths.outputs.code || 'true' }}
+      state: ${{ steps.paths.outputs.state || 'false' }}
+      main_sha: ${{ steps.main.outputs.main_sha }}
+    steps:
+      - name: Resolve main's tip once (every shard reads this commit's timing map)
+        id: main
+        shell: bash
+        run: |
+          sha=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" refs/heads/main | cut -f1)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::cannot resolve refs/heads/main of $GITHUB_REPOSITORY"; exit 1; }
+          echo "main_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "timing map comes from main@$sha"
+      - name: Select Python interpreters
+        id: interpreters
+        shell: bash
+        run: |
+          # Main pushes and PRs use the production interpreter.
+          pythons='["3.13"]'
+          printf 'pythons=%s\n' "$pythons" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        id: source
+        continue-on-error: true
+        with:
+          fetch-depth: 0
+      - name: Detect code changes
+        id: paths
+        shell: bash
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.source.outcome }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Only a successful, non-empty, unreferenced docs-only diff may suppress tests
+          # (scripts/ci_docs_only.sh; tests/test_ci_docs_only.py). A state-only diff
+          # (scripts/ci_state_only.sh; also tested in tests/test_ci_docs_only.py) runs the
+          # plain quick tier and fences instead of the shards. Errors run CI.
+          before=; after=
+          case "${GITHUB_EVENT_NAME:-}" in
+            push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
+            pull_request) before=${PR_BASE_SHA:-}; after=${PR_HEAD_SHA:-} ;;
+          esac
+          # Run the BASE commit's classifier so a range cannot rewrite its own gate.
+          classify() {
+            [[ "${CHECKOUT_OUTCOME:-}" == success && -n "$before" && -n "$after" ]] || return 1
+            git cat-file -e "$before:scripts/$1" 2>/dev/null || return 1
+            git show "$before:scripts/$1" | bash -s -- "$before" "$after"
+          }
+          code=true; state=false
+          if classify ci_docs_only.sh; then
+            code=false
+          elif classify ci_state_only.sh; then
+            code=false; state=true
+          fi
+          printf 'code=%s\nstate=%s\n' "$code" "$state" >> "$GITHUB_OUTPUT"
+
+  # F2 state generation, F4 historical receipt semantics, and F5 CLI/strict
+  # mock smokes ran identically inside every ordinary test-matrix shard; they
+  # run once here instead, and F3 docs freshness is run explicitly here too.
+  # Fences, build and installed-wheel also run for docs-only changes.
+  fences:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Preflight (this branch must carry the scripts main's CI calls)
+        if: true
+        shell: bash
+        run: |
+          missing=0
+          for f in scripts/gen_state.py scripts/repin.py scripts/verify_receipt_histsem.py configs/examples/mock_local.json configs/examples/mac_mlx_local.json; do
+            [ -f "$f" ] || { echo "::error::$f is missing on this branch; main's CI calls it. Merge origin/main into this branch."; missing=1; }
+          done
+          [ "$missing" -eq 0 ]
+      - name: State kernel and generated-view drift
+        run: python scripts/gen_state.py --check
+      - name: Hard-coded pins that protect a number are current
+        # Kind-P pins (configs/pins/registry.json) and the generators' --check
+        # modes. A stale pin prints "run python scripts/repin.py --write <name>".
+        run: python scripts/repin.py --check
+      - name: Documentation freshness
+        run: python -m unittest -v tests.test_docs_freshness
+      - name: Historical receipt semantics
+        run: python scripts/verify_receipt_histsem.py --repository-root . --require-published
+      - name: CLI smoke - validate example configs
+        run: |
+          python -m joulewise validate-config configs/examples/mock_local.json
+          python -m joulewise validate-config configs/examples/mac_mlx_local.json
+      - name: Strict mock run, validate, reduce, and revalidate
+        run: |
+          set -euo pipefail
+          line=$(python -m joulewise run configs/examples/mock_local.json --runs-dir ci-runs)
+          echo "$line"
+          bundle=${line#bundle: }
+          bundle=${bundle%% *}
+          python -m joulewise validate-bundle --strict "$bundle"
+          python -m joulewise reduce "$bundle"
+          python -m joulewise validate-bundle --strict "$bundle"
+
+  test:
+    needs: [changes]
+    runs-on: ubuntu-latest
+    # RL-127: a shard has 60 minutes (the default is 360). The per-test limit
+    # is shard_tests.py's watchdog: it prints TEST TIMEOUT <test id>, dumps
+    # every thread's stack and fails the shard, so an overrun names its test.
+    # The limit is 1200 s, not RL-127's 900 s (1.5 x the 10-minute unit
+    # budget), because four workers share a runner. test_controller_g2b_attachment.
+    # G2bAttachmentTests.test_tracked_bound_corpus_and_all_window_references_attach
+    # ran 802 s (run 43463516682) and then over 1200 s (run 43473235567) under
+    # that contention, so it has a named 2400 s limit in
+    # shard_tests.TEST_TIMEOUT_OVERRIDES_SECONDS until it is split or sped up.
+    timeout-minutes: 60
+    env:
+      JW_TEST_TIMEOUT_SECONDS: "1200"
+      # CI-12 (2026-10-05): hosted runners are free for this public repo, so
+      # the ordinary suite is packed from hosted per-module medians
+      # (scripts/test_timings.json _provenance). Audit item 5.4 (2026-11-13):
+      # six shards, each dealing its units to four child processes
+      # (shard_tests.run_units_in_workers, one per hosted vCPU), instead of
+      # twelve one-process shards: fewer jobs queue for the account's job
+      # slots and each runner's cores are used. Each selected interpreter
+      # runs the full suite across ordinary and exclusive jobs.
+      SHARD_COUNT: "6"
+      SHARD_WORKERS: "4"
+    strategy:
+      # Preserve coverage and timing observations when another shard fails.
+      fail-fast: false
+      matrix:
+        # 3.13: production nights (the measurement venv).
+        # PRs and main pushes use production 3.13 only. 3.14 is
+        # local dev and is exercised by every seat's local module runs, not CI.
+        python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    # Matrix slots above SHARD_COUNT (7-12 today) are retired but stay so the
+    # required contexts test (3.13, 7)..(3.13, 12) keep reporting; each runs
+    # only the retired-slot step below. Every condition compares against
+    # fromJSON(env.SHARD_COUNT), and the retired-slot step re-checks it and
+    # fails if its slot is not above SHARD_COUNT, so raising SHARD_COUNT
+    # cannot silently skip a shard. Drop the slots once branch protection
+    # drops those contexts (contexts first, then the matrix).
+    steps:
+      - name: Docs-only range (required contexts report success without running tests)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code changes in this range; tests skipped."
+      - name: Retired shard slot (required context reports success when the slot is above SHARD_COUNT)
+        if: needs.changes.outputs.code == 'true' && matrix.shard > fromJSON(env.SHARD_COUNT)
+        env:
+          SLOT: ${{ matrix.shard }}
+        run: |
+          if [ "$SLOT" -le "$SHARD_COUNT" ]; then
+            echo "slot $SLOT <= SHARD_COUNT=$SHARD_COUNT but marked retired; refusing to skip a shard"
+            exit 1
+          fi
+          echo "Shard slot $SLOT is retired; the suite runs in shards 1-$SHARD_COUNT."
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
+        with:
+          # Golden provenance sidecars replay `git archive` against their
+          # pinned base commit; a shallow checkout lacks that object.
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
+        with:
+          python-version: ${{ matrix.python-version }}
+      # Once-per-run state, receipt, and CLI/mock checks live in fences.
+      - name: Compile Python sources
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
+        run: python -m compileall -q joulewise tests
+      - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
+        run: |
+          # Tests require /bin/zsh: /usr/bin/zsh without that symlink is insufficient.
+          if [ ! -x /bin/zsh ]; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q zsh
+          fi
+          test -x /bin/zsh
+      - name: Preflight (this branch must carry the scripts main's CI calls)
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
+        shell: bash
+        run: |
+          missing=0
+          for f in scripts/shard_tests.py; do
+            [ -f "$f" ] || { echo "::error::$f is missing on this branch; main's CI calls it. Merge origin/main into this branch."; missing=1; }
+          done
+          python3 - <<'PY' || missing=1
+          import sys
+          sys.path.insert(0, "scripts")
+          import shard_tests
+          need = ("discover_test_modules", "load_timing_map", "load_split_declarations", "conservative_unknown_weight", "expand_units", "partition_modules", "partition_totals", "run_units_in_workers")
+          absent = [n for n in need if not hasattr(shard_tests, n)]
+          if absent:
+              print("::error::scripts/shard_tests.py on this branch lacks " + ", ".join(absent)
+                    + "; main's CI calls them. Merge origin/main into this branch.")
+              raise SystemExit(1)
+          PY
+          [ "$missing" -eq 0 ]
+      - name: Fetch main's timing map and merge it under this branch's (one commit for every shard)
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
+        shell: bash
+        env:
+          MAIN_SHA: ${{ needs.changes.outputs.main_sha }}
+        run: |
+          git fetch -q origin "$MAIN_SHA"
+          git show "$MAIN_SHA:scripts/test_timings.json" > "$RUNNER_TEMP/main_test_timings.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          main = json.loads(Path(os.environ["RUNNER_TEMP"], "main_test_timings.json").read_text())
+          lane_path = Path("scripts/test_timings.json")
+          lane = json.loads(lane_path.read_text()) if lane_path.is_file() else {}
+          merged = dict(lane)
+          for key in ("seconds_by_module", "split_modules"):
+              merged[key] = {**lane.get(key, {}), **main.get(key, {})}
+          # Main's workflow has exactly its own exclusive jobs; a lane-declared
+          # exclusive module would never run, so only main's list counts.
+          merged["exclusive_modules"] = main["exclusive_modules"]
+          if "unknown_module_weight_seconds" in main:
+              merged["unknown_module_weight_seconds"] = main["unknown_module_weight_seconds"]
+          out = Path(os.environ["RUNNER_TEMP"], "merged_test_timings.json")
+          out.write_text(json.dumps(merged))
+          only_lane = sorted(set(lane.get("seconds_by_module", {})) - set(main["seconds_by_module"]))
+          print(f"merged timing map: main {len(main['seconds_by_module'])} modules, "
+                f"{len(only_lane)} lane-only keep lane weights")
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"JW_TIMINGS_FILE={out}\n")
+          PY
+      - name: Unit tests (stdlib core only, per D-009/D-017)
+        if: needs.changes.outputs.code == 'true' && matrix.shard <= fromJSON(env.SHARD_COUNT)
+        # test_calibration_exits AND test_calibration_writer_crash_matrix
+        # are intentionally absent here (both carry exclusive_modules
+        # declarations); each runs once in its exclusive job below, while
+        # the six ordinary shards (and each shard's four workers) keep
+        # deterministic LPT balance from the ordinary timing map. Timing weights are scheduling hints only, so
+        # no step asserts their values; the guards kept here are coverage
+        # guards (every exclusive module is still discovered, and every
+        # declared split test id still exists).
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, "scripts")
+          import shard_tests
+
+          timings_file = os.environ["JW_TIMINGS_FILE"]
+          overlay = json.loads(Path(timings_file).read_text())
+          discovered = shard_tests.discover_test_modules()
+          # Main's exclusive modules run in the exclusive jobs below, which
+          # skip with a notice when the branch lacks the module; so here only
+          # those the branch has are withheld from the ordinary shards.
+          exclusive = frozenset(overlay["exclusive_modules"]) & set(discovered)
+          timings = shard_tests.load_timing_map(timings_file)
+          ordinary = tuple(module for module in discovered if module not in exclusive)
+
+          # UNIT-atomic, not module-atomic. Modules in split_modules (today
+          # test_reduce and test_controller_g2b_attachment, each audited for
+          # per-test independence) are spread across shards at test
+          # granularity. BYTES and B6 declarations activate when their pending
+          # lanes arrive; see docs/perf/2026-11-08-eng-ci.md for the world split.
+          # A heavy individual test can still floor a shard. Splitting
+          # skips nothing: expand_units emits one unit per declared heavy
+          # test plus ONE remainder unit holding every other test in that
+          # module, and verify_split_declaration fails the build closed if
+          # a declared id no longer exists.
+          splits = {
+              module: declaration
+              for module, declaration in shard_tests.load_split_declarations(timings_file).items()
+              if module in set(ordinary)
+          }
+          unknown = shard_tests.conservative_unknown_weight(timings_file)
+          units, weights = shard_tests.expand_units(
+              ordinary, timings, splits, unknown_weight=unknown
+          )
+          count = int(os.environ["SHARD_COUNT"])
+          partitions = shard_tests.partition_modules(
+              units, weights, count, unknown_weight=unknown
+          )
+          totals = shard_tests.partition_totals(
+              partitions, weights, unknown_weight=unknown
+          )
+          print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
+          index = int(os.environ["SHARD_INDEX"])
+          raise SystemExit(shard_tests.run_units_in_workers(
+              partitions[index - 1], weights, count, index,
+              int(os.environ.get("SHARD_WORKERS", "1")), unknown_weight=unknown,
+          ))
+          PY
+
+  calibration-exits-exclusive:
+    needs: [changes]
+    # Exclusive by design: this module already runs sequentially internally;
+    # colocating it with an ordinary shard only adds scheduler starvation.
+    # The module watchdog ceiling is 10 minutes per child and this hosted job
+    # retains the consult-dictated 30-minute absolute ceiling.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
+    steps:
+      - name: Docs-only range (required contexts report success without running tests)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code changes in this range; tests skipped."
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.code == 'true'
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        if: needs.changes.outputs.code == 'true'
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Preflight (module present on this branch)
+        id: present
+        if: needs.changes.outputs.code == 'true'
+        shell: bash
+        run: |
+          if [ -f tests/test_calibration_exits.py ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::tests/test_calibration_exits.py is absent on this branch; nothing to run here."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Compile calibration-exit sources
+        if: needs.changes.outputs.code == 'true' && steps.present.outputs.present == 'true'
+        run: python -m compileall -q joulewise tests scripts/validate_powermetrics_fiducial.py
+      - name: Exclusive calibration-exit module
+        if: needs.changes.outputs.code == 'true' && steps.present.outputs.present == 'true'
+        run: python -m unittest -v tests.test_calibration_exits
+
+  calibration-writer-crash-matrix-exclusive:
+    needs: [changes]
+    # Exclusive because fallback-weight shard placement is unsound for this
+    # module: its hosted runtime is dominated by its own subprocess-heavy
+    # cases — the same CPU-amplifying-fixture class WO-CALEXITS-RELIABILITY
+    # fixed for test_calibration_exits, registered as
+    # WO-CRASHMATRIX-RELIABILITY. Exclusivity buys FASTER ordinary-shard
+    # signal; it does not shorten this module's own job.
+    #
+    # The job is split in two (TEST-SPEED-01, 2026-08-23): one declared heavy
+    # test plus a remainder unit computed at run time that holds every other
+    # test in the module (split_modules in scripts/test_timings.json). The
+    # split is runner-side only, edits no test file, and skips nothing;
+    # independence was audited and the K=2 split was executed concurrently
+    # on one machine with both shards passing. The heavy method is
+    # indivisible by this runner, so K>2 buys nothing. Timing weights are
+    # scheduling hints and are no longer asserted here (CI-12, 2026-10-05);
+    # verify_split_declaration below still fails closed if the declared
+    # heavy test id disappears. The 120-minute ceiling stays as headroom.
+    # See docs/process_traces/2026-08-23-speed/.
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # Same per-test limit as the test job (1200 s; RL-127's figure is 900 s).
+      # Named exceptions such as test_controller_g2b_attachment...
+      # test_tracked_bound_corpus_and_all_window_references_attach live in
+      # shard_tests.TEST_TIMEOUT_OVERRIDES_SECONDS.
+      JW_TEST_TIMEOUT_SECONDS: "1200"
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
+        shard: [1, 2]
+    steps:
+      - name: Docs-only range (required contexts report success without running tests)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code changes in this range; tests skipped."
+      - uses: actions/checkout@v5
+        if: needs.changes.outputs.code == 'true'
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        if: needs.changes.outputs.code == 'true'
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Preflight (module present on this branch)
+        id: present
+        if: needs.changes.outputs.code == 'true'
+        shell: bash
+        run: |
+          if [ -f tests/test_calibration_writer_crash_matrix.py ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::tests/test_calibration_writer_crash_matrix.py is absent on this branch; nothing to run here."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Preflight (this branch must carry the scripts main's CI calls)
+        if: needs.changes.outputs.code == 'true' && steps.present.outputs.present == 'true'
+        shell: bash
+        run: |
+          missing=0
+          for f in scripts/shard_tests.py; do
+            [ -f "$f" ] || { echo "::error::$f is missing on this branch; main's CI calls it. Merge origin/main into this branch."; missing=1; }
+          done
+          python3 - <<'PY' || missing=1
+          import sys
+          sys.path.insert(0, "scripts")
+          import shard_tests
+          need = ("load_timing_map", "load_split_declarations", "conservative_unknown_weight", "expand_units", "partition_modules", "partition_totals", "run_units")
+          absent = [n for n in need if not hasattr(shard_tests, n)]
+          if absent:
+              print("::error::scripts/shard_tests.py on this branch lacks " + ", ".join(absent)
+                    + "; main's CI calls them. Merge origin/main into this branch.")
+              raise SystemExit(1)
+          PY
+          [ "$missing" -eq 0 ]
+      - name: Fetch main's timing map and merge it under this branch's (one commit for every shard)
+        if: needs.changes.outputs.code == 'true' && steps.present.outputs.present == 'true'
+        shell: bash
+        env:
+          MAIN_SHA: ${{ needs.changes.outputs.main_sha }}
+        run: |
+          git fetch -q origin "$MAIN_SHA"
+          git show "$MAIN_SHA:scripts/test_timings.json" > "$RUNNER_TEMP/main_test_timings.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          main = json.loads(Path(os.environ["RUNNER_TEMP"], "main_test_timings.json").read_text())
+          lane_path = Path("scripts/test_timings.json")
+          lane = json.loads(lane_path.read_text()) if lane_path.is_file() else {}
+          merged = dict(lane)
+          for key in ("seconds_by_module", "split_modules"):
+              merged[key] = {**lane.get(key, {}), **main.get(key, {})}
+          # Main's workflow has exactly its own exclusive jobs; a lane-declared
+          # exclusive module would never run, so only main's list counts.
+          merged["exclusive_modules"] = main["exclusive_modules"]
+          if "unknown_module_weight_seconds" in main:
+              merged["unknown_module_weight_seconds"] = main["unknown_module_weight_seconds"]
+          out = Path(os.environ["RUNNER_TEMP"], "merged_test_timings.json")
+          out.write_text(json.dumps(merged))
+          only_lane = sorted(set(lane.get("seconds_by_module", {})) - set(main["seconds_by_module"]))
+          print(f"merged timing map: main {len(main['seconds_by_module'])} modules, "
+                f"{len(only_lane)} lane-only keep lane weights")
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write(f"JW_TIMINGS_FILE={out}\n")
+          PY
+      - name: Compile calibration sources
+        if: needs.changes.outputs.code == 'true' && steps.present.outputs.present == 'true'
+        run: python -m compileall -q joulewise tests scripts/validate_powermetrics_fiducial.py
+      - name: Exclusive calibration-writer crash-matrix module (shard ${{ matrix.shard }} of 2)
+        if: needs.changes.outputs.code == 'true' && steps.present.outputs.present == 'true'
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          sys.path.insert(0, "scripts")
+          import shard_tests
+
+          module = "tests.test_calibration_writer_crash_matrix"
+          timings_file = os.environ["JW_TIMINGS_FILE"]
+          timings = shard_tests.load_timing_map(timings_file)
+          splits = shard_tests.load_split_declarations(timings_file)
+          unknown = shard_tests.conservative_unknown_weight(timings_file)
+          # expand_units runs verify_split_declaration, which fails closed if
+          # the declared heavy test id no longer exists. That is the case a
+          # computed remainder would otherwise absorb in silence, handing one
+          # shard ~20 minutes of unaccounted work while the weights disagree.
+          units, weights = shard_tests.expand_units(
+              (module,), timings, {module: splits[module]}, unknown_weight=unknown
+          )
+          partitions = shard_tests.partition_modules(
+              units, weights, 2, unknown_weight=unknown
+          )
+          totals = shard_tests.partition_totals(
+              partitions, weights, unknown_weight=unknown
+          )
+          print("CRASH-MATRIX SHARD ESTIMATES", ",".join(f"{v:.3f}" for v in totals))
+          index = int(os.environ["SHARD_INDEX"])
+          raise SystemExit(shard_tests.run_units(partitions[index - 1], 2, index))
+          PY
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install build frontend
+        run: python -m pip install build
+      - name: Build wheel and source distribution
+        run: python -m build
+      - name: Upload distributions
+        uses: actions/upload-artifact@v5
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+
+  installed-wheel:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Download distributions
+        uses: actions/download-artifact@v5
+        with:
+          name: python-distributions
+          path: dist
+      - name: Install wheel in a clean environment and smoke outside the repo
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/joulewise-venv"
+          source "$RUNNER_TEMP/joulewise-venv/bin/activate"
+          wheel=$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -type f -name '*.whl' -print -quit)
+          test -n "$wheel"
+          python -m pip install --no-deps "$wheel"
+          cd "$RUNNER_TEMP"
+          python -m joulewise --help
+          # Installed-layout behavioral smokes (post-merge integration
+          # review XSI-1): both surfaces must fail closed outside a
+          # checkout, never resolve into site-packages or guess.
+          rc=0
+          python -m joulewise determinism-gate > determinism_out.json || rc=$?
+          test "$rc" -eq 2
+          python - determinism_out.json <<'PY'
+          import json, sys
+          payload = json.load(open(sys.argv[1]))
+          assert payload["verdict"] == "bundle_refused", payload["verdict"]
+          assert "fewer_than_two_bundles" in payload["reason_codes"], payload
+          PY
+          python - <<'PY'
+          from joulewise.analysis_manifest import validate_analysis_manifest
+          from joulewise.analysis_manifest import SCHEMA_VERSION
+          errors = validate_analysis_manifest(
+              {
+                  "schema_version": SCHEMA_VERSION,
+                  "manifest_id": "am-" + "0" * 64,
+                  "freeze_status": "frozen",
+                  "design": {},
+                  "source": {},
+                  "entries": [],
+                  "sentinel_links": [],
+                  "families": [],
+                  "contrasts": [],
+              }
+          )
+          assert any(
+              e.startswith("cannot infer the JouleWise repository root") for e in errors
+          ), errors
+          PY
