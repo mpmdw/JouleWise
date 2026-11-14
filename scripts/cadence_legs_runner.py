@@ -8,7 +8,7 @@
         [--t0-local 2026-11-15T13:20] [--contaminate L002] [--g0-timeout L005]
     python3.13 -B scripts/cadence_legs_runner.py pin-kit KIT.json --commit SHA [--write]
 
-``run`` is launched ONLY by ``launch_align_r0.py launch --runner-kind cadence-legs-v1`` (the
+``run`` is launched ONLY by ``launch_cadence_span.py launch`` (the R0/R1 desk launcher's procedure:
 LaunchAgent, the desk fence, Spotlight paused). One span, agent-free:
 
 1. preflight: the kit validates; HEAD is the kit's frozen commit and every frozen path's

@@ -16,7 +16,7 @@ import unittest
 from unittest.mock import patch
 
 from joulewise.cadence import desk, kit as kitmod, legs as legsmod
-from scripts import cadence_legs_runner as runner, launch_align_r0 as launcher
+from scripts import cadence_legs_runner as runner, launch_align_r0 as launcher, launch_cadence_span as cadence_launch
 
 TMP = os.environ.get("TMPDIR")
 ZONE = legsmod.LOCAL_ZONE
@@ -559,31 +559,27 @@ class RunnerWithLegRuntimeTests(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------
-# Launcher registration
+# The campaign launcher (scripts/launch_cadence_span.py), kept out of every W1 closure
 # --------------------------------------------------------------------------
-def launch_files(root, *, kind="cadence-legs-v1", seconds, **extra):
-    """launch_align_r0.launch up to the (failing) bootstrap, as the smoke launcher tests do."""
-    import plistlib  # noqa: F401
+def launch_files(root, *, seconds, **extra):
+    """launch_cadence_span.launch up to the (failing) bootstrap, as the smoke launcher tests do."""
     repo = root / "repo"
     (repo / "scripts").mkdir(parents=True, exist_ok=True)
-    for name in ("align_r0_checks.py", "run_align_r1_smoke.py", "cadence_legs_runner.py"):
-        (repo / "scripts" / name).write_text("")
-    soak = root / "soak"
-    soak.write_text("{}")
-    args = SimpleNamespace(repo=repo, config=None, soak_reference=None, output=root / "out",
-                           python_bin=Path(sys.executable), runner_kind=kind, checks=None, keep_going=True,
+    (repo / "scripts" / "cadence_legs_runner.py").write_text("")
+    args = SimpleNamespace(repo=repo, output=root / "out", python_bin=Path(sys.executable),
                            magistrate_pid=1234, deadline=1000 + seconds, custody_root=root / "custody",
                            exit_wait_seconds=180, start_wait_seconds=30, disk_path=root, launchctl_bin="fake-launchctl",
                            pmset_bin="fake-pmset", pgrep_bin="fake-pgrep", kill_bin="fake-kill",
                            kit=None, legs=None, batch_window=None)
     for name, value in extra.items():
         setattr(args, name, value)
-    with patch.object(launcher, "pid_alive", return_value=True), patch.object(launcher.time, "time", return_value=1000), \
-         patch.object(launcher.uuid, "uuid4", return_value=SimpleNamespace(hex="fixed")), \
-         patch.object(launcher.subprocess, "run", side_effect=[subprocess.CalledProcessError(19, []),
-                                                               subprocess.CompletedProcess([], 0, "", "")]):
+    with patch.object(cadence_launch.base, "pid_alive", return_value=True), \
+         patch.object(cadence_launch.time, "time", return_value=1000), \
+         patch.object(cadence_launch.uuid, "uuid4", return_value=SimpleNamespace(hex="fixed")), \
+         patch.object(cadence_launch.subprocess, "run", side_effect=[subprocess.CalledProcessError(19, []),
+                                                                     subprocess.CompletedProcess([], 0, "", "")]):
         try:
-            launcher.launch(args)
+            cadence_launch.launch(args)
         except subprocess.CalledProcessError:
             pass
     job = root / "custody/r0-launches/fixed"
@@ -598,34 +594,38 @@ class LauncherTests(unittest.TestCase):
 
     def test_runner_argv(self):
         args = SimpleNamespace(repo=Path("/synthetic/repo"), python_bin=Path("/synthetic/python"),
-                               output=Path("/synthetic/new"), runner_kind="cadence-legs-v1",
-                               kit=Path("/synthetic/kit.json"), legs="L001,L002,L003", batch_window="02:00-02:35",
-                               deadline=1234, pmset_bin="fake-pmset")
-        self.assertEqual(launcher.runner_argv(args), [
+                               output=Path("/synthetic/new"), kit=Path("/synthetic/kit.json"), legs="L001,L002,L003",
+                               batch_window="02:00-02:35", deadline=1234, pmset_bin="fake-pmset")
+        self.assertEqual(cadence_launch.runner_argv(args), [
             "/synthetic/python", "/synthetic/repo/scripts/cadence_legs_runner.py", "run", "--kit",
             "/synthetic/kit.json", "--output", "/synthetic/new", "--legs", "L001,L002,L003", "--batch-window",
             "02:00-02:35", "--deadline", "1234", "--pmset-bin", "fake-pmset"])
 
-    def test_launch_writes_an_agent_free_interactive_job(self):
+    def test_launch_writes_an_agent_free_interactive_job_on_the_desk_wrapper(self):
+        import plistlib
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
-            plan = launcher.cadence_plan(self.kit_file(root), "L001,L002,L003", "02:00-02:35",
-                                         t0=local("2026-11-15T13:20"))
-            minimum = launcher.cadence_minimum_seconds(plan)
+            plan = cadence_launch.cadence_plan(self.kit_file(root), "L001,L002,L003", "02:00-02:35",
+                                               t0=local("2026-11-15T13:20"))
+            minimum = cadence_launch.cadence_minimum_seconds(plan)
             self.assertEqual(minimum, plan["worst_case_s"] + runner.LAUNCH_RESERVE_S)
             spec, plist = self._launch_at(root, minimum)
             spec = json.loads(spec)
             self.assertEqual(spec["kind"], "cadence-legs-v1")
             self.assertIn("--kit", spec["argv"])
-            import plistlib
             job = plistlib.loads(plist)
             self.assertEqual(job["ProcessType"], "Interactive")
             self.assertGreaterEqual(job["ExitTimeOut"], 2 * launcher.R1_CLEANUP_GRACE_S + 10)
+            # The desk wrapper calls THIS module back (handoff, preflight, run, clear).
+            self.assertTrue(job["ProgramArguments"][1].endswith("scripts/run_align_r0_launchagent.sh"))
+            self.assertTrue(job["ProgramArguments"][2].endswith("scripts/launch_cadence_span.py"))
+            fence = json.loads((root / "custody/desk_fence.json").read_text()) if (root / "custody/desk_fence.json").exists() else None
+            self.assertIsNone(fence)        # the failed bootstrap cleared it
 
     def _launch_at(self, root, seconds):
         # The harness pins time.time to 1000; plan the span at a real afternoon t0 instead.
-        real_plan = launcher.cadence_plan
-        with patch.object(launcher, "cadence_plan",
+        real_plan = cadence_launch.cadence_plan
+        with patch.object(cadence_launch, "cadence_plan",
                           side_effect=lambda kit, legs, window: real_plan(kit, legs, window,
                                                                           t0=local("2026-11-15T13:20"))):
             return launch_files(root, seconds=seconds, kit=self.kit_file(root), legs="L001,L002,L003",
@@ -634,13 +634,12 @@ class LauncherTests(unittest.TestCase):
     def test_launch_refusals(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             root = Path(td)
-            plan = launcher.cadence_plan(self.kit_file(root), "L001,L002,L003", "02:00-02:35",
-                                         t0=local("2026-11-15T13:20"))
+            plan = cadence_launch.cadence_plan(self.kit_file(root), "L001,L002,L003", "02:00-02:35",
+                                               t0=local("2026-11-15T13:20"))
             with self.assertRaisesRegex(ValueError, "deadline cannot fit"):
-                self._launch_at(root, launcher.cadence_minimum_seconds(plan) - 1)
+                self._launch_at(root, cadence_launch.cadence_minimum_seconds(plan) - 1)
             self.assertFalse((root / "custody").exists())
         cases = (({"kit": Path("/nonexistent/kit.json")}, "existing --kit"),
-                 ({"soak_reference": Path("/synthetic/soak")}, "own fresh soak"),
                  ({"legs": "L1;L2"}, "--legs"), ({"batch_window": "2-3"}, "--batch-window"))
         for extra, why in cases:
             with tempfile.TemporaryDirectory(dir=TMP) as td:
@@ -648,24 +647,49 @@ class LauncherTests(unittest.TestCase):
                 values = {"kit": self.kit_file(root), **extra}
                 with self.assertRaisesRegex(ValueError, re.escape(why)):
                     launch_files(root, seconds=43000, **values)
-        with tempfile.TemporaryDirectory(dir=TMP) as td:
-            root = Path(td)
-            with self.assertRaisesRegex(ValueError, "cadence-legs-v1 only"):
-                launch_files(root, kind="r1-smoke", seconds=43000, kit=self.kit_file(root),
-                             soak_reference=root / "soak")
 
-    def test_outer_run_treats_the_campaign_like_the_smoke(self):
+    def test_outer_run_is_agent_free_and_refuses_another_kind(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             spec = Path(td) / "runner.json"
             spec.write_text(json.dumps({"kind": "cadence-legs-v1", "argv": ["fake-python", "fake-runner"]}))
             args = SimpleNamespace(deadline=__import__("time").time() + 7200, runner_spec=spec, pmset_bin="fake")
-            with patch.object(launcher, "sleep_display") as display, patch.object(launcher.time, "sleep") as sleep, \
-                 patch.object(launcher.signal, "signal"), patch.object(launcher.subprocess, "Popen") as popen:
+            with patch.object(launcher, "sleep_display") as display, patch.object(cadence_launch.time, "sleep") as sleep, \
+                 patch.object(cadence_launch.signal, "signal"), patch.object(cadence_launch.subprocess, "Popen") as popen:
                 popen.return_value.wait.return_value = 0
                 popen.return_value.poll.return_value = 0
-                self.assertEqual(launcher.run_until_deadline(args), 0)
+                self.assertEqual(cadence_launch.run_until_deadline(args), 0)
                 display.assert_not_called()
                 sleep.assert_not_called()
+                self.assertEqual(popen.call_args.args[0], ["fake-python", "fake-runner"])
+                self.assertLess(popen.return_value.wait.call_args.kwargs["timeout"], 7200 - 170)
+            spec.write_text(json.dumps({"kind": "r1-smoke", "argv": ["x"]}))
+            with self.assertRaisesRegex(ValueError, "not a cadence-legs-v1 spec"):
+                cadence_launch.run_until_deadline(args)
+
+    def test_desk_callbacks_are_the_base_launchers(self):
+        for verb in ("handoff", "preflight", "clear"):
+            with patch.object(launcher, "main", return_value=0) as base_main:
+                self.assertEqual(cadence_launch.main([verb, "--x"]), 0)
+                base_main.assert_called_once_with([verb, "--x"])
+
+
+class W1IsolationTests(unittest.TestCase):
+    """The campaign is outside every W1 executed closure (PR #775 CI: launch_align_r0.py is in W1's closure
+    through magistrate_watchdog.py, so the campaign kind lives in its own launcher)."""
+
+    def test_the_desk_launcher_is_the_base_launcher(self):
+        source = (runner.ROOT / "scripts/launch_align_r0.py").read_text()
+        for name in ("cadence_legs_runner", "joulewise.cadence", "joulewise/cadence", "launch_cadence_span",
+                     "cadence-legs-v1", "cadence_leg"):
+            self.assertNotIn(name, source)
+
+    def test_no_campaign_file_is_in_the_w1_closures(self):
+        from joulewise.align import w1_prequal
+        from tests.align import test_v4_executed_closure as closure
+        campaign = ("joulewise/cadence/", "scripts/cadence_", "scripts/launch_cadence_span.py",
+                    "joulewise/align/apple/cadence_leg.py")
+        for found in (closure.executed_closure(), w1_prequal.executed_closure(runner.ROOT)):
+            self.assertEqual(sorted(p for p in found if p.startswith(campaign)), [])
 
 
 class CommittedKitTests(unittest.TestCase):

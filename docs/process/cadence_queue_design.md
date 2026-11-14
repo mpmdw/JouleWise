@@ -430,7 +430,7 @@ Built on `align/2026-11-14-campaign-runner`. RL-149 governs where this section a
 | Per-leg redo | the driver | RL-72 E2's load rule (`os_load_verdict`); up to the kit's `redo_quota` per span; a rejected attempt stays as `runtime.rejected<N>` |
 | Stage stamps | `DIR/chain-stages.jsonl` | A start line (rc null) and an end line per stage, with the probe's five keys |
 | Desk bundle | `DIR/desk-bundle/` | `legs/<id>/leg_summary.json` (exactly `desk.LEG_SUMMARY_KEYS`), `span/result.json`, `span/meter.json` (the KM003C stream's header and trailer lines only) |
-| Launcher | `scripts/launch_align_r0.py --runner-kind cadence-legs-v1 --kit K [--legs ...]` | Agent-free like `r1-smoke`; refuses a deadline shorter than the plan's worst case plus reserves |
+| Launcher | `scripts/launch_cadence_span.py launch --kit K [--legs ...] --batch-window ...` | The desk launcher's procedure (fence, the same LaunchAgent wrapper, Spotlight pause), agent-free like `r1-smoke`; refuses a deadline shorter than the plan's worst case plus reserves. A separate entry, because `launch_align_r0.py` is in W1's executed closure (via `magistrate_watchdog.py`); it imports that module one way and leaves it at its base bytes |
 | Mock | `scripts/cadence_legs_runner.py mock` | The whole span with a fake clock, feeds and leg runtime, then the Air desk on its bundle |
 
 Bands are history recipes (`q0` = the turn starts at the leg's own G0 release). The first leg of a span follows

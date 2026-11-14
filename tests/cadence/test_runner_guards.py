@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from joulewise.cadence import legs as legsmod
 from scripts import cadence_legs_runner as runner
+from tests.git_fixture import init_git_fixture
 from tests.cadence.test_legs_runner import NEW_WINDOW, campaign_kit, local
 
 TMP = os.environ.get("TMPDIR")
@@ -30,7 +31,7 @@ class FrozenPreflightTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir=TMP)
         self.root = Path(self.tmp.name)
-        git(self.root, "init", "-q")
+        init_git_fixture(self.root, "-q")
         git(self.root, "config", "user.email", "test@example.invalid")
         git(self.root, "config", "user.name", "test")
         (self.root / "scripts").mkdir()
