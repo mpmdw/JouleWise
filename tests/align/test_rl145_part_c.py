@@ -311,5 +311,19 @@ class LauncherWiringTests(unittest.TestCase):
             smoke.main(['--output', '/tmp/rl145-never', '--parts', 'C', '--soak-reference', '/s.json', '--deadline', '1e12'])
 
 
+class RunnerPartCTests(unittest.TestCase):
+    def test_runner_runs_only_part_c_and_records_it(self):
+        from tests.align.test_r1_smoke_launcher import RunnerTests
+        case = RunnerTests('test_order_and_receipt')
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.args.parts = 'C'
+        self.assertEqual(case.run_runner(), 0)
+        self.assertEqual([e for e in case.events if e.startswith('part-')], ['part-C'])
+        receipt = case.receipt()
+        self.assertEqual((receipt['parts'], receipt['parts_requested'], receipt['rc']), ({'C': True}, 'C', 0))
+        self.assertFalse(case.live)
+
+
 if __name__ == '__main__':
     unittest.main()

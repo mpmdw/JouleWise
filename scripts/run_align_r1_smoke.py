@@ -427,7 +427,7 @@ def run(args, *, feeds=None):
     record = {"schema": "joulewise.align.r1_smoke_runner.v1", "started": stamp(),
               "deadline": args.deadline, "work_reserve_s": WORK_RESERVE_S,
               "soak_reference": None if fresh_soak else str(args.soak_reference),
-              "fresh_soak": fresh_soak, "parts_requested": parts, "parts": {"A": False, "B": False, "C": False},
+              "fresh_soak": fresh_soak, "parts_requested": parts, "parts": {"C": False} if parts == "C" else {"A": False, "B": False},
               "steps": [], "feeds": {}, "rc": 0}
 
     def step(name, operation, *, fatal=True):
