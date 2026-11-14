@@ -1,7 +1,7 @@
 """Twin of the reference-state row builder (``joulewise/align/apple/s_rows.py``).
 
-Written from RL-149 section 1.3 (with RL-151 section 1.1), RL-152 section 1.6
-and RL-153 section 2, with its own arithmetic: energy through
+Written from RL-149 section 1.3 (with RL-151 section 1.1), RL-152 section 1.6,
+RL-153 section 2 and RL-154, with its own arithmetic: energy through
 ``tests.align.twins.attribution_twin.trace_energy`` (the independent A4 twin),
 its own state scan (one time-ordered sweep over a merged stream of journal
 readings, native powermetrics rows and hazard readings per turn), its own stamp
@@ -20,8 +20,14 @@ and each is listed for the research lead):
 
 T1  Carry-in is the last member-journal reading at or before the turn's start
     (RL-149 T1). It must be fresh state, at most 2 s before the start, level 0
-    and Nominal. A fresh reading whose state is missing (None) is unobserved,
-    not out of state; ``Unknown`` is out of state (it is not Nominal).
+    and Nominal. Fresh state (RL-154 section 3) is an integer level, a stamp
+    within 2 s on either side, and a power-management state that is present
+    and not ``Unknown``: a reading whose state is missing or ``Unknown`` is
+    unobserved, at the start (``start_state_unobserved``) and in the gap rule.
+    ``start_out_of_state`` is a fresh reading with a level above 0 or a named
+    state other than Nominal. (RL-154 refused the earlier reading that
+    ``Unknown`` is out of state.) Missing and ``Unknown`` never cut by
+    themselves, in the journal or in native rows.
 T2  A powermetrics row is read at its end; it only cuts, inside the turn.
 T3  The clock window lies inside the decode: it ends at a PM row end no later
     than the last stamped token and starts no earlier than first token + 10 s
@@ -34,14 +40,26 @@ T7  Member half-width: sqrt(Q^2 + n_edges * edge_j^2).
 T8  The in-turn search (off readings, gaps, clock windows) runs over
     (start, last stamped token], as the step-3 script does; without stamps, to
     the turn record's end.
-T9  "Any cut fired" for ``after_hot_turn`` means any candidate row end found in
-    the turn (state, ``state_unobserved`` or clock), or a start read out of state.
+T9  (Accepted as RL-154 section 2 words it.) A turn is hot when its start read
+    out of state, an off reading fired in (start, last stamped token], the
+    clock clause fired, or more than 2 s of it went by with no fresh state;
+    every later turn of the member gives ``after_hot_turn``. Hot is decided
+    whether or not the turn gave a row. A turn that is only
+    ``start_state_unobserved`` is not hot.
+T9a Gap anchor (RL-154 finding 1). The gap rule counts from the carry-in when
+    it is fresh state, and from the turn's start when it is not or there is
+    none; so a turn with no fresh state in its first 2 s (or at all) has a
+    ``state_unobserved`` at its start and is hot.
 T10 The guard's second term is the last FRESH in-state reading before the first
     off reading (freshness is needed to claim the state); the turn's start when
     there is none. Ties between candidate row ends take the reason code that
     sorts first; simultaneous off kinds are joined with '+'.
 T11 A hazard journal only adds cuts (level above 0 inside the turn). It is
     never the start's evidence.
+T12 Clock reference (RL-154 finding 3). A clock clause with no reference (no
+    ``max_state_mhz`` on the PM rows, or no PM rows) gives no row for the
+    member: every turn's no-row reason is ``clock_reference_missing``, status
+    ``s_score_undefined``, flag ``s_rows.clock_reference_missing``.
 """
 from __future__ import annotations
 
@@ -67,7 +85,9 @@ def _reading(sample):
     pm_ns = st.get('pm_observed_ns')
     t = sample['monotonic_ns']
     stamp_ok = _int(pm_ns) and -TWO_S <= t - pm_ns <= TWO_S
-    return t, level, st.get('pm_state'), bool(level is not None and stamp_ok)
+    pm = st.get('pm_state')
+    observed = pm is not None and pm != 'Unknown'
+    return t, level, pm, bool(level is not None and stamp_ok and observed)
 
 
 def _evaluate(turn, journal, pm_rows, hazard, state, guard, clock, leg_max, first_tok, hi):
@@ -82,7 +102,7 @@ def _evaluate(turn, journal, pm_rows, hazard, state, guard, clock, leg_max, firs
     for r in readings:
         if r[0] <= turn.start_ns:
             carry = r
-    if carry is None or turn.start_ns - carry[0] > TWO_S or not carry[3] or (want_pm and carry[2] is None):
+    if carry is None or turn.start_ns - carry[0] > TWO_S or not carry[3]:
         verdict = 'start_state_unobserved'
     elif in_state(carry[1], carry[2]):
         verdict = 'ok'
@@ -102,7 +122,7 @@ def _evaluate(turn, journal, pm_rows, hazard, state, guard, clock, leg_max, firs
     stream.sort(key=lambda e: (e[0], e[1]))
 
     carry_fresh = carry is not None and carry[3]
-    last_fresh = carry[0] if carry_fresh else None
+    last_fresh = carry[0] if carry_fresh else turn.start_ns     # T9a
     fresh_in = [carry[0]] if carry_fresh and in_state(carry[1], carry[2]) else []
     off_t, off_kinds, unobserved = None, set(), None
     for t, _, kind, payload in stream:
@@ -114,7 +134,7 @@ def _evaluate(turn, journal, pm_rows, hazard, state, guard, clock, leg_max, firs
             if want_pm and pm not in NOT_OFF:
                 kinds.append('journal_pm_state_off')
             if fresh:
-                if unobserved is None and last_fresh is not None and t - last_fresh > TWO_S:
+                if unobserved is None and t - last_fresh > TWO_S:
                     unobserved = last_fresh
                 last_fresh = t
                 if in_state(level, pm):
@@ -126,7 +146,7 @@ def _evaluate(turn, journal, pm_rows, hazard, state, guard, clock, leg_max, firs
         if kinds and (off_t is None or t == off_t):
             off_t = t
             off_kinds.update(kinds)
-    if unobserved is None and last_fresh is not None and hi - last_fresh > TWO_S:
+    if unobserved is None and hi - last_fresh > TWO_S:
         unobserved = last_fresh
 
     ends = []
@@ -167,7 +187,8 @@ def _clock_window(pm_rows, reference, clock, first_tok, hi):
 
 def rows_for(episode, *, token_stamps, finish_reasons, journal, pm_rows, state, clock, guard_s,
              hazard_os=(), edge_j=1.0, edges='all_boundaries', source='powermetrics', channel='gpu_power'):
-    """Twin output: {'rows': [dict], 'no_row': [dict], 'measured_j', 'half_width_j', 'n_edges', 'turns'}.
+    """Twin output: {'rows': [dict], 'no_row': [dict], 'measured_j', 'half_width_j', 'n_edges', 'turns',
+    'status', 'flags'}.
 
     ``journal``: normalized samples (``monotonic_ns``, ``status``). ``clock`` is None or a dict
     {reference, ratio, window_s, base_mhz, start_after_first_token_s}.
@@ -180,6 +201,10 @@ def rows_for(episode, *, token_stamps, finish_reasons, journal, pm_rows, state, 
              (episode.hardware.get('thermal') or {}).get('intervals', ()) if i.get('kind') == 'H']
     out_rows, no_row, turns = [], [], []
     seen_hot = False
+    no_reference = False
+    if clock is not None:
+        ref = clock['base_mhz'] if clock['reference'] == 'registered_base' else leg_max
+        no_reference = ref is None or ref <= 0                       # T12
     for turn in episode.turns:
         stamps = token_stamps.get(turn.index)
         stamps = None if stamps is None else sorted(stamps)
@@ -191,6 +216,9 @@ def rows_for(episode, *, token_stamps, finish_reasons, journal, pm_rows, state, 
         seen_hot = seen_hot or verdict == 'start_out_of_state' or bool(ends)
         turns.append({'turn': turn.index, 'start_state': verdict, 'cut': (cut_at, cut_name)})
         dead = finish_reasons.get(turn.index) == 'episode.deadman'
+        if no_reference:
+            no_row.append({'turn': turn.index, 'reason': 'clock_reference_missing'})
+            continue
         if was_hot:
             no_row.append({'turn': turn.index, 'reason': 'after_hot_turn'})
             continue
@@ -246,8 +274,11 @@ def rows_for(episode, *, token_stamps, finish_reasons, journal, pm_rows, state, 
         half = math.hypot(q, math.sqrt(n_edges) * edge_j)
     else:
         measured = half = None
+    scored = bool(out_rows) and math.isfinite(measured) and math.isfinite(half)
+    flags = ['s_rows.clock_reference_missing'] if no_reference else []
     return {'rows': out_rows, 'no_row': no_row, 'measured_j': measured, 'half_width_j': half,
-            'n_edges': n_edges, 'turns': turns}
+            'n_edges': n_edges, 'turns': turns, 'status': 'scored' if scored else 's_score_undefined',
+            'flags': flags}
 
 
 def _design(c, p, d):

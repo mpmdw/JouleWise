@@ -1,4 +1,5 @@
-"""Reference-state rows for the registered test S (RL-148 desk step 6; RL-149 section 1.3; RL-153 section 2).
+"""Reference-state rows for the registered test S (RL-148 desk step 6; RL-149 section 1.3; RL-153 section 2;
+RL-154).
 
 A row is the part of one turn's model call that ran in the reference state:
 from the turn's start to the earliest cut, less the guard, snapped down to the
@@ -8,19 +9,24 @@ stamped by the row's end, and its energy is the GPU-rail integral over exactly
 that interval (``attribution.trace_energy``), with holds removed. Tool-call time
 and unowned segments never enter a row.
 
-THE STATE RULE (RL-149 section 1.3 as amended by RL-153 section 2; constants
-confirmed by RL-151 section 1.1). A reading is in the reference state when the
-OS level is 0 and the power-management state is Nominal.
+THE STATE RULE (RL-149 section 1.3 as amended by RL-153 section 2 and RL-154;
+constants confirmed by RL-151 section 1.1). A reading is in the reference state
+when the OS level is 0 and the power-management state is Nominal.
 
-- Fresh state. A journal reading is fresh state when its OS level is an integer
-  and ``rl145_prints.stamp_fresh`` accepts its stamp's age, the age
-  ``rl145_prints._status_age_s`` computes at the reading's own stamp (RL-152
-  section 1.6: within 2 s on either side). Both are imported, not copied.
+- Fresh state (RL-154 section 3). A journal reading is fresh state when its OS
+  level is an integer, ``rl145_prints.stamp_fresh`` accepts its stamp's age (the
+  age ``rl145_prints._status_age_s`` computes at the reading's own stamp; RL-152
+  section 1.6: within 2 s on either side; both imported, not copied), and its
+  power-management state is present and not ``Unknown``. ``Unknown`` is the
+  instrument saying it does not know: it and a missing state are one thing,
+  unobserved, never out of state. The definition does not depend on the
+  constants' state keys.
 - At the turn's start, positive evidence: the last journal reading at or before
   the start is fresh state, at most 2 s before the start, and level 0 and
-  Nominal. No reading, a reading with no level or no state, a stale or absent
-  stamp, or one more than 2 s before the start gives ``start_state_unobserved``;
-  a fresh reading out of state gives ``start_out_of_state``.
+  Nominal. No reading, a reading with no level, a missing or ``Unknown`` state, a
+  stale or absent stamp, or one more than 2 s before the start gives
+  ``start_state_unobserved``. ``start_out_of_state`` means one thing: a fresh
+  reading that reports a level above 0 or a named state other than Nominal.
 - Inside the turn (the search runs over (start, last stamped token]; the turn
   record's end when no stamp exists), the state cut is the first of: a journal
   reading with level above 0 (``os_level_above_0``); a journal reading whose
@@ -29,9 +35,13 @@ OS level is 0 and the power-management state is Nominal.
   a hazard-journal OS reading above 0 (``hazard_os_level_above_0``). An off-state
   reading cuts whatever its stamp's age: freshness is needed to claim the state,
   never to leave it. Kinds that fire at the same instant are joined with ``+``.
-- ``state_unobserved``: the last fresh-state reading before any stretch of more
-  than 2 s with no fresh state (the carry-in counts when it is fresh; the stretch
-  may run to the last stamped token). Only fresh readings count.
+- ``state_unobserved``: the start of the first stretch of more than 2 s with no
+  fresh state. The first anchor is the carry-in when it is fresh state, and the
+  turn's start when it is not or there is none (RL-154 finding 1: a turn nobody
+  observed is cut at its start); after that each fresh reading is an anchor, and
+  the stretch may run to the last stamped token. Readings with a missing or
+  ``Unknown`` state do not count: one such reading costs nothing, more than 2 s of
+  them is ``state_unobserved``. ``Unknown`` and missing never cut by themselves.
 - Native powermetrics rows only cut. They carry no stamp-age rule and never
   supply in-state evidence (RL-153 section 2.2 item 4). The OS level has no stamp
   of its own: its bounds are those of the journal reading that carries it. A
@@ -44,13 +54,23 @@ OS level is 0 and the power-management state is Nominal.
   window is under 0.97 of the member's own top DVFM state with used time
   (``leg_max_state``). Windows end at powermetrics row ends, lie wholly inside the
   decode (end at or before the last stamped token) and start no earlier than the
-  first token plus 10 s; the cut is the window's start (``clock_e20``).
+  first token plus 10 s; the cut is the window's start (``clock_e20``). A window
+  with no active time gives no value and no cut.
+- Clock reference (RL-154 finding 3). When the constants carry a clock clause and
+  the member has no reference (no ``max_state_mhz`` on its PM rows, or no PM
+  rows), the member gives no row: every turn's no-row reason is
+  ``clock_reference_missing``, the status is ``s_score_undefined`` and the flag
+  ``s_rows.clock_reference_missing``. The clause never switches itself off.
 - The row ends at the earliest of these; ties take the first reason code in sort
   order, as the step-3 script does. A cut before the first stamped token gives no
   row (``cut_in_prefill``).
-- ``after_hot_turn``: after a turn in which any cut fired (a state cut,
-  ``state_unobserved``, the clock clause, or a start read out of state), no later
-  turn of that member gives a row.
+- ``after_hot_turn`` (RL-154 section 2; T9 kept). A turn is hot when its start
+  read out of state; an off reading fired in (start, last stamped token]; the
+  clock clause fired; or more than 2 s of it went by with no fresh state, counted
+  from the fresh carry-in or else from the start. No later turn of the member
+  gives a row. Hot is decided whether or not the turn gave a row. A turn that is
+  only ``start_state_unobserved`` (in-turn readings fresh and in state, no gap)
+  is not hot: it loses its own row and nothing else.
 
 Truncated members (RL-148 section 2): a member ended by the deadman, a G1
 timeout or the decode budget is kept on the rows it produced. A turn cut by the
@@ -77,7 +97,8 @@ from joulewise.align.apple.rl145_prints import _status_age_s, stamp_fresh
 
 NS = 1_000_000_000
 STATE_KEYS = frozenset({'os_level', 'pm_state'})
-PM_REFERENCE_STATES = ('Nominal', 'Unknown', None)
+PM_REFERENCE_STATES = ('Nominal', 'Unknown', None)   # states that never cut
+PM_UNOBSERVED_STATES = ('Unknown', None)            # states that never claim the state (RL-154 section 3)
 CLOCK_REFERENCES = ('registered_base', 'leg_max_state')
 # RL-149 section 1.3: the start's reading is at most 2 s before the start; more than 2 s with no fresh
 # state is state_unobserved. (The stamp's own 2 s bound is rl145_prints.stamp_fresh, imported above.)
@@ -92,6 +113,7 @@ START_OUT_OF_STATE = 'start_out_of_state'
 START_STATE_UNOBSERVED = 'start_state_unobserved'
 STATE_UNOBSERVED = 'state_unobserved'
 CUT_IN_PREFILL = 'cut_in_prefill'
+CLOCK_REFERENCE_MISSING = 'clock_reference_missing'
 AFTER_HOT_TURN = 'after_hot_turn'
 OFF_KINDS = ('os_level_above_0', 'journal_pm_state_off', 'native_pm_state_off', 'hazard_os_level_above_0')
 TRUNCATING_STOPS = (('episode.deadman:', 'deadman'), ('thermal.gate_timeout:', 'g1_timeout'),
@@ -160,8 +182,9 @@ class JournalReading:
     """One member-journal reading on the episode clock, as S reads it.
 
     ``t_ns`` is the reading's own stamp (the sample's start, as ``thermal_desk.normalize_journal``),
-    ``level`` the OS level when it is an int (else None), ``stamp_ok`` whether ``stamp_fresh``
-    accepts the power-management stamp's age at ``t_ns``."""
+    ``level`` the OS level when it is an int (else None), ``pm_state`` the journal's state as read
+    (None when missing), ``stamp_ok`` whether ``stamp_fresh`` accepts the power-management stamp's
+    age at ``t_ns``."""
     t_ns: int
     level: int | None
     pm_state: Any
@@ -169,8 +192,9 @@ class JournalReading:
 
     @property
     def fresh(self):
-        """Fresh state (RL-153 section 2.2 item 1): an integer level and an accepted stamp."""
-        return self.level is not None and self.stamp_ok
+        """Fresh state (RL-153 section 2.2 item 1 as RL-154 section 3 amends it): an integer level, an
+        accepted stamp, and a power-management state that is present and not ``Unknown``."""
+        return self.level is not None and self.stamp_ok and self.pm_state not in PM_UNOBSERVED_STATES
 
     def in_state(self, keys):
         return (('os_level' not in keys or self.level == 0)
@@ -237,18 +261,20 @@ class MemberRows:
 
 
 # --------------------------------------------------------------------------
-# The state rule (RL-149 section 1.3, RL-153 section 2)
+# The state rule (RL-149 section 1.3, RL-153 section 2, RL-154)
 # --------------------------------------------------------------------------
 def start_state(turn, readings, keys):
-    """'ok', 'start_out_of_state' or 'start_state_unobserved' from the last reading at or before the start."""
+    """'ok', 'start_out_of_state' or 'start_state_unobserved' from the last reading at or before the start.
+
+    A carry-in that is not fresh state (a missing or ``Unknown`` state included, RL-154 section 3) or more
+    than 2 s before the start is unobserved; fresh state level 0 and Nominal is 'ok'; any other fresh state
+    is out of state."""
     before = [r for r in readings if r.t_ns <= turn.start_ns]
     if not before:
         return START_STATE_UNOBSERVED
     carry = before[-1]
     if turn.start_ns - carry.t_ns > START_MAX_AGE_NS or not carry.fresh:
         return START_STATE_UNOBSERVED
-    if 'pm_state' in keys and carry.pm_state is None:
-        return START_STATE_UNOBSERVED      # a missing state is unobserved, not out of state
     return 'ok' if carry.in_state(keys) else START_OUT_OF_STATE
 
 
@@ -280,7 +306,8 @@ def state_cut(turn, readings, pm_rows, keys, *, guard_ns, search_end_ns, hazard_
                       default=lo)
         candidates.append((min(first_off - guard_ns, last_in), why))
     before = [r for r in readings if r.t_ns <= lo]
-    fresh_t = ([before[-1].t_ns] if before and before[-1].fresh else [])
+    # RL-154 finding 1: the first anchor is the carry-in when it is fresh state, else the turn's start.
+    fresh_t = [before[-1].t_ns if before and before[-1].fresh else lo]
     fresh_t += [r.t_ns for r in readings if lo < r.t_ns <= hi and r.fresh]
     unobserved = None
     for a, b in zip(fresh_t, fresh_t[1:] + [hi]):
@@ -479,6 +506,10 @@ def member_rows(episode, *, token_stamps, finish_reasons, journal, pm_rows, cons
     clause = constants.clock
     base = clause.base_mhz if clause is not None else None
     reference = None if clause is None else (clause.base_mhz if clause.reference == 'registered_base' else leg_max)
+    # RL-154 finding 3: a clock clause with no reference gives no row (the clause never switches itself off).
+    reference_missing = clause is not None and not (reference is not None and reference > 0)
+    if reference_missing:
+        flags.append('s_rows.' + CLOCK_REFERENCE_MISSING)
     guard_ns = round(constants.guard_s * NS)
     record_os = sorted([(r.t_ns, r.level) for r in readings] + list(hazard_os), key=lambda x: x[0])
     rows, no_row, record = [], [], []
@@ -512,6 +543,9 @@ def member_rows(episode, *, token_stamps, finish_reasons, journal, pm_rows, cons
             entry['row'] = None
             entry['no_row'] = reason
 
+        if reference_missing:
+            refuse(CLOCK_REFERENCE_MISSING)
+            continue
         if after_hot:
             refuse(AFTER_HOT_TURN)
             continue
