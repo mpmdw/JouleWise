@@ -420,14 +420,14 @@ class R1NightWorstCaseTests(unittest.TestCase):
         self.assertAlmostEqual(bounds['step_D_prefill_10k_decode_4096'], 1800 + 5763.9952)
         self.assertAlmostEqual(bounds['high_power_B'], r1.aba_leg_bound_s(['fake-runtime']))
         self.assertAlmostEqual(value['no_redo_s'], sum(bounds.values()))
-        self.assertEqual(value['batch_blackout_s'], 5400)
+        self.assertEqual(value['batch_blackout_s'], 2100)       # RL-149 section 2.9 item 4 (was 5,400)
         self.assertAlmostEqual(value['largest_unit_s'], max(bounds.values()))
-        self.assertAlmostEqual(value['batch_encounter_max_s'], max(bounds.values()) + 5400)
+        self.assertAlmostEqual(value['batch_encounter_max_s'], max(bounds.values()) + 2100)
 
     # test_worst_case_uses_the_round6_table_and_counts_the_r6_2_retries: deleted. RL-59/64/72
     # (a85ee8ec6) removed the R6-2 retries and the step-D precool, and priced the night as two
     # whole-unit load redos; superseded by test_r1_round7_science.G0TimeoutTests.
-    # test_night_worst_case_with_the_round8_bounds (108768 / 126480).
+    # test_night_worst_case_with_the_round8_bounds (RL-149: 102168 / 119880).
 
 
 if __name__ == '__main__':

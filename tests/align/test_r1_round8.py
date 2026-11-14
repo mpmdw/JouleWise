@@ -597,6 +597,27 @@ class AliasedPicksBarTests(unittest.TestCase):
         self.assertEqual(thermometry["bar"], "pass")
         self.assertNotIn("r1.picks_aliased", thermometry["flags"])
 
+    def test_the_rl145_ruled_alias_pair_keeps_the_bar_and_no_other_does(self):
+        # RL-145 close sections 5 and 10, RL-149 section 5 item 12: the fast key and the lexically first
+        # other member of its alias group, on an ok RL-145 night confirmation naming both, keep the bar.
+        ok = {"ok": True, "second_key_rule": "RL-145", "s_fast": "TV0h", "s_slow": "TV1h"}
+        pair = {"s_fast": "TV0h", "s_slow": "TV1h", "alias_groups": [["TV0h", "TV1h", "TV2h"]],
+                "night_confirmation": ok}
+        self.assertTrue(r1.picks_aliased(pair) and r1.ruled_alias_pair(pair))
+        refused = {
+            "not the lexically first alias": {**pair, "s_slow": "TV2h",
+                                              "night_confirmation": {**ok, "s_slow": "TV2h"}},
+            "no confirmation": {**pair, "night_confirmation": None},
+            "confirmation not ok": {**pair, "night_confirmation": {**ok, "ok": False}},
+            "another rule": {**pair, "night_confirmation": {**ok, "second_key_rule": "RL-122"}},
+            "confirmation names another pair": {**pair, "night_confirmation": {**ok, "s_slow": "TV2h"}},
+            "one key twice": {**pair, "s_slow": "TV0h", "night_confirmation": {**ok, "s_slow": "TV0h"}},
+            "no group": {**pair, "alias_groups": []},
+        }
+        for name, value in refused.items():
+            with self.subTest(name):
+                self.assertFalse(r1.ruled_alias_pair(value))
+
     def test_the_rule(self):
         self.assertTrue(r1.picks_aliased({"s_fast": "A", "s_slow": "A", "alias_groups": []}))
         self.assertTrue(r1.picks_aliased({"s_fast": "A", "s_slow": "B", "alias_groups": [["A", "B"]]}))

@@ -112,7 +112,7 @@ class PrepareTests(unittest.TestCase):
                     runtime_stack_check=lambda *a, **kw: (calls.append("stack") or {"ok": True, "reasons": []}))
             self.assertEqual(calls, ["weights", "stack", "identity"])
             self.assertEqual(packet["window_max_s"], r1.night_worst_case_s()["window_max_s"])
-            self.assertEqual(packet["window_max_s"], 126480)
+            self.assertEqual(packet["window_max_s"], 119880)      # RL-149 section 2.9 item 4
             self.assertEqual(packet["overhead_s"], 9000)
             self.assertEqual(packet["status"], "FOR_LEAD_ARM")
 
@@ -179,19 +179,19 @@ class DriverTests(unittest.TestCase):
 
     def test_window_equals_computed_arm_and_batch_admits_whole_pair(self):
         bound = r1.night_worst_case_s()
-        self.assertEqual(bound["window_max_s"], 126480)
-        self.assertEqual(bound["floor_s"], 99768)
+        self.assertEqual(bound["window_max_s"], 119880)           # RL-149 section 2.9 item 4
+        self.assertEqual(bound["floor_s"], 93168)
         self.assertEqual(bound["overhead_s"], sum(bound["overhead_caps_s"].values()))
         self.assertAlmostEqual(bound["no_redo_s"], 58711.9616)
         from datetime import datetime, timedelta
         for day in (11, 12, 13):
-            moment = datetime(2026, 11, day, 10, 0, tzinfo=r1.ZoneInfo("America/Los_Angeles"))
+            moment = datetime(2026, 11, day, 0, 30, tzinfo=r1.ZoneInfo("America/Los_Angeles"))
             now = [moment]
             def sleep(seconds):
                 now[0] += timedelta(seconds=seconds)
             waited = r1.wait_outside_os_batch(bound["largest_unit_s"], now=lambda: now[0], sleep=sleep)
             self.assertGreater(waited, 0)
-            self.assertEqual((now[0].hour, now[0].minute), (13, 15))
+            self.assertEqual((now[0].hour, now[0].minute), (2, 35))
 
 
 class DispatchTests(unittest.TestCase):

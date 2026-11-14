@@ -103,6 +103,9 @@ EXECUTED_CLOSURE = (
     'joulewise/align/apple/r1_runtime.py',
     'joulewise/align/apple/r1_runtime_contract.py',
     'joulewise/align/apple/registry_select.py',
+    # RL-145 rows 6-7 (reached from the smoke launcher through the follow-up kit): the Part C evaluator
+    # and the desk's per-turn prints. Bound with the rest of the executed closure (PR #777 review).
+    'joulewise/align/apple/rl145_prints.py',
     'joulewise/align/apple/sampler.py',
     'joulewise/align/apple/sampling.py',
     'joulewise/align/apple/smc_enumeration.py',
@@ -279,6 +282,7 @@ EXECUTED_CLOSURE = (
     'scripts/advance_b5_ledger_pin.py',
     'scripts/align_pilot_kit.py',
     'scripts/align_r0_checks.py',
+    'scripts/align_r1_part_c.py',
     'scripts/align_r1_rehearsal.py',
     'scripts/align_r1_turn_counts_export.py',
     'scripts/align_smc_enumerate.py',

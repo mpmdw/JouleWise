@@ -16,11 +16,13 @@ from tests.align.test_w1_rl122_kit import planning_slots, release_for
 NS = desk.NS
 T0 = 1_000 * NS
 TARGET, DELTA = 30.0, 1.5          # band edge 31.5; threshold 31.2
+# RL-152 section 1.1: the heater key is the configured s_slow (TV1h since RL-145), never a literal.
+HEATER = kit.planning_heater_key()
 
 
-def build_member(root, phase, *, outcome='timeout', duration_s=1200, key='TVh0', target=TARGET, os_level=0,
+def build_member(root, phase, *, outcome='timeout', duration_s=1200, key=HEATER, target=TARGET, os_level=0,
                  pm_state='Nominal', early=40.0, late=30.0, last_s=None, delta=DELTA, step_s=1, run='m',
-                 pm_observed=True):
+                 pm_observed=True, fast_offset=None):
     """One member journal: `early` for the first part of G0, `late` for the last 300 s (or last_s)."""
     last_s = desk.WINDOW_S if last_s is None else last_s
     start, end = T0, T0 + int(duration_s * NS)
@@ -28,8 +30,14 @@ def build_member(root, phase, *, outcome='timeout', duration_s=1200, key='TVh0',
     for second in range(0, int(duration_s) + 1, step_s):
         t = start + second * NS
         value = late if t >= end - last_s * NS else early
+        # TV0h and TV1h are one thermometer (RL-145 close section 5): the fast key reads the heater's value
+        # unless ``fast_offset`` = (seconds before the end, offset) puts an unequal row in.
+        fast = value
+        if fast_offset is not None and t == end - int(fast_offset[0] * NS) and value is not None:
+            fast = value + fast_offset[1]
+        sensors = {'TV0h': fast, key: value}
         rows.append({'kind': 'reading', 'started': {'monotonic_ns': t},
-                     'values': {'sensors': {'TV0h': 34.0, key: value}, 'errors': {},
+                     'values': {'sensors': sensors, 'errors': {},
                                 'status': {'os_level': os_level, 'pm_state': pm_state,
                                            'pm_observed_ns': t if pm_observed else None}}})
     rows.append({'kind': 'align_thermal_gate', 'values': {'state': 'end', 'gate': {
@@ -77,14 +85,24 @@ class Desk3aTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 report, row = self.run_desk(phase, late=31.4)
                 self.assertEqual(row['classification'], 'planning-release-3a', row['reasons'])
-                self.assertEqual((row['heater_key'], row['target_c'], row['band_edge_c']), ('TVh0', 30.0, 31.5))
+                self.assertEqual((row['heater_key'], row['target_c'], row['band_edge_c']), (HEATER, 30.0, 31.5))
                 self.assertEqual(row[desk.PEAK_FIELD], 31.4)
                 self.assertAlmostEqual(row['margin_to_threshold_c'], 0.2)
                 self.assertEqual(row['whole_g0_max_c'], 40.0)       # disclosure only
                 self.assertEqual(row['os_levels'], [0])
                 self.assertEqual(report['kit_record_segments'][phase], {
-                    'band_edge_c': 31.5, 'heater_key': 'TVh0', desk.PEAK_FIELD: 31.4,
+                    'band_edge_c': 31.5, 'heater_key': HEATER, desk.PEAK_FIELD: 31.4,
                     'os_levels': [0], 'pm_states': ['Nominal']})
+
+    def test_unequal_fast_and_slow_rows_in_the_last_300_s_are_counted(self):
+        # RL-152 section 1.1 (RL-149 section 1.7): print only; the class does not read it.
+        _, row = self.run_desk(late=31.4)
+        self.assertEqual(row['fast_slow_unequal_last_300s'], 0)
+        _, row = self.run_desk(late=31.4, fast_offset=(120, 0.25))
+        self.assertEqual(row['fast_slow_unequal_last_300s'], 1)
+        self.assertEqual(row['classification'], 'planning-release-3a')
+        _, row = self.run_desk(late=31.4, fast_offset=(400, 0.25))      # before the last 300 s: not counted
+        self.assertEqual(row['fast_slow_unequal_last_300s'], 0)
 
     def test_crossing_the_edge_is_3a(self):
         _, row = self.run_desk(late=32.0)
@@ -295,6 +313,23 @@ class Desk3aTests(unittest.TestCase):
                 record['segments'] = report['kit_record_segments']
                 self.assertEqual(kit.planning_released_segments(slots, record), set(names))
                 kit.require_ready(inputs, slots, planning_release=record)
+        # RL-152 section 1.1: a record naming the RL-122 key TVh0 (no role since RL-145) is refused by the
+        # kit, which accepts exactly the configured s_slow.
+        self.assertNotEqual(HEATER, 'TVh0')
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            phases = {}
+            for name in names:
+                build_member(root, name, late=31.4, key='TVh0')
+                phases[name] = {'g0_outcome': 'timeout'}
+                phases[desk.precool_phase(name)] = {'released': True}
+            write_result(root, phases)
+            stale = desk.desk(tmp)['kit_record_segments']
+        self.assertEqual({row['heater_key'] for row in stale.values()}, {'TVh0'})
+        record = release_for(slots, names)
+        record['segments'] = stale
+        with self.assertRaisesRegex(ValueError, f"heater key 'TVh0' is not '{HEATER}'.*research lead rules"):
+            kit.planning_released_segments(slots, record)
         # Just below the boundary the desk emits nothing, and the kit would refuse the same numbers.
         record = release_for(slots, names, heater_key_max_last_300s_c=31.19)
         with self.assertRaisesRegex(ValueError, 'band edge'):

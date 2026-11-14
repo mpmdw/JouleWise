@@ -1,0 +1,33 @@
+{
+  "authority": "docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md RL-145 section 3 and the RL-145 addendum section 5 (2026-11-13); supersedes RL-122 item 7's slow rule (TVh0 failed D1(b) and clamped on the 11-13 D step)",
+  "authorizes_night": false,
+  "classification_sha256": "0b9cdb9e136eee48c742a6bdfef3313373f795949027779353c31f717630e0a6",
+  "conditions": [
+    "this file carries the pair and the rule only; no night is authorized by it (RL-145 step 4 checklist, in the magistrate's arm item)",
+    "the research lead's close names the adopted values; the cold review of the condition-13 diff has no open finding",
+    "thermal_gates.py and thermal.py hash as at a6a09e6d7 (tests/align/test_rl145_gate_hashes.py)",
+    "the session's night confirmation is ok under RL-145 section 3 (r1_runtime.night_confirmation)"
+  ],
+  "note": "RL-145 addendum row 4: the second key is the lexically first other member of the fast pick's alias group on the saved Part B classification, derived by scripts/align_r1_followup_kit.py alias_second_key_selection, never supplied by hand; validate_sensor_ruling refuses any other pick. authorizes_night is false here: the validator requires true, so the arm item (not this file) must set it on a copy at the close. Written by the builder.",
+  "research_lead_ruling": "RL-145",
+  "schema": "joulewise.align.r1_sensor_ruling.v1",
+  "sensors": {
+    "fan_keys": [
+      "F0Ac",
+      "F1Ac"
+    ],
+    "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b",
+    "record_keys": [
+      "Tf08"
+    ],
+    "s_fast": "TV0h",
+    "s_slow": "TV1h"
+  },
+  "slow_rule": "alias_group_lexical_first",
+  "slow_rule_text": "the lexically first other member of the fast pick's alias group on the saved Part B classification (RL-145 section 3)",
+  "smoke_part_b_path": "docs/run_reports/2026-11-13-rl145/smoke_part_b.rl145.json",
+  "smoke_part_b_sha256": "0dd1d4efeec3acb1e6ee6f26b5ca94e1bd2748560a627a040811c3df6af9498b",
+  "source_smoke_part_b_path": "docs/run_reports/2026-11-12-rl122/smoke_part_b.rl122.json",
+  "source_smoke_part_b_sha256": "b2369b6c78d91b75299e10ff7249f1e8cae7304b48cf022e20b2c6a6f69f2884",
+  "superseded_sensor_ruling": "docs/run_reports/2026-11-12-rl122/sensor_ruling_rl122.json (RL-145: TVh0 unseated)"
+}
