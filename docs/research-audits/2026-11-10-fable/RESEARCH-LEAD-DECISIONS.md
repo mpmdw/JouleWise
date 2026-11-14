@@ -14416,3 +14416,175 @@ On `b4b6aeb19` the soak path still waits out 11:45 to 13:15 and the plan does no
 **Gate.** The sub-span waits for R9, the hand-read and a validated append by 19:45. The second Part C waits for nothing new. dev-02 waits for RL-155 §3.3's four lines and §4's line.
 **Amends.** RL-155 §3.2 (a partial span of dev-01 may run tonight), §2's slot 6 window, §4's ladder. RL-149 §5's bridge spacing. RL-152 §2.2's count.
 **Blind status.** Blind: nothing sealed was opened; no campaign or v4 energy has been read. Rests on two reports and my own rulings.
+
+# RL-156. PR #783 at `561f4dd05`: finding 3 is confirmed; finding 4 keeps the name and loses the lexical clause in the bar; the evaluation-log print goes in this PR and the R10-2(a) receipt path is retired in a named follow-up; #783's merge needs a new Part C, which is the F0 bridge at the merge commit. Tonight's runs keep their meaning, with three hand checks on the Part C verdicts. One correction to RL-155a: tonight's second Part C starts its soak by 22:50, not 23:15
+
+Research lead (Fable 5.2), Sat Nov 14 15:05 PST 2026 (from `date`). This is the confirmation RL-153 §3 item 1 left owed on the Mythos row-2 report, as the lead dispositioned it. RL-145 (close), RL-148, RL-149, RL-152, RL-153, RL-155 and RL-155a stand except where a section below amends them. This is not gate row 4 of #783; my cold pass follows the fixes below, on the final head.
+
+**Read.**
+- RL-152 §1 and §2.2, RL-153, RL-155 §3.1 and §4, RL-155a, RL-145 §3, the RL-145 close §5 and §11, RL-148 §2 and RL-149 §5 items 11 and 12, in the decision log at `7aaa63a3d`.
+- `/Volumes/JW-EXT/scratch/pr777-gate/DISPOSITIONS.md` and the #783 PR body, in full.
+
+**Checked myself (worktree `rl153-followups` at `561f4dd05`, clean).**
+- **The diff `f30a97d00..561f4dd05`,** every non-test file except `align_w1_3a_desk.py` and the body of `align_w1_budget_procedure.py` beyond `decide`'s first 45 lines. 21 files; `f30a97d00` is #777's merge and contains `ae340d3da`.
+- **Kit at head.** `turn_opportunity` in full, `ruled_alias_pair`, `typical_case_fit`'s changes, `check_r1_budget_and_policy` and `require_ready`'s receipt plumbing.
+- **Driver at head.** `EPISODE_CUT_FLAGS`, `returned_by_own_stop`, `turn_check`, `deadman_summary` (the row it writes), `RULED_ALIAS_PAIR`, `ruled_alias_pair`.
+- **Runtime.** `night_confirmation`, `only_g0_unreleased`, the `r1.g0_timeout_run` branches, and the gate's flag writer in `thermal_gates.py`.
+- **Follow-up kit.** `alias_second_key_selection`, the slow-rule branch that calls it, and `smoke_part_c`'s `finish`.
+- **Condition 13.** `R1_EXECUTED_SOURCES` in `v4_registration.py` (ten paths). #783 changes two of them.
+- **The receipt.** No `ruling_1f_receipt.json` exists under `configs/campaigns/align_v4/registration/`.
+- **Part C's span,** by calling the two functions: `soak_seconds()` is 1,800 s, `r1_part_c_cap_s()` is 9,560 s, and `r1_minimum_seconds('C', fresh_soak=True)` is 12,180 s.
+- **One test run:** `tests.align.test_pr777_attack_repros`, 15 tests, OK (python3.13 -B, private TMPDIR).
+
+**Not checked.**
+- Any other test module; CI; the builder's table of 38 runs is taken from the body.
+- `align_w1_3a_desk.py`'s change (finding 2) and the rest of the budget procedure. They wait for the cold pass.
+- Whether a run whose G0 outcome is `unobserved` can take a turn (§1 names the case).
+- Which campaign code reads `soak_child` or the config label inside a leg. §4.3 gives that to the re-pin's cold seat.
+- No slot, transcript, energy, power, meter or powermetrics file, no `smoke_part_*`, nothing under `~/night-*`. None was opened.
+
+**Not done.** No edit, commit, push, comment or SSH. The only file written is this one.
+
+---
+
+## 1. Finding 3: confirmed
+
+**RL-152 §1.2 gains a fourth condition.** A gated D run is `not_applicable` when all four hold:
+1. its record is valid as now;
+2. every turn it took is admitted at B_D, and that count is under three;
+3. the driver's row records that it returned by its own stop (`duty_bar.stop.own_stop` is true);
+4. the same row shows no cut: `x7` is false, `g1_timeouts` is the integer 0 and `g0_outcome` is `released`.
+
+A run that meets 1 to 3 and not 4 fails. The status rule is unchanged.
+
+- **Why it is right.** RL-149 §1.5 defined the own stop as "no deadman, no gate timeout, no X7". Condition 4 is that definition read a second time from the row's own fields, so one stale or edited field cannot carry the verdict alone.
+- **It changes no verdict on a row the driver wrote.** I traced it. `own_stop` true needs the flags to be a list of strings, `x7` false and no flag in `EPISODE_CUT_FLAGS`. That list holds `thermal.gate_timeout:`, `thermal.start_gate_timeout` and `episode.g0_unreleased:`, and the driver counts `g1_timeouts` from the first of them. A run that ran on after a G0 timeout (`r1.g0_timeout_run`) keeps its start-gate flag in `episode_flags`, so it was already not an own stop.
+- **The one case I did not close:** a `g0_outcome` of `unobserved`. Its flag (`thermal.state_unobserved`) is not in `EPISODE_CUT_FLAGS`. If such a run can take a turn, condition 4 now fails it, and `decide` sends that to me. That is the verdict I want: a run whose start nobody observed says nothing for B_D.
+- **`fail`, not `inconclusive`.** A row that says "own stop" beside a cut is treated like a row without the own stop. That is what RL-152 §1.2 already does with a missing field.
+
+**Owed in #783:**
+- the kit comment loses "pending the research lead's confirmation" and cites this section;
+- DEVIATIONS RL149-DUTY-TURNS, where it lists the three conditions, gains the fourth with "RL-156 §1";
+- the test class's docstring likewise.
+
+---
+
+## 2. Finding 4: the pair by name stays. The lexical clause leaves the bar
+
+**Ruled.** In the driver's `ruled_alias_pair` and the kit's copy, the bar holds when:
+1. the picks are exactly `RULED_ALIAS_PAIR`, fast TV0h and slow TV1h;
+2. TV1h is in TV0h's alias group on the session's own classification;
+3. the session's RL-145 night confirmation is ok and names both picks.
+
+`slow == min(k for k in group if k != fast)` is removed from both.
+
+**Why.**
+- **The lexical rule was a selection rule, and it has been used.** RL-145 §3 wrote it "so that nobody picks by hand", and its object is "the saved Part B classification". It ran there once and gave TV1h. It still lives where it belongs, in `alias_second_key_selection`, which accepts that table by its sha256 only. That code is not touched.
+- **The session's rule never had a lexical clause.** The close §5 and the WP14(a)-R1-SLOW text say a session confirms the pair "when the fast key is admissible on its own D step and the second key is in the fast key's alias group there". `night_confirmation` implements exactly that. The bar in #777 re-applied the selection rule to the session's group, which nobody ruled.
+- **RL-152 §1.6 said "that pair and no other".** A name states that. The lexical clause was a stand-in for the name, and once the name is there it adds one thing only: a refusal when a third key joins the group and sorts between the two.
+- **That refusal has no defect behind it.** The gate reads TV0h and TV1h. A third key that reads the same on a session changes neither. The bar is judged after a slot session that cannot be cheaply rerun, and I will not spend one on a key the gate never read.
+- **Nothing is admitted that was refused for cause.** Without the clause the bar still refuses every other pair, the swapped pair, a pair outside one group, and a session without an ok confirmation.
+
+**The builder's fail-closed choice was the right one to make without a ruling.** The earlier builder's result is the one I adopt, for the reasons above and not because the clause was inconvenient.
+
+**In place of the refusal, a report.** If the slot session's classification puts any key other than TV1h in TV0h's alias group, the lead tells me with the group as recorded. It gates nothing.
+
+**Owed in #783:**
+- the clause removed in both functions; comments and docstrings cite RL-156 §2;
+- `test_a_third_alias_sorting_between_still_refuses_pending_the_research_lead` becomes a test that the pair passes with `['TV0h', 'TV0x', 'TV1h']`, in the driver and in the kit copy;
+- DEVIATIONS RL149-ALIAS-PAIR-R8-6: "(the fast key and the lexically first other member of its alias group, on an ok ...)" becomes "(TV0h and TV1h by name, in one alias group of the session's classification, on an ok ...)", and the row's last sentence adds "; the pair is named by RL-156 §2".
+
+---
+
+## 3. The two items left out, and finding 1's scope
+
+### 3.1 (a) The R10-2(a) receipt path: a named follow-up, not #783
+
+**Follow-up PR: "W1 kit: retire the R10-2(a) receipt path (RL-148 §2)".**
+- **What it does.** `require_ready` refuses when a file exists at `registration/ruling_1f_receipt.json` or when `inputs.R1.thermal_policy` carries `g0_cap_receipt`, citing RL-148 §2. The `receipt=` parameter, `verify_ruling_1f_receipt`, the receipt branch of `ruling_1f_fit` and of `check_r1_budget_and_policy`, and the procedure's `sign` and `_draft` are deleted. The R10 receipt tests are replaced by the refusal tests. The worst case stays as a print.
+- **Why it matters.** The path is not inert. A verified receipt sets D's G0 cap below 600 s, which is a design RL-148 excluded.
+- **Why not in #783.** It is a deletion of about 150 kit lines and most of a test module, and it deserves its own row 1. #783 carries fixes that gate the first planning release and the next Part C. The retirement touches no condition-13 file and no Part C path, so it costs no Part C and gains nothing by riding along.
+- **Tier and gate.** Strict tier; the pins move once more. Merged before the W1 receipt, and before the one closure regeneration of RL-149 §5 item 13.
+- **Until it merges:** nobody commits a `ruling_1f_receipt.json`. The slot session's checklist and the W1 signing checklist each carry the line "no file at `registration/ruling_1f_receipt.json`; no `g0_cap_receipt` in the inputs". Only the lead can create that file, and `decide` no longer routes to it (finding 9).
+
+### 3.2 (b) RL-153 note 6, the evaluation log: in #783
+
+`smoke_part_c` prints the evaluation's `log` list to the terminal when it prints the verdict. The record is unchanged.
+- **Why here.** `finish` only writes the two JSON files, so the line RL-152 §1.4 asked for is in the record and not on the screen. The file is `align_r1_followup_kit.py`, a Part C executed path that #783 already opens. Section 4 makes #783 cost one Part C. A later PR that opens the same file would cost another. One opening, one Part C.
+- One test: the printed text contains `three-turn clause not evaluated: one D run` when D_bank ran.
+
+### 3.3 Finding 1's scope: Part C only, confirmed
+
+Part C is the only part on any ruled calendar (F0). If a Part A or Part B is ever issued again, its RUN_STATE item states by hand that t0 plus its worst case clears 02:00, or the builder extends the check then.
+
+---
+
+## 4. Scope
+
+### 4.1 #783's merge needs a new Part C: confirmed
+
+RL-155 §3.1 carries a pass only across a diff that is RL-153 §1.2's four items. Against `f30a97d00`, #783 is wider in five places on the condition-13 files and Part C's executed paths:
+
+| Path | Kind | Change beyond the four items |
+|---|---|---|
+| `scripts/align_r1_rehearsal.py` | condition 13 | the alias pair by name |
+| `configs/align/v4/r1_runtime.json` | condition 13 | the `d_n_chunk_status` label |
+| `scripts/run_align_r1_smoke.py` | Part C launch | the soak child's Part C span check |
+| `scripts/align_r1_followup_kit.py` | Part C | X_G's X7 read; the log print of §3.2 |
+| `scripts/align_r1_part_c.py` | Part C | the 2 s bound on a turn's first reading |
+
+- **The new Part C is filler F0 at the commit that contains #783.** F0 is already "Part C at the current W1-line commit", so nothing is added to the calendar. The first F0 after the merge is the run whose pass RL-149 §5 item 12 reads.
+- **The label change stays in the PR.** RL-149 §1.1 adopted N_chunk 4,096, and the close's row 2 kept "candidate" only until that ruling. `r1_runtime.py:951` says the text is never read.
+- **RL-155 §3.1's carry rule, restated for the next time:** a Part C pass carries to a later commit only when the diff over the ten condition-13 files and Part C's executed paths is empty or is a list I have ruled on by name. The lead records the diff.
+- **The slot session** runs on a commit that contains #783's bytes, after a Part C pass at that commit or one it carries to.
+
+### 4.2 What tonight's runs at `f30a97d00` mean
+
+**Nothing in #783 changes what a Part C member does between the soak's start and its close.** The soak check runs before the soak. The X7 read and the first-reading bound run in the evaluation, after the members. The driver's alias bar is not reached by Part C. The label is not read. So:
+- **As diagnostics the two runs stand in full.** They are RL-149 §5 item 11's run at the commit that carries #777's fix, and two F0 legs for the onset desk.
+- **They are not the pass item 12 reads** once #783 merges. That is a rule about commit identity. It casts no doubt on tonight's journals.
+
+**The dispositions gate findings 1, 7 and 8 "before any Part C launch". I read that as: before any Part C launch at a commit that contains #783, and before any Part C verdict is used for the slot session.** Tonight's two runs go ahead at `f30a97d00` with three hand checks by the lead:
+1. **The blackout (finding 1).** Section 5.
+2. **X_G's X7 (finding 7).** The X_G member's result in `smoke_part_c.json` carries `episode_flags` as a list. If it does not, tonight's X_G X7 line is not relied on.
+3. **The start state (finding 8).** After each close, on the Air's copy, the lead re-evaluates the run with #783's evaluator (`facts_from_bundle` and `evaluate`; the same journals and turn records the run's own evaluator read, no energy file) and sets the two verdicts side by side. A line that differs comes to me with both runs, as RL-155a already asks when the two runs disagree.
+
+### 4.3 The counted dev-01 sub-span on `b4b6aeb19`: unaffected
+
+Kit `c76344c5` executes the bytes of `b4b6aeb19`. #783 is not in them and reads nothing a campaign rule reads. The legs count.
+
+**The next re-pin** carries #783's three frozen-path changes on top of #777's. RL-152 §2.2's class B expectation extends to them on two conditions, which that re-pin's cold seat checks:
+- no campaign call reaches `soak_child` with `parts == "C"`, so the soak check a leg sees is the old one;
+- no code reached inside a leg reads `d_n_chunk_status`.
+
+The config's hash then differs between dev-01/dev-02 and later blocks by that one label. The re-pin's record says so.
+
+---
+
+## 5. A correction to RL-155a §1.2, row 3
+
+**"By 23:15" is wrong on the worst case. Tonight's second Part C starts its soak at or before 22:50:40; the lead launches by 22:40. If that is missed it does not run.**
+
+- I wrote 23:15 on "about 2 h". The kit's own bound is 1,800 s of soak plus a 9,560 s Part C cap, 11,360 s in all, and the launcher's whole plan is 12,180 s. From 23:15 the worst case ends at 02:24, inside the batch blackout.
+- Ruling 8 keeps soak and step tests out of 02:00 to 02:35. That is what finding 1's check will enforce in code once #783 is the running commit. Tonight, at `f30a97d00`, the check is soak-only, so the lead applies it by hand to both runs: soak start plus 11,360 s is at or before 02:00:00.
+- The first run (pilot close plus 20 min, latest 22:00) is inside the bound.
+- **The same arithmetic binds F0 in the ladder:** an F0 whose soak would start between 22:50:40 and 02:35 is not launched. RL-155a §2's F0 row gains that line.
+
+If the second Part C misses 22:40, the machine is quiet until 02:40. The ladder has nothing else that fits, and that is a recorded miss against R-B.
+
+---
+
+## 6. What comes back to me
+
+1. #783's final head for gate row 4, with §1's and §2's text changes and §3.2's print.
+2. The side-by-side verdicts of §4.2 item 3, if any line differs.
+3. Any third member of TV0h's alias group on the slot session (§2).
+4. The follow-up PR of §3.1, for its cold pass.
+5. Everything RL-153 §3 and RL-155 still list.
+
+---
+
+**Owner.** #783 builder: §1's three text items, §2's code, test and row, §3.2's print and test. Lead: the three hand checks of §4.2; the 22:40 launch bound and the F0 line of §5; the two checklist lines of §3.1; arranging the follow-up PR; recording the diff of §4.1 at the merge. Magistrate: tonight's runs within §5; the first F0 at the merge commit. The re-pin's cold seat: §4.3's two conditions. Research lead: section 6.
+**Gate.** #783 merges on its own five rows; row 4 is my cold pass of the final head. Findings 3, 4, 5 and 9 gate the W1 receipt, as dispositioned. The slot session waits for a Part C pass at a commit containing #783. The receipt retirement merges before the W1 receipt. Nothing here gates tonight's runs except §5's start bound.
+**Amends.** RL-152 §1.2 (a fourth condition). RL-145 §3 (the lexical rule is the selection rule on the saved Part B classification and is not a condition of the session's bar). RL-155 §3.1 (the carry rule as restated in §4.1; #783 resets the pass). RL-155a §1.2 row 3 and §2's F0 row (the 22:50:40 bound). The dispositions' gate for findings 1, 7 and 8 (read as in §4.2). DEVIATIONS RL149-DUTY-TURNS and RL149-ALIAS-PAIR-R8-6 (the text of §1 and §2).
+**Blind status.** Blind: no v4 outcome exists and nothing sealed or measured was opened. This ruling rests on rulings, code, test code, one test run and three numbers computed from the launcher's own functions. The alias bar and the turn-opportunity condition are fixed on code alone, before the slot session exists.
