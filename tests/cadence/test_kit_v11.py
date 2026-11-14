@@ -334,5 +334,54 @@ class V1Untouched(unittest.TestCase):
             self.assertEqual((runner.ROOT / path).read_text(), self.at_pilot_commit(path), path)
 
 
+class CommittedDev03Kit(unittest.TestCase):
+    """The dev-03 draft on kit v1.1a (the cell law only; RL-155 section 5.1). The lead pins and commits the
+    final bytes; this checks the draft's shape and that it changes no byte a leg executes."""
+    PLANNING_ONLY = {"joulewise/cadence/kit.py", "joulewise/cadence/kit_v11.py", "joulewise/cadence/legs.py",
+                     "scripts/cadence_legs_runner.py", "scripts/launch_cadence_span.py"}
+
+    def load(self, window=NEW_WINDOW):
+        return kitmod.load_kit(KITS / "cl-dev-03.json", batch_window=window)
+
+    def test_shape(self):
+        kit, _ = self.load()
+        self.load(OLD_WINDOW)
+        self.assertEqual((kit["schema"], kit["runner"]["kind"], kit["campaign_id"]),
+                         (kit_v11.SCHEMA, kit_v11.RUNNER_KIND, "cl-dev-03"))
+        self.assertEqual(kit["ruling"], {"id": "RL-149 §2", "authorizes_spans": True})
+        self.assertEqual(kit["seed_law"]["prompt_tokens"], SIZES)
+        sizes = [leg["prefill_tokens"] for leg in kit["legs"]]
+        self.assertEqual({s: sizes.count(s) for s in SIZES}, {s: 4 for s in SIZES})
+        self.assertEqual({(leg["decode_tokens"], leg["start_band"]) for leg in kit["legs"]}, {(4096, "q0")})
+        self.assertEqual(kitmod.deny_scan(kit), [])
+        dev02, _ = kitmod.load_kit(KITS / "cl-dev-02.json")
+        self.assertEqual(set(kit["frozen"]["paths"]), set(dev02["frozen"]["paths"]) | {"joulewise/cadence/kit_v11.py"})
+        self.assertEqual(kit["looks"], [])
+        rules = {r["id"]: r["text"] for r in kit["inclusion_rules"]}
+        self.assertIn("whether or not a redo replaced it", rules["not_a_replaced_attempt"])   # RL-150 R7
+
+    def test_class_b_no_executed_leg_byte_moves(self):
+        kit, _ = self.load()
+        dev01, _ = kitmod.load_kit(KITS / "cl-dev-01.json")
+        changed = {p for p, h in kit["frozen"]["paths"].items() if dev01["frozen"]["paths"].get(p) != h}
+        if kit["seed_law"]["g0_shapes"] == ["own"]:
+            self.assertLessEqual(changed, self.PLANNING_ONLY)
+
+    def test_frozen_paths_hash_at_the_frozen_commit_and_the_plan_fits(self):
+        kit, _ = self.load()
+        have = subprocess.run(["git", "-C", str(runner.ROOT), "cat-file", "-e", kit["frozen"]["commit"] + "^{commit}"],
+                              capture_output=True)
+        if have.returncode:
+            self.skipTest("frozen commit not in this clone")
+        self.assertEqual(kitmod.verify_frozen(kit, runner.ROOT), [])
+        t0 = local("2026-11-17T02:40")
+        pilot = legsmod.plan_span(kit, t0_epoch=t0, windows=[NEW_WINDOW], leg_ids=["L001", "L002", "L003"],
+                                  max_span_s=runner.max_span_s())
+        whole = legsmod.plan_span(kit, t0_epoch=t0, windows=[NEW_WINDOW], max_span_s=runner.max_span_s())
+        self.assertEqual(sorted(leg["prefill_tokens"] for leg in pilot["legs"]), SIZES)
+        self.assertLessEqual(whole["expected_s"], 5.0 * 3600)
+        self.assertEqual(whole["worst_case_s"], 40950)
+
+
 if __name__ == "__main__":
     unittest.main()
