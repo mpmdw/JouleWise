@@ -602,9 +602,9 @@ A single session says how much a number moves from run to run within about six h
 
 Figure 3 shows the order of sessions in the collection period.
 
-Collection closed on 21 October 2026 with three counting sessions per pack, nine in total. These are collection
-facts; the replication's numerical results remain sealed, and Section 6.8 remains an unfilled template.
-<!-- FACT H08: paper-audit §4.2 (replication close), C-11; RL-6(e), DLE-10. -->
+Collection closed on 21 October 2026 with three counting sessions per pack, nine in total. The replication's
+results were released on 13 November 2026 (Section 5.6) and are reported in Section 6.8.
+<!-- FACT H08: paper-audit §4.2 (replication close), C-11; RL-6(e), DLE-10; RL-147 §8; RUN_STATE item 312. -->
 
 ![Figure 3. Order of measurement sessions (schematic ledger).](figures/fig_p1_session_ledger.svg)
 
