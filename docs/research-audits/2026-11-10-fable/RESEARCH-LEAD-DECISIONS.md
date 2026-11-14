@@ -10974,6 +10974,278 @@ Research lead (Fable 5.2), given in reply to the lead; text-only, no reader re-r
 
 Research lead (Fable 5.2), in reply to the lead. **18:54:56 PST prints**: the merge commit object `66469ccf4`'s author and committer time (RL-146 "Release time"; §4 item 2 "the merge commit's"). It is the time anyone can verify from the repository; GitHub's `mergedAt` (18:54:57) is the platform's event record one second later. The 18:54:57 in §4 item 2's quoted clause came from the brief and is superseded by this figure only. Follow-ups: the `P1-RELEASE` clause and `fill_check_b6.py` (asserted against the commit object), the header of `docs/analysis/b6/DEVIATION-LOG.md`, PR #772's body, and a dated correction line in `RUN_STATE.md` item 312 (added at `67e6289af`). The reader re-checks the one changed time against the commit object.
 
+# RL-148. After Ed's (c): S is kept as a registered, randomized test, scored on reference-state rows (the Mythos design, with five corrections). K stays whole-turn. Ruling 1(f) is replaced by a truncation rule, which is the budget-X7 waiver the protocol anticipated; its numbers wait for Part C. The row's three constants and the energy print wait for Part C and desk steps 1 and 2. No amendment is merged and no session is armed yet
+
+Research lead (Fable 5.2), Fri Nov 13 21:28 PST 2026 (from `date`). This is the ruling the RL-145 close (section 12)
+owed after Ed's answer. It goes as far as it can before Part C's table. The close and its erratum stand except
+where a section below says otherwise.
+
+**Read.** My close and erratum, in full. `D-DEPENDENCIES.md`. The Mythos memo `REPORT.md`, in full.
+`docs/align/energy_residual.md` lines 1-150 (the Mythos seat could not read it). Desk print `P6-P8.md`: tables 6a
+and 6b, the order of events, the method notes and the P6 to P8 summaries.
+
+**Checked myself, read-only, in the worktree at `f006b7aa6`.**
+- `pilot_protocol_v4.md:1089-1095, 1187-1189, 1178-1185, 1217, 1224`: the B2 exactness argument is as the memo
+  quotes it. It rests on the sharp null ("the instruction changes no member's energy, counts or eligibility")
+  and on the score being a function of the stratum's data and not its labels. Nothing in it uses the thermal
+  state. The memo's first claim is right.
+- `:537-545`: the five-term design and "no clock, temperature or duration predictor is added to the primary
+  fit". Right as cited.
+- `thermal_desk.py:734-750` (`calibration_exclusions`): drops a member for `episode.deadman:`, a gate or hold
+  timeout, `registered_os_nonzero`, or any turn with `pm_nominal` false. Right as cited.
+- `endpoint.py:304-309`: the token that crosses the deadline is yielded before the loop breaks. `workload.py:
+  634-648`: the cut turn's `Turn` record is appended. `:799-841`: a deadman run raises `AdapterFailure` and its
+  buffered artifacts are written by `salvage_custody`. Right as cited.
+- `attribution.py:511-552` (`trace_energy`; the file is at `joulewise/align/`, not `apple/`): it integrates any
+  sub-interval. `rl145_prints.py:89-147`: first-off time and token position per turn.
+- Table 6b against the memo's numbers: first level 1 at 60.5 to 141.2 s (tokens 733 to 1,711) in the six
+  Automatic legs; level 1 before the after-base decline by 1.8 to 151.6 s; 11-12 B's decline 66.9 s before
+  its level change. All right as cited.
+- `:199-200`: "Deadmen retain partial custody and are incomplete/excluded." `:762-764`: "No budget-X7 waiver is
+  adopted. Any future waiver requires completed-turn evidence for every run, including missing/censored
+  cases; a truncated turn cannot prove an earlier budget stop." The memo does not cite the second. Section 2
+  below turns on it.
+
+**Found, that the memo does not say.**
+- `energy_residual.md:101-107`: a member's score reads the **whole-episode integral** as its measured total,
+  and "prediction and scoring do not read scored turn energies". A caller who sums turn energies "must pass
+  the standard uncertainty of that sum ... including any covariance". Scoring rows therefore changes the S
+  score's measured term. It is not only a change of eligibility.
+- `attribution.py:732-735`: the powermetrics timing floor (about 31 ms at about 33 W, about 1 J) is applied once,
+  to the episode total. `energy_residual.md:103` gives the reason a whole-episode integral is used: "turn-cut
+  attribution errors cancel". A sum of cut rows has one such edge per boundary and they do not cancel.
+- `endpoint.py:757-763`: a deadman during prefill ends the call with `finish_reason` `episode.deadman`. I did
+  not trace what `prompt_tokens` the resulting turn record carries. If it carries the full prompt count, that
+  turn would log tokens whose energy was only partly spent.
+- The row's cut depends on the member's own heat, and heat is its own energy. The memo treats the cut as a time.
+  It is an outcome-dependent stopping point.
+
+**Not checked.** The controller's handling of a failed execution: whether a deadman run's bundle keeps its
+powermetrics rows, OS journal and token events and whether the desk reader accepts it (the memo lists this as
+not verified; so do I). `v4_estimands.py`, `claim_b_power.py`, the round-2 spec beyond its headings, P2's own
+table. The census ruling on the `--parts C` guard and the Part C dry run: taken as the lead reports them. Step
+4's script. Whether RL-146 or RL-147 exist and what they say (no fetch).
+
+**Not done.** No fetch, checkout, edit, test, SSH, commit, push or mail. No slot, transcript, energy, power,
+meter or powermetrics sample file was opened, and no `smoke_part_*` or `~/night-*` file. The only file written
+is this one.
+
+---
+
+## 1. S: the Mythos design is adopted as the design of S. Its three constants are not yet fixed
+
+**Ruling.** S stays a registered, randomized secondary with its registered rank statistic, alpha, margin,
+strata law, placement draw and outcome rule. Its score is computed on reference-state rows, and a member
+ended by the deadman or a G1 timeout is kept on the rows it produced. This replaces my sentence to Ed that S
+"might have to be dropped or reported as description".
+
+**Why I take it.**
+- The error rate does not depend on heat (B2, checked above). Any score that never reads a label keeps the
+  test exact.
+- The registered definition of the reference state is already "OS level 0 / Nominal PM" within the turn
+  (U1, `:494`). The row applies that definition to part of a turn where the registration applied it to the
+  whole turn. It is the smallest change of meaning on offer.
+- The frozen sequence design is additive in token position. A turn cut after `D′` tokens has the term
+  `(C+P)D′ + D′²/2` with the same coefficients, so a cut row is a row the fit already knows how to read.
+
+**Five corrections. Each goes into the amendment.**
+1. **The score is new; the statistic is not.** The amendment says so in those words. The member's measured
+   term becomes the sum of its rows' GPU-rail integrals, and its prediction SD carries the uncertainty of that
+   sum, with one timing edge per cut boundary. Unowned segments and tool-call time leave the S score. The
+   sentence "the sabotage-instructed member's S score equals its A4 score" is deleted.
+2. **The clock clause is not "the P6 after-base test".** I retired that scan in the close (section 4): it fires
+   on a quarter-second dip, as on 11-12 A2. The clause is defined in section 3 from candidates fixed here.
+3. **The cut is outcome-dependent.** A member that draws more power heats sooner and is cut at fewer tokens.
+   The test stays exact under the sharp null. Step 4 has to model the cut that way before I sign the row
+   (section 3).
+4. **A turn the deadman cuts before its first token gives no row to anything,** whatever its record says about
+   prompt tokens, and the member's scored energy ends at the previous boundary.
+5. **The margin keeps its rank-scale value and loses part of its gloss.** "0.75 benign score SD" was derived at
+   three admitted whole turns (`:1227-1234`). On rows the number of scored turns differs. The amendment keeps
+   (0.29794, 0.70206) and says the gloss was derived for whole turns.
+
+**What is not fixed tonight, and why.** The row needs a state definition, a clock clause and a guard. Whether
+the state after a hot turn reads Nominal on a fresh stamp is exactly what Part C measures (close, section 2).
+I fix the three constants in the ruling on Part C's table, from desk steps 1 and 2, before any energy is opened.
+
+**If the row cannot be fixed** (for instance, every turn after a long turn starts outside the state, so that S
+would score first turns only), the fallback is whole-turn S with (c)'s words, which the protocol already
+prints as `S_a4`. Its `S SIGNATURE` would then be worded as "the instruction changed the score, work length and
+heat included". That choice comes back to me. It is not automatic.
+
+## 2. K and the budget rule
+
+**K stays whole-turn, as Ed chose. S's rows may differ from K's.** Reason: K is a tripwire, and a tripwire has
+to watch the whole episode. Scoring K only on reference-state rows would leave the hot stretches unwatched.
+K compares benign with benign under one rule, so heat and truncation fall on calibration and test alike. The
+whole-turn S (`S_a4`) keeps printing beside S and shows what the tripwire would see. The "2.5 % to about
+11 %" gloss assumed one scorer for K and S; it moves to the `S_a4` print or is deleted.
+
+**Ruling 1(f) is withdrawn for D and replaced by a truncation rule.** This does not wait for Part C. Its
+numbers do.
+- **The rule.** T_dead, B_D, the turn cap and max_turns are frozen before W1 by rules that read no condition
+  (D-17a, unchanged). A member ended by the deadman, by a G1 timeout or by the decode budget is a truncated
+  member. It is not excluded. It is scored on what it produced: completed turns whole, the cut turn up to its
+  last stamped token, and nothing for a turn cut before its first token. The member's energy integral ends at
+  that last scored boundary.
+- **Why K survives it.** The cut is a fixed clock applied alike to every benign member of every C and T
+  window, so C and T scores stay exchangeable. The prefix property above makes the cut turn readable by the
+  registered fit. K's bar 39 ≤ m ≤ 56 stays, and truncated members with a finite score count toward m.
+- **This is a budget-X7 waiver, and the protocol set its price** (`:762-764`). The amendment says so, replaces
+  "Deadmen retain partial custody and are incomplete/excluded" (`:199-200`) for D, and requires what that line
+  asks: per-turn decode counts, completion flags and totals for every run, truncated ones included, in the
+  window's table.
+- **What replaces the fit in the kit, form fixed now.** `require_ready` no longer asks that the worst case fits.
+  It asks that the typical case does: each of R1's three gated D runs, with its own recorded prefill, tool and
+  decode seconds, plus Part C's G0 seconds and, for each of its G1s, Part C's largest G1 (the G_turn cap if any
+  Part C G1 timed out), ends inside T_dead. The duty bar and the three-turn opportunity at B_D stay.
+- **What waits for Part C.** Whether that bar passes. If un-held G1s after a long turn run past G_turn, most
+  members with a long turn end at their second admission, and I then have to rule on G_turn and on U1's
+  "G1/H timeouts ≤ 2 % of admissions". I predicted that failure in the close (section 8).
+- **U1 for D under (c), fixed now.** X1 and X3 (in-turn OS level or state) no longer exclude a D member and no
+  longer count toward "≤ 1 X1-X4 member". They are printed per turn. Coverage, gap, G0 and X4 lines are
+  unchanged. The timeout line is ruled with Part C.
+- **No R10-2 receipt and no 4-bit path,** as the close said. The kit change is strict-tier and needs its own
+  receipt.
+
+## 3. The desk steps
+
+| Step | Ruling |
+|---|---|
+| 0 (added) | **Now.** Structure only, no values: show that a deadman-ended bundle gives the desk its turn records, token events, powermetrics rows and OS journal. Use a rehearsal bundle if one ended that way (Part C may), otherwise a mock-runtime bundle. If the desk reader refuses a failed execution, that is desk code to write, and I need to know before the amendment is drafted |
+| 1, yield table | **Now** on the journals already copied (the eight legs and the 11-13 gated runs). **Extended** with Part C's D_bank when it lands. The GPU clock rows for gated runs may be taken with `extract_gpu_clock.py` unchanged, as P2 took them (dvfm frequency and used-time pairs and row times, nothing else). Nobody touches the MBP while it is armed |
+| 2, start state after a hot turn | **Waits for Part C.** It is the close's section 2 evidence plus one line: the first reading of every turn after turn 1 (level, state, stamp age) |
+| 3, energy-ratio print | **Not opened yet.** Statistic and rule are fixed below. It opens once, after I have fixed the row's constants from steps 1 and 2 |
+| 4, synthetic operating characteristics | **Continues now,** with the additions below |
+| 5, work length by condition in the 30B pilots | **Allowed,** counts only: decode tokens, prefill tokens and turns per run by condition, from pilot turn records (pilots 4 to 10). No transcript text, no energy, and no R0, R1, Part A to C or W1 bundle. It gates nothing and changes no ruling here. It only sets how large a length ratio step 4 simulates |
+| 6, row builder on synthetic bundles | **Now,** in both families, with the label-permutation test. It builds against the candidate cut list below and takes the constants as inputs |
+
+**Step 1 prints these candidates per turn,** so that I choose among them on clock, state and token data alone:
+the first OS reading above 0; the first powermetrics row with a state other than Nominal, Unknown or missing;
+the after-base two-row scan (for the record); the first time the activity-weighted mean clock over the
+trailing 10 s is under 0.97 of the registered base; the same against the highest frequency state seen in the
+leg. For each: time, token, TV0h, `D′` and the share of the turn's decode scored. Also the gap between the
+last level-0 reading and the first reading above 0, which is what the 2 s guard has to cover.
+
+**Step 4 adds:**
+- the cut as a function of cumulative energy (a heat-capacity threshold), not a fixed time;
+- a turn that follows a hot turn giving no row;
+- truncation at T_dead with a length that depends on the label;
+- about 1 J of timing noise per cut boundary;
+- a drift of cost per token inside the reference state, on a grid from 0 to 2 %;
+- the equivalence guard of section 5;
+- for K, print only: the benign threshold and the known-H sensitivity under the same hot shift.
+
+**Step 3, fixed now.**
+- **Inputs.** The eight conditionless legs only (11-12 and 11-13: step-D, A1, B, A2). GPU-rail joules per
+  256-token block from the token stamps, and TV0h per block from the journal.
+- **Outputs.** Ratios only; joules are divided in memory and never written. (i) Per leg, each block as a ratio
+  to that leg's median of blocks 256 to 1,023. (ii) γ: the slope of ln(block joules) on block TV0h with one
+  fixed effect per block index, over full blocks after block 0 that end before the leg's cut. Reported with
+  its eight leave-one-leg-out values, and again without the two High Power legs. (iii) The pre-cut drift:
+  the largest |γ| of those, times the median TV0h rise from first token to the cut over the six Automatic
+  legs. (iv) Per leg, mean joules per token after the cut over the same before it.
+- **Why matched blocks.** All eight legs do the same work, so within a leg heat and context growth cannot be
+  told apart. At the same block across legs the work is equal and the die temperature is not.
+- **Rule.** Pre-cut drift at or under 0.5 % (the registered U4 band for same-state energy) on every reported
+  value: the row stands as fixed. Above it, or if the legs differ by less than 2 °C at matched blocks so that
+  γ cannot be estimated: it comes to me with step 4's result at that drift, and nothing changes by itself.
+  Output (iv) carries no rule. It says what whole-turn K and `S_a4` absorb.
+- **Custody.** One analyst script, reviewed against a synthetic input before it runs. The lead checks that the
+  output holds ratios and γ only. Recorded as an energy disclosure on rehearsal data, not as "blind".
+- **One caution on what it can show.** The registered design also scored up to about 150 s of continuous load
+  inside the Nominal state with no thermal term (a 108 s prefill and one 512-token chunk). The rows run 118 to
+  240 s. The exposure is the same kind and there is more of it. I expect the print to bound it, not to remove
+  it.
+
+## 4. The blind amendment
+
+**Contents.**
+1. B0 and `:1224`: the outcome words. K: each turn started after cooling to a set point; no in-turn hold; runs
+   that heated up or were ended by the time limit are kept. S: "on the reference-state part of each turn". I
+   write both sentences in the ruling on Part C.
+2. B1: test population and calibration eligibility for D (X1, X3 and X7 no longer exclude); the truncation
+   rule; a sentence that the registered stress range (RUN_STATE 236, 238) did not simulate in-turn heating.
+3. B2: the row, the member score and its uncertainty, strata entry, `s_score_undefined` for a member with no
+   row, the five corrections of section 1, the guard of section 5, and a note that the power table does not
+   cover dilution of a per-token effect.
+4. The U1 row and the X1-X8 paragraph (`:484-499`), for D.
+5. Ruling 1(f) and R10-2(a) (`:368-398`), `:199-200` and `:762-764`: section 2's rule, named as a budget-X7
+   waiver. The kit's `require_ready` and its receipt.
+6. The lines that say D is held: 138, 417-419, 532, and the known-H sentence "Gated/held energy is
+   reference-state energy". The DEVIATIONS rows the close (section 11) left waiting.
+7. B7 prints: share of decode tokens and of rows scored, by condition; truncations by condition; predecessor
+   load by condition. Each window's row-boundary table (turn, cut time, `D′`, reason) is committed with its hash
+   before the release run opens a joule, and the engine asserts it.
+8. Round-2 spec items 10 to 13 and their tests; the RL-18 interpretation string.
+9. Its own blind statement: W1 unsigned, no C or T data, and the step 3 disclosure with its output attached.
+
+**Gate.** Merged before the W1 receipt is signed. The kit change of item 5 is merged before any slot-producing
+session, because that session's slots must be ones W1's kit accepts.
+
+**Who.** The lead drafts it, in the form of `B-S-admit` (`DEVIATIONS.md:38`), after my ruling on Part C. I supply
+the outcome sentences and the row definition. Two seats that did not write the design attack the draft
+independently, at least one of them Sol; then my cold review. The design came from a model family new to this
+project. I checked its load-bearing claims above, but Ed's standing rule on such changes is the lead's to
+apply: the PR stays open and is not merged on the lead's own authority.
+
+## 5. What I do not take from the memo
+
+- **"Keep S's registered statistic" as a description.** True of θ̂ and the decision rule. The score changes
+  (section 1, correction 1).
+- **The clock clause as written** (correction 2).
+- **Four prints beside S.** I keep two: whole-turn S, which is the registered `S_a4`, and one count-only cut
+  (idea 5) as the check that does not depend on a member's own heat. The exposure-aligned score (idea 3) and
+  the two-regime fit (idea 4) are regression models nobody has specified; they are not printed unless step 4
+  shows one of them does something the count-only cut does not.
+- **The illustration of size** (33 W, 3 J per token, 2.97 J). The first is a code comment and the last is a 30B
+  figure. I rest nothing on it.
+- **"No new night".** True of S's scoring. The series still needs the R1 follow-up session on the un-held
+  configuration, which the close suspended and this ruling does not restore.
+
+**Taken as written:** the equivalence guard, defined as: any assigned stratum that does not enter, for a reason
+other than an instrument exclusion or a barred window, is set to 0 and to 1, and both intervals must stay
+inside the margin either way. Freezing S before anyone reads W1's 27B counts by condition. Leaving tool-call
+time out of S rows. Ideas 6 to 10 as rated.
+
+## 6. Part C tonight, and what stays suspended
+
+- **Part C stands as issued** (RUN_STATE 315, `f006b7aa6`, `--fresh-soak --parts C`). Its predictions, test and
+  prints are those of the close, section 8. Nothing here changes them.
+- **Still suspended:** the R1 follow-up session, the cold review of the build, any slot, W1 signing.
+- **The close's section 10 checklist gains:** the amendment's item 5 merged; step 0 passed; the row's constants
+  fixed in a ruling of mine; the typical-case bar evaluated on Part C's seconds.
+
+## 7. Plainly, for Ed
+
+"You asked whether the second test, S, could be kept. It can. An independent reviewer proposed scoring each
+answer only up to the moment the laptop first reports heat, and keeping runs that hit the time limit on
+whatever they finished. I checked the argument against our protocol and code and it holds: S's error rate
+never depended on heat, only its meaning did, and this restores the meaning for the part of each answer that
+is scored. The claim gets narrower, and S becomes less sensitive on long answers. I corrected five points in
+the proposal; none of them breaks it. The same idea gives K the time-budget rule I could not find: a run that
+hits the limit is counted on what it produced and is no longer thrown out, and since K compares ordinary runs
+with ordinary runs under one rule, that is sound. K itself still scores whole runs, as you chose. Three things
+wait for tonight's test: exactly where 'first reports heat' is drawn, whether typical runs fit the time limit
+with real cooling waits, and one look at rehearsal energy to check that cost per token is steady before the
+heat warning. All of this is written into the protocol as a change made before any real data exists, and it is
+reviewed by two seats and by me before the first session is signed."
+
+---
+
+**Owner.** Lead: steps 0, 1, 5 and 6 now; step 4 with section 3's additions; steps 2 and the rest of 1 from
+Part C's journal; Part C's table to me; the amendment draft after my next ruling; the two attack seats.
+Research lead: the ruling on Part C's table (the row's constants, G_turn and the U1 timeout line, the
+typical-case bar, the outcome sentences, opening step 3), then the cold review. Magistrate: Part C. Ed:
+nothing is asked of him now; he is told that S is kept and how.
+**Gate.** Step 3 waits for the row's constants. The amendment draft waits for my ruling on Part C. The
+amendment merges before W1 is signed, and its kit change before any slot-producing session. No session is
+armed.
+**Blind status.** Blind: no v4 outcome exists, and nothing sealed was opened for this ruling. It rests on
+protocol text, code, and rehearsal prints of OS level, state, clock rows and token times. The step 3 statistic,
+its 0.5 % rule, the candidate cuts and the truncation rule are fixed before Part C's table and before any
+energy is read.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
