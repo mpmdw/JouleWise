@@ -880,19 +880,17 @@ def picks_aliased(classification):
                                for group in (groups if isinstance(groups, list) else ()))
 
 
-# RL-145 close section 5, RL-152 section 1.6 ("that pair and no other"): the ruled alias pair by name, fast key
-# first. PR #777 row-2 finding 4: the bar admits this pair by name. RL-145 section 3's lexical rule (the slow pick
-# is the lexically first other member of the fast pick's alias group) stays beside it as a second condition,
-# fail closed, until the research lead rules whether it stays.
+# RL-145 close section 5, RL-152 section 1.6 ("that pair and no other"), RL-156 section 2: the ruled alias pair
+# by name, fast key first (PR #777 row-2 finding 4). RL-145 section 3's lexical rule is the selection rule on the
+# saved Part B classification (align_r1_followup_kit.alias_second_key_selection), not a condition of the bar.
 RULED_ALIAS_PAIR = ("TV0h", "TV1h")
 
 
 def ruled_alias_pair(classification):
     """RL-145 close sections 5 and 10, RL-149 section 5 item 12, RL-152 section 1.6 (cited rebind of R8-6's bar
-    for one pair): the picks are exactly ``RULED_ALIAS_PAIR`` (fast TV0h, slow TV1h), the slow pick is the
-    lexically first other member of the fast pick's alias group in the session's classification (RL-145
-    section 3, kept beside the name pending the research lead), on an ok RL-145 night confirmation that names
-    both picks. For this pair only the close replaced "aliases do not fill both roles"; any other aliased pair,
+    for one pair; RL-156 section 2): the picks are exactly ``RULED_ALIAS_PAIR`` (fast TV0h, slow TV1h), TV1h is
+    in TV0h's alias group in the session's classification, on an ok RL-145 night confirmation that names both
+    picks. For this pair only the close replaced "aliases do not fill both roles"; any other aliased pair,
     the swapped pair included, still fails the bar. The same test as the W1 kit's ``ruled_alias_pair``
     (``scripts/align_v4_kit.py``)."""
     fast, slow = classification.get("s_fast"), classification.get("s_slow")
@@ -902,7 +900,6 @@ def ruled_alias_pair(classification):
     confirmation = classification.get("night_confirmation")
     confirmation = confirmation if isinstance(confirmation, dict) else {}
     return ((fast, slow) == RULED_ALIAS_PAIR and group is not None and slow in group
-            and slow == min(k for k in group if k != fast)
             and confirmation.get("ok") is True and confirmation.get("second_key_rule") == "RL-145"
             and confirmation.get("s_fast") == fast and confirmation.get("s_slow") == slow)
 

@@ -488,6 +488,12 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         result["elapsed_s"] = time.monotonic() - started
         (output / "smoke_part_c.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
         (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        # RL-153 section 1.2 note 6, RL-156 section 3.2: the verdict and the evaluation's log (RL-152 section
+        # 1.4's line among them) go to the terminal as well as the record; the record is unchanged.
+        if verdict_doc is not None:
+            print(f"Part C verdict: {verdict_doc.get('verdict')} (pass: {verdict_doc.get('pass')})")
+            for line in verdict_doc.get("log") or ():
+                print(f"Part C log: {line}")
     try:
         result["members"]["predecessor"] = invoke(runtime, "capture-predecessor-30b", output / "capture_predecessor_30b",
                                                   soak_reference=soak_reference)

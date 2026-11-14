@@ -1,6 +1,6 @@
 """PR #777 row-2 attack (Mythos 5.2, /Volumes/JW-EXT/scratch/mythos-777-attack/REPORT.md): tests built from the
 seat's reproductions, one class per finding the lead's dispositions fix on PR #783. Each repro fails at 2646197e3
-(PR #783 before these fixes) and passes with the fix; the one test that pins behaviour left fail closed says so.
+(PR #783 before these fixes) and passes with the fix.
 Finding 6 was fixed by RL-153 section 1.2 finding 1 (tests/align/test_w1_3a_desk.py). Synthetic records and
 journals only; no host, journal or study data.
 """
@@ -79,7 +79,8 @@ class Finding2DeskStaleStampTests(unittest.TestCase):
 
 
 class Finding3TurnOpportunityCrossCheckTests(unittest.TestCase):
-    """LOW: not_applicable also needs x7 False, g1_timeouts 0 and g0_outcome released (pending research lead)."""
+    """LOW: RL-152 section 1.2's fourth condition (RL-156 section 1): not_applicable also needs the row to show no
+    cut, i.e. x7 False, g1_timeouts the integer 0 and g0_outcome released; otherwise the run fails."""
 
     def record(self, **bank):
         _inputs, slots = ready_inputs()
@@ -107,8 +108,8 @@ class Finding3TurnOpportunityCrossCheckTests(unittest.TestCase):
 
 
 class Finding4AliasPairByNameTests(unittest.TestCase):
-    """LOW: the ruled alias pair is (TV0h, TV1h) by name, in the driver and in the kit's copy (pending research-lead
-    confirmation; the lexical rule stays beside the name, fail closed)."""
+    """LOW: the ruled alias pair is (TV0h, TV1h) by name, in the driver and in the kit's copy; RL-145 section 3's
+    lexical clause is not a condition of the bar (RL-156 section 2)."""
 
     @staticmethod
     def classification(fast, slow, groups):
@@ -120,11 +121,9 @@ class Finding4AliasPairByNameTests(unittest.TestCase):
         self.assertFalse(r1.ruled_alias_pair(self.classification('TV1h', 'TV0h', [['TV0h', 'TV1h']])))
         self.assertTrue(r1.ruled_alias_pair(self.classification('TV0h', 'TV1h', [['TV0h', 'TV1h']])))
 
-    def test_a_third_alias_sorting_between_still_refuses_pending_the_research_lead(self):
-        # Not a repro: the seat's second case (a third alias sorting between TV0h and TV1h refuses the ruled
-        # pair) is left fail closed. RL-145 section 3's lexical rule stays beside the name until the research
-        # lead rules whether it stays (DISPOSITIONS.md finding 4); this pins the current behaviour.
-        self.assertFalse(r1.ruled_alias_pair(self.classification('TV0h', 'TV1h', [['TV0h', 'TV0x', 'TV1h']])))
+    def test_a_third_alias_sorting_between_does_not_refuse_the_ruled_pair(self):
+        # The seat's second case. RL-156 section 2: the lexical clause leaves the bar; the pair by name stays.
+        self.assertTrue(r1.ruled_alias_pair(self.classification('TV0h', 'TV1h', [['TV0h', 'TV0x', 'TV1h']])))
         self.assertTrue(r1.ruled_alias_pair(self.classification('TV0h', 'TV1h', [['TV0h', 'TV1h', 'TVh0']])))
 
     def test_the_kit_copy_names_the_same_pair(self):
@@ -132,7 +131,7 @@ class Finding4AliasPairByNameTests(unittest.TestCase):
         self.assertEqual(r1.RULED_ALIAS_PAIR, ('TV0h', 'TV1h'))
         for fast, slow, groups, expected in (('Tp01', 'Tp05', [['Tp01', 'Tp05']], False),
                                              ('TV1h', 'TV0h', [['TV0h', 'TV1h']], False),
-                                             ('TV0h', 'TV1h', [['TV0h', 'TV0x', 'TV1h']], False),
+                                             ('TV0h', 'TV1h', [['TV0h', 'TV0x', 'TV1h']], True),
                                              ('TV0h', 'TV1h', [['TV0h', 'TV1h']], True)):
             with self.subTest(pair=(fast, slow), groups=groups):
                 c = self.classification(fast, slow, groups)

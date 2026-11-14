@@ -273,21 +273,20 @@ def planning_released_segments(r1_slots, release, root=ROOT):
     return set(planning)
 
 
-# RL-145 close section 5, RL-152 section 1.6: the ruled alias pair by name (fast, slow); the same constant as the
-# R1 driver's align_r1_rehearsal.RULED_ALIAS_PAIR (PR #777 row-2 finding 4).
+# RL-145 close section 5, RL-152 section 1.6, RL-156 section 2: the ruled alias pair by name (fast, slow); the
+# same constant as the R1 driver's align_r1_rehearsal.RULED_ALIAS_PAIR (PR #777 row-2 finding 4).
 RULED_ALIAS_PAIR = ('TV0h', 'TV1h')
 
 
 def ruled_alias_pair(sensors, aliases, confirmation):
-    """The W1 kit's copy of the driver's ``ruled_alias_pair``: the policy's picks are exactly RULED_ALIAS_PAIR,
-    both in one alias group of R1's classification, the slow pick being the lexically first other member of
-    the fast pick's group (RL-145 section 3, kept beside the name, fail closed, until the research lead rules
-    whether it stays), on an ok RL-145 night confirmation naming both."""
+    """The W1 kit's copy of the driver's ``ruled_alias_pair`` (RL-156 section 2): the policy's picks are exactly
+    RULED_ALIAS_PAIR, TV1h in TV0h's alias group of R1's classification, on an ok RL-145 night confirmation
+    naming both. RL-145 section 3's lexical rule is the selection rule on the saved Part B classification
+    (``align_r1_followup_kit.alias_second_key_selection``), not a condition of this bar."""
     fast, slow = (sensors or {}).get('s_fast'), (sensors or {}).get('s_slow')
     confirmation = confirmation if isinstance(confirmation, dict) else {}
     group = next((g for g in (aliases or ()) if isinstance(g, list) and fast in g), None)
     return ((fast, slow) == RULED_ALIAS_PAIR and group is not None and slow in group
-            and slow == min(k for k in group if k != fast)
             and confirmation.get('ok') is True and confirmation.get('second_key_rule') == 'RL-145'
             and all(confirmation.get(r) == v for r, v in (('s_fast', fast), ('s_slow', slow))))
 
@@ -382,15 +381,14 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planni
     if isinstance(sensors, dict):
         fast, slow = sensors.get('s_fast'), sensors.get('s_slow')
         confirmation = classified.get('night_confirmation') or {}
-        # RL-145 close section 5, RL-152 section 1.6: the ruled pair is TV0h/TV1h by name (RULED_ALIAS_PAIR),
-        # one thermometer read twice, with RL-145 section 3's lexical rule beside it; only that pair, and only
-        # on an ok RL-145 confirmation that names it, passes. Any other aliased pair still refuses (PR #777
-        # row-2 finding 4).
+        # RL-145 close section 5, RL-152 section 1.6, RL-156 section 2: the ruled pair is TV0h/TV1h by name
+        # (RULED_ALIAS_PAIR), one thermometer read twice; only that pair, and only on an ok RL-145 confirmation
+        # that names it, passes. Any other aliased pair still refuses (PR #777 row-2 finding 4).
         ruled = ruled_alias_pair(sensors, aliases, confirmation)
         if fast == slow or (any(fast in g and slow in g for g in aliases) and not ruled):
             raise ValueError('R1.thermal_policy s_fast/s_slow: aliased keys are one thermometer '
-                             '(LEAD-RULINGS-2 R7-13; RL-145 and RL-152 section 1.6 admit only TV0h/TV1h on an ok '
-                             'RL-145 night confirmation)')
+                             '(LEAD-RULINGS-2 R7-13; RL-145, RL-152 section 1.6 and RL-156 section 2 admit only '
+                             'TV0h/TV1h on an ok RL-145 night confirmation)')
         fixed_pair = (confirmation.get('ok') is True and confirmation.get('authority') == 'RL-78'
                       and all(confirmation.get(r) == sensors.get(r) for r in ('s_fast', 's_slow')))
         if sensors.get('s_fast') not in (classified.get('die_candidates') or ()) and not fixed_pair:
@@ -591,9 +589,9 @@ def turn_opportunity(r1_slots, b_d):
         # have cut before a turn it took still fails.
         stop = ((row.get('duty_bar') or {}).get('stop') or {}) if isinstance(row.get('duty_bar'), dict) else {}
         own_stop = isinstance(stop, dict) and stop.get('own_stop') is True
-        # PR #777 row-2 finding 3 (fail-closed; pending the research lead's confirmation of this tightening of
-        # RL-152 section 1.2): the row itself must also show no cut, so a stale or hand-edited own_stop cannot
-        # stand alone: x7 false, no G1 timeout (an int 0) and a released G0.
+        # RL-156 section 1 (PR #777 row-2 finding 3), RL-152 section 1.2's fourth condition: the row itself
+        # must also show no cut, so a stale or hand-edited own_stop cannot stand alone: x7 false, no G1 timeout
+        # (an int 0) and a released G0. A run that meets the other three conditions and not this one fails.
         g1_timeouts = row.get('g1_timeouts')
         uncut = (row.get('x7') is False and type(g1_timeouts) is int and g1_timeouts == 0
                  and row.get('g0_outcome') == 'released')
