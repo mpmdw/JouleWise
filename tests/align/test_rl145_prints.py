@@ -183,18 +183,23 @@ class CloseSection2Tests(unittest.TestCase):
         self.assertEqual(p.gate_state_prints([], quiet, [t], 'TV0h')['quiet_after_last_token'][0]['s_from_last_token'],
                          0.0)
 
-    def test_the_stamp_rule_has_a_sanity_floor_and_refuses_non_numbers(self):
-        # PR #777 row-1 review, finding 7: below -60 s is a clock mix-up, not a fresh stamp; it warns.
+    def test_a_stamp_is_fresh_within_2_s_of_the_sample_on_either_side(self):
+        # RL-152 section 1.6: fresh in [-2 s, +2 s]; below -2 s or non-finite: not recorded, with a warning.
         import contextlib
         import io
-        self.assertTrue(p.stamp_fresh(-59.9) and p.stamp_fresh(-0.02) and p.stamp_fresh(2.0))
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            self.assertFalse(p.stamp_fresh(-60.5))
-        self.assertIn('sanity floor', err.getvalue())
-        for bad in (float('nan'), float('-inf'), float('inf'), True, '1.0', None):
-            with self.subTest(bad=bad), contextlib.redirect_stderr(io.StringIO()):
+        for age in (-2.0, -0.02, 0.0, 2.0):
+            with self.subTest(age=age):
+                self.assertTrue(p.stamp_fresh(age))
+        for age in (-2.01, -60.5, float('nan'), float('-inf'), float('inf')):
+            with self.subTest(age=age):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    self.assertFalse(p.stamp_fresh(age))
+                self.assertIn('RL-152', err.getvalue())
+        for bad in (True, '1.0', None, 2.01):
+            with self.subTest(bad=bad), contextlib.redirect_stderr(io.StringIO()) as err:
                 self.assertFalse(p.stamp_fresh(bad))
+                self.assertEqual(err.getvalue(), '')
 
     def test_tv1h_unequal_rows_are_counted_inside_and_outside_gate_windows(self):
         # RL-149 section 1.7: the per-member count, inside and outside gate windows; outside rows never fire.

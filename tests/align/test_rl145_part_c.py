@@ -90,7 +90,8 @@ class EvaluatorPassTests(unittest.TestCase):
         result = run(x_g=None, x_g_not_run_reason='launcher cannot run it')
         self.assertTrue(result['pass'])
         self.assertIsNone(result['lines']['x_g'])
-        self.assertEqual(result['log'], ['X_G was not run: launcher cannot run it'])
+        self.assertEqual(result['log'], ['three-turn clause not evaluated: one D run',     # RL-152 section 1.4
+                                         'X_G was not run: launcher cannot run it'])
 
 
 class EvaluatorFailureTests(unittest.TestCase):
@@ -349,8 +350,9 @@ class SidecarJournalTests(unittest.TestCase):
         self.assertFalse(pc.stamp_fresh(2.0001) or pc.stamp_fresh(None) or pc.stamp_fresh(True))
         import contextlib
         import io
-        with contextlib.redirect_stderr(io.StringIO()):         # one rule with the desk prints: -60 s floor
-            self.assertFalse(pc.stamp_fresh(-61.0) or pc.stamp_fresh(float('nan')))
+        with contextlib.redirect_stderr(io.StringIO()):         # RL-152 section 1.6: 2 s on either side
+            self.assertFalse(pc.stamp_fresh(-2.01) or pc.stamp_fresh(float('nan')))
+        self.assertTrue(pc.stamp_fresh(-2.0))
 
     def test_an_off_state_reading_fails_with_its_values(self):
         self.state.update(os_level=1, pm_state='Moderate')

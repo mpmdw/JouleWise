@@ -47,6 +47,7 @@ STEP_D_SLOPE_C_PER_MIN = 0.2
 STAMP_MAX_AGE_S = 2.0
 MIN_ADMITTED_TURNS = 3
 GATE_SHARE_OF_T_DEAD = 0.40
+THREE_TURN_CLAUSE_LINE = "three-turn clause not evaluated: one D run"   # RL-152 section 1.4
 PREDICTED_NOT_JUDGED = ("D_bank turn 1 (11,211 prefill tokens and a long decode): OS level 2 before token 2,048; "
                         "last-512 clock ratio between 0.83 and 0.93; token rate ratio at or above 0.98. "
                         "Printed beside the measurement; no verdict reads it.")
@@ -146,8 +147,8 @@ def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
 def stamp_fresh(age_s):
     """RL-145 close section 2 / row 7, as written (RL-149 section 1.2 item 4): the state's stamp is at most
     2 s old. The age is taken at the sample's own stamp; a stamp that follows it (negative age) is not old.
-    One rule with the desk prints (``rl145_prints.stamp_fresh``): a non-finite age or one below its -60 s
-    sanity floor is not fresh, and the latter warns."""
+    One rule with the desk prints (``rl145_prints.stamp_fresh``; RL-152 section 1.6): fresh within 2 s of the
+    sample on either side; a non-finite age or one below -2 s is not recorded, with a printed warning."""
     from joulewise.align.apple.rl145_prints import FRESH_STAMP_S, stamp_fresh as rule
     assert FRESH_STAMP_S == STAMP_MAX_AGE_S
     return rule(age_s)
@@ -209,7 +210,8 @@ def evaluate(*, step_d, d_bank, n_chunk, x_g=None, x_g_not_run_reason=None, prin
              "d_bank_mechanics": None if mechanics is None else _check(all(v["pass"] for v in _judged(mechanics).values()),
                                                                        checks=mechanics),
              "d_bank_start_state": start, "x_g": x_g_line(x_g)}
-    log = []
+    # RL-152 section 1.4: the slot session's set clause (one D run with three turns) is not applied here.
+    log = [THREE_TURN_CLAUSE_LINE] if d_bank is not None else []
     if x_g is None:
         log.append("X_G was not run: " + (x_g_not_run_reason or "no reason recorded"))
     judged = [v for v in lines.values() if v is not None]

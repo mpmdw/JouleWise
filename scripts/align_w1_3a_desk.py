@@ -29,6 +29,13 @@ amendment):
   duplicate rows under one kit segment name. Superseded attempts (``.rejectedN``,
   ``.g0_timeoutN``) are classified by the same rule, labelled, never emitted.
 
+RL-152 section 1.1 (RL-149 section 1.7, RL-145 close section 5): the heater key is the
+configured ``s_slow`` (TV1h), an alias of the fast key TV0h, and TV1h has read a multiple of
+5 C on isolated rows. Every G0 interval prints ``fast_slow_unequal_last_300s``: the number of
+readings in its last 300 s whose ``s_fast`` and ``s_slow`` values differ (both valid). Print
+only; the class does not read it. Before signing a planning release the lead reads it: a
+non-zero count sends that segment to the research lead.
+
 A released G0 is classified ``released`` (nothing to rule). The output is
 deterministic: no wall clock, sorted keys. ``kit_record_segments`` carries the
 rows the W1 kit's ``r1_planning_release.json`` expects for the 3(a) segments
@@ -202,6 +209,14 @@ def analyse_gate(phase, gate, start, readings, delta_slow, delta_source, precool
     row['last_300s_count_ge_threshold'] = (sum(1 for v in last if round(v - edge + EDGE_C, 9) >= 0)
                                            if edge is not None else None)
     row['exit_slope_c_per_min'] = r6(gate.get('slope_c_per_min')) if finite(gate.get('slope_c_per_min')) else None
+    # RL-152 section 1.1: unequal fast/slow rows in the last 300 s (print only; the lead reads it).
+    fast = start.get('s_fast')
+    if fast and heater and fast != heater and finite(e_ns):
+        fast_by_t = {t: v for t, v, *_ in sample_points(readings, fast)}
+        pairs = [(fast_by_t.get(t), v) for t, v in values if t >= e_ns - WINDOW_S * NS]
+        row['fast_slow_unequal_last_300s'] = sum(1 for a, b in pairs if a is not None and b is not None and a != b)
+    else:
+        row['fast_slow_unequal_last_300s'] = None
     row['stale_power_state_samples'] = sum(1 for t, _, _, _, pm in points
                                            if type(pm) is not int or t - pm > FRESH_NS)
     levels = sorted({p[2] for p in points if p[2] is not None})
@@ -342,7 +357,7 @@ def _f(value, fmt='{:.3f}'):
 
 def render(report):
     head = ('turn', 'outcome', 'dur_s', 'key', 'target', 'edge', 'last300', 'margin', 'whole', 'os', 'nom',
-            'median300', 'n>=thr', 'slope', 'stale_pm', 'precool', 'class')
+            'median300', 'n>=thr', 'slope', 'stale_pm', 'unequal300', 'precool', 'class')
     lines = [f"RL-122 3(a) desk: night {report['night']}", '  '.join(head)]
     for r in report['g0_intervals']:
         pre = r.get('precool')
@@ -358,7 +373,7 @@ def render(report):
             'yes' if r['nominal_throughout'] else 'NO',
             _f(r['last_300s_median_c']) + '+', _f(r['last_300s_count_ge_threshold'], '{}') + '+',
             _f(r['exit_slope_c_per_min'], '{:+.3f}') + '+', str(r['stale_power_state_samples']) + '+',
-            pre_text, r['classification'])))
+            _f(r.get('fast_slow_unequal_last_300s'), '{}') + '+', pre_text, r['classification'])))
         if pre is not None:
             lines.append(f"    precool {pre['phase']}: released {pre['released']}, last curve value "
                          f"{_f(pre['last_curve_c'])}")
@@ -370,7 +385,8 @@ def render(report):
     if report['kit_record_segments_note']:
         lines.append(report['kit_record_segments_note'])
     lines.append('margin = last-300-s peak - (band edge - 0.3); >= 0 meets the pattern. '
-                 '* whole-G0 peak and + columns: disclosure only.')
+                 '* whole-G0 peak and + columns: disclosure only. unequal300 > 0 on a planning '
+                 'release: the segment goes to the research lead (RL-152 section 1.1).')
     return '\n'.join(lines)
 
 
