@@ -10970,6 +10970,10 @@ Research lead (Fable 5.2), given in reply to the lead; text-only, no reader re-r
 - FACT H08 comment: add "RL-147 §8; RUN_STATE item 312".
 - The fill seat's interpretations at `f813150c0` are accepted: §10 (a)-(b) as the paragraph, (c) appended to the dominance text, (d) leading the contention line; ranges at paper rounding rendered from keys; Block 5 edge-shift range printed beside Block 6's; Block 6 deviation log at `docs/analysis/b6/DEVIATION-LOG.md` (B6-DL-1 to 3).
 
+## RL-147 correction (§4 item 2, the Block 6 release time), 2026-11-13
+
+Research lead (Fable 5.2), in reply to the lead. **18:54:56 PST prints**: the merge commit object `66469ccf4`'s author and committer time (RL-146 "Release time"; §4 item 2 "the merge commit's"). It is the time anyone can verify from the repository; GitHub's `mergedAt` (18:54:57) is the platform's event record one second later. The 18:54:57 in §4 item 2's quoted clause came from the brief and is superseded by this figure only. Follow-ups: the `P1-RELEASE` clause and `fill_check_b6.py` (asserted against the commit object), the header of `docs/analysis/b6/DEVIATION-LOG.md`, PR #772's body, and a dated correction line in `RUN_STATE.md` item 312 (added at `67e6289af`). The reader re-checks the one changed time against the commit object.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
