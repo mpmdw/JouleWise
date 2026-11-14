@@ -14120,3 +14120,229 @@ Consequences:
 - The builder's reading T9 is accepted as section 2 words it. Reading T1's "`Unknown` is out of state" is refused.
 
 **Blind status.** Blind: no v4 outcome exists and nothing sealed was opened. This ruling rests on rulings, code, the synthetic test suite and synthetic probes. Every rule changed here is fixed on code alone and reads no label. Step 3's values remain the recorded energy disclosure on conditionless legs; I did not open them.
+
+# RL-155. The MBP block calendar, Sat 14 to Wed 18 Nov: Part C at the W1-line commit runs tonight; dev-01's second span keeps its own calendar day (Sun 02:40); dev-02 runs anchor-only as an ADDED development block (the mixed-cell blocks become dev-03 to dev-05 and the cap moves from 120 to 132 legs); a filler ladder is ruled so the magistrate never needs a design round to fill a gap; v4 sessions take the machine before campaign blocks
+
+Research lead (Fable 5.2), Sat Nov 14 14:52 PST 2026 (from `date`). Rules on the orchestrator's block-queue brief and its addendum relaying Ed ("idle MBP time is a defect"). RL-149 to RL-154 stand except where a section below amends them.
+
+**Read.**
+- `throughput-plan/REPORT.md`, in full.
+- `BLOCK-QUEUE.json` and `cadence_queue_design.md` §13 on `origin/align/2026-11-14-campaign-runner` (`8bd31ae5a`).
+- RUN_STATE 314, 316 and 317 on `origin/main` (`6aa822f7c`).
+- My RL-149 §1.1, §1.2, §2, §4 and §5, RL-150 in full, RL-151 §2.2 and §2.3, and RL-153, in the log at `8aaa43fbc`.
+- The builder's material in `/Volumes/JW-EXT/scratch/dev02-ready-1414/` as it stood at 14:51: both kits and four `plan` outputs. The queue drafts and the list of options for tonight were not there yet.
+- `docs/research/AGENDA.md` (the experiment table and the interp section).
+
+**Checked myself, read-only.**
+- The two kit files: `cl-dev-01` is sha `c76344c5…`, `cl-dev-02` is `d963500b…`. Their `frozen` blocks are equal (commit `b4b6aeb19`, 37 paths). They differ in `campaign_id`, `title`, `seed_law.master_seed`, `legs` and the text of `inclusion_rules`.
+- The plans: dev-01 L004-L012 expected 14,409 s (4.0 h); dev-02 expected 18,162 s (5.0 h); leg cap 2,700 s, soak 1,950 s, overhead 1,200 s, redo quota 2. Worst case is therefore 3,150 s + (legs + 2) x 2,700 s: 4.6 h for 3 legs, 9.1 h for 9, 11.4 h for 12.
+- PR states by `gh`: #777 MERGED into `ops/2026-11-11-w1-presign` at 06:59 PST today. #775, #774, #783 and #787 are open drafts. #683 (the Flash-Next live kit) is an open draft.
+
+**Not checked.**
+- No SSH. No measurement, energy, power, meter or custody file was opened. The pilot's state is taken from the brief.
+- Part C's worst-case bound. I use the one observed run (1 h 59 min, RUN_STATE 316). The lead takes the bound from the kit's own plan.
+- Whether the queue validator or the kit's `span_window` check enforces anything about calendar days or the fixed 13:20 `t0_local`. RUN_STATE 317 already tells the magistrate not to run `cadence_queue.py checklist` for that reason.
+- The R1 slot session's duration and whether its checklist (RL-149 §5 item 12) can hold by Sunday. I did not read the amendment draft's state.
+- Whether #683's kit can run on the MBP with no physical step (the SSD is on the Air).
+- Whether the builder has answered RL-150 R1's question on the span-reference leg.
+- RL-154. It was filed while I wrote this and I have not read it. Nothing here touches the S rows.
+
+**Not done.** No edit, commit, push, comment, SSH or run. The only file written is this one.
+
+---
+
+## 0. A correction to the brief
+
+**The v4 lane is not waiting on me.** The brief says RUN_STATE 316's Part C waits on the lead's desk table and then on my ruling. That ruling is RL-149 §1: the `start_state_failed` verdict was an evaluator bug, and the fix rode PR #777, which merged this morning. The "sampler-null question" is closed.
+
+**What the lane waits on is a run.** RL-149 §5 item 11: Part C once more, at the commit that carries the fix. Its table row reads "needs nothing new; ready when step 3's PR is green". It has been runnable since 06:59. That is tonight's first slot.
+
+---
+
+## 1. Priority and the two standing rules
+
+**R-A. v4 sessions take the machine first.** Whenever a v4 session (Part C at the W1-line commit, the R1 slot session, W1) and a campaign block are both READY for a slot, the v4 session runs and the campaign block slides one slot.
+- **Why.** W1 does not wait for the campaign (RL-149 §2.7; RL-151 made S_w print-only). The campaign waits on kit builds, not on machine time. The v4 lane waits only on the machine.
+
+**R-B. A gap is never left without an owner.** Every slot below names a block, and behind it the filler ladder of section 4. The only ruled idle time is:
+- the batch blackout, 02:00 to 02:35, with the machine quiet from 01:30 so the OS batch fires there;
+- 20 minutes after any close, for the restore check and the journal copy.
+
+---
+
+## 2. The calendar
+
+Times are PST. "Exp" is the plan's expected end; "worst" is its deadline. A slot's t0 is "as soon as its gate holds, inside its window", not a fixed clock time (RL-149 §2.9 item 6.3).
+
+| # | Slot | Block, span, legs | t0 window | Exp / worst | Gate |
+|---|---|---|---|---|---|
+| 0 | Sat 14:45 | dev-01 pilot, L001-L003 | running | 16:40 / 19:20 | RUN_STATE 317 |
+| 1 | Sat evening | **Part C at the W1-line commit** (v4; diagnostic, no slots) | pilot close + 20 min, latest 22:00 | about 2 h; worst from the kit's plan | Section 3.1. Not gated on the hand-read or on R9 |
+| 2 | Sat, after slot 1, to 01:30 | **Filler ladder** (section 4). First choice F1 | after slot 1's restore check | hard stop 01:30 | Section 4's footprint rules |
+| - | Sun 01:30-02:40 | Quiet, then blackout | | | R-B |
+| 3 | Sun 02:40 | **dev-01 span 2, L004-L012** | 02:40 to 04:50 | 06:40 / 11:46 (from 02:40) | R9 pass recorded; hand-read agrees; queue appended (section 3.2) |
+| 4 | Sun, after slot 3 closes | First READY of: **R1 slot session**; **hp-01 pilot, H001-H003**; else filler ladder | from about 07:00 | slot session: its plan. hp pilot: 1.9 h / 4.6 h | Slot session: RL-149 §5 item 12, every line. hp-01: section 5.2 |
+| 5 | Sun evening to 01:30 | hp-01 pilot if not yet run and READY (latest t0 21:20); else filler ladder | | | |
+| - | Mon 01:30-02:40 | Quiet, then blackout | | | |
+| 6 | Mon 02:40 | **dev-02, anchor, L001-L012** (section 3.3) | 02:40 to 14:30 | 07:45 / 14:04 | Section 3.3's four lines |
+| 7 | Mon, after slot 6 closes | **hp-01 span 2, H004-H012** (latest t0 16:50); or the slot session if it slipped (R-A) | from about 08:15 | 4.0 h / 9.1 h | hp pilot passed (R5), hand-read done |
+| 8 | Mon evening to 01:30 | Filler ladder | | | |
+| 9 | Tue 02:40 | **dev-03 on kit v1.1.** If the kit is class A: its first three legs as their own span, then the other nine the same day once the hand-read is recorded | 02:40 | pilot 04:35; rest about 4 h | Section 5.1. If v1.1 is not READY: R-A's session, else hp-01's remainder, else filler |
+| 10 | Tue from about 13:00 | **dev-04** on the same kit (t0 at least 10 h after slot 9's) | latest 14:30 for 12 legs | 5.0 h / 11.4 h | Kit unchanged; dev-03's first span desk-final (§2.8 line 9) |
+| 11 | Wed 02:40 | **dev-05**, then the interim look and freeze 2 | | | The look manifest (RL-150 R4) committed before the look |
+| 12 | Thu, Fri | qual-01 to qual-03 on two days that are not development days | | | Freeze 2; section 5.3 |
+
+**Notes on the table.**
+- **Development days.** Sat (3 legs), Sun (9), Mon (12), Tue (24), Wed (12): five calendar days, with night spans and day spans both present. RL-149 §2.3 asks for three.
+- **Slot 3 can start late.** If the hand-read is not recorded by 02:40, the span arms when it is, up to 04:50 (so its worst case ends before 14:00 and slot 4 still has a day). After that it arms at any time whose worst case clears the next blackout.
+- **Slot 6 is placed on Monday on purpose.** dev-02 on Sunday afternoon would share Sunday with dev-01's second span and add no day.
+- **A same-day pilot and remainder (slot 9).** dev-01's two spans fall on two days only because the hand-read came between them and the t0 was fixed. That was a consequence, not a rule. For later kits, the first three legs and the rest may run on one calendar day, and the block then counts as that one day.
+- **W1** is not on this calendar. When its receipt is signed it takes the night it needs under R-A and everything behind it slides.
+
+---
+
+## 3. The rulings the calendar needs
+
+### 3.1 Part C at the W1-line commit (slot 1)
+
+**Runs tonight, as RL-149 §5 item 11 already ruled.** No new design, no cold seat.
+- **Commit.** The head of `ops/2026-11-11-w1-presign` that contains #777's merge. The lead names the full sha in the RUN_STATE item and records that the ten condition-13 files and the Part C paths are #777's.
+- **Shape.** RUN_STATE 315's, at the new commit: a fresh soak, `--parts C`. Diagnostic, no slots, nothing adopted. Its fixed test is the addendum's with RL-149 §1.2 and §1.5 applied, and RL-152 §1.4's one-line print.
+- **It does not wait for the pilot's hand-read.** Different bytes, different lane. It waits for the pilot's close, its restore lines, and the lead's copy of the pilot journals off the MBP (which must happen before Part C arms, because nothing reaches the MBP while a span is armed).
+- **If the pilot ends with a named stop,** Part C still runs. A campaign stop is scoped to campaign spans, unless it is "restore unproven" or a host-state stop, which hold everything.
+- **PR #783 does not reset it.** Part C's pass at this commit carries to a later commit whose diff over the condition-13 files and Part C's executed paths is only RL-153 §1.2's four items (two desk columns, one DEVIATIONS sentence, one reason string). The lead records that diff. Anything wider is a new Part C.
+- **What comes to me:** the verdict line and the desk table, as before. A pass opens the slot session's checklist line. A failure on any line other than the ones RL-149 restated comes to me before anything v4 arms.
+
+### 3.2 dev-01 span 2 stays on Sunday
+
+**No rule change. L004-L012 do not run tonight.**
+- **What would be legal in machine terms.** After a 17:30 hand-read, eight legs clear the blackout on the worst case. After Part C (about 19:30), five do.
+- **Why I do not take it.** The day is the unit of independence. Running them tonight puts all of dev-01 on one calendar day and buys nothing: the 48 mixed legs are paced by the v1.1 kit, not by this span. Tonight's hours are worth more to the v4 lane, which is waiting only on the machine.
+- **Its gate, complete:** the magistrate's RUN_STATE 318; R9's four items recorded by the lead; the hand table and the desk agree; R1's reference print attached (it gates nothing); the queue gains span `cq-dev-01-s02-a1` by appending (§2.8 line 3); `--legs L004,…,L012 --batch-window 02:00-02:35`; lines 5, 6, 7 and 9 at the arm. Line 2 is already read for this kit (RL-152 §2.2).
+- **If the pilot does not pass R9,** slot 3 goes to the filler ladder and the lead's diagnosis comes to me. Admitted legs still count.
+
+### 3.3 dev-02: anchor-only now, as an added block
+
+**RL-150 R3 is amended. `HOLD_FOR_CELL_LAW` is lifted from kit `cl-dev-02`.**
+
+1. **dev-02 runs on `cl-dev-02` as built: twelve type-A legs at the anchor shape. Its legs count as development legs.**
+2. **It is added, not substituted.** The mixed-cell design keeps all 36 of its legs: they become dev-03, dev-04 and dev-05 on kit v1.1. Development is 60 legs in five blocks. The campaign cap moves from 120 to 132 legs.
+3. **Why this answers R3's objection.** R3 refused anchor-only because it would put 24 of 48 legs in one cell and every 2k and 10k leg on the last two days. With the block added, the anchor is 24 of 60, the 2k and 10k legs fall on three blocks and at least two days, and the anchor cell is measured on every development day. Size is less confounded with day than in the original plan, not more.
+4. **What it costs.** About 5 h of machine time that would otherwise be filler, and one more block before freeze 2. Twelve more legs carry the per-leg G0 shape; RL-150 R1 part 1 (start TV0h as a predictor) already covers them, and R1 part 2 is unchanged for the v1.1 blocks.
+5. **Blind.** No campaign energy has been read, by anyone. The cap is changed on design grounds only, before the first look. RL-149 §2.3's rule for any further extension stands as written.
+
+**READY when all four hold. Nothing else.**
+
+| Line | What | Who |
+|---|---|---|
+| 1 | A cold seat that did not write the kit checks `cl-dev-02` (`d963500b…`) as a **delta against the cold-checked `cl-dev-01`**: the seed law and its twelve seeds, the ids, the title, the `inclusion_rules` text (which differs and must match RL-149 §2.4 with R7 and R8), and that the `frozen` block is equal. No open finding | One Mythos 5.2 seat, dispatched now |
+| 2 | **RL-152 §2.2's reading is extended to this kit:** same frozen commit, same 37 path hashes, so the same CI comparison stands. The lead records the equality of the two `frozen` blocks (I checked it on the builder's copies; the lead checks the committed bytes) and `validate-kit` at `b4b6aeb19` | Lead |
+| 3 | A finite queue pinning `d963500b…`, one span, twelve legs, expiring within seven days | Builder's draft, lead commits |
+| 8 | The dev-01 pilot passed R9. Same bytes, so no smoke of its own | Lead's record |
+
+- **The ledger:** `dev-02` moves SPECIFIED to READY on those lines; `dev-03` to `dev-05` are entered as the v1.1 blocks; `qual-01` now depends on `dev-05`.
+- **The anchor-only fallback clause of R3 is retired.** It is no longer a fallback.
+
+### 3.4 Line 9 across lanes
+
+§2.8 line 9 (span k's desk final before span k+2 arms) counts campaign spans only. A Part C run, a slot session or a filler between two campaign spans is not a span for that count.
+
+---
+
+## 4. The filler ladder
+
+**Standing authorization.** When the slot's named block is not READY, the magistrate runs the first filler on this ladder whose own line holds, with no ruling and no design round. It posts one line on the standing notice. None of these is counted, none feeds a claim, and none has a registration.
+
+**Footprint rules, for every filler.**
+1. **Never while anything is armed.** A READY block or a v4 session ends the filler's turn: the filler stops at its next safe point when the block's gate closes, and never delays a t0 by more than 30 minutes.
+2. **Host state.** No change outside `measurement_mode`. Own venv and own scratch directory; nothing is installed into the measurement venv. No reboot. Disk stays above 40 GB free.
+3. **Restore check at the end, same lines as a span's close:** powermode 0, no High Power marker, network time off, no stray monitor or root powermetrics, no agent process, frequency word 0. A failed line is the "restore unproven" stop.
+4. **Start state of the next counted span.** Each span begins with its own fresh soak, and bands are by history, so no extra cool-down is ruled. A filler that loads the GPU ends at least 30 minutes before a counted t0, and every filler ends by 01:30.
+5. **Blinding.** A filler opens no campaign or v4 energy, power or meter file. F0's and F2's own energy is not read under any look unless I rule so (RL-149 §5, the bridge).
+
+| # | Filler | What it gives | Time | Footprint | Ready when | Builder |
+|---|---|---|---|---|---|---|
+| F0 | **The Part C bridge:** the Part C kit at the current W1-line commit, unchanged, at most twice a day, t0 at least 10 h apart (RL-149 §5; the commit moves from `f006b7aa6` once slot 1 has passed) | One more step-D leg and D_bank run on a new history: G0 times by hour of day, onset, the first G1 after a hot turn if one occurs. Journals only | about 2 h | A measurement span with its own soak and close. No carry-over | Now, after slot 1 | None |
+| F1 | **Flash-Next port on real weights:** gold parity, then the perf runs (PRs #667, #669, #670, #680; kit #683) | The open port goal, which only the 128 GB machine can close | 2 to 6 h, resumable | Heavy GPU and disk; no measurement; nothing blind. Rule 4's 30 minutes | The orchestrator confirms it runs remotely with the weights on the MBP's own disk and no physical step, and names a resumable entry point with a wall-clock stop | Sonnet builder to wrap #683's kit; Opus review of the wrapper |
+| F2 | **Instrument characterization** (AGENDA experiment 3): powermetrics against the KM003C on scripted fixed loads, no model weights | The transfer function the DC-in analysis needs | 1 to 1.5 nights, in pieces | Reads its own instrument streams, which belong to no campaign leg and no v4 member. Not blind-relevant | A one-page design to me, then a build | Mythos design seat, Opus builder |
+| F3 | **Soak-only capture:** the span's soak path with an empty roster | Soak settle time by hour, sensor drift, the fan floor | 35 min | None | Only if the launcher already accepts an empty roster. Not worth a frozen-path change | None |
+
+**The default rule, for the magistrate:** "If the slot's block is not READY: F1 if its line holds; otherwise F0 if the last Part C t0 is at least 10 h old and fewer than two have run today; otherwise F3; otherwise report `DESIGN_QUEUE_LOW` and stay idle." Tonight that reads: F1 after Part C if the orchestrator has it ready by about 19:30, and if not, the machine is quiet until 02:40 and that is a recorded miss against R-B, not a ruling.
+
+**Not fillers.**
+- **Extra dev-01 or dev-02 legs outside their spans.** Counted legs run only inside a queued span.
+- **A High Power smoke on the old A-B-A leg.** hp-01's first three legs are its smoke and they count (RL-150 R5). A separate smoke spends the same hours and counts for nothing.
+- **Interp experiments (ASTRA-2CH).** The agenda queues them behind the ALIGN windows and they need Ed's OK for a download. Unchanged.
+
+---
+
+## 5. The pipeline beyond dev-02
+
+In build order. The aim is that slots 4 to 12 each have a READY block before the slot before them closes.
+
+### 5.1 Kit v1.1 (dev-03 to dev-05). First in the build order
+
+- **Contents:** the cell law over the three prompt sizes; the span-reference leg at half or more of each block's warm legs (RL-150 R1 part 2); the free t0 in place of `t0_local`; R7's rule-5 text; F6 to F12 of the kit check.
+- **A cut-off, so the span-reference leg cannot hold the kit.** If the builder's answer to R1's question is "no gate-module edit" and the leg is code-complete by Sun 15 Nov 18:00, v1.1 is class A and dev-03's first three legs are its counted smoke. Otherwise dev-03 runs on **v1.1a** (the cell law only, class B under R5: a mock span, a `plan`, a cold check of the diff, no leg smoke), and the span-reference leg enters at dev-04 or dev-05 as its own class A kit. A gate-module edit still comes to me first.
+- **Owner:** Opus builder (the campaign-runner builder). **Gate:** row-1 review; one Mythos cold seat against RL-149 §2 and RL-150 (§2.8 line 1); CI on the frozen commit (line 2); my read only if a gate module changes.
+- **READY target:** Mon 16 Nov 18:00, for slot 9.
+
+### 5.2 hp-01. In parallel, a second builder
+
+- **Contents:** `PowerModeGuard` around the legs, the host marker, the close's proof of powermode 0 and no marker before anything else arms, a kit field for the block's power mode, kit `cl-hp-01` mirroring dev-01 cell for cell.
+- **Class A.** H001-H003 are its smoke, as their own span, and count as type H. The lead hand-reads once.
+- **Owner:** a second Opus builder. **Gate:** row-1 review; a Mythos cold seat; CI; and one extra line because this block changes host state: the close's restore proof is exercised in the mock span with a failing restore, and the stop fires.
+- **READY target:** Sun 15 Nov midday, for slot 4 or 5. Never in the fit.
+
+### 5.3 The look manifest, then qual-01 to qual-03 and reserve-01
+
+- **The look manifest** (RL-150 R4) must be committed before the interim look, which is now Wed. **Owner:** Opus builder for the schema, the analyst seat for the fit code. **Gate:** a cold seat that did not write the fit code, then my cold pass. It is paper-bound.
+- **qual-01 to qual-03:** designed this week, held at `HOLD_FOR_FIT_FREEZE`. Six type A, two type-L pairs at RL-150's caps, two type M or type A, every leg a span-reference leg. **Owner:** a Mythos block-design seat drafts the three kits against v1.1 once it is frozen; the lead enters them. **Gate:** §2.8 line 1 per kit. They need no ruling of their own.
+- **Type-T and type-M code** (RL-151 §2.3's order): the builder who finishes first of 5.1 and 5.2 takes type T. If it lands by Tue, dev-05 carries two type-T legs; if not, dev-05 is type A and type T goes into the qualification blocks' open slots only if I rule it there.
+- **reserve-01 and ctl-01:** reserve-01 is entered now, on v1.1. ctl-01 follows type T in the build order and takes a filler-class slot once its kit passes line 1.
+
+### 5.4 The v4 lane
+
+| Step | Needs | Owner | Gate |
+|---|---|---|---|
+| Part C at the commit | Section 3.1 | Lead issues, magistrate runs | Tonight |
+| R1 slot session | RL-149 §5 item 12, every line: Part C passed; the typical-case bar in the kit (#777); the constants in the amendment draft | Lead assembles the checklist; magistrate runs. If every line holds, it does not come back to me | Earliest slot 4 |
+| The amendment (with option (c)'s words, RL-151 §3.2) | Draft, two attack seats (one Sol), my cold review. The PR stays open for Ed | Lead; Mythos and Sol seats | Before the W1 receipt |
+| The desk seal, #774 | The four fixes of RL-151 §4 and RL-152 §3 | Desk-seal builder | Before the W1 receipt |
+| S rows, #787 | RL-153 §2.3; RL-154 as filed | S-rows builder | Before any S row on a conditioned bundle |
+| W1 | RL-149 §5 item 13 | Lead signs; magistrate runs | R-A |
+
+---
+
+## 6. What the orchestrator does, in order
+
+**Now, before the pilot closes (about 16:40).**
+1. **Draft the RUN_STATE item for Part C at the W1-line commit** (section 3.1): 315's text at the new sha, launch window from the pilot's close to 22:00, the journal-copy step before the arm.
+2. **Dispatch one Mythos 5.2 cold seat on `cl-dev-02` as a delta against `cl-dev-01`** (section 3.3 line 1), and have the builder finish the dev-02 queue and the dev-01 span-2 queue append. Each seat and builder gets its own scratch directory.
+3. **Dispatch two Opus builders:** v1.1 (5.1) and hp-01 (5.2). Ask the campaign-runner builder for R1's answer on the span-reference leg today.
+4. **A Sonnet builder checks F1:** can #683's kit run on the MBP remotely, on the internal disk, resumable, with a wall-clock stop. Report by 19:00. Ed named this work in his addendum, so no further ping is needed for our own port code; if the kit executes unmerged upstream code, tell Ed in one line first.
+
+**When the pilot closes.**
+5. Copy the journals; the desk; the hand-read with R1's reference print; record R9. Then issue item 1. Then append the span-2 queue and issue slot 3 for 02:40.
+6. Update `BLOCK-QUEUE.json` to section 3.3's ledger and enter F0 to F3 as standing fillers with the default rule.
+
+**Sunday.**
+7. Assemble the slot session's checklist against Part C's result. Issue slot 4 from whichever of the slot session and hp-01 is READY.
+8. Dispatch the Mythos design seat for the qual kits and for F2's one page; start the look manifest.
+9. Issue dev-02 for Mon 02:40 once its four lines hold.
+
+**What comes back to me.**
+1. The pilot's result with R1's print (RL-150 §4 item 1).
+2. Part C's verdict and desk table.
+3. The builder's answer on the span-reference leg, and which of v1.1 and v1.1a dev-03 runs on.
+4. F2's page. The look manifest. The qual kits only if a seat finds they differ from RL-149 §2.3.
+5. Any slot that went to "quiet" because the ladder was empty.
+
+---
+
+**Owner.** Lead: section 6; the ledger; the RUN_STATE items; telling Ed the cap change. Builders: v1.1, hp-01, the F1 wrapper, type T, the look manifest's schema. Cold seats (Mythos 5.2): `cl-dev-02`, v1.1, `cl-hp-01`, the qual kits. Magistrate: every slot, and the filler ladder on its default rule. Research lead: the five items above. Ed: nothing is asked of him.
+**Gate.** Part C waits for the pilot's close and the lead's item. dev-01 span 2 waits for R9 and the hand-read. dev-02 waits for section 3.3's four lines. dev-03 waits for v1.1 or v1.1a. hp-01 waits for its code and cold seat. The slot session waits for its checklist. Development energy waits for the look manifest.
+**Amends.** RL-150 R3 (dev-02 runs anchor-only as an added block; the fallback clause is retired). RL-149 §2.3 (development is 60 legs in five blocks; the cap is 132; a block's pilot and remainder may share a calendar day). RL-149 §2.8 line 9 (campaign spans only). RL-149 §5's bridge (it moves to the current W1-line commit and becomes filler F0). RL-152 §2.2 (its reading of line 2 extends to kit `d963500b…`).
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed was opened. This ruling rests on rulings, the ledger, two kit files, four plans, PR states and one throughput report. The leg cap and the block list are changed before any development energy is read.
+
+**For Ed, plainly.** "The laptop has work assigned for every hour through Tuesday. Tonight, after the three-run test finishes, it runs the v4 check that has been waiting since this morning, then the Flash-Next port if we can start it remotely. Sunday at 02:40 it runs the other nine calibration runs. I am not running those tonight: they are more useful as a second day than as more of the same day, and tonight is better spent on the v4 check. The second calibration block, which I had been holding, now runs Monday as an extra block, so the total goes from 120 runs to 132. High Power and the mixed-size blocks follow as their code lands. Whenever a planned block is not ready, the laptop has a fixed list of useful jobs it starts by itself."
