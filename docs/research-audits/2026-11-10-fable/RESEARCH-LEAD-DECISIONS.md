@@ -12936,6 +12936,296 @@ and my predictions, the campaign's inclusion rules, looks and freezes, Rule P's 
 section 4 are fixed before any energy is read. One rehearsal energy value was displayed to a desk analyst
 (bundle E); it is disclosed and was not used here.
 
+# RL-150. The dev-01 kit check: R1 to R9 ruled, and the pilot may arm once F1 to F4 are closed. Step 3's output, the corrected pilot length ratio and the desk-seal PR are recorded. The S row's fate waits for step 4
+
+Research lead (Fable 5.2), Sat Nov 14 01:15 PST 2026 (from `date`). Rules on the cold seat's kit check
+(`/Volumes/JW-EXT/scratch/mythos-kit-check/REPORT.md`, Mythos 5.2, verdict ADMIT WITH FIXES). RL-149 stands
+except where a section below amends it.
+
+**Read, in full.** The kit check. `step3/REPORT.md` (the lead's condensed copy). `mbp-chores-1114/REPORT.md`.
+My RL-149.
+
+**Checked myself, read-only, in the worktree at `79031dcd8`.**
+- `cadence_leg.py:120`: the leg calls `reference_hook(..., capture=True)`. `thermal_gates.py:441-459`: the
+  reference is the median of the 60 s before warm-up entry. `:542, :576-577`: a G0 releases against that
+  reference. So each leg's G0 is judged against the leg's own entry temperature. The seat's R1 is right.
+- `cadence_leg.py:84-85`: the leg refuses to run without the span's soak reference, so that reference exists
+  per span.
+- `scripts/km003c_monitor.py:246-248` and `:75-78`: the trailer holds the four counts (`polls`, `empties`,
+  `bad`, `usb_errors`), `elapsed_s`, two end stamps, the reader's own CPU time and memory, and `stop_reason`.
+  **It holds no power or energy aggregate.** `:170-174` and `init_meter`: the header holds status, init
+  errors, start stamps and device identity.
+- `legs.py:370-395` (`meter_health`): only the first line and the last line are decoded.
+- `legs.py:338-345` (`leg_admitted`): a contaminated attempt is not admitted, replaced or not.
+- The kit's 36 frozen paths, its `inclusion_rules` text and `looks: []`.
+
+**Not checked.**
+- Any slot, transcript, energy, power, meter or powermetrics sample file, any `smoke_part_*`, anything under
+  `~/night-*`. None was opened.
+- Step 3's `OUTPUT.json` and script. I record from the lead's condensed report.
+- How far a warm leg's own reference sits above the soak's. No temperature was read for this ruling.
+  Section 1 (R1) asks for that print.
+- Whether the `consume` reference role can be wired into a campaign leg without a gate-module edit.
+- The tests of PR #775. Nothing was run.
+
+**Not done.** No edit, commit, comment, SSH or run. The only file written is this one.
+
+---
+
+## 1. The nine rulings
+
+### R1. The G0 reference of a campaign leg
+
+**The pilot arms as built, with each leg capturing its own reference, and its three legs count.**
+- It is the shape of the nine legs step 3 read, and changing it means a frozen-path change and a new kit.
+- L001 follows the soak, so it is the same leg under either shape.
+
+**Per-leg capture alone is not the shape the heat-term fit needs.**
+- In the series a session's reference is captured once and every later member's G0 waits for it. A member
+  starts with TV0h within 1.0 °C of that reference.
+- A warm campaign leg releases near its own entry temperature. Its start TV0h is not pinned to anything
+  the series uses, and it moves together with start Tf08.
+- So §2.7's reason for leaving start TV0h out ("the gate pins it") is false of these legs. A fit on them
+  would load TV0h's effect onto the Tf08 term and then apply it to members whose TV0h did not move.
+- Step 3 makes this matter more, not less: the clock slope is +1.59, so start heat changes a token's cost.
+
+**Ruled, in three parts.**
+1. **§2.7's predictor list is amended.** Start TV0h, as the excess over the span's soak reference, joins
+   the allowed start readings, under the same stamp rule. For a series member it is evaluated at the
+   member's own start reading against the session reference. It is a start reading and reads no label, so
+   the test stays exact. Freeze 1 carries the amended list.
+2. **A second G0 shape, the span-reference leg, enters with the next kit** (schema v1.1). Its G0 is judged
+   against the span's reference, as a series member's is. From the first block on that kit, at least half
+   of each development block's warm legs are span-reference legs, by the seed law. **Every type-A, L and M
+   leg of the qualification blocks is a span-reference leg:** Rule P judges the scorer for the series, so
+   it is judged on the series' start shape. A G0 that times out is excluded under rule 2 as now.
+3. **The pilot's hand-read adds one print, which gates nothing:** per leg, the soak reference, the leg's
+   own reference and the G0 release reading, on TV0h, TV1h and Tf08. These are thermal journal values.
+   They show how far apart the two shapes are, and they come to me with the pilot's result.
+
+**What the builder reports back:** whether a campaign leg can take the span's reference through the
+existing `consume` role or the soak reference it already receives, with no edit to `thermal_gates.py`. If
+it needs a gate-module edit, that comes to me before it is built.
+
+### R2. Cold starts
+
+**One per span: the first leg after the soak.** §2.2's "first after the soak, and after at least 30 min
+idle" is one kind of start, not two. No mid-block idle is added.
+- A 30 min idle costs more machine time than a leg. What it would buy, more legs at the series' start
+  state, the span-reference legs of R1 give at no idle.
+- F12 follows: tables by band use span position and the measured start reading. `q0` is a recipe label.
+
+### R3. dev-02
+
+**Held for the cell law.** dev-01 runs anchor-only as built. dev-02 moves to the v1.1 kit, where the seed
+law assigns prompt size and G0 shape.
+- **Why.** Anchor-only dev-02 would put 24 of 48 development legs in one cell and one G0 shape, and every
+  2k and 10k leg on the last two development days. Size would then be confounded with day, and every
+  error in this campaign is leave-one-day-out.
+- **The MBP is not idled for it.** The span dev-02 would have taken goes to hp-01 on the v1 kit shape
+  (which mirrors dev-01 cell for cell, the comparison §2.5 wants), then Part C, then the bridge of
+  RL-149 §5. `cl-dev-02.json` stays in the ledger as `HOLD_FOR_CELL_LAW`.
+- **If v1.1 is not READY and none of those is,** dev-02 runs anchor-only rather than leave the machine
+  idle. Its legs count, the lead tells me, and I size the extension §2.3 allows.
+
+### R4. Where freeze 1 lives
+
+**In a look manifest, a file of its own beside the kits, not in a leg kit.** RL-149 §2.6's "These are in
+the kit" is amended to "these are in the look manifest".
+- **Contents:** the look id; the blocks it reads; the fit code's paths and hashes; the model family and
+  predictor list (as R1 amends it); the code that judges inclusion rules 3 and 4; the output schema; the
+  one decision of §2.6.
+- **It is committed before any development energy is read.** The block ledger points at it by hash.
+- **Adding it changes no leg kit's frozen paths, so §2.8's authorization does not end and line 8 is not
+  re-run.** That clause protects the bytes that make measurements. Fit code makes none. The runner and the
+  leg runtime must never import it; the manifest's check states that.
+- **Its review:** one cold seat that did not write the fit code, against §2.6 and §2.7, then my cold pass.
+  It is paper-bound.
+- The leg kits keep `looks: []`. F7's answer on the pilot is right: freeze 1 gates the first energy read,
+  not the first leg.
+
+### R5. The smoke for a new kit after a frozen-path change
+
+Two classes, by what the changed bytes do.
+
+| Class | Change | Smoke | Counts |
+|---|---|---|---|
+| A | Bytes that execute inside a leg, from soak start to leg close: leg runtime, gates, sidecar, workload, adapters, the power-mode path, the meter monitor, a new leg type | The first three legs of the new kit's first block, in kit order, as their own span. The lead hand-reads the journal table once beside the desk; the tables agree and no stop is open | Yes, as legs of their block and type, under the inclusion rules, when the kit's text registers them as counted before they run |
+| B | Bytes that only plan, arm, queue, validate or print: schema fields, the blackout constant, the free t0, the queue checks, the desk's columns | A mock span, a `plan`, and the cold seat's check of the diff. No leg smoke | Not applicable |
+
+- **A new leg type that is not among the first three legs:** the hand-read covers the whole first span, and
+  no later span arms before it.
+- **hp-01** is class A (the power path). Its first three legs are its smoke and count as type H. Its close
+  proves powermode 0 and no marker, as §2.5 says.
+- **Schema v1.1 with the span-reference leg** is class A. Without it, v1.1 is class B.
+- **The blackout constant** (`align_r1_rehearsal.py:64`) is class B.
+- Every new kit still passes §2.8 lines 1 and 2. This table is what line 8 means for it.
+
+### R6. "None carries a condition"
+
+**§2.6's sentence is replaced by:** "None comes from a run that had a sabotage instruction, a slot or a
+v4 member: every campaign leg is the same uninstructed workload. The workload code requires a `condition`
+field in each member bundle's config, and every campaign leg carries the constant `benign` there, which
+selects the neutral warm-up. It is a constant, not a factor. No projection carries it and no fit or print
+code reads it."
+- §2.8 line 4 is read to match: the validator refuses a condition, slot or instruction key or label in the
+  kit and in every projection. The constant in the bundle config is the one stated exception.
+- The look manifest's check (R4) includes that the fit code does not read the field.
+
+### R7. A contaminated attempt left unreplaced
+
+**Excluded.** Rule 5 is amended to: "it is not an attempt judged contaminated under the load-redo rule
+(above 0.5 core of outside load for 60 s), whether or not a redo replaced it."
+- The test reads outside load only, so excluding on it cannot select on an outcome.
+- The attempt stays in custody. Its cell is refilled from the reserve under §2.4. The runner already does
+  this. The kit's rule-5 text may be brought into line at the next re-pin; it need not change for the
+  pilot.
+
+### R8. The runner and the KM003C stream
+
+**Allowed, as built.** The runner may hash each stream file and decode its first line and its last line.
+INSTRUMENT_FAULT cannot be judged otherwise.
+- I read the monitor myself: the trailer carries counts, elapsed time, end stamps, the reader's own CPU
+  and memory figures and a stop reason. No power or energy aggregate. The builder's confirmation is still
+  wanted for the header's device fields, which I read less closely.
+- **Conditions:** no sample line is decoded, logged or copied; the tail bytes read to find the last line
+  are discarded; the projected fields stay the six the seat lists.
+- **§2.6's energy-read sentence gains one clause,** and the kit's text is restored to it (F4): "No desk,
+  watcher, queue or agent opens an energy, power or meter file of a campaign leg. The runner hashes each
+  meter stream and decodes its header and trailer lines only, for the meter's presence and fault counts."
+- `km003c_monitor.py` is a frozen path. A trailer or header that gains a power or energy field comes to me.
+
+### R9. The pilot with one leg excluded
+
+**Passed, when all of these hold:**
+1. all three legs ran to a close with complete records;
+2. at least two are admitted;
+3. the excluded leg fell under rule 2 (its G0 timed out) or rule 5 (outside load);
+4. the lead's hand table and the desk agree, on inclusion too, and no stop is open.
+
+**Not passed:** an exclusion under rule 1 (stopped short of its cap) or rule 6 (power mode), or two or more
+exclusions. Those are defects of the bytes or the host. The lead diagnoses; a re-run is a new span with
+`attempt` + 1; legs already admitted still count.
+- Rules 3 and 4 are judged at a look, not at the pilot. INSTRUMENT_FAULT covers the meter until then.
+- Until F8's column exists, the hand-read takes inclusion from the summary's `admitted` field.
+
+---
+
+## 2. The findings
+
+**§2.8 line 1 is met when F1 to F4 are closed and the lead has recorded each closure.** I accept the
+seat's four fixes as written.
+- **F1.** The re-pinned kit may differ from the checked bytes only in `frozen.commit`, F4's sentence (as R8
+  words it) and, if the lead chooses, rule 5's wording (R7). All 36 path hashes are unchanged. The suite
+  result is for the commit finally pinned.
+- **F2.** Every arm passes `--batch-window 02:00-02:35` and the arm record shows it.
+- **F3.** The first queue holds the pilot span only.
+- **F5, one line for the pilot too:** the arm record states that the host is in `measurement_mode` as
+  applied on 11-13 at 23:47 and that network time is off, checked remotely. The legs count, and the check
+  is cheap. The stop's text and the machine check follow before chained spans.
+- **F6 to F12** are the lead's, on the seat's schedule. Reading 4 (the fixed 13:20 t0) is fixed in v1.1.
+
+---
+
+## 3. Recorded since RL-149
+
+### 3.1 Step 3 has run
+
+**Recorded.** Run once on 11-14 at 08:25Z; script and output hashes as in the report; the lead's custody
+check found ratios, γ and slopes only.
+
+| Output | Value | My prediction | Held |
+|---|---|---|---|
+| (iii) pre-cut drift | 1.567 % on six Automatic legs, 1.968 % on seven; 0.70 % leg-normalised | under 0.5 % | No |
+| (iv) post-cut over pre-cut GPU joules per token | median 0.911, range 0.847 to 0.961; 5 of 7 legs under 0.95 | 0.93 to 1.05 | No |
+| (vi) slope of ln joules on ln clock | +1.59 | +0.2 to +0.8 | Sign yes, size no |
+
+**All three predictions failed, in one direction: heat matters more than I assumed, and it makes a
+GPU-rail token cheaper, not dearer.** I had the saving and the context growth roughly offsetting. They do
+not.
+
+**The row's fate is not ruled here.** RL-148 §3 sends it to me with step 4's result at that drift, and it
+waits for that.
+
+**What step 4 brings back:**
+- the rows at 1.6 % and 2.0 % drift, and at the leg-normalised 0.70 %;
+- the hot shift at −9 %, and at the range's ends (−15 % and −4 %);
+- K's threshold and its H50 and H90 at those shifts. RL-149 quoted K at a +10 % shift. The sign is now
+  the other way, so the question changes from false alarms to lost sensitivity: a run that heats more
+  looks cheaper;
+- the S_w arm of §2.7.
+
+**For Ed.** §1.4 required that (iv) outside 0.95 to 1.05 go to him in plain words, and the lead has told
+him. The sentence I stand behind: "Once the laptop reports heat, each token costs about 9 % less energy on
+the GPU, because the chip slows down. A run that works harder and heats up can therefore look cheaper per
+token, which works against the first test's ability to see hidden work. How much it costs is what the
+simulation now running will say." It does not reopen his decision.
+
+**Does it block the pilot? No.** The pilot reads no energy, and no campaign rule depends on these values.
+It strengthens R1: start heat has to be measured and modelled on the series' own start shape.
+
+### 3.2 The pilot length ratio
+
+**Recorded: 1.374 is withdrawn as a work ratio.** It came from mislabeled fixtures.
+- The live bundles give 1.085 pooled, and that figure rests on two sabotage trajectories (one per task),
+  replayed identically across three pilots, on the 30B model. It is not an estimate for the 27B series.
+- By task the ratio is 1.298 (bank) and 0.888 (spam). The sign differs by task. No single pilot number can
+  be "the registered work ratio".
+
+**Ruled, as the proposal the amendment fixes:**
+- Rule P's item 1 is evaluated at two ratios, 1.10 and 1.30, and passes only if it passes at both. A
+  shorter sabotage run (0.888 is 1.13 the other way) falls inside that bracket.
+- Type L's caps become 3,724 and 4,096 (1.10) and 3,151 and 4,096 (1.30). The 2,981 cap is dropped.
+- The looks print the prefix bias at 1.10, 1.30 and 1.374. The last is a grid point with no standing.
+- Step 4's S_w arm uses the bracket.
+
+**The lead traces** where `wp18_{x,y}_token_ids.json` came from, and lists anything that used those
+fixtures with their labels.
+
+**Also recorded from the chores report.**
+- **The batch.** The daily core stayed inside 01:50 to 02:40 on all seven days. One hourly job fired at
+  02:42:21 on 11-13. Hourly jobs are not the batch and cannot be blacked out. The 02:00 to 02:35 blackout
+  stands and the row may merge.
+- **The clock in D_spam turn 2** did not move once decode was under way. Noted.
+- **A disclosure:** one 30B pilot run's three outcome fields were printed during a schema probe. It is a
+  non-claim pilot, it was used nowhere, and it joins the blind statement's list as a disclosure.
+- **The battery journal** that `attach()` rejected is a builder question, not a ruling.
+
+### 3.3 The desk seal
+
+**Recorded.** Draft PR #774 is open and its row-1 review is running. My cold pass of the allowlists, the
+pooled list and the W1 exception list follows it, as RL-149 §3 set out. It gates the W1 receipt. It does
+not gate the pilot or any campaign span.
+
+---
+
+## 4. What comes back to me
+
+1. The pilot's result, with R1's reference print.
+2. The builder's answer on the span-reference leg.
+3. Step 4 at the measured drift, with K's figures and the S_w arm. Then I rule on the row.
+4. The look manifest for the interim look, before any development energy is read.
+5. The v1.1 kit's cold check, and dev-02 if it had to run anchor-only.
+
+---
+
+**Owner.** Lead: closing F1 to F4 and the F5 line before the arm; the queue; the fixture trace. Builder:
+the span-reference leg, schema v1.1, the look manifest's schema. Magistrate: the pilot span under §2.8.
+Research lead: section 4.
+**Gate.** The pilot waits for F1 to F4 and the F5 line. L004 to L012 wait for the pilot's pass (R9) and the
+lead's hand-read. dev-02 waits for the cell law (R3). Development energy waits for the look manifest (R4).
+The row waits for step 4.
+**Amends RL-149.** §2.4 rule 5 (R7). §2.6's energy-read sentence (R8), its disclosure sentence (R6) and
+the home of freeze 1 (R4). §2.7's predictor list, and the G0 shape of later blocks (R1). §2.7's work ratio
+and §2.2's type-L caps (3.2). §2.9 item 3 is extended to later kits (R5).
+**Blind status.** Blind: nothing sealed was opened. This ruling rests on the kit, the runner's code, the
+meter monitor's code and three reports. Step 3's values are a recorded energy disclosure on rehearsal
+data. The amended predictor list, the span-reference shape, the work-ratio bracket and Rule P's two-ratio
+form are fixed before any campaign energy is read.
+
+**Pilot may arm: yes once F1 to F4 are closed and recorded, the arm passes `--batch-window 02:00-02:35`,
+and the arm record carries the `measurement_mode` line.**
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
