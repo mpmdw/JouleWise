@@ -14754,3 +14754,133 @@ Research lead (Fable 5.2), Sat Nov 14 15:18 PST 2026 (from `date`). Rules on the
 **Gate.** The smoke waits for RL-155 §5.2's four lines. The remainder waits for the smoke's pass and the hand-read. Nothing in this ruling adds a gate, and none of the seven answers needs a code or kit change as the PR stands.
 **Amends.** RL-155 §2, slots 5 and 7 (the latest t0 values; the remainder may share the smoke's day). RL-149 §2.4 for the High Power phase only (no reserve; LEG_OVERTIME on hp-01 is cleared by me). RL-149 §2.5 ("at matched blocks" is read as cell, soak and span position).
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This ruling rests on rulings, one PR body, one design section, three kit files and the runner's close code.
+
+# RL-158. Kit v1.1 (PR #788 at `17f478675`): the seven questions. The span reference is the first leg's capture, as built; a redo's capture is accepted and marked; a missing reference stops the span; the 600 s budget stays; 2,000 and 10,000 stand; "at least half" is judged on the queue's layout at READY; permuted blocks of three stand. dev-03 runs on v1.1 as 3 + 9 on Tue 17 Nov if its gates pass; dev-04 follows the same day as 6 + 6, and RL-155's 10 h spacing is withdrawn
+
+Research lead (Fable 5.2), Sat Nov 14 15:19 PST 2026 (from `date`). Rules on the v1.1 builder's seven questions and the dev-03 and dev-04 slots. RL-150 R1, RL-155 §5.1 and RL-155a stand except where a section below amends them.
+
+**Read.**
+- `gh pr view 788`, in full.
+- `docs/process/cadence_queue_design.md` §14 at `17f478675`, in full.
+- RL-150 R1, R2 and R5; RL-155 in full; RL-155a; RL-156a, in the log on `origin/audit/2026-11-10-fable`.
+
+**Checked myself, read-only.**
+- **The two kit drafts.** `cl-dev-03.v1.1.json` pins `e82e2a1b9`, `v1.1a` pins `55a5670e8`. Sizes, seeds and bands are equal; only `g0_shape` differs. Every leg's band is `q0`.
+- **The v1.1 cells, L001 to L012:** 2k own, 19k span, 10k own, 10k span, 2k own, 19k own, 10k own, 2k span, 19k span, 2k span, 19k own, 10k span.
+- **Consumers by layout** (a span-shaped leg that is first in its span captures, so it is not a consumer):
+
+| Layout | Warm legs | Consumers |
+|---|---|---|
+| 12 | 11 | 6 |
+| 3 + 9 (the plan) | 10 | 5 |
+| 6 + 6 | 10 | 6 |
+| 3 + 3 + 6 | 9 | 5 |
+| 3 + 6 + 3 | 9 | 4 |
+| 3 + 5 + 4 | 9 | 4 |
+
+- **`SPAN_G0_S = 600.0` is in `joulewise/cadence/legs.py`,** a file the kit pins. LEG_OVERTIME needs two legs over 1.5 x their budget in one span.
+- **The branch does not contain #777's head** (`ae340d3da` is not an ancestor). So both of RL-155a §3's bounds apply to these kits.
+
+**Not checked.**
+- The span-reference code and its tests. The Mythos cold seat has that.
+- That the series' member 5 captures with the model loaded and later members consume it. Taken from §14.5.
+- The dev-01 pilot's R1 print. I opened no measurement file.
+- The plan outputs. The three pairs of seconds are taken from the brief.
+
+**Not done.** No SSH, no run, no commit. The only file written is this one.
+
+---
+
+## 1. The seven questions
+
+**Q1. The span's reference is the first leg's 60 s capture with the model loaded. As built.**
+- It is what R1 part 2 meant by "as a series member's is": one member captures, the later ones wait for it.
+- The soak mean is taken with no model resident. A G0 judged against it could wait for a state a loaded machine never reaches, and every such leg would be lost under rule 2.
+- The fit's predictor is unchanged: start TV0h as the excess over the soak reference.
+- **One print is added to the hand-read of every v1.1 span** (thermal journal values, as R1 part 3): the soak reference, the first leg's capture, and for each consumer its release reading and its G0 wait in seconds.
+
+**Q2. A redone first leg: its accepted attempt's capture is the reference. Accepted.**
+- The reference has to be bound to an accepted attempt's custody, and the redo is the only one.
+- It is warmer, and that is measured: the predictor reads the excess over the soak.
+- **The lead marks that span in the hand-read** ("reference from a redo", read from the receipt's source run id). Its first leg is not a cold start by history; tables use the measured start reading (RL-150 R2).
+
+**Q3. A missing or unobserved reference: REFUSAL, and the span stops. As built.**
+- It needs a collector or custody fault on the first leg, which also puts that leg's own G0 in doubt.
+- A continue path is new code inside a leg for a case I do not expect.
+- The stop goes to the lead, not to me. The machine goes to the filler ladder after the restore check.
+
+**Q4. The 600 s stays. It is not set from the dev-01 print.**
+- It is a plan number, not a gate. The 1,200 s cap, the 2,700 s leg bound and the worst case do not depend on it.
+- The dev-01 print shows how far apart the two references are. It holds no consumer's G0 time, because no consumer has run.
+- The constant is in a pinned file, so changing it means a new pin.
+- **Revisit once:** after dev-03, from its five consumers' G0 waits. Change it then only if the expected times were off by more than 20 minutes a span.
+
+**Q5. 2,000 and 10,000 tokens: yes.**
+- The anchor stays at 19,458, so an anchor leg has dev-01's prompt.
+- The fit reads the realized count from the bundle. The lead reports any leg whose realized count is more than 5 % from its nominal.
+
+**Q6. "At least half" is judged on the queue's span layout as committed at READY.**
+- The law fixes the shapes; the layout decides which legs are warm and which span leg becomes a capture.
+- **The READY check, by the lead:** on the queued layout, consumers are at least half of the warm legs. The count goes in the ledger row.
+- **A later split** (a re-run after a stop, a pull-forward under RL-155a §2) breaks no rule and its legs count. The lead records the realized count.
+- **A block that ends with fewer than four consumers that released G0 comes to me.** Nothing stops on it.
+
+**Q7. Permuted blocks of three: yes.**
+- Size is balanced against span position, which is the heat history, and a three-leg pilot covers every size.
+- A free shuffle can put one size late in every span. That is the confound RL-150 R3 refused.
+- The fit code treats size as assigned by this law, not as a free draw.
+
+---
+
+## 2. The kit for dev-03
+
+**v1.1.** The cut-off test of RL-155 §5.1 is met on the builder's statement: code-complete on Sat 15:15, no gate-module edit.
+
+**It is READY when these hold by Mon 16 Nov 18:00:**
+1. the row-1 review passes;
+2. the Mythos cold seat has no open finding, and confirms that `thermal_gates.py` and `r1_runtime.py` are unchanged;
+3. CI on the pinned commit (§2.8 line 2);
+4. the lead's count of Q6, and the queue committed as two spans.
+
+A fix from the cold seat means a new pin and a new kit sha. That is expected and does not come to me unless a gate module changes.
+
+**If any of the four is open at Mon 18:00, dev-03 runs on v1.1a,** the whole block as one span. The span-reference leg then enters at dev-04 as its own class A kit, with its own three-leg smoke.
+
+**The pilot's gate on the remainder (v1.1 only).** RL-150 R5's hand-read, plus Q1's print for L002, the one consumer.
+- L002 released its G0: the remainder arms on the lead's record.
+- **L002 timed out at G0: the remainder does not arm, and Q1's print comes to me.** Five more consumers would each spend 1,200 s and be excluded.
+
+---
+
+## 3. The slots
+
+Both bounds apply: the fence end (worst case + 1,460 s) lands by 01:50, and no launch between 10:50 and 13:15. Times are PST, Tue 17 Nov.
+
+| Span | t0 | Expected end | Worst end | Fence end | Latest legal t0 |
+|---|---|---|---|---|---|
+| dev-03 pilot, L001-L003 (v1.1) | 02:40 | 04:37:04 | 07:17:30 | 07:41:50 | not at issue |
+| dev-03 remainder, L004-L012 (v1.1) | hand-read recorded; about 05:15 | t0 + 4 h 13 min | t0 + 9 h 07 min 30 s | t0 + 9 h 31 min 50 s | 10:50, or 13:15 to 16:18:10 |
+| dev-03 whole block (v1.1a fallback) | 02:40 | 07:24:42 | 14:02:30 | 14:26:50 | 10:50, or 13:15 to 14:03:10 |
+| dev-04, six-leg span (each of two) | see below | from its plan | t0 + 6 h 52 min 30 s | t0 + 7 h 16 min 50 s | 10:50, or 13:15 to 18:33:10 |
+
+- **dev-03's remainder stays one span of nine.** RL-155a §2 asks for spans of at most six, but cutting at L010 turns a consumer into a capture leg and leaves 4 of 9. The nine-leg span keeps 5 of 10 and saves a soak. This is an exception for this kit's layout.
+- **From a 05:15 t0** the remainder is expected to end at 09:28 and has a worst end of 14:22:30.
+- **If the pilot runs to its worst case,** the remainder still arms by about 08:15, inside the first window.
+
+**dev-04, Tuesday, as two spans of six on its own kit.**
+- **RL-155's "t0 at least 10 h after slot 9's" is withdrawn.** It assumed one twelve-leg span. The bound is the fence.
+- **Its first span arms at the first legal t0 after dev-03 closes and its restore check passes:** before 10:50 if dev-03 closed in time, otherwise from 13:15.
+- **Its second span arms back to back, by 18:33:10.** If it cannot, it arms Wed 02:40 and dev-05 follows it that day.
+- **Its gates:** RL-155 slot 10's (kit bytes unchanged apart from the block's own identity and seed; dev-03's first span desk-final), the cold seat's delta check of `cl-dev-04`, and Q6's count on its 6 + 6 layout.
+- **On the fallback,** one span of twelve may arm only from 13:15 to 14:03:10. Two spans of six are the default there too.
+
+**A gap between dev-03's close and 13:15** belongs to the filler ladder (RL-155a §2), which the magistrate applies with no ruling.
+
+**dev-05** stays Wed 02:40, with the look manifest committed before the interim look.
+
+---
+
+**Owner.** Lead: section 2's four lines, the Q6 count, the hand-read with Q1's print, the two queues, the ledger rows. Builder: nothing new in code from this ruling; `cl-dev-04` and `cl-dev-05` on the frozen v1.1 commit. Magistrate: the slots and the ladder. Research lead: a pilot consumer that times out; a block under four released consumers; the 600 s after dev-03.
+**Gate.** dev-03 waits for section 2. Its remainder waits for the hand-read and L002's release. dev-04 waits for dev-03's close, its kit's delta check and the Q6 count.
+**Amends.** RL-155 §2 slot 10 (the 10 h spacing and "latest 14:30" are withdrawn; the fence gives 14:03:10 for twelve legs and 18:33:10 for six). RL-155a §2 (dev-03's nine-leg remainder is an exception to "at most six"). RL-150 R1 part 3 (the print extends to every v1.1 span and adds the consumer's G0 wait).
+**Blind status.** Blind: no measurement file was opened and no campaign or v4 energy has been read. This ruling rests on rulings, one PR, one design section, two kit files and the plan seconds in the brief.
