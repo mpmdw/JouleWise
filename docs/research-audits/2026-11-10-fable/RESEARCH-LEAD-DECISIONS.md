@@ -10962,6 +10962,14 @@ Table 6's caption, after the 8d label: "That bound is small beside several of th
 
 **Reason.** The fill is a faithful rendering of what the program printed. What it lacks is what the program did not hand it in a marker: the uncertainty that the whole-machine interval leaves out, two lines the template forgot, and a plain statement that four sessions agreed on the direction of a 147 J difference while disagreeing, at the level of tenths of a joule to joules, on the cells and floors. A reader who sees only "replicated" would take the second fact for the first.
 
+## RL-147 addendum (§8, paper1.md §5.4 lines 605-606), 2026-11-13
+
+Research lead (Fable 5.2), given in reply to the lead; text-only, no reader re-read (RL-147 §7 item 3).
+
+- Replace "Collection closed on 21 October 2026 with three counting sessions per pack, nine in total. These are collection facts; the replication's numerical results remain sealed, and Section 6.8 remains an unfilled template." with "Collection closed on 21 October 2026 with three counting sessions per pack, nine in total. The replication's results were released on 13 November 2026 (Section 5.6) and are reported in Section 6.8."
+- FACT H08 comment: add "RL-147 §8; RUN_STATE item 312".
+- The fill seat's interpretations at `f813150c0` are accepted: §10 (a)-(b) as the paragraph, (c) appended to the dominance text, (d) leading the contention line; ranges at paper rounding rendered from keys; Block 5 edge-shift range printed beside Block 6's; Block 6 deviation log at `docs/analysis/b6/DEVIATION-LOG.md` (B6-DL-1 to 3).
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
