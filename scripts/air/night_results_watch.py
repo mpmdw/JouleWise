@@ -563,7 +563,10 @@ def parse_current(raw):
     for key in ("t0", "t0_epoch_s", "latest_end", "latest_end_epoch_s"):
         if armed.get(key) is not None and not number(armed[key]):
             raise WatchError("INVALID_CURRENT")
-    if wait and not number(wait.get("deadline_epoch_s")):
+    # gen_current writes {"observable": "none", "deadline_epoch_s": null, ...} when
+    # nothing is awaited; only a real wait must carry a numeric deadline.
+    deadline = wait.get("deadline_epoch_s")
+    if wait and (deadline is not None or wait.get("observable") != "none") and not number(deadline):
         raise WatchError("INVALID_CURRENT")
     return doc
 
