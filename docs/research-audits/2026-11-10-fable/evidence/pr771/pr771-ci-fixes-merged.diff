@@ -1,0 +1,214 @@
+diff --git a/docs/analysis/b5/DEVIATION-LOG.md b/docs/analysis/b5/DEVIATION-LOG.md
+index 4eaa38da8..2ba5b7188 100644
+--- a/docs/analysis/b5/DEVIATION-LOG.md
++++ b/docs/analysis/b5/DEVIATION-LOG.md
+@@ -713,8 +713,8 @@ to the research lead for review before merge.
+ - **Status.** ADOPTED, 2026-11-10, by research-lead ruling RL-3 (RL:56-76). It is logged as DLE-6 because RL-3 says
+   "The lead logs it as DLE-6".
+ - **Original rule.** The 2026-10-20 renderer obligation, declared deviation Q-RENDERER, appended to the Block 5 seal
+-  record (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md:631-638`;
+-  `docs/process_traces/2026-10-20-magistrate-6cff3515/L9-RULING-ADDENDUM.md:92-99`). Its obligation, from the line on which it starts (SEAL_RECORD.md:635-638):
++  record (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md:697-704`;
++  `docs/process_traces/2026-10-20-magistrate-6cff3515/L9-RULING-ADDENDUM.md:92-99`). Its obligation, from the line on which it starts (SEAL_RECORD.md:701-704):
+ 
+ > changes. Obligation fixed now, before release: any block-5 Results renderer written after release prints every row of
+ > the validated fill input's contrast census with its issued status (unsupported and refused included), selects none, and
+@@ -977,7 +977,24 @@ to the research lead for review before merge.
+   was listed. The script, Δ, T, intervals, exclusion counts and outcome row are unchanged.
+ - **Effect on estimands.** None.
+ 
+-## DLE-13. `joulewise/flags/exclusions.py`: the keyword-only `pack_scoped` parameter, a cited rebind after the fact (RL-144 addendum M2)
++## DLE-13. Block 5's release event recorded in the seal record five days late (RL-147 section 4 item 1)
++
++- **Status.** Logged 2026-11-13, by research-lead ruling RL-147 section 4 item 1. Kind: reporting. Not blind to Block 5
++  outcomes or to Block 6; nothing the PLAN governs changes.
++- **Original rule.** The seal record's section "Release event" (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`)
++  said it would be written when the withheld energies were opened and would tie the digests of its section 4 to the final
++  harvest records. The event was Ed's unseal OK of 2026-11-08 11:17 PST (`RUN_STATE.md` item 231).
++- **What happened.** The record was owed at the event (2026-11-08) and was written on 2026-11-13, five days later. The
++  paragraph "Nothing is recorded here yet" was replaced by a section headed "Recorded late", which gives the event, the
++  release check, the digests of section 4 re-taken at the release checkout, the three analysed sessions' `harvest.json`
++  SHA-256 values and the released output's SHA-256, each re-taken from its file.
++- **Pins.** `tests/b5_analysis/test_frozen_files.py` reads the seal record but pins no byte of this section; the section
++  sits between Addendum 4 and Addendum 5 and adds no `## Addendum`, `B5-HARVEST-PIN` or erratum text, so no pin needed a
++  rebind. Line cites into the record that moved by 66 lines were updated: DLE-6's two `SEAL_RECORD.md` line ranges
++  (631-638 and 635-638 became 697-704 and 701-704).
++- **Effect on estimands.** None. The event and the released bytes are unchanged.
++
++## DLE-14. `joulewise/flags/exclusions.py`: the keyword-only `pack_scoped` parameter, a cited rebind after the fact (RL-144 addendum M2)
+ 
+ - **Status.** RECORDED, 2026-11-13, on `fix/2026-11-13-b6-m1-m2` (lead, under RL-144 addendum section 3 M2 and
+   RL-146 section 2 item 4). It is owed before the S-14 line merges to `main`.
+diff --git a/tests/b5_analysis/test_analysis_commit_agreement.py b/tests/b5_analysis/test_analysis_commit_agreement.py
+index 303e394fe..8977b84b9 100644
+--- a/tests/b5_analysis/test_analysis_commit_agreement.py
++++ b/tests/b5_analysis/test_analysis_commit_agreement.py
+@@ -22,6 +22,12 @@ from tests.b5_analysis.test_frozen_files import (
+ 
+ 
+ R4_TAG = "b5/analysis-r4"
++# Cited rebinds of frozen files made AFTER b5/analysis-r4 (the S-14 line, Block 6). They belong to
++# EVOLVED_ON_MAIN but r4 itself must not have changed them: r4 descends from the anchor with only the
++# rebinds that predate it. Each entry needs its deviation-log id; a new one needs its own cited rebind.
++POST_R4_REBINDS = frozenset({
++    "joulewise/flags/exclusions.py",  # 4e3446e6c, DLE-14 (RL-144 addendum M2): keyword-only pack_scoped
++})
+ REMOTE_PREFIX = "origin" + "/"
+ GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "synthetic", "GIT_AUTHOR_EMAIL": "test@example.invalid",
+@@ -61,8 +67,11 @@ class AnalysisIdentityTests(unittest.TestCase):
+         paths = sorted(frozen_digests())
+         changed = git(ROOT, "diff", "--name-only", anchor, tag, "--", *paths)
+         self.assertEqual(changed.returncode, 0, changed.stderr)
+-        self.assertEqual(set(changed.stdout.splitlines()), set(EVOLVED_ON_MAIN),
+-                         identities + "; changed frozen paths must be exactly the cited in-place rebinds")
++        self.assertTrue(POST_R4_REBINDS <= EVOLVED_ON_MAIN)
++        self.assertEqual(set(changed.stdout.splitlines()), set(EVOLVED_ON_MAIN) - POST_R4_REBINDS,
++                         identities + "; changed frozen paths must be exactly the cited in-place rebinds made before r4")
++        result = git(ROOT, "diff", "--quiet", anchor, tag, "--", *sorted(POST_R4_REBINDS))
++        self.assertEqual(result.returncode, 0, identities + "; a post-r4 rebind already differs at r4")
+         stable = sorted(set(paths) - EVOLVED_ON_MAIN)
+         self.assertTrue(stable)
+         result = git(ROOT, "diff", "--quiet", anchor, tag, "--", *stable)
+diff --git a/tests/b5_analysis/test_frozen_files.py b/tests/b5_analysis/test_frozen_files.py
+index fce17b573..4bbfafe23 100644
+--- a/tests/b5_analysis/test_frozen_files.py
++++ b/tests/b5_analysis/test_frozen_files.py
+@@ -20,7 +20,7 @@ B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
+ # joulewise/calibration_bracketing.py -- b5 under-90 round 2 (lead ruling under D-188
+ # and the 2026-10-30 frozen-components rule): the run-scoped candidate-physics memo
+ # (_verified_candidate_bound); every value it returns is the frozen refit's own.
+-# joulewise/flags/exclusions.py -- Block 6 option-c analysis (4e3446e6c), recorded as DLE-13 (RL-144 addendum
++# joulewise/flags/exclusions.py -- Block 6 option-c analysis (4e3446e6c), recorded as DLE-14 (RL-144 addendum
+ # section 3, M2): compute() gained the keyword-only `pack_scoped: bool = True`; with the default the result is
+ # Block 5's (tests/flags/test_flags_exclusions.py, Block5DefaultEquivalenceTests).
+ EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py",
+@@ -32,7 +32,7 @@ EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_b
+ REBOUND_WORKING_TREE = {
+     # b5 under-90 round 2 (13af1baa8), the candidate-physics memo; DLE-3.
+     "joulewise/calibration_bracketing.py": "40fd34bb82b8a0a57ece79ef23e507482a5ea79dd0c6cc001c5e3ea0cfe2a1f2",
+-    # Block 6 option-c analysis (4e3446e6c), the keyword-only pack_scoped parameter; DLE-13.
++    # Block 6 option-c analysis (4e3446e6c), the keyword-only pack_scoped parameter; DLE-14.
+     "joulewise/flags/exclusions.py": "ebe1678c0fdd60b1ddd20d432cf07412bd321a8629589f4ce4c6b334378f0ad6",
+ }
+ PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
+diff --git a/tests/host_command_sites.json b/tests/host_command_sites.json
+index dee429dfa..970afe61e 100644
+--- a/tests/host_command_sites.json
++++ b/tests/host_command_sites.json
+@@ -671,6 +671,78 @@
+     "command": "python-isolated",
+     "seam": "none: usage docstring (python3.13 -I); not a child launch"
+   },
++  {
++    "file": "scripts/b6_r12_runtime.py",
++    "locator": "install_sources.ChainSources.__init__:541443a289d468bd",
++    "command": "pmset",
++    "seam": "string literal '/usr/bin/pmset' inside ChainSources.__init__ rule-table keys (pmset -g assertions and pmset displaysleepnow); dictionary key for the declared-result table, never passed to a process; Sources.run answers from the table (R12 fixture seam, execute nothing)"
++  },
++  {
++    "file": "scripts/b6_r12_runtime.py",
++    "locator": "install_sources.ChainSources.__init__:817dc28f0bb99139",
++    "command": "pmset",
++    "seam": "argv tuple ('pmset', 'displaysleepnow') used as a key in ChainSources self.rules: declared rc 0, empty output; display-sleep command is simulated by the R12 fixture, execute nothing"
++  },
++  {
++    "file": "scripts/b6_r12_runtime.py",
++    "locator": "install_sources.ChainSources.__init__:9d2be7ac15275504",
++    "command": "pmset",
++    "seam": "string literal 'pmset' as the first element of the declared-reading argv keys (-g batt, -g, -g assertions, -g therm, -g systemstate) in ChainSources.__init__; keys of the table of canned outputs, never executed; the getters are read-only anyway (R12 fixture seam)"
++  },
++  {
++    "file": "scripts/b6_r12_runtime.py",
++    "locator": "install_sources.ChainSources.__init__:f679f0584e90bf28",
++    "command": "pmset",
++    "seam": "argv tuple ('/usr/bin/pmset', 'displaysleepnow') used as a key in ChainSources self.rules: declared rc 0, empty output; display-sleep command is simulated by the R12 fixture, execute nothing"
++  },
++  {
++    "file": "scripts/b6_r12_runtime.py",
++    "locator": "install_sources.ChainSources.popen:175a05d35d6cb7d5",
++    "command": "caffeinate",
++    "seam": "string literal '/usr/bin/caffeinate' in the argv-prefix comparison in ChainSources.popen; the matched call is answered by a ReturnedProcess(alive=True) fake handle, no process is started (R12 fixture seam)"
++  },
++  {
++    "file": "scripts/b6_r12_runtime.py",
++    "locator": "install_sources.ChainSources.popen:2e15e4357a1dfcb1",
++    "command": "caffeinate",
++    "seam": "argv-prefix comparison ('/usr/bin/caffeinate', '-i', '-s', '-w') in ChainSources.popen; records a declared rc 0 receipt (executed=false) and returns a ReturnedProcess(alive=True) fake handle; the sleep-guard caffeinate is simulated by the R12 fixture, execute nothing"
++  },
++  {
++    "file": "scripts/b6_r12_runtime.py",
++    "locator": "install_sources.ChainSources.run:ae17b9a737bf75ad",
++    "command": "launchctl",
++    "seam": "argv-prefix comparison ('launchctl', 'print') in ChainSources.run; answers rc 113 'Could not find service' (declared_job_absent) from the fixture; launchctl is never executed and only the read-only print form is matched (R12 fixture seam)"
++  },
++  {
++    "file": "scripts/b6_r12_session_fixture.py",
++    "locator": "declare_sources:0672075787e402de",
++    "command": "caffeinate",
++    "seam": "manifest text only: the key 'caffeinate' of the actions dict in declare_sources ('declared live handle; pmset assertions source confirms it; execute nothing'); a documentation string in the R12 fixture manifest, no command"
++  },
++  {
++    "file": "scripts/b6_r12_session_fixture.py",
++    "locator": "declare_sources:9d369dd3b33de616",
++    "command": "caffeinate",
++    "seam": "manifest text only: seam description 'declared caffeinate and pmset command results; no host action' for KeepAwake defaults in declare_sources; documentation string, no command"
++  },
++  {
++    "file": "scripts/b6_r12_session_fixture.py",
++    "locator": "declare_sources:9d369dd3b33de616",
++    "command": "pmset",
++    "seam": "manifest text only: seam description 'declared caffeinate and pmset command results; no host action' for KeepAwake defaults in declare_sources; documentation string, no command"
++  },
++  {
++    "file": "scripts/b6_r12_session_fixture.py",
++    "locator": "declare_sources:bcfb1e01dbb880b2",
++    "command": "pmset",
++    "seam": "manifest text only: actions-dict value 'declared live handle; pmset assertions source confirms it; execute nothing' in declare_sources; documentation string, no command"
++  },
++  {
++    "file": "scripts/b6_r12_session_fixture.py",
++    "locator": "prepare:dcbfc4801677a664",
++    "command": "kill",
++    "seam": "manifest text only: seam description for subprocess.Popen._handle_exitstatus ending 'no native kill' in prepare; documentation string, no command"
++  },
+   {
+     "file": "scripts/bench_replay_start_drift.py",
+     "locator": "<module>:6bba141443c9a807",
+diff --git a/tests/test_b6_r12_session_fixture.py b/tests/test_b6_r12_session_fixture.py
+index cde8eeee0..cee237ea3 100644
+--- a/tests/test_b6_r12_session_fixture.py
++++ b/tests/test_b6_r12_session_fixture.py
+@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO / "scripts"))
+ from b6_r12_session_fixture import command, prepare, export_chain_inputs, prepare_interpreters
+ from b6_r12_runtime import SharedClock
+ from b6_r12_chain_fixture import PIN
++from tests.git_fixture import init_git_fixture
+ 
+ ADDITIONAL_MONITOR_SERIES = (
+     ("battery.jsonl", "reading", "battery_s"),
+@@ -911,7 +912,7 @@ class VerifierInventoryTests(unittest.TestCase):
+                 path = repo / name
+                 path.parent.mkdir(parents=True, exist_ok=True)
+                 path.write_bytes(data)
+-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
++            init_git_fixture(repo, "-q")
+             subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+             subprocess.run(["git", "-C", str(repo), "-c", "user.name=R12 unit",
+                 "-c", "user.email=r12-unit@example.invalid", "-c", "commit.gpgsign=false",
+diff --git a/tests/test_whole_window_inverted_corner_clamp.py b/tests/test_whole_window_inverted_corner_clamp.py
+index 9849f0cd5..dfbbaf35e 100644
+--- a/tests/test_whole_window_inverted_corner_clamp.py
++++ b/tests/test_whole_window_inverted_corner_clamp.py
+@@ -63,9 +63,9 @@ ORIGIN_MAIN_SHA256 = {
+ # Cited rebind (DLE-3, docs/analysis/b5/DEVIATION-LOG.md): test_frozen_files.py gained the
+ # calibration_bracketing.py entry of EVOLVED_ON_MAIN and its citation (b5 under-90 round 2, 13af1baa8),
+ # then the working-tree pin of the rebound bytes (REBOUND_WORKING_TREE; PR #693 review M2/M1).
+-# Rebound again for the exclusions.py entries (DLE-13, RL-144 addendum M2).
++# Rebound again for the exclusions.py entries (DLE-14, RL-144 addendum M2).
+ FROZEN_FILES_TEST_SHA256 = (
+-    "f625391364e26f7225483d068acb0c9d4c323ea83125a1abc07d6003556d192d"
++    "319f75c9820e819c3fb60b8b42e06dc5e267b2be139a632a35666f720c55ec92"
+ )
+ PREFILL = "/phase_energy_j/prefill"
+ UNRECORDED = "anchor_energy_envelope_unrecorded"

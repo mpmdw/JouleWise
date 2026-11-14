@@ -69,3 +69,55 @@ The content of the PR is right and I would change none of it. It cannot merge at
 - The PR body.
 
 **Owner.** The lead: the fix, the runs, the merge and the record. Research lead: finding 7's list if it is not empty.
+
+---
+
+# Addendum 1 (2026-11-13 20:06 PST): the three further CI failures, head `baff329ad`
+
+## Verdict: ADMIT. All three fixes stand as written; no change asked.
+
+Row 4 now stands on `baff329ad1d904e7af4395c0c1938e8c5a5d5f18`. The merge still waits on the full run finishing green on that head.
+
+**Read.** `/Volumes/JW-EXT/scratch/pr771-ci-fixes-merged.diff`, which I confirmed equals `git diff 8d70fbe9a baff329ad -- tests docs/analysis/b5/DEVIATION-LOG.md`. The skip commit `8d70fbe9a`. `tests/test_host_command_sites.py` lines 1-152. In `scripts/b6_r12_runtime.py`: `install_sources`, and `ChainSources.__init__`, `run`, `rewritten`, `subprocess_run` and `popen` (lines 819-1012). In `scripts/b6_r12_chain_fixture.py`: the base `Sources` class (lines 92-190). The three flagged lines of `scripts/b6_r12_session_fixture.py`. **Ran:** `git`, `shasum`, `gh pr checks`. No test.
+
+**One thing I did that I should not have:** a `git fetch origin main` from the worktree. It moved `origin/main` in the shared git directory from `fd43dcdf4` to `67e6289af`; the worktree itself is untouched. It is the same slip I recorded in the RL-144 addendum.
+
+## Findings
+
+A1. **The skip commit `8d70fbe9a` is what finding 6 asked.** Four `skipUnless(sys.platform == "darwin", …)` decorators on methods and one reason string; nine added lines, one file. The reason states the mechanism truthfully.
+
+A2. **Fix 1 (`git init` through the helper): ADMIT.** One call replaced at line 915 and one import. It is a temp repository inside a unit test; the helper only adds maintenance-off settings to it. Nothing the R12 verifier judges changes. The lead's macOS count (86 OK, 14 skipped) equals the r2 count.
+
+A3. **Fix 2 (the twelve allowlist rows): ADMIT. I checked the claim that no site executes a host command myself, and it holds.**
+   - `ChainSources.run` starts a real process in two cases only: Git on the fixture's own repositories, and an argv that `rewritten` maps to the fixture's Python bootstrap or its `shell.zsh`. `rewritten` returns nothing for any other argv, including one prefixed by `taskpolicy -b`.
+   - Every other argv ends in the base `Sources.run`, which answers from the rule table or returns rc 126 "RL-49 default deny", and records `executed: False`.
+   - The seven runtime rows are what the reasons say: `pmset` strings and tuples are keys of that table; the `caffeinate` prefix in `popen` records a declared success and returns a `ReturnedProcess` handle with no process behind it; `launchctl` is matched only as `launchctl print <label>` and answered rc 113 from the fixture.
+   - `launchctl` in any other form, `pmset` with any other arguments and any signal fall to the deny.
+   - The five session-fixture rows are manifest prose (lines 104, 118 and 154), not argv.
+   - Both files are outside the 24, and neither changes in this fix.
+   - The allowlist is keyed by function and token hash, so a later edit that kept the same literals and made one of them execute would not trip it. That is the guard's design on `main`, not a fault of these rows. The R12 audit hook is the second fence for that.
+
+A4. **Fix 3 (`POST_R4_REBINDS`): ADMIT.** The test still asserts an equality, now against `EVOLVED_ON_MAIN` minus the post-r4 set, and it adds the check that makes the exception safe: a path in `POST_R4_REBINDS` must be unchanged between the anchor and r4. So the set cannot be used to excuse a change that r4 itself made. `exclusions.py` satisfies it: it differs from the Block 5 commit only by `4e3446e6c`, which postdates r4.
+
+A5. **DLE-14.** The renumbering is right: `main`'s DLE-13 is the Block 5 release-event row from PR #773. No stale "DLE-13" remains under `tests/`, `joulewise/` or `scripts/`. `FROZEN_FILES_TEST_SHA256` is `319f75c9…ec92`, the hash of `test_frozen_files.py` at the head. Where my findings 2 and 3 above say DLE-13, read DLE-14; the entry's text is unchanged.
+   - *Optional, not a condition:* one sentence in DLE-14 naming `POST_R4_REBINDS` in `test_analysis_commit_agreement.py`, since that exception exists only because of this rebind.
+
+A6. **The 24 at the new head.** 0 of 24 differ from the record's `closure_sha256`. `6e6d1b18a` is still an ancestor of the head.
+
+A7. **`main` moved once more while I read: `67e6289af`, one line in `RUN_STATE.md`.** The head no longer contains `main`, but `git merge-tree origin/main HEAD` is clean and the line touches nothing in this PR. No further merge of `main` into the branch is needed for it. The post-merge hash check (merge condition 4) covers the result.
+
+A8. **CI at 20:04 PST on `baff329ad`:** 10 checks passed, 10 pending, 1 failed. The failure is `gate-ledger`, which is the unfilled PR body.
+
+## Merge conditions, restated
+
+1. Full suite green on `baff329ad` (or on a later head that differs only by A5's optional sentence).
+2. Ledger rows filled; merge by merge commit.
+3. The 24 hashes re-taken on `main`, recorded in `RUN_STATE.md`.
+4. Any failing id in the finished run comes back to me, as before.
+
+## Not verified by me
+
+- Any test result at `baff329ad`; the lead's "Ran 101, OK" is taken as reported.
+- That the twelve locator hashes match the scanner's output. `test_host_command_sites` passing shows it; I did not run it.
+- The R12 runtime beyond the five methods named above.
+- The content of PR #773's DLE-13 and the seal-record change. They are `main`'s, not this PR's.
