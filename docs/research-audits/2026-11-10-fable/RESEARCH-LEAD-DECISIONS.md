@@ -14588,3 +14588,56 @@ If the second Part C misses 22:40, the machine is quiet until 02:40. The ladder 
 **Gate.** #783 merges on its own five rows; row 4 is my cold pass of the final head. Findings 3, 4, 5 and 9 gate the W1 receipt, as dispositioned. The slot session waits for a Part C pass at a commit containing #783. The receipt retirement merges before the W1 receipt. Nothing here gates tonight's runs except §5's start bound.
 **Amends.** RL-152 §1.2 (a fourth condition). RL-145 §3 (the lexical rule is the selection rule on the saved Part B classification and is not a condition of the session's bar). RL-155 §3.1 (the carry rule as restated in §4.1; #783 resets the pass). RL-155a §1.2 row 3 and §2's F0 row (the 22:50:40 bound). The dispositions' gate for findings 1, 7 and 8 (read as in §4.2). DEVIATIONS RL149-DUTY-TURNS and RL149-ALIAS-PAIR-R8-6 (the text of §1 and §2).
 **Blind status.** Blind: no v4 outcome exists and nothing sealed or measured was opened. This ruling rests on rulings, code, test code, one test run and three numbers computed from the launcher's own functions. The alias bar and the turn-opportunity condition are fixed on code alone, before the slot session exists.
+
+# RL-156a. dev-02's line 2 holds, with the sentence for its arm record. dev-01 `s04b` at 02:40 is accepted: "by 09:30" was a rounded description, and the fence is the bound
+
+Research lead (Fable 5.2), Sat Nov 14 15:08 PST 2026 (from `date`). Two questions from the execution of RL-155a. RL-155a and RL-156 stand except where a section below amends them.
+
+**Read.**
+- RL-155a in full, RL-152 §2.2, RL-155 §3.3 and RL-156 §4.3 and §5, in the decision log at audit `d52591d52`.
+- The builder's `LINE2-added-modules.md` (scratch copy, sha256 `3518c4a6…`).
+- The RL-155a section of `/Volumes/JW-EXT/scratch/dev02-ready-1414/README.md`.
+
+**Checked myself.**
+- **Seven blobs** by `git rev-parse` at `fe907d0d3`, `b4b6aeb19` and `ae340d3da`. All match the builder's table.
+- **The `run_align_r1_smoke.py` diff** between the pilot commit and #777's head: one `raise ValueError` message, 2 lines added and 1 removed.
+- **The arithmetic of `s04b`:** 3,150 + 8 x 2,700 = 24,750 s; 02:40 plus that is 09:32:30; plus 1,460 s is 09:56:50; the latest t0 for a 10:50 fence is 03:33:10.
+
+**Not checked.**
+- The builder's audit-hook and profiler records (`files-*.json`, `exec-r1_followup.json`). "Executed", "only imported" and "only scanned" are taken from the builder's page.
+- The sampler test's pass on the Air and the reproduction of the census failure at `8bd31ae5a`. I ran no test.
+- The plan files under `rl155a/plans/`. The times are taken from the README's table.
+
+**Not done.** No SSH, no measurement file opened, no commit. The only file written is this one.
+
+---
+
+## 1. dev-02's line 2 holds
+
+**The three files #777 changed do not route dev-02 to me. "The bytes it tests" in RL-155a §4 means the frozen bytes a red test executes, or the frozen site its failing assertion names.** A frozen file the module only imports, or the census only scans, is not tested by that red.
+
+- **What the sentence was for.** It rules out a red that points at a fault in bytes a dev-02 leg runs. The comparison that carries that is base against pilot commit, because dev-02 runs `b4b6aeb19`. All three files are identical on that pair (`963b6511`, `9619cc86`, `b7a66a5b`).
+- **#777's head is in the sentence** only to place each test's passing run. Neither red needs it:
+  - the sampler test passes at `b4b6aeb19` on the Air, and the frozen bytes it executes are equal at all three commits;
+  - the census test passes at `b4b6aeb19` itself, and its red at `8bd31ae5a` comes from an unfrozen file.
+- **The three changes are not new.** They are #777's frozen-path changes that RL-152 §2.2 already hands to the cold seat of the next re-pin, with RL-156 §4.3's two conditions. That check is unchanged and still owed there.
+- **One limit.** The sampler test's pass is one run on the Air. `r1_runtime.py` is leg-executed code, so the attribution of the CI error to the host rests on that run plus the pilot's R9 pass on the same bytes (RL-155 §3.3 line 8). If the pilot's R9 record shows any sampler starvation or inventory gap, this section does not hold and dev-02 comes back to me.
+
+**The sentence for dev-02's arm record, and as the note beside the pilot's:**
+
+> Line 2 (RL-155a §4, read by RL-156a §1): the two red modules beyond RL-152's eight test no frozen byte that differs. `align.test_r1_followup` executes frozen `r1_runtime.py` (`261761f1`) and `thermal.py` (`e7cbd680`), and the failing site of `hazards.test_refusal_allowlist` is frozen `launch_align_r0.py` (`d2e8cba0`), each byte-identical at `fe907d0d3`, `b4b6aeb19` and `ae340d3da`; the allowlist red comes from unfrozen `configs/gates/hazard_refusals.json`; the three frozen files #777 changed (`v4_registration.py`, `align_r1_rehearsal.py`, `run_align_r1_smoke.py`) are only imported or scanned by these modules and are identical at the base and at the pilot commit.
+
+## 2. `dev-01-s04b` (L007-L012) at 02:40: accepted as planned
+
+**Nothing changes. RL-155a §1.2's "worst-case end by 09:30" is withdrawn as a bound.** It was my rounding of the six-leg worst case, and I did not compute it. The bounds on `s04` and `s04b` are the two of RL-155a §3:
+- the fence end lands by 10:50 (`s04b` from 02:40: 09:56:50, 53 min of margin);
+- no launch between 10:50 and 13:15.
+
+The latest t0 values in the README stand: 04:18:10 for five legs, 03:33:10 for six. The item draft's 04:18 and 03:33 are correct as written.
+
+---
+
+**Owner.** Lead: the sentence into dev-02's arm record and beside the pilot's; the check of the pilot's R9 record named in §1.
+**Gate.** dev-02 still waits for RL-155 §3.3's four lines; §4's line is now this sentence. Neither answer is gated on me further.
+**Amends.** RL-155a §4 (the reading of "the bytes it tests"). RL-155a §1.2 (the 09:30 clause).
+**Blind status.** Blind: nothing sealed or measured was opened. This note rests on rulings, one builder page, blob hashes and one diff.
