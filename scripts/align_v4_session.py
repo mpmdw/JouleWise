@@ -996,6 +996,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     # MED-4: per-member DC residuals print for BENIGN members only; sabotage (any non-benign)
     # members' DC rows are sealed (hash only) until the v5 addendum registers.
     dc = km003c.seal_non_benign(dc, plan['members'])
+    # Desk release guard (protocol B0/B2/B9/R27): before release a C or T window prints no member's DC row.
+    from joulewise.align.apple import v4_desk_seal
+    sealed_scope = v4_desk_seal.sealed_scope(state)
+    if sealed_scope in ('C', 'T'):
+        dc = v4_desk_seal.seal_dc(dc, plan['members'])
     for rid, row in dc['members'].items():
         if row.get('sealed'):
             print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
@@ -1070,7 +1075,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     # R22-3: the printed balance check by condition (exclusions + flags per member-second); print only.
     from joulewise.align.apple import v4_balance
     report['balance_check'] = v4_balance.balance_check(records)
-    for line in v4_balance.lines(report['balance_check']):
+    if sealed_scope in ('C', 'T'):
+        # Member exposure is member time (B7's time baseline): withheld with the report until release.
+        report['balance_check'] = v4_desk_seal.seal_balance(report['balance_check'])
+    for line in (v4_desk_seal.balance_lines(report['balance_check']) if sealed_scope in ('C', 'T')
+                 else v4_balance.lines(report['balance_check'])):
         print(line)
     if supplemental_report(records):
         report['supplemental_sentinels'] = supplemental_report(records)
@@ -1105,10 +1114,18 @@ def desk(session_root, **kwargs):
     kwargs.setdefault('extra_checks', powermode_desk_check)
     from joulewise.align.apple import v4_contention
     kwargs.setdefault('exclusion_policy', v4_contention.split_codes)      # R22-1: contention is disclosure-only
+    # Desk release guard (desk-leak audit 2026-11-13; protocol B0/B2/B9/B7, DC seal, R27/A25): before the
+    # registered release event a C/T desk prints and records only the allowlist; W1 its configured scope.
+    from joulewise.align.apple import v4_desk_seal
+    if 'print_policy' not in kwargs:
+        kit_path = kwargs['kit']
+        kwargs['print_policy'] = v4_desk_seal.desk_policy(state, lambda: pilot._member_rows(state, kit=kit_path))
+    seal = kwargs['print_policy']
     status = pilot.desk(session_root, **kwargs)
     # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
     try:
-        members = pilot.h.read(status['pilot']).get('members', [])
+        full = getattr(seal, 'full', None)
+        members = full['members'] if full is not None else pilot.h.read(status['pilot']).get('members', [])
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         members = None
     removed = [m.get('run_id') for m in members or () if charging_only_exclusion(m)]

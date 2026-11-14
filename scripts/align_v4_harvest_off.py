@@ -217,6 +217,13 @@ def cmd_triage(args, run=subprocess.run):
               # and its SECONDARY meter tabulation, both read by the packet builder (R17).
               'checks': checks, 'km003c': report.get('km003c'),
               'thermal': report['thermal']}
+    # Desk release guard (protocol B0/B2/B9/R27): the triage's record source carries the same thermal and
+    # meter sections the sealed desk records (the allowlist the packet builder reads), never member energy.
+    from joulewise.align.apple import v4_desk_seal
+    scope = v4_desk_seal.sealed_scope(state)
+    if scope is not None:
+        sealed = v4_desk_seal.seal_extra({'thermal': result['thermal'], 'km003c': result['km003c']}, rows, scope)
+        result.update(thermal=sealed['thermal'], km003c=sealed['km003c'])
     if args.out:
         # The record source the arm's packet builder reads for the provisional adjudication (R17).
         from joulewise.align.apple.pilot_analysis import finite_json

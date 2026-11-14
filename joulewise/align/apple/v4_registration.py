@@ -112,6 +112,7 @@ EXECUTED_CLOSURE = (
     'joulewise/align/apple/v4_balance.py',
     'joulewise/align/apple/v4_cadence.py',
     'joulewise/align/apple/v4_contention.py',
+    'joulewise/align/apple/v4_desk_seal.py',
     'joulewise/align/apple/v4_topup.py',
     'joulewise/align/apple/xml_tool_calls.py',
     'joulewise/align/attribution.py',

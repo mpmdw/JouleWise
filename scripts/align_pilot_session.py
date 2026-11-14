@@ -285,7 +285,10 @@ def apply_exclusion_policy(entries, policy=None):
 
 
 def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None, exclusion_policy=None,
-         kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None):
+         kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None, print_policy=None):
+    """The common desk. ``print_policy(pilot, member_lines, *, output) -> (pilot, member_lines)`` is applied
+    before PILOT.json is written and before every print below (v4 release guard,
+    ``joulewise.align.apple.v4_desk_seal``); ``None`` is the identity, so the v3 desk is unchanged."""
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     plan = h.read(state['plan_path'])
@@ -414,6 +417,41 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
              'status': 'instrument_ok' if all(v is True for v in checks.values()) else 'instrument_incomplete'}
     from joulewise.align.apple.pilot_analysis import finite_json
     pilot = finite_json(pilot)
+    # The per-member printed lines, built from the full members, then passed through the policy with the PILOT.
+    def member_lines():
+        lines = []
+        for member in members:
+            record = {'harvest_flags': {'flags': member['harvest_flags'], 'battery_discharge': member['battery_discharge']}}
+            summary = member.get('summary')
+            if summary is None:
+                record.update(unreadable=member['unreadable'], detail={
+                    'excluded': member['excluded'], 'exclusion_codes': member['exclusion_codes']})
+            else:
+                pre = summary['window_evidence_precheck']
+                record['detail'] = {
+                    'end_state': summary['end_state'], 'state_changing_calls': summary['state_changing_calls'],
+                    'episode_seconds': summary['duration_s'], 'sampler_policy': summary['configuration']['sampler'],
+                    'cap_hits': sum(f.startswith('turn_token_budget_reached:') for f in summary['flags']),
+                    **{k: summary[k] for k in ('acted_beyond_read_marking', 'bank_stage', 'cache_statistics', 'repetition_flags_per_turn', 'phase_window_reason_counts')},
+                    **{k: summary[k] for k in ('classification', 'counted_tool_names', 'read_only_tool_names', 'unobserved_tool_names', 'exclusion_codes', 'excluded', 'os_thermal')},
+                    'tool_names_per_turn': summary['tool_names_per_turn'], 'unknown_tool_names': summary['unknown_tool_names'],
+                    'thermal_pressure_seconds': summary['thermal_pressure_seconds'],
+                    'active_gpu_clock_mhz': summary['active_gpu_clock_mhz'],
+                    'per_turn_active_gpu_clock_mhz': summary['per_turn_active_gpu_clock_mhz'],
+                    'chain_eligible': summary['chain_eligible'], 'chain_reasons': pre['reasons'] + summary['exclusion_codes'],
+                    'target_precheck_eligible': pre['eligible'],
+                    'request_window_diagnostics': pre['request_windows'],
+                    'window_evidence_precheck': {r['window']: {'eligible': r['eligible'], 'reasons': r['reasons']} for r in pre['windows']},
+                    'ended_in_unclosed_reasoning': summary['ended_in_unclosed_reasoning']}
+            lines.append((member['run_id'], record))
+        return lines
+    shown = {'repeat_token_identity': deterministic, 'cross_pilot_token_identity': comparison,
+             'repeat_energy_spread': spreads}
+    lines = None
+    if print_policy is not None:
+        pilot, lines = print_policy(pilot, member_lines(), output=output)
+        checks = pilot['checks']
+        shown = {k: pilot.get(k) for k in shown}
     h.write(output / 'PILOT.json', pilot)
     status = {'schema_version': desk_schema, 'non_claim': True, 'plan_id': state['session_id'],
               'pilot': str(output / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
@@ -429,38 +467,20 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         print(f'{name}: {"not_evaluated" if ok == "not_evaluated" else "pass" if ok is True else "fail"}')
     print('model.identity_mismatch: under NON_CLAIM_FILE_IDENTITIES_ONLY pins the runtime identity is unsealed (null); this is expected and is not a claim identity pass.')
     print('session harvest_flags: ' + json.dumps(pilot['session_harvest_flags'], sort_keys=True))
-    for member in members:
-        print(member['run_id'] + ' harvest_flags: ' + json.dumps({'flags': member['harvest_flags'],
-              'battery_discharge': member['battery_discharge']}, sort_keys=True))
-        summary = member.get('summary')
-        if summary is None:
-            print(member['run_id'] + ': unreadable ' + member['unreadable'] + ' ' + json.dumps({
-                'excluded': member['excluded'], 'exclusion_codes': member['exclusion_codes']}, sort_keys=True))
+    for run_id, record in (member_lines() if lines is None else lines):
+        print(run_id + ' harvest_flags: ' + json.dumps(record['harvest_flags'], sort_keys=True))
+        if 'unreadable' in record:
+            print(run_id + ': unreadable ' + record['unreadable'] + ' ' + json.dumps(record['detail'], sort_keys=True))
             continue
-        pre = summary['window_evidence_precheck']
-        print(member['run_id'] + ': ' + json.dumps({
-            'end_state': summary['end_state'], 'state_changing_calls': summary['state_changing_calls'],
-            'episode_seconds': summary['duration_s'], 'sampler_policy': summary['configuration']['sampler'],
-            'cap_hits': sum(f.startswith('turn_token_budget_reached:') for f in summary['flags']),
-            **{k: summary[k] for k in ('acted_beyond_read_marking', 'bank_stage', 'cache_statistics', 'repetition_flags_per_turn', 'phase_window_reason_counts')},
-            **{k: summary[k] for k in ('classification', 'counted_tool_names', 'read_only_tool_names', 'unobserved_tool_names', 'exclusion_codes', 'excluded', 'os_thermal')},
-            'tool_names_per_turn': summary['tool_names_per_turn'], 'unknown_tool_names': summary['unknown_tool_names'],
-            'thermal_pressure_seconds': summary['thermal_pressure_seconds'],
-            'active_gpu_clock_mhz': summary['active_gpu_clock_mhz'],
-            'per_turn_active_gpu_clock_mhz': summary['per_turn_active_gpu_clock_mhz'],
-            'chain_eligible': summary['chain_eligible'], 'chain_reasons': pre['reasons'] + summary['exclusion_codes'],
-            'target_precheck_eligible': pre['eligible'],
-            'request_window_diagnostics': pre['request_windows'],
-            'window_evidence_precheck': {r['window']: {'eligible': r['eligible'], 'reasons': r['reasons']} for r in pre['windows']},
-            'ended_in_unclosed_reasoning': summary['ended_in_unclosed_reasoning']}, sort_keys=True))
-    print('repeat_token_identity (greedy-only; sampled configurations skipped): ' + json.dumps(deterministic, sort_keys=True))
-    if comparison is not None:
-        print('cross_pilot_token_identity: ' + json.dumps(comparison, sort_keys=True))
+        print(run_id + ': ' + json.dumps(record['detail'], sort_keys=True))
+    print('repeat_token_identity (greedy-only; sampled configurations skipped): ' + json.dumps(shown['repeat_token_identity'], sort_keys=True))
+    if shown['cross_pilot_token_identity'] is not None:
+        print('cross_pilot_token_identity: ' + json.dumps(shown['cross_pilot_token_identity'], sort_keys=True))
     for key in ('I4_prime', 'registered_eligible_members', 'episode_scope_alternative_eligible_members',
                 'episode_scope_alternative_ineligible_reasons',
                 'raw_within_cell_energy_sd', 'residual_analysis'):
         print(key + ': ' + json.dumps(pilot[key], sort_keys=True, allow_nan=False))
-    print('repeat_energy_spread: ' + json.dumps(spreads, sort_keys=True))
+    print('repeat_energy_spread: ' + json.dumps(shown['repeat_energy_spread'], sort_keys=True))
     print('harvest_exit: ' + str(result.returncode))
     print('harvest_status: ' + status['harvest_status'])
     return status
