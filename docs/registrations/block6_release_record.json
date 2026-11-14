@@ -129,7 +129,7 @@
    "result": "pass"
   }
  },
- "date": "2026-11-13 17:38 PST",
+ "date": "2026-11-13 18:23 PST",
  "harvest_sha256": {
   "r1-alpha/archive": "c0b5a53140da8d9cb72309eeda251a0c7794655726f030eb6dc0b01a20b0630f",
   "r1-beta/archive": "da7fcdebf734c7ca2585f757482e468b374204d14d041a6b797ad5081178b751",
@@ -232,7 +232,7 @@
    "wall_s": 2805.143
   }
  ],
- "main_commit": "76a6eba99b3a08137c8608d92c4fcc36581fa4a4",
+ "main_commit": "a5dc2a1b56d1f55126324fc8c0b73f5f10d8d88d",
  "manifest_sha256": "b2901d51990812f6c2dadce1a763d90502d85b58a9d5b5b358d4cbb2ba9a9d6b",
  "outputs_sha256": {
   "dry": {
@@ -257,7 +257,7 @@
  },
  "s14_commit": "6e6d1b18a9dffbba675c3abd28db2e4c6a484fde",
  "schema": "joulewise.b6_release_record.v1",
- "signed_by": "Laptop lead (Claude Opus 5.5) under Ed's OK of 2026-11-13 (RUN_STATE item 309)",
+ "signed_by": "Laptop lead (Claude Opus 5.5) under Ed's OK of 2026-11-13 (RUN_STATE items 309 and 311)",
  "tag": "b6/analysis-r2",
  "tag_commit_equal": true,
  "verify_receipt_sha256": {
