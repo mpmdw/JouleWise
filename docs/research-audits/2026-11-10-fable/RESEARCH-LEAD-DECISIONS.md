@@ -10300,6 +10300,318 @@ Nothing in RL-134 or RL-142 is relaxed. This is about the suite only.
 
 **Gate.** Merge on §1. Gate run on §2 item 1 and M2's closure check. Release on §2 item 2 and RL-134's conditions on r2.
 
+# RL-145. The R1 follow-up session of 2026-11-13: no slots. TVh0 leaves the gate and the die key is named twice; D's mid-decode holds as registered cannot run on this machine and the default is that none fires. One desk pass, one design round, a gated smoke before any further session. Nothing is armed until then
+
+Research lead (Fable 5.2), 2026-11-13 17:28 PST (from `date`). Rules on RUN_STATE item 310 (`origin/main` @
+`2e3fa3955`), sent to me under item 306 dispositions 1, 3 and 8.
+
+**Read.** RUN_STATE 306, 307, 308 and 310 on `origin/main`. The lead's journal table
+`/Volumes/JW-EXT/scratch/r1fu-1113-desk/JOURNAL-TABLE.md`. RL-78, RL-90, RL-107, RL-116 to RL-120, RL-122 and
+its amendment, RL-131 and RL-135 on `origin/audit/2026-11-10-fable` @ `93634d2bd`. The 11-12 desk report
+`/Volumes/JW-EXT/scratch/r1fu-desk/REPORT.md`.
+
+**Checked myself, read-only (`git show` at `a6a09e6d7`; no checkout).**
+- `endpoint.py:309-327`: a hold fires when `policy['heavy']` is true and the turn's decode count is a multiple
+  of `chunk_tokens` and below the turn's `max_tokens`. It waits on `thermal.wait('H', …)`, which uses G1's
+  reference and cap.
+- `r1_runtime.py:1016-1021`: `N_chunk = max(256, 256 × floor(0.6 × t_decline × r_decode / 256))`, or 2,048 when
+  no decline is observed. `r1_runtime.py:2174`: the gated D runs take `chunk_tokens` from that slot.
+- `align_r1_rehearsal.py:52-60, 690-741`: the duty bar and the fallback order as registered.
+- `smc_enumeration.py:583-584, 624-655`: `clamped` (at least 10 distinct idle values with one value on at
+  least 40 % of idle samples) and D1(b) (largest one-second change above half the step rise).
+- `r1_runtime.py:502-522`: `sensor_admissibility` refuses a key that is clamped or not resolving, and refuses a
+  pair in one alias group.
+- `pilot_protocol_v4.md:138, 417-419, 532, 715-719`: all D rows carry holds; the N_chunk rule; "D always retains
+  G1/holds"; D-17a lets W1 revise N_chunk and freezes `max_tokens=4096`, `max_turns=12`, B_D and T_dead.
+- The session's step-D classification (the lead's copy, `in/step_D/r1_classification.json`): the rows for
+  TV0h, TV1h and TVh0, and the alias groups.
+
+**Not checked.** TVh0's one-second change on the 11-12 D steps. Whether seed-1 D episodes repeat token for
+token between sessions (D_spam a and b do within this one). The W1 budget arithmetic (ruling 1(f)) under any
+candidate. OS level and power-management state inside D_bank's turn 1: the table does not carry them. Each is
+a desk print below.
+
+**Not done.** No fetch, checkout, edit, test, SSH, commit or mail. No slot, energy or power file was read, and
+none is asked for anywhere in this ruling.
+
+---
+
+## 1. What the session is
+
+Complete and clean (chain exit 0), and it produces **no slots**. Item 306 dispositions 1 and 3 both apply.
+Nothing from `r1_slots.json` is read or committed. W1 does not sign at `a6a09e6d7`. RL-107's freeze moves to
+the next slot-producing session's commit.
+
+**Kept as diagnostics, and worth having:**
+- The per-turn die gate works for three turns. D_spam a and b each admitted three turns with gates of 163.1 s
+  and 150.6 s (0.164 and 0.151 × T_dead), no timeout, no X7. That was the open question of RL-122 item 6, and
+  it is answered for G0 and G1.
+- The first holds ever journalled. No earlier session reached one.
+- A second A-B-A with the verdict `not_adopted`. It agrees with RL-118. The series mode is Automatic.
+- The thermometry record, the planning G0s and the Tf08 journals.
+
+**Small items, closed here.**
+- Planning R+0, R+2 and R+4 fit the 3(a) pattern: `inconclusive`, non-blocking, as ruled. No planning release
+  is signed for this session, because it enters no slots.
+- D_spam_b's +0.211 °C/min is TV0h's own slope, the labelled alternative of RL-131. The registered clause read
+  TVh0 and was met. It is a disclosure and needs nothing.
+- The 30B record-only flag `r1.sensor_pick_changed` and the classifier's own slow pick (TaRF) change nothing:
+  the session confirms, it does not re-rank (RL-78 item 3).
+- X_G used 0.404 × its T_dead in gates over 12 turns with no X7. It is printed and not judged (RL-135 item 5).
+  It matters for section 3: X_G has little room for a longer G0.
+- RL-106's N and the A-B-A slot are taken from the next slot-producing session.
+- The lead commits a short outcome record (structure, the magistrate's tables, the journal table, this
+  ruling), as after RL-120.
+
+## 2. The duty bar: the cause is the hold rule on this machine. It is not the host, the bar, the key or noise
+
+**The finding.** D_bank's turn 1 decoded in 512-token chunks of 42.7 to 43.0 s. After each chunk the hold
+waited 87.7 to 111.9 s for the die to come back from about 87 °C to within 1.0 °C of the episode's start. Each
+hold is 2.0 to 2.6 times the decode it follows. Five released; the sixth met the deadman at 995.8 s with turn
+1 unfinished at 3,072 tokens.
+
+**Why it cannot work, in the rule's own terms.**
+1. A hold returns the die to rest. On this machine that costs about 90 to 110 s, whatever the chunk.
+2. The registered chunk is 512 tokens, 43 s of decode. So a held decode spends about 70 % of its wall time
+   waiting.
+3. The bar leaves room for two holds in an episode: 398 s, less the 151 to 163 s that three turns of gates
+   took, is about 240 s. A third hold breaks it.
+4. One turn at the registered cap cannot finish at all: 4,096 tokens are about 343 s of decode plus seven
+   holds, about 735 s. That is 1,078 s against a T_dead of 995.79 s, before prefill or any gate.
+5. D's R0 rung admits a median of up to 2,048 reasoning tokens a turn. Long turns are the cohort, not its
+   tail. D_spam passed only because its turns were 84 to 358 tokens and no hold fired.
+
+**What it is not.**
+- **Not the bar.** With no bar at all the episode still dies in turn 1 (item 4). The three-turn bar also
+  carries the registered power statement (T = 3 admitted turns). The bar is not changed.
+- **Not the second key.** Every hold released at TVh0 = 35.000 against a TVh0 reference of 35.000, with TV0h
+  0.84 to 0.87 °C above its own reference. TV0h's band decided each one. The staircase made the holds no
+  longer. RL-131's T2 is predicted not fired; the desk confirms it per sample (P1).
+- **Not noise, and not the host as far as the journals show.** No G1 or H timed out. The five full holds grow
+  smoothly from 88 to 112 s as the heatsink warms. D_spam a and b repeat each other token for token. The same
+  bytes would give the same result. **They are not re-run.**
+- **Not new in kind.** This is RL-116 again one level down. A wait that returns a mass to rest costs more than
+  the work it separates. On the heatsink that broke G0 and G1. On the die it breaks only the hold, because the
+  hold is the one wait that recurs every 43 s.
+
+**The registered ladder does not reach it.**
+- Rung 1 (S6 for G1 and hold waits, δ_slow up to 2.0 °C): the hold median is about 106 s against 90 s, and
+  δ_slow moves TVh0's band, which never binds. Predicted: the replay at 1.5 and 2.0 °C changes no duration (P1).
+- Rung 2 (idle 300 to 450 s after D predecessors) acts on G0, which took 12 to 16 s.
+- Rung 3 (4-bit) is refused by the kit, and would not change how fast a die cools.
+- Rung 4 is "D screen-only; return to council". Section 5 is that council. **Screen-only D is not taken.** It
+  would take the D cells out of the confirmatory series for the sake of a wait nobody has shown to be needed.
+  If it is ever the only rung left, it goes to Ed first, because it changes the claim.
+
+**Not on the table.** `thermal_gates.py` (a hold with its own reference or band is a different instrument and
+a full review), T_dead, B_D, `max_tokens`, `max_turns`, the 0.40 share, the three-turn bar, quantization, and
+any cap on reasoning length. Shortening the model's turns to fit the gate would change the behaviour we
+measure.
+
+**What is on the table.** N_chunk. D-17a already names it as revisable, and the protocol already carries a
+second value (2,048, for "no observed decline").
+
+**The default, mine: N_chunk = 4,096 for D, the turn cap, so that no hold fires.** D keeps G0 and G1 and stays
+`heavy` by class. The policy and the gate module are unchanged.
+- This is a pre-signing protocol amendment: it replaces the 0.6 × t_decline formula by a stated value, and
+  "D always retains G1/holds" becomes "G1".
+- What the holds were for: keeping every decode chunk inside the first 60 % of the time to a 3 % fall in
+  decode rate, so that energy per token does not drift within a turn. Without them, a long turn runs into the
+  declined regime. That drift is the same code path for every condition, but turn length may differ by
+  condition, so it must be measured and shown, not assumed away.
+- It is replaced by two prints, fixed now and blind: (a) per turn, the decode clock of the last 512 tokens over
+  the first-10-s median, by condition; (b) the scorer's residual by decode-length bin (≤ 1,024, 1,025 to
+  2,048, above 2,048 tokens), in place of the residual-by-hold-count print. Print-only. No scorer change.
+- The alternative, N_chunk = 2,048 (at most one hold in a turn), is not my default. It fits the bar only under
+  the band-only gate of section 3's fallback. It also puts a two-minute cooldown inside turns of 2,049 tokens
+  and none inside turns of 2,047, which is a discontinuity tied to turn length. The round may argue for it.
+
+## 3. The second key: TVh0 is unseated. The gate is configured as the one-sensor gate it is
+
+**The finding.** On this session's D step TVh0 fails two clauses, both produced by its 5 °C floor:
+- D1(b): largest one-second change 25.0 °C against half the step rise, 24.70 °C;
+- `clamped`: one value on 41.8 % of idle samples, with 175 distinct values.
+
+The idle die sat near 35 °C (baseline 34.81), so the idle series spent 42 % of its time on the 35.000 step. On
+11-12 the baseline was 34.42 and the key passed. TVh0's admissibility therefore depends on which side of 35 °C
+the resting die sits. If the same 25.0 °C step occurred on 11-12, the clause passed there by 0.03 °C (rise
+50.06 °C); P4 prints it.
+
+**Ruling.** RL-131's trigger T4 has fired, and the classifier is right: TVh0 is not a resolved thermometer.
+- **No waiver.** A key that fails its quality clause whenever the room is half a degree warmer cannot be
+  confirmed by any slot session we could rely on.
+- **The role swap of RL-131 item 2.6 does not cure it.** TVh0 is inadmissible in either role.
+- **The rule's set is exhausted.** After TV0h, its alias and TVh0, no die key returns to within 1.0 °C inside
+  600 s (11-12 print 3; RL-131 item 3.2).
+
+**The default, mine: `s_slow` becomes TV1h, TV0h's registered alias.** TV0h and TV1h are identical in every
+row of this session's D step (alias group `['TV0h', 'TV1h']`; both rows eligible, rise 49.407 °C, noise
+0.003 °C).
+- It is the remedy RL-131 named before the session, in the only form the finding leaves: the band and the
+  slope clause are both read on the real die value. The heater and the precools of the R1 harness regulate the
+  real value too.
+- It reverses "aliases do not fill both roles". That sentence guarded against mistaking one thermometer for
+  two. We now say there is one. Pre-signing protocol amendment, decided blind.
+- The rule, so that nobody picks by hand: the second key is the lexically first other member of the fast
+  pick's alias group on the saved Part B classification. The session confirms the pair when the fast key is
+  admissible on its D step and the second key is in the fast key's alias group there, or is itself an
+  admissible die key if the group did not form. Any other reason refuses as today and comes to me.
+
+**What it costs, and why it still goes to the round.** With a real slope, G0 is slope-decided again. The 11-12
+replay gave 104 to 109 s in the gated D members and 212 s at step-D, against 12 to 16 s on this session. The
+episode reference is lower, so G1 lengthens (replay 84 to 115 s against 53 to 90 s here). Every second of gate
+comes out of the D episode's decode budget through ruling 1(f): at about 12 tokens a second, 100 s of gate is
+about one 1,024-token step of B_D. X_G is already at 0.404 of its T_dead in gates. So the real slope is
+honest and not free.
+
+**The fallback, named now:** TVh0 stays as the second key, its admissibility is not required, and the row says
+the slope clause is inert (the gate of RL-131, band and throttle status only). It is taken only if the default
+fails the fixed test of section 5, or if the round shows the default costs D a B_D step that the settled start
+does not earn. I decide that at the close.
+
+**RL-131 item 3.3's row edits do not go in.** The WP14(a)-R1-SLOW row is rewritten once, at the close.
+
+## 4. Desk, now (the lead; journals, classification files, decode clocks and temperatures only)
+
+Read-only on the MBP's custody, which is unarmed, or on a copy. No transcript text, no `r1_slots.json`, no
+energy, power or meter file. Minutes each. They go to the round and to me.
+
+- **P1. The rest of RL-122 item 6's table.** For every G1 and H of the three gated D runs and X_G: the clause
+  and key last out of band; RL-135's T1 census and T2 per-sample count; the replay at δ_slow 1.5 and 2.0 °C;
+  OS level and power-management state through D_bank's turn 1. Predicted: TV0h last in every one, no T2
+  sample, no change at either band, level 0 and Nominal.
+- **P2. The un-held long decodes on record.** Step-D and the three A-B-A legs of 11-12 and 11-13, eight
+  4,096-token decodes with no hold. Per leg: decode clock in 256-token blocks over the first-10-s median;
+  t_decline; the ratio over the last 512 tokens; OS level and power-management state every second; TV0h and
+  Tf08 at each 512-token mark. This is what the holds protect against.
+- **P3. The cost of a return to rest after a long decode.** From the same eight recoveries: seconds from decode
+  end until TV0h is within 1.0 °C of that leg's own G0 release for five samples. Beside it, D_bank's six holds
+  with Tf08 at entry.
+- **P4. TVh0 and TV1h on every D classification on record** (Part B 11-12, session 11-12, session 11-13):
+  baseline, idle mode fraction and distinct count, largest one-second change, half the rise, `clamped`,
+  eligibility, and whether TV0h and TV1h form an alias group.
+- **P5. Repeatability of D_bank seed 1.** Token and tool counts of its turns on 11-12 and 11-13, counts only.
+  D_bank seed 1 is W1's ordinal 8, so this says whether W1 would have lost that member on these bytes.
+
+**One stop, fixed now.** If P2 shows OS level above 0 or a non-Nominal state in any un-held leg, or a decode
+clock over the last 512 tokens below 90 % of the first-10-s median in any leg, the no-hold default comes back
+to me before anything is built on it. Otherwise it proceeds to the round as the default.
+
+## 5. The route
+
+**Step 1. One design round (Opus xhigh and Sol xhigh, one memo each; I close it in the next ruling).** The
+brief is sections 2 to 4 with the prints. W1's protocol is open on two values only: the second key and N_chunk.
+The seats attack:
+- whether un-held decoding costs the scorer something the two prints of section 2 do not show;
+- real slope (TV0h / TV1h) against the band-only fallback, with ruling 1(f) worked from the journal table's
+  gate, prefill and decode seconds, and X_G's twelve turns under a longer G0;
+- N_chunk 4,096 against 2,048;
+- whether naming one key twice in `thermal.py` is cleaner than the alias (it edits a second condition-13 file;
+  my default leaves `thermal.py` and `thermal_gates.py` byte-identical);
+- anything simpler.
+
+**Step 2. The build, started now at risk on a branch off `a6a09e6d7` (the lead's builder seat). Nothing merges
+before the close.**
+
+| Change | Path | Kind |
+|---|---|---|
+| `sensors.s_slow` TVh0 → TV1h | `configs/align/v4/r1_runtime.json` | Condition 13. Cited rebind before signing |
+| N_chunk for D taken from a config value (4,096), with the formula's value still recorded beside it | the config, `r1_runtime.py` | Condition 13. Cited rebind. The smallest edit that does it |
+| The confirmation rule of section 3 (ruled alias pair is `ok`) | `r1_runtime.py`, and the driver only if it must | Condition 13. Cited rebind |
+| Validator, ruling file, regenerated selection table (re-derived from the saved Part B, not re-measured); the W1 kit accepts the pair and the N_chunk slot | `scripts/align_r1_followup_kit.py`, `scripts/align_v4_kit.py`, `docs/run_reports/` | Ordinary engineering |
+| WP14(a)-R1-SLOW rewritten; a new row for the holds; protocol lines 138, 417-419 and 532 marked | `docs/align/v4/DEVIATIONS.md` | Registration text. I supply the wording at the close |
+| The two prints of section 2 | W1 desk script side; none of the ten paths | Ordinary engineering. Before the first W1 thermal desk, not before the session |
+| Part C of the smoke (step 3) | the smoke launcher | Smoke-only |
+
+`thermal_gates.py` is not edited. A cold review by a Fable seat covers the condition-13 diff, the rule's
+derivation and the table.
+
+**Step 3. Part C, a gated smoke on the final bytes (the magistrate runs it; it is not an arm).** Two
+slot-producing sessions have now been lost to the gated block, each to a fault that one gated member would
+have shown in half an hour. So before any further session:
+- fresh soak and step-D (this is Part A on the final bytes);
+- then, on W1's inter-member schedule, the gated D_bank member, seed 1;
+- then X_G, if the launcher can run it without more condition-13 code; otherwise it is left out and said so.
+
+It runs the same bytes of the ten paths as the session. It produces no slots, and nothing from it is entered.
+About two hours.
+
+**The test, fixed now.**
+- Step-D's G0 releases inside 1,200 s with both keys at most 1.0 °C over the reference and the slope inside
+  ±0.2 °C/min.
+- D_bank: at least three admitted turns, gates plus holds ≤ 0.40 × T_dead, no X7, no G1 timeout, no H record
+  at all, OS level 0 and Nominal in every turn.
+- X_G, if run: no X7 and no G1 timeout.
+
+If it holds and the round finds no defect, the default is adopted at the close. If D_bank fails on gate time
+with no hold, the fallback of section 3 is the candidate and Part C is run once on it. Any other failure comes
+to me with its table.
+
+**Step 4. One more R1 follow-up session: the full program, at the adopted commit. It is the slot-producing
+session.** Authorized on a checklist, as RL-122 was, and the lead does not come back to me if every line holds:
+- the round is closed by me and names the adopted values;
+- the PR's diff is the rows of step 2 and nothing else; `thermal_gates.py` and `thermal.py` hash as at
+  `a6a09e6d7`; the ten hashes are listed; the cold review has no open finding; CI is green;
+- Part C passed the fixed test at that commit;
+- the 60-key check with the new pair, and D-7;
+- dry checks: the W1 kit accepts the pair given an `ok` confirmation, binds N_chunk from the slots, and takes
+  the 3(a) planning release;
+- the dispositions are in the arm item.
+
+**Dispositions for that session.** Item 306's, with these changes:
+- Thermometry: `ok` under section 3's rule. Anything else comes to me.
+- Duty bar: unchanged. Any H record in a gated D run is a defect and comes to me.
+- Planning turns: 3(a) unchanged. The heater's key is now the real die value, so RL-124 item 5(a) means what
+  it says again and RL-131 item 2.4's extra condition is retired.
+- S6: the G1 median as registered. There is no hold median.
+
+## 6. The magistrate and the MBP
+
+**May not arm:** any R1 follow-up session, on `a6a09e6d7` or any other commit, until a RUN_STATE item carries
+step 4's checklist with every line ticked. W1 is not armed or signed.
+
+**May run now, as smokes that are not arms** (a kit from the lead, the fresh soak, the usual restore):
+- **Tonight, if it needs no code:** Part A as built, on a scratch commit whose only change is `s_slow` → TV1h.
+  The lead checks by dry run that the launcher accepts it. It gives the first native step-D G0 with a real die
+  slope (the replay predicted 212 s). It is a diagnostic and is not the Part A of the final bytes. If the
+  launcher refuses the pair, this is skipped and nobody builds around it.
+- **Part C**, when the lead delivers it.
+
+**Otherwise the MBP is the lead's**, for the desk prints of section 4 and for whatever non-ALIGN work is
+queued: tests under RL-144's separate account, the disk offload, port work. The conditions are that each job
+can be stopped within ten minutes of a smoke kit arriving, the session's custody directory is not written,
+and the host is left as item 310 restored it (powermode 0, network time OFF, frequency word 0, no stray
+monitor). R12 is not relaunched (RL-141).
+
+## 7. For Ed
+
+No decision is needed from him now. Nothing here is a physical step.
+
+**Plainly:** "The rehearsal ran clean again and again produced no settings for W1, for two separate reasons.
+First, the second temperature reading, the rounded one, failed its own quality check last night. It passes or
+fails depending on whether the chip rests just under or just over 35 degrees, so it cannot be relied on, and I
+am removing it. We gate on the one real chip reading, as we already said we were doing in effect. Second, and
+this is the larger finding: the protocol pauses the model every 512 tokens of a long answer until the chip
+cools back to rest. Last night was the first time any run was long enough to trigger those pauses. Each pause
+took about a minute and three quarters for every 43 seconds of work, and one long answer ran out the whole
+time budget. As written, a single full-length turn cannot finish. That would have cost us a registered W1 run.
+My default is to drop those pauses and keep the gates before each episode and each turn, which worked for
+three turns last night, and to measure and report how much the decode slows within a long turn instead of
+trying to prevent it. Two reviewers attack that tonight. Before another ten-hour session we run a two-hour
+test of the one run that failed, so we do not lose a third night to the same block. If that test fails, the
+remaining registered fallback is to make the 27B model screening-only, which changes what the paper can
+claim, and I would bring that to you before taking it."
+
+**Owner.** Lead: the prints of section 4, the round's brief, the build of step 2, Part C's kit, the dry check
+for tonight's diagnostic, the outcome record. Research lead: the close of the round with the row wording, the
+cold-review seat, the P2 stop, any failure named above. Magistrate: tonight's diagnostic if it runs, Part C,
+and the session on its checklist.
+**Gate.** The next session waits for step 4's checklist. W1 signing waits for that session to pass item 306
+disposition 2 and for RL-107 at its commit. The two prints of section 2 gate the first W1 thermal desk.
+**Blind status.** Blind: no v4 outcome exists. Rehearsal temperatures, gate and hold timings, decode clocks,
+classifier fields, token counts and code only. The Part C test, the P2 stop, the replacement prints and the
+fallback are fixed before the prints of section 4 exist.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
