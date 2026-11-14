@@ -713,8 +713,8 @@ to the research lead for review before merge.
 - **Status.** ADOPTED, 2026-11-10, by research-lead ruling RL-3 (RL:56-76). It is logged as DLE-6 because RL-3 says
   "The lead logs it as DLE-6".
 - **Original rule.** The 2026-10-20 renderer obligation, declared deviation Q-RENDERER, appended to the Block 5 seal
-  record (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md:631-638`;
-  `docs/process_traces/2026-10-20-magistrate-6cff3515/L9-RULING-ADDENDUM.md:92-99`). Its obligation, from the line on which it starts (SEAL_RECORD.md:635-638):
+  record (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md:697-704`;
+  `docs/process_traces/2026-10-20-magistrate-6cff3515/L9-RULING-ADDENDUM.md:92-99`). Its obligation, from the line on which it starts (SEAL_RECORD.md:701-704):
 
 > changes. Obligation fixed now, before release: any block-5 Results renderer written after release prints every row of
 > the validated fill input's contrast census with its issued status (unsupported and refused included), selects none, and
@@ -977,7 +977,24 @@ to the research lead for review before merge.
   was listed. The script, Δ, T, intervals, exclusion counts and outcome row are unchanged.
 - **Effect on estimands.** None.
 
-## DLE-13. `joulewise/flags/exclusions.py`: the keyword-only `pack_scoped` parameter, a cited rebind after the fact (RL-144 addendum M2)
+## DLE-13. Block 5's release event recorded in the seal record five days late (RL-147 section 4 item 1)
+
+- **Status.** Logged 2026-11-13, by research-lead ruling RL-147 section 4 item 1. Kind: reporting. Not blind to Block 5
+  outcomes or to Block 6; nothing the PLAN governs changes.
+- **Original rule.** The seal record's section "Release event" (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`)
+  said it would be written when the withheld energies were opened and would tie the digests of its section 4 to the final
+  harvest records. The event was Ed's unseal OK of 2026-11-08 11:17 PST (`RUN_STATE.md` item 231).
+- **What happened.** The record was owed at the event (2026-11-08) and was written on 2026-11-13, five days later. The
+  paragraph "Nothing is recorded here yet" was replaced by a section headed "Recorded late", which gives the event, the
+  release check, the digests of section 4 re-taken at the release checkout, the three analysed sessions' `harvest.json`
+  SHA-256 values and the released output's SHA-256, each re-taken from its file.
+- **Pins.** `tests/b5_analysis/test_frozen_files.py` reads the seal record but pins no byte of this section; the section
+  sits between Addendum 4 and Addendum 5 and adds no `## Addendum`, `B5-HARVEST-PIN` or erratum text, so no pin needed a
+  rebind. Line cites into the record that moved by 66 lines were updated: DLE-6's two `SEAL_RECORD.md` line ranges
+  (631-638 and 635-638 became 697-704 and 701-704).
+- **Effect on estimands.** None. The event and the released bytes are unchanged.
+
+## DLE-14. `joulewise/flags/exclusions.py`: the keyword-only `pack_scoped` parameter, a cited rebind after the fact (RL-144 addendum M2)
 
 - **Status.** RECORDED, 2026-11-13, on `fix/2026-11-13-b6-m1-m2` (lead, under RL-144 addendum section 3 M2 and
   RL-146 section 2 item 4). It is owed before the S-14 line merges to `main`.

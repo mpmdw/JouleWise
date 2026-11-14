@@ -26,7 +26,7 @@ R4_TAG = "b5/analysis-r4"
 # EVOLVED_ON_MAIN but r4 itself must not have changed them: r4 descends from the anchor with only the
 # rebinds that predate it. Each entry needs its deviation-log id; a new one needs its own cited rebind.
 POST_R4_REBINDS = frozenset({
-    "joulewise/flags/exclusions.py",  # 4e3446e6c, DLE-13 (RL-144 addendum M2): keyword-only pack_scoped
+    "joulewise/flags/exclusions.py",  # 4e3446e6c, DLE-14 (RL-144 addendum M2): keyword-only pack_scoped
 })
 REMOTE_PREFIX = "origin" + "/"
 GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",

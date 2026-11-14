@@ -20,7 +20,7 @@ B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
 # joulewise/calibration_bracketing.py -- b5 under-90 round 2 (lead ruling under D-188
 # and the 2026-10-30 frozen-components rule): the run-scoped candidate-physics memo
 # (_verified_candidate_bound); every value it returns is the frozen refit's own.
-# joulewise/flags/exclusions.py -- Block 6 option-c analysis (4e3446e6c), recorded as DLE-13 (RL-144 addendum
+# joulewise/flags/exclusions.py -- Block 6 option-c analysis (4e3446e6c), recorded as DLE-14 (RL-144 addendum
 # section 3, M2): compute() gained the keyword-only `pack_scoped: bool = True`; with the default the result is
 # Block 5's (tests/flags/test_flags_exclusions.py, Block5DefaultEquivalenceTests).
 EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_bracketing.py",
@@ -32,7 +32,7 @@ EVOLVED_ON_MAIN = frozenset({"joulewise/b5/harvest.py", "joulewise/calibration_b
 REBOUND_WORKING_TREE = {
     # b5 under-90 round 2 (13af1baa8), the candidate-physics memo; DLE-3.
     "joulewise/calibration_bracketing.py": "40fd34bb82b8a0a57ece79ef23e507482a5ea79dd0c6cc001c5e3ea0cfe2a1f2",
-    # Block 6 option-c analysis (4e3446e6c), the keyword-only pack_scoped parameter; DLE-13.
+    # Block 6 option-c analysis (4e3446e6c), the keyword-only pack_scoped parameter; DLE-14.
     "joulewise/flags/exclusions.py": "ebe1678c0fdd60b1ddd20d432cf07412bd321a8629589f4ce4c6b334378f0ad6",
 }
 PACK_PREFIXES = ("configs/campaigns/d117_floor_qwen3-1p7b_v5/", "configs/campaigns/d117_floor_qwen3-8b_v5/",
