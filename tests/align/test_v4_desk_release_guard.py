@@ -204,7 +204,9 @@ class Fixture:
                                                         'delta_j': plant(0)['u3_delta']}]},
                     'U4': {'status': 'inconclusive'}, 'U5': {'status': 'inconclusive'}, 'U6': {'status': 'inconclusive'},
                     'hardware_control': 'pass', 'monitoring_calibration': 'inconclusive', 'consequence': 'under control'}},
-                'deciding_experiment': {'arm_effect_j': plant(0)['arm']}, 'members': records,
+                # real-shaped (verdict, rule, branch from the production builder) with a planted arm effect
+                'deciding_experiment': {**thermal_desk.deciding_experiment([], v4=True), 'arm_effect_j': plant(0)['arm']},
+                'members': records,
                 'tool_call_flags': thermal_desk.tool_call_table(records)}
 
     def diagnostics(self, records, **_):
@@ -525,7 +527,8 @@ class ReleaseGuardTests(unittest.TestCase):
                 self.assertLessEqual(set(member), MEMBER_KEYS)
         # The exception class prints as registered: the deciding contrast's statistics and U1-U6 (U3's |dE|).
         thermal = report['extra_checks']['thermal']
-        self.assertEqual(thermal['deciding_experiment'], {'arm_effect_j': plant(0)['arm']})
+        self.assertEqual(thermal['deciding_experiment'],
+                         {**thermal_desk.deciding_experiment([], v4=True), 'arm_effect_j': plant(0)['arm']})
         self.assertEqual(thermal['model_windows']['m/W1']['U3']['pairs'][0]['delta_j'], plant(0)['u3_delta'])
         self.assertEqual(report['release_guard']['scope'], 'W1')
         self.assertTrue(report['release_guard']['w1_withhold_sabotage_gpu_and_outcomes'])
@@ -1061,6 +1064,11 @@ class EntryPointTests(unittest.TestCase):
             self.assertTrue((output / 'archive/withheld/PILOT.full.json').is_file())
             self.assertTrue((output / 'archive/withheld/RL145_PRINTS.full.json').is_file())
             self.assertNotIn(str(plant(0)['gpu_j']), texts['RL145_PRINTS.json'])        # residual bins withheld
+            # The reviewable full tables open with the archive; the written THERMAL.md carries none of them.
+            full = (output / seal.WITHHELD_THERMAL_MD).read_text()
+            self.assertIn('Exact exclusion intervals', full)
+            self.assertNotIn('Exact exclusion intervals', texts['THERMAL.md'])
+            self.assertEqual(report['release_guard']['withheld_markdown'], 'archive/withheld/THERMAL.full.md')
 
 
 class SealUnitTests(unittest.TestCase):

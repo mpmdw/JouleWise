@@ -48,6 +48,7 @@ import re
 
 WITHHELD = 'withheld_until_series_complete'
 WITHHELD_PILOT = 'archive/withheld/PILOT.full.json'
+WITHHELD_THERMAL_MD = 'archive/withheld/THERMAL.full.md'   # standalone thermal desk (Sol F1)
 SERIES_MANIFEST = 'configs/campaigns/align_v4/series/series_manifest.json'
 # The release event (protocol B0 :1099-1101, B2 :1173, B7 :1383): "computed only in the release run, after
 # the last admitted test window's eligibility is final". The record names that window and its final
@@ -1175,7 +1176,7 @@ def guard_thermal_desk(result, prints, records, registration_dir, output):
         'scope': scope, 'w1_withhold_sabotage_gpu_and_outcomes': W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES if scope == 'W1' else None,
         'authority': 'desk-leak audit 2026-11-13; RL-149 section 3; RL-151 section 4; PR #774 Sol F1',
         'withheld_pilot': WITHHELD_PILOT, 'withheld_pilot_sha256': digest,
-        'withheld_prints': 'archive/withheld/RL145_PRINTS.full.json', 'digest': DIGEST, 'digest_key': WITHHELD_KEY,
+        'withheld_prints': 'archive/withheld/RL145_PRINTS.full.json', 'withheld_markdown': WITHHELD_THERMAL_MD, 'digest': DIGEST, 'digest_key': WITHHELD_KEY,
         'opens': 'release run (registered series_complete record plus lead-signed release receipt)'}
     return sealed, sealed_prints, True
 

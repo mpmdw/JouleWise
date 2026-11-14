@@ -183,6 +183,7 @@ def main(argv=None):
     # Desk release guard at this output boundary (PR #774 Sol F1): before release the written PILOT, the
     # RL-145 prints and THERMAL.md carry the C/T or W1 seal; the full ones go to the withheld archive.
     from joulewise.align.apple import v4_desk_seal
+    full = result
     result, prints, sealed = v4_desk_seal.guard_thermal_desk(result, prints, members, args.registration_dir, args.output)
     (args.output/'RL145_PRINTS.json').write_text(json.dumps(prints, indent=2, sort_keys=True, allow_nan=False)+'\n')
     (args.output/'PILOT.json').write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
@@ -192,6 +193,12 @@ def main(argv=None):
     for name, row in result['registration_diagnostics']['battery_windows'].items():
         battery_rows.append(f"| {name} | {row['B_count']} | {row['unobserved_count']} | {row['assist_count']} | "
                             f"{row['status']} | {row['consequence']} |")
+    if sealed:
+        # The reviewable full tables (exclusion intervals, member energy, gates, tools) open with the archive.
+        full_rows = battery_rows[:4] + [
+            f"| {name} | {row['B_count']} | {row['unobserved_count']} | {row['assist_count']} | {row['status']} | {row['consequence']} |"
+            for name, row in full['registration_diagnostics']['battery_windows'].items()]
+        (args.output/v4_desk_seal.WITHHELD_THERMAL_MD).write_text(markdown_report(full)+'\n'.join(full_rows)+'\n')
     report = v4_desk_seal.sealed_markdown(result) if sealed else markdown_report(result)
     (args.output/'THERMAL.md').write_text(report+'\n'.join(battery_rows)+'\n')
     return 0

@@ -383,7 +383,11 @@ class DeskTests(unittest.TestCase):
             # This mock runtime has no GPU meter/PM evidence. Never call it live.
             self.assertIn('trace.missing', report['members'][0]['energy_flags'])
             self.assertNotEqual(next(iter(report['model_windows'].values()))['U1']['status'], 'pass')
-            self.assertIn('Exact exclusion intervals', (output/'THERMAL.md').read_text())
+            # PR #774 Sol F1: before release the standalone desk writes the sealed THERMAL.md; the reviewable
+            # full tables go to the withheld archive and open with it.
+            self.assertEqual(report['release_guard']['status'], 'withheld_until_series_complete')
+            self.assertNotIn('Exact exclusion intervals', (output/'THERMAL.md').read_text())
+            self.assertIn('Exact exclusion intervals', (output/'archive/withheld/THERMAL.full.md').read_text())
 
     @patch('joulewise.align.apple.v4_registration.validate_u3')
     def test_cli_keeps_a_member_without_artifact_and_refuses_unresolved_references(self, _unruled_u3):
