@@ -1,0 +1,251 @@
+{
+ "comparer_sha256": "eb82b6e25a9dc9a3cffcb4d2e859a19c2f2151a42ce3b4a98f2ea188887e02c1",
+ "counts": {
+  "by_rule": {
+   "B-FILE": 3,
+   "R-B-1": 4,
+   "R-B-3": 1,
+   "R-B-4": 6,
+   "R-DG-1": 8,
+   "R-PH-1": 4,
+   "R-PH-2": 1
+  },
+  "differing_paths": 27,
+  "unowned": 0
+ },
+ "exit": 0,
+ "extra_files": [],
+ "files": {
+  "child-argv.json": {
+   "class": "C",
+   "equal": false,
+   "new_sha256": "a137fee2cf866052898b6e9497cb05df24db0b8f84971e481480af2101438ab0",
+   "old_sha256": "9efbb84242130f2b6e4b92a19fe0222a2f9963ead9520e536b024fdd4921213a"
+  },
+  "process.json": {
+   "class": "B",
+   "equal": false,
+   "new_sha256": "eb9a8e5c8427c6e5c5719217e2f62e0d06f1c587406ae7a9a89ff48ec18ce5a4",
+   "old_sha256": "bb6c36e7ec020bf2e2876e9c7f2c7396bfdb74d04d9e9c8c2646649dfa3fceed"
+  },
+  "public.json": {
+   "class": "A",
+   "equal": false,
+   "new_sha256": "c926565b384259f4519069be225c4638bb4d8fa3ba48ae5f4fc09aff68da4f69",
+   "old_sha256": "2483a5dfe725b3468cc78a036eb54918c9d006ccc4e0b0885646ce7ef605d170"
+  },
+  "record.json": {
+   "class": "C",
+   "equal": false,
+   "new_sha256": "8de7841a8d94247f6fc191397a64d6c901fd15173f0a51503cc06bb757540d85",
+   "old_sha256": "591300dc9b1bf7abb60b3f03d78c74acf667ba86b9c93aec70de8bfe56159b73"
+  },
+  "restricted.json": {
+   "class": "A",
+   "equal": false,
+   "new_sha256": "4e620ed55cfe4e164e98c79e0d7b42523755a50b7176cbf2e3081f157f58a918",
+   "old_sha256": "4a5da121af46a04cfd1123e7831ce19c9b7ae3f36bc387e963830ae8d08a65d0"
+  },
+  "samples.jsonl": {
+   "class": "B",
+   "equal": false,
+   "new_sha256": "e8f7f7810a55a8494d5cdf7e341bf50acd5029c7fe64ddd299b9f4684ac7327a",
+   "old_sha256": "c7c869740e70124fa7519e2557381d2aedea43ac2d4ec6a350c2bbc22537107d"
+  },
+  "stderr": {
+   "class": "B",
+   "equal": true,
+   "new_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "old_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "stdout": {
+   "class": "C",
+   "equal": false,
+   "new_sha256": "2a5cbd0676f7b7f64d187f1b907b1e8e451cfcf6b4a58d3bfc49b3e4a36a424b",
+   "old_sha256": "0742ba639d972fe1fe5f567c59e5a0b5e94347864b6774156daa173172a02a26"
+  },
+  "structure.json": {
+   "class": "A",
+   "equal": false,
+   "new_sha256": "a265d198afcf1248ab7b9485e62afc8006f694ea388c1dc0a0af53fdd072a6d2",
+   "old_sha256": "18d03ea91def25ee4dd69acb0a2afa0e10f0b1d968fb739860e3054fc36722df"
+  },
+  "time": {
+   "class": "B",
+   "equal": false,
+   "new_sha256": "1f6585a3c707547cbdccfae8e82024f6e2ead86d1302a681d8dc916cf223e618",
+   "old_sha256": "0601a0f5b3d06ca8c7911e2e72685ee3fa097a9a6ac1bc941dbe56b1f645da6a"
+  }
+ },
+ "inputs_rerun": false,
+ "mode": "a",
+ "new_dir": "/Volumes/JW-EXT/b6-custody-run/gate-r2",
+ "old_dir": "/Volumes/JW-EXT/b6-custody-run/gate-2",
+ "paths": [
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/program_sha256",
+   "rule": "R-PH-1"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/restricted_sha256",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/digests/program_sha256",
+   "rule": "R-PH-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/digests/public_file",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/digests/public_restricted_sha256",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/digests/restricted_file",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/argv/17",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/argv/19",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/argv_sha256",
+   "rule": "R-B-3"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/closure_after/scripts~1independent_recompute_b6.py",
+   "rule": "R-PH-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/closure_before/scripts~1independent_recompute_b6.py",
+   "rule": "R-PH-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/commit",
+   "rule": "R-PH-2"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/end_time_ns",
+   "rule": "R-B-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/outputs_sha256/public",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/outputs_sha256/restricted",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/outputs_sha256/stdout",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/peak_rss",
+   "rule": "R-B-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/record_path",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/start_time_ns",
+   "rule": "R-B-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/timed_argv/7",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/wall_s",
+   "rule": "R-B-1"
+  },
+  {
+   "file": "child-argv.json",
+   "kind": "value",
+   "path": "/argv/17",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "child-argv.json",
+   "kind": "value",
+   "path": "/argv/19",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "stdout",
+   "kind": "value",
+   "path": "/restricted_sha256",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "process.json",
+   "kind": "bytes_differ_hash_only",
+   "path": "/",
+   "rule": "B-FILE"
+  },
+  {
+   "file": "samples.jsonl",
+   "kind": "bytes_differ_hash_only",
+   "path": "/",
+   "rule": "B-FILE"
+  },
+  {
+   "file": "time",
+   "kind": "bytes_differ_hash_only",
+   "path": "/",
+   "rule": "B-FILE"
+  }
+ ],
+ "predeclared": "/Volumes/JW-EXT/scratch/rl142-expected-diff.md",
+ "schema": "rl142.compare.v1",
+ "verdict": "PASS"
+}

@@ -1,0 +1,1159 @@
+{
+ "comparer_sha256": "eb82b6e25a9dc9a3cffcb4d2e859a19c2f2151a42ce3b4a98f2ea188887e02c1",
+ "counts": {
+  "by_rule": {
+   "B-FILE": 3,
+   "R-B-1": 4,
+   "R-B-3": 1,
+   "R-B-4": 6,
+   "R-B1-INC": 16,
+   "R-B1-SBS": 24,
+   "R-B1-SUM": 16,
+   "R-B5N": 8,
+   "R-BQ": 28,
+   "R-CS": 7,
+   "R-CS-X": 3,
+   "R-CT-1": 4,
+   "R-CT-2": 6,
+   "R-CT-3": 1,
+   "R-DG-1": 8,
+   "R-FL": 19,
+   "R-OCD": 2,
+   "R-OCD-N": 11,
+   "R-OCP": 4,
+   "R-PH-1": 4,
+   "R-PH-2": 1
+  },
+  "differing_paths": 176,
+  "unowned": 0
+ },
+ "exit": 0,
+ "extra_files": [],
+ "files": {
+  "child-argv.json": {
+   "class": "C",
+   "equal": false,
+   "new_sha256": "262f8fa3e4ac9d48453b7a3a9111268278814810d00aee43f93d3978a2dce971",
+   "old_sha256": "2bda34d2054f79266b597a44fca483ba615b60eabbeabf4497452229015aa0c2"
+  },
+  "process.json": {
+   "class": "B",
+   "equal": false,
+   "new_sha256": "88584868dae8f732d72cfb27ef31184ec9efb6e8797f0208ae67d56685bbafc6",
+   "old_sha256": "7b5ad23eeb429771fcddec1e68d8b292edacb4fbe179143e208d90c0a8648b06"
+  },
+  "public.json": {
+   "class": "A",
+   "equal": false,
+   "new_sha256": "c2b5c4098f70dd3a5be19edb3016bf682588d5529f21c41abf05d125fe8107f8",
+   "old_sha256": "60b535a1fdfa627725cf338514a432eec7a2ba5c2e4f89c62212f215167ce0d4"
+  },
+  "record.json": {
+   "class": "C",
+   "equal": false,
+   "new_sha256": "558fd415a152cdca2b9d738b21d4b5823e8a1472387272913321aacdbc8a710e",
+   "old_sha256": "3a96ab2b9f8218a45ba727efc3b437b6761b8f486d3ee4cab11d3a0ef06bb3b0"
+  },
+  "restricted.json": {
+   "class": "A",
+   "equal": false,
+   "new_sha256": "92e67c389bb71813d1e57b962e98eb6dcacf65d2bc3957332a36881c821c14bb",
+   "old_sha256": "c61d4fa8c801752a11afea826c9f1992f22d0ea68af212c459a6ecd4798ec86b"
+  },
+  "samples.jsonl": {
+   "class": "B",
+   "equal": false,
+   "new_sha256": "14daa8fde7c25e4ed7815719d6a8353d9f54c9005083b8cb838f63efa4e1287f",
+   "old_sha256": "7349a3a692d7dfa67b6c62f7b46794ed361bad86730ec9d928c000dc159a6598"
+  },
+  "stderr": {
+   "class": "B",
+   "equal": true,
+   "new_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "old_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "stdout": {
+   "class": "C",
+   "equal": false,
+   "new_sha256": "f718e0ac719f9e11165750beb844882e6bc7a559a95f31d27ffe8bb398c153d6",
+   "old_sha256": "9aee3e0d080e60e1392ebca7427a55b4af988b41d5b6d5c2082d2c265e430fd4"
+  },
+  "structure.json": {
+   "class": "A",
+   "equal": false,
+   "new_sha256": "18a129f218d002516cc2bbf2a13243ea7e977ce90328e63c29a46bb78132d8e5",
+   "old_sha256": "3ad1a41d1fcabed1043071ffc59d916e4d5782a83bdec4fffae2712131934ce8"
+  },
+  "time": {
+   "class": "B",
+   "equal": false,
+   "new_sha256": "9d0ba973e32c517b58713b71d41e71b6f1776a4a54aab2ce9cb8ced7973385e3",
+   "old_sha256": "e5984246cb3900308a46740d1fa744087b9a5c82f563696517f50cc76af4426f"
+  }
+ },
+ "inputs_rerun": false,
+ "mode": "b",
+ "new_dir": "/Volumes/JW-EXT/b6-custody-run/dry-r2",
+ "old_dir": "/Volumes/JW-EXT/b6-custody-run/dry",
+ "paths": [
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/block5_included",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/mean",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/n",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/sd",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/block5_included",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/mean",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/n",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/sd",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/BETA/values/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/block5_included",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/BETA/values/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/mean",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/BETA/values/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/n",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/BETA/values/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/sd",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/BETA/values/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/block5_included",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/BETA/values/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/mean",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/BETA/values/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/n",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/between_session/BETA/values/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/sd",
+   "rule": "R-B1-SUM"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/block5_included",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/mean",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/n",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/sd",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/block5_included",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/mean",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/n",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/ALPHA/values/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/sd",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/BETA/values/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/block5_included",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/BETA/values/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/mean",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/BETA/values/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/n",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/BETA/values/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/sd",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/BETA/values/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/block5_included",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/BETA/values/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/mean",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/BETA/values/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/n",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/flagged_inclusive/BETA/values/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/sd",
+   "rule": "R-B1-INC"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/option_c/comparator/classes/side_by_side/failed",
+   "rule": "R-CT-1"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/option_c/comparator/classes/side_by_side/pass",
+   "rule": "R-CT-2"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/option_c/comparator/classes/side_by_side/passed",
+   "rule": "R-CT-1"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/option_c/comparator/pass",
+   "rule": "R-CT-2"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/block/option_c/failures/0",
+   "rule": "R-FL"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/block/option_c/failures/1",
+   "rule": "R-FL"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/block/option_c/failures/2",
+   "rule": "R-FL"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/block/option_c/failures/3",
+   "rule": "R-FL"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/block/option_c/failures/4",
+   "rule": "R-FL"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/block/option_c/failures/5",
+   "rule": "R-FL"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/block/option_c/failures/6",
+   "rule": "R-FL"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/block/option_c/failures/7",
+   "rule": "R-FL"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/block/option_c/pass",
+   "rule": "R-OCP"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/block5",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/block5_label",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/delta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/session_deltas/r1-alpha",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/session_deltas/r3-alpha",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j/session_deltas/r4-alpha",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/block5",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/block5_label",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/delta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/session_deltas/r1-alpha",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/session_deltas/r3-alpha",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/ALPHA/lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j/session_deltas/r4-alpha",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/block5",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/block5_label",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/delta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/session_deltas/r1-beta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/session_deltas/r2-beta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1decode~1mean_j/session_deltas/r3-beta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/block5",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/block5_label",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/delta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/session_deltas/r1-beta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/session_deltas/r2-beta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "added",
+   "path": "/block/side_by_side/BETA/lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j/session_deltas/r3-beta",
+   "rule": "R-B1-SBS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_stopped",
+   "rule": "R-CS"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j~1mean",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j~1n",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j~1sd",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j~1mean",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j~1n",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j~1sd",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1BETA~1lines~1whole_machine~1qwen3-8b~1decode~1mean_j~1mean",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1BETA~1lines~1whole_machine~1qwen3-8b~1decode~1mean_j~1n",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1BETA~1lines~1whole_machine~1qwen3-8b~1decode~1mean_j~1sd",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1BETA~1lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j~1mean",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1BETA~1lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j~1n",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/inclusive~1BETA~1lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j~1sd",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/comparison_table/block/quantities/side_by_side~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j~1delta",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/comparison_table/block/quantities/side_by_side~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j~1delta",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/comparison_table/block/quantities/side_by_side~1BETA~1lines~1whole_machine~1qwen3-8b~1decode~1mean_j~1delta",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "type",
+   "path": "/comparison_table/block/quantities/side_by_side~1BETA~1lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j~1delta",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j~1mean",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j~1n",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1decode~1mean_j~1sd",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j~1mean",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j~1n",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1ALPHA~1lines~1whole_machine~1qwen3-1p7b~1prefill-p2048~1mean_j~1sd",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1BETA~1lines~1whole_machine~1qwen3-8b~1decode~1mean_j~1mean",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1BETA~1lines~1whole_machine~1qwen3-8b~1decode~1mean_j~1n",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1BETA~1lines~1whole_machine~1qwen3-8b~1decode~1mean_j~1sd",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1BETA~1lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j~1mean",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1BETA~1lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j~1n",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/comparison_table/block/quantities/summary~1BETA~1lines~1whole_machine~1qwen3-8b~1prefill-p2048~1mean_j~1sd",
+   "rule": "R-BQ"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "removed",
+   "path": "/flags/option_c_disagrees",
+   "rule": "R-OCD"
+  },
+  {
+   "file": "restricted.json",
+   "kind": "value",
+   "path": "/program_sha256",
+   "rule": "R-PH-1"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/comparison_stopped",
+   "rule": "R-CS"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/restricted_sha256",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r1-alpha/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r1-beta/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r1-gamma/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r2-beta/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r2-gamma/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r3-alpha/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r3-beta/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r3-gamma/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "public.json",
+   "kind": "value",
+   "path": "/sessions/r4-alpha/restricted_flag_count",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/block5_included/ALPHA",
+   "rule": "R-B5N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/block5_included/BETA",
+   "rule": "R-B5N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/block5_included/by_pack/ALPHA",
+   "rule": "R-B5N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/block5_included/by_pack/BETA",
+   "rule": "R-B5N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/block5_included/expected",
+   "rule": "R-B5N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/block5_included/expected_by_pack/ALPHA",
+   "rule": "R-B5N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/block5_included/expected_by_pack/BETA",
+   "rule": "R-B5N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/block5_included/observed",
+   "rule": "R-B5N"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/checks/compared_classes_clean/names_of_classes/0",
+   "rule": "R-CT-2"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/compared_classes_clean/result",
+   "rule": "R-CT-2"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/comparison_stopped/observed",
+   "rule": "R-CS"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/comparison_stopped/result",
+   "rule": "R-CS"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/failures_empty/count",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/failures_empty/result",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/option_c_pass/observed",
+   "rule": "R-OCP"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/checks/option_c_pass/result",
+   "rule": "R-OCP"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/digests/program_sha256",
+   "rule": "R-PH-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/digests/public_file",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/digests/public_restricted_sha256",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/digests/restricted_file",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/flags/option_c_disagrees",
+   "rule": "R-OCD"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/identity/comparison_stopped",
+   "rule": "R-CS"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/names/failures/0",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/names/failures/1",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/names/failures/2",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/names/failures/3",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/names/failures/4",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/names/failures/5",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/names/failures/6",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "removed",
+   "path": "/names/failures/7",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/option_c/comparator/classes/side_by_side/failed",
+   "rule": "R-CT-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/option_c/comparator/classes/side_by_side/pass",
+   "rule": "R-CT-2"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/option_c/comparator/classes/side_by_side/passed",
+   "rule": "R-CT-1"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/option_c/comparator/pass",
+   "rule": "R-CT-2"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/option_c/failure_count",
+   "rule": "R-FL"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/option_c/pass",
+   "rule": "R-OCP"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/public/comparison_stopped",
+   "rule": "R-CS"
+  },
+  {
+   "file": "structure.json",
+   "kind": "value",
+   "path": "/term7/per_class/side_by_side/passed",
+   "rule": "R-CT-3"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/argv/36",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/argv/38",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/argv_sha256",
+   "rule": "R-B-3"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/closure_after/scripts~1independent_recompute_b6.py",
+   "rule": "R-PH-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/closure_before/scripts~1independent_recompute_b6.py",
+   "rule": "R-PH-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "type",
+   "path": "/code",
+   "rule": "R-CS-X"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/commit",
+   "rule": "R-PH-2"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/end_time_ns",
+   "rule": "R-B-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/exit_code",
+   "rule": "R-CS-X"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/outputs_sha256/public",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/outputs_sha256/restricted",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/outputs_sha256/stdout",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/peak_rss",
+   "rule": "R-B-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/record_path",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/start_time_ns",
+   "rule": "R-B-1"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/status",
+   "rule": "R-CS-X"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/timed_argv/7",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "record.json",
+   "kind": "value",
+   "path": "/wall_s",
+   "rule": "R-B-1"
+  },
+  {
+   "file": "child-argv.json",
+   "kind": "value",
+   "path": "/argv/36",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "child-argv.json",
+   "kind": "value",
+   "path": "/argv/38",
+   "rule": "R-B-4"
+  },
+  {
+   "file": "stdout",
+   "kind": "value",
+   "path": "/flags",
+   "rule": "R-OCD-N"
+  },
+  {
+   "file": "stdout",
+   "kind": "value",
+   "path": "/comparison_stopped",
+   "rule": "R-CS"
+  },
+  {
+   "file": "stdout",
+   "kind": "value",
+   "path": "/restricted_sha256",
+   "rule": "R-DG-1"
+  },
+  {
+   "file": "process.json",
+   "kind": "bytes_differ_hash_only",
+   "path": "/",
+   "rule": "B-FILE"
+  },
+  {
+   "file": "samples.jsonl",
+   "kind": "bytes_differ_hash_only",
+   "path": "/",
+   "rule": "B-FILE"
+  },
+  {
+   "file": "time",
+   "kind": "bytes_differ_hash_only",
+   "path": "/",
+   "rule": "B-FILE"
+  }
+ ],
+ "predeclared": "/Volumes/JW-EXT/scratch/rl142-expected-diff.md",
+ "schema": "rl142.compare.v1",
+ "verdict": "PASS"
+}
