@@ -250,11 +250,17 @@ class SyntheticBackend:
         self.stack.close()
 
 
-def synthetic_config(root, *, templates=None, **synthetic):
+def synthetic_config(root, *, templates=None, d_n_chunk=None, **synthetic):
     """Write a synthetic R1 runtime config plus filled kit-template copies under ``root``."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     production = json.loads((rt.ROOT / "configs/align/v4/r1_runtime.json").read_text())
+    # RL-145 addendum row 2: the production config carries d_n_chunk (candidate, 4,096). The
+    # synthetic runs keep the registered formula (key absent) unless a test passes a value.
+    production.pop("d_n_chunk", None)
+    production.pop("d_n_chunk_status", None)
+    if d_n_chunk is not None:
+        production["d_n_chunk"] = d_n_chunk
     out_templates = {}
     for key, path in production["templates"].items():
         config, spec = rt.read_template(path)
@@ -271,6 +277,8 @@ def synthetic_config(root, *, templates=None, **synthetic):
                   sensors={"s_fast": syn.FAST, "s_slow": syn.SLOW, "fan_keys": [syn.FAN],
                            "record_keys": ["Tf08"], "r0_sha256": "a" * 64},
                   r0_classified_keys=[syn.FAST, syn.SLOW],
+                  # RL-145 section 3: the non-alias branch of night_confirmation needs a die second key.
+                  r0_classes={syn.FAST: "die", syn.SLOW: "die"},
                   step={**production["step"], "prefill_chars": 4000},
                   battery_poll_s=30, synthetic={"battery": {"drain_pct_per_h": 9.0}, **synthetic})
     path = root / "r1_runtime_synthetic.json"

@@ -322,6 +322,44 @@ class ReadBackTests(unittest.TestCase):
         self.assertEqual((censored["N_chunk"], censored["S7"], censored["t_decline"]), (2048, 300.0, 400.0))
         self.assertTrue(detail["t_decline_censored"])
 
+    def test_step_d_n_chunk_from_config_with_the_formula_recorded_beside_it(self):
+        # RL-145 addendum row 2: a configured value is N_chunk; the formula's value is still
+        # computed and recorded; the key absent is exactly the registered formula's output.
+        turn = SimpleNamespace(start_ns=100 * NS, first_token_ns=120 * NS, end_ns=520 * NS,
+                               decode_tokens=4000, prefill_tokens=10000)
+        ep = SimpleNamespace(start_ns=100 * NS, end_ns=525 * NS, hardware={"thermal": {"intervals": [
+            {"kind": "G0", "start_ns": 40 * NS, "end_ns": 100 * NS, "duration_s": 60.0}]}})
+        response = {"key": "K", "delta_t_c": 5.0, "t63_s": 3.0, "tau_s": 80.0, "peak_ns": 0}
+        common = dict(ep=ep, turn=turn, wall_s=800.0, responses={"s_fast": response, "s_slow": response},
+                      recovery_s=50.0, recovery_censored=False, bands={"delta_fast_c": 1.2, "delta_slow_c": 1.5},
+                      t_decline_s=200.0, t_decline_status="declined", d_class="heavy")
+        absent, absent_detail = rt.derive_step_d_slots(**common)
+        formula = 256 * int(0.6 * 200.0 * 10.0 / 256)
+        self.assertEqual((absent["N_chunk"], absent["S8"]), (formula, float(formula)))
+        self.assertEqual((absent_detail["N_chunk_formula"], absent_detail["N_chunk_source"]), (formula, "formula"))
+        for value in (4096, 2048):
+            with self.subTest(n_chunk=value):
+                slots, detail = rt.derive_step_d_slots(**common, n_chunk_config=value)
+                self.assertEqual((slots["N_chunk"], slots["S8"]), (value, float(value)))
+                self.assertEqual((detail["N_chunk_formula"], detail["N_chunk_source"]), (formula, "config.d_n_chunk"))
+                # Only N_chunk and S8 move; every other slot is the formula run's.
+                self.assertEqual({k: v for k, v in slots.items() if k not in ("N_chunk", "S8")},
+                                 {k: v for k, v in absent.items() if k not in ("N_chunk", "S8")})
+        # A censored decline still records the protocol's 2,048 as the formula value.
+        censored, cdetail = rt.derive_step_d_slots(**{**common, "t_decline_s": None, "t_decline_status": "no_decline"},
+                                                    n_chunk_config=4096)
+        self.assertEqual((censored["N_chunk"], cdetail["N_chunk_formula"]), (4096, 2048))
+
+    def test_configured_n_chunk_reads_the_key_and_refuses_a_bad_value(self):
+        self.assertIsNone(rt.configured_n_chunk({}))
+        production = json.loads((REPO / "configs/align/v4/r1_runtime.json").read_text())
+        self.assertEqual(rt.configured_n_chunk(production), 4096)
+        self.assertIn("not adopted", production["d_n_chunk_status"])
+        self.assertEqual(rt.configured_n_chunk({"d_n_chunk": 2048}), 2048)
+        for bad in (0, 100, 4352, 2048.0, "4096", None, True):
+            with self.subTest(bad=bad), self.assertRaises(rt.Refused):
+                rt.configured_n_chunk({"d_n_chunk": bad})
+
     def test_episode_phases_split_holds_out_of_decode(self):
         from joulewise.align.records import ToolCall
         tool = ToolCall(name="act", start_ns=60 * NS, end_ns=62 * NS, args_bytes=1, result_bytes=1,
