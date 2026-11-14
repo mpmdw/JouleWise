@@ -87,7 +87,8 @@ W1_EXCEPTIONS = (
      'handling': 'window counts and bar verdict printed (a count over all members); per-member battery rows withheld'},
     {'output': 'R10 D-member X2 count and rate (d_member_x2)', 'protocol': 'LEAD-RULINGS-2 R10; :395, :409-416',
      'reads': 'G0/G1 timeouts of D members incl. 11 and 14', 'in_class': False,
-     'handling': 'counts and rate printed; per-row G0 outcome kept, G1-timeout column pooled (RL-149 carve-out)'},
+     'handling': 'R10 count and rate printed over the six W1 D members (5, 8, 11, 14, 17, 18); non-benign rows keep '
+                 'the G0 outcome only (RL-149 carve-out). In C/T only the G0 count prints'},
     {'output': 'R22-3 balance check by condition', 'protocol': 'RUN_STATE 234 R22-3',
      'reads': 'exposure seconds and event counts of the sabotage-condition members', 'in_class': False,
      'handling': 'withheld with a member count, as in C/T (member time by condition is an outcome, RL-149 3(c))'},
@@ -116,13 +117,15 @@ CARVE_OUT_CODES = ('episode.deadman', 'thermal.gate_timeout', 'thermal.hold_time
                    'episode.max_turns', 'episode.time_guard', 'reasoning_censored_at_token_limit',
                    'calibration_censored_at_ceiling')
 
-# Per member (PILOT.json ``members`` and the printed member lines): what the harvest-off ``final``
-# (light_triage.final_adjudication_error + member_eligibility), the packet builder and the full-desk
-# gate need, and nothing else. Every other field is folded into one ``withheld`` digest, so not even
-# a withheld key name is printed.
-MEMBER_ALLOWLIST = ('run_id', 'ordinal', 'pool_role', 'readable', 'excluded', 'exclusion_codes',
-                    'disclosed_exclusion_codes', 'chain_eligible', 'chain_reasons', 'target_precheck_eligible',
-                    'window_evidence_precheck', 'harvest_flag_codes')
+# Per member (PILOT.json ``members`` and the printed member lines): identity and the exclusion record, which
+# is the harvest's own (``members_excluded``) and is all any consumer reads; ``light_triage.final_adjudication_error``
+# and harvest-off ``final`` read only top-level fields and ``extra_checks.thermal``, and the full-desk gate reads
+# the full members in memory. PR #774 row-1 F5: chain_eligible, chain_reasons (it can carry the heat-bearing
+# ``thermal_pressure_elevated_in_window``), target_precheck_eligible, window_evidence_precheck, the harvest
+# flag codes and readable are read by no consumer, so they are folded into the digest. Per-member instrument
+# and identity codes stay visible in ``extra_checks.thermal`` members (``flags``), which the packet builder reads.
+# Every other field is folded into one ``withheld`` digest, so not even a withheld key name is printed.
+MEMBER_ALLOWLIST = ('run_id', 'ordinal', 'pool_role', 'excluded', 'exclusion_codes', 'disclosed_exclusion_codes')
 # PILOT.json top level kept verbatim (light_triage.final_adjudication_error reads plan_id, status,
 # members_excluded and members_disclosure_only; the packet builder reads checks and the desk status).
 TOP_ALLOWLIST = ('schema_version', 'non_claim', 'session_id', 'plan_id', 'runs_root', 'checks',
@@ -147,9 +150,12 @@ BATTERY_WINDOW_KEEP = ('B_count', 'unobserved_count', 'assist_count', 'assist_ou
                        'bar_pass', 'status', 'consequence')
 KM003C_KEEP = ('schema', 'label', 'print_only', 'measurement', 'residual', 'fit', 'uncertainty', 'detail')
 # RL-149: the G0 outcome stays per member (a G0 timeout ends a member before its first turn and decides
-# eligibility); the G1-timeout column (and ``x2``, which ORs it in) is pooled.
+# eligibility); the G1-timeout column (and ``x2``, which ORs it in) is not printed per member. PR #774 row-1 F1:
+# in C/T only the G0 count is kept; ``x2_count``/``x2_rate`` minus it would give the G1 count, which belongs to
+# the carve-out (window counts over all members). Real C/T rosters hold 18 role-D members (14 pool benign, 2
+# sentinels, 2 sabotage); W1 holds 6 (ordinals 5, 8, 11, 14, 17, 18; 11 and 14 non-benign).
 X2_ROW_KEEP = ('run_id', 'ordinal', 'g0_outcome', 'g0_timeout_x2')
-X2_KEEP = ('print_only', 'authority', 'd_members', 'read', 'unread', 'x2_count', 'g0_timeout_x2_count', 'x2_rate')
+X2_KEEP = ('print_only', 'authority', 'd_members', 'read', 'unread', 'g0_timeout_x2_count')
 
 
 def canonical_sha256(value):
@@ -167,10 +173,6 @@ def _code(flag):
     if isinstance(flag, dict):
         flag = flag.get('code')
     return str(flag).split(':')[0] if flag is not None else None
-
-
-def carved(code):
-    return _code(code) in CARVE_OUT_CODES
 
 
 def _codes(flags):
@@ -205,6 +207,10 @@ def _load(path):
 
 def release_error(root):
     """``None`` when ``root`` holds a registered release event, else why not (fail closed).
+
+    OPEN ITEM for the research lead's cold pass (PR #774 row-1 F6): the lead signature is format-only
+    (``align_v4_kit.valid_lead_signature``, as for the registration receipt), so anyone who can write the
+    measurement root could forge a release; the receipt binds the record's bytes, not an identity.
 
     ``series_complete.json`` (schema :data:`SERIES_COMPLETE_SCHEMA`)::
 
@@ -283,33 +289,13 @@ def _nonbenign(plan_members, pilot_members=()):
 
 # --- members -------------------------------------------------------------------------------------
 
-def _eligibility(member):
-    summary = member.get('summary')
-    out = {'readable': summary is not None}
-    if summary:
-        pre = summary.get('window_evidence_precheck') or {}
-        # Exclusion codes stay verbatim (finality compares them with the harvest exactly); carved flag codes
-        # that are not exclusions are dropped from the per-member reasons.
-        exclusions = list(summary.get('exclusion_codes') or [])
-        out.update(chain_eligible=summary.get('chain_eligible'),
-                   chain_reasons=[r for r in pre.get('reasons') or [] if not carved(r)] + exclusions,
-                   target_precheck_eligible=pre.get('eligible'),
-                   window_evidence_precheck={r['window']: {'eligible': r.get('eligible'),
-                                                           'reasons': [c for c in r.get('reasons') or () if not carved(c)]}
-                                             for r in pre.get('windows') or () if isinstance(r, dict) and 'window' in r})
-    else:
-        out.update(chain_eligible=False, chain_reasons=['member.unreadable'])
-    return out
-
-
 def seal_member(member, plan_row=None):
     """One PILOT member reduced to :data:`MEMBER_ALLOWLIST` plus one ``withheld`` digest of the rest."""
     plan_row = plan_row or {}
     view = {'run_id': member.get('run_id'), 'ordinal': member.get('ordinal', plan_row.get('ordinal')),
             'pool_role': plan_row.get('pool_role', member.get('pool_role')),
             'excluded': member.get('excluded'), 'exclusion_codes': member.get('exclusion_codes'),
-            'disclosed_exclusion_codes': member.get('disclosed_exclusion_codes', []),
-            'harvest_flag_codes': _codes(member.get('harvest_flags')), **_eligibility(member)}
+            'disclosed_exclusion_codes': member.get('disclosed_exclusion_codes', [])}
     view = {k: view[k] for k in MEMBER_ALLOWLIST if k in view}
     rest = {k: v for k, v in member.items() if k not in view or view[k] != v}
     view['withheld'] = withheld(rest)
@@ -318,17 +304,9 @@ def seal_member(member, plan_row=None):
 
 def seal_line(run_id, record):
     """A printed member line (``harvest_flags`` / ``detail`` / ``unreadable``) reduced to the allowlist."""
-    out = {'harvest_flags': {'flag_codes': _codes((record.get('harvest_flags') or {}).get('flags')),
-                             'withheld': withheld(record.get('harvest_flags'))}}
+    out = {'harvest_flags': {'withheld': withheld(record.get('harvest_flags'))}}
     detail = record.get('detail') or {}
     keep = {k: detail[k] for k in MEMBER_ALLOWLIST if k in detail}
-    exclusions = list(detail.get('exclusion_codes') or [])
-    if isinstance(keep.get('chain_reasons'), list):
-        keep['chain_reasons'] = [r for r in keep['chain_reasons'] if not carved(r) or r in exclusions]
-    if isinstance(keep.get('window_evidence_precheck'), dict):
-        keep['window_evidence_precheck'] = {w: {**v, 'reasons': [c for c in v.get('reasons') or () if not carved(c)]}
-                                            if isinstance(v, dict) else v
-                                            for w, v in keep['window_evidence_precheck'].items()}
     keep['withheld'] = withheld({k: v for k, v in detail.items() if k not in keep})
     out['detail'] = keep
     if 'unreadable' in record:
@@ -518,8 +496,9 @@ def _seal_x2(report, run_ids=None):
     if not isinstance(report, dict):
         return report
     rows = report.get('members') or ()
+    # C/T: X2_KEEP only. W1 (``run_ids`` = its non-benign members): the registered R10 count and rate over
+    # W1's six D members stay (W1_EXCEPTIONS); only the non-benign rows are reduced.
     out = {k: report[k] for k in X2_KEEP if k in report} if run_ids is None else dict(report)
-    out['gate_timeout_x2_count'] = sum(bool(r.get('gate_timeout_x2')) for r in rows)
     out['members'] = [{k: r[k] for k in X2_ROW_KEEP if k in r} if run_ids is None or r.get('run_id') in run_ids else r
                       for r in rows]
     out['withheld'] = withheld(report)

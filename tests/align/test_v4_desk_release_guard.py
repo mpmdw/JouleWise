@@ -190,33 +190,65 @@ class Fixture:
         record['battery'] = {'status': 'observed', 'discharge_j': v['thermal_battery'], 'flags': []}
         return record
 
+    def x2_report(self, original):
+        """The real R10 report with a planted G1 timeout on member 0 (benign) and member 2 (sabotage)."""
+        def planted(plan_members, runs_root):
+            report = original(plan_members, runs_root)
+            for row in report['members']:
+                if self.index.get(row['run_id']) in (0, 2):
+                    row.update(gate_timeout_x2=True, x2=True)
+            report['x2_count'] = sum(row['x2'] for row in report['members'])
+            report['x2_rate'] = report['x2_count'] / len(report['members'])
+            return report
+        return planted
+
+    def patches(self, stack):
+        enter = stack.enter_context
+        enter(patch.object(session, 'd_member_x2_report', self.x2_report(session.d_member_x2_report)))
+        enter(patch.object(pilot, 'episode_summary', self.summary(pilot.episode_summary)))
+        enter(patch('joulewise.align.apple.diagnostics.member_thermal_readings', return_value=self.thermals))
+        enter(patch.object(session, 'bundle_ac_powermode', return_value=0))
+        enter(patch.object(km003c, 'session_report', return_value=self.dc_report()))
+        enter(patch.object(v4_thermal, 'registration_evidence', return_value=({'policy': {}}, {})))
+        enter(patch.object(v4_thermal, 'enrich_record', side_effect=lambda record, path: record))
+        enter(patch.object(v4_thermal, 'r1_soak_c', return_value={}))
+        enter(patch.object(v4_thermal, 'contrast_predeclaration', return_value=None))
+        enter(patch.object(thermal_desk, 'read_bundle_record', side_effect=self.record))
+        enter(patch.object(thermal_desk, 'window_report', side_effect=self.window_report))
+        enter(patch.object(v4_registration, 'desk_diagnostics', side_effect=self.diagnostics))
+        enter(patch.object(v4_battery, 'attach', side_effect=self.battery))
+        enter(patch.object(v4_contention, 'attach', side_effect=lambda r, path, journal: r.update(
+            contention={'span_s': None, 'disclosed_codes': [], 'flags': []}) or r))
+        enter(patch.object(kit, 'read_inputs', return_value={}))
+        enter(patch.object(series, 'load', return_value={}))
+        enter(patch.object(series, 'desk_row', side_effect=lambda manifest, wid, members, u_pass: {
+            'window_id': wid, 'desk_eligible_benign': {'spam': 2, 'bank': 1}}))
+
     def run_desk(self, root, *, released=False):
         """Run the v4 desk (``harvest=False``) with planted sources; returns (stdout, PILOT, desk.json, output dir)."""
         with ExitStack() as stack:
-            enter = stack.enter_context
-            enter(patch.object(pilot, 'episode_summary', self.summary(pilot.episode_summary)))
-            enter(patch('joulewise.align.apple.diagnostics.member_thermal_readings', return_value=self.thermals))
-            enter(patch.object(session, 'bundle_ac_powermode', return_value=0))
-            enter(patch.object(km003c, 'session_report', return_value=self.dc_report()))
-            enter(patch.object(v4_thermal, 'registration_evidence', return_value=({'policy': {}}, {})))
-            enter(patch.object(v4_thermal, 'enrich_record', side_effect=lambda record, path: record))
-            enter(patch.object(v4_thermal, 'r1_soak_c', return_value={}))
-            enter(patch.object(v4_thermal, 'contrast_predeclaration', return_value=None))
-            enter(patch.object(thermal_desk, 'read_bundle_record', side_effect=self.record))
-            enter(patch.object(thermal_desk, 'window_report', side_effect=self.window_report))
-            enter(patch.object(v4_registration, 'desk_diagnostics', side_effect=self.diagnostics))
-            enter(patch.object(v4_battery, 'attach', side_effect=self.battery))
-            enter(patch.object(v4_contention, 'attach', side_effect=lambda r, path, journal: r.update(
-                contention={'span_s': None, 'disclosed_codes': [], 'flags': []}) or r))
-            enter(patch.object(kit, 'read_inputs', return_value={}))
-            enter(patch.object(series, 'load', return_value={}))
-            enter(patch.object(series, 'desk_row', side_effect=lambda manifest, wid, members, u_pass: {
-                'window_id': wid, 'desk_eligible_benign': {'spam': 2, 'bank': 1}}))
+            self.patches(stack)
             out = io.StringIO()
             with redirect_stdout(out):
                 status = session.desk(root, harvest=False)
         output = Path(status['pilot']).parent
         return out.getvalue(), json.loads(Path(status['pilot']).read_text()), json.loads((output / 'desk.json').read_text()), output
+
+    def run_triage(self, root, window_id):
+        """The harvest-off light triage (``cmd_triage``) on the same session: its record, JSON line, stdout, stderr."""
+        import argparse
+        import contextlib
+        from scripts import align_v4_harvest_off as harvest_off
+        target = Path(root) / 'triage-record.json'
+        args = argparse.Namespace(session_root=str(root), window_id=window_id, ladder_recorded=False, out=str(target))
+        with ExitStack() as stack:
+            self.patches(stack)
+            stack.enter_context(patch.object(harvest_off, '_runs_root', return_value=self.runs))
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = harvest_off.cmd_triage(args)
+        return {'triage_record': target.read_text(), 'triage_json': json.dumps(result, sort_keys=True),
+                'triage_stdout': stdout.getvalue(), 'triage_stderr': stderr.getvalue()}
 
 
 def leaks(texts, values, keys=FORBIDDEN_KEYS):
@@ -266,7 +298,7 @@ class ReleaseGuardTests(unittest.TestCase):
         for line in printed.splitlines():
             for rid in self.fx.index:
                 if line.startswith(rid + ' harvest_flags: '):
-                    self.assertLessEqual(set(json.loads(line.split(': ', 1)[1])), {'flag_codes', 'withheld'})
+                    self.assertEqual(set(json.loads(line.split(': ', 1)[1])), {'withheld'})
                 elif line.startswith(rid + ': {'):
                     printed_members += 1
                     self.assertLessEqual(set(json.loads(line.split(': ', 1)[1])), allowed, line)
@@ -280,7 +312,12 @@ class ReleaseGuardTests(unittest.TestCase):
         pooled = report['residual_analysis']['pooled']['scopes']['all_members_diagnostic']['counts_logged_headline']
         self.assertEqual(pooled['members_scored'], len(self.fx.rows))
         # The unsealed PILOT is kept for the release run, inside the withheld archive, and bound by digest.
-        full_path = output / seal.WITHHELD_PILOT
+        full_path = output / 'archive' / 'withheld' / 'PILOT.full.json'          # literal: the withheld archive
+        self.assertTrue(full_path.is_file())
+        self.assertFalse((output / 'PILOT.full.json').exists())
+        self.assertFalse((output / 'archive' / 'PILOT.full.json').exists())
+        self.assertEqual(sorted(p.relative_to(output).as_posix() for p in output.rglob('PILOT.full.json')),
+                         ['archive/withheld/PILOT.full.json'])
         full = full_path.read_bytes()
         self.assertEqual(hashlib.sha256(full).hexdigest(), report['release_guard']['withheld_pilot_sha256'])
         self.assertIn(str(self.fx.values()[0]['gpu_j']).encode(), full)
@@ -308,10 +345,22 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertEqual(thermal['carve_out_flag_counts']['counts'], {'thermal.gate_timeout': 1})
         by_id = {m['id']: m for m in thermal['members']}
         self.assertIn('thermal.start_gate_timeout', by_id[self.fx.rows[5]['run_id']]['flags'])  # G0 stays per member
-        self.assertIn('meter.planted_instrument', printed)                                      # instrument codes stay
-        for row in report['extra_checks']['d_member_x2']['members']:
+        self.assertNotIn('meter.planted_instrument', printed)          # harvest flag codes are in the digest (F5)
+        # X2 (R10): per row the G0 outcome only; in C/T only the G0 count (row-1 F1: the G1 count is carved).
+        x2 = report['extra_checks']['d_member_x2']
+        self.assertLessEqual(set(x2), set(seal.X2_KEEP) | {'members', 'withheld'})
+        for row in x2['members']:
             self.assertLessEqual(set(row), set(seal.X2_ROW_KEEP))
-        self.assertIn('gate_timeout_x2_count', report['extra_checks']['d_member_x2'])
+        self.assertEqual(x2['g0_timeout_x2_count'], 0)
+        for key in ('gate_timeout_x2', 'x2', 'x2_count', 'x2_rate', 'gate_timeout_x2_count'):
+            self.assertEqual([n for n, t in self.texts(printed, report, desk).items() if f'"{key}"' in t], [], key)
+        # The harvest-off light triage writes the same sealed sections (record, JSON line, stdout, stderr).
+        triage = self.fx.run_triage(root, window)
+        self.assertEqual(leaks(triage, planted_values(self.fx.values()), keys=('joules', 'turn_owned_j', 'gross_episode_j',
+                                                                               'battery', 'dc_in_energy_j')), [])
+        record = json.loads(triage['triage_record'])
+        self.assertTrue(all(m['tokens'].startswith('sha256:') for m in record['thermal']['members']))
+        self.assertEqual(record['member_eligibility']['status'], 'pass')
         return printed, report, desk
 
     def assert_carved_only_as_counts(self, printed, report, desk, indices):
@@ -416,9 +465,19 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assert_carved_only_as_counts(printed, report, desk,
                                           [i for i, r in enumerate(self.fx.rows) if r['run_id'] in self.fx.nonbenign])
         self.assertEqual(report['carve_out_flag_counts']['members'], len(self.fx.rows))
-        for row in report['extra_checks']['d_member_x2']['members']:
+        x2 = report['extra_checks']['d_member_x2']
+        for row in x2['members']:
             if row['run_id'] in self.fx.nonbenign:
                 self.assertLessEqual(set(row), set(seal.X2_ROW_KEEP))
+            elif self.fx.index[row['run_id']] == 0:
+                self.assertTrue(row['gate_timeout_x2'])                     # benign rows print as registered
+        self.assertNotIn('gate_timeout_x2_count', json.dumps(report))
+        self.assertEqual(x2['x2_count'], 2)                                 # registered R10 count over W1's D members
+        # The W1 light triage seals the non-benign members as the desk does.
+        triage = self.fx.run_triage(root, 'W1')
+        self.assertEqual(leaks(triage, planted_values(sabotage, ('owned', 'gross', 'latency', 'thermal_battery', 'dc',
+                                                                 'seconds', 'calls', 'tool_turn')), keys=()), [])
+        self.assertIn(str(plant(0)['arm']), triage['triage_record'])        # the deciding contrast prints
         for cell in report['I4_prime'].values():
             for row in cell['accounting']:
                 if row['run_id'] in self.fx.nonbenign:
@@ -443,6 +502,57 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertEqual(leaks(texts, planted_values(sabotage, ('cpu_j', 'battery', 'dc', 'thermal_battery')), keys=()), [])
         self.assertTrue(leaks({'stdout': printed}, planted_values(sabotage, ('main', 'tool')), keys=()))
         self.assertFalse(report['release_guard']['w1_withhold_sabotage_gpu_and_outcomes'])
+
+
+class SentinelDetectorTests(unittest.TestCase):
+    """PR #774 row-1 reviewer's independent check, adopted: its own sentinels and its own detector (numeric tokens
+    within rel 1e-9 of a sentinel or its integer part, 9-digit signatures, strings), no key blacklist; the unsealed
+    PILOT.full.json is the control that must light it."""
+
+    @staticmethod
+    def sentinel(i):
+        b = 100000 * (i + 1)
+        return {'gpu_j': 8100000.1357 + b, 'cpu_j': 8200000.2468 + b, 'turn_j': 8300000.3691 + b,
+                'main': 0.6173948251 + i / 1e7, 'side': f'ZSIDEQ{i}K9', 'tool': f'zq_tool_{i}_ww', 'bank': f'zq_bank_{i}_ww',
+                'calls': 7160000 + 13 * i + 7, 'seconds': 8400000.5927 + b, 'battery': 8500000.7149 + b,
+                'dc': 8600000.8351 + b, 'owned': 8700000.9573 + b, 'gross': 8800000.1795 + b,
+                'latency': 8900000.3917 + b, 'thermal_battery': 9100000.5139 + b, 'u3_delta': 9200000.7351,
+                'arm': 9300000.9573, 'warm': 9400000.1795 + b, 'tool_turn': 7270000 + 17 * i}
+
+    @staticmethod
+    def detect(texts, values):
+        import re
+        nums, signatures, strings = set(), set(), set()
+        for v in values:
+            for x in v.values():
+                if isinstance(x, str):
+                    strings.add(x)
+                else:
+                    nums.update((float(x), float(int(x))))
+                    signatures.add(re.sub(r'\D', '', repr(float(x)))[:9] if isinstance(x, float) else str(int(x)))
+        hits = set()
+        for name, text in texts.items():
+            for token in re.finditer(r'-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?', text):
+                t = float(token.group())
+                hits.update((name, 'num', n) for n in nums if n and abs(t - n) <= 1e-9 * abs(n))
+            flat = re.sub(r'[.\-]', '', text)
+            hits.update((name, 'sig', g) for g in signatures if len(g) >= 7 and g in flat)
+            hits.update((name, 'str', x) for x in strings if x in text)
+        return sorted(hits, key=str)
+
+    def test_independent_detector_finds_no_sentinel_in_sealed_c_and_t_desks_or_triage(self):
+        with tempfile.TemporaryDirectory(prefix='jw-desk-sentinel-') as tmp, \
+                patch(__name__ + '.plant', self.sentinel):
+            fx = Fixture(tmp)
+            values = [self.sentinel(i) for i in range(len(CASES))]
+            for window, role in (('C3', 'calibration'), ('T2', 'test')):
+                root = fx.session('s-' + window, {'window_id': window, 'role': role})
+                printed, report, desk, output = fx.run_desk(root)
+                texts = {'stdout': printed, 'PILOT.json': json.dumps(report, sort_keys=True),
+                         'desk.json': json.dumps(desk, sort_keys=True), **fx.run_triage(root, window)}
+                self.assertEqual(self.detect(texts, values), [], window)
+                control = self.detect({'full': (output / 'archive/withheld/PILOT.full.json').read_text()}, values)
+                self.assertGreater(len(control), 20, window)
 
 
 class SealUnitTests(unittest.TestCase):
