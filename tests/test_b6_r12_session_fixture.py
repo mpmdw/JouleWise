@@ -26,6 +26,11 @@ ADDITIONAL_MONITOR_SERIES = (
 )
 
 
+
+PLATFORM_SKIP_REASON = (
+    "macOS only: the R12 guard (b6_r12_runtime.py) denies the os.posix_spawn audit event, which Python 3.13's subprocess.Popen uses on Linux (POSIX_SPAWN_CLOSEFROM); the R12 fixture simulates the macOS measurement chain and runs on the two Macs only (research lead, PR #771 row 4 finding 6)"
+)
+
 class BootstrapTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="r12-session-")
@@ -101,6 +106,7 @@ print('logical_alarm')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "logical_alarm")
 
+    @unittest.skipUnless(sys.platform == "darwin", PLATFORM_SKIP_REASON)
     def test_default_term_reaches_child_without_clock_reads(self):
         """Predict: declared TERM terminates an owned stdin-blocked child with returncode -15, without native signals or child clock reads."""
         bootstrap = self.root / "bootstrap.py"
@@ -180,6 +186,7 @@ print('typed_smc')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "typed_smc")
 
+    @unittest.skipUnless(sys.platform == "darwin", PLATFORM_SKIP_REASON)
     def test_subprocess_deadline_uses_child_logical_clock(self):
         """Predict: a child that advances 5 logical seconds then waits for stdin exceeds a 1 s parent deadline before 1 wall second."""
         prepare_interpreters(self.root)
@@ -588,6 +595,7 @@ print(json.dumps(rows[-1]))
         self.assertFalse(actions[0]["executed"])
         self.assertEqual(actions[0]["returncode"], 0)
 
+    @unittest.skipUnless(sys.platform == "darwin", PLATFORM_SKIP_REASON)
     def test_declared_signal_closes_both_original_monitor_threads(self):
         """Predict: declared owned-child TERM stops both original monitor loops, writes session_end and exits 0 without native signaling."""
         export_chain_inputs(self.root)
@@ -1130,6 +1138,7 @@ class MonitorCoverageTests(unittest.TestCase):
 
 
 class CourierProfileTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", PLATFORM_SKIP_REASON)
     def test_original_courier_preserves_stdin_argv_and_injected_clock(self):
         """Predict: exact f31 courier exits 0, writes file-transport bytes/argv and synthetic time; undeclared host argv still returns 126. Before the new executable input this fails with rc 126/no courier records (RL-49 rules 1, 4, 6)."""
         from b6_r12_courier_profile import prepare_profile, export_prompt, COURIER, PROMPT
