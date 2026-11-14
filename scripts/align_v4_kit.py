@@ -359,10 +359,19 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planni
         seen.update(group)
     if isinstance(sensors, dict):
         fast, slow = sensors.get('s_fast'), sensors.get('s_slow')
-        if fast == slow or any(fast in group and slow in group for group in aliases):
-            raise ValueError('R1.thermal_policy s_fast/s_slow: aliased keys are one thermometer '
-                             '(LEAD-RULINGS-2 R7-13)')
         confirmation = classified.get('night_confirmation') or {}
+        # RL-145 section 3 / addendum row 4: the ruled pair is the fast pick and the lexically first
+        # other member of its alias group, read as one thermometer twice; only that pair, and only
+        # on an ok RL-145 confirmation that names it, passes. Any other aliased pair still refuses.
+        group = next((g for g in aliases if fast in g), None)
+        ruled_alias_pair = (group is not None and slow in group and slow != fast
+                            and slow == min(k for k in group if k != fast)
+                            and confirmation.get('ok') is True and confirmation.get('second_key_rule') == 'RL-145'
+                            and all(confirmation.get(r) == sensors.get(r) for r in ('s_fast', 's_slow')))
+        if fast == slow or (any(fast in g and slow in g for g in aliases) and not ruled_alias_pair):
+            raise ValueError('R1.thermal_policy s_fast/s_slow: aliased keys are one thermometer '
+                             '(LEAD-RULINGS-2 R7-13; RL-145 admits only the fast key and its lexically first '
+                             'alias on an ok RL-145 night confirmation)')
         fixed_pair = (confirmation.get('ok') is True and confirmation.get('authority') == 'RL-78'
                       and all(confirmation.get(r) == sensors.get(r) for r in ('s_fast', 's_slow')))
         if sensors.get('s_fast') not in (classified.get('die_candidates') or ()) and not fixed_pair:

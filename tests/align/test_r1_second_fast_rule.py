@@ -33,6 +33,10 @@ class SecondFastRuleTests(unittest.TestCase):
         cls.saved, cls.regen = json.loads(cls.saved_raw), json.loads(cls.regen_raw)
         cls.ruling = json.loads(RULING.read_bytes())
         cls.config, _ = rt.load_config(CONFIG)
+        # RL-145 moved the config's s_slow TVh0 -> TV1h. This file tests RL-122's rule (still in the
+        # validator, superseded), so it reads the config as RL-122 had it: only s_slow differs.
+        cls.config = deepcopy(cls.config)
+        cls.config['sensors']['s_slow'] = 'TVh0'
 
     def validate(self, config=None, ruling=None, table=None):
         # A ruling written for a changed table names that table's own digest.

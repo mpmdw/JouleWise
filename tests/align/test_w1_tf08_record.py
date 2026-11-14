@@ -89,18 +89,18 @@ class W1RecordTests(unittest.TestCase):
         self.assertEqual(result['sensors']['s_slow'], self.inputs['R1']['thermal_policy']['sensors']['s_slow'])
 
     def test_rl94_record_key_is_r0_pick_not_runtime_s_slow(self):
-        # RL-94: with the runtime's s_slow an R1 pick (TVh0 since RL-119/RL-122,
-        # Th0C under RL-89), W1 records Tf08 and gates on the R1 picks; a changed
+        # RL-94: with the runtime's s_slow an R1 pick (TV1h since RL-145, TVh0 under
+        # RL-119/RL-122, Th0C under RL-89), W1 records Tf08 and gates on the R1 picks; a changed
         # s_slow alone moves nothing.
         config = json.loads((ROOT / 'configs/align/v4/r1_runtime.json').read_bytes())
-        self.assertEqual((config['sensors']['s_fast'], config['sensors']['s_slow']), ('TV0h', 'TVh0'))
+        self.assertEqual((config['sensors']['s_fast'], config['sensors']['s_slow']), ('TV0h', 'TV1h'))
         self.assertEqual(config['r0_picks'], {'s_fast': 'TV0h', 's_slow': 'Tf08'})
         self.assertEqual(kit.r0_heatsink_key(ROOT), 'Tf08')
         inputs = deepcopy(self.inputs)
-        inputs['R1']['thermal_policy']['sensors'].update(s_fast='TV0h', s_slow='TVh0')
+        inputs['R1']['thermal_policy']['sensors'].update(s_fast='TV0h', s_slow='TV1h')
         result = self.policy_with(config, inputs)
         self.assertEqual(result['sensors']['record_keys'], ['Tf08'])
-        self.assertEqual((result['sensors']['s_fast'], result['sensors']['s_slow']), ('TV0h', 'TVh0'))
+        self.assertEqual((result['sensors']['s_fast'], result['sensors']['s_slow']), ('TV0h', 'TV1h'))
         config['sensors']['s_slow'] = 'Tsyn'
         self.assertEqual(self.policy_with(config, inputs)['sensors']['record_keys'], ['Tf08'])
 
