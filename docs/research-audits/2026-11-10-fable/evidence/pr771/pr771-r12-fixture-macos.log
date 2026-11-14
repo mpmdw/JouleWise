@@ -1,0 +1,183 @@
+start 2026-11-13 19:24:12 PST
+host Edrs-MacBook-Air.local 15.7.9 python Python 3.13.18
+tree: HEAD 93f30c3d87c2735088439a2b1b03cbe98046d500 + working-tree skip decorators (sha256 f336be1be6afca186cc308d869dcb51badc8a2661c48dbb02ea16e7b76b800c3)
+test_actual_git_blob_transport_preserves_bytes_and_fresh_refs (tests.test_b6_r12_session_fixture.BootstrapTests.test_actual_git_blob_transport_preserves_bytes_and_fresh_refs)
+Predict: native/batch bytes, errors and pinned digest agree; fresh commits are read, replace refs denied, and SystemExit(4) survives transport atexit cleanup. ... ok
+test_bootstrap_never_arms_native_diagnostic_watchdog (tests.test_b6_r12_session_fixture.BootstrapTests.test_bootstrap_never_arms_native_diagnostic_watchdog)
+Predict: even the legacy trace flag cannot arm a native traceback watchdog/handler or leave a diagnostic file; the source program exits 0. This excludes an agent diagnostic, not a chain judgment. ... ok
+test_declared_signal_closes_both_original_monitor_threads (tests.test_b6_r12_session_fixture.BootstrapTests.test_declared_signal_closes_both_original_monitor_threads)
+Predict: declared owned-child TERM stops both original monitor loops, writes session_end and exits 0 without native signaling. ... ok
+test_declared_signal_reaches_original_meter_shutdown_handler (tests.test_b6_r12_session_fixture.BootstrapTests.test_declared_signal_reaches_original_meter_shutdown_handler)
+Predict: declared owned-child TERM executes no native signal; the real meter writes its signal trailer and exits 0. ... ok
+test_default_term_reaches_child_without_clock_reads (tests.test_b6_r12_session_fixture.BootstrapTests.test_default_term_reaches_child_without_clock_reads)
+Predict: declared TERM terminates an owned stdin-blocked child with returncode -15, without native signals or child clock reads. ... ok
+test_guard_rejects_metadata_probes_exec_and_escaping_write (tests.test_b6_r12_session_fixture.BootstrapTests.test_guard_rejects_metadata_probes_exec_and_escaping_write)
+Predict: six denials occur before native metadata access, exec or file creation. ... ok
+test_inconsistent_pinned_prospective_manifest_is_not_repaired (tests.test_b6_r12_session_fixture.BootstrapTests.test_inconsistent_pinned_prospective_manifest_is_not_repaired)
+Predict: a pinned manifest whose manifest_id is already wrong is named, left unrepaired in the overlay, and the pinned resolver still refuses it. ... ok
+test_notification_polling_does_not_cache_clock_values (tests.test_b6_r12_session_fixture.BootstrapTests.test_notification_polling_does_not_cache_clock_values)
+Predict: 500 clock reads plus 60/30 s advances match the unthrottled reference byte for byte; another clock's advance is visible immediately. ... ok
+test_original_harvest_readiness_uses_declared_absent_group (tests.test_b6_r12_session_fixture.BootstrapTests.test_original_harvest_readiness_uses_declared_absent_group)
+Predict: original readiness accepts a terminal synthetic unit input with an absent group; source returns ESRCH, never EPERM or a substituted verdict. ... ok
+test_original_sleep_reader_uses_coherent_uptime_input (tests.test_b6_r12_session_fixture.BootstrapTests.test_original_sleep_reader_uses_coherent_uptime_input)
+Predict: original sleep reader observes zero sleep and no flags across a 75 s injected wait. ... ok
+test_original_verdict_publisher_retains_no_clobber_and_root_fence (tests.test_b6_r12_session_fixture.BootstrapTests.test_original_verdict_publisher_retains_no_clobber_and_root_fence)
+Predict: the pinned publisher writes exact bytes under its real lock, refuses overwrite, and an escaping hard link is denied before creation. ... ok
+test_pinned_children_share_clock_without_wall_wait (tests.test_b6_r12_session_fixture.BootstrapTests.test_pinned_children_share_clock_without_wall_wait)
+Predict: pinned SystemClock advances 60+30 s across fresh children in <10 wall s. ... ok
+test_pinned_j1_schema_mismatch_is_reported_without_patch (tests.test_b6_r12_session_fixture.BootstrapTests.test_pinned_j1_schema_mismatch_is_reported_without_patch)
+Predict: f31's real producer/reader disagree on J1 schema; reader returns verdict_schema_mismatch. ... ok
+test_prospective_identity_must_be_a_unique_field (tests.test_b6_r12_session_fixture.BootstrapTests.test_prospective_identity_must_be_a_unique_field)
+Predict: a self-consistent pinned manifest that repeats its frozen_semantics_sha256 value elsewhere is refused (not a unique field), not rewritten in both places. ... ok
+test_prospective_identity_quoted_outside_manifest_is_refused (tests.test_b6_r12_session_fixture.BootstrapTests.test_prospective_identity_quoted_outside_manifest_is_refused)
+Predict: a pinned frozen_semantics_sha256 quoted in another config, or a manifest_id quoted in an exported doc, makes make-inputs refuse before any overlay is written. ... ok
+test_public_model_input_drives_declared_science_sensor_script (tests.test_b6_r12_session_fixture.BootstrapTests.test_public_model_input_drives_declared_science_sensor_script)
+Predict: declared science input emits busy GPU/6 W; reference input emits clean GPU/0 W, using only raw source inputs. ... ok
+test_real_meter_writer_uses_synthetic_libusb_object (tests.test_b6_r12_session_fixture.BootstrapTests.test_real_meter_writer_uses_synthetic_libusb_object)
+Predict: unchanged meter writes 11 polls/110 samples at the registered 28 V EPR midpoint and a duration trailer; no native USB load. ... ok
+test_real_timer_uses_injected_clock_without_native_alarm (tests.test_b6_r12_session_fixture.BootstrapTests.test_real_timer_uses_injected_clock_without_native_alarm)
+Predict: a 60 s ITIMER_REAL expires after 120 injected seconds, without calling the native timer. ... ok
+test_shell_and_python_use_same_clock (tests.test_b6_r12_session_fixture.BootstrapTests.test_shell_and_python_use_same_clock)
+Predict: unedited zsh date/sleep commands and pinned child see the same 75 s advance. ... ok
+test_smc_source_types_pass_original_current_parser (tests.test_b6_r12_session_fixture.BootstrapTests.test_smc_source_types_pass_original_current_parser)
+Predict: original SMC battery parser accepts integer 0 mA and a positive integer 12000 mV, with no source errors. ... ok
+test_source_pruning_preserves_raw_instrument_bytes (tests.test_b6_r12_session_fixture.BootstrapTests.test_source_pruning_preserves_raw_instrument_bytes)
+Predict: waveform pruning and notification polling preserve complete plist bytes and every meter poll byte against unpruned, unthrottled inputs. ... ok
+test_subprocess_deadline_uses_child_logical_clock (tests.test_b6_r12_session_fixture.BootstrapTests.test_subprocess_deadline_uses_child_logical_clock)
+Predict: a child that advances 5 logical seconds then waits for stdin exceeds a 1 s parent deadline before 1 wall second. ... ok
+test_synthetic_inputs_keep_canonical_suite_bindings (tests.test_b6_r12_session_fixture.BootstrapTests.test_synthetic_inputs_keep_canonical_suite_bindings)
+Predict: every synthetic suite config binds the pinned canonicalizer's actual digest, with production 57.6 s idle inputs. ... ok
+test_synthetic_inputs_keep_prospective_analysis_identity (tests.test_b6_r12_session_fixture.BootstrapTests.test_synthetic_inputs_keep_prospective_analysis_identity)
+Predict: all four GAMMA contrast stage dirs pass the pinned run_campaign prospective resolver over synthetic inputs (MBP GAMMA root -1 failed it: analysis_prospective_identity_mismatch); make-inputs names the one rebound manifest. ... ok
+test_usb_source_sampling_grid_survives_poll_roundoff (tests.test_b6_r12_session_fixture.BootstrapTests.test_usb_source_sampling_grid_survives_poll_roundoff)
+Predict: a 1 ns early poll and a partial last poll retain the device's 20 ms sampling grid, with legal variable packet counts and no native USB access. ... ok
+test_original_courier_preserves_stdin_argv_and_injected_clock (tests.test_b6_r12_session_fixture.CourierProfileTests.test_original_courier_preserves_stdin_argv_and_injected_clock)
+Predict: exact f31 courier exits 0, writes file-transport bytes/argv and synthetic time; undeclared host argv still returns 126. Before the new executable input this fails with rc 126/no courier records (RL-49 rules 1, 4, 6). ... ok
+test_existing_root_is_never_restarted (tests.test_b6_r12_session_fixture.CourierSetControlTests.test_existing_root_is_never_restarted)
+Predict: an existing root is refused before any declaration or child; partial output is not resumed. ... ok
+test_failed_actual_child_has_no_success_marker (tests.test_b6_r12_session_fixture.CourierSetControlTests.test_failed_actual_child_has_no_success_marker)
+Predict: actual generator child exit 7 records failed/7 and cannot create a successful parent marker, regardless of plausible state elsewhere. ... {"argv": ["/opt/homebrew/opt/python@3.13/bin/python3.13", "-B", "/Volumes/JW-EXT/jw-wt/b6-m1-m2/scripts/b6_r12_courier_set.py", "--out", "/Volumes/JW-EXT/tmp/r12-courier-set-5tmcohg1/fixture", "--prior-chain-root", "/Volumes/JW-EXT/tmp/r12-courier-set-5tmcohg1/prior", "--mode", "denied", "--schedule", "reduced", "--child-token", "5270a9274eea48c9bd30ff44687a1302"], "declaration_sha256": "492d0a6d96c98c4b05164219fa4041082208a4d6c674fd1b0ab584ac187377ff", "ended_native_ns": 1794626755059362000, "exit_code": 7, "pid": 123, "started_native_ns": 1794626755058590000, "status": "failed", "supervisor_pid": 80800}
+ok
+test_reduced_source_preserves_scripted_shapes (tests.test_b6_r12_session_fixture.CourierSetControlTests.test_reduced_source_preserves_scripted_shapes)
+Predict: reduced input supplier changes only dwell/token inputs; wait/skip/skew sequences survive, and no pinned function is substituted. ... ok
+test_only_named_completed_denied_root_and_scoped_child_environment (tests.test_b6_r12_session_fixture.CrossTempReaderTests.test_only_named_completed_denied_root_and_scoped_child_environment)
+Predict RL-123: only the named denied root may cross TMPDIR after parent/manifest authentication; sibling and inflight roots refuse, child TMPDIR still passes strict checks and is restored. ... ok
+test_cross_session_gamma (tests.test_b6_r12_session_fixture.DeclaredShapeTests.test_cross_session_gamma)
+Predict r12-gamma-cross: nine-session option (c) exits 0/agrees and records a GAMMA unit paired across sessions (§17-R12:673). ... skipped 'explicit generated R12 set required'
+test_denied_action_ordinary_session (tests.test_b6_r12_session_fixture.DeclaredShapeTests.test_denied_action_ordinary_session)
+Predict r12-denied-action: single-session option (c) exits 0/agrees; normal session retains network_time.off_output and arm action rc 126 (RL-49 rule 2). ... skipped 'explicit generated R12 set required'
+test_desk_compressed_logs_and_plists (tests.test_b6_r12_session_fixture.DeclaredShapeTests.test_desk_compressed_logs_and_plists)
+Predict r12-compressed: option (c) exits 0/agrees reading real desk-compressed campaign logs and plists (§17-R12:673). ... skipped 'explicit generated R12 set required'
+test_full_volume_member_and_instrument_census (tests.test_b6_r12_session_fixture.DeclaredShapeTests.test_full_volume_member_and_instrument_census)
+Predict full ALPHA/BETA/GAMMA: 125/125/107 members, >=334 s per primary at 10 Hz with 16 CPUs; continuous 50 Hz meter, registered monitor cadences and no source errors (RL-48 item 5). ... skipped 'explicit generated R12 set required'
+test_mixed_campaign_rows (tests.test_b6_r12_session_fixture.DeclaredShapeTests.test_mixed_campaign_rows)
+Predict r12-mixed: option (c) exits 0/agrees and classifies executed-member plus trailing evaluation rows (§17-R12:673). ... skipped 'explicit generated R12 set required'
+test_unbounded_anchor (tests.test_b6_r12_session_fixture.DeclaredShapeTests.test_unbounded_anchor)
+Predict r12-anchor: option (c) exits 0/agrees; member.anchor_not_bounded excludes the source-skewed member (§17-R12:673). ... skipped 'explicit generated R12 set required'
+test_wait_cap_and_budget_skips (tests.test_b6_r12_session_fixture.DeclaredShapeTests.test_wait_cap_and_budget_skips)
+Predict r12-skips: option (c) exits 0/agrees; real idle.wait_cap_skip and idle.wait_budget_skip (§17-R12:673). ... skipped 'explicit generated R12 set required'
+test_waited_attempt_n (tests.test_b6_r12_session_fixture.DeclaredShapeTests.test_waited_attempt_n)
+Predict r12-waited: option (c) exits 0/agrees, idle.waited and attempt >=2 telemetry (§17-R12:673). ... skipped 'explicit generated R12 set required'
+test_loop_identity_uses_copied_plan_without_suffix_guess (tests.test_b6_r12_session_fixture.DeskInputBoundaryTests.test_loop_identity_uses_copied_plan_without_suffix_guess)
+Predict: a copied plan binds its outer loop ID to a distinct bracket ID; the original attempt matches only after that authenticated binding. A mismatching bracket refuses association. ... ok
+test_noncomputable_single_step_keeps_registered_projection (tests.test_b6_r12_session_fixture.DeskInputBoundaryTests.test_noncomputable_single_step_keeps_registered_projection)
+Predict: insufficient-unit diagnostic rows retain their null result without adding unregistered comparison interval keys. This is a projection regression, not a generated session. ... ok
+test_open_block_prints_noncomputable_registered_summaries (tests.test_b6_r12_session_fixture.DeskInputBoundaryTests.test_open_block_prints_noncomputable_registered_summaries)
+Predict: with no eligible sessions, every registered block summary prints n=0 and null mean/sd; coverage still rejects a missing required session key. No session or counting judgment is simulated here. ... ok
+test_pool_reader_refuses_unpinned_sibling_before_read (tests.test_b6_r12_session_fixture.DeskInputBoundaryTests.test_pool_reader_refuses_unpinned_sibling_before_read)
+Predict: a pinned worker refuses an out-of-archive synthetic sibling before reading any of its bytes. ... ok
+test_production_archives_with_repeated_basename_use_distinct_pins (tests.test_b6_r12_session_fixture.DeskInputBoundaryTests.test_production_archives_with_repeated_basename_use_distinct_pins)
+Predict: option (c) exits 0 for ten toy regression archives named archive, each explicitly pinned by absolute path. ... ok
+test_real_desk_log_can_be_pinned_without_editing_archive (tests.test_b6_r12_session_fixture.DeskInputBoundaryTests.test_real_desk_log_can_be_pinned_without_editing_archive)
+Predict: the B6 reader authenticates the real desk's adjacent log without copying it into the immutable archive. ... ok
+test_normal_exit_is_preserved_without_signal (tests.test_b6_r12_session_fixture.DryRunLimitTests.test_normal_exit_is_preserved_without_signal)
+Predict: actual child exit 7 is preserved; no timeout signal or invented success. ... ok
+test_reduced_finisher_accepts_bound_courier_profile_only (tests.test_b6_r12_session_fixture.DryRunLimitTests.test_reduced_finisher_accepts_bound_courier_profile_only)
+Predict RL-123: a bound courier_set reduced declaration reaches authenticated finalization; registered or altered-bootstrap declarations refuse before it. Tiny control unit only, not a generated session. ... ok
+test_three_hour_limit_stops_only_owned_group_and_requires_profile (tests.test_b6_r12_session_fixture.DryRunLimitTests.test_three_hour_limit_stops_only_owned_group_and_requires_profile)
+Predict RL-123: timeout is unconditionally 10,800 native seconds; stop only the newly owned group, return 124/profile-required and never retry. ... ok
+test_pinned_block5_omitted_refuses_in_block_mode (tests.test_b6_r12_session_fixture.ExternalInputPinTests.test_pinned_block5_omitted_refuses_in_block_mode)
+Predict (cold review finding 3): block5 pinned, --block5 omitted in block: refused external_input_missing. ... ok
+test_pinned_loop_attempts_omitted_refuses_in_single_mode (tests.test_b6_r12_session_fixture.ExternalInputPinTests.test_pinned_loop_attempts_omitted_refuses_in_single_mode)
+Predict: loop_attempts pinned, single run without --loop-attempts: refused external_input_missing. ... ok
+test_pinned_loop_state_omitted_refuses (tests.test_b6_r12_session_fixture.ExternalInputPinTests.test_pinned_loop_state_omitted_refuses)
+Predict: loop_state pinned, --loop-state omitted: refused before any session is read, block and single. ... ok
+test_unpinned_loop_state_supplied_refuses (tests.test_b6_r12_session_fixture.ExternalInputPinTests.test_unpinned_loop_state_supplied_refuses)
+Predict: --loop-state given with no loop_state key refuses by name, not as a bare KeyError. ... ok
+test_waived_loop_state_runs_and_is_recorded (tests.test_b6_r12_session_fixture.ExternalInputPinTests.test_waived_loop_state_runs_and_is_recorded)
+Predict: no loop_state key and no --loop-state: the run completes and records that it read no corrections. ... ok
+test_expectations_match_pinned_plan_trees_and_registry (tests.test_b6_r12_session_fixture.FullPackExpectationTests.test_expectations_match_pinned_plan_trees_and_registry)
+Predict: 125/125/107 equal the pinned campaign_collection counts; the verifier's table agrees; registry has 122/122/93 session keys. ... ok
+test_profile_gate_admits_only_new_plain_full_pack_roots (tests.test_b6_r12_session_fixture.FullPackExpectationTests.test_profile_gate_admits_only_new_plain_full_pack_roots)
+Predict: fresh ALPHA/BETA/GAMMA plain/full reaches the unchanged single-pack scheduler with full volume; other scenarios/volumes, unknown packs and existing roots refuse before any write; BETA's declaration text is byte-identical to root 23's. ... ok
+test_supervisor_generation_only_requires_exclusive_mode (tests.test_b6_r12_session_fixture.FullPackExpectationTests.test_supervisor_generation_only_requires_exclusive_mode)
+Predict: generation-only and a reader stem are exclusive and refuse before any journal; a reader stem alone keeps the original behaviour. ... ok
+test_production_reader_at_full_size (tests.test_b6_r12_session_fixture.FullProductionSessionTests.test_production_reader_at_full_size)
+Predict full-BETA-reader: actual option (c) exits 0/comparator agrees on the full original desk archive and emits every published production BETA quantity key; record native session/primary/meter ratios, reader wall and RSS separately (RL-98 terms 1 and 2). Predict full-ALPHA-reader and full-GAMMA-reader identically against the published ALPHA (122) and GAMMA (93) session keys. ... skipped 'explicit completed full-volume profile fixture required'
+test_registered_production_volume (tests.test_b6_r12_session_fixture.FullProductionSessionTests.test_registered_production_volume)
+Predict full-BETA-courier: 125 original roster members and executed primary streams, each >=334 s at 10 Hz with 16 CPU records/frame; 50 Hz meter with no drops/gaps/duplicates and registered monitor cadences/errors 0; original courier records file transport (RL-48 item 5; RL-98 term 1). Predict full-ALPHA-courier and full-GAMMA-courier identically with 125 and 107 members/primary streams. ... skipped 'explicit completed full-volume profile fixture required'
+test_exact_three_profiles_and_source_copy_integrity (tests.test_b6_r12_session_fixture.HistoricalProfileTests.test_exact_three_profiles_and_source_copy_integrity)
+Predict RL-123: each named historical profile passes Git/blob/copy authentication; a changed recorded generator digest or copied runtime refuses, and the list has exactly three entries. ... ok
+test_unlisted_commit_and_altered_runtime_are_refused (tests.test_b6_r12_session_fixture.HistoricalProfileTests.test_unlisted_commit_and_altered_runtime_are_refused)
+Predict RL-123: even CWD-matching generator hashes cannot admit an unlisted generator commit or altered recorded runtime; both refuse before archive reading. ... ok
+test_interval_extent_includes_the_last_measured_interval (tests.test_b6_r12_session_fixture.MonitorCoverageTests.test_interval_extent_includes_the_last_measured_interval)
+Predict: two original-schema adjacent intervals cover 20 s although their row starts span only 10 s; a 25 s stream is covered within one 10 s cadence. ... ok
+test_missing_interval_is_not_counted_as_covered_time (tests.test_b6_r12_session_fixture.MonitorCoverageTests.test_missing_interval_is_not_counted_as_covered_time)
+Predict: [0,10] and [20,30] have a 30 s extent but only 20 s of coverage and one gap; missing coverage is never synthesized. ... ok
+test_native_interval_uses_authenticated_mbp_nanoseconds (tests.test_b6_r12_session_fixture.ReaderContextTests.test_native_interval_uses_authenticated_mbp_nanoseconds)
+Predict: MBP endpoints 100.000000123 and 160.000000456 yield 60.000000333 s despite an Air-copy interval of 999 s; changing endpoint bytes refuses. ... ok
+test_predeclared_reduced_nine (tests.test_b6_r12_session_fixture.ReducedSetTests.test_predeclared_reduced_nine)
+Predict reduced-set: closed nine-session option (c) exits 0/agrees, serial/pool numbers/public bytes match, and all six §17-R12:673 shapes pass their original assertions; no full-volume claim (RL-48 item 5 stays open). ... skipped 'explicit reduced real-chain set required'
+test_numeric_or_comparator_change_stops_attribution (tests.test_b6_r12_session_fixture.RereadAttributionTests.test_numeric_or_comparator_change_stops_attribution)
+Predict: a quantity change and a changed compared-class verdict each produce an unattributed path and fail; zero-compared pass=true refuses. ... ok
+test_only_predeclared_reporting_changes_are_attributed (tests.test_b6_r12_session_fixture.RereadAttributionTests.test_only_predeclared_reporting_changes_are_attributed)
+Predict: program identity, RL-113 names/counts and RL-115 supply metadata attribute; no scientific value is normalized away. ... ok
+test_checkpoint_verifier_requires_completed_ordinary_desk (tests.test_b6_r12_session_fixture.SchedulerBoundaryTests.test_checkpoint_verifier_requires_completed_ordinary_desk)
+Predict: control-only successful driver boundary cannot authorize archive verification before the ordinary desk; no report view is created. ... ok
+test_dispatch_requires_collecting_state_and_absent_terminal (tests.test_b6_r12_session_fixture.SchedulerBoundaryTests.test_dispatch_requires_collecting_state_and_absent_terminal)
+Predict: completed drivers and desk states are never scheduled again. ... ok
+test_driver_boundary_requires_original_terminal (tests.test_b6_r12_session_fixture.SchedulerBoundaryTests.test_driver_boundary_requires_original_terminal)
+Predict: a launched handle alone cannot authenticate a completed driver phase. ... ok
+test_full_supervisor_never_restarts_inflight_journal (tests.test_b6_r12_session_fixture.SchedulerBoundaryTests.test_full_supervisor_never_restarts_inflight_journal)
+Predict: an existing inflight supervisor refuses before reading a session or starting a child; interruption cannot silently become success. ... ok
+test_full_verifier_refuses_completed_smoke_boundary (tests.test_b6_r12_session_fixture.SchedulerBoundaryTests.test_full_verifier_refuses_completed_smoke_boundary)
+Predict: a successful original smoke desk cannot authorize the production-size reader or create a full-volume report view. ... ok
+test_plausible_state_does_not_resume_interrupted_parent (tests.test_b6_r12_session_fixture.SchedulerBoundaryTests.test_plausible_state_does_not_resume_interrupted_parent)
+Predict: missing/failed parent completion refuses before reading a session. ... ok
+test_reduced_finisher_refuses_running_original_loop (tests.test_b6_r12_session_fixture.SchedulerBoundaryTests.test_reduced_finisher_refuses_running_original_loop)
+Predict: a successful intermediate parent cannot authorize finalization or analysis while the original loop is running. ... ok
+test_reduced_policy_only_changes_external_generator_inputs (tests.test_b6_r12_session_fixture.SchedulerBoundaryTests.test_reduced_policy_only_changes_external_generator_inputs)
+Predict: short-dwell supplier preserves scripted waits/skew and every chain file; its source plan explicitly claims no full volume. ... ok
+test_anchor (tests.test_b6_r12_session_fixture.SinglePackShapeTests.test_anchor)
+Predict additional single-BETA-anchor: full roster, reduced streams, option (c) 0/agrees with member.anchor_not_bounded from native sampler ordinal 27 +5 s (§17-R12:673; RL-49 rule 3). ... skipped 'explicit additional single-pack fixture required'
+test_compressed (tests.test_b6_r12_session_fixture.SinglePackShapeTests.test_compressed)
+Predict additional single-BETA-compressed: option (c) 0/agrees through original desk-compressed campaign logs and plists (§17-R12:673). ... skipped 'explicit additional single-pack fixture required'
+test_mixed_rows (tests.test_b6_r12_session_fixture.SinglePackShapeTests.test_mixed_rows)
+Predict additional single-BETA-mixed: option (c) 0/agrees and original executed-member plus trailing evaluation rows (§17-R12:673). ... skipped 'explicit additional single-pack fixture required'
+test_changed_program_loop_pin_refuses_before_shape_tests (tests.test_b6_r12_session_fixture.SinglePackVerifierTests.test_changed_program_loop_pin_refuses_before_shape_tests)
+Predict: mismatched program loop pins refuse before any shape assertion, even after a successful analysis receipt. ... ok
+test_failed_parent_refuses_before_analysis (tests.test_b6_r12_session_fixture.SinglePackVerifierTests.test_failed_parent_refuses_before_analysis)
+Predict: a failed parent refuses before creating a view or running analysis, even with plausible desk bytes. ... ok
+test_literal_loop_pins_and_failed_shape_exit_are_preserved (tests.test_b6_r12_session_fixture.SinglePackVerifierTests.test_literal_loop_pins_and_failed_shape_exit_are_preserved)
+Predict: verifier preserves exact original loop bytes/pins and returns the shape-test failure; this mocked control run is no fixture evidence. ... ok
+test_actual_smoke_inventory_excludes_attached_calibrations (tests.test_b6_r12_session_fixture.VerifierInventoryTests.test_actual_smoke_inventory_excludes_attached_calibrations)
+Predict: captured f31 smoke inventory yields four executed primaries; its four calibration copies and validation captures never inflate volume. ... ok
+test_empty_gamma_pairing_never_becomes_cross_session_evidence (tests.test_b6_r12_session_fixture.VerifierInventoryTests.test_empty_gamma_pairing_never_becomes_cross_session_evidence)
+Predict: empty/self pairings or no kept GAMMA unit never count as cross-session evidence. Receipt stubs test the join, not a chain fixture. ... ok
+test_finisher_refuses_live_generators_before_hashing (tests.test_b6_r12_session_fixture.VerifierInventoryTests.test_finisher_refuses_live_generators_before_hashing)
+Predict: DONE alone cannot authorize receipt hashing while a generator parent is still live. Unit state stubs are not collected loop records or fixture evidence. ... ok
+test_full_volume_thermal_selector_matches_original_writer (tests.test_b6_r12_session_fixture.VerifierInventoryTests.test_full_volume_thermal_selector_matches_original_writer)
+Predict: the full-volume gate selects the real notify thermal records and observes their registered 5 s cadence. These two copied synthetic writer records are a parser unit, not a session fixture. ... ok
+test_manifest_names_actual_dependency_and_harvest_default_seams (tests.test_b6_r12_session_fixture.VerifierInventoryTests.test_manifest_names_actual_dependency_and_harvest_default_seams)
+Predict: final attestation names version-reader values from the hash-bound copied runtime and the killpg constructor default. This is a manifest unit, not a collected fixture. ... ok
+test_manifest_refuses_runtime_bytes_different_from_pre_run_hash (tests.test_b6_r12_session_fixture.VerifierInventoryTests.test_manifest_refuses_runtime_bytes_different_from_pre_run_hash)
+Predict: changing a metadata unit's copied runtime after its declared hash refuses final attestation, even if the version declarations did not change. ... ok
+test_prediction_sources_use_bound_git_blobs (tests.test_b6_r12_session_fixture.VerifierInventoryTests.test_prediction_sources_use_bound_git_blobs)
+Predict: later working-file edits cannot change the manifest's original committed prediction/doc hashes. The temporary Git repo is a provenance unit, not a chain fixture. ... ok
+
+----------------------------------------------------------------------
+Ran 86 tests in 129.353s
+
+OK (skipped=14)
+recompute sessions=10 flags=0 comparison_stopped=false restricted_sha256=848f31937b0e31f5d288f01246681dffd7e67b0398aae1e83e4c00da95566663
+end 2026-11-13 19:26:22 PST
