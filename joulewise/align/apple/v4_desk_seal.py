@@ -862,6 +862,10 @@ def _seal_residual_rows(configuration, run_ids):
             if not isinstance(convention, dict) or 'residuals' not in convention:
                 continue
             convention = dict(convention)
+            # RL-152 section 3.2: the benign population is taken from the recorded residuals by run id, before
+            # the non-benign rows are replaced by their digests (not by relying on a digest lacking residual_j).
+            benign = [r for r in convention['residuals'] if isinstance(r, dict) and r.get('run_id') not in run_ids
+                      and _finite(r.get('residual_j'))]
             convention['residuals'] = [withheld(r) if r.get('run_id') in run_ids else r for r in convention['residuals']]
             convention['cross_pair_transfer'] = [
                 {**t, 'scores': [withheld(s) if s.get('run_id') in run_ids else s for s in t.get('scores') or ()]}
@@ -869,8 +873,6 @@ def _seal_residual_rows(configuration, run_ids):
             convention['tamper_detection_curve'] = withheld(convention.get('tamper_detection_curve'))
             # RL-152 section 3.2: s_r and the per-cell residual counts pool cells that hold non-benign members,
             # beside printed benign residuals; they are recomputed over the benign residuals and labelled.
-            benign = [r for r in convention['residuals'] if isinstance(r, dict) and r.get('run_id') not in run_ids
-                      and _finite(r.get('residual_j'))]
             cells = {}
             for r in benign:
                 cells.setdefault(r.get('cell'), []).append(r['residual_j'])

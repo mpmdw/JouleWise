@@ -868,6 +868,26 @@ class RL152Tests(unittest.TestCase):
                        'U1', 'U2', 'g0_timeout_x2_count', 'unlisted flag codes', 'non-benign tool path'):
             self.assertIn(figure, table)
 
+    def test_population_rule_w1_s_r_is_over_benign_residuals_only(self):
+        # Real-shaped residual rows where non-benign members share a cell with benign ones and fill a cell of
+        # their own (the fixture's cells hold one sabotage member each, so s_r over all would equal s_r over
+        # benign there). s_r, its df and the per-cell counts must be the benign figures.
+        residuals = [{'run_id': 'b1', 'cell': 'a', 'residual_j': 1.0, 'score': 1.0},
+                     {'run_id': 'b2', 'cell': 'a', 'residual_j': 3.0, 'score': 3.0},
+                     {'run_id': 'n1', 'cell': 'a', 'residual_j': 101.0, 'score': 101.0},
+                     {'run_id': 'n2', 'cell': 'x', 'residual_j': 5.0, 'score': 5.0},
+                     {'run_id': 'n3', 'cell': 'x', 'residual_j': 55.0, 'score': 55.0}]
+        configuration = {'scopes': {'episode': {'counts_logged_headline': {
+            'residuals': residuals, 's_r_j': 999.0, 's_r_df': 3, 'cell_residual_counts': {'a': 3, 'x': 2}}}}}
+        out = seal._seal_residual_rows(configuration, {'n1', 'n2', 'n3'})
+        convention = out['scopes']['episode']['counts_logged_headline']
+        self.assertEqual(convention['s_r_population'], 'benign')
+        self.assertEqual((convention['s_r_df'], convention['cell_residual_counts']), (1, {'a': 2}))
+        self.assertAlmostEqual(convention['s_r_j'], 2 ** .5)          # cell a: residuals 1 and 3 (ss 2, df 1)
+        text = json.dumps(convention)
+        for value in ('101.0', '55.0', '"x"'):
+            self.assertNotIn(value, text)
+
     def test_tool_path_tripwire_fires_on_a_broken_non_benign_tool_path(self):
         self.assertIn('W1 non-benign tool path (RL-152 section 3.4): to the research lead', self.runs['W1']['printed'])
         self.assertEqual(self.runs['W1']['report']['extra_checks']['w1_non_benign_tool_path']['verdict'],
