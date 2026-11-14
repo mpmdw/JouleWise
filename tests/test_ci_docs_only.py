@@ -35,6 +35,10 @@ class StateOnlyClassifierTests(unittest.TestCase):
                     "CANONICAL.md": "x\n", "README.md": "x\n", "configs/plan.md": "x\n",
                     "docs/tooldir/tool.py": "SIB = HERE / 'sibling.tsv'\n", "docs/tooldir/sibling.tsv": "a\n",
                     "tests/test_tooluser.py": "import docs.tooldir.tool  # docs/tooldir/tool.py\n",
+                    "docs/untested/build.py": "P = 'docs/untested/page.md'\nQ = HERE / 'page.md'\n",
+                    "docs/untested/page.md": "x\n", "docs/cdir/deep/x.md": "x\n", "docs/vdir/deep/x.md": "x\n",
+                    "tests/test_readers3.py": ("CFG = ROOT / 'configs' / 'cdir' / 'deep'\n"
+                                               "V = DOCS / 'vdir' / 'deep'\n"),
                     "tests/test_readers2.py": (
                         "A = f\"docs/fdir/{name}.md\"\n"
                         "B = 'docs/pdir/%s.md' % name\n"
@@ -158,6 +162,20 @@ class StateOnlyClassifierTests(unittest.TestCase):
         for why, path in cases.items():
             with self.subTest(why=why):
                 self.assertEqual(self.classify({path: "y\n"}), 1)
+
+    def test_docs_code_that_no_test_names_reads_nothing(self):
+        # A builder under docs/ that no test names (the paper's build_fill_index.py) reads its siblings
+        # outside the suite; only docs-hosted code a test reaches is searched (backtest: PRs #717, #718).
+        self.assertEqual(self.classify({"docs/untested/page.md": "y\n"}), 0)
+
+    def test_docs_code_a_test_reaches_reads_its_siblings(self):
+        self.assertEqual(self.classify({"docs/tooldir/sibling.tsv": "b\n"}), 1)
+
+    def test_joined_parts_after_docs_need_a_docs_holder(self):
+        # ROOT / 'configs' / 'cdir' / 'deep' is not docs/cdir/deep (backtest: PR #746 matched
+        # configs/analysis/b5); DOCS / 'vdir' / 'deep' is docs/vdir/deep.
+        self.assertEqual(self.classify({"docs/cdir/deep/x.md": "y\n"}), 0)
+        self.assertEqual(self.classify({"docs/vdir/deep/x.md": "y\n"}), 1)
 
     CENSUS = "tests.test_d165_rationale_census"
 

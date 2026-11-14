@@ -21,13 +21,16 @@
 # "No test reads it" is an INTERIM static proxy for RL-144's dependency set (term 4: static import closure
 # plus recorded opens). It is checked at the base and at the head of the range. A path is refused when
 #   - its full path appears in tests/, joulewise/, scripts/, configs/, .github/, tools/, pyproject.toml or
-#     any docs-hosted code (docs/**/*.py, *.sh, *.zsh: tests import tools that read their siblings); or
+#     docs-hosted code that a test reaches (a docs/**/*.py, *.sh or *.zsh whose full path or basename appears
+#     in tests/: tests import tools that read their siblings; docs code no test names is not searched); or
 #   - in tests/, scripts/, joulewise/, tools/ or docs-hosted code, its basename appears (tests join path
 #     parts, so full paths miss reads); or one of its parent directories appears as a path ending its
 #     token (not in scripts/, which write reports to docs/run_reports/ and the like), as a path prefix of a glob, f-string or %-format token ("<dir>/*", "<dir>/{name}", "<dir>/%s"),
-#     or as quoted parts joined by "/" or "," on one line (Path("docs") / "x" / "y"), or by a line that
-#     starts with the operator ("/ 'x'").
-# Blind spots, all fail-open: a directory held in a variable or built over several lines of quoted parts
+#     or as quoted parts joined by "/" or "," on one line (Path("docs") / "x" / "y"); the parts after docs
+#     alone match only after a name (DOCS / "x" / "y") or at a line that starts with the operator ("/ 'x'"),
+#     never after another quoted part (ROOT / "configs" / "x" / "y" is another directory).
+# Blind spots, all fail-open: docs-hosted code that a test reaches only through other docs code no test
+# names (one level of reach is searched); a directory held in a variable or built over several lines of quoted parts
 # that are not on one line; content-hash pins of a file (docs/analysis/b5 pins RESULTS.md by sha256 inside
 # docs-hosted code that is not named as a path); helper code outside the searched trees; reads by tests
 # of files under a directory whose name is also a common word. Whole-tree readers that are in the quick
@@ -82,24 +85,41 @@ while IFS= read -r path; do
       [[ "$part" == docs ]] || rest+="${rest:+[[:space:]]*[/,][[:space:]]*}[\"']$q[\"']\\)?"
     done
     printf '%s\n' "$joined" >> "$tmp/test_regex"
-    if [[ ${#parts[@]} -gt 2 ]]; then printf '%s\n' "$rest" >> "$tmp/test_regex"
+    # The parts after docs, joined to a name that holds the docs directory (DOCS / "x" / "y",
+    # join(DOCS, "x", "y")) or to an operator that starts the line. Not to another quoted part:
+    # ROOT / "configs" / "x" / "y" is a different directory.
+    if [[ ${#parts[@]} -gt 2 ]]; then printf '(^|[]A-Za-z0-9_])[[:space:]]*[/,][[:space:]]*%s\n' "$rest" >> "$tmp/test_regex"
     else printf '^[[:space:]]*[/,][[:space:]]*%s\n' "$rest" >> "$tmp/test_regex"; fi
     dir=${dir%/*}
   done
 done <<< "$paths"
 [[ -s "$tmp/full" ]] || exit 0   # state records only
-docs_code=(':(glob)docs/**/*.py' ':(glob)docs/**/*.sh' ':(glob)docs/**/*.zsh')
 for rev in "$before" "$after"; do
-  git grep -q -F -f "$tmp/full" "$rev" -- joulewise scripts tests configs .github pyproject.toml tools "${docs_code[@]}" 2>/dev/null
+  # Docs-hosted code that a test reaches: a docs/**/*.py, *.sh or *.zsh file whose full path or basename
+  # appears in tests/. Only these are searched as readers; a script under docs/ that no test names (a
+  # paper builder, a record's own run.zsh) reads its siblings outside the suite and refuses nothing.
+  git ls-tree -r --name-only "$rev" -- docs > "$tmp/docs_files" || exit 1
+  grep -E '\.(py|sh|zsh)$' "$tmp/docs_files" > "$tmp/docs_code_all"
+  docs_code=()
+  if [[ -s "$tmp/docs_code_all" ]]; then
+    sed -e 's#.*/##' "$tmp/docs_code_all" | sort -u > "$tmp/docs_code_names"
+    cat "$tmp/docs_code_all" "$tmp/docs_code_names" > "$tmp/docs_code_patterns"
+    git grep -h -o -F -f "$tmp/docs_code_patterns" "$rev" -- tests 2>/dev/null | sort -u > "$tmp/docs_code_named"
+    [[ ${PIPESTATUS[0]} -le 1 ]] || exit 1
+    while IFS= read -r code; do
+      if grep -qxF -e "$code" -e "${code##*/}" "$tmp/docs_code_named"; then docs_code+=("$code"); fi
+    done < "$tmp/docs_code_all"
+  fi
+  git grep -q -F -f "$tmp/full" "$rev" -- joulewise scripts tests configs .github pyproject.toml tools ${docs_code[@]+"${docs_code[@]}"} 2>/dev/null
   [[ $? -eq 1 ]] || exit 1   # 0 = read, >1 = grep error
-  git grep -q -F -f "$tmp/base" "$rev" -- tests scripts joulewise tools "${docs_code[@]}" 2>/dev/null
+  git grep -q -F -f "$tmp/base" "$rev" -- tests scripts joulewise tools ${docs_code[@]+"${docs_code[@]}"} 2>/dev/null
   [[ $? -eq 1 ]] || exit 1
   if [[ -s "$tmp/test_regex" ]]; then
-    git grep -q -E -f "$tmp/test_regex" "$rev" -- tests scripts joulewise tools "${docs_code[@]}" 2>/dev/null
+    git grep -q -E -f "$tmp/test_regex" "$rev" -- tests scripts joulewise tools ${docs_code[@]+"${docs_code[@]}"} 2>/dev/null
     [[ $? -eq 1 ]] || exit 1
   fi
   if [[ -s "$tmp/end_regex" ]]; then   # not scripts/: tools there write to docs/run_reports/ and the like
-    git grep -q -E -f "$tmp/end_regex" "$rev" -- tests joulewise tools "${docs_code[@]}" 2>/dev/null
+    git grep -q -E -f "$tmp/end_regex" "$rev" -- tests joulewise tools ${docs_code[@]+"${docs_code[@]}"} 2>/dev/null
     [[ $? -eq 1 ]] || exit 1
   fi
 done
