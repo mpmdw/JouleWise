@@ -1,0 +1,10 @@
+head ae340d3da62192403fc0e9cfcc10f04fe19fd2e6
+Sat Nov 14 05:44:09 PST 2026
+cmd: PYTHONPATH=.:tests taskpolicy -b python3.13 -B -m unittest tests.align.test_v4_dynamic_closure
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 55.085s
+
+OK
+rc=0
+Sat Nov 14 05:45:04 PST 2026

@@ -1,0 +1,10 @@
+head ae340d3da62192403fc0e9cfcc10f04fe19fd2e6
+Sat Nov 14 05:46:27 PST 2026
+cmd: PYTHONPATH=.:tests taskpolicy -b python3.13 -B -m unittest tests.align.test_timing_receipts
+...........................
+----------------------------------------------------------------------
+Ran 27 tests in 188.805s
+
+OK
+rc=0
+Sat Nov 14 05:49:38 PST 2026
