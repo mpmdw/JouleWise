@@ -266,18 +266,13 @@ def validate_sensor_ruling(config, ruling, smoke_sha256, table):
     if rule is None:
         if digest == SECOND_FAST_RULE_CLASSIFICATION_SHA256:
             raise ValueError("RL-116: the registered slow pick on this D classification was unseated; only "
-                             f"ruling {SECOND_FAST_RULE_RULING}'s {SECOND_FAST_RULE} pick is accepted")
+                             f"ruling {ALIAS_SECOND_KEY_RULING}'s {ALIAS_SECOND_KEY_RULE} pick is accepted")
         selected = smoke_selection(classification, table["coverage"], config["r0_classified_keys"])
         label = "RL-78: policy must use the fixed smoke Part B selection: "
-    elif (rule == SECOND_FAST_RULE and ruling.get("research_lead_ruling") == SECOND_FAST_RULE_RULING
-          and ruling.get("classification_sha256") == digest == SECOND_FAST_RULE_CLASSIFICATION_SHA256):
-        if smoke_sha256 != SECOND_FAST_RULE_TABLE_SHA256:
-            raise ValueError(f"{SECOND_FAST_RULE_RULING}: the Part B table must be the regenerated table "
-                             f"{SECOND_FAST_RULE_TABLE_SHA256}, not {smoke_sha256}")
-        selected = second_fast_rule_selection(table, config)
-        if table.get("selection", {}).get("ok") is not True or table["selection"].get("fallback") is not False:
-            raise ValueError("RL-122: the Part B selection must be ok with no fallback")
-        label = f"{SECOND_FAST_RULE_RULING}: policy must use the fast rule's second application: "
+    elif rule == SECOND_FAST_RULE:
+        raise ValueError(f"slow rule {rule!r} (ruling {SECOND_FAST_RULE_RULING}) is refused: it prepares a session on "
+                         "TVh0, which RL-145 unseated with no fallback role; only the alias-group rule of "
+                         f"{ALIAS_SECOND_KEY_RULING} is accepted")
     elif (rule == ALIAS_SECOND_KEY_RULE and ruling.get("research_lead_ruling") == ALIAS_SECOND_KEY_RULING
           and ruling.get("classification_sha256") == digest == SECOND_FAST_RULE_CLASSIFICATION_SHA256):
         if smoke_sha256 != ALIAS_SECOND_KEY_TABLE_SHA256:
@@ -288,9 +283,8 @@ def validate_sensor_ruling(config, ruling, smoke_sha256, table):
             raise ValueError("RL-145: the Part B selection must be ok with no fallback")
         label = f"{ALIAS_SECOND_KEY_RULING}: policy must use the fast pick's lexically first alias: "
     else:
-        raise ValueError(f"slow rule {rule!r} refused: only the registered rule, {SECOND_FAST_RULE} under "
-                         f"ruling {SECOND_FAST_RULE_RULING}, or {ALIAS_SECOND_KEY_RULE} under ruling "
-                         f"{ALIAS_SECOND_KEY_RULING} on its own D classification, is accepted")
+        raise ValueError(f"slow rule {rule!r} refused: only the registered rule, or {ALIAS_SECOND_KEY_RULE} under "
+                         f"ruling {ALIAS_SECOND_KEY_RULING} on its own D classification, is accepted")
     mismatched = [r for r in ("s_fast", "s_slow")
                   if selected[r] != config["sensors"][r] or selected[r] != table.get("selection", {}).get(r)]
     if not selected["ok"] or mismatched:
