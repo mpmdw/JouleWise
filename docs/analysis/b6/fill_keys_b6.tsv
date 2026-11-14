@@ -1023,6 +1023,18 @@ P1-B6-CARRIED	restricted.json	sessions|r2-beta|copied_disclosures|families|block
 P1-B6-CARRIED	restricted.json	sessions|r2-gamma|copied_disclosures|families|block5_codes_carried|0|record (neg8.midpoint_lost observed.lost[0].reason)	"""contention.request_overlap"""	overlapped outside processor work	word	copied from the harvest or acceptance record, bound by digest, not recomputed
 P1-B6-CARRIED	restricted.json	sessions|r2-gamma|neg8|n_mid	1	1	n	computed and compared
 P1-B6-CARRIED	restricted.json	sessions|<sid>|quantities|neg8/verdict (all nine)	"[""passed"", ""passed"", ""passed"", ""passed"", ""passed"", ""passed"", ""passed"", ""passed"", ""passed""]"	passed	word	computed and compared
+P1-RELEASE	docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md@fd43dcdf4	"docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md@fd43dcdf4 ""Release event"": ""given on 2026-11-08 at 11:17 PST"""	"""2026-11-08 11:17 PST"""	8 November 2026 at 11:17 PST	time	
+P1-RELEASE	docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md@fd43dcdf4	"docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md@fd43dcdf4 ""Release event"": released output SHA-256"	"""c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc"""	`c06ee7c8…`	sha256	
+P1-RELEASE	git	git log -1 --format=%cd fd43dcdf4 (PR #773 merge, PST)	"""13 November 2026"""	13 November 2026	date	
+P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: registration digest	"""7243a2bc1e43207d756ba9eacc6c93622968edd73a6ebe0648afaba563324ead"""	`7243a2bc…`	sha256	
+P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: catalog digest	"""b5bce6c64bbc1d079ecf6fed02bf4c214b76a8f7d279d44eea5984e4a389a42b"""	`b5bce6c6…`	sha256	
+P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: manifest digest	"""b2901d51990812f6c2dadce1a763d90502d85b58a9d5b5b358d4cbb2ba9a9d6b"""	`b2901d51…`	sha256	
+P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: restricted digest	"""92e67c389bb71813d1e57b962e98eb6dcacf65d2bc3957332a36881c821c14bb"""	`92e67c38…`	sha256	
+P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: public digest	"""c2b5c4098f70dd3a5be19edb3016bf682588d5529f21c41abf05d125fe8107f8"""	`c2b5c409…`	sha256	
+P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: Sessions table rows (harvest_sha256)	9	nine	n	
+P1-RELEASE	git	git log -1 --format=%cd 66469ccf4 (commit object, PST; not printed)	"""2026-11-13 18:54:56 PST"""	2026-11-13 18:54:56 PST	time	
+P1-RELEASE	RUN_STATE.md	"RUN_STATE.md item 312: ""merged to `main` at 2026-11-13 18:54:57 PST"""	"""2026-11-13 18:54:57 PST"""	13 November 2026 at 18:54:57 PST	time	
+P1-RELEASE	git	merge commit of PR #769	"""66469ccf4d575e770b6a72de0d670105bbd95124"""	`66469ccf4`	sha	
 P1-B6-WM-DEF	scripts/independent_recompute_b5.py@6e6d1b18a	"text ""+/-2 samples at 50 Hz"""	"""+/-2 samples at 50 Hz"""	50 a second	constant	single implementation; not independently recomputed
 P1-B6-WM-DEF	scripts/independent_recompute_b5.py@6e6d1b18a	"text "".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	""".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	0.2	constant	single implementation; not independently recomputed
 P1-B6-WM-DEF	scripts/independent_recompute_b5.py@6e6d1b18a	"text "".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	""".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	0.8	constant	single implementation; not independently recomputed

@@ -672,7 +672,7 @@ exploratory. The replication stayed blinded until its own release, which require
 with hidden multiplicative offsets (Section 7.3).
 <!-- FACT H11: R2P P2; DEVIATION-LOG.md:71-128 (DLE-1); paper-audit C-5/C-11; RL-147 §8; RUN_STATE item 312. -->
 
-{{FILL: P1-RELEASE | dates of the primary-block release event and the replication-block release, with the digests each record ties, from the seal-record "Release event" section and the replication release record (RL-147 §4 items 1 to 3)}} {{FILL: P1-RELEASE-BYTES | dates of the BYTES stage-1 commitment and stage-2 release, with the digests each record ties; no sentence about BYTES is printed until its events exist (RL-147 §4 item 4)}}
+The primary block was released on 8 November 2026 at 11:17 PST, after its release check agreed; its record ties the sealed documents' digests to the three analysed sessions' harvest records and to the released output (`c06ee7c8…`). The record of that event was written into the seal record on 13 November 2026. The replication block was released on 13 November 2026 at 18:54:57 PST, when its release record was merged into `main` (`66469ccf4`). The record ties the registration (`7243a2bc…`), the flag catalog (`b5bce6c6…`), the custody manifest (`b2901d51…`), the nine sessions' harvest digests and the outputs of the blind dry run that print here (restricted `92e67c38…`, public `c2b5c409…`). {{FILL: P1-RELEASE-BYTES | dates of the BYTES stage-1 commitment and stage-2 release, with the digests each record ties; no sentence about BYTES is printed until its events exist (RL-147 §4 item 4)}}
 
 ### 5.7 Independent recomputation
 

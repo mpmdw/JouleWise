@@ -78,6 +78,10 @@ READER2_SHA256 = 'b54043c34aa37888909255f87d57a13feddd280d6df0eb63776d30252c3791
 READER2_RESULT = '- Rows checked: 167. Agree: 167. Disagree: 0.'
 PASS1_HEAD, PASS2_HEAD = 'a2563016e', 'f813150c0'
 MANIFEST_PATH = 'docs/analysis/b6/fill_keys_b6.tsv'
+# Fable's final pass, finding 4: P1-RELEASE, after PR #773 wrote Block 5's release event into the seal record.
+SEAL_RECORD = 'docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md'
+SEAL_PR_MERGE = 'fd43dcdf4c132480207b2c7d7c9f202f85c43f37'      # PR #773
+B6_RELEASE_MERGE = '66469ccf4d575e770b6a72de0d670105bbd95124'   # PR #769, the Block 6 release event
 DELTA_PATH = 'docs/analysis/b6/fill_keys_b6_delta_rl147.tsv'
 # RL-147 §2: Block 5's catalog; its 32 session-removing codes are those with effect EXCLUDE_WINDOW.
 B5_CATALOG = ROOT / 'configs/campaigns/v5_claim_25g83/flag_catalog.json'
@@ -255,7 +259,8 @@ CURRENT = {'marker': ''}
 class Src:
     def __init__(self, name: str, data: dict):
         self.name, self.data = name, data
-        self.file = {'attempts': 'attempts.jsonl', 'block5': 'Block 5 recompute.json (c06ee7c8…)',
+        self.file = {'attempts': 'attempts.jsonl', 'git': 'git', 'release_record': 'docs/registrations/block6_release_record.md',
+                     'seal_record': SEAL_RECORD + '@' + SEAL_PR_MERGE[:9], 'run_state': 'RUN_STATE.md', 'block5': 'Block 5 recompute.json (c06ee7c8…)',
                      'catalog': 'configs/campaigns/v5_claim_25g83/flag_catalog.json',
                      'reader': READER_PATH + '@' + READER_COMMIT[:9],
                      'reader2': READER2_PATH + '@' + READER2_COMMIT,
@@ -805,6 +810,87 @@ def fill_shows(R: Src, X: dict) -> str:
     return '**What the replication shows.** ' + a_text + '\n\n' + b_text
 
 
+# ---------------------------------------------------------------- P1-RELEASE (final pass finding 4; RL-147 §4 items 2-3)
+
+def git(*args: str) -> str:
+    return subprocess.run(['git', *args], cwd=ROOT, check=True, capture_output=True, text=True,
+                          env={'TZ': 'America/Los_Angeles', 'PATH': '/usr/bin:/bin:/opt/homebrew/bin'}).stdout
+
+
+def fill_release() -> str:
+    G = Src('git', {})
+    Rr = Src('release_record', {})
+    Sr = Src('seal_record', {})
+    for c in (SEAL_PR_MERGE, B6_RELEASE_MERGE):
+        if subprocess.run(['git', 'merge-base', '--is-ancestor', c, 'HEAD'], cwd=ROOT).returncode:
+            fail(f'{c[:9]} is not an ancestor of HEAD')
+    # Block 5: the seal record's late section (condition (iii)) and the date it was written (the merge of #773).
+    seal = git('show', f'{SEAL_PR_MERGE}:{SEAL_RECORD}')
+    sec = seal[seal.index('## Release event'):]
+    sec = sec[:sec.index('\n## ', 3)]
+    if '### Recorded late' not in sec or 'Nothing is recorded here yet' in sec:
+        fail('seal record: the release-event section is not the late record')
+    if 'given on 2026-11-08 at 11:17 PST' not in sec:
+        fail('seal record: the event time is not 2026-11-08 11:17 PST')
+    b5_out = 'c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc'
+    if f'SHA-256\n`{b5_out}`' not in sec and f'SHA-256 `{b5_out}`' not in ' '.join(sec.split()):
+        fail('seal record: the released output digest is not c06ee7c8…')
+    if 'verdict` `agree`' not in sec:
+        fail('seal record: the release check did not agree')
+    harvests = re.findall(r'^\| (ALPHA|BETA|GAMMA) \| `v5-b5-[^`]+` \| `[0-9a-f]{64}` \|$', sec, re.M)
+    if harvests != ['ALPHA', 'BETA', 'GAMMA']:
+        fail('seal record: not three analysed sessions\' harvest digests')
+    t5 = record(Sr, f'{SEAL_RECORD}@{SEAL_PR_MERGE[:9]} "Release event": "given on 2026-11-08 at 11:17 PST"',
+                '2026-11-08 11:17 PST', '8 November 2026 at 11:17 PST', 'time')
+    d5 = record(Sr, f'{SEAL_RECORD}@{SEAL_PR_MERGE[:9]} "Release event": released output SHA-256', b5_out,
+                f'`{b5_out[:8]}…`', 'sha256')
+    written = git('log', '-1', '--format=%cd', '--date=format-local:%-d %B %Y', SEAL_PR_MERGE).strip()
+    record(G, f'git log -1 --format=%cd {SEAL_PR_MERGE[:9]} (PR #773 merge, PST)', written, written, 'date')
+    if written != '13 November 2026' or '### Recorded late (2026-11-13)' not in sec:
+        fail(f'the seal record was not written on 13 November 2026 ({written})')
+    # Block 6: the release record on main and its merge.
+    rr = (ROOT / 'docs/registrations/block6_release_record.md').read_text()
+    def row(label: str) -> str:
+        m = re.search(rf'^\| {re.escape(label)}[^|]*\| `([0-9a-f]{{64}})` \|$', rr, re.M)
+        if not m:
+            raise SystemExit(f'release record: no row {label}')
+        return m.group(1)
+    digests = {'registration': row('Registration'), 'catalog': row('Flag catalog'), 'manifest': row('Custody manifest')}
+    for stem in ('restricted', 'public'):
+        digests[stem] = re.search(rf'^\| dry \| {stem} \| `([0-9a-f]{{64}})` \|$', rr, re.M).group(1)
+    pr = {k: record(Rr, f'docs/registrations/block6_release_record.md: {k} digest', v, f'`{v[:8]}…`', 'sha256')
+          for k, v in digests.items()}
+    sessions = re.findall(r'^\| `r\d-(alpha|beta|gamma)/archive` \| `[0-9a-f]{64}` \|$', rr, re.M)
+    nine = record(Rr, 'docs/registrations/block6_release_record.md: Sessions table rows (harvest_sha256)', len(sessions),
+                  {9: 'nine'}.get(len(sessions), str(len(sessions))), 'n')
+    if nine != 'nine':
+        fail('release record: not nine session harvest digests')
+    subject = git('log', '-1', '--format=%s', B6_RELEASE_MERGE)
+    if 'Merge pull request #769' not in subject:
+        fail('66469ccf4 is not the merge of PR #769')
+    # The time printed is RUN_STATE item 312's (GitHub's merge time, 02:54:57Z); the merge commit object's own
+    # timestamp is one second earlier (18:54:56 PST). Both are recorded; the difference is reported to the lead.
+    rs = (ROOT / 'RUN_STATE.md').read_text()
+    if f'merged to `main` at 2026-11-13 18:54:57 PST (merge commit `{B6_RELEASE_MERGE}`)' not in rs:
+        fail('RUN_STATE item 312 does not give 2026-11-13 18:54:57 PST for the merge of PR #769')
+    commit_time = git('log', '-1', '--format=%cd', '--date=format-local:%Y-%m-%d %H:%M:%S %Z', B6_RELEASE_MERGE).strip()
+    record(G, f'git log -1 --format=%cd {B6_RELEASE_MERGE[:9]} (commit object, PST; not printed)', commit_time,
+           commit_time, 'time')
+    t6 = record(Src('run_state', {}), 'RUN_STATE.md item 312: "merged to `main` at 2026-11-13 18:54:57 PST"',
+                '2026-11-13 18:54:57 PST', '13 November 2026 at 18:54:57 PST', 'time')
+    m6 = record(G, f'merge commit of PR #769', B6_RELEASE_MERGE, f'`{B6_RELEASE_MERGE[:9]}`', 'sha')
+    b5 = ('The primary block was released on 8 November 2026 at 11:17 PST, after its release check agreed; its record '
+          'ties the sealed documents\' digests to the three analysed sessions\' harvest records and to the released '
+          f'output ({d5}). The record of that event was written into the seal record on {written}.')
+    b6 = (f'The replication block was released on {t6}, when its release record was merged into `main` ({m6}). The '
+          f'record ties the registration ({pr["registration"]}), the flag catalog ({pr["catalog"]}), the custody '
+          f'manifest ({pr["manifest"]}), the {nine} sessions\' harvest digests and the outputs of the blind dry run '
+          f'that print here (restricted {pr["restricted"]}, public {pr["public"]}).')
+    if t5 != '8 November 2026 at 11:17 PST':
+        fail('Block 5 time')
+    return b5 + ' ' + b6
+
+
 # ---------------------------------------------------------------- Table 6 and Table 6a
 
 ROWS = {  # quantity key suffix -> (row name, format family, label)
@@ -1097,7 +1183,7 @@ def fill_summary_b6(R: Src, S: Src, X: dict) -> str:
 
 # ---------------------------------------------------------------- assembly
 
-PENDING = {'P1-RELEASE', 'P1-RELEASE-BYTES', 'P1-B6-DISCLOSURES'}
+PENDING = {'P1-RELEASE-BYTES', 'P1-B6-DISCLOSURES'}
 
 # RL-147 §8: the research lead's text for the stale "blinded" sentences, P1-RECOMPUTE and the abstract's replication
 # clause. Each new text must be present once and each old one gone. The Block 5 numbers of P1-ABS-PART1 are
@@ -1142,6 +1228,7 @@ def render_all(R: Src, P: Src, S: Src, attempts: list[dict], X: dict) -> tuple[d
     for marker, fn in (('P1-RECOMPUTE-SUMMARY-B6', lambda: fill_summary_b6(R, S, X)),
                        ('P1-B6-SIDEBYSIDE', lambda: fill_sidebyside(R, P, X)),
                        ('P1-B6-CARRIED', lambda: fill_carried(R, X)),
+                       ('P1-RELEASE', fill_release),
                        ('P1-B6-WM-DEF', lambda: fill_wm_def(X)),
                        ('P1-B6-SHOWS', lambda: fill_shows(R, X)),
                        ('P1-B6-LOADSENS', lambda: fill_equal_line(
@@ -1188,9 +1275,8 @@ PAT = re.compile(r'\{\{FILL:\s*([^|\\}]+?)\s*(?:\\\||\|)\s*(.*?)\}\}', re.S)
 
 def apply(paper: str, fills: dict[str, str], branch: str) -> str:
     start, end = paper.find('**[BRANCH 5.7.1'), paper.find(END_574)
-    if start < 0 or end < start:
-        raise SystemExit('the 5.7 branches are not in paper1.md; nothing applied')
-    paper = paper[:start] + branch + paper[end + len(END_574):]
+    if start >= 0 and end > start:  # the first apply; later applies fill only the placeholders still present
+        paper = paper[:start] + branch + paper[end + len(END_574):]
 
     def sub(m: re.Match) -> str:
         fid = m.group(1).strip()
