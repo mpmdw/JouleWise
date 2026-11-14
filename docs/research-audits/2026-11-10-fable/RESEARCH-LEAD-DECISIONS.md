@@ -10783,6 +10783,185 @@ On the form of findings 1 and 3: **the record itself carries the tables above.**
 
 **Gate.** The merge of PR #769 waits on §2 steps 1 to 6. Nothing else waits on this ruling.
 
+# RL-147. The Block 6 paper fills (draft PR #772): eight rulings, the cold pass of §6.7, §6.8 and Table S9, and four things the draft does not yet print (2026-11-13 19:22 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 19:22 PST (`date`).
+
+**Read.** PR #772's body and its `paper1.md` diff at `a2563016e` (worktree `/Volumes/JW-EXT/jw-wt/b6-paper-fills`, read only). RL-3, RL-6, RL-60, RL-113, RL-114, RL-133 §2, RL-134 §8 to §10 and §16 to §17, RL-146, and the earlier R_cm note (ruling log line 2712) on `origin/audit/2026-11-10-fable`. Registration §8.2, §9.5, §10, §11, §12.3, row S-15, §17-R9, §17-R13, §17-S16, and the S17 entries §17-R8 and §17-R9. The pinned program at tag `b6/analysis-r2`: `recompute_block`, `compare`, and in `independent_recompute_b5.py` (`d49103e8…`) `machine_member`, `sampled_gross`, `phase_machine_mean`, `diagnostic_estimate`, `add_machine`. `configs/b6/recompute/precision.json` at the tag (SHA-256 `e242cab6…`, equal to the release record's). The released `dry-r2/restricted.json` (opened after the release): `block.option_c`, each session's `copied_disclosures.families.block5_codes_carried`, `neg8`, `whole_machine`, `lines`, `cross_session` and contrast quantities. Block 5's catalog `configs/campaigns/v5_claim_25g83/flag_catalog.json` (`5d77c725…`) and Block 6's at the tag. `SEAL_RECORD.md` "Release event"; `RUN_STATE.md` item 231. The reader's report `/Volumes/JW-EXT/scratch/b6-rr3/reader-pr772.md` (SHA-256 `4239c9146ff06ae180f2d67ba090db3509a7e140df7daa3e07908cfdc7af4a63`) and the step 13 report (`bc0fce56…`, on the audit branch at `3dc8200e7`).
+
+**Blind status.** Not blind to Block 5 or Block 6. Every ruling here is made with both outcomes known and is labelled so where it enters the deviation log. I edited, committed and commented nothing.
+
+## 0. Ruling in one paragraph
+
+The draft is sound: the numbers are the dry run's, the reader re-read 1,417 of 1,417 by key, and "replicated" is the registered word for both contrasts. **It is not admitted as it stands.** It needs the eight rulings below applied and four additions (§10): the whole-machine edge-shift sensitivity, which is 6.5 to 11.1 J per cell beside printed intervals of ±0.12 to ±0.70 J; the two registered labelled lines the draft leaves out; one paragraph that states in words what the replication shows beyond the word; and a caption sentence so that the timing-regime label is not read as explaining the 8B floor shift. No program is re-run. The fill comes back to me once, with the reader's delta re-read.
+
+## 1. `P1-RECOMPUTE-SUMMARY-B6-MAXDIFF`: "not retained", with the bound the retained data gives. One deviation line. No re-run
+
+I confirmed it in the pinned code: `compare()` tallies `max_observed_difference`, the public comparator drops it, `recompute_block` stores only the public one, and the second side's table is popped. No released file holds it.
+
+**Ruled.**
+
+1. The pinned run is not repeated for this (RL-134 §16 item 1 stands). The number is bounded by the bar in every class, the bars are 1 mJ and 5 × 10⁻⁶ J, and a re-run with outcomes known to recover it buys nothing a claim rests on.
+2. Table S9 gains no column. The marker is replaced by this sentence, after the table's caption:
+
+   > The largest observed difference per class is not printed: the pinned program computed it and did not write it to its output, and the run was not repeated after the release. What the released output shows is that every compared row passed, so in each class the largest difference is no larger than that class's bar. This departs from the registration's §12.3 item 4, which says the observed agreement is printed beside the tolerance; the counts are printed and the largest difference is not.
+
+3. **Deviation log, one line** (kind: reporting; "decided after Block 5 and Block 6 outcomes were known"): §12.3 item 4 and runbook step 15 expect the largest observed difference per class; the pinned program did not retain it; the paper prints the counts and the bound; no re-run (RL-134 §16.1, RL-147 §1).
+4. Follow-up on `main`, not applied to the pinned run (RL-134 §16.3): the next revision of the program keeps the restricted comparator's per-class `max_observed_difference`. One line in the lessons list.
+5. `fill_check_b5.py`'s PENDING entry for the residual id is removed when the sentence lands; `fill_check_b6.py` asserts the sentence instead.
+
+## 2. `P1-B6-CARRIED`: the list, its source, and who derives it
+
+**The authoritative list of 32** is Block 5's catalog, `configs/campaigns/v5_claim_25g83/flag_catalog.json`, SHA-256 `5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d`: the codes whose `effect` is `EXCLUDE_WINDOW`. I counted 32. In Block 6's catalog (`b5bce6c6…`) 25 of them are `DISCLOSE`, and those 25 are exactly `SESSION_CODES_TO_FLAGS` in the S-16 script; 7 stay `EXCLUDE_WINDOW`. The GAMMA lost-midpoint rule is not one of the 32 (`neg8.midpoint_lost` is `DISCLOSE` in Block 5's catalog; the removal was a pack rule) and is the one dropped session rule of §8.2.
+
+**`neg8.screen_failed` in r2-beta is the stored NEG-8 bracket decision. It is not listed as a carried code.** Its record reads `decision: failed`, reasons `bracket_not_passed` and `neg8_conditions`, conditions `neg8_bracket_reference_invalid`, `neg8_drift_bound_underived`, `neg8_idle_sub_drift_bound_underived`. §9.5 item 7 names "the stored NEG-8 bracket decision and its `neg8_bracket_*` conditions" as disclosed only, and §8.2 counts "the NEG-8 bracket decision" among the old drift-screen codes. So it prints, as a disclosure, in its own sentence. One thing the registered derivation does not cover and the paper must not hide: item 7's reason is the 0.05 J bar, and r2-beta's condition is a different one of the same family (an invalid bracket reference). The disclosure names the condition and makes no statement either way about what Block 5 would have done with it.
+
+**What I derived** (all levels, all nine sessions, from the copied records): of the 32 codes only two occur. `code.executed_differs_from_sealed` at window level, 2 rows, in each of the nine sessions; `neg8.screen_failed`, 1 row, r2-beta. None of the 7 still-excluding codes occurs. `neg8.midpoint_lost`, 1 row, r2-gamma (reason: the midpoint run carried `contention.request_overlap`, a Block 5 run exclusion that is a flag in Block 6; the Block 6 screen used the midpoint, `n_mid` = 1, so no lost-midpoint sentence is owed).
+
+**Who, from what.** This is an RL-3 item 3 hand derivation. The fill seat adds the rule to `fill_check_b6.py`: parse each session's `sessions.<sid>.copied_disclosures.families.block5_codes_carried[0].record` as JSON lines; take the set of `code` values; intersect with the 32 read from the catalog file pinned by the digest above; drop `neg8.screen_failed` to the disclosure sentence; add `neg8.midpoint_lost` for GAMMA sessions only, labelled as the dropped rule. The reader seat, with its own code, re-derives the same three sets from the same two sources and must match mine above. A mismatch comes to me.
+
+**Text** (replaces the parenthesis holding the marker; the fill seat checks the §7 cite for the collection commit before printing the second sentence, and drops its last clause if §7 does not say it):
+
+> Of the primary block's 32 session-removing codes, one is carried, by all nine replication sessions: `code.executed_differs_from_sealed`. The comparison it records is against the primary block's sealed file inventory, and the replication was collected from its own registered checkout, so the code fires by construction and is a flag in this block. One primary-block session rule that the replication dropped would have applied: r2-gamma's midpoint reference run overlapped outside processor work, which the primary block's rules would have removed, and on the contrast pack a lost midpoint removed the session (`neg8.midpoint_lost`); under the replication's rules the run is kept and the drift screen used it. Disclosed and, as registered, not listed as carried: r2-beta's stored bracket decision of the old drift screen is "failed" (`neg8.screen_failed`; conditions `neg8_bracket_reference_invalid`, `neg8_drift_bound_underived`, `neg8_idle_sub_drift_bound_underived`); the registered drift screen passed in that session, as in all nine.
+
+The S-16 line says this code fired in 0 of 3 Block 5 sessions. Both facts are true and the paragraph should not be softened: read by Block 5's catalog, every Block 6 session carries a session-removing code, for a reason that is the design.
+
+## 3. `P1-B6-WM-DEF`: the definition, and a number that must print with it
+
+From the pinned code, not from DESIGN §8:
+
+> For each run and phase, the phase's two edges are placed on the meter's clock by the meter stream's clock fit, and the phase's whole-machine energy is the mean of the meter's power samples (50 a second) that fall between the edges, multiplied by the phase length. It is gross: no idle baseline is subtracted and the battery term is not added. Per model and phase the runs are summarised with estimator 1's arithmetic (0.2 × the mean over repeats + 0.8 × the mean over quad means), and the interval printed is that estimator's statistical half-width only, with no timing bound. The rails' share is the median, over the kept runs, of the run's gross rail energy over the same phase divided by its whole-machine energy. The meter's clock-fit residual and the alignment bound do not enter the interval. They enter one labelled sensitivity: each edge is moved by ±(b_op + the stream's largest clock-fit residual), in the four sign combinations, and the largest change of the cell's mean is printed as the edge-shift sensitivity.
+
+**The edge-shift sensitivity prints, per cell, in the same line.** It is in the released output (`sessions.<sid>.whole_machine.windows.<pack>.cells.<cell>.edge_shift_sensitivity.max_abs_change_j`) and the draft leaves it out. I read all twelve: 6.45 to 11.12 J (for example r1-alpha decode 150.06 J, half-width 0.116 J, edge-shift 8.82 J; r1-beta decode 593.06 J, 0.36 J, 11.12 J), with b_op 41 to 46 ms and a clock-fit residual of 17 to 19 ms. A reader shown [149.94, 150.18] alone would take the per-phase whole-machine energy as known to a part in a thousand. It is known to several percent.
+
+Mechanical:
+
+- `P1-B6-WM`: after each cell's interval add "edge-shift sensitivity ± x.xx J" (rounds up; it states a limit). Add the twelve keys to the manifest.
+- The line's lead-in gains: "intervals are statistical half-widths only; the timing sensitivity is printed beside each".
+- Table 6's caption gains: "The whole-machine interval is the statistical half-width only; its edge-shift sensitivity, 6.5 to 11.1 J per cell, is in the labelled lines." The fill seat renders the two range ends from the keys.
+- The Block 5 whole-machine values in Table 6's Primary column: if the Block 5 released output holds the same sensitivity for its four cells, print the range's Block 5 ends in the same caption sentence; if it does not, say nothing. I did not open Block 5's output for this.
+- The reader re-reads the twelve values and the definition's three constants (50 a second, 0.2 and 0.8).
+
+## 4. `P1-RELEASE`: Block 5's release event is recorded first. Block 6's clause is admitted with one edit. BYTES is split off
+
+1. **The seal record's "Release event" section is written before `P1-RELEASE` is filled.** The marker's named source is that section and it says nothing is recorded. The lead writes it, on `main`, as a late record: dated the day it is written, headed "recorded late", stating the event (Ed's unseal OK, 2026-11-08 11:17 PST, `RUN_STATE.md` item 231, verbatim words as item 231 quotes them), the release check it followed (`release-check-final-20261108T0942Z`, main `02ef89f5c`, analysis `b5/analysis-r4` = `ab1e0098d`), the digests of the seal record's §4 that the section was promised to tie, the three analysed sessions' final `harvest.json` SHA-256 values, and the released output's SHA-256 (`c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc`). Every digest is re-taken from the files by the writer, none copied from this ruling. The paragraph "Nothing is recorded here yet…" is replaced, not kept beside it. One deviation-log line: the release-event record was owed at the event and written N days later; the event and the released bytes are unchanged. This is a light-tier docs PR; it does not wait on #772 and #772's `P1-RELEASE` waits on it.
+2. **Block 6 clause, admitted with "its record" made exact:**
+
+   > The replication block was released on 13 November 2026 at 18:54:57 PST, when its release record was merged into `main` (`66469ccf4`). The record ties the registration (`7243a2bc…`), the flag catalog (`b5bce6c6…`), the custody manifest (`b2901d51…`), the nine sessions' harvest digests and the outputs of the blind dry run that print here (restricted `92e67c38…`, public `c2b5c409…`).
+
+   The time is the merge commit's (RL-146, "Release time"), not the record's render time of 18:23.
+3. **Block 5 clause**, filled from the section of item 1 once it is on `main`:
+
+   > The primary block was released on 8 November 2026 at 11:17 PST, after its release check agreed; its record ties the sealed documents' digests to the three analysed sessions' harvest records and to the released output (`c06ee7c8…`). The record of that event was written into the seal record on ⟨date⟩.
+
+4. **BYTES.** `P1-RELEASE` is split. The Block 5 and Block 6 clauses fill `P1-RELEASE`. A new marker `P1-RELEASE-BYTES` (stage-1 commitment and stage-2 release, with digests) stays pending and is listed in `fill_index.md`. No sentence about BYTES is printed until its events exist.
+
+## 5. Rounding in Table 6: nearest stays for the nine floors, with a caption sentence. R_cm prints 1.99975
+
+1. **The nine floors: accepted as drafted.** RL-60 item 1's fourth bullet is the rule, and the fill seat applied it correctly: in Table 6 each value stands beside a printed Δ, so it rounds to nearest. Printing floors up there would move the reader's own subtraction further from the printed Δ. The cost, one quantity with two printed values, is paid by saying so. Table 6's caption gains, after "standard deviations up":
+
+   > A floor printed here to nearest can be one unit in its last digit below the same floor in Tables 2 to 4, where it stands as a limit and rounds up.
+
+2. **R_cm for 1.7B prefill prints 1.99975 in Table 6.** This is a fix, not a choice. It was ruled for this one ratio at the second fill: it sits within 3 × 10⁻⁴ of its threshold and prints at five decimals wherever it prints. 1.9997 beside Table 4's 1.99975 reads as a different number. `fill_check_b6.py` takes the five-decimal form for this key's Block 5 value; Δ and the summary are computed from unrounded values and do not change. The reader re-reads that one cell.
+
+## 6. Forms with no registered wording
+
+| Form | Ruling |
+|---|---|
+| Table 6 layout (one sub-table per pack; columns Primary, three sessions, Δ with each session's difference, summary, label) | **Admitted.** It is §11.1's content in §11.1's order. |
+| Table 6a (sessions, kept units, program flags, drift-screen word, floor pairing) | **Admitted**, with one column added: "Primary-block codes carried", filled from §2 (`code.executed_differs_from_sealed` in every row; r2-gamma also "lost-midpoint rule (dropped)"). |
+| Block-6-only summary on floor rows only | **Admitted.** 8d registers it for the rows that carry the timing-regime label, and those are the rows the program labels. The other rows' Block-6-only values exist in the output and are not printed. |
+| Floor gate per session | **Amend.** §11.1 says every quantity of §9, and the gate is §9.4's. GAMMA's sub-table gains two rows, "Floor gate, decode (J)" and "Floor gate, 2,048-token prefill (J)": the three session values from `sessions.<gamma sid>.quantities.contrast/<phase>/floor_gate_j`, rounded up; Primary from the Block 5 released output's key if `block.side_by_side` or the Block 5 input holds it, else "—"; Δ and summary "—" with the caption note "not a §10 quantity"; label from the R3 table. The caption's "it is the larger of the two floors printed" sentence is dropped as unnecessary once the rows exist. |
+| 8a's plain-mean scaling factor | **Not printed; one deviation line.** RL-25 8a-i registers it to print beside the registered factor where a cell has unequal losses. Such cells exist (for example r3-alpha decode, 10 / 9) and the released output does not hold it. The scaled-allowance line gains: "The plain-mean factor, registered to print beside this one where a cell lost unequal numbers of units, is not in the released output and is not printed." Deviation log: reporting; decided after outcomes were known. Follow-up with §1 item 4. |
+| `P1-B6-DOM` prints R_cm beside the four R and reuses §6.4's branch B sentence | **Admitted**, with the sentence of §10 item (c) added. |
+| `P1-B6-FLAGINC-WORDS` | **Amend** to the registered print form (§11.4): "Including sessions that did not count (n = 0): every attempt counted, so no session is added and the flagged-inclusive words are the registered ones, "replicated" for decode and "replicated" for 2,048-token prefill; they do not enter the registered word." |
+| The sentence before it | **Amend:** "The replication words were "replicated" for decode and "replicated" for 2,048-token prefill." The draft's bare "replicated for decode and replicated for prefill" reads as a verb. |
+| Contention line, "not computed (reason; n_r, n_b)" | **Admitted**, with the summary sentence of §10 item (d) placed before the per-cell list. |
+
+## 7. "Re-read by key by a separate reader": it stands, with its count, and is bound to the head it was true of
+
+The reader's report is in: 1,417 of 1,417 manifest rows agree, 0 disagree; Table S9's totals and all 17 classes match term 7; branch 5.7.1 confirmed for both contrasts from the output, without the fill seat's script.
+
+1. The sentence becomes: "…and re-read by key by a separate reader (1,417 of 1,417 printed elements agreed)." The count is rendered from the report's line, not typed.
+2. The lead commits the report to `evidence/pr772/` on the audit branch. `fill_check_b6.py` pins its SHA-256 (`4239c914…4a63` as I read it; re-take it) and its result line, exactly as it pins the step 13 report, and fails if either changes.
+3. **The sentence is true of head `a2563016e`.** Every printed value this ruling adds or changes (§2, §3, §5 item 2, §6's gate rows, §10) is re-read by the reader from a delta manifest before the PR merges; the count in the sentence becomes the new total and the pinned digest the new report's. Text-only edits need no re-read.
+4. **"72 of 72": the paper may say it and it stands.** It is the step 13 check (RL-104 check 3; 8 families × 9 sessions), committed at `3dc8200e7` with SHA-256 `bc0fce56…`, which the fill check already pins. Reword so the reader sees what 72 is: "(8 families in 9 sessions: 72 of 72 rows hold their disclosure)". It is another reader's work and is not claimed for this one.
+5. The reader's two limits. Cell position: accepted; each fill is rendered whole from its keys and the check asserts each rendered block is present exactly once, so position is the renderer's and value is the reader's. RL-60 and `precision.json`: I read both. RL-60 item 1 says what the fill seat's docstring says, and the nine bars of Table S9 equal the pinned file's decimals (`*_j` 5, R, R_cm, energy ratio and p 4, per token 8, b_op 6).
+
+## 8. The stale "blinded" text, `P1-ABS-PART1` and `P1-RECOMPUTE`: the fill seat applies my text, in this PR
+
+A paper whose §6.8 prints the replication and whose abstract says it is blinded must not exist on `main`, so these land in #772, as their own commit. The wording is mine (RL-6 (d), (e)); the fill seat changes nothing in it.
+
+- **Line 38** (abstract). Replace "A registered replication in further sessions on later days was collected and remains blinded." with: "A registered replication, nine further sessions on later days, was collected and analysed blind and released after the primary block."
+- **`P1-ABS-PART1`.** The fill seat assembles it as its instruction says, from the CP-X rows. The replication clause is fixed: "Both contrasts replicated under the registered definition: each of the three replication contrast sessions gave the primary session's outcome word and sign." No number from §6.8 enters the abstract, and no p-value (RL-4 (ii)). The assembled sentences come to me with the fill.
+- **Line 106** (contribution 2). Heading: "**A pre-registered, blinded measurement with a registered replication**". Last sentence, replacing "The replication results remain sealed.": "The replication's results are reported beside the primary block's (Section 6.8)."
+- **Line 676** (§5.6). Replace "The replication remains blinded; its release requires closure and prior primary release, because reading replication values first would unblind the same quantities." with: "The replication stayed blinded until its own release, which required its closure and the prior primary release, because reading replication values first would have unblinded the same quantities."
+- **Line 1836** (conclusion). Replace "the registered replication was collected in further sessions and remains blinded." with: "in the registered replication, nine further sessions, both contrasts gave the primary session's outcome word and sign, and the sessions differed from one another by more than their within-session intervals cover."
+- The four FACT comments (H01, H04, H11, H21) gain "RL-147 §8; RUN_STATE item 312" and lose "no replication result is asserted".
+- **`P1-RECOMPUTE`** (§5.7). Replace the marker with: "The bars, the counts and the agreement are given per family for the primary block in Table S8 and per class for the replication block in Table S9 (Section 6.7), with the quantities not covered and their separate reader checks." The two-table content is already there; the marker asked for it twice.
+- §5.7's standing sentence "The observed differences and comparison coverage must be printed beside the applicable bars" gains: "(for the replication block the largest difference was not retained; Section 6.7)".
+
+## 9. Cold pass: registered wording, scope, and the word "replicated"
+
+**Registered wording, verified against the source.**
+
+- The agreement sentence has RL-113 term 6's form as RL-133 §2 amended it: over compared rows, with both-null, first-program-only and agreeing-on-a-value stated; classes with no compared row carry no verdict. Correct.
+- Branch 5.7.1 is the registered §11.2 and §11.3 text, twice. The 8d label in Table 6's caption is the ruled text verbatim. The cross-session line uses §9.5 item 6's two registered phrases. The whole-machine boundary sentence is the registration's (RL-30).
+- Invented and ruled above: Table 6a, the flagged-inclusive sentence, the dominance and contention sentences.
+
+**"Replicated", both contrasts: correct, and correctly limited.** Block 5: `direction_supported`, positive, both contrasts. Each of the three counting GAMMA sessions: the same word and sign, 10, 10, 10 quads for decode and 8, 9, 10 for prefill, the pack not short, no binding defect. The registered definition is met and no other branch applies. The two sentences after the word say what it is not. One caution for every place the word travels (abstract, talk): d̄ is about 147 J and 102 J against decision half-widths of 4 to 6 J, so the direction was never in doubt in any session. The word says the instrument gave the same answer four times to an easy question. It is not evidence that the floors, the dominance branch components or the cell means replicate, and §10 below is where the paper says what those did.
+
+**Scope.**
+
+- Table 6's caption sentence "comes from the registered rule and not from the machine" is verbatim and stays, but as it stands it reads as explaining the floor differences in the table. See §10 (b).
+- The agreement paragraph's "(single-source: one producer in this block, the same pinned functions that agreed with the registered analysis on the primary block)" is true and is as far as it may go: agreement on Block 5's bytes is not a check of Block 6's values. Leave it; do not strengthen it.
+- "decision 6 (a)" in the d̄ label is an internal name: gloss it once in the caption (RL-4 (xi)) or drop the parenthesis.
+- The repair sentence (§17-R13) is accurate and complete: date, revision, the four quantities, what changed.
+
+## 10. What the draft does not yet print
+
+**Two registered labelled lines are missing.** §9.5 lists eight; the draft's list has six. Items 1 and 2, the load-correlated sensitivity line and the battery-assist line, are in the output for every cell and contrast (`sessions.<sid>.lines.<cell or cid>.load_sensitivity` and `.battery_assist`, status `computed`). In the cells I read both equal the registered estimate. New markers `P1-B6-LOADSENS` and `P1-B6-BATT`, filled by key in the form of the waited-runs line; where a line equals the registered value in every cell the fill may say so once, with the count of cells, instead of listing them. Manifest and reader as for the rest.
+
+**§9.5's per-session disclosures** (attempt history, battery, thermal, contention and clock counts, reference drift with realised counts, monitor cost, the fixed sentences) are read (72 of 72) and not printed. They are owed by the registration. They go in a supplementary table, in a follow-up PR, not this one; #772 adds one sentence to §6.8 saying they are in the released record and the supplement, and a pending marker `P1-B6-DISCLOSURES`.
+
+**One paragraph, "What the replication shows", after the replication word.** The four notable outputs are all disclosed cell by cell and none is stated. The earlier ruling on Block 5's 8B decode cell applies with more force here: a "differs" goes in the results text, and this is what a replication is for. Text, with every number rendered by key (the fill seat adds the keys to the manifest; the counts are computed by the check, not typed):
+
+> (a) *Between sessions.* In 7 of the 12 cross-session comparisons the contrast session and its paired floor session differ by more than their statistical half-widths. All six comparisons for the 8B model do, and in each the contrast session reads lower, by 0.35 to 0.55 J (primary block: −0.422 J for decode, which differed, and −0.261 J for prefill, which agreed); one of the six for the 1.7B model does (+0.372 J). The sign is the same in every 8B comparison of both blocks, so this is a systematic difference between a model measured alone and the same model measured in alternation, not scatter; we did not test a cause. The 8B differences are 0.2% to 0.4% of the phase energy and the 1.7B one 1.4%; all are far inside every decision interval, and the two separately collected cells are not differenced into any claim.
+>
+> (b) *Floors.* The replication's 8B absolute floors (6.95 to 7.79 J for decode, 6.75 to 7.14 J for prefill) are 1.7 to 3.2 J below the primary block's (10.18 and 8.83 J). The calibration-acceptance difference between the blocks accounts for at most 0.175 J of that. The rest is a difference between sessions that the registered rule does not explain, and it is the reason the between-session summary is printed for the replication sessions alone as well.
+>
+> (c) *Dominance.* In the primary block all eight independent-corner ratios R were at least 2. In the replication the 8B decode comparative R is below 2 in two of the three 8B floor sessions (1.3108 and 1.6865). The branch is B in the primary block and in all three replication pairings; which components fail is not stable from session to session.
+>
+> (d) *The registered contention rule.* Applied as registered, the outside-processor exclusion leaves none of the 12 floor cells with the registered minimum of units, and leaves the six contrasts 0 to 4 quads of the 5 required. It was not adopted for this block for that reason, as registered, and the replication's sessions confirm it would have removed most of the data.
+
+Notes on that text. In (a), "a model measured alone … in alternation" describes the two packs' designs and is not a cause; if the fill seat cannot support it from §5's description of the packs, it cuts the clause after "both blocks" to "so it is systematic, not scatter". In (b) I give the range for both phases (decode −2.39 to −3.23, prefill −1.69 to −2.08); the PR body's "2.4 to 3.2" is decode only. The fill seat prints the ends from the keys and the reader checks them. No kept-unit or thermal explanation is offered for (b); if one is wanted it is a labelled exploratory analysis and comes to me first. RL-4 (iv) holds throughout.
+
+Table 6's caption, after the 8d label: "That bound is small beside several of the floor differences in the table; see the text."
+
+## 11. For the fill seat, in order
+
+1. Apply §1 (sentence, deviation line), §2 (derivation in the check, paragraph, Table 6a column), §3 (definition, twelve sensitivities, two caption sentences), §5 (caption sentence; 1.99975), §6 (gate rows, three amended sentences, the 8a sentence and deviation line), §8 (five edits, two markers), §10 (two lines, the paragraph, the pending marker, the caption sentence).
+2. `P1-RELEASE` waits on the lead's seal-record PR (§4 item 1); then §4 items 2 to 4.
+3. Regenerate the manifest and a delta manifest of every new or changed printed element. The reader re-reads the delta with its own code and re-derives §2's three sets. Then §7 items 1 to 3.
+4. Deviation log: three lines (§1, §4, §6's 8a), each "decided after Block 5 and Block 6 outcomes were known".
+5. The PR comes back to me once, with the reader's delta report and the assembled `P1-ABS-PART1`. Gate ledger rows 1 and 4 are then the reader and this pass.
+
+## 12. Not verified by me
+
+- I did not run `fill_check_b6.py` or re-read the 1,417 values; the reader did, and I spot-read only the keys this ruling turns on.
+- §2's paragraph says the replication ran from "its own registered checkout": I read §8.2 and the flag's record (27 changed, 54 added against the Block 5 sealed inventory), not §7 line by line. The fill seat checks the cite.
+- The load-sensitivity and battery-assist lines: I read their status and mean in the twelve floor cells and their status in the three contrast sessions. I did not compare every field.
+- Whether Block 5's released output holds an edge-shift sensitivity for its four whole-machine cells (§3).
+- The three harvest digests and the §4 digests for the seal record's release-event section: the lead re-takes them.
+- Whether the Block 5 input holds a floor-gate key for Table 6's Primary column (§6).
+- The cause of the 8B cross-session offset, of the 8B floor shift, and of r2-beta's `neg8_bracket_reference_invalid`. None is needed for a number that prints; none is asserted.
+
+**Owner.** The fill seat: §11 items 1 to 4. The lead: the seal record's release-event PR, the reader report's commit, the deviation-log lines' merge. The reader seat: the delta re-read and §2. Me: the returned PR, in one turn.
+
+**Gate.** #772 does not merge before §11 item 5. The seal-record PR gates only `P1-RELEASE`. Nothing here gates anything outside Paper 1.
+
+**Reason.** The fill is a faithful rendering of what the program printed. What it lacks is what the program did not hand it in a marker: the uncertainty that the whole-machine interval leaves out, two lines the template forgot, and a plain statement that four sessions agreed on the direction of a 147 J difference while disagreeing, at the level of tenths of a joule to joules, on the cells and floors. A reader who sees only "replicated" would take the second fact for the first.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
