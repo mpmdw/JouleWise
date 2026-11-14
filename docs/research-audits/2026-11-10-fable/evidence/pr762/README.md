@@ -25,3 +25,5 @@ Total 75 failing ids (2+4+8+1+52+8). Unexplained: none. Named set (test_block6, 
 Side note, not a CI id: on macOS under taskpolicy -b, test_run_night has 7 failures (BindSupervisionProcessTests x6, QuietDriverIntegrationTests x1), identical at head and base: base-inherent, outside the diff; routed to the CI owed list.
 
 Comparer test section §D errored on the runner's invocation (-I drops cwd); the comparer of record (v2, eb82b6e2…) passed 18/18 with discover (rl142-r2-records.md §F).
+
+**Added 2026-11-13 16:55 PST:** hosted run 43525694693 on draft PR #763 (an empty commit on 3551e1a7d, a Linux baseline of the S-14 cut) failed on the same 41 distinct test ids as run 43521257617 at #762's head (75 log lines there, counting repeated subtests); compared by module and method name, no id on either side only. Every hosted failing id of #762 is therefore also base-inherent on Linux (reproduced on 3551e1a7d), which supersedes the "platform" class in the table for the hosted list.
