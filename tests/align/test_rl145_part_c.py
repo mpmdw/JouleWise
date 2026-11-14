@@ -345,7 +345,7 @@ class SidecarJournalTests(unittest.TestCase):
         line = pc.d_bank_start_state(self.facts())
         self.assertFalse(line['pass'])
         self.assertEqual(len(line['reasons']), 4)
-        self.assertTrue(all('not recorded' in r for r in line['reasons']))
+        self.assertTrue(all('not recorded: not within 2 s of the sample, or absent' in r for r in line['reasons']))
         self.assertTrue(pc.stamp_fresh(2.0) and pc.stamp_fresh(-0.02))
         self.assertFalse(pc.stamp_fresh(2.0001) or pc.stamp_fresh(None) or pc.stamp_fresh(True))
         import contextlib

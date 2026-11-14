@@ -170,7 +170,7 @@ def d_bank_start_state(d_bank):
             reasons.append(f"{what}: no journal row for sample")
         elif not ok:
             reasons.append(f"{what}: level {level!r}, state {state!r}, stamp age {age!r} s"
-                           + ("" if fresh else f" (not recorded: older than {STAMP_MAX_AGE_S:g} s or absent)"))
+                           + ("" if fresh else f" (not recorded: not within {STAMP_MAX_AGE_S:g} s of the sample, or absent)"))
     for r in d_bank.get("intervals", []):
         if r.get("kind") in ("G0", "G1") and r.get("outcome") == "released":
             row(f"{r['kind']} release" + ("" if r["kind"] == "G0" else f" (turn {r.get('turn')})"), r.get("release_status"))
