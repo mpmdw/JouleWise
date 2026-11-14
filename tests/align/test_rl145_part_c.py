@@ -17,8 +17,8 @@ from scripts import align_r1_followup_kit as kit, align_r1_part_c as pc, launch_
 from scripts import run_align_r1_smoke as smoke
 
 
-def status(level=0, state='Nominal'):
-    return {'os_level': level, 'pm_state': state}
+def status(level=0, state='Nominal', age=0.5):
+    return {'os_level': level, 'pm_state': state, 'pm_age_s': age}
 
 
 def turn(index, decode, **extra):
@@ -71,6 +71,9 @@ class EvaluatorPassTests(unittest.TestCase):
         self.assertEqual(result['printed_not_judged']['turns'][0]['turn'], 0)
         self.assertIn('0.83 and 0.93', result['printed_not_judged']['predicted'])
         self.assertFalse(result['slots_entered'])
+        both = run(printed={'turns': [{'turn': 0}], 'desk_verdict': {'member_excluded': True}, 'tv1h_trigger': {'fires': True}})
+        self.assertTrue(both['pass'])      # the desk verdict is printed beside the result and never decides
+        self.assertTrue(both['printed_not_judged']['desk_verdict']['member_excluded'])
         # A bad-looking print changes nothing.
         bad = run(printed=[{'turn': 0, 'first_off': {'s_after_first_token': 1.0}, 'clock_ratio_last_512': 0.1}])
         self.assertTrue(bad['pass'])
@@ -110,7 +113,8 @@ class EvaluatorFailureTests(unittest.TestCase):
         d['intervals'][0]['duration_s'] = 190.001
         result = run(d_bank=d)
         self.check(result, 'd_bank_mechanics', 'gate_time', 'mechanics_gate_time_failed')
-        self.assertIn('fallback of RL-145 section 3', result['disposition'])
+        self.assertNotIn('fallback of', result['disposition'].replace('withdrew the fallback', ''))
+        self.assertIn('research lead', result['disposition'])
         # Holds count toward the same total.
         d = bank(intervals=bank()['intervals'] + [interval('H', 1, token_count=None, duration=300.0)])
         self.assertFalse(run(d_bank=d)['lines']['d_bank_mechanics']['checks']['gate_time']['pass'])
@@ -151,6 +155,9 @@ class EvaluatorFailureTests(unittest.TestCase):
             'turn start level 2': lambda d: d['turns'][1].update(first_reading_after_start=status(2)),
             'turn start not Nominal': lambda d: d['turns'][2].update(first_reading_after_start=status(0, 'Heavy')),
             'turn start unread': lambda d: d['turns'][0].update(first_reading_after_start=None),
+            'G0 stamp 2.5 s old': lambda d: d['intervals'][0].update(release_status=status(age=2.5)),
+            'G1 stamp age missing': lambda d: d['intervals'][1].update(release_status=status(age=None)),
+            'turn start stamp old': lambda d: d['turns'][2].update(first_reading_after_start=status(age=9.0)),
         }
         for name, mutate in cases.items():
             with self.subTest(name):
@@ -158,7 +165,7 @@ class EvaluatorFailureTests(unittest.TestCase):
                 self.assertEqual(result['verdict'], 'start_state_failed')
                 self.assertFalse(result['lines']['d_bank_start_state']['pass'])
                 self.assertIn('research lead', result['disposition'])
-                self.assertIn('not re-run', result['disposition'])
+                self.assertIn('Nothing is re-run', result['disposition'])
         # The failing sample is named in the table.
         bad = [s for s in broken(cases['G1 release not Nominal'])['lines']['d_bank_start_state']['samples'] if not s['ok']]
         self.assertEqual([s['at'] for s in bad], ['G1 release (turn 1)'])
@@ -236,7 +243,8 @@ class KitSequenceTests(unittest.TestCase):
         config = SimpleNamespace()
         return kit.smoke_part_c(self.tmp / 'c', ['runtime'], config, soak_reference='soak.json', invoke=self.invoke,
                                 facts=facts, step_facts=lambda *_: dict(step_facts or STEP),
-                                prints=lambda bundle: [{'turn': 0, 'token_basis': 'uniform_estimate'}])
+                                prints=lambda bundle: {'turns': [{'turn': 0, 'token_basis': 'uniform_estimate'}],
+                                                     'desk_verdict': {'exclusion_reasons': ['r']}})
 
     def test_order_and_a_passing_table(self):
         result = self.run_c()
@@ -248,6 +256,7 @@ class KitSequenceTests(unittest.TestCase):
         self.assertEqual(table['n_chunk_formula_recorded'], 1280)
         self.assertEqual(table['evaluation']['n_chunk_configured'], 4096)
         self.assertEqual(table['evaluation']['printed_not_judged']['turns'][0]['token_basis'], 'uniform_estimate')
+        self.assertEqual(table['evaluation']['printed_not_judged']['desk_verdict']['exclusion_reasons'], ['r'])
         self.assertFalse((self.tmp / 'c' / 'r1_slots.json').exists())
         self.assertIs(result['evaluation']['pass'], True)
 

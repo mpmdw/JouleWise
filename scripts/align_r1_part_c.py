@@ -16,7 +16,8 @@ D_bank line):
   before it finishes and that is below 4,096. At N_chunk 4,096 that is none.
 - D_bank, start state: at the release sample of G0 and of every G1, and at the first
   reading after each turn's start, the OS thermal level is 0 and the power-management
-  state is Nominal.
+  state is Nominal, and the state's stamp is at most 2 s old (older counts as not recorded;
+  G0's own bound; RL-145 close section 2).
 - D_bank, printed and not judged: per turn, the first reading off (0, Nominal); the
   share of decode readings at each level; the clock ratio by 256-token block and over
   the last 512 tokens; the token-rate ratio.
@@ -31,6 +32,7 @@ MAX_TOKENS = 4096                  # frozen turn cap (D-17a); no hold fires at o
 G0_LIMIT_S = 1200.0
 STEP_D_BAND_C = 1.0
 STEP_D_SLOPE_C_PER_MIN = 0.2
+STAMP_MAX_AGE_S = 2.0
 MIN_ADMITTED_TURNS = 3
 GATE_SHARE_OF_T_DEAD = 0.40
 PREDICTED_NOT_JUDGED = ("D_bank turn 1 (11,211 prefill tokens and a long decode): OS level 2 before token 2,048; "
@@ -40,10 +42,9 @@ DISPOSITION = {
     "pass": "Mechanics and start state hold: the no-hold design is sound as a mechanism. Adoption still waits for the "
             "design round's question 1; if the close takes these bytes unchanged this run is the Part C of step 4's "
             "checklist, otherwise Part C is run again at the adopted commit.",
-    "start_state_failed": "Start state fails: the no-hold design fails in Automatic. It is not re-run. It goes to the "
-                          "research lead with the table.",
-    "mechanics_gate_time_failed": "Mechanics fail on gate time only: the fallback of RL-145 section 3 is the candidate "
-                                  "and Part C runs once on it.",
+    "start_state_failed": "Start state fails: it goes to the research lead with the table. Nothing is re-run.",
+    "mechanics_gate_time_failed": "Mechanics fail on gate time only: it goes to the research lead with the table "
+                                  "(the RL-145 close withdrew the fallback; nothing is re-run).",
     "other_failure": "Any other failure goes to the research lead with its table.",
 }
 
@@ -121,8 +122,10 @@ def d_bank_start_state(d_bank):
     def row(what, status):
         status = status if isinstance(status, dict) else None
         level, state = (status or {}).get("os_level"), (status or {}).get("pm_state")
-        rows.append({"at": what, "os_level": level, "pm_state": state,
-                     "ok": status is not None and level == 0 and state == "Nominal"})
+        age = (status or {}).get("pm_age_s")
+        fresh = isinstance(age, (int, float)) and 0 <= age <= STAMP_MAX_AGE_S
+        rows.append({"at": what, "os_level": level, "pm_state": state, "pm_age_s": age, "stamp_fresh": fresh,
+                     "ok": status is not None and level == 0 and state == "Nominal" and fresh})
     for r in d_bank.get("intervals", []):
         if r.get("kind") in ("G0", "G1") and r.get("outcome") == "released":
             row(f"{r['kind']} release" + ("" if r["kind"] == "G0" else f" (turn {r.get('turn')})"), r.get("release_status"))
@@ -141,7 +144,16 @@ def x_g_line(x_g):
     return _check(x_g.get("x7") is False and not timeouts, x7=x_g.get("x7"), g1_timeout_turns=timeouts)
 
 
+def _printed_rows(printed):
+    if not isinstance(printed, dict):
+        return {"turns": printed}
+    return {"turns": printed.get("turns"),
+            **{k: printed[k] for k in ("desk_verdict", "gate_states", "tv1h_trigger") if k in printed}}
+
+
 def evaluate(*, step_d, d_bank, n_chunk, x_g=None, x_g_not_run_reason=None, printed=None):
+    """``printed``: None, a per-turn list, or the dict ``rl145_prints.bundle_prints`` returns (its ``turns``,
+    ``desk_verdict``, ``gate_states`` and ``tv1h_trigger`` are printed beside the result, never judged)."""
     """The fixed test. ``pass`` needs every judged line to hold; the printed rows never decide."""
     mechanics = d_bank_mechanics(d_bank, n_chunk) if d_bank is not None else None
     start = d_bank_start_state(d_bank) if d_bank is not None else None
@@ -168,7 +180,7 @@ def evaluate(*, step_d, d_bank, n_chunk, x_g=None, x_g_not_run_reason=None, prin
         verdict = "other_failure"
     return {"schema": "joulewise.align.r1_part_c.v1", "authority": "RL-145 step 3; RL-145 addendum section 6",
             "pass": ok, "verdict": verdict, "disposition": DISPOSITION[verdict], "lines": lines,
-            "printed_not_judged": {"turns": printed, "predicted": PREDICTED_NOT_JUDGED},
+            "printed_not_judged": {**_printed_rows(printed), "predicted": PREDICTED_NOT_JUDGED},
             "log": log, "slots_entered": False, "n_chunk_configured": n_chunk}
 
 
@@ -184,6 +196,14 @@ def _journal(bundle):
                   key=lambda r: r["monotonic_ns"])
 
 
+def _status_with_age(row):
+    """The row's status plus the age (s) of its power-management stamp at the row's own time."""
+    status = dict(row.get("status") or {})
+    pm_ns = status.get("pm_observed_ns")
+    status["pm_age_s"] = None if type(pm_ns) is not int else (row["monotonic_ns"] - pm_ns) / 1e9
+    return status
+
+
 def facts_from_bundle(bundle, *, role):
     """The evaluator's facts for one member bundle: intervals (with the status at each release sample),
     turns (with the first status reading after each start), the deadman flag and the budget."""
@@ -197,14 +217,14 @@ def facts_from_bundle(bundle, *, role):
         sample = by_ns.get(r.get("exit_sample_ns")) if r.get("exit_sample_ns") is not None else None
         out_intervals.append({k: r.get(k) for k in ("kind", "turn", "token_count", "outcome", "duration_s", "reference",
                                                     "release", "slope_c_per_min")}
-                             | {"release_status": None if sample is None else sample.get("status")})
+                             | {"release_status": None if sample is None else _status_with_age(sample)})
     turns = []
     for t in ep.turns:
         first = next((x for x in rows if x["monotonic_ns"] > t.start_ns and isinstance(x.get("status"), dict)
                       and "os_level" in x["status"]), None)
         turns.append({"index": t.index, "start_ns": t.start_ns, "end_ns": t.end_ns, "decode_tokens": t.decode_tokens,
                       "prefill_tokens": t.prefill_tokens,
-                      "first_reading_after_start": None if first is None else first["status"]})
+                      "first_reading_after_start": None if first is None else _status_with_age(first)})
     budget = ep.hardware.get("token_budget") or {}
     return {"role": role, "turns": turns, "intervals": out_intervals, "t_dead_s": budget.get("deadman_s"),
             "x7": any(str(f).startswith("episode.deadman:") for f in ep.flags)}
