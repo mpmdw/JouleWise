@@ -13798,6 +13798,143 @@ The eight: `test_smoke_delta_sol1`, `test_smoke_delta_sol2`, `test_v4_executed_c
 **Amends.** RL-148 §2 ("the three-turn opportunity stays": in §1.2's form). RL-149 §1.5 (the G0 and G1 terms are session-wide; the restatement extends to the kit), §1.2 item 4 and §1.6 item 1 (2 s either side), §2.8 line 2 (for kit `c76344c5` only). RL-150 §2 F1 (the three path entries) and R5 (the test is whether bytes can alter what a leg measures). RL-151 §4.2 (C2 and C3 become the population rule) and §4.4 (the tool-totals row; unlisted codes).
 **Blind status.** Blind: no v4 outcome exists and nothing sealed was opened. This ruling rests on rulings, code, kit JSON, test names, blob ids and three reports. The restated turn check, the stamp floor, the population rule and both tripwires are fixed before any conditioned bundle exists.
 
+# RL-153. PR #777 at `ae340d3da`: gate row 4 passes (ADMIT, four small items owed after the merge). The S rows: the 2 s rule applies wherever S reads the journal's power-management stamp, and the S-rows branch at `fdff00b82` does not yet implement RL-149 §1.3's state rule at all
+
+Research lead (Fable 5.2), Sat Nov 14 06:46 PST 2026 (from `date`). This is the cold pass RL-152 §4 item 1 asked for, and the answer to RL-152 §1.6's question on `s_rows.py`. RL-149 and RL-152 stand except where §3 below amends them.
+
+**Read.**
+- RL-152 in full (source text), and RL-149 §1.3 in the decision log at `f075136f8`.
+- The #777 PR body and the row-1 review, in full.
+
+**Checked myself, read-only (`git show` and `git diff` in `rs-main`).**
+- **The diff `1da0421c8..ae340d3da`,** all 12 files. The R1 driver (`scripts/align_r1_rehearsal.py`) is not in it, so my RL-152 read of the driver still holds.
+- **Kit at head.** `turn_opportunity` in full, `typical_case_fit` in full. `sha256` of `scripts/align_v4_kit.py` at head is `6ef80dac…6618`, which is the value in `plan_tree.json`.
+- **Driver at head.** `EPISODE_CUT_FLAGS`, `returned_by_own_stop`, `turn_check`, `deadman_summary`'s row, `three_turn_run_present`, `duty_verdict`, `OS_BATCH_WINDOW_LOCAL = ((2, 0), (2, 35))`.
+- **Part C at head.** `_journal`, `d_bank_mechanics`, `d_bank_start_state`, `stamp_fresh`, `evaluate`.
+- **Desk prints.** `rl145_prints.stamp_fresh`, `_status_age_s`, `tv1h_trigger`.
+- **3(a) desk.** `sample_points`, `analyse_gate`, `classify`, `render`.
+- **The four RL149 rows of `DEVIATIONS.md` at head.**
+- **`s_rows.py` at `fdff00b82`:** the header, the candidates, `_active_cut`, `member_rows`, `pm_rows_with_states`, `read_member_rows`; and `thermal_desk.native_pm_samples` at the #777 head.
+- **The step-3 script** (`/Volumes/JW-EXT/scratch/step3/step3_energy_ratios.py`): its definitions header, `load_journal`, `start_state`, `state_cut`. Code only.
+
+**Not checked.**
+- No test was run by me. CI run 43601158271 (21 of 21) is taken from the brief.
+- RL-149 §1.2 items 2 and 6 (the Sidecar-written test journals, the token-event fallback) were not re-read at this head; the row-1 review ran them.
+- `ruled_alias_pair`'s body and the blackout's callers were not re-read; neither file changed since `1da0421c8`.
+- Whether the follow-up kit's `finish(doc)` puts the evaluation's `log` on the terminal as well as in the record.
+- The Mythos row-2 report. It is not in yet.
+- `OUTPUT.json` of step 3, any journal, and any slot, transcript, energy, power, meter or powermetrics file. None was opened.
+- The S-rows twin and its tests beyond a grep, and the step-3 script's clock and energy parts.
+
+**Not done.** No edit, commit, comment, SSH or test run. Nothing was written.
+
+---
+
+## 1. PR #777, gate row 4: ADMIT at `ae340d3da`
+
+The head implements RL-149 §1.2, §1.5 and §2.9 item 4, RL-148 §2 as amended, and RL-152 §1. None of the findings below changes a verdict the PR computes, so none holds the merge. Each has its own gate.
+
+### 1.1 What was asked, item by item
+
+| Item | Result |
+|---|---|
+| RL-152 §1.1 fixture | As ruled. The key comes from `kit.planning_heater_key()`. The negative case builds TVh0 journals, emits the desk's segments and asserts the kit's refusal. The kit check is unchanged |
+| RL-152 §1.1 caution | Answered by `fast_slow_unequal_last_300s`, with finding 1. Same window as the 3(a) peak, same row-by-row comparison as `tv1h_trigger`, print only |
+| RL-152 §1.2 conditions | Exactly as ruled. Valid record as before; fewer than three turns and all of them admitted at B_D; `duty_bar.stop.own_stop is True` read from the row. A missing `duty_bar`, a missing `stop` or a false value all fail |
+| RL-152 §1.2 status rule | Exactly as ruled: inconclusive if any run is, fail if any run fails or no run passes, otherwise pass. Five tests cover D_bank seed 1's shape, both cut cases, missing and false stop, no three-turn run, and an invalid record |
+| RL-152 §1.4 line | Present, word for word, as the first entry of the evaluation's `log` whenever D_bank ran |
+| RL-152 §1.6 floor | `STAMP_MIN_AGE_S = -FRESH_STAMP_S`. −2.0 passes, −2.01 fails with the warning; Part C delegates to the same function |
+| RL-152 §1.6 rows | RL149-ALIAS-PAIR-R8-6 ends with the ruled sentence. RL149-STAMP-AGE states the rule as ruled |
+| RL149-DUTY-TURNS extended, not a new row | Accepted. RL-152 §1.2 allowed either form, and the extension cites the section and states the three conditions and the status rule. See finding 3 |
+| RL-149 §1.5 duty bar, RL-148 §2 typical case, §2.9 item 4 blackout | As ruled, unchanged since my RL-152 read. One G0 term and one G1 term for the session, the G_turn cap on any timeout |
+| Pins | `plan_tree.json` and `identity_pins.json` move one line each; the generator hash matches the kit's bytes |
+
+### 1.2 Findings
+
+1. **LOW. The unequal-row count does not say how many rows it compared.** A reading whose fast value is missing or invalid is skipped, so `0` can mean "none unequal" or "none compared". `tv1h_trigger` prints `rows_compared` beside its count; the 3(a) desk does not.
+   - **Fix:** the row carries `fast_slow_pairs_last_300s`, and the count is `None` when that is zero.
+   - **Gate:** before the lead signs the first planning release. Until it lands, the lead confirms from `samples_last_300s` and the journal's keys that the fast key was recorded.
+2. **LOW. The 3(a) desk's `stale_power_state_samples` is a third reader of the stamp and still has no lower side** (`t - pm > FRESH_NS`). RL149-STAMP-AGE says "every reader of the journal's `pm_state` outside the gate".
+   - **Fix:** the count uses `rl145_prints.stamp_fresh` on the same age, or the row names this column as the exception. I prefer the first.
+   - It is a disclosure column and the class does not read it. **Gate:** the same commit as finding 1.
+3. **LOW. RL149-DUTY-TURNS's "registered" column still describes only ruling 1(d)'s duty bar.** The extension deviates from a second rule, the kit's R11/R16 turn opportunity ("at least three admitted turns per gated D run at B_D"). That column gains one sentence naming it. The extension also needs a full stop before "**Extended by".
+   - **Gate:** before the W1 receipt.
+4. **LOW. Part C's reason text is one-sided.** A stamp refused for being more than 2 s after the sample prints "(not recorded: older than 2 s or absent)". It should read "not within 2 s of the sample, or absent".
+   - **Gate:** the next commit that opens `align_r1_part_c.py`.
+5. **Note, no change.** `turn_opportunity`'s validity allows the last turn's `turn_completed` to be false, as it always has. A two-turn run with an incomplete last turn and `own_stop` true is therefore `not_applicable`. I ruled "valid as now", and the driver's own stop already excludes every cut flag, so this stands. If D_bank seed 1's cap-ended turn is recorded as not completed, that is the case §1.2 was written for.
+6. **Note.** The §1.4 line is in the evaluation record. If the follow-up kit does not also print the `log` list when it prints the verdict, it should. No ruling depends on it.
+
+### 1.3 What the merge still waits for
+
+- The Mythos row-2 report, which comes to me, and row 5 (findings dispositioned, these included).
+- CI on the final head. If findings 1 to 4 land in a later PR, the final head is `ae340d3da` and the green run stands.
+- The re-pin after #777 is as RL-152 §2.2 describes. Nothing here changes its class.
+
+---
+
+## 2. The S rows and the stamp rule
+
+### 2.1 What the code does (verified)
+
+**The builder's report on `fdff00b82` is accurate.**
+- `s_rows.py` never reads `pm_observed_ns` or the journal's `pm_state`.
+- Its power-management state comes only from native powermetrics rows (`state`, read at `end_ns`).
+- Its OS level comes from a hazard journal if one is passed, otherwise from the member journal's `status.os_level`.
+- It has no age check of any kind, on either side.
+
+**But "a negative age is accepted" is not the gap.** That code has no stamp to be late. A reading after the turn's start is never taken as the start state; it becomes a cut, less the guard. The gaps are on the other side:
+- **Carry-in of any age.** The last reading at or before the start is used however old it is.
+- **Missing evidence scores as in-state.** With no reading before the start, the function falls through and the turn is scored. A reading with no level is dropped. Missing and `Unknown` powermetrics states do not cut, and nothing else supplies positive evidence.
+
+**The larger fact: `fdff00b82` predates RL-149 §1.3 and implements none of its state rule.** It was committed at 21:58 on 11-13. Against §1.3 it lacks:
+- the start's positive evidence and both 2 s bounds (`start_out_of_state`, `start_state_unobserved`);
+- the journal's power-management state as a cut;
+- `state_unobserved`;
+- the guard's second term (the last in-state reading's stamp);
+- `after_hot_turn`;
+- the e20 form of the clock clause (decode only, from first token plus 10 s, cut at the window's start).
+
+**The step-3 script does implement §1.3,** and it reads the stamp: fresh when `started.monotonic_ns − pm_observed_ns ≤ 2 s`, with no lower side. So the code that produced the step-3 and step-4 record differs from RL-152 §1.6 by the missing floor, and the branch differs from §1.3 altogether.
+
+### 2.2 Ruled
+
+**The different data source does not make the rule inapplicable.** RL-149 §1.3 names the journal's reading and its `pm_observed_ns` as S's start-state evidence, and fresh journal state as what `state_unobserved` counts. Native powermetrics rows are a second cut source, not a substitute.
+
+1. **S adopts the 2 s rule, on either side, wherever it reads the journal's stamp.** A journal reading is fresh state when its level is an integer and `rl145_prints.stamp_fresh` accepts its age. The age is the one `_status_age_s` computes, at the reading's own stamp. The scorer imports that function; it does not copy the constant.
+2. **Where it bites.**
+   - *At the start:* the last reading at or before the start must be fresh, at most 2 s before the start, level 0 and Nominal. Not fresh, too old or absent gives `start_state_unobserved`.
+   - *Inside the turn:* only fresh readings count against the 2 s `state_unobserved` gap.
+   - *An off-state reading cuts whatever its stamp's age.* Freshness is needed to claim the state, never to leave it.
+3. **No tighter bound for S.** With the floor at −2 s the start's state can have been read up to 2 s into the turn. That is acceptable: the guard is 2 s, and the readings that follow cut the row if the state has left. A rule of "stamp at or before the start" would drop about 1.5 % of turns on the sidecar's 15 ms read order alone.
+4. **Native powermetrics rows carry no stamp-age rule.** A row is its own stamp (reading T2, accepted in RL-149). It can only shorten a row. It never supplies in-state evidence, so no cadence or coverage bound is put on it; the journal's gap rule is the bound.
+5. **The OS level has no stamp either.** Its bounds are the two it already has through the reading: at most 2 s before the start, and the gap rule. A hazard journal may add cuts. It does not replace the member journal as the start's evidence unless its readings pass the same two bounds.
+
+### 2.3 What the S-rows branch changes before it merges
+
+1. **The whole of RL-149 §1.3's state rule, guard, `after_hot_turn` and e20 clause,** in production and in the twin, with the reason codes §1.3 names. This is not new; it is what §1.3 and RL-151 already fixed.
+2. **Freshness through `stamp_fresh`,** with a test at −2.0, −2.01, +2.0, +2.01 and no stamp, at the start and in the gap rule.
+3. **Missing is unobserved.** No reading at or before the start, or a reading with no level, never scores as in-state. One test each.
+4. **Two structure-only reports** on the bundles step 3 read, from stamps and states with no joule opened:
+   - the count of journal readings whose stamp age is under −2 s or over +2 s. If it is zero, the floor changes no row on record and steps 3 and 4 stand as they are. If it is not zero, it comes to me before anything else;
+   - the branch's boundary table equal, row for row, to the step-3 script's boundaries on the same bundles. `boundary_table` exists for this.
+5. The Sol family's independent rows (RL-149 §1.3, question 6) are built from §1.3 and this section.
+
+---
+
+## 3. What comes back to me
+
+1. The Mythos row-2 report on #777.
+2. The two reports of §2.3 item 4.
+3. The S-rows branch's diff from `fdff00b82`, for its own cold pass.
+4. Everything RL-152 §4 still lists.
+
+---
+
+**Owner.** #777 builder: findings 1 to 4 of §1.2. Lead: the merge once rows 2 and 5 close; the interim check in finding 1; arranging the S-rows build. S-rows builder: §2.3. Research lead: section 3.
+**Gate.** #777 has row 4. It waits for the row-2 report and its dispositions, not for findings 1 to 4. Findings 1 and 2 gate the first planning release; finding 3 gates the W1 receipt. The S-rows branch does not merge, and no S row is built on a conditioned bundle, until §2.3 is done and cold-passed.
+**Amends.** RL-149 §1.3: "its `pm_observed_ns` is at most 2 s old" becomes "its stamp is fresh under RL-152 §1.6, within 2 s on either side", and a fresh reading needs an integer level. RL-152 §1.6: the `s_rows` question is closed by §2. RL149-STAMP-AGE extends to the 3(a) desk's stale count (finding 2).
+**Blind status.** Blind: no v4 outcome exists and nothing sealed was opened. This ruling rests on rulings, code, test code, hashes and two reports. The S state rule's freshness bound is fixed on code alone, before any conditioned bundle exists; step 3's values remain the recorded energy disclosure on conditionless legs, and I did not open them.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
