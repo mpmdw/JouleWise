@@ -194,6 +194,7 @@ class Fixture:
                 'configuration': {'max_turns': 8}, 'cohort_identity': {'model_source': 'synthetic'}}
 
     def window_report(self, records, **_):
+        self.window_inputs = getattr(self, 'window_inputs', []) + [copy.deepcopy(records)]
         window = records[0]['window']
         return {'schema': 'joulewise.align.thermal_desk.v1',
                 'model_windows': {f'm/{window}': {
@@ -570,9 +571,10 @@ class ReleaseGuardTests(unittest.TestCase):
                                                                  'seconds', 'calls', 'tool_turn')), keys=()), [])
         self.assertIn(str(plant(0)['arm']), triage['triage_record'])        # the deciding contrast prints
         for cell in report['I4_prime'].values():
+            if cell.get('status') == seal.WITHHELD:                 # a cell holding a non-benign member (RL-152 3.2)
+                continue
             for row in cell['accounting']:
-                if row['run_id'] in self.fx.nonbenign:
-                    self.assertNotIn('turns', row)
+                self.assertNotIn(row['run_id'], self.fx.nonbenign)
 
     def test_w1_exception_list_names_protocol_lines_and_handling(self):
         names = [e['output'] for e in seal.W1_EXCEPTIONS]
@@ -816,6 +818,132 @@ class RecoveryAttackTests(unittest.TestCase):
         plain = hashlib.sha256(json.dumps(row, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()
         self.assertNotEqual(digest, plain)
         self.assertNotIn('sealed_sha256', sealed['members']['s'])
+
+
+class RL152Tests(unittest.TestCase):
+    """RL-152 section 3: the population rule, the two section 3.4 lines and the three confirmations."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix='jw-desk-rl152-')
+        cls.fx = Fixture(cls.tmp.name)
+        cls.runs = {}
+        for name, series_state in (('C3', {'window_id': 'C3', 'role': 'calibration'}),
+                                   ('T2', {'window_id': 'T2', 'role': 'test'}), ('W1', None)):
+            root = cls.fx.session('rl152-' + name, series_state)
+            cls.fx.window_inputs = []
+            printed, report, desk, output = cls.fx.run_desk(root)
+            cls.runs[name] = dict(printed=printed, report=report, desk=desk, inputs=cls.fx.window_inputs,
+                                  triage=json.loads(cls.fx.run_triage(root, name)['triage_record']))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_population_rule_w1_pooled_figures_are_benign_only_or_verdicts(self):
+        report = self.runs['W1']['report']
+        nonbenign = self.fx.nonbenign
+        for configuration in report['residual_analysis']:
+            for scope in configuration['scopes'].values():
+                for label in ('counts_logged_headline', 'counts_withheld'):
+                    convention = scope[label]
+                    self.assertEqual(convention['s_r_population'], 'benign')
+                    cells = {r['cell'] for r in convention['residuals'] if isinstance(r, dict) and 'cell' in r}
+                    self.assertLessEqual(set(convention['cell_residual_counts']), cells)
+        for cell, value in report['I4_prime'].items():
+            if 'sabotage' in cell:
+                self.assertEqual(value['status'], seal.WITHHELD)
+        row = next(iter(report['extra_checks']['registration_diagnostics']['battery_windows'].values()))
+        self.assertEqual((row['count_population'], row['assist_population']), ('benign', 'benign'))
+        self.assertIn('bar_pass', row)                                         # the verdict, over all members
+        self.assertEqual(report['extra_checks']['d_member_x2']['pool'], 'benign D members only (RL-151 section 4 C2)')
+        self.assertIn('benign', report['carve_out_flag_counts']['over'])
+        self.assertEqual(report['extra_checks']['thermal']['tool_call_flags']['population'], 'benign')
+        table = (Path(__file__).resolve().parents[2] / 'docs/align/v4/w1_pooled_figures.md').read_text()
+        for figure in ('s_r_j', 'cell_residual_counts', 'I4_prime', 'repeat_token_identity', 'B_count',
+                       'assist_count', 'no_assist_sensitivity', 'x2_count', 'carve_out_flag_counts', 'turn_totals',
+                       'U1', 'U2', 'g0_timeout_x2_count', 'unlisted flag codes', 'non-benign tool path'):
+            self.assertIn(figure, table)
+
+    def test_tool_path_tripwire_fires_on_a_broken_non_benign_tool_path(self):
+        self.assertIn('W1 non-benign tool path (RL-152 section 3.4): to the research lead', self.runs['W1']['printed'])
+        self.assertEqual(self.runs['W1']['report']['extra_checks']['w1_non_benign_tool_path']['verdict'],
+                         'to the research lead')
+        ok = [{'id': 's', 'turns': 6, 'flags': ['episode.unsupported_tool_call_format:1']},             # one turn
+              {'id': 't', 'turns': 10, 'flags': ['episode.malformed_tool_call.json:1',
+                                                  'episode.malformed_tool_call.json:2']}]                # 2 of 10
+        self.assertEqual(seal.tripwires(ok, 'W1', {'s', 't'})[0]['w1_non_benign_tool_path']['verdict'], 'within')
+        hot = [{'id': 't', 'turns': 4, 'flags': ['episode.malformed_tool_call.json:1', 'episode.malformed_tool_call.json:3']}]
+        self.assertEqual(seal.tripwires(hot, 'W1', {'t'})[0]['w1_non_benign_tool_path']['verdict'], 'to the research lead')
+        self.assertEqual(seal.tripwires(hot, 'W1', set())[0]['w1_non_benign_tool_path']['verdict'], 'within')  # benign: not this line
+
+    def test_unlisted_codes_line(self):
+        # Every fixture member carries the unknown code thermal.planted: W1 counts the 4 benign members' codes and
+        # says only "present" for the withheld ones; C and T count over all six.
+        self.assertIn('W1 unlisted flag codes (RL-152 section 3.4): benign members 4; withheld members: '
+                      'present, to the research lead', self.runs['W1']['printed'])
+        for window in ('C3', 'T2'):
+            self.assertIn('unlisted flag codes (RL-152 section 3.4): all members 6', self.runs[window]['printed'])
+            self.assertEqual(self.runs[window]['report']['extra_checks']['unlisted_flag_codes']['all_members'], 6)
+        self.assertEqual(seal.unlisted_codes(['episode.end_task:3', 'thermal.start_gate_timeout', 'new.fault:1']),
+                         ['new.fault'])
+
+    def test_confirmation_1_finality_and_eligibility_pass_on_verdict_coverage(self):
+        rows = self.fx.rows
+        for window, run in self.runs.items():
+            report, desk = run['report'], run['desk']
+            self.assertIsNone(light_triage.final_adjudication_error({**desk, 'harvest_status': 'ok'}, report,
+                              {'members_excluded': []}, report['plan_id'], captured=True), window)
+            for thermal in (report['extra_checks']['thermal'], run['triage']['thermal']):
+                eligibility = light_triage.member_eligibility(thermal['members'], rows,
+                                                              captured={r['run_id'] for r in rows}, final=True)
+                self.assertEqual(eligibility['status'], 'pass', window)
+                self.assertEqual(light_triage.thermal_escalation(thermal)['status'], 'pass', window)
+                for m in thermal['members']:
+                    # the next-arm packet builder's fault tabulation reads these shapes (faults())
+                    self.assertTrue(isinstance(m['flags'], list) and isinstance(m['coverage'], list)
+                                    and isinstance(m['calibration_exclusions'], list))
+                    self.assertTrue(m['flags'] or m['calibration_exclusions'] or
+                                    (isinstance(m['pm_period_s'], float) and isinstance(m['pm_max_gap_s'], float)))
+                    if window != 'W1' or m['id'] in self.fx.nonbenign:
+                        self.assertTrue(all(set(span) == {'verdict', 'reasons'} for span in m['coverage']))
+
+    def test_confirmation_2_identity_reads_raw_tokens_in_memory_never_digests(self):
+        # U3 (and the contrast) run in window_report on the raw records before any seal.
+        for window, run in self.runs.items():
+            self.assertTrue(run['inputs'])
+            for record in run['inputs'][-1]:
+                self.assertIsInstance(record['tokens'], list, window)
+        # Digests are keyed per desk: equal within one desk iff equal tokens, never comparable across desks.
+        a = {'id': 'a', 'tokens': SECRET_TOKENS}
+        with seal.keyed(b'1' * 32):
+            one = [seal._seal_thermal_member(r)['tokens'] for r in (a, {**a, 'id': 'b'}, {**a, 'tokens': [[1]]})]
+        with seal.keyed(b'2' * 32):
+            two = seal._seal_thermal_member(a)['tokens']
+        self.assertEqual(one[0], one[1])
+        self.assertNotEqual(one[0], one[2])
+        self.assertNotEqual(one[0], two)
+        # The only in-repo cross-window U4 read (K sessions) takes v4_desk_evidence from PILOT.json; a sealed
+        # C/T PILOT withholds it, so the read carries no sentinel energy and no digest into U4 (U4 stays
+        # inconclusive: window_report reads cross_windows[model], absent here).
+        sealed = seal.seal_pilot({'plan_id': 'p', 'status': 'instrument_ok', 'checks': {}, 'members': [],
+                                  'v4_desk_evidence': {'sentinel_energies_j': {'m': [123.4]}}}, [], 'C3')
+        path = self.fx.root / 'sealed-k-session.json'
+        path.write_text(json.dumps(sealed))
+        evidence = thermal_desk.session_desk_evidence([path])
+        self.assertEqual((evidence['cross_windows'], evidence['sensitivity'], evidence['monitoring']), ({}, {}, {}))
+        self.assertNotIn('hmac', json.dumps(evidence))
+        self.assertNotIn('123.4', json.dumps(evidence))
+
+    def test_confirmation_3_d17a_inputs_read_no_w1_gate_wait(self):
+        # D-17a (protocol :715-722): D's G0 cap is revised under the existing evidence-bound rule, which reads R1's
+        # recorded slots (kit.w1_d_g0_cap(r1_slots)), not a W1 member's gate wait; delta_slow comes from R1's
+        # thermal policy; a G_turn revision comes through the RL-149 section 1.5 tripwire (a verdict over all six).
+        import inspect
+        self.assertEqual(list(inspect.signature(kit.w1_d_g0_cap).parameters), ['r1_slots', 'root'])
+        self.assertEqual(list(inspect.signature(kit.w1_g0_cap).parameters), ['r1_slots', 'root'])
+        line = 'W1 D G1 timeout tripwire (RL-149 section 1.5): '
+        self.assertIn(line, self.runs['W1']['printed'])
 
 
 class EntryPointTests(unittest.TestCase):

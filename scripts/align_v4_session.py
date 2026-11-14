@@ -1097,6 +1097,12 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         # (RL-151 section 4 C2).
         report['w1_g1_tripwire'] = v4_desk_seal.w1_g1_tripwire(records)
         print('W1 D G1 timeout tripwire (RL-149 section 1.5): ' + report['w1_g1_tripwire']['verdict'])
+    if sealed_scope is not None:
+        # RL-152 section 3.4: the tool-path and unlisted-code lines (in memory; one fact each).
+        trip, lines = v4_desk_seal.tripwires(records, sealed_scope, v4_desk_seal._nonbenign(plan['members']))
+        report.update(trip)
+        for line in lines:
+            print(line)
     if window_id != 'W1':
         # RUN_STATE 226 R15: the desk's provisional counts. The final adjudication
         # may lower them, never raise them (align_v4_series.calibration_rows).
