@@ -48,6 +48,9 @@ def plant(i):
 CARVED = ((0, 'summary', 'episode.deadman:2'), (2, 'summary', 'turn_token_budget_reached:1'),
           (2, 'thermal', 'thermal.gate_timeout:G1:1'), (3, 'harvest', 'thermal.hold_timeout'))
 KEPT = ((5, 'thermal', 'thermal.start_gate_timeout'), (0, 'harvest', 'meter.planted_instrument'))
+HEAT_REASON = 'thermal_pressure_elevated_in_window'
+# The per-member allowlist as reviewed (PR #774 row-1 F5), pinned literally so a widened allowlist fails.
+MEMBER_KEYS = {'run_id', 'ordinal', 'pool_role', 'excluded', 'exclusion_codes', 'disclosed_exclusion_codes', 'withheld'}
 
 
 class Fixture:
@@ -128,6 +131,8 @@ class Fixture:
             out['energy'][CPU] = {**copy.deepcopy(gpu), 'joules': v['cpu_j'], 'segment_sum_j': v['cpu_j'],
                                   'per_turn_j': [v['cpu_j']]}
             out['flags'] = [*out['flags'], *self.planted_flags(Path(bundle).name, 'summary')]
+            if self.index[Path(bundle).name] == 2:          # a heat-bearing precheck reason (row-1 F5)
+                out['window_evidence_precheck']['reasons'] = [*out['window_evidence_precheck']['reasons'], HEAT_REASON]
             out.update(main_task_score=v['main'], side_task_success=v['side'], bank_stage=v['bank'],
                        state_changing_calls=v['calls'], duration_s=v['seconds'],
                        tool_names_per_turn=[[v['tool']]])
@@ -293,7 +298,9 @@ class ReleaseGuardTests(unittest.TestCase):
         printed, report, desk, output = self.fx.run_desk(root)
         self.assertEqual(leaks(self.texts(printed, report, desk), planted_values(self.fx.values())), [])
         # Every printed member line and every recorded member carries only allowlisted keys.
-        allowed = set(seal.MEMBER_ALLOWLIST) | {'withheld'}
+        allowed = MEMBER_KEYS
+        self.assertEqual(set(seal.MEMBER_ALLOWLIST) | {'withheld'}, MEMBER_KEYS)
+        self.assertEqual([n for n, t in self.texts(printed, report, desk).items() if HEAT_REASON in t], [])
         printed_members = 0
         for line in printed.splitlines():
             for rid in self.fx.index:
@@ -448,7 +455,7 @@ class ReleaseGuardTests(unittest.TestCase):
         nonbenign = {m['run_id'] for m in report['members'] if m['run_id'] in self.fx.nonbenign}
         for member in report['members']:
             if member['run_id'] in nonbenign:
-                self.assertLessEqual(set(member), set(seal.MEMBER_ALLOWLIST) | {'withheld'})
+                self.assertLessEqual(set(member), MEMBER_KEYS)
         # The exception class prints as registered: the deciding contrast's statistics and U1-U6 (U3's |dE|).
         thermal = report['extra_checks']['thermal']
         self.assertEqual(thermal['deciding_experiment'], {'arm_effect_j': plant(0)['arm']})
