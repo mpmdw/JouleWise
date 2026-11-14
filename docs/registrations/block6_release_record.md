@@ -168,3 +168,11 @@ The ids: `evidence/pr762/ci-43521257617-failing-ids.txt` (SHA-256 `fa2389f0f9834
 - **Programs that opened the restricted outputs before the release,** each by ruling: the pinned program; the launcher and the release check (hash only); the structure probe (RL-134 item 4); and the RL-142 comparer, on `gate-2`, `gate-r2`, `dry` and `dry-r2`. The Mythos audit hashed them and opened none.
 - **Mode.** The gate run and the dry run at r2 ran serial (`--workers 1`).
 - **Audits of this record.** Claude Mythos 5.2, cold, 2026-11-13 (report SHA-256 `9ba5c89d59ceea82e39ab7e4928bbc279a4a26d8efce69a654fb794bd71a6862`): admit with fixes. Research lead RL-146: this section.
+
+### Post-release lines (RL-146 §3)
+
+- 2026-11-13 18:59 PST: custody kit end to end re-run with a kept log on the `b6/analysis-r2` tree (`6e6d1b18a`; program SHA-256 `4a9f5944…11ea`; kit worktree `e1f4f8052`, clean), Python 3.13.18: `tests.test_b6_custody_kit.EndToEnd` and `EndToEndPinned`, Ran 8, OK, none skipped. Replaces "8 OK by the lead's account; no log was kept" above.
+- 2026-11-13 18:59 PST: RL-142 comparer v2 (`eb82b6e2…02c1`) own tests re-run with a kept log: `test_compare_rl142`, Ran 18, OK. Replaces "18 of 18 are the lead's account".
+- Both: log `evidence/pr769/keptlog-reruns.log` on `audit/2026-11-10-fable` at `96cc9655230ca87d75c31a8cf427e12b7e0b7cfe`, SHA-256 `9935ae46efa0d0364338446f0677ef93cfd94b1c16bf778f065a8ec323a1f56c`; the script beside it.
+- 2026-11-13 18:56 PST: runbook step 13 (RL-104 check 3): every copied-record file of the eight families in the nine sessions holds its disclosure (72 of 72) and its digest matches; the names equal the R3 table's family by family. Reader: Sonnet 5.5 reader seat for the laptop lead, with a lead spot check. Report `evidence/pr769/step13-rl104-check3.md` on the same branch (`3dc8200e7`).
+
