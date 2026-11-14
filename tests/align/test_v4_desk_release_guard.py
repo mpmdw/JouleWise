@@ -41,7 +41,13 @@ def plant(i):
             'bank': f'planted_bank_stage_{i}_zz', 'calls': 975318642 + i, 'seconds': 6543.21987 + i,
             'battery': 1357.92468 + i, 'dc': 2468.13579 + i, 'owned': 5551.23457 + i, 'gross': 5552.34568 + i,
             'latency': 913752468.0 + i, 'thermal_battery': 1212.34343 + i, 'u3_delta': 7777.12345,
-            'arm': 3333.44445, 'warm': 909.090901}
+            'arm': 3333.44445, 'warm': 909.090901 + i, 'tool_turn': 864213579 + i}
+
+
+# RL-149 carve-out plants: (member index, where, flag). Truncation / heat-ended codes must never print per member.
+CARVED = ((0, 'summary', 'episode.deadman:2'), (2, 'summary', 'turn_token_budget_reached:1'),
+          (2, 'thermal', 'thermal.gate_timeout:G1:1'), (3, 'harvest', 'thermal.hold_timeout'))
+KEPT = ((5, 'thermal', 'thermal.start_gate_timeout'), (0, 'harvest', 'meter.planted_instrument'))
 
 
 class Fixture:
@@ -104,7 +110,13 @@ class Fixture:
         pilot.h.write(root / 'archive/derived/exclusions.json', {'members_excluded': []})
         pilot.h.write(root / 'archive/withheld/battery-assist.json',
                       {'members': {rid: {'discharge_j': plant(i)['battery']} for rid, i in self.index.items()}})
+        rows = [{'code': flag, 'scope': {'run_id': self.rows[i]['run_id']}} for i, where, flag in CARVED + KEPT
+                if where == 'harvest']
+        (root / 'archive/derived/flags.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
         return root
+
+    def planted_flags(self, run_id, where):
+        return [flag for i, w, flag in CARVED + KEPT if w == where and self.rows[i]['run_id'] == run_id]
 
     # --- planted sources ------------------------------------------------------------------------
     def summary(self, original):
@@ -115,6 +127,7 @@ class Fixture:
             gpu.update(joules=v['gpu_j'], segment_sum_j=v['gpu_j'], per_turn_j=[v['turn_j']])
             out['energy'][CPU] = {**copy.deepcopy(gpu), 'joules': v['cpu_j'], 'segment_sum_j': v['cpu_j'],
                                   'per_turn_j': [v['cpu_j']]}
+            out['flags'] = [*out['flags'], *self.planted_flags(Path(bundle).name, 'summary')]
             out.update(main_task_score=v['main'], side_task_success=v['side'], bank_stage=v['bank'],
                        state_changing_calls=v['calls'], duration_s=v['seconds'],
                        tool_names_per_turn=[[v['tool']]])
@@ -132,7 +145,8 @@ class Fixture:
     def record(self, path):
         run_id = Path(path).name
         v = plant(self.index[run_id])
-        return {'id': run_id, 'gated': True, 'model': 'm', 'flags': [f'thermal.planted:{v["seconds"]}'],
+        return {'id': run_id, 'gated': True, 'model': 'm',
+                'flags': [f'thermal.planted:{v["seconds"]}', *self.planted_flags(run_id, 'thermal')],
                 'tokens': [{'prompt_token_ids': [self.index[run_id]], 'output_token_ids': [v['calls']]}],
                 'intervals': [], 'turn_observation': [{'os_nominal': True, 'pm_nominal': True, 'pm_max_gap_s': .1}],
                 'coverage': [], 'pm_period_s': .1, 'pm_max_gap_s': .1, 'calibration_exclusions': [],
@@ -151,7 +165,9 @@ class Fixture:
                     'U4': {'status': 'inconclusive'}, 'U5': {'status': 'inconclusive'}, 'U6': {'status': 'inconclusive'},
                     'hardware_control': 'pass', 'monitoring_calibration': 'inconclusive', 'consequence': 'under control'}},
                 'deciding_experiment': {'arm_effect_j': plant(0)['arm']}, 'members': records,
-                'tool_call_flags': {'rows': [plant(0)['tool']]}}
+                'tool_call_flags': {'members': [{'id': r['id'], 'malformed_json_turns': [plant(self.index[r['id']])['tool_turn']]}
+                                                for r in records],
+                                    'turn_totals': {'malformed_json_turns': len(records)}}}
 
     def diagnostics(self, records, **_):
         window = records[0]['window']
@@ -161,7 +177,11 @@ class Fixture:
                     'bar_pass': True, 'status': 'pass', 'consequence': 'retain',
                     'no_assist_sensitivity': {'status': 'print_only', 'member_ids': [r['id'] for r in records]},
                     'members': [{'id': r['id'], **r['battery']} for r in records]}},
-                'warm_reference': {'table': [{'G1_wait_s': plant(0)['warm']}]},
+                'warm_reference': {'status': 'print_only', 'R_minus_R1_soak_c': {'slow': 1.5}, 'thermal.reference_warm': True,
+                                   'wait_against_ordinal': [{'ordinal': r['ordinal'], 'G0_wait_s': 0,
+                                                             'G1_wait_s': plant(self.index[r['id']])['warm']}
+                                                            for r in records]},
+                'no_rebuild_sensitivity': {'status': 'print_only', 'member_ids': [r['id'] for r in records]},
                 'd_cohort': {'instrument_ok': True},
                 'rebuilds': [{'id': r['id'], 'cache_statistics': {'rebuilds': r['turns']}} for r in records]}
 
@@ -214,7 +234,7 @@ def leaks(texts, values, keys=FORBIDDEN_KEYS):
 
 def planted_values(values, fields=None):
     fields = fields or ('gpu_j', 'cpu_j', 'turn_j', 'main', 'side', 'tool', 'bank', 'calls', 'seconds', 'battery',
-                        'dc', 'owned', 'gross', 'latency', 'thermal_battery', 'u3_delta', 'arm', 'warm')
+                        'dc', 'owned', 'gross', 'latency', 'thermal_battery', 'u3_delta', 'arm', 'warm', 'tool_turn')
     out = []
     for v in values:
         for f in fields:
@@ -257,7 +277,7 @@ class ReleaseGuardTests(unittest.TestCase):
         for key in ('residual_analysis', 'raw_within_cell_energy_sd', 'repeat_energy_spread', 'I4_prime'):
             self.assertEqual(report[key]['status'], seal.WITHHELD)
             self.assertEqual(len(report[key]['sha256']), 64)
-        pooled = report['residual_analysis']['pooled']['scopes']['registered']['counts_logged_headline']
+        pooled = report['residual_analysis']['pooled']['scopes']['all_members_diagnostic']['counts_logged_headline']
         self.assertEqual(pooled['members_scored'], len(self.fx.rows))
         # The unsealed PILOT is kept for the release run, inside the withheld archive, and bound by digest.
         full_path = output / seal.WITHHELD_PILOT
@@ -280,7 +300,30 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertTrue(report['extra_checks']['km003c']['members'][self.fx.rows[0]['run_id']]['sealed'])
         self.assertEqual(report['extra_checks']['balance_check']['status'], seal.WITHHELD)
         self.assertIn('full_desk_gate: ', printed)
+        # RL-149 carve-out: truncation / heat-ended codes appear only as window counts over all members.
+        self.assert_carved_only_as_counts(printed, report, desk, range(len(self.fx.rows)))
+        self.assertEqual(report['carve_out_flag_counts']['counts'],
+                         {'episode.deadman': 1, 'thermal.hold_timeout': 1, 'turn_token_budget_reached': 1})
+        self.assertEqual(report['carve_out_flag_counts']['members'], len(self.fx.rows))
+        self.assertEqual(thermal['carve_out_flag_counts']['counts'], {'thermal.gate_timeout': 1})
+        by_id = {m['id']: m for m in thermal['members']}
+        self.assertIn('thermal.start_gate_timeout', by_id[self.fx.rows[5]['run_id']]['flags'])  # G0 stays per member
+        self.assertIn('meter.planted_instrument', printed)                                      # instrument codes stay
+        for row in report['extra_checks']['d_member_x2']['members']:
+            self.assertLessEqual(set(row), set(seal.X2_ROW_KEEP))
+        self.assertIn('gate_timeout_x2_count', report['extra_checks']['d_member_x2'])
         return printed, report, desk
+
+    def assert_carved_only_as_counts(self, printed, report, desk, indices):
+        report = copy.deepcopy(report)
+        report.pop('carve_out_flag_counts', None)
+        thermal = (report.get('extra_checks') or {}).get('thermal') or {}
+        thermal.pop('carve_out_flag_counts', None)
+        texts = self.texts(printed, report, desk)
+        for i, _where, flag in CARVED:
+            if i in indices:
+                code = flag.split(':')[0]
+                self.assertEqual([name for name, text in texts.items() if code in text], [], code)
 
     def test_a_calibration_window_desk_prints_and_records_no_planted_value_or_key(self):
         self.assert_sealed('c3', 'C3')
@@ -336,35 +379,70 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertFalse((repo / seal.SERIES_COMPLETE).exists())
         self.assertFalse((repo / seal.RELEASE_RECEIPT).exists())
 
-    def test_w1_minimum_seals_battery_and_non_gpu_rails_of_non_benign_members(self):
-        self.assertIs(seal.W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES, False)        # the research lead decides
-        root = self.fx.session('w1-min')
+    def nonbenign_values(self):
+        return [self.fx.values(r)[0] for r in sorted(self.fx.nonbenign)]
+
+    def test_w1_switch_is_on_as_ruled_and_withholds_non_benign_outcomes(self):
+        self.assertIs(seal.W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES, True)        # RL-149 section 3(a)
+        root = self.fx.session('w1-on')
         printed, report, desk, _ = self.fx.run_desk(root)
         texts = self.texts(printed, report, desk)
-        sabotage = [self.fx.values(r)[0] for r in sorted(self.fx.nonbenign)]
-        benign = [self.fx.values(r['run_id'])[0] for r in self.fx.rows if r['condition'] == 'benign']
-        self.assertEqual(leaks(texts, planted_values(sabotage, ('cpu_j', 'battery', 'dc', 'thermal_battery')), keys=()), [])
-        # The minimum leaves the non-benign GPU rail and the benign rows as they were (the switch decides more).
-        self.assertTrue(leaks({'stdout': printed}, planted_values(sabotage, ('main', 'tool')), keys=()))
-        self.assertTrue(leaks(texts, planted_values(benign, ('battery', 'cpu_j', 'dc')), keys=()))
-        self.assertEqual(report['release_guard']['scope'], 'W1')
-        self.assertFalse(report['release_guard']['w1_withhold_sabotage_gpu_and_outcomes'])
-
-    def test_w1_switch_on_also_withholds_non_benign_gpu_scores_outcomes_and_tools(self):
-        root = self.fx.session('w1-on')
-        with patch.object(seal, 'W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES', True):
-            printed, report, desk, _ = self.fx.run_desk(root)
-        sabotage = [self.fx.values(r)[0] for r in sorted(self.fx.nonbenign)]
-        self.assertEqual(leaks(self.texts(printed, report, desk),
-                               planted_values(sabotage, ('gpu_j', 'cpu_j', 'turn_j', 'main', 'side', 'tool', 'bank',
-                                                         'calls', 'seconds', 'battery', 'dc', 'owned', 'gross',
-                                                         'thermal_battery')), keys=()), [])
+        sabotage = self.nonbenign_values()
+        self.assertEqual(leaks(texts, planted_values(sabotage, (
+            'gpu_j', 'cpu_j', 'turn_j', 'main', 'side', 'tool', 'bank', 'calls', 'seconds', 'battery', 'dc', 'owned',
+            'gross', 'latency', 'thermal_battery', 'warm', 'tool_turn')), keys=()), [])
         for configuration in report['residual_analysis']:
             for scope in configuration['scopes'].values():
                 for label in ('counts_logged_headline', 'counts_withheld'):
                     for row in scope[label]['residuals']:
                         self.assertTrue(row.get('status') == seal.WITHHELD or row['run_id'] not in self.fx.nonbenign)
+        nonbenign = {m['run_id'] for m in report['members'] if m['run_id'] in self.fx.nonbenign}
+        for member in report['members']:
+            if member['run_id'] in nonbenign:
+                self.assertLessEqual(set(member), set(seal.MEMBER_ALLOWLIST) | {'withheld'})
+        # The exception class prints as registered: the deciding contrast's statistics and U1-U6 (U3's |dE|).
+        thermal = report['extra_checks']['thermal']
+        self.assertEqual(thermal['deciding_experiment'], {'arm_effect_j': plant(0)['arm']})
+        self.assertEqual(thermal['model_windows']['m/W1']['U3']['pairs'][0]['delta_j'], plant(0)['u3_delta'])
+        self.assertEqual(report['release_guard']['scope'], 'W1')
         self.assertTrue(report['release_guard']['w1_withhold_sabotage_gpu_and_outcomes'])
+        self.assertIn('deciding contrast (thermal.deciding_experiment)', report['release_guard']['w1_exceptions'])
+        # Benign members and registered window counts still print.
+        benign = [self.fx.values(r['run_id'])[0] for r in self.fx.rows if r['condition'] == 'benign']
+        self.assertTrue(leaks(texts, planted_values(benign, ('battery', 'warm', 'tool_turn', 'main')), keys=()))
+        self.assertIn('balance (R22-3): ' + seal.WITHHELD, printed)
+        self.assertIn('m/W1 battery: ', printed)
+        # Carve-out for the non-benign members; window counts over all members.
+        self.assert_carved_only_as_counts(printed, report, desk,
+                                          [i for i, r in enumerate(self.fx.rows) if r['run_id'] in self.fx.nonbenign])
+        self.assertEqual(report['carve_out_flag_counts']['members'], len(self.fx.rows))
+        for row in report['extra_checks']['d_member_x2']['members']:
+            if row['run_id'] in self.fx.nonbenign:
+                self.assertLessEqual(set(row), set(seal.X2_ROW_KEEP))
+        for cell in report['I4_prime'].values():
+            for row in cell['accounting']:
+                if row['run_id'] in self.fx.nonbenign:
+                    self.assertNotIn('turns', row)
+
+    def test_w1_exception_list_names_protocol_lines_and_handling(self):
+        names = [e['output'] for e in seal.W1_EXCEPTIONS]
+        self.assertEqual(len(names), len(set(names)))
+        for entry in seal.W1_EXCEPTIONS:
+            self.assertEqual(set(entry), {'output', 'protocol', 'reads', 'in_class', 'handling'})
+            self.assertTrue(entry['protocol'] and entry['handling'])
+        in_class = {e['output'] for e in seal.W1_EXCEPTIONS if e['in_class']}
+        self.assertIn('deciding contrast (thermal.deciding_experiment)', in_class)
+        self.assertTrue({'U3 (thermal.model_windows[*].U3 pairs)', 'U4-U6'} <= in_class)
+
+    def test_w1_switch_off_keeps_only_the_med4_minimum(self):
+        root = self.fx.session('w1-min')
+        with patch.object(seal, 'W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES', False):
+            printed, report, desk, _ = self.fx.run_desk(root)
+        texts = self.texts(printed, report, desk)
+        sabotage = self.nonbenign_values()
+        self.assertEqual(leaks(texts, planted_values(sabotage, ('cpu_j', 'battery', 'dc', 'thermal_battery')), keys=()), [])
+        self.assertTrue(leaks({'stdout': printed}, planted_values(sabotage, ('main', 'tool')), keys=()))
+        self.assertFalse(report['release_guard']['w1_withhold_sabotage_gpu_and_outcomes'])
 
 
 class SealUnitTests(unittest.TestCase):

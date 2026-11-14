@@ -14,7 +14,15 @@ every other value is replaced by ``{status: withheld_until_series_complete, sha2
 JSON>}``; the window's analyses become a hash plus window-pooled instrument figures that carry no
 member or cell key. The unsealed PILOT is written to ``archive/withheld/PILOT.full.json`` (the
 session's withheld archive, beside the harvest's ``archive/withheld/battery-assist.json``) for the
-release run. W1 (selection data) has its own, configurable scope (:data:`W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES`).
+release run. W1 (selection data) has its own scope (:data:`W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES`, ON by
+RL-149 section 3(a)) with one exception class, the registered W1 outputs that need a non-benign member's
+value (:data:`W1_EXCEPTIONS`): they are computed in memory from the full records and print as their
+registered output only. Release for W1's withheld values is the series' release event.
+
+RL-149 section 3 carve-out: codes that say a member was truncated or heat-ended (:data:`CARVE_OUT_CODES`)
+print only as a window count over all members, never per member (X2's G1-timeout column likewise); codes
+for instrument and identity faults stay per member. RL-149 3(c): no pooled figure is an extreme-value
+statistic over a set holding a non-benign member, and no heat-bearing quantity prints per member.
 
 :func:`released` is True only on a registered release event (a committed ``series_complete``
 record plus a lead-signed release receipt); no such record exists today. Pure stdlib; it reads
@@ -42,13 +50,71 @@ RELEASE_RECEIPT_SCHEMA = 'joulewise.align_v4.release_receipt.v1'
 GUARD_SCHEMA = 'joulewise.align_v4.desk_release_guard.v1'
 GPU = 'powermetrics:gpu_power'
 
-# RESEARCH-LEAD SWITCH (desk-leak audit question (a); not decided here). W1 is selection data, and its
-# sabotage-instructed D members (ordinals 11 and 14) are not admitted to S. False (default) = the MINIMUM
-# the existing DC seal (MED-4, protocol :828-829) already requires: for every non-benign W1 member,
-# battery_discharge and all non-GPU-rail energy are withheld; the GPU rail, scores, task outcomes and
-# tool structure print as before. True = ALSO withhold every non-benign W1 member's GPU-rail energy and
-# residual/transfer/tamper scores, task outcomes and tool structure (the C/T member allowlist).
-W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES = False
+# RESEARCH-LEAD SWITCH, ruled ON (RL-149 section 3(a)): "W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES = True".
+# Every non-benign W1 member (ordinals 2, 3, 6, 9, 11, 13, 14, 16 of the frozen roster) gets the C/T member
+# allowlist: GPU-rail energy, residual/transfer/tamper scores, task outcomes, tool structure, battery and
+# non-GPU rails are withheld, except through W1_EXCEPTIONS. False keeps only the MED-4 minimum
+# (battery_discharge and non-GPU rails of non-benign members) and is not the ruled setting.
+W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES = True
+
+# RL-149 section 3(a): "the registered W1 outputs that need a non-benign member's value ... are computed in
+# memory and print as their registered output only." The builder's trace (protocol v4 line numbers). W1's
+# non-benign members: anchors 2, 3; contrast template X (X-G 6, 16; X-S 9, 13), all sabotage-condition;
+# D 11, 14. ``handling`` is what the sealed desk prints; ``in_class`` False marks a registered output that
+# needs a non-benign value but is NOT in RL-149's named class (left withheld or narrowed; cold review).
+W1_EXCEPTIONS = (
+    {'output': 'deciding contrast (thermal.deciding_experiment)', 'protocol': ':518-534, ruling 9 :693-694, D-C1',
+     'reads': 'turn_owned_j, tokens, start_ns, stage, admission slow temperature and G1 waits of X-template '
+              'members 6, 9, 13, 16 (sabotage condition)',
+     'in_class': True, 'handling': 'printed whole: verdict, branch, reason, delivery statistics, d_template_j, '
+                                   'arm_effect_j, ci90_j, df, same-arm pair statistics, per-turn arm-mean differences'},
+    {'output': 'U1 (thermal.model_windows[*].U1)', 'protocol': ':444-451, :461-465',
+     'reads': "every gated member's turn OS/PM states, coverage, gate timeouts and X1-X4 exclusions",
+     'in_class': True, 'handling': 'printed as registered (status, thermal-excluded members)'},
+    {'output': 'U2 (thermal.model_windows[*].U2)', 'protocol': ':452, :461-465',
+     'reads': 'the G0 slow-temperature range over every gated member (an extreme-value statistic over a set '
+              'holding non-benign members) and every G1/H release',
+     'in_class': True, 'handling': 'printed as registered (status, g0_slow_range_c); RL-149 names U3-U6, U1/U2 '
+                                   'read the same records and are placed in the class here for the cold review'},
+    {'output': 'U3 (thermal.model_windows[*].U3 pairs)', 'protocol': ':453, :463-464, ruling 5 :660-684',
+     'reads': 'identical-work replay pairs X-S 9/13 and X-G 6/16 (sabotage condition) beside 7/15, 10/12, 5/17',
+     'in_class': True, 'handling': 'printed as registered (pair status, token identity, |dE| and its margin)'},
+    {'output': 'U4-U6', 'protocol': ':444-447, :454-456, ruling 6 :686-688',
+     'reads': 'nothing in W1 (U4-U6 are unevaluable there; U4 later reads W1 ordinals 5 and 17, both benign)',
+     'in_class': True, 'handling': 'printed as registered (inconclusive in W1)'},
+    {'output': 'B bar (registration_diagnostics.battery_windows)', 'protocol': 'W1-BLOCKERS lead ruling 9; :889',
+     'reads': 'B, assist and unobserved codes of every member', 'in_class': False,
+     'handling': 'window counts and bar verdict printed (a count over all members); per-member battery rows withheld'},
+    {'output': 'R10 D-member X2 count and rate (d_member_x2)', 'protocol': 'LEAD-RULINGS-2 R10; :395, :409-416',
+     'reads': 'G0/G1 timeouts of D members incl. 11 and 14', 'in_class': False,
+     'handling': 'counts and rate printed; per-row G0 outcome kept, G1-timeout column pooled (RL-149 carve-out)'},
+    {'output': 'R22-3 balance check by condition', 'protocol': 'RUN_STATE 234 R22-3',
+     'reads': 'exposure seconds and event counts of the sabotage-condition members', 'in_class': False,
+     'handling': 'withheld with a member count, as in C/T (member time by condition is an outcome, RL-149 3(c))'},
+    {'output': 'warm reference: G0/G1 waits against ordinal', 'protocol': 'ruling 18 :724-729',
+     'reads': 'gate waits of every ordinal', 'in_class': False,
+     'handling': 'rows of non-benign ordinals withheld (heat-bearing per member); R-minus-R1 soak and '
+                 'thermal.reference_warm (ordinal 5, benign) printed'},
+    {'output': 'rebuild counts and the no-rebuild sensitivity list', 'protocol': 'ruling 18 :727-728',
+     'reads': 'cache rebuilds of every member', 'in_class': False,
+     'handling': 'non-benign rows and ids withheld'},
+    {'output': 'tool_call_flags table (per member)', 'protocol': ':480-489',
+     'reads': 'tool-call flags of every member', 'in_class': False,
+     'handling': 'non-benign rows withheld; window turn totals printed'},
+    {'output': 'refusal/incomplete members by arm', 'protocol': ':493',
+     'reads': 'end state of every member', 'in_class': False,
+     'handling': "non-benign members' end state withheld with their member line"},
+    {'output': 'residual analysis: sabotage full-benign-fit scores, cross-pair transfer, known-H tamper curve',
+     'protocol': ':536-559, B4', 'reads': 'GPU-rail energy and residual rows of D/anchor/X sabotage members',
+     'in_class': False, 'handling': 'non-benign score rows and the tamper curve withheld (the preview RL-149 '
+                                    'withholds); benign LOTO scores print'},
+)
+
+# RL-149 section 3 carve-out: truncation / heat-ended codes print only as a window count over all members.
+CARVE_OUT_CODES = ('episode.deadman', 'thermal.gate_timeout', 'thermal.hold_timeout', 'episode.decode_budget',
+                   'turn_token_budget_reached', 'turn_budget_reached', 'episode.turn_token_budget_reached',
+                   'episode.max_turns', 'episode.time_guard', 'reasoning_censored_at_token_limit',
+                   'calibration_censored_at_ceiling')
 
 # Per member (PILOT.json ``members`` and the printed member lines): what the harvest-off ``final``
 # (light_triage.final_adjudication_error + member_eligibility), the packet builder and the full-desk
@@ -80,7 +146,9 @@ MODEL_WINDOW_KEEP = ('hardware_control', 'monitoring_calibration', 'consequence'
 BATTERY_WINDOW_KEEP = ('B_count', 'unobserved_count', 'assist_count', 'assist_outside_request_count',
                        'bar_pass', 'status', 'consequence')
 KM003C_KEEP = ('schema', 'label', 'print_only', 'measurement', 'residual', 'fit', 'uncertainty', 'detail')
-X2_ROW_KEEP = ('run_id', 'ordinal', 'g0_outcome', 'g0_timeout_x2', 'gate_timeout_x2', 'x2')
+# RL-149: the G0 outcome stays per member (a G0 timeout ends a member before its first turn and decides
+# eligibility); the G1-timeout column (and ``x2``, which ORs it in) is pooled.
+X2_ROW_KEEP = ('run_id', 'ordinal', 'g0_outcome', 'g0_timeout_x2')
 X2_KEEP = ('print_only', 'authority', 'd_members', 'read', 'unread', 'x2_count', 'g0_timeout_x2_count', 'x2_rate')
 
 
@@ -101,8 +169,28 @@ def _code(flag):
     return str(flag).split(':')[0] if flag is not None else None
 
 
+def carved(code):
+    return _code(code) in CARVE_OUT_CODES
+
+
 def _codes(flags):
-    return sorted({c for c in (_code(f) for f in flags or ()) if c})
+    """Per-member flag codes: instrument and identity faults only (the carve-out is counted, never listed)."""
+    return sorted({c for c in (_code(f) for f in flags or ()) if c and c not in CARVE_OUT_CODES})
+
+
+def carve_out_counts(flag_sets):
+    """Window count over all members: carved code -> number of members carrying it (RL-149 section 3)."""
+    counts = {}
+    flag_sets = list(flag_sets)
+    for flags in flag_sets:
+        for code in {_code(f) for f in flags or ()} & set(CARVE_OUT_CODES):
+            counts[code] = counts.get(code, 0) + 1
+    return {'members': len(flag_sets), 'counts': dict(sorted(counts.items())), 'rule': 'RL-149 section 3 carve-out'}
+
+
+def _member_flags(member):
+    summary = member.get('summary') or {}
+    return [*(summary.get('flags') or ()), *(_code(f) for f in member.get('harvest_flags') or ())]
 
 
 # --- the release event ---------------------------------------------------------------------------
@@ -200,10 +288,14 @@ def _eligibility(member):
     out = {'readable': summary is not None}
     if summary:
         pre = summary.get('window_evidence_precheck') or {}
+        # Exclusion codes stay verbatim (finality compares them with the harvest exactly); carved flag codes
+        # that are not exclusions are dropped from the per-member reasons.
+        exclusions = list(summary.get('exclusion_codes') or [])
         out.update(chain_eligible=summary.get('chain_eligible'),
-                   chain_reasons=list(pre.get('reasons') or []) + list(summary.get('exclusion_codes') or []),
+                   chain_reasons=[r for r in pre.get('reasons') or [] if not carved(r)] + exclusions,
                    target_precheck_eligible=pre.get('eligible'),
-                   window_evidence_precheck={r['window']: {'eligible': r.get('eligible'), 'reasons': r.get('reasons')}
+                   window_evidence_precheck={r['window']: {'eligible': r.get('eligible'),
+                                                           'reasons': [c for c in r.get('reasons') or () if not carved(c)]}
                                              for r in pre.get('windows') or () if isinstance(r, dict) and 'window' in r})
     else:
         out.update(chain_eligible=False, chain_reasons=['member.unreadable'])
@@ -230,6 +322,13 @@ def seal_line(run_id, record):
                              'withheld': withheld(record.get('harvest_flags'))}}
     detail = record.get('detail') or {}
     keep = {k: detail[k] for k in MEMBER_ALLOWLIST if k in detail}
+    exclusions = list(detail.get('exclusion_codes') or [])
+    if isinstance(keep.get('chain_reasons'), list):
+        keep['chain_reasons'] = [r for r in keep['chain_reasons'] if not carved(r) or r in exclusions]
+    if isinstance(keep.get('window_evidence_precheck'), dict):
+        keep['window_evidence_precheck'] = {w: {**v, 'reasons': [c for c in v.get('reasons') or () if not carved(c)]}
+                                            if isinstance(v, dict) else v
+                                            for w, v in keep['window_evidence_precheck'].items()}
     keep['withheld'] = withheld({k: v for k, v in detail.items() if k not in keep})
     out['detail'] = keep
     if 'unreadable' in record:
@@ -373,12 +472,20 @@ def seal_thermal(thermal, run_ids=None):
         out['model_windows'] = thermal.get('model_windows')
     out['members'] = [_seal_thermal_member(r) if (run_ids is None or r.get('id') in run_ids) else r
                       for r in thermal.get('members') or ()]
+    out['carve_out_flag_counts'] = carve_out_counts(r.get('flags') for r in thermal.get('members') or ())
     rest = {k: v for k, v in thermal.items() if k not in ('schema', 'model_windows', 'members')}
+    tools = rest.get('tool_call_flags')
     if run_ids is None:
+        if isinstance(tools, dict):
+            out['tool_call_flags'] = {'turn_totals': tools.get('turn_totals'), 'withheld': withheld(tools)}
         out['withheld'] = withheld(rest)
     else:
+        # W1: the deciding contrast is in RL-149's exception class and prints as registered (W1_EXCEPTIONS).
         for key, value in rest.items():
-            out[key] = withheld(value) if key == 'deciding_experiment' else value
+            if key == 'tool_call_flags' and isinstance(value, dict):
+                value = {**value, 'members': [withheld(r) if r.get('id') in run_ids else r
+                                              for r in value.get('members') or ()]}
+            out[key] = value
     return out
 
 
@@ -406,11 +513,15 @@ def seal_registration_diagnostics(diag):
     return out
 
 
-def _seal_x2(report):
+def _seal_x2(report, run_ids=None):
+    """R10 X2 report: counts and rate kept; per row the G0 outcome only (``run_ids`` None = every row)."""
     if not isinstance(report, dict):
         return report
-    out = {k: report[k] for k in X2_KEEP if k in report}
-    out['members'] = [{k: r[k] for k in X2_ROW_KEEP if k in r} for r in report.get('members') or ()]
+    rows = report.get('members') or ()
+    out = {k: report[k] for k in X2_KEEP if k in report} if run_ids is None else dict(report)
+    out['gate_timeout_x2_count'] = sum(bool(r.get('gate_timeout_x2')) for r in rows)
+    out['members'] = [{k: r[k] for k in X2_ROW_KEEP if k in r} if run_ids is None or r.get('run_id') in run_ids else r
+                      for r in rows]
     out['withheld'] = withheld(report)
     return out
 
@@ -442,7 +553,13 @@ def seal_extra(extra, plan_members, scope, *, w1_withhold=None):
 
 def _seal_extra_w1(extra, plan_members, withhold):
     nonbenign = _nonbenign(plan_members)
+    ordinals = {m.get('ordinal') for m in plan_members or () if m.get('run_id') in nonbenign}
     out = dict(extra)
+    if withhold:
+        if isinstance(extra.get('balance_check'), dict) and extra['balance_check'].get('status') != WITHHELD:
+            out['balance_check'] = seal_balance(extra['balance_check'])
+        if isinstance(extra.get('d_member_x2'), dict):
+            out['d_member_x2'] = _seal_x2(extra['d_member_x2'], nonbenign)
     if isinstance(extra.get('km003c'), dict):
         # MED-4 already seals non-benign DC rows; re-apply so the guard never depends on the caller.
         out['km003c'] = _seal_dc_rows(extra['km003c'], nonbenign)
@@ -463,6 +580,14 @@ def _seal_extra_w1(extra, plan_members, withhold):
                 if isinstance(row, dict) else row for k, row in diag['battery_windows'].items()}
         if withhold and isinstance(diag.get('rebuilds'), list):
             diag['rebuilds'] = [withheld(r) if r.get('id') in nonbenign else r for r in diag['rebuilds']]
+        sensitivity = diag.get('no_rebuild_sensitivity')
+        if withhold and isinstance(sensitivity, dict):
+            diag['no_rebuild_sensitivity'] = {**sensitivity, 'member_ids': [
+                i for i in sensitivity.get('member_ids') or () if i not in nonbenign], 'withheld': withheld(sensitivity)}
+        warm = diag.get('warm_reference')
+        if withhold and isinstance(warm, dict) and isinstance(warm.get('wait_against_ordinal'), list):
+            diag['warm_reference'] = {**warm, 'wait_against_ordinal': [
+                withheld(r) if r.get('ordinal') in ordinals else r for r in warm['wait_against_ordinal']]}
         out['registration_diagnostics'] = diag
     return out
 
@@ -495,6 +620,7 @@ def seal_pilot(pilot, plan_members, window_id_, *, scope=None, w1_withhold=None)
             out[key] = _sealed_block(value, {'members': len(value or ())})
         else:
             out[key] = withheld(value)
+    out['carve_out_flag_counts'] = carve_out_counts(_member_flags(m) for m in pilot.get('members') or ())
     return out
 
 
@@ -540,6 +666,20 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
                   if _in_cells(key, cells) else entries) for key, entries in spreads.items()}
     if withhold and isinstance(pilot.get('residual_analysis'), list):
         out['residual_analysis'] = [_seal_residual_rows(c, nonbenign) for c in pilot['residual_analysis']]
+    if withhold and isinstance(pilot.get('I4_prime'), dict):
+        # Per-turn accounting and sampler rows give a member's turn count (episode length): status only.
+        def row(r):
+            return ({'run_id': r.get('run_id'), 'status': r.get('status'), 'withheld': withheld(r)}
+                    if isinstance(r, dict) and r.get('run_id') in nonbenign else r)
+        out['I4_prime'] = {cell: {**value, **{f: [row(r) for r in value.get(f) or ()]
+                                              for f in ('accounting', 'sampler_provenance') if isinstance(value.get(f), list)}}
+                           if isinstance(value, dict) else value for cell, value in pilot['I4_prime'].items()}
+    reasons = pilot.get('episode_scope_alternative_ineligible_reasons')
+    if withhold and isinstance(reasons, dict):
+        out['episode_scope_alternative_ineligible_reasons'] = {
+            rid: (_codes(codes) if rid in nonbenign else codes) for rid, codes in reasons.items()}
+    if withhold:
+        out['carve_out_flag_counts'] = carve_out_counts(_member_flags(m) for m in members)
     if 'extra_checks' in pilot:
         out['extra_checks'] = _seal_extra_w1(pilot['extra_checks'], plan_members, withhold)
     return out
@@ -621,6 +761,8 @@ class DeskSeal:
         sealed['release_guard'] = {
             'schema': GUARD_SCHEMA, 'status': WITHHELD, 'window_id': self.window_id, 'scope': self.scope,
             'w1_withhold_sabotage_gpu_and_outcomes': self.w1_withhold if self.scope == 'W1' else None,
+            'w1_exceptions': [e['output'] for e in W1_EXCEPTIONS if e['in_class']] if self.scope == 'W1' else None,
+            'authority': 'desk-leak audit 2026-11-13; RL-149 section 3',
             'withheld_pilot': WITHHELD_PILOT, 'withheld_pilot_sha256': digest,
             'opens': 'release run (registered series_complete record plus lead-signed release receipt)'}
         return sealed, lines
@@ -631,6 +773,12 @@ def desk_policy(state, plan_members, *, w1_withhold=None):
     if released(state):
         return None
     return DeskSeal(plan_members, window_id(state), window_scope(state), w1_withhold=w1_withhold)
+
+
+def seals_balance(state):
+    """Whether the R22-3 balance print is withheld now: C/T, and W1 with the switch on (RL-149 3)."""
+    scope = sealed_scope(state)
+    return scope in ('C', 'T') or (scope == 'W1' and W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES)
 
 
 def sealed_scope(state):

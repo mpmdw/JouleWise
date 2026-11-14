@@ -1075,10 +1075,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     # R22-3: the printed balance check by condition (exclusions + flags per member-second); print only.
     from joulewise.align.apple import v4_balance
     report['balance_check'] = v4_balance.balance_check(records)
-    if sealed_scope in ('C', 'T'):
-        # Member exposure is member time (B7's time baseline): withheld with the report until release.
+    seal_balance = v4_desk_seal.seals_balance(state)
+    if seal_balance:
+        # Member exposure is member time, an outcome by condition (RL-149 section 3): withheld until release.
         report['balance_check'] = v4_desk_seal.seal_balance(report['balance_check'])
-    for line in (v4_desk_seal.balance_lines(report['balance_check']) if sealed_scope in ('C', 'T')
+    for line in (v4_desk_seal.balance_lines(report['balance_check']) if seal_balance
                  else v4_balance.lines(report['balance_check'])):
         print(line)
     if supplemental_report(records):
