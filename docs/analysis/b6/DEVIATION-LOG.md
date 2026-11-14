@@ -2,7 +2,7 @@
 
 Block 6's registered deviations are dated entries in its registration's §17
 (`docs/registrations/block6_replication_DRAFT.md`), which is not edited after the release
-(2026-11-13 18:54:57 PST, PR #769, merge `66469ccf4`). This file records the reporting deviations decided after
+(2026-11-13 18:54:56 PST, PR #769, merge `66469ccf4`). This file records the reporting deviations decided after
 the release, while Paper 1's Block 6 fill was written (PR #772). Its first three lines are the ones RL-147 §11
 item 4 orders. Each was decided after Block 5 and Block 6 outcomes were known.
 

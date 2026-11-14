@@ -1,6 +1,6 @@
 """Renders and checks every Block 6 value filled into paper1.md from the released Block 6 outputs.
 
-Runbook steps 14 to 16 after the Block 6 release (PR #769, merged 66469ccf4, 2026-11-13 18:54:57 PST;
+Runbook steps 14 to 16 after the Block 6 release (PR #769, merged 66469ccf4, 2026-11-13 18:54:56 PST;
 RUN_STATE item 312). The Block 5 counterpart is fill_check_b5.py; this script follows its form: every number is
 rendered from a named key of a released output, never typed by hand, and the paper must hold the rendered text.
 
@@ -868,16 +868,17 @@ def fill_release() -> str:
     subject = git('log', '-1', '--format=%s', B6_RELEASE_MERGE)
     if 'Merge pull request #769' not in subject:
         fail('66469ccf4 is not the merge of PR #769')
-    # The time printed is RUN_STATE item 312's (GitHub's merge time, 02:54:57Z); the merge commit object's own
-    # timestamp is one second earlier (18:54:56 PST). Both are recorded; the difference is reported to the lead.
+    # The time printed is the merge commit object's own committer time (research lead's ruling, 2026-11-13; RL-146
+    # "Release time", RL-147 §4 item 2), not GitHub's mergedAt. RUN_STATE item 312 carries the correction line.
+    ci = git('log', '-1', '--format=%cd', '--date=format-local:%Y-%m-%d %H:%M:%S %Z', B6_RELEASE_MERGE).strip()
+    ai = git('log', '-1', '--format=%ad', '--date=format-local:%Y-%m-%d %H:%M:%S %Z', B6_RELEASE_MERGE).strip()
+    if ci != '2026-11-13 18:54:56 PST' or ai != ci:
+        fail(f'66469ccf4 committer/author time is {ci} / {ai}, not 2026-11-13 18:54:56 PST')
+    t6 = record(G, f'git log -1 --format=%ci {B6_RELEASE_MERGE[:9]} (committer time, PST)', ci,
+                '13 November 2026 at 18:54:56 PST', 'time')
     rs = (ROOT / 'RUN_STATE.md').read_text()
-    if f'merged to `main` at 2026-11-13 18:54:57 PST (merge commit `{B6_RELEASE_MERGE}`)' not in rs:
-        fail('RUN_STATE item 312 does not give 2026-11-13 18:54:57 PST for the merge of PR #769')
-    commit_time = git('log', '-1', '--format=%cd', '--date=format-local:%Y-%m-%d %H:%M:%S %Z', B6_RELEASE_MERGE).strip()
-    record(G, f'git log -1 --format=%cd {B6_RELEASE_MERGE[:9]} (commit object, PST; not printed)', commit_time,
-           commit_time, 'time')
-    t6 = record(Src('run_state', {}), 'RUN_STATE.md item 312: "merged to `main` at 2026-11-13 18:54:57 PST"',
-                '2026-11-13 18:54:57 PST', '13 November 2026 at 18:54:57 PST', 'time')
+    if 'the release time is the merge commit\'s own time, 2026-11-13 18:54:56 PST (`66469ccf4`' not in rs:
+        fail('RUN_STATE item 312 lacks the correction line giving 18:54:56 PST')
     m6 = record(G, f'merge commit of PR #769', B6_RELEASE_MERGE, f'`{B6_RELEASE_MERGE[:9]}`', 'sha')
     b5 = ('The primary block was released on 8 November 2026 at 11:17 PST, after its release check agreed; its record '
           'ties the sealed documents\' digests to the three analysed sessions\' harvest records and to the released '

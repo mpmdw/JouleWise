@@ -1032,8 +1032,7 @@ P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6
 P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: restricted digest	"""92e67c389bb71813d1e57b962e98eb6dcacf65d2bc3957332a36881c821c14bb"""	`92e67c38…`	sha256	
 P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: public digest	"""c2b5c4098f70dd3a5be19edb3016bf682588d5529f21c41abf05d125fe8107f8"""	`c2b5c409…`	sha256	
 P1-RELEASE	docs/registrations/block6_release_record.md	docs/registrations/block6_release_record.md: Sessions table rows (harvest_sha256)	9	nine	n	
-P1-RELEASE	git	git log -1 --format=%cd 66469ccf4 (commit object, PST; not printed)	"""2026-11-13 18:54:56 PST"""	2026-11-13 18:54:56 PST	time	
-P1-RELEASE	RUN_STATE.md	"RUN_STATE.md item 312: ""merged to `main` at 2026-11-13 18:54:57 PST"""	"""2026-11-13 18:54:57 PST"""	13 November 2026 at 18:54:57 PST	time	
+P1-RELEASE	git	git log -1 --format=%ci 66469ccf4 (committer time, PST)	"""2026-11-13 18:54:56 PST"""	13 November 2026 at 18:54:56 PST	time	
 P1-RELEASE	git	merge commit of PR #769	"""66469ccf4d575e770b6a72de0d670105bbd95124"""	`66469ccf4`	sha	
 P1-B6-WM-DEF	scripts/independent_recompute_b5.py@6e6d1b18a	"text ""+/-2 samples at 50 Hz"""	"""+/-2 samples at 50 Hz"""	50 a second	constant	single implementation; not independently recomputed
 P1-B6-WM-DEF	scripts/independent_recompute_b5.py@6e6d1b18a	"text "".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	""".2 * statistics.fmean(repeats) + .8 * statistics.fmean(quad_means)"""	0.2	constant	single implementation; not independently recomputed
