@@ -2020,5 +2020,47 @@
     "locator": "main:99396a2a5503574e",
     "command": "pmset",
     "seam": "none"
+  },
+  {
+    "file": "joulewise/cadence/kit.py",
+    "locator": "<module>:15487cb0637ddfa1",
+    "command": "pmset",
+    "seam": "CHECK_KINDS description string ('pmset powermode 0'); text for the checklist printout, never executed"
+  },
+  {
+    "file": "joulewise/cadence/kit.py",
+    "locator": "<module>:27e798274d67f50f",
+    "command": "kill",
+    "seam": "CHECK_KINDS description string ('sudo -n -l /bin/kill rc 0'); text only, the magistrate observes the rc"
+  },
+  {
+    "file": "joulewise/cadence/kit.py",
+    "locator": "<module>:27e798274d67f50f",
+    "command": "sudo",
+    "seam": "CHECK_KINDS description string ('sudo -n -l /bin/kill rc 0'); text only, the magistrate observes the rc"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "main:541443a289d468bd",
+    "command": "pmset",
+    "seam": "parser default only; ProductionHost.display passes the configured bin to run_align_r1_smoke.display; mock and synthetic tests use FakeHost"
+  },
+  {
+    "file": "scripts/launch_cadence_span.py",
+    "locator": "main:0ad70fd971de1688",
+    "command": "kill",
+    "seam": "parser default only (the desk launcher's own --kill-bin default); launch() passes it to the LaunchAgent wrapper; tests patch subprocess.run and never bootstrap"
+  },
+  {
+    "file": "scripts/launch_cadence_span.py",
+    "locator": "main:502ee0a584ce0b0b",
+    "command": "launchctl",
+    "seam": "parser default only (the desk launcher's own --launchctl-bin default); launch() passes it to the LaunchAgent wrapper; tests patch subprocess.run and never bootstrap"
+  },
+  {
+    "file": "scripts/launch_cadence_span.py",
+    "locator": "main:541443a289d468bd",
+    "command": "pmset",
+    "seam": "parser default only (the desk launcher's own --pmset-bin default); launch() passes it to the LaunchAgent wrapper; tests patch subprocess.run and never bootstrap"
   }
 ]

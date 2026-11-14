@@ -1,0 +1,115 @@
+{
+  "schema": "joulewise.cadence_block_queue.v1",
+  "updated": "2026-11-14T00:51:32-08:00",
+  "ready_min": 1,
+  "ready_max": 2,
+  "blocks": [
+    {
+      "design_id": "dev-01",
+      "title": "Development block 1 with the counted pilot (12 type-A legs, anchor shape, band q0)",
+      "question": "Development data for the heat-term and onset fits (RL-149 2.1 uses 1-4): twelve conditionless single-turn 27B legs at the anchor shape; its first three legs are the counted pilot, the smoke for the campaign's final bytes.",
+      "phase": "development",
+      "block_definition": "RL-149 2.3 and 5 item 6: twelve type-A legs on kit cl-dev-01, built on the existing step leg. Two spans on the same bytes, each behind its own fresh soak: the counted pilot (L001-L003; RL-149 2.9 item 3) and then L004-L012. The two spans fall on two calendar days (schema v1 fixes t0 at 13:20, and L004-L012 wait for the lead's hand-read of the pilot), so dev-01 gives two calendar days, the unit of independence for leave-one-day-out (RL-149 2.3).",
+      "kit": {
+        "path": "docs/process/cadence/kits/cl-dev-01.json",
+        "sha256": "c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7"
+      },
+      "est_legs": 12,
+      "est_spans": 2,
+      "depends_on": [],
+      "reviews": [],
+      "ruling": "RL-149 §2",
+      "status": "SPECIFIED",
+      "ready_since": null,
+      "expires": null,
+      "assigned_span_ids": [],
+      "owner": "lead (kit, queue), cold seat (2.8 line 1), magistrate (spans)",
+      "notes": "READY needs (RL-149 2.8): a cold seat that did not write the kit checks it against RL-149 section 2 with no open finding (line 1); the kit validates at its frozen commit and that commit's full suite is green (line 2; the kit is pinned to the runner commit b4b6aeb19 and is re-pinned with `cadence_legs_runner.py pin-kit` at the commit the magistrate measures from); then a finite queue that pins it (line 3) and the per-span checklist. The pilot span's roster is --legs L001,L002,L003; after it the lead reads the journal table once by hand beside the automatic desk (2.9 item 3) before L004-L012 arm (2.8 line 8). Plans at a 13:20 t0: pilot expected 1.9 h, worst case 4.6 h; L004-L012 expected 4.0 h, worst case 9.1 h."
+    },
+    {
+      "design_id": "dev-02",
+      "title": "Development block 2 (dev-01's kit, next seeds)",
+      "question": "Second development block: twelve more type-A legs at the anchor shape on another history, for the leave-one-day-out fit.",
+      "phase": "development",
+      "block_definition": "RL-149 2.3 and section 5 (\"the same kit, next seeds\"): twelve type-A legs on kit cl-dev-02, one span behind its own fresh soak, on a calendar day other than dev-01's if the three-day rule needs it.",
+      "kit": {
+        "path": "docs/process/cadence/kits/cl-dev-02.json",
+        "sha256": "d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8"
+      },
+      "est_legs": 12,
+      "est_spans": 1,
+      "depends_on": [
+        "dev-01"
+      ],
+      "reviews": [],
+      "ruling": "RL-149 §2",
+      "status": "SPECIFIED",
+      "ready_since": null,
+      "expires": null,
+      "assigned_span_ids": [],
+      "owner": "lead",
+      "notes": "HOLD_FOR_CELL_LAW (RL-150 R3): dev-02 moves to the v1.1 kit, where the seed law assigns prompt size and G0 shape; its span goes to hp-01 on the v1 shape, then Part C, then the RL-149 section 5 bridge. If v1.1 is not READY and none of those is, it runs anchor-only on this kit rather than leave the MBP idle, and the lead tells the research lead. READY needs (RL-149 2.8): a cold seat that did not write the kit checks it against RL-149 section 2 with no open finding (line 1); the kit validates at its frozen commit and that commit's full suite is green (line 2; the kit is pinned to the runner commit b4b6aeb19 and is re-pinned with `cadence_legs_runner.py pin-kit` at the commit the magistrate measures from); then a finite queue that pins it (line 3) and the per-span checklist. Runs after the pilot passed (2.8 line 8). Expected 5.0 h, worst case 11.4 h; with the 02:00-02:35 blackout a 13:20 or 02:40 t0 clears it. Mixed prompt sizes (2k/10k/19.5k, RL-149 2.3) need kit schema v1.1's cell law; the runner already takes per-leg prompt sizes."
+    },
+    {
+      "design_id": "hp-01",
+      "title": "High Power arm: 12 type-H legs, same cells as a development block",
+      "question": "What High Power would have changed: onset, clock, share of decode scored, and energy ratios against Automatic at matched blocks (RL-149 2.5; description only, never in the fit).",
+      "phase": "extension",
+      "block_definition": "RL-149 2.3 and 2.5: one block of twelve type-H legs (type A in High Power), any day after dev-01. The kit sets powermode 2; the close proves powermode 0 and no marker before anything else arms. Never in the fit.",
+      "kit": null,
+      "est_legs": 12,
+      "est_spans": 1,
+      "depends_on": [
+        "dev-01"
+      ],
+      "reviews": [],
+      "ruling": "RL-149 §2",
+      "status": "SPECIFIED",
+      "ready_since": null,
+      "expires": null,
+      "assigned_span_ids": [],
+      "owner": "lead, research lead",
+      "notes": "Blocked on code: the campaign runner's High Power path (PowerModeGuard around the legs, the host marker, the powermode-0-and-no-marker close check) and a kit field for the block's power mode (kit schema v1 has none; the checklist's powermode_zero is an arm check). Then a kit cl-hp-01 and READY per RL-149 2.8."
+    },
+    {
+      "design_id": "qual-01",
+      "title": "Qualification block 1",
+      "question": "First qualification block on the frozen fit.",
+      "phase": "qualification",
+      "block_definition": "",
+      "kit": null,
+      "est_legs": 12,
+      "est_spans": 1,
+      "depends_on": [
+        "dev-02"
+      ],
+      "reviews": [],
+      "ruling": null,
+      "status": "DRAFT",
+      "ready_since": null,
+      "expires": null,
+      "assigned_span_ids": [],
+      "owner": "lead",
+      "notes": "RL-149 2.3: qual-01 to qual-03, 12 legs each (six type A, two type-L pairs, two type M or type A), after the development freeze, on at least 2 calendar days that are not development days. HOLD_FOR_FIT_FREEZE: never crosses that boundary automatically; type L needs the decode cap parameter (the runner has it), type M needs new rehearsal code."
+    },
+    {
+      "design_id": "reserve-01",
+      "title": "Predeclared replacement capacity",
+      "question": "Replacement legs under a replacement rule fixed before any qualification leg runs.",
+      "phase": "reserve",
+      "block_definition": "",
+      "kit": null,
+      "est_legs": 12,
+      "est_spans": 1,
+      "depends_on": [],
+      "reviews": [],
+      "ruling": null,
+      "status": "DRAFT",
+      "ready_since": null,
+      "expires": null,
+      "assigned_span_ids": [],
+      "owner": "lead",
+      "notes": "RL-149 2.4: replaces a leg excluded under inclusion rules 1-6, in the same cell, in a later block of the same phase; never used because a result is inconvenient."
+    }
+  ]
+}
