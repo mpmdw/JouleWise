@@ -1,0 +1,5 @@
+# RL-151 §1.3 item 1 — drift margin for the rows (saved by the lead)
+Rows (RL-149 §1.3 constants), h −9 %: false signature ≤ .035 at every simulated drift 3-8 % (flat within MC error); largest drift tested with rows ≤ .035 = 8 % (top of scan) -> the interim-look tripwire is not binding in this model. Pooled over drift: +30 % .0316 ± .0048 (5,000 reps; = drift-free +30 % cells, energy-scaled-noise residual), bank+30/spam−11 .0276. Power at 0.5 %: rows .667-.690, count cut .838-.861.
+Worst cell re-run (+8.5 % pooled, d 0.7 %, h −9 %, 10,000 reps): rows .0265 ± .0031; count cut .0233; S_a4 .0272; S_w .0250 — the earlier .032 was MC noise.
+Caveats: drift modelled as linear ramp to d at each turn's off-nominal time, label-blind, partly absorbed by the five-term refit; compounding or start-state-dependent drift not simulated. Flatness is specific to RL-149's drop-all-after-cut rule (RL-148's next-turn rule reached .036-.042 at 2 % drift, ±40-50 %). If (iii) on development legs is well above 2 %, look at the drift's form, not only its size.
+Files: results_rl151_drift.json, results_rl151_worst10k.json; s_oc_rl149_named.py --set3 / --worst10k.
