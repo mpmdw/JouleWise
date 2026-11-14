@@ -221,7 +221,7 @@ class Fixture:
 
     def battery(self, record, path, journal):
         i = self.index[Path(path).name]
-        flags = ['battery.assist'] if i == ASSISTED else []
+        flags = ['battery.assist'] if i == ASSISTED else ['battery.member_span'] if i == 2 else []   # a B code on 2
         record['battery'] = {'status': 'observed', 'discharge_j': plant(i)['thermal_battery'], 'flags': flags,
                              'source_sha256': 'a' * 64}
         record.setdefault('flags', []).extend(f for f in flags if f not in record['flags'])   # as v4_battery.attach
@@ -855,6 +855,9 @@ class RL152Tests(unittest.TestCase):
                 self.assertEqual(value['status'], seal.WITHHELD)
         row = next(iter(report['extra_checks']['registration_diagnostics']['battery_windows'].values()))
         self.assertEqual((row['count_population'], row['assist_population']), ('benign', 'benign'))
+        self.assertEqual(row['B_count'], 0)                     # the B code sits on non-benign member 2 only
+        line = next(l for l in self.runs['W1']['printed'].splitlines() if l.startswith('m/W1 battery: '))
+        self.assertEqual(json.loads(line.split(': ', 1)[1])['B_count'], 0)
         self.assertIn('bar_pass', row)                                         # the verdict, over all members
         self.assertEqual(report['extra_checks']['d_member_x2']['pool'], 'benign D members only (RL-151 section 4 C2)')
         self.assertIn('benign', report['carve_out_flag_counts']['over'])
