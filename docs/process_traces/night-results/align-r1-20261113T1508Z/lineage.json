@@ -1,0 +1,95 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "published": true
+    }
+  ],
+  "boot_changed": [],
+  "ended": {
+    "monotonic_ns": 2567108140469125,
+    "monotonic_raw_ns": 2567108140468625,
+    "wall_s": 1794582770.709653
+  },
+  "locators": {
+    "bound": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-align/r1fu-20261113T144743Z/bound",
+      "sha256": "91714aeea461e8a83baa8986b7d19e6f52cb78ccd908dc04c9bb4913688fe0a3",
+      "valid": true
+    },
+    "claim": {
+      "boot_changed": false,
+      "current_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "recorded_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "root": "/Users/edr/night-align/r1fu-20261113T144743Z/runs",
+      "sha256": "a4f2f48f32478a788cfe9d1db95d643d3a677c8a854c7a3d96af19cef8b27c77",
+      "valid": true
+    }
+  },
+  "locators_valid": true,
+  "published": true,
+  "requested": {
+    "monotonic_ns": 2567108116801041,
+    "monotonic_raw_ns": 2567108116800291,
+    "wall_s": 1794582770.685985
+  },
+  "result": {
+    "launch_lineage": {
+      "bracket_session_id": "align-r1-20261113T1508Z",
+      "collection_boot_session_id": "ea2d3ec8-01bb-473b-9c72-554a726fd482",
+      "launch_record": {
+        "path": "/Users/edr/night-align/r1fu-20261113T144743Z/window_lineage/launch.json",
+        "sha256": "6e605f0eaf1edf04f85d3b9444f10a994e39e052ac2bac7b7c6172b445981d9e"
+      },
+      "pack_id": "align-r1-runtime",
+      "pack_root": "/Users/edr/night-align/r1fu-20261113T144743Z/align-r1-runtime",
+      "pack_sha256": null,
+      "plan_id": "align-r1-20261113T1508Z",
+      "plan_tree_sha256": "2a946a320ff6912af946d185d88fd4f53964158aa68ca11b4414c0ef2c43246c",
+      "schema_version": "joulewise.hazard_window_lineage.v1",
+      "window_context": {
+        "bound_runs_root": "/Users/edr/night-align/r1fu-20261113T144743Z/bound",
+        "claim_runs_root": "/Users/edr/night-align/r1fu-20261113T144743Z/runs",
+        "custody_root": "/Users/edr/night-align/r1fu-20261113T144743Z",
+        "night_dir": "/Users/edr/night-align/r1fu-20261113T144743Z/night",
+        "post_attempt_id": "align-r1-20261113T1508Z-post",
+        "pre_attempt_id": "align-r1-20261113T1508Z-pre"
+      },
+      "window_id": "align-r1-20261113T1508Z"
+    },
+    "locators": {
+      "bound_runs_root": {
+        "path": "/Users/edr/night-align/r1fu-20261113T144743Z/bound/.joulewise-launch-lineage.json",
+        "sha256": "91714aeea461e8a83baa8986b7d19e6f52cb78ccd908dc04c9bb4913688fe0a3"
+      },
+      "claim_runs_root": {
+        "path": "/Users/edr/night-align/r1fu-20261113T144743Z/runs/.joulewise-launch-lineage.json",
+        "sha256": "a4f2f48f32478a788cfe9d1db95d643d3a677c8a854c7a3d96af19cef8b27c77"
+      }
+    },
+    "records": {
+      "authorization": {
+        "path": "/Users/edr/night-align/r1fu-20261113T144743Z/window_lineage/authorization.json",
+        "sha256": "da870947ae5285bba857304643a5d556ff31eed3ed92f31c31cdeeaae8c4bd90"
+      },
+      "go": {
+        "path": "/Users/edr/night-align/r1fu-20261113T144743Z/window_lineage/go.json",
+        "sha256": "80ff23e533338b38991a09b5d4ff2881a548916cee6c7ba9eeb328ac3bc3df1b"
+      },
+      "launch": {
+        "path": "/Users/edr/night-align/r1fu-20261113T144743Z/window_lineage/launch.json",
+        "sha256": "6e605f0eaf1edf04f85d3b9444f10a994e39e052ac2bac7b7c6172b445981d9e"
+      }
+    },
+    "unrecorded": [
+      {
+        "error": "ArmReadinessError: Git proof failed: fatal: not a git repository (or any of the parent directories): .git",
+        "field": "pack_sha256"
+      }
+    ]
+  },
+  "schema": "joulewise.b5_lineage_publication.v1"
+}
