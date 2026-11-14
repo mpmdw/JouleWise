@@ -672,6 +672,78 @@
     "seam": "none: usage docstring (python3.13 -I); not a child launch"
   },
   {
+    "file": "scripts/b6_r12_runtime.py",
+    "locator": "install_sources.ChainSources.__init__:541443a289d468bd",
+    "command": "pmset",
+    "seam": "string literal '/usr/bin/pmset' inside ChainSources.__init__ rule-table keys (pmset -g assertions and pmset displaysleepnow); dictionary key for the declared-result table, never passed to a process; Sources.run answers from the table (R12 fixture seam, execute nothing)"
+  },
+  {
+    "file": "scripts/b6_r12_runtime.py",
+    "locator": "install_sources.ChainSources.__init__:817dc28f0bb99139",
+    "command": "pmset",
+    "seam": "argv tuple ('pmset', 'displaysleepnow') used as a key in ChainSources self.rules: declared rc 0, empty output; display-sleep command is simulated by the R12 fixture, execute nothing"
+  },
+  {
+    "file": "scripts/b6_r12_runtime.py",
+    "locator": "install_sources.ChainSources.__init__:9d2be7ac15275504",
+    "command": "pmset",
+    "seam": "string literal 'pmset' as the first element of the declared-reading argv keys (-g batt, -g, -g assertions, -g therm, -g systemstate) in ChainSources.__init__; keys of the table of canned outputs, never executed; the getters are read-only anyway (R12 fixture seam)"
+  },
+  {
+    "file": "scripts/b6_r12_runtime.py",
+    "locator": "install_sources.ChainSources.__init__:f679f0584e90bf28",
+    "command": "pmset",
+    "seam": "argv tuple ('/usr/bin/pmset', 'displaysleepnow') used as a key in ChainSources self.rules: declared rc 0, empty output; display-sleep command is simulated by the R12 fixture, execute nothing"
+  },
+  {
+    "file": "scripts/b6_r12_runtime.py",
+    "locator": "install_sources.ChainSources.popen:175a05d35d6cb7d5",
+    "command": "caffeinate",
+    "seam": "string literal '/usr/bin/caffeinate' in the argv-prefix comparison in ChainSources.popen; the matched call is answered by a ReturnedProcess(alive=True) fake handle, no process is started (R12 fixture seam)"
+  },
+  {
+    "file": "scripts/b6_r12_runtime.py",
+    "locator": "install_sources.ChainSources.popen:2e15e4357a1dfcb1",
+    "command": "caffeinate",
+    "seam": "argv-prefix comparison ('/usr/bin/caffeinate', '-i', '-s', '-w') in ChainSources.popen; records a declared rc 0 receipt (executed=false) and returns a ReturnedProcess(alive=True) fake handle; the sleep-guard caffeinate is simulated by the R12 fixture, execute nothing"
+  },
+  {
+    "file": "scripts/b6_r12_runtime.py",
+    "locator": "install_sources.ChainSources.run:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "argv-prefix comparison ('launchctl', 'print') in ChainSources.run; answers rc 113 'Could not find service' (declared_job_absent) from the fixture; launchctl is never executed and only the read-only print form is matched (R12 fixture seam)"
+  },
+  {
+    "file": "scripts/b6_r12_session_fixture.py",
+    "locator": "declare_sources:0672075787e402de",
+    "command": "caffeinate",
+    "seam": "manifest text only: the key 'caffeinate' of the actions dict in declare_sources ('declared live handle; pmset assertions source confirms it; execute nothing'); a documentation string in the R12 fixture manifest, no command"
+  },
+  {
+    "file": "scripts/b6_r12_session_fixture.py",
+    "locator": "declare_sources:9d369dd3b33de616",
+    "command": "caffeinate",
+    "seam": "manifest text only: seam description 'declared caffeinate and pmset command results; no host action' for KeepAwake defaults in declare_sources; documentation string, no command"
+  },
+  {
+    "file": "scripts/b6_r12_session_fixture.py",
+    "locator": "declare_sources:9d369dd3b33de616",
+    "command": "pmset",
+    "seam": "manifest text only: seam description 'declared caffeinate and pmset command results; no host action' for KeepAwake defaults in declare_sources; documentation string, no command"
+  },
+  {
+    "file": "scripts/b6_r12_session_fixture.py",
+    "locator": "declare_sources:bcfb1e01dbb880b2",
+    "command": "pmset",
+    "seam": "manifest text only: actions-dict value 'declared live handle; pmset assertions source confirms it; execute nothing' in declare_sources; documentation string, no command"
+  },
+  {
+    "file": "scripts/b6_r12_session_fixture.py",
+    "locator": "prepare:dcbfc4801677a664",
+    "command": "kill",
+    "seam": "manifest text only: seam description for subprocess.Popen._handle_exitstatus ending 'no native kill' in prepare; documentation string, no command"
+  },
+  {
     "file": "scripts/bench_replay_start_drift.py",
     "locator": "<module>:6bba141443c9a807",
     "command": "sudo",

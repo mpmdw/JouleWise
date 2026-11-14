@@ -713,8 +713,8 @@ to the research lead for review before merge.
 - **Status.** ADOPTED, 2026-11-10, by research-lead ruling RL-3 (RL:56-76). It is logged as DLE-6 because RL-3 says
   "The lead logs it as DLE-6".
 - **Original rule.** The 2026-10-20 renderer obligation, declared deviation Q-RENDERER, appended to the Block 5 seal
-  record (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md:631-638`;
-  `docs/process_traces/2026-10-20-magistrate-6cff3515/L9-RULING-ADDENDUM.md:92-99`). Its obligation, from the line on which it starts (SEAL_RECORD.md:635-638):
+  record (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md:697-704`;
+  `docs/process_traces/2026-10-20-magistrate-6cff3515/L9-RULING-ADDENDUM.md:92-99`). Its obligation, from the line on which it starts (SEAL_RECORD.md:701-704):
 
 > changes. Obligation fixed now, before release: any block-5 Results renderer written after release prints every row of
 > the validated fill input's contrast census with its issued status (unsupported and refused included), selects none, and
@@ -976,3 +976,42 @@ to the research lead for review before merge.
 - **Text changes.** One scope and interval caveat was added to the outcome block of `edge-check-results.md`, and I13
   was listed. The script, Δ, T, intervals, exclusion counts and outcome row are unchanged.
 - **Effect on estimands.** None.
+
+## DLE-13. Block 5's release event recorded in the seal record five days late (RL-147 section 4 item 1)
+
+- **Status.** Logged 2026-11-13, by research-lead ruling RL-147 section 4 item 1. Kind: reporting. Not blind to Block 5
+  outcomes or to Block 6; nothing the PLAN governs changes.
+- **Original rule.** The seal record's section "Release event" (`docs/process_traces/2026-10-07-block5-seal/SEAL_RECORD.md`)
+  said it would be written when the withheld energies were opened and would tie the digests of its section 4 to the final
+  harvest records. The event was Ed's unseal OK of 2026-11-08 11:17 PST (`RUN_STATE.md` item 231).
+- **What happened.** The record was owed at the event (2026-11-08) and was written on 2026-11-13, five days later. The
+  paragraph "Nothing is recorded here yet" was replaced by a section headed "Recorded late", which gives the event, the
+  release check, the digests of section 4 re-taken at the release checkout, the three analysed sessions' `harvest.json`
+  SHA-256 values and the released output's SHA-256, each re-taken from its file.
+- **Pins.** `tests/b5_analysis/test_frozen_files.py` reads the seal record but pins no byte of this section; the section
+  sits between Addendum 4 and Addendum 5 and adds no `## Addendum`, `B5-HARVEST-PIN` or erratum text, so no pin needed a
+  rebind. Line cites into the record that moved by 66 lines were updated: DLE-6's two `SEAL_RECORD.md` line ranges
+  (631-638 and 635-638 became 697-704 and 701-704).
+- **Effect on estimands.** None. The event and the released bytes are unchanged.
+
+## DLE-14. `joulewise/flags/exclusions.py`: the keyword-only `pack_scoped` parameter, a cited rebind after the fact (RL-144 addendum M2)
+
+- **Status.** RECORDED, 2026-11-13, on `fix/2026-11-13-b6-m1-m2` (lead, under RL-144 addendum section 3 M2 and
+  RL-146 section 2 item 4). It is owed before the S-14 line merges to `main`.
+- **What happened.** Commit `4e3446e6c` (Block 6 option-c analysis) edited `joulewise/flags/exclusions.py`, a file
+  frozen by Block 5 (seal inventory, `joulewise/flags/`), without a cited rebind. `compute` gained a keyword-only
+  `pack_scoped: bool = True`. The one changed expression is
+  `PACK_SCOPED_WINDOW_REASONS.get(pack_id, {}) if pack_scoped and isinstance(pack_id, str) else {}`. With the
+  default it reduces to Block 5's expression. The only caller that passes `False` is
+  `scripts/independent_recompute_b6.py` (line 323).
+- **Rebind.** The file is now in `EVOLVED_ON_MAIN` (the freeze binds the Block 5 analysis commit `b13a510dc`'s
+  bytes) and in `REBOUND_WORKING_TREE` (working-tree sha256
+  `ebe1678c0fdd60b1ddd20d432cf07412bd321a8629589f4ce4c6b334378f0ad6`, a row of the Block 6 24-file closure). A
+  further edit fails until it carries its own cited rebind. `tests/test_whole_window_inverted_corner_clamp.py`
+  `FROZEN_FILES_TEST_SHA256` is rebound to the edited `test_frozen_files.py`.
+- **Test.** `tests/flags/test_flags_exclusions.py`, `Block5DefaultEquivalenceTests`: `compute` with the default
+  (and with `pack_scoped=True`) equals the Block 5 commit's `compute` (loaded by `git show`) on a fixture, for
+  GAMMA, BETA and no pack, with and without a `neg8.midpoint_lost` flag; `pack_scoped=False` differs only on GAMMA
+  with that flag.
+- **Effect on estimands.** None. Block 5's behaviour is unchanged. Whether the first program and the recompute
+  should differ in pack scoping is not decided here; the dry run's comparator is the check (RL-134).

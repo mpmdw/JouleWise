@@ -1042,6 +1042,492 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+317. **Laptop lead (interactive, Opus 5.5), drafted by the campaign-runner builder 2026-11-14 01:30:32 PST, ISSUED 2026-11-14 14:32:12 PST (`date`): MAGISTRATE: arm the COUNTED PILOT of the conditionless calibration campaign: kit `cl-dev-01`, legs L001, L002, L003 only, runner kind `cadence-legs-v1`, on `b4b6aeb192da60d895a7529311b06599efff5be4` checked out detached in a fresh scratch worktree. One span: a fresh soak, then three type-A legs (19,458-token step prompt, decode cap 4,096, Automatic, band q0). It is counted (RL-149 §2.9 item 3, §2.3). No other span, no queue extension, no session, no W1. The launch is your LAST action and you exit at once. LAUNCH no earlier than 13:20 PST and no later than 20:45 PST Sat 14 Nov. If you cannot, do not launch; mail the lead.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-15T02:47:00-08:00
+on_early_or_refused: any failed line of "Start and check", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen inside 13:20-20:45 PST: NOTHING launches. A span that ran but ends with any named stop, a receipt rc≠0, or a pilot that does not pass under RL-150 R9: nothing relaunches, nothing is re-run, L004-L012 are not queued; mail the lead. Do not retry, do not extend, do not reuse OUT
+next_observable: the next activation (after the fence is gone) runs "Check" below and reports, by email to Ed and the lead and as RUN_STATE 318: the receipt asserts, the per-leg admitted lines, the desk bundle, the restore lines, measurement_mode verify again, the RL-150 R9 items and the RL-150 R1 start-reference print
+```
+
+- **Why.** RL-149 §2.9 item 3 makes the first three legs of dev-01 the smoke for the campaign's final bytes, counted as development legs and registered as counted before they run. RL-150 §2 accepts the cold kit check's four pre-arm fixes (F1-F4) and rules R1-R9. This item is the pilot span of block dev-01 (BLOCK-QUEUE `dev-01`, two spans on two days).
+- **Counted.** The three legs count as development legs of dev-01 under the kit's inclusion rules (RL-149 §2.3, §2.9 item 3; kit rule `pilot_counted`). The pilot has passed when RL-150 R9's four conditions hold: (1) all three legs ran to a close with complete records; (2) at least two are admitted; (3) an excluded leg fell under rule 2 (G0 timeout) or rule 5 (outside load); (4) the lead's hand table and the desk agree, on inclusion too, and no stop is open. An exclusion under rule 1 or 6, or two or more exclusions: not passed; the lead diagnoses; a re-run is a new span with `attempt` + 1, and admitted legs still count.
+- **L004-L012 are NOT queued.** They are appended only after the lead's one hand-read of this span's journal table beside the automatic desk (RL-149 §2.9 item 3, §2.8 line 8; cold check F3). The first queue holds this span only.
+- **Bytes.** Measured from `b4b6aeb192da60d895a7529311b06599efff5be4` (PR #775, branch `align/2026-11-14-campaign-runner`, off `align/2026-11-13-rl145-build` `fe907d0d3`). The kit is NOT the in-tree copy at that commit (that one is the RL-150 text pinned at `efbd0b020`, ledger sha `75c99163…`): it is `cl-dev-01.json` from `589748f15` (PR head `cf63121bc` carries the same kit blob; its extra commit reverts `hazard_refusals.json` only), sha256 `c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7`, copied outside the checkout. Its diff against the cold-checked bytes is only RL-150 R8's energy-read sentence and R7's rule-5 wording; its `frozen` block now names `b4b6aeb19` and 37 paths: against the cold-checked kit three hashes changed, all launch-side (`scripts/launch_cadence_span.py` added, `scripts/launch_align_r0.py` back to its base bytes, the runner's docstring); this delta goes to the row-1 re-review and a cold seat (RL-150 §2 F1, R5 class B).
+- **CI equivalence.** `git diff b4b6aeb19..589748f15` over the kit's 37 frozen paths is empty: the one commit after `b4b6aeb19` changes only kit pins, a test and docs. The full-suite CI on `589748f15` was cancelled; the run that stands for `b4b6aeb19` is the one on #775's head `8bd31ae5a` (CI `ci` 43602828989), whose diff against `b4b6aeb19` over the 37 frozen paths is also empty. It is red with exactly the base's red set, which RL-152 §2.2 accepts in place of green (line 2).
+- **Condition-13 sources are byte-identical to the base** (`v4_registration.R1_EXECUTED_SOURCES`, the ten paths): the leg kind subclasses `r1_runtime.Segment` in a new module. `verify_r1_executed_sources` must return the full sha.
+- **What the runner does** (docs/process/cadence_queue_design.md §13): preflight (HEAD = frozen commit; frozen paths' working-tree bytes = kit; night agents; AC; condition 13; agent census, KM003C and volume feeds; powermode 0 read back; display sleep and 300 s dwell); the plan; ONE fresh soak (the night's own soak path, cap 1,950 s); L001-L003 in seeded order, each its own G0 under the 1,200 s R1 timeout, then one turn; per-leg load redo (RL-72 E2 rule, quota 2 per span; rejected attempts kept as `runtime.rejected<N>`); no leg starts inside 02:00-02:35; close: Automatic restore, feeds stopped and hashed, `runner_receipt.json`, `desk-bundle/`. It reads and writes no energy. Of the KM003C stream it decodes only the header and trailer lines (RL-150 R8).
+- **Timing.** Plan for this roster: expected 6,903 s (1.9 h), worst case 16,650 s (4.6 h). The launcher refuses a deadline under the worst case plus 560 s of reserves (17,210 s); this item sets the fence deadline at launch + 18,110 s (900 s of start slack). Worst case must end before 01:50 Sun (RL-149 §2.9 item 4: nothing near 01:50-02:40): latest launch 20:48:10, so **launch by 20:45 PST** (worst end 01:22:30; fence end 01:46:50). Earliest **13:20 PST**: the soak path of these bytes also refuses the frozen R1 window 11:45-13:15 (cold check F2), and a 13:20 launch clears it. Pointer deadline = latest fence end + 1 h.
+- **Conditions.**
+  - No agent session on the MBP during the span: you exit at once after the launch. No lead SSH, desk job or R12 process until the fence is gone.
+  - Restore before the launch and again in "Check": AC, powermode 0, network time OFF, kernel frequency word 0 (item 251's remedy if not), no stray `km003c_monitor.py` / `hazard_monitor.py` / root `powermetrics`, no High Power marker. `sudo -n -l /bin/kill` rc 0. Leave `night.lock` as found.
+  - Every launch passes `--batch-window 02:00-02:35` and the arm record shows the plan's `batch_windows` (RL-150 §2 F2).
+  - The arm record states the host is in measurement_mode as applied 11-13 23:47 and network time is off, checked remotely (RL-150 §2 F5).
+  - Output root `/Users/edr/campaign-out/cl-dev-01/` is outside every v4 registration and custody root (RL-149 §2.8 line 4; cold check F6).
+- **Blinding.** Open no energy, power, meter-sample, transcript or slot file. From each leg bundle read ONLY `outputs/align_window_reference.json` and `outputs/align_thermal.jsonl` (thermal journal values, RL-150 R1 part 3), with the script below. Never print a KM003C stream line; never open `powermetrics*`, `hazards/`, `align_episode.json`, `telemetry*` or anything under `runs/*/outputs/` other than those two files.
+- **May run today:** this span, once. **May NOT:** any other span, L004-L012, dev-02, hp-01, any session, W1.
+- **High Power marker:** if `/Users/Shared/JouleWise/host-power/high-power.marker` exists, STOP and report.
+
+**RL-149 §2.8 arm-record lines (record each, with its evidence):**
+1. Kit `ruling` is `RL-149 §2`. Cold seat (Mythos 5.2, 11-14) on `efbd0b020`: ADMIT WITH FIXES, F1-F4 closed (RL-150 §2). Kit `c76344c5` on `b4b6aeb19` (RL-152 §2.1, which amends RL-150 §2 F1 to the three launch-side path entries): (i) Mythos 5.2 delta seat ADMIT WITH FIXES, its F3-F5 closed in this item's text (evidence/align-v4-campaign/mythos-775-delta.md, audit branch `8aaa43fbc`); (ii) row-1 delta review ADMIT WITH FIXES (test-only), with an end-to-end run on kit `c76344c5` and no campaign file in any W1 closure (evidence/align-v4-campaign/row1-775-delta.md, audit branch `8aaa43fbc`); (iii) the `validate-kit` line and the `plan` below. Class B accepted (RL-152 §2.1): three changed files load in span-lifetime processes; behaviour inside a leg is unchanged.
+2. Read for kit `c76344c5` only (RL-152 §2.2): the kit validates at `b4b6aeb19`. The full suite ran on bytes equal to that commit on all 37 frozen paths: CI `ci` run 43602828989 on `8bd31ae5a` (#775 head; frozen-path diff against `b4b6aeb19` empty). Its red set equals the red set at base `fe907d0d3`: CI `ci` run 43600776368 (PR #781, CI-only); both red sets are the same 12 tests, test for test. Each red module has a passing run at a #777 head (CI `ci` run 43601158271 on #777 head `ae340d3da`: success, full suite; plus targeted local runs rc 0). The meter driver `joulewise/b5/driver.py` (blob `ff4fd76a`) and `scripts/km003c_monitor.py` (blob `7d6acc98`) are identical at the base, the pilot commit and #777's head. Every other module is green. Evidence: evidence/align-v4-campaign/rl152-redset/ (LINE2.md) on audit/2026-11-10-fable at `8aaa43fbc`.
+3. Queue `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/QUEUE-cl-dev-01-pilot-b4b6aeb19.json` on audit/2026-11-10-fable at `f075136f8`, sha256 `02d057c8384bee40e432f6513d5841cf3ec0cc5cef80012ced5d1c1471920daa` (`validate-queue` ok at `cf63121bc`): finite, expires within 7 days of its commit, pins `cl-dev-01` by sha `c76344c5…66d7`, one span (`cq-dev-01-s01-a1`, legs L001-L003), append-only.
+4. `validate-kit` passes (its `deny_scan` refuses any condition/slot/instruction key or label); OUT is outside every v4 registration and custody root (check below). RL-150 R6: the constant `benign` inside member-bundle configs is the stated exception.
+5. The per-span checks of design doc §4 pass at the arm (Start and check) and at the close (Check). Do NOT run `cadence_queue.py checklist`: its `span_window` line encodes the fixed 13:20 t0 that RL-149 §2.9 item 6.3 removed (cold check reading 4).
+6. No named stop, veto or halt open: no open `directive` issue by `mpmdw` whose title or first line starts STOP/NO/HALT/VETO, no open `cadence-stop` issue (gh on the MBP runs in the GUI context: `launchctl asuser`).
+7. Results-ref watcher live within 24 h: the Air results watcher (`com.joulewise.air-watch`, `night_results_watch.py --loop --keep-going --current-from-origin`) live since 2026-11-14 14:30:36 PST (pid 14020) on `b3c672401` (PR #786: it had exited on CURRENT's idle wait since item 316).
+8. Not applicable: this span is the pilot.
+9. Not applicable: first span.
+
+**Start and check (while you are still alive).** From a FRESH scratch worktree detached at the full sha (NOT the canonical clone's checkout, not another smoke worktree), own TMPDIR, `JW_B5_SYNTHETIC_ONLY=1`, `python3.13 -B -m unittest`, one module at a time; all must be OK: `tests.cadence.test_legs_runner`, `tests.cadence.test_kit`, `tests.cadence.test_stops_desk`, `tests.cadence.test_runner_guards`, `tests.align.test_r1_smoke_launcher`. (At `b4b6aeb19` the in-tree `CommittedKitTests` test the in-tree kit, not the armed one; the armed kit is checked by `validate-kit` below.) Any failure: nothing launches; mail the lead.
+
+```sh
+git -C /Users/edr/code/JouleWise fetch origin align/2026-11-14-campaign-runner
+git -C /Users/edr/code/JouleWise worktree add --detach /Users/edr/code/jw-wt/cadence-pilot-317 b4b6aeb192da60d895a7529311b06599efff5be4
+cd /Users/edr/code/jw-wt/cadence-pilot-317
+test "$(git rev-parse HEAD)" = b4b6aeb192da60d895a7529311b06599efff5be4 || { echo "STOP: HEAD"; exit 1; }
+test -z "$(git status --porcelain)" || { echo "STOP: dirty tree"; exit 1; }
+REPO="$PWD"
+: "${PY:?Set PY to the existing pinned measurement-venv interpreter (do not resolve the symlink)}"
+: "${MAGISTRATE_PID:?Set to the PID of this magistrate's own claude process}"
+ps -o pid=,comm= -p "$MAGISTRATE_PID"                 # must show the claude process
+NOW=$(date +%s); { test "$NOW" -ge 1794691200 && test "$NOW" -le 1794717900; } || { echo "STOP: outside 13:20-20:45 PST Sat 14 Nov; mail the lead"; exit 1; }
+CUSTODY="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-/Users/edr/night-custody/magistrate}"   # the watchdog's fence root (fence + launch spec only)
+"$PY" -B -c 'from pathlib import Path; import subprocess; from joulewise.align.apple import v4_registration as r; root=Path.cwd(); head=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); print(r.verify_r1_executed_sources(root,{"executed_commit":head}))'
+# must print b4b6aeb192da60d895a7529311b06599efff5be4
+
+# The kit: from PR #775's head, OUTSIDE the checkout, sha asserted
+mkdir -p /Users/edr/campaign-out/kits
+KIT=/Users/edr/campaign-out/kits/cl-dev-01-589748f15.json
+test ! -e "$KIT" || { echo "STOP: KIT exists"; exit 1; }
+git -C /Users/edr/code/JouleWise show 589748f15:docs/process/cadence/kits/cl-dev-01.json > "$KIT"
+test "$(shasum -a 256 "$KIT" | cut -c1-64)" = c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7 || { echo "STOP: kit sha"; exit 1; }
+"$PY" -B scripts/cadence_queue.py validate-kit "$KIT" --repo "$REPO" --batch-window 02:00-02:35
+# must print ok true, frozen_commit b4b6aeb192da60d895a7529311b06599efff5be4, frozen_paths_verified true,
+# kit_sha256 c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7, legs 12
+
+# Output root outside every v4 registration and custody root
+OUT=/Users/edr/campaign-out/cl-dev-01/cq-dev-01-s01-a1-$("$PY" -B -c 'import time; print(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))')
+test ! -e "$OUT" || { echo "STOP: OUT exists"; exit 1; }
+case "$OUT" in */restricted/*|*/night-*|*/jw-b5-*|"$REPO"/*|*/configs/campaigns/align_v4*) echo "REFUSE OUT"; exit 1;; esac
+
+# measurement_mode (RL-149 §2.4 campaign-scope stop; RL-150 §2 F5): record every FAIL/WARN line
+zsh /Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh verify; echo "verify rc $?"
+# RULE (lead, RL-150 F5 line): proceed only if every FAIL line is the "agent process present" line and every PID it names is
+# in MAGISTRATE_PID's own process tree (record the lines); ANY other FAIL line: STOP, mail the lead. WARN lines are recorded, not gates.
+sudo -n systemsetup -getusingnetworktime                 # must say Off
+# kernel frequency word: read it as item 308 did; must be 0 (else item 251's remedy, then re-read)
+test ! -e /Users/Shared/JouleWise/host-power/high-power.marker || { echo "STOP: High Power marker"; exit 1; }
+test ! -e "$CUSTODY/desk_fence.json" || cat "$CUSTODY/desk_fence.json"   # no live fence
+sudo -n -l /bin/kill >/dev/null; echo "sudo kill rc $?"  # must be 0
+pgrep -fl 'b6_r12|r12' || echo "no r12"
+pgrep -fl 'claude|codex|mcp-server|mcp_server|modelcontextprotocol' | grep -v "^$MAGISTRATE_PID " || echo "no other agent"
+pgrep -fl 'km003c_monitor.py|hazard_monitor.py' || echo "no stray monitor"
+pgrep -u root -fl powermetrics || echo "no root powermetrics"
+launchctl list | grep -E 'com\.joulewise\.(night|align-r0)' || echo "no night/smoke agent"
+pmset -g | grep -i powermode                              # 0
+"$PY" -B scripts/launch_align_r0.py preflight --disk-path "$REPO"     # ac_power true
+
+# The plan (record it whole; batch_windows must be ["02:00-02:35"])
+"$PY" -B scripts/cadence_legs_runner.py plan --kit "$KIT" --legs L001,L002,L003 --batch-window 02:00-02:35
+# expect legs L001 L002 L003, budget_s 1251 each, expected_s 6903, worst_case_s 16650, blackout_clear true
+DEADLINE="$("$PY" -B -c 'import time; print(time.time()+18110)')"
+```
+
+NOTE 1 (ADOPTED by the lead; the rule is in the verify line above). `measurement_mode.zsh verify` fails a line "agent process present" for ANY `claude`/`codex`/MCP process (`pgrep -x claude`), which includes this magistrate. While the magistrate runs, verify cannot print "verify OK". Proposed rule: proceed only if every FAIL line is that one agent line and the PIDs it names are the magistrate's own process tree (record the lines); any other FAIL means STOP. WARN lines (battery limit syntax, softwareupdate schedule) are recorded, not gates. The lead confirms or amends this rule.
+
+NOTE 2 (ADOPTED by the lead: the fence root stays the watchdog's; all campaign data under OUT). `--custody-root` is the watchdog's fence root (`/Users/edr/night-custody/magistrate`): the launcher writes the fence, the plist, `runner.json` and the LaunchAgent logs there, as every R1 smoke did. All campaign data (soak, legs, receipt, desk bundle) go under OUT. If RL-149 §2.8 line 4 is read to cover the fence root too, the fence must move with the watchdog, which is a code change; the lead decides.
+
+**Run (your last action):**
+
+```sh
+NOW=$(date +%s); { test "$NOW" -ge 1794691200 && test "$NOW" -le 1794717900; } || { echo "STOP: outside 13:20-20:45 PST; mail the lead"; exit 1; }
+"$PY" -B scripts/launch_cadence_span.py launch \
+  --repo "$REPO" --python-bin "$PY" \
+  --kit "$KIT" --legs L001,L002,L003 --batch-window 02:00-02:35 \
+  --output "$OUT" --disk-path "$REPO" \
+  --custody-root "$CUSTODY" --magistrate-pid "$MAGISTRATE_PID" \
+  --deadline "$DEADLINE" --exit-wait-seconds 180 --start-wait-seconds 30
+echo "$OUT"
+```
+
+Require exit 0, `"next": "exit the magistrate session now"` with a claimed fence (fence `pid` ≠ `MAGISTRATE_PID`), and the launch output's `plan.batch_windows` equal to `["02:00-02:35"]` (else report it; the span is not counted until the lead rules). The launcher itself refuses a deadline under the plan's worst case plus reserves, a missing kit and malformed `--legs` / `--batch-window`. Record PY, MAGISTRATE_PID, KIT and its sha256, OUT, DEADLINE, the launch time, the measurement_mode lines and the plan in your RUN_STATE item and in `/Users/edr/night-custody/magistrate/cadence-pilot-out-<activation>.txt`. Then exit at once, with no other `claude` or `codex` process running.
+
+**Check (next activation, after the fence is gone):**
+
+```sh
+"$PY" -B - "$OUT" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+r = json.loads((root / "runner_receipt.json").read_text())
+print(json.dumps({k: r.get(k) for k in ("rc", "runner_kind", "roster", "batch_windows", "legs_planned",
+                                        "legs_finished", "load_redos_used", "span_result", "meter", "error")},
+                 sort_keys=True))
+print([(s["name"], s["rc"]) for s in r["steps"]])
+assert r["runner_kind"] == "cadence-legs-v1" and r["roster"] == ["L001", "L002", "L003"]
+assert r["kit"]["sha256"] == "c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7"
+assert r["kit"]["frozen_commit"] == "b4b6aeb192da60d895a7529311b06599efff5be4"
+assert r["batch_windows"] == ["02:00-02:35"]
+names = [s["name"] for s in r["steps"]]
+assert names.count("soak") == 1 and names.count("frozen") == 1
+assert all(s["rc"] == 0 for s in r["steps"] if s["name"] in ("frozen", "condition13", "read_power", "soak", "restore"))
+for name, feed in r["feeds"].items():
+    assert feed["stop"]["proven_stopped"]
+    if name == "meter":
+        continue   # RL-150 R8: only the runner hashes KM003C stream files; the magistrate does not open them
+    for f in feed["files"]:
+        with (root / f["path"]).open("rb") as h:
+            assert hashlib.file_digest(h, "sha256").hexdigest() == f["sha256"]
+bundle = root / "desk-bundle"
+files = sorted(p.relative_to(bundle).as_posix() for p in bundle.rglob("*") if p.is_file())
+assert files == ["legs/L001/leg_summary.json", "legs/L002/leg_summary.json", "legs/L003/leg_summary.json",
+                 "span/meter.json", "span/result.json"], files
+for leg in ("L001", "L002", "L003"):
+    s = json.loads((bundle / "legs" / leg / "leg_summary.json").read_text())
+    print(leg, json.dumps(s, sort_keys=True))
+print("result", (bundle / "span/result.json").read_text().strip())
+print("meter", (bundle / "span/meter.json").read_text().strip())
+print("RECEIPT OK" if r["rc"] == 0 and r["legs_finished"] == 3 else "RECEIPT NOT CLEAN: report in full")
+PY
+
+# RL-150 R1 part 3 print (gates nothing): soak reference; each leg's own reference; its G0 release reading;
+# TV0h, TV1h, Tf08. Thermal journal values only: soak_reference.json, the soak's sensors journal,
+# each leg's outputs/align_window_reference.json and outputs/align_thermal.jsonl. Nothing else is opened.
+"$PY" -I -B - "$OUT" <<'PY'
+import json, statistics, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+KEYS = ("TV0h", "TV1h", "Tf08")
+def rows(path):
+    out = []
+    for line in path.read_text().splitlines():
+        d = json.loads(line)
+        if d.get("module") == "temperature" and d.get("kind") in ("reading", "align_thermal_gate"):
+            out.append(d)
+    return out
+def reading(d):
+    return d["started"]["monotonic_ns"], (d["values"].get("sensors") or {})
+soak = json.loads((root / "soak" / "soak_reference.json").read_text())
+sj = [reading(d) for d in rows(root / "soak" / "idle_soak" / "sensors" / "align_thermal.jsonl") if d["kind"] == "reading"]
+end = sj[-1][0]
+tail = [s for t, s in sj if t > end - 1200 * 10**9]
+tf08 = [s["Tf08"] for s in tail if isinstance(s.get("Tf08"), (int, float))]
+print("soak_reference", {k: soak["sensors_c"].get(k) for k in ("TV0h", "TV1h")},
+      "Tf08_last1200s_mean", statistics.fmean(tf08) if tf08 else None)
+for leg in ("L001", "L002", "L003"):
+    rec = json.loads((root / "legs" / leg / "leg_record.json").read_text())
+    bname = (rec.get("result") or {}).get("bundle")
+    if not bname:
+        print(leg, json.dumps({"no_bundle": True, "leg_status": rec.get("leg_status")})); continue
+    out = root / "legs" / leg / "runtime" / bname / "outputs"
+    j = rows(out / "align_thermal.jsonl")
+    reads = [reading(d) for d in j if d["kind"] == "reading"]
+    ref = json.loads((out / "align_window_reference.json").read_text())
+    lo, hi = ref["span_ns"]
+    ref_tf08 = [s["Tf08"] for t, s in reads if lo <= t <= hi and isinstance(s.get("Tf08"), (int, float))]
+    g0 = next((d["values"]["gate"] for d in j if d["kind"] == "align_thermal_gate"
+               and d["values"].get("gate", {}).get("kind") == "G0"), None)
+    at = next((s for t, s in reads if g0 and t == g0.get("exit_sample_ns")), {})
+    print(leg, json.dumps({
+        "own_reference": {"status": ref["status"], "TV0h": ref["fast_c"], "TV1h": ref["slow_c"],
+                          "Tf08_median": statistics.median(ref_tf08) if ref_tf08 else None},
+        "g0": None if g0 is None else {"outcome": g0["outcome"], "duration_s": g0["duration_s"],
+                                       "row_reference": g0.get("reference"), "row_release": g0.get("release"),
+                                       "release": {k: at.get(k) for k in KEYS}}}, sort_keys=True))
+PY
+
+test ! -e "$CUSTODY/desk_fence.json"; launchctl list | grep -c 'com.joulewise.align-r0' || true   # expect 0
+pmset -g | grep -i powermode                                            # 0
+sudo -n systemsetup -getusingnetworktime                                # Off
+# kernel frequency word: 0 (item 251 remedy if not)
+test ! -e /Users/Shared/JouleWise/host-power/high-power.marker
+pgrep -fl 'km003c_monitor.py|hazard_monitor.py' || echo "no stray monitor"
+pgrep -u root -fl powermetrics || echo "no root powermetrics"
+zsh /Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh verify; echo "verify rc $?"   # record lines (NOTE 1 applies)
+```
+
+The receipt also carries the runner's own close steps (`restore`, `stop-*`, `close-*`); report them as the restore lines. Do not open `hazards/`, any `stream-*.jsonl`, any `powermetrics*` file or any `align_episode.json`.
+
+**Report** (by email to Ed and the lead, and as RUN_STATE 318):
+- the receipt line, the step list and RECEIPT OK (or the receipt in full if not clean);
+- each leg's `leg_summary.json` line, with `admitted` called out per leg;
+- `span/result.json` and `span/meter.json`;
+- RL-150 R9: (1) three closes with complete records; (2) admitted count; (3) for any excluded leg, the rule it fell under (from `g0_outcome`, `contaminated_redos`, `leg_status`/decode cap and powermode in `leg_record.json`); (4) left to the lead's hand-read; and whether any named stop would fire (the Air desk builds `stops.json` from the bundle);
+- the RL-150 R1 print above, as printed;
+- the restore lines and the measurement_mode verify lines;
+- whether the span crossed 00:00 (the `/private/tmp` walk; not a gate).
+
+The magistrate reports; it never decides. Commit nothing from `$OUT`. Nothing is re-run and nothing else is queued.
+
+**After (the lead, at the desk; not the magistrate).** Copy the desk bundle to the Air (`/Volumes/JW-EXT/cadence-desk/<plan_id>/input`), build the automatic desk table, and read the journal table once by hand beside it (RL-149 §2.9 item 3). Record the pilot's R9 verdict. Only then append L004-L012 (span 2 of dev-01, on another calendar day) to the queue.
+
+316. **Magistrate 3b6187a1 (headless, Opus 5.5), 2026-11-13 23:29 PST (`date`): THE RL-145 PART C SMOKE COMPLETED (receipt rc 1, RECEIPT OK; part-C rc 1; verdict `start_state_failed`). A DIAGNOSTIC: no slots, nothing adopted, nothing re-run, nothing armed. It goes to the RESEARCH LEAD with the lead's desk table (close §8). Record: `docs/process_traces/2026-11-13-rl145-part-c-smoke/CHECK-3b6187a1.md`.**
+
+```pointer
+owner: research lead
+wait: none
+next_observable: (was waiting on: item 315's Part C smoke) the lead's desk table from the Part C journals (item 315 "After": step-D addendum §8 prints, close §7 row 6 prints for D_bank and X_G with the 2 s stamp rule, close §2 replacement evidence, the TV1h ≠ TV0h trigger), then a research-lead ruling naming the next step. The magistrate arms nothing and runs nothing until a RUN_STATE item authorizes it
+```
+
+- **Receipt:** `{"error": "StepFailed: 1", "fresh_soak": true, "parts": {"C": true}, "parts_requested": "C", "rc": 1}`; every step rc 0 except part-C rc 1; one `close-volumes`; all feeds (KM003C included) proven stopped and hash-checked: RECEIPT OK. OUT `/Users/edr/code/jw-wt/r1-followup-smoke/.desk/r1-partc-smoke-20261114T052520Z` at `f006b7aa6`. Span 21:26:16 to 23:25:17 PST: **00:00 was not inside it.** 237 agent censuses during the run, all empty.
+- **Soak:** rc 0, `soak_reference.json` sha256 `decfc428c1f119e5bad4ffd9487207cf6de4ecc2df1549d71ea33ab1d88a78bb`. TV0h and TV1h bands are identical to every printed digit: mean 34.2571 °C, detrended sd 0.01237 °C, slope −0.00725 °C/min, settled, 1,200 reads each.
+- **Evaluation (blinded print only):** verdict `start_state_failed`, pass false, `slots_entered` false. N_chunk 4,096; T_dead 983.10 s. `step_d` pass (G0 wait 209.0 s; slope −0.159 °C/min; over reference 0.275 °C, fast = slow). `d_bank_mechanics` fail on `admitted_turns` 2 of 3 only (gates + holds 210.6 s ≤ 393.2 s limit, 0.214 × T_dead; h_records match; no G1 timeout; no X7). `d_bank_start_state` fail: all four samples `os_level` null and `pm_state` null, reasons []. `x_g` pass (X_G ran). `log` []. Printed, not judged: turn 1 (4,096 decode tokens) left Nominal at token 1,223 (Moderate, 162.7 s after turn start), decode OS level share 0/1/2 = 0.30/0.07/0.63, last-512 clock ratio 0.875; both turns started at os_level 0 / Nominal. The printed `disposition` ("Start state fails: the no-hold design fails in Automatic…") is **superseded** (item 315).
+- **For the lead (observations, not rulings):** the start-state verdict rests on null samples, while the turn records show a level-0 / Nominal start, so the journals should say whether this is a sampler lookup or stamp-age effect; TV0h = TV1h throughout (close §5 trigger). Beside the close §8 predictions: G0 209 s (100-220 predicted), first off-Nominal before token 2,048 (as predicted), last-512 clock ratio 0.875 (0.83-0.93 predicted), gate time under 398.3 s and no deadman (the predicted mechanics failure did not occur in that form; 2 of 3 turns admitted), X_G passed (as predicted).
+- **Restore:** desk fence gone; no `align-r0` agent loaded; plist ProcessType Interactive; AC, powermode 0; Network Time Off; frequency word `raw_word 0`; no stray monitor, no root powermetrics, no High Power marker.
+- **Mail:** Ed and the lead, Gmail `1a1d8f6983dcb90f`, 23:31 PST.
+
+315. **Laptop lead (interactive, Opus 5.5), 2026-11-13 21:20:16 PST (`date`): MAGISTRATE: run the RL-145 close §8 PART C smoke on `f006b7aa6`: a FRESH TV0h/TV1h idle soak, then Part C only (`--fresh-soak --parts C`): the 30B predecessor, a full step-D on TV1h, the gated D_bank member seed 1, then X_G. It is a DIAGNOSTIC. It adopts nothing, enters nothing and produces no slots. It REPLACES the Part A smoke on `c3dbc33ed` (addendum §8), so the two are not both run. ONE smoke. No prepare, no arm, no session, no W1. The launch is your LAST action, and you exit at once. LAUNCH BY 02:15 PST Sat 14 Nov. If you cannot, do not launch; mail the lead.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-14T06:15:00-08:00
+on_early_or_refused: any failed line of "Start and check", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen by 02:15 PST: NOTHING launches. Do not retry, do not extend, do not reuse OUT, and do NOT run the Part A smoke on your own; mail the lead (the lead decides whether addendum §8's Part A fallback runs). A completed run whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json) is NOT a refusal: it goes to the research lead with the lead's table (close §8). Nothing is re-run
+next_observable: the next activation (after the fence is gone) runs "Check" below and reports, by email to Ed and the lead and as RUN_STATE 316: receipt rc, parts, soak rc and sha256, part-C rc; from smoke_part_c.json ONLY the evaluation, N_chunk and T_dead; the restore lines
+```
+
+- **Why (RL-145 close §8 and §12; close erratum §4: "Section 8, Part C: stands, unchanged, tonight"; RUN_STATE 314: Ed chose (c), and Part C is its first evidence).**
+  - Under every option now put to Ed, the 27B runs again with no in-turn hold. Nobody has yet seen a long un-held turn behind real gates, D_bank's turn 2, or a native G0 on a real slope. Part C also carries close §2's replacement evidence for the retired P7 stop (the OS level, the state and the state's stamp age at every G1 release sample of the gated D_bank run).
+  - It runs on the build bytes at `f006b7aa6`, **unchanged**. Close §7's changes to rows 3, 4, 6 and 7 are not in these bytes and are not needed tonight: they touch the evaluator and the prints, and the journals already record what those need. The lead's desk applies the 2 s stamp rule and the added prints from the journals. The research lead judges from that table, not from the evaluator's verdict.
+  - It replaces the Part A smoke on `c3dbc33ed`. Part C opens with the fresh soak, the 30B predecessor and a full step-D on TV1h, which covers everything the Part A smoke would show.
+  - **The evaluator's own `disposition` strings are superseded.** They predate the close. In particular, "Mechanics fail on gate time only: the fallback of RL-145 section 3 is the candidate and Part C runs once on it" is VOID: close §5 withdrew the fallback key, and close §8 says nothing is re-run on a fallback. Report the `verdict` and `disposition` as printed, but whatever the run returns goes to the research lead with the lead's table. The magistrate reports; it never decides.
+  - **A failing verdict ends with a non-zero rc, by design.** `smoke_part_c` (`scripts/align_r1_followup_kit.py`) writes `smoke_part_c.json` with its `evaluation` first and only then raises on `pass: false`. The kit then exits 1, so part-C's rc is 1 and the receipt's rc is 1. The research lead predicts a mechanics failure (close §8), so receipt rc 1 with an `evaluation` present is the expected shape of a completed run.
+  - **Predictions, fixed by the research lead before the run (close §8). For the record only; none is a bar here:** step-D's G0 releases on the slope clause in 100 to 220 s; D_bank turn 1 leaves level 0 before token 2,048 and the desk's rule excludes the member; the G1 after turn 1 takes more than 120 s; the run fails its mechanics (gates above 398.3 s, or the deadman before a third turn ends); X_G passes; no prediction for the state at each G1 release sample.
+- **Smoke commit `f006b7aa665280253db10d7a167599ff385fcec4`** (branch `origin/align/2026-11-13-rl145-build`, off `a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe`, the 11-13 night commit of item 306). Nothing on this branch is merged. The stack, row by row (addendum §5, close §7):
+  - `8143dec49`: rows 1-3. `s_slow` TVh0 → TV1h; `d_n_chunk` 4,096 from the config, labelled "candidate, not adopted", with the formula value recorded beside it; the alias-pair night confirmation.
+  - `ad078b03c`: row 8, the hash test. `thermal_gates.py` and `thermal.py` are pinned by sha256.
+  - `526de938f`: row 4. The validator, the ruling file (`authorizes_night false`), the regenerated table and the W1 kit; `plan_tree.json` and `identity_pins.json` change by one hash line each.
+  - `cfd16a52b`: row 6, the desk prints (print-only).
+  - `4f267dd24`: row 7, Part C in the smoke launcher, with the addendum §6 test (`scripts/align_r1_part_c.py`).
+  - `f006b7aa6`: row 7 follow-up. The runner receipt keeps parts `{A, B}` unless `--parts C`.
+  - Review: the research lead read the build diff `a6a09e6d7..f006b7aa6` for the config, `r1_runtime.py`, both kits, the launcher, the runner, `plan_tree.json` and `identity_pins.json`, and read `align_r1_part_c.py` and `sensor_ruling_rl145.json` in full (close, "Checked myself"). The Fable cold review waits for the ruling after Ed's answer (close §7), and nothing merges before it. Part C runs on these bytes by close §8.
+  - Lead pre-check on the Air (fresh worktree at the full sha, `python3.13 -B -m unittest`, one module at a time, under `taskpolicy -b`, `JW_B5_SYNTHETIC_ONLY=1`, own TMPDIR). The five TVh0 tests were excluded.
+    - Rows 1-3: `test_r1_runtime` 36 OK; `test_rl145_night_confirmation` 6 OK.
+    - Row 4: `test_rl145_second_key_rule` 11 OK; `test_v4_kit` 116 OK.
+    - Row 6: `test_rl145_prints` 10 OK; `test_thermal_desk` 25 OK.
+    - Row 7: `test_rl145_part_c` 22 OK; `test_r1_smoke_launcher` 58 OK; `test_r1_followup` 12 OK.
+    - Row 8: `test_rl145_gate_hashes` 1 OK.
+    - Item 306's dry-check set: `test_v4_registration` 24 OK; `test_r1_arm` 10 OK; `test_powermetrics_reap` 9 OK.
+    - **`hazards.test_refusal_allowlist`: 24 run, FAILED (failures=1, skipped=1).** The one failure is `test_every_refusal_site_is_listed_with_its_exact_count`, and its only finding is the new launcher refusal `scripts/launch_align_r0.py:308` (`launch`, `ValueError|parts c runs`, guard `496386fa2d97bd32`), which `configs/gates/hazard_refusals.json` does not list. It is a static census of refusal sites, not a row test or the hash test. It changes no executed byte, and the refusal it names is the one that makes `--parts C` require `--fresh-soak`. The allowlist line goes in with close §7's builder changes. **Lead's ruling: it does not block the issue.** Close §8's fallback condition names only the build's own targeted tests and the hash test, which all pass; the census line is a static listing of the new refusal, no executed byte, and its allowlist line lands with close §7's builder changes. The interim MBP lead session was stopped before this item so the MBP is agent-free.
+  - Air dry run of the launcher (stub `launchctl`, scratch custody root, no measurement):
+    - `--fresh-soak --parts C` passed every refusal before bootstrap at a deadline of now + 14,400 s and at now + 12,200 s. It wrote a runner spec `run_align_r1_smoke.py … --fresh-soak --parts C`, and the plist has `ProcessType Interactive` and `ExitTimeOut 400`. It stopped only at "LaunchAgent did not claim the desk fence", which is expected from a stub, and the fence was cleared.
+    - At now + 12,000 s it refused: "deadline cannot fit both part caps, display dwell and cleanup grace".
+    - With `--parts C` and no `--fresh-soak` it refused: "--parts C runs on a fresh soak".
+- **Condition-13 paths at `f006b7aa6`.** Eight are byte-identical to `a6a09e6d7` (item 306's table). Two changed:
+
+| Path | sha256 at `f006b7aa6` |
+|---|---|
+| `joulewise/align/apple/r1_runtime.py` (rows 2-3) | `1e41bda1cfc850fdc9c3272ffa96f5bc5f50946504e42f1ab3f93a5e6c7ec13f` |
+| `configs/align/v4/r1_runtime.json` (rows 1-2) | `bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df` |
+| `joulewise/align/apple/thermal_gates.py` (unchanged; addendum pin) | `c72937bd8bf7b5553c1ffd70e76018ffbf25f32578533c8749aa88419837918d` |
+| `joulewise/align/apple/thermal.py` (unchanged; addendum pin) | `b9b46f9ede50b265c245dcc05d3503139632ae129e313675622fa1dce25d39d7` |
+
+  The other six are as item 306 lists them: `align_r1_rehearsal.py` `2ba005b1…0a710`, `scripts/align_r1_runtime.py` `7403e69d…8f923`, `r1_runtime_contract.py` `4b9d1c69…6591`, `smc_enumeration.py` `0132579c…a0a9`, `r1_phase_table.py` `ffd6c025…f1ea`, `workload.py` `837b74be…1ba`. The config's word diff against `a6a09e6d7` is exactly `+"d_n_chunk": 4096,`, `+  "d_n_chunk_status": …`, `-"TVh0",`, `+"TV1h",`.
+- **What counts as completed (this is a diagnostic: there is no PASS bar).** The receipt asserts in "Check" hold: parts `{"C": true}`, `parts_requested` `"C"`, `fresh_soak` true, soak rc 0, one `close-volumes`, and every feed proven stopped and hash-checked (the KM003C meter feed included). `smoke_part_c.json` carries an `evaluation`. The receipt's rc is then 0 (verdict `pass`) or 1 (any other verdict). Anything else (rc 2, no `smoke_part_c.json`, an `error` with no `evaluation`, a failed feed) is still reported in full and goes to the lead and the research lead. It is not re-run.
+- **Conditions (close §8, §12).**
+  - No agent session on the MBP during the smoke: you exit at once after the launch, and no other `claude` or `codex` process is running. No lead SSH, desk job or R12 process until the fence is gone (`pgrep -fl 'b6_r12|r12'` empty before launch).
+  - The usual restore before the launch, and again in "Check": AC with powermode 0; network time OFF; the kernel frequency word at 0 (item 251: if it is not 0, set network time off and run item 251's zero script, then read it back); no stray `km003c_monitor.py`, `hazard_monitor.py` or root `powermetrics`. The runner restores Automatic itself and does not touch network time.
+  - `sudo -n -l /bin/kill` rc 0. Leave `night.lock` as found.
+  - The kit carries addendum §8's sensors tuple `("TV0h", "TV1h", ["Tf08"])` and class assert `classes["TV1h"] == "die" and classes["TV0h"] == "die"`.
+  - **The five kit tests that hard-coded TVh0 are not requested:** `test_r1_r0_classes:46`, `test_w1_tf08_record:96`, `test_r11_delta4_sol1:87`, `test_r1_second_fast_rule:57-65,139`, `test_w1_rl122_kit:54`. (At `f006b7aa6`, `526de938f` has rebound four of them to TV0h/TV1h, and `test_r1_second_fast_rule` pins its own config copy to TVh0 to keep testing RL-122's rule. They are still not part of this item's gate.)
+  - **Blinding.** From `smoke_part_c.json` print ONLY `evaluation`, N_chunk (`evaluation.n_chunk_configured`) and T_dead (`members.d_bank.deadman.T_dead_s`), with the "Check" script below.
+    - **Never `cat`, `grep`, `jq` or Read `smoke_part_c.json` or its twin `smoke.json`.** Their `members` block holds the slot block (`members.step_d.slots`, `slot_detail`) and the members' energy fields (`members.d_bank.energy_j`, `gross_episode_j`, and the like). Nobody reads energy before W1 (close §6).
+    - Open no member bundle, transcript, energy, power or meter file. No `r1_slots.json` exists or is produced.
+- **May run tonight:** this Part C smoke, once. **May NOT arm:** any session; W1 (close §12).
+- **High Power marker:** if `/Users/Shared/JouleWise/host-power/high-power.marker` exists, STOP and report.
+- **Timing.**
+  - **Cap.** Part C's cap is Part B's 5,720 s plus 2 × (1,800 + 120) s, which is 9,560 s (close §7 question 3; `launch_align_r0.r1_part_c_cap_s`). The launcher's minimum for `--fresh-soak --parts C` is that plus the soak cap (1,950 s), the display dwell (300 s), twice the cleanup grace (2 × 180 s) and 10 s: **12,180 s (3 h 23 min)**. The launcher refuses a deadline below it.
+  - **Deadline.** The fence deadline is the launch time plus **14,400 s (4 h)**, which leaves 2,220 s of margin and is under the 12 h maximum.
+  - **Batch window.** The soak refuses if it would overlap the 11:45-13:15 local OS batch window, so the launcher refuses a launch between 11:05 and 13:15.
+  - **Launch by 02:15 PST Sat 14 Nov,** so that the worst-case end (launch + 12,180 s) falls before the 05:40-06:00 scan hour. A launch before 00:00 runs through the midnight `/private/tmp` walk (item 29). That walk is not a gate: record whether 00:00 fell inside the span.
+
+**Start and check (while you are still alive).** Run the dry checks first, from a scratch worktree detached at the full sha (NOT the smoke worktree), with your own TMPDIR, `JW_B5_SYNTHETIC_ONLY=1`, `python3.13 -B -m unittest`, one module at a time. All must be OK:
+- `tests.align.test_rl145_gate_hashes`
+- `tests.align.test_rl145_part_c` (includes `RunnerPartCTests`: the receipt records `{"C": true}`)
+- `tests.align.test_r1_smoke_launcher`
+- `tests.align.test_v4_registration`
+
+`tests.hazards.test_refusal_allowlist` is deliberately NOT in this list. At `f006b7aa6` it fails on exactly one census line, the unlisted Part C refusal (see the pre-check above).
+
+Any failure: nothing launches; mail the lead (the Part A fallback of addendum §8 is then the lead's to issue). The Air already ran the full targeted list (above).
+
+```sh
+git -C /Users/edr/code/JouleWise fetch origin
+cd /Users/edr/code/jw-wt/r1-followup-smoke
+git checkout --detach f006b7aa665280253db10d7a167599ff385fcec4
+test "$(git rev-parse HEAD)" = f006b7aa665280253db10d7a167599ff385fcec4
+git merge-base --is-ancestor a6a09e6d7c3c756551c3e5c3546311c96fe8d3fe HEAD
+REPO="$PWD"
+: "${PY:?Set PY to the existing pinned measurement-venv interpreter (do not resolve the symlink)}"
+: "${MAGISTRATE_PID:?Set to the PID of this magistrate's own claude process}"
+ps -o pid=,comm= -p "$MAGISTRATE_PID"     # must show the claude process, not a tool shell
+test "$(date +%s)" -le 1794651300         # 02:15:00 PST Sat 14 Nov; else STOP, mail the lead
+CUSTODY="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-/Users/edr/night-custody/magistrate}"
+OUT="$REPO/.desk/r1-partc-smoke-$("$PY" -B -c 'import time; print(time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()))')"
+test -z "$(git status --porcelain)"
+for p in scripts/align_r1_rehearsal.py scripts/align_r1_runtime.py joulewise/align/apple/r1_runtime.py joulewise/align/apple/r1_runtime_contract.py joulewise/align/apple/smc_enumeration.py joulewise/align/apple/thermal_gates.py joulewise/align/apple/r1_phase_table.py joulewise/align/apple/workload.py joulewise/align/apple/thermal.py configs/align/v4/r1_runtime.json; do
+  printf '%s %s\n' "$(shasum -a 256 "$p" | cut -c1-64)" "$p"; done        # compare with the tables above
+"$PY" -B -c 'from pathlib import Path; import subprocess; from joulewise.align.apple import v4_registration as r; root=Path.cwd(); head=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); print(r.verify_r1_executed_sources(root,{"executed_commit":head}))'
+# must print f006b7aa665280253db10d7a167599ff385fcec4
+# RL-89 Mac check, rebound to TV0h/TV1h (addendum §8): the config's 60 keys equal r0.json's eligible rows (sha first)
+R0=/Users/edr/night-align/r0-v4-20261108T0550Z/smc/r0.json
+"$PY" -I -B - "$R0" "$REPO/configs/align/v4/r1_runtime.json" <<'PY'
+import hashlib, json, sys
+EXPECT = "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b"
+raw = open(sys.argv[1], "rb").read()
+got = hashlib.sha256(raw).hexdigest()
+assert got == EXPECT, f"REFUSE: r0.json sha256 {got} != {EXPECT}"        # 1. sha first
+rows = [r for r in json.loads(raw)["response"]["ranking"]
+        if r["class"] in ("die", "heatsink") and r["eligible"] is True]
+keys, classes = [r["key"] for r in rows], {r["key"]: r["class"] for r in rows}
+config = json.load(open(sys.argv[2]))
+assert config["sensors"]["r0_sha256"] == EXPECT, "REFUSE: config r0_sha256"
+assert len(keys) == 60 and len(set(keys)) == 60, f"REFUSE: {len(keys)} eligible rows"
+assert config["r0_classified_keys"] == keys, "REFUSE: r0_classified_keys != r0.json eligible rows (ranking order)"
+assert config["r0_classes"] == classes, "REFUSE: r0_classes != r0.json classes"
+s = config["sensors"]
+assert (s["s_fast"], s["s_slow"], s["record_keys"]) == ("TV0h", "TV1h", ["Tf08"]), f"REFUSE: sensors {s}"
+assert classes["TV1h"] == "die" and classes["TV0h"] == "die"
+print("RL-89 MAC CHECK OK", got, len(keys), sum(c == "die" for c in classes.values()),
+      sum(c == "heatsink" for c in classes.values()),
+      hashlib.sha256(open(sys.argv[2], "rb").read()).hexdigest())
+PY
+"$PY" -B -m unittest tests.align.test_r1_smoke_launcher.LauncherTests.test_r1_smoke_plist_runs_interactive_like_the_night_templates   # must be OK
+test ! -e /Users/Shared/JouleWise/host-power/high-power.marker
+sudo -n -l /bin/kill >/dev/null; echo "sudo kill rc $?"                 # must be 0
+pgrep -fl 'b6_r12|r12' || echo "no r12"                                # must print "no r12"
+pgrep -fl 'claude|codex' | grep -v "^$MAGISTRATE_PID " || echo "no other agent"   # must print "no other agent" (close §8: no agent session on the MBP during the smoke)
+pgrep -fl 'km003c_monitor.py|hazard_monitor.py' || echo "no stray monitor"
+pgrep -u root -fl powermetrics || echo "no root powermetrics"
+sudo -n systemsetup -getusingnetworktime                               # must say Off
+# kernel frequency word: read it as item 308 did; must be 0 (else item 251's remedy, then re-read)
+launchctl list | grep -E 'com\.joulewise\.(night|align-r0)' || echo "no night/smoke agent"
+"$PY" -B scripts/launch_align_r0.py preflight --disk-path "$REPO"       # ac_power true
+DEADLINE="$("$PY" -B -c 'import time; print(time.time()+14400)')"
+```
+
+The Mac check must print `RL-89 MAC CHECK OK e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b 60 16 44 bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df`. The ten hashes must match the tables, and `verify_r1_executed_sources` must return the full sha. Anything else means STOP.
+
+**Run (your last action):**
+
+```sh
+"$PY" -B scripts/launch_align_r0.py launch \
+  --runner-kind r1-smoke --repo "$REPO" --python-bin "$PY" \
+  --output "$OUT" --fresh-soak --parts C --disk-path "$REPO" \
+  --custody-root "$CUSTODY" --magistrate-pid "$MAGISTRATE_PID" \
+  --deadline "$DEADLINE" --exit-wait-seconds 180 --start-wait-seconds 30
+echo "$OUT"
+```
+
+Require exit 0, and `"next": "exit the magistrate session now"` with a claimed fence (fence `pid` ≠ `MAGISTRATE_PID`). Record PY, MAGISTRATE_PID, OUT, DEADLINE and the launch time in your RUN_STATE item and in `/Users/edr/night-custody/magistrate/r1-partc-out-<activation>.txt`. Then exit at once, with no other `claude` or `codex` process running.
+
+**Check (next activation, after the fence is gone):**
+
+```sh
+"$PY" -B - "$OUT" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+r = json.loads((root / "runner_receipt.json").read_text())
+print(json.dumps({k: r.get(k) for k in ("rc", "parts", "parts_requested", "fresh_soak", "error")}, sort_keys=True))
+print([(s["name"], s["rc"]) for s in r["steps"]])
+soak = [s for s in r["steps"] if s["name"] == "soak"]
+part_c = [s for s in r["steps"] if s["name"] == "part-C"]
+print("soak", soak and soak[0].get("rc"), soak and soak[0].get("result", {}).get("soak_reference_sha256"))
+print("part-C", part_c and part_c[0].get("rc"), part_c and part_c[0].get("error"))
+assert r["parts"] == {"C": True} and r["parts_requested"] == "C" and r.get("fresh_soak") is True
+assert soak and soak[0]["rc"] == 0
+assert part_c and r["rc"] in (0, 1) and part_c[0]["rc"] == r["rc"]     # rc 1 = completed, verdict not "pass"
+assert [s["name"] for s in r["steps"]].count("close-volumes") == 1
+for feed in r["feeds"].values():
+    assert feed["stop"]["proven_stopped"]
+    for f in feed["files"]:
+        with (root / f["path"]).open("rb") as h:
+            assert hashlib.file_digest(h, "sha256").hexdigest() == f["sha256"]
+print("RECEIPT OK")
+PY
+# smoke_part_c.json: print ONLY evaluation, N_chunk, T_dead (and the kit's error text if there is no evaluation). Never print members/slots.
+"$PY" -I -B - "$OUT/part-c/smoke_part_c.json" <<'PY'
+import json, sys
+g = json.load(open(sys.argv[1]))
+ev = g.get("evaluation")
+d_bank = (g.get("members") or {}).get("d_bank") or {}
+print(json.dumps({"evaluation": ev,
+                  "N_chunk": None if ev is None else ev.get("n_chunk_configured"),
+                  "T_dead_s": (d_bank.get("deadman") or {}).get("T_dead_s"),
+                  "error": None if ev is not None else g.get("error")}, indent=1, sort_keys=True))
+PY
+test ! -e "$CUSTODY/desk_fence.json"; launchctl list | grep -c 'com.joulewise.align-r0' || true   # expect 0
+plutil -p "$CUSTODY"/r0-launches/<token>/*.plist | grep ProcessType      # must show Interactive
+pmset -g | grep -i powermode                                            # 0
+sudo -n systemsetup -getusingnetworktime                                # Off
+# kernel frequency word: 0 (item 251 remedy if not)
+pgrep -fl 'km003c_monitor.py|hazard_monitor.py' || echo "no stray monitor"
+pgrep -u root -fl powermetrics || echo "no root powermetrics"
+```
+
+**Report** (by email to Ed and the lead, and as RUN_STATE 316):
+- the receipt line and RECEIPT OK;
+- the soak's rc, its reference sha256 and its two bands (TV0h, TV1h);
+- part-C's rc;
+- from `smoke_part_c.json` only: `evaluation` (its `verdict` and `disposition` as printed, each `lines` entry's `pass` and its detail, the `log` lines including whether X_G ran, and `printed_not_judged`), N_chunk and T_dead;
+- whether 00:00 fell inside the span;
+- the restore lines.
+
+Say in the report that the `disposition` text is superseded, as above. The verdict decides nothing here: the result goes to the research lead with the lead's desk table. Commit nothing from `$OUT`.
+
+**After (the lead, at the desk; not the magistrate).**
+- From the journals: the step-D leg's addendum §8 prints (the G0's duration and the clause last out; the P4 rows; the P2 row; the P6 values; the P7 time).
+- Then close §7's row 6 prints for D_bank and X_G, with the 2 s stamp rule (`pm_observed_ns` older than 2 s counts as not recorded), close §2's replacement evidence, and the TV1h ≠ TV0h trigger (close §5).
+- That table goes to the research lead with the erratum §3 question already answered (item 314).
+
+**The MBP.** RL-145 §6 stands otherwise: the MBP is the lead's under the same conditions. Leave `/Users/edr/code/jw-wt/r12-mbp`, `/Users/edr/code/jw-wt/lead-desk-r1fu` and `/private/tmp/r12-mbp-tmp/` as they are.
+
+314. **Laptop lead (interactive, Opus 5.5), 2026-11-13 21:01:03 PST (`date`): ALIGN v4: ED'S ANSWER TO THE RL-145 QUESTION (the 27B cannot run as registered on this laptop): option (c). Recorded verbatim. Nothing is armed by this item; no session and no W1.**
+
+- **Question:** the research lead's text of RL-145 close erratum §3 (`~/code/jw-wt/lead-handoff-1113/fable-rl145-close-erratum.md` on the MBP), put to Ed in session with the four options (a) screening-only, (b) qualify High Power, (c) keep K in normal power mode and change the claim words, (d) a smaller model; research lead recommends (c) as a trial.
+- **Ed, 2026-11-13 21:01:03 PST, verbatim (option chosen):** "(c) Keep K, reword (Recommended)" — "Fable's trial recommendation. K is kept in normal power mode; 27B runs become 'cooled to a set point before each turn', and runs that heat up are kept in. S is at risk. A rewritten budget check is needed and may not exist; Fable reports within one ruling. If none fits, the choice falls back to (a) or (d)."
+- **Next (research lead):** the ruling after Ed's answer (RL-145 close §12 owner line): whether a budget check exists that fits; design, N_chunk, series mode, ruling 1(f), the energy print, DEVIATIONS wording, the restored checklist. Tonight's Part C smoke (close §8) runs as a diagnostic either way; it is its first evidence.
+
+313. **Laptop lead (interactive, Opus 5.5), 2026-11-13 20:58 PST (`date`): THE S-14 LINE IS ON `main` (RL-134 item 18, runbook step 17 and §18). PR #771 merged at 2026-11-13 20:57:47 PST by merge commit `8d54a57797d5c41f1c4c1160f69a0bb5e5c3e6ed`; `6e6d1b18a` (tag `b6/analysis-r2`) is now reachable from `main`.**
+
+- **§18 check, re-taken on `main` at `8d54a5779`:** all 24 closure files equal the release record's `closure_sha256` (24 of 24, 0 differ; `git show <merge>:<path> | sha256`). The merge is not redone.
+- **Carried with it:** RL-144 addendum M1 (mint guard exempts the two pinned literal files by name and asserts each equals `D125_SCREEN_FLOOR_S`) and M2 (cited rebind of `joulewise/flags/exclusions.py`, DLE-14; `EVOLVED_ON_MAIN`, `REBOUND_WORKING_TREE`, Block 5 equivalence test). Four `os.posix_spawn` R12 fixture tests skip off macOS (research lead, #771 row 4 finding 6); git-init via the shared helper; 12 reviewed host-command allowlist rows for the R12 fixture (none executes); `POST_R4_REBINDS` in the r4 ancestry test. CI attempt 1 had one load flake (`test_reserve_calibration_hazard`, custody-hang timeout), green on re-run; research lead ADMIT as flake. A second failure of that id on `main` goes to the research lead.
+- **Also merged today after the release:** PR #770 (release record post-release lines, `c45c3254c`), PR #773 (Block 5 seal record release event, recorded late, DLE-13, `fd43dcdf4`), PR #772 (Paper 1 Block 6 fills under RL-147, `bced84e11`).
+- **Still owed (non-gating):** `P1-B6-DISCLOSURES` supplementary table (follow-up PR, to the research lead); `P1-RELEASE-BYTES` pending its events; program follow-up keeps per-class `max_observed_difference` and the 8a plain-mean factor (B6-DL-1, B6-DL-3).
+
+312. **Laptop lead (interactive, Opus 5.5), 2026-11-13 18:55 PST (`date`): BLOCK 6 IS RELEASED. PR #769 (the release record) merged to `main` at 2026-11-13 18:54:57 PST (merge commit `66469ccf4d575e770b6a72de0d670105bbd95124`); that commit is the release event (RL-134 item 10, runbook step 12). Recorded BEFORE any restricted output is opened (RL-146 §2 step 8).**
+
+- **RL-6 (d):** "Block 6 is released under its registration on 2026-11-13; Paper 1 prints the replication." The date in item 309 stands (the merge landed on 2026-11-13 PST).
+- **Record on `main` at `66469ccf4d575e770b6a72de0d670105bbd95124`:** `docs/registrations/block6_release_record.md` SHA-256 `8d5da6351cfdd0ecbb334f164d62590959aac0fd9c0adef12583c68feff34f30`; `docs/registrations/block6_release_record.json` SHA-256 `41e6ebd7fa07d1cee24beffaf96de6de0a7be201fe4ab1c6eeefb78bce0d5385`. Registration `docs/registrations/block6_replication_DRAFT.md` SHA-256 `7243a2bc1e43207d756ba9eacc6c93622968edd73a6ebe0648afaba563324ead` (unchanged).
+- **Under:** Ed's OK, items 309 and 311 (311 verbatim); RL-134 checks all PASS on r2; Mythos 5.2 cold audit admit-with-fixes and RL-146 (audit branch `7d2e38bb2`), every RL-146 §2 step done; step 6 checks re-run immediately before the merge: registration hash, 8 of 8 r2 output digests, item 311 quoted.
+- **Correction (2026-11-13 20:04 PST, research lead's ruling on the release time):** the release time is the merge commit's own time, 2026-11-13 18:54:56 PST (`66469ccf4`, author and committer; RL-146 "Release time", RL-147 §4 item 2). The 18:54:57 above was GitHub's `mergedAt` event record, one second later. Paper 1 prints 18:54:56.
+- **Next (lead):** runbook steps 13-17 on the Air (they read the restricted outputs, now allowed); RL-146 §3 post-release list (commit the comparison evidence, kept-log re-runs of the kit end-to-end and comparer tests, M1/M2 follow-ups, then the S-14 line PR to `main`). PRs #765-#767 may now merge on their own gates.
+
+311. **Laptop lead (interactive, Opus 5.5), 2026-11-13 18:13 PST (`date`): BLOCK 6: ED'S RELEASE OK IN HIS OWN WORDS (release condition 11; Mythos finding 6, RL-146 §2 step 1). Recorded BEFORE the release and before any Block 6 outcome is read.**
+
+- **Context.** Ed asked for a cold audit of the release record (PR #769) by Claude Mythos 5.2: ADMIT WITH FIXES (report SHA-256 `9ba5c89d…6862`). The research lead's RL-146 agrees: the fixes are record text, one re-render and CI only; no program is run on custody, `check` is not re-run. #769 is held as a draft until RL-146 §2 is done.
+- **The question put to Ed (in session, verbatim):** "Block 6 release OK, to be recorded verbatim in the release RUN_STATE item (Mythos finding 6). Every RL-134 check passed on r2. Mythos found only record-completeness fixes and no failed check, and Fable is ruling on those fixes now. Do you OK merging PR #769 (the release / unblinding) once the record fixes land, CI is green and Fable admits? It may slip past midnight PST."
+- **Ed, 2026-11-13 18:13:29 PST, verbatim:** "OK, today or tomorrow" — "Release on the same r2 outputs once fixes, CI and Fable's admit are in, even if the merge lands after midnight. I'll quote this answer verbatim and re-date the record and the RL-6 (d) line if it does."
+- **Reading (RL-146 §2 step 8):** this answers both of RL-146's questions: the OK to unblind by merging #769 once RL-146's list is done and CI is green, and that the OK stands if the merge lands on 2026-11-14 PST. Item 309's paraphrase stands as the history of the 08:45 and 14:30 OKs.
+
+310. **Magistrate 823a43f6 (headless, Opus 5.5), 2026-11-13 17:20 PST (`date`): THE SLOT-PRODUCING R1 FOLLOW-UP NIGHT COMPLETED (chain exit 0, 17:04 PST; D-7 packet matches) BUT PRODUCES NO SLOTS. It goes to the RESEARCH LEAD under item 306 dispositions 1, 3 and 8: (1) TVh0 is inadmissible on D under clause D1(b) (max one-second change 25.0 °C > half the step rise, 24.70 °C), which is the 5 °C staircase of item 308; (3) the duty bar FAILS: D_bank admitted 2 turns, gates + holds 621 s = 0.62 × T_dead, and the deadman stopped it (X7). So no slots are entered, W1 does not sign, and no further night is armed. Planning turns R+0/R+2/R+4 all fit the 3(a) pattern. A-B-A `not_adopted` as expected. Restored: uninstalled, powermode 0, network time OFF, frequency word 0. Nothing is armed. Record: `docs/process_traces/2026-11-13-w1-slot-night/AFTER-NIGHT-823a43f6.md`.**
+
+```pointer
+owner: research lead
+wait: none
+next_observable: (was waiting on: the research lead's ruling on the R1 follow-up night (TVh0 D1(b) inadmissibility; duty-bar failure in D_bank: H holds 536.5 s inside one decode turn, X7 deadman)) a research-lead ruling (RL-1xx) naming the next step for the second key and the duty bar; the lead brings the journal table (disposition 3). The magistrate arms nothing until a RUN_STATE item authorizes a night
+```
+
+- **Night:** plan `align-r1-20261113T1508Z`, custody `S=/Users/edr/night-align/r1fu-20261113T144743Z`, `r1_result.json` `status complete` (sha256 `8df1bdd1…8fed`), `chain_wall_s` 35,194, `executed_commit` `a6a09e6d7…`. Results ref `night-results/align-r1-20261113T1508Z` @ `61f88049a`. KM003C capture present (35,515 s, 0 bad, 0 USB errors).
+- **Restore (runbook §4):** `arm_align_r1.py uninstall` rc 0; only `com.joulewise.magistrate` loaded; powermode 0; no stray monitor or powermetrics. Network time: the driver set it ON at 17:04:47; at 17:07:38 it was set OFF again, and `zero.py` changed freq from −188706 to 0; 120 s rate +0.012 ppm. Canonical root fast-forwarded to `a5c698e51`.
+- **For the lead's desk:** `align_r1_followup_kit.py desk` refuses on this night by design (`RL-78: picked sensors inadmissible on night D`). The 3(a) desk print (`215e048ed`, run read-only) and a per-G0 RL-90 table are beside the record. The ticker statistic was not computed. Nothing from `r1_slots.json` was read or committed.
+- **Mail:** Ed, Gmail `1a1d79ed2af63fb4`, 17:22 PST.
+- **Also for the research lead:** D_spam_b's G0 released at slope +0.211 °C/min (bar ±0.2), and every D-member TVh0 release is 35.000 (staircase-pinned). The 30B record-only thermometry flags `r1.sensor_pick_changed` (`s_slow` Th06).
+
 309. **Laptop lead (interactive, Opus 5.5), 2026-11-13 16:52 PST (`date`): BLOCK 6: ED'S OK ON RECORD (release condition 11) AND THE RL-6 (d) CALL (condition 10). Recorded BEFORE any Block 6 outcome is read. Nothing on the MBP is touched; the armed session stands.**
 
 - **Ed's OK (in session).** 2026-11-13 08:45 PST: unblind Block 6 today, conditional on every RL-134 pre-release check passing (gate, dry run within its stop, structure probe and term 7 with no stop, the digest and census release check); any stop holds the release. Renewed 14:30 PST after the first dry run's hold (RL-142): release today if every RL-134 check passes on r2; any further stop moves it to tomorrow and to the research lead.

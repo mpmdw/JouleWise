@@ -48,6 +48,9 @@ PENDING_AT_SNAPSHOT += [f'{p}{c}_{f}{s}' for c in ('1p7B_decode', '1p7B_prefill_
 MIXED = {'P1-ID-OS','P1-M-RECORD-WIDTH','P1-M-ACCEPT','P1-LEDGER','P1-DEV-LIST','P1-RELEASE','P1-RECOMPUTE','P1-AVAIL'}
 # Placeholders the second fill created (RL-52 (4): the Block 6 half of P1-RECOMPUTE-SUMMARY).
 NEW_AFTER_SNAPSHOT = {'P1-RECOMPUTE-SUMMARY-B6'}
+# Mapped ids filled and checked by fill_check_b6.py, not by fill_check_b5.py: P1-RELEASE (its Block 5 and Block 6
+# clauses; Fable's final pass on PR #772, finding 4, after PR #773). Its BYTES part is the pending P1-RELEASE-BYTES.
+FILLED_ELSEWHERE = {'P1-RELEASE'}
 FILL_ID = re.compile(r'\{\{FILL:\s*([^|]+?)\s*\|')
 
 
@@ -67,7 +70,7 @@ def check_working_paper(current, rows, fill=None):
     fill = fill or fill_module()
     mapped = {r['placeholder'] for r in rows}
     present = {m[1].rstrip(' \\') for m in FILL_ID.finditer(current)}
-    done = set(fill.FILLED) | set(fill.DELETED_WITH_BRANCH) | set(fill.DROPPED)
+    done = set(fill.FILLED) | set(fill.DELETED_WITH_BRANCH) | set(fill.DROPPED) | FILLED_ELSEWHERE
     for fid in mapped:
         if fid in present:
             if fid not in set(fill.PENDING) | MIXED:
