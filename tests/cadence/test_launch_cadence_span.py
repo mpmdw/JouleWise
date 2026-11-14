@@ -412,8 +412,9 @@ time.sleep(60)
 ''')
         spec = self.root / "runner.json"
         spec.write_text(json.dumps({"kind": "cadence-legs-v1", "argv": [sys.executable, "-B", str(child)]}))
+        # The fake pmset, so that even a mutant that sleeps the display never reaches /usr/bin/pmset.
         outer = subprocess.Popen([sys.executable, "-B", str(SCRIPT), "run", "--deadline", str(time.time() + 3600),
-                                  "--runner-spec", str(spec)], cwd=REPO, env=self.env)
+                                  "--runner-spec", str(spec), "--pmset-bin", str(self.pmset)], cwd=REPO, env=self.env)
         self.addCleanup(self.stop, outer)
         self.wait_for(lambda: (self.root / "child.pid").exists())
         child_pid = int((self.root / "child.pid").read_text())
