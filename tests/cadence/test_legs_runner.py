@@ -637,5 +637,64 @@ class LauncherTests(unittest.TestCase):
                 sleep.assert_not_called()
 
 
+class CommittedKitTests(unittest.TestCase):
+    """The dev-01 and dev-02 kits and the ledger rows that pin them (RL-149 section 2; section 5 item 6)."""
+    KITS = ("cl-dev-01", "cl-dev-02")
+
+    def load(self, name, window=kitmod.OS_BATCH_WINDOW):
+        return kitmod.load_kit(runner.ROOT / f"docs/process/cadence/kits/{name}.json", batch_window=window)
+
+    def test_kits_validate_under_both_blackouts_and_are_rl149_section2(self):
+        for name in self.KITS:
+            kit, _ = self.load(name)
+            self.load(name, NEW_WINDOW[0])
+            self.assertEqual(kit["ruling"], {"id": "RL-149 §2", "authorizes_spans": True})
+            self.assertEqual(kit["runner"]["kind"], "cadence-legs-v1")
+            self.assertEqual(len(kit["legs"]), 12)
+            self.assertEqual({(leg["prefill_tokens"], leg["decode_tokens"], leg["start_band"]) for leg in kit["legs"]},
+                             {(19458, 4096, "q0")})
+            self.assertEqual(kitmod.deny_scan(kit), [])
+            for path in ("scripts/cadence_legs_runner.py", "scripts/cadence_leg_runtime.py",
+                         "joulewise/align/apple/cadence_leg.py", "joulewise/cadence/legs.py",
+                         "joulewise/align/apple/r1_runtime.py", "configs/align/v4/r1_runtime.json"):
+                self.assertIn(path, kit["frozen"]["paths"])
+        self.assertIn("pilot_counted", [r["id"] for r in self.load("cl-dev-01")[0]["inclusion_rules"]])
+        self.assertNotIn("pilot_counted", [r["id"] for r in self.load("cl-dev-02")[0]["inclusion_rules"]])
+
+    def test_spans_plan_inside_the_launch_ceiling(self):
+        kit, _ = self.load("cl-dev-01")
+        for t0 in ("2026-11-15T13:20", "2026-11-16T02:40"):
+            pilot = legsmod.plan_span(kit, t0_epoch=local(t0), windows=NEW_WINDOW, leg_ids=["L001", "L002", "L003"],
+                                      max_span_s=runner.max_span_s())
+            rest = legsmod.plan_span(kit, t0_epoch=local(t0), windows=NEW_WINDOW,
+                                     leg_ids=[f"L{i:03d}" for i in range(4, 13)], max_span_s=runner.max_span_s())
+            whole = legsmod.plan_span(self.load("cl-dev-02")[0], t0_epoch=local(t0), windows=NEW_WINDOW,
+                                      max_span_s=runner.max_span_s())
+            self.assertEqual([leg["leg_id"] for leg in pilot["legs"]], ["L001", "L002", "L003"])
+            self.assertLess(pilot["expected_s"], 2 * 3600)
+            self.assertLess(rest["expected_s"], whole["expected_s"])
+            self.assertLessEqual(whole["expected_s"], 5.1 * 3600)
+
+    def test_frozen_paths_hash_at_the_frozen_commit(self):
+        kit, _ = self.load("cl-dev-01")
+        have = subprocess.run(["git", "-C", str(runner.ROOT), "cat-file", "-e", kit["frozen"]["commit"] + "^{commit}"],
+                              capture_output=True)
+        if have.returncode:
+            self.skipTest("frozen commit not in this clone")
+        for name in self.KITS:
+            self.assertEqual(kitmod.verify_frozen(self.load(name)[0], runner.ROOT), [])
+
+    def test_ledger_pins_the_kits(self):
+        from joulewise.cadence import blocks
+        doc = blocks.load_ledger(runner.ROOT / blocks.LEDGER_PATH, runner.ROOT)
+        rows = {b["design_id"]: b for b in doc["blocks"]}
+        for design_id, name in (("dev-01", "cl-dev-01"), ("dev-02", "cl-dev-02")):
+            _, sha = self.load(name)
+            self.assertEqual(rows[design_id]["kit"]["sha256"], sha)
+            self.assertEqual((rows[design_id]["status"], rows[design_id]["ruling"]), ("SPECIFIED", "RL-149 §2"))
+        self.assertEqual((rows["hp-01"]["status"], rows["hp-01"]["kit"]), ("SPECIFIED", None))
+        self.assertNotIn("pilot-01", rows)       # RL-149 2.3: the pilot is part of dev-01
+
+
 if __name__ == "__main__":
     unittest.main()

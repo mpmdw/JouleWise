@@ -1,0 +1,294 @@
+{
+ "schema": "joulewise.cadence_campaign_kit.v1",
+ "campaign_id": "cl-dev-02",
+ "title": "Conditionless calibration campaign, development block dev-02 (RL-149 section 2): the dev-01 kit with the next seeds (RL-149 section 5: same kit, next seeds). Twelve type-A legs at the anchor shape, band q0, Automatic, one span.",
+ "ruling": {
+  "id": "RL-149 §2",
+  "authorizes_spans": true
+ },
+ "frozen": {
+  "commit": "1f235fb65eed18179279397429a124f07d5bde48",
+  "paths": {
+   "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
+   "configs/align/v4/r1_runtime.json": "bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df",
+   "configs/campaigns/align_v4/registration/inputs.json": "49806b61e50d5c2ceeeea323d8aceff75177a2f7e7d83ad2f5dfbe1c20090130",
+   "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
+   "joulewise/adapters/mlx_runtime.py": "953e6fec990c1d7e0702a8abb199a55f179e50d28854f4b62d0e95302dde0c45",
+   "joulewise/adapters/powermetrics.py": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4",
+   "joulewise/align/apple/cadence_leg.py": "c4dc0713c4dc6885797eb5d6e50f5611e365c273055a3ea47bf0496a6daad7c0",
+   "joulewise/align/apple/endpoint.py": "65b02aea0e02b5484811e2021445213b2d2645e334b93461b593f23e0a4d0deb",
+   "joulewise/align/apple/powermode.py": "a5cb6efe7707b95277cfb85ddb4453dbcb02fe87ada5177ec3947d48ce64e84b",
+   "joulewise/align/apple/prompt_cache.py": "48cf0d5453b96fadfb58168e0c55a90d92066af7469f2ee1151fb61821c83999",
+   "joulewise/align/apple/r1_phase_table.py": "ffd6c025f4691771ea348f5d0f670c8f4bbfcb61afe67b83831afdd6c3d6f1ea",
+   "joulewise/align/apple/r1_runtime.py": "a5ba3cd4dce1b41c8448e2e26653789a9f607ffc2836a7b4a9339b991f9b6dac",
+   "joulewise/align/apple/r1_runtime_contract.py": "4b9d1c69b0459a0382dfdd5e3aee56366e99f770ed2320cfff90539647ab6591",
+   "joulewise/align/apple/smc_enumeration.py": "0132579cc33f8a997cdfd5f3dd84466352cdeeeebf9ca7de8dc1ec7990cea0a9",
+   "joulewise/align/apple/smc_reader.py": "6ea8dbb6ed6b6640f8cb89698ec19827de8de0e657750815a101e7809520516e",
+   "joulewise/align/apple/thermal.py": "b9b46f9ede50b265c245dcc05d3503139632ae129e313675622fa1dce25d39d7",
+   "joulewise/align/apple/thermal_gates.py": "c72937bd8bf7b5553c1ffd70e76018ffbf25f32578533c8749aa88419837918d",
+   "joulewise/align/apple/v4_registration.py": "317859c427910eb8c705784a52aaf4f44b1a059bae729031dce1d6a539b5d1d5",
+   "joulewise/align/apple/workload.py": "837b74be97616c48c26b0c1277fe2a605b575d5cfc4396dc05e1139079daf1ba",
+   "joulewise/b5/driver.py": "88068b64d09d3e335810e3b4718246cb3164223b87f96b56c5a098349882f90b",
+   "joulewise/cadence/__init__.py": "f4b0e5a58ba794f75fc831965b4a840bcd07340807c66b42b3efad66bd787630",
+   "joulewise/cadence/desk.py": "c577a548f2426863eefc11a42f5e4ef83f748f18932ebd38e6c5bc7e5457f58a",
+   "joulewise/cadence/kit.py": "719a41eb4dc84c94f2192978088c2b335eed8779bcc2f29f59256b141407cacb",
+   "joulewise/cadence/legs.py": "a89441749228b725cad1bd246d65b5561853d9d2925fab342dd09ff5fef45c0d",
+   "joulewise/cadence/queue.py": "4f926974f23c627d6d245199adf4f979d3397df4b0f6c5ed5eb22177690bc80e",
+   "joulewise/cadence/stops.py": "80d640fc6519c8c35def61f086ae255a15bbebac43900bdcd183d772bec020fb",
+   "joulewise/controller.py": "3f0535c976463da1ae99718cfcde2b0ef92241cda36973baaf4b1a6ebe1b12db",
+   "scripts/align_r1_rehearsal.py": "2ba005b14bd687a87e749c2ec6f162a603b7e76674924bb282a766164070a710",
+   "scripts/align_r1_runtime.py": "7403e69d9aedb54887bfc4218a45db84faa653329ca977bcf97edf20af88f923",
+   "scripts/cadence_leg_runtime.py": "345e9064015536f7e1454f42535d7a44d39acdc17494d26fc4200a25b31662f1",
+   "scripts/cadence_legs_runner.py": "4b28e62593e5ece62ece5018ce331f33b3fb2962d5c739c98ed22e7d7040fc52",
+   "scripts/km003c_monitor.py": "211a807f152e18b28b622f1d914fca115f308e5938c979269842e2df91601ef9",
+   "scripts/launch_align_r0.py": "b143a22c78b7d79f7d439cf3ed89daa75b4ce2e10a102794c8853ffe1e61f602",
+   "scripts/run_align_r0_launchagent.sh": "ac1dc2a223754cfc3295dd1352a838a3077671da140ffeeba484400e1bd249c6",
+   "scripts/run_align_r1_smoke.py": "5513d616231acf66209a29310df12214304a293042ddc020887b26369a87c34c",
+   "scripts/run_night.py": "b3c58c91125b8355a5269928cda3b30e26f362b9927b03cbebf71d71f1fb28c0"
+  }
+ },
+ "runner": {
+  "kind": "cadence-legs-v1",
+  "entry": "scripts/cadence_legs_runner.py",
+  "stage_journal": "chain-stages.jsonl"
+ },
+ "model": "mlx-community/Qwen3.8-27B-8bit",
+ "leg_defaults": {
+  "prefill_tokens": 19458,
+  "decode_tokens": 4096
+ },
+ "seed_law": {
+  "method": "sha256-v1",
+  "master_seed": 2026111402,
+  "n_legs": 12,
+  "bands": [
+   "q0"
+  ]
+ },
+ "legs": [
+  {
+   "leg_id": "L001",
+   "seed": 3407196167,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L002",
+   "seed": 1200148396,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L003",
+   "seed": 4048253495,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L004",
+   "seed": 2129654160,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L005",
+   "seed": 2522171568,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L006",
+   "seed": 606134315,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L007",
+   "seed": 756369387,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L008",
+   "seed": 2814803342,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L009",
+   "seed": 3757715371,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L010",
+   "seed": 2990673426,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L011",
+   "seed": 3918830640,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  },
+  {
+   "leg_id": "L012",
+   "seed": 2835741939,
+   "start_band": "q0",
+   "prefill_tokens": 19458,
+   "decode_tokens": 4096
+  }
+ ],
+ "inclusion_rules": [
+  {
+   "id": "ran_to_cap",
+   "text": "RL-149 section 2.4 rule 1: it ran to its decode cap, or was cut by T_dead where the design says it should be. A type-A leg has no designed cut: a leg that stops short of 4,096 tokens is kept in custody, flagged, and not included."
+  },
+  {
+   "id": "g0_released",
+   "text": "RL-149 section 2.4 rule 2: its G0 released (its own G0, under the R1 G0 timeout of 1,200 s). A leg whose G0 timed out runs no turn, stays in custody and is not included."
+  },
+  {
+   "id": "sidecar_coverage",
+   "text": "RL-149 section 2.4 rule 3: sidecar coverage of at least 99 % with no gap over 2 s, and powermetrics gaps within the U1 bound. Judged on custody by frozen code at a look, not by the runner."
+  },
+  {
+   "id": "km003c_clean",
+   "text": "RL-149 section 2.4 rule 4: the KM003C was present and its stream is clean, since every leg is analysed on DC-in as well as the GPU rail."
+  },
+  {
+   "id": "not_a_replaced_attempt",
+   "text": "RL-149 section 2.4 rule 5: it is not an attempt replaced under the load-redo rule (above 0.5 core of outside load for 60 s). The runner redoes such a leg once per contaminated attempt, up to the span's redo quota; every replaced attempt stays in custody as runtime.rejected<N>."
+  },
+  {
+   "id": "block_power_mode",
+   "text": "RL-149 section 2.4 rule 6: the power mode is the block's. This block is Automatic (pmset powermode 0)."
+  },
+  {
+   "id": "no_drop_by_outcome",
+   "text": "No leg is dropped for its energy, its residual, its OS level or state, or its heat. Those are the measurement. Every attempt stays in custody, replaced ones included."
+  },
+  {
+   "id": "bands_by_history",
+   "text": "RL-149 section 2.2: bands are by history and no designed start state is waited for. Band q0 means the turn starts at the leg's own G0 release (a warm start directly after a heavy leg's G0). The first leg of each span follows that span's fresh soak of at least 30 min idle, which is the block's cold start. Every model reads the measured start reading."
+  },
+  {
+   "id": "reserve_rule",
+   "text": "RL-149 section 2.4: the reserve replaces a leg excluded under rules 1 to 6, in the same cell, in a later block of the same phase, never because a result is inconvenient. A leg whose energy was captured is never re-run to replace it."
+  },
+  {
+   "id": "energy_read_rule",
+   "text": "RL-149 section 2.6: campaign energy (GPU rail, the other rails and DC-in) is read only by frozen code at the looks the ruling names, by one analyst seat. This kit names no look. No desk, watcher, queue, runner or agent opens an energy, power or meter sample file of these legs; the desk reads the projected leg summary only."
+  }
+ ],
+ "stop_rules": {
+  "instrument_fault": true,
+  "refusal": true,
+  "contaminated_redos_max": 3,
+  "contaminated_redos_scope": "span",
+  "band_unreachable_max": 2,
+  "band_unreachable_scope": "span",
+  "leg_time_factor": 1.5,
+  "notes": "RL-149 section 2.4: REFUSAL, restore unproven, disk or watcher down (span; the lead clears); INSTRUMENT_FAULT (span; the research lead clears); CONTAMINATED_REDOS, 3 in a span (the lead once, then the research lead); LEG_OVERTIME, two legs over 1.5 x their budget in a span (the lead). BAND_UNREACHABLE is dropped; the band_unreachable keys are schema v1 fields that no stop reads. A stop stops the next arm, never a running span. Leg budgets come from the runner's time model: 1,251 s for the anchor leg (G0 at Part C's 209 s); leg_budget_s is their ceiling and leg_worst_case_s (a G0 at its 1,200 s cap, with margin) is each leg's process cap."
+ },
+ "span_template": {
+  "timezone": "America/Los_Angeles",
+  "t0_local": "13:20",
+  "end_by_local": "00:45",
+  "legs_per_span": 12,
+  "soak_s": 1950,
+  "fixed_overhead_s": 1200,
+  "leg_budget_s": 1260,
+  "leg_worst_case_s": 2700,
+  "redo_quota": 2
+ },
+ "checklist": [
+  {
+   "id": "head_is_frozen_commit",
+   "kind": "head_is_frozen_commit"
+  },
+  {
+   "id": "frozen_paths_hash",
+   "kind": "frozen_paths_hash"
+  },
+  {
+   "id": "kit_sha256",
+   "kind": "kit_sha256"
+  },
+  {
+   "id": "ac_power",
+   "kind": "ac_power"
+  },
+  {
+   "id": "powermode_zero",
+   "kind": "powermode_zero"
+  },
+  {
+   "id": "network_time_off",
+   "kind": "network_time_off"
+  },
+  {
+   "id": "freq_word_zero",
+   "kind": "freq_word_zero"
+  },
+  {
+   "id": "no_stray_monitor",
+   "kind": "no_stray_monitor"
+  },
+  {
+   "id": "no_other_agent",
+   "kind": "no_other_agent"
+  },
+  {
+   "id": "no_night_agent_loaded",
+   "kind": "no_night_agent_loaded"
+  },
+  {
+   "id": "no_high_power_marker",
+   "kind": "no_high_power_marker"
+  },
+  {
+   "id": "sudo_kill",
+   "kind": "sudo_kill"
+  },
+  {
+   "id": "km003c_ready",
+   "kind": "km003c_ready"
+  },
+  {
+   "id": "disk_free_gb",
+   "kind": "disk_free_gb",
+   "args": {
+    "min_gb": 40
+   }
+  },
+  {
+   "id": "previous_span_closed",
+   "kind": "previous_span_closed"
+  },
+  {
+   "id": "no_halt_or_veto",
+   "kind": "no_halt_or_veto"
+  },
+  {
+   "id": "span_window",
+   "kind": "span_window"
+  }
+ ],
+ "looks": [],
+ "desk": {
+  "adapter": "leg-summary-v1"
+ }
+}
