@@ -479,7 +479,9 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
                                 'phases_s': dict(GATED_PHASES, tail=tail if i == 0 else tail / 2),
                                 'decode_tokens': 14000, 'turn_decode_counts': [2000]*7,
                                 'turn_completed': [True]*7, 'admitted_turns': 7, 'x7': False,
-                                'turn_counts_source_sha256': 'c'*64, 'duty_bar': {'pass': True, 'verdict': 'pass'}}
+                                'turn_counts_source_sha256': 'c'*64, 'duty_bar': {'pass': True, 'verdict': 'pass'},
+                                # RL-148/RL-149 typical-case bar: six G1 waits (150 s of G1), none timed out.
+                                'gate_waits_s': {'G1': [25.0] * 6}, 'g1_timeouts': 0}
                                for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
             'budget_fit_inputs': {'r_decode_tok_per_s': 50.0, 'r_decode_step_d_tok_per_s': 50.0,
                                   'turn_cap_tokens': 4096},
@@ -755,12 +757,14 @@ class R1BudgetBindingTests(unittest.TestCase):
         self.assertAlmostEqual(fit['worst_s'], 600 + 240 + 126 + 12288 / 50)
         self.assertTrue(fit['fits'])
         set_decode_rate(slots, 11.0)   # FD:145's ~370 s per 4,096 tokens
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit.*largest fitting B_D is None'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots)
         set_decode_rate(slots, 37.0)   # 966 + (B_D + 4096)/37 <= 1277.0
         self.assertEqual(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']), 7168)
-        with self.assertRaisesRegex(ValueError, 'largest fitting B_D is 7168'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots)
         inputs['R1']['B_D'] = 7168
         kit.require_ready(inputs, slots)
 
@@ -916,8 +920,10 @@ class Round6KitTests(unittest.TestCase):
         self.assertEqual(fit['r_decode_tok_per_s'], 10.0)
         self.assertAlmostEqual(fit['terms_s']['decode_s'], (8192 + 4096) / 10.0)
         # 966 + 12,288/10 > T_dead: step-d's rate alone would have admitted it.
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 8192 does not fit'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # the budget check asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        checked = kit.check_r1_budget_and_policy(inputs['R1'], slots, x_max_turns=12)
+        self.assertEqual((checked['fits'], checked['typical_case']['fits']), (False, True))
         # A run that decoded nothing (G0 timeout) has no rate and does not lower it.
         inputs, slots = ready_inputs()
         slots['deadman_budget'][1]['decode_tokens'] = 0
@@ -1057,8 +1063,9 @@ class Round7KitTests(unittest.TestCase):
         old_worst = 120 + 240 + 126 + (8192 + 4096) / 20
         self.assertLess(old_worst, inputs['R1']['T_dead'])
         self.assertFalse(fit['fits'])
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\).*g0_cap_w1'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots)
 
     def test_inconclusive_x_g_falls_back_and_is_admitted_when_1f_fits(self):
         inputs, slots = ready_inputs(i_d=0)

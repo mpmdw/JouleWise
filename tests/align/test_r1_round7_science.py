@@ -139,7 +139,9 @@ class G0TimeoutTests(_World):
 
     def test_night_worst_case_with_the_round8_bounds(self):
         # a85ee8ec6, RL-72 E2: "two load redos for the night, each a whole
-        # admission unit; `window_max_s` 126,480 s."
+        # admission unit; `window_max_s` 126,480 s." RL-149 section 2.9 item 4:
+        # the blackout is 02:00-02:35 (2,100 s), and window_max_s is recomputed
+        # by the same construction: 119,880 s.
         value = r1.night_worst_case_s(["fake-runtime"])
         self.assertEqual(r1.runtime_g0_timeout_s(["fake-runtime"]), 1200)
         expected_units = [
@@ -160,25 +162,27 @@ class G0TimeoutTests(_World):
             self.assertAlmostEqual(unit["bound_s"], bound)
         subtotal = math.fsum(bound for _, bound in expected_units)
         largest = 1800 + 5763.9952
-        encounter = largest + 5400
+        encounter = largest + 2100
         floor = math.ceil(subtotal + 2 * largest + 2 * encounter)
         self.assertAlmostEqual(value["no_redo_s"], subtotal)
         self.assertAlmostEqual(value["no_redo_s"], 58711.9616)
         self.assertAlmostEqual(value["largest_unit_s"], largest)
         self.assertAlmostEqual(value["largest_unit_s"], 7563.9952)
-        self.assertEqual(value["batch_blackout_s"], 5400)
+        self.assertEqual(value["batch_blackout_s"], 2100)
         self.assertAlmostEqual(value["batch_encounter_max_s"], encounter)
-        self.assertAlmostEqual(value["batch_encounter_max_s"], 12963.9952)
+        self.assertAlmostEqual(value["batch_encounter_max_s"], 9663.9952)
         self.assertEqual((value["redo_quota"], value["encounters"]), (2, 2))
         self.assertEqual(value["floor_s"], floor)
-        self.assertEqual(value["floor_s"], 99768)
+        self.assertEqual(value["floor_s"], 93168)
         self.assertEqual(value["overhead_caps_s"],
                          {"pre_bracket": 1800, "post_bracket": 1800, "close": 900, "harvest": 4500})
         self.assertEqual(value["overhead_s"], sum(value["overhead_caps_s"].values()))
         self.assertEqual(value["overhead_s"], 9000)
         self.assertEqual(value["programmed_span_s"], floor + 9000)
-        self.assertEqual(value["programmed_span_s"], 108768)
-        self.assertEqual(value["window_max_s"], 126480)
+        self.assertEqual(value["programmed_span_s"], 102168)
+        self.assertEqual(value["window_max_s"], 119880)
+        from joulewise.b6.plan_inputs import window_max_s
+        self.assertEqual(value["window_max_s"], window_max_s({"programmed_span_s": {"seconds": 102168}}))
         for stale in ("g0_timeout_s", "redo_release_s", "r6_2_retry_max_s", "with_one_batch_encounter_s",
                       "with_retries_and_one_batch_encounter_s", "batch_window_wait_max_s",
                       "with_one_batch_wait_s", "with_retries_and_one_batch_wait_s"):

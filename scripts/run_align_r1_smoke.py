@@ -315,7 +315,8 @@ def soak_child(output, inputs):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     def overlaps_batch(_delay):
-        raise ValueError("idle soak would overlap the 11:45-13:15 local OS batch window (ruling 8)")
+        raise ValueError(f"idle soak would overlap the {r1.os_batch_window_text()} local OS batch window "
+                         "(ruling 8; RL-149 section 2.9 item 4)")
     r1.wait_outside_os_batch(soak_seconds(), sleep=overlaps_batch)
     started = time.time_ns()
     result = r1._invoke(r1.runtime_argv_from_inputs(inputs), "idle", output / "idle_soak", soak_seconds(),
