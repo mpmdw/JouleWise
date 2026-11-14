@@ -502,6 +502,7 @@ ALLOWED_LITERALS = [
     r'\bat least 2\b', r'\breach 2\b',  # RL-70 (1): the registered dominance threshold (row 275), as words             # the number of comparator families in Table S8 (asserted equal to its rows)
     r'7 November 2026',    # DLE-3 and DLE-4 adoption date (asserted in DEVIATION-LOG.md)
     r'\b0\.2\b',           # the registered "consistent" spread limit (asserted in analysis plan §8)
+    r'\(L1\)',             # the registered claim level of a reported cell, a name (analysis plan §4; RL-147 §8)
 ]
 
 
@@ -985,6 +986,17 @@ TABLE_S8 = '\n'.join([
 ])
 
 # --- Section 11: branch 9.D (CP-X02-conclusion), branch B sentence with the failing components named
+# RL-147 §8: P1-ABS-PART1, assembled from the issued outcome rows. The replication clause that follows it is Block 6's
+# and is checked by fill_check_b6.py. No p-value (RL-4 (ii)); decision intervals are in Table 5, not the abstract.
+ABSTRACT_PART1 = (
+    'On M3 Max / MLX / powermetrics SoC rails, from one session per model, the reported gross energy per request was '
+    '{r133:e} J [{r134:lo}, {r135:hi}] for Qwen3-1.7B decode, {r142:e} J [{r143:lo}, {r144:hi}] for its 2,048-token '
+    'prefill, {r151:e} J [{r152:lo}, {r153:hi}] for Qwen3-8B decode and {r160:e} J [{r161:lo}, {r162:hi}] for its '
+    '2,048-token prefill, each an instrument result (L1) whose phase attribution was not checked by an independent '
+    'instrument. Timing movement did not at least double every detection floor (dominance branch {r863:id}). The '
+    'decode and 2,048-token prefill contrasts were both *{r530:w}*, in the registered direction (the 8B '
+    'model used more phase energy than the 1.7B model), with {r11:n} of '
+    '{r12:n} and {r13:n} of {r14:n} planned quads kept in one session.')
 CONCLUSION_9D = ('Allowing each value to move within its registered timing uncertainty at least doubled the detection '
                  'floor in all eight independent-corner ratios, and did not in three of the four shared-sign replays '
                  '(1.7B decode, 1.7B prefill, 8B decode). The registered condition for stating that timing attribution '
@@ -1088,6 +1100,11 @@ SITES.append(('Section 5.1, identities (RL-60 (5))', ['CP-X01-identity'], '({c:i
 SITES.append(('Section 5.1, prefill length record (RL-60 (5))', ['CP-X01-length'], '({c:length})', 1, []))
 SITES.append(('Section 6.3, floor class (RL-66 F07)', [], FLOOR_CLASS, 1, []))
 SITES.append(('Table 3 caption (RL-60 (4))', [], TABLE3_CAPTION, 1, []))
+SITES.append(('Abstract, Part 1 summary (RL-147 §8)', ['P1-ABS-PART1'], ABSTRACT_PART1, 1, []))
+SITES.append(('Section 5.7, recompute pointer (RL-147 §8)', ['P1-RECOMPUTE'],
+              'The bars, the counts and the agreement are given per family for the primary block in Table S8 and per '
+              'class for the replication block in Table S9 (Section 6.7), with the quantities not covered and their '
+              'separate reader checks.', 1, []))
 SITES.append(('Table 4 caption (RL-60 (2))', [], TABLE4_CAPTION, 1, []))
 
 # A print-labelled row in a table cell carries its label in the table note (RL-42), which is its own site.
@@ -1103,9 +1120,9 @@ DELETED_WITH_BRANCH = ['P1-B5-NOPACK', 'P1-B5-NOPACK-REASON', 'P1-B5-CELL-REFUSE
                        'P1-B5-DOM-REFUSED']
 DROPPED = ['P1-B5-B-SHARE']  # RL-52 (5): dropped with its sentence
 
-# Block 5 ids left as placeholders (reasons in the run report), and the new Block 6 half of the recompute summary.
-PENDING = ['P1-ABS-PART1', 'CP-X08-decode-a-conclusion',
-           'P1-RECOMPUTE-SUMMARY-B6']
+# Block 5 ids left as placeholders (reasons in the run report). P1-ABS-PART1 was filled under RL-147 §8 (2026-11-13);
+# the Block 6 half of the recompute summary is fill_check_b6.py's.
+PENDING = ['CP-X08-decode-a-conclusion']
 
 GONE = ['[BRANCH 5.1.a', '[END BRANCH 5.1]', '[BRANCH 5.2.a', '[END BRANCH 5.2]', '[BRANCH 5.4.A', '[END BRANCH 5.4.A]',
         '[BRANCH 5.4.B', '[END BRANCH 5.4.B]', '**[BRANCH 5.4.R', '[END BRANCH 5.4.R]', '[BRANCH 9.D',
@@ -1163,6 +1180,13 @@ def verify_allowed_literals() -> None:
         m = re.search(rf'## {d}\..*?\*\*Status\.\*\* ADOPTED, (\d{{4}}-\d{{2}}-\d{{2}})', log, re.S)
         if not m or m.group(1) != '2026-11-07':
             fail(f'{d}: adoption date is not 2026-11-07 in DEVIATION-LOG.md')
+    # RL-147 §8 / the P1-ABS-PART1 instruction: the abstract states the registered direction only where the claim gate
+    # returns L2 (rows 532 and 535, recorded judgments) and the direction rows read the registered one (531, 534).
+    if [val(532), val(535), val(531), val(534)] != ['L2', 'L2', 'positive', 'positive']:
+        fail('abstract: the direction is printed but a contrast is not L2 in the registered direction')
+    # Final pass on PR #772: the abstract prints one word for both contrasts ("were both"), so row 533 stays bound.
+    if val(530) != val(533):
+        fail('abstract: "were both" but the decode (row 530) and prefill (row 533) outcome words differ')
     if len(CMP_ROWS) != 24 or sum(1 for r in CMP_ROWS if val(r[3]) == '0') != 1:
         fail('Table S8: expected 24 comparator families, exactly one of which compared no rows')
 
