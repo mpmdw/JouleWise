@@ -1,0 +1,47 @@
+start 2026-11-13 18:57:07 PST  python Python 3.13.18
+kit worktree e1f4f805288ede026980852814af2512a58b4c74 porcelain=0
+tree b6/analysis-r2 = 6e6d1b18a9dffbba675c3abd28db2e4c6a484fde  program sha 4a9f594471652581737b6cd02bd2922592f2e7cf9d575a164adb10162a5211ea
+kit 6af6fcf985e7e5dc9f16ead432f34e58c262992c69d3fc32905a77694cd0eee6; literal lines changed: 1
+== kit e2e
+test_kit_steps_exit_zero (tests.test_b6_custody_kit.EndToEnd.test_kit_steps_exit_zero) ... ok
+test_public_output_identical_up_to_run_input_digest (tests.test_b6_custody_kit.EndToEnd.test_public_output_identical_up_to_run_input_digest) ... ok
+test_recompute_on_kit_inputs_agrees (tests.test_b6_custody_kit.EndToEnd.test_recompute_on_kit_inputs_agrees) ... ok
+test_i_full_document_closed_block_with_block5 (tests.test_b6_custody_kit.EndToEndPinned.test_i_full_document_closed_block_with_block5) ... ok
+test_ii_block5_changed_one_byte_refused (tests.test_b6_custody_kit.EndToEndPinned.test_ii_block5_changed_one_byte_refused) ... ok
+test_iii_only_document_one_session_block (tests.test_b6_custody_kit.EndToEndPinned.test_iii_only_document_one_session_block) ... ok
+test_iv_full_document_one_session_left_out_refused (tests.test_b6_custody_kit.EndToEndPinned.test_iv_full_document_one_session_left_out_refused) ... ok
+test_program_is_the_pinned_one (tests.test_b6_custody_kit.EndToEndPinned.test_program_is_the_pinned_one) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 145.380s
+
+OK
+kit e2e rc 0
+== comparer tests
+eb82b6e25a9dc9a3cffcb4d2e859a19c2f2151a42ce3b4a98f2ea188887e02c1  /Volumes/JW-EXT/scratch/b6-rr3/cmp-tests/compare_rl142.py
+41db6f9a1e70247d90ad943ca848574451e963066b8312c97362ee6ca4fa8e7f  /Volumes/JW-EXT/scratch/b6-rr3/cmp-tests/test_compare_rl142.py
+test_a_argv_beyond_out_dir_holds_and_inputs_rerun (test_compare_rl142.ModeA.test_a_argv_beyond_out_dir_holds_and_inputs_rerun) ... ok
+test_a_clean (test_compare_rl142.ModeA.test_a_clean) ... ok
+test_a_does_not_allow_b_classes (test_compare_rl142.ModeA.test_a_does_not_allow_b_classes) ... ok
+test_a_extra_difference_holds (test_compare_rl142.ModeA.test_a_extra_difference_holds) ... ok
+test_a_missing_file_holds (test_compare_rl142.ModeA.test_a_missing_file_holds) ... ok
+test_a_program_hash_must_be_the_pair (test_compare_rl142.ModeA.test_a_program_hash_must_be_the_pair) ... ok
+test_a_unbound_digest_holds (test_compare_rl142.ModeA.test_a_unbound_digest_holds) ... ok
+test_b_every_allowed_class (test_compare_rl142.ModeB.test_b_every_allowed_class) ... ok
+test_b_flag_count_not_explained_holds (test_compare_rl142.ModeB.test_b_flag_count_not_explained_holds) ... ok
+test_b_one_unowned_path (test_compare_rl142.ModeB.test_b_one_unowned_path) ... ok
+test_b_other_key_same_field_holds (test_compare_rl142.ModeB.test_b_other_key_same_field_holds) ... ok
+test_b_prefix_dir_substitutes_cleanly (test_compare_rl142.ModeB.test_b_prefix_dir_substitutes_cleanly) ... ok
+test_b_summary_class_tally_change_holds (test_compare_rl142.ModeB.test_b_summary_class_tally_change_holds) ... ok
+test_b_term7_not_following_comparator_holds (test_compare_rl142.ModeB.test_b_term7_not_following_comparator_holds) ... ok
+test_b_term7_other_field_or_class_holds (test_compare_rl142.ModeB.test_b_term7_other_field_or_class_holds) ... ok
+test_b_term7_side_by_side_passed_follows_comparator (test_compare_rl142.ModeB.test_b_term7_side_by_side_passed_follows_comparator) ... ok
+test_secret_values_never_emitted (test_compare_rl142.ModeB.test_secret_values_never_emitted) ... ok
+test_parse_error_and_out_exists (test_compare_rl142.Usage.test_parse_error_and_out_exists) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 1.800s
+
+OK
+comparer rc 0
+end 2026-11-13 18:59:36 PST
