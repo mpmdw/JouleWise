@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 from b6_r12_session_fixture import command, prepare, export_chain_inputs, prepare_interpreters
 from b6_r12_runtime import SharedClock
 from b6_r12_chain_fixture import PIN
+from tests.git_fixture import init_git_fixture
 
 ADDITIONAL_MONITOR_SERIES = (
     ("battery.jsonl", "reading", "battery_s"),
@@ -911,7 +912,7 @@ class VerifierInventoryTests(unittest.TestCase):
                 path = repo / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(data)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            init_git_fixture(repo, "-q")
             subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
             subprocess.run(["git", "-C", str(repo), "-c", "user.name=R12 unit",
                 "-c", "user.email=r12-unit@example.invalid", "-c", "commit.gpgsign=false",
