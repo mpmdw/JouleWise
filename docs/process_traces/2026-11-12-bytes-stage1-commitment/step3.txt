@@ -1,0 +1,5 @@
+== step 3 2026-11-12T19:59:29Z
+BYTES commitment refused: BYTES commitment: no unambiguous non-force GitHub push event for origin tip
+rc=1
+569591e53ffcd91efbab7a9ebaff1d580bbc78ba BYTES stage-1 commitment: predictions.sha256 a6cb172c58462b76
+       0

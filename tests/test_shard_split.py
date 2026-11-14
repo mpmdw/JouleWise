@@ -15,6 +15,7 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import types
@@ -910,6 +911,345 @@ class SplitCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
         run_units.assert_not_called()
         self.assertIn("DECLARED BUT MISSING", stderr.getvalue())
+
+
+class TestTimeoutTests(unittest.TestCase):
+    """RL-127: a per-test limit that names the overrunning test (JW_TEST_TIMEOUT_SECONDS)."""
+
+    def test_limit_is_read_from_the_environment_and_unset_means_none(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(shard_tests.TEST_TIMEOUT_ENV, None)
+            self.assertIsNone(shard_tests.test_timeout_seconds())
+        with mock.patch.dict(os.environ, {shard_tests.TEST_TIMEOUT_ENV: "900"}):
+            self.assertEqual(shard_tests.test_timeout_seconds(), 900.0)
+        for value in ("fast", "0", "-1", "inf", "nan"):
+            with self.subTest(value=value), mock.patch.dict(
+                os.environ, {shard_tests.TEST_TIMEOUT_ENV: value}
+            ):
+                with self.assertRaisesRegex(ValueError, shard_tests.TEST_TIMEOUT_ENV):
+                    shard_tests.test_timeout_seconds()
+
+    @unittest.skipUnless(hasattr(sys, "monitoring"), "needs sys.monitoring")
+    def test_watchdog_thread_reads_no_clock(self):
+        # A clock inventory test traces every clock call in every thread
+        # (tests/b5_analysis/test_leaf_whole_window.py ClockGuard); the
+        # watchdog's own reads made it flaky on PR #764. It waits on its
+        # condition with a timeout instead, and no shard_tests frame may call
+        # a time function while it is armed, re-armed and disarmed.
+        import inspect
+        source = inspect.getsource(shard_tests._TestWatchdog)
+        for name in ("monotonic", "perf_counter", "time.time", "_watchdog_clock"):
+            self.assertNotIn(name, source)
+        # Same mechanism as the ClockGuard inventory: a sys.monitoring CALL
+        # tracer, run in a subprocess, sees every thread, including calls
+        # through names bound at import (which a mock.patch of time.monotonic
+        # cannot intercept), and leaves no watchdog thread in this process.
+        code = (
+            "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests\n"
+            "clocks = {time.time, time.time_ns, time.monotonic, time.monotonic_ns,\n"
+            "          time.perf_counter, time.perf_counter_ns}\n"
+            "seen = []; m = sys.monitoring; tool = next(n for n in range(6) if m.get_tool(n) is None)\n"
+            "m.use_tool_id(tool, 'wd-clock')\n"
+            "def called(code, _o, fn, _a):\n"
+            "    try:\n"
+            "        if fn in clocks and code.co_filename.endswith('shard_tests.py'): seen.append(code.co_qualname)\n"
+            "    except TypeError: pass\n"
+            "m.register_callback(tool, m.events.CALL, called); m.set_events(tool, m.events.CALL)\n"
+            "dog = shard_tests._TestWatchdog(30)\n"
+            "for i in range(20): dog.arm('t%d' % i); time.sleep(0.005)\n"
+            "dog.disarm(); time.sleep(0.05); m.set_events(tool, 0); print(sorted(set(seen)))\n"
+        )
+        result = subprocess.run([sys.executable, "-B", "-c", code], cwd=ROOT,
+                                capture_output=True, text=True, timeout=25)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "[]")
+
+    def test_expiry_names_the_label_dumps_stacks_and_exits_124(self):
+        code = (
+            "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests; "
+            "dog = shard_tests._TestWatchdog(0.3); "
+            "dog.arm('tests.fixture.SlowTests.test_hangs'); time.sleep(30)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code], cwd=ROOT, capture_output=True,
+            text=True, timeout=25,
+        )
+        self.assertEqual(result.returncode, shard_tests.TEST_TIMEOUT_EXIT_CODE)
+        self.assertIn(
+            "TEST TIMEOUT tests.fixture.SlowTests.test_hangs exceeded 0.3 s "
+            "(JW_TEST_TIMEOUT_SECONDS)",
+            result.stdout,
+        )
+        self.assertIn("TEST TIMEOUT tests.fixture.SlowTests.test_hangs", result.stderr)
+        self.assertIn("Thread", result.stderr)  # faulthandler's all-threads dump
+
+    def test_a_patched_time_monotonic_neither_feeds_nor_stops_the_watchdog(self):
+        # tests/test_run_night.py patches time.monotonic with a two-value
+        # side_effect; the watchdog must keep its own clock.
+        code = (
+            "import sys, time; from unittest import mock; sys.path.insert(0, 'scripts'); "
+            "import shard_tests; dog = shard_tests._TestWatchdog(0.5); "
+            "patch = mock.patch.object(time, 'monotonic', side_effect=[100.0, 350.0]); "
+            "patch.start(); dog.arm('tests.fixture.PatchedClock.test_x'); "
+            "[dog.arm('tests.fixture.PatchedClock.test_x') for _ in range(3)]; "
+            "assert time.monotonic() == 100.0 and time.monotonic() == 350.0; "
+            "time.sleep(30)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code], cwd=ROOT, capture_output=True,
+            text=True, timeout=25,
+        )
+        self.assertEqual(
+            result.returncode, shard_tests.TEST_TIMEOUT_EXIT_CODE, result.stdout + result.stderr
+        )
+        self.assertIn("TEST TIMEOUT tests.fixture.PatchedClock.test_x", result.stdout)
+
+    def test_rearming_and_disarming_keep_the_process_alive(self):
+        code = (
+            "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests; "
+            "dog = shard_tests._TestWatchdog(0.5); "
+            "[(dog.arm('t%d' % i), time.sleep(0.2)) for i in range(5)]; "
+            "dog.disarm(); time.sleep(1.0); print('alive')"
+        )
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code], cwd=ROOT, capture_output=True,
+            text=True, timeout=25,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.strip(), "alive")
+
+    def test_run_units_arms_each_phase_and_a_nested_run_leaves_the_owner_alone(self):
+        events = []
+
+        class RecordingWatchdog:
+            def __init__(self, seconds):
+                self.seconds = seconds
+
+            def arm(self, label, seconds=None):
+                events.append(("arm", label))
+
+            def disarm(self):
+                events.append(("disarm",))
+
+        executed = []
+        with (
+            mock.patch.dict(os.environ, {shard_tests.TEST_TIMEOUT_ENV: "900"}),
+            mock.patch.object(shard_tests, "_TestWatchdog", RecordingWatchdog),
+            mock.patch.object(shard_tests, "_WATCHDOG", None),
+            mock.patch.object(shard_tests, "_WATCHDOG_CLAIMED", False),
+            _installed(_make_fixture_module(ALPHA, ALPHA_METHODS, recorder=executed)),
+            _discovered(ALPHA, BETA),
+            redirect_stdout(io.StringIO()),
+        ):
+            exit_code = shard_tests.run_units((ALPHA,), 1, 1)
+            # The outer owner claimed it; a run nested inside a test gets none.
+            owner = shard_tests._claim_watchdog()
+            self.assertIsNotNone(owner)
+            self.assertIsNone(shard_tests._claim_watchdog())
+            shard_tests._release_watchdog(owner)
+        self.assertEqual(exit_code, 0)
+        labels = [event[1] for event in events if event[0] == "arm"]
+        self.assertEqual(labels[0], f"module {ALPHA} (import and load)")
+        for test_id in _ids(_import_name(ALPHA), ALPHA_METHODS):
+            self.assertIn(test_id, labels)
+            self.assertIn(
+                f"fixtures after {test_id} (class or module setUp/tearDown)", labels
+            )
+        self.assertEqual(events[-1], ("disarm",))
+
+    def test_named_overrides_name_real_tests_and_replace_the_default(self):
+        self.assertTrue(shard_tests.TEST_TIMEOUT_OVERRIDES_SECONDS)
+        for test_id, seconds in shard_tests.TEST_TIMEOUT_OVERRIDES_SECONDS.items():
+            with self.subTest(test_id=test_id):
+                module = test_id.rsplit(".", 2)[0]
+                self.assertIn(test_id, shard_tests.discover_test_ids(module))
+                # Either id form (unittest's import name or the canonical one).
+                self.assertEqual(shard_tests._test_limit_seconds(test_id, 900.0), seconds)
+                self.assertEqual(
+                    shard_tests._test_limit_seconds(test_id[len("tests."):], 900.0), seconds
+                )
+                self.assertLess(seconds, 60 * 60)  # inside the shard job's timeout
+        self.assertEqual(shard_tests._test_limit_seconds("tests.test_x.T.test_y", 900.0), 900.0)
+
+    def test_an_override_sets_the_reported_limit(self):
+        code = (
+            "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests; "
+            "dog = shard_tests._TestWatchdog(30); "
+            "dog.arm('tests.fixture.Named.test_slow', 0.4); time.sleep(30)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code], cwd=ROOT, capture_output=True,
+            text=True, timeout=25,
+        )
+        self.assertEqual(result.returncode, shard_tests.TEST_TIMEOUT_EXIT_CODE)
+        self.assertIn("TEST TIMEOUT tests.fixture.Named.test_slow exceeded 0.4 s", result.stdout)
+
+    def test_no_limit_means_no_watchdog(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(shard_tests.TEST_TIMEOUT_ENV, None)
+            self.assertIsNone(shard_tests._claim_watchdog())
+
+
+class _ScriptedPopen:
+    """Popen stand-in: each child prints a scripted output and exits."""
+
+    scripts = []
+    launched = []
+
+    def __init__(self, argv, cwd=None, env=None, stdout=None, stderr=None, text=None,
+                 errors=None):
+        units_path = Path(argv[argv.index("--units-file") + 1])
+        units = json.loads(units_path.read_text(encoding="utf-8"))
+        number = len(type(self).launched) + 1
+        type(self).launched.append({"argv": list(argv), "units": units, "env": env})
+        lines, self.returncode = type(self).scripts[number - 1]
+        self.stdout = io.StringIO("".join(line + "\n" for line in lines))
+
+    def wait(self):
+        return self.returncode
+
+
+def _summary(index, shards, *, modules=1, tests=2, result="PASS"):
+    failures = 0 if result == "PASS" else 1
+    return (
+        f"SHARD SUMMARY index={index}/{shards} modules={modules} tests={tests} "
+        f"failures={failures} errors=0 skipped=0 result={result}"
+    )
+
+
+class ShardWorkerTests(unittest.TestCase):
+    UNITS = ("tests.test_a", "tests.test_b", "tests.test_c", "tests.test_d")
+    WEIGHTS = {"tests.test_a": 40.0, "tests.test_b": 30.0, "tests.test_c": 20.0,
+               "tests.test_d": 10.0}
+
+    def run_workers(self, scripts, workers=2):
+        _ScriptedPopen.scripts = scripts
+        _ScriptedPopen.launched = []
+        output = io.StringIO()
+        with (
+            mock.patch.object(shard_tests.subprocess, "Popen", _ScriptedPopen),
+            mock.patch.dict(os.environ, {"JW_TEST_HOST_GUARD_REPORT": "/tmp/parent.jsonl"}),
+            redirect_stdout(output),
+        ):
+            code = shard_tests.run_units_in_workers(
+                self.UNITS, self.WEIGHTS, 6, 3, workers, unknown_weight=26.98
+            )
+        return code, output.getvalue()
+
+    def test_units_are_dealt_disjointly_and_completely_by_weight(self):
+        code, text = self.run_workers(
+            [(["MODULE PASS tests.test_a", _summary(3, 6, modules=2)], 0),
+             (["MODULE PASS tests.test_b", _summary(3, 6, modules=2)], 0)]
+        )
+        self.assertEqual(code, 0)
+        dealt = [launch["units"] for launch in _ScriptedPopen.launched]
+        self.assertEqual(sorted(u for units in dealt for u in units), sorted(self.UNITS))
+        self.assertEqual(dealt, [["tests.test_a", "tests.test_d"], ["tests.test_b", "tests.test_c"]])
+        for launch in _ScriptedPopen.launched:
+            argv = launch["argv"]
+            self.assertEqual(argv[argv.index("--shards") + 1], "6")
+            self.assertEqual(argv[argv.index("--index") + 1], "3")
+            self.assertEqual(launch["env"]["PYTHONUNBUFFERED"], "1")
+            # Each worker gets its own host-command-guard report.
+            self.assertNotIn("JW_TEST_HOST_GUARD_REPORT", launch["env"])
+        self.assertIn("WORKER ESTIMATES 50.000,50.000", text)
+        self.assertIn("[w1/2] MODULE PASS tests.test_a", text)
+        self.assertIn("[w2/2] MODULE PASS tests.test_b", text)
+        # Only the aggregate summary is unprefixed, so it is the one a parser finds.
+        match = shard_tests.SHARD_SUMMARY_RE.search(text)
+        self.assertEqual(match.group(0), _summary(3, 6, modules=4, tests=4))
+        self.assertEqual(len(shard_tests.SHARD_SUMMARY_RE.findall(text)), 1)
+
+    def test_a_child_without_a_passing_summary_fails_the_shard(self):
+        for scripts, reason in (
+            ([(["TEST TIMEOUT tests.test_b.T.test_x exceeded 900 s"], 124)], "exit=124 summary=missing"),
+            ([([_summary(3, 6, result="FAIL")], 1)], "exit=1 summary=FAIL"),
+            ([([_summary(3, 6)], 1)], "exit=1 summary=PASS"),
+        ):
+            with self.subTest(reason=reason):
+                code, text = self.run_workers([([_summary(3, 6)], 0), *scripts])
+                self.assertEqual(code, 1)
+                self.assertIn(f"WORKER 2/2 FAILED {reason}", text)
+                self.assertTrue(text.rstrip().endswith("result=FAIL"))
+
+    def test_the_childs_last_summary_counts_not_one_a_test_printed(self):
+        nested = _summary(9, 9, modules=7, tests=999)
+        code, text = self.run_workers(
+            [([nested, "MODULE PASS tests.test_a", _summary(3, 6, modules=2)], 0),
+             ([_summary(3, 6, modules=2)], 0)]
+        )
+        self.assertEqual(code, 0)
+        self.assertIn(_summary(3, 6, modules=4, tests=4), text)
+
+    def test_one_worker_or_one_unit_runs_in_process(self):
+        with mock.patch.object(shard_tests, "run_units", return_value=0) as run_units:
+            self.assertEqual(
+                shard_tests.run_units_in_workers(
+                    self.UNITS, self.WEIGHTS, 6, 2, 1, unknown_weight=26.98
+                ),
+                0,
+            )
+            self.assertEqual(
+                shard_tests.run_units_in_workers(
+                    ("tests.test_a",), self.WEIGHTS, 6, 2, 4, unknown_weight=26.98
+                ),
+                0,
+            )
+        self.assertEqual(
+            run_units.call_args_list,
+            [mock.call(list(self.UNITS), 6, 2), mock.call(["tests.test_a"], 6, 2)],
+        )
+
+    def test_units_file_cli_runs_exactly_the_listed_units(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "units.json"
+            path.write_text(json.dumps(["tests.test_a", "tests.test_b::remainder"]))
+            with (
+                mock.patch.object(shard_tests, "run_units", return_value=0) as run_units,
+                mock.patch.object(
+                    shard_tests, "discover_test_modules", return_value=self.UNITS * 2
+                ),
+            ):
+                code = shard_tests.main(
+                    ["--units-file", str(path), "--shards", "6", "--index", "4"]
+                )
+            self.assertEqual(code, 0)
+            run_units.assert_called_once_with(
+                ["tests.test_a", "tests.test_b::remainder"], 6, 4
+            )
+            path.write_text(json.dumps({"not": "a list"}))
+            with (
+                mock.patch.object(shard_tests, "run_units") as run_units,
+                mock.patch.object(
+                    shard_tests, "discover_test_modules", return_value=self.UNITS * 2
+                ),
+                mock.patch("sys.stderr", new_callable=io.StringIO),
+            ):
+                self.assertEqual(
+                    shard_tests.main(["--units-file", str(path), "--shards", "6", "--index", "4"]),
+                    2,
+                )
+            run_units.assert_not_called()
+
+
+class WorkflowShardSlotTests(unittest.TestCase):
+    """Review F2: a matrix slot is retired only when it is above SHARD_COUNT."""
+
+    def test_slot_conditions_follow_shard_count_and_the_retired_step_checks_it(self):
+        import re
+        text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        job = text[text.index("\n  test:\n"):text.index("\n  calibration-exits-exclusive:\n")]
+        self.assertNotRegex(job, r"matrix\.shard\s*(<=|>|<|>=)\s*\d")
+        conditions = re.findall(r"if: (.*matrix\.shard.*)", job)
+        self.assertTrue(conditions)
+        for condition in conditions:
+            self.assertIn("fromJSON(env.SHARD_COUNT)", condition)
+        self.assertIn('if [ "$SLOT" -le "$SHARD_COUNT" ]; then', job)
+        self.assertIn("exit 1", job)
+        count = int(re.search(r'SHARD_COUNT: "(\d+)"', job).group(1))
+        slots = [int(v) for v in re.search(r"shard: \[([\d, ]+)\]", job).group(1).split(",")]
+        self.assertEqual(slots, list(range(1, len(slots) + 1)))
+        self.assertLessEqual(count, len(slots))
 
 
 if __name__ == "__main__":

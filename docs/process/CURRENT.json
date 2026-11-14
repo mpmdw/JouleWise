@@ -1,0 +1,13 @@
+{
+  "armed": null,
+  "next_observable": "(was waiting on: the research lead's ruling on the R1 follow-up night (TVh0 D1(b) inadmissibility; duty-bar failure in D_bank: H holds 536.5 s inside one decode turn, X7 deadman)) a research-lead ruling (RL-1xx) naming the next step for the second key and the duty bar; the lead brings the journal table (disposition 3). The magistrate arms nothing until a RUN_STATE item authorizes a night",
+  "owner": "research lead",
+  "schema": "joulewise.current_pointer.v1",
+  "source_item": "310",
+  "source_item_heading_date": "2026-11-13",
+  "wait": {
+    "deadline_epoch_s": null,
+    "observable": "none",
+    "on_early_or_refused": null
+  }
+}

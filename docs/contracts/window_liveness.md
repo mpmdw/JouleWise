@@ -1,5 +1,10 @@
 # Keep status work outside power measurements
 
+**Publisher retired on `main`, 2026-11-11.** Current head-pointer intake uses
+[`CURRENT.json`](../process/CURRENT.json) and [the pointer rule](../process/POINTER_RULE.md).
+Publisher behavior and source citations below describe the historical implementation;
+see [archive retrieval](../ARCHIVE.md). The W1 line is unchanged.
+
 ## 1. The physical problem
 
 A power measurement records the electricity used by the machine while it does
@@ -666,11 +671,14 @@ cannot change the already-established refusal.
 | E (exited) | not-run | malformed | Refuse |
 
 The helper prints warnings with `WARN:` and refusals with `REFUSING:` to stderr,
-and returns rc `0` exactly when it has no refusals, otherwise rc `1`. The shell
-runs that helper before writing `WINDOW_STATUS.md` or doing Git work, and
-returns rc `1` if the helper fails. `courier.sent`, the file recording delivery
+and returns rc `0` exactly when it has no refusals, otherwise rc `1`. The retired shell
+ran that helper before writing `WINDOW_STATUS.md` or doing Git work, and
+returned rc `1` if the helper failed. `courier.sent`, the file recording delivery
 of the night's handback message, is not inspected and cannot clear either
 chain or campaign contributions. [T6]
+
+The publisher and `WINDOW_STATUS.md` are retired on `main`. Current head-pointer intake uses
+[`CURRENT.json`](../process/CURRENT.json) and [the pointer rule](../process/POINTER_RULE.md).
 
 A **commit-freeze sentinel** is a file whose presence suppresses Git work;
 `JOULEWISE_COMMIT_FREEZE_SENTINEL` selects it, default
@@ -732,10 +740,10 @@ monotonic value is illustrative and need not be converted to epoch time: [W2]
 }
 ```
 
-If the sentinel exists at step 6, `scripts/window_status.sh complete
-"Example chain ended"` writes only local status after the warning; if absent,
-it stages the status, commits if there is a staged change, and attempts push.
-Running the same command at step 4 refuses even with a sentinel. If instead
+Use [`CURRENT.json`](../process/CURRENT.json) and [the pointer rule](../process/POINTER_RULE.md)
+for the declared wait and next activation. In the retired publisher, a sentinel
+at step 6 limited the update to local status; without one it staged, committed
+and attempted push. Step 4 refused even with a sentinel. If instead
 the second parent exists but cannot be listed, steps 6–8 all refuse for that
 read error; the first parent's stale/empty result cannot cancel it. These are
 predicted outcomes from the source, not commands executed by this rewrite. [W3]

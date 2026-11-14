@@ -853,6 +853,13 @@ to the research lead for review before merge.
 > **Blind status.** Not blind to Block 5; the ruling is about wording released results.
 
 - **Effect on estimands.** None. It fixes where a registered limitation sentence is stated.
+- **2026-11-11, RL-66 F05 (dated precision of this interpretation; not a new entry).** "Every table caption" is made
+  precise: the limitation goes in the caption of every table that prints a phase energy or a quantity computed from
+  one (reported cells, interval components, floors, dominance ratios and their terms, contrasts, and per-cell or
+  per-contrast sensitivity lines). It does not go on tables of counts, flags, attempts, hazard readings,
+  request-level energies and shares, reference-request screens, or comparator differences. For paragraphs the rule
+  stays literal: every paragraph that states a phase energy carries it. In Paper 1 this puts it on Tables 2, 3, 4, 5
+  and S5, and not on Tables 1, S1 to S4, S6, S7 and S8.
 
 ---
 
@@ -935,7 +942,42 @@ to the research lead for review before merge.
 
 ---
 
-## DLE-11. `joulewise/flags/exclusions.py`: the keyword-only `pack_scoped` parameter, a cited rebind after the fact (RL-144 addendum M2)
+## DLE-11. Cross-instrument edge check, fix 1 (label only)
+
+- **Status.** Logged 2026-11-12 under the edge-check reading rule (`docs/analysis/b5/edge-check-reading-rule.md`,
+  rule commit `7e1d4278c`), §6: "A bug fix is allowed; it is logged in `DEVIATION-LOG.md` and both results are
+  printed." The check is exploratory and outside the sealed PLAN; this entry changes nothing the PLAN governs.
+- **Bug.** In `scripts/b5_edge_check.py` at the pre-run commit `56cf90719`, assumption check (a) labelled each
+  2,048-token run's model from the prefill event's `item_id`. The 2,048-token runs carry no `item_id`, so every
+  label printed as `?` and GAMMA's two models were pooled in one duration line. Found after the first run.
+- **Fix.** Commit `7d3724b70` reads the model from the run's `config.json` (`model.name`). Nothing else changed.
+- **Both results.** Every Δ, T, interval, exclusion count and the outcome row are identical in the two runs; the
+  per-edge output file has the same SHA-256 (`8dc61055…cb07f`) both times. Only the (a) lines differ:
+  - run 1: "ALPHA ? n 41, min 607 ms"; "BETA ? n 33, min 2663 ms"; "GAMMA ? n 20, min 609 ms, median 1651 ms,
+    max 2689 ms".
+  - run 2: "ALPHA Qwen3-1.7B-4bit n 41, min 607 ms"; "BETA Qwen3-8B-4bit n 33, min 2663 ms"; "GAMMA
+    Qwen3-1.7B-4bit n 10, min 609 / median 621 / max 634 ms"; "GAMMA Qwen3-8B-4bit n 10, min 2669 / median 2679 /
+    max 2689 ms".
+- **Effect on estimands.** None.
+
+## DLE-12. Cross-instrument edge check: interpretations disclosed after the cold review (no number changed)
+
+- **Status.** Logged 2026-11-12 after the Fable 5.2 cold review of PRs #746/#747 (ADMIT-WITH-FIXES; review comment on
+  #747). Exploratory check outside the sealed PLAN; nothing the PLAN governs changes.
+- **What is disclosed.**
+  - **I2 consequence.** Every run in a session shares one calibration capture, so the run-level bootstrap holds the
+    pulse median fixed. The printed 95% intervals therefore omit pulse-side uncertainty. Reviewer's intervals with
+    pulses also resampled: rises [-6.4, +13.3] ms, falls [-9.7, -0.5] ms; the outcome row is unchanged.
+  - **Failed assumption (a).** The Qwen3-1.7B 2,048-token prefill (607–635 ms) is shorter than the +800 ms
+    neighbour window. Under the rule's exclusion logic, all 51 1.7B request starts drop out, so the pooled rise T
+    covers Qwen3-8B request starts only, in BETA and GAMMA.
+  - **I13 (new).** The pooled rise T uses the three-session pulse reference, including ALPHA's pulses. The
+    session-matched value is +2.7 ms against the printed +1.8 ms, with the same reading.
+- **Text changes.** One scope and interval caveat was added to the outcome block of `edge-check-results.md`, and I13
+  was listed. The script, Δ, T, intervals, exclusion counts and outcome row are unchanged.
+- **Effect on estimands.** None.
+
+## DLE-13. `joulewise/flags/exclusions.py`: the keyword-only `pack_scoped` parameter, a cited rebind after the fact (RL-144 addendum M2)
 
 - **Status.** RECORDED, 2026-11-13, on `fix/2026-11-13-b6-m1-m2` (lead, under RL-144 addendum section 3 M2 and
   RL-146 section 2 item 4). It is owed before the S-14 line merges to `main`.

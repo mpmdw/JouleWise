@@ -273,6 +273,12 @@ phase depends on how well that is done.
   only structure (exit codes, schema checks, refusal codes) written out.
 - **Independent recompute.** The headline numbers computed again from the raw power records by code that shares
   nothing with the analysis programs (branch `lane/2026-10-14-independent-recompute`).
+  *Corrected 2026-11-13 (§17-R1, with §17-DLE2):* for block 6 the program that prints the numbers is RC-B6-1
+  (`scripts/independent_recompute_b6.py`, pinned at S-14), which loads block 5's `scripts/independent_recompute_b5.py`
+  at its release digest and runs its arithmetic unchanged. The second side is the harvest and engine twins
+  (`joulewise/twins/harvest_twin.py`, `joulewise/twins/engine_twin.py`), a stdlib checker for counting, pairing and
+  §10-§11, and the reducer cross-check `stored_energy_mismatch`, promoted to a gate. The L9 programs are not run for
+  block 6 (§17-R1, L9 audit not run). The sentence above is the registered text of 2026-10-17.
 - **Integration branch and pinned commit.** The block-6 build lanes (branches, each building one part of the
   collection and desk code) are merged, not into the project's main
   branch, but into `integration/2026-10-14-b6-stage1`. One commit of that branch is **pinned** (§7): its hash is
@@ -899,7 +905,7 @@ From threshold note §9, for every condition of §8.2 and §8.3 that is new or c
 ## 9. Estimators: block 5's, unchanged, applied to each counting session
 
 "Unchanged" means: the arithmetic of B5-PLAN sections 4 to 7 and their programs, at the analysis commit of §13
-(`OPEN[S-14]`), applied to one counting session at a time (for GAMMA, with the floors of its paired sessions, §6.2).
+(`OPEN[S-14]`, filled: §14 row S-14 and §17-R1), applied to one counting session at a time (for GAMMA, with the floors of its paired sessions, §6.2).
 No run, unit or cell is pooled across sessions. The worked examples below are B5-PLAN's own synthetic data,
 re-executed for this draft with the repository functions at main `3bb305d7a` (`joulewise.detection_floor`), so a
 reader can check both files against one set of numbers. The pack files' `estimators` entries name library kernels and
@@ -1183,7 +1189,7 @@ energy per cell (§9.1); descriptive estimates and disclosures. Then §9.5, §10
 analysis programs (lane L9, the code line that implements B5-PLAN) at their release tag, plus the block-6 additions
 (pairing, between-session summary, side-by-side table, replication word, flagged-inclusive line), written blind,
 tested on synthetic fixtures and on full-size production-shaped synthetic archives through the real stage chain,
-independently reviewed by executing them, and given one blind executing cold pass by Fable and one by Opus. The analysis commit is pinned before the blind dry run: `OPEN[S-14]`. Every output is
+independently reviewed by executing them, and given one blind executing cold pass by Fable and one by Opus. The analysis commit is pinned before the blind dry run: `OPEN[S-14]`, filled: §14 row S-14 and §17-R1. Every output is
 content-addressed; after the release the analysis re-runs from identical bytes and every output digest must equal the
 dry run's.
 
@@ -1199,14 +1205,14 @@ dry run's.
 | S-6 | M2's measured shift d; the rule is fixed (every waited run excluded when \|d\| ≥ F_min / 4, cells printed with and without waited runs). **Filled 2026-10-17 and registered by the cold gate** (§15 D32): d = +0.180 J (prefill, 38% of 0.475 J; decode +0.009 J): `idle.waited` disclosed only; 0 runs removed on replay. The proportional carry (0.61 J) is not the rule's reading (§8.5) | **M2** (threshold-note test 8, as run: 10 reference runs after the ordinary baseline, delivered as about 75 s, and 10 after a wait aimed at 20 continuous quiet minutes, 8 of which reached the kit's 2,700 s cap first; alternated in five quads) | round 1 |
 | S-7 | T_stream_max (the longest run-level stamp span) and the measured clock rate; the hold rule is fixed (\|r\| > 5 ms / T_stream_max − 0.25 ppm). **Filled 2026-10-17 and registered by the cold gate** (§15 D33): r = −4.67 × 10⁻⁷ ppm over 14.3 h; T_stream_max 335 s carried from block 5 (the programmed longest stream), replaced by the machine test's longest run-level stamp span if that is longer; hold 14.675 ppm; 0 sessions held; no decision depends on T_stream_max below 20,000 s at the measured r | **M3** (machine-test run-level stamp spans; hours of CLOCK_REALTIME minus CLOCK_MONOTONIC_RAW with network time off) | round 1 |
 | S-8 | w, joules per outside CPU-second; the rule is fixed (excluded when w × max(0, C − k × c_q) ≥ F_min / 4; C a flag only until w exists). **Filled 2026-10-17; cold gate:** w = 5.432 J per CPU-s registered as measured; c_q = 0.54 CPU-s (0.72 as measured with Spotify and the orphaned test process, printed beside; 2026-10-09's 0.52 the check). The exclusion is not adopted for round 1: `contention.request_overlap` stays a recorded flag, and each cell prints the registered rule's result (14 of 53 quiet rehearsal runs, 38 of 77 removed) as a labelled alternative with C, k, C − k × c_q and E_add per flagged run; the code that computes E_add is owed before the analysis release (S-14) (§8.5, §15 D34, D35) | **M4** (threshold-note test 1 with burst placements) | round 1 |
-| S-9 | Line P* = F_min / (4 T_phase), per pack and phase. Decided 2026-10-15 (§8.6); the M5 quiet level is dropped. M5 (2026-10-17) confirms the GPU rail sees a graphics contender. Held by the cold gate of 2026-10-17 until each pack's smoke (§15 D37) For round 1 a recorded flag (`power.pstar_unsized`); the exclusion is computed at the desk from preserved idle-baseline rails (§8.3 item 3) | the values follow from S-11 (1.7B at the rehearsal sizes: 0.77 W prefill, 0.24 W decode) | the blind dry run |
+| S-9 | Line P* = F_min / (4 T_phase), per pack and phase. Decided 2026-10-15 (§8.6); the M5 quiet level is dropped. M5 (2026-10-17) confirms the GPU rail sees a graphics contender. Held by the cold gate of 2026-10-17 until each pack's smoke (§15 D37) For round 1 a recorded flag (`power.pstar_unsized`); the exclusion is computed at the desk from preserved idle-baseline rails (§8.3 item 3) **Filled 2026-10-22 (B6-2) from S-11, by the registered rule; not a rule change:** P* = F_min / (4 T_phase) = 0.475 J / T_phase. ALPHA prefill **0.761986 W**, decode **0.238003 W**; BETA prefill **0.177169 W**, decode **0.072277 W**; GAMMA prefill **0.177898 W**, decode **0.072305 W** (its 1.7B runs' own lengths would give 0.762941 W and 0.238600 W, printed beside). P_x is read as the time-weighted mean of `processor.gpu_power` plus `processor.ane_power` over the records of the run's admitted idle baseline (`raw/powermetrics_idle.plist`), the same values as the adapter's `gpu_power` and `ane_power` rails. Replay over the nine counting sessions, counts only (§12.2): 0 of 840 science runs reach the line, 0 reach a tenth of it, and 0 of GAMMA's 240 reach the per-model line. P* is computed from the exact difference of the stamp texts; the reducer's double-precision length differs by at most 1.3e-7 s, which moves no line by more than 1.6e-7 W. A blind executing refuter (Opus 5.5) read the same stamps on the same lines, agreed on every P* within 1.6e-7 W (bar 1e-6 W), and re-ran the replay to byte-identical counts. The line sees only a contender present during the idle baseline, as registered. The desk code that applies the line in the blind dry run is still owed with S-14 (entered in this file 2026-11-13 under §17-R10, from PR #529 @ `c37614f71`) | the values follow from S-11 (1.7B at the rehearsal sizes: 0.77 W prefill, 0.24 W decode) | the blind dry run (filled) |
 | S-10 | F_min (proposed 1.9 J) **Registered 1.9 J by the cold gate of 2026-10-17** (§8.5) | the cold gate, from non-claim data (§15 D9) | round 1 (filled) |
-| S-11 | T_phase per pack and target phase, the phase's length in non-claim smoke runs (the longest, if they differ). Still open: no pack smoke has run. Not the registered source, for comparison only: M15 ran the packs' decode configurations, longest decode 1.9935 s for Qwen3-1.7B (30 runs) and 6.6009 s for Qwen3-8B (29 runs), which would give P* = 0.238 W and 0.0720 W; it ran no 2,048-token prefill. Held by the cold gate of 2026-10-17 until each pack's smoke (§15 D37) Read from each pack's smoke; enters only S-9 | each pack's first smoke | the blind dry run |
+| S-11 | T_phase per pack and target phase, the phase's length in non-claim smoke runs (the longest, if they differ). Open at registration, when no pack smoke had run. Not the registered source, for comparison only: M15 ran the packs' decode configurations, longest decode 1.9935 s for Qwen3-1.7B (30 runs) and 6.6009 s for Qwen3-8B (29 runs), which would give P* = 0.238 W and 0.0720 W; it ran no 2,048-token prefill. Held by the cold gate of 2026-10-17 until each pack's smoke (§15 D37) Read from each pack's smoke; enters only S-9 **Filled 2026-10-22 (B6-2) from each pack's first smoke, by the registered rule; not a rule change.** A run's length is the end stamp minus the start stamp of its target phase's `phase_start` and `phase_end` events in its `events.jsonl`, the window its phase energy covers (`joulewise/bundle_read.py` `phase_windows`); each file is `/Users/edr/night-b6/loop/staging/<smoke>/smoke/<bundle>/runs-parent/runs_<pack id>/<run>/events.jsonl`. ALPHA (`r1-alpha-smoke-0`, bundle `d117_floor_qwen3-1p7b_v5-20261018T0252Z`): prefill **0.623371 s** (run `d117fq31p7-df-ph-prefill-p2048-abs-r01`, lines 16 and 17), decode **1.9957762 s** (`d117fq31p7-df-ph-decode-abs-r01`, lines 22 and 535). BETA (`r1-beta-smoke-0`, bundle `d117_floor_qwen3-8b_v5-20261018T1122Z`): prefill **2.6810598 s** (`d117fq38-df-ph-prefill-p2048-abs-r01`, lines 16 and 17), decode **6.5719512 s** (`d117fq38-df-ph-decode-abs-r01`, lines 22 and 535). GAMMA (`r1-gamma-smoke-0`, bundle `d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5-20261018T2018Z`), the longer of its two runs per phase, both 8B: prefill **2.670075 s** (`d117c-qwen3-1p7b-vs-qwen3-8b-v5-prefill-p2048-contrast-b01-b1`, lines 16 and 17), decode **6.569401 s** (`d117c-qwen3-1p7b-vs-qwen3-8b-v5-decode-contrast-b01-b1`, lines 22 and 535); its 1.7B runs, printed beside: prefill 0.622591 s and decode 1.990778 s (the `-b01-a1` runs, same lines). M15's decode values above stay comparison only; the later smokes (r2 to r4) differ from these by at most 1.6% (trace `docs/process_traces/2026-10-22-forward/B6-2-S9-S11.md`) (entered in this file 2026-11-13 under §17-R10, from PR #529 @ `c37614f71`) | each pack's first smoke | the blind dry run (filled) |
 | S-12 | Meter cross-check of the S-8 and S-9 conversions. Decided 2026-10-15 (§8.5): the meter excludes nothing; `meter.unexplained_idle_step` is recorded and the cross-check printed. **M14 values (2026-10-17, §8.5):** rails / meter step 0.353 (graphics 5%), 0.380 to 0.384 (graphics 20%), 0.576 to 0.587 (one core); meter idle scatter 0.97 to 1.31 W. Registered by the cold gate of 2026-10-17 as a printed cross-check that excludes nothing (§15 D38) | closed; **M14** (meter idle-power step with known GPU and CPU loads) supplies the printed cross-check | — |
-| S-13 | Recompute agreement tolerance for the release, the analysis-library version and per-pack release. Decided 2026-10-15 (§12.3 item 4): 1 mJ per run phase energy, and half a unit of its last printed digit for every printed quantity | closed | — |
-| S-14 | Analysis commit | block 5's L9 release tag plus the block-6 additions, reviewed and cold-passed | the blind dry run |
-| S-15 | Definition of whole-machine energy per phase | the commit that fixes it for block 5 | the blind dry run |
-| S-16 | Replay counts beside each new or changed rule of §8 | rehearsals: done for the ruling of 2026-10-15 (2026-10-06 and 2026-10-09 archives, an agent process alive in each; §8.7 item 1); block 5's usable sessions after its release (structure only) | the block-6 release (block 5) |
+| S-13 | Recompute agreement tolerance for the release, the analysis-library version and per-pack release. Decided 2026-10-15 (§12.3 item 4): 1 mJ per run phase energy, and half a unit of its last printed digit for every printed quantity **Made definite 2026-11-13 (§17-R2; the audit's decision 2, default):** the parameter S-13 lacked, the printed precision per family, the strictest value per family across the three tables: J, 5 decimals; ratios (R, R_cm, the factor, the energy ratio), 4; per-token, 8; t, 3; p, 4; b_op (s), 6; counts and words, exact, with the FS3 rule; run phase energy, 1 mJ (unchanged). One comparator code path; the table is pinned by digest at S-14 | closed | — |
+| S-14 | Analysis commit **Contents (§17-R1, R4, R10, R11):** the printing program RC-B6-1 (`scripts/independent_recompute_b6.py`) and the block-5 script it loads, the E_add code, the vendored S-3, S-4 and S-18 files, and the precision and comparison-key tables. **Filled 2026-11-13 (§17-R4; the S-14 pin, RL-129 and RL-134):** commit `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b`, annotated tag `b6/analysis` (tag object `082652f25983ccd335acd834861f19455b9ff6fe`); SHA-256 of `scripts/independent_recompute_b6.py` `90e22603593926e5654a8e72f095b6e600b5b85009a5a76d2e7f68431fb85759`, of `scripts/independent_recompute_b5.py` `d49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0`, of `configs/b6/recompute/precision.json` `e242cab6bb311a9c23d5c6dc06374ed3094a351e36d6954c3589e2b535cc63b0`, of `configs/b6/recompute/production_comparison_keys.json` `62dbfaef9ebc5cfbbe5a00734f5eb8ad3d82389f54f28473ed63db6135b9174d`. The 24-file closure with every SHA-256 is section 2 of the pin request, `docs/run_reports/2026-11-13-b6-s14-pin-request.md` @ `9a98eb5b1043643562f772b418cf92a4bce3d1f6` | block 5's L9 release tag plus the block-6 additions, reviewed and cold-passed; superseded through §17-R1 and §17-R4: the analysis commit is the S-14 pin recorded in this row | the blind dry run |
+| S-15 | Definition of whole-machine energy per phase **Filled 2026-11-13 (§17-R8; decision 7 ruled by RL-25 and RL-30, decided after Block 5 outcomes were known), as entered in `docs/registrations/block6_s17_entries_DRAFT_2026-11-10.md` §17-R8, which lists "the three differences above":** The per-phase line prints with the label "single implementation; not independently recomputed" (RL-25, 7a-i). Its arithmetic is the call chain of `scripts/independent_recompute_b5.py` at SHA-256 `d49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0`: `machine_member`, `sampled_gross`, `phase_machine_mean` with `diagnostic_estimate` and `reported_estimate`, and the edge-shift corner logic inside `add_machine`. DESIGN §8 is its written statement; where the two differ, the pinned code governs, and the three differences above are disposed of as RL-30 rules. §10's Block 5 value for this quantity is Block 5's released value if, at the S-14 pin, seat 7 shows both tests: the loaded script's SHA-256 is the pinned digest, and on one synthetic session the Block 6 per-phase output equals the Block 5 program's own output on the same input. Otherwise 7b-ii applies without a further ruling: §10 prints "block 5: not computed" for this quantity, and Block 5's released values print only in their own table. No Block 5 number is computed by Block 6 code. | the commit that fixes it for block 5 | the blind dry run |
+| S-16 | Replay counts beside each new or changed rule of §8 | rehearsals: done for the ruling of 2026-10-15 (2026-10-06 and 2026-10-09 archives, an agent process alive in each; §8.7 item 1); block 5's usable sessions after its release (structure only): filled 2026-11-13 (§17-S16) | the block-6 release (block 5) |
 | S-17 | GAMMA pairing when no later counting floor session exists (§6.2 step 3) **Registered by the cold gate of 2026-10-17** (§6.2 step 3, with the "floor from block 5" label) | the cold gate | round 1 (filled) |
 | S-18 | Model and runtime pins for block 6 (expected: block 5's `identity_pins.json`). **Filled 2026-10-17 (activation 52d50d1f):** `configs/b6/registration/identity_pins.json`, SHA-256 `513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d`, byte-identical to block 5's `configs/campaigns/v5_claim_25g83/identity_pins.json` (same digest). Also checked at `6849cb7e3` for §7 item 5: `joulewise/reduce.py`, `joulewise/uncertainty_evidence.py`, `joulewise/powermetrics_fiducial.py` and `joulewise/adapters/powermetrics.py` have the same git blob as at `a434e363d` | S-1 | round 1 |
 
@@ -1404,3 +1410,138 @@ nothing under the block-5 restricted paths listed above.
   `precheck.certain_exclusion`; the graphics line a flag for round 1; the agent rule's literal replay count; the
   estimator note in §9; hidden offsets divided out to rounding. D2, D3, D5, D8, D9, D10, D12, D13, D14, D15 and D23
   ruled; D37 amended. Where the judges' wordings differed (S-5), the lead took Fable's. Registered.
+- 2026-11-13: the §17 entries owed by RL-6 (b) entered, one line each below, in the order R0, DLE2 with R1, R2 to
+  R12. Full text of each entry, with every quotation's source by commit and line, is in
+  `docs/registrations/block6_s17_entries_DRAFT_2026-11-10.md` (on `main` since PR #710, `a9dd335b3`; written
+  "S17" in these lines). The rulings are RL-6, RL-25, RL-30, RL-34, RL-48, RL-98 and RL-99 in
+  `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` (`origin/audit/2026-11-10-fable` @
+  `8f829d223`). The audit is the 2026-11-07 Block 6 design audit (`origin/research/2026-11-07-block6-design` @
+  `07b9f704b`). Signing statement, once for the set (S17 header, extracted from RL-25 flag 1 and reflowed): "Signed
+  blind to Block 6: neither the signer nor the drafter has seen a Block 6 energy, floor, ratio, contrast or outcome
+  word. Not blind to Block 5, whose released outcome words and numbers both have seen. Entry texts marked 'drafted
+  pre-unseal' are quoted from texts dated 2026-11-06 and 2026-11-07." Each entry is its S17 text at blob `9928e1394`
+  (SHA-256 `e57aaad300c5ce9f3dff0f17eb41bc43db245ddbe8c8f2e92f103079ad148660`); a line below summarises it, and where
+  the two differ S17 governs. RL-98 and RL-99 are stated in the R12 and R1 lines.
+- 2026-11-13, §17-R0 (S17 §17-R0). **Kind.** Framing entry. It states once that this set was entered after the Block
+  5 unseal (RL-25 flag 5). It changes no rule, no number and no procedure. Entered after the Block 5 unseal
+  (2026-11-08); text drafted pre-unseal on 2026-11-07. Deadline clause (RL-30, S17-01), decided after Block 5
+  outcomes were known: "The audit's deadline, before the Block 5 unseal, was not met. These entries are made after
+  it. Each is a dated §17 entry with its reason, as this registration's header requires for any change after its
+  commit. None changes registered arithmetic (§12.4). Each names its kind: a slot fill this registration owes; a
+  clarification that changes no number; a tooling or coverage entry; or a deviation from the registered release
+  procedure of §12.3 and §13. Decided after Block 5 outcomes were known."
+- 2026-11-13, §17-DLE2 (S17 §17-DLE2). **Kind.** Deviation from the registered release procedure, with §17-R1.
+  Entered after the Block 5 unseal (2026-11-08); text adopted pre-unseal on 2026-11-06 (DLE-2). For blocks 6
+  onward the lean recompute (`scripts/independent_recompute_b5.py`, with its member pool) is the production path;
+  the collection-time input judgments are bound by content hash to the harvest record; the heavy L9 pipeline is an
+  audit that never gates a release unless it disagrees; any family outside its bar holds the release. Agreement
+  gate: exit 0 on the Block 5 dry-run custody with every family agreeing and 0 unmapped, and again on the first
+  counting Block 6 session. Precedence (RL-30, S17-04), decided after Block 5 outcomes were known: for exclusions,
+  item 2's "not re-derived" is superseded by C3 and §17-R6. For Block 6, items 1 and 3 are amended by §17-R1.
+- 2026-11-13, §17-R1 (S17 §17-R1). **Kind.** Deviation from the registered release procedure, with §17-DLE2: it
+  changes which program prints the numbers and how agreement is shown (§12.3 items 3 and 4, §13), and no
+  estimator. Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on 2026-11-07. The audit's
+  decision 1, option (c) with C3, and decision 5, hold: the printing program is RC-B6-1
+  (`scripts/independent_recompute_b6.py`, path and digest at S-14), which loads `scripts/independent_recompute_b5.py`
+  at SHA-256 `d49103e884ccae47242b8efb91ea1f5764e4505a4ad5e54558cc42a399a2e4e0`; the second side is the twins, a
+  stdlib checker for counting, pairing and §10-§11, and the reducer cross-check promoted to a gate; §13's release
+  re-run becomes digest re-verification plus an input census; a disagreement holds the release, decided by the
+  defect found. The L9-audit wording (RL-25 flag 6) is decided after Block 5 outcomes were known. **L9 audit: not
+  run** (RL-99, recorded before the blind dry run as RL-25 flag 6 requires; decided after Block 5 outcomes were
+  known): the ALPHA and BETA cell and floor estimators have no second producer inside Block 6, and their Block 6
+  values print with the label `single-source`. The §17-DLE2 gate on the first counting Block 6 session is the option
+  (c) program's own (RL-99 item 3, `origin/audit/2026-11-10-fable` @ `8f829d223`): "§17-DLE2's gate on the first
+  counting Block 6 session is the option (c) program's own: exit 0, every family agreeing, 0 unmapped, on that
+  session alone, before the closed run over all sessions." §1.10 and `CANONICAL.md`'s "Production numbers for
+  blocks 6+" row are corrected in the same commit.
+- 2026-11-13, §17-R2 (S17 §17-R2). **Kind.** Slot fill: S-13's missing parameter. Entered after the Block 5 unseal
+  (2026-11-08); text drafted pre-unseal on 2026-11-07. The audit's decision 2: the strictest printed precision per
+  family, one comparator code path, the FS3 tie rule in that path, coverage as a registry of printed quantities
+  that fails closed on unmatched or absent keys, and refusal of any bar set marked `placeholder: true`. S-13's row
+  carries the table.
+- 2026-11-13, §17-R3 (S17 §17-R3). **Kind.** Tooling or coverage. Entered after the Block 5 unseal (2026-11-08);
+  text drafted pre-unseal on 2026-11-07. The audit's decision 6: (b) "copied from the harvest or acceptance record,
+  bound by digest, not recomputed" for count-type disclosures, (a) "computed by the production program and
+  compared" for both whole-machine lines. Exception (RL-30, S17-03), decided after Block 5 outcomes were known: the
+  request-level whole-machine line is computed and compared; the per-phase line is single-implementation under
+  §17-R8. The printed-quantity table: the stdout of `scripts/b6_r3_table.py` (SHA-256 `d3106ecbc37b941b764efd1bbb51ccf3a99928081e324a602a1089616cb90609`) at the S-14 commit `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b`
+  (`python3.13 -I -B scripts/b6_r3_table.py` on a `git archive` of that commit), stdout SHA-256 `1003d87e7b92bc28a38890d75860e0ea0e47ae65862e6d6dd09641d7b3f29840`, the pin request's slot and the same bytes as its generation at `b5ab6a71d`; "Keys covered: 675 of 675; 149 groups; UNSTATED groups: 0."; printed in `docs/run_reports/2026-11-12-b6-r3-table.md` at that commit. Each key group's producer and label, the dominance and lines groups included, is that table's row. At the pin it is generated by script from the pinned commit, with no UNSTATED row, and
+  this line cites it by commit.
+- 2026-11-13, §17-R4 (S17 §17-R4). **Kind.** Slot fill: S-14. Entered after the Block 5 unseal (2026-11-08); text
+  drafted pre-unseal on 2026-11-07. Any L9 use is based at or after `b5/analysis-r4`; the blind dry run prints
+  per-cell floor-binding flags for all three GAMMA units (structure only); "all serving cells unbound" is a tooling
+  refusal class, never an outcome. S-14's row carries the pin fields.
+- 2026-11-13, §17-R5 (S17 §17-R5). **Kind.** Clarification, no number changes. Entered after the Block 5 unseal
+  (2026-11-08); text drafted pre-unseal on 2026-11-07. Both programs recompose b_op from each session's captures
+  under `configs/b6/registration/acceptance.json`; the harvest's stored bracket is disclosed only; a difference
+  from the acceptance record's `calibration` b_op beyond 1e-6 relative is a refusal.
+- 2026-11-13, §17-R6 (S17 §17-R6). **Kind.** Clarification, no number changes. Entered after the Block 5 unseal
+  (2026-11-08); text drafted pre-unseal on 2026-11-07. Exclusions by the sealed `joulewise.flags.exclusions.compute`
+  with catalog digest `b5bce6c6…` and no pack-scoped window reasons; counting from `derived/b6-acceptance.json` and
+  the loop record; `claim_usable` is never read; both programs refuse on disagreement.
+- 2026-11-13, §17-R7 (S17 §17-R7). **Kind.** Clarification, no number changes. Entered after the Block 5 unseal
+  (2026-11-08); text drafted pre-unseal on 2026-11-07. Session index and pairing table, registered as structure.
+  The nine counting sessions (`RUN_STATE.md` item 59, "alpha 3 (r1, r3, r4), beta 3 (r1, r2, r3), gamma 3 (r1, r2,
+  r3)"; ids as written in items 45 to 59), each id `r<round>-<pack>`: ALPHA `r1-alpha`, `r3-alpha`, `r4-alpha`;
+  BETA `r1-beta`, `r2-beta`, `r3-beta`; GAMMA `r1-gamma`, `r2-gamma`, `r3-gamma`. t0 order: `r1-alpha`, then
+  `r1-beta`, then `r1-gamma` (items 45, 49 to 51); `r2-beta`, `r2-gamma` and `r3-gamma` all finished before
+  `r3-alpha` (item 53); then `r3-alpha`, `r3-beta`, `r4-alpha`, in that order (items 53 to 59).
+  R7-SESSION-INDEX, filled 2026-11-13 from the copy's `attempts.jsonl` by `scripts/b6_mapping_build.py` (`mapping-report.json` SHA-256 `562f65f146cc414bc504541b252960d1ba88a06982ebc88ccc0d0d5a3ad082eb`; structure only): order of the three: r2-beta then r2-gamma then r3-gamma; relative to `r1-gamma`: all three after r1-gamma;
+  t0 order of the nine: r1-alpha then r1-beta then r1-gamma then r2-beta then r2-gamma then r3-gamma then r3-alpha then r3-beta then r4-alpha.
+  Pairing, fixed by counting alone (§6.2; S17 §17-R7, the audit's exposure note): `r1-gamma` ↔ (`r1-alpha`,
+  `r1-beta`); `r2-gamma` ↔ (`r3-alpha`, `r2-beta`); `r3-gamma` ↔ (`r3-alpha`, `r3-beta`); `r4-alpha` floor-only.
+  Tie rule: earlier t0.
+- 2026-11-13, §17-R8 (S17 §17-R8). **Kind.** Slot fill: S-15. Entered after the Block 5 unseal (2026-11-08); text
+  drafted pre-unseal on 2026-11-07. Decision 7 is ruled (RL-25, RL-30) and carries "decided after Block 5 outcomes
+  were known": 7a-i, the per-phase line prints "single implementation; not independently recomputed"; its
+  arithmetic is the call chain of `scripts/independent_recompute_b5.py` at SHA-256 `d49103e8…a2e4e0`; the three
+  listed differences are disposed of as RL-30 rules; 7b is settled at the S-14 pin by seat 7's two tests, else 7b-ii
+  ("block 5: not computed") without a further ruling. S-15's row carries the entry's "As entered" text.
+- 2026-11-13, §17-R9 (S17 §17-R9). **Kind.** Split (RL-30): items 8b and 8d and the §10 and §11.2 edge cases,
+  clarification, no number changes; item 8a, interpretation of a labelled line, with the alternative printed
+  beside; item 8c, nothing added. Entered after the Block 5 unseal (2026-11-08); text drafted pre-unseal on
+  2026-11-07. The four decision-8 items (RL-25: 8a-i, 8b-i, 8c-ii, the 8d label) are decided after Block 5 outcomes
+  were known. Alternatives printed beside: 8a, the plain-mean factor where it differs, labelled; 8d, the
+  Block-6-only summary beside the all-sessions summary; 8b and 8c, none.
+- 2026-11-13, §17-R10 (S17 §17-R10). **Kind.** Slot fill: S-9, S-11 and S-8. Entered after the Block 5 unseal
+  (2026-11-08); text drafted pre-unseal on 2026-11-07. PR #529's §17 entry and its S-9 and S-11 values are entered
+  again from `origin/lane/2026-10-22-b6-s9-s11` @ `c37614f71` (that branch is not merged); its entry, verbatim:
+  "2026-10-22 (B6-2, forward work while windows are paused): S-11 and S-9 filled from each pack's first non-claim
+  smoke (`r1-alpha-smoke-0`, `r1-beta-smoke-0`, `r1-gamma-smoke-0`), as D37 requires before the blind dry run. The
+  values follow the registered rule (§8.5, S-9, S-11, D23); no rule, line, exclusion or flag of §8 changes. GAMMA's
+  T_phase is the longer (8B) of its two smoke runs per phase, the registered per-pack-and-phase grain; its 1.7B
+  values are printed beside. Replay of the filled line over the nine counting sessions, counts only (§12.2,
+  doctrine item 9): 0 of 840 science runs removed. One blind executing refuter (Opus 5.5): `VERDICT: AGREE`, the
+  same stamps on the same lines, P* within 1.6e-7 W of these, replay counts byte-identical; four low findings, none
+  changing a value or count. Trace: `docs/process_traces/2026-10-22-forward/B6-2-S9-S11.md` (Opus 5.5)." P_x,
+  T_phase, E_add and the removal counts are hazard structure, computed and reported before the dry run. The
+  production path implements the E_add alternative and the P* desk exclusion, including GAMMA's per-model P*; the
+  E_add code is named in S-14.
+- 2026-11-13, §17-R11 (S17 §17-R11). **Kind.** Tooling or coverage. Entered after the Block 5 unseal (2026-11-08);
+  text drafted pre-unseal on 2026-11-07. Inputs cite tag `b6/collection` (`f31aca19f`) and the S-3, S-4 and S-18
+  digests, vendored into S-14; the production path authenticates its inputs; `trace_plist_missing` stays a STOP.
+  Decision 9 is ruled (RL-25) and carries "decided after Block 5 outcomes were known": 9a, the one read path is
+  `desk_compress.read_bytes`; 9b, the host is the Air, from a custody copy verified against the archive's
+  `SHA256SUMS`.
+- 2026-11-13, §17-R12 (S17 §17-R12). **Kind.** Tooling or coverage. Entered after the Block 5 unseal (2026-11-08);
+  text drafted pre-unseal on 2026-11-07. Production-shaped synthetic sessions generated by the real chain at
+  `f31aca19f` before S-14 is cut, covering the entry's six shapes. Deviation from §13 (RL-98 term 3), decided after
+  Block 5 outcomes were known: §13's "full-size ... through the real stage chain" was shown for
+  3 of 3 packs, on single-pack roots, per host; volume for the reader was shown by a direct test; the first real-size run of the
+  whole program is the blind dry run. It changes no arithmetic and nothing about blinding.
+- 2026-11-13, §17-S16 (RL-134 item 17, RL-140). **Kind.** Slot fill: S-16, Block 5's half. Read after the Block 5 release (2026-11-08, `RUN_STATE.md` item 231), from Block 5's 3 usable sessions (`v5-b5-alpha-a1-20261009T2312Z`, `v5-b5-beta-a6-20261011T2011Z`, `v5-b5-gamma-a1-20261012T0420Z`; 357 runs: 280 science, 77 auxiliary). Counts from the released flags, rosters and exclusion lists, by `scripts/b6_s16_block5_replay_counts.py` @ `e0d5b0fc7`, under Block 5's catalog `5d77c725…` and Block 6's `b5bce6c6…`. The desk exclusion from each run's idle-baseline rails, by `scripts/b6_s16_block5_pstar.py` @ `e0d5b0fc7`. Per-pack counts are ALPHA, BETA, GAMMA. **Rules that became flags (counted).** Block 6 turns 5 run codes and 25 session codes into flags and drops GAMMA's lost-midpoint rule. As flags they remove nothing. Of the 5 run codes only `contention.request_overlap` fired in Block 5: 28 runs (4, 14, 10; 18 science). Block 5 removed all 28, and none carries a code that still removes it. Over Block 5's flags, Block 6's catalog removes 11 runs (2, 4, 5) where Block 5 removed 39 (6, 18, 15). The 25 session codes fired in 0 of 3 sessions. The midpoint was lost in 0 of 1 GAMMA sessions. `idle.waited`: 0; Block 5 had no waiting admission. **Derived, not read.** The clock-rate hold (14.675 ppm) holds 0 of 3: each session was armed under Block 5's gate, |f| ≤ 3.6306 ppm (B5-REG §4.2), and none carries `clock.arm_unmeasured`. The b_op stop (139 ms, ALPHA and GAMMA; §8.2 P3) stops 0 of 2: each session is claim-usable, so its smallest target phase passed the unchanged phase check, which every run fails above the line (§8.6 S-5), and Block 6's s_bracket is smaller than Block 5's. **Replayed on its input.** The desk exclusion at P* (§8.3 item 3, S-9), by the pinned `desk_hazards` (`b5ab6a71d`) with Block 6's registered line per pack and phase: removes 0 of 357 runs (0, 0, 0); largest baseline mean 1.11 mW against the lowest line 0.0723 W. The rule applies to science runs. 272 of the 280 were examined (98, 98, 76); the other 8 (2, 2, 4) failed, and Block 5 had already removed them. The function also reads each run's status, model name and request span, and the contention journal; its contention result is not reported. **Not replayed.** (a) Grounds N, W, D, S and the pre-check hold (§8.2 N1, N2, W1, W2, W3, D1, S1; `precheck.certain_exclusion`): no replay is owed and none stands beside them from the rehearsals; the nearest Block 5 codes (`calibration.no_bracket`, `calibration.capture_invalid`, `neg8.bound_not_derived`, `model.identity_mismatch`, `code.executed_differs_from_sealed`, `neg8.screen_failed`) fired in 0 of 3 sessions. (b) Block 5 did not record the input: `sleep.in_run`; the agent rule (`agent.presence`, `agent.presence_overlap`, `agent.unit_overlap`), since Block 5 took no agent census and an agent's presence in it is unknown; the wait skips (`idle.wait_cap_skip`, `idle.wait_budget_skip`), since Block 5 had no waiting admission and aborted 9 runs (2, 3, 4) at admission instead, a kept rule. (c) Contention's labelled alternative (C − k × 0.54 ≥ 0.0874 CPU-s): not counted; it removes nothing in Block 6. The desk exclusion is the only excluding rule new in Block 6 that was replayed on Block 5's runs by reading its input; the b_op stop is derived, and (a) and (b) were not replayed. Outside the pinned program; changes no Block 6 number.
+- 2026-11-13, §17-R13 (RL-142). **Kind.** Tooling defect, chooses no rule; found blind; **changes printed
+  numbers.** The first nine-session dry run at `b6/analysis` (`3551e1a7d`, RC-B6-1 `90e22603…`) completed and
+  exited 3: the second side disagreed on four side-by-side differences, the whole-machine per-phase value of
+  ALPHA and BETA, decode and prefill. Cause: `pack_block5_keys` matched the model tag in a key's second
+  segment only, so it dropped Block 5's four released whole-machine values (`lines/whole_machine/<model>/…`),
+  which §10 and §11.1 include. RC-B6-1 printed those rows as "block 5: not computed" with n one short; the
+  second side used the values. Fix: the function also keeps `lines/whole_machine/<its model>/…`; one function,
+  no other pinned byte; tag `b6/analysis-r2`, RC-B6-1 `4a9f594471652581737b6cd02bd2922592f2e7cf9d575a164adb10162a5211ea`. Changed outputs: for those four
+  quantities, the between-session and flagged-inclusive n, mean and standard deviation, and the side-by-side
+  Block 5 value, difference and per-session differences. No other printed value changes, shown by a names-only
+  comparison of the two dry runs. Reproduced on synthetic inputs before the fix; no Block 6 value was read
+  before or after. Decided with Block 5's outcomes known and Block 6's unknown. The R12 reads stand under
+  `90e22603…`: the changed function returns nothing when no Block 5 output is supplied, as in every one of
+  them. The predeclared count of rows with a Block 5 value was 44 by the same defect and is 48. Gate run and
+  dry run repeated at r2; both first attempts are in the ledger.

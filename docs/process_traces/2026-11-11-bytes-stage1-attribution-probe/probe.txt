@@ -1,0 +1,666 @@
+# BYTES stage-1 attribution probe (RL-80): names, counts, multiples of bar and yes/no only
+Q B_other_keys Is every above-bar field at stage fit one of flags, B_j, lower_j, upper_j, attribution_floor_j, rails_attribution_floor_j, B_kind:anchor?
+Q B_other_kinds In this fit cell, are B_kind:interp, B_kind:drift and B_kind:meter_edge all within bar?
+Q B_is_anchor In this fit cell, does the B_j difference equal the B_kind:anchor difference within bar?
+Q B_centre_h In this fit cell, are mean_j, h_j and duration_s all within bar?
+Q B_ends In this fit cell, does each interval end move by exactly the B_j difference, within bar?
+Q B_twin_is_export Rails gross and flagged-inclusive cells: does the twin's anchor term equal the stratified average of the export column bound_E_clock_anchor_shift_bound_j over its kept runs, scaled by its own decode mean over the export phase_decode_j average (blinding factor cancels), within bar?
+Q B_estimator_is_export Same cells: does the estimator's anchor term equal that same export-column average, within bar?
+Q B_operative_one In this fit cell, is every operative record of status rereduced, with one operative bound, equal to the export sidecar's operative_bound_s?
+Q W_follows_B Fit-commit w: does the w difference equal the mean over passes of the gross cell's B_j difference, within the w bar?
+Q W_with_B Fit-commit w: is w above bar exactly when a gross cell B_j of that model and boundary is?
+Q F_row_flag_codes Is the code in the export flag_codes column of any row of the session?
+Q F_kept_flag_codes Is the code in the export flag_codes column of a kept run of the cell?
+Q F_exclusion_codes Is the code in the export exclusion_codes column of any row of the session?
+Q F_sidecar_counts Is the code in the session sidecar's flag_counts?
+Q F_every_cell Is the code in the estimator's flags of every fit cell of the session?
+Q F_meter_flag Is the code one of the meter-derived BYTES flags (meter_decode_unavailable, meter_gap, decode_battery_assist)?
+Q F_blinded_estimator Is the code in the estimator's flags of the same rails cell at the blinded stage?
+TOTAL above_bar=390 compared_fit=56537
+ABOVE fit dc_input flags 24
+ABOVE fit rails B_j 24
+ABOVE fit rails B_kind:anchor 24
+ABOVE fit rails attribution_floor_j 48
+ABOVE fit rails flags 24
+ABOVE fit rails lower_j 24
+ABOVE fit rails rails_attribution_floor_j 24
+ABOVE fit rails upper_j 24
+ABOVE fit rest B_j 24
+ABOVE fit rest B_kind:anchor 24
+ABOVE fit rest attribution_floor_j 24
+ABOVE fit rest flags 24
+ABOVE fit rest lower_j 24
+ABOVE fit rest rails_attribution_floor_j 24
+ABOVE fit rest upper_j 24
+ABOVE fit-commit commit w 6
+A B_other_keys yes=1 no=0 not_evaluable=0
+EXACT cell/qwen3-1.7b-4bit/pass1/rails/gross flags
+MULT cell/qwen3-1.7b-4bit/pass1/rails/gross B_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/gross lower_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/gross upper_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/gross attribution_floor_j 33
+MULT cell/qwen3-1.7b-4bit/pass1/rails/gross rails_attribution_floor_j 33
+MULT cell/qwen3-1.7b-4bit/pass1/rails/gross B_kind:anchor 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/gross attribution_floor_j 33
+EXACT cell/qwen3-1.7b-4bit/pass1/dc_input/gross flags
+EXACT cell/qwen3-1.7b-4bit/pass1/rest/gross flags
+MULT cell/qwen3-1.7b-4bit/pass1/rest/gross B_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/gross lower_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/gross upper_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/gross attribution_floor_j 11
+MULT cell/qwen3-1.7b-4bit/pass1/rest/gross rails_attribution_floor_j 11
+MULT cell/qwen3-1.7b-4bit/pass1/rest/gross B_kind:anchor 14
+EXACT cell/qwen3-1.7b-4bit/pass1/rails/idle_subtracted flags
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_subtracted B_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_subtracted lower_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_subtracted upper_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_subtracted attribution_floor_j 33
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_subtracted rails_attribution_floor_j 33
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_subtracted B_kind:anchor 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_subtracted attribution_floor_j 33
+EXACT cell/qwen3-1.7b-4bit/pass1/dc_input/idle_subtracted flags
+EXACT cell/qwen3-1.7b-4bit/pass1/rest/idle_subtracted flags
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_subtracted B_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_subtracted lower_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_subtracted upper_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_subtracted attribution_floor_j 11
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_subtracted rails_attribution_floor_j 11
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_subtracted B_kind:anchor 14
+EXACT cell/qwen3-1.7b-4bit/pass2/rails/gross flags
+MULT cell/qwen3-1.7b-4bit/pass2/rails/gross B_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/gross lower_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/gross upper_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/gross attribution_floor_j 30
+MULT cell/qwen3-1.7b-4bit/pass2/rails/gross rails_attribution_floor_j 30
+MULT cell/qwen3-1.7b-4bit/pass2/rails/gross B_kind:anchor 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/gross attribution_floor_j 30
+EXACT cell/qwen3-1.7b-4bit/pass2/dc_input/gross flags
+EXACT cell/qwen3-1.7b-4bit/pass2/rest/gross flags
+MULT cell/qwen3-1.7b-4bit/pass2/rest/gross B_j 13
+MULT cell/qwen3-1.7b-4bit/pass2/rest/gross lower_j 13
+MULT cell/qwen3-1.7b-4bit/pass2/rest/gross upper_j 13
+MULT cell/qwen3-1.7b-4bit/pass2/rest/gross attribution_floor_j 9
+MULT cell/qwen3-1.7b-4bit/pass2/rest/gross rails_attribution_floor_j 9.3
+MULT cell/qwen3-1.7b-4bit/pass2/rest/gross B_kind:anchor 13
+EXACT cell/qwen3-1.7b-4bit/pass2/rails/idle_subtracted flags
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_subtracted B_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_subtracted lower_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_subtracted upper_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_subtracted attribution_floor_j 30
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_subtracted rails_attribution_floor_j 30
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_subtracted B_kind:anchor 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_subtracted attribution_floor_j 30
+EXACT cell/qwen3-1.7b-4bit/pass2/dc_input/idle_subtracted flags
+EXACT cell/qwen3-1.7b-4bit/pass2/rest/idle_subtracted flags
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_subtracted B_j 12
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_subtracted lower_j 12
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_subtracted upper_j 12
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_subtracted attribution_floor_j 9
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_subtracted rails_attribution_floor_j 9.2
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_subtracted B_kind:anchor 12
+EXACT cell/qwen3-4b-4bit/pass1/rails/gross flags
+MULT cell/qwen3-4b-4bit/pass1/rails/gross B_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/gross lower_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/gross upper_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/gross attribution_floor_j 30
+MULT cell/qwen3-4b-4bit/pass1/rails/gross rails_attribution_floor_j 30
+MULT cell/qwen3-4b-4bit/pass1/rails/gross B_kind:anchor 36
+MULT cell/qwen3-4b-4bit/pass1/rails/gross attribution_floor_j 30
+EXACT cell/qwen3-4b-4bit/pass1/dc_input/gross flags
+EXACT cell/qwen3-4b-4bit/pass1/rest/gross flags
+MULT cell/qwen3-4b-4bit/pass1/rest/gross B_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/gross lower_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/gross upper_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/gross attribution_floor_j 10
+MULT cell/qwen3-4b-4bit/pass1/rest/gross rails_attribution_floor_j 11
+MULT cell/qwen3-4b-4bit/pass1/rest/gross B_kind:anchor 13
+EXACT cell/qwen3-4b-4bit/pass1/rails/idle_subtracted flags
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_subtracted B_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_subtracted lower_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_subtracted upper_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_subtracted attribution_floor_j 30
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_subtracted rails_attribution_floor_j 30
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_subtracted B_kind:anchor 36
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_subtracted attribution_floor_j 30
+EXACT cell/qwen3-4b-4bit/pass1/dc_input/idle_subtracted flags
+EXACT cell/qwen3-4b-4bit/pass1/rest/idle_subtracted flags
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_subtracted B_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_subtracted lower_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_subtracted upper_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_subtracted attribution_floor_j 10
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_subtracted rails_attribution_floor_j 11
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_subtracted B_kind:anchor 13
+EXACT cell/qwen3-4b-4bit/pass2/rails/gross flags
+MULT cell/qwen3-4b-4bit/pass2/rails/gross B_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/gross lower_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/gross upper_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/gross attribution_floor_j 28
+MULT cell/qwen3-4b-4bit/pass2/rails/gross rails_attribution_floor_j 28
+MULT cell/qwen3-4b-4bit/pass2/rails/gross B_kind:anchor 34
+MULT cell/qwen3-4b-4bit/pass2/rails/gross attribution_floor_j 28
+EXACT cell/qwen3-4b-4bit/pass2/dc_input/gross flags
+EXACT cell/qwen3-4b-4bit/pass2/rest/gross flags
+MULT cell/qwen3-4b-4bit/pass2/rest/gross B_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/gross lower_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/gross upper_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/gross attribution_floor_j 8.2
+MULT cell/qwen3-4b-4bit/pass2/rest/gross rails_attribution_floor_j 9.4
+MULT cell/qwen3-4b-4bit/pass2/rest/gross B_kind:anchor 11
+EXACT cell/qwen3-4b-4bit/pass2/rails/idle_subtracted flags
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_subtracted B_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_subtracted lower_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_subtracted upper_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_subtracted attribution_floor_j 28
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_subtracted rails_attribution_floor_j 28
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_subtracted B_kind:anchor 34
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_subtracted attribution_floor_j 28
+EXACT cell/qwen3-4b-4bit/pass2/dc_input/idle_subtracted flags
+EXACT cell/qwen3-4b-4bit/pass2/rest/idle_subtracted flags
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_subtracted B_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_subtracted lower_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_subtracted upper_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_subtracted attribution_floor_j 8.2
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_subtracted rails_attribution_floor_j 9.4
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_subtracted B_kind:anchor 11
+EXACT cell/qwen3-8b-4bit/pass1/rails/gross flags
+MULT cell/qwen3-8b-4bit/pass1/rails/gross B_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/gross lower_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/gross upper_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/gross attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass1/rails/gross rails_attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass1/rails/gross B_kind:anchor 27
+MULT cell/qwen3-8b-4bit/pass1/rails/gross attribution_floor_j 26
+EXACT cell/qwen3-8b-4bit/pass1/dc_input/gross flags
+EXACT cell/qwen3-8b-4bit/pass1/rest/gross flags
+MULT cell/qwen3-8b-4bit/pass1/rest/gross B_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/gross lower_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/gross upper_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/gross attribution_floor_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/gross rails_attribution_floor_j 10
+MULT cell/qwen3-8b-4bit/pass1/rest/gross B_kind:anchor 11
+EXACT cell/qwen3-8b-4bit/pass1/rails/idle_subtracted flags
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_subtracted B_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_subtracted lower_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_subtracted upper_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_subtracted attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_subtracted rails_attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_subtracted B_kind:anchor 27
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_subtracted attribution_floor_j 26
+EXACT cell/qwen3-8b-4bit/pass1/dc_input/idle_subtracted flags
+EXACT cell/qwen3-8b-4bit/pass1/rest/idle_subtracted flags
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_subtracted B_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_subtracted lower_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_subtracted upper_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_subtracted attribution_floor_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_subtracted rails_attribution_floor_j 10
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_subtracted B_kind:anchor 11
+EXACT cell/qwen3-8b-4bit/pass2/rails/gross flags
+MULT cell/qwen3-8b-4bit/pass2/rails/gross B_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/gross lower_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/gross upper_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/gross attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/gross rails_attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/gross B_kind:anchor 26
+MULT cell/qwen3-8b-4bit/pass2/rails/gross attribution_floor_j 26
+EXACT cell/qwen3-8b-4bit/pass2/dc_input/gross flags
+EXACT cell/qwen3-8b-4bit/pass2/rest/gross flags
+MULT cell/qwen3-8b-4bit/pass2/rest/gross B_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/gross lower_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/gross upper_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/gross attribution_floor_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/gross rails_attribution_floor_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/gross B_kind:anchor 12
+EXACT cell/qwen3-8b-4bit/pass2/rails/idle_subtracted flags
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_subtracted B_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_subtracted lower_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_subtracted upper_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_subtracted attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_subtracted rails_attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_subtracted B_kind:anchor 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_subtracted attribution_floor_j 26
+EXACT cell/qwen3-8b-4bit/pass2/dc_input/idle_subtracted flags
+EXACT cell/qwen3-8b-4bit/pass2/rest/idle_subtracted flags
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_subtracted B_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_subtracted lower_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_subtracted upper_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_subtracted attribution_floor_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_subtracted rails_attribution_floor_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_subtracted B_kind:anchor 12
+EXACT cell/qwen3-1.7b-4bit/pass1/rails/flagged_inclusive flags
+MULT cell/qwen3-1.7b-4bit/pass1/rails/flagged_inclusive B_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/flagged_inclusive lower_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/flagged_inclusive upper_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/flagged_inclusive attribution_floor_j 33
+MULT cell/qwen3-1.7b-4bit/pass1/rails/flagged_inclusive rails_attribution_floor_j 33
+MULT cell/qwen3-1.7b-4bit/pass1/rails/flagged_inclusive B_kind:anchor 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/flagged_inclusive attribution_floor_j 33
+EXACT cell/qwen3-1.7b-4bit/pass1/dc_input/flagged_inclusive flags
+EXACT cell/qwen3-1.7b-4bit/pass1/rest/flagged_inclusive flags
+MULT cell/qwen3-1.7b-4bit/pass1/rest/flagged_inclusive B_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/flagged_inclusive lower_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/flagged_inclusive upper_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/flagged_inclusive attribution_floor_j 11
+MULT cell/qwen3-1.7b-4bit/pass1/rest/flagged_inclusive rails_attribution_floor_j 11
+MULT cell/qwen3-1.7b-4bit/pass1/rest/flagged_inclusive B_kind:anchor 14
+EXACT cell/qwen3-1.7b-4bit/pass1/rails/idle_flagged_inclusive flags
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_flagged_inclusive B_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_flagged_inclusive lower_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_flagged_inclusive upper_j 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_flagged_inclusive attribution_floor_j 33
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_flagged_inclusive rails_attribution_floor_j 33
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_flagged_inclusive B_kind:anchor 42
+MULT cell/qwen3-1.7b-4bit/pass1/rails/idle_flagged_inclusive attribution_floor_j 33
+EXACT cell/qwen3-1.7b-4bit/pass1/dc_input/idle_flagged_inclusive flags
+EXACT cell/qwen3-1.7b-4bit/pass1/rest/idle_flagged_inclusive flags
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_flagged_inclusive B_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_flagged_inclusive lower_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_flagged_inclusive upper_j 14
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_flagged_inclusive attribution_floor_j 11
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_flagged_inclusive rails_attribution_floor_j 11
+MULT cell/qwen3-1.7b-4bit/pass1/rest/idle_flagged_inclusive B_kind:anchor 14
+EXACT cell/qwen3-1.7b-4bit/pass2/rails/flagged_inclusive flags
+MULT cell/qwen3-1.7b-4bit/pass2/rails/flagged_inclusive B_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/flagged_inclusive lower_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/flagged_inclusive upper_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/flagged_inclusive attribution_floor_j 30
+MULT cell/qwen3-1.7b-4bit/pass2/rails/flagged_inclusive rails_attribution_floor_j 30
+MULT cell/qwen3-1.7b-4bit/pass2/rails/flagged_inclusive B_kind:anchor 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/flagged_inclusive attribution_floor_j 30
+EXACT cell/qwen3-1.7b-4bit/pass2/dc_input/flagged_inclusive flags
+EXACT cell/qwen3-1.7b-4bit/pass2/rest/flagged_inclusive flags
+MULT cell/qwen3-1.7b-4bit/pass2/rest/flagged_inclusive B_j 13
+MULT cell/qwen3-1.7b-4bit/pass2/rest/flagged_inclusive lower_j 13
+MULT cell/qwen3-1.7b-4bit/pass2/rest/flagged_inclusive upper_j 13
+MULT cell/qwen3-1.7b-4bit/pass2/rest/flagged_inclusive attribution_floor_j 9
+MULT cell/qwen3-1.7b-4bit/pass2/rest/flagged_inclusive rails_attribution_floor_j 9.3
+MULT cell/qwen3-1.7b-4bit/pass2/rest/flagged_inclusive B_kind:anchor 13
+EXACT cell/qwen3-1.7b-4bit/pass2/rails/idle_flagged_inclusive flags
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_flagged_inclusive B_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_flagged_inclusive lower_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_flagged_inclusive upper_j 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_flagged_inclusive attribution_floor_j 30
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_flagged_inclusive rails_attribution_floor_j 30
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_flagged_inclusive B_kind:anchor 40
+MULT cell/qwen3-1.7b-4bit/pass2/rails/idle_flagged_inclusive attribution_floor_j 30
+EXACT cell/qwen3-1.7b-4bit/pass2/dc_input/idle_flagged_inclusive flags
+EXACT cell/qwen3-1.7b-4bit/pass2/rest/idle_flagged_inclusive flags
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_flagged_inclusive B_j 12
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_flagged_inclusive lower_j 12
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_flagged_inclusive upper_j 12
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_flagged_inclusive attribution_floor_j 9
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_flagged_inclusive rails_attribution_floor_j 9.2
+MULT cell/qwen3-1.7b-4bit/pass2/rest/idle_flagged_inclusive B_kind:anchor 12
+EXACT cell/qwen3-4b-4bit/pass1/rails/flagged_inclusive flags
+MULT cell/qwen3-4b-4bit/pass1/rails/flagged_inclusive B_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/flagged_inclusive lower_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/flagged_inclusive upper_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/flagged_inclusive attribution_floor_j 30
+MULT cell/qwen3-4b-4bit/pass1/rails/flagged_inclusive rails_attribution_floor_j 30
+MULT cell/qwen3-4b-4bit/pass1/rails/flagged_inclusive B_kind:anchor 36
+MULT cell/qwen3-4b-4bit/pass1/rails/flagged_inclusive attribution_floor_j 30
+EXACT cell/qwen3-4b-4bit/pass1/dc_input/flagged_inclusive flags
+EXACT cell/qwen3-4b-4bit/pass1/rest/flagged_inclusive flags
+MULT cell/qwen3-4b-4bit/pass1/rest/flagged_inclusive B_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/flagged_inclusive lower_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/flagged_inclusive upper_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/flagged_inclusive attribution_floor_j 10
+MULT cell/qwen3-4b-4bit/pass1/rest/flagged_inclusive rails_attribution_floor_j 11
+MULT cell/qwen3-4b-4bit/pass1/rest/flagged_inclusive B_kind:anchor 13
+EXACT cell/qwen3-4b-4bit/pass1/rails/idle_flagged_inclusive flags
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_flagged_inclusive B_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_flagged_inclusive lower_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_flagged_inclusive upper_j 36
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_flagged_inclusive attribution_floor_j 30
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_flagged_inclusive rails_attribution_floor_j 30
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_flagged_inclusive B_kind:anchor 36
+MULT cell/qwen3-4b-4bit/pass1/rails/idle_flagged_inclusive attribution_floor_j 30
+EXACT cell/qwen3-4b-4bit/pass1/dc_input/idle_flagged_inclusive flags
+EXACT cell/qwen3-4b-4bit/pass1/rest/idle_flagged_inclusive flags
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_flagged_inclusive B_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_flagged_inclusive lower_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_flagged_inclusive upper_j 13
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_flagged_inclusive attribution_floor_j 10
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_flagged_inclusive rails_attribution_floor_j 11
+MULT cell/qwen3-4b-4bit/pass1/rest/idle_flagged_inclusive B_kind:anchor 13
+EXACT cell/qwen3-4b-4bit/pass2/rails/flagged_inclusive flags
+MULT cell/qwen3-4b-4bit/pass2/rails/flagged_inclusive B_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/flagged_inclusive lower_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/flagged_inclusive upper_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/flagged_inclusive attribution_floor_j 28
+MULT cell/qwen3-4b-4bit/pass2/rails/flagged_inclusive rails_attribution_floor_j 28
+MULT cell/qwen3-4b-4bit/pass2/rails/flagged_inclusive B_kind:anchor 34
+MULT cell/qwen3-4b-4bit/pass2/rails/flagged_inclusive attribution_floor_j 28
+EXACT cell/qwen3-4b-4bit/pass2/dc_input/flagged_inclusive flags
+EXACT cell/qwen3-4b-4bit/pass2/rest/flagged_inclusive flags
+MULT cell/qwen3-4b-4bit/pass2/rest/flagged_inclusive B_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/flagged_inclusive lower_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/flagged_inclusive upper_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/flagged_inclusive attribution_floor_j 8.2
+MULT cell/qwen3-4b-4bit/pass2/rest/flagged_inclusive rails_attribution_floor_j 9.4
+MULT cell/qwen3-4b-4bit/pass2/rest/flagged_inclusive B_kind:anchor 11
+EXACT cell/qwen3-4b-4bit/pass2/rails/idle_flagged_inclusive flags
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_flagged_inclusive B_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_flagged_inclusive lower_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_flagged_inclusive upper_j 34
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_flagged_inclusive attribution_floor_j 28
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_flagged_inclusive rails_attribution_floor_j 28
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_flagged_inclusive B_kind:anchor 34
+MULT cell/qwen3-4b-4bit/pass2/rails/idle_flagged_inclusive attribution_floor_j 28
+EXACT cell/qwen3-4b-4bit/pass2/dc_input/idle_flagged_inclusive flags
+EXACT cell/qwen3-4b-4bit/pass2/rest/idle_flagged_inclusive flags
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_flagged_inclusive B_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_flagged_inclusive lower_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_flagged_inclusive upper_j 11
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_flagged_inclusive attribution_floor_j 8.2
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_flagged_inclusive rails_attribution_floor_j 9.4
+MULT cell/qwen3-4b-4bit/pass2/rest/idle_flagged_inclusive B_kind:anchor 11
+EXACT cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive flags
+MULT cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive B_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive lower_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive upper_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive rails_attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive B_kind:anchor 27
+MULT cell/qwen3-8b-4bit/pass1/rails/flagged_inclusive attribution_floor_j 26
+EXACT cell/qwen3-8b-4bit/pass1/dc_input/flagged_inclusive flags
+EXACT cell/qwen3-8b-4bit/pass1/rest/flagged_inclusive flags
+MULT cell/qwen3-8b-4bit/pass1/rest/flagged_inclusive B_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/flagged_inclusive lower_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/flagged_inclusive upper_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/flagged_inclusive attribution_floor_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/flagged_inclusive rails_attribution_floor_j 10
+MULT cell/qwen3-8b-4bit/pass1/rest/flagged_inclusive B_kind:anchor 11
+EXACT cell/qwen3-8b-4bit/pass1/rails/idle_flagged_inclusive flags
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_flagged_inclusive B_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_flagged_inclusive lower_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_flagged_inclusive upper_j 27
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_flagged_inclusive attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_flagged_inclusive rails_attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_flagged_inclusive B_kind:anchor 27
+MULT cell/qwen3-8b-4bit/pass1/rails/idle_flagged_inclusive attribution_floor_j 26
+EXACT cell/qwen3-8b-4bit/pass1/dc_input/idle_flagged_inclusive flags
+EXACT cell/qwen3-8b-4bit/pass1/rest/idle_flagged_inclusive flags
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_flagged_inclusive B_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_flagged_inclusive lower_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_flagged_inclusive upper_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_flagged_inclusive attribution_floor_j 11
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_flagged_inclusive rails_attribution_floor_j 10
+MULT cell/qwen3-8b-4bit/pass1/rest/idle_flagged_inclusive B_kind:anchor 11
+EXACT cell/qwen3-8b-4bit/pass2/rails/flagged_inclusive flags
+MULT cell/qwen3-8b-4bit/pass2/rails/flagged_inclusive B_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/flagged_inclusive lower_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/flagged_inclusive upper_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/flagged_inclusive attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/flagged_inclusive rails_attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/flagged_inclusive B_kind:anchor 26
+MULT cell/qwen3-8b-4bit/pass2/rails/flagged_inclusive attribution_floor_j 26
+EXACT cell/qwen3-8b-4bit/pass2/dc_input/flagged_inclusive flags
+EXACT cell/qwen3-8b-4bit/pass2/rest/flagged_inclusive flags
+MULT cell/qwen3-8b-4bit/pass2/rest/flagged_inclusive B_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/flagged_inclusive lower_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/flagged_inclusive upper_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/flagged_inclusive attribution_floor_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/flagged_inclusive rails_attribution_floor_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/flagged_inclusive B_kind:anchor 12
+EXACT cell/qwen3-8b-4bit/pass2/rails/idle_flagged_inclusive flags
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_flagged_inclusive B_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_flagged_inclusive lower_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_flagged_inclusive upper_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_flagged_inclusive attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_flagged_inclusive rails_attribution_floor_j 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_flagged_inclusive B_kind:anchor 26
+MULT cell/qwen3-8b-4bit/pass2/rails/idle_flagged_inclusive attribution_floor_j 26
+EXACT cell/qwen3-8b-4bit/pass2/dc_input/idle_flagged_inclusive flags
+EXACT cell/qwen3-8b-4bit/pass2/rest/idle_flagged_inclusive flags
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_flagged_inclusive B_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_flagged_inclusive lower_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_flagged_inclusive upper_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_flagged_inclusive attribution_floor_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_flagged_inclusive rails_attribution_floor_j 12
+MULT cell/qwen3-8b-4bit/pass2/rest/idle_flagged_inclusive B_kind:anchor 12
+MULT commit/fit_point/rails/qwen3-1.7b-4bit w 41
+MULT commit/fit_point/rest/qwen3-1.7b-4bit w 13
+MULT commit/fit_point/rails/qwen3-4b-4bit w 35
+MULT commit/fit_point/rest/qwen3-4b-4bit w 12
+MULT commit/fit_point/rails/qwen3-8b-4bit w 27
+MULT commit/fit_point/rest/qwen3-8b-4bit w 11
+A B_other_kinds yes=72 no=0 not_evaluable=0
+A B_is_anchor yes=72 no=0 not_evaluable=0
+A B_centre_h yes=72 no=0 not_evaluable=0
+A B_ends yes=72 no=0 not_evaluable=0
+A B_twin_is_export yes=12 no=0 not_evaluable=0
+A B_estimator_is_export yes=0 no=12 not_evaluable=0
+A B_operative_one yes=72 no=0 not_evaluable=0
+A W_follows_B yes=3 no=6 not_evaluable=0
+A W_with_B yes=9 no=0 not_evaluable=0
+FLAG dc_input estimator_only calibration.alignment_above_reference cells=8 effect=DISCLOSE
+FLAG dc_input estimator_only calibration.bracket_acceptance_failed cells=20 effect=DISCLOSE
+FLAG dc_input estimator_only calibration.capture_battery_assist cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only calibration.capture_outside_acceptance_range cells=20 effect=DISCLOSE
+FLAG dc_input estimator_only calibration.corpus_doubling_reached cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only calibration.other_session_range_expansion cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only calibration.other_session_systematic cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only calibration.stop_line_unsized cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only calibration.writer_record_flagged cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only code.changed_since_registration cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only code.executed_differs_from_sealed cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only diagnostic.s1_structural cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only g3.not_applicable cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only meter.duplicates cells=8 effect=DISCLOSE
+FLAG dc_input estimator_only neg8.reference_lost cells=16 effect=DISCLOSE
+FLAG dc_input estimator_only neg8.screen_failed cells=4 effect=DISCLOSE
+FLAG dc_input estimator_only neg8.survivor_screen_passed cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only network_time.off_output cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only pack.identity_mismatch cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only pack.identity_unmeasured cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only power.pstar_unsized cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only whole_window.not_passed cells=24 effect=DISCLOSE
+FLAG dc_input estimator_only whole_window.verdict_unauthenticated cells=24 effect=DISCLOSE
+FLAG rails estimator_only calibration.alignment_above_reference cells=8 effect=DISCLOSE
+FLAG rails estimator_only calibration.bracket_acceptance_failed cells=20 effect=DISCLOSE
+FLAG rails estimator_only calibration.capture_battery_assist cells=24 effect=DISCLOSE
+FLAG rails estimator_only calibration.capture_outside_acceptance_range cells=20 effect=DISCLOSE
+FLAG rails estimator_only calibration.corpus_doubling_reached cells=24 effect=DISCLOSE
+FLAG rails estimator_only calibration.other_session_range_expansion cells=24 effect=DISCLOSE
+FLAG rails estimator_only calibration.other_session_systematic cells=24 effect=DISCLOSE
+FLAG rails estimator_only calibration.stop_line_unsized cells=24 effect=DISCLOSE
+FLAG rails estimator_only calibration.writer_record_flagged cells=24 effect=DISCLOSE
+FLAG rails estimator_only code.changed_since_registration cells=24 effect=DISCLOSE
+FLAG rails estimator_only code.executed_differs_from_sealed cells=24 effect=DISCLOSE
+FLAG rails estimator_only diagnostic.s1_structural cells=24 effect=DISCLOSE
+FLAG rails estimator_only g3.not_applicable cells=24 effect=DISCLOSE
+FLAG rails estimator_only meter.duplicates cells=8 effect=DISCLOSE
+FLAG rails estimator_only neg8.reference_lost cells=16 effect=DISCLOSE
+FLAG rails estimator_only neg8.screen_failed cells=4 effect=DISCLOSE
+FLAG rails estimator_only neg8.survivor_screen_passed cells=24 effect=DISCLOSE
+FLAG rails estimator_only network_time.off_output cells=24 effect=DISCLOSE
+FLAG rails estimator_only pack.identity_mismatch cells=24 effect=DISCLOSE
+FLAG rails estimator_only pack.identity_unmeasured cells=24 effect=DISCLOSE
+FLAG rails estimator_only power.pstar_unsized cells=24 effect=DISCLOSE
+FLAG rails estimator_only whole_window.not_passed cells=24 effect=DISCLOSE
+FLAG rails estimator_only whole_window.verdict_unauthenticated cells=24 effect=DISCLOSE
+FLAG rest estimator_only calibration.alignment_above_reference cells=8 effect=DISCLOSE
+FLAG rest estimator_only calibration.bracket_acceptance_failed cells=20 effect=DISCLOSE
+FLAG rest estimator_only calibration.capture_battery_assist cells=24 effect=DISCLOSE
+FLAG rest estimator_only calibration.capture_outside_acceptance_range cells=20 effect=DISCLOSE
+FLAG rest estimator_only calibration.corpus_doubling_reached cells=24 effect=DISCLOSE
+FLAG rest estimator_only calibration.other_session_range_expansion cells=24 effect=DISCLOSE
+FLAG rest estimator_only calibration.other_session_systematic cells=24 effect=DISCLOSE
+FLAG rest estimator_only calibration.stop_line_unsized cells=24 effect=DISCLOSE
+FLAG rest estimator_only calibration.writer_record_flagged cells=24 effect=DISCLOSE
+FLAG rest estimator_only code.changed_since_registration cells=24 effect=DISCLOSE
+FLAG rest estimator_only code.executed_differs_from_sealed cells=24 effect=DISCLOSE
+FLAG rest estimator_only diagnostic.s1_structural cells=24 effect=DISCLOSE
+FLAG rest estimator_only g3.not_applicable cells=24 effect=DISCLOSE
+FLAG rest estimator_only meter.duplicates cells=8 effect=DISCLOSE
+FLAG rest estimator_only neg8.reference_lost cells=16 effect=DISCLOSE
+FLAG rest estimator_only neg8.screen_failed cells=4 effect=DISCLOSE
+FLAG rest estimator_only neg8.survivor_screen_passed cells=24 effect=DISCLOSE
+FLAG rest estimator_only network_time.off_output cells=24 effect=DISCLOSE
+FLAG rest estimator_only pack.identity_mismatch cells=24 effect=DISCLOSE
+FLAG rest estimator_only pack.identity_unmeasured cells=24 effect=DISCLOSE
+FLAG rest estimator_only power.pstar_unsized cells=24 effect=DISCLOSE
+FLAG rest estimator_only whole_window.not_passed cells=24 effect=DISCLOSE
+FLAG rest estimator_only whole_window.verdict_unauthenticated cells=24 effect=DISCLOSE
+FLAGQ calibration.alignment_above_reference F_row_flag_codes yes=0 no=1 not_evaluable=0
+FLAGQ calibration.alignment_above_reference F_kept_flag_codes yes=0 no=1 not_evaluable=0
+FLAGQ calibration.alignment_above_reference F_exclusion_codes yes=0 no=1 not_evaluable=0
+FLAGQ calibration.alignment_above_reference F_sidecar_counts yes=1 no=0 not_evaluable=0
+FLAGQ calibration.alignment_above_reference F_every_cell yes=1 no=0 not_evaluable=0
+FLAGQ calibration.alignment_above_reference F_meter_flag yes=0 no=1 not_evaluable=0
+FLAGQ calibration.alignment_above_reference F_blinded_estimator yes=0 no=1 not_evaluable=0
+FLAGQ calibration.bracket_acceptance_failed F_row_flag_codes yes=0 no=3 not_evaluable=0
+FLAGQ calibration.bracket_acceptance_failed F_kept_flag_codes yes=0 no=3 not_evaluable=0
+FLAGQ calibration.bracket_acceptance_failed F_exclusion_codes yes=0 no=3 not_evaluable=0
+FLAGQ calibration.bracket_acceptance_failed F_sidecar_counts yes=3 no=0 not_evaluable=0
+FLAGQ calibration.bracket_acceptance_failed F_every_cell yes=3 no=0 not_evaluable=0
+FLAGQ calibration.bracket_acceptance_failed F_meter_flag yes=0 no=3 not_evaluable=0
+FLAGQ calibration.bracket_acceptance_failed F_blinded_estimator yes=0 no=3 not_evaluable=0
+FLAGQ calibration.capture_battery_assist F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.capture_battery_assist F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.capture_battery_assist F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.capture_battery_assist F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ calibration.capture_battery_assist F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ calibration.capture_battery_assist F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ calibration.capture_battery_assist F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ calibration.capture_outside_acceptance_range F_row_flag_codes yes=0 no=3 not_evaluable=0
+FLAGQ calibration.capture_outside_acceptance_range F_kept_flag_codes yes=0 no=3 not_evaluable=0
+FLAGQ calibration.capture_outside_acceptance_range F_exclusion_codes yes=0 no=3 not_evaluable=0
+FLAGQ calibration.capture_outside_acceptance_range F_sidecar_counts yes=3 no=0 not_evaluable=0
+FLAGQ calibration.capture_outside_acceptance_range F_every_cell yes=3 no=0 not_evaluable=0
+FLAGQ calibration.capture_outside_acceptance_range F_meter_flag yes=0 no=3 not_evaluable=0
+FLAGQ calibration.capture_outside_acceptance_range F_blinded_estimator yes=0 no=3 not_evaluable=0
+FLAGQ calibration.corpus_doubling_reached F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.corpus_doubling_reached F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.corpus_doubling_reached F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.corpus_doubling_reached F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ calibration.corpus_doubling_reached F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ calibration.corpus_doubling_reached F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ calibration.corpus_doubling_reached F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_range_expansion F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_range_expansion F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_range_expansion F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_range_expansion F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ calibration.other_session_range_expansion F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ calibration.other_session_range_expansion F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_range_expansion F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_systematic F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_systematic F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_systematic F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_systematic F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ calibration.other_session_systematic F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ calibration.other_session_systematic F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ calibration.other_session_systematic F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ calibration.stop_line_unsized F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.stop_line_unsized F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.stop_line_unsized F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.stop_line_unsized F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ calibration.stop_line_unsized F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ calibration.stop_line_unsized F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ calibration.stop_line_unsized F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ calibration.writer_record_flagged F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.writer_record_flagged F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.writer_record_flagged F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ calibration.writer_record_flagged F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ calibration.writer_record_flagged F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ calibration.writer_record_flagged F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ calibration.writer_record_flagged F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ code.changed_since_registration F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ code.changed_since_registration F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ code.changed_since_registration F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ code.changed_since_registration F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ code.changed_since_registration F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ code.changed_since_registration F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ code.changed_since_registration F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ code.executed_differs_from_sealed F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ code.executed_differs_from_sealed F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ code.executed_differs_from_sealed F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ code.executed_differs_from_sealed F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ code.executed_differs_from_sealed F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ code.executed_differs_from_sealed F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ code.executed_differs_from_sealed F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ diagnostic.s1_structural F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ diagnostic.s1_structural F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ diagnostic.s1_structural F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ diagnostic.s1_structural F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ diagnostic.s1_structural F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ diagnostic.s1_structural F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ diagnostic.s1_structural F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ g3.not_applicable F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ g3.not_applicable F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ g3.not_applicable F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ g3.not_applicable F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ g3.not_applicable F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ g3.not_applicable F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ g3.not_applicable F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ meter.duplicates F_row_flag_codes yes=0 no=1 not_evaluable=0
+FLAGQ meter.duplicates F_kept_flag_codes yes=0 no=1 not_evaluable=0
+FLAGQ meter.duplicates F_exclusion_codes yes=0 no=1 not_evaluable=0
+FLAGQ meter.duplicates F_sidecar_counts yes=1 no=0 not_evaluable=0
+FLAGQ meter.duplicates F_every_cell yes=1 no=0 not_evaluable=0
+FLAGQ meter.duplicates F_meter_flag yes=0 no=1 not_evaluable=0
+FLAGQ meter.duplicates F_blinded_estimator yes=0 no=1 not_evaluable=0
+FLAGQ neg8.reference_lost F_row_flag_codes yes=0 no=3 not_evaluable=0
+FLAGQ neg8.reference_lost F_kept_flag_codes yes=0 no=3 not_evaluable=0
+FLAGQ neg8.reference_lost F_exclusion_codes yes=0 no=3 not_evaluable=0
+FLAGQ neg8.reference_lost F_sidecar_counts yes=3 no=0 not_evaluable=0
+FLAGQ neg8.reference_lost F_every_cell yes=3 no=0 not_evaluable=0
+FLAGQ neg8.reference_lost F_meter_flag yes=0 no=3 not_evaluable=0
+FLAGQ neg8.reference_lost F_blinded_estimator yes=0 no=3 not_evaluable=0
+FLAGQ neg8.screen_failed F_row_flag_codes yes=0 no=1 not_evaluable=0
+FLAGQ neg8.screen_failed F_kept_flag_codes yes=0 no=1 not_evaluable=0
+FLAGQ neg8.screen_failed F_exclusion_codes yes=0 no=1 not_evaluable=0
+FLAGQ neg8.screen_failed F_sidecar_counts yes=1 no=0 not_evaluable=0
+FLAGQ neg8.screen_failed F_every_cell yes=1 no=0 not_evaluable=0
+FLAGQ neg8.screen_failed F_meter_flag yes=0 no=1 not_evaluable=0
+FLAGQ neg8.screen_failed F_blinded_estimator yes=0 no=1 not_evaluable=0
+FLAGQ neg8.survivor_screen_passed F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ neg8.survivor_screen_passed F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ neg8.survivor_screen_passed F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ neg8.survivor_screen_passed F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ neg8.survivor_screen_passed F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ neg8.survivor_screen_passed F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ neg8.survivor_screen_passed F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ network_time.off_output F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ network_time.off_output F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ network_time.off_output F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ network_time.off_output F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ network_time.off_output F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ network_time.off_output F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ network_time.off_output F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_mismatch F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_mismatch F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_mismatch F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_mismatch F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ pack.identity_mismatch F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ pack.identity_mismatch F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_mismatch F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_unmeasured F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_unmeasured F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_unmeasured F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_unmeasured F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ pack.identity_unmeasured F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ pack.identity_unmeasured F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ pack.identity_unmeasured F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ power.pstar_unsized F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ power.pstar_unsized F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ power.pstar_unsized F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ power.pstar_unsized F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ power.pstar_unsized F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ power.pstar_unsized F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ power.pstar_unsized F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.not_passed F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.not_passed F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.not_passed F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.not_passed F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ whole_window.not_passed F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ whole_window.not_passed F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.not_passed F_blinded_estimator yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.verdict_unauthenticated F_row_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.verdict_unauthenticated F_kept_flag_codes yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.verdict_unauthenticated F_exclusion_codes yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.verdict_unauthenticated F_sidecar_counts yes=4 no=0 not_evaluable=0
+FLAGQ whole_window.verdict_unauthenticated F_every_cell yes=4 no=0 not_evaluable=0
+FLAGQ whole_window.verdict_unauthenticated F_meter_flag yes=0 no=4 not_evaluable=0
+FLAGQ whole_window.verdict_unauthenticated F_blinded_estimator yes=0 no=4 not_evaluable=0
+WITHHELD unprintable_rows=0

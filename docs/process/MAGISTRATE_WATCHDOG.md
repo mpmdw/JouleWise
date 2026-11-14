@@ -7,14 +7,9 @@ LaunchAgent with a bounded [desk fence](R0_HEADLESS_LAUNCH.md). This also
 suppresses relaunches and remote-stop probes while the desk job is alive;
 the ordinary plan stand-down and R0 agent census remain in force.
 
-When the magistrate writes and sends a progress update with
-`scripts/window_status.sh`, that script first inventories recorded measurement
-processes: a **chain** runs the night's measurements and pauses; a **campaign**
-runs one set of measurements. A **custody parent** is the directory holding
-each night's records and the shared list of campaign processes. A recorded
-process still running, or **indeterminate** evidence (not enough information
-to decide whether it is still running), stops the update before any status-file
-or Git changes. This also applies when a file is present to suppress Git work.
+For the current declared wait and next activation, read
+[`CURRENT.json`](CURRENT.json) and [the pointer rule](POINTER_RULE.md).
+The declaration does not establish host liveness.
 The watchdog's separate checks for agent processes and rules forbidding their
 launch still apply. The [window-liveness contract](../contracts/window_liveness.md)
 explains the shared directory settings, process checks, and operator repair

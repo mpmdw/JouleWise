@@ -33,7 +33,8 @@ repeat — with its exact validity state and blocker. Refresh this file
 whenever claim-bearing state changes (a verdict, a mint, a merge in the
 D-095 chain, an adjudication); quote verdicts as issued, never
 reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
-`WINDOW_STATUS.md` (machine state), `docs/decision_log.md` (policy).
+`docs/process/CURRENT.json` (declared wait; see `docs/process/POINTER_RULE.md`),
+`docs/decision_log.md` (policy).
 
 Last updated: **2026-08-20** (B7 ruling pass). Since the 2026-08-07 entry
 below, all three D-117 packs were **frozen** (2026-08-13, receipts PASS ×3)

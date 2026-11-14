@@ -1,0 +1,10 @@
+commit_rc=0
+STAGE1 569591e53ffcd91efbab7a9ebaff1d580bbc78ba
+18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71  -
+4820dc2e4d6c2b717ae7d1e70c9d66bc28b3c2ad622497604d3ea487b10a03de  -
+ * [new branch]          records/2026-11-bytes-stage1 -> records/2026-11-bytes-stage1
+branch 'records/2026-11-bytes-stage1' set up to track 'origin/records/2026-11-bytes-stage1'.
+push_rc=0
+569591e53ffcd91efbab7a9ebaff1d580bbc78ba
+  ✓ Logged in to github.com account mpmdw (keyring)
+  - Active account: true

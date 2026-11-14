@@ -1,0 +1,39 @@
+Counter({'fit': 384, 'fit-commit': 6}) Counter({'above_bar': 390})
+3 cell/pass1/dc_input/flagged_inclusive
+3 cell/pass1/dc_input/gross
+3 cell/pass1/dc_input/idle_flagged_inclusive
+3 cell/pass1/dc_input/idle_subtracted
+24 cell/pass1/rails/flagged_inclusive
+24 cell/pass1/rails/gross
+24 cell/pass1/rails/idle_flagged_inclusive
+24 cell/pass1/rails/idle_subtracted
+21 cell/pass1/rest/flagged_inclusive
+21 cell/pass1/rest/gross
+21 cell/pass1/rest/idle_flagged_inclusive
+21 cell/pass1/rest/idle_subtracted
+3 cell/pass2/dc_input/flagged_inclusive
+3 cell/pass2/dc_input/gross
+3 cell/pass2/dc_input/idle_flagged_inclusive
+3 cell/pass2/dc_input/idle_subtracted
+24 cell/pass2/rails/flagged_inclusive
+24 cell/pass2/rails/gross
+24 cell/pass2/rails/idle_flagged_inclusive
+24 cell/pass2/rails/idle_subtracted
+21 cell/pass2/rest/flagged_inclusive
+21 cell/pass2/rest/gross
+21 cell/pass2/rest/idle_flagged_inclusive
+21 cell/pass2/rest/idle_subtracted
+1 commit/rails/qwen3-1.7b-4bit
+1 commit/rails/qwen3-4b-4bit
+1 commit/rails/qwen3-8b-4bit
+1 commit/rest/qwen3-1.7b-4bit
+1 commit/rest/qwen3-4b-4bit
+1 commit/rest/qwen3-8b-4bit
+--- keys
+[('flags', 72), ('attribution_floor_j', 72), ('B_j', 48), ('lower_j', 48), ('upper_j', 48), ('rails_attribution_floor_j', 48), ('B_kind:anchor', 48), ('w', 6)]
+--- models
+Counter({'qwen3-1.7b-4bit': 130, 'qwen3-4b-4bit': 130, 'qwen3-8b-4bit': 130})
+dc_input Counter({'flags': 24})
+rails Counter({'attribution_floor_j': 48, 'flags': 24, 'B_j': 24, 'lower_j': 24, 'upper_j': 24, 'rails_attribution_floor_j': 24, 'B_kind:anchor': 24, 'w': 3})
+rest Counter({'flags': 24, 'B_j': 24, 'lower_j': 24, 'upper_j': 24, 'attribution_floor_j': 24, 'rails_attribution_floor_j': 24, 'B_kind:anchor': 24, 'w': 3})
+commit Counter({('rails', 'w'): 3, ('rest', 'w'): 3})

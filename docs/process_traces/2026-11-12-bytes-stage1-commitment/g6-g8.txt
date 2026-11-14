@@ -1,0 +1,19 @@
+== G6 2026-11-12T19:58:32Z
++refs/heads/*:refs/remotes/origin/*
+fetch_rc=0
+rc=0
+rc=0
+     151
+     124
+== G7
+       0
+       0
+       0
+== G8
+0
+0
+0
+/dev/disk3s5       926  806        97    90% 7451640 1019329440    1%   /System/Volumes/Data
+You need administrator access to run this tool... exiting!
+ls: /Users/edr/night-custody/magistrate/desk_fence.json: No such file or directory
+G8 network time: Network Time: Off

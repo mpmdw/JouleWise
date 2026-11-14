@@ -1,4 +1,5 @@
-"""The CI docs-only classifier (scripts/ci_docs_only.sh) only suppresses tests for unreferenced Markdown."""
+"""The CI range classifiers: docs-only (scripts/ci_docs_only.sh) suppresses tests only for
+unreferenced Markdown; state-only (scripts/ci_state_only.sh) admits only the state records."""
 import os
 import subprocess
 import tempfile
@@ -8,6 +9,8 @@ from pathlib import Path
 from tests.git_fixture import init_git_fixture
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "ci_docs_only.sh"
+STATE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "ci_state_only.sh"
+WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
 
 
 class DocsOnlyClassifierTests(unittest.TestCase):
@@ -86,6 +89,105 @@ class DocsOnlyClassifierTests(unittest.TestCase):
     def test_unknown_commit_runs_tests(self):
         self.assertEqual(self.classify({"docs/notes.md": "y\n"}, before="0123456789" * 4), 1)
 
+
+class StateOnlyClassifierTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self.tmp.name)
+        self.env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+                    "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        init_git_fixture(self.repo, "-q")
+        self.write({"RUN_STATE.md": "x\n", "TASK_QUEUE.md": "x\n", "docs/process/CURRENT.json": "{}\n",
+                    "docs/notes.md": "x\n", "joulewise/core.py": "x = 1\n"})
+        self.base = self.commit()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def git(self, *args):
+        return subprocess.run(["git", *args], cwd=self.repo, env=self.env, check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    def write(self, files):
+        for name, text in files.items():
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+
+    def commit(self):
+        self.git("add", "-A")
+        self.git("commit", "-q", "--allow-empty", "-m", "c")
+        return self.git("rev-parse", "HEAD")
+
+    def classify(self, files, before=None):
+        self.git("checkout", "-q", self.base)
+        self.write(files)
+        after = self.commit()
+        return subprocess.run(["bash", str(STATE_SCRIPT), before or self.base, after], cwd=self.repo,
+                              env=self.env).returncode
+
+    def test_run_state_alone_is_state_only(self):
+        self.assertEqual(self.classify({"RUN_STATE.md": "y\n"}), 0)
+
+    def test_run_state_with_generated_current_pointer_is_state_only(self):
+        self.assertEqual(self.classify({"RUN_STATE.md": "y\n", "docs/process/CURRENT.json": "{\"a\": 1}\n"}), 0)
+
+    def test_task_queue_is_state_only(self):
+        self.assertEqual(self.classify({"TASK_QUEUE.md": "y\n"}), 0)
+
+    def test_state_with_docs_runs_everything(self):
+        self.assertEqual(self.classify({"RUN_STATE.md": "y\n", "docs/notes.md": "y\n"}), 1)
+
+    def test_state_with_code_runs_everything(self):
+        self.assertEqual(self.classify({"RUN_STATE.md": "y\n", "joulewise/core.py": "x = 2\n"}), 1)
+
+    def test_other_process_files_run_everything(self):
+        for path in ("docs/process/OTHER.json", "docs/process_traces/t/r.md", "RUN_STATE.md.bak",
+                     "sub/RUN_STATE.md"):
+            with self.subTest(path=path):
+                self.assertEqual(self.classify({path: "y\n"}), 1)
+
+    def test_empty_range_runs_everything(self):
+        self.assertEqual(self.classify({}), 1)
+
+    def test_malformed_sha_runs_everything(self):
+        self.assertEqual(self.classify({"RUN_STATE.md": "y\n"}, before="not-a-sha"), 1)
+
+    def test_unknown_commit_runs_everything(self):
+        self.assertEqual(self.classify({"RUN_STATE.md": "y\n"}, before="0123456789" * 4), 1)
+
+    def test_zero_sha_runs_everything(self):
+        self.assertEqual(self.classify({"RUN_STATE.md": "y\n"}, before="0" * 40), 1)
+
+
+class StateOnlyWorkflowTests(unittest.TestCase):
+    """The workflow runs the BASE commit's classifier; a state-only range keeps the quick tier."""
+
+    # The modules that read the live RUN_STATE.md, TASK_QUEUE.md or CURRENT.json content.
+    LIVE_STATE_READERS = ("tests.test_gen_state", "tests.test_gen_current", "tests.test_docs_freshness")
+
+    def test_workflow_wires_the_classifier_into_the_quick_job(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn('git show "$before:scripts/$1" | bash -s -- "$before" "$after"', text)
+        self.assertIn("elif classify ci_state_only.sh; then", text)
+        self.assertIn("state: ${{ steps.paths.outputs.state || 'false' }}", text)
+        self.assertIn("if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'\n"
+                      "        run: python3 scripts/quick_suite.py --tier quick --workers 4", text)
+
+    def test_live_state_readers_are_in_the_quick_tier(self):
+        import json
+        import sys
+        sys.path.insert(0, str(SCRIPT.parent))
+        import quick_suite
+        import shard_tests
+        modules = shard_tests.discover_test_modules()
+        payload = json.loads(shard_tests.DEFAULT_TIMINGS_PATH.read_text(encoding="utf-8"))
+        selected, excluded = quick_suite.select_modules(
+            modules, shard_tests.load_timing_map(), payload.get("exclusive_modules", {}),
+            shard_tests.load_split_declarations())
+        for module in self.LIVE_STATE_READERS:
+            with self.subTest(module=module):
+                self.assertIn(module, selected, excluded.get(module))
 
 if __name__ == "__main__":
     unittest.main()
