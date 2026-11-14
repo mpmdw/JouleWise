@@ -284,7 +284,9 @@ def production_deps(*, inputs, pmset_bin, output):
     def run_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining):
         argv = [*leg_argv, "--leg-spec", str(spec_path), "--r1-kind", legsmod.LEG_KIND,
                 "--output", str(attempt_dir), "--soak-reference", str(soak_reference)]
-        result = run_child(name=Path(attempt_dir).name, argv=argv, cap_s=cap_s, log_dir=Path(attempt_dir).parent,
+        leg_dir = Path(attempt_dir).parent
+        attempt = 1 + sum(1 for p in leg_dir.iterdir() if p.name.startswith(Path(attempt_dir).name + ".rejected"))
+        result = run_child(name=f"{leg_dir.name}.a{attempt}", argv=argv, cap_s=cap_s, log_dir=leg_dir,
                            feeds=feeds, work_remaining=work_remaining)
         if result["rc"]:
             raise LegRuntimeError(f"{Path(attempt_dir).parent.name}: leg runtime exit {result['rc']}")

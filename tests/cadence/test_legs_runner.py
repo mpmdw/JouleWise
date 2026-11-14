@@ -480,6 +480,37 @@ class LegRuntimeTests(unittest.TestCase):
             self.assertEqual(changed.stdout.strip(), "")
 
 
+class ProductionSeamTests(unittest.TestCase):
+    """The production leg step: argv, per-attempt child names (a redo gets fresh logs and deadline dir)."""
+
+    def test_leg_argv_and_attempt_names(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            inputs = root / "inputs.json"
+            inputs.write_text(json.dumps({"WP15": {"runtime_entrypoint": [
+                "scripts/align_r1_runtime.py", "--config", "configs/align/v4/r1_runtime.json"]}}))
+            argv = runner.leg_runtime_argv(inputs)
+            self.assertEqual(argv[2], str(runner.ROOT / "scripts/cadence_leg_runtime.py"))
+            self.assertEqual(argv[1:2] + argv[3:], ["-B", "--config", "configs/align/v4/r1_runtime.json"])
+            with patch("scripts.run_align_r1_smoke.AgentFeed"), patch("scripts.run_align_r1_smoke.MeterFeed"), \
+                 patch("scripts.run_align_r1_smoke.VolumeFeed"):
+                deps = runner.production_deps(inputs=inputs, pmset_bin="fake", output=root / "span")
+            leg_dir = root / "span/legs/L001"
+            leg_dir.mkdir(parents=True)
+            names = []
+
+            def child(**kw):
+                names.append(kw["name"])
+                Path(kw["argv"][kw["argv"].index("--output") + 1]).mkdir()
+                return {"rc": 0}
+            with patch.object(runner, "run_child", side_effect=child), \
+                 patch.object(runner, "accepted_result", return_value={"kind": "cadence-leg"}):
+                deps.run_leg(leg_dir / "runtime", leg_dir / "leg_spec.json", root / "soak.json", 2700, [], lambda: 1e9)
+                (leg_dir / "runtime").rename(leg_dir / "runtime.rejected1")
+                deps.run_leg(leg_dir / "runtime", leg_dir / "leg_spec.json", root / "soak.json", 2700, [], lambda: 1e9)
+            self.assertEqual(names, ["L001.a1", "L001.a2"])
+
+
 class RunnerWithLegRuntimeTests(unittest.TestCase):
     """The driver with its leg step wired to the real leg runtime (in process, synthetic backend)."""
 
