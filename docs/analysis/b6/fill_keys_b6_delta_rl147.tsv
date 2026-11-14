@@ -218,3 +218,5 @@ removed (no longer printed in this form)	P1-B6-SIDEBYSIDE	restricted.json	sessio
 removed (no longer printed in this form)	P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/decode/n	10	10	n	computed and compared (decision 6 (a))
 removed (no longer printed in this form)	P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|contrast/prefill-p2048/n	10	10	n	computed and compared (decision 6 (a))
 removed (no longer printed in this form)	P1-B6-SIDEBYSIDE	restricted.json	sessions|r3-gamma|quantities|neg8/verdict	"""passed"""	passed	word	computed and compared (decision 6 (a))
+new or changed (re-printed in RL-147 §10 (c); added after the delta pass, which flagged it missing)	P1-B6-DOM	restricted.json	sessions|r2-beta|quantities|dominance/qwen3-8b/decode/comparative/R	1.3107932658913495	1.3108	R	single-source
+new or changed (re-printed in RL-147 §10 (c); added after the delta pass, which flagged it missing)	P1-B6-DOM	restricted.json	sessions|r3-beta|quantities|dominance/qwen3-8b/decode/comparative/R	1.686484598538609	1.6865	R	single-source

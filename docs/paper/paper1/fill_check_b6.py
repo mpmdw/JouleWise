@@ -48,6 +48,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import json
 import pathlib
 import re
@@ -70,6 +71,14 @@ CHECK3_RESULT = '72 of 72 (family x session) rows PASS; 0 FAIL.'
 READER_COMMIT = '9611d5fd13d3b8d843f09144b91cc56c17359135'
 READER_PATH = 'docs/research-audits/2026-11-10-fable/evidence/pr772/reader-pr772.md'
 READER_SHA256 = '4239c9146ff06ae180f2d67ba090db3509a7e140df7daa3e07908cfdc7af4a63'
+# RL-147 §7 item 3: the reader's delta pass on head f813150c0 (its manifest and delta manifest at that commit).
+READER2_COMMIT = '063676c2f'
+READER2_PATH = 'docs/research-audits/2026-11-10-fable/evidence/pr772/reader-pr772-delta.md'
+READER2_SHA256 = 'b54043c34aa37888909255f87d57a13feddd280d6df0eb63776d30252c3791bb'
+READER2_RESULT = '- Rows checked: 167. Agree: 167. Disagree: 0.'
+PASS1_HEAD, PASS2_HEAD = 'a2563016e', 'f813150c0'
+MANIFEST_PATH = 'docs/analysis/b6/fill_keys_b6.tsv'
+DELTA_PATH = 'docs/analysis/b6/fill_keys_b6_delta_rl147.tsv'
 # RL-147 §2: Block 5's catalog; its 32 session-removing codes are those with effect EXCLUDE_WINDOW.
 B5_CATALOG = ROOT / 'configs/campaigns/v5_claim_25g83/flag_catalog.json'
 B5_CATALOG_SHA256 = '5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d'
@@ -167,7 +176,23 @@ def load_extras() -> dict:
                              capture_output=True).stdout
     if hashlib.sha256(program).hexdigest() != B5_PROGRAM_SHA256:
         fail('pinned Block 5 program SHA-256 differs')
-    return {'reader': {'rows': m_rows.group(1), 'agree': m_agree.group(1)},
+    report2 = subprocess.run(['git', 'show', f'{READER2_COMMIT}:{READER2_PATH}'], cwd=ROOT, check=True,
+                             capture_output=True).stdout
+    if hashlib.sha256(report2).hexdigest() != READER2_SHA256 or READER2_RESULT not in report2.decode():
+        fail('delta reader report SHA-256 or result line differs (RL-147 §7 item 3)')
+    # The total the sentence states: every row of the manifest at PASS2_HEAD is covered by pass one (the manifest at
+    # PASS1_HEAD, all rows agreeing) or by pass two (the delta's new or changed rows, all agreeing). Rows are matched on
+    # file, key path, raw value and printed text.
+    tsv = lambda ref, path: list(csv.DictReader(io.StringIO(subprocess.run(
+        ['git', 'show', f'{ref}:{path}'], cwd=ROOT, check=True, capture_output=True, text=True).stdout), delimiter='\t'))
+    key = lambda r: (r['file'], r['key_path'], r['raw'], r['printed'])
+    pass1 = {key(r) for r in tsv(PASS1_HEAD, MANIFEST_PATH)}
+    pass2 = {key(r) for r in tsv(PASS2_HEAD, DELTA_PATH) if r['change'] == 'new or changed'}
+    current = tsv(PASS2_HEAD, MANIFEST_PATH)
+    covered = sum(key(r) in pass1 or key(r) in pass2 for r in current)
+    if covered != len(current):
+        fail(f'reader coverage: {covered} of {len(current)} manifest rows at {PASS2_HEAD} were re-read')
+    return {'reader': {'rows': f'{len(current):,}', 'agree': f'{covered:,}', 'pass1': m_agree.group(1)},
             'catalog': json.loads(B5_CATALOG.read_text()), 'b5': json.loads(B5_OUTPUT.read_text()),
             'program': program.decode()}
 
@@ -233,6 +258,7 @@ class Src:
         self.file = {'attempts': 'attempts.jsonl', 'block5': 'Block 5 recompute.json (c06ee7c8…)',
                      'catalog': 'configs/campaigns/v5_claim_25g83/flag_catalog.json',
                      'reader': READER_PATH + '@' + READER_COMMIT[:9],
+                     'reader2': READER2_PATH + '@' + READER2_COMMIT,
                      'program': B5_PROGRAM + '@' + S14_COMMIT[:9]}.get(name, name + '.json')
 
     def get(self, path: str):
@@ -1023,8 +1049,12 @@ def fill_summary_b6(R: Src, S: Src, X: dict) -> str:
     restricted_sha = S.get('digests|restricted_file')
     record(S, 'digests|restricted_file', restricted_sha, restricted_sha, 'sha256')
     Rd = Src('reader', {})
-    agreed = record(Rd, '"- Agree: N" line', X['reader']['agree'], X['reader']['agree'], 'n')
-    checked = record(Rd, '"- Rows checked: N" line', X['reader']['rows'], X['reader']['rows'], 'n')
+    record(Rd, '"- Agree: N" line', X['reader']['pass1'], X['reader']['pass1'], 'n')
+    Rd2 = Src('reader2', {})
+    record(Rd2, '"- Rows checked: 167. Agree: 167. Disagree: 0." line', READER2_RESULT, READER2_RESULT, 'text')
+    agreed = record(Rd2, f'manifest rows at {PASS2_HEAD} covered by pass one ({PASS1_HEAD}) or pass two (delta)',
+                    X['reader']['agree'], X['reader']['agree'], 'n')
+    checked = record(Rd2, f'manifest rows at {PASS2_HEAD} ({MANIFEST_PATH})', X['reader']['rows'], X['reader']['rows'], 'n')
     para = (
         f'**Replication block.** The comparator set the first program\'s values against the second side\'s in '
         f'{n_classes} classes, under the replication registration\'s S-13 bars (Block 6 §12.3 item 4): each run\'s '
