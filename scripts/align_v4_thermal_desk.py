@@ -85,7 +85,8 @@ def rl145_prints_report(manifest, root, journal):
 
     Optional member keys: ``os_journal`` (as for the desk) and ``token_stamps`` (a JSON file
     ``{"<turn index>": [arrival ns of decode token 1, 2, ...]}``). The optional manifest key
-    ``residual_rows`` names a JSONL of ``{trajectory, decode_tokens, residual_j}`` rows.
+    ``residual_rows`` names a JSONL of ``{trajectory, decode_tokens, residual_j[, prefill_s, decode_s]}`` rows
+    (the load bins need the two seconds). Token times come from each bundle's token events.
     Without token stamps the token-position fields print as null with ``token_basis`` unavailable.
     """
     from joulewise.align.apple import rl145_prints
@@ -104,7 +105,8 @@ def rl145_prints_report(manifest, root, journal):
     rows = journal(manifest['residual_rows']) if manifest.get('residual_rows') else None
     return {'schema': 'joulewise.align.rl145_prints.v1', 'authority': 'RL-145 section 2, RL-145 addendum row 6',
             'print_only': True, 'members': members,
-            'residual_by_decode_bin': None if rows is None else rl145_prints.residual_by_decode_bin(rows)}
+            'residual_by_decode_bin': None if rows is None else rl145_prints.residual_by_decode_bin(rows),
+            'residual_by_load_bin': None if rows is None else rl145_prints.residual_by_load_bin(rows)}
 
 
 def main(argv=None):

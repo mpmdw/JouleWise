@@ -29,6 +29,11 @@ NS = 1_000_000_000
 BLOCK = 256
 BASE_WINDOW_NS = 10 * NS
 LAST_TOKENS = 512
+FRESH_STAMP_S = 2.0                 # a PM state stamp older than this counts as not recorded (G0's own bound)
+CONSECUTIVE_QUIET = 5
+# Continuous load = prefill + decode seconds of a turn. The close names the bin but not its edges;
+# these are the builder's choice (seconds) and are printed with the result.
+LOAD_BINS = (("<=100", 0, 100), ("101-200", 100, 200), ("201-300", 200, 300), (">300", 300, None))
 DECODE_BINS = (("<=1024", 0, 1024), ("1025-2048", 1025, 2048), (">2048", 2049, None))
 
 
@@ -168,33 +173,149 @@ def residual_by_decode_bin(rows):
             for (t, b), v in sorted(groups.items(), key=lambda kv: (kv[0][0] == "*", kv[0][0], order[kv[0][1]]))]
 
 
+def residual_by_load_bin(rows):
+    """The residual by continuous load (prefill + decode seconds), beside the decode-length bins.
+
+    ``rows``: ``{trajectory, residual_j, prefill_s, decode_s}``; rows without both seconds are
+    counted in ``skipped``. One row per (trajectory, bin) and per bin over all trajectories (``"*"``)."""
+    groups, skipped = {}, 0
+    for row in rows:
+        if row.get("prefill_s") is None or row.get("decode_s") is None:
+            skipped += 1
+            continue
+        load = float(row["prefill_s"]) + float(row["decode_s"])
+        name = next(n for n, lo, hi in LOAD_BINS if load > lo and (hi is None or load <= hi)) if load > 0 else LOAD_BINS[0][0]
+        for key in ((row["trajectory"], name), ("*", name)):
+            groups.setdefault(key, []).append(float(row["residual_j"]))
+    order = {name: i for i, (name, _, _) in enumerate(LOAD_BINS)}
+    return {"edges_s": [list(b) for b in LOAD_BINS], "skipped": skipped,
+            "rows": [{"trajectory": t, "load_bin": b, "n": len(v), "mean_residual_j": sum(v) / len(v)}
+                     for (t, b), v in sorted(groups.items(), key=lambda kv: (kv[0][0] == "*", kv[0][0], order[kv[0][1]]))]}
+
+
+def token_stamps_from_events(events, turn):
+    """Decode-token arrival times (episode ns) from the bundle's token events, as the P8 desk took them.
+
+    ``events``: the ``events.jsonl`` records. A token event's time is placed on the episode clock by
+    the turn's own prefill-end event: ``first_token_ns`` is that instant. Returns ``None`` when the
+    turn has no token events or no prefill-end event."""
+    mine = [e for e in events if (e.get("metadata") or {}).get("align_turn_index") == turn.index]
+    ends = [e["timestamp_s"] for e in mine if e.get("event_type") == "phase_end" and e.get("phase") == "prefill"]
+    tokens = sorted(e["timestamp_s"] for e in mine if e.get("event_type") == "token")
+    if not ends or not tokens or turn.first_token_ns is None:
+        return None
+    anchor = min(ends)
+    return [turn.first_token_ns + round((t - anchor) * NS) for t in tokens]
+
+
+def _status_age_s(row):
+    pm_ns = (row.get("status") or {}).get("pm_observed_ns")
+    return None if type(pm_ns) is not int else (row["monotonic_ns"] - pm_ns) / NS
+
+
+def gate_state_prints(intervals, rows, turns, fast_key):
+    """Close section 2: the OS level, state and stamp age at every G1 release sample; per turn, seconds
+    from the last token to the first of five consecutive readings at level 0 and Nominal with a fresh
+    stamp, and the fast key (TV0h) at that reading. ``rows``: gate-journal samples (``status``, ``sensors``)."""
+    by_ns = {r["monotonic_ns"]: r for r in rows}
+    g1 = []
+    for r in intervals:
+        if r.get("kind") != "G1":
+            continue
+        sample = by_ns.get(r.get("exit_sample_ns"))
+        st = (sample or {}).get("status") or {}
+        age = None if sample is None else _status_age_s(sample)
+        g1.append({"turn": r.get("turn"), "outcome": r.get("outcome"), "os_level": st.get("os_level"),
+                   "pm_state": st.get("pm_state"), "stamp_age_s": age,
+                   "stamp_fresh": age is not None and 0 <= age <= FRESH_STAMP_S})
+    recovery = []
+    for t in turns:
+        later = [r for r in rows if r["monotonic_ns"] >= t.end_ns]
+        streak, found = [], None
+        for r in later:
+            st = r.get("status") or {}
+            age = _status_age_s(r)
+            good = st.get("os_level") == 0 and st.get("pm_state") == "Nominal" and age is not None and 0 <= age <= FRESH_STAMP_S
+            streak = streak + [r] if good else []
+            if len(streak) == CONSECUTIVE_QUIET:
+                found = streak[0]
+                break
+        recovery.append({"turn": t.index, "s_from_last_token": None if found is None else (found["monotonic_ns"] - t.end_ns) / NS,
+                         "fast_key_c": None if found is None else (found.get("sensors") or {}).get(fast_key),
+                         "readings_after_turn": len(later)})
+    return {"g1_release_samples": g1, "quiet_after_last_token": recovery,
+            "fresh_stamp_bound_s": FRESH_STAMP_S, "consecutive_readings": CONSECUTIVE_QUIET}
+
+
+def tv1h_trigger(intervals, rows, fast_key, slow_key):
+    """Close section 5: any journal row inside a gate window (G0, G1, H) whose two gate keys differ comes to the
+    research lead. Lists every such row; ``fires`` is true when there is one."""
+    windows = [(r["start_ns"], r["end_ns"], r["kind"], r.get("turn")) for r in intervals if r.get("kind") in ("G0", "G1", "H")]
+    hits = []
+    for r in rows:
+        values = r.get("sensors") or {}
+        a, b = values.get(fast_key), values.get(slow_key)
+        if a is None or b is None or a == b:
+            continue
+        w = next((w for w in windows if w[0] <= r["monotonic_ns"] <= w[1]), None)
+        if w is not None:
+            hits.append({"monotonic_ns": r["monotonic_ns"], "gate": w[2], "turn": w[3], fast_key: a, slow_key: b})
+    return {"keys": [fast_key, slow_key], "fires": bool(hits), "rows": hits}
+
+
 def bundle_prints(bundle, *, os_journal=(), token_stamps_by_turn=None, estimate_tokens=False):
     """The prints for one immutable bundle, read the way ``thermal_desk.read_bundle_record`` reads it.
 
-    ``estimate_tokens`` (off for the W1 desk) fills turns that have no stamps with the uniform estimate."""
+    Token times come from the bundle's token events (``token_stamps_by_turn`` overrides them);
+    ``estimate_tokens`` fills any turn still without stamps with the uniform estimate."""
     import json
     from pathlib import Path
-    from joulewise.align.apple.thermal_desk import native_pm_samples, normalize_journal
+    from joulewise.align.apple.thermal_desk import native_pm_samples, normalize_journal, read_bundle_record
     from joulewise.align.apple.workload import read_episode_bundle
     from joulewise.desk_compress import read_bytes
     bundle = Path(bundle)
     ep = read_episode_bundle(bundle)
-    try:
-        gate_journal = [json.loads(x) for x in read_bytes(bundle / "outputs/align_thermal.jsonl").splitlines() if x.strip()]
-    except FileNotFoundError:
-        gate_journal = []
+
+    def jsonl(name):
+        try:
+            return [json.loads(x) for x in read_bytes(bundle / name).splitlines() if x.strip()]
+        except FileNotFoundError:
+            return []
+    gate_journal = jsonl("outputs/align_thermal.jsonl")
     os_readings = [(r["finished"]["monotonic_ns"], r["values"].get("level")) for r in os_journal
                    if r.get("kind") == "reading" and not r.get("error")]
     if not os_readings:
         os_readings = [(r["monotonic_ns"], r.get("status", {}).get("os_level"))
                        for r in normalize_journal(gate_journal) if r.get("status", {}).get("os_level") is not None]
     pm = native_pm_samples(bundle, ep)
-    intervals = (ep.hardware.get("thermal") or {}).get("intervals", [])
+    thermal = ep.hardware.get("thermal") or {}
+    intervals = thermal.get("intervals", [])
+    events = jsonl("events.jsonl")
     stamps = token_stamps_by_turn or {}
+    record = read_bundle_record(bundle, os_journal=os_journal)
+    observation = record.get("turn_observation") or []
     turns = []
-    for t in ep.turns:
-        real = stamps.get(t.index)
+    for k, t in enumerate(ep.turns):
+        real = stamps.get(t.index) or token_stamps_from_events(events, t)
         use = real or (uniform_token_stamps(t, intervals) if estimate_tokens and t.decode_tokens > 0 else None)
-        turns.append(turn_prints(t, intervals=intervals, os_readings=os_readings, pm_rows=pm,
-                                 token_stamps_ns=use, estimated=bool(use) and not real))
-    return {"episode": ep.episode_id, "turns": turns}
+        row = turn_prints(t, intervals=intervals, os_readings=os_readings, pm_rows=pm,
+                          token_stamps_ns=use, estimated=bool(use) and not real)
+        first = t.first_token_ns if t.first_token_ns is not None else t.end_ns
+        held = _hold_ns(_holds(intervals, t.index), first, t.end_ns)
+        row.update(prefill_s=(first - t.start_ns) / NS, prefill_tokens=t.prefill_tokens,
+                   decode_s=(t.end_ns - first - held) / NS, load_s=(t.end_ns - t.start_ns - held) / NS,
+                   desk_os_nominal=observation[k]["os_nominal"] if k < len(observation) else None,
+                   desk_pm_nominal=observation[k]["pm_nominal"] if k < len(observation) else None)
+        turns.append(row)
+    sensors = (thermal.get("policy") or {}).get("sensors") or {}
+    samples = [r for r in gate_journal if r.get("kind") == "sample"]
+    out = {"episode": ep.episode_id, "turns": turns,
+           "desk_verdict": {"member_excluded": bool(record.get("calibration_exclusions")),
+                            "exclusion_reasons": list(record.get("calibration_exclusions") or []),
+                            "flags": list(record.get("flags") or []),
+                            "per_turn": [{"turn": t.index, "os_nominal": r["desk_os_nominal"],
+                                          "pm_nominal": r["desk_pm_nominal"]} for t, r in zip(ep.turns, turns)]}}
+    if sensors.get("s_fast") and sensors.get("s_slow"):
+        out["gate_states"] = gate_state_prints(intervals, samples, ep.turns, sensors["s_fast"])
+        out["tv1h_trigger"] = tv1h_trigger(intervals, samples, sensors["s_fast"], sensors["s_slow"])
+    return out

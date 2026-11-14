@@ -140,6 +140,111 @@ class UniformEstimateTests(unittest.TestCase):
         self.assertEqual(p.uniform_token_stamps(t, [{**hold, 'turn': 4}])[0], 10 * NS + round(200 * NS / 1000))
 
 
+def sample(t_s, level=0, state='Nominal', pm_age_s=0.5, fast=40.0, slow=40.0):
+    t = int(t_s * NS)
+    return {'kind': 'sample', 'monotonic_ns': t, 'sensors': {'TV0h': fast, 'TV1h': slow},
+            'status': {'os_level': level, 'pm_state': state, 'pm_observed_ns': t - int(pm_age_s * NS)}}
+
+
+class CloseSection2Tests(unittest.TestCase):
+    def test_g1_release_sample_state_and_stamp_age(self):
+        rows = [sample(50), sample(100, level=2, state='Heavy', pm_age_s=3.0)]
+        intervals = [{'kind': 'G1', 'turn': 1, 'outcome': 'released', 'exit_sample_ns': 100 * NS},
+                     {'kind': 'G1', 'turn': 2, 'outcome': 'released', 'exit_sample_ns': 50 * NS},
+                     {'kind': 'G0', 'turn': 0, 'outcome': 'released', 'exit_sample_ns': 50 * NS},
+                     {'kind': 'G1', 'turn': 3, 'outcome': 'timeout', 'exit_sample_ns': None}]
+        out = p.gate_state_prints(intervals, rows, [], 'TV0h')['g1_release_samples']
+        self.assertEqual([(r['turn'], r['os_level'], r['pm_state'], r['stamp_fresh']) for r in out],
+                         [(1, 2, 'Heavy', False), (2, 0, 'Nominal', True), (3, None, None, False)])
+        self.assertAlmostEqual(out[0]['stamp_age_s'], 3.0)
+
+    def test_quiet_after_last_token_needs_five_fresh_readings_at_level_0_and_nominal(self):
+        t = turn(start=0, first=10, end=100)
+        rows = [sample(100 + i, level=1 if i < 40 else 0, state='Heavy' if i < 40 else 'Nominal', fast=41 - i * 0.01)
+                for i in range(60)]
+        rows[43] = sample(143, level=0, state='Nominal', pm_age_s=5.0, fast=40.6)   # stale stamp breaks the streak
+        got = p.gate_state_prints([], rows, [t], 'TV0h')['quiet_after_last_token'][0]
+        self.assertEqual(got['s_from_last_token'], 44.0)        # readings 44..48 are the first five in a row
+        self.assertAlmostEqual(got['fast_key_c'], 41 - 44 * 0.01)
+        none = p.gate_state_prints([], rows[:20], [t], 'TV0h')['quiet_after_last_token'][0]
+        self.assertEqual((none['s_from_last_token'], none['fast_key_c']), (None, None))
+
+    def test_tv1h_trigger_lists_rows_inside_gate_windows_only(self):
+        intervals = [{'kind': 'G1', 'turn': 1, 'start_ns': 10 * NS, 'end_ns': 20 * NS},
+                     {'kind': 'H', 'turn': 1, 'start_ns': 30 * NS, 'end_ns': 40 * NS}]
+        rows = [sample(5, slow=41.0), sample(15, slow=41.0), sample(16), sample(35, slow=39.9), sample(50, slow=1.0)]
+        out = p.tv1h_trigger(intervals, rows, 'TV0h', 'TV1h')
+        self.assertTrue(out['fires'])
+        self.assertEqual([(r['gate'], r['monotonic_ns'] // NS) for r in out['rows']], [('G1', 15), ('H', 35)])
+        self.assertFalse(p.tv1h_trigger(intervals, [sample(15), sample(35)], 'TV0h', 'TV1h')['fires'])
+
+    def test_token_times_from_token_events(self):
+        t = turn(start=0, first=10, end=20, tokens=3)
+        ev = lambda ts, typ, phase, idx=0: {'timestamp_s': ts, 'event_type': typ, 'phase': phase,
+                                            'message': '', 'metadata': {'align_turn_index': idx}}
+        events = [ev(1000.0, 'phase_end', 'prefill'), ev(1000.5, 'token', 'decode'), ev(1001.5, 'token', 'decode'),
+                  ev(1003.0, 'token', 'decode'), ev(1002.0, 'token', 'decode', idx=7), ev(1002.0, 'phase_end', 'prefill', idx=7)]
+        self.assertEqual(p.token_stamps_from_events(events, t), [int(10.5 * NS), int(11.5 * NS), int(13.0 * NS)])
+        self.assertIsNone(p.token_stamps_from_events(events[:1], t))
+        self.assertIsNone(p.token_stamps_from_events(events, turn(index=3)))
+        # With real stamps the token-rate ratio is no longer null.
+        t2 = turn(first=10, end=130, tokens=1200)
+        out = p.turn_prints(t2, pm_rows=pm(130), token_stamps_ns=stamps(10, 1200))
+        self.assertIsNotNone(out['token_rate_ratio_last_512'])
+        self.assertEqual(out['token_basis'], 'stamps')
+
+
+class BundlePrintsTests(unittest.TestCase):
+    def test_bundle_prints_joins_desk_verdict_token_events_states_and_trigger(self):
+        import tempfile
+        from unittest.mock import patch
+        t = SimpleNamespace(index=0, start_ns=0, first_token_ns=10 * NS, end_ns=130 * NS, decode_tokens=1200,
+                            prefill_tokens=11211)
+        intervals = [{'kind': 'G1', 'turn': 0, 'outcome': 'released', 'start_ns': 140 * NS, 'end_ns': 150 * NS,
+                      'exit_sample_ns': 150 * NS}]
+        ep = SimpleNamespace(episode_id='ep', turns=[t], hardware={'thermal': {
+            'intervals': intervals, 'policy': {'sensors': {'s_fast': 'TV0h', 's_slow': 'TV1h'}}}})
+        rows = [sample(145, slow=40.5), sample(150)]
+        events = [{'timestamp_s': 500.0, 'event_type': 'phase_end', 'phase': 'prefill', 'message': '',
+                   'metadata': {'align_turn_index': 0}}]
+        events += [{'timestamp_s': 500.0 + 0.1 * (i + 1), 'event_type': 'token', 'phase': 'decode', 'message': '',
+                    'metadata': {'align_turn_index': 0}} for i in range(1200)]
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'outputs').mkdir()
+            (Path(tmp) / 'events.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in events))
+            (Path(tmp) / 'outputs/align_thermal.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
+            record = {'turn_observation': [{'os_nominal': False, 'pm_nominal': True}],
+                      'calibration_exclusions': ['thermal.os_level_nonzero'], 'flags': ['x']}
+            with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep), \
+                    patch('joulewise.align.apple.thermal_desk.native_pm_samples', return_value=pm(160)), \
+                    patch('joulewise.align.apple.thermal_desk.read_bundle_record', return_value=record):
+                out = p.bundle_prints(tmp)
+        row = out['turns'][0]
+        self.assertEqual((row['token_basis'], row['prefill_s'], row['prefill_tokens']), ('stamps', 10.0, 11211))
+        self.assertEqual((row['decode_s'], row['load_s']), (120.0, 130.0))
+        self.assertIsNotNone(row['token_rate_ratio_last_512'])
+        self.assertEqual((row['desk_os_nominal'], row['desk_pm_nominal']), (False, True))
+        self.assertEqual(out['desk_verdict'], {'member_excluded': True, 'exclusion_reasons': ['thermal.os_level_nonzero'],
+                                               'flags': ['x'], 'per_turn': [{'turn': 0, 'os_nominal': False, 'pm_nominal': True}]})
+        self.assertEqual(out['gate_states']['g1_release_samples'][0]['os_level'], 0)
+        self.assertTrue(out['tv1h_trigger']['fires'])
+
+
+class ResidualByLoadBinTests(unittest.TestCase):
+    def test_bins_by_prefill_plus_decode_seconds(self):
+        rows = [{'trajectory': 'a', 'residual_j': r, 'prefill_s': pf, 'decode_s': dc}
+                for r, pf, dc in ((1.0, 50, 50), (3.0, 60, 41), (10.0, 100, 100), (20.0, 140, 160), (50.0, 140, 161))]
+        rows += [{'trajectory': 'a', 'residual_j': 9.0, 'prefill_s': None, 'decode_s': 5}]
+        out = p.residual_by_load_bin(rows)
+        self.assertEqual(out['skipped'], 1)
+        got = {(r['trajectory'], r['load_bin']): (r['n'], r['mean_residual_j']) for r in out['rows']}
+        self.assertEqual(got[('a', '<=100')], (1, 1.0))
+        self.assertEqual(got[('a', '101-200')], (2, 6.5))
+        self.assertEqual(got[('a', '201-300')], (1, 20.0))
+        self.assertEqual(got[('a', '>300')], (1, 50.0))
+        self.assertEqual(got[('*', '101-200')], (2, 6.5))
+
+
 class ResidualByDecodeBinTests(unittest.TestCase):
     def test_bin_edges_and_trajectory_grouping(self):
         rows = [{'trajectory': 'a', 'decode_tokens': n, 'residual_j': r}
