@@ -1530,3 +1530,6 @@ P1-B6-REPWORD-prefill / branch 5.7.1	restricted.json	block|replication|prefill-p
 P1-B6-REPWORD-prefill / branch 5.7.1	restricted.json	block|replication|prefill-p2048|word	"""replicated"""	replicated	word	
 P1-B6-REPWORD-prefill / branch 5.7.1	restricted.json	block|replication|prefill-p2048|sessions	3	3	n	
 P1-B6-REPWORD-prefill / branch 5.7.1	restricted.json	block|replication|prefill-p2048|sessions|0|outcome	"""direction_supported"""	direction supported	word	
+P1-ABS-PART1 (replication clause, RL-147 §8)	restricted.json	block|replication|decode|word	"""replicated"""	replicated	word	
+P1-ABS-PART1 (replication clause, RL-147 §8)	restricted.json	block|replication|prefill-p2048|word	"""replicated"""	replicated	word	
+P1-ABS-PART1 (replication clause, RL-147 §8)	restricted.json	block|replication|<phase>|sessions (count)	3	three	n	

@@ -758,7 +758,8 @@ class Round5DeltaTests(unittest.TestCase):
         fill = self.module('fill_check_b5.py')
         rows = coverage.build(coverage.paper_text(), fill.load_ledger())
         current = (SCRIPT.parents[3]/'docs/paper/paper1/paper1.md').read_text()
-        self.assertEqual(coverage.check_working_paper(current, rows, fill), (55, 10))
+        # RL-147 §8 (2026-11-13) filled P1-ABS-PART1 and P1-RECOMPUTE: 55 + 2 filled, 10 - 2 pending.
+        self.assertEqual(coverage.check_working_paper(current, rows, fill), (57, 8))
         with self.assertRaisesRegex(ValueError, 'unaccounted Block 5 placeholder'):
             coverage.check_working_paper(current + '\n{{FILL: P1-B5-NEW-GAP | x}}', rows, fill)
         with patch.object(fill, 'FILLED', [f for f in fill.FILLED if f != 'P1-B5-XWIN']):

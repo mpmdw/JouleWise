@@ -163,6 +163,9 @@ new or changed	P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|B
 new or changed	P1-B6-WM	restricted.json	sessions|r3-beta|whole_machine|windows|BETA|cells|df-ph-prefill-p2048-qwen3-8b|edge_shift_sensitivity|max_abs_change_j	6.681730751401574	6.69	up	single implementation; not independently recomputed
 new or changed	P1-B6-CONTENTION	restricted.json	sessions|<sid>|lines|<cell>|outside_processor_alternative|status (computed, of 12 floor cells)	0	none	n	not independently recomputed
 new or changed	P1-B6-CONTENTION	restricted.json	sessions|<gamma sid>|lines|<cid>|outside_processor_alternative|n (min, max over 6 contrasts)	[0, 4]	0 to 4	n	not independently recomputed
+new or changed	P1-ABS-PART1 (replication clause, RL-147 §8)	restricted.json	block|replication|decode|word	"""replicated"""	replicated	word	
+new or changed	P1-ABS-PART1 (replication clause, RL-147 §8)	restricted.json	block|replication|prefill-p2048|word	"""replicated"""	replicated	word	
+new or changed	P1-ABS-PART1 (replication clause, RL-147 §8)	restricted.json	block|replication|<phase>|sessions (count)	3	three	n	
 removed (no longer printed in this form)	P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|ALPHA|dominance/qwen3-1p7b/prefill-p2048/comparative/R_cm|block5	1.9997482608118822	1.9997	R	Block 5 released output
 removed (no longer printed in this form)	P1-B6-SIDEBYSIDE	restricted.json	block|side_by_side|GAMMA|contrast/decode/dbar_j|sessions|r1-gamma	147.3849174950298	147.38	e	computed and compared (decision 6 (a))
 removed (no longer printed in this form)	P1-B6-SIDEBYSIDE	restricted.json	sessions|r1-gamma|quantities|contrast/decode/dbar_j	147.3849174950298	147.38	e	computed and compared (decision 6 (a))

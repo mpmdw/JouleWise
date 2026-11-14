@@ -34,13 +34,8 @@ instrument produces when nothing differs), and the *dominance ratio* (how much t
 detection floor). We then report a pre-registered, blinded experiment on Qwen3-1.7B and Qwen3-8B (4-bit), with
 a 512-token decode workload and a 2,048-token prefill workload, two primary model contrasts with Holm
 correction, and an independent recomputation of the core arithmetic from raw power records with recorded
-collection-time judgments as inputs. A registered replication in further sessions on later days was collected
-and remains blinded. <!-- FACT H01: RL-5; R2P P3; LEAN-COVERAGE-AUDIT.md §§2-4; paper-audit C-11. -->
-{{FILL: P1-ABS-PART1 | one or two sentences summarising Part 1, assembled from
-the issued outcome fields only: the four reported cells' L1 statement with intervals (CP-X05-*), the dominance
-branch (CP-X02-abstract / CP-X03-abstract), the decode and prefill contrast outcome words and, only where the
-claim gate returns L2, the registered direction (CP-X08-*-abstract), and the replication word per contrast
-(P1-B6-REPWORD-decode, P1-B6-REPWORD-prefill)}} In a second part, BYTES, we test whether decode energy per
+collection-time judgments as inputs. A registered replication, nine further sessions on later days, was collected and analysed blind and released after the primary block. <!-- FACT H01: RL-5; R2P P3; LEAN-COVERAGE-AUDIT.md §§2-4; paper-audit C-11; RL-147 §8; RUN_STATE item 312. -->
+On M3 Max / MLX / powermetrics SoC rails, from one session per model, the reported gross energy per request was 51.21 J [48.92, 53.49] for Qwen3-1.7B decode, 26.25 J [23.32, 29.19] for its 2,048-token prefill, 198.36 J [195.23, 201.49] for Qwen3-8B decode and 128.28 J [125.19, 131.38] for its 2,048-token prefill, each an instrument result (L1) whose phase attribution was not checked by an independent instrument. Timing movement did not at least double every detection floor (dominance branch B). The decode and 2,048-token prefill contrasts were *direction supported* and *direction supported*, in the registered direction (the 8B model used more phase energy than the 1.7B model), with 6 of 10 and 5 of 10 planned quads kept in one session. Both contrasts replicated under the registered definition: each of the three replication contrast sessions gave the primary session's outcome word and sign. In a second part, BYTES, we test whether decode energy per
 token on the same laptop follows the bytes the model reads per token, its resident size in memory, or its
 decode time: the registration requires three straight lines fixed on three dense models to be committed before
 seven held-out models, including three mixture-of-experts models, are unblinded.
@@ -103,10 +98,10 @@ the independent recomputation uses recorded collection-time judgments as inputs 
    floor with timing-widened corners, an attribution floor, a dominance ratio, a drift allowance from
    reference requests with a labelled scaled sensitivity line, and a whole-machine cross-check at the laptop's
    power input (Sections 3 and 4; Appendix D).
-2. **A pre-registered, blinded measurement with a collected, blinded replication**: reported phase energies for two models, two
+2. **A pre-registered, blinded measurement with a registered replication**: reported phase energies for two models, two
    primary model contrasts under a multiplicity correction and a claims ladder that caps what each result may
    say, and a replication in further sessions whose agreement word was defined before replication collection (Sections 5
-   and 6). The replication results remain sealed. <!-- FACT H04: paper-audit C-10/C-11; RL-5 item 5. -->
+   and 6). The replication's results are reported beside the primary block's (Section 6.8). <!-- FACT H04: paper-audit C-10/C-11; RL-5 item 5; RL-147 §8; RUN_STATE item 312. -->
 3. **BYTES, a pre-registered test of what drives decode energy per token** on the same laptop, requiring rival
    lines to be committed before held-out models are unblinded and using mixture-of-experts models to separate
    bytes read from bytes held (Section 7).
@@ -673,10 +668,9 @@ numerical outputs stayed in custody and only structure (exit codes, schema check
 A **release event** tied the digests of the sealed documents and final harvest records together. Under DLE-1,
 the primary numbers designated for printing are the dry run's L9 outputs, produced before the event and verified
 byte for byte at release, rather than outputs of a new post-event L9 run. Any unregistered analysis is labelled
-exploratory. The replication remains blinded; its release requires closure and prior primary release, because
-reading replication values first would unblind the same quantities. BYTES has a stronger, two-stage blinding
+exploratory. The replication stayed blinded until its own release, which required its closure and the prior primary release, because reading replication values first would have unblinded the same quantities. BYTES has a stronger, two-stage blinding
 with hidden multiplicative offsets (Section 7.3).
-<!-- FACT H11: R2P P2; DEVIATION-LOG.md:71-128 (DLE-1); paper-audit C-5/C-11. -->
+<!-- FACT H11: R2P P2; DEVIATION-LOG.md:71-128 (DLE-1); paper-audit C-5/C-11; RL-147 §8; RUN_STATE item 312. -->
 
 {{FILL: P1-RELEASE | dates of the primary-block release event and the replication-block release, with the digests each record ties, from the seal-record "Release event" section and the replication release record (RL-147 §4 items 1 to 3)}} {{FILL: P1-RELEASE-BYTES | dates of the BYTES stage-1 commitment and stage-2 release, with the digests each record ties; no sentence about BYTES is printed until its events exist (RL-147 §4 item 4)}}
 
@@ -700,8 +694,7 @@ max(10⁻⁶ absolute, 10⁻⁶ × |L9 value|); p values and the rail/machine ra
 timing bound uses 10⁻⁶ relative only. Counts and integer-nanosecond window edges are exact; legacy wall-placed
 meter edges use 10⁻⁶ s absolute. Where a family specifies printed decimals, half a unit of that precision also
 enters the maximum. Block 6's separate S-13 rule is 1 mJ for run phase energies and half a last printed digit
-for printed quantities; it is not Block 5's bar set. The observed differences and comparison coverage must be
-printed beside the applicable bars, never used to choose them. Part 2 uses an independent **twin** (Section 7.3).
+for printed quantities; it is not Block 5's bar set. The observed differences and comparison coverage must be printed beside the applicable bars (for the replication block the largest difference was not retained; Section 6.7), never used to choose them. Part 2 uses an independent **twin** (Section 7.3).
 <!-- FACT H12: R2P P1/P3; RUN_STATE item 83 ruling 1; recompute_bars.json; DEVIATION-LOG.md DLE-0/DLE-6;
 LEAN-COVERAGE-AUDIT.md §§2-4. No agreement or completion verdict is asserted here. -->
 
@@ -711,7 +704,7 @@ The comparison is made over the second side's keys only. A quantity that only th
 
 The second side has limits that are fixed by design. The cell and floor estimators of the two floor packs, and the dominance ratios copied from their output, have one producer in this block and print with the label *single-source*; the same pinned functions agreed with the registered analysis on the primary block in every compared family (Table S8). The labelled lines that rerun the estimators on another unit set, the scaled-allowance and single-step lines, the per-phase whole-machine line, and a contrast's ratio, per-token, t and cross-session fields print as *not independently recomputed*. For a session whose drift screen is undefined, the second side compares neither the screen row nor any contrast field, and requires only that the outcome word is not resolvable or not estimable. For a contrast with two to four kept quads it compares the count, the mean difference, its spread and the bounds; it does not compare p or the Holm-adjusted p, and requires that both are 1.0 and the word is not estimable. The Holm value of that session's other contrast is computed on both sides with p = 1.0 for the short one. Two inputs are shared and not independent: the engine twin is given the first program's floor gate, and the block check takes primary-block inclusion and the floor-binding defect mark from the first program.
 
-{{FILL: P1-RECOMPUTE | Block 5, per compared family: applicable bar (recompute_bars.json, fixed blind under DLE-0), number compared, observed largest difference and agreement word. Block 6, per class: the S-13 bar (1 mJ for run phase energies, half a last printed digit otherwise), then compared, passed, failed, unmatched, null on both sides, agreeing on a value (compared minus null on both sides) and first-program-only; no agreement word for a class with no compared row. Both: name uncovered quantities and their separate reader checks; checked by one executing reader before printing}}
+The bars, the counts and the agreement are given per family for the primary block in Table S8 and per class for the replication block in Table S9 (Section 6.7), with the quantities not covered and their separate reader checks.
 
 ## 6. Results I, instrument validation: phase energy, floors and contrasts
 
@@ -1842,8 +1835,8 @@ A laptop's own power sampler can divide inference energy between prefill and dec
 the measurement must report: an attribution floor from phase-edge timing, a detection floor from false
 differences between identical runs, and the dominance ratio that compares timing widening with repeatability. We
 measured these quantities for two models on one Apple M3 Max laptop under pre-registration, blinding and
-independent recomputation; the registered replication was collected in further sessions and remains blinded.
-<!-- FACT H21: paper-audit C-2/C-11; no replication result is asserted. -->
+independent recomputation; in the registered replication, nine further sessions, both contrasts gave the primary session's outcome word and sign, and the sessions differed from one another by more than their within-session intervals cover.
+<!-- FACT H21: paper-audit C-2/C-11; RL-147 §8; RUN_STATE item 312. -->
 
 <!-- BRANCH 9.D: branch B selected (second fill, 2026-11-11). From the table: DISC dominance branch row 863
 = B, sentence licence row 864 = false; failing components rows 843, 1846 and 853. From the registered rule

@@ -1067,7 +1067,42 @@ def fill_summary_b6(R: Src, S: Src, X: dict) -> str:
 
 # ---------------------------------------------------------------- assembly
 
-PENDING = {'P1-RELEASE', 'P1-RELEASE-BYTES', 'P1-B6-DISCLOSURES', 'P1-RECOMPUTE', 'P1-ABS-PART1'}
+PENDING = {'P1-RELEASE', 'P1-RELEASE-BYTES', 'P1-B6-DISCLOSURES'}
+
+# RL-147 §8: the research lead's text for the stale "blinded" sentences, P1-RECOMPUTE and the abstract's replication
+# clause. Each new text must be present once and each old one gone. The Block 5 numbers of P1-ABS-PART1 are
+# fill_check_b5.py's (site "Abstract, Part 1 summary").
+S8_NEW = [
+    'A registered replication, nine further sessions on later days, was collected and analysed blind and released '
+    'after the primary block.',
+    '**A pre-registered, blinded measurement with a registered replication**',
+    'The replication\'s results are reported beside the primary block\'s (Section 6.8).',
+    'The replication stayed blinded until its own release, which required its closure and the prior primary release, '
+    'because reading replication values first would have unblinded the same quantities.',
+    'in the registered replication, nine further sessions, both contrasts gave the primary session\'s outcome word and '
+    'sign, and the sessions differed from one another by more than their within-session intervals cover.',
+    'The bars, the counts and the agreement are given per family for the primary block in Table S8 and per class for '
+    'the replication block in Table S9 (Section 6.7), with the quantities not covered and their separate reader checks.',
+    'must be printed beside the applicable bars (for the replication block the largest difference was not retained; '
+    'Section 6.7), never used to choose them.',
+]
+S8_GONE = ['remains blinded', 'The replication results remain sealed', 'with a collected, blinded replication',
+           'no replication result is asserted']
+
+
+def abstract_clause(R: Src) -> str:
+    """RL-147 §8's fixed replication clause, printed only if the program's words support it."""
+    CURRENT['marker'] = 'P1-ABS-PART1 (replication clause, RL-147 §8)'
+    n = set()
+    for phase, _, _ in CONTRASTS:
+        if word(R, f'block|replication|{phase}|word') != 'replicated':
+            raise SystemExit('the abstract\'s replication clause does not hold')
+        n.add(len(R.get(f'block|replication|{phase}|sessions')))
+    if n != {3}:
+        raise SystemExit('the replication rests on other than three contrast sessions')
+    three = record(R, 'block|replication|<phase>|sessions (count)', 3, 'three', 'n')
+    return (f'Both contrasts replicated under the registered definition: each of the {three} replication contrast '
+            'sessions gave the primary session\'s outcome word and sign.')
 END_574 = '**[END BRANCH 5.7.4]**'
 
 
@@ -1098,6 +1133,7 @@ def render_all(R: Src, P: Src, S: Src, attempts: list[dict], X: dict) -> tuple[d
     for phase, name, _ in CONTRASTS:
         CURRENT['marker'] = f'P1-B6-REPWORD-{"decode" if phase == "decode" else "prefill"} / branch 5.7.1'
         words[phase] = fill_rep(R, phase)
+    fills['P1-ABS-PART1-CLAUSE'] = abstract_clause(R)
     fills['P1-B6-REPWORD-decode'] = words['decode']['word']
     fills['P1-B6-REPWORD-prefill'] = words['prefill-p2048']['word']
     branch = ('<!-- BRANCH 5.7.1 selected for both contrasts (fill seat, 2026-11-13), from the released dry run at r2 '
@@ -1135,7 +1171,7 @@ def check(paper: str, fills: dict[str, str], branch: str) -> None:
     norm = lambda s: re.sub(r'\s+', ' ', s)
     flat = norm(paper)
     for fid, txt in fills.items():
-        if fid in ('P1-B6-REPWORD-decode', 'P1-B6-REPWORD-prefill'):
+        if fid in ('P1-B6-REPWORD-decode', 'P1-B6-REPWORD-prefill', 'P1-ABS-PART1-CLAUSE'):
             continue
         if flat.count(norm(txt)) != 1:
             fail(f'{fid}: rendered text appears {flat.count(norm(txt))} times in paper1.md, not once')
@@ -1158,6 +1194,15 @@ def check(paper: str, fills: dict[str, str], branch: str) -> None:
     for fid in sorted(i for i in ids if i.startswith('P1-B6-')):
         if fid not in PENDING:
             fail(f'{fid} is a placeholder but neither filled nor pending')
+    for fid in ('P1-ABS-PART1', 'P1-RECOMPUTE'):
+        if fid in ids:
+            fail(f'{fid} is still a placeholder (RL-147 §8)')
+    for t in S8_NEW + [fills['P1-ABS-PART1-CLAUSE']]:
+        if flat.count(norm(t)) != 1:
+            fail(f'RL-147 §8 text not in paper1.md once: {t[:70]!r}')
+    for t in S8_GONE:
+        if t in flat:
+            fail(f'stale text still in paper1.md: {t!r}')
 
 
 def main() -> int:
