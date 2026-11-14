@@ -13226,6 +13226,10 @@ form are fixed before any campaign energy is read.
 **Pilot may arm: yes once F1 to F4 are closed and recorded, the arm passes `--batch-window 02:00-02:35`,
 and the arm record carries the `measurement_mode` line.**
 
+## Lead's correction to RL-150 §3.2 (2026-11-14; the research lead's text above is unchanged)
+
+RL-150 §3.2 says 1.374 "came from mislabeled fixtures". That reason, which the lead supplied, is wrong. The fixture trace (evidence/align-v4-campaign/wp18-fixture-trace.md) shows `wp18_{x,y}_token_ids.json` (commit `aaee4b2d2`, 2026-11-07) are correctly labelled: X = `align-pilot-v3-episodes-b-e25`, sabotage, spam_filter_update, 12 turns; Y = `b-e18`, benign, spam_filter_update, 12 turns, from ordinal pilot 7, whose directory is `pilot-v6`. The MBP chore that "contradicted" them assumed pilot N = directory `pilot-vN`; its "pilots v7-v9" are ordinals 8-10, and its `b-e25` is a different member (run ids are reused across pilots). 1.374 (5,506 / 4,006) is correct for the one ordinal-7 pair; it is withdrawn as a work ratio because it is n = 1 per arm, not because of a label error. The pooled 1.085 (bank 1.298, spam 0.888) is from ordinals 8-10. The 1.10/1.30 bracket, Rule P's two-ratio form and the type-L caps stand unchanged. The "lead traces" item of §3.2 is done; no consumer of the fixtures produced a wrong number.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
