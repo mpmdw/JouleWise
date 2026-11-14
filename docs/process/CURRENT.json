@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "after chain.exited, item 306's \"After the night\" with S=/Users/edr/night-align/r1fu-20261113T144743Z and PKT_SHA=80d2023cff9cb219e282f20c730ac2de541f156f096c05c06141ecec97e6946e (r1_result.json status first; then runbook §4; set network time OFF again and zero the frequency word); the report also carries the TVh0 finding below for the research lead",
+  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as RUN_STATE 318: the receipt asserts, the per-leg admitted lines, the desk bundle, the restore lines, measurement_mode verify again, the RL-150 R9 items and the RL-150 R1 start-reference print",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "308",
-  "source_item_heading_date": "2026-11-13",
+  "source_item": "317",
+  "source_item_heading_date": "2026-11-14",
   "wait": {
-    "deadline_epoch_s": 1794712860,
-    "observable": "results_branch_exists",
-    "on_early_or_refused": "a REFUSED result or no `chain.started` by t0+10 min (07:18 PST 11-13): restore (uninstall, powermode 0), mail Ed and the lead. No chain.exited by the latest end: dead-man/restore path; mail Ed and the lead"
+    "deadline_epoch_s": 1794739620,
+    "observable": "none",
+    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen inside 13:20-20:45 PST: NOTHING launches. A span that ran but ends with any named stop, a receipt rc≠0, or a pilot that does not pass under RL-150 R9: nothing relaunches, nothing is re-run, L004-L012 are not queued; mail the lead. Do not retry, do not extend, do not reuse OUT"
   }
 }

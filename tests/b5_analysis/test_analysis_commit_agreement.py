@@ -22,6 +22,12 @@ from tests.b5_analysis.test_frozen_files import (
 
 
 R4_TAG = "b5/analysis-r4"
+# Cited rebinds of frozen files made AFTER b5/analysis-r4 (the S-14 line, Block 6). They belong to
+# EVOLVED_ON_MAIN but r4 itself must not have changed them: r4 descends from the anchor with only the
+# rebinds that predate it. Each entry needs its deviation-log id; a new one needs its own cited rebind.
+POST_R4_REBINDS = frozenset({
+    "joulewise/flags/exclusions.py",  # 4e3446e6c, DLE-14 (RL-144 addendum M2): keyword-only pack_scoped
+})
 REMOTE_PREFIX = "origin" + "/"
 GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_AUTHOR_NAME": "synthetic", "GIT_AUTHOR_EMAIL": "test@example.invalid",
@@ -61,8 +67,11 @@ class AnalysisIdentityTests(unittest.TestCase):
         paths = sorted(frozen_digests())
         changed = git(ROOT, "diff", "--name-only", anchor, tag, "--", *paths)
         self.assertEqual(changed.returncode, 0, changed.stderr)
-        self.assertEqual(set(changed.stdout.splitlines()), set(EVOLVED_ON_MAIN),
-                         identities + "; changed frozen paths must be exactly the cited in-place rebinds")
+        self.assertTrue(POST_R4_REBINDS <= EVOLVED_ON_MAIN)
+        self.assertEqual(set(changed.stdout.splitlines()), set(EVOLVED_ON_MAIN) - POST_R4_REBINDS,
+                         identities + "; changed frozen paths must be exactly the cited in-place rebinds made before r4")
+        result = git(ROOT, "diff", "--quiet", anchor, tag, "--", *sorted(POST_R4_REBINDS))
+        self.assertEqual(result.returncode, 0, identities + "; a post-r4 rebind already differs at r4")
         stable = sorted(set(paths) - EVOLVED_ON_MAIN)
         self.assertTrue(stable)
         result = git(ROOT, "diff", "--quiet", anchor, tag, "--", *stable)

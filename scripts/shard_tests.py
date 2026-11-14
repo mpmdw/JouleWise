@@ -632,9 +632,11 @@ def _result_counts(result: unittest.TestResult) -> tuple[int, int, int, int]:
 
 TEST_TIMEOUT_ENV = "JW_TEST_TIMEOUT_SECONDS"
 TEST_TIMEOUT_EXIT_CODE = 124
-# Bound at import: tests patch time.monotonic (e.g. side_effect lists), and
-# the watchdog thread must neither consume their values nor die on them.
-_watchdog_clock = time.monotonic
+# The watchdog reads no clock itself: it waits on its condition with a
+# timeout, so a test that patches or traces clock calls (side_effect lists,
+# sys.monitoring clock inventories such as
+# tests/b5_analysis/test_leaf_whole_window.py) never sees or feeds it. A
+# re-arm or disarm bumps a generation number and restarts the wait.
 
 # Named per-test limits that replace JW_TEST_TIMEOUT_SECONDS for one test.
 # Each entry is a known overrun, listed until the test is split or sped up.
@@ -693,7 +695,8 @@ class _TestWatchdog:
         self._condition = threading.Condition()
         self._label = None
         self._limit = seconds
-        self._deadline = None
+        self._armed = False
+        self._generation = 0
         self._thread = threading.Thread(
             target=self._watch, name="shard-test-watchdog", daemon=True
         )
@@ -704,23 +707,26 @@ class _TestWatchdog:
         with self._condition:
             self._label = label
             self._limit = limit
-            self._deadline = _watchdog_clock() + limit
+            self._armed = True
+            self._generation += 1
             self._condition.notify()
 
     def disarm(self) -> None:
         with self._condition:
-            self._label = self._deadline = None
+            self._label = None
+            self._armed = False
+            self._generation += 1
             self._condition.notify()
 
     def _watch(self) -> None:
         with self._condition:
             while True:
-                if self._deadline is None:
+                if not self._armed:
                     self._condition.wait()
                     continue
-                remaining = self._deadline - _watchdog_clock()
-                if remaining > 0:
-                    self._condition.wait(remaining)
+                generation = self._generation
+                notified = self._condition.wait(self._limit)
+                if notified or self._generation != generation or not self._armed:
                     continue
                 label, limit = self._label, self._limit
                 break

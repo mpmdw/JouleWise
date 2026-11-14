@@ -31,6 +31,9 @@ READERS = {
     "scripts/independent_recompute_b5.py": (
         "independent recompute (comparison only)", "reads calibration captures' and members' stored "
         "b_fiducial_s to compute b_op for an offline cross-check; issues, pins and gates nothing"),
+    "scripts/independent_recompute_b6.py": (
+        "independent recompute (comparison only)", "reads block-6 calibration captures' and members' stored "
+        "b_fiducial_s to compute b_op for the S-13 cross-check; issues, pins and gates nothing"),
     "scripts/b5_edge_check.py": (
         "post-release desk analysis (compares, prints and selects wording; no battery-float gate)", "exploratory diagnostic on released "
         "Block 5 sessions, run after the Revision-5 derivation and outside its scope. It loads no battery-float "
