@@ -10612,6 +10612,177 @@ disposition 2 and for RL-107 at its commit. The two prints of section 2 gate the
 classifier fields, token counts and code only. The Part C test, the P2 stop, the replacement prints and the
 fallback are fixed before the prints of section 4 exist.
 
+# RL-146. The Mythos cold audit of the Block 6 release record (PR #769): admitted with fixes; what the record must carry before the merge; the release time; Ed's confirmation (2026-11-13 18:19 PST)
+
+Research lead (Fable 5.2). Written 2026-11-13 18:19 PST (`date`).
+
+**Read.** `/Volumes/JW-EXT/scratch/mythos-audit-769/REPORT.md` (SHA-256 `9ba5c89d59ceea82e39ab7e4928bbc279a4a26d8efce69a654fb794bd71a6862`); the record `.md` and `.json` at `2d8a8ee7b`; RL-134, RL-142, RL-144 and its addendum on `origin/audit/2026-11-10-fable` (`6ab3f6a98`); my runbook; `rl142-r2-records.md`; `evidence/pr762/` on the audit branch (README, both id lists, `premerge-macos.log` and `.zsh`); `b6_release_record.py` at `f19f36081` (`check` and `record`); `RUN_STATE.md` items 231, 309, 310 on `origin/main` `783381fac`; registration §14 row S-14 and the freeze addendum rows; `gh` state of PR #769 and the log of its failed shard; top-level fields only of `rl142-cmp-a.json` and `rl142-cmp-b.json`; option names only of the two r2 `child-argv.json` files.
+
+**Blind status.** Blind to Block 6. I opened no `restricted.json`, no `stdout` or `stderr` file, nothing under `/Volumes/JW-EXT/b6-custody/` and no `analysis-tmp`. Those files were touched by `shasum` and `ls` only. I edited, committed and commented nothing.
+
+## 0. Ruling in one paragraph
+
+Mythos is right: **the PR does not merge as it stands.** Its facts hold; I re-derived findings 1, 2, 3, 4, 7, 8, 9 from the files. Nothing it found touches a result, a digest or a check. The fixes are record text, one re-render, CI on the new head, and Ed's words. **No program is run on custody and `check` is not re-run.** The audit's findings are not a "stop" under RL-142 §3: no run, probe, term 7 or release check failed. The release may proceed today when §2 below is done. A release after midnight PST needs nothing more from me (§2 step 8).
+
+## 1. Part A: the eleven findings
+
+| # | Mythos | Mine | Why, and what is wrong or missing |
+|---|---|---|---|
+| 1 | BLOCKING | **AGREE** | The record has no `RL-144`, no module counts, no failing-id classes, no M1/M2 text. I wrote "listed in the release record" four times and meant it. **Missing in the finding:** addendum §2 item 3. The full hosted run on r2's tree (43521257617, head `aaa2f3086`) is `completed`, so its complete failing list is due in the record at the release, not later. I checked the two committed id lists: 75 failing lines, 41 distinct ids at the head; 41 at the base `3551e1a7d` (run 43525694693); none on one side only; none in the named set. |
+| 2 | BLOCKING | **AGREE** | `gate-ledger` fails on row 3 `NOT-RUN`. I read the shard 1 log Mythos could not: one failure in 292, `test_run_night.CourierReapingTests.test_delivered_courier_exit_wait_respects_deadman_epoch` (`outcome["sent"]` false under a 0.2 s deadline). It is a wall-clock test in a module the two-file diff cannot reach. It is not the test PR #767 names; whether the cause is the same is not shown. `main` `783381fac` ran green (43542232009). The shard is being re-run now. |
+| 3 | SHOULD-FIX | **AGREE, and I raise it to required** | RL-142 §2 item 6 makes (a) and (b) release conditions. Both result files hash as Mythos says, verdict PASS, unowned 0, comparer `eb82b6e2…02c1`. **Missing:** the result files and the comparer live only in `/Volumes/JW-EXT/scratch`, uncommitted. And the result's `predeclared` field is a constant path whose bytes on disk are now the v1 text (`808c3dc1…`); the predeclaration v2 ran under is `rl142-cmp-v2/rl142-expected-diff.md`, `6101e980…16e4`. The record cites that digest. |
+| 4 | SHOULD-FIX | **AGREE** | `236c8f708` is not an ancestor of `origin/main`; `255ab96cc` is; the §17-S16 line hashes `5e5cf37e…a9a5` at both and at `main`. The fact holds, the pointer is wrong. I disagree with the first of its two fixes (§2 step 3). |
+| 5 | SHOULD-FIX | **AGREE** | 17:38 is the render time. "Released under its registration on" is a fixed string of the renderer, and the next sentence already defines the event as the commit on `main`. No tool change is needed (§2 steps 3, 4, 8). |
+| 6 | SHOULD-FIX | **AGREE on the gap, DISAGREE on the fix** | Item 309 paraphrases; item 231 quoted. Condition 11 is the one condition nobody but Ed can evidence. But a PR comment or a merge by Ed is not required and parks a click on him. His words in session, quoted verbatim in `RUN_STATE.md` before the merge, are the Block 5 precedent and are enough (§2 step 1). |
+| 7 | NOTE | **AGREE** | `0dbfd105f` 15:58:57 against the gate r2 start 15:58:11. It changes nothing the gate depends on: 48 was fixed by RL-142 (`1f54727cb`, 14:30:16), enforced in the tool (`f19f36081`, 14:50:31, `--predeclared`) and produced by `b5-probe` before the gate. It is a departure from runbook step 6's order all the same, and the record says so in one line. |
+| 8 | NOTE | **AGREE** | **Ruled (records open point 1):** §17-R13 and the freeze addendum's `b6/analysis-r2` row are the revision of record. The §14 row is not edited: an edit now would change the registration hash for no gain. **Open point 2:** no new R3 table; §17-R3 stays true as stated at `3551e1a7d`. |
+| 9 | NOTE | **AGREE** | `6e6d1b18a` is on `origin/analysis/2026-11-13-b6-s14-merge` only. RL-134 item 18 gates nothing. One thing Mythos could not check and I did: the tag is on the remote (`refs/tags/b6/analysis-r2` → `e11a6003…`, peeled `6e6d1b18a…`). |
+| 10 | NOTE | **AGREE** | The comparer opened the four output directories under RL-142 §2 item 5. The record's sentence is true of persons and agents; the list of programs belongs beside it. |
+| 11 | NOTE | **AGREE**, with one correction | The table order and `None` are the tool's output and stay. The Markdown ledger's omissions are covered by the JSON. Mode and tool commits go in. **Tier:** it stays light. The checker requires `N/A (light tier)` in rows 1, 4 and 5 of a light PR, so the audit cannot "stand as row 1"; it is named in the PR body's summary instead. |
+
+## 2. Part B: what the lead does, in order
+
+**Step 1. Ed, now.** Send him this, and nothing that asks for a click:
+
+> Block 6 unblinding needs your OK in your own words; I will quote it verbatim in RUN_STATE and in the release record.
+> State: every RL-134 check passed on r2 (gate run, dry run, probe, term 7, release check; comparisons (a) and (b) PASS). Earlier today the first dry run stopped on a code defect; one function of the pinned program was fixed blind (r2); four Block 5 side-by-side rows change. The Mythos audit says ADMIT WITH FIXES; Fable's RL-146 says the fixes are record text and CI only, with no program run.
+> 1. OK to unblind Block 6 by merging PR #769 once RL-146's list is done and CI is green?
+> 2. If the merge lands after midnight PST, does your OK stand for 2026-11-14, or do you want to be asked again?
+
+Required form: Ed's reply to question 1, quoted verbatim with the time from `date`, in a new `RUN_STATE.md` item on `main` (item N), before the merge. No PR comment, no merge by Ed. If he does not answer question 2, his OK is read as covering 2026-11-13 PST only.
+
+**Step 2. This ruling** is committed whole to the audit branch (no script-sliced extract).
+
+**Step 3. Re-render with `record` only. `check` is not re-run.** Finding 4 is closed by a dated correction line, not by a new check. Reasons: the cite is a string the tool prints and does not test; a re-run rewrites the draft of record (`release-record-draft.json` is opened with truncate), adds a third receipt and executes a custody program again, all for a pointer.
+
+- Draft: `/Volumes/JW-EXT/b6-custody-run/release-record-draft.json`, SHA-256 `bab20d7ad58ba0aead7f121d2ff633e6fbcd066f75d3e8e8eeb0ab19a5271581`. Confirm it before rendering.
+- Same invocation as the first render except: `--out` to a new scratch path (the tool refuses an existing file), then copy both files over the two in the worktree; `--main-commit` = `git rev-parse origin/main` taken after step 1's item lands; `--registration` from that commit; `--date "$(date '+%Y-%m-%d %H:%M PST')"`; `--signed-by "Laptop lead (Claude Opus 5.5) under Ed's OK of 2026-11-13 (RUN_STATE items 309 and N)"`.
+- Check: against `2d8a8ee7b` the `.md` differs only in the first line's date, the registration row's commit and the signature line; the `.json` only in `date`, `main_commit` and `signed_by`. `registration_sha256` is still `7243a2bc1e43207d756ba9eacc6c93622968edd73a6ebe0648afaba563324ead`. Anything else differing: stop and tell me.
+
+**Step 4. Append this section to the `.md`, after the signature.** Fill only the ⟨ ⟩ fields. The `.json` is left as the tool wrote it.
+
+```markdown
+## Additions and corrections (RL-142, the RL-144 addendum, RL-146)
+
+Written by hand by the lead under RL-146, ⟨date⟩. Everything above this heading is the output of `b6_release_record.py record` (tools commit `f19f3608120adce25bb3ace62dab1ddd9b54f6e4`) from the release-check draft (SHA-256 `bab20d7ad58ba0aead7f121d2ff633e6fbcd066f75d3e8e8eeb0ab19a5271581`), unchanged. The JSON record is the tool's output and does not carry this section.
+
+### Release time
+
+The time in the first line and in the signature is when this record was rendered and signed. The release time is the commit time of this record's merge on `main`. It is entered in `RUN_STATE.md` with the RL-6 (d) line, before any restricted output is opened.
+
+### Correction to condition 9
+
+Condition 9 cites the S-16 line at `236c8f708`. That commit is on `docs/2026-11-13-b6-s17-fill-staged` and is not an ancestor of `main`. The line is on `main` as `255ab96cc781a1ff7b4c56b231ba6f1831d6807d`, inside PR #748's merge `35b94bca5113704f80c9c6d4cf587c8c4ff4577d`. Its text is the same at both commits. The condition holds; the pointer is corrected.
+
+### Condition 11, in Ed's words
+
+Ed, ⟨time from `date`⟩, verbatim: "⟨quote⟩" (`RUN_STATE.md` item ⟨N⟩). Item 309 reported his OK of 08:45 PST and its renewal of 14:30 PST in the lead's words.
+
+### Comparisons (a) and (b) (RL-142 §2 items 5 and 6: release conditions on r2)
+
+Names-only comparisons. Each prints differing key paths and no value.
+
+| | Directories | Verdict | Differing paths | Unowned | Result file SHA-256 |
+|---|---|---|---|---|---|
+| (a) | `gate-2` against `gate-r2` | PASS | 27 | 0 | `b3717ec3001da7f2c1db44af21e5c900dab10a03c630d77b8877c90710c05f9b` |
+| (b) | `dry` against `dry-r2` | PASS | 176 | 0 | `8b805e8e910e1dfe3b801a137c9f137a0a4c75b4eb67d695923ac1ba66ade6eb` |
+
+Comparer `compare_rl142.py` v2, SHA-256 `eb82b6e25a9dc9a3cffcb4d2e859a19c2f2151a42ce3b4a98f2ea188887e02c1`; its predeclared differences, `rl142-expected-diff.md`, SHA-256 `6101e980ecfe0e37f7bd4da86bc17fea1498cc1b6e48ef0adf79f9f9e40816e4`. The three files are committed to the audit branch after the release. The comparer's own tests (18 of 18) are the lead's account; no log was kept.
+
+### The suite at the release (RL-144 addendum §2)
+
+**Item 1, the named set, green on macOS before the gate run.** Log `evidence/pr762/premerge-macos.log` on `audit/2026-11-10-fable` at `301b632736d61dc5b97bc32a2512555600a4773f`, SHA-256 `8472facb929bbdfbb31b3d6dada210288da0a85515dd8923832c30f7589e4e43`; finished 15:55:45 PST; the gate run at r2 started 15:58:11.
+
+| Modules | Commit | Result |
+|---|---|---|
+| `tests.independent_recompute.test_block6`, `tests.independent_recompute.test_b6_production` (the tests of RC-B6-1 and of `b6_analysis_check`) | `aaa2f3086` (the same tree as `b6/analysis-r2`) | Ran 62, OK |
+| `tests.test_b6_release_record`, `tests.test_b6_structure_probe` | `f19f36081` | Ran 40, OK |
+| Custody kit end to end (`tests.test_b6_custody_kit.EndToEnd`, `EndToEndPinned`; kit `e1f4f805288ede026980852814af2512a58b4c74` against the r2 tree) | | 8 OK by the lead's account; **no log was kept**. The gate run and the dry run at r2 then read the kit's real documents and exited 0 |
+
+**Items 2 and 3, the full hosted run on r2's tree.** Run 43521257617 at `aaa2f3086` finished (failure). Its complete failing list is 75 lines, 41 distinct test ids. All 41 also fail on Linux at the base `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b` (run 43525694693), with no id on one side only. Class of every id: base-inherent and reproduced on `3551e1a7d`. Unexplained: none. In the named set: none.
+
+| Module | Lines | Distinct ids | On macOS at r2 |
+|---|---|---|---|
+| `b5_analysis.test_frozen_files` | 2 | 1 | fails the same at head and base (M2 below) |
+| `test_mint_policy_resolver_guard` | 4 | 1 | fails the same at head and base (M1 below) |
+| `test_b6_r12_session_fixture` | 8 | 4 | passes (86 OK, 14 skipped) |
+| `test_git_fixture_maintenance` | 1 | 1 | fails the same at head and base |
+| `test_install_night_agent` | 52 | 26 | passes (Ran 67, OK) |
+| `test_run_night` | 8 | 8 | none of the 8 fails |
+
+The ids: `evidence/pr762/ci-43521257617-failing-ids.txt` (SHA-256 `fa2389f0f983401f55c94ba8784efc5342342e032f5c6617fdeee96d8932cf9a`) and `ci-43525694693-base-failing-ids.txt` (`0b985eed08d7f9924401acb49f14b043a93ee6e9a242a05c7a3ca902cae1d0ed`), same branch and commit. Also seen on macOS at background priority only: 7 failures in `test_run_night`, the same at head and base, none of them a hosted id.
+
+**Item 4, the two base reds (RL-144 addendum §3).**
+
+- **M1, base-inherent.** `joulewise/b6_analysis_check.py` and `scripts/independent_recompute_b6.py` each carry the literal 0.010818 s. It equals the registered s_bracket (registration §3.3: 10.818 ms). The mint-lane guard forbids copies of that constant; an independent recompute carries its own copy from the registration by design. Not a correctness matter. After the release the guard exempts these two files by name and asserts each literal equals the registry constant. No pinned byte changes.
+- **M2, base-inherent.** `joulewise/flags/exclusions.py` (SHA-256 `ebe1678c0fdd60b1ddd20d432cf07412bd321a8629589f4ce4c6b334378f0ad6`, a row of the 24 above) differs from its Block 5 frozen hash: commit `4e3446e6c` added a keyword-only `pack_scoped: bool = True` to `compute`. With the default the expression reduces to Block 5's. **A frozen Block 5 file was edited without a cited rebind.** Owed after the release and before the S-14 line merges to `main`: a row in `docs/analysis/b5/DEVIATION-LOG.md`, entries in `EVOLVED_ON_MAIN` and `REBOUND_WORKING_TREE`, and one test that `compute` with the default gives the Block 5 commit's result on a fixture.
+
+### Disclosures
+
+- **S-14 is at revision 2.** Registration §14 row S-14 names the first pin (`3551e1a7d`, tag `b6/analysis`). §17-R13 and the freeze addendum's `b6/analysis-r2` row are the revision of record, and this release ran at `6e6d1b18a9dffbba675c3abd28db2e4c6a484fde`. That commit is reachable from the tag `b6/analysis-r2` and from `analysis/2026-11-13-b6-s14-merge`; it is not yet on `main` (RL-134 item 18).
+- **Order of the r2 predeclaration.** Its amendment (`0dbfd105f17d11ca4e9cf352c50c51fe5310fe6f`, on `docs/2026-11-13-b6-s17-fill-staged`) was committed at 15:58:57 PST, 46 s after the gate run at r2 started and before the dry run at r2 was launched. Runbook step 6 puts it before any program run. The predeclared count of 48 was fixed earlier by RL-142 (14:30), by the tool's `--predeclared` check (`f19f36081`, 14:50) and by `b5-probe` at r2 before the gate run.
+- **Programs that opened the restricted outputs before the release,** each by ruling: the pinned program; the launcher and the release check (hash only); the structure probe (RL-134 item 4); and the RL-142 comparer, on `gate-2`, `gate-r2`, `dry` and `dry-r2`. The Mythos audit hashed them and opened none.
+- **Mode.** The gate run and the dry run at r2 ran serial (`--workers 1`).
+- **Audits of this record.** Claude Mythos 5.2, cold, 2026-11-13 (report SHA-256 `9ba5c89d59ceea82e39ab7e4928bbc279a4a26d8efce69a654fb794bd71a6862`): admit with fixes. Research lead RL-146: this section.
+```
+
+On the form of findings 1 and 3: **the record itself carries the tables above.** A cite alone does not meet "listed in the release record"; the tables with the id-level list by path, commit and SHA-256 do. Per-id rows are not required.
+
+**Step 5. PR and CI.** Commit, push. PR body: row 3 becomes `RUN <new head sha>`; the summary gains one line naming the Mythos report digest and RL-146. Tier stays light. CI green on the new head, `gate-ledger` included.
+
+- A red shard whose only failing id is the `CourierReapingTests` deadline test above, and which passes on one re-run of the same head, is a flake: note both job ids in the PR body and go on.
+- The same test red twice on one head, or any other failing id, comes to me.
+- PRs #765 to #767 do not merge until the record has. State-only `RUN_STATE.md` items may land.
+
+**Step 6. Immediately before the merge**, all three, any miss holds:
+
+1. `git fetch`; the registration at `origin/main` still hashes `7243a2bc…4ead`.
+2. The eight r2 output files re-hash to the record's "Output digests" table (I did this at 18:16 PST: 8 of 8).
+3. Ed's item N is on `main` and the record quotes it.
+
+**Step 7. Merge** with a merge commit, as #764 was. Mark the PR ready first.
+
+**Step 8. After the merge, before anything restricted is opened:** one `RUN_STATE.md` item with the merge commit, its time from `date`, the SHA-256 of both record files on `main`, and the RL-6 (d) line with the actual date.
+
+**If the merge commit's time is 2026-11-14 PST or later:**
+
+- From me: nothing more. No run, no new ruling; RL-142 §3 already allows the same r2 outputs the next day. Step 6 is the guard.
+- From Ed: his explicit yes to question 2, or a fresh OK that day, quoted in the same way. Without it the lead does not merge. His date, his call.
+- The record is not re-rendered for the date alone; its "Release time" paragraph governs. If it is re-rendered for another reason, the date comes from `date` as always.
+- Step 8's item writes: "RL-6 (d): Block 6 is released under its registration on 2026-11-14; Paper 1 prints the replication. This replaces the date in item 309."
+
+## 3. Findings 7 to 11, placed
+
+| Finding | In the record now | After the release | Nothing |
+|---|---|---|---|
+| 7 | the predeclaration-order line | the predeclaration file reaches `main` with the S-14 line's PR or its own | |
+| 8 | the S-14 revision line | | no edit to §14; no new R3 table |
+| 9 | one clause in the S-14 line | PR of the S-14 line to `main`, after M1 and M2 | |
+| 10 | the programs line | | |
+| 11 | mode; tool and kit commits | | table order, `None`, the Markdown ledger's columns, the tier |
+
+**Also after the release, in this order:** commit `rl142-cmp-a.json`, `rl142-cmp-b.json`, the v2 comparer and its predeclaration to `evidence/` on the audit branch (their digests are in the record); re-run the kit end-to-end test and the comparer's tests with kept logs and add one dated line each to the record; runbook steps 13 to 17.
+
+## 4. What Mythos missed. None of it holds the release beyond §2
+
+1. Addendum §2 item 3 is already due: the full hosted run on r2's tree has finished (finding 1 row).
+2. The comparison evidence is uncommitted, and the result's `predeclared` field points at v1's bytes (finding 3 row).
+3. The kit end-to-end result has no log. Mythos noted it; I rule it disclosed, not held: the gate run and dry run at r2 read the kit's real documents and exited 0, which is the stronger evidence of what that test is for.
+4. The committed head id list has its lines cut at 170 characters and one stray trailer line. The ids still compare by module and method (41 against 41). Nothing to do.
+5. Whether the audit is a "stop" under RL-142 §3 and Ed's renewal. Ruled in §0: it is not. Ed's own reading is step 1.
+
+## 5. Not verified by me
+
+- Ed's OK (step 1 closes it).
+- The 62 and 40 beyond the committed log's `Ran … OK` lines; the kit's 8; the comparer's 18.
+- A custody census since 16:54:46. Not run and not required: the outputs are bound by digest and re-hash.
+- Cause of the shard 1 failure beyond its traceback.
+- I did not re-take the 24 hashes, the nine `harvest_sha256` values or the receipts; Mythos did, and the record's values equal `rl142-r2-records.md` §C.
+
+**Owner.** The lead: §2 steps 1 to 8 and §3. Ed: step 1's answer. Research lead: anything step 3's diff, step 5 or step 6 sends back.
+
+**Gate.** The merge of PR #769 waits on §2 steps 1 to 6. Nothing else waits on this ruling.
+
 ## Open items routed to me, not yet ruled
 
 | Item | Waiting on |
