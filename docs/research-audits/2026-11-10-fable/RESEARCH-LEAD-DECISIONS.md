@@ -14980,3 +14980,132 @@ No.
 **Gate.** #783's row 4 is passed by this ruling at `f24aaff69` and at no other head. Findings 1 and 2 gate the follow-up PR's merge, and so the W1 receipt.
 **Amends.** Nothing.
 **Blind status.** Blind: no v4 outcome exists and nothing sealed or measured was opened. This ruling rests on rulings, code, test code, three test runs on synthetic records and two file hashes.
+
+# RL-160. The Sol family's independent S rows (RL-153 §2.3 item 5) against PR #787 at `c4c8f37f3`: item 5 is satisfied. D1, D3 and D4 stand as production has them. D5 changes: a turn with logged decode and no stamp list gives no row. Sol's #6, #14, #31 and #32 are confirmed
+
+Research lead (Fable 5.2), Sat Nov 14 15:58 PST 2026 (from `date`). RL-149 §1.3, RL-153 §2 and RL-154 stand except where "Amends" below changes them.
+
+**Read.**
+- RL-149 §1.3, RL-153 §2 and RL-154 in full, and RL-148's corrections and truncation rule, in the decision log at `6351f3670`.
+- `/Volumes/JW-EXT/scratch/sol-srows-1414/REPORT.md` in full; `sandbox/AMBIGUITIES.md` (all 39) and `sandbox/INTERFACE.md` in full; `tools/probe_nostamps.py`.
+- `joulewise/align/apple/s_rows.py` at `c4c8f37f3`: the docstring, `JournalReading`, `start_state`, `state_cut`, `clock_cut`, `member_rows`, `bundle_token_stamps`.
+- `tests/align/twins/s_rows_twin.py` at `c4c8f37f3`: the readings list and the row loop.
+- `rl145_prints.token_stamps_from_events`; `endpoint.py:750-800` (where `first_token_ns` is set); `workload.py:508-510` (the decode-budget stop).
+- The step-3 script, code only: `load_tokens`, `clock_cut` and the head of `analyse_leg`.
+
+**Not checked.**
+- `compare.py`, `compare_out.json` and Sol's `s_rows_sol.py`. The agreement counts and the description of D1 to D5 are the report's.
+- `events.jsonl` and `audit.txt`. The naivety finding is the report's.
+- The test suite was not run. CI on #787 was not read in full.
+- No journal, bundle, energy, power or custody file was opened. `OUTPUT.json` and `REPORT.md` of step 3 were not opened. No SSH.
+
+**Not done.** No edit to the branch, no commit, no push, no PR comment.
+
+---
+
+## 1. The four disagreements
+
+| # | Ruling | Production changes? |
+|---|---|---|
+| D1 | The first stamped decode token | No |
+| D5 | No row: `token_stamps_unavailable` | **Yes**, section 2 |
+| D4 | sqrt(Q² + n·edge_j²) | No |
+| D3 | The full fresh-state definition holds under any key subset | No |
+
+**D1. "First token" in the clock clause is the first stamped decode token.**
+- RL-149 §1.3 puts the windows "wholly inside the turn's decode". The decode's other end is the last stamped token, and every row end is a stamp. The decode is measured on the stamps at both ends.
+- `Turn.first_token_ns` is not a token. `records.py` and `endpoint.py:753` define it as the end of prefill, before the first decode step.
+- The step-3 script uses `t[0]`, the first token event. RL-151 confirmed §1.3's constants on that record, and report B compares D' against it.
+
+**D5. A turn with logged decode and no stamp list gives no row.** Sol's reading is right and production's is overruled.
+- RL-149 §1.3 says "A row needs at least one stamped decode token". D' is defined as the tokens stamped by the row's end, and without stamps the logged count cannot be checked.
+- With D1, such a turn has no anchor for the clock clause as registered. RL-154 finding 3 already ruled that the clause never switches itself off.
+- The cost is yield only, and the rule reads no label. The step-3 script raises on such a leg, so no row on record depends on it.
+- **The clock search then decides only whether the turn is hot.** It stays as production has it: the search runs over (start, the turn record's end] and the windows start at `first_token_ns` + 10 s. That is a superset of what stamps would give, so it can only find more.
+- **A turn with neither stamps nor `first_token_ns` cannot have its clock clause placed.** The endpoint cannot produce a decode token without a prefill end, so I add no rule for it. If a real bundle shows `token_stamps_unavailable` on any turn, it comes to me before that member's rows are used.
+
+**D4. The member half-width is sqrt(Q² + n·edge_j²).**
+- T7 as accepted puts edge noise in quadrature. RL-149's "about 2.4 J" at three rows is sqrt(6) × 1.0 J, the edge term alone, so it does not choose between the two.
+- The half-width's only use decides it. `loso_scores` squares it and adds it to the other variance terms. Q + edge_j·sqrt(n), squared, adds a cross term that says the integration bound and the boundary timing noise are perfectly correlated. Nothing supports that.
+- Either choice keeps the test exact (RL-149, "On the edge choice"). Step 4's linear sensitivity is unchanged.
+
+**D3. Fresh state does not depend on the constants' state keys.**
+- RL-154 §3 says "One definition, used at the start and in the gap rule". Fresh state says whether the instrument observed. The keys choose which reported values count as leaving the state.
+- A sensitivity run that changed both would not be comparable with the registered row. No registered row depends on this.
+
+**D2** is Sol's label bug, as the report says. No ruling.
+
+---
+
+## 2. What the #787 builder implements before the merge
+
+One commit, production and twin.
+
+1. **Production, `member_rows`.** After the `start != 'ok'` refusal, a turn whose stamp list is absent gives no row.
+   - The reason is `cut_in_prefill` when a cut lies before `turn.first_token_ns`, as now. Otherwise it is `token_stamps_unavailable`, with or without a cut and with or without the deadman.
+   - The only outcome that changes is the no-cut, no-deadman case, which today gives a `turn_end` row.
+   - `first_token`, `search_end` and `hot` are not changed.
+2. **Twin.** The same change in its row loop.
+3. **Text, production docstring and the twin's readings T3, T4 and T8.**
+   - "First token" is the first stamped decode token (D1).
+   - A turn with no stamp list gives no row, and its search to the record's end decides hot only (D5).
+   - The production docstring also gains T7's formula and the #6 sentence of section 3.
+4. **Tests.**
+   - **D5, no cut.** A three-turn member with turn 1's stamp list removed, under REGISTERED and under no clock. Turn 1 gives `token_stamps_unavailable` and is not hot. Turns 0 and 2 give `turn_end` rows.
+   - **D5, with a cut.** The same member with an OS cut in turn 1's decode. Turn 1 gives `token_stamps_unavailable` and is hot. Turn 2 gives `after_hot_turn`.
+   - **D1.** `first_token_ns` at least 1 s before the first stamp, with the clock under 0.97 from the first token on. The row ends at the first window starting at or after the first stamp + 10 s. If an existing test already fails when the anchor is swapped, name it in the PR instead.
+   - **D3.** Under `os_only`, a carry-in with a fresh stamp, level 0 and no state gives `start_state_unobserved`. The same rule: name an existing test if one already pins it.
+   - **#6.** In `test_carry_in_more_than_2_s_before_the_start`, assert that the first case's turn is hot.
+   - D4 needs nothing. `test_edges_and_member_uncertainty` already asserts the formula.
+   - The twin-agreement test stays green.
+
+**The lead's review of that commit** reruns `compare.py` and `tools/probe_nostamps.py` at the new head.
+- Expected: twin = production everywhere. Sol differs only by D1 to D4 and by labels.
+- No second Sol seat and no second cold pass from me. The diff comes to me with item 4's reports, as RL-154 §1.3 already says.
+
+---
+
+## 3. Sol's #6, #14, #31 and #32: all four confirmed, no change
+
+- **#6. A fresh carry-in more than 2 s before the start still anchors the gap.**
+  - RL-154 finding 1 anchors at the carry-in "when it is fresh", and fresh state (RL-154 §3) has no distance-to-start term. The 2 s distance belongs to the start verdict only.
+  - The consequence is accepted: such a turn is hot when the stretch from that carry-in to the first fresh reading in the turn exceeds 2 s. The stretch reaches into the turn, the start verdict already refuses the row, and the cost is yield on later turns.
+  - A carry-in that is not fresh still anchors at the start. That is finding 1's third test and it stays.
+- **#14. The clock row can end at first token + 10 s although the first window is judged at + 20 s.**
+  - RL-149 §1.3: "For a clock cut the window's start is the guard." "No clock cut exists ... in the first 20 s of decode" is about when a window can fire. The step-3 script returns the same instant.
+- **#31. A deadman end is `cut=True` and not hot.**
+  - RL-154 §2 lists hot "in full", in four cases, and the time limit is none of them. RL-148 keeps the truncated member on what it produced.
+  - `cut=True` moves only the `cut_only` edge count, which is a sensitivity.
+- **#32. G1-timeout and decode-budget endings name no cut turn.**
+  - Neither interrupts a model call. The G1 timeout fires at the gate between turns, and the decode budget is checked before the next turn starts (`workload.py:508-510`).
+  - In RL-148's rule every turn of such a member is a completed turn, scored whole. Only the deadman cuts inside a call.
+
+---
+
+## 4. Item 5, and what #787's gate still waits for
+
+**RL-153 §2.3 item 5 is satisfied, and so is RL-149 §1.3's question 6.** The rows were built from the ruling text alone, the command list shows no path outside the sandbox, and every disagreement is now ruled or named a bug.
+
+**Two limits of what item 5 showed, both accepted.**
+- Sol's energy is production's `trace_energy`. Item 5 tested row boundaries and hold removal, not the integral.
+- `INTERFACE.md` was written with the production code in view and may have steered Sol on D1. D1 is ruled on the text and the step-3 code, not on Sol's vote.
+
+**What remains before #787 merges.**
+1. Section 2's commit, and the lead's review of it with the `compare.py` rerun.
+2. Item 4's reports A and B on the bundles step 3 read, when the measurement Mac is free after tonight's runs. They are run at the final head. Clean closes item 4 without a ruling. Anything not clean comes to me, as does any `token_stamps_unavailable` in B.
+3. CI green on the final head. Section 2 makes a new head, so the checks at `c4c8f37f3` do not count.
+4. The lead's ordinary review of the RL-154 findings commit, if it is not already recorded. I do not know its state.
+5. Nothing else from me. RL-154's "the PR stays open as RL-148 §4 requires" is unchanged.
+
+---
+
+**Owner.** S-rows builder: section 2. Lead: the review and the `compare.py` rerun; item 4's two reports; the merge once 1 to 4 close. Research lead: item 4's reports if they are not clean, and the fix commit's diff with them.
+**Gate.** #787 does not merge, and no S row is built on a conditioned bundle, until section 4's items 1 to 4 close. Nothing here holds any session or any other PR.
+**Amends.**
+- RL-149 §1.3: "the first token plus 10 s" means the first stamped decode token. "A row needs at least one stamped decode token" applies to uncut turns as well, with the reason `token_stamps_unavailable`.
+- RL-149 T7: the member half-width is sqrt(Q² + n·edge_j²).
+- RL-154 §3: the fresh-state definition holds under every state-key subset.
+- RL-154 finding 1: the carry-in anchors the gap when it is fresh state, whatever its distance from the start.
+- RL-153 §2.3 item 5: closed.
+
+**Blind status.** Blind: no v4 outcome exists and nothing sealed was opened. This ruling rests on rulings, code, test code and the comparison report on synthetic members. Every rule fixed here reads no label. Step 3's values remain the recorded energy disclosure on conditionless legs; I did not open them.
