@@ -21,18 +21,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Docs-only range (required contexts report success without running tests)
-        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.state != 'true'
+        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.state != 'true' && needs.changes.outputs.targeted == ''
         run: echo "No code changes in this range; tests skipped."
       - uses: actions/checkout@v5
-        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true' || needs.changes.outputs.targeted != ''
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v6
-        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true' || needs.changes.outputs.targeted != ''
         with:
           python-version: "3.13"
       - name: Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)
-        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
+        if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true' || needs.changes.outputs.targeted != ''
         run: |
           if [ ! -x /bin/zsh ]; then
             sudo apt-get update -q
@@ -42,6 +42,15 @@ jobs:
       - name: Quick test tier
         if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
         run: python3 scripts/quick_suite.py --tier quick --workers 4
+      # Targeted-docs lane (scripts/ci_docs_targeted.sh): a docs-only range whose docs are named only by
+      # test_*.py modules skips the shards and runs just those modules here. This job is a required
+      # context, so a failing module blocks the merge (a separate job would not).
+      - name: Targeted docs test modules
+        if: needs.changes.outputs.targeted != ''
+        env:
+          TARGETED_MODULES: ${{ needs.changes.outputs.targeted }}
+        # The modules are validated as plain dotted names by the changes job. The exit code is fatal (nothing swallows it).
+        run: python -m unittest -v $TARGETED_MODULES
 
   # Select interpreters and skip expensive jobs only for proven docs-only ranges.
   changes:
@@ -79,7 +88,7 @@ jobs:
           # plain quick tier and fences instead of the shards. A targeted-docs diff
           # (scripts/ci_docs_targeted.sh; also tested in tests/test_ci_docs_only.py) skips the
           # shards too, and runs only the test modules that name the changed docs in the
-          # docs-targeted job. Errors run CI.
+          # required quick job. Errors run CI.
           before=; after=
           case "${GITHUB_EVENT_NAME:-}" in
             push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
@@ -101,7 +110,8 @@ jobs:
             case "$verdict" in
               docs-only) code=false ;;
               "targeted tests."*)
-                if [[ "$verdict" =~ ^targeted\ tests(\.[A-Za-z0-9_]+)+(\ tests(\.[A-Za-z0-9_]+)+)*$ ]]; then
+                if [[ "$verdict" =~ ^targeted\ tests(\.[A-Za-z0-9_]+)+(\ tests(\.[A-Za-z0-9_]+)+)*$ ]] &&
+                   [[ "${verdict// /. }." != *.py.* ]]; then   # no component named py
                   code=false; targeted=${verdict#targeted }
                 fi ;;
             esac
@@ -398,36 +408,6 @@ jobs:
           index = int(os.environ["SHARD_INDEX"])
           raise SystemExit(shard_tests.run_units(partitions[index - 1], 2, index))
           PY
-
-  # Targeted-docs lane: a docs-only range whose changed docs are named only by test_*.py modules
-  # (scripts/ci_docs_targeted.sh) skips the shards and runs just those modules, in one job.
-  docs-targeted:
-    needs: [changes]
-    if: needs.changes.outputs.targeted != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      JW_TEST_TIMEOUT_SECONDS: "1200"
-      TARGETED_MODULES: ${{ needs.changes.outputs.targeted }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v6
-        with:
-          python-version: ${{ fromJSON(needs.changes.outputs.pythons)[0] }}
-      - name: Compile Python sources
-        run: python -m compileall -q joulewise tests
-      - name: Install zsh (tests invoke /bin/zsh)
-        run: |
-          if [ ! -x /bin/zsh ]; then
-            sudo apt-get update -q
-            sudo apt-get install -y -q zsh
-          fi
-          test -x /bin/zsh
-      - name: Targeted test modules
-        # The modules are validated as plain dotted names by the changes job.
-        run: python -m unittest -v $TARGETED_MODULES
 
   build:
     runs-on: ubuntu-latest

@@ -9,10 +9,12 @@
 #                                  unittest modules (e.g. tests.test_docs_freshness)
 # A docs path is Markdown under docs/ or at the root, or an image (.svg .png .jpg .jpeg .webp .gif)
 # under docs/assets/. docs/registrations|contracts|process_traces|null|site/ are read by glob: full suite.
-# A reference from joulewise/, scripts/, configs/, .github/, pyproject.toml, or from any tests/ file that
-# is not a test_*.py module (helpers, fixtures, json) runs the full suite, because a helper can be
-# imported by many modules. References are checked at both ends of the range. Any detector error, or a
-# module name that is not a plain dotted identifier, runs the full suite.
+# A reference is the full path OR the basename (code builds paths like REPO_ROOT / "docs" / "x.md"), as a
+# fixed string, in joulewise scripts tests configs .github pyproject.toml or any docs/**/*.py. A reference
+# from anything but a tests/**/test_*.py module (code, helpers, fixtures, json) runs the full suite, because
+# a helper can be imported by many modules. References are checked at both ends of the range. Any detector
+# error, a symlink or gitlink in the range, or a module path that is not plain identifiers (no dots in a
+# directory name, no component named py) runs the full suite.
 set -u
 before=${1:-}; after=${2:-}
 [[ "$before" =~ ^[0-9a-f]{40}$ && "$before" != 0000000000000000000000000000000000000000 ]] || exit 1
@@ -21,6 +23,10 @@ git cat-file -e "$before^{commit}" 2>/dev/null || exit 1
 git cat-file -e "$after^{commit}" 2>/dev/null || exit 1
 paths=$(git diff --name-only --no-renames "$before..$after") || exit 1
 [[ -n "$paths" ]] || exit 1
+# Symlinks (120000) and gitlinks (160000) at either end are not docs: full suite.
+raw=$(git diff --raw --no-renames "$before..$after") || exit 1
+awk '{ if ($1 == ":120000" || $1 == ":160000" || $2 == "120000" || $2 == "160000") bad = 1 } END { exit bad }' \
+  <<< "$raw" || exit 1
 modules=
 while IFS= read -r path; do
   case "$path" in
@@ -33,15 +39,15 @@ while IFS= read -r path; do
     *) exit 1 ;;
   esac
   for rev in "$before" "$after"; do
-    hits=$(git grep -l -F -e "$path" "$rev" -- joulewise scripts tests configs .github pyproject.toml 2>/dev/null)
+    hits=$(git grep -l -F -e "$path" -e "${path##*/}" "$rev" -- joulewise scripts tests configs .github pyproject.toml 'docs/*.py' 2>/dev/null)
     status=$?
     [[ $status -le 1 ]] || exit 1   # 0 = referenced, 1 = not, >1 = grep error
     [[ $status -eq 1 ]] && continue
     while IFS= read -r hit; do
       file=${hit#"$rev":}
-      [[ "$file" == tests/*.py && "${file##*/}" == test_*.py ]] || exit 1   # non-test reference: full suite
+      # Non-test reference (or an odd test path): full suite.
+      [[ "$file" =~ ^tests(/[A-Za-z0-9_]+)*/test_[A-Za-z0-9_]*\.py$ && "/$file" != */py/* ]] || exit 1
       module=${file%.py}; module=${module//\//.}
-      [[ "$module" =~ ^tests(\.[A-Za-z0-9_]+)+$ ]] || exit 1
       modules+="$module"$'\n'
     done <<< "$hits"
   done

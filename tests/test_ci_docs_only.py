@@ -4,6 +4,7 @@ narrows referenced docs to the test modules that name them; state-only (scripts/
 import os
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -111,7 +112,14 @@ class TargetedDocsClassifierTests(unittest.TestCase):
             "tests/test_img.py": "PATH = 'docs/assets/readme/used.png'\n",
             "tests/helpers.py": "PATH = 'docs/helped.md'\n",
             "scripts/tool.py": "PATH = 'docs/scripted.md'\n",
-            "joulewise/core.py": "x = 1\n"})
+            "joulewise/core.py": "x = 1\n",
+            "docs/process/BUILT.md": "x\n", "scripts/watch.py": "P = ROOT / 'docs' / 'process' / 'BUILT.md'\n",
+            "docs/BASE.md": "x\n", "tests/test_base.py": "P = ROOT / 'docs' / 'BASE.md'\n",
+            "docs/CODE.md": "x\n", "docs/analysis/reader.py": "P = 'CODE.md'\n",
+            "docs/a*[x].md": "x\n", "scripts/glob.sh": "cat 'docs/a*[x].md'\n",
+            "docs/bad.md": "x\n", "tests/test_$(id).py": "P = 'docs/bad.md'\n",
+            "docs/dot.md": "x\n", "tests/x.py/test_y.py": "P = 'docs/dot.md'\n",
+            "docs/pydir.md": "x\n", "tests/py/test_z.py": "P = 'docs/pydir.md'\n"})
         self.base = self.commit()
 
     def tearDown(self):
@@ -159,8 +167,8 @@ class TargetedDocsClassifierTests(unittest.TestCase):
     def test_one_helper_reference_makes_a_targeted_range_full(self):
         self.assertEqual(self.classify({"docs/guide.md": "y\n", "docs/helped.md": "y\n"}), (1, ""))
 
-    def test_reference_that_exists_only_at_the_before_end_is_found(self):
-        # The test that names the doc is removed by the range itself: the diff has a .py path, so full.
+    def test_python_file_in_the_range_is_full_even_when_it_is_the_referencing_test(self):
+        # The referencing test is edited by the range itself: the diff has a .py path, so full.
         self.assertEqual(self.classify({"docs/guide.md": "y\n", "tests/test_guide.py": "x = 1\n"}), (1, ""))
 
     def test_unreferenced_image_under_docs_assets_is_docs_only(self):
@@ -202,6 +210,43 @@ class TargetedDocsClassifierTests(unittest.TestCase):
             with self.subTest(before=before):
                 self.assertEqual(self.classify({"docs/notes.md": "y\n"}, before=before), (1, ""))
 
+    def test_reader_that_builds_the_path_in_code_is_found_by_basename(self):
+        self.assertEqual(self.classify({"docs/process/BUILT.md": "y\n"}), (1, ""))
+
+    def test_basename_hit_in_a_test_module_joins_the_targeted_set(self):
+        self.assertEqual(self.classify({"docs/BASE.md": "y\n"}), (0, "targeted tests.test_base"))
+
+    def test_python_under_docs_that_names_the_doc_is_full(self):
+        self.assertEqual(self.classify({"docs/CODE.md": "y\n"}), (1, ""))
+
+    def test_invalid_test_module_name_is_full(self):
+        self.assertEqual(self.classify({"docs/bad.md": "y\n"}), (1, ""))
+
+    def test_dotted_directory_or_py_component_in_the_module_path_is_full(self):
+        for path in ("docs/dot.md", "docs/pydir.md"):
+            with self.subTest(path=path):
+                self.assertEqual(self.classify({path: "y\n"}), (1, ""))
+
+    def test_path_with_glob_characters_is_matched_as_a_fixed_string(self):
+        self.assertEqual(self.classify({"docs/a*[x].md": "y\n"}), (1, ""))
+
+    def test_symlink_named_like_a_doc_is_full(self):
+        self.git("checkout", "-q", self.base)
+        (self.repo / "docs" / "link.md").symlink_to("notes.md")
+        after = self.commit()
+        done = subprocess.run(["bash", str(TARGETED_SCRIPT), self.base, after], cwd=self.repo, env=self.env,
+                              capture_output=True, text=True)
+        self.assertEqual((done.returncode, done.stdout.strip()), (1, ""))
+
+    def test_gitlink_named_like_a_doc_is_full(self):
+        self.git("checkout", "-q", self.base)
+        self.git("update-index", "--add", "--cacheinfo", "160000," + self.base + ",docs/sub.md")
+        self.git("commit", "-q", "-m", "gitlink")
+        after = self.git("rev-parse", "HEAD")
+        done = subprocess.run(["bash", str(TARGETED_SCRIPT), self.base, after], cwd=self.repo, env=self.env,
+                              capture_output=True, text=True)
+        self.assertEqual((done.returncode, done.stdout.strip()), (1, ""))
+
     def test_docs_only_script_contract_is_unchanged_for_referenced_markdown(self):
         self.git("checkout", "-q", self.base)
         self.write({"docs/guide.md": "y\n"})
@@ -211,17 +256,83 @@ class TargetedDocsClassifierTests(unittest.TestCase):
 
 
 class TargetedDocsWorkflowTests(unittest.TestCase):
+    def text(self):
+        return WORKFLOW.read_text(encoding="utf-8")
+
+    def job(self, name):
+        text = self.text()
+        start = text.index(f"\n  {name}:\n")
+        rest = text[start + 1:]
+        end = rest.find("\n  # ", 1)
+        nxt = [i for i in (rest.find("\n  " + m + ":\n", 1) for m in ("changes", "fences", "test", "build"))
+               if i > 0]
+        return rest[:min(nxt + ([end] if end > 0 else []))]
+
     def test_workflow_wires_the_targeted_lane(self):
-        text = WORKFLOW.read_text(encoding="utf-8")
+        text = self.text()
         self.assertIn("elif verdict=$(classify ci_docs_targeted.sh); then", text)
         self.assertIn("targeted: ${{ steps.paths.outputs.targeted || '' }}", text)
-        self.assertIn("  docs-targeted:\n    needs: [changes]\n    if: needs.changes.outputs.targeted != ''", text)
-        self.assertIn("run: python -m unittest -v $TARGETED_MODULES", text)
 
-    def test_targeted_job_is_not_gated_on_the_full_suite_flag(self):
-        text = WORKFLOW.read_text(encoding="utf-8")
-        job = text.split("  docs-targeted:\n", 1)[1].split("\n  build:\n", 1)[0]
-        self.assertNotIn("outputs.code", job)
+    def test_targeted_modules_run_inside_the_required_quick_job_and_fail_it(self):
+        text = self.text()
+        self.assertNotIn("docs-targeted", text)
+        quick = self.job("quick")
+        self.assertIn("      - name: Targeted docs test modules\n        if: needs.changes.outputs.targeted != ''\n",
+                      quick)
+        self.assertIn("run: python -m unittest -v $TARGETED_MODULES", quick)
+        self.assertNotIn("continue-on-error", quick)
+        self.assertNotIn("|| true", quick)
+        self.assertNotIn("TARGETED_MODULES || ", quick)
+
+    def test_quick_job_is_not_skipped_by_the_targeted_verdict(self):
+        quick = self.job("quick")
+        skip = quick.split("      - uses: actions/checkout@v5", 1)[0]
+        self.assertIn("&& needs.changes.outputs.targeted == ''", skip)
+        for step in ("actions/checkout@v5", "actions/setup-python@v6", "Install zsh"):
+            index = quick.index(step)
+            self.assertIn("|| needs.changes.outputs.targeted != ''", quick[index:index + 400].split("run:")[0]
+                          if "run:" in quick[index:index + 400] else quick[index:index + 400], step)
+        self.assertNotIn("needs: [changes]\n    if:", quick)
+        self.assertNotIn("\n    if:", quick)
+
+    def paths_block(self):
+        text = self.text()
+        return text.split("      - name: Detect code changes\n", 1)[1].split("\n\n", 1)[0]
+
+    def test_changes_job_sets_code_false_only_with_a_verdict_and_exports_targeted(self):
+        block = self.paths_block()
+        self.assertEqual(block.count("code=false"), 4, block)
+        self.assertIn("printf 'code=%s\\nstate=%s\\ntargeted=%s\\n' \"$code\" \"$state\" \"$targeted\" >> \"$GITHUB_OUTPUT\"",
+                      block)
+        # The targeted verdict branch sets code=false and targeted together, behind the regex.
+        self.assertIn("code=false; targeted=${verdict#targeted }", block)
+        self.assertIn("docs-only) code=false ;;", block)
+        self.assertIn("code=true; state=false; targeted=\n", block)
+
+    def verdict_snippet(self):
+        block = self.paths_block()
+        start = block.index('            case "$verdict" in')
+        end = block.index("            esac", start) + len("            esac")
+        return textwrap.dedent(block[start:end])
+
+    def simulate(self, verdict):
+        script = ('verdict=$1; code=true; targeted=\n' + self.verdict_snippet()
+                  + '\nprintf "%s|%s" "$code" "$targeted"\n')
+        return subprocess.run(["bash", "-c", script, "sim", verdict], capture_output=True, text=True).stdout
+
+    def test_hostile_or_malformed_verdicts_keep_the_full_suite(self):
+        for verdict in ("targeted tests.test_$(id)", "targeted tests.test_a;id", "targeted tests.test_a ",
+                        "targeted tests.test_a\ntargeted=evil", "targeted tests.test_a\n", "targeted tests..x",
+                        "targeted tests.x.py.test_y", "targeted tests.py", "targeted tests.test_a  tests.test_b",
+                        "targeted tests.", "targeted", "docs-only ", "", "targeted tests.test_a tests.py.b"):
+            with self.subTest(verdict=verdict):
+                self.assertEqual(self.simulate(verdict), "true|")
+
+    def test_good_verdicts_are_accepted(self):
+        self.assertEqual(self.simulate("docs-only"), "false|")
+        self.assertEqual(self.simulate("targeted tests.test_a tests.sub.test_b"),
+                         "false|tests.test_a tests.sub.test_b")
+        self.assertEqual(self.simulate("targeted tests.test_py_x"), "false|tests.test_py_x")
 
 
 class StateOnlyClassifierTests(unittest.TestCase):
