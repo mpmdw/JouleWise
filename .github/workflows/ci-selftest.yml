@@ -1,0 +1,28 @@
+name: ci-selftest
+
+# Tests a change to the CI definition itself. The required `ci` caller runs
+# MAIN's ci-reusable.yml (so a lane cannot rewrite its own gate), which means a
+# PR that edits ci-reusable.yml would otherwise be judged by the old copy. This
+# workflow calls the PR's own copy by local path and runs only when a CI file
+# changes. It is not a required check: a PR that touches these paths must not
+# merge until it is green (RL-144 step 1c). Its jobs report as
+# "selftest / <job>", which never collides with the required
+# "ci / <job>" names.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ci-reusable.yml"
+      - ".github/workflows/ci-selftest.yml"
+      - ".github/workflows/ci.yml"
+
+concurrency:
+  group: ci-selftest-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    uses: ./.github/workflows/ci-reusable.yml
