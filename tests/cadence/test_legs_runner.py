@@ -246,14 +246,19 @@ class MockSpanTests(unittest.TestCase):
         self.assertEqual(receipt["span_result"], {"chain_exit_code": 0, "chain_outcome": "COMPLETE", "fault": False,
                                                   "outcome": "MEASURED_OK", "verdict": "12/12 legs run"})
         names = [s["name"] for s in receipt["steps"]]
-        self.assertEqual(names[:5], ["deadline", "frozen", "night_agents", "ac_power", "condition13"])
+        self.assertEqual(names[:7], ["deadline", "frozen", "model", "night_agents", "ac_power", "condition13",
+                                     "measurement_mode"])
+        self.assertEqual(names[-1], "measurement_mode-close")
+        self.assertEqual(set(receipt["measurement_mode"]), {"preflight", "close"})
+        self.assertIn("| admitted |", (out / "desk" / "JOURNAL-TABLE.md").read_text())        # F8
+        self.assertIn("| True |\n", (out / "desk" / "JOURNAL-TABLE.md").read_text())
         self.assertLess(names.index("dwell"), names.index("plan"))
         self.assertLess(names.index("plan"), names.index("soak"))
         self.assertLess(names.index("soak"), names.index("L001.a1"))
         # Close: restore after the last leg, then the feeds stop in reverse order.
         self.assertEqual(names[names.index("L012.a1") + 1:names.index("L012.a1") + 5],
                          ["restore", "stop-volumes", "stop-meter", "stop-agents"])
-        self.assertEqual(deps.host.calls[-1], "restore")
+        self.assertEqual(deps.host.calls[-2:], ["restore", "measurement_mode-close"])
         # Exactly one soak; legs in the kit's seeded order; one attempt each.
         self.assertEqual(names.count("soak"), 1)
         self.assertEqual(deps.fake.calls, [f"L{i:03d}" for i in range(1, 13)])
@@ -330,7 +335,7 @@ class MockSpanTests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertEqual(deps.fake.calls, ["L001"])
         self.assertEqual(receipt["span_result"]["chain_outcome"], "INCOMPLETE")
-        self.assertEqual(deps.host.calls[-1], "restore")
+        self.assertEqual(deps.host.calls[-2:], ["restore", "measurement_mode-close"])
         self.assertTrue(all(f.events[-1] == "stop" for f in deps.feeds))
         _, stops = desk.build_desk(plan_id="t", input_dir=out / runner.DESK_BUNDLE, out_dir=out / "desk",
                                    adapter="leg-summary-v1", stop_rules=kit["stop_rules"])
@@ -348,7 +353,7 @@ class MockSpanTests(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("plan needs", receipt["error"])
         self.assertEqual(deps.fake.calls, [])
-        self.assertEqual(deps.host.calls[-1], "restore")
+        self.assertEqual(deps.host.calls[-2:], ["restore", "measurement_mode-close"])
         with self.assertRaises(FileExistsError):      # create-once
             runner.run_span(kit=kit, kit_sha256="f" * 64, output=out, deadline=clock.time() + 7200,
                             windows=NEW_WINDOW, deps=deps)
@@ -478,6 +483,77 @@ class LegRuntimeTests(unittest.TestCase):
                                   *reg.R1_EXECUTED_SOURCES], cwd=runner.ROOT, capture_output=True, text=True)
         if changed.returncode == 0:
             self.assertEqual(changed.stdout.strip(), "")
+
+
+class ColdCheckFixTests(unittest.TestCase):
+    """The cold kit check's fixes (PR #775): F2, F5, F6, F8, F11."""
+
+    def test_f2_run_and_plan_need_an_explicit_blackout(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            kit_path = Path(td) / "kit.json"
+            kit_path.write_text(json.dumps(campaign_kit(), indent=1))
+            with patch("sys.stderr", io.StringIO()) as err:
+                self.assertEqual(runner.main(["plan", "--kit", str(kit_path)]), 1)
+                self.assertEqual(runner.main(["run", "--kit", str(kit_path), "--output", str(Path(td) / "o"),
+                                              "--deadline", "1"]), 1)
+            self.assertIn("explicit --batch-window", err.getvalue())
+            self.assertFalse((Path(td) / "o").exists())
+            # The unchanged launcher refuses too, because its plan asks the runner for the default.
+            with self.assertRaisesRegex(ValueError, "explicit --batch-window"):
+                launcher.cadence_plan(kit_path)
+
+    def test_f6_output_and_custody_root_outside_v4_roots(self):
+        bad = [Path.home() / "night-custody/cl", Path("/Users/edr/night-2026-11-15/x"), Path("/tmp/restricted/x"),
+               runner.ROOT / "configs/campaigns/align_v4/registration/x", Path("/tmp/jw-b5-x/y")]
+        for path in bad:
+            self.assertTrue(runner.v4_root_problems(path, "--output"), path)
+        self.assertEqual(runner.v4_root_problems(Path("/Users/edr/cadence-custody/cq-dev-01-s01-a1"), "--output"), [])
+        with patch("sys.stdout", io.StringIO()) as out:
+            self.assertEqual(runner.main(["check-roots", "--output", "/Users/edr/cadence-custody/a",
+                                          "--custody-root", "/Users/edr/night-custody"]), 1)
+        self.assertIn("REFUSE --custody-root", out.getvalue())
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            kit_path = Path(td) / "kit.json"
+            kit_path.write_text(json.dumps(campaign_kit(), indent=1))
+            target = Path(td) / "night-custody" / "span"
+            with patch("sys.stderr", io.StringIO()) as err:
+                self.assertEqual(runner.main(["run", "--kit", str(kit_path), "--output", str(target),
+                                              "--deadline", "1", "--batch-window", "02:00-02:35"]), 2)
+            self.assertIn("v4 custody root", err.getvalue())
+            self.assertFalse(target.exists())
+
+    def test_f11_kit_model_must_be_the_leg_model(self):
+        inputs = runner.ROOT / "configs/campaigns/align_v4/registration/inputs.json"
+        self.assertEqual(runner.kit_model_problems(campaign_kit(), inputs), [])
+        wrong = {**campaign_kit(), "model": "mlx-community/Qwen3.8-27B-4bit"}
+        self.assertTrue(runner.kit_model_problems(wrong, inputs))
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            rc, *_ = runner.run_mock(kit=wrong, kit_sha256="f" * 64, output=Path(td) / "m",
+                                     t0_epoch=local("2026-11-15T13:20"), windows=NEW_WINDOW)
+            receipt = json.loads((Path(td) / "m" / runner.RECEIPT_NAME).read_text())
+            self.assertEqual(rc, 2)
+            self.assertIn("is not the leg's model", receipt["error"])
+
+    def test_f5_failing_verify_refuses_the_span_and_the_close_is_recorded(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            out = Path(td) / "span"
+            clock = runner.FakeClock(local("2026-11-15T13:20"))
+            deps = runner.mock_deps(out, clock)
+            deps.max_span_s = runner.max_span_s()
+            deps.host.measurement_mode = lambda point: {"rc": 1, "point": point,
+                                                        "lines": ["FAIL  network time: want Off, got On"]}
+            kit = campaign_kit()
+            plan = legsmod.plan_span(kit, t0_epoch=clock.time(), windows=NEW_WINDOW)
+            rc = runner.run_span(kit=kit, kit_sha256="f" * 64, output=out, deadline=runner.launch_deadline(plan),
+                                 windows=NEW_WINDOW, deps=deps)
+            receipt = json.loads((out / runner.RECEIPT_NAME).read_text())
+            self.assertEqual(rc, 1)
+            self.assertEqual(deps.fake.calls, [])
+            self.assertEqual(receipt["measurement_mode"]["preflight"]["rc"], 1)
+            self.assertEqual(receipt["measurement_mode"]["close"]["rc"], 1)
+        host = runner.ProductionHost("fake")
+        host.tool = Path("/nonexistent/measurement_mode.zsh")
+        self.assertEqual(host.measurement_mode("preflight")["rc"], 2)
 
 
 class ProductionSeamTests(unittest.TestCase):

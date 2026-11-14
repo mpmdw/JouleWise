@@ -31,9 +31,16 @@ LaunchAgent, the desk fence, Spotlight paused). One span, agent-free:
 
 Stage stamps go to ``DIR/chain-stages.jsonl`` (start and end of every stage) for the RL-128 probe.
 
-The blackout defaults to the R1 driver's ``OS_BATCH_WINDOW_LOCAL`` (ruling 8; moved to 02:00-02:35 by
-RL-149 section 2.9 item 4 in the W1-line PR), so that PR's change flows through; ``--batch-window``
-overrides it. The soak also avoids the driver's window, because the night's soak path refuses it.
+The blackout must be given explicitly: ``run`` and ``plan`` refuse without ``--batch-window`` (cold kit check
+F2: the frozen R1 driver constant is still ruling 8's 11:45-13:15, and RL-149 section 2.9 item 4 rules
+02:00-02:35). Only ``mock`` falls back to the driver's constant. The soak also avoids the driver's window,
+because the night's soak path refuses it.
+
+Preflight also refuses (cold kit check): an ``--output`` inside a v4 registration or custody root (F6;
+``check-roots`` gives the same answer for the arm record, with ``--custody-root``); a kit ``model`` that is
+not the model the leg loads (F11); and a failing ``measurement_mode.zsh verify`` (F5; RL-149 section 2.4's
+campaign-scope stop on host state outside measurement_mode). The verify runs again at the close and both
+results are in the receipt.
 
 ``mock`` executes a whole span on this machine with a fake clock, fake feeds and a fake leg runtime
 (no model, no sensor, no host command), then builds the Air desk table on its bundle.
@@ -89,10 +96,55 @@ def _stamp(clock):
     return {"epoch_s": clock.time(), "monotonic_ns": int(clock.monotonic() * 1e9)}
 
 
+BATCH_WINDOW_REQUIRED = ("an explicit --batch-window is required (RL-149 section 2.9 item 4 rules 02:00-02:35; "
+                         "the frozen R1 driver constant is still 11:45-13:15)")
+# The measurement_mode tool as installed on the MBP (ops/2026-11-13-measurement-mode).
+MEASUREMENT_MODE_TOOL = Path("/Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh")
+MEASUREMENT_MODE_CAP_S = 120
+# v4 registration and custody roots a campaign output may never sit in (cold kit check F6). The path
+# components follow the v4 path rules (v4_registration._local, window_timing.safe_path).
+V4_ROOT_PARTS = ("restricted", "night-custody", "night-archive")
+V4_ROOT_PREFIXES = ("night-", "jw-b5-")
+V4_REGISTRATION_DIRS = ("configs/campaigns/align_v4",)
+
+
 def default_windows():
-    """The R1 driver's blackout constant, read at run time (the W1-line PR moves it)."""
+    """No default blackout for a real span or its plan: the caller names it (cold kit check F2).
+    A ValueError here is also what makes ``launch_align_r0.py`` refuse a launch without --batch-window."""
+    raise ValueError(BATCH_WINDOW_REQUIRED)
+
+
+def r1_driver_windows():
+    """The R1 driver's constant, for ``mock`` only."""
     from scripts import align_r1_rehearsal as r1
     return [r1.OS_BATCH_WINDOW_LOCAL]
+
+
+def v4_root_problems(path, label):
+    """Why ``path`` lies in a v4 registration or custody root (empty when it does not)."""
+    resolved = Path(path).expanduser().resolve()
+    problems = [f"{label} {resolved}: component {part!r} is a v4 custody root" for part in resolved.parts
+                if part in V4_ROOT_PARTS or part.startswith(V4_ROOT_PREFIXES)]
+    for rel in V4_REGISTRATION_DIRS:
+        base = (ROOT / rel).resolve()
+        if resolved == base or base in resolved.parents:
+            problems.append(f"{label} {resolved}: inside the v4 registration tree {rel}")
+    return problems
+
+
+def kit_model_problems(kit, inputs):
+    """The kit's ``model`` must name the model the leg loads: the d_spam template of the bound runtime
+    config (``org/name`` from the template's model source, and its name) (cold kit check F11)."""
+    from joulewise.align.apple import r1_runtime as rt
+    from scripts import align_r1_rehearsal as r1
+    argv = r1.runtime_argv_from_inputs(inputs)
+    config = json.loads(rt.resolve(argv[argv.index("--config") + 1]).read_text())
+    template, _spec = rt.read_template(config["templates"]["d_spam"])
+    model = template["model"]
+    loaded = "/".join(Path(model["source"]).parts[-2:])
+    if kit["model"] != loaded or Path(kit["model"]).name != model.get("name"):
+        return [f"kit model {kit['model']!r} is not the leg's model {loaded!r} (name {model.get('name')!r})"]
+    return []
 
 
 def max_span_s():
@@ -131,6 +183,7 @@ class Deps:
     run_soak: Callable          # (soak_dir, cap_s, feeds, work_remaining) -> soak_reference Path
     run_leg: Callable           # (attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining) -> result
     verify_frozen: Callable     # (kit) -> {"rc": 0, ...}; raises SpanRefusal on a mismatch
+    verify_model: Callable      # (kit) -> {"rc": 0, ...}; raises SpanRefusal on a mismatch (F11)
     load_verdict: Callable      # (name, result, wall_s) -> {"redo": bool, ...}; raises on a bad journal
     soak_cap_s: float
     soak_windows: list = field(default_factory=list)   # extra windows the soak path itself refuses
@@ -246,6 +299,19 @@ class ProductionHost:
         from scripts import launch_align_r0 as launcher
         return launcher.display_dwell_seconds()
 
+    def measurement_mode(self, point):
+        """``measurement_mode.zsh verify`` (read-only; exit 1 on any FAIL): its rc and its lines."""
+        tool = getattr(self, "tool", MEASUREMENT_MODE_TOOL)
+        if not tool.is_file():
+            return {"rc": 2, "point": point, "tool": str(tool), "error": "measurement_mode tool not installed"}
+        try:
+            done = subprocess.run(["/bin/zsh", str(tool), "verify"], capture_output=True, text=True,
+                                  timeout=MEASUREMENT_MODE_CAP_S, env={**os.environ, "LC_ALL": "C"})
+        except (OSError, subprocess.SubprocessError) as error:
+            return {"rc": 2, "point": point, "tool": str(tool), "error": f"{type(error).__name__}: {error}"}
+        return {"rc": done.returncode, "point": point, "tool": str(tool),
+                "lines": done.stdout.splitlines()[-80:], "stderr": done.stderr.strip()[-2000:]}
+
 
 def verify_frozen_production(kit):
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
@@ -265,7 +331,7 @@ def verify_frozen_production(kit):
     return {"rc": 0, "head": head, "paths": len(kit["frozen"]["paths"])}
 
 
-def production_deps(*, inputs, pmset_bin, output):
+def production_deps(*, inputs, pmset_bin, output, measurement_mode_tool=MEASUREMENT_MODE_TOOL):
     from scripts import align_r1_rehearsal as r1, launch_align_r0 as launcher, run_align_r1_smoke as smoke
     leg_argv = leg_runtime_argv(inputs)
 
@@ -298,10 +364,19 @@ def production_deps(*, inputs, pmset_bin, output):
         except r1.Refusal as error:
             raise LegRuntimeError(f"{name}: {error}") from error
 
+    def verify_model(kit):
+        problems = kit_model_problems(kit, inputs)
+        if problems:
+            raise SpanRefusal("; ".join(problems))
+        return {"rc": 0, "model": kit["model"]}
+
     feeds = [smoke.AgentFeed(output), smoke.MeterFeed(output), smoke.VolumeFeed(output)]
-    return Deps(clock=RealClock(), feeds=feeds, host=ProductionHost(pmset_bin), run_soak=run_soak,
-                run_leg=run_leg, verify_frozen=verify_frozen_production, load_verdict=load_verdict,
-                soak_cap_s=launcher.r1_soak_cap_s(), soak_windows=[r1.OS_BATCH_WINDOW_LOCAL])
+    host = ProductionHost(pmset_bin)
+    host.tool = Path(measurement_mode_tool)
+    return Deps(clock=RealClock(), feeds=feeds, host=host, run_soak=run_soak,
+                run_leg=run_leg, verify_frozen=verify_frozen_production, verify_model=verify_model,
+                load_verdict=load_verdict, soak_cap_s=launcher.r1_soak_cap_s(),
+                soak_windows=[r1.OS_BATCH_WINDOW_LOCAL])
 
 
 # --------------------------------------------------------------------------
@@ -419,9 +494,16 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
     try:
         step("deadline", lambda: {"rc": 0, "remaining_s": work_remaining()})
         step("frozen", lambda: deps.verify_frozen(kit))
+        step("model", lambda: deps.verify_model(kit))
         step("night_agents", deps.host.night_agents)
         step("ac_power", deps.host.ac_power)
         step("condition13", deps.host.condition13)
+
+        def measurement_mode():
+            result = deps.host.measurement_mode("preflight")
+            record["measurement_mode"] = {"preflight": result}
+            return result
+        step("measurement_mode", measurement_mode)
         for feed in deps.feeds:
             step("start-" + feed.name, feed.start)
 
@@ -485,6 +567,12 @@ _RESULT_KEEP = ("leg_id", "leg_status", "bundle", "member_status", "g0_outcome",
 def _close(record, state, deps, output, step, kit):
     cleanup = [("restore", lambda: deps.host.restore_power(state["power_read"])),
                *(("stop-" + f.name, f.stop) for f in reversed(deps.feeds))]
+    if "measurement_mode" in record:   # the close's verify, recorded beside the arm's (never fatal here)
+        def verify_close():
+            result = deps.host.measurement_mode("close")
+            record["measurement_mode"]["close"] = result
+            return {**result, "rc": 0, "verify_rc": result.get("rc")}
+        cleanup.append(("measurement_mode-close", verify_close))
     for name, operation in cleanup:
         try:
             result = step(name, operation, kind="close")
@@ -587,6 +675,9 @@ class FakeHost:
     def dwell_s(self):
         return 300.0
 
+    def measurement_mode(self, point):
+        return self._ok(f"measurement_mode-{point}", point=point, lines=["verify OK (mock)"])
+
 
 class FakeFeed:
     def __init__(self, name, output, clock, meter=False):
@@ -673,6 +764,14 @@ class FakeLegRuntime:
         return result
 
 
+def _mock_model(kit):
+    """The mock checks the model binding against this checkout's bound runtime config (a file read only)."""
+    problems = kit_model_problems(kit, ROOT / "configs/campaigns/align_v4/registration/inputs.json")
+    if problems:
+        raise SpanRefusal("; ".join(problems))
+    return {"rc": 0, "model": kit["model"]}
+
+
 def mock_load_verdict(name, result, wall_s):
     from scripts import align_r1_rehearsal as r1
     return r1.os_load_verdict(name, result, wall_s=wall_s)
@@ -684,6 +783,7 @@ def mock_deps(output, clock, *, contaminate=(), g0_timeout=()):
              FakeFeed("volumes", output, clock)]
     deps = Deps(clock=clock, feeds=feeds, host=FakeHost(), run_soak=fake.soak, run_leg=fake.leg,
                 verify_frozen=lambda kit: {"rc": 0, "skipped": "mock (no measurement checkout)"},
+                verify_model=lambda kit: _mock_model(kit),
                 load_verdict=mock_load_verdict, soak_cap_s=1950.0, mock=True)
     deps.fake = fake
     return deps
@@ -709,7 +809,9 @@ def run_mock(*, kit, kit_sha256, output, t0_epoch, windows, leg_ids=None, contam
 # CLI
 # --------------------------------------------------------------------------
 def _windows(args):
-    return [legsmod.parse_window(args.batch_window)] if args.batch_window else default_windows()
+    if args.batch_window:
+        return [legsmod.parse_window(args.batch_window)]
+    return r1_driver_windows() if args.command == "mock" else default_windows()
 
 
 def _roster(args):
@@ -757,6 +859,7 @@ def main(argv=None):
         p.add_argument("--legs", help="the queue span's roster, comma-separated kit leg ids (default: all)")
         p.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (default: the R1 driver's constant)")
         if name == "run":
+            p.add_argument("--measurement-mode-tool", type=Path, default=MEASUREMENT_MODE_TOOL)
             p.add_argument("--output", type=Path, required=True)
             p.add_argument("--deadline", type=float, required=True)
             p.add_argument("--pmset-bin", default="/usr/bin/pmset")
@@ -769,6 +872,9 @@ def main(argv=None):
             p.add_argument("--t0-local", help="local start, e.g. 2026-11-15T13:20 (default: now)")
             p.add_argument("--contaminate", default="", help="legs whose first attempt carries load")
             p.add_argument("--g0-timeout", default="", help="legs whose G0 times out")
+    p = sub.add_parser("check-roots", help="refuse an output or custody root inside a v4 root (arm record)")
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--custody-root", type=Path)
     p = sub.add_parser("soak-child")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--inputs", type=Path, default=ROOT / "configs/campaigns/align_v4/registration/inputs.json")
@@ -781,13 +887,28 @@ def main(argv=None):
     if args.command == "soak-child":
         soak_child(args.output.resolve(), args.inputs)
         return 0
+    if args.command == "check-roots":
+        problems = v4_root_problems(args.output, "--output")
+        if args.custody_root is not None:
+            problems += v4_root_problems(args.custody_root, "--custody-root")
+        for problem in problems:
+            print(f"REFUSE {problem}")
+        if not problems:
+            print(json.dumps({"ok": True, "output": str(args.output.expanduser().resolve()),
+                              "custody_root": str(args.custody_root.expanduser().resolve())
+                              if args.custody_root else None}))
+        return 1 if problems else 0
     if args.command == "pin-kit":
         _, text = pin_kit(args.kit, args.commit, write=args.write)
         if not args.write:
             sys.stdout.write(text)
         return 0
     kit, sha = _load(args.kit)
-    windows = _windows(args)
+    try:
+        windows = _windows(args)
+    except ValueError as error:
+        print(f"REFUSE {error}", file=sys.stderr)
+        return 1
     try:
         if args.command == "plan":
             plan = legsmod.plan_span(kit, t0_epoch=args.t0 if args.t0 is not None else time.time(), windows=windows,
@@ -813,7 +934,13 @@ def main(argv=None):
     if not math.isfinite(args.deadline):
         parser.error("deadline must be finite")
     output = args.output.resolve()
-    deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output)
+    problems = v4_root_problems(output, "--output")
+    if problems:
+        for problem in problems:
+            print(f"REFUSE {problem}", file=sys.stderr)
+        return 2
+    deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output,
+                           measurement_mode_tool=args.measurement_mode_tool)
     return run_span(kit=kit, kit_sha256=sha, output=output, deadline=args.deadline, windows=windows, deps=deps,
                     leg_ids=_roster(args))
 

@@ -156,8 +156,8 @@ def leg_summary_rows(root):
 
 
 def leg_table(legs, rules):
-    out = ["| leg | band | reached | G0 s | G0 outcome | wall s | budget s | wall/budget | attempts | contaminated redos | redo reasons | OS max | nominal |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    out = ["| leg | band | reached | G0 s | G0 outcome | wall s | budget s | wall/budget | attempts | contaminated redos | redo reasons | OS max | nominal | admitted |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for leg in legs:
         wall, budget = leg.get("wall_s"), leg.get("budget_s")
         ratio = f"{wall / budget:.2f}" if isinstance(wall, (int, float)) and isinstance(budget, (int, float)) and budget else "-"
@@ -166,7 +166,7 @@ def leg_table(legs, rules):
                    f"{_f(leg.get('g0_s'))} | {leg.get('g0_outcome', '-')} | {_f(wall)} | {_f(budget)} | {ratio}{flag} | "
                    f"{leg.get('attempts', '-')} | {leg.get('contaminated_redos', 0)} | "
                    f"{','.join(map(str, leg.get('redo_reasons') or [])) or '-'} | {leg.get('os_level_max', '-')} | "
-                   f"{leg.get('pm_nominal', '-')} |")
+                   f"{leg.get('pm_nominal', '-')} | {leg.get('admitted', '-')} |")
     return out
 
 
