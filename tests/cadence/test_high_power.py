@@ -512,6 +512,135 @@ class HighPowerSpanTests(HostStateSandbox):
         self.assertEqual(deps.host.calls[-1], "restore")
 
 
+class UnprovenChildStopTests(HostStateSandbox):
+    """``run_child``'s "process group not proven stopped" refusal (PR #789 row-1 LOW 1; RL-157 Q2 condition 1).
+
+    The leg goes through the real ``run_child`` with a fake ``Popen`` (no process starts), a stubbed
+    ``PartDeadline`` (no watchdog thread, nothing it could signal) and an injected terminator that cannot
+    prove the group stopped for L002. The tripwire stays on: no real process or signal is involved."""
+
+    class FakePopen:
+        next_pid = 4_000_000          # beyond any real pid; never signalled (the terminator is injected)
+
+        def __init__(self, argv, **kw):
+            self.argv = list(argv)
+            self.pid = UnprovenChildStopTests.FakePopen.next_pid
+            UnprovenChildStopTests.FakePopen.next_pid += 1
+            self.returncode = None
+
+        def poll(self):
+            self.returncode = 0
+            return 0
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+    class FakeDeadline:
+        fired_for = ()               # legs whose deadline watchdog "fired" and could not prove the group stopped
+
+        def __init__(self, child, **kw):
+            self.child = child
+
+        def start(self):
+            pass
+
+        def expired(self):
+            return False
+
+        def cancel(self):
+            if self.child.argv[-1] in self.fired_for:
+                return {"fired": True, "pgid": self.child.pid, "proven": False, "injected": True}
+            return None
+
+    def span(self, kit, fired_for=()):
+        from scripts import run_align_r1_smoke as smoke, run_night as night
+        terminated = []
+        self.FakeDeadline.fired_for = tuple(fired_for)
+        self.addCleanup(setattr, self.FakeDeadline, "fired_for", ())
+
+        def terminator(child, evidence=None, **kw):
+            proven = "L002" not in child.argv[-1]
+            evidence.update(pgid=child.pid, proven=proven, injected=True)
+            terminated.append((child.argv[-1], proven))
+            return proven
+        patches = [patch.object(runner.subprocess, "Popen", self.FakePopen),
+                   patch.object(smoke, "PartDeadline", self.FakeDeadline),
+                   patch.object(night, "_terminate_process_group", terminator)]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+        out = self.root / "unproven"
+        clock = runner.FakeClock(local("2026-11-15T13:20"))
+        deps = runner.mock_deps(out, clock)
+        deps.max_span_s = runner.max_span_s()
+        fake_leg = deps.run_leg
+
+        def run_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining):
+            leg_dir = Path(attempt_dir).parent
+            result = runner.run_child(name=f"{leg_dir.name}.a1", argv=["fake-leg-runtime", leg_dir.name], cap_s=cap_s,
+                                      log_dir=leg_dir, feeds=feeds, work_remaining=work_remaining)
+            self.assertTrue(result["proven_stopped"])
+            return fake_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining)
+        deps.run_leg = run_leg
+        plan = legsmod.plan_span(kit, t0_epoch=clock.time(), windows=NEW_WINDOW)
+        rc = runner.run_span(kit=kit, kit_sha256="f" * 64, output=out, deadline=runner.launch_deadline(plan),
+                             windows=NEW_WINDOW, deps=deps)
+        receipt = json.loads((out / runner.RECEIPT_NAME).read_text())
+        summary, stops = desk.build_desk(plan_id="t", input_dir=out / runner.DESK_BUNDLE, out_dir=out / "desk",
+                                         adapter="leg-summary-v1", stop_rules=kit["stop_rules"])
+        return out, rc, receipt, deps, summary, stops, terminated
+
+    def check_refusal(self, out, rc, receipt, summary, stops, terminated):
+        # (a) the refusal names the leg attempt
+        self.assertEqual(rc, 2)
+        self.assertIn("SpanRefusal: L002.a1 process group not proven stopped", receipt["error"])
+        row = next(r for r in receipt["steps"] if r["name"] == "L002.a1")
+        self.assertEqual(row["rc"], 2)
+        self.assertIn("L002.a1 process group not proven stopped", row["error"])
+        if terminated is not None:
+            self.assertEqual(terminated, [("L001", True), ("L002", False)])
+        # (b) the attempt is neither summarized nor counted finished; nothing after it runs
+        self.assertFalse((out / "legs/L002/leg_summary.json").exists())
+        self.assertFalse((out / runner.DESK_BUNDLE / "legs/L002").exists())
+        self.assertEqual([leg["leg_id"] for leg in summary["legs"]], ["L001"])
+        legs = {leg["leg_id"]: leg for leg in receipt["legs"]}
+        self.assertNotIn("summary", legs["L002"])
+        self.assertNotIn("L003", legs)
+        self.assertEqual((receipt["legs_finished"], receipt["span_result"]["verdict"]), (1, "1/12 legs run"))
+        self.assertEqual(receipt["span_result"]["chain_outcome"], "INCOMPLETE")
+        self.assertIn("REFUSAL", [s["code"] for s in stops])
+
+    def test_an_unproven_leg_group_refuses_the_span_on_an_automatic_kit(self):
+        out, rc, receipt, deps, summary, stops, terminated = self.span(campaign_kit())
+        self.check_refusal(out, rc, receipt, summary, stops, terminated)
+        self.assertEqual(deps.host.calls[-1], "restore")
+
+    def test_an_unproven_leg_group_still_restores_and_proves_automatic_in_high_power(self):
+        out, rc, receipt, deps, summary, stops, terminated = self.span(hp_kit())
+        self.check_refusal(out, rc, receipt, summary, stops, terminated)
+        # (c) the close still restores Automatic and proves powermode 0 and no marker
+        self.assertEqual(receipt["high_power"]["restore"], {"action": "restore_automatic", "ok": True, "deferred": False})
+        proof = receipt["high_power"]["close_proof"]
+        self.assertEqual((proof["ac_powermode"], proof["host_marker_present"], proof["proven"]), (0, False, True))
+        self.assertIs(receipt["span_result"]["restore_proven"], True)
+        self.assertNotIn("RESTORE_UNPROVEN", [s["code"] for s in stops])
+        self.assertEqual((deps.host.mode, deps.host.host_marker_path().exists()), (0, False))
+        self.assertEqual([c["argv"] for c in deps.host.power_calls][-3:], [AUTO, QUERY, QUERY])
+
+
+    def test_a_fired_deadline_that_cannot_prove_the_group_stopped_refuses_and_still_proves_automatic(self):
+        # The deadline watchdog's own teardown (``PartDeadline.cancel`` returns its record) is the proof
+        # run_child uses when it fired; an unproven one refuses exactly as the terminator's does.
+        out, rc, receipt, deps, summary, stops, terminated = self.span(hp_kit(), fired_for=("L002",))
+        self.assertEqual(terminated, [("L001", True)])           # the injected terminator never ran for L002
+        self.check_refusal(out, rc, receipt, summary, stops, None)
+        self.assertIn("'fired': True", receipt["error"])
+        self.assertIs(receipt["span_result"]["restore_proven"], True)
+        self.assertEqual((deps.host.mode, deps.host.host_marker_path().exists()), (0, False))
+
+
 class ProductionSeamTests(HostStateSandbox):
     def test_production_power_seams_are_the_fixed_paths_and_the_narrow_rule(self):
         from scripts import run_align_r1_smoke as smoke
