@@ -517,7 +517,10 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
             x_g = invoke(runtime, "x-g", output / PART_C_X_G, soak_reference=soak_reference)
             result["members"]["x_g"] = x_g
             x_g_facts = facts(output / PART_C_X_G / x_g["bundle"], role="x-g")
-            x_g_facts["x7"] = any(f.startswith("episode.deadman:") for f in x_g.get("episode_flags", []))
+            # PR #777 row-2 finding 7: the runtime's flags decide only when they are recorded (a list), as on
+            # D_bank's path; otherwise the bundle-derived X7 stands.
+            if isinstance(x_g.get("episode_flags"), list):
+                x_g_facts["x7"] = any(str(f).startswith("episode.deadman:") for f in x_g["episode_flags"])
         except (r1.Refusal, ValueError, KeyError, OSError) as exc:
             why = f"{type(exc).__name__}: {exc}"
             print(f"Part C: X_G left out, the launcher could not run it without more condition-13 code: {why}",

@@ -225,14 +225,18 @@ def analyse_gate(phase, gate, start, readings, delta_slow, delta_source, precool
     # RL-153 section 1.2 finding 2: the stamp rule of every journal reader, bounded on both sides
     # (rl145_prints.stamp_fresh: within 2 s of the sample, RL-152 section 1.6), on the same age.
     stamp_fresh = _stamp_rule()
-    row['stale_power_state_samples'] = sum(1 for t, _, _, _, pm in points
-                                           if type(pm) is not int or not stamp_fresh((t - pm) / NS))
+    fresh = [type(pm) is int and stamp_fresh((t - pm) / NS) for t, _, _, _, pm in points]
+    row['stale_power_state_samples'] = sum(1 for ok in fresh if not ok)
     levels = sorted({p[2] for p in points if p[2] is not None})
-    states = sorted({p[3] for p in points if isinstance(p[3], str)})
+    # PR #777 row-2 finding 2 (RL-149 section 1.6 item 1): a state on a stamp that is not fresh is not
+    # recorded, never Nominal: it is left out of pm_states and counts as an unobserved sample, so the
+    # interval is not "Nominal throughout" and the class is to-research-lead.
+    states = sorted({p[3] for p, ok in zip(points, fresh) if ok and isinstance(p[3], str)})
     row['os_level_max'] = max(levels) if levels else None
     row['os_levels'] = levels
     row['pm_states'] = states
-    row['status_unobserved_samples'] = sum(1 for p in points if p[2] is None or p[3] is None)
+    row['status_unobserved_samples'] = sum(1 for p, ok in zip(points, fresh)
+                                           if p[2] is None or p[3] is None or not ok)
     row['nominal_throughout'] = bool(points) and states == ['Nominal'] and row['status_unobserved_samples'] == 0
     if planning:
         row['precool'] = precool or precool_record(None, base)

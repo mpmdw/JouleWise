@@ -115,6 +115,7 @@ class Desk3aTests(unittest.TestCase):
             with self.subTest(age=age), contextlib.redirect_stderr(io.StringIO()):
                 _, row = self.run_desk(late=31.4, pm_age_s=age)
                 self.assertEqual(row['stale_power_state_samples'], row['samples'] if stale else 0)
+                self.assertEqual(row['classification'], 'to-research-lead' if stale else 'planning-release-3a')
 
     def test_crossing_the_edge_is_3a(self):
         _, row = self.run_desk(late=32.0)
@@ -290,7 +291,8 @@ class Desk3aTests(unittest.TestCase):
         self.assertEqual(len(row['journal_sha256']), 64)
         _, stale = self.run_desk(late=31.4, pm_observed=False)
         self.assertEqual(stale['stale_power_state_samples'], stale['samples'])
-        self.assertEqual(stale['classification'], 'planning-release-3a')
+        # PR #777 row-2 finding 2: a state with no stamp is not recorded, so not "Nominal throughout".
+        self.assertEqual(stale['classification'], 'to-research-lead')
 
     def test_output_is_deterministic_and_has_no_wall_clock(self):
         with tempfile.TemporaryDirectory() as tmp:
