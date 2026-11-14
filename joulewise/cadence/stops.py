@@ -10,12 +10,13 @@ is recorded by its predeclared disposition and does not page anyone.
 | INSTRUMENT_FAULT | ``fault`` true, the KM003C capture missing, a feed not proven stopped, meter bad polls or USB errors above zero |
 | CONTAMINATED_REDOS | contaminated redos (scope span or campaign) reach ``contaminated_redos_max`` |
 | LEG_OVERTIME | two legs of the span exceed ``leg_time_factor`` x their budget (a leg with no wall or budget recorded counts) |
+| RESTORE_UNPROVEN | the span's result says its close did not prove AC powermode 0 and no host High Power marker (``restore_proven`` false; a High Power span, RL-149 sections 2.4 and 2.5). An Automatic span's result carries no such key and never fires it |
 
 RL-149 section 2.4 (it governs this table): LEG_OVERTIME needs two legs in a span, and
 BAND_UNREACHABLE is dropped ("bands are by history; nothing is reached for"). The kit's
 ``band_unreachable_*`` keys stay in schema v1 and no stop reads them.
 
-Span summary shape (all operational): ``{"result": {chain_exit_code, chain_outcome, fault, outcome},
+Span summary shape (all operational): ``{"result": {chain_exit_code, chain_outcome, fault, outcome[, restore_proven]},
 "meter": {present, proven_stopped, bad_polls, usb_errors}, "feeds_proven_stopped": bool,
 "legs": [{leg_id, wall_s, budget_s, start_band, band_reached, contaminated_redos}]}``.
 """
@@ -23,7 +24,7 @@ from __future__ import annotations
 
 from joulewise.cadence.queue import result_ok
 
-CODES = ("REFUSAL", "INSTRUMENT_FAULT", "CONTAMINATED_REDOS", "LEG_OVERTIME")
+CODES = ("REFUSAL", "INSTRUMENT_FAULT", "CONTAMINATED_REDOS", "LEG_OVERTIME", "RESTORE_UNPROVEN")
 LEG_OVERTIME_LEGS = 2   # RL-149 section 2.4: "two legs over 1.5 x their budget in a span"
 
 
@@ -41,6 +42,10 @@ def evaluate_named_stops(rules, span, history=()):
         stops.append({"code": "REFUSAL", "detail": (
             f"chain_exit_code={result.get('chain_exit_code')} chain_outcome={result.get('chain_outcome')} "
             f"outcome={result.get('outcome')}")})
+    if result is not None and result.get("restore_proven") is False:
+        stops.append({"code": "RESTORE_UNPROVEN",
+                      "detail": "the close did not prove AC powermode 0 and no High Power marker; nothing arms "
+                                "until the lead restores and records it"})
     meter = span.get("meter") or {}
     faults = []
     if result is not None and result.get("fault") is True:

@@ -454,3 +454,91 @@ its fresh soak, the block's cold start. Kits live under `docs/process/cadence/ki
   `--output` outside every v4 registration and custody root. The arm record states measurement_mode (as
   applied 11-13 23:47) and network time off, checked remotely (RL-150 §2 F5). The first queue holds the
   pilot span only (F3).
+
+### 13.2 High Power: block hp-01 (RL-149 §2.3 and §2.5; RL-150 R5; RL-155 §5.2)
+
+Built on `align/2026-11-14-hp01`, off PR #775's head `8bd31ae5a`. Type H is type A in High Power. hp-01 is
+description only, never in the fit.
+
+**The kit field.** `power_mode` is the kit's one optional top-level key (`joulewise/cadence/kit.py`): 0
+Automatic, 2 High Power, absent means 0. The schema string stays `joulewise.cadence_campaign_kit.v1`, so
+`cl-dev-01` and `cl-dev-02` validate byte for byte as before. A High Power kit must also freeze
+`joulewise/align/apple/powermode.py` and `scripts/align_r1_rehearsal.py` (the marker and the guard) and
+carry inclusion rule `block_power_mode` (RL-149 §2.4 rule 6 in its own words). An older validator refuses
+the key as unknown, so a High Power kit can never be run by a runner without the guard.
+
+**The guard.** `cadence_legs_runner.power_guard_class()` is the R1 driver's `PowerModeGuard`, reused: its
+`__enter__` (the narrow sudo rule listed by `sudo -n -l`, then an Automatic restore read back before any
+work) and its `restore` (retake the host night lock on a fresh descriptor, never undo a W1 session's
+marker, `pmset -c powermode 0`, read back, remove the marker only on 0) are inherited unchanged. `high`
+is overridden only to name this span as the marker's owner and to refuse a mode that does not read back 2.
+
+| When | What the runner does (power_mode 2 only) |
+|---|---|
+| Preflight, before any feed | Take the host night lock (`/Users/Shared/JouleWise/host-power/night.lock`) and hold it to the close; another holder refuses the span. A host marker already present refuses the span untouched (a restore owed by someone else) |
+| After `read_power` reads 0 | `powermode_guard`: the sudo rule check and the Automatic restore proof |
+| After the soak (which stays Automatic, like an Automatic block's) | `high_power`: the marker first (R1 crash tag, owner `cadence span`, campaign id, kit sha, output), then `pmset -c powermode 2`, then a read-back of 2 |
+| Before every leg attempt | `L00n.aK-powermode`: powermode reads 2 and the marker is present, or the span stops |
+| Close, every exit path | `restore` (the guard), `power_proof` (powermode and the marker path read again), `host_lock_release`, then the feeds stop |
+
+**Exit paths.** Every one is a test in `tests/cadence/test_high_power.py`.
+
+| Exit | Covered by |
+|---|---|
+| Completion; a leg runtime failure; a refusal anywhere; the work deadline; SIGTERM, SIGINT or SIGHUP (the handler raises `SystemExit`; signals are ignored during the close) | `run_span`'s `finally` runs the close |
+| `pmset -c powermode 2` fails, or does not read back 2 | The marker was written first, so the close restores and removes it |
+| The mode or the marker changes between legs | The per-leg check stops the span before the next leg |
+| The stage journal fails at the close (disk) | The power steps run directly when their step could not start |
+| The restore fails, or does not read back 0 | The marker is kept; the proof fails; rc 2; `restore_proven` false; RESTORE_UNPROVEN |
+| SIGKILL, power loss or a panic | No close. The marker, written before the mode changed and tagged as an owed restore (not a W1 night's), is what every session start, night admission and the arm checklist's `no_high_power_marker` and `powermode_zero` lines act on |
+
+**The proof.** The receipt records `high_power.close_proof` (`ac_powermode`, `pmset_error`, `host_marker`,
+`host_marker_present`, `proven`), the guard's records and the restore. `span/result.json` gains
+`restore_proven` on a High Power span only. The desk projects it (`RESULT_KEYS`); an older desk drops it,
+and the rc 2 still fires REFUSAL. `stops.evaluate_named_stops` fires RESTORE_UNPROVEN when it is false.
+Admission (rule 6) is now the block's mode: `legs.leg_admitted(..., block_mode=2)` admits a leg only if
+it recorded AC powermode 2 at its episode start.
+
+**Mock.** `cadence_legs_runner.py mock --kit cl-hp-01.json ... [--fail-close-restore]` runs the whole span
+on the mock host's fake power world (`FakeHost.pmset`). With `--fail-close-restore` the close's restore
+fails, the proof fails, and the desk fires RESTORE_UNPROVEN (RL-155 §5.2's extra gate line).
+
+**Kit `cl-hp-01`.** `docs/process/cadence/kits/cl-hp-01.json`: dev-01's kit with `power_mode` 2, its own
+campaign id and master seed (2026111403), and the same 37 frozen paths re-pinned at this branch's code
+commit. Leg ids stay `L001`-`L012`; the calendar's H001-H003 are L001-L003 and H004-H012 are L004-L012.
+Model, leg defaults, cell (19,458-token prompt, decode cap 4,096, band q0), span template, checklist,
+looks and desk equal dev-01's. Inclusion rules: dev-01's, with `pilot_counted` replaced by
+`hp_smoke_counted` (RL-150 R5) and `never_in_the_fit` added, and rule 6 saying High Power.
+
+#### 13.2.1 Plan: the hp-01 smoke, H001-H003 (RL-155 slot 4 or 5)
+
+- **Bytes.** The kit's `frozen.commit`, checked out detached in a fresh scratch worktree. The kit file is
+  copied from the PR head to a path outside the checkout and pinned by sha256 in the queue.
+- **Queue.** `cq-hp-01-s01-a1`, legs L001,L002,L003, pinning the kit sha. L004-L012 are not queued until the
+  hand-read (RL-150 R5).
+- **Timing.** `plan` for L001-L003: expected 6,903 s (1.9 h), worst case 16,650 s (4.6 h). These bytes
+  still carry the R1 soak window 11:45-13:15 (no #777), so RL-155a §3's two bounds hold: **no launch
+  between 10:50 and 13:15**, and the fence end (worst case + 1,460 s = 18,110 s) **by 01:50**, so the latest
+  launch is 20:48. Sunday: after dev-01's second span closes plus 20 min, in 07:00-10:50 or 13:15-20:48.
+- **Arm lines beyond item 317's.** `sudo -n -l` lists `/usr/bin/pmset -c powermode 0` and
+  `/usr/bin/pmset -c powermode 2`; `pmset -g custom` reads AC powermode 0; no file at
+  `/Users/Shared/JouleWise/host-power/high-power.marker`; the host night lock is free (nothing measuring).
+  `--legs L001,L002,L003 --batch-window 02:00-02:35`.
+- **Check after the close.** Receipt `high_power.close_proof.proven` true and `span/result.json`
+  `restore_proven` true; independently, `pmset -g custom` AC powermode 0 and no marker. Every leg's
+  `ac_powermode` 2 (in its leg record). RL-150 R9's four conditions, with rule 6 now meaning High Power.
+- **If the proof fails (RESTORE_UNPROVEN).** Nothing arms. The magistrate restores with the narrow rule
+  (`sudo -n /usr/bin/pmset -c powermode 0`), reads 0 back, removes the marker only then, and mails the lead.
+  The lead clears the stop with a RUN_STATE line.
+- **Gate (RL-155 §5.2).** Row-1 review; a Mythos cold seat on `cl-hp-01` against RL-149 §2.3, §2.4, §2.5
+  and RL-150 R5; CI on the frozen commit; the mock span with a failing restore (above), recorded.
+
+#### 13.2.2 Plan: H004-H012 (RL-155 slot 7)
+
+- **Gate.** The smoke passed and the lead's hand-read is recorded (RL-150 R5); line 8 then holds for hp-01.
+- **One span**, `cq-hp-01-s02-a1`, L004-L012, appended to the queue: expected 14,409 s (4.0 h), worst case
+  32,850 s (9.1 h). Fence end (34,310 s) by 01:50 puts the latest launch at **16:18**; no launch 10:50-13:15.
+  Monday after dev-02 closes, so 13:15-16:18 (or 07:00-10:50 if dev-02 ends early).
+- **Or two short spans** (RL-155a §2's practice): L004-L009 (worst 24,750 s, latest launch 18:33) and
+  L010-L012 (worst 16,650 s, latest 20:48). Each takes its own soak, about 55 min more in all, and fits a
+  shorter gap. The lead chooses at the append; the queue is append-only either way.

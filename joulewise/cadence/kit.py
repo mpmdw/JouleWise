@@ -19,7 +19,16 @@ fit code may read energy, and the machine-checked per-span checklist.
 * a span template that overlaps the OS batch window or cannot hold its legs at
   their worst-case bound;
 * a checklist missing a mandatory check;
-* a look whose fit code is not a frozen path.
+* a look whose fit code is not a frozen path;
+* a ``power_mode`` other than 0 (Automatic) or 2 (High Power), or a High Power
+  kit that does not freeze the power-mode path or register rule 6's words.
+
+``power_mode`` is the one optional top-level key (RL-149 section 2.5, block
+hp-01). Absent, the block is Automatic (0), so every kit written before it
+validates unchanged, byte for byte. A kit with 2 runs its legs in High Power:
+the runner sets AC powermode 2 after the span's soak, holds it through the
+legs, and its close restores 0 and proves powermode 0 and no host High Power
+marker before anything else arms (``scripts/cadence_legs_runner.py``).
 
 ``verify_frozen`` re-hashes the frozen paths at the frozen commit in a git
 repository. ``evaluate_checklist`` judges the magistrate's observations; a
@@ -75,6 +84,15 @@ TOP_KEYS = {
     "schema", "campaign_id", "title", "ruling", "frozen", "runner", "model", "leg_defaults",
     "seed_law", "legs", "inclusion_rules", "stop_rules", "span_template", "checklist", "looks", "desk",
 }
+# Optional top-level keys. Absent means the default; v1 kits written before a key existed validate unchanged.
+OPTIONAL_TOP_KEYS = {"power_mode"}
+# RL-149 section 2.5 (block hp-01): the block's AC powermode. 0 Automatic (the default), 2 High Power.
+AUTOMATIC, HIGH_POWER = 0, 2
+POWER_MODES = (AUTOMATIC, HIGH_POWER)
+# The High Power path's executed code: a High Power kit must freeze it (the guard and the host marker).
+POWER_MODE_PATHS = ("joulewise/align/apple/powermode.py", "scripts/align_r1_rehearsal.py")
+# RL-149 section 2.4 rule 6 ("the power mode is the block's"): a High Power kit registers it in its own words.
+POWER_MODE_RULE_ID = "block_power_mode"
 LEG_KEYS = {"leg_id", "seed", "start_band", "prefill_tokens", "decode_tokens"}
 LEG_DEFAULT_KEYS = {"prefill_tokens", "decode_tokens"}
 SEED_LAW_KEYS = {"method", "master_seed", "n_legs", "bands"}
@@ -236,7 +254,7 @@ def _check_stops(s, problems):
 def validate_kit(kit, *, batch_window=OS_BATCH_WINDOW):
     """Return the kit unchanged, or raise KitError naming every problem."""
     problems = []
-    if not _closed(kit, TOP_KEYS, "kit", problems):
+    if not _closed(kit, TOP_KEYS | OPTIONAL_TOP_KEYS, "kit", problems, required=TOP_KEYS):
         raise KitError(problems)
     problems.extend(deny_scan(kit))
     if kit.get("schema") != SCHEMA:
@@ -384,9 +402,27 @@ def validate_kit(kit, *, batch_window=OS_BATCH_WINDOW):
     if _closed(desk, {"adapter"}, "desk", problems) and desk.get("adapter") not in DESK_ADAPTERS:
         problems.append(f"desk.adapter: one of {sorted(DESK_ADAPTERS)}")
 
+    if "power_mode" in kit:
+        mode = kit["power_mode"]
+        if type(mode) is not int or mode not in POWER_MODES:
+            problems.append("power_mode: 0 (Automatic) or 2 (High Power); absent means 0")
+        elif mode == HIGH_POWER:
+            for path in POWER_MODE_PATHS:
+                if path not in paths:
+                    problems.append(f"power_mode: a High Power kit must freeze the power-mode path {path}")
+            rule_ids = [r.get("id") for r in rules if isinstance(r, dict)] if isinstance(rules, list) else []
+            if POWER_MODE_RULE_ID not in rule_ids:
+                problems.append(f"power_mode: a High Power kit registers RL-149 section 2.4 rule 6 as inclusion rule "
+                                f"{POWER_MODE_RULE_ID!r}")
+
     if problems:
         raise KitError(problems)
     return kit
+
+
+def power_mode(kit):
+    """The block's AC powermode: the kit's ``power_mode``, or 0 (Automatic) when the kit has none."""
+    return kit.get("power_mode", AUTOMATIC)
 
 
 def load_kit(path, *, batch_window=OS_BATCH_WINDOW):

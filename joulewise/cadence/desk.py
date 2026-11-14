@@ -48,7 +48,8 @@ LEG_SUMMARY_KEYS = {"leg_id", "seed", "start_band", "band_reached", "g0_s", "g0_
                     "attempts", "contaminated_redos", "redo_reasons", "os_level_max", "pm_nominal",
                     "started_epoch_s", "ended_epoch_s", "admitted"}
 METER_KEYS = {"present", "proven_stopped", "bad_polls", "usb_errors", "elapsed_s", "polls"}
-RESULT_KEYS = {"chain_exit_code", "chain_outcome", "fault", "outcome", "verdict"}
+# ``restore_proven``: a High Power span's close proof (RL-149 section 2.5); absent on an Automatic span.
+RESULT_KEYS = {"chain_exit_code", "chain_outcome", "fault", "outcome", "verdict", "restore_proven"}
 
 
 class DeskRefusal(RuntimeError):

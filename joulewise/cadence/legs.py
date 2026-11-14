@@ -335,22 +335,26 @@ def guard_projection(doc, where, *, values=True):
     return doc
 
 
-def leg_admitted(result, *, contaminated):
+def leg_admitted(result, *, contaminated, block_mode=kitmod.AUTOMATIC):
     """RL-149 section 2.4 rules 1, 2, 5 and 6 as the runner sees them. Rules 3 and 4 (sidecar
-    and powermetrics coverage, a clean KM003C stream) are judged on custody at the look."""
+    and powermetrics coverage, a clean KM003C stream) are judged on custody at the look. Rule 6:
+    the AC powermode the leg recorded at its episode start is the block's (``block_mode``, the
+    kit's ``power_mode``: 0 Automatic, 2 High Power); an unobserved mode is never the block's."""
     mode = (result or {}).get("ac_powermode")
     mode = mode.get("value") if isinstance(mode, dict) else mode
     return bool(result is not None and not contaminated and result.get("leg_status") == "complete"
                 and result.get("g0_released") is True and result.get("decode_cap_reached") is True
-                and mode == 0)
+                and type(mode) is int and mode == block_mode)
 
 
-def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_epoch_s):
+def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_epoch_s,
+                block_mode=kitmod.AUTOMATIC):
     """The ``leg-summary-v1`` projection of one leg (the desk's allowlist, nothing else).
 
     ``attempts`` are this leg's attempt records in order ({wall_s, contaminated, redo_reason}); an
     attempt is contaminated when the load-redo rule fired on it, whether or not quota remained to
-    redo it. ``accepted`` is the last attempt's runtime result (None when none returned one)."""
+    redo it. ``accepted`` is the last attempt's runtime result (None when none returned one).
+    ``block_mode`` is the kit's power mode (rule 6)."""
     rejected = [a for a in attempts if a.get("contaminated")]
     last = attempts[-1] if attempts else {}
     contaminated = bool(last.get("contaminated"))
@@ -363,7 +367,7 @@ def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_ep
         "contaminated_redos": len(rejected), "redo_reasons": [a["redo_reason"] for a in rejected],
         "os_level_max": result.get("os_level_max"), "pm_nominal": result.get("pm_nominal"),
         "started_epoch_s": started_epoch_s, "ended_epoch_s": ended_epoch_s,
-        "admitted": leg_admitted(accepted, contaminated=contaminated),
+        "admitted": leg_admitted(accepted, contaminated=contaminated, block_mode=block_mode),
     }
     assert set(summary) <= LEG_SUMMARY_KEYS
     return guard_projection(summary, f"legs/{spec['leg_id']}/leg_summary.json")
@@ -407,13 +411,19 @@ def meter_health(stream_paths, *, started, stop_record):
     return guard_projection(out, "span/meter.json")
 
 
-def span_result(*, rc, planned, finished, fault):
+def span_result(*, rc, planned, finished, fault, restore_proven=None):
     """``span/result.json`` (desk RESULT_KEYS). A complete roster with rc 0 is MEASURED_OK; a
-    roster with an excluded leg is still COMPLETE (the desk and the reserve handle exclusion)."""
+    roster with an excluded leg is still COMPLETE (the desk and the reserve handle exclusion).
+
+    ``restore_proven`` is a High Power span's close proof (RL-149 section 2.5: AC powermode 0 read
+    back and no host High Power marker). It is written only for such a span (``None`` omits it, so
+    an Automatic span's result is unchanged); ``False`` is the RESTORE_UNPROVEN named stop."""
     complete = rc == 0 and finished == planned
     doc = {"chain_exit_code": rc, "chain_outcome": "COMPLETE" if complete else "INCOMPLETE",
            "fault": bool(fault), "outcome": "MEASURED_OK" if complete and not fault else "REFUSED",
            "verdict": f"{finished}/{planned} legs run"}
+    if restore_proven is not None:
+        doc["restore_proven"] = bool(restore_proven)
     assert set(doc) <= RESULT_KEYS
     return doc
 
