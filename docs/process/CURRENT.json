@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "(was waiting on: item 315's Part C smoke) the lead's desk table from the Part C journals (item 315 \"After\": step-D addendum §8 prints, close §7 row 6 prints for D_bank and X_G with the 2 s stamp rule, close §2 replacement evidence, the TV1h ≠ TV0h trigger), then a research-lead ruling naming the next step. The magistrate arms nothing and runs nothing until a RUN_STATE item authorizes it",
-  "owner": "research lead",
+  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as RUN_STATE 318: the receipt asserts, the per-leg admitted lines, the desk bundle, the restore lines, measurement_mode verify again, the RL-150 R9 items and the RL-150 R1 start-reference print",
+  "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "316",
-  "source_item_heading_date": "2026-11-13",
+  "source_item": "317",
+  "source_item_heading_date": "2026-11-14",
   "wait": {
-    "deadline_epoch_s": null,
+    "deadline_epoch_s": 1794739620,
     "observable": "none",
-    "on_early_or_refused": null
+    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen inside 13:20-20:45 PST: NOTHING launches. A span that ran but ends with any named stop, a receipt rc≠0, or a pilot that does not pass under RL-150 R9: nothing relaunches, nothing is re-run, L004-L012 are not queued; mail the lead. Do not retry, do not extend, do not reuse OUT"
   }
 }
