@@ -324,8 +324,9 @@ def prepare(output, *, root=ROOT, config_path=None, ruling=None, smoke_table=Non
     if (root / gate).read_bytes() != expected:
         raise ValueError("W1 thermal gate bytes changed")
     bounds = r1.night_worst_case_s(["--config", str(path)])
-    if bounds["window_max_s"] != 126480 or bounds["overhead_s"] != 9000:
-        raise ValueError("follow-up sizing differs from RL-72 E2")
+    # RL-72 E2's construction at the RL-149 section 2.9 item 4 blackout (02:00-02:35): 119,880 s (was 126,480).
+    if bounds["window_max_s"] != 119880 or bounds["overhead_s"] != 9000:
+        raise ValueError("follow-up sizing differs from RL-72 E2 at the RL-149 blackout")
     packet = {"schema": "joulewise.align.r1_followup_prepare.v1", "status": "FOR_LEAD_ARM",
               "executed_commit": commit, "sensors": config["sensors"], "sensor_ruling": ruling,
               **checks, "chain_script": "scripts/night_chains/align_r1_rehearsal.zsh",
@@ -507,6 +508,9 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         # The runtime's own X7 flag and T_dead are the authority where it reports them.
         bank_facts["x7"] = bank.get("x7", bank_facts["x7"])
         bank_facts["t_dead_s"] = (bank.get("deadman") or {}).get("T_dead_s", bank_facts["t_dead_s"])
+        # RL-149 section 1.5: the stop reason is read from the runtime's episode flags where it reports them.
+        if isinstance(bank.get("episode_flags"), list):
+            bank_facts["episode_flags"] = list(bank["episode_flags"])
         printed = prints(bank_dir / bank["bundle"])
         x_g_facts, why = None, None
         try:

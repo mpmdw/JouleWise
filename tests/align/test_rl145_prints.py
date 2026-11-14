@@ -169,6 +169,31 @@ class CloseSection2Tests(unittest.TestCase):
         none = p.gate_state_prints([], rows[:20], [t], 'TV0h')['quiet_after_last_token'][0]
         self.assertEqual((none['s_from_last_token'], none['fast_key_c']), (None, None))
 
+    def test_a_stamp_that_follows_the_sample_is_fresh_and_one_over_2_s_is_not(self):
+        # RL-149 section 1.6 item 1 and the RL-145 close's row 7 rule as written: at most 2 s old. The sidecar
+        # reads the status about 15 ms after the SMC read bracket starts, so a fresh age is slightly negative.
+        rows = [sample(50, pm_age_s=-0.015), sample(60, pm_age_s=2.0), sample(70, pm_age_s=2.01)]
+        intervals = [{'kind': 'G1', 'turn': t, 'outcome': 'released', 'exit_sample_ns': s * NS}
+                     for t, s in ((1, 50), (2, 60), (3, 70))]
+        out = p.gate_state_prints(intervals, rows, [], 'TV0h')['g1_release_samples']
+        self.assertEqual([r['stamp_fresh'] for r in out], [True, True, False])
+        self.assertTrue(p.stamp_fresh(-0.015) and not p.stamp_fresh(None))
+        t = turn(start=0, first=10, end=100)
+        quiet = [sample(100 + i, pm_age_s=-0.015) for i in range(5)]
+        self.assertEqual(p.gate_state_prints([], quiet, [t], 'TV0h')['quiet_after_last_token'][0]['s_from_last_token'],
+                         0.0)
+
+    def test_tv1h_unequal_rows_are_counted_inside_and_outside_gate_windows(self):
+        # RL-149 section 1.7: the per-member count, inside and outside gate windows; outside rows never fire.
+        intervals = [{'kind': 'G1', 'turn': 1, 'start_ns': 10 * NS, 'end_ns': 20 * NS}]
+        rows = [sample(5, slow=41.0), sample(6, slow=42.0), sample(15), sample(25), sample(26, slow=None)]
+        out = p.tv1h_trigger(intervals, rows, 'TV0h', 'TV1h')
+        self.assertFalse(out['fires'])
+        self.assertEqual(out['unequal_rows'], {'inside_gate_windows': 0, 'outside_gate_windows': 2, 'rows_compared': 4})
+        out = p.tv1h_trigger(intervals, rows + [sample(12, slow=40.5)], 'TV0h', 'TV1h')
+        self.assertTrue(out['fires'])
+        self.assertEqual(out['unequal_rows']['inside_gate_windows'], 1)
+
     def test_tv1h_trigger_lists_rows_inside_gate_windows_only(self):
         intervals = [{'kind': 'G1', 'turn': 1, 'start_ns': 10 * NS, 'end_ns': 20 * NS},
                      {'kind': 'H', 'turn': 1, 'start_ns': 30 * NS, 'end_ns': 40 * NS}]
@@ -228,6 +253,60 @@ class BundlePrintsTests(unittest.TestCase):
                                                'flags': ['x'], 'per_turn': [{'turn': 0, 'os_nominal': False, 'pm_nominal': True}]})
         self.assertEqual(out['gate_states']['g1_release_samples'][0]['os_level'], 0)
         self.assertTrue(out['tv1h_trigger']['fires'])
+
+
+def reading(t_s, level=0, state='Nominal', pm_age_s=-0.015, fast=40.0, slow=40.0):
+    """One row in the runtime Sidecar's journal shape (``joulewise.align_thermal.v1`` ``reading``: stamps nested in
+    ``started``/``finished``, the status in ``values.status``). Structure only, synthetic values."""
+    t = int(t_s * NS)
+    stamp = lambda ns: {'monotonic_ns': ns, 'monotonic_raw_ns': ns + 7, 'wall_ns': ns + 1_700_000_000 * NS}
+    return {'schema': 'joulewise.align_thermal.v1', 'module': 'temperature', 'kind': 'reading', 'session': 's',
+            'seq': t_s, 'started': stamp(t), 'finished': stamp(t + 2_000_000), 'raw': [], 'error': None,
+            'values': {'source': 'smc', 'sensors': {'TV0h': fast, 'TV1h': slow}, 'errors': {}, 'readings': {},
+                       'units': {'TV0h': 'degC', 'TV1h': 'degC'},
+                       'status': {'monotonic_ns': t + 15_000_000, 'os_level': level, 'pm_state': state,
+                                  'pm_observed_ns': t - int(pm_age_s * NS)}}}
+
+
+class SidecarBundlePrintsTests(unittest.TestCase):
+    """RL-149 section 1.2: the prints read the Sidecar's ``reading`` rows through ``thermal_gates.sample_rows``,
+    and take token events from ``outputs/align_runtime_events.jsonl`` when ``events.jsonl`` has none (step 0)."""
+
+    def test_reading_rows_and_the_runtime_events_fallback(self):
+        import tempfile
+        from unittest.mock import patch
+        t = SimpleNamespace(index=0, start_ns=0, first_token_ns=10 * NS, end_ns=130 * NS, decode_tokens=1200,
+                            prefill_tokens=11211)
+        intervals = [{'kind': 'G1', 'turn': 0, 'outcome': 'released', 'start_ns': 140 * NS, 'end_ns': 150 * NS,
+                      'exit_sample_ns': 150 * NS}]
+        ep = SimpleNamespace(episode_id='ep', turns=[t], hardware={'thermal': {
+            'intervals': intervals, 'policy': {'sensors': {'s_fast': 'TV0h', 's_slow': 'TV1h'}}}})
+        journal = [{'kind': 'session_start', 'module': 'temperature', 'values': {}}, reading(145, slow=40.5),
+                   reading(150), reading(160, slow=41.0), {'kind': 'session_end', 'module': 'temperature', 'values': {}}]
+        events = [{'timestamp_s': 500.0, 'event_type': 'phase_end', 'phase': 'prefill', 'message': '',
+                   'metadata': {'align_turn_index': 0}}]
+        events += [{'timestamp_s': 500.0 + 0.1 * (i + 1), 'event_type': 'token', 'phase': 'decode', 'message': '',
+                    'metadata': {'align_turn_index': 0}} for i in range(1200)]
+        record = {'turn_observation': [{'os_nominal': True, 'pm_nominal': True}], 'calibration_exclusions': [],
+                  'flags': []}
+        for where in ('events.jsonl', 'outputs/align_runtime_events.jsonl'):
+            with self.subTest(where=where), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / 'outputs').mkdir()
+                (Path(tmp) / 'events.jsonl').write_text('' if where != 'events.jsonl' else
+                                                        ''.join(json.dumps(e) + '\n' for e in events))
+                (Path(tmp) / where).write_text(''.join(json.dumps(e) + '\n' for e in events))
+                (Path(tmp) / 'outputs/align_thermal.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in journal))
+                with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep), \
+                        patch('joulewise.align.apple.thermal_desk.native_pm_samples', return_value=pm(160)), \
+                        patch('joulewise.align.apple.thermal_desk.read_bundle_record', return_value=record):
+                    out = p.bundle_prints(tmp)
+                self.assertEqual(out['token_events_source'], where)
+                self.assertEqual(out['turns'][0]['token_basis'], 'stamps')
+                g1 = out['gate_states']['g1_release_samples'][0]
+                self.assertEqual((g1['os_level'], g1['pm_state'], g1['stamp_fresh']), (0, 'Nominal', True))
+                self.assertTrue(out['tv1h_trigger']['fires'])               # the 145 s row is inside the G1 window
+                self.assertEqual(out['tv1h_trigger']['unequal_rows'],
+                                 {'inside_gate_windows': 1, 'outside_gate_windows': 1, 'rows_compared': 3})
 
 
 class ResidualByLoadBinTests(unittest.TestCase):

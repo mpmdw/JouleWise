@@ -14,10 +14,22 @@ D_bank line):
   no X7 (the deadman); no G1 timeout. The H (hold) records are exactly those the
   configured N_chunk implies: one at each multiple of N_chunk that a turn reaches
   before it finishes and that is below 4,096. At N_chunk 4,096 that is none.
+  RL-149 sections 1.2 item 5 and 1.5: a member that returned by its own stop (no
+  deadman, no gate timeout, no X7) before a third admission is judged on its other
+  checks, and its turn check prints "not_applicable: episode returned at turn k"
+  (``align_r1_rehearsal.turn_check``, the R1 driver's own rule). Part C has one D
+  run, so the slot session's set clause (one D run with three turns) is not applied.
 - D_bank, start state: at the release sample of G0 and of every G1, and at the first
   reading after each turn's start, the OS thermal level is 0 and the power-management
   state is Nominal, and the state's stamp is at most 2 s old (older counts as not recorded;
-  G0's own bound; RL-145 close section 2).
+  G0's own bound; RL-145 close section 2 and row 7, as written: the age is taken at the
+  sample's own stamp and has no lower bound, because the sidecar reads the status just
+  after the SMC read bracket, so a fresh stamp may follow the sample's stamp by a few ms).
+  A sample that matches no journal row is a reason (``no journal row for sample``),
+  never a silent null (RL-149 section 1.2 item 3).
+- The journal is read through ``thermal_gates.sample_rows``, the projection the gate
+  itself uses (RL-149 section 1.2 item 1): the Sidecar writes ``reading`` rows, not
+  ``sample`` rows.
 - D_bank, printed and not judged: per turn, the first reading off (0, Nominal); the
   share of decode readings at each level; the clock ratio by 256-token block and over
   the last 512 tokens; the token-rate ratio.
@@ -39,9 +51,9 @@ PREDICTED_NOT_JUDGED = ("D_bank turn 1 (11,211 prefill tokens and a long decode)
                         "last-512 clock ratio between 0.83 and 0.93; token rate ratio at or above 0.98. "
                         "Printed beside the measurement; no verdict reads it.")
 DISPOSITION = {
-    "pass": "Mechanics and start state hold: the no-hold design is sound as a mechanism. Adoption still waits for the "
-            "design round's question 1; if the close takes these bytes unchanged this run is the Part C of step 4's "
-            "checklist, otherwise Part C is run again at the adopted commit.",
+    "pass": "Mechanics and start state hold. The no-hold TV1h design is adopted (RL-149 section 1.1); run at the "
+            "commit of RL-149 step 3's PR, this is the Part C of the slot session's checklist (RL-149 section 5, "
+            "items 11 and 12).",
     "start_state_failed": "Start state fails: it goes to the research lead with the table. Nothing is re-run.",
     "mechanics_gate_time_failed": "Mechanics fail on gate time only: it goes to the research lead with the table "
                                   "(the RL-145 close withdrew the fallback; nothing is re-run).",
@@ -86,12 +98,28 @@ def step_d_line(step_d):
     return _check(not reasons, reasons=reasons, g0_wait_s=wait, over_reference_c=over, slope_c_per_min=slope)
 
 
+def _judged(checks):
+    """The checks that are judged: a not-applicable check (``judged`` false) is printed and never decides."""
+    return {k: v for k, v in checks.items() if v.get("judged", True)}
+
+
 def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
     """``d_bank``: {turns: [{index, decode_tokens, ...}], intervals: [{kind, turn, token_count, outcome,
-    duration_s, ...}], x7, t_dead_s}."""
+    duration_s, ...}], x7, t_dead_s, episode_flags (None when not recorded)}."""
+    from scripts.align_r1_rehearsal import turn_check
     turns, intervals = d_bank.get("turns", []), d_bank.get("intervals", [])
     out, failed = {}, []
-    out["admitted_turns"] = _check(len(turns) >= MIN_ADMITTED_TURNS, value=len(turns), need=MIN_ADMITTED_TURNS)
+    # RL-149 sections 1.2 item 5 and 1.5: the R1 driver's own turn rule. A G1 timeout is a gate timeout
+    # and is read from the intervals as well as from the flags.
+    flags = d_bank.get("episode_flags")
+    g1_cut = [f"thermal.{'hold' if r.get('kind') == 'H' else 'gate'}_timeout:{r.get('turn')}" for r in intervals
+              if r.get("kind") in ("G1", "H") and r.get("outcome") not in ("released", "unobserved")]
+    turns_ok, stop = turn_check(len(turns), d_bank.get("x7"), None if flags is None else list(flags) + g1_cut,
+                                MIN_ADMITTED_TURNS)
+    out["admitted_turns"] = (_check(turns_ok, value=len(turns), need=MIN_ADMITTED_TURNS, stop=stop)
+                             if type(turns_ok) is bool else
+                             {"pass": None, "judged": False, "status": turns_ok, "value": len(turns),
+                              "need": MIN_ADMITTED_TURNS, "stop": stop, "authority": "RL-149 section 1.5"})
     gate_s = sum(float(r.get("duration_s", 0.0)) for r in intervals if r.get("kind") in ("G0", "G1", "H"))
     t_dead = d_bank.get("t_dead_s")
     limit = GATE_SHARE_OF_T_DEAD * t_dead if isinstance(t_dead, (int, float)) else None
@@ -115,25 +143,41 @@ def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
     return out
 
 
+def stamp_fresh(age_s):
+    """RL-145 close section 2 / row 7, as written: the state's stamp is at most 2 s old. The age is taken
+    at the sample's own stamp; a stamp that follows it (negative age) is not old."""
+    return isinstance(age_s, (int, float)) and not isinstance(age_s, bool) and age_s <= STAMP_MAX_AGE_S
+
+
 def d_bank_start_state(d_bank):
     """OS level 0 and Nominal at G0's and every G1's release sample, and at the first reading after each turn's start."""
-    rows = []
+    rows, reasons = [], []
 
     def row(what, status):
         status = status if isinstance(status, dict) else None
         level, state = (status or {}).get("os_level"), (status or {}).get("pm_state")
         age = (status or {}).get("pm_age_s")
-        fresh = isinstance(age, (int, float)) and 0 <= age <= STAMP_MAX_AGE_S
+        fresh = stamp_fresh(age)
+        ok = status is not None and level == 0 and state == "Nominal" and fresh
         rows.append({"at": what, "os_level": level, "pm_state": state, "pm_age_s": age, "stamp_fresh": fresh,
-                     "ok": status is not None and level == 0 and state == "Nominal" and fresh})
+                     "ok": ok})
+        if status is None:
+            reasons.append(f"{what}: no journal row for sample")
+        elif not ok:
+            reasons.append(f"{what}: level {level!r}, state {state!r}, stamp age {age!r} s"
+                           + ("" if fresh else f" (not recorded: older than {STAMP_MAX_AGE_S:g} s or absent)"))
     for r in d_bank.get("intervals", []):
         if r.get("kind") in ("G0", "G1") and r.get("outcome") == "released":
             row(f"{r['kind']} release" + ("" if r["kind"] == "G0" else f" (turn {r.get('turn')})"), r.get("release_status"))
     for turn in d_bank.get("turns", []):
         row(f"first reading after turn {turn['index']} start", turn.get("first_reading_after_start"))
     has_g0 = any(r.get("kind") == "G0" and r.get("outcome") == "released" for r in d_bank.get("intervals", []))
+    if not has_g0:
+        reasons.insert(0, "no released G0 sample")
+    if not d_bank.get("turns"):
+        reasons.append("no admitted turn")
     return _check(has_g0 and bool(d_bank.get("turns")) and all(r["ok"] for r in rows), samples=rows,
-                  reasons=([] if has_g0 else ["no released G0 sample"]))
+                  reasons=reasons)
 
 
 def x_g_line(x_g):
@@ -158,7 +202,7 @@ def evaluate(*, step_d, d_bank, n_chunk, x_g=None, x_g_not_run_reason=None, prin
     mechanics = d_bank_mechanics(d_bank, n_chunk) if d_bank is not None else None
     start = d_bank_start_state(d_bank) if d_bank is not None else None
     lines = {"step_d": step_d_line(step_d),
-             "d_bank_mechanics": None if mechanics is None else _check(all(v["pass"] for v in mechanics.values()),
+             "d_bank_mechanics": None if mechanics is None else _check(all(v["pass"] for v in _judged(mechanics).values()),
                                                                        checks=mechanics),
              "d_bank_start_state": start, "x_g": x_g_line(x_g)}
     log = []
@@ -173,12 +217,13 @@ def evaluate(*, step_d, d_bank, n_chunk, x_g=None, x_g_not_run_reason=None, prin
     elif start is not None and not start["pass"]:
         verdict = "start_state_failed"
     elif (lines["step_d"]["pass"] and mechanics is not None
-          and [k for k, v in mechanics.items() if not v["pass"]] == ["gate_time"]
+          and [k for k, v in _judged(mechanics).items() if not v["pass"]] == ["gate_time"]
           and (lines["x_g"] is None or lines["x_g"]["pass"])):
         verdict = "mechanics_gate_time_failed"
     else:
         verdict = "other_failure"
-    return {"schema": "joulewise.align.r1_part_c.v1", "authority": "RL-145 step 3; RL-145 addendum section 6",
+    return {"schema": "joulewise.align.r1_part_c.v1",
+            "authority": "RL-145 step 3; RL-145 addendum section 6; RL-149 sections 1.2 and 1.5",
             "pass": ok, "verdict": verdict, "disposition": DISPOSITION[verdict], "lines": lines,
             "printed_not_judged": {**_printed_rows(printed), "predicted": PREDICTED_NOT_JUDGED},
             "log": log, "slots_entered": False, "n_chunk_configured": n_chunk}
@@ -187,12 +232,15 @@ def evaluate(*, step_d, d_bank, n_chunk, x_g=None, x_g_not_run_reason=None, prin
 # ---- fact extraction (reads one immutable member bundle; no writes) --------------------------------
 
 def _journal(bundle):
+    """The gate journal as the gate reads it: ``thermal_gates.sample_rows`` (RL-149 section 1.2 item 1; no
+    second projection). The Sidecar writes ``reading`` rows; legacy ``sample`` rows pass through."""
+    from joulewise.align.apple.thermal_gates import sample_rows
     from joulewise.desk_compress import read_bytes
     try:
         text = read_bytes(Path(bundle) / "outputs/align_thermal.jsonl")
     except FileNotFoundError:
         return []
-    return sorted((r for r in (json.loads(x) for x in text.splitlines() if x.strip()) if r.get("kind") == "sample"),
+    return sorted(sample_rows([json.loads(x) for x in text.splitlines() if x.strip()]),
                   key=lambda r: r["monotonic_ns"])
 
 
@@ -227,7 +275,8 @@ def facts_from_bundle(bundle, *, role):
                       "first_reading_after_start": None if first is None else _status_with_age(first)})
     budget = ep.hardware.get("token_budget") or {}
     return {"role": role, "turns": turns, "intervals": out_intervals, "t_dead_s": budget.get("deadman_s"),
-            "x7": any(str(f).startswith("episode.deadman:") for f in ep.flags)}
+            "x7": any(str(f).startswith("episode.deadman:") for f in ep.flags),
+            "episode_flags": [str(f) for f in ep.flags]}
 
 
 def step_d_facts(bundle, fields):

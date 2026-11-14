@@ -211,6 +211,150 @@ class EvaluatorFailureTests(unittest.TestCase):
         self.assertTrue(any('D_bank did not run' in line for line in result['log']))
 
 
+class OwnStopTurnCheckTests(unittest.TestCase):
+    """RL-149 sections 1.2 item 5 and 1.5: a member that returned by its own stop before a third admission is
+    judged on its other checks; its turn check prints not_applicable. The R1 driver's own rule decides."""
+
+    def two_turns(self, **override):
+        d = bank(turns=[turn(0, 2200), turn(1, 4096)],
+                 intervals=[interval('G0', 0, duration=110.0), interval('G1', 1, duration=99.8)],
+                 episode_flags=['ended_in_unclosed_reasoning'])
+        d.update(override)
+        return d
+
+    def test_an_own_stop_at_two_turns_is_not_applicable_and_the_run_passes(self):
+        result = run(d_bank=self.two_turns())
+        self.assertEqual((result['pass'], result['verdict']), (True, 'pass'))
+        check = result['lines']['d_bank_mechanics']['checks']['admitted_turns']
+        self.assertEqual(check['status'], 'not_applicable: episode returned at turn 1')
+        self.assertIs(check['judged'], False)
+        self.assertEqual(check['value'], 2)
+        self.assertIn('RL-149', result['authority'])
+        json.dumps(result)
+
+    def test_a_cut_or_unreadable_stop_keeps_the_turn_check_judged(self):
+        cases = {
+            'deadman': self.two_turns(x7=True, episode_flags=['episode.deadman:1']),
+            'G1 timeout in the flags': self.two_turns(episode_flags=['thermal.gate_timeout:1']),
+            'decode budget': self.two_turns(episode_flags=['episode.decode_budget:2']),
+            'flags not recorded': self.two_turns(episode_flags=None),
+        }
+        for name, d in cases.items():
+            with self.subTest(name):
+                result = run(d_bank=d)
+                check = result['lines']['d_bank_mechanics']['checks']['admitted_turns']
+                self.assertIs(check['pass'], False)
+                self.assertFalse(result['pass'])
+        # A G1 timeout that only the intervals show is still a gate timeout.
+        d = self.two_turns()
+        d['intervals'][1]['outcome'] = 'timeout'
+        check = run(d_bank=d)['lines']['d_bank_mechanics']['checks']
+        self.assertIs(check['admitted_turns']['pass'], False)
+        self.assertFalse(check['no_g1_timeout']['pass'])
+
+    def test_a_not_applicable_turn_check_does_not_hide_the_gate_time_branch(self):
+        d = self.two_turns()
+        d['intervals'][0]['duration_s'] = 500.0
+        self.assertEqual(run(d_bank=d)['verdict'], 'mechanics_gate_time_failed')
+
+    def test_three_turns_need_no_stop_reading(self):
+        self.assertTrue(run(d_bank=bank(episode_flags=None))['pass'])
+
+
+class SidecarJournalTests(unittest.TestCase):
+    """RL-149 section 1.2 items 1 to 4: the evaluator reads a journal written by the runtime's own Sidecar
+    writer (``reading`` rows, stamps nested in ``started``/``finished``, the status in ``values.status`` and
+    read about 15 ms after the SMC read bracket starts). Synthetic sensors and clocks; no study data."""
+
+    def setUp(self):
+        from joulewise.align.apple import thermal
+        from joulewise.hazards import base
+        from tests.hazards.fakes import FakeClocks
+        from tests.hazards.test_temperature import FakeSensors, POLICY
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.bundle = Path(self.temp.name) / 'bundle'
+        self.clocks = FakeClocks(read_cost_ns=0)
+        self.state = {'os_level': 0, 'pm_state': 'Nominal', 'age_s': 0.0}
+
+        def status_reader():
+            self.clocks.advance(0.015)                       # parsed just after the SMC read bracket
+            now = self.clocks.monotonic_ns()
+            return {'monotonic_ns': now, 'os_level': self.state['os_level'], 'pm_state': self.state['pm_state'],
+                    'pm_observed_ns': now - round(self.state['age_s'] * 1e9)}
+        self.sidecar = thermal.Sidecar(self.bundle / 'outputs', POLICY, reader=FakeSensors(),
+                                       ctx=base.Context(clocks=self.clocks), status_reader=status_reader)
+        self.sidecar.start(background=False)
+        self.stamps = []
+
+    def tick(self, n=1):
+        for _ in range(n):
+            self.clocks.advance(1.0)
+            self.stamps.append(self.sidecar.tick()['started']['monotonic_ns'])
+        return self.stamps[-1]
+
+    def facts(self, *, release_ns=None, flags=('ended_in_unclosed_reasoning',)):
+        """Two gates and two turns placed on the journal's own stamps (G0 release at tick 2, turn 0 after it;
+        G1 release at tick 6, turn 1 after it), then ``facts_from_bundle`` on the written bundle."""
+        g0 = self.tick(2)
+        t0 = self.clocks.monotonic_ns() + 100_000_000
+        self.tick(3)
+        g1 = self.tick()
+        t1 = self.clocks.monotonic_ns() + 100_000_000
+        self.tick(3)
+        self.sidecar.event('align_thermal_gate', {'gate_kind': 'G1', 'state': 'release', 'turn': 1})
+        self.sidecar.stop()
+        intervals = [{'kind': 'G0', 'turn': 0, 'outcome': 'released', 'duration_s': 110.0,
+                      'exit_sample_ns': g0 if release_ns is None else release_ns},
+                     {'kind': 'G1', 'turn': 1, 'outcome': 'released', 'duration_s': 99.8, 'exit_sample_ns': g1}]
+        turns = [SimpleNamespace(index=0, start_ns=t0, end_ns=t0 + 2, decode_tokens=2200, prefill_tokens=11211),
+                 SimpleNamespace(index=1, start_ns=t1, end_ns=t1 + 2, decode_tokens=4096, prefill_tokens=40)]
+        ep = SimpleNamespace(hardware={'thermal': {'intervals': intervals}, 'token_budget': {'deadman_s': 983.1}},
+                             turns=turns, flags=list(flags))
+        with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep):
+            return pc.facts_from_bundle(self.bundle, role='d-bank')
+
+    def test_the_sidecar_journal_is_read_and_a_fresh_in_state_member_passes(self):
+        facts = self.facts()
+        raw = [json.loads(x) for x in (self.bundle / 'outputs/align_thermal.jsonl').read_text().splitlines()]
+        self.assertEqual({r['kind'] for r in raw}, {'session_start', 'reading', 'align_thermal_gate', 'session_end'})
+        self.assertNotIn('sample', {r['kind'] for r in raw})
+        self.assertEqual(len(pc._journal(self.bundle)), len(self.stamps))   # the legacy reader found 0 rows
+        line = pc.d_bank_start_state(facts)
+        self.assertTrue(line['pass'], line)
+        self.assertEqual(line['reasons'], [])
+        self.assertEqual(len(line['samples']), 4)
+        for sample in line['samples']:
+            self.assertEqual((sample['os_level'], sample['pm_state'], sample['stamp_fresh']), (0, 'Nominal', True))
+            self.assertLess(sample['pm_age_s'], 0)           # the stamp follows the sample's own stamp
+            self.assertGreater(sample['pm_age_s'], -0.1)
+        result = pc.evaluate(step_d=STEP, d_bank=facts, n_chunk=4096, x_g=None, x_g_not_run_reason='not in this test')
+        self.assertEqual((result['pass'], result['verdict']), (True, 'pass'), result['lines'])
+        self.assertEqual(result['lines']['d_bank_mechanics']['checks']['admitted_turns']['status'],
+                         'not_applicable: episode returned at turn 1')
+
+    def test_a_sample_with_no_journal_row_is_a_reason_never_a_silent_null(self):
+        line = pc.d_bank_start_state(self.facts(release_ns=123))
+        self.assertFalse(line['pass'])
+        self.assertIn('G0 release: no journal row for sample', line['reasons'])
+        self.assertEqual(len(line['reasons']), 1)
+
+    def test_a_stamp_over_two_seconds_old_is_not_recorded(self):
+        self.state['age_s'] = 2.1
+        line = pc.d_bank_start_state(self.facts())
+        self.assertFalse(line['pass'])
+        self.assertEqual(len(line['reasons']), 4)
+        self.assertTrue(all('not recorded' in r for r in line['reasons']))
+        self.assertTrue(pc.stamp_fresh(2.0) and pc.stamp_fresh(-0.02))
+        self.assertFalse(pc.stamp_fresh(2.0001) or pc.stamp_fresh(None) or pc.stamp_fresh(True))
+
+    def test_an_off_state_reading_fails_with_its_values(self):
+        self.state.update(os_level=1, pm_state='Moderate')
+        line = pc.d_bank_start_state(self.facts())
+        self.assertFalse(line['pass'])
+        self.assertIn("level 1, state 'Moderate'", line['reasons'][0])
+
+
 class KitSequenceTests(unittest.TestCase):
     """smoke --part C: the runtime kinds in order, no slots entered, a failure raises after the table."""
 

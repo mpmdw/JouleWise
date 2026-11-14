@@ -30,6 +30,10 @@ BLOCK = 256
 BASE_WINDOW_NS = 10 * NS
 LAST_TOKENS = 512
 FRESH_STAMP_S = 2.0                 # a PM state stamp older than this counts as not recorded (G0's own bound)
+# RL-149 section 1.6 item 1: every reader of the journal's pm_state applies the 2 s age rule; a stale state
+# is "not recorded", never Heavy and never Nominal. The age is taken at the sample's own stamp and has no
+# lower bound (the sidecar reads the status just after the SMC read bracket, so a fresh stamp may follow
+# the sample's stamp by a few ms), as the RL-145 close's row 7 rule is written.
 CONSECUTIVE_QUIET = 5
 # Continuous load = prefill + decode seconds of a turn. The close names the bin but not its edges;
 # these are the builder's choice (seconds) and are printed with the result.
@@ -213,6 +217,11 @@ def _status_age_s(row):
     return None if type(pm_ns) is not int else (row["monotonic_ns"] - pm_ns) / NS
 
 
+def stamp_fresh(age_s):
+    """RL-145 close section 2 / RL-149 section 1.6: the state's stamp is at most 2 s old."""
+    return age_s is not None and age_s <= FRESH_STAMP_S
+
+
 def gate_state_prints(intervals, rows, turns, fast_key):
     """Close section 2: the OS level, state and stamp age at every G1 release sample; per turn, seconds
     from the last token to the first of five consecutive readings at level 0 and Nominal with a fresh
@@ -227,7 +236,7 @@ def gate_state_prints(intervals, rows, turns, fast_key):
         age = None if sample is None else _status_age_s(sample)
         g1.append({"turn": r.get("turn"), "outcome": r.get("outcome"), "os_level": st.get("os_level"),
                    "pm_state": st.get("pm_state"), "stamp_age_s": age,
-                   "stamp_fresh": age is not None and 0 <= age <= FRESH_STAMP_S})
+                   "stamp_fresh": stamp_fresh(age)})
     recovery = []
     for t in turns:
         later = [r for r in rows if r["monotonic_ns"] >= t.end_ns]
@@ -235,7 +244,7 @@ def gate_state_prints(intervals, rows, turns, fast_key):
         for r in later:
             st = r.get("status") or {}
             age = _status_age_s(r)
-            good = st.get("os_level") == 0 and st.get("pm_state") == "Nominal" and age is not None and 0 <= age <= FRESH_STAMP_S
+            good = st.get("os_level") == 0 and st.get("pm_state") == "Nominal" and stamp_fresh(age)
             streak = streak + [r] if good else []
             if len(streak) == CONSECUTIVE_QUIET:
                 found = streak[0]
@@ -249,18 +258,26 @@ def gate_state_prints(intervals, rows, turns, fast_key):
 
 def tv1h_trigger(intervals, rows, fast_key, slow_key):
     """Close section 5: any journal row inside a gate window (G0, G1, H) whose two gate keys differ comes to the
-    research lead. Lists every such row; ``fires`` is true when there is one."""
+    research lead. Lists every such row; ``fires`` is true when there is one. RL-149 section 1.7: the member's
+    count of unequal rows inside and outside gate windows is printed beside it (outside rows never fire)."""
     windows = [(r["start_ns"], r["end_ns"], r["kind"], r.get("turn")) for r in intervals if r.get("kind") in ("G0", "G1", "H")]
-    hits = []
+    hits, outside, compared = [], 0, 0
     for r in rows:
         values = r.get("sensors") or {}
         a, b = values.get(fast_key), values.get(slow_key)
-        if a is None or b is None or a == b:
+        if a is None or b is None:
+            continue
+        compared += 1
+        if a == b:
             continue
         w = next((w for w in windows if w[0] <= r["monotonic_ns"] <= w[1]), None)
         if w is not None:
             hits.append({"monotonic_ns": r["monotonic_ns"], "gate": w[2], "turn": w[3], fast_key: a, slow_key: b})
-    return {"keys": [fast_key, slow_key], "fires": bool(hits), "rows": hits}
+        else:
+            outside += 1
+    return {"keys": [fast_key, slow_key], "fires": bool(hits), "rows": hits,
+            "unequal_rows": {"inside_gate_windows": len(hits), "outside_gate_windows": outside,
+                             "rows_compared": compared}}
 
 
 def bundle_prints(bundle, *, os_journal=(), token_stamps_by_turn=None, estimate_tokens=False):
@@ -291,6 +308,13 @@ def bundle_prints(bundle, *, os_journal=(), token_stamps_by_turn=None, estimate_
     thermal = ep.hardware.get("thermal") or {}
     intervals = thermal.get("intervals", [])
     events = jsonl("events.jsonl")
+    # RL-149 section 1.2 item 6 (desk step 0, gap 1): a failed execution (the deadman) keeps its token events
+    # only in outputs/align_runtime_events.jsonl; events.jsonl then has none.
+    token_source = "events.jsonl"
+    if not any(e.get("event_type") == "token" for e in events):
+        runtime_events = jsonl("outputs/align_runtime_events.jsonl")
+        if any(e.get("event_type") == "token" for e in runtime_events):
+            events, token_source = runtime_events, "outputs/align_runtime_events.jsonl"
     stamps = token_stamps_by_turn or {}
     record = read_bundle_record(bundle, os_journal=os_journal)
     observation = record.get("turn_observation") or []
@@ -308,8 +332,10 @@ def bundle_prints(bundle, *, os_journal=(), token_stamps_by_turn=None, estimate_
                    desk_pm_nominal=observation[k]["pm_nominal"] if k < len(observation) else None)
         turns.append(row)
     sensors = (thermal.get("policy") or {}).get("sensors") or {}
-    samples = [r for r in gate_journal if r.get("kind") == "sample"]
-    out = {"episode": ep.episode_id, "turns": turns,
+    # RL-149 section 1.2: the gate journal as the gate reads it (the Sidecar writes reading rows).
+    from joulewise.align.apple.thermal_gates import sample_rows
+    samples = sorted(sample_rows(gate_journal), key=lambda r: r["monotonic_ns"])
+    out = {"episode": ep.episode_id, "turns": turns, "token_events_source": token_source,
            "desk_verdict": {"member_excluded": bool(record.get("calibration_exclusions")),
                             "exclusion_reasons": list(record.get("calibration_exclusions") or []),
                             "flags": list(record.get("flags") or []),
