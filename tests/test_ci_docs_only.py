@@ -238,6 +238,18 @@ class TargetedDocsClassifierTests(unittest.TestCase):
                               capture_output=True, text=True)
         self.assertEqual((done.returncode, done.stdout.strip()), (1, ""))
 
+    def test_symlink_replaced_by_a_regular_doc_is_full(self):
+        # The guard reads the mode on both sides: a symlink before the range is refused too.
+        self.git("checkout", "-q", self.base)
+        (self.repo / "docs" / "flip.md").symlink_to("notes.md")
+        before = self.commit()
+        (self.repo / "docs" / "flip.md").unlink()
+        (self.repo / "docs" / "flip.md").write_text("now a regular file\n", encoding="utf-8")
+        after = self.commit()
+        done = subprocess.run(["bash", str(TARGETED_SCRIPT), before, after], cwd=self.repo, env=self.env,
+                              capture_output=True, text=True)
+        self.assertEqual((done.returncode, done.stdout.strip()), (1, ""))
+
     def test_gitlink_named_like_a_doc_is_full(self):
         self.git("checkout", "-q", self.base)
         self.git("update-index", "--add", "--cacheinfo", "160000," + self.base + ",docs/sub.md")
