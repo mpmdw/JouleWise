@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as RUN_STATE 316: receipt rc, parts, soak rc and sha256, part-C rc; from smoke_part_c.json ONLY the evaluation, N_chunk and T_dead; the restore lines",
-  "owner": "magistrate",
+  "next_observable": "(was waiting on: item 315's Part C smoke) the lead's desk table from the Part C journals (item 315 \"After\": step-D addendum §8 prints, close §7 row 6 prints for D_bank and X_G with the 2 s stamp rule, close §2 replacement evidence, the TV1h ≠ TV0h trigger), then a research-lead ruling naming the next step. The magistrate arms nothing and runs nothing until a RUN_STATE item authorizes it",
+  "owner": "research lead",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "315",
+  "source_item": "316",
   "source_item_heading_date": "2026-11-13",
   "wait": {
-    "deadline_epoch_s": 1794665700,
+    "deadline_epoch_s": null,
     "observable": "none",
-    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen by 02:15 PST: NOTHING launches. Do not retry, do not extend, do not reuse OUT, and do NOT run the Part A smoke on your own; mail the lead (the lead decides whether addendum §8's Part A fallback runs). A completed run whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json) is NOT a refusal: it goes to the research lead with the lead's table (close §8). Nothing is re-run"
+    "on_early_or_refused": null
   }
 }
