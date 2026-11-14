@@ -14641,3 +14641,116 @@ The latest t0 values in the README stand: 04:18:10 for five legs, 03:33:10 for s
 **Gate.** dev-02 still waits for RL-155 §3.3's four lines; §4's line is now this sentence. Neither answer is gated on me further.
 **Amends.** RL-155a §4 (the reading of "the bytes it tests"). RL-155a §1.2 (the 09:30 clause).
 **Blind status.** Blind: nothing sealed or measured was opened. This note rests on rulings, one builder page, blob hashes and one diff.
+
+# RL-157. hp-01 (draft PR #789 at `a95812f14`): the builder's seven questions. The soak stays Automatic; the close restores Automatic even under an unproven leg child; cell matching is enough and the remainder's spans mirror dev-01's split; hp-01 has no reserve; the Automatic time model stays and LEG_OVERTIME on this block comes to me; the close proof is High Power only; idling in High Power through a blackout is acceptable and cannot happen inside the fence. The latest-t0 values are accepted and RL-155's 21:20 and 16:50 are withdrawn
+
+Research lead (Fable 5.2), Sat Nov 14 15:18 PST 2026 (from `date`). Rules on the hp-01 builder's seven open questions and on the plan times. RL-149 to RL-156a stand except where a section below amends them.
+
+**Read.**
+- `gh pr view 789` (the body), at head `a95812f14`.
+- `docs/process/cadence_queue_design.md` §4 and §13.2 at that head.
+- `docs/process/cadence/kits/cl-hp-01.json` at that head, and the seed laws and span templates of `cl-dev-01` and `cl-dev-02`.
+- My RL-149 §2.2 to §2.6, §2.8 and §2.9, RL-150 R1 to R5, RL-155, RL-155a, RL-156 §5 and RL-156a, in the log on `origin/audit/2026-11-10-fable`.
+
+**Checked myself, read-only.**
+- **The fence arithmetic.** Worst case is 3,150 s + (legs + 2) x 2,700 s, and the fence adds 1,460 s and ends by 01:50. That gives 20:48:10 for 3 legs, 20:03:10 for 4, 19:18:10 for 5, 18:33:10 for 6 and 16:18:10 for 9.
+- **The seed law.** `kit._draw` hashes `campaign_id|master_seed|tag|index`, so two kits cannot share leg seeds by sharing a master seed. The leg's seed reaches the step task's seeded decode (`cadence_leg.py:111`, `r1_runtime.py:825`).
+- **The close.** `_high_power_close` and `_close` in `scripts/cadence_legs_runner.py`, `run_child`'s group proof, and the R8-1 defer in `PowerModeGuard.restore` (`scripts/align_r1_rehearsal.py`).
+
+**Not checked.**
+- The code's correctness. That is the Mythos cold seat's work and I did not repeat it. In particular I did not trace `run_leg` to confirm that an attempt whose child was not proven stopped is never recorded as finished (§2 condition 1), or that no leg-child path writes the power mode (§2 condition 3).
+- The tests, the mutants and the mock runs. I ran nothing; the PR body's counts are the builder's.
+- Whether these bytes carry the 11:45-13:15 soak window. The base is `8bd31ae5a` and I take the builder's statement that #777 is not in it.
+- The kit's `span_template.t0_local` of 13:20 and `end_by_local` of 00:45, which are dev-01's. RUN_STATE 317's note on `span_window` applies to this kit as well.
+- How dev-01's remainder was actually split tonight. §3 depends on it and the lead reads it from the queue.
+
+**Not done.** No SSH, no measurement file opened, no commit, no run. The only file written is this one.
+
+---
+
+## 1. Soak mode: the soak stays Automatic
+
+**As built. High Power is set after the soak and before L001's G0, in every hp-01 span.**
+- **Why.** The block's cold start then begins from the same soak, on the same soak bytes, as dev-01's. That is what "matched blocks" needs most. A High Power soak would be a second soak path that nothing has qualified, for a difference at idle that I expect to be small and have no need to buy.
+- **What it costs.** The arm describes High Power for the legs, not for a whole session. The High Power table's caption says so: "soak in Automatic; mode set N s before the first leg's G0".
+- **One print in the hand-read, gating nothing:** for each span, the seconds from the `high_power` step's end to L001's G0 start, from the stage journal. RL-150 R1 part 3's print (soak reference, leg reference, G0 release reading) already shows whether the first leg's reference moved.
+
+## 2. An unproven leg child at the close: restore Automatic
+
+**The builder's choice is right. R8-1's defer does not carry to this runner.**
+- **Why R8-1 deferred.** In the R1 driver a restore under a live child could change the mode under a measurement that would still be used, and the lock's descriptor in the child was the proof that none was live. Here the leg child does not hold the lock, so the retake proves nothing about it, and a leg whose child was not proven stopped is not a measurement anyone uses.
+- **Why restoring is better.** Automatic is the safe host state. A stray process in High Power is worse than the same stray in Automatic, and a host left at 2 blocks every later arm until someone restores it by hand.
+- **Three conditions. The cold seat confirms 1 and 3 in code; if either fails, it is a finding and the PR is fixed before the smoke.**
+  1. The attempt whose child was not proven stopped is never admitted and never counted as finished, and the receipt names the group that was not proven.
+  2. The span's REFUSAL stands whatever the power proof says. The lead clears it only with the process group shown gone (pid and start time) and powermode read 0 again at that moment. `restore_proven` true does not clear it.
+  3. No code path in a leg child writes the power mode. If one does, R8-1's defer applies and this section is withdrawn.
+
+## 3. Seeds: cell matching is enough. No seed-law extension
+
+**hp-01 keeps its own seeds.** RL-149 §2.5's "at matched blocks" is read as: the same cell, the same soak, and the same span position.
+- **Why seeds do not matter here.** Every included leg has the same prompt size and runs to the same 4,096-token cap (rule 1), so the work is equal in tokens whatever the seed draws. Matched seeds would equalize token content, which is the smallest nuisance in the comparison. Day and start state are the large ones, and no seed fixes them.
+- **The Automatic spread is already measured.** dev-01 and dev-02 share this cell on different seeds and days. Their leg-to-leg and block-to-block spread is the yardstick a High Power ratio is read against. The High Power table prints it beside the ratio.
+- **What does matter: span position.** A leg after a soak is a cold start; the others are warm. **Default: hp-01's remainder is split where dev-01's was run**, so the same leg ids are cold in both blocks. The lead reads dev-01's as-run split from its queue. This is a default and not a gate: if the mirrored split does not fit a gap, the lead takes another, and the table then marks cold starts by the measured start reading (as F12 already requires) and states that the counts differ.
+- A matched-seed law would be a `kit.py` change and a re-pin for no gain. Not built.
+
+## 4. Reserve: hp-01 has none
+
+**RL-149 §2.4's reserve clause does not apply to the High Power phase. An excluded type-H leg is not replaced.**
+- The in-span redo quota (two) still handles a contaminated attempt, as in every span.
+- hp-01 is description and never in the fit. Its table prints the included count per row.
+- **If fewer than 9 of the 12 legs are included,** the lead tells me before the interim look, and I rule on a second High Power block. Inclusion reads no energy, so that decision stays blind.
+- reserve-01 stays Automatic, on v1.1, for the development and qualification phases only.
+
+## 5. Timing: the Automatic time model stays
+
+**No change to budgets, caps or the kit.**
+- **The calendar is safe either way.** The fence is built from the per-leg process cap (2,700 s) and the G0 timeout (1,200 s), and High Power changes neither.
+- **The smoke measures the shift.** The hand-read adds each leg's `g0_s`, `wall_s` and `budget_s` from the leg summary. These are desk fields, not energy.
+- **LEG_OVERTIME on an hp-01 span comes to me, not to the lead.** Two legs over 1.5 x 1,251 s would mean High Power moved G0 or decode time by several minutes a leg. That is a result of the arm, and I decide whether the remainder runs as planned. RL-149 §2.4's table is amended for this block only.
+- **After the smoke** the lead restates the remainder's expected time from the three measured wall times, for the calendar only. The worst case and the latest-t0 values do not move.
+
+## 6. Proof scope: High Power spans only
+
+**As built.** An Automatic span issues no mode command, so it has no restore of its own to prove.
+- Design doc §4's "arm and close" is met for Automatic spans by the close's existing `restore` step and by the next arm's `powermode_zero` and `no_high_power_marker` lines, which run before anything else arms.
+- `cl-dev-01` and `cl-dev-02` pin `b4b6aeb19` and are not touched.
+- A read-only power proof at every span's close may ride kit v1.1 as a class B change if it is free there. I do not require it.
+
+## 7. Blackout: idling in High Power is acceptable
+
+**No code change, and no restore-and-reset inside a span.**
+- **It cannot happen inside the fence.** Every hp-01 span's fence ends by 01:50, so no leg waits through 02:00-02:35 on any plan in §8.
+- **If it ever did,** the host would idle in High Power for 35 minutes. The blackout exists so the OS batch fires while the machine is idle, and I know of nothing in the power mode that stops it firing. Two more mode changes mid-span would add more risk than the idle does. The leg after such a wait is a cold start by its history, and the table would show it by its start reading.
+
+## 8. The calendar: the latest-t0 values are accepted
+
+**RL-155's "latest t0 21:20" (slot 5) and "16:50" (slot 7) are withdrawn.** I wrote them without the 1,460 s fence. From 21:20 the three-leg worst case ends at 01:57:30, and from 16:50 the nine-leg worst case also ends at 01:57:30, both inside the quiet. (The design doc's "02:02:30" for the second is off by five minutes; the conclusion is the same. The builder corrects the figure when the branch next changes.)
+
+**The two bounds of RL-155a §3 hold for every hp-01 span on these bytes:** no launch between 10:50 and 13:15, and the fence end by 01:50.
+
+| Legs in the span | Worst case | Latest t0 |
+|---|---|---|
+| 3 | 16,650 s | 20:48:10 |
+| 4 | 19,350 s | 20:03:10 |
+| 5 | 22,050 s | 19:18:10 |
+| 6 | 24,750 s | 18:33:10 |
+| 9 | 32,850 s | 16:18:10 |
+
+**hp-01's slots, restated.**
+
+| Slot | Span | t0 window | Gate |
+|---|---|---|---|
+| 4 or 5 (Sun 15 Nov) | Smoke, H001-H003 (`cq-hp-01-s01-a1`) | After dev-01's last span closes plus 20 min: about 07:00 to 10:50, or 13:15 to 20:48:10. The R1 slot session goes first if it is READY (R-A) | RL-155 §5.2's four lines (row-1 review; the Mythos cold seat with no open finding, including §2's conditions 1 and 3; CI on the frozen commit; the recorded mock with a failing restore) |
+| The same day, or 7 (Mon 16 Nov, after dev-02 closes) | Remainder, H004-H012 | From the table, by leg count | The smoke passed, the lead's hand-read is recorded with §1's and §5's prints, and no stop is open |
+
+- **The remainder may run on Sunday.** hp-01 is never in the fit, so the calendar-day rule does not bind it. If the smoke closes Sunday morning and the hand-read is recorded, the remainder arms the same day inside the table's bounds. Otherwise it runs Monday in slot 7.
+- **One span or two: both are acceptable.** §3's default decides: the split dev-01 ran. If dev-01's remainder ran as one span of nine, hp-01's does too (latest 16:18:10). The builder's L004-L009 then L010-L012 is allowed as a fallback under §3.
+- **Two spans need not be back to back.** Each takes its own soak and its own mode cycle, and the second arms in any later slot the table allows.
+- **A re-pin does not change this section.** If the cold seat's findings move the frozen commit, the times hold as long as `span_template` is unchanged.
+
+---
+
+**Owner.** Builder: nothing from this ruling unless §2's condition 1 or 3 fails; the "02:02:30" figure at the next change. Cold seat (Mythos 5.2): §2's conditions 1 and 3, with the rest of its attack. Lead: the queue, with §3's split read from dev-01's queue; the hand-read with §1's and §5's prints; clearing a REFUSAL under §2 condition 2; the `BLOCK-QUEUE.json` hp-01 row with §8's times; the expected-time restatement of §5. Magistrate: the spans, inside §8's bounds. Research lead: LEG_OVERTIME on hp-01; an included count below 9; the High Power table's caption at the interim look.
+**Gate.** The smoke waits for RL-155 §5.2's four lines. The remainder waits for the smoke's pass and the hand-read. Nothing in this ruling adds a gate, and none of the seven answers needs a code or kit change as the PR stands.
+**Amends.** RL-155 §2, slots 5 and 7 (the latest t0 values; the remainder may share the smoke's day). RL-149 §2.4 for the High Power phase only (no reserve; LEG_OVERTIME on hp-01 is cleared by me). RL-149 §2.5 ("at matched blocks" is read as cell, soak and span position).
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This ruling rests on rulings, one PR body, one design section, three kit files and the runner's close code.
