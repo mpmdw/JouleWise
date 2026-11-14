@@ -436,3 +436,17 @@ Built on `align/2026-11-14-campaign-runner`. RL-149 governs where this section a
 Bands are history recipes (`q0` = the turn starts at the leg's own G0 release). The first leg of a span follows
 its fresh soak, the block's cold start. Kits live under `docs/process/cadence/kits/`.
 
+
+### 13.1 Magistrate note: checkout and kit for the counted pilot (dev-01 L001-L003)
+
+- **Checkout.** The MBP measures from `efbd0b0204b75930ab279a6788860b611405bce6`, checked out **detached**
+  (`git checkout --detach efbd0b0204b75930ab279a6788860b611405bce6`). That is the kit's `frozen.commit`, and
+  the runner's preflight refuses any other HEAD, and any frozen path whose working-tree bytes differ.
+- **Kit.** `--kit` points at `docs/process/cadence/kits/cl-dev-01.json` **taken from PR #775's head**, copied
+  to a path outside the measurement checkout. The kit file is not in the frozen commit (it was committed
+  after it). The kit at the PR head differs from the cold-checked bytes only in the RL-150 R8 and R7 text;
+  its `frozen` block, all 36 path hashes included, is unchanged. Pin its sha256 in the queue entry.
+- **Arm.** `--legs L001,L002,L003` and `--batch-window 02:00-02:35` on every launch (RL-150 §2 F2), with
+  `--output` outside every v4 registration and custody root. The arm record states measurement_mode (as
+  applied 11-13 23:47) and network time off, checked remotely (RL-150 §2 F5). The first queue holds the
+  pilot span only (F3).
