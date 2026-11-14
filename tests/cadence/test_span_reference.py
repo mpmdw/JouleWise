@@ -353,5 +353,54 @@ class RunnerThroughTheLegRuntime(unittest.TestCase):
             self.assertEqual(argvs[1][argvs[1].index("--span-reference") + 1], str(source))
 
 
+class CommittedDev03SpanKit(unittest.TestCase):
+    """The dev-03 draft on kit v1.1 (class A): the v1.1a draft's block with span-reference legs."""
+    KITS = runner.ROOT / "docs/process/cadence/kits"
+
+    def load(self, name):
+        return kitmod.load_kit(self.KITS / name, batch_window=NEW_WINDOW)
+
+    def test_same_block_as_the_v11a_draft_but_the_g0_shapes(self):
+        kit, _ = self.load("cl-dev-03.v1.1.json")
+        fallback, _ = self.load("cl-dev-03.v1.1a.json")
+        self.assertEqual(kit["campaign_id"], fallback["campaign_id"])
+        self.assertEqual(kit["seed_law"], {**fallback["seed_law"], "g0_shapes": ["own", "span"]})
+        strip = lambda legs: [{k: v for k, v in leg.items() if k != "g0_shape"} for leg in legs]  # noqa: E731
+        self.assertEqual(strip(kit["legs"]), strip(fallback["legs"]))
+        self.assertEqual(set(kit["frozen"]["paths"]), set(fallback["frozen"]["paths"]))
+        self.assertIn("pilot_counted", [r["id"] for r in kit["inclusion_rules"]])
+        self.assertNotIn("pilot_counted", [r["id"] for r in fallback["inclusion_rules"]])
+
+    def test_the_counted_smoke_exercises_a_consumer_and_the_share_holds(self):
+        kit, _ = self.load("cl-dev-03.v1.1.json")
+        ids = [leg["leg_id"] for leg in kit["legs"]]
+        pilot = legsmod.leg_specs(kit, ids[:3])
+        self.assertEqual(sorted(s["prefill_tokens"] for s in pilot), SIZES)
+        self.assertIn("consume", [s.get("g0_role") for s in pilot])
+        for rosters in ([ids], [ids[:3], ids[3:]]):
+            n_span, n_warm = warm_span_share(kit, rosters)
+            self.assertGreaterEqual(2 * n_span, n_warm, rosters)
+        t0 = local("2026-11-17T02:40")
+        whole = legsmod.plan_span(kit, t0_epoch=t0, windows=[NEW_WINDOW], max_span_s=runner.max_span_s())
+        self.assertEqual(whole["worst_case_s"], 40950)
+        self.assertLessEqual(max(leg["budget_s"] for leg in whole["legs"]), kit["span_template"]["leg_budget_s"])
+
+    def test_frozen_paths_hash_at_the_frozen_commit(self):
+        import subprocess
+        kit, _ = self.load("cl-dev-03.v1.1.json")
+        have = subprocess.run(["git", "-C", str(runner.ROOT), "cat-file", "-e", kit["frozen"]["commit"] + "^{commit}"],
+                              capture_output=True)
+        if have.returncode:
+            self.skipTest("frozen commit not in this clone")
+        self.assertEqual(kitmod.verify_frozen(kit, runner.ROOT), [])
+        # The span leg's bytes are in the kit's frozen closure, and no gate module moved since the pilot.
+        dev01, _ = kitmod.load_kit(self.KITS / "cl-dev-01.json")
+        for path in ("joulewise/align/apple/thermal_gates.py", "joulewise/align/apple/r1_runtime.py",
+                     "joulewise/align/apple/workload.py"):
+            self.assertEqual(kit["frozen"]["paths"][path], dev01["frozen"]["paths"][path], path)
+        self.assertNotEqual(kit["frozen"]["paths"]["joulewise/align/apple/cadence_leg.py"],
+                            dev01["frozen"]["paths"]["joulewise/align/apple/cadence_leg.py"])
+
+
 if __name__ == "__main__":
     unittest.main()
