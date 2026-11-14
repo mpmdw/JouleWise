@@ -53,8 +53,11 @@ from scripts import align_v4_kit as kit  # noqa: E402
 # The only fields read (R10-2: timing and count fields, never energies).
 SLOT_FIELDS = ('I_D', 'B_D')
 # phases_s is copied only through _phases, key by key (cold-review LOW-3).
+# RL-148 section 2 / RL-149 section 1.5: gate_waits_s (the run's own G1 waits) and g1_timeouts are the
+# typical-case bar's inputs (align_v4_kit.typical_case_fit); the view keeps them so a kit check on the view
+# reads the same record (PR #777 row-1 review, finding 6).
 ROW_FIELDS = ('run', 'g0_outcome', 'decode_tokens', 'admitted_turns', 'x7',
-              'turn_decode_counts', 'turn_completed', 'turn_counts_source_sha256')
+              'turn_decode_counts', 'turn_completed', 'turn_counts_source_sha256', 'gate_waits_s', 'g1_timeouts')
 FIT_FIELDS = ('r_decode_tok_per_s', 'r_decode_step_d_tok_per_s', 'turn_cap_tokens')
 X_G_FIELDS = ('status', 'g0_outcome', 'g0_wait_s', 'admitted_turns', 'x7')
 DUTY_FIELDS = ('verdict', 'pass')

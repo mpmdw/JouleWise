@@ -217,9 +217,27 @@ def _status_age_s(row):
     return None if type(pm_ns) is not int else (row["monotonic_ns"] - pm_ns) / NS
 
 
+# Sanity floor (PR #777 row-1 review, finding 7). Real ages are -0.003 to -0.020 s: the sidecar reads the
+# status about 15 ms after the SMC read bracket starts. An age below this means a clock mix-up or a status
+# read long after its sample, not a fresh stamp, so it is not recorded and a warning is printed.
+STAMP_MIN_AGE_S = -60.0
+
+
 def stamp_fresh(age_s):
-    """RL-145 close section 2 / RL-149 section 1.6: the state's stamp is at most 2 s old."""
-    return age_s is not None and age_s <= FRESH_STAMP_S
+    """RL-145 close section 2 and row 7, as RL-149 sections 1.2 item 4 and 1.6 item 1 apply them: the state's
+    stamp is at most 2 s old ("as written": age at the sample's own stamp, a slightly negative age is not old).
+    A non-number, a non-finite age or an age below ``STAMP_MIN_AGE_S`` is not fresh; the last also warns on
+    stderr. The rule is otherwise looser than G0's own ``0 <= now - pm_ns <= 2 s``, whose ``now`` is taken
+    after the status read (DEVIATIONS RL149-STAMP-AGE)."""
+    import math
+    import sys
+    if isinstance(age_s, bool) or not isinstance(age_s, (int, float)) or not math.isfinite(age_s):
+        return False
+    if age_s < STAMP_MIN_AGE_S:
+        print(f"rl145_prints: power-management stamp age {age_s} s is below the {STAMP_MIN_AGE_S:g} s sanity "
+              "floor; treated as not recorded", file=sys.stderr)
+        return False
+    return age_s <= FRESH_STAMP_S
 
 
 def gate_state_prints(intervals, rows, turns, fast_key):

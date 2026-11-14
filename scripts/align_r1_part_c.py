@@ -144,9 +144,13 @@ def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
 
 
 def stamp_fresh(age_s):
-    """RL-145 close section 2 / row 7, as written: the state's stamp is at most 2 s old. The age is taken
-    at the sample's own stamp; a stamp that follows it (negative age) is not old."""
-    return isinstance(age_s, (int, float)) and not isinstance(age_s, bool) and age_s <= STAMP_MAX_AGE_S
+    """RL-145 close section 2 / row 7, as written (RL-149 section 1.2 item 4): the state's stamp is at most
+    2 s old. The age is taken at the sample's own stamp; a stamp that follows it (negative age) is not old.
+    One rule with the desk prints (``rl145_prints.stamp_fresh``): a non-finite age or one below its -60 s
+    sanity floor is not fresh, and the latter warns."""
+    from joulewise.align.apple.rl145_prints import FRESH_STAMP_S, stamp_fresh as rule
+    assert FRESH_STAMP_S == STAMP_MAX_AGE_S
+    return rule(age_s)
 
 
 def d_bank_start_state(d_bank):

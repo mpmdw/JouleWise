@@ -602,8 +602,12 @@ class ProducerTests(unittest.TestCase):
 
 
 class CaptureEqualityTests(unittest.TestCase):
+    # scripts/align_v4_w1_synthetic.py holds SYN_R1_SLOTS, the synthetic R1 record the overlaid kit's
+    # require_ready reads. RL-148 section 2 / RL-149 section 1.5 (PR #777): the kit now refuses an R1 record
+    # without per-run gate_waits_s.G1 and g1_timeouts, so the record overlays with the kit that reads it.
+    # It carries no timing-receipt code (test_overlaid_files_hold_no_timing_receipt_code).
     NON_RECEIPT_OVERLAY = ('joulewise/align/apple/thermal.py', 'scripts/align_v4_kit.py',
-                           'tests/align/w1_synthetic.py')
+                           'tests/align/w1_synthetic.py', 'scripts/align_v4_w1_synthetic.py')
     # Fable review of #742 (MEDIUM 2): the overlay copies these files from HEAD, so a timing
     # change inside them would be invisible to the byte comparison. They must stay free of
     # timing-receipt code; if one ever needs it, pin the overlay to a commit instead.

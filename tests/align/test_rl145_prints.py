@@ -183,6 +183,19 @@ class CloseSection2Tests(unittest.TestCase):
         self.assertEqual(p.gate_state_prints([], quiet, [t], 'TV0h')['quiet_after_last_token'][0]['s_from_last_token'],
                          0.0)
 
+    def test_the_stamp_rule_has_a_sanity_floor_and_refuses_non_numbers(self):
+        # PR #777 row-1 review, finding 7: below -60 s is a clock mix-up, not a fresh stamp; it warns.
+        import contextlib
+        import io
+        self.assertTrue(p.stamp_fresh(-59.9) and p.stamp_fresh(-0.02) and p.stamp_fresh(2.0))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertFalse(p.stamp_fresh(-60.5))
+        self.assertIn('sanity floor', err.getvalue())
+        for bad in (float('nan'), float('-inf'), float('inf'), True, '1.0', None):
+            with self.subTest(bad=bad), contextlib.redirect_stderr(io.StringIO()):
+                self.assertFalse(p.stamp_fresh(bad))
+
     def test_tv1h_unequal_rows_are_counted_inside_and_outside_gate_windows(self):
         # RL-149 section 1.7: the per-member count, inside and outside gate windows; outside rows never fire.
         intervals = [{'kind': 'G1', 'turn': 1, 'start_ns': 10 * NS, 'end_ns': 20 * NS}]

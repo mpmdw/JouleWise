@@ -1445,7 +1445,11 @@ def check_r1_w1_chain(ctx):
     data.mkdir(parents=True, exist_ok=True)
     steps, failures = [], []
     try:
-        with mock.patch.object(r1, '_run', rehearsal.FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
+        # A pinned wall clock outside the OS-batch window (tests.align.test_r1_rehearsal.NOON_SAFE): the synthetic
+        # rehearsal otherwise waits in real time whenever the probe runs near 02:00-02:35 (RL-149 section 2.9
+        # item 4; PR #777 row-1 review, finding 11).
+        with mock.patch.object(r1, '_now_local', lambda: rehearsal.NOON_SAFE), \
+                mock.patch.object(r1, '_run', rehearsal.FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
                                                                gated_admitted_turns=7)), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             if r1.run(rehearsal.R1Tests.args(None, str(data), synthetic=True)) != 0:

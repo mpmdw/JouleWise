@@ -347,6 +347,10 @@ class SidecarJournalTests(unittest.TestCase):
         self.assertTrue(all('not recorded' in r for r in line['reasons']))
         self.assertTrue(pc.stamp_fresh(2.0) and pc.stamp_fresh(-0.02))
         self.assertFalse(pc.stamp_fresh(2.0001) or pc.stamp_fresh(None) or pc.stamp_fresh(True))
+        import contextlib
+        import io
+        with contextlib.redirect_stderr(io.StringIO()):         # one rule with the desk prints: -60 s floor
+            self.assertFalse(pc.stamp_fresh(-61.0) or pc.stamp_fresh(float('nan')))
 
     def test_an_off_state_reading_fails_with_its_values(self):
         self.state.update(os_level=1, pm_state='Moderate')

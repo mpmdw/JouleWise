@@ -90,6 +90,19 @@ class TypicalCaseTests(unittest.TestCase):
         self.assertEqual((bare['gate_waits_s'], bare['g1_timeouts']), ({'G1': None}, None))
 
 
+class TimingViewTests(unittest.TestCase):
+    def test_the_budget_procedures_view_keeps_the_typical_case_inputs(self):
+        # PR #777 row-1 review, finding 6: the view rebuilds rows from a whitelist; the typical-case bar reads
+        # gate_waits_s.G1 and g1_timeouts, so the view keeps them and the bar judges the view as the record.
+        from scripts import align_w1_budget_procedure as proc
+        _inputs, slots = rl149_case(timed_out=True)
+        view = proc.timing_view(slots)
+        for row, original in zip(view['deadman_budget'], slots['deadman_budget']):
+            self.assertEqual((row['gate_waits_s'], row['g1_timeouts']),
+                             (original['gate_waits_s'], original['g1_timeouts']))
+        self.assertEqual(kit.typical_case_fit(view, T_DEAD, 300.0), kit.typical_case_fit(slots, T_DEAD, 300.0))
+
+
 class DutySetClauseInTheKitTests(unittest.TestCase):
     def test_the_kit_rederives_the_three_turn_set_clause(self):
         _inputs, slots = ready_inputs()

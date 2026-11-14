@@ -315,10 +315,13 @@ class FakeWorld:
 
 
 PACIFIC = r1.ZoneInfo("America/Los_Angeles")
-# A pinned wall clock outside the OS-batch window (RL-149 section 2.9 item 4: 02:00-02:35 local; under
-# RL-72 E2's 11:45-13:15 window this was 02:00). A pinned clock inside the window never advances, so the
-# driver's wait would not end.
-NOON_SAFE = r1.datetime(2026, 11, 7, 12, 0, tzinfo=PACIFIC)
+# A pinned wall clock outside the OS-batch window: twelve hours after the window's start, so the driver's
+# admission check (a segment bound of at most about 2.1 h) never meets the window. It is derived from
+# OS_BATCH_WINDOW_LOCAL, not fixed: a pinned clock inside the window never advances, and the driver's wait
+# would then sleep in real time without end (PR #777 row-1 review, finding 11: a mutated window hung a test).
+# Under RL-149 section 2.9 item 4 (02:00-02:35) this is 14:00.
+NOON_SAFE = (r1.datetime(2026, 11, 7, *r1.OS_BATCH_WINDOW_LOCAL[0], tzinfo=PACIFIC)
+             + r1.timedelta(hours=12))
 
 
 class PhaseTableIdentityTests(unittest.TestCase):

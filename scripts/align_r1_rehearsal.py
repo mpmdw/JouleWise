@@ -61,6 +61,8 @@ EPISODE_CUT_FLAGS = ("episode.deadman:", "episode.g0_unreleased:", "thermal.star
                      "thermal.gate_timeout:", "thermal.hold_timeout:", "episode.decode_budget:",
                      "episode.time_guard:", "episode.context_limit:", "episode_error:", "endpoint_error:",
                      "thermal.collector_failed")
+# k is the 0-based index of the run's last admitted turn: a two-turn run prints "turn 1" (RL-149 section 1.1:
+# D_bank seed 1 "ended at turn 1").
 TURN_CHECK_NOT_APPLICABLE = "not_applicable: episode returned at turn {k}"
 
 
