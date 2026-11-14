@@ -473,7 +473,7 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
     step_facts = step_facts or part_c.step_d_facts
     if prints is None:
         from joulewise.align.apple.rl145_prints import bundle_prints
-        prints = lambda bundle: bundle_prints(bundle, estimate_tokens=True)["turns"]
+        prints = lambda bundle: bundle_prints(bundle, estimate_tokens=True)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
