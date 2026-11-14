@@ -1,4 +1,4 @@
-"""Reference-state rows (RL-148 desk step 6; RL-149 section 1.3; RL-153 section 2): production and twin.
+"""Reference-state rows (RL-148 desk step 6; RL-149 section 1.3; RL-153 section 2; RL-154): production and twin.
 
 Synthetic only: in-memory episodes, traces, member journals, OS readings and PM
 rows. No bundle, no measurement, no model. The optional world test
@@ -29,7 +29,7 @@ REASONS = {'turn_end', 'deadman_last_token', 'os_level_above_0', 'journal_pm_sta
            'hazard_os_level_above_0', 'state_unobserved', 'clock_e20', 'clock_base_e20'}
 NO_ROW = {'start_out_of_state', 'start_state_unobserved', 'cut_in_prefill', 'after_hot_turn',
           'deadman_before_first_token', 'no_decode_token', 'token_stamps_count_mismatch',
-          'token_stamps_unavailable'}
+          'token_stamps_unavailable', 'clock_reference_missing'}
 
 
 def watts_at(t, phases):
@@ -188,7 +188,9 @@ class RowTests(unittest.TestCase):
                       .rows[0].reason)
         self.assertEqual(outcome(m, RowConstants(state={'os_level'}, clock=None, guard_s=2)).rows[0].reason,
                          'turn_end')
-        # Native Unknown and missing states never cut.
+        # Native Unknown and missing states never cut. RL-154 finding 5: the journal has its own state
+        # (Nominal), so this checks the native rows only; a journal reading Unknown or missing is unobserved
+        # (RL154UnknownIsUnobservedTests).
         unknown = build('a', SPEC1, pm_state=lambda x: 'Unknown' if x > t0.first_token_ns else None,
                         journal_pm=lambda x: 'Nominal')
         self.assertEqual(outcome(unknown, C_BOTH).rows[0].reason, 'turn_end')
@@ -570,6 +572,178 @@ class MissingIsUnobservedTests(unittest.TestCase):
                 self.assertTrue({x['reason'] for x in out.no_row} <= NO_ROW)
 
 
+class RL154GapAnchorTests(unittest.TestCase):
+    """RL-154 finding 1: the gap rule's first anchor is the fresh carry-in, else the turn's start."""
+
+    def test_turn_with_no_stamp_at_all_is_hot(self):
+        probe = build('a', SPEC3)
+        t0 = probe[0].turns[0]
+        # The carry-in (at the start, 10 s) and every reading of turn 0 have no stamp.
+        m = build('a', SPEC3, age=lambda x: None if x <= t0.end_ns else -0.015)
+        out = outcome(m, C_BOTH)
+        entry = out.candidates[0]
+        self.assertEqual((entry['start_state'], entry['state_unobserved_ns'], entry['hot']),
+                         ('start_state_unobserved', t0.start_ns, True))
+        self.assertEqual(out.rows, ())
+        self.assertEqual(out.no_row, ({'turn': 0, 'reason': 'start_state_unobserved'},
+                                      {'turn': 1, 'reason': 'after_hot_turn'},
+                                      {'turn': 2, 'reason': 'after_hot_turn'}))
+
+    def test_turn_with_no_reading_at_all_is_hot(self):
+        probe = build('a', SPEC3)
+        t0 = probe[0].turns[0]
+        m = build('a', SPEC3, keep=lambda x: x > t0.end_ns)
+        out = outcome(m, C_BOTH)
+        self.assertEqual((out.candidates[0]['state_unobserved_ns'], out.candidates[0]['hot']), (t0.start_ns, True))
+        self.assertEqual([x['reason'] for x in out.no_row],
+                         ['start_state_unobserved', 'after_hot_turn', 'after_hot_turn'])
+
+    def test_one_long_gap_in_the_turn_also_ends_the_member(self):
+        # The milder loss of evidence: a fresh carry-in, then a 4 s hole inside turn 0's decode.
+        probe = build('a', SPEC3)
+        f = probe[0].turns[0].first_token_ns
+        base = (f // NS) * NS
+        m = build('a', SPEC3, keep=lambda x: not (base + 5 * NS <= x <= base + 7 * NS))
+        out = outcome(m, C_BOTH)
+        self.assertEqual([(r.turn, r.reason) for r in out.rows], [(0, 'state_unobserved')])
+        self.assertEqual([x['reason'] for x in out.no_row], ['after_hot_turn', 'after_hot_turn'])
+
+    def test_stale_carry_in_then_fresh_within_2_s_is_not_hot(self):
+        # Carry-in at 9 s with no stamp, 1.9 s before the start; no reading at 10 or 11 s; the first fresh
+        # reading at 12 s is 1.1 s after the start. Counted from the start: no gap. (Counted from the stale
+        # carry-in it would be a 3 s gap.)
+        start = 10 * NS + 900 * MS
+        m = build('a', SPEC3, start=start, age=lambda x: None if x <= 9 * NS else -0.015,
+                  keep=lambda x: x not in (10 * NS, 11 * NS))
+        out = outcome(m, C_BOTH)
+        entry = out.candidates[0]
+        self.assertEqual((entry['start_state'], entry['state_unobserved_ns'], entry['hot']),
+                         ('start_state_unobserved', None, False))
+        self.assertEqual([(r.turn, r.reason) for r in out.rows], [(1, 'turn_end'), (2, 'turn_end')])
+        self.assertEqual(out.no_row, ({'turn': 0, 'reason': 'start_state_unobserved'},))
+
+    def test_stale_carry_in_then_fresh_more_than_2_s_after_the_start_is_hot(self):
+        # As above with the start at 9.9 s: the first fresh reading (12 s) is 2.1 s after the start.
+        start = 9 * NS + 900 * MS
+        m = build('a', SPEC3, start=start, age=lambda x: None if x <= 9 * NS else -0.015,
+                  keep=lambda x: x not in (10 * NS, 11 * NS))
+        out = outcome(m, C_BOTH)
+        entry = out.candidates[0]
+        self.assertEqual((entry['start_state'], entry['state_unobserved_ns'], entry['hot']),
+                         ('start_state_unobserved', start, True))
+        self.assertEqual([x['reason'] for x in out.no_row],
+                         ['start_state_unobserved', 'after_hot_turn', 'after_hot_turn'])
+
+
+class RL154UnknownIsUnobservedTests(unittest.TestCase):
+    """RL-154 section 3 (finding 2): fresh state needs a present, non-Unknown state, at the start and inside."""
+
+    def test_unknown_or_missing_at_the_start_is_unobserved_and_later_turns_score(self):
+        for value in ('Unknown', None):
+            with self.subTest(state=value):
+                m = build('a', SPEC3, journal_pm=lambda x, v=value: v if x <= 10 * NS else 'Nominal')
+                out = outcome(m, C_BOTH)
+                self.assertEqual(out.candidates[0]['start_state'], 'start_state_unobserved')
+                self.assertFalse(out.candidates[0]['hot'])
+                self.assertEqual(out.no_row, ({'turn': 0, 'reason': 'start_state_unobserved'},))
+                self.assertEqual([(r.turn, r.reason) for r in out.rows], [(1, 'turn_end'), (2, 'turn_end')])
+
+    def test_out_of_state_at_the_start_still_means_a_named_state_or_a_level(self):
+        for kwargs in ({'journal_pm': lambda x: 'Moderate' if x <= 10 * NS else 'Nominal'},
+                       {'os_level': lambda x: 1 if x <= 10 * NS else 0}):
+            with self.subTest(kwargs=list(kwargs)):
+                out = outcome(build('a', SPEC3, **kwargs), C_BOTH)
+                self.assertEqual([x['reason'] for x in out.no_row],
+                                 ['start_out_of_state', 'after_hot_turn', 'after_hot_turn'])
+
+    def test_runs_of_unknown_or_missing_inside_the_decode(self):
+        probe = build('a', SPEC1)
+        f = probe[0].turns[0].first_token_ns
+        base = (f // NS) * NS
+        for value in ('Unknown', None):
+            # 1 s: one reading; no cut.
+            one = build('a', SPEC1, journal_pm=lambda x, v=value: v if x == base + 5 * NS else 'Nominal')
+            with self.subTest(state=value, run='1 s'):
+                self.assertEqual(outcome(one, C_BOTH).rows[0].reason, 'turn_end')
+            # 3 s: three readings; the stretch from base+4 s to base+8 s has no fresh state.
+            three = build('a', SPEC1,
+                          journal_pm=lambda x, v=value: v if base + 5 * NS <= x <= base + 7 * NS else 'Nominal')
+            with self.subTest(state=value, run='3 s'):
+                out = outcome(three, C_BOTH)
+                row = out.rows[0]
+                self.assertEqual(row.reason, 'state_unobserved')
+                self.assertEqual(out.candidates[0]['state_unobserved_ns'], base + 4 * NS)
+                self.assertEqual(row.end_ns, max(s for s in three[1][0] if s <= base + 4 * NS))
+                self.assertIsNone(out.candidates[0]['first_off_ns'])   # Unknown and missing never cut
+
+    def test_whole_turn_of_unknown_after_a_nominal_start(self):
+        # RL-154's probe: a Nominal carry-in, then a fresh stamp on no state (or Unknown) for all of turn 0.
+        probe = build('a', SPEC3)
+        t0 = probe[0].turns[0]
+        for value in ('Unknown', None):
+            with self.subTest(state=value):
+                m = build('a', SPEC3,
+                          journal_pm=lambda x, v=value: v if t0.start_ns < x <= t0.end_ns else 'Nominal')
+                out = outcome(m, C_BOTH)
+                self.assertEqual(out.candidates[0]['start_state'], 'ok')
+                self.assertEqual(out.candidates[0]['state_unobserved_ns'], t0.start_ns)
+                self.assertEqual([x['reason'] for x in out.no_row],
+                                 ['cut_in_prefill', 'after_hot_turn', 'after_hot_turn'])
+
+    def test_fresh_needs_a_present_known_state(self):
+        r = s_rows.JournalReading
+        self.assertTrue(r(0, 0, 'Nominal', True).fresh)
+        self.assertTrue(r(0, 0, 'Moderate', True).fresh)
+        self.assertFalse(r(0, 0, 'Unknown', True).fresh)
+        self.assertFalse(r(0, 0, None, True).fresh)
+        self.assertFalse(r(0, None, 'Nominal', True).fresh)
+        self.assertFalse(r(0, 0, 'Nominal', False).fresh)
+
+
+class RL154ClockReferenceTests(unittest.TestCase):
+    """RL-154 finding 3: a clock clause with no reference gives no row for the member."""
+
+    def test_no_reference_is_s_score_undefined(self):
+        low = build('a', SPEC3, clock=lambda x: 900.0, max_state=lambda x: 1400.0)
+        self.assertIn('clock_e20', [r.reason for r in outcome(low, REG).rows])
+        no_max = build('a', SPEC3, clock=lambda x: 900.0, max_state=lambda x: None)
+        no_pm = (*low[:4], [])
+        for name, member in (('no max_state_mhz', no_max), ('no PM rows', no_pm)):
+            with self.subTest(member=name):
+                out = outcome(member, REG)
+                tw = run_twin(member, REG)
+                self.assertEqual((out.rows, out.status, out.measured_j), ((), 's_score_undefined', None))
+                self.assertIn('s_rows.clock_reference_missing', out.flags)
+                self.assertEqual([x['reason'] for x in out.no_row], ['clock_reference_missing'] * 3)
+                self.assertEqual((tw['status'], tw['flags']),
+                                 ('s_score_undefined', ['s_rows.clock_reference_missing']))
+                self.assertIsNone(out.candidates[0]['clock_reference_mhz'])
+                # Without a clock clause there is nothing to switch off: the member scores.
+                plain = outcome(member, C_BOTH)
+                self.assertEqual((plain.status, len(plain.rows)), ('scored', 3))
+                self.assertNotIn('s_rows.clock_reference_missing', plain.flags)
+
+    def test_a_registered_base_clause_has_its_own_reference(self):
+        no_pm = (*build('a', SPEC3)[:4], [])
+        out = outcome(no_pm, RowConstants(state=BOTH, clock=ClockClause('registered_base', base_mhz=1398.0),
+                                          guard_s=2.0))
+        self.assertEqual((out.status, len(out.rows)), ('scored', 3))
+
+
+class RL154DocstringTests(unittest.TestCase):
+    """RL-154 finding 4: the readings list and the module docstring carry T1, T9 and the gap anchor."""
+
+    def test_docstrings_carry_the_rl154_text(self):
+        for doc in (s_rows.__doc__, twin.__doc__):
+            self.assertIn('RL-154', doc)
+            self.assertIn('``Unknown``', doc)
+            self.assertNotIn('``Unknown`` is out of state (it is not Nominal)', doc)
+        self.assertIn('T9a Gap anchor', twin.__doc__)
+        self.assertIn('T12 Clock reference', twin.__doc__)
+        self.assertIn('counted\n  from the fresh carry-in or else from the start', s_rows.__doc__)
+        self.assertIn('clock_reference_missing', s_rows.__doc__)
+
+
 class BundleStampTests(unittest.TestCase):
     def test_failed_execution_reads_runtime_events(self):
         turn = Turn(index=0, start_ns=0, end_ns=10 * NS, context_tokens=0, prefill_tokens=5, decode_tokens=2,
@@ -588,11 +762,12 @@ class BundleStampTests(unittest.TestCase):
         self.assertEqual(source, 'events.jsonl')
 
 
-def world(seed, *, n=8, hot=False, deadman=None, noisy=False):
+def world(seed, *, n=8, hot=False, deadman=None, noisy=False, unknown=False, no_max=False):
     """A stratum of n members of one window and pair with varied lengths (deterministic).
 
     ``noisy``: each member's journal has stale stamps (one 3 s stretch, single readings at +2.5 s and at
-    exactly -2.0 s, which is fresh) and missing readings."""
+    exactly -2.0 s, which is fresh) and missing readings. ``unknown``: the journal's state is Unknown or
+    missing in runs of 1 to 4 readings. ``no_max``: no PM row carries ``max_state_mhz``."""
     rng = random.Random(seed)
     members = []
     for k in range(n):
@@ -621,6 +796,16 @@ def world(seed, *, n=8, hot=False, deadman=None, noisy=False):
                                                  2.5 if (x // NS) % 200 in si else
                                                  -2.0 if (x // NS) % 200 in ed else -0.015))(stale, single, edge)
             kwargs['keep'] = (lambda g: (lambda x: (x // NS) % 200 not in g))(gone)
+        if unknown:
+            runs = {}
+            for _ in range(4):
+                a, v = rng.randrange(0, 190), rng.choice(('Unknown', None))
+                runs.update({a + i: v for i in range(rng.randint(1, 4))})
+            pm_fn = kwargs.get('pm_state') or (lambda x: 'Nominal')
+            kwargs['journal_pm'] = (lambda r, f: (lambda x: r[(x // NS) % 200] if (x // NS) % 200 in r
+                                                  else f(x)))(runs, pm_fn)
+        if no_max:
+            kwargs['max_state'] = lambda x: None
         if deadman == k:
             kwargs.update(deadman_turn=len(spec) - 1, flags=(f'episode.deadman:{len(spec) - 1}',))
         members.append(build(f'w{seed}-m{k}', spec, start=10 * NS + k * 1000 * NS,
@@ -641,10 +826,13 @@ CONSTANT_GRID = [
 class TwinAgreementTests(unittest.TestCase):
     def test_production_and_twin_agree_on_rows_and_scores(self):
         seen = set()
-        for seed, hot, deadman, noisy in ((1, False, None, False), (2, True, None, False), (3, True, 4, True),
-                                          (4, False, 0, True), (5, True, None, True),
-                                          (6, False, 2, False)):
-            members = world(seed, hot=hot, deadman=deadman, noisy=noisy)
+        for seed, hot, deadman, noisy, extra in ((1, False, None, False, {}), (2, True, None, False, {}),
+                                                 (3, True, 4, True, {}), (4, False, 0, True, {}),
+                                                 (5, True, None, True, {}), (6, False, 2, False, {}),
+                                                 (7, True, None, True, {'unknown': True}),
+                                                 (8, False, 1, False, {'unknown': True}),
+                                                 (9, False, None, False, {'no_max': True})):
+            members = world(seed, hot=hot, deadman=deadman, noisy=noisy, **extra)
             for constants in CONSTANT_GRID:
                 prod = [run(m, constants) for m in members]
                 twins = {m[0].episode_id: run_twin(m, constants) for m in members}
@@ -656,6 +844,8 @@ class TwinAgreementTests(unittest.TestCase):
                     self.assertEqual(list(p.no_row), t['no_row'])
                     self.assertEqual([e['start_state'] for e in p.candidates], [x['start_state'] for x in t['turns']])
                     self.assertEqual(p.n_edges, t['n_edges'])
+                    self.assertEqual(p.status, t['status'])
+                    self.assertEqual('s_rows.clock_reference_missing' in p.flags, bool(t['flags']))
                     for a, b in zip(p.rows, t['rows']):
                         self.assertAlmostEqual(a.energy_j, b['energy_j'], delta=1e-9 * max(1, abs(a.energy_j)))
                     seen.update(r.reason for r in p.rows)
@@ -673,7 +863,7 @@ class TwinAgreementTests(unittest.TestCase):
                         self.assertAlmostEqual(ps[k], ts[k], delta=1e-6)
         # The worlds reach the rule's branches.
         for reason in ('turn_end', 'state_unobserved', 'after_hot_turn', 'os_level_above_0', 'clock_e20',
-                       'deadman_last_token'):
+                       'deadman_last_token', 'start_state_unobserved', 'clock_reference_missing'):
             self.assertIn(reason, seen)
 
 
