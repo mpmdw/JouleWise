@@ -254,7 +254,7 @@ Each line is machine-checked at the arm (`kit.CHECK_KINDS`, which every kit must
   anything is written.
 - **Outputs.** `JOURNAL-TABLE.md`, `desk_summary.json`, `stops.json`.
 - **Named stops** (`joulewise/cadence/stops.py`): REFUSAL, INSTRUMENT_FAULT, CONTAMINATED_REDOS (3),
-  BAND_UNREACHABLE (2), LEG_OVERTIME (1.5×). Only these page the lead and the research lead, through
+  LEG_OVERTIME (two legs over 1.5×). RL-149 §2.4 drops BAND_UNREACHABLE and sets LEG_OVERTIME at two legs. Only these page the lead and the research lead, through
   the alarm and a `cadence-stop` issue, which also halts the queue. Everything else follows its
   predeclared disposition and is recorded without a page.
 - **Energy.** No desk code opens it. The frozen fit at a kit look is the only reader, run as its own
@@ -267,7 +267,7 @@ Each line is machine-checked at the arm (`kit.CHECK_KINDS`, which every kit must
   bundle. The bundle is either pushed as `refs/heads/desk-bundles/<plan_id>`, which is public and
   carries no energy, token ids or text, or pulled by the Air over the ordinary key before the next
   install. The research lead chooses.
-- **One span of lag.** A desk-only stop (CONTAMINATED_REDOS, BAND_UNREACHABLE, LEG_OVERTIME) is found
+- **One span of lag.** A desk-only stop (CONTAMINATED_REDOS, LEG_OVERTIME) is found
   after span k+1 is armed and stops k+2. The magistrate evaluates the MBP-visible stops itself before
   arming. The k+2 rule bounds the debt to one span.
 
@@ -416,3 +416,23 @@ Each line is machine-checked at the arm (`kit.CHECK_KINDS`, which every kit must
 6. **Per-span RUN_STATE items:** keep them (the pointer rule and watchers depend on them) or move to a
    campaign ledger? This design keeps them.
 7. **After a named stop:** who may restart, and is it always a new `attempt` with a ruling?
+
+## 13. The campaign runner, `cadence-legs-v1` (RL-149 §5 item 6)
+
+Built on `align/2026-11-14-campaign-runner`. RL-149 governs where this section and the sections above differ.
+
+| Piece | Where | What it does |
+|---|---|---|
+| Leg kind `cadence-leg` | `joulewise/align/apple/cadence_leg.py`, entry `scripts/cadence_leg_runtime.py` | One type-A leg per invocation: its own G0 (R1 timeout 1,200 s), the band recipe's quiet, one step-task turn with the leg's prompt size, decode cap and seed. Built on the step leg (`StepTask`/`step_spec`, the A-B-A leg's native capture and post-G0 deadman). It writes no energy: no `decode_energy`, no `t_decline`, and its result is refused if a key names energy, power, a slot or a transcript. The ten condition-13 files are byte-identical: the kind subclasses `r1_runtime.Segment` |
+| Span driver | `scripts/cadence_legs_runner.py run` | Preflight (frozen commit and paths, night agents, AC, condition 13, the R1 smoke's feeds, powermode 0, display dwell); the plan; one fresh soak (the night's soak path); the roster's legs in seeded order; close (Automatic restore, feeds stopped and hashed, receipt, desk bundle) |
+| Plan adapter | `joulewise/cadence/legs.py` `plan_span`; CLI `plan` | worst case = soak + overhead + (roster + redo quota) × leg cap; deadline = t0 + worst case; refuses a t0 whose worst case meets the blackout (RL-149 §2.9 item 6.3); per-leg budgets from the time model |
+| Batch admission | `legs.leg_start_delay`, `legs.interval_delay` | No soak overlaps a blackout, no leg starts in one; a leg in flight finishes. The blackout defaults to the R1 driver's constant (moved by the W1-line PR) and is `--batch-window` otherwise |
+| Per-leg redo | the driver | RL-72 E2's load rule (`os_load_verdict`); up to the kit's `redo_quota` per span; a rejected attempt stays as `runtime.rejected<N>` |
+| Stage stamps | `DIR/chain-stages.jsonl` | A start line (rc null) and an end line per stage, with the probe's five keys |
+| Desk bundle | `DIR/desk-bundle/` | `legs/<id>/leg_summary.json` (exactly `desk.LEG_SUMMARY_KEYS`), `span/result.json`, `span/meter.json` (the KM003C stream's header and trailer lines only) |
+| Launcher | `scripts/launch_align_r0.py --runner-kind cadence-legs-v1 --kit K [--legs ...]` | Agent-free like `r1-smoke`; refuses a deadline shorter than the plan's worst case plus reserves |
+| Mock | `scripts/cadence_legs_runner.py mock` | The whole span with a fake clock, feeds and leg runtime, then the Air desk on its bundle |
+
+Bands are history recipes (`q0` = the turn starts at the leg's own G0 release). The first leg of a span follows
+its fresh soak, the block's cold start. Kits live under `docs/process/cadence/kits/`.
+

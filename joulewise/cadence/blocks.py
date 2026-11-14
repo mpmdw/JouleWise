@@ -79,7 +79,7 @@ def validate_ledger(doc, kits_root=None):
             problems.append(f"{where}: SPECIFIED needs block_definition (what makes it an independent block)")
         if at_least(st, "REVIEWED") and not b.get("reviews"):
             problems.append(f"{where}: REVIEWED needs at least one review record")
-        if at_least(st, "AUTHORIZED") and not (isinstance(b.get("ruling"), str) and re.fullmatch(r"RL-\d+[a-z]?", b["ruling"])):
+        if at_least(st, "AUTHORIZED") and not (isinstance(b.get("ruling"), str) and re.fullmatch(r"RL-\d+[a-z]?(?: §\d{1,2}(?:\.\d{1,2})?)?", b["ruling"])):
             problems.append(f"{where}: AUTHORIZED needs a ruling RL-<n>")
         if at_least(st, "READY"):
             if not (isinstance(kit, dict) and set(kit) == {"path", "sha256"}):

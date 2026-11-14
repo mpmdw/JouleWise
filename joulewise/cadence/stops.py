@@ -9,8 +9,11 @@ is recorded by its predeclared disposition and does not page anyone.
 | REFUSAL | the results ref is not a clean completion (chain exit code non-zero, outcome not COMPLETE, or no result by the deadline). ``verdict: GO`` alone is never success |
 | INSTRUMENT_FAULT | ``fault`` true, the KM003C capture missing, a feed not proven stopped, meter bad polls or USB errors above zero |
 | CONTAMINATED_REDOS | contaminated redos (scope span or campaign) reach ``contaminated_redos_max`` |
-| BAND_UNREACHABLE | one start band is unreachable ``band_unreachable_max`` times (scope span or campaign) |
-| LEG_OVERTIME | a leg's wall time exceeds ``leg_time_factor`` x its budget |
+| LEG_OVERTIME | two legs of the span exceed ``leg_time_factor`` x their budget (a leg with no wall or budget recorded counts) |
+
+RL-149 section 2.4 (it governs this table): LEG_OVERTIME needs two legs in a span, and
+BAND_UNREACHABLE is dropped ("bands are by history; nothing is reached for"). The kit's
+``band_unreachable_*`` keys stay in schema v1 and no stop reads them.
 
 Span summary shape (all operational): ``{"result": {chain_exit_code, chain_outcome, fault, outcome},
 "meter": {present, proven_stopped, bad_polls, usb_errors}, "feeds_proven_stopped": bool,
@@ -18,11 +21,10 @@ Span summary shape (all operational): ``{"result": {chain_exit_code, chain_outco
 """
 from __future__ import annotations
 
-from collections import Counter
-
 from joulewise.cadence.queue import result_ok
 
-CODES = ("REFUSAL", "INSTRUMENT_FAULT", "CONTAMINATED_REDOS", "BAND_UNREACHABLE", "LEG_OVERTIME")
+CODES = ("REFUSAL", "INSTRUMENT_FAULT", "CONTAMINATED_REDOS", "LEG_OVERTIME")
+LEG_OVERTIME_LEGS = 2   # RL-149 section 2.4: "two legs over 1.5 x their budget in a span"
 
 
 def _num(v):
@@ -64,19 +66,13 @@ def evaluate_named_stops(rules, span, history=()):
         stops.append({"code": "CONTAMINATED_REDOS",
                       "detail": f"{redos} contaminated redos ({rules['contaminated_redos_scope']})"})
 
-    band_pool = list(legs)
-    if rules["band_unreachable_scope"] == "campaign":
-        band_pool = [leg for past in history for leg in past.get("legs") or []] + band_pool
-    misses = Counter(leg.get("start_band") for leg in band_pool if leg.get("band_reached") is False)
-    for band, n in sorted(misses.items(), key=lambda kv: str(kv[0])):
-        if n >= rules["band_unreachable_max"]:
-            stops.append({"code": "BAND_UNREACHABLE", "detail": f"band {band} unreachable {n} times "
-                                                                f"({rules['band_unreachable_scope']})"})
+    over = []
     for leg in legs:
         wall, budget = leg.get("wall_s"), leg.get("budget_s")
         if not (_num(wall) and _num(budget) and budget > 0):
-            stops.append({"code": "LEG_OVERTIME", "detail": f"{leg.get('leg_id')}: wall or budget not recorded"})
+            over.append(f"{leg.get('leg_id')}: wall or budget not recorded")
         elif wall > rules["leg_time_factor"] * budget:
-            stops.append({"code": "LEG_OVERTIME",
-                          "detail": f"{leg.get('leg_id')}: {wall:.0f} s > {rules['leg_time_factor']} x {budget:.0f} s"})
+            over.append(f"{leg.get('leg_id')}: {wall:.0f} s > {rules['leg_time_factor']} x {budget:.0f} s")
+    if len(over) >= LEG_OVERTIME_LEGS:
+        stops.append({"code": "LEG_OVERTIME", "detail": "; ".join(over)})
     return stops

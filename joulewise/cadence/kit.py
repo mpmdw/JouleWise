@@ -37,7 +37,10 @@ from zoneinfo import ZoneInfo
 
 SCHEMA = "joulewise.cadence_campaign_kit.v1"
 LOCAL_ZONE_NAME = "America/Los_Angeles"
-# scripts/align_r1_rehearsal.py OS_BATCH_WINDOW_LOCAL (ruling 8): 11:45-13:15 local.
+# scripts/align_r1_rehearsal.py OS_BATCH_WINDOW_LOCAL (ruling 8): 11:45-13:15 local. RL-149 section 2.9
+# item 4 moves the blackout to 02:00-02:35; the W1-line PR moves the driver constant. The validator takes
+# the window as a parameter (``validate_kit(..., batch_window=...)``, ``validate-kit --batch-window``)
+# so this default is not a second copy of that change.
 OS_BATCH_WINDOW = ((11, 45), (13, 15))
 # Approved named stops (Ed, 2026-11-13; throughput plan change 3). A kit may tighten, never loosen.
 STOP_LIMITS = {"contaminated_redos_max": 3, "band_unreachable_max": 2, "leg_time_factor": 1.5}
@@ -47,7 +50,8 @@ CAMPAIGN_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{2,40}")
 LEG_ID_RE = re.compile(r"L\d{3,4}")
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
-RULING_RE = re.compile(r"RL-\d{1,4}[a-z]?")
+# RL-149 section 2.8 line 1: "the kit's ruling is RL-149 §2" (an optional section suffix).
+RULING_RE = re.compile(r"RL-\d{1,4}[a-z]?(?: §\d{1,2}(?:\.\d{1,2})?)?")
 HHMM_RE = re.compile(r"([01]\d|2[0-3]):([0-5]\d)")
 CHECK_ID_RE = re.compile(r"[a-z][a-z0-9_]{1,40}")
 PATH_RE = re.compile(r"(?!/)(?!.*\.\./)[A-Za-z0-9_./-]{1,200}")
@@ -175,15 +179,15 @@ def _window_s(t0_min, end_min):
     return ((end_min - t0_min) % (24 * 60)) * 60
 
 
-def _overlaps_batch(start_min, end_min):
-    """True when the span [start, end) on a 24 h clock (end may be the next day) meets 11:45-13:15."""
-    (h0, m0), (h1, m1) = OS_BATCH_WINDOW
+def _overlaps_batch(start_min, end_min, window=OS_BATCH_WINDOW):
+    """True when the span [start, end) on a 24 h clock (end may be the next day) meets the window."""
+    (h0, m0), (h1, m1) = window
     b0, b1 = h0 * 60 + m0, h1 * 60 + m1
     length = (end_min - start_min) % 1440 or 1440
     return any(start_min < b1 + d * 1440 and start_min + length > b0 + d * 1440 for d in (-1, 0, 1))
 
 
-def _check_template(t, problems):
+def _check_template(t, problems, batch_window=OS_BATCH_WINDOW):
     if not _closed(t, TEMPLATE_KEYS, "span_template", problems):
         return
     if t.get("timezone") != LOCAL_ZONE_NAME:
@@ -199,8 +203,10 @@ def _check_template(t, problems):
             problems.append(f"span_template.{k}: must be an integer >= {0 if k in ('redo_quota', 'soak_s', 'fixed_overhead_s') else 1}")
     if any(not _is_int(v) for v in ints.values()):
         return
-    if _overlaps_batch(t0, end):
-        problems.append("span_template: the span [t0_local, end_by_local) overlaps the OS batch window 11:45-13:15")
+    if _overlaps_batch(t0, end, batch_window):
+        (h0, m0), (h1, m1) = batch_window
+        problems.append(f"span_template: the span [t0_local, end_by_local) overlaps the OS batch window "
+                        f"{h0:02d}:{m0:02d}-{h1:02d}:{m1:02d}")
     if ints["leg_worst_case_s"] < ints["leg_budget_s"]:
         problems.append("span_template.leg_worst_case_s: below leg_budget_s")
     need = (ints["soak_s"] + ints["fixed_overhead_s"]
@@ -227,7 +233,7 @@ def _check_stops(s, problems):
             problems.append(f"stop_rules.{k}: one of {STOP_SCOPES}")
 
 
-def validate_kit(kit):
+def validate_kit(kit, *, batch_window=OS_BATCH_WINDOW):
     """Return the kit unchanged, or raise KitError naming every problem."""
     problems = []
     if not _closed(kit, TOP_KEYS, "kit", problems):
@@ -329,7 +335,7 @@ def validate_kit(kit):
             problems.append("inclusion_rules: duplicate id")
 
     _check_stops(kit.get("stop_rules"), problems)
-    _check_template(kit.get("span_template"), problems)
+    _check_template(kit.get("span_template"), problems, batch_window)
 
     checklist = kit.get("checklist")
     if not isinstance(checklist, list):
@@ -383,13 +389,13 @@ def validate_kit(kit):
     return kit
 
 
-def load_kit(path):
+def load_kit(path, *, batch_window=OS_BATCH_WINDOW):
     raw = Path(path).read_bytes()
     try:
         kit = json.loads(raw, object_pairs_hook=_unique)
     except ValueError as error:
         raise KitError([f"{path}: not JSON ({error})"]) from None
-    return validate_kit(kit), hashlib.sha256(raw).hexdigest()
+    return validate_kit(kit, batch_window=batch_window), hashlib.sha256(raw).hexdigest()
 
 
 def _unique(pairs):

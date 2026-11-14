@@ -40,6 +40,13 @@ DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
 # R1 has two separately owned groups (part and meter) and an Automatic
 # restore. Leave the fence up while their ordinary teardown proves absence.
 R1_CLEANUP_GRACE_S = 180
+# RL-149 section 5 item 6: the conditionless calibration campaign's span runner
+# (scripts/cadence_legs_runner.py). Like r1-smoke it is agent-free: it starts
+# its own feeds, display sleep and dwell, and owns an Automatic restore.
+CADENCE_RUNNER_KIND = "cadence-legs-v1"
+AGENT_FREE_RUNNER_KINDS = ("r1-smoke", CADENCE_RUNNER_KIND)
+LEG_IDS_PATTERN = re.compile(r"L\d{3,4}(?:,L\d{3,4})*")
+BATCH_WINDOW_PATTERN = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d")
 
 
 def r1_part_caps() -> dict[str, float]:
@@ -84,6 +91,29 @@ def r1_minimum_seconds(parts: str = "AB", fresh_soak: bool = False) -> float:
     caps = {**r1_part_caps(), "C": r1_part_c_cap_s() if "C" in parts else 0}
     return (sum(caps[p] for p in parts) + (r1_soak_cap_s() if fresh_soak else 0)
             + DISPLAY_SLEEP_DWELL_S + 2 * R1_CLEANUP_GRACE_S + 10)
+
+
+def cadence_plan(kit: Path, legs: str | None = None, batch_window: str | None = None,
+                 t0: float | None = None) -> dict:
+    """The campaign runner's plan for this span (kit roster and template; no host contact)."""
+    repo = Path(__file__).resolve().parents[1]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from joulewise.cadence import kit as kitmod, legs as legsmod
+    from scripts import cadence_legs_runner as runner
+
+    loaded, _sha = kitmod.load_kit(kit)
+    if loaded["runner"]["kind"] != CADENCE_RUNNER_KIND:
+        raise ValueError(f"kit runner.kind is not {CADENCE_RUNNER_KIND}")
+    windows = [legsmod.parse_window(batch_window)] if batch_window else runner.default_windows()
+    return legsmod.plan_span(loaded, t0_epoch=time.time() if t0 is None else t0, windows=windows,
+                             leg_ids=legs.split(",") if legs else None, max_span_s=runner.max_span_s())
+
+
+def cadence_minimum_seconds(plan: dict) -> float:
+    """The span's worst case plus the runner's work reserve and this launcher's cleanup grace."""
+    from scripts import cadence_legs_runner as runner
+    return runner.launch_deadline(plan) - plan["t0_epoch_s"]
 
 
 def positive_seconds(value: str) -> float:
@@ -233,7 +263,7 @@ def run_until_deadline(args) -> int:
         raise TimeoutError(f"R0 desk deadline leaves no room for the {dwell:g} s display dwell")
     child = None
     runner = json.loads(args.runner_spec.read_text())
-    r1_smoke = isinstance(runner, dict) and runner.get("kind") == "r1-smoke"
+    r1_smoke = isinstance(runner, dict) and runner.get("kind") in AGENT_FREE_RUNNER_KINDS
 
     def interrupted(signum, _frame):
         raise SystemExit(128 + signum)
@@ -275,6 +305,12 @@ def run_until_deadline(args) -> int:
 
 
 def runner_argv(args) -> list[str]:
+    if getattr(args, "runner_kind", "r0") == CADENCE_RUNNER_KIND:
+        legs, window = getattr(args, "legs", None), getattr(args, "batch_window", None)
+        return [str(args.python_bin), str(args.repo / "scripts/cadence_legs_runner.py"), "run",
+                "--kit", str(args.kit), "--output", str(args.output),
+                *(["--legs", legs] if legs else []), *(["--batch-window", window] if window else []),
+                "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin)]
     if getattr(args, "runner_kind", "r0") == "r1-smoke":
         fresh = getattr(args, "fresh_soak", False)
         parts = getattr(args, "parts", "AB")
@@ -302,6 +338,22 @@ def launch(args) -> None:
         raise ValueError("--checks must be comma-separated runner check names")
     fresh = getattr(args, "fresh_soak", False)
     parts = getattr(args, "parts", "AB")
+    cadence = args.runner_kind == CADENCE_RUNNER_KIND
+    kit, legs, window = getattr(args, "kit", None), getattr(args, "legs", None), getattr(args, "batch_window", None)
+    if not cadence and (kit is not None or legs is not None or window is not None):
+        raise ValueError("--kit, --legs and --batch-window apply to cadence-legs-v1 only")
+    if cadence:
+        if kit is None or not kit.is_file():
+            raise ValueError("cadence-legs-v1 requires an existing --kit")
+        if args.soak_reference is not None:
+            raise ValueError("cadence-legs-v1 runs its own fresh soak; no --soak-reference")
+        if legs is not None and not LEG_IDS_PATTERN.fullmatch(legs):
+            raise ValueError("--legs must be comma-separated kit leg ids (L001,L002,...)")
+        if window is not None and not BATCH_WINDOW_PATTERN.fullmatch(window):
+            raise ValueError("--batch-window must be HH:MM-HH:MM")
+        plan = cadence_plan(kit, legs, window)
+        if args.deadline - time.time() < cadence_minimum_seconds(plan):
+            raise ValueError("cadence-legs-v1 deadline cannot fit the span's worst case, work reserve and cleanup grace")
     if args.runner_kind != "r1-smoke" and (fresh or parts != "AB"):
         raise ValueError("--fresh-soak and --parts apply to r1-smoke only")
     if parts == "C" and not fresh:
@@ -330,8 +382,8 @@ def launch(args) -> None:
     # R0-L3 item 3: pass a check subset (R0-L1) and --keep-going (the desk
     # default) through; the runner's prerequisite gates still apply.
     spec = runner_argv(args)
-    if args.runner_kind == "r1-smoke":
-        spec = {"kind": "r1-smoke", "argv": spec}
+    if args.runner_kind in AGENT_FREE_RUNNER_KINDS:
+        spec = {"kind": args.runner_kind, "argv": spec}
     runner_spec.write_text(json.dumps(spec) + "\n")
     # Keep the measurement entry-point name out of the launcher ancestors'
     # argv: QuietGuard correctly refuses a second align_r0_checks process.
@@ -346,7 +398,7 @@ def launch(args) -> None:
         "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin", "LC_ALL": "C"},
         "StandardOutPath": str(job / "stdout.log"), "StandardErrorPath": str(job / "stderr.log"),
     }
-    if args.runner_kind == "r1-smoke":
+    if args.runner_kind in AGENT_FREE_RUNNER_KINDS:
         # Cover the runner's teardown plus the outer helper's TERM grace.
         job_spec["ExitTimeOut"] = 2 * R1_CLEANUP_GRACE_S + 40
         # The night, dead-man and probe templates run Interactive: the default
@@ -390,7 +442,10 @@ def main(argv=None) -> int:
     start = sub.add_parser("launch", help="magistrate: publish fence, bootstrap once, then exit session")
     start.add_argument("--repo", type=Path, required=True)
     start.add_argument("--config", type=Path, help="required for the default r0 runner")
-    start.add_argument("--runner-kind", choices=("r0", "r1-smoke"), default="r0")
+    start.add_argument("--runner-kind", choices=("r0", "r1-smoke", CADENCE_RUNNER_KIND), default="r0")
+    start.add_argument("--kit", type=Path, help="cadence-legs-v1: the frozen campaign kit (RL-149 section 2)")
+    start.add_argument("--legs", help="cadence-legs-v1: the queue span's roster, comma-separated kit leg ids")
+    start.add_argument("--batch-window", help="cadence-legs-v1: HH:MM-HH:MM blackout (default: the R1 driver's)")
     start.add_argument("--soak-reference", type=Path, help="required for r1-smoke unless --fresh-soak")
     start.add_argument("--fresh-soak", action="store_true",
                        help="r1-smoke: run the night's idle soak first and use its reference (RL-94)")
@@ -429,7 +484,7 @@ def main(argv=None) -> int:
     run.add_argument("--runner-spec", type=Path, required=True)
     run.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
-    for name in ("repo", "config", "output", "disk_path", "custody_root", "soak_reference"):
+    for name in ("repo", "config", "output", "disk_path", "custody_root", "soak_reference", "kit"):
         if getattr(args, name, None) is not None:
             setattr(args, name, getattr(args, name).expanduser().resolve())
     # Absolute but NOT symlink-resolved: a venv interpreter is a symlink to its

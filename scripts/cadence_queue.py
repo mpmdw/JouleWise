@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Campaign kit, span queue and BLOCK-QUEUE ledger: validate, decide, report. Read-only.
 
-    python3.13 -B scripts/cadence_queue.py validate-kit KIT.json [--repo PATH]
+    python3.13 -B scripts/cadence_queue.py validate-kit KIT.json [--repo PATH] [--batch-window HH:MM-HH:MM]
     python3.13 -B scripts/cadence_queue.py gen-legs --campaign-id ID --master-seed N --n-legs N \\
         --bands a,b,c --prefill-tokens N --decode-tokens N
     python3.13 -B scripts/cadence_queue.py validate-queue [QUEUE.json] [--kits-root .]
@@ -34,9 +34,16 @@ def _fail(problems):
     return 1
 
 
+def _window(text):
+    if not text:
+        return kitmod.OS_BATCH_WINDOW
+    h0, m0, h1, m1 = (int(x) for x in text.replace("-", ":").split(":"))
+    return ((h0, m0), (h1, m1))
+
+
 def cmd_validate_kit(args):
     try:
-        kit, sha = kitmod.load_kit(args.kit)
+        kit, sha = kitmod.load_kit(args.kit, batch_window=_window(args.batch_window))
     except kitmod.KitError as error:
         return _fail(error.problems)
     problems = kitmod.verify_frozen(kit, args.repo) if args.repo else []
@@ -106,6 +113,8 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("validate-kit"); s.add_argument("kit"); s.add_argument("--repo")
+    s.add_argument("--batch-window", help="HH:MM-HH:MM local blackout for the template check "
+                                          "(default 11:45-13:15; RL-149 section 2.9 item 4 rules 02:00-02:35)")
     s = sub.add_parser("gen-legs")
     s.add_argument("--campaign-id", required=True); s.add_argument("--master-seed", type=int, required=True)
     s.add_argument("--n-legs", type=int, required=True); s.add_argument("--bands", required=True)

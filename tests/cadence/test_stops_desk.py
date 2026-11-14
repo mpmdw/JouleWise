@@ -52,16 +52,17 @@ class NamedStops(unittest.TestCase):
         rules = {**RULES, "contaminated_redos_scope": "campaign"}
         self.assertEqual(self.codes(span([leg(4, contaminated_redos=1)]), [span(legs[:2])], rules), ["CONTAMINATED_REDOS"])
 
-    def test_band_unreachable_twice(self):
-        legs = [leg(1, band_reached=False), leg(2, start_band="warm", band_reached=False)]
+    def test_band_unreachable_is_dropped_by_rl149(self):
+        # RL-149 section 2.4: BAND_UNREACHABLE is dropped; bands are by history.
+        legs = [leg(i, band_reached=False) for i in (1, 2, 3)]
         self.assertEqual(self.codes(span(legs)), [])
-        legs.append(leg(3, band_reached=False))
-        self.assertEqual(self.codes(span(legs)), ["BAND_UNREACHABLE"])
 
-    def test_leg_over_one_and_a_half_times(self):
-        self.assertEqual(self.codes(span([leg(1, wall_s=2250.0)])), [])
-        self.assertEqual(self.codes(span([leg(1, wall_s=2251.0)])), ["LEG_OVERTIME"])
-        self.assertEqual(self.codes(span([leg(1, wall_s=None)])), ["LEG_OVERTIME"])
+    def test_two_legs_over_one_and_a_half_times(self):
+        # RL-149 section 2.4: "LEG_OVERTIME, two legs over 1.5 x their budget in a span".
+        self.assertEqual(self.codes(span([leg(1, wall_s=2250.0), leg(2, wall_s=2250.0)])), [])
+        self.assertEqual(self.codes(span([leg(1, wall_s=2251.0)])), [])
+        self.assertEqual(self.codes(span([leg(1, wall_s=2251.0), leg(2, wall_s=2251.0)])), ["LEG_OVERTIME"])
+        self.assertEqual(self.codes(span([leg(1, wall_s=None), leg(2, wall_s=2251.0)])), ["LEG_OVERTIME"])
 
 
 class Desk(unittest.TestCase):
@@ -94,8 +95,12 @@ class Desk(unittest.TestCase):
         self.assertIn("| L001 | mid | True | 114.0 | released | 1200.0 | 1500.0 | 0.80 |", text)
         self.assertEqual(json.loads((self.out / "stops.json").read_text()), [])
 
-    def test_overtime_leg_is_flagged_and_stops(self):
+    def test_overtime_legs_are_flagged_and_two_stop(self):
         self.write_leg(leg(1, wall_s=3000.0))
+        _, stops = self.build()
+        self.assertEqual(stops, [])
+        self.assertIn("**over**", (self.out / "JOURNAL-TABLE.md").read_text())
+        self.write_leg(leg(2, wall_s=3000.0))
         _, stops = self.build()
         self.assertEqual([s["code"] for s in stops], ["LEG_OVERTIME"])
         self.assertIn("**over**", (self.out / "JOURNAL-TABLE.md").read_text())
