@@ -547,11 +547,23 @@ override lives in `cadence_leg.py` (`CadenceLegSegment`).
 - **Budget.** A consumer's modeled G0 is 600 s (own: 209 s), so a consumer whose G0 runs to its 1,200 s cap is
   still under 1.5 x its budget: a long G0 alone never trips LEG_OVERTIME. The cap and the 2,700 s leg bound
   are unchanged, so the worst case is unchanged (11.4 h for 12 legs).
-- **Projection.** The leg result and record gain `g0_shape`, `g0_role` and `g0_reference_source` (a run id).
-  No temperature, energy or power is projected; `leg-summary-v1` is unchanged.
+- **Projection.** The leg result and record gain `g0_shape`, `g0_role` and `g0_reference_source` (a run id);
+  the receipt names each consumer's source (`legs[].span_reference`). No temperature, energy or power is
+  projected; `leg-summary-v1` is unchanged, so the desk table shows no cell column (the hand-read joins the
+  kit by leg id).
+- **Which attempt is the source.** The first leg's accepted attempt (`legs/<first>/runtime`). If that leg was
+  redone for outside load, the source is the redo's capture, taken after the rejected attempt ran.
 
 ### 14.6 Cut-off (RL-155 §5.1)
 
 Sun 15 Nov 18:00 PST. If the span-reference leg is code-complete and has no gate-module edit by then, dev-03
 runs on v1.1 (class A: L001-L003 as their own span are its counted smoke). Otherwise dev-03 runs on v1.1a
 (class B), pinned at the cell-law commit, and the span leg enters at dev-04 or dev-05 as its own class A kit.
+
+**The two drafts** (same `campaign_id`, master seed 2026111403, seeds, bands and sizes; only `g0_shape` and what
+they pin differ). The lead picks one at the cut-off, enters it in the ledger and pins its sha256 in the queue.
+
+| File | Kit | Pin | Class | First span |
+|---|---|---|---|---|
+| `kits/cl-dev-03.v1.1.json` | cell law and span-reference legs (6 of 11 warm legs) | the span-leg commit | A | L001-L003 as their own span (the counted smoke, one leg per size), then L004-L012 after the hand-read |
+| `kits/cl-dev-03.v1.1a.json` | cell law only | the cell-law commit `55a5670e8` | B | the whole block, one span |

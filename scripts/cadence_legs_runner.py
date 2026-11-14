@@ -129,7 +129,8 @@ class Deps:
     feeds: list
     host: object
     run_soak: Callable          # (soak_dir, cap_s, feeds, work_remaining) -> soak_reference Path
-    run_leg: Callable           # (attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining) -> result
+    run_leg: Callable           # (attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining
+                                #  [, span_reference=DIR for a span-reference consumer]) -> result
     verify_frozen: Callable     # (kit) -> {"rc": 0, ...}; raises SpanRefusal on a mismatch
     load_verdict: Callable      # (name, result, wall_s) -> {"redo": bool, ...}; raises on a bad journal
     soak_cap_s: float
@@ -281,9 +282,10 @@ def production_deps(*, inputs, pmset_bin, output):
             raise SpanRefusal("the fresh soak wrote no soak reference")
         return reference
 
-    def run_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining):
+    def run_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None):
         argv = [*leg_argv, "--leg-spec", str(spec_path), "--r1-kind", legsmod.LEG_KIND,
-                "--output", str(attempt_dir), "--soak-reference", str(soak_reference)]
+                "--output", str(attempt_dir), "--soak-reference", str(soak_reference),
+                *(["--span-reference", str(span_reference)] if span_reference is not None else [])]
         leg_dir = Path(attempt_dir).parent
         attempt = 1 + sum(1 for p in leg_dir.iterdir() if p.name.startswith(Path(attempt_dir).name + ".rejected"))
         result = run_child(name=f"{leg_dir.name}.a{attempt}", argv=argv, cap_s=cap_s, log_dir=leg_dir,
@@ -373,9 +375,20 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
         leg_dir = output / "legs" / leg_id
         leg_dir.mkdir(parents=True)
         spec_path = leg_dir / "leg_spec.json"
-        spec_path.write_text(json.dumps({k: spec[k] for k in legsmod.LEG_SPEC_KEYS}, indent=1, sort_keys=True) + "\n")
+        spec_path.write_text(json.dumps({k: spec[k] for k in legsmod.leg_spec_keys(spec)}, indent=1,
+                                        sort_keys=True) + "\n")
+        # A span-reference consumer reads the span's reference from the span's first leg's accepted
+        # attempt (RL-150 R1 part 2; design doc section 14.5). The runtime verifies it with W1's verifier.
+        span_kw = {}
+        if spec.get("g0_role") == "consume":
+            first = state["plan"]["legs"][0]["leg_id"]
+            span_kw["span_reference"] = output / "legs" / first / "runtime"
+            leg_row_source = {"leg_id": first, "dir": str(span_kw["span_reference"].relative_to(output))}
+        else:
+            leg_row_source = None
         attempts, result, first_start = [], None, None
-        leg_row = {"leg_id": leg_id, "attempts": attempts, "budget_s": budget}
+        leg_row = {"leg_id": leg_id, "attempts": attempts, "budget_s": budget,
+                   **({"span_reference": leg_row_source} if leg_row_source else {})}
         record["legs"].append(leg_row)
         while True:
             delay = legsmod.leg_start_delay(clock.time(), windows)
@@ -387,7 +400,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
             started = clock.time()
             first_start = first_start if first_start is not None else started
             result = step(f"{leg_id}.a{n}", lambda: deps.run_leg(attempt_dir, spec_path, soak_reference, cap,
-                                                                  deps.feeds, work_remaining),
+                                                                  deps.feeds, work_remaining, **span_kw),
                           kind="leg", cap_s=cap, keep=_RESULT_KEEP)
             ended = clock.time()
             verdict = deps.load_verdict(leg_id, result, ended - started)
@@ -479,7 +492,8 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
 _RESULT_KEEP = ("leg_id", "leg_status", "bundle", "member_status", "g0_outcome", "g0_released", "g0_wait_s",
                 "g0_timeout_s", "quiet_s", "prefill_chars", "prefill_tokens", "decode_cap", "decode_tokens",
                 "decode_cap_reached", "os_level_max", "pm_nominal", "incomplete_reasons", "ac_powermode",
-                "turn_start_ns", "turn_end_ns", "first_token_ns", "quiet_spans_ns", "config_sha256")
+                "turn_start_ns", "turn_end_ns", "first_token_ns", "quiet_spans_ns", "config_sha256",
+                "g0_shape", "g0_role", "g0_reference_source")
 
 
 def _close(record, state, deps, output, step, kit):
@@ -633,6 +647,7 @@ class FakeLegRuntime:
         self.contaminate, self.g0_timeout = set(contaminate), set(g0_timeout)
         self.contaminate_attempts = contaminate_attempts
         self.calls = []
+        self.span_references = []
 
     def soak(self, soak_dir, cap_s, feeds, work_remaining):
         Path(soak_dir).mkdir(parents=True)
@@ -641,16 +656,22 @@ class FakeLegRuntime:
         path.write_text(json.dumps({"schema": "joulewise.align.r1_soak_reference.v1", "mock": True}) + "\n")
         return path
 
-    def leg(self, attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining):
+    def leg(self, attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None):
         from joulewise.align.apple import r1_runtime as rt
         spec = legsmod.validate_leg_spec(json.loads(Path(spec_path).read_text()))
         leg_id = spec["leg_id"]
+        role = spec.get("g0_role", "capture")
+        # The runtime's refusals: a consumer needs the span's first leg's accepted attempt; a capture takes none.
+        if (role == "consume") != (span_reference is not None) or (
+                span_reference is not None and not (Path(span_reference) / rt.RESULT_NAME).is_file()):
+            raise LegRuntimeError(f"{leg_id}: leg runtime exit {rt.EXIT_REFUSED} (span reference)")
         n = sum(1 for c in self.calls if c == leg_id) + 1
         self.calls.append(leg_id)
+        self.span_references.append((leg_id, None if span_reference is None else Path(span_reference)))
         Path(attempt_dir).mkdir(parents=True)
         timeout = leg_id in self.g0_timeout
-        g0 = 1200.0 if timeout else 90.0 + spec["seed"] % 240
-        wall = legsmod.leg_expected_s(spec) - legsmod.TIME_MODEL["g0_s"] + g0
+        g0 = 1200.0 if timeout else 90.0 + spec["seed"] % 240 + (300.0 if role == "consume" else 0.0)
+        wall = legsmod.leg_expected_s(spec) - legsmod.leg_g0_s(spec) + g0
         if timeout:
             wall -= spec["quiet_s"] + spec["prefill_tokens"] * 0.005 + spec["decode_tokens"] / 12.03
         if work_remaining() < wall:
@@ -666,6 +687,9 @@ class FakeLegRuntime:
                   "decode_cap": spec["decode_tokens"], "decode_tokens": None if timeout else spec["decode_tokens"],
                   "decode_cap_reached": not timeout, "os_level_max": 0, "pm_nominal": True,
                   "episode_flags": [], "incomplete_reasons": [], "ac_powermode": {"value": 0},
+                  "g0_shape": spec.get("g0_shape", "own"), "g0_role": role,
+                  "g0_reference_source": (f"mock-{Path(span_reference).parent.name}" if role == "consume"
+                                          else f"mock-{leg_id}"),
                   "cpu_busy_cores": [busy] * seconds, "cpu_busy_t_s": [float(i) for i in range(seconds)],
                   "census": [{"mock": True}]}
         legsmod.guard_projection(result, "mock leg result", values=False)

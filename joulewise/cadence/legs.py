@@ -71,6 +71,17 @@ MAX_SPAN_S = 12 * 3600
 
 LEG_SPEC_KEYS = {"schema", "campaign_id", "leg_id", "seed", "start_band", "prefill_tokens", "prefill_chars",
                  "decode_tokens", "quiet_s"}
+# The span-reference leg (kit v1.1; RL-150 R1 part 2; design doc section 14.5). A leg whose kit shape is
+# ``own`` keeps the v1 spec, the contract dev-01's legs run under. A ``span`` leg's spec adds its shape and
+# its role in this span: ``capture`` when it is the span's first leg (its capture IS the span's
+# reference), ``consume`` otherwise (its G0 is judged against the first leg's authenticated capture).
+LEG_SPEC_SCHEMA_V11 = "joulewise.cadence_leg_spec.v1.1"
+LEG_SPEC_KEYS_V11 = LEG_SPEC_KEYS | {"g0_shape", "g0_role"}
+G0_ROLES = ("capture", "consume")
+# A consumer waits for the span's reference, not its own entry temperature: its G0 is modeled at 600 s,
+# so a consumer whose G0 runs to the 1,200 s cap still sits under 1.5 x its budget (LEG_OVERTIME is
+# not tripped by a long G0 alone). The process cap (leg_worst_case_s) and the worst case are unchanged.
+SPAN_G0_S = 600.0
 
 
 class PlanError(ValueError):
@@ -91,8 +102,36 @@ def prefill_chars(tokens):
     return round(tokens * ANCHOR_PREFILL_CHARS / ANCHOR_PREFILL_TOKENS)
 
 
+def leg_spec_keys(spec):
+    """The closed key set of ``spec``'s schema."""
+    return LEG_SPEC_KEYS_V11 if spec.get("schema") == LEG_SPEC_SCHEMA_V11 else LEG_SPEC_KEYS
+
+
+def _validate_leg_spec_v11(spec):
+    """A span leg's spec: its shape and role, then every v1 rule on the rest."""
+    problems = []
+    if spec.get("g0_shape") != "span":
+        problems.append(f"leg spec: {LEG_SPEC_SCHEMA_V11} is a span leg's (g0_shape 'span'); an own leg keeps "
+                        f"{LEG_SPEC_SCHEMA}")
+    if spec.get("g0_role") not in G0_ROLES:
+        problems.append(f"leg spec: g0_role one of {G0_ROLES}")
+    for key in ("g0_shape", "g0_role"):
+        if key not in spec:
+            problems.append(f"leg spec: missing key {key!r}")
+    try:
+        validate_leg_spec({**{k: v for k, v in spec.items() if k not in ("g0_shape", "g0_role")},
+                           "schema": LEG_SPEC_SCHEMA})
+    except PlanError as error:
+        problems.extend(error.problems)
+    if problems:
+        raise PlanError(problems)
+    return spec
+
+
 def validate_leg_spec(spec):
     """Return ``spec`` or raise PlanError. Closed keys; a leg runtime reads nothing else."""
+    if isinstance(spec, dict) and spec.get("schema") == LEG_SPEC_SCHEMA_V11:
+        return _validate_leg_spec_v11(spec)
     problems = []
     if not isinstance(spec, dict):
         raise PlanError(["leg spec: object"])
@@ -149,7 +188,7 @@ def leg_specs(kit, leg_ids=None):
     if problems:
         raise PlanError(problems)
     specs = []
-    for leg_id in ids:
+    for position, leg_id in enumerate(ids):
         leg = by_id[leg_id]
         band = leg["start_band"]
         if band not in BAND_RECIPES:
@@ -157,20 +196,28 @@ def leg_specs(kit, leg_ids=None):
         # A v1 leg may take its size from leg_defaults; a v1.1 leg carries its cell (the cell law).
         tokens = leg["prefill_tokens"] if "prefill_tokens" in leg else kit["leg_defaults"]["prefill_tokens"]
         decode = leg["decode_tokens"] if "decode_tokens" in leg else kit["leg_defaults"]["decode_tokens"]
-        if leg.get("g0_shape", "own") != "own":
-            raise PlanError([f"{leg_id}: G0 shape {leg['g0_shape']!r} has no leg runtime at this commit"])
+        shape = leg.get("g0_shape", "own")
+        if shape not in ("own", "span"):
+            raise PlanError([f"{leg_id}: G0 shape {shape!r} has no leg runtime"])
         spec = {"schema": LEG_SPEC_SCHEMA, "campaign_id": kit["campaign_id"], "leg_id": leg_id,
                 "seed": leg["seed"], "start_band": band, "prefill_tokens": tokens,
                 "prefill_chars": prefill_chars(tokens) if type(tokens) is int else None,
                 "decode_tokens": decode, "quiet_s": BAND_RECIPES[band]["quiet_s"]}
+        if shape == "span":   # the span's first leg captures the span's reference; later span legs consume it
+            spec.update(schema=LEG_SPEC_SCHEMA_V11, g0_shape="span", g0_role="capture" if position == 0 else "consume")
         specs.append(validate_leg_spec(spec))
     return specs
+
+
+def leg_g0_s(spec, model=TIME_MODEL):
+    """The modeled G0 of one leg: a span-reference consumer's (SPAN_G0_S), or the time model's."""
+    return SPAN_G0_S if spec.get("g0_role") == "consume" else model["g0_s"]
 
 
 def leg_expected_s(spec, model=TIME_MODEL):
     """Modeled wall seconds of one leg: fixed + warm-up (one prefill) + G0 + quiet + prefill + decode."""
     prefill = spec["prefill_tokens"] * model["prefill_s_per_token"]
-    return (model["fixed_s"] + prefill + model["warmup_extra_s"] + model["g0_s"] + spec["quiet_s"]
+    return (model["fixed_s"] + prefill + model["warmup_extra_s"] + leg_g0_s(spec, model) + spec["quiet_s"]
             + prefill + spec["decode_tokens"] / model["decode_tokens_per_s"])
 
 
@@ -281,7 +328,9 @@ def plan_span(kit, *, t0_epoch, windows, leg_ids=None, max_span_s=MAX_SPAN_S):
             "blackout_clear": True, "expected_s": expected, "soak_s": t["soak_s"],
             "fixed_overhead_s": t["fixed_overhead_s"], "leg_cap_s": t["leg_worst_case_s"],
             "redo_quota": t["redo_quota"], "batch_windows": [format_window(w) for w in windows],
-            "time_model": dict(TIME_MODEL), "legs": legs}
+            "time_model": {**TIME_MODEL, **({"span_g0_s": SPAN_G0_S} if any(leg.get("g0_role") == "consume"
+                                                                            for leg in legs) else {})},
+            "legs": legs}
 
 
 # --------------------------------------------------------------------------

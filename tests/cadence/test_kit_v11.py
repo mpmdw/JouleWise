@@ -95,8 +95,8 @@ class CellLaw(unittest.TestCase):
             kit_v11.generate_legs("c-id", law(n_legs=10), {"decode_tokens": 1})
         with self.assertRaises(kitmod.KitError):
             kit_v11.generate_legs("c-id", law(method="sha256-v1"), {"decode_tokens": 1})
-        with self.assertRaises(kitmod.KitError):     # no span-reference leg runtime at this commit
-            kit_v11.generate_legs("c-id", law(g0_shapes=["own", "span"]), {"decode_tokens": 1})
+        with self.assertRaises(kitmod.KitError):
+            kit_v11.generate_legs("c-id", law(g0_shapes=["span"]), {"decode_tokens": 1})
 
     def test_prompt_range_is_the_leg_specs(self):
         self.assertEqual(kit_v11.PROMPT_TOKENS_RANGE, legsmod.PREFILL_TOKENS_RANGE)
@@ -141,7 +141,7 @@ class Validator(unittest.TestCase):
         for overrides, fragment in (({"n_legs": 10}, "multiple of the 3 prompt sizes"),
                                     ({"prompt_tokens": [2000, 2000, 19458]}, "seed_law.prompt_tokens"),
                                     ({"prompt_tokens": [100, 19458]}, "seed_law.prompt_tokens"),
-                                    ({"g0_shapes": ["own", "span"]}, "seed_law.g0_shapes"),
+                                    ({"g0_shapes": ["span", "own"]}, "seed_law.g0_shapes"),
                                     ({"g0_shapes": ["span"]}, "seed_law.g0_shapes"),
                                     ({"method": "sha256-v1"}, "seed_law.method")):
             kit = v11_kit(validate=False)
@@ -243,9 +243,9 @@ class RunnerConsumesTheCell(unittest.TestCase):
         with self.assertRaises(legsmod.PlanError):   # 02:00 inside the worst case
             legsmod.plan_span(kit, t0_epoch=local("2026-11-16T20:00"), windows=[NEW_WINDOW])
 
-    def test_a_span_shaped_leg_has_no_runtime_at_this_commit(self):
+    def test_an_unknown_g0_shape_has_no_runtime(self):
         kit = v11_kit()
-        kit["legs"][4]["g0_shape"] = "span"
+        kit["legs"][4]["g0_shape"] = "session"
         with self.assertRaises(legsmod.PlanError) as ctx:
             legsmod.leg_specs(kit)
         self.assertIn("no leg runtime", str(ctx.exception))
@@ -299,11 +299,11 @@ def _top_level_sources(text, names):
 class V1Untouched(unittest.TestCase):
     """dev-01 and dev-02 measure from b4b6aeb19. v1 keeps validating, and nothing a leg executes moves."""
 
-    def at_pilot_commit(self, path):
-        shown = subprocess.run(["git", "-C", str(runner.ROOT), "show", f"{PILOT_COMMIT}:{path}"],
+    def at_commit(self, commit, path):
+        shown = subprocess.run(["git", "-C", str(runner.ROOT), "show", f"{commit}:{path}"],
                                capture_output=True, text=True)
         if shown.returncode:
-            self.skipTest("the pilot commit is not in this clone")
+            self.skipTest(f"{commit[:12]} is not in this clone")
         return shown.stdout
 
     def test_committed_v1_kits_validate_unchanged(self):
@@ -314,9 +314,11 @@ class V1Untouched(unittest.TestCase):
             self.assertIs(kitmod.validate_kit(kit), kit)
             self.assertEqual(kitmod.generate_legs(kit["campaign_id"], kit["seed_law"], kit["leg_defaults"]), kit["legs"])
 
-    def test_the_leg_runtime_reads_the_pilot_commits_bytes(self):
-        """What a leg executes from legs.py and kit.py (spec validation and the projection guard) is the
-        pilot commit's, byte for byte: the cell law is class B (RL-150 R5)."""
+    def test_the_v11a_pin_runs_the_pilot_commits_leg_bytes(self):
+        """At the v1.1a kit's frozen commit, what a leg executes from legs.py and kit.py (spec validation
+        and the projection guard) is the pilot commit's, byte for byte: the cell law is class B (RL-150 R5).
+        The span-reference leg (a later commit) changes these bytes and is class A."""
+        pin = json.loads((KITS / "cl-dev-03.v1.1a.json").read_text())["frozen"]["commit"]
         names = {"joulewise/cadence/legs.py": {"validate_leg_spec", "_int", "prefill_chars", "guard_projection",
                                                "_walk", "LEG_SPEC_KEYS", "LEG_SPEC_SCHEMA", "BAND_RECIPES",
                                                "PREFILL_TOKENS_RANGE", "DECODE_TOKENS_RANGE", "LEG_KIND",
@@ -325,23 +327,25 @@ class V1Untouched(unittest.TestCase):
                                               "FREE_TEXT_KEYS", "LEG_ID_RE", "CAMPAIGN_ID_RE", "validate_kit",
                                               "generate_legs", "evaluate_checklist"}}
         for path, wanted in names.items():
-            old = _top_level_sources(self.at_pilot_commit(path), wanted)
-            new = _top_level_sources((runner.ROOT / path).read_text(), wanted)
+            old = _top_level_sources(self.at_commit(PILOT_COMMIT, path), wanted)
+            new = _top_level_sources(self.at_commit(pin, path), wanted)
             self.assertEqual(set(old), wanted, path)
             self.assertEqual(new, old, path)
         for path in ("joulewise/align/apple/cadence_leg.py", "scripts/cadence_leg_runtime.py",
                      "joulewise/align/apple/r1_runtime.py", "joulewise/align/apple/thermal_gates.py"):
-            self.assertEqual((runner.ROOT / path).read_text(), self.at_pilot_commit(path), path)
+            self.assertEqual(self.at_commit(pin, path), self.at_commit(PILOT_COMMIT, path), path)
 
 
 class CommittedDev03Kit(unittest.TestCase):
-    """The dev-03 draft on kit v1.1a (the cell law only; RL-155 section 5.1). The lead pins and commits the
-    final bytes; this checks the draft's shape and that it changes no byte a leg executes."""
+    """The dev-03 draft on kit v1.1a (the cell law only; RL-155 section 5.1), the fallback if the
+    span-reference leg misses the cut-off. The lead pins and commits the final bytes; this checks the
+    draft's shape and that it changes no byte a leg executes."""
+    NAME = "cl-dev-03.v1.1a.json"
     PLANNING_ONLY = {"joulewise/cadence/kit.py", "joulewise/cadence/kit_v11.py", "joulewise/cadence/legs.py",
                      "scripts/cadence_legs_runner.py", "scripts/launch_cadence_span.py"}
 
     def load(self, window=NEW_WINDOW):
-        return kitmod.load_kit(KITS / "cl-dev-03.json", batch_window=window)
+        return kitmod.load_kit(KITS / self.NAME, batch_window=window)
 
     def test_shape(self):
         kit, _ = self.load()

@@ -8,8 +8,10 @@ What v1.1 adds to v1:
 
 * **the cell law** ``sha256-cells-v1``: each leg's prompt size by permuted blocks over
   ``seed_law.prompt_tokens`` (every run of k legs holds each size once), and its G0 shape
-  (``g0_shape``) from ``seed_law.g0_shapes``. Seeds and bands are v1's ``sha256-v1`` draws on the
-  same campaign id and master seed. Size and shape use their own draw tags;
+  (``g0_shape``) from ``seed_law.g0_shapes``: with ``span``, L001 is ``own`` and, per size, the first
+  ceil(m/2) of that size's m warm legs in a drawn order are ``span``. Seeds and bands are v1's
+  ``sha256-v1`` draws on the same campaign id and master seed. Size and shape use their own draw tags,
+  so the v1.1 and v1.1a lists of one block differ in ``g0_shape`` only;
 * **legs that carry their cell**: ``prefill_tokens``, ``decode_tokens`` and ``g0_shape`` on every leg;
   ``leg_defaults`` holds ``decode_tokens`` only;
 * **the free t0** (RL-149 section 2.9 item 6.3): ``span_template.t0_rule = "free"`` replaces
@@ -33,8 +35,9 @@ SCHEMA = "joulewise.cadence_campaign_kit.v1.1"
 RUNNER_KIND = "cadence-legs-v1.1"
 LAW = "sha256-cells-v1"
 # G0 shapes a v1.1 kit may draw from. "own": the leg's G0 is judged against its own capture (dev-01's
-# shape). The span-reference shape (RL-150 R1 part 2) is not in this set until the leg runtime has it.
-G0_SHAPE_SETS = (("own",),)
+# shape; v1.1a). "span": against the span's reference, the capture of the span's first leg, consumed as
+# a series member consumes its session's (RL-150 R1 part 2; design doc section 14.5; v1.1).
+G0_SHAPE_SETS = (("own",), ("own", "span"))
 # legs.PREFILL_TOKENS_RANGE (a test asserts they agree; legs imports kit, so it is not imported here).
 PROMPT_TOKENS_RANGE = (256, 32768)
 # The launcher's ceiling (legs.MAX_SPAN_S = launch_align_r0.MAX_DESK_SECONDS).
