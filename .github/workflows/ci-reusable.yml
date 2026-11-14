@@ -6,8 +6,11 @@ name: ci-reusable
 # own stale jobs. What comes from where:
 #   * this workflow (jobs, matrix, shard count, timeouts): main.
 #   * scripts/test_timings.json: main's copy at ONE commit resolved by the
-#     `changes` job (main_sha), merged under the lane's own map (main wins on
-#     every key it has; lane-only modules and splits keep their lane weights).
+#     `changes` job (main_sha), merged under the lane's own map: main wins
+#     on seconds_by_module, the unknown weight and exclusive_modules; the
+#     lane's own split_modules block is kept VERBATIM, because shard_tests.py
+#     resolves `::remainder` units from the branch's own declarations at run
+#     time and a different block would drop, duplicate or red tests.
 #     One commit for every shard is load-bearing: each shard partitions
 #     independently, so two maps would drop or duplicate tests.
 #   * the code under test, shard_tests.py and the classifiers: the PR's own
@@ -151,7 +154,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Preflight (this branch must carry the scripts main's CI calls)
-        if: true
         shell: bash
         run: |
           missing=0
@@ -298,8 +300,9 @@ jobs:
           lane_path = Path("scripts/test_timings.json")
           lane = json.loads(lane_path.read_text()) if lane_path.is_file() else {}
           merged = dict(lane)
-          for key in ("seconds_by_module", "split_modules"):
-              merged[key] = {**lane.get(key, {}), **main.get(key, {})}
+          merged["seconds_by_module"] = {**lane.get("seconds_by_module", {}), **main["seconds_by_module"]}
+          # The runner reads split declarations from the branch's own map, so keep them verbatim.
+          merged["split_modules"] = lane.get("split_modules", {})
           # Main's workflow has exactly its own exclusive jobs; a lane-declared
           # exclusive module would never run, so only main's list counts.
           merged["exclusive_modules"] = main["exclusive_modules"]
@@ -321,8 +324,10 @@ jobs:
         # the six ordinary shards (and each shard's four workers) keep
         # deterministic LPT balance from the ordinary timing map. Timing weights are scheduling hints only, so
         # no step asserts their values; the guards kept here are coverage
-        # guards (every exclusive module is still discovered, and every
-        # declared split test id still exists).
+        # guards (every declared split test id still exists; an exclusive
+        # module absent from the branch is refused for main pushes and PRs
+        # into main by the "module present" steps, and tolerated, with a
+        # notice, only on lane bases).
         env:
           SHARD_INDEX: ${{ matrix.shard }}
         run: |
@@ -406,11 +411,17 @@ jobs:
         id: present
         if: needs.changes.outputs.code == 'true'
         shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           if [ -f tests/test_calibration_exits.py ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::tests/test_calibration_exits.py is absent on this branch; nothing to run here."
+            if [ "$GITHUB_EVENT_NAME" = push ] || [ "$BASE_REF" = main ]; then
+              echo "::error::tests/test_calibration_exits.py is absent but this run targets main; refusing to skip an exclusive module."
+              exit 1
+            fi
+            echo "::notice::tests/test_calibration_exits.py is absent on this branch (lane base); nothing to run here."
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Compile calibration-exit sources
@@ -469,11 +480,17 @@ jobs:
         id: present
         if: needs.changes.outputs.code == 'true'
         shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           if [ -f tests/test_calibration_writer_crash_matrix.py ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::tests/test_calibration_writer_crash_matrix.py is absent on this branch; nothing to run here."
+            if [ "$GITHUB_EVENT_NAME" = push ] || [ "$BASE_REF" = main ]; then
+              echo "::error::tests/test_calibration_writer_crash_matrix.py is absent but this run targets main; refusing to skip an exclusive module."
+              exit 1
+            fi
+            echo "::notice::tests/test_calibration_writer_crash_matrix.py is absent on this branch (lane base); nothing to run here."
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Preflight (this branch must carry the scripts main's CI calls)
@@ -487,7 +504,13 @@ jobs:
           python3 - <<'PY' || missing=1
           import sys
           sys.path.insert(0, "scripts")
+          import json
           import shard_tests
+          declared = json.load(open("scripts/test_timings.json")).get("split_modules", {})
+          if "tests.test_calibration_writer_crash_matrix" not in declared:
+              print("::error::scripts/test_timings.json on this branch has no split_modules entry for "
+                    "tests.test_calibration_writer_crash_matrix; main's CI needs it. Merge origin/main into this branch.")
+              raise SystemExit(1)
           need = ("load_timing_map", "load_split_declarations", "conservative_unknown_weight", "expand_units", "partition_modules", "partition_totals", "run_units")
           absent = [n for n in need if not hasattr(shard_tests, n)]
           if absent:
@@ -512,8 +535,9 @@ jobs:
           lane_path = Path("scripts/test_timings.json")
           lane = json.loads(lane_path.read_text()) if lane_path.is_file() else {}
           merged = dict(lane)
-          for key in ("seconds_by_module", "split_modules"):
-              merged[key] = {**lane.get(key, {}), **main.get(key, {})}
+          merged["seconds_by_module"] = {**lane.get("seconds_by_module", {}), **main["seconds_by_module"]}
+          # The runner reads split declarations from the branch's own map, so keep them verbatim.
+          merged["split_modules"] = lane.get("split_modules", {})
           # Main's workflow has exactly its own exclusive jobs; a lane-declared
           # exclusive module would never run, so only main's list counts.
           merged["exclusive_modules"] = main["exclusive_modules"]

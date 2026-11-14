@@ -6,7 +6,7 @@ name: ci-selftest
 # workflow calls the PR's own copy by local path and runs only when a CI file
 # changes. It is not a required check: a PR that touches these paths must not
 # merge until it is green (RL-144 step 1c). Its jobs report as
-# "ci-selftest / selftest / <job>", which never collides with the required
+# "selftest / <job>", which never collides with the required
 # "ci / <job>" names.
 
 on:

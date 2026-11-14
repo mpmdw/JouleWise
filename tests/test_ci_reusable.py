@@ -1,6 +1,6 @@
 """The reusable CI definition (RL-144 step 1c): job names stay the ones branch protection requires
 (under the caller's `ci /` prefix), every shard reads ONE merged timing map, a PR's own CI edit has
-a self-test path, and the timing-map merge keeps lane-only modules while main wins on conflicts."""
+a self-test path, and the timing-map merge keeps the branch split block verbatim while main supplies weights."""
 import json
 import os
 import re
@@ -93,10 +93,15 @@ class TimingMergeTests(unittest.TestCase):
         merged, env = self.run_merge(lane, main)
         self.assertEqual(merged["seconds_by_module"], {"a": 2.0, "lane_only": 9.0, "b": 3.0})
         self.assertEqual(merged["exclusive_modules"], ["main_excl"])
-        self.assertEqual(merged["split_modules"]["a"], {"declared": {"y": 2}})
-        self.assertIn("lane_only", merged["split_modules"])
+        # The runner resolves remainders from the branch's own block, so it survives verbatim.
+        self.assertEqual(merged["split_modules"], lane["split_modules"])
         self.assertEqual(merged["unknown_module_weight_seconds"], 26.98)
         self.assertIn("JW_TIMINGS_FILE=", env)
+
+    def test_the_two_merge_heredocs_are_identical(self):
+        def body(job):
+            return job_text(job).split("Fetch main's timing map", 1)[1].split("python3 - <<'PY'\n", 1)[1].split("\n          PY\n")[0]
+        self.assertEqual(body("test"), body("calibration-writer-crash-matrix-exclusive"))
 
     def test_lane_without_a_map_uses_main_alone(self):
         main = {"seconds_by_module": {"a": 2.0}, "exclusive_modules": [], "split_modules": {}}
