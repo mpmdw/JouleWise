@@ -12,7 +12,7 @@
       "block_definition": "RL-149 2.3 and 5 item 6: twelve type-A legs on kit cl-dev-01, built on the existing step leg. Two spans on the same bytes, each behind its own fresh soak: the counted pilot (L001-L003; RL-149 2.9 item 3) and then L004-L012. Leave-one-day-out: its calendar day is its unit of independence.",
       "kit": {
         "path": "docs/process/cadence/kits/cl-dev-01.json",
-        "sha256": "d4cc991ad528bb050b3ddebb9e19af5d534b200a90406f547d07f53de7cac3ea"
+        "sha256": "3b33c52d8405006bd11aad71811b78d2dd25becd5f18341e11ea01a5dd8955cd"
       },
       "est_legs": 12,
       "est_spans": 2,
@@ -24,7 +24,7 @@
       "expires": null,
       "assigned_span_ids": [],
       "owner": "lead (kit, queue), cold seat (2.8 line 1), magistrate (spans)",
-      "notes": "READY needs (RL-149 2.8): a cold seat that did not write the kit checks it against RL-149 section 2 with no open finding (line 1); the kit validates at its frozen commit and that commit's full suite is green (line 2; the kit is pinned to the runner commit 1f235fb65 and is re-pinned with `cadence_legs_runner.py pin-kit` at the commit the magistrate measures from); then a finite queue that pins it (line 3) and the per-span checklist. The pilot span's roster is --legs L001,L002,L003; after it the lead reads the journal table once by hand beside the automatic desk (2.9 item 3) before L004-L012 arm (2.8 line 8). Plans at a 13:20 t0: pilot expected 1.9 h, worst case 4.6 h; L004-L012 expected 4.0 h, worst case 9.1 h."
+      "notes": "READY needs (RL-149 2.8): a cold seat that did not write the kit checks it against RL-149 section 2 with no open finding (line 1); the kit validates at its frozen commit and that commit's full suite is green (line 2; the kit is pinned to the runner commit efbd0b020 and is re-pinned with `cadence_legs_runner.py pin-kit` at the commit the magistrate measures from); then a finite queue that pins it (line 3) and the per-span checklist. The pilot span's roster is --legs L001,L002,L003; after it the lead reads the journal table once by hand beside the automatic desk (2.9 item 3) before L004-L012 arm (2.8 line 8). Plans at a 13:20 t0: pilot expected 1.9 h, worst case 4.6 h; L004-L012 expected 4.0 h, worst case 9.1 h."
     },
     {
       "design_id": "dev-02",
@@ -34,7 +34,7 @@
       "block_definition": "RL-149 2.3 and section 5 (\"the same kit, next seeds\"): twelve type-A legs on kit cl-dev-02, one span behind its own fresh soak, on a calendar day other than dev-01's if the three-day rule needs it.",
       "kit": {
         "path": "docs/process/cadence/kits/cl-dev-02.json",
-        "sha256": "a2dca106d9e8022cfedaa8637bcffc55da7e50375c3ca8c0941dd5d4d56c0a7d"
+        "sha256": "052579f06e4d9157290fcea5a81fb5aaf263c0fdaca884bce7d218397b726d2b"
       },
       "est_legs": 12,
       "est_spans": 1,
@@ -48,7 +48,7 @@
       "expires": null,
       "assigned_span_ids": [],
       "owner": "lead",
-      "notes": "READY needs (RL-149 2.8): a cold seat that did not write the kit checks it against RL-149 section 2 with no open finding (line 1); the kit validates at its frozen commit and that commit's full suite is green (line 2; the kit is pinned to the runner commit 1f235fb65 and is re-pinned with `cadence_legs_runner.py pin-kit` at the commit the magistrate measures from); then a finite queue that pins it (line 3) and the per-span checklist. Runs after the pilot passed (2.8 line 8). Expected 5.0 h, worst case 11.4 h; with the 02:00-02:35 blackout a 13:20 or 02:40 t0 clears it. Mixed prompt sizes (2k/10k/19.5k, RL-149 2.3) need kit schema v1.1's cell law; the runner already takes per-leg prompt sizes."
+      "notes": "READY needs (RL-149 2.8): a cold seat that did not write the kit checks it against RL-149 section 2 with no open finding (line 1); the kit validates at its frozen commit and that commit's full suite is green (line 2; the kit is pinned to the runner commit efbd0b020 and is re-pinned with `cadence_legs_runner.py pin-kit` at the commit the magistrate measures from); then a finite queue that pins it (line 3) and the per-span checklist. Runs after the pilot passed (2.8 line 8). Expected 5.0 h, worst case 11.4 h; with the 02:00-02:35 blackout a 13:20 or 02:40 t0 clears it. Mixed prompt sizes (2k/10k/19.5k, RL-149 2.3) need kit schema v1.1's cell law; the runner already takes per-leg prompt sizes."
     },
     {
       "design_id": "hp-01",
