@@ -1004,7 +1004,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     for rid, row in dc['members'].items():
         if row.get('sealed'):
             print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
-                  ('status', 'sealed', 'sealed_sha256', 'flags')}, sort_keys=True))
+                  ('status', 'sealed', 'sealed_sha256', 'sealed_hmac_sha256', 'flags') if k in row}, sort_keys=True))
         else:
             print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
                   ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
@@ -1091,6 +1091,11 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
               ('B_count', 'unobserved_count', 'assist_count', 'bar_pass', 'consequence')}, sort_keys=True))
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
     window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
+    if window_id == 'W1':
+        # RL-149 section 1.5 tripwire, evaluated over all six D members in memory; only the verdict prints
+        # (RL-151 section 4 C2).
+        report['w1_g1_tripwire'] = v4_desk_seal.w1_g1_tripwire(records)
+        print('W1 D G1 timeout tripwire (RL-149 section 1.5): ' + report['w1_g1_tripwire']['verdict'])
     if window_id != 'W1':
         # RUN_STATE 226 R15: the desk's provisional counts. The final adjudication
         # may lower them, never raise them (align_v4_series.calibration_rows).
@@ -1122,7 +1127,9 @@ def desk(session_root, **kwargs):
         kit_path = kwargs['kit']
         kwargs['print_policy'] = v4_desk_seal.desk_policy(state, lambda: pilot._member_rows(state, kit=kit_path))
     seal = kwargs['print_policy']
-    status = pilot.desk(session_root, **kwargs)
+    # Withheld digests made inside this desk (the extra checks' prints included) use the seal's own key.
+    with v4_desk_seal.keyed(getattr(seal, 'key', None)):
+        status = pilot.desk(session_root, **kwargs)
     # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
     try:
         full = getattr(seal, 'full', None)

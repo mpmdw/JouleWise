@@ -7,6 +7,7 @@ planted here are distinctive and must never reach stdout, PILOT.json or desk.jso
 import copy
 import csv
 import hashlib
+import hmac
 import io
 import json
 from contextlib import ExitStack, redirect_stdout
@@ -49,6 +50,12 @@ CARVED = ((0, 'summary', 'episode.deadman:2'), (2, 'summary', 'turn_token_budget
           (2, 'thermal', 'thermal.gate_timeout:G1:1'), (3, 'harvest', 'thermal.hold_timeout'))
 KEPT = ((5, 'thermal', 'thermal.start_gate_timeout'), (0, 'harvest', 'meter.planted_instrument'))
 HEAT_REASON = 'thermal_pressure_elevated_in_window'
+# RL-151 section 4 C1(a): exclusion codes with suffix text; the text after the first ':' must never print.
+CAL_EXCLUSIONS = {1: ['episode.deadman:871.5'],
+                  2: ['episode.deadman:983.1', 'thermal.gate_timeout:G1 turn 2 waited 300.0s',
+                      'thermal.os_level_nonzero', 'thermal.powermetrics_non_nominal']}
+SUFFIXES = {1: ['871.5'], 2: ['983.1', 'G1 turn 2 waited 300.0s', 'waited 300.0s']}
+G1_TIMEOUT = (0, 2, 5)          # R10 G1 timeouts: one benign, the two sabotage members (W1's 11 and 14 analog)
 # The per-member allowlist as reviewed (PR #774 row-1 F5), pinned literally so a widened allowlist fails.
 MEMBER_KEYS = {'run_id', 'ordinal', 'pool_role', 'excluded', 'exclusion_codes', 'disclosed_exclusion_codes', 'withheld'}
 
@@ -153,8 +160,12 @@ class Fixture:
         return {'id': run_id, 'gated': True, 'model': 'm',
                 'flags': [f'thermal.planted:{v["seconds"]}', *self.planted_flags(run_id, 'thermal')],
                 'tokens': [{'prompt_token_ids': [self.index[run_id]], 'output_token_ids': [v['calls']]}],
-                'intervals': [], 'turn_observation': [{'os_nominal': True, 'pm_nominal': True, 'pm_max_gap_s': .1}],
-                'coverage': [], 'pm_period_s': .1, 'pm_max_gap_s': .1, 'calibration_exclusions': [],
+                'intervals': [{'kind': 'G1', 'outcome': 'released', 'duration_s': 1.0},
+                              *([{'kind': 'G1', 'outcome': 'timeout', 'duration_s': 300.0}]
+                                if self.index[run_id] in G1_TIMEOUT[1:] else [])],
+                'turn_observation': [{'os_nominal': True, 'pm_nominal': True, 'pm_max_gap_s': .1}],
+                'coverage': [], 'pm_period_s': .1, 'pm_max_gap_s': .1,
+                'calibration_exclusions': list(CAL_EXCLUSIONS.get(self.index[run_id], [])),
                 'turn_owned_j': v['owned'], 'gross_episode_j': v['gross'], 'gross_latency_s': v['latency'],
                 'status': 'completed', 'turns': 4, 'x_flags': [],
                 'configuration': {'max_turns': 8}, 'cohort_identity': {'model_source': 'synthetic'}}
@@ -200,7 +211,7 @@ class Fixture:
         def planted(plan_members, runs_root):
             report = original(plan_members, runs_root)
             for row in report['members']:
-                if self.index.get(row['run_id']) in (0, 2):
+                if self.index.get(row['run_id']) in G1_TIMEOUT:
                     row.update(gate_timeout_x2=True, x2=True)
             report['x2_count'] = sum(row['x2'] for row in report['members'])
             report['x2_rate'] = report['x2_count'] / len(report['members'])
@@ -315,7 +326,7 @@ class ReleaseGuardTests(unittest.TestCase):
             self.assertEqual(member['withheld']['status'], seal.WITHHELD)
         for key in ('residual_analysis', 'raw_within_cell_energy_sd', 'repeat_energy_spread', 'I4_prime'):
             self.assertEqual(report[key]['status'], seal.WITHHELD)
-            self.assertEqual(len(report[key]['sha256']), 64)
+            self.assertEqual(len(report[key]['hmac_sha256']), 64)
         pooled = report['residual_analysis']['pooled']['scopes']['all_members_diagnostic']['counts_logged_headline']
         self.assertEqual(pooled['members_scored'], len(self.fx.rows))
         # The unsealed PILOT is kept for the release run, inside the withheld archive, and bound by digest.
@@ -327,6 +338,21 @@ class ReleaseGuardTests(unittest.TestCase):
                          ['archive/withheld/PILOT.full.json'])
         full = full_path.read_bytes()
         self.assertEqual(hashlib.sha256(full).hexdigest(), report['release_guard']['withheld_pilot_sha256'])
+        # Withheld digests are HMAC-SHA256 under the desk's own key, kept beside the full PILOT, so a low-entropy
+        # value (a turn list, a small count) cannot be recovered by enumeration and still checks at release.
+        key = json.loads((output / 'archive' / 'withheld' / 'desk_seal_key.json').read_text())
+        full_pilot = json.loads(full)
+        expected = hmac.new(bytes.fromhex(key['key_hex']), json.dumps(full_pilot['residual_analysis'], sort_keys=True,
+                            separators=(',', ':')).encode(), hashlib.sha256).hexdigest()
+        self.assertEqual(report['residual_analysis']['hmac_sha256'], expected)
+        self.assertNotIn(hashlib.sha256(json.dumps(full_pilot['residual_analysis'], sort_keys=True,
+                         separators=(',', ':')).encode()).hexdigest(), json.dumps(report))
+        # RL-151 C1(a): exclusion codes print as codes; no suffix text, in the desk or the triage.
+        thermal_members = {m['id']: m for m in report['extra_checks']['thermal']['members']}
+        self.assertEqual(thermal_members[self.fx.rows[2]['run_id']]['calibration_exclusions'],
+                         ['episode.deadman', 'thermal.gate_timeout', 'thermal.os_level_nonzero',
+                          'thermal.powermetrics_non_nominal'])
+        suffixes = [x for values in SUFFIXES.values() for x in values]
         self.assertIn(str(self.fx.values()[0]['gpu_j']).encode(), full)
         self.assertEqual(report['release_guard']['scope'], window[0])
         # What the finality predicate, the harvest-off ``final`` and the packet builder read survives.
@@ -352,7 +378,11 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertEqual(thermal['carve_out_flag_counts']['counts'], {'thermal.gate_timeout': 1})
         by_id = {m['id']: m for m in thermal['members']}
         self.assertIn('thermal.start_gate_timeout', by_id[self.fx.rows[5]['run_id']]['flags'])  # G0 stays per member
-        self.assertNotIn('meter.planted_instrument', printed)          # harvest flag codes are in the digest (F5)
+        # RL-151 section 4.4 (builder's answer): a member-scoped harvest instrument/identity flag on a member the
+        # harvest does not exclude reaches the C/T desk only inside that member's digest. It is not in stdout,
+        # PILOT.json, desk.json or the thermal members' flags (an operational blind spot, not a leak).
+        for name, text in self.texts(printed, report, desk).items():
+            self.assertNotIn('meter.planted_instrument', text, name)
         # X2 (R10): per row the G0 outcome only; in C/T only the G0 count (row-1 F1: the G1 count is carved).
         x2 = report['extra_checks']['d_member_x2']
         self.assertLessEqual(set(x2), set(seal.X2_KEEP) | {'members', 'withheld'})
@@ -365,6 +395,7 @@ class ReleaseGuardTests(unittest.TestCase):
         triage = self.fx.run_triage(root, window)
         self.assertEqual(leaks(triage, planted_values(self.fx.values()), keys=('joules', 'turn_owned_j', 'gross_episode_j',
                                                                                'battery', 'dc_in_energy_j')), [])
+        self.assertEqual(leaks({**self.texts(printed, report, desk), **triage}, suffixes, keys=()), [])
         record = json.loads(triage['triage_record'])
         self.assertTrue(all(m['tokens'].startswith('sha256:') for m in record['thermal']['members']))
         self.assertEqual(record['member_eligibility']['status'], 'pass')
@@ -375,6 +406,8 @@ class ReleaseGuardTests(unittest.TestCase):
         report.pop('carve_out_flag_counts', None)
         thermal = (report.get('extra_checks') or {}).get('thermal') or {}
         thermal.pop('carve_out_flag_counts', None)
+        for member in thermal.get('members') or ():
+            member.pop('calibration_exclusions', None)   # codes stay here until the truncation rule (RL-151 C1(b))
         texts = self.texts(printed, report, desk)
         for i, _where, flag in CARVED:
             if i in indices:
@@ -410,12 +443,14 @@ class ReleaseGuardTests(unittest.TestCase):
         complete.write_bytes(raw)
         self.addCleanup(complete.unlink)
         good = {'schema': seal.RELEASE_RECEIPT_SCHEMA, 'release_run': True,
-                'series_complete_sha256': hashlib.sha256(raw).hexdigest(), 'lead_signature': 'lead: synthetic 2027-01-01'}
+                'series_complete_sha256': hashlib.sha256(raw).hexdigest(), 'ruling': 'RL-999 synthetic release ruling',
+                'lead_signature': 'lead: synthetic 2027-01-01'}
         state = {'measurement_root': str(measurement)}
         # Fail closed: no receipt, an unsigned receipt, or a receipt for other bytes never releases.
         self.assertFalse(seal.released(state))
         for bad in ({**good, 'lead_signature': 'PENDING_LEAD_SIGNATURE'}, {**good, 'series_complete_sha256': '0' * 64},
-                    {**good, 'release_run': False}):
+                    {**good, 'release_run': False}, {k: v for k, v in good.items() if k != 'ruling'},
+                    {**good, 'ruling': 'released, trust me'}):
             receipt.write_text(json.dumps(bad))
             self.assertFalse(seal.released(state), bad)
         receipt.write_text(json.dumps(good))
@@ -427,7 +462,13 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertIn(('PILOT.json', self.fx.values()[2]['gpu_j']), found)
         self.assertIn(('stdout', self.fx.values()[2]['battery']), found)
         self.assertIn(('stdout', 'residual_j'), found)
-        self.assertNotIn('release_guard', report)
+        # RL-151 C4: a released desk records and prints that it ran released, with both release files' digests.
+        guard = report['release_guard']
+        self.assertEqual(guard['status'], 'released')
+        self.assertEqual(guard['series_complete_sha256'], hashlib.sha256(complete.read_bytes()).hexdigest())
+        self.assertEqual(guard['release_receipt_sha256'], hashlib.sha256(receipt.read_bytes()).hexdigest())
+        self.assertEqual(guard['ruling'], 'RL-999 synthetic release ruling')
+        self.assertEqual(sum(line.startswith('release_guard: released ') for line in printed.splitlines()), 1)
 
     def test_today_nothing_is_released(self):
         repo = Path(__file__).resolve().parents[2]
@@ -471,15 +512,33 @@ class ReleaseGuardTests(unittest.TestCase):
         # Carve-out for the non-benign members; window counts over all members.
         self.assert_carved_only_as_counts(printed, report, desk,
                                           [i for i, r in enumerate(self.fx.rows) if r['run_id'] in self.fx.nonbenign])
-        self.assertEqual(report['carve_out_flag_counts']['members'], len(self.fx.rows))
+        # RL-151 C2/C3 invariant: nothing printed gives a carved count over the non-benign members alone. G1
+        # timeouts are planted on member 0 (benign) and on both sabotage members (W1's 11 and 14 analog).
         x2 = report['extra_checks']['d_member_x2']
+        benign_rows = [row for row in x2['members'] if row['run_id'] not in self.fx.nonbenign]
         for row in x2['members']:
             if row['run_id'] in self.fx.nonbenign:
                 self.assertLessEqual(set(row), set(seal.X2_ROW_KEEP))
-            elif self.fx.index[row['run_id']] == 0:
-                self.assertTrue(row['gate_timeout_x2'])                     # benign rows print as registered
+        self.assertTrue(next(r for r in benign_rows if self.fx.index[r['run_id']] == 0)['gate_timeout_x2'])
         self.assertNotIn('gate_timeout_x2_count', json.dumps(report))
-        self.assertEqual(x2['x2_count'], 2)                                 # registered R10 count over W1's D members
+        self.assertEqual(x2['x2_count'], sum(bool(r.get('x2')) for r in benign_rows))   # 1: nothing to subtract
+        self.assertEqual(x2['x2_count'], 1)
+        self.assertEqual(x2['x2_rate'], 1 / len(benign_rows))
+        self.assertIn('benign', x2['pool'])
+        counts = report['carve_out_flag_counts']
+        self.assertEqual(counts['members'], len(self.fx.rows) - len(self.fx.nonbenign))
+        self.assertEqual(counts['counts'], {'episode.deadman': 1, 'thermal.hold_timeout': 1})   # turn budget on 2: not counted
+        self.assertIn('benign', counts['over'])
+        thermal_counts = report['extra_checks']['thermal']['carve_out_flag_counts']
+        self.assertEqual(thermal_counts['counts'], {})                     # the G1 flag on 2 is not counted
+        for window in report['extra_checks']['thermal']['model_windows'].values():
+            self.assertEqual(set(window['U1']), {'status', 'withheld'})    # U1 counts over all members withheld
+        # The RL-149 section 1.5 tripwire is judged in memory over all D members: 2 of 8 G1 admissions timed out.
+        self.assertIn('W1 D G1 timeout tripwire (RL-149 section 1.5): to the research lead', printed)
+        self.assertEqual(report['extra_checks']['w1_g1_tripwire']['verdict'], 'to the research lead')
+        self.assertEqual(set(report['extra_checks']['w1_g1_tripwire']), {'verdict', 'rule', 'withheld'})
+        # C1(a) in W1: the sabotage member's suffix text never prints; the benign member's row prints whole.
+        self.assertEqual(leaks(texts, SUFFIXES[2], keys=()), [])
         # The W1 light triage seals the non-benign members as the desk does.
         triage = self.fx.run_triage(root, 'W1')
         self.assertEqual(leaks(triage, planted_values(sabotage, ('owned', 'gross', 'latency', 'thermal_battery', 'dc',
@@ -539,6 +598,7 @@ class SentinelDetectorTests(unittest.TestCase):
                     signatures.add(re.sub(r'\D', '', repr(float(x)))[:9] if isinstance(x, float) else str(int(x)))
         hits = set()
         for name, text in texts.items():
+            text = re.sub(r'[0-9a-f]{64}', '', text)      # digests are not printed values (random HMAC hex)
             for token in re.finditer(r'-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?', text):
                 t = float(token.group())
                 hits.update((name, 'num', n) for n in nums if n and abs(t - n) <= 1e-9 * abs(n))
@@ -563,10 +623,17 @@ class SentinelDetectorTests(unittest.TestCase):
 
 
 class SealUnitTests(unittest.TestCase):
-    def test_withheld_digest_is_the_canonical_json_sha256(self):
+    def test_withheld_digest_is_keyed_hmac_of_the_canonical_json(self):
         value = {'b': [1, 2.5], 'a': 'x'}
-        self.assertEqual(seal.withheld(value), {'status': seal.WITHHELD, 'sha256': hashlib.sha256(
-            json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()})
+        raw = json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
+        key = b'k' * 32
+        with seal.keyed(key):
+            self.assertEqual(seal.withheld(value), {'status': seal.WITHHELD,
+                                                    'hmac_sha256': hmac.new(key, raw, hashlib.sha256).hexdigest()})
+        # Outside a desk the key is ephemeral and never written; it is still not the plain (invertible) sha256.
+        self.assertNotEqual(seal.withheld(value)['hmac_sha256'], hashlib.sha256(raw).hexdigest())
+        with seal.keyed(b'j' * 32):
+            self.assertNotEqual(seal.withheld(value), seal.withheld({**value, 'a': 'y'}))
 
     def test_unknown_top_level_and_extra_keys_fail_closed(self):
         sealed = seal.seal_pilot({'plan_id': 'p', 'status': 'instrument_ok', 'checks': {}, 'members': [],

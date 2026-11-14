@@ -24,14 +24,23 @@ print only as a window count over all members, never per member (X2's G1-timeout
 for instrument and identity faults stay per member. RL-149 3(c): no pooled figure is an extreme-value
 statistic over a set holding a non-benign member, and no heat-bearing quantity prints per member.
 
+RL-151 section 4: per-member code lists print as codes, never the text after the first ':' (C1(a)); in W1 no
+printed figure gives a carved count over the non-benign members alone (pooled carved counts and the R10 count
+are over benign members, U1's all-member counts are withheld, the section 1.5 tripwire prints its verdict;
+C2, C3); a released desk records and prints that it ran released (C4). Withheld digests are keyed (see
+:func:`keyed_digest`).
+
 :func:`released` is True only on a registered release event (a committed ``series_complete``
 record plus a lead-signed release receipt); no such record exists today. Pure stdlib; it reads
 only the two release files and the series manifest, never energy, transcript or meter bytes.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import hmac
 import json
+import secrets
 import math
 import os
 from pathlib import Path
@@ -70,7 +79,9 @@ W1_EXCEPTIONS = (
                                    'arm_effect_j, ci90_j, df, same-arm pair statistics, per-turn arm-mean differences'},
     {'output': 'U1 (thermal.model_windows[*].U1)', 'protocol': ':444-451, :461-465',
      'reads': "every gated member's turn OS/PM states, coverage, gate timeouts and X1-X4 exclusions",
-     'in_class': True, 'handling': 'printed as registered (status, thermal-excluded members)'},
+     'in_class': True, 'handling': 'verdict printed; its counts over all members (turn admissions, G1/H and G0 '
+                                   'timeouts, thermally excluded members) withheld, since with the benign rows printed '
+                                   'whole they give the non-benign counts by subtraction (RL-151 section 4 C2)'},
     {'output': 'U2 (thermal.model_windows[*].U2)', 'protocol': ':452, :461-465',
      'reads': 'the G0 slow-temperature range over every gated member (an extreme-value statistic over a set '
               'holding non-benign members) and every G1/H release',
@@ -87,8 +98,10 @@ W1_EXCEPTIONS = (
      'handling': 'window counts and bar verdict printed (a count over all members); per-member battery rows withheld'},
     {'output': 'R10 D-member X2 count and rate (d_member_x2)', 'protocol': 'LEAD-RULINGS-2 R10; :395, :409-416',
      'reads': 'G0/G1 timeouts of D members incl. 11 and 14', 'in_class': False,
-     'handling': 'R10 count and rate printed over the six W1 D members (5, 8, 11, 14, 17, 18); non-benign rows keep '
-                 'the G0 outcome only (RL-149 carve-out). In C/T only the G0 count prints'},
+     'handling': 'R10 count and rate printed over the four BENIGN W1 D members only, labelled so (RL-151 section 4 C2); '
+                 'non-benign rows keep the G0 outcome only (RL-149 carve-out); the RL-149 section 1.5 tripwire (more '
+                 'than 10 % of the D G1 admissions timing out) is judged in memory over all six D members and prints '
+                 'its verdict only. In C/T only the G0 count prints'},
     {'output': 'R22-3 balance check by condition', 'protocol': 'RUN_STATE 234 R22-3',
      'reads': 'exposure seconds and event counts of the sabotage-condition members', 'in_class': False,
      'handling': 'withheld with a member count, as in C/T (member time by condition is an outcome, RL-149 3(c))'},
@@ -164,8 +177,33 @@ def canonical_sha256(value):
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+# Withheld digests are keyed. A plain sha256 of a low-entropy value (a turn list, a small count, a boolean)
+# is inverted by enumeration, so each desk run draws a random 32-byte key, records it in its withheld archive
+# (``archive/withheld/desk_seal_key.json``, beside PILOT.full.json; it opens with it) and digests every
+# withheld value as HMAC-SHA256 over its canonical JSON. Outside a :func:`keyed` block (the light triage, a
+# direct call) the key is a process-ephemeral one that is never written: the digest cannot be checked later,
+# and it cannot be inverted.
+DIGEST = 'HMAC-SHA256 over canonical JSON (sort_keys, separators (",", ":"))'
+WITHHELD_KEY = 'archive/withheld/desk_seal_key.json'
+_KEY = {'current': None, 'ephemeral': secrets.token_bytes(32)}
+
+
+@contextlib.contextmanager
+def keyed(key):
+    previous, _KEY['current'] = _KEY['current'], key
+    try:
+        yield key
+    finally:
+        _KEY['current'] = previous
+
+
+def keyed_digest(value):
+    raw = json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=True, default=str).encode()
+    return hmac.new(_KEY['current'] or _KEY['ephemeral'], raw, hashlib.sha256).hexdigest()
+
+
 def withheld(value):
-    return {'status': WITHHELD, 'sha256': canonical_sha256(value)}
+    return {'status': WITHHELD, 'hmac_sha256': keyed_digest(value)}
 
 
 def _code(flag):
@@ -180,6 +218,20 @@ def _codes(flags):
     return sorted({c for c in (_code(f) for f in flags or ()) if c and c not in CARVE_OUT_CODES})
 
 
+def _strip(codes):
+    """RL-151 section 4 C1(a): a per-member code list printed as codes only, never the text after the first ':'.
+
+    Exact-string consumers keep their verbatim fields elsewhere: ``members_excluded`` and
+    ``members_disclosure_only`` (top level) are compared string-for-string with the harvest's exclusions by
+    ``light_triage.final_adjudication_error`` through ``v4_contention.records_agree_with_harvest``. Every other
+    per-member reader uses a prefix or truthiness (``light_triage.apply_harvest_codes``,
+    ``v4_contention.split_codes``, the packet builder's ``eligibility``/``faults``), so codes suffice there.
+    """
+    if not isinstance(codes, (list, tuple)):
+        return codes
+    return list(dict.fromkeys(c for c in (_code(x) for x in codes) if c))
+
+
 def carve_out_counts(flag_sets):
     """Window count over all members: carved code -> number of members carrying it (RL-149 section 3)."""
     counts = {}
@@ -188,6 +240,24 @@ def carve_out_counts(flag_sets):
         for code in {_code(f) for f in flags or ()} & set(CARVE_OUT_CODES):
             counts[code] = counts.get(code, 0) + 1
     return {'members': len(flag_sets), 'counts': dict(sorted(counts.items())), 'rule': 'RL-149 section 3 carve-out'}
+
+
+def _benign_counts(flag_sets):
+    """W1 (RL-151 section 4 C3): carved counts over the BENIGN members only, labelled so; a count over all
+    members would give the non-benign members' count by subtracting the printed benign rows."""
+    return {**carve_out_counts(flag_sets), 'over': 'benign members only (RL-151 section 4 C3)'}
+
+
+def w1_g1_tripwire(records):
+    """RL-149 section 1.5: more than 10 % of W1's D G1 admissions timing out goes to the research lead.
+
+    Evaluated in memory over all D members; only the verdict prints (RL-151 section 4 C2)."""
+    gates = [i for r in records or () if r.get('role') == 'D'
+             for i in r.get('intervals') or () if isinstance(i, dict) and i.get('kind') == 'G1']
+    timeouts = sum(i.get('outcome') == 'timeout' for i in gates)
+    verdict = 'to the research lead' if gates and timeouts / len(gates) > .10 else 'within'
+    return {'verdict': verdict, 'rule': 'RL-149 section 1.5: > 10 % of W1 D G1 admissions timing out',
+            'withheld': withheld({'admissions': len(gates), 'timeouts': timeouts})}
 
 
 def _member_flags(member):
@@ -222,7 +292,7 @@ def release_error(root):
     ``release_receipt.json`` (schema :data:`RELEASE_RECEIPT_SCHEMA`)::
 
         {"schema": ..., "release_run": true, "series_complete_sha256": <sha256 of series_complete.json>,
-         "lead_signature": "lead: <name/session> <YYYY-MM-DD>"}
+         "ruling": "RL-<n>: <the research lead's release ruling>", "lead_signature": "lead: <name/session> <YYYY-MM-DD>"}
     """
     if root is None:
         return 'no measurement root'
@@ -250,10 +320,26 @@ def release_error(root):
         return 'no release receipt'
     if receipt.get('release_run') is not True or receipt.get('series_complete_sha256') != hashlib.sha256(raw).hexdigest():
         return 'release receipt does not authorize this series_complete record'
+    ruling = receipt.get('ruling')
+    if not isinstance(ruling, str) or not re.match(r'RL-[1-9][0-9]*\b', ruling.strip()):
+        # RL-151 section 4.3: the receipt names the research lead's release ruling, so the authorization sits in
+        # the decision log where its absence can be seen.
+        return 'release receipt names no research-lead release ruling'
     from scripts.align_v4_kit import valid_lead_signature
     if not valid_lead_signature(receipt.get('lead_signature')):
         return 'release receipt is not lead-signed'
     return None
+
+
+def release_record(state):
+    """What a released desk records (RL-151 section 4 C4): both release files' sha256 and the ruling."""
+    state = state or {}
+    root = Path(state.get('source_measurement_root') or state.get('measurement_root'))
+    complete, receipt = (root / SERIES_COMPLETE).read_bytes(), (root / RELEASE_RECEIPT).read_bytes()
+    return {'schema': GUARD_SCHEMA, 'status': 'released', 'window_id': window_id(state),
+            'series_complete': SERIES_COMPLETE, 'series_complete_sha256': hashlib.sha256(complete).hexdigest(),
+            'release_receipt': RELEASE_RECEIPT, 'release_receipt_sha256': hashlib.sha256(receipt).hexdigest(),
+            'ruling': json.loads(receipt).get('ruling'), 'authority': 'RL-151 section 4 C4'}
 
 
 def released(state):
@@ -294,8 +380,8 @@ def seal_member(member, plan_row=None):
     plan_row = plan_row or {}
     view = {'run_id': member.get('run_id'), 'ordinal': member.get('ordinal', plan_row.get('ordinal')),
             'pool_role': plan_row.get('pool_role', member.get('pool_role')),
-            'excluded': member.get('excluded'), 'exclusion_codes': member.get('exclusion_codes'),
-            'disclosed_exclusion_codes': member.get('disclosed_exclusion_codes', [])}
+            'excluded': member.get('excluded'), 'exclusion_codes': _strip(member.get('exclusion_codes')),
+            'disclosed_exclusion_codes': _strip(member.get('disclosed_exclusion_codes', []))}
     view = {k: view[k] for k in MEMBER_ALLOWLIST if k in view}
     rest = {k: v for k, v in member.items() if k not in view or view[k] != v}
     view['withheld'] = withheld(rest)
@@ -306,7 +392,7 @@ def seal_line(run_id, record):
     """A printed member line (``harvest_flags`` / ``detail`` / ``unreadable``) reduced to the allowlist."""
     out = {'harvest_flags': {'withheld': withheld(record.get('harvest_flags'))}}
     detail = record.get('detail') or {}
-    keep = {k: detail[k] for k in MEMBER_ALLOWLIST if k in detail}
+    keep = {k: (_strip(detail[k]) if k.endswith('_codes') else detail[k]) for k in MEMBER_ALLOWLIST if k in detail}
     keep['withheld'] = withheld({k: v for k, v in detail.items() if k not in keep})
     out['detail'] = keep
     if 'unreadable' in record:
@@ -385,8 +471,11 @@ def _seal_dc_rows(dc, run_ids):
     members = {}
     for rid, row in (dc.get('members') or {}).items():
         if rid in run_ids and isinstance(row, dict) and not row.get('sealed'):
-            row = {'label': row.get('label'), 'print_only': True, 'sealed': True, 'sealed_sha256': canonical_sha256(row),
-                   'status': row.get('status'), 'flags': list(row.get('flags') or ()), 'sealed_until': 'series_complete'}
+            row = {'label': row.get('label'), 'print_only': True, 'sealed': True, 'sealed_hmac_sha256': keyed_digest(row),
+                   'status': row.get('status'), 'flags': _strip(list(row.get('flags') or ())),
+                   'sealed_until': 'series_complete'}
+        elif rid in run_ids and isinstance(row, dict):          # MED-4-sealed: codes only (RL-151 C1(a))
+            row = {**row, 'flags': _strip(list(row.get('flags') or ()))}
         members[rid] = row
     return {**dc, 'members': members}
 
@@ -416,16 +505,19 @@ def seal_balance(report):
 
 
 def balance_lines(report):
-    return [f"balance (R22-3): {WITHHELD} sha256={report.get('sha256')} "
+    return [f"balance (R22-3): {WITHHELD} hmac_sha256={report.get('hmac_sha256')} "
             f"members={(report.get('pooled') or {}).get('members')} (print only)"]
 
 
 def _seal_thermal_member(record):
     view = {k: record[k] for k in THERMAL_MEMBER_ALLOWLIST if k in record}
     view['flags'] = _codes(record.get('flags'))
+    if 'calibration_exclusions' in view:                     # RL-151 C1(a): codes only, no suffix text
+        view['calibration_exclusions'] = _strip(view['calibration_exclusions'])
     if 'tokens' in record:
         view['tokens'] = None if record['tokens'] is None else 'sha256:' + canonical_sha256(record['tokens'])
-    view['withheld'] = withheld({k: v for k, v in record.items() if k not in view or k in ('flags', 'tokens')})
+    view['withheld'] = withheld({k: v for k, v in record.items()
+                                 if k not in view or k in ('flags', 'tokens', 'calibration_exclusions')})
     return view
 
 
@@ -447,10 +539,17 @@ def seal_thermal(thermal, run_ids=None):
     if run_ids is None:
         out['model_windows'] = {k: _seal_model_window(v) for k, v in (thermal.get('model_windows') or {}).items()}
     else:
-        out['model_windows'] = thermal.get('model_windows')
+        # W1: the U results print as registered, except U1's counts over all members (turn admissions,
+        # G1/H and G0 timeouts, thermally excluded members): with the benign rows printed whole they give the
+        # non-benign members' counts by subtraction (RL-151 section 4 C2). U1 prints its verdict.
+        out['model_windows'] = {k: ({**v, 'U1': {'status': (v.get('U1') or {}).get('status'),
+                                                 'withheld': withheld(v.get('U1'))}} if isinstance(v, dict) and 'U1' in v else v)
+                                for k, v in (thermal.get('model_windows') or {}).items()}
     out['members'] = [_seal_thermal_member(r) if (run_ids is None or r.get('id') in run_ids) else r
                       for r in thermal.get('members') or ()]
-    out['carve_out_flag_counts'] = carve_out_counts(r.get('flags') for r in thermal.get('members') or ())
+    out['carve_out_flag_counts'] = (carve_out_counts(r.get('flags') for r in thermal.get('members') or ())
+                                    if run_ids is None else _benign_counts(
+                                        r.get('flags') for r in thermal.get('members') or () if r.get('id') not in run_ids))
     rest = {k: v for k, v in thermal.items() if k not in ('schema', 'model_windows', 'members')}
     tools = rest.get('tool_call_flags')
     if run_ids is None:
@@ -496,9 +595,18 @@ def _seal_x2(report, run_ids=None):
     if not isinstance(report, dict):
         return report
     rows = report.get('members') or ()
-    # C/T: X2_KEEP only. W1 (``run_ids`` = its non-benign members): the registered R10 count and rate over
-    # W1's six D members stay (W1_EXCEPTIONS); only the non-benign rows are reduced.
-    out = {k: report[k] for k in X2_KEEP if k in report} if run_ids is None else dict(report)
+    # C/T: X2_KEEP only. W1 (``run_ids`` = its non-benign members): the R10 count and rate are over the BENIGN
+    # D members only and labelled so (RL-151 section 4 C2: over all six D members they give the non-benign G1
+    # timeouts by subtraction); the RL-149 section 1.5 tripwire is evaluated in memory over all six.
+    if run_ids is None:
+        out = {k: report[k] for k in X2_KEEP if k in report}
+    else:
+        benign = [r for r in rows if r.get('run_id') not in run_ids]
+        x2_benign = sum(bool(r.get('x2')) for r in benign)
+        out = {k: report[k] for k in X2_KEEP if k in report}
+        out.update(x2_count=x2_benign, x2_rate=(x2_benign / len(benign)) if benign else None,
+                   g0_timeout_x2_count=sum(bool(r.get('g0_timeout_x2')) for r in benign),
+                   pool='benign D members only (RL-151 section 4 C2)')
     out['members'] = [{k: r[k] for k in X2_ROW_KEEP if k in r} if run_ids is None or r.get('run_id') in run_ids else r
                       for r in rows]
     out['withheld'] = withheld(report)
@@ -658,7 +766,7 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
         out['episode_scope_alternative_ineligible_reasons'] = {
             rid: (_codes(codes) if rid in nonbenign else codes) for rid, codes in reasons.items()}
     if withhold:
-        out['carve_out_flag_counts'] = carve_out_counts(_member_flags(m) for m in members)
+        out['carve_out_flag_counts'] = _benign_counts(_member_flags(m) for m in members if m.get('run_id') not in nonbenign)
     if 'extra_checks' in pilot:
         out['extra_checks'] = _seal_extra_w1(pilot['extra_checks'], plan_members, withhold)
     return out
@@ -721,6 +829,7 @@ class DeskSeal:
         self.scope = scope
         self.w1_withhold = W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES if w1_withhold is None else w1_withhold
         self.full = None
+        self.key = secrets.token_bytes(32)          # the caller runs the desk inside ``keyed(self.key)``
 
     @property
     def plan_members(self):
@@ -731,6 +840,12 @@ class DeskSeal:
         self.full = pilot
         self._plan_members = self.plan_members      # resolve once
         digest = _write_json(Path(output) / WITHHELD_PILOT, pilot)
+        _write_json(Path(output) / WITHHELD_KEY, {'schema': GUARD_SCHEMA + '.key', 'algorithm': DIGEST,
+                                                  'key_hex': self.key.hex()})
+        with keyed(self.key):
+            return self._seal(pilot, lines, digest)
+
+    def _seal(self, pilot, lines, digest):
         sealed = seal_pilot(pilot, self.plan_members, self.window_id, scope=self.scope, w1_withhold=self.w1_withhold)
         if self.scope == 'W1':
             nonbenign = _nonbenign(self.plan_members, pilot.get('members'))
@@ -743,14 +858,30 @@ class DeskSeal:
             'w1_exceptions': [e['output'] for e in W1_EXCEPTIONS if e['in_class']] if self.scope == 'W1' else None,
             'authority': 'desk-leak audit 2026-11-13; RL-149 section 3',
             'withheld_pilot': WITHHELD_PILOT, 'withheld_pilot_sha256': digest,
+            'digest': DIGEST, 'digest_key': WITHHELD_KEY,
             'opens': 'release run (registered series_complete record plus lead-signed release receipt)'}
         return sealed, lines
 
 
+class ReleasedDesk:
+    """``print_policy`` after the registered release event: every field opens, and the desk records and prints
+    that it ran released (RL-151 section 4 C4), so a forged or early release cannot pass for an ordinary desk."""
+
+    def __init__(self, state):
+        self.record = release_record(state)
+        self.full = None
+
+    def __call__(self, pilot, lines, *, output):
+        self.full = pilot
+        print('release_guard: released ' + json.dumps({k: self.record[k] for k in
+              ('window_id', 'ruling', 'series_complete_sha256', 'release_receipt_sha256')}, sort_keys=True))
+        return {**pilot, 'release_guard': self.record}, lines
+
+
 def desk_policy(state, plan_members, *, w1_withhold=None):
-    """The v4 desk's ``print_policy`` for ``state``; ``None`` (identity) once the series is released."""
+    """The v4 desk's ``print_policy`` for ``state``: the seal, or :class:`ReleasedDesk` once released."""
     if released(state):
-        return None
+        return ReleasedDesk(state)
     return DeskSeal(plan_members, window_id(state), window_scope(state), w1_withhold=w1_withhold)
 
 
