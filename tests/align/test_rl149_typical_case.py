@@ -103,6 +103,76 @@ class TimingViewTests(unittest.TestCase):
         self.assertEqual(kit.typical_case_fit(view, T_DEAD, 300.0), kit.typical_case_fit(slots, T_DEAD, 300.0))
 
 
+class TurnOpportunityRestatedTests(unittest.TestCase):
+    """RL-152 section 1.2: the three-turn opportunity at B_D, in the duty bar's form."""
+
+    def record(self, counts_by_run, own_stop_by_run):
+        _inputs, slots = ready_inputs()
+        for row in slots['deadman_budget']:
+            counts = counts_by_run[row['run']]
+            row.update(turn_decode_counts=list(counts), turn_completed=[True] * len(counts),
+                       decode_tokens=sum(counts), admitted_turns=len(counts))
+            stop = own_stop_by_run[row['run']]
+            if stop is not None:
+                row['duty_bar'] = {'pass': True, 'verdict': 'pass', 'stop': {'own_stop': stop, 'why': None}}
+        return slots
+
+    BANK, SPAM_A, SPAM_B = ('D_bank_benign_s1_gated_held', 'D_spam_benign_s1_gated_held_a',
+                            'D_spam_benign_s1_gated_held_b')
+
+    def test_d_bank_seed_1_shape_is_not_applicable_and_the_set_passes(self):
+        # D_bank seed 1: two turns, the second to the 4,096-token cap, both inside B_D 9,216, own stop.
+        slots = self.record({self.BANK: [1500, 4096], self.SPAM_A: [300, 400, 500],
+                             self.SPAM_B: [300, 400, 500]},
+                            {self.BANK: True, self.SPAM_A: True, self.SPAM_B: True})
+        result = kit.turn_opportunity(slots, 9216)
+        by_run = {r['run']: r for r in result['runs']}
+        self.assertEqual(by_run[self.BANK]['status'], 'not_applicable')
+        self.assertEqual((by_run[self.BANK]['admitted_at_B_D'], by_run[self.BANK]['turns_taken']), (2, 2))
+        self.assertEqual(result['status'], 'pass')
+
+    def test_a_turn_b_d_would_have_cut_still_fails(self):
+        # Three turns taken, but B_D 6,144 admits only two of them: the run says something against B_D.
+        slots = self.record({self.BANK: [4096, 4096, 100], self.SPAM_A: [300, 400, 500],
+                             self.SPAM_B: [300, 400, 500]},
+                            {self.BANK: True, self.SPAM_A: True, self.SPAM_B: True})
+        result = kit.turn_opportunity(slots, 6144)
+        self.assertEqual({r['run']: r['status'] for r in result['runs']}[self.BANK], 'fail')
+        self.assertEqual(result['status'], 'fail')
+        # Two own-stop turns, but B_D 4,096 admits only the first: B_D would have cut a turn it took.
+        slots = self.record({self.BANK: [4096, 4096], self.SPAM_A: [300, 400, 500], self.SPAM_B: [300, 400, 500]},
+                            {self.BANK: True, self.SPAM_A: True, self.SPAM_B: True})
+        result = kit.turn_opportunity(slots, 4096)
+        self.assertEqual({r['run']: r['status'] for r in result['runs']}[self.BANK], 'fail')
+        self.assertEqual(result['status'], 'fail')
+
+    def test_a_missing_or_false_stop_never_makes_a_run_not_applicable(self):
+        for stop in (None, False):
+            with self.subTest(stop=stop):
+                slots = self.record({self.BANK: [1500, 4096], self.SPAM_A: [300, 400, 500],
+                                     self.SPAM_B: [300, 400, 500]},
+                                    {self.BANK: stop, self.SPAM_A: True, self.SPAM_B: True})
+                if stop is None:
+                    row = next(r for r in slots['deadman_budget'] if r['run'] == self.BANK)
+                    row['duty_bar'] = {'pass': True, 'verdict': 'pass'}          # no stop recorded
+                result = kit.turn_opportunity(slots, 9216)
+                self.assertEqual({r['run']: r['status'] for r in result['runs']}[self.BANK], 'fail')
+                self.assertEqual(result['status'], 'fail')
+
+    def test_no_run_with_three_turns_fails(self):
+        slots = self.record({self.BANK: [1500, 4096], self.SPAM_A: [300, 400], self.SPAM_B: [300, 400]},
+                            {self.BANK: True, self.SPAM_A: True, self.SPAM_B: True})
+        result = kit.turn_opportunity(slots, 9216)
+        self.assertEqual({r['status'] for r in result['runs']}, {'not_applicable'})
+        self.assertEqual(result['status'], 'fail')
+
+    def test_an_invalid_record_stays_inconclusive(self):
+        slots = self.record({self.BANK: [1500, 4096], self.SPAM_A: [300, 400, 500], self.SPAM_B: [300, 400, 500]},
+                            {self.BANK: True, self.SPAM_A: True, self.SPAM_B: True})
+        del slots['deadman_budget'][0]['turn_completed']
+        self.assertEqual(kit.turn_opportunity(slots, 9216)['status'], 'inconclusive')
+
+
 class DutySetClauseInTheKitTests(unittest.TestCase):
     def test_the_kit_rederives_the_three_turn_set_clause(self):
         _inputs, slots = ready_inputs()

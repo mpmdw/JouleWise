@@ -57,7 +57,9 @@ SLOT_FIELDS = ('I_D', 'B_D')
 # typical-case bar's inputs (align_v4_kit.typical_case_fit); the view keeps them so a kit check on the view
 # reads the same record (PR #777 row-1 review, finding 6).
 ROW_FIELDS = ('run', 'g0_outcome', 'decode_tokens', 'admitted_turns', 'x7',
-              'turn_decode_counts', 'turn_completed', 'turn_counts_source_sha256', 'gate_waits_s', 'g1_timeouts')
+              'turn_decode_counts', 'turn_completed', 'turn_counts_source_sha256', 'gate_waits_s', 'g1_timeouts',
+              # RL-152 section 1.2: turn_opportunity reads the own stop from the driver's row (duty_bar.stop).
+              'duty_bar')
 FIT_FIELDS = ('r_decode_tok_per_s', 'r_decode_step_d_tok_per_s', 'turn_cap_tokens')
 X_G_FIELDS = ('status', 'g0_outcome', 'g0_wait_s', 'admitted_turns', 'x7')
 DUTY_FIELDS = ('verdict', 'pass')
