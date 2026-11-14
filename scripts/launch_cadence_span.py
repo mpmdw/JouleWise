@@ -56,8 +56,10 @@ def cadence_plan(kit: Path, legs: str | None = None, batch_window: str | None = 
     from scripts import cadence_legs_runner as runner
 
     loaded, _sha = kitmod.load_kit(kit)
-    if loaded["runner"]["kind"] != RUNNER_KIND:
-        raise ValueError(f"kit runner.kind is not {RUNNER_KIND}")
+    # The job kind (RUNNER_KIND, the runner spec this launcher writes) is one: the same runner entry runs
+    # v1 kits and v1.1 kits (design doc section 14). The kit's own runner kind must be one it executes.
+    if loaded["runner"]["kind"] not in legsmod.RUNNER_KINDS:
+        raise ValueError(f"kit runner.kind is not one of {list(legsmod.RUNNER_KINDS)}")
     windows = [legsmod.parse_window(batch_window)] if batch_window else runner.default_windows()
     return legsmod.plan_span(loaded, t0_epoch=time.time() if t0 is None else t0, windows=windows,
                              leg_ids=legs.split(",") if legs else None, max_span_s=runner.max_span_s())

@@ -40,6 +40,8 @@ from joulewise.cadence import kit as kitmod
 from joulewise.cadence.desk import DENIED_KEY_RE, LEG_SUMMARY_KEYS, METER_KEYS, RESULT_KEYS
 
 RUNNER_KIND = "cadence-legs-v1"
+# Runner kinds this runner executes: v1 kits, and v1.1 kits (the cell law; design doc section 14).
+RUNNER_KINDS = (RUNNER_KIND, "cadence-legs-v1.1")
 LEG_KIND = "cadence-leg"
 LEG_SPEC_SCHEMA = "joulewise.cadence_leg_spec.v1"
 PLAN_SCHEMA = "joulewise.cadence_span_plan.v1"
@@ -152,12 +154,15 @@ def leg_specs(kit, leg_ids=None):
         band = leg["start_band"]
         if band not in BAND_RECIPES:
             raise PlanError([f"{leg_id}: band {band!r} has no recipe in {sorted(BAND_RECIPES)}"])
-        tokens = leg.get("prefill_tokens", kit["leg_defaults"]["prefill_tokens"])
+        # A v1 leg may take its size from leg_defaults; a v1.1 leg carries its cell (the cell law).
+        tokens = leg["prefill_tokens"] if "prefill_tokens" in leg else kit["leg_defaults"]["prefill_tokens"]
+        decode = leg["decode_tokens"] if "decode_tokens" in leg else kit["leg_defaults"]["decode_tokens"]
+        if leg.get("g0_shape", "own") != "own":
+            raise PlanError([f"{leg_id}: G0 shape {leg['g0_shape']!r} has no leg runtime at this commit"])
         spec = {"schema": LEG_SPEC_SCHEMA, "campaign_id": kit["campaign_id"], "leg_id": leg_id,
                 "seed": leg["seed"], "start_band": band, "prefill_tokens": tokens,
                 "prefill_chars": prefill_chars(tokens) if type(tokens) is int else None,
-                "decode_tokens": leg.get("decode_tokens", kit["leg_defaults"]["decode_tokens"]),
-                "quiet_s": BAND_RECIPES[band]["quiet_s"]}
+                "decode_tokens": decode, "quiet_s": BAND_RECIPES[band]["quiet_s"]}
         specs.append(validate_leg_spec(spec))
     return specs
 
@@ -271,7 +276,7 @@ def plan_span(kit, *, t0_epoch, windows, leg_ids=None, max_span_s=MAX_SPAN_S):
         raise PlanError([f"the worst-case span [t0, t0 + {worst:.0f} s] meets a batch blackout "
                          f"({', '.join(format_window(w) for w in windows)}); arm after it or earlier"])
     expected = t["soak_s"] + t["fixed_overhead_s"] + sum(leg["budget_s"] for leg in legs)
-    return {"schema": PLAN_SCHEMA, "runner_kind": RUNNER_KIND, "campaign_id": kit["campaign_id"],
+    return {"schema": PLAN_SCHEMA, "runner_kind": kit["runner"]["kind"], "campaign_id": kit["campaign_id"],
             "t0_epoch_s": t0_epoch, "deadline_epoch_s": t0_epoch + worst, "worst_case_s": worst,
             "blackout_clear": True, "expected_s": expected, "soak_s": t["soak_s"],
             "fixed_overhead_s": t["fixed_overhead_s"], "leg_cap_s": t["leg_worst_case_s"],

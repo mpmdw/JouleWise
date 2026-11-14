@@ -313,7 +313,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
     output.mkdir(parents=True, exist_ok=False)   # create-once: a retry cannot overwrite a span
     clock = deps.clock
     stages = legsmod.StageJournal(output / legsmod.STAGE_JOURNAL, clock)
-    record = {"schema": RECEIPT_SCHEMA, "runner_kind": legsmod.RUNNER_KIND, "mock": deps.mock,
+    record = {"schema": RECEIPT_SCHEMA, "runner_kind": kit["runner"]["kind"], "mock": deps.mock,
               "started": _stamp(clock), "deadline": deadline, "work_reserve_s": WORK_RESERVE_S,
               "kit": {"campaign_id": kit["campaign_id"], "sha256": kit_sha256, "frozen_commit": kit["frozen"]["commit"]},
               "roster": list(leg_ids) if leg_ids is not None else [leg["leg_id"] for leg in kit["legs"]],
