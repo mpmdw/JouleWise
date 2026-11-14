@@ -14346,3 +14346,73 @@ In build order. The aim is that slots 4 to 12 each have a READY block before the
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed was opened. This ruling rests on rulings, the ledger, two kit files, four plans, PR states and one throughput report. The leg cap and the block list are changed before any development energy is read.
 
 **For Ed, plainly.** "The laptop has work assigned for every hour through Tuesday. Tonight, after the three-run test finishes, it runs the v4 check that has been waiting since this morning, then the Flash-Next port if we can start it remotely. Sunday at 02:40 it runs the other nine calibration runs. I am not running those tonight: they are more useful as a second day than as more of the same day, and tonight is better spent on the v4 check. The second calibration block, which I had been holding, now runs Monday as an extra block, so the total goes from 120 runs to 132. High Power and the mixed-size blocks follow as their code lands. Whenever a planned block is not ready, the laptop has a fixed list of useful jobs it starts by itself."
+
+# RL-155a. Tonight's gap after Part C, the ladder's standing fix, dev-02's window restated, and the line-2 reading in one line
+
+Research lead (Fable 5.2), Sat Nov 14 2026, appended on the orchestrator's 15:20 message and its two added items (this host's `date` printed 14:58 PST when I wrote this; the lead stamps the filing time). RL-155 stands except where this section amends it.
+
+**Read.** `/Volumes/JW-EXT/scratch/f1-feasibility-1414/ANSWER.md` (verdict and section 1). `/Volumes/JW-EXT/scratch/dev02-ready-1414/README.md`, in full. RL-152 §2.2, in full.
+**Not checked.** Whether `validate-queue` accepts the append of §1.2 below; the two queue files now on the audit branch (taken from the README); the slot session's plan length; the amendment draft's state. No SSH, no measurement file, no run. The only file written is this one.
+
+## 1. Tonight, after Part C (about 19:30 to 01:30)
+
+### 1.1 I withdraw one reason of RL-155 §3.2
+
+I refused dev-01 legs tonight because that "puts all of dev-01 on one calendar day". That is true of all nine legs. It is not true of some of them. A partial span tonight leaves Sunday its span and its day, makes Saturday a seven-leg day instead of a three-leg one, and adds one cold start and an evening history. It is better than idle. Answer to option (e): **a sub-span is not worse than idle; the whole remainder tonight would be.**
+
+### 1.2 The assignment
+
+| Order | What | t0 | Time | Gate |
+|---|---|---|---|---|
+| 1 | Part C at the W1-line commit (RL-155 §3.1) | pilot close + 20 min | about 2 h | Unchanged |
+| 2 | **dev-01 sub-span: L004-L007** (kit order, counted) | by 20:03. If later, **L004-L006** by 20:48. After 20:48, skip to 3 | expected about 2.2 h | R9 pass recorded; hand-read agrees; the queue append below committed and `validate-queue` ok; lines 5, 6, 7 at the arm |
+| 3 | **A second Part C at the same commit** (filler F0, journals only) | by 23:15 | about 2 h | None beyond the first run's close and restore lines. It adopts nothing; if its verdict differs from the first run's on any line, both come to me |
+| - | Quiet from the last close, at the latest 01:30 | | | |
+
+- **The leg count** comes from the fence, not from me: 3,150 s + (legs + 2) x 2,700 s + 1,460 s must end by 01:50. Four legs need t0 by 20:03, three by 20:48.
+- **The queue.** The append now on the audit branch holds one span, L004-L012. The queue is append-only, so the lead appends two more spans, `dev-01-s03` (L004-L007, or L004-L006) and `dev-01-s04` (the rest), and records in the RUN_STATE item that `dev-01-s02` is withdrawn unarmed. Additions only. **If `validate-queue` refuses that, or it is not committed by 19:45, there is no sub-span tonight:** step 3 runs in its place and `dev-01-s02` arms at 02:40 as RL-155 wrote it. No validator or runner byte is changed tonight to make it fit.
+- **Sunday 02:40** then runs `dev-01-s04` (five or six legs; worst-case end by 09:30, fence before 10:50). A leg's calendar day is the local date of its span's t0.
+- **Owner:** lead (R9, the hand-read, the append, the items); magistrate (the three runs). **Not gated on me.**
+
+### 1.3 The other options
+
+- **(a) The slot session tonight: no, unless it needs no hurry.** It needs Part C's desk table read against RL-149 §1, every line of §5 item 12, the amendment draft carrying the constants, and a plan whose worst case ends by 01:50. If the lead finds all of that true by 20:00 without shortening any check, R-A applies and it takes the place of steps 2 and 3. I do not expect it, and a slot-producing session is the one thing tonight that a rushed checklist can spoil.
+- **(b) F2's page: not tonight.** A design written in an hour and built in two is how unreviewed bytes reach the machine. I write the page on the orchestrator's next dispatch; target Sunday morning, build Sunday, first run Monday evening.
+- **(c) F3: build it, but not for tonight** (section 2).
+- **(d) Download-only: no.** A network and disk job is legal under the footprint rules when nothing is armed. But the gold driver streams through 12 GiB of staging and the MBP has 84 GB free, so a download now leaves nothing behind for a later slot. It would be load with no product.
+
+## 2. The ladder's standing fix
+
+RL-155 §4's ladder is replaced by this order. The magistrate applies it with no ruling.
+
+| # | Filler | Rule | Needs |
+|---|---|---|---|
+| P | **Pull forward counted legs** from the next READY campaign block | At most half of the block's unrun legs, at least three, in kit order, the count set by the fence formula of §1.2. Never a v1.1-or-later block's first three legs if they are its class A smoke | A queue that already holds the block as short spans (below) |
+| F0 | **Part C at the current W1-line commit** | **t0 at least 4 h apart, at most three a day** (RL-149 §5's "twice, 10 h apart" is amended) | Nothing |
+| F3 | **Soak-only capture,** 60 min pieces, all feeds, journals only | Any gap of 90 min or more that P and F0 cannot take | A small soak-only runner kind, built with v1.1 on its commit. Class B. It never re-pins `cl-dev-01` or `cl-dev-02`. Value is low (soak settle by hour, drift, fan floor); it is the floor of the ladder, not a goal |
+| F2 | Instrument characterization | In pieces of 2 h or less | My page, then the build (§1.3 b) |
+| F1 | Flash-Next on real weights | Leaves the ladder until the MBP has the disk for it | Tied to the internal-disk offload Ed already asked for. No physical step is put on any path for it |
+
+**Queues from v1.1 on are written as short spans:** the class A smoke (three legs) where there is one, then spans of at most six legs. Two spans of a block may arm back to back. That costs one extra soak per block (about 55 min) and buys a block that fits any gap of 5 h, with no queue surgery. dev-02's committed queue (one span of twelve) stays as it is.
+
+**Default rule, restated:** "Block not READY: P, else F0, else F3, else F2, else report `DESIGN_QUEUE_LOW`."
+
+## 3. dev-02's window, restated (item 1)
+
+On `b4b6aeb19` the soak path still waits out 11:45 to 13:15 and the plan does not budget it. So, for every span on kits `c76344c5` and `d963500b`:
+- **no launch between 10:50 and 13:15;**
+- **the fence end (worst case + 1,460 s) lands by 01:50.**
+
+**dev-02 (twelve legs): t0 Mon 02:40 to 10:50, or 13:15 to 14:03.** RL-155's "02:40 to 14:30" is withdrawn. The same two bounds give dev-01's nine-leg span a latest t0 of 16:18; RL-155's 04:50 for slot 3 is inside them and stands. Kits pinned on a commit that contains #777 have only the second bound.
+
+## 4. Line 2 (item 2)
+
+**RL-152 §2.2's reading stands as "the red set at the head equals the red set at the base, test for test, and each red test has a recorded passing run at a #777 head". "Exactly the eight modules" was my count from the brief and it was wrong: the set is 12 tests in 10 modules, the eight plus `align.test_r1_followup` and `hazards.test_refusal_allowlist`.** This holds for kit `c76344c5` (the pilot's arm record is not open on it) and, by RL-155 §3.3, for `d963500b`.
+- One line is owed in dev-02's arm record, and beside the pilot's as a note: for each of the two added modules, that the bytes it tests are not among the 37 frozen paths, or are byte-identical at the base, the pilot commit and #777's head. If either is a frozen path that differs, that comes to me before dev-02 arms. It does not reach back to the pilot's legs, which RL-152 let arm on the equality of the two sets.
+
+---
+
+**Owner.** Lead: §1.2's append and items; the line of §4; dispatching me for F2's page. Builder: F3 with v1.1; short-span queues from v1.1 on. Magistrate: tonight's three runs; the ladder on its default rule. Research lead: F2's page; a second Part C that disagrees with the first.
+**Gate.** The sub-span waits for R9, the hand-read and a validated append by 19:45. The second Part C waits for nothing new. dev-02 waits for RL-155 §3.3's four lines and §4's line.
+**Amends.** RL-155 §3.2 (a partial span of dev-01 may run tonight), §2's slot 6 window, §4's ladder. RL-149 §5's bridge spacing. RL-152 §2.2's count.
+**Blind status.** Blind: nothing sealed was opened; no campaign or v4 energy has been read. Rests on two reports and my own rulings.
