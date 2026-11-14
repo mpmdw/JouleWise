@@ -139,6 +139,7 @@ class Fixture:
                       {'members': {rid: {'discharge_j': plant(i)['battery']} for rid, i in self.index.items()}})
         rows = [{'code': flag, 'scope': {'run_id': self.rows[i]['run_id']}} for i, where, flag in CARVED + KEPT
                 if where == 'harvest']
+        rows.append({'code': 'thermal.hold_timeout:session', 'scope': {}})      # session-scoped: counted, not listed
         (root / 'archive/derived/flags.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
         return root
 
@@ -167,7 +168,8 @@ class Fixture:
         return {'schema': 'joulewise.align_v4.km003c_secondary.v1', 'label': km003c.LABEL, 'print_only': True,
                 'members': {r['run_id']: {**km003c._empty(), 'status': 'available', 'dc_in_energy_j': plant(i)['dc'],
                                           'dc_in_delta_j': plant(i)['dc'], 'dc_in_residual_j': plant(i)['dc'],
-                                          'score': plant(i)['dc'], 'flags': []}
+                                          'score': plant(i)['dc'],
+                                          'flags': ['meter.stream_unclosed', 'prediction.extrapolated_decode:812']}
                             for i, r in enumerate(self.rows)},
                 'models': [{'model': {'coef': [plant(0)['dc']]}}]}
 
@@ -387,6 +389,11 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertTrue(all(isinstance(t, str) and t.startswith('hmac:') for t in tokens.values()))
         self.assertTrue(report['extra_checks']['km003c']['members'][self.fx.rows[0]['run_id']]['sealed'])
         self.assertEqual(report['extra_checks']['balance_check']['status'], seal.WITHHELD)
+        # Session-scoped carved codes are not listed (Sol F3 / RL-149 carve-out); sealed DC rows keep meter codes only.
+        self.assertNotIn('thermal.hold_timeout', report['session_harvest_flags']['flag_codes'])
+        for row in report['extra_checks']['km003c']['members'].values():
+            self.assertEqual(row['flags'], ['meter.stream_unclosed'])
+        self.assertNotIn('prediction.extrapolated_decode', json.dumps(report))
         self.assertIn('full_desk_gate: ', printed)
         # RL-149 carve-out: truncation / heat-ended codes appear only as window counts over all members.
         self.assert_carved_only_as_counts(printed, report, desk, range(len(self.fx.rows)))
@@ -792,6 +799,15 @@ class RecoveryAttackTests(unittest.TestCase):
                 self.assertNotIn(sealed, dictionary, window)                         # recovery fails
             for name, text in run['texts'].items():
                 self.assertEqual([c for c in dictionary if c in text], [], (window, name))
+
+    def test_w1_no_assist_list_never_names_a_non_benign_member(self):
+        extra = {'registration_diagnostics': {'battery_windows': {'m/W1': {
+            'B_count': 0, 'assist_count': 0, 'members': [{'id': 'b1', 'flags': []}, {'id': 's1', 'flags': []}],
+            'no_assist_sensitivity': {'status': 'print_only', 'member_ids': ['b1', 's1']}}}}}
+        plan = [{'run_id': 'b1', 'condition': 'benign'}, {'run_id': 's1', 'condition': 'sabotage'}]
+        row = seal._seal_extra_w1(extra, plan, True)['registration_diagnostics']['battery_windows']['m/W1']
+        self.assertEqual(row['no_assist_sensitivity']['member_ids'], ['b1'])
+        self.assertEqual(row['no_assist_sensitivity']['population'], 'benign')
 
     def test_med4_dc_digest_is_keyed(self):
         row = {**km003c._empty(), 'status': 'available', 'dc_in_energy_j': 12.0}
