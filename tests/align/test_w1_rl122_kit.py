@@ -22,9 +22,9 @@ RUNTIME_KEEP = ('status', 's_fast', 's_slow', 'r0_sensors', 'sensor_pick_changed
                 'classification_sha256')
 
 
-def night_d(classification, pair, r0_keys):
+def night_d(classification, pair, r0_keys, r0_classes=None):
     """The runtime's confirmation-path summary (r1_runtime thermometry), projected by the driver."""
-    confirmation = rt.sensor_admissibility(classification, pair, r0_keys)
+    confirmation = rt.night_confirmation(classification, pair, r0_keys, r0_classes)
     summary = {key: classification.get(key) for key in RUNTIME_KEEP}
     summary.update(status='pass' if confirmation['ok'] else 'fail', **pair,
                    registered_picks={r: classification[r] for r in ('s_fast', 's_slow')},
@@ -35,7 +35,7 @@ def night_d(classification, pair, r0_keys):
 
 
 class RebindPairDryCheck(unittest.TestCase):
-    """RL-122 item 7 checklist: the W1 kit accepts TV0h / TVh0 given an ok night confirmation."""
+    """RL-122 item 7 checklist, as rebound by RL-145: the W1 kit accepts TV0h / TV1h given an ok night confirmation."""
 
     def setUp(self):
         self.config, _ = rt.load_config(CONFIG)
@@ -51,28 +51,37 @@ class RebindPairDryCheck(unittest.TestCase):
         kit.require_ready(self.inputs, self.slots)
 
     def test_kit_accepts_the_pair_on_an_ok_confirmation(self):
-        self.assertEqual(self.pair, {'s_fast': 'TV0h', 's_slow': 'TVh0'})
-        d, confirmation = night_d(self.classification, self.pair, self.config['r0_classified_keys'])
+        self.assertEqual(self.pair, {'s_fast': 'TV0h', 's_slow': 'TV1h'})
+        d, confirmation = night_d(self.classification, self.pair, self.config['r0_classified_keys'], self.config['r0_classes'])
         self.assertTrue(confirmation['ok'], confirmation)
         self.assertEqual(confirmation['authority'], 'RL-78')
-        # The classifier's own slow pick is a heatsink key; TVh0 is admitted only as the fixed pair.
+        # The classifier's own slow pick is a heatsink key; TV1h is admitted only as the fast key's alias (RL-145).
         self.assertEqual(d['registered_picks'], {'s_fast': 'TV0h', 's_slow': 'Th0C'})
-        self.assertNotIn('TVh0', d['heatsink_candidates'])
+        self.assertNotIn('TV1h', d['heatsink_candidates'])
         self.ready(d)
 
     def test_kit_refuses_without_an_ok_confirmation_or_with_aliased_keys(self):
-        d, _ = night_d(self.classification, self.pair, self.config['r0_classified_keys'])
+        d, _ = night_d(self.classification, self.pair, self.config['r0_classified_keys'], self.config['r0_classes'])
+        group = ['TV0h', 'TV1h']
         for mutate, message in (
-                (lambda x: x['night_confirmation'].update(ok=False), 'heatsink list'),
+                (lambda x: x['night_confirmation'].update(ok=False), 'aliased'),
+                (lambda x: x['night_confirmation'].pop('second_key_rule'), 'aliased'),
+                (lambda x: x['night_confirmation'].update(second_key_rule='RL-78'), 'aliased'),
                 (lambda x: x['night_confirmation'].update(authority='RL-122'), 'heatsink list'),
-                (lambda x: x['night_confirmation'].update(s_slow='Th0C'), 'heatsink list'),
+                (lambda x: x['night_confirmation'].update(s_slow='Th0C'), 'aliased'),
                 (lambda x: x.update(s_slow='Th0C'), 'must equal'),
-                (lambda x: x['alias_groups'].__setitem__(x['alias_groups'].index(['TV0h', 'TV1h']),
-                                                         ['TV0h', 'TV1h', 'TVh0']), 'aliased')):
+                # A group whose lexically first other member is not the policy's slow key.
+                (lambda x: x['alias_groups'].__setitem__(x['alias_groups'].index(group),
+                                                         ['TV0a', 'TV0h', 'TV1h']), 'aliased')):
             bad = deepcopy(d)
             mutate(bad)
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
                 self.ready(bad)
+
+    def test_kit_takes_a_three_member_group_when_the_slow_key_is_its_lexically_first_other(self):
+        d, _ = night_d(self.classification, self.pair, self.config['r0_classified_keys'], self.config['r0_classes'])
+        d['alias_groups'][d['alias_groups'].index(['TV0h', 'TV1h'])] = ['TV0h', 'TV1h', 'TVh0']
+        self.ready(d)
 
 
 def planning_slots(names, *, reason=kit.PLANNING_RELEASE_REASON):
@@ -92,7 +101,7 @@ def planning_slots(names, *, reason=kit.PLANNING_RELEASE_REASON):
 
 
 def release_for(slots, names, **row):
-    segment = {'os_levels': [0], 'pm_states': ['Nominal'], 'heater_key': 'TVh0',
+    segment = {'os_levels': [0], 'pm_states': ['Nominal'], 'heater_key': 'TV1h',
                'band_edge_c': 36.018, 'heater_key_max_last_300s_c': 36.4, **row}
     return {'schema': kit.R1_PLANNING_RELEASE_SCHEMA, 'authority': kit.PLANNING_RELEASE_AUTHORITY,
             'lead_signature': 'lead: synthetic-test 2026-11-12', 'r1_record': kit.r1_record_identity(slots),
@@ -106,7 +115,7 @@ class PlanningReleaseTests(unittest.TestCase):
     def test_segment_names_are_the_drivers(self):
         names = [name for name, kind, *_ in r1_phase_table.phase_plan() if kind in r1.contract.PLANNING_KINDS]
         self.assertEqual(sorted(names), sorted(kit.PLANNING_SEGMENTS))
-        self.assertEqual(kit.planning_heater_key(), 'TVh0')
+        self.assertEqual(kit.planning_heater_key(), 'TV1h')
 
     def test_as_built_kit_refuses_a_planning_timeout_without_the_record(self):
         inputs, slots = planning_slots(['planning_turn_R_plus_4C'])

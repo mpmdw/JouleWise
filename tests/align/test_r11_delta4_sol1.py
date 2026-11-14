@@ -81,10 +81,10 @@ class ArmWitnesses(Base):
         from joulewise.align.apple import r1_runtime as runtime
         config, _ = runtime.load_config(ROOT / 'configs/align/v4/r1_runtime.json')
         sensors = runtime.sensors_policy(config)
-        # RL-119/RL-122 (rebinding RL-89's Th0C): the runtime pair is TV0h/TVh0;
+        # RL-145 (rebinding RL-122's TVh0 and RL-89's Th0C): the runtime pair is TV0h/TV1h;
         # RL-94: R0's registered picks stay TV0h/Tf08.
         self.assertEqual((config['r0_picks']['s_fast'], config['r0_picks']['s_slow']), ('TV0h', 'Tf08'))
-        self.assertEqual((sensors['s_fast'], sensors['s_slow']), ('TV0h', 'TVh0'))
+        self.assertEqual((sensors['s_fast'], sensors['s_slow']), ('TV0h', 'TV1h'))
         self.assertEqual(sensors['fan_keys'], ['F0Ac', 'F1Ac'])
         for key in ('d_spam', 'd_bank'):
             _, spec = runtime.read_template(config['templates'][key])

@@ -55,6 +55,8 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                                     'phases_s': dict(SYN_PHASES, tail=tail), 'decode_tokens': 8000,
                                     'turn_decode_counts': [2000]*4, 'turn_completed': [True]*4,
                                     'admitted_turns': 4, 'x7': False, 'turn_counts_source_sha256': R0_SHA,
+                                    # RL-148/RL-149 typical-case bar: three G1 waits (30 s of G1), none timed out.
+                                    'gate_waits_s': {'G1': [10.0, 10.0, 10.0]}, 'g1_timeouts': 0,
                                     'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                    for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'r_decode_step_d_tok_per_s': 40.0,

@@ -80,6 +80,35 @@ def enrich_record(record, bundle):
     return record
 
 
+def rl145_prints_report(manifest, root, journal):
+    """RL-145 section 2 prints per manifest member (explicit inputs only, no discovery).
+
+    Optional member keys: ``os_journal`` (as for the desk) and ``token_stamps`` (a JSON file
+    ``{"<turn index>": [arrival ns of decode token 1, 2, ...]}``). The optional manifest key
+    ``residual_rows`` names a JSONL of ``{trajectory, decode_tokens, residual_j[, prefill_s, decode_s]}`` rows
+    (the load bins need the two seconds). Token times come from each bundle's token events.
+    Without token stamps the token-position fields print as null with ``token_basis`` unavailable.
+    """
+    from joulewise.align.apple import rl145_prints
+    members = []
+    for item in manifest['members']:
+        stamps = None
+        if item.get('token_stamps'):
+            stamps = {int(k): v for k, v in json.loads((root/item['token_stamps']).read_text()).items()}
+        try:
+            row = rl145_prints.bundle_prints(root/item['bundle'], token_stamps_by_turn=stamps,
+                                             os_journal=journal(item['os_journal']) if 'os_journal' in item else ())
+        except FileNotFoundError as exc:
+            row = {'episode': item.get('id', Path(item['bundle']).name), 'turns': [],
+                   'unavailable': f'member.artifact_missing:{exc.filename}'}
+        members.append({'id': item.get('id'), **row})
+    rows = journal(manifest['residual_rows']) if manifest.get('residual_rows') else None
+    return {'schema': 'joulewise.align.rl145_prints.v1', 'authority': 'RL-145 section 2, RL-145 addendum row 6',
+            'print_only': True, 'members': members,
+            'residual_by_decode_bin': None if rows is None else rl145_prints.residual_by_decode_bin(rows),
+            'residual_by_load_bin': None if rows is None else rl145_prints.residual_by_load_bin(rows)}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, required=True)
@@ -149,6 +178,9 @@ def main(argv=None):
     result['wp19'] = wp19
     result['K_session_read'] = compared or {'status': 'inconclusive', 'reason': 'no --compare-session inputs'}
     args.output.mkdir(parents=True, exist_ok=False)
+    # RL-145 addendum row 6: per-turn prints for the first W1 thermal desk. Print-only; no verdict.
+    (args.output/'RL145_PRINTS.json').write_text(json.dumps(
+        rl145_prints_report(manifest, root, journal), indent=2, sort_keys=True, allow_nan=False)+'\n')
     (args.output/'PILOT.json').write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
     battery_rows = ['\n## Battery window consequences', '',
                     '| Model/window | B | Missing | Assist | Verdict | Consequence |',

@@ -80,7 +80,8 @@ class RuntimeWiringTests(unittest.TestCase):
         c = classified()
         picks = {role: c[role] for role in ('s_fast', 's_slow')}
         keys = [r['key'] for r in c['ranking']]
-        c.update(s_fast='Tnew', s_slow='Ttop')
+        # RL-145 close: the pair is confirmed as the fast key's alias group; only the fast key is tested.
+        c.update(s_fast='Tnew', s_slow='Ttop', alias_groups=[sorted(picks.values())])
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             (out / 'inventory').mkdir()
@@ -93,7 +94,7 @@ class RuntimeWiringTests(unittest.TestCase):
             for admissible in (True, False):
                 result = deepcopy(c)
                 if not admissible:
-                    next(r for r in result['ranking'] if r['key'] == picks['s_slow'])['t_band_s'] = 301
+                    next(r for r in result['ranking'] if r['key'] == picks['s_fast'])['t_band_s'] = 301
                 with patch.object(rt, 'classify_step', return_value=result):
                     summary = segment.thermometry(member, label='step-d', record_only=False)
                 self.assertEqual({role: summary[role] for role in picks}, picks)

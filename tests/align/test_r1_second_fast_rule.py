@@ -33,6 +33,10 @@ class SecondFastRuleTests(unittest.TestCase):
         cls.saved, cls.regen = json.loads(cls.saved_raw), json.loads(cls.regen_raw)
         cls.ruling = json.loads(RULING.read_bytes())
         cls.config, _ = rt.load_config(CONFIG)
+        # RL-145 moved the config's s_slow TVh0 -> TV1h. This file tests RL-122's rule (still in the
+        # validator, superseded), so it reads the config as RL-122 had it: only s_slow differs.
+        cls.config = deepcopy(cls.config)
+        cls.config['sensors']['s_slow'] = 'TVh0'
 
     def validate(self, config=None, ruling=None, table=None):
         # A ruling written for a changed table names that table's own digest.
@@ -62,7 +66,9 @@ class SecondFastRuleTests(unittest.TestCase):
         rows = {r['key']: r for r in self.saved['classification_table']['classification']['ranking']}
         self.assertEqual(rows['TV0h']['observed_rise'], rows['TVh0']['observed_rise'])
         self.assertEqual(self.config['sensors']['s_slow'], pick['s_slow'])
-        self.assertEqual(self.validate()['s_slow'], 'TVh0')
+        # RL-145 close: the validator no longer accepts this rule (see test_rl145_second_key_rule).
+        with self.assertRaisesRegex(ValueError, 'RL-145'):
+            self.validate()
 
     def test_a_hand_pick_of_any_other_key_is_refused(self):
         others = [k for k in self.config['r0_classified_keys'] + ['TVH3', 'Tsyn'] if k not in ('TVh0', 'TV0h')]
@@ -90,22 +96,6 @@ class SecondFastRuleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             kit.validate_sensor_ruling(self.config, rl89, sha(self.saved_raw), self.saved)
 
-    def test_rl78_and_rl84_bars_still_apply(self):
-        config = deepcopy(self.config)
-        config['slow_band_floor_c'] = 1.5
-        with self.assertRaisesRegex(ValueError, 'default'):
-            self.validate(config)
-        config = deepcopy(self.config)
-        config['sensors']['record_keys'] = []
-        ruling = deepcopy(self.ruling)
-        ruling['sensors'] = config['sensors']
-        with self.assertRaisesRegex(ValueError, 'Tf08'):
-            self.validate(config, ruling)
-        table = deepcopy(self.regen)
-        table['selection']['fallback'] = True
-        with self.assertRaisesRegex(ValueError, 'regenerated table'):
-            self.validate(table=table)
-
     def test_only_the_regenerated_table_bytes_are_accepted(self):
         # PR #752 cold review F2: with the declared classification digest left in
         # place, an edited ranking or coverage would move the pick to Tf48.
@@ -127,7 +117,7 @@ class SecondFastRuleTests(unittest.TestCase):
                 config, ruling = deepcopy(self.config), deepcopy(self.ruling)
                 for record in (config['sensors'], ruling['sensors'], table['selection']):
                     record['s_slow'] = moved['s_slow']
-                with self.assertRaisesRegex(ValueError, 'regenerated table'):
+                with self.assertRaisesRegex(ValueError, 'RL-145'):     # refused outright, not by the table bytes
                     self.validate(config, ruling, table)
 
     def test_table_regenerates_byte_stable(self):
