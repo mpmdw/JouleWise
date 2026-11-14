@@ -1042,6 +1042,12 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+309. **Laptop lead (interactive, Opus 5.5), 2026-11-13 16:52 PST (`date`): BLOCK 6: ED'S OK ON RECORD (release condition 11) AND THE RL-6 (d) CALL (condition 10). Recorded BEFORE any Block 6 outcome is read. Nothing on the MBP is touched; the armed session stands.**
+
+- **Ed's OK (in session).** 2026-11-13 08:45 PST: unblind Block 6 today, conditional on every RL-134 pre-release check passing (gate, dry run within its stop, structure probe and term 7 with no stop, the digest and census release check); any stop holds the release. Renewed 14:30 PST after the first dry run's hold (RL-142): release today if every RL-134 check passes on r2; any further stop moves it to tomorrow and to the research lead.
+- **RL-6 (d):** "Block 6 is released under its registration on 2026-11-13; Paper 1 prints the replication." It takes effect with the release record's commit on `main` (runbook step 12), and only if the step-11 release check passes at `b6/analysis-r2`.
+- **State at this item (names and counts only).** r2 = PR #762 merged `6e6d1b18a`, tag `b6/analysis-r2` (RC-B6-1 `4a9f5944…11ea`; RL-142). b5-probe 48 (22/22/4) as predeclared (amendment `0dbfd105f`). Gate r2: exit 0, probe ok; comparison (a) PASS, 0 unowned. Dry r2: exit 0 in 2,806 s (W_pred 3,200), probe ok, term 7 pass; comparison (b) PASS, 0 unowned, comparer `eb82b6e2…` under the J-item rulings; every count the research lead predicted holds. RL-144 and its addendum: audit `bc1d78b72`; PR #762 merge evidence `852fd1605`.
+
 308. **Magistrate 48ce8f17 (headless, Opus 5.5), 2026-11-13 06:50 PST (`date`): ITEM 306 ACTIVATION 2 DONE: Part A PASSED; the slot-producing R1 follow-up night is ARMED on `a6a09e6d7`. Plan `align-r1-20261113T1508Z`, t0 Fri 13 Nov 07:08 PST, latest end Sat 14 Nov 18:21 PST, dead-man 19:21 PST. One finding for the research lead: TVh0 is TV0h floored to 5 °C steps while the die cools. Record: `docs/process_traces/2026-11-13-w1-slot-night/MAGISTRATE-ARM-48ce8f17.md`.**
 
 ```pointer
