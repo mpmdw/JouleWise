@@ -880,19 +880,28 @@ def picks_aliased(classification):
                                for group in (groups if isinstance(groups, list) else ()))
 
 
+# RL-145 close section 5, RL-152 section 1.6 ("that pair and no other"): the ruled alias pair by name, fast key
+# first. PR #777 row-2 finding 4: the bar admits this pair by name. RL-145 section 3's lexical rule (the slow pick
+# is the lexically first other member of the fast pick's alias group) stays beside it as a second condition,
+# fail closed, until the research lead rules whether it stays.
+RULED_ALIAS_PAIR = ("TV0h", "TV1h")
+
+
 def ruled_alias_pair(classification):
-    """RL-145 close sections 5 and 10, RL-149 section 5 item 12 (cited rebind of R8-6's bar for one pair):
-    the fast pick and the lexically first other member of its alias group, read as one thermometer under
-    two key names, on an ok RL-145 night confirmation that names both picks. For this pair only the close
-    replaced "aliases do not fill both roles"; any other aliased pair still fails the bar. The same test as
-    the W1 kit's ``ruled_alias_pair`` (``scripts/align_v4_kit.py``)."""
+    """RL-145 close sections 5 and 10, RL-149 section 5 item 12, RL-152 section 1.6 (cited rebind of R8-6's bar
+    for one pair): the picks are exactly ``RULED_ALIAS_PAIR`` (fast TV0h, slow TV1h), the slow pick is the
+    lexically first other member of the fast pick's alias group in the session's classification (RL-145
+    section 3, kept beside the name pending the research lead), on an ok RL-145 night confirmation that names
+    both picks. For this pair only the close replaced "aliases do not fill both roles"; any other aliased pair,
+    the swapped pair included, still fails the bar. The same test as the W1 kit's ``ruled_alias_pair``
+    (``scripts/align_v4_kit.py``)."""
     fast, slow = classification.get("s_fast"), classification.get("s_slow")
     groups = classification.get("alias_groups")
     group = next((g for g in (groups if isinstance(groups, list) else ()) if isinstance(g, list) and fast in g),
                  None)
     confirmation = classification.get("night_confirmation")
     confirmation = confirmation if isinstance(confirmation, dict) else {}
-    return (fast is not None and group is not None and slow in group and slow != fast
+    return ((fast, slow) == RULED_ALIAS_PAIR and group is not None and slow in group
             and slow == min(k for k in group if k != fast)
             and confirmation.get("ok") is True and confirmation.get("second_key_rule") == "RL-145"
             and confirmation.get("s_fast") == fast and confirmation.get("s_slow") == slow)
@@ -1980,8 +1989,8 @@ def run(args):
         thermometry["bar"] = thermometry_d["status"] if thermometry_d else "inconclusive"
         thermometry["flags"] = list((thermometry_d or {}).get("flags") or [])
         if thermometry_d and picks_aliased(thermometry_d) and ruled_alias_pair(thermometry_d):
-            # RL-145 close sections 5 and 10, RL-149 section 5 item 12: the one ruled alias pair
-            # (the fast key and its lexically first alias, confirmed this session) keeps the bar.
+            # RL-145 close sections 5 and 10, RL-149 section 5 item 12, RL-152 section 1.6: the one ruled
+            # alias pair (RULED_ALIAS_PAIR, TV0h/TV1h by name, confirmed this session) keeps the bar.
             thermometry["bar_basis"] = ("RL-145 ruled alias pair: one thermometer under two key names, "
                                         "confirmed by the session's RL-145 night confirmation")
             thermometry["flags"].append("r1.picks_alias_pair_rl145")

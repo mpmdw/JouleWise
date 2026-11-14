@@ -112,12 +112,15 @@ class R11Tests(unittest.TestCase):
         del slots['deadman_budget'][0]['turn_completed']
         self.assertEqual(kit.turn_opportunity(slots, 6144)['status'], 'inconclusive')
 
-    def test_procedure_routes_two_turn_opportunity_to_four_bit(self):
+    def test_procedure_routes_a_two_turn_opportunity_to_the_research_lead(self):
+        # RL-148 section 2 (PR #777 row-2 finding 9): no 4-bit route; the research lead rules.
         _, slots = eight_bit_case()
+        slots['slots']['B_D'] = 6144
         counted(slots, (4096, 4096, 100))
         decision = proc.decide(slots, 12)
-        self.assertEqual(decision['step'], 'R10-2(b)')
+        self.assertEqual((decision['step'], decision['receipt_draft']), ('RESEARCH-LEAD', None))
         self.assertEqual(decision['turn_opportunity']['status'], 'fail')
+        self.assertIn('three-turn opportunity', decision['reason'])
 
     def test_sentinel_fallback_has_no_silent_single_run_reference(self):
         r = member('18')

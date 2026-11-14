@@ -250,7 +250,8 @@ class FakeWorld:
                                       "classification_sha256": "c" * 64}
         if kind == "x-g" or kind.startswith(("d-spam", "d-bank")):
             payload.update(reference_source="align-v4-r1-step-d",
-                           gate_waits_s={"G0": [120.0], "G1": [40.0, 50.0, 60.0], "H": [30.0, 30.0, 30.0]},
+                           # PR #777 row-2 finding 5: no holds (N_chunk 4,096); the G1 waits add up to phases_s.G1.
+                           gate_waits_s={"G0": [120.0], "G1": [70.0, 80.0, 90.0], "H": []},
                            # R6-1: W1's inter-member schedule (the kit configs' idle).
                            inter_member_idle_s=300.0,
                            g0_outcome="timeout" if out.name in self.g0_timeout else "released",
@@ -275,7 +276,7 @@ class FakeWorld:
                            # R6-3: 12,600 tokens in 700 s = 18 tok/s (step-d: 20).
                            decode_tokens=self.gated_decode_tokens,
                            deadman={"T_dead_s": 1451.018, "phases_s": {
-                               "G0": self.g0_waits.get(out.name, 120.0), "G1": 150.0, "H": 90.0, "decode": 700.0,
+                               "G0": self.g0_waits.get(out.name, 120.0), "G1": 240.0, "H": 0.0, "decode": 700.0,
                                "prefill": 120.0, "tool": 6.0, "tail": self.tail}})
             if out.name in self.g0_timeout:
                 # R6-1: a G0 timeout admits no turn and decodes nothing (R7-2: at 1,200 s).
