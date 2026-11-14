@@ -709,7 +709,7 @@ class CommittedKitTests(unittest.TestCase):
             self.assertEqual({(leg["prefill_tokens"], leg["decode_tokens"], leg["start_band"]) for leg in kit["legs"]},
                              {(19458, 4096, "q0")})
             self.assertEqual(kitmod.deny_scan(kit), [])
-            for path in ("scripts/cadence_legs_runner.py", "scripts/cadence_leg_runtime.py",
+            for path in ("scripts/cadence_legs_runner.py", "scripts/cadence_leg_runtime.py", "scripts/launch_cadence_span.py",
                          "joulewise/align/apple/cadence_leg.py", "joulewise/cadence/legs.py",
                          "joulewise/align/apple/r1_runtime.py", "configs/align/v4/r1_runtime.json"):
                 self.assertIn(path, kit["frozen"]["paths"])

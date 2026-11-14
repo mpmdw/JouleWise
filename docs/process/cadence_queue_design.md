@@ -439,13 +439,17 @@ its fresh soak, the block's cold start. Kits live under `docs/process/cadence/ki
 
 ### 13.1 Magistrate note: checkout and kit for the counted pilot (dev-01 L001-L003)
 
-- **Checkout.** The MBP measures from `efbd0b0204b75930ab279a6788860b611405bce6`, checked out **detached**
-  (`git checkout --detach efbd0b0204b75930ab279a6788860b611405bce6`). That is the kit's `frozen.commit`, and
+- **Checkout.** The MBP measures from `b4b6aeb192da60d895a7529311b06599efff5be4`, checked out **detached**
+  (`git checkout --detach b4b6aeb192da60d895a7529311b06599efff5be4`). That is the kit's `frozen.commit`, and
   the runner's preflight refuses any other HEAD, and any frozen path whose working-tree bytes differ.
 - **Kit.** `--kit` points at `docs/process/cadence/kits/cl-dev-01.json` **taken from PR #775's head**, copied
   to a path outside the measurement checkout. The kit file is not in the frozen commit (it was committed
-  after it). The kit at the PR head differs from the cold-checked bytes only in the RL-150 R8 and R7 text;
-  its `frozen` block, all 36 path hashes included, is unchanged. Pin its sha256 in the queue entry.
+  after it). Against the cold-checked bytes, the kit at the PR head differs in the RL-150 R8 and R7 text and in
+  its `frozen` block: `frozen.commit` `b4b6aeb19`, 37 paths, three hashes changed, all launch-side
+  (`scripts/launch_cadence_span.py` added, `scripts/launch_align_r0.py` back to its base bytes, the runner's
+  docstring). Pin its sha256 in the queue entry.
+- **Launch.** `scripts/launch_cadence_span.py launch` (not `launch_align_r0.py`, which no longer knows this
+  runner kind).
 - **Arm.** `--legs L001,L002,L003` and `--batch-window 02:00-02:35` on every launch (RL-150 §2 F2), with
   `--output` outside every v4 registration and custody root. The arm record states measurement_mode (as
   applied 11-13 23:47) and network time off, checked remotely (RL-150 §2 F5). The first queue holds the
