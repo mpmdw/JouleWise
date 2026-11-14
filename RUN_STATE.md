@@ -1042,6 +1042,12 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+314. **Laptop lead (interactive, Opus 5.5), 2026-11-13 21:01:03 PST (`date`): ALIGN v4: ED'S ANSWER TO THE RL-145 QUESTION (the 27B cannot run as registered on this laptop): option (c). Recorded verbatim. Nothing is armed by this item; no session and no W1.**
+
+- **Question:** the research lead's text of RL-145 close erratum §3 (`~/code/jw-wt/lead-handoff-1113/fable-rl145-close-erratum.md` on the MBP), put to Ed in session with the four options (a) screening-only, (b) qualify High Power, (c) keep K in normal power mode and change the claim words, (d) a smaller model; research lead recommends (c) as a trial.
+- **Ed, 2026-11-13 21:01:03 PST, verbatim (option chosen):** "(c) Keep K, reword (Recommended)" — "Fable's trial recommendation. K is kept in normal power mode; 27B runs become 'cooled to a set point before each turn', and runs that heat up are kept in. S is at risk. A rewritten budget check is needed and may not exist; Fable reports within one ruling. If none fits, the choice falls back to (a) or (d)."
+- **Next (research lead):** the ruling after Ed's answer (RL-145 close §12 owner line): whether a budget check exists that fits; design, N_chunk, series mode, ruling 1(f), the energy print, DEVIATIONS wording, the restored checklist. Tonight's Part C smoke (close §8) runs as a diagnostic either way; it is its first evidence.
+
 313. **Laptop lead (interactive, Opus 5.5), 2026-11-13 20:58 PST (`date`): THE S-14 LINE IS ON `main` (RL-134 item 18, runbook step 17 and §18). PR #771 merged at 2026-11-13 20:57:47 PST by merge commit `8d54a57797d5c41f1c4c1160f69a0bb5e5c3e6ed`; `6e6d1b18a` (tag `b6/analysis-r2`) is now reachable from `main`.**
 
 - **§18 check, re-taken on `main` at `8d54a5779`:** all 24 closure files equal the release record's `closure_sha256` (24 of 24, 0 differ; `git show <merge>:<path> | sha256`). The merge is not redone.
