@@ -510,6 +510,12 @@ def check_duty_bar_consistency(r1_slots):
     if not verdicts or any(v not in ('pass', 'inconclusive', 'fail') for v in verdicts):
         raise ValueError('R1 deadman_budget must carry a duty_bar.verdict for every run')
     verdict = 'fail' if 'fail' in verdicts else 'inconclusive' if 'inconclusive' in verdicts else 'pass'
+    # RL-149 section 1.5: a PASS also needs one passing gated D run with three admitted turns (the driver's
+    # three_turn_run_present; a run that stopped itself at two turns has a not-applicable turn check).
+    if verdict == 'pass' and not any(isinstance(row, dict) and (row.get('duty_bar') or {}).get('verdict') == 'pass'
+                                     and type(row.get('admitted_turns')) is int and row['admitted_turns'] >= 3
+                                     for row in rows):
+        verdict = 'fail'
     duty = r1_slots.get('duty_bar')
     if not isinstance(duty, dict) or duty.get('verdict') != verdict or duty.get('pass') is not (verdict == 'pass'):
         raise ValueError('R1 duty_bar verdict/pass disagrees with the per-run duty verdicts')
@@ -727,6 +733,51 @@ def ruling_1f_fit(r1_slots, b_d, t_dead, *, receipt=None, x_max_turns=None):
     worst = math.fsum(terms.values())
     return {'B_D': b_d, 'T_dead_s': t_dead, 'terms_s': terms, 'r_decode_tok_per_s': rate, 'worst_s': worst,
             'g0_cap_w1': g0_cap, 'd_g0_cap': d_cap, 'rule': rule, 'fits': worst <= t_dead + 1e-6}
+
+
+TYPICAL_CASE_AUTHORITY = 'RL-148 section 2 ("What replaces the fit in the kit"); RL-149 section 1.5'
+
+
+def typical_case_fit(r1_slots, t_dead, g_turn_s):
+    """RL-148 section 2, as RL-149 section 1.5 sets it: the typical case, not the worst case, must fit.
+
+    Each of R1's three gated D runs, with its own recorded prefill, tool and decode seconds, plus the G0
+    seconds and, for each of its own G1s, the largest G1, ends inside T_dead. Evaluated on the slot
+    session's own seconds (RL-149 section 1.5): the G0 term is the largest gated D G0 wait of the session
+    and the G1 term is the session's largest single gated D G1 wait, or ``g_turn_s`` (the armed G_turn cap,
+    thermal_policy.turn_cap_s) if any gated D G1 of the session timed out. A run's G1 count is the number
+    of G1 waits it recorded (``deadman_budget[].gate_waits_s.G1``, written by the RL-149 R1 driver). Holds
+    are not a term: N_chunk 4,096 (no in-turn hold, RL-149 section 1.1). Returns the arithmetic; the duty
+    bar and the three-turn opportunity at B_D are separate checks and stay."""
+    rows, phases, _rate, _cap = gated_fit_inputs(r1_slots)
+    if not finite(t_dead) or t_dead <= 0 or not finite(g_turn_s) or g_turn_s <= 0:
+        raise ValueError('typical-case fit: T_dead and the G_turn cap must be finite and positive')
+    g1_waits, timeouts = {}, {}
+    for row in rows:
+        waits = (row.get('gate_waits_s') or {}).get('G1') if isinstance(row.get('gate_waits_s'), dict) else None
+        if not isinstance(waits, list) or not all(finite(w) and w >= 0 for w in waits):
+            raise ValueError(f'typical-case fit: {row.get("run")} must record its per-G1 waits '
+                             '(deadman_budget[].gate_waits_s.G1, the RL-149 R1 driver); an older R1 record cannot '
+                             'be judged (RL-148 section 2)')
+        count = row.get('g1_timeouts')
+        if type(count) is not int or count < 0:
+            raise ValueError(f'typical-case fit: {row.get("run")} must record g1_timeouts (an int >= 0; the RL-149 '
+                             'R1 driver reads it from the run\'s episode flags)')
+        g1_waits[row['run']], timeouts[row['run']] = [float(w) for w in waits], count
+    g0 = max(p['G0'] for p in phases)
+    timed_out = any(timeouts.values())
+    g1_max = float(g_turn_s) if timed_out else max((w for ws in g1_waits.values() for w in ws), default=0.0)
+    runs = {}
+    for row, p in zip(rows, phases):
+        n_g1 = len(g1_waits[row['run']])
+        own = p['prefill'] + p['tool'] + p['decode']
+        total = math.fsum((g0, n_g1 * g1_max, own))
+        runs[row['run']] = {'prefill_tool_decode_s': own, 'g1_count': n_g1, 'total_s': total,
+                            'margin_s': t_dead - total, 'fits': total <= t_dead + 1e-6}
+    return {'authority': TYPICAL_CASE_AUTHORITY, 'T_dead_s': t_dead, 'G0_s': g0, 'G1_max_s': g1_max,
+            'G1_basis': 'G_turn cap (a gated D G1 timed out)' if timed_out else 'largest recorded gated D G1',
+            'G_turn_s': g_turn_s, 'runs': runs, 'fits': all(r['fits'] for r in runs.values()),
+            'rule': 'for each gated D run: max G0 + (its G1 count) x max G1 + its prefill + tool + decode <= T_dead'}
 
 
 G0_CAP_FACTOR = 1.25
@@ -1107,14 +1158,19 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
                              '(s6_tuning {authority, from_c = S5, to_c = S6})')
         if slots['S6'] > S6_TUNING_CAP_C + 1e-9:
             raise ValueError(f'a tuned S6 must stay within the {S6_TUNING_CAP_C} C cap (council ruling 1(e))')
+    # RL-148 section 2 ("What replaces the fit in the kit"), RL-149 section 1.5: ruling 1(f)'s worst case
+    # is withdrawn for D and no longer refuses; it is computed and returned for the record. The typical
+    # case must fit, on the slot session's own seconds (typical_case_fit). The duty bar and the
+    # three-turn opportunity at B_D stay (check_r1_evidence).
     fit = ruling_1f_fit(r1_slots, r1_inputs['B_D'], r1_inputs['T_dead'], receipt=receipt, x_max_turns=x_max_turns)
-    if not fit['fits']:
-        raise ValueError(f'ruling 1(f): B_D {fit["B_D"]} does not fit T_dead {fit["T_dead_s"]:.1f} s: worst '
-                         f'{fit["worst_s"]:.1f} s = ' + ' + '.join(f'{k} {v:.1f}' for k, v in fit['terms_s'].items())
-                         + f' ({fit["rule"]}); the largest fitting B_D is '
-                         f'{max_fitting_b_d(r1_slots, r1_inputs["T_dead"])}'
-                         + f'; g0_cap_w1 = {fit["g0_cap_w1"]}; d_g0_cap = {fit["d_g0_cap"]}')
-    return fit
+    typical = typical_case_fit(r1_slots, r1_inputs['T_dead'], policy.get('turn_cap_s'))
+    if not typical['fits']:
+        raise ValueError(f'RL-148 typical-case bar: a gated D run does not fit T_dead {typical["T_dead_s"]:.2f} s '
+                         f'with G0 {typical["G0_s"]:.2f} s and each G1 at {typical["G1_max_s"]:.2f} s '
+                         f'({typical["G1_basis"]}): ' + '; '.join(
+                             f'{run} {r["total_s"]:.2f} s ({r["g1_count"]} G1)' for run, r in typical['runs'].items()
+                             if not r['fits']) + ' (RL-148 section 2; RL-149 section 1.5)')
+    return {**fit, 'worst_case_refuses': False, 'typical_case': typical}
 
 
 def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None, planning_release=None, root=ROOT):

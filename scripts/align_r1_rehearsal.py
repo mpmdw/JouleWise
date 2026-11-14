@@ -780,7 +780,15 @@ def deadman_summary(name, result, duty_t_dead=None, *, inconclusive_reason=None)
     if tokens and phases["decode"] <= 0:
         raise Refusal(f"{name}: {tokens} decode tokens in {phases['decode']} s of decode")
     rate = tokens / phases["decode"] if tokens else None
+    # RL-148 section 2 / RL-149 section 1.5: the kit's typical-case bar needs each run's own G1 waits and
+    # whether a G1 timed out (then the G_turn cap is the G1 term). Recorded as the runtime returned them.
+    waits = (result.get("gate_waits_s") or {}).get("G1") if isinstance(result.get("gate_waits_s"), dict) else None
+    flags = result.get("episode_flags")
+    g1_waits = ([_finite_number(v, f"{name}.gate_waits_s.G1") for v in waits] if isinstance(waits, list) else None)
+    g1_timeouts = (sum(1 for f in flags if str(f).startswith("thermal.gate_timeout:"))
+                   if isinstance(flags, list) else None)
     return {"run": name, "T_dead_s": t_dead, "duty_T_dead_s": duty, "phases_s": phases,
+            "gate_waits_s": {"G1": g1_waits}, "g1_timeouts": g1_timeouts,
             # R7-2: the G0 outcome decides whether phases_s.G0 is a measured
             # wait or a censored one in G0_cap_W1.
             "g0_outcome": result.get("g0_outcome"),

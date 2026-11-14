@@ -72,8 +72,9 @@ class ReceiptTests(unittest.TestCase):
 
     def test_without_a_receipt_1f_still_refuses_unconditionally(self):
         inputs, slots = eight_bit_case()
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 6144 does not fit.*largest fitting B_D is None'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots)
         self.assertIsNone(kit.max_fitting_b_d(slots, inputs['R1']['T_dead']))
 
     def test_signed_branch_a_receipt_arms_d_at_g0_star_and_admits(self):
@@ -97,8 +98,9 @@ class ReceiptTests(unittest.TestCase):
         self.assertTrue(fit['fits'])
         # B_D above the floor does not fit the budget-sized cap.
         inputs['R1']['B_D'] = 7168
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 7168 does not fit'):
-            kit.require_ready(inputs, slots, receipt=receipt)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots, receipt=receipt)
 
     def test_kit_rederives_the_receipt_and_refuses_any_mismatch(self):
         inputs, slots = eight_bit_case()
@@ -335,15 +337,17 @@ class RoleCapTests(unittest.TestCase):
         inputs['R1']['thermal_policy']['g0_cap_s'] = 700
         fit_c = kit.w1_contrast_g0_cap(slots, 12)
         inputs['R1']['thermal_policy'].update(contrast_g0_cap_s=fit_c['value_s'], contrast_fit=fit_c)
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 6144 does not fit.*G0_s 700'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots)
         inputs['R1']['thermal_policy']['g0_cap_s'] = 600
         with self.assertRaisesRegex(ValueError, r'r1_slots\.g0_cap_w1\.value_s.*LEAD-RULINGS-2 R7-2'):
             kit.require_ready(inputs, slots)
         # R11: contrast cap is legal without a D receipt; D's fit still fails.
         inputs['R1']['thermal_policy'].update(g0_cap_s=700, contrast_g0_cap_s=700)
-        with self.assertRaisesRegex(ValueError, r'ruling 1\(f\): B_D 6144 does not fit'):
-            kit.require_ready(inputs, slots)
+        # RL-148 section 2, RL-149 section 1.5: ruling 1(f)'s worst case no longer refuses D;
+        # require_ready asks that the typical case fits (tests/align/test_rl149_typical_case.py).
+        kit.require_ready(inputs, slots)
 
     def test_under_a_receipt_d_is_sized_on_d_waits_and_contrast_arms_its_own_cap(self):
         inputs, slots = eight_bit_case()
