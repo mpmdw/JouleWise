@@ -21,13 +21,17 @@ from joulewise.night_gate import NightPlan
 
 KIT = Path("configs/campaigns/align_v4")
 # R1 follow-up night (RL-59/RL-64/RL-72). The driver's own span is RL-72 E2:
-# two whole-unit load redos, two batch encounters (largest unit + 5,400 s
+# two whole-unit load redos, two batch encounters (largest unit + the batch
 # blackout) and 9,000 s of in-driver overhead (its calibration-pre/-post
-# brackets, 1,800 s each, close 900, harvest 4,500), so 108,768 s
+# brackets, 1,800 s each, close 900, harvest 4,500)
 # (align_r1_rehearsal.night_worst_case_s; r1_runtime_contract.md). It is read
 # from the measurement checkout's driver and must equal the ruled value.
-R1_FOLLOWUP_SPAN_S = 108_768
-R1_FOLLOWUP_WINDOW_S = 126_480  # RL-72 E2; = b6.plan_inputs.window_max_s(span)
+# RL-149 section 2.9 item 4: the blackout moves to 02:00-02:35 local (2,100 s;
+# RL-72 E2 had 11:45-13:15, 5,400 s), so the span is recomputed by the same
+# construction: 108,768 - 2 x 3,300 = 102,168 s, and window_max_s by the plan
+# writer: 119,880 s (RL-72 E2: 108,768 and 126,480).
+R1_FOLLOWUP_SPAN_S = 102_168
+R1_FOLLOWUP_WINDOW_S = 119_880  # = b6.plan_inputs.window_max_s(span)
 # This route's own wrapper runs OUTSIDE the driver and its span: the hazard
 # arm (inside run_night's t0 deadline), the R0-L3 display dwell, two D-109
 # diagnostic bookends with their teardown allowances, and the final writes.
@@ -37,22 +41,28 @@ HARVEST_S = CLOSE_S  # one existing session-status budget for final manifest/res
 DISPLAY_DWELL_S = 300  # R0-L3 / RUN_STATE items 206, 209: re-run 11 passing dwell
 ARM_NOTICE_S = 15 * 60  # R1-ARM-FIX-1: choose t0 at least 15 minutes ahead
 BATCH_ZONE = ZoneInfo("America/Los_Angeles")  # R1 ruling 8 local batch clock
+BATCH_START_LOCAL = (2, 0)  # RL-149 section 2.9 item 4; = align_r1_rehearsal.OS_BATCH_WINDOW_LOCAL[0]
 MAX_BATCH_CROSSINGS = 2  # the driver budgets two encounters; it refuses a third
 CHAIN_SOURCE = Path("scripts/night_chains/align_r1_rehearsal.zsh")
 RUNTIME_CONFIG = Path("configs/align/v4/r1_runtime.json")
 
 
 def batch_crossings(t0, window_s):
-    """Local 11:45 starts in the half-open window [t0, t0 + window_s)."""
+    """Local batch-window starts (02:00 under RL-149) in the half-open window [t0, t0 + window_s)."""
+    hour, minute = BATCH_START_LOCAL
     day = datetime.fromtimestamp(t0, BATCH_ZONE).date()
     crossings = []
     while True:
-        epoch = datetime(day.year, day.month, day.day, 11, 45, tzinfo=BATCH_ZONE).timestamp()
+        epoch = datetime(day.year, day.month, day.day, hour, minute, tzinfo=BATCH_ZONE).timestamp()
         if epoch >= t0 + window_s:
             return crossings
         if epoch >= t0:
             crossings.append(epoch)
         day += timedelta(days=1)
+
+
+def hour_minute():
+    return f"{BATCH_START_LOCAL[0]:02d}:{BATCH_START_LOCAL[1]:02d}"
 
 
 def driver_span_s(measurement_root=None):
@@ -69,7 +79,8 @@ def size_window(t0, span_s=None):
     from joulewise.b6 import plan_inputs
     span = driver_span_s() if span_s is None else span_s
     if span != R1_FOLLOWUP_SPAN_S:
-        raise ValueError(f"driver span {span} s is not the RL-72 E2 follow-up span {R1_FOLLOWUP_SPAN_S} s")
+        raise ValueError(f"driver span {span} s is not the RL-72 E2 follow-up span at the RL-149 blackout "
+                         f"{R1_FOLLOWUP_SPAN_S} s")
     terms = {"r1_driver_span_s": span, "hazard_arm_s": b5_plan.T0_STAGE_CAP_S,
              "display_dwell_s": DISPLAY_DWELL_S, "bookends_s": 2 * BOOKEND_S, "close_s": 2 * CLOSE_S,
              "harvest_s": HARVEST_S}
@@ -84,12 +95,13 @@ def size_window(t0, span_s=None):
         raise ValueError("window does not cover the wrapper, the driver span and the post bookend")
     crossings = batch_crossings(t0, window)
     if len(crossings) > MAX_BATCH_CROSSINGS:
-        raise ValueError(f"{len(crossings)} local 11:45 batch windows inside the window; the driver budgets "
+        raise ValueError(f"{len(crossings)} local {hour_minute()} batch windows inside the window; the driver budgets "
                          f"{MAX_BATCH_CROSSINGS}")
     return {"programmed_span_s": span, "base_terms_s": terms, "base_s": base, "writer_window_max_s": writer,
             "window_max_s": window, "latest_driver_end_offset_s": driver_end,
             "batch_crossings_epoch_s": crossings, "batch_window_crossings": len(crossings),
-            "authority": "RL-72 E2 (span 108,768 s, window_max_s 126,480 s); encounters inside the span"}
+            "authority": "RL-72 E2 at the RL-149 section 2.9 item 4 blackout (span 102,168 s, window_max_s "
+                         "119,880 s); encounters inside the span"}
 
 
 def digest(path):

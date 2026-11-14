@@ -85,12 +85,13 @@ class DriverRuntimeTests(unittest.TestCase):
             b_leg = [p for p in result["phases"] if p["name"] == "high_power_B"][0]
             self.assertEqual(b_leg["result"]["ac_powermode"]["value"], 2)
             self.assertEqual(registration["slots_ac_powermode"], 0)
-            # RL-145 close: the synthetic gate pair is an alias group (the ruled shape), which the
-            # unchanged driver's R8-6 rule (align_r1_rehearsal.picks_aliased, a condition-13 path)
-            # still fails at the bar. The runtime's own confirmation passes. Reported to the lead.
+            # RL-145 close sections 5 and 10, RL-149 section 5 item 12: the synthetic gate pair is the
+            # ruled alias pair (the fast key and its lexically first alias), confirmed by the runtime's
+            # RL-145 night confirmation, so the driver's R8-6 bar keeps it (it failed it before).
             self.assertEqual(registration["thermometry"]["D"]["status"], "pass")
-            self.assertEqual(registration["thermometry"]["bar"], "fail")
-            self.assertIn("r1.picks_aliased", registration["thermometry"]["flags"])
+            self.assertEqual(registration["thermometry"]["bar"], "pass")
+            self.assertIn("r1.picks_alias_pair_rl145", registration["thermometry"]["flags"])
+            self.assertNotIn("r1.picks_aliased", registration["thermometry"]["flags"])
 
     def test_term_reaches_the_runtime_which_closes_its_custody_before_exit(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:

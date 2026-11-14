@@ -313,7 +313,10 @@ class FakeWorld:
 
 
 PACIFIC = r1.ZoneInfo("America/Los_Angeles")
-NOON_SAFE = r1.datetime(2026, 11, 7, 2, 0, tzinfo=PACIFIC)
+# A pinned wall clock outside the OS-batch window (RL-149 section 2.9 item 4: 02:00-02:35 local; under
+# RL-72 E2's 11:45-13:15 window this was 02:00). A pinned clock inside the window never advances, so the
+# driver's wait would not end.
+NOON_SAFE = r1.datetime(2026, 11, 7, 12, 0, tzinfo=PACIFIC)
 
 
 class PhaseTableIdentityTests(unittest.TestCase):
@@ -566,6 +569,45 @@ class R1Tests(unittest.TestCase):
         # R7-1: the bank run first, then the replay pair.
         self.assertEqual(kinds, ["d-bank-benign-s1", "d-spam-benign-s1-a", "d-spam-benign-s1-b"])
 
+    def test_duty_bar_turn_check_is_not_applicable_after_an_own_stop(self):
+        # RL-149 section 1.5: a run that returned by its own stop before a third admission is judged on its
+        # other two checks; its turn check prints not_applicable. A cut, or an unreadable stop, stays judged.
+        phases = {"G0": 110.0, "G1": 100.0, "H": 0.0, "decode": 400.0, "prefill": 60.0, "tool": 1.0, "tail": 10.0}
+
+        def run_with(turns, flags, x7=False):
+            result = {"admitted_turns": turns, "x7": x7, "deadman": {"T_dead_s": 983.1, "phases_s": dict(phases)}}
+            if flags is not None:
+                result["episode_flags"] = flags
+            return r1.deadman_summary("D_bank_benign_s1_gated_held", result)
+        row = run_with(2, ["ended_in_unclosed_reasoning"])
+        self.assertEqual(row["duty_bar"]["checks"]["admitted_turns_ge_3"], "not_applicable: episode returned at turn 1")
+        self.assertEqual((row["duty_bar"]["pass"], row["duty_bar"]["verdict"]), (True, "pass"))
+        self.assertIs(row["duty_bar"]["stop"]["own_stop"], True)
+        for name, flags, x7 in (("deadman", ["episode.deadman:1"], True), ("G1 timeout", ["thermal.gate_timeout:1"], False),
+                                ("hold timeout", ["thermal.hold_timeout:1"], False),
+                                ("decode budget", ["episode.decode_budget:2"], False),
+                                ("flags not recorded", None, False)):
+            with self.subTest(name):
+                bar = run_with(2, flags, x7)["duty_bar"]
+                self.assertIs(bar["checks"]["admitted_turns_ge_3"], False)
+                self.assertEqual(bar["verdict"], "fail")
+        self.assertIs(run_with(3, None)["duty_bar"]["checks"]["admitted_turns_ge_3"], True)
+        self.assertIs(run_with(0, [])["duty_bar"]["checks"]["admitted_turns_ge_3"], False)
+        # The other two checks still decide an own-stop run.
+        heavy = {"admitted_turns": 2, "x7": False, "episode_flags": [],
+                 "deadman": {"T_dead_s": 983.1, "phases_s": {**phases, "G0": 400.0}}}
+        self.assertEqual(r1.deadman_summary("d", heavy)["duty_bar"]["verdict"], "fail")
+
+    def test_duty_verdict_needs_one_passing_run_with_three_admitted_turns(self):
+        # RL-149 section 1.5: the judged set must still contain at least one D run with three admitted turns.
+        def row(turns, verdict="pass"):
+            return {"admitted_turns": turns, "duty_bar": {"verdict": verdict}}
+        self.assertEqual(r1.duty_verdict([row(2), row(3), row(3)]), "pass")
+        self.assertEqual(r1.duty_verdict([row(2), row(2), row(2)]), "fail")
+        self.assertFalse(r1.three_turn_run_present([row(2), row(3, "inconclusive")]))
+        self.assertEqual(r1.duty_verdict([row(2), row(3, "inconclusive")]), "inconclusive")
+        self.assertEqual(r1.duty_verdict([row(3), row(2, "fail")]), "fail")
+
     def test_duty_bar_fails_on_gate_hold_share_and_names_fallbacks(self):
         result = {"admitted_turns": 3, "x7": False, "deadman": {"T_dead_s": 1000.0, "phases_s": {
             "G0": 300.0, "G1": 60.0, "H": 50.0, "decode": 400.0, "prefill": 50.0, "tool": 5.0, "tail": 10.0}}}
@@ -598,18 +640,32 @@ class R1Tests(unittest.TestCase):
             self.assertAlmostEqual(soak["soak_detrended"]["s_slow"]["detrended_sd_c"], 0.05, places=3)
 
     def test_quiet_segments_avoid_the_os_batch_window(self):
+        # RL-149 section 2.9 item 4: the window is 02:00-02:35 local (it was 11:45-13:15).
+        self.assertEqual(r1.OS_BATCH_WINDOW_LOCAL, ((2, 0), (2, 35)))
+        self.assertEqual((r1.os_batch_blackout_s(), r1.os_batch_window_text()), (2100, "02:00-02:35"))
         sleeps = []
-        moments = [r1.datetime(2026, 11, 7, 11, 30, tzinfo=PACIFIC)]
+        moments = [r1.datetime(2026, 11, 7, 1, 45, tzinfo=PACIFIC)]
         def now():
             return moments[-1]
         def sleep(seconds):
             sleeps.append(seconds)
             moments.append(moments[-1] + r1.timedelta(seconds=seconds))
         waited = r1.wait_outside_os_batch(1800, now=now, sleep=sleep)
-        self.assertEqual(moments[-1].strftime("%H:%M"), "13:15")
+        self.assertEqual(moments[-1].strftime("%H:%M"), "02:35")
         self.assertEqual(waited, sum(sleeps))
-        self.assertEqual(r1.wait_outside_os_batch(600, now=lambda: r1.datetime(2026, 11, 7, 11, 30, tzinfo=PACIFIC),
+        self.assertEqual(r1.wait_outside_os_batch(600, now=lambda: r1.datetime(2026, 11, 7, 1, 45, tzinfo=PACIFIC),
                                                   sleep=sleep), 0.0)
+        # The old midday window is no longer a blackout; a segment starting inside 02:00-02:35 waits to 02:35.
+        def never(_seconds):
+            raise AssertionError("no wait expected")
+        for start in ((11, 30), (12, 0), (13, 0)):
+            with self.subTest(start=start):
+                self.assertEqual(r1.wait_outside_os_batch(
+                    1800, now=lambda: r1.datetime(2026, 11, 7, *start, tzinfo=PACIFIC), sleep=never), 0.0)
+        moments = [r1.datetime(2026, 11, 7, 2, 10, tzinfo=PACIFIC)]
+        self.assertEqual(r1.wait_outside_os_batch(1800, now=lambda: moments[-1],
+                                                  sleep=lambda s: moments.append(moments[-1] + r1.timedelta(seconds=s))),
+                         25 * 60.0)
 
     def test_persistent_marker_recovers_prior_sigkill_with_fake_pmset_and_sudo(self):
         with tempfile.TemporaryDirectory() as td:
@@ -1239,21 +1295,24 @@ class R1Tests(unittest.TestCase):
             self.assertIn("output directory already exists", result["error"])
 
     def test_batch_window_is_pacific_wall_time_across_a_dst_change(self):
-        # Cold pass LOW 8. From 23:00 PST on 2027-03-13 (a fixed -08:00 offset,
-        # as datetime.now().astimezone() gave), a 12 h segment ends at 12:00
-        # PDT on 2027-03-14, inside that day's 11:45-13:15 window. The fixed
-        # offset put the window at 12:45-14:15 PDT, so the segment started at
-        # once and ran into the batch window.
+        # Cold pass LOW 8, at the RL-149 window (02:00-02:35). From 22:00 PDT on
+        # 2026-10-31 (a fixed -07:00 offset, as datetime.now().astimezone() gave),
+        # a 5.5 h segment ends at 02:30 PST on 2026-11-01, after the fall-back,
+        # inside that day's 02:00-02:35 PST window. The fixed offset put the window
+        # an hour early (01:00-01:35 PST) and would release the wait at 01:35 PST.
         from datetime import timezone
         utc = timezone.utc
-        moments = [r1.datetime(2027, 3, 13, 23, 0, tzinfo=timezone(r1.timedelta(hours=-8)))]
+        moments = [r1.datetime(2026, 10, 31, 22, 0, tzinfo=timezone(r1.timedelta(hours=-7)))]
 
         def sleep(seconds):
             moments.append((moments[-1].astimezone(utc) + r1.timedelta(seconds=seconds)).astimezone(PACIFIC))
-        waited = r1.wait_outside_os_batch(12 * 3600, now=lambda: moments[-1], sleep=sleep)
+        waited = r1.wait_outside_os_batch(5.5 * 3600, now=lambda: moments[-1], sleep=sleep)
         self.assertGreater(waited, 0)
-        self.assertEqual(moments[-1].astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z"), "2027-03-14 13:15 PDT")
+        self.assertEqual(moments[-1].astimezone(PACIFIC).strftime("%Y-%m-%d %H:%M %Z"), "2026-11-01 02:35 PST")
         self.assertEqual(r1._now_local().tzinfo, PACIFIC)
+        # On the spring-forward day 02:00 is not a wall time; the window still lasts 2,100 s.
+        (start, end), _ = r1._batch_windows(r1.datetime(2027, 3, 14, 0, 30, tzinfo=PACIFIC))
+        self.assertEqual(end - start, 2100)
 
     @staticmethod
     def lane_shaped_record(td, synthetic):
@@ -1452,7 +1511,7 @@ class Round5RulingTests(unittest.TestCase):
         # Sol critique of round 5: the steps now run 600 s past the member and
         # the designed states have a 900 s preheat outside the deadman.
         bounds = r1.night_worst_case_s()
-        self.assertEqual(bounds["window_max_s"], 126480)
+        self.assertEqual(bounds["window_max_s"], 119880)       # RL-149 section 2.9 item 4 (RL-72 E2: 126,480)
         self.assertAlmostEqual(bounds["largest_unit_s"], 7563.9952)
         self.assertAlmostEqual(bounds["no_redo_s"], 58711.9616)
         for unit in r1.admission_units():

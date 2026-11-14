@@ -78,15 +78,16 @@ class OsBatchWindowClockTests(unittest.TestCase):
         result = json.loads((tmp / 'run/r1_result.json').read_text())
         return result, slept
 
-    def test_a_rehearsal_pinned_inside_the_batch_window_waits_to_13_15_without_sleeping(self):
-        result, slept = self.run_at(12, 0)
+    def test_a_rehearsal_pinned_inside_the_batch_window_waits_to_02_35_without_sleeping(self):
+        # RL-149 section 2.9 item 4: the window is 02:00-02:35 local.
+        result, slept = self.run_at(2, 10)
         first_quiet = next(p for p in result['phases'] if p.get('os_batch_wait_s'))
-        self.assertGreaterEqual(first_quiet['os_batch_wait_s'], 75 * 60)       # 12:00 -> 13:15
-        self.assertGreaterEqual(sum(slept), 75 * 60)
+        self.assertGreaterEqual(first_quiet['os_batch_wait_s'], 25 * 60)       # 02:10 -> 02:35
+        self.assertGreaterEqual(sum(slept), 25 * 60)
         self.assertTrue(all(p.get('os_batch_wait_s', 0) >= 0 for p in result['phases']))
 
     def test_a_rehearsal_pinned_outside_the_window_never_waits_on_the_batch(self):
-        result, slept = self.run_at(2, 0)
+        result, slept = self.run_at(12, 0)
         self.assertEqual(slept, [])
         self.assertTrue(all(p.get('os_batch_wait_s', 0) == 0 for p in result['phases']))
 
@@ -95,7 +96,7 @@ class ExportTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        # The rehearsal waits out the 11:45-13:15 Pacific OS-batch window (ruling 8): pin the wall clock so this
+        # The rehearsal waits out the 02:00-02:35 Pacific OS-batch window (ruling 8, RL-149): pin the wall clock so this
         # fixture passes at any hour (it failed inside the window). The pinned-inside case is below.
         clock = patch.object(r1, '_now_local', lambda: rehearsal.NOON_SAFE)
         clock.start()

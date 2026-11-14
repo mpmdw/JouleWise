@@ -51,6 +51,45 @@ W1_SCHEDULE_ROLES = {"d_spam": "D", "d_bank": "D", "x_g": "X-G"}
 DEADMAN_PHASES = ("G0", "G1", "H", "decode", "prefill", "tool", "tail")  # ruling 1(a)
 # Ruling 1(d): pre-declared duty bar, fixed here before any R1 data are read.
 DUTY_BAR = {"x7": False, "min_admitted_turns": 3, "max_gate_hold_fraction_of_T_dead": 0.40}
+# RL-149 section 1.5 (cited rebind of ruling 1(d)'s turn check; DEVIATIONS RL149-DUTY-TURNS): a run
+# that returned by its own stop (no deadman, no gate timeout, no X7) before a third admission is judged
+# on its other two checks, and its turn check prints "not_applicable: episode returned at turn k". The
+# judged set must still hold at least one D run with three admitted turns. A run ended by any of these
+# episode flags did not return by its own stop: the deadman (X7), a G0/G1/H gate timeout, or another
+# runtime cut or fault (decode budget, time guard, context limit, episode or endpoint error, collector).
+EPISODE_CUT_FLAGS = ("episode.deadman:", "episode.g0_unreleased:", "thermal.start_gate_timeout",
+                     "thermal.gate_timeout:", "thermal.hold_timeout:", "episode.decode_budget:",
+                     "episode.time_guard:", "episode.context_limit:", "episode_error:", "endpoint_error:",
+                     "thermal.collector_failed")
+TURN_CHECK_NOT_APPLICABLE = "not_applicable: episode returned at turn {k}"
+
+
+def returned_by_own_stop(admitted_turns, x7, episode_flags):
+    """RL-149 section 1.5: ``(True, None)`` when the run returned by its own stop (it admitted a turn, no
+    X7, and no flag in ``EPISODE_CUT_FLAGS``); ``(False, why)`` when it was cut; ``(None, why)`` when the
+    record does not carry its episode flags, so the stop cannot be read (the turn check stays judged)."""
+    if not isinstance(episode_flags, (list, tuple)) or not all(isinstance(f, str) for f in episode_flags):
+        return None, "episode_flags not recorded: the stop reason cannot be read"
+    if x7 is not False:
+        return False, "x7"
+    cut = sorted({f for f in episode_flags if f.startswith(EPISODE_CUT_FLAGS)})
+    if cut:
+        return False, ", ".join(cut)
+    if type(admitted_turns) is not int or admitted_turns < 1:
+        return False, "no admitted turn"
+    return True, None
+
+
+def turn_check(admitted_turns, x7, episode_flags, minimum=DUTY_BAR["min_admitted_turns"]):
+    """RL-149 section 1.5: ``True``/``False`` when the turn check is judged, or the ``not_applicable``
+    string when the run returned by its own stop before ``minimum`` admissions; and the stop reading."""
+    own, why = returned_by_own_stop(admitted_turns, x7, episode_flags)
+    if type(admitted_turns) is int and admitted_turns >= minimum:
+        return True, {"own_stop": own, "why": why}
+    if own is True:
+        return TURN_CHECK_NOT_APPLICABLE.format(k=admitted_turns - 1), {"own_stop": True, "why": None}
+    return False, {"own_stop": own, "why": why}
+
 # Ruling 1(e): named fallback order if the duty bar fails (lead applies it).
 DUTY_FALLBACK_ORDER = (
     "S6 tuning jointly for G1 and hold waits (median <= 90 s each), delta_slow capped at 2.0 C",
@@ -61,7 +100,13 @@ DUTY_FALLBACK_ORDER = (
 # Ruling 8: OS daily-batch avoidance and load journal. The window is local
 # wall time on the measurement Mac (Pacific); a zoneinfo zone keeps the
 # boundaries right across a DST transition (cold pass LOW 8).
-OS_BATCH_WINDOW_LOCAL = ((11, 45), (13, 15))
+# RL-149 section 2.9 item 4 (cited rebind; DEVIATIONS RL149-BATCH-WINDOW): ruling 8's
+# sentence now reads "Soak and step tests outside 02:00-02:35 local". Three days of
+# dasd logs put the daily batch at about 02:08 (XProtect's periodic scan 02:08-02:25)
+# and nothing above 0.65 core in 11:45-13:15 on any day inspected. RL-72 E2's two
+# load redos and two batch encounters stand; the blackout term of night_worst_case_s
+# follows this window, and window_max_s is recomputed by the registered construction.
+OS_BATCH_WINDOW_LOCAL = ((2, 0), (2, 35))
 LOCAL_ZONE = ZoneInfo("America/Los_Angeles")
 # Ruling 8 load-journal completeness (executing review MEDIUM-1): about one
 # sample per wall second of the segment, and no gap longer than this.
@@ -714,9 +759,14 @@ def deadman_summary(name, result, duty_t_dead=None, *, inconclusive_reason=None)
     per_turn = ((phases["G1"] + phases["H"] + phases["decode"] + phases["prefill"] + phases["tool"]) / turns
                 if turns else None)
     predicted = ((t_dead - phases["G0"] - phases["tail"]) / per_turn) if per_turn else None
-    checks = {"no_x7": not x7, "admitted_turns_ge_3": turns >= DUTY_BAR["min_admitted_turns"],
+    # RL-149 section 1.5: a run that returned by its own stop before a third admission is judged on its
+    # other two checks; its turn check prints not_applicable and is not judged.
+    turns_ok, stop = turn_check(turns, x7, result.get("episode_flags"))
+    checks = {"no_x7": not x7, "admitted_turns_ge_3": turns_ok,
               "gate_hold_le_40pct_T_dead": gate_hold <= DUTY_BAR["max_gate_hold_fraction_of_T_dead"] * duty}
-    bar = {"checks": checks, "pass": all(checks.values()), "verdict": "pass" if all(checks.values()) else "fail"}
+    judged = [v for v in checks.values() if type(v) is bool]
+    bar = {"checks": checks, "pass": all(judged), "verdict": "pass" if all(judged) else "fail",
+           "stop": stop, "turn_check_authority": "RL-149 section 1.5"}
     if inconclusive_reason is not None:
         # LEAD-RULINGS-2 R6-1: the run's G0 timed out after W1's inter-member
         # schedule, or it did not follow a D turn; it is INCONCLUSIVE
@@ -741,11 +791,21 @@ def deadman_summary(name, result, duty_t_dead=None, *, inconclusive_reason=None)
             "duty_bar": bar}
 
 
+def three_turn_run_present(rows):
+    """RL-149 section 1.5: the judged set still holds at least one D run with three admitted turns."""
+    return any(row["duty_bar"]["verdict"] == "pass" and type(row.get("admitted_turns")) is int
+               and row["admitted_turns"] >= DUTY_BAR["min_admitted_turns"] for row in rows)
+
+
 def duty_verdict(rows):
     """Ruling 1(d) over the gated runs: FAIL if any judged run fails, else
-    INCONCLUSIVE if any run is inconclusive (R5-1), else PASS."""
+    INCONCLUSIVE if any run is inconclusive (R5-1), else PASS. RL-149 section
+    1.5: a PASS also needs one passing run with three admitted turns."""
     verdicts = [row["duty_bar"]["verdict"] for row in rows]
-    return "fail" if "fail" in verdicts else "inconclusive" if "inconclusive" in verdicts else "pass"
+    verdict = "fail" if "fail" in verdicts else "inconclusive" if "inconclusive" in verdicts else "pass"
+    if verdict == "pass" and not three_turn_run_present(rows):
+        return "fail"
+    return verdict
 
 
 def gate_wait_medians(gated):
@@ -808,6 +868,24 @@ def picks_aliased(classification):
     groups = classification.get("alias_groups")
     return fast == slow or any(isinstance(group, list) and fast in group and slow in group
                                for group in (groups if isinstance(groups, list) else ()))
+
+
+def ruled_alias_pair(classification):
+    """RL-145 close sections 5 and 10, RL-149 section 5 item 12 (cited rebind of R8-6's bar for one pair):
+    the fast pick and the lexically first other member of its alias group, read as one thermometer under
+    two key names, on an ok RL-145 night confirmation that names both picks. For this pair only the close
+    replaced "aliases do not fill both roles"; any other aliased pair still fails the bar. The same test as
+    the W1 kit's ``ruled_alias_pair`` (``scripts/align_v4_kit.py``)."""
+    fast, slow = classification.get("s_fast"), classification.get("s_slow")
+    groups = classification.get("alias_groups")
+    group = next((g for g in (groups if isinstance(groups, list) else ()) if isinstance(g, list) and fast in g),
+                 None)
+    confirmation = classification.get("night_confirmation")
+    confirmation = confirmation if isinstance(confirmation, dict) else {}
+    return (fast is not None and group is not None and slow in group and slow != fast
+            and slow == min(k for k in group if k != fast)
+            and confirmation.get("ok") is True and confirmation.get("second_key_rule") == "RL-145"
+            and confirmation.get("s_fast") == fast and confirmation.get("s_slow") == slow)
 
 
 def _sustained_busy(samples):
@@ -903,12 +981,27 @@ def soak_detrended(series_by_key, times_by_key, end_t_s=None):
     return out
 
 
+def os_batch_blackout_s():
+    """The blackout's length in wall seconds on an ordinary day (RL-149: 02:00-02:35, 2,100 s)."""
+    (h0, m0), (h1, m1) = OS_BATCH_WINDOW_LOCAL
+    return ((h1 * 60 + m1) - (h0 * 60 + m0)) * 60
+
+
+def os_batch_window_text():
+    """``"HH:MM-HH:MM"`` of ``OS_BATCH_WINDOW_LOCAL``, for messages."""
+    (h0, m0), (h1, m1) = OS_BATCH_WINDOW_LOCAL
+    return f"{h0:02d}:{m0:02d}-{h1:02d}:{m1:02d}"
+
+
 def _batch_windows(moment):
-    """Today's and tomorrow's 11:45-13:15 Pacific windows as epoch seconds.
+    """Today's and tomorrow's OS-batch windows (``OS_BATCH_WINDOW_LOCAL``,
+    02:00-02:35 Pacific under RL-149) as epoch seconds.
 
     Each boundary is built from the local calendar date in LOCAL_ZONE, so on
-    a DST transition day it still means 11:45 and 13:15 wall time; all
-    comparisons are on absolute (epoch) time, never on fixed-offset wall time.
+    a DST transition day it still means the same wall times (on a spring-forward
+    day 02:00-02:35 does not exist as wall time; zoneinfo maps it forward, so the
+    window still lies at the transition); all comparisons are on absolute (epoch)
+    time, never on fixed-offset wall time.
     """
     (h0, m0), (h1, m1) = OS_BATCH_WINDOW_LOCAL
     day = moment.astimezone(LOCAL_ZONE).date()
@@ -922,7 +1015,8 @@ def _batch_windows(moment):
 
 
 def wait_outside_os_batch(expected_s, *, now=None, sleep=None):
-    """Ruling 8: start a quiet segment only if it ends before 11:45 or starts after 13:15 local."""
+    """Ruling 8 (RL-149 window): start a quiet segment only if it ends before the batch window's start or
+    starts after its end, local time (``OS_BATCH_WINDOW_LOCAL``)."""
     now = now or _now_local
     sleep = sleep or time.sleep
     waited = 0.0
@@ -1253,7 +1347,8 @@ def night_worst_case_s(runtime_argv=None, include_4bit=False):
              for unit in admission_units(runtime_argv) if unit[0][1] not in ("calibration-pre", "calibration-post")]
     total = math.fsum(u["bound_s"] for u in units)
     largest = max(u["bound_s"] for u in units)
-    blackout, encounters, redos, overhead = 5400, 2, 2, 9000
+    # RL-149 section 2.9 item 4: the blackout is the 02:00-02:35 window (2,100 s; RL-72 E2 had 5,400 s).
+    blackout, encounters, redos, overhead = os_batch_blackout_s(), 2, 2, 9000
     encounter = largest + blackout
     floor = math.ceil(total + redos * largest + encounters * encounter)
     span = floor + overhead
@@ -1822,6 +1917,8 @@ def run(args):
                        for name, result in gated.items()]
             verdict = duty_verdict(deadman)
             duty = {"declared": DUTY_BAR, "pass": verdict == "pass", "verdict": verdict,
+                    "three_turn_run_present": three_turn_run_present(deadman),
+                    "turn_check_authority": "RL-149 section 1.5",
                     "inconclusive_runs": uncooled, "reference": "step-D R_D (RL-59)",
                     "schedule": schedule, "duty_T_dead_s": l1["effective_T_dead_s"],
                     "fallback_order": list(DUTY_FALLBACK_ORDER)}
@@ -1872,7 +1969,13 @@ def run(args):
         # Either null pick fails R1's thermometry bar (D only; the 30B is record-only).
         thermometry["bar"] = thermometry_d["status"] if thermometry_d else "inconclusive"
         thermometry["flags"] = list((thermometry_d or {}).get("flags") or [])
-        if thermometry_d and picks_aliased(thermometry_d):
+        if thermometry_d and picks_aliased(thermometry_d) and ruled_alias_pair(thermometry_d):
+            # RL-145 close sections 5 and 10, RL-149 section 5 item 12: the one ruled alias pair
+            # (the fast key and its lexically first alias, confirmed this session) keeps the bar.
+            thermometry["bar_basis"] = ("RL-145 ruled alias pair: one thermometer under two key names, "
+                                        "confirmed by the session's RL-145 night confirmation")
+            thermometry["flags"].append("r1.picks_alias_pair_rl145")
+        elif thermometry_d and picks_aliased(thermometry_d):
             # LEAD-RULINGS-2 R8-6 (round-7 cold LOW-3): two picks that are one
             # sensor (R7-13) are not two thermometers; the bar fails at R1, not
             # only at the kit after the night.
