@@ -929,6 +929,41 @@ class TestTimeoutTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, shard_tests.TEST_TIMEOUT_ENV):
                     shard_tests.test_timeout_seconds()
 
+    @unittest.skipUnless(hasattr(sys, "monitoring"), "needs sys.monitoring")
+    def test_watchdog_thread_reads_no_clock(self):
+        # A clock inventory test traces every clock call in every thread
+        # (tests/b5_analysis/test_leaf_whole_window.py ClockGuard); the
+        # watchdog's own reads made it flaky on PR #764. It waits on its
+        # condition with a timeout instead, and no shard_tests frame may call
+        # a time function while it is armed, re-armed and disarmed.
+        import inspect
+        source = inspect.getsource(shard_tests._TestWatchdog)
+        for name in ("monotonic", "perf_counter", "time.time", "_watchdog_clock"):
+            self.assertNotIn(name, source)
+        # Same mechanism as the ClockGuard inventory: a sys.monitoring CALL
+        # tracer, run in a subprocess, sees every thread, including calls
+        # through names bound at import (which a mock.patch of time.monotonic
+        # cannot intercept), and leaves no watchdog thread in this process.
+        code = (
+            "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests\n"
+            "clocks = {time.time, time.time_ns, time.monotonic, time.monotonic_ns,\n"
+            "          time.perf_counter, time.perf_counter_ns}\n"
+            "seen = []; m = sys.monitoring; tool = next(n for n in range(6) if m.get_tool(n) is None)\n"
+            "m.use_tool_id(tool, 'wd-clock')\n"
+            "def called(code, _o, fn, _a):\n"
+            "    try:\n"
+            "        if fn in clocks and code.co_filename.endswith('shard_tests.py'): seen.append(code.co_qualname)\n"
+            "    except TypeError: pass\n"
+            "m.register_callback(tool, m.events.CALL, called); m.set_events(tool, m.events.CALL)\n"
+            "dog = shard_tests._TestWatchdog(30)\n"
+            "for i in range(20): dog.arm('t%d' % i); time.sleep(0.005)\n"
+            "dog.disarm(); time.sleep(0.05); m.set_events(tool, 0); print(sorted(set(seen)))\n"
+        )
+        result = subprocess.run([sys.executable, "-B", "-c", code], cwd=ROOT,
+                                capture_output=True, text=True, timeout=25)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "[]")
+
     def test_expiry_names_the_label_dumps_stacks_and_exits_124(self):
         code = (
             "import sys, time; sys.path.insert(0, 'scripts'); import shard_tests; "
