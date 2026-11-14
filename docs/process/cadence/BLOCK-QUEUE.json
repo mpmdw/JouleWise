@@ -9,10 +9,10 @@
       "title": "Development block 1 with the counted pilot (12 type-A legs, anchor shape, band q0)",
       "question": "Development data for the heat-term and onset fits (RL-149 2.1 uses 1-4): twelve conditionless single-turn 27B legs at the anchor shape; its first three legs are the counted pilot, the smoke for the campaign's final bytes.",
       "phase": "development",
-      "block_definition": "RL-149 2.3 and 5 item 6: twelve type-A legs on kit cl-dev-01, built on the existing step leg. Two spans on the same bytes, each behind its own fresh soak: the counted pilot (L001-L003; RL-149 2.9 item 3) and then L004-L012. Leave-one-day-out: its calendar day is its unit of independence.",
+      "block_definition": "RL-149 2.3 and 5 item 6: twelve type-A legs on kit cl-dev-01, built on the existing step leg. Two spans on the same bytes, each behind its own fresh soak: the counted pilot (L001-L003; RL-149 2.9 item 3) and then L004-L012. The two spans fall on two calendar days (schema v1 fixes t0 at 13:20, and L004-L012 wait for the lead's hand-read of the pilot), so dev-01 gives two calendar days, the unit of independence for leave-one-day-out (RL-149 2.3).",
       "kit": {
         "path": "docs/process/cadence/kits/cl-dev-01.json",
-        "sha256": "3b33c52d8405006bd11aad71811b78d2dd25becd5f18341e11ea01a5dd8955cd"
+        "sha256": "75c99163bc8ed54a3a462eb235527875197803772d6bd71ceddf12b85f7fc3cb"
       },
       "est_legs": 12,
       "est_spans": 2,
@@ -34,7 +34,7 @@
       "block_definition": "RL-149 2.3 and section 5 (\"the same kit, next seeds\"): twelve type-A legs on kit cl-dev-02, one span behind its own fresh soak, on a calendar day other than dev-01's if the three-day rule needs it.",
       "kit": {
         "path": "docs/process/cadence/kits/cl-dev-02.json",
-        "sha256": "052579f06e4d9157290fcea5a81fb5aaf263c0fdaca884bce7d218397b726d2b"
+        "sha256": "9c2a2aac4a2df5fcbbf389bd1c633ea11047c7759e1eb0c658db998474dcc406"
       },
       "est_legs": 12,
       "est_spans": 1,
@@ -48,7 +48,7 @@
       "expires": null,
       "assigned_span_ids": [],
       "owner": "lead",
-      "notes": "READY needs (RL-149 2.8): a cold seat that did not write the kit checks it against RL-149 section 2 with no open finding (line 1); the kit validates at its frozen commit and that commit's full suite is green (line 2; the kit is pinned to the runner commit efbd0b020 and is re-pinned with `cadence_legs_runner.py pin-kit` at the commit the magistrate measures from); then a finite queue that pins it (line 3) and the per-span checklist. Runs after the pilot passed (2.8 line 8). Expected 5.0 h, worst case 11.4 h; with the 02:00-02:35 blackout a 13:20 or 02:40 t0 clears it. Mixed prompt sizes (2k/10k/19.5k, RL-149 2.3) need kit schema v1.1's cell law; the runner already takes per-leg prompt sizes."
+      "notes": "HOLD_FOR_CELL_LAW (RL-150 R3): dev-02 moves to the v1.1 kit, where the seed law assigns prompt size and G0 shape; its span goes to hp-01 on the v1 shape, then Part C, then the RL-149 section 5 bridge. If v1.1 is not READY and none of those is, it runs anchor-only on this kit rather than leave the MBP idle, and the lead tells the research lead. READY needs (RL-149 2.8): a cold seat that did not write the kit checks it against RL-149 section 2 with no open finding (line 1); the kit validates at its frozen commit and that commit's full suite is green (line 2; the kit is pinned to the runner commit efbd0b020 and is re-pinned with `cadence_legs_runner.py pin-kit` at the commit the magistrate measures from); then a finite queue that pins it (line 3) and the per-span checklist. Runs after the pilot passed (2.8 line 8). Expected 5.0 h, worst case 11.4 h; with the 02:00-02:35 blackout a 13:20 or 02:40 t0 clears it. Mixed prompt sizes (2k/10k/19.5k, RL-149 2.3) need kit schema v1.1's cell law; the runner already takes per-leg prompt sizes."
     },
     {
       "design_id": "hp-01",

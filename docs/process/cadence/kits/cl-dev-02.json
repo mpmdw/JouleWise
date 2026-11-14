@@ -170,7 +170,7 @@
   },
   {
    "id": "not_a_replaced_attempt",
-   "text": "RL-149 section 2.4 rule 5: it is not an attempt replaced under the load-redo rule (above 0.5 core of outside load for 60 s). The runner redoes such a leg once per contaminated attempt, up to the span's redo quota; every replaced attempt stays in custody as runtime.rejected<N>."
+   "text": "RL-149 section 2.4 rule 5 as amended by RL-150 R7: it is not an attempt judged contaminated under the load-redo rule (above 0.5 core of outside load for 60 s), whether or not a redo replaced it. The runner redoes such a leg once per contaminated attempt, up to the span's redo quota; every replaced attempt stays in custody as runtime.rejected<N>."
   },
   {
    "id": "block_power_mode",
@@ -190,7 +190,7 @@
   },
   {
    "id": "energy_read_rule",
-   "text": "RL-149 section 2.6: campaign energy (GPU rail, the other rails and DC-in) is read only by frozen code at the looks the ruling names, by one analyst seat. This kit names no look. No desk, watcher, queue, runner or agent opens an energy, power or meter sample file of these legs; the desk reads the projected leg summary only."
+   "text": "RL-149 section 2.6: campaign energy (GPU rail, the other rails and DC-in) is read only by frozen code at the looks the ruling names, by one analyst seat. This kit names no look. No desk, watcher, queue or agent opens an energy, power or meter file of a campaign leg. The runner hashes each meter stream and decodes its header and trailer lines only, for the meter's presence and fault counts. The per-span desk reads the projected leg summary only."
   }
  ],
  "stop_rules": {
