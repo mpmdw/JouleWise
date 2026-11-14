@@ -1046,8 +1046,8 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 ```pointer
 owner: research lead
-wait: the research lead's ruling on the R1 follow-up night (TVh0 D1(b) inadmissibility; duty-bar failure in D_bank: H holds 536.5 s inside one decode turn, X7 deadman)
-next_observable: a research-lead ruling (RL-1xx) naming the next step for the second key and the duty bar; the lead brings the journal table (disposition 3). The magistrate arms nothing until a RUN_STATE item authorizes a night
+wait: none
+next_observable: (was waiting on: the research lead's ruling on the R1 follow-up night (TVh0 D1(b) inadmissibility; duty-bar failure in D_bank: H holds 536.5 s inside one decode turn, X7 deadman)) a research-lead ruling (RL-1xx) naming the next step for the second key and the duty bar; the lead brings the journal table (disposition 3). The magistrate arms nothing until a RUN_STATE item authorizes a night
 ```
 
 - **Night:** plan `align-r1-20261113T1508Z`, custody `S=/Users/edr/night-align/r1fu-20261113T144743Z`, `r1_result.json` `status complete` (sha256 `8df1bdd1…8fed`), `chain_wall_s` 35,194, `executed_commit` `a6a09e6d7…`. Results ref `night-results/align-r1-20261113T1508Z` @ `61f88049a`. KM003C capture present (35,515 s, 0 bad, 0 USB errors).
