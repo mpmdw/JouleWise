@@ -14884,3 +14884,99 @@ Both bounds apply: the fence end (worst case + 1,460 s) lands by 01:50, and no l
 **Gate.** dev-03 waits for section 2. Its remainder waits for the hand-read and L002's release. dev-04 waits for dev-03's close, its kit's delta check and the Q6 count.
 **Amends.** RL-155 §2 slot 10 (the 10 h spacing and "latest 14:30" are withdrawn; the fence gives 14:03:10 for twelve legs and 18:33:10 for six). RL-155a §2 (dev-03's nine-leg remainder is an exception to "at most six"). RL-150 R1 part 3 (the print extends to every v1.1 span and adds the consumer's G0 wait).
 **Blind status.** Blind: no measurement file was opened and no campaign or v4 energy has been read. This ruling rests on rulings, one PR, one design section, two kit files and the plan seconds in the brief.
+
+# RL-159. PR #783 at `f24aaff69`: gate row 4 passes (ADMIT, two text items owed in the receipt-retirement follow-up). The diff is RL-153 §1.2, the row-2 dispositions and RL-156, and nothing wider. The e2e test fix is legitimate
+
+Research lead (Fable 5.2), Sat Nov 14 15:31 PST 2026 (from `date`). This is the cold pass RL-156 said would follow on the final head. RL-153 and RL-156 stand unchanged.
+
+**Read.**
+- RL-153 §1 and RL-156 in full, in the decision log at `32132af60`.
+- `/Volumes/JW-EXT/scratch/pr777-gate/DISPOSITIONS.md` and the #783 PR body, in full.
+
+**Checked myself (read-only; `git diff f30a97d00 f24aaff69` in `rs-main`, and the worktree `rl153-followups` at `f24aaff69`, clean before and after).**
+- **The whole diff,** 24 files, every hunk, test files included.
+- **The files RL-156 left for this pass.** `align_w1_3a_desk.py` (`analyse_gate`, `_stamp_rule`, `classify`, `sample_points`) and `align_w1_budget_procedure.py` (`timing_view`, `decide`, `main`), with `kit.typical_case_fit`, `gated_fit_inputs`, `ruling_1f_fit` and `check_r1_budget_and_policy` behind them.
+- **The RL-156 commit `561f4dd05..f24aaff69`,** 11 files.
+- **Where the reconciled numbers come from.** `r1_runtime.episode_phases` (line 931) and the runtime's `gate_waits_s` (line 2268) both sum the same intervals' `duration_s`.
+- **The blackout arithmetic.** `wait_outside_os_batch` tests today's and tomorrow's window with `finish > start`. A soak start at 22:50:40 plus 11,360 s ends at 02:00:00 and is not refused; one second later is. That is RL-156 §5's bound.
+- **The age reference.** The desk's `t - pm` uses the reading's `started.monotonic_ns`, the same instant `sample_rows` gives Part C and the desk prints.
+- **Pins.** `sha256` of `scripts/align_v4_kit.py` is `fb47c019…a47a`, the generator value in `plan_tree.json`. `sha256` of `plan_tree.json` is `acfeb21e…7060`, the `tree_sha256` in `identity_pins.json`.
+- **Three test runs** (python3.13 -B, `PYTHONPATH=.:tests`, private TMPDIR, one at a time): `tests.align.test_r1_runtime_e2e` 2 tests OK in 20.1 s; `tests.align.test_pr777_attack_repros` OK; `tests.align.test_w1_3a_desk` 26 tests OK.
+
+**Not checked.**
+- Any other test module. The builder's table (20 modules at this head, `test_w1_prequal` whole at 42 tests) is taken from the body.
+- CI. At 15:31 the run on this head shows the 12 `test` shards pending; the other jobs pass.
+- That `test_r1_runtime_e2e` fails without the stand-in. That would need an edit to the worktree; I take it from the body and from the code (the synthetic keys are `Tp0f` and `Th0s`).
+- RL-156 §4.3's two re-pin conditions. They stay with the re-pin's cold seat.
+- No slot, transcript, energy, power, meter or powermetrics file was opened.
+
+**Not done.** No edit, commit, push, comment or SSH. The only file written is this one.
+
+---
+
+## 1. Gate row 4: ADMIT at `f24aaff69`
+
+### 1.1 Question 1: does the diff implement the three sources exactly, with nothing wider?
+
+Yes.
+
+| Source | Result |
+|---|---|
+| RL-153 §1.2 finding 1 | As ruled. `fast_slow_pairs_last_300s` beside the count; the count is `None` when no pair was compared, and both are `None` when the keys cannot be compared at all |
+| RL-153 §1.2 finding 2 | As ruled. `stale_power_state_samples` uses `rl145_prints.stamp_fresh` on the same age. `FRESH_NS` is deleted |
+| RL-153 §1.2 findings 3 and 4 | As ruled, word for word. The full stop is there |
+| RL-153 note 6 (RL-156 §3.2) | As ruled. `finish` prints the verdict and each log line after writing the two files; the record is unchanged. The test asserts the RL-152 §1.4 line |
+| Disposition 1 | As ruled, Part C only (RL-156 §3.3). `--parts` takes `AB`, `A` or `C`, so no other value reaches the check |
+| Disposition 2 | As dispositioned. A state on a stamp that is not fresh leaves `pm_states` and counts as unobserved, so `nominal_throughout` is false and `classify` gives `to-research-lead` |
+| Disposition 3, RL-156 §1 | As ruled. `uncut` is the fourth condition; a run that meets the other three and not it fails. The three text items are done |
+| Disposition 4, RL-156 §2 | As ruled, in the driver and the kit copy. The lexical clause is gone from both; `alias_second_key_selection` is untouched. The two DEVIATIONS edits match my text |
+| Disposition 5 | As dispositioned. See notes 3 and 4 |
+| Dispositions 7 and 8 | As dispositioned |
+| Disposition 9 | As dispositioned. `decide` has three steps and drafts nothing. `sign` and `_draft` stay for the follow-up (RL-156 §3.1). See finding 2 |
+| Disposition 10 | As dispositioned: two type-exact comparisons, the stale text, the label |
+
+Nothing else is in the diff. The fixture edits (`H` to 0 with G1 + H kept, the waits made to add up) are what disposition 5 forces. The old duty-bar note named `lead_fallback`, which no code at this head reads; the new note matches the kit, which refuses a failed duty bar.
+
+### 1.2 Question 2: is anything measurement-, calibration- or claim-bearing changed beyond the rulings?
+
+No.
+- **No member executes differently.** The soak check runs before the soak; the rest is evaluation, kit admission, the lead's desk and the lead's procedure. RL-156 §4.2 stands.
+- **The driver's thermometry bar** changes as RL-156 §2 ruled and no further.
+- **Kit admission** is tighter in the dispositioned places and wider in one: the named pair with a third alias in its group, which RL-156 §2 ruled.
+- **The config** changes one label that no code reads.
+- **The pins** move one line each and match the bytes.
+- **No registration text, estimator constant or paper sentence** is touched beyond the two DEVIATIONS rows.
+
+### 1.3 Question 3: the e2e test fix
+
+**Legitimate. It weakens no bar.**
+- The test's subject is the driver and the runtime joined end to end on the confirmation path. The synthetic world's keys are `Tp0f` and `Th0s`, so under RL-156 §2 it cannot pass the named bar, and it should not.
+- The patch replaces only the driver's constant, in the test. The bar's other conditions (one alias group, an ok RL-145 confirmation naming both picks) still run unpatched in that test.
+- The name itself is tested without a patch in three places: the repro module (another rule-shaped pair and the swapped pair refuse, in the driver and the kit copy), `test_r1_round8` ("not the named pair") and `test_w1_rl122_kit`.
+- Renaming the synthetic world's keys to TV0h and TV1h would have been the other route. It is a larger fixture change for the same coverage, and I do not ask for it.
+
+### 1.4 Findings
+
+1. **LOW. One comment in the e2e test is now wrong.** `test_r1_runtime_e2e.py`, near line 91: "the synthetic gate pair is the ruled alias pair (TV0h/TV1h by name, RL-156 section 2)". The synthetic pair is not TV0h/TV1h; it stands in for it by the patch above.
+   - **Fix:** "the synthetic gate pair stands in for the ruled alias pair (`RULED_ALIAS_PAIR` is patched above)".
+2. **LOW. `decide` reads the G_turn cap from `slots.S7`, which is the kit's source only when the picks did not change.** `check_r1_budget_and_policy` binds `turn_cap_s` to `slots.S7` when `sensor_pick_changed` is false, and to `thermometry.D.s7_for_r1_picks.S7` when it is true. The timing view cannot read thermometry.
+   - **It does not bite on the ruled design.** A session with an RL-145 confirmation records `sensor_pick_changed` false (`r1_runtime.py:2150`), so TV0h/TV1h takes the `slots.S7` branch in both places. The cap also enters the arithmetic only when a gated D G1 timed out.
+   - **The kit is the bar either way.** A wrong step from `decide` cannot admit anything.
+   - **Fix:** the module docstring's "cannot disagree with `--check`" gains "on a record whose picks did not change (`sensor_pick_changed` false); on a changed-pick record the kit's cap is the R1-pick S7 and the step goes to the research lead". No code.
+3. **Note, no change.** `decide` computes the typical case and the printed worst case before it routes. A record that either function refuses (hold seconds, waits that do not add up, a missing rate) ends `decide` with an error and exit 1, not with a step. That is fail-closed and I accept it.
+4. **Note, no change.** `G1_RECONCILE_TOL_S` is slack, not a needed tolerance: the two numbers are sums of the same `duration_s` values and agree to float rounding. With no hold interval `phases_s.H` is exactly 0.0. So neither new refusal can trip on a row the driver wrote.
+5. **Note.** `stamp_fresh` warns on stderr once per reading whose stamp is more than 2 s after the sample, so the desk can print one line per reading of a bad interval. Cosmetic.
+
+**Gate for findings 1 and 2:** the follow-up PR "W1 kit: retire the R10-2(a) receipt path (RL-148 §2)", which already opens `align_w1_budget_procedure.py`. They do not hold #783 and do not need a new head here. Neither file is a kit, condition-13 or Part C path, so they move no pin and cost no Part C.
+
+### 1.5 What the merge still waits for
+
+- CI green on `f24aaff69` (the 12 test shards were pending at 15:31) and the PR's other rows.
+- RL-156 §4.1 stands: the first F0 at the commit that contains #783 is the Part C pass RL-149 §5 item 12 reads. The lead records the diff over the ten condition-13 files and Part C's paths at the merge.
+
+---
+
+**Owner.** Follow-up PR builder: findings 1 and 2. Lead: CI and the remaining rows of #783; the merge record of RL-156 §4.1. Research lead: the follow-up PR's cold pass (RL-156 §6 item 4).
+**Gate.** #783's row 4 is passed by this ruling at `f24aaff69` and at no other head. Findings 1 and 2 gate the follow-up PR's merge, and so the W1 receipt.
+**Amends.** Nothing.
+**Blind status.** Blind: no v4 outcome exists and nothing sealed or measured was opened. This ruling rests on rulings, code, test code, three test runs on synthetic records and two file hashes.
