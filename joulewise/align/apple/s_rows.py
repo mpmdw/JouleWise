@@ -1,75 +1,136 @@
-"""RL-148 reference-state rows for the registered test S (desk step 6; synthetic-tested only).
+"""Reference-state rows for the registered test S (RL-148 desk step 6; RL-149 section 1.3; RL-153 section 2).
 
 A row is the part of one turn's model call that ran in the reference state:
-from the turn's start to the earliest active cut, less a guard, snapped to a
-decode-token stamp. It is ``(C, P, D')`` with ``C`` the cached context, ``P`` the
-prefill tokens and ``D'`` the decode tokens stamped by the row's end, and its
-energy is the GPU-rail integral over exactly that interval
-(``attribution.trace_energy``), with holds removed. Tool-call time and unowned
-segments never enter a row.
+from the turn's start to the earliest cut, less the guard, snapped down to the
+last decode token stamped at or before that time. It is ``(C, P, D')`` with
+``C`` the cached context, ``P`` the prefill tokens and ``D'`` the decode tokens
+stamped by the row's end, and its energy is the GPU-rail integral over exactly
+that interval (``attribution.trace_energy``), with holds removed. Tool-call time
+and unowned segments never enter a row.
 
-Three constants are INPUTS (``RowConstants``), not fixed here: the state
-definition (which of the OS level and the powermetrics state end a row), the
-clock clause (none, or a trailing activity-weighted clock under a ratio of a
-reference), and the guard. RL-148 section 3 fixes the candidate list; every
-candidate prints for the record whichever constants are chosen.
+THE STATE RULE (RL-149 section 1.3 as amended by RL-153 section 2; constants
+confirmed by RL-151 section 1.1). A reading is in the reference state when the
+OS level is 0 and the power-management state is Nominal.
+
+- Fresh state. A journal reading is fresh state when its OS level is an integer
+  and ``rl145_prints.stamp_fresh`` accepts its stamp's age, the age
+  ``rl145_prints._status_age_s`` computes at the reading's own stamp (RL-152
+  section 1.6: within 2 s on either side). Both are imported, not copied.
+- At the turn's start, positive evidence: the last journal reading at or before
+  the start is fresh state, at most 2 s before the start, and level 0 and
+  Nominal. No reading, a reading with no level or no state, a stale or absent
+  stamp, or one more than 2 s before the start gives ``start_state_unobserved``;
+  a fresh reading out of state gives ``start_out_of_state``.
+- Inside the turn (the search runs over (start, last stamped token]; the turn
+  record's end when no stamp exists), the state cut is the first of: a journal
+  reading with level above 0 (``os_level_above_0``); a journal reading whose
+  state is not Nominal, Unknown or missing (``journal_pm_state_off``); a native
+  powermetrics row, read at its end, with such a state (``native_pm_state_off``);
+  a hazard-journal OS reading above 0 (``hazard_os_level_above_0``). An off-state
+  reading cuts whatever its stamp's age: freshness is needed to claim the state,
+  never to leave it. Kinds that fire at the same instant are joined with ``+``.
+- ``state_unobserved``: the last fresh-state reading before any stretch of more
+  than 2 s with no fresh state (the carry-in counts when it is fresh; the stretch
+  may run to the last stamped token). Only fresh readings count.
+- Native powermetrics rows only cut. They carry no stamp-age rule and never
+  supply in-state evidence (RL-153 section 2.2 item 4). The OS level has no stamp
+  of its own: its bounds are those of the journal reading that carries it. A
+  hazard journal only adds cuts; it is never the start's evidence (item 5).
+- Guard. A state cut ends the row at the earlier of 2.0 s (``guard_s``) before
+  the first off reading and the stamp of the last fresh in-state reading before
+  it (the turn's start if there is none). ``state_unobserved`` ends the row at
+  its reading. The clock clause ends it at the firing window's start.
+- Clock clause (e20). The activity-weighted mean GPU clock over a trailing 10 s
+  window is under 0.97 of the member's own top DVFM state with used time
+  (``leg_max_state``). Windows end at powermetrics row ends, lie wholly inside the
+  decode (end at or before the last stamped token) and start no earlier than the
+  first token plus 10 s; the cut is the window's start (``clock_e20``).
+- The row ends at the earliest of these; ties take the first reason code in sort
+  order, as the step-3 script does. A cut before the first stamped token gives no
+  row (``cut_in_prefill``).
+- ``after_hot_turn``: after a turn in which any cut fired (a state cut,
+  ``state_unobserved``, the clock clause, or a start read out of state), no later
+  turn of that member gives a row.
 
 Truncated members (RL-148 section 2): a member ended by the deadman, a G1
 timeout or the decode budget is kept on the rows it produced. A turn cut by the
 deadman is scored up to its last stamped token; a turn with no stamped token
-gives no row whatever its record says about prompt tokens (step 0: a deadman
-inside the native prefill leaves a turn record carrying the full fresh prompt
-count, zero decode tokens and a ``first_token_ns`` set to the cut instant). The
-member's scored energy ends at its last scored boundary.
+gives no row whatever its record says about prompt tokens. The member's scored
+energy ends at its last scored boundary.
+
+RL-148's record-only candidates (``turn_candidates``) still print for every
+turn; they decide nothing.
 
 Label blindness: no function here reads ``Episode.condition`` (the sharp-null
 exactness of S rests on it; tests poison the field).
 """
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 import math
 from typing import Any, Mapping
 
+from joulewise.align.apple.rl145_prints import _status_age_s, stamp_fresh
+
 NS = 1_000_000_000
 STATE_KEYS = frozenset({'os_level', 'pm_state'})
 PM_REFERENCE_STATES = ('Nominal', 'Unknown', None)
 CLOCK_REFERENCES = ('registered_base', 'leg_max_state')
-# RL-148 section 3: the candidate list and its fixed record-only parameters.
+# RL-149 section 1.3: the start's reading is at most 2 s before the start; more than 2 s with no fresh
+# state is state_unobserved. (The stamp's own 2 s bound is rl145_prints.stamp_fresh, imported above.)
+START_MAX_AGE_NS = 2 * NS
+UNOBSERVED_GAP_NS = 2 * NS
+# RL-148 section 3: the record-only candidate list and its fixed parameters.
 RECORD_RATIO = 0.97
 RECORD_WINDOW_S = 10.0
 CANDIDATES = ('os_first_nonzero', 'pm_first_off', 'after_base_two_row', 'clock_vs_base', 'clock_vs_leg_max')
+# RL-149 section 1.3's reason codes.
+START_OUT_OF_STATE = 'start_out_of_state'
+START_STATE_UNOBSERVED = 'start_state_unobserved'
+STATE_UNOBSERVED = 'state_unobserved'
+CUT_IN_PREFILL = 'cut_in_prefill'
+AFTER_HOT_TURN = 'after_hot_turn'
+OFF_KINDS = ('os_level_above_0', 'journal_pm_state_off', 'native_pm_state_off', 'hazard_os_level_above_0')
 TRUNCATING_STOPS = (('episode.deadman:', 'deadman'), ('thermal.gate_timeout:', 'g1_timeout'),
                     ('episode.decode_budget:', 'decode_budget'))
-SCHEMA = 'joulewise.align.s_rows.v1'
+SCHEMA = 'joulewise.align.s_rows.v2'
 
 
 @dataclass(frozen=True)
 class ClockClause:
-    """First time the activity-weighted mean clock over the trailing window is under ratio x reference."""
+    """First window (trailing, inside the decode, from first token + ``start_after_first_token_s``) whose
+    activity-weighted mean clock is under ratio x reference; the cut is the window's start."""
     reference: str
     ratio: float = RECORD_RATIO
     window_s: float = RECORD_WINDOW_S
     base_mhz: float | None = None
+    start_after_first_token_s: float = 10.0
 
     def __post_init__(self):
         if self.reference not in CLOCK_REFERENCES:
             raise ValueError(f'clock reference must be one of {CLOCK_REFERENCES}')
         if not (0 < self.ratio <= 1) or not self.window_s > 0:
             raise ValueError('clock clause needs 0 < ratio <= 1 and a positive window')
+        if not (self.start_after_first_token_s >= 0 and math.isfinite(self.start_after_first_token_s)):
+            raise ValueError('start_after_first_token_s must be finite and nonnegative')
         if self.reference == 'registered_base' and not (self.base_mhz and self.base_mhz > 0):
             raise ValueError('registered_base clock clause needs base_mhz')
+
+    @property
+    def reason(self):
+        return 'clock_e20' if self.reference == 'leg_max_state' else 'clock_base_e20'
 
 
 @dataclass(frozen=True)
 class RowConstants:
-    """The row's three constants (RL-148 section 1: fixed later, in the ruling on Part C)."""
+    """The row's constants. ``REGISTERED`` below holds RL-149 section 1.3's values."""
     state: frozenset
     clock: ClockClause | None
     guard_s: float
-    # Uncertainty of the summed member term (RL-148 correction 1).
+    # Uncertainty of the summed member term (RL-148 correction 1; RL-149 section 1.3, T7: edge_j = 1.0 J).
     edge_j: float = 1.0
     edges: str = 'all_boundaries'
 
@@ -89,6 +150,59 @@ class RowConstants:
                 'guard_s': self.guard_s, 'edge_j': self.edge_j, 'edges': self.edges}
 
 
+# RL-149 section 1.3 (RL-151 section 1.1: unchanged): both state keys, e20 against the member's own
+# top state, a 2.0 s guard, edges at every row boundary at 1.0 J.
+REGISTERED = RowConstants(state=STATE_KEYS, clock=ClockClause('leg_max_state'), guard_s=2.0)
+
+
+@dataclass(frozen=True)
+class JournalReading:
+    """One member-journal reading on the episode clock, as S reads it.
+
+    ``t_ns`` is the reading's own stamp (the sample's start, as ``thermal_desk.normalize_journal``),
+    ``level`` the OS level when it is an int (else None), ``stamp_ok`` whether ``stamp_fresh``
+    accepts the power-management stamp's age at ``t_ns``."""
+    t_ns: int
+    level: int | None
+    pm_state: Any
+    stamp_ok: bool
+
+    @property
+    def fresh(self):
+        """Fresh state (RL-153 section 2.2 item 1): an integer level and an accepted stamp."""
+        return self.level is not None and self.stamp_ok
+
+    def in_state(self, keys):
+        return (('os_level' not in keys or self.level == 0)
+                and ('pm_state' not in keys or self.pm_state == 'Nominal'))
+
+    def off_kinds(self, keys):
+        kinds = []
+        if 'os_level' in keys and self.level is not None and self.level > 0:
+            kinds.append('os_level_above_0')
+        if 'pm_state' in keys and self.pm_state not in PM_REFERENCE_STATES:
+            kinds.append('journal_pm_state_off')
+        return kinds
+
+
+def journal_readings(samples):
+    """``JournalReading`` per normalized journal sample (``thermal_desk.normalize_journal`` rows)."""
+    out = []
+    for sample in samples:
+        status = sample.get('status') or {}
+        level = status.get('os_level')
+        out.append(JournalReading(t_ns=int(sample['monotonic_ns']), level=level if type(level) is int else None,
+                                  pm_state=status.get('pm_state'), stamp_ok=stamp_fresh(_status_age_s(sample))))
+    return sorted(out, key=lambda r: r.t_ns)
+
+
+def _as_readings(journal):
+    journal = list(journal)
+    if all(isinstance(r, JournalReading) for r in journal):
+        return sorted(journal, key=lambda r: r.t_ns)
+    return journal_readings(journal)
+
+
 @dataclass(frozen=True)
 class Row:
     turn: int
@@ -98,7 +212,7 @@ class Row:
     logged_decode_tokens: int     # D: the turn record's decode count
     start_ns: int
     end_ns: int
-    reason: str                   # 'turn_end', 'deadman_last_token' or the firing candidate
+    reason: str                   # 'turn_end', 'deadman_last_token' or the cut's reason code
     cut: bool                     # end_ns is a cut boundary (not the turn record's own end)
     energy_j: float
     query_half_width_j: float
@@ -110,7 +224,7 @@ class MemberRows:
     episode_id: str
     rows: tuple
     no_row: tuple                 # ({'turn', 'reason'}, ...)
-    candidates: tuple             # per-turn record of every candidate
+    candidates: tuple             # per-turn record: the state rule's pieces and RL-148's record candidates
     ended_by: str                 # deadman | g1_timeout | decode_budget | returned
     truncated: bool
     measured_j: float | None
@@ -123,7 +237,97 @@ class MemberRows:
 
 
 # --------------------------------------------------------------------------
-# Candidates
+# The state rule (RL-149 section 1.3, RL-153 section 2)
+# --------------------------------------------------------------------------
+def start_state(turn, readings, keys):
+    """'ok', 'start_out_of_state' or 'start_state_unobserved' from the last reading at or before the start."""
+    before = [r for r in readings if r.t_ns <= turn.start_ns]
+    if not before:
+        return START_STATE_UNOBSERVED
+    carry = before[-1]
+    if turn.start_ns - carry.t_ns > START_MAX_AGE_NS or not carry.fresh:
+        return START_STATE_UNOBSERVED
+    if 'pm_state' in keys and carry.pm_state is None:
+        return START_STATE_UNOBSERVED      # a missing state is unobserved, not out of state
+    return 'ok' if carry.in_state(keys) else START_OUT_OF_STATE
+
+
+def state_cut(turn, readings, pm_rows, keys, *, guard_ns, search_end_ns, hazard_os=()):
+    """The state's candidate row ends inside (start, search_end]: a list of (end_ns, reason), plus the
+    first off reading's time and kind and the state_unobserved reading (for the record)."""
+    lo, hi = turn.start_ns, search_end_ns
+    first = {}
+    for r in readings:
+        if lo < r.t_ns <= hi:
+            for kind in r.off_kinds(keys):
+                first.setdefault(kind, r.t_ns)
+    if 'pm_state' in keys:
+        for row in sorted(pm_rows, key=lambda x: x['end_ns']):
+            if lo < row['end_ns'] <= hi and row.get('state') not in PM_REFERENCE_STATES:
+                first.setdefault('native_pm_state_off', row['end_ns'])
+                break
+    if 'os_level' in keys:
+        for t, level in sorted(hazard_os, key=lambda x: x[0]):
+            if lo < t <= hi and type(level) is int and level > 0:
+                first.setdefault('hazard_os_level_above_0', t)
+                break
+    candidates = []
+    first_off = min(first.values()) if first else None
+    why = None
+    if first_off is not None:
+        why = '+'.join(sorted(k for k, t in first.items() if t == first_off))
+        last_in = max((r.t_ns for r in readings if r.t_ns < first_off and r.fresh and r.in_state(keys)),
+                      default=lo)
+        candidates.append((min(first_off - guard_ns, last_in), why))
+    before = [r for r in readings if r.t_ns <= lo]
+    fresh_t = ([before[-1].t_ns] if before and before[-1].fresh else [])
+    fresh_t += [r.t_ns for r in readings if lo < r.t_ns <= hi and r.fresh]
+    unobserved = None
+    for a, b in zip(fresh_t, fresh_t[1:] + [hi]):
+        if b - a > UNOBSERVED_GAP_NS:
+            unobserved = a
+            break
+    if unobserved is not None:
+        candidates.append((unobserved, STATE_UNOBSERVED))
+    return candidates, first_off, why, unobserved
+
+
+def _trailing_clock(rows, t, window_ns):
+    """Activity-weighted mean clock over [t - window, t]; None without clock support."""
+    lo = t - window_ns
+    num = den = 0.0
+    for r in rows:
+        if r.get('clock_mhz') is None:
+            continue
+        overlap = min(t, r['end_ns']) - max(lo, r['start_ns'])
+        width = r['end_ns'] - r['start_ns']
+        if overlap <= 0 or width <= 0:
+            continue
+        weight = r.get('active_ns', 0) * overlap / width
+        num += weight * r['clock_mhz']
+        den += weight
+    return num / den if den > 0 else None
+
+
+def clock_cut(pm_rows, clause, reference_mhz, *, first_token_ns, decode_end_ns):
+    """(window start, window end) of the first e20 window that fires, or None."""
+    if clause is None or not reference_mhz or reference_mhz <= 0 or first_token_ns is None:
+        return None
+    window_ns = round(clause.window_s * NS)
+    earliest = first_token_ns + round(clause.start_after_first_token_s * NS)
+    rows = sorted(pm_rows, key=lambda r: r['end_ns'])
+    for r in rows:
+        end = r['end_ns']
+        if end - window_ns < earliest or end > decode_end_ns:
+            continue
+        mean = _trailing_clock(rows, end, window_ns)
+        if mean is not None and mean < clause.ratio * reference_mhz:
+            return end - window_ns, end
+    return None
+
+
+# --------------------------------------------------------------------------
+# RL-148's record-only candidates (they print; they decide nothing)
 # --------------------------------------------------------------------------
 def _first_os_nonzero(turn, os_readings):
     """Carry-in (last reading at or before the start) above 0 cuts at the start; else the first reading above 0."""
@@ -147,23 +351,6 @@ def _first_pm_off(turn, pm_rows):
     return next((r['end_ns'] for r in rows if turn.start_ns < r['end_ns'] <= turn.end_ns and _pm_off(r)), None)
 
 
-def _trailing_clock(rows, t, window_ns):
-    """Activity-weighted mean clock over [t - window, t]; None without clock support."""
-    lo = t - window_ns
-    num = den = 0.0
-    for r in rows:
-        if r.get('clock_mhz') is None:
-            continue
-        overlap = min(t, r['end_ns']) - max(lo, r['start_ns'])
-        width = r['end_ns'] - r['start_ns']
-        if overlap <= 0 or width <= 0:
-            continue
-        weight = r.get('active_ns', 0) * overlap / width
-        num += weight * r['clock_mhz']
-        den += weight
-    return num / den if den > 0 else None
-
-
 def _first_clock_under(turn, pm_rows, reference_mhz, ratio, window_s):
     if reference_mhz is None or reference_mhz <= 0:
         return None
@@ -171,8 +358,6 @@ def _first_clock_under(turn, pm_rows, reference_mhz, ratio, window_s):
     window_ns = round(window_s * NS)
     for r in rows:
         t = r['end_ns']
-        # The trailing window lies inside the turn: the clause is first evaluated a full window
-        # after the start, so idle gate rows (low clock at low activity) never fire it.
         if not turn.start_ns + window_ns <= t <= turn.end_ns:
             continue
         mean = _trailing_clock(rows, t, window_ns)
@@ -216,22 +401,6 @@ def turn_candidates(turn, *, os_readings, pm_rows, base_mhz=None, leg_max_mhz=No
         'clock_vs_base': _first_clock_under(turn, pm_rows, base_mhz, RECORD_RATIO, RECORD_WINDOW_S),
         'clock_vs_leg_max': _first_clock_under(turn, pm_rows, leg_max_mhz, RECORD_RATIO, RECORD_WINDOW_S),
     }
-
-
-def _active_cut(turn, constants, *, os_readings, pm_rows, leg_max_mhz):
-    """(time, name) of the earliest cut the constants make active, or (None, None)."""
-    found = []
-    if 'os_level' in constants.state:
-        found.append((_first_os_nonzero(turn, os_readings), 'os_first_nonzero'))
-    if 'pm_state' in constants.state:
-        found.append((_first_pm_off(turn, pm_rows), 'pm_first_off'))
-    clause = constants.clock
-    if clause is not None:
-        reference = clause.base_mhz if clause.reference == 'registered_base' else leg_max_mhz
-        name = 'clock_vs_base' if clause.reference == 'registered_base' else 'clock_vs_leg_max'
-        found.append((_first_clock_under(turn, pm_rows, reference, clause.ratio, clause.window_s), name))
-    found = [(t, n) for t, n in found if t is not None]
-    return min(found) if found else (None, None)
 
 
 # --------------------------------------------------------------------------
@@ -286,42 +455,66 @@ def ended_by(flags):
     return 'returned'
 
 
-def member_rows(episode, *, token_stamps, finish_reasons, os_readings, pm_rows, constants,
+def member_rows(episode, *, token_stamps, finish_reasons, journal, pm_rows, constants, hazard_os=(),
                 source='powermetrics', channel='gpu_power'):
     """Reference-state rows of one member.
 
     ``token_stamps``: {turn index: [episode ns of decode token 1, 2, ...]} (absent: unavailable).
     ``finish_reasons``: {turn index: the turn's ``align_turns.jsonl`` finish reason}.
-    ``os_readings``: [(episode ns, OS level)]. ``pm_rows``: native PM rows on the episode clock
-    ({start_ns, end_ns, state, active_ns, clock_mhz[, max_state_mhz]}).
+    ``journal``: the member journal on the episode clock, as normalized samples
+    (``thermal_desk.normalize_journal``: ``monotonic_ns`` and ``status`` with ``os_level``, ``pm_state``,
+    ``pm_observed_ns``) or as ``JournalReading``. ``pm_rows``: native PM rows on the episode clock
+    ({start_ns, end_ns, state, active_ns, clock_mhz[, max_state_mhz]}). ``hazard_os``: [(episode ns,
+    OS level)] from a hazard journal; it only adds cuts.
     """
     if not isinstance(constants, RowConstants):
         raise TypeError('constants must be RowConstants')
+    readings = _as_readings(journal)
+    keys = constants.state
     flags = []
     trace, mapping, trace_flags = _select_trace(episode, source, channel)
     flags.extend(trace_flags)
     intervals = (episode.hardware.get('thermal') or {}).get('intervals', ())
     leg_max = leg_max_state_mhz(pm_rows)
-    base = constants.clock.base_mhz if constants.clock is not None else None
+    clause = constants.clock
+    base = clause.base_mhz if clause is not None else None
+    reference = None if clause is None else (clause.base_mhz if clause.reference == 'registered_base' else leg_max)
     guard_ns = round(constants.guard_s * NS)
+    record_os = sorted([(r.t_ns, r.level) for r in readings] + list(hazard_os), key=lambda x: x[0])
     rows, no_row, record = [], [], []
+    hot_before = False
     for turn in episode.turns:
-        candidates = turn_candidates(turn, os_readings=os_readings, pm_rows=pm_rows,
-                                     base_mhz=base, leg_max_mhz=leg_max)
         stamps = token_stamps.get(turn.index)
         stamps = None if stamps is None else sorted(int(s) for s in stamps)
-        cut_t, cut_name = _active_cut(turn, constants, os_readings=os_readings, pm_rows=pm_rows,
-                                      leg_max_mhz=leg_max)
+        first_token = stamps[0] if stamps else turn.first_token_ns
+        search_end = stamps[-1] if stamps else turn.end_ns
+        start = start_state(turn, readings, keys)
+        candidates, first_off, off_kind, unobserved = state_cut(
+            turn, readings, pm_rows, keys, guard_ns=guard_ns, search_end_ns=search_end, hazard_os=hazard_os)
+        window = clock_cut(pm_rows, clause, reference, first_token_ns=first_token, decode_end_ns=search_end)
+        if window is not None:
+            candidates.append((window[0], clause.reason))
+        cut_t, cut_name = min(candidates) if candidates else (None, None)
+        hot = start == START_OUT_OF_STATE or cut_t is not None
         deadman_cut = finish_reasons.get(turn.index) == 'episode.deadman'
-        entry = {'turn': turn.index, 'candidates_ns': candidates, 'active_cut': cut_name,
-                 'active_cut_ns': cut_t, 'deadman_cut': deadman_cut, 'logged_decode_tokens': turn.decode_tokens}
+        entry = {'turn': turn.index, 'start_state': start, 'first_off_ns': first_off, 'off_kind': off_kind,
+                 'state_unobserved_ns': unobserved, 'clock_window_ns': window, 'clock_reference_mhz': reference,
+                 'active_cut': cut_name, 'active_cut_ns': cut_t, 'hot': hot, 'after_hot': hot_before,
+                 'deadman_cut': deadman_cut, 'logged_decode_tokens': turn.decode_tokens,
+                 'candidates_ns': turn_candidates(turn, os_readings=record_os, pm_rows=pm_rows,
+                                                  base_mhz=base, leg_max_mhz=leg_max)}
         record.append(entry)
+        after_hot = hot_before
+        hot_before = hot_before or hot
 
         def refuse(reason):
             no_row.append({'turn': turn.index, 'reason': reason})
             entry['row'] = None
             entry['no_row'] = reason
 
+        if after_hot:
+            refuse(AFTER_HOT_TURN)
+            continue
         if turn.decode_tokens == 0 or (stamps is not None and not stamps):
             # RL-148 correction 4: no row whatever the record says about prompt tokens.
             refuse('deadman_before_first_token' if deadman_cut else 'no_decode_token')
@@ -329,29 +522,26 @@ def member_rows(episode, *, token_stamps, finish_reasons, os_readings, pm_rows, 
         if stamps is not None and len(stamps) != turn.decode_tokens:
             refuse('token_stamps_count_mismatch')
             continue
-        limit = None if cut_t is None else cut_t - guard_ns
-        state_cut = limit is not None and limit < turn.end_ns
-        if not state_cut and not deadman_cut:
+        if start != 'ok':
+            refuse(start)
+            continue
+        if cut_t is None and not deadman_cut:
             end, d_prime, reason, cut = turn.end_ns, turn.decode_tokens, 'turn_end', False
         else:
             if stamps is None:
                 # Every stamp is at or after the prefill-end stamp, so a cut before it needs none.
-                early = state_cut and turn.first_token_ns is not None and limit < turn.first_token_ns
-                refuse(f'cut_before_first_token:{cut_name}' if early else 'token_stamps_unavailable')
+                early = cut_t is not None and turn.first_token_ns is not None and cut_t < turn.first_token_ns
+                refuse(CUT_IN_PREFILL if early else 'token_stamps_unavailable')
                 continue
-            if state_cut and limit < stamps[-1]:
-                d_prime = sum(1 for s in stamps if s <= limit)
-                end = stamps[d_prime - 1] if d_prime else None
-                reason = cut_name
+            if cut_t is not None:
+                # The search ends at the last stamp and every candidate lies before it.
+                d_prime, reason = bisect_right(stamps, cut_t), cut_name
             else:
-                # The state cut (if any) falls after the last token; a deadman-cut turn
-                # ends at its last stamped token.
-                d_prime, end = len(stamps), stamps[-1]
-                reason = 'deadman_last_token' if deadman_cut else cut_name
+                d_prime, reason = len(stamps), 'deadman_last_token'
             if d_prime == 0:
-                refuse(f'cut_before_first_token:{cut_name}')
+                refuse(CUT_IN_PREFILL)
                 continue
-            cut = True
+            end, cut = stamps[d_prime - 1], True
         holds = [(i['start_ns'], i['end_ns']) for i in intervals
                  if i.get('kind') == 'H' and i.get('turn') == turn.index]
         if trace is None:
@@ -389,13 +579,15 @@ def member_rows(episode, *, token_stamps, finish_reasons, os_readings, pm_rows, 
 
 
 def scored_shares(member):
-    """B7 item 7 print: rows and decode tokens scored against the member's logged turns (no outcome word)."""
+    """B7 item 7 print: rows and decode tokens scored against the member's logged turns, and the turns
+    lost to ``after_hot_turn`` (no outcome word)."""
     turns = len(member.candidates)
     logged = sum(e['logged_decode_tokens'] for e in member.candidates)
     scored = sum(r.decode_tokens for r in member.rows)
     return {'rows': len(member.rows), 'turns': turns, 'row_share': len(member.rows) / turns if turns else None,
             'decode_scored': scored, 'decode_logged': logged,
-            'decode_share': scored / logged if logged else None}
+            'decode_share': scored / logged if logged else None,
+            'after_hot_turn': sum(1 for x in member.no_row if x['reason'] == AFTER_HOT_TURN)}
 
 
 def boundary_table(members):
@@ -521,8 +713,17 @@ def pm_rows_with_states(bundle, episode):
     return rows
 
 
-def read_member_rows(bundle, constants, *, os_journal=(), pm_rows=None):
-    """Rows for one bundle, failed executions included. Reads no condition label and no transcript."""
+def hazard_os_readings(hazard_journal):
+    """[(episode ns, level)] from a hazard journal's readings; they only add cuts (RL-153 section 2.2 item 5)."""
+    return [(r['finished']['monotonic_ns'], r['values'].get('level')) for r in hazard_journal
+            if r.get('kind') == 'reading' and not r.get('error')]
+
+
+def read_member_rows(bundle, constants, *, hazard_journal=(), pm_rows=None):
+    """Rows for one bundle, failed executions included. Reads no condition label and no transcript.
+
+    The start's evidence and the gap rule come from the member journal (``outputs/align_thermal.jsonl``)
+    only; a hazard journal adds cuts."""
     from pathlib import Path
     from joulewise.align.apple.thermal_desk import normalize_journal
     from joulewise.align.apple.workload import read_episode_bundle
@@ -533,20 +734,19 @@ def read_member_rows(bundle, constants, *, os_journal=(), pm_rows=None):
     stamps, stamp_source = bundle_token_stamps(episode, events, runtime)
     finish = {r['turn']: (r.get('generation') or {}).get('finish_reason')
               for r in (_jsonl(bundle / 'outputs/align_turns.jsonl') or [])}
-    os_readings = [(r['finished']['monotonic_ns'], r['values'].get('level')) for r in os_journal
-                   if r.get('kind') == 'reading' and not r.get('error')]
-    if not os_readings:
-        gate = _jsonl(bundle / 'outputs/align_thermal.jsonl') or []
-        os_readings = [(r['monotonic_ns'], r.get('status', {}).get('os_level')) for r in normalize_journal(gate)
-                       if r.get('status', {}).get('os_level') is not None]
+    readings = journal_readings(normalize_journal(_jsonl(bundle / 'outputs/align_thermal.jsonl') or []))
+    hazard = hazard_os_readings(hazard_journal)
     if pm_rows is None:
         pm_rows = pm_rows_with_states(bundle, episode)
-    member = member_rows(episode, token_stamps=stamps, finish_reasons=finish, os_readings=os_readings,
-                         pm_rows=pm_rows, constants=constants)
+    member = member_rows(episode, token_stamps=stamps, finish_reasons=finish, journal=readings,
+                         pm_rows=pm_rows, constants=constants, hazard_os=hazard)
     return member, {'token_stamp_source': stamp_source, 'failed_execution': runtime is not None,
-                    'os_readings': len(os_readings), 'pm_rows': len(pm_rows)}
+                    'journal_readings': len(readings), 'fresh_readings': sum(r.fresh for r in readings),
+                    'hazard_os_readings': len(hazard), 'pm_rows': len(pm_rows)}
 
 
-__all__ = ['ClockClause', 'RowConstants', 'Row', 'MemberRows', 'CANDIDATES', 'turn_candidates',
+__all__ = ['ClockClause', 'RowConstants', 'REGISTERED', 'JournalReading', 'journal_readings', 'Row',
+           'MemberRows', 'CANDIDATES', 'OFF_KINDS', 'start_state', 'state_cut', 'clock_cut', 'turn_candidates',
            'member_rows', 'boundary_table', 'sequence_design', 'loso_scores', 'bundle_token_stamps',
-           'pm_rows_with_states', 'read_member_rows', 'scored_shares', 'ended_by', 'leg_max_state_mhz']
+           'pm_rows_with_states', 'hazard_os_readings', 'read_member_rows', 'scored_shares', 'ended_by',
+           'leg_max_state_mhz']

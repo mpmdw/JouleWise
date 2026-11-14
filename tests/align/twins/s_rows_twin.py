@@ -1,37 +1,47 @@
-"""Twin of the RL-148 reference-state row builder (``joulewise/align/apple/s_rows.py``).
+"""Twin of the reference-state row builder (``joulewise/align/apple/s_rows.py``).
 
-Written from RL-148 sections 1-3 and the step-0/step-6 brief, with its own
-arithmetic: energy through ``tests.align.twins.attribution_twin.trace_energy``
-(the independent A4 twin), its own state scan (one merged, time-ordered stream
-of readings per turn), its own snapping (bisect over stamps) and its own
-least-squares (normal equations in exact ``fractions.Fraction`` arithmetic on
-integer-scaled data, then a float score).
+Written from RL-149 section 1.3 (with RL-151 section 1.1), RL-152 section 1.6
+and RL-153 section 2, with its own arithmetic: energy through
+``tests.align.twins.attribution_twin.trace_energy`` (the independent A4 twin),
+its own state scan (one time-ordered sweep over a merged stream of journal
+readings, native powermetrics rows and hazard readings per turn), its own stamp
+age (integer nanoseconds against +/-2 s, not ``rl145_prints``), its own snapping
+(bisect over stamps) and its own least-squares (normal equations in exact
+``fractions.Fraction`` arithmetic on integer-scaled data, then a float score).
 
 CAVEAT, stated plainly: this twin and the production module were written in one
 session by one model (Opus). It catches slips of arithmetic and of reading, not
-a shared misreading of the ruling. Family independence in the round-2 sense
-(CLAIM-CONTRACT-B-ROUND2-SPEC, preamble) still needs the Sol engine family to
-build its own rows from the RL-148 text.
+a shared misreading of the ruling. Family independence (RL-149 section 1.3,
+question 6) still needs the Sol engine family to build its own rows from
+RL-149 section 1.3 and RL-153 section 2.
 
-READINGS (choices the ruling leaves open; production reads them the same way,
+READINGS (choices the rulings leave open; production reads them the same way,
 and each is listed for the research lead):
 
-T1  State at a turn's start is the last reading at or before the start (the
-    carry-in). Off at the start cuts at the start, so the turn gives no row.
-T2  A powermetrics row is read at its end time (as ``rl145_prints``); Nominal,
-    Unknown and missing never cut. An OS level that is not an int is missing.
-T3  The trailing clock window must lie inside the turn: the clause is evaluated
-    at each PM row end t with start + window <= t <= end (idle gate rows, low
-    clock at low activity, would otherwise fire it at every turn start). No
-    clock cut can therefore fall in a turn's first window (10 s).
-T4  Snap: D' = number of stamps at or before (cut - guard); the row ends at stamp
+T1  Carry-in is the last member-journal reading at or before the turn's start
+    (RL-149 T1). It must be fresh state, at most 2 s before the start, level 0
+    and Nominal. A fresh reading whose state is missing (None) is unobserved,
+    not out of state; ``Unknown`` is out of state (it is not Nominal).
+T2  A powermetrics row is read at its end; it only cuts, inside the turn.
+T3  The clock window lies inside the decode: it ends at a PM row end no later
+    than the last stamped token and starts no earlier than first token + 10 s
+    (the first stamped token; the turn record's first token without stamps).
+T4  Snap: D' = number of stamps at or before the row end; the row ends at stamp
     D'. A whole turn (no cut, no deadman) ends at the turn record's own end.
-T5  A deadman-cut turn (finish reason ``episode.deadman``) ends at its last
-    stamped token unless a state cut falls earlier.
-T6  Edges: 'all_boundaries' counts both ends of every row (a row's start is no
-    longer shared with an integrated neighbour); 'cut_only' counts cut ends.
-T7  Member half-width: query bounds summed linearly, edges in quadrature
-    (sqrt(Q^2 + n_edges * edge_j^2)).
+T5  A deadman-cut turn ends at its last stamped token unless a cut falls earlier.
+T6  Edges: 'all_boundaries' counts both ends of every row; 'cut_only' cut ends.
+T7  Member half-width: sqrt(Q^2 + n_edges * edge_j^2).
+T8  The in-turn search (off readings, gaps, clock windows) runs over
+    (start, last stamped token], as the step-3 script does; without stamps, to
+    the turn record's end.
+T9  "Any cut fired" for ``after_hot_turn`` means any candidate row end found in
+    the turn (state, ``state_unobserved`` or clock), or a start read out of state.
+T10 The guard's second term is the last FRESH in-state reading before the first
+    off reading (freshness is needed to claim the state); the turn's start when
+    there is none. Ties between candidate row ends take the reason code that
+    sorts first; simultaneous off kinds are joined with '+'.
+T11 A hazard journal only adds cuts (level above 0 inside the turn). It is
+    never the start's evidence.
 """
 from __future__ import annotations
 
@@ -42,65 +52,125 @@ import math
 from tests.align.twins.attribution_twin import trace_energy as twin_trace_energy
 
 NS = 1_000_000_000
-OK_PM = {'Nominal', 'Unknown', None}
+TWO_S = 2 * NS
+NOT_OFF = {'Nominal', 'Unknown', None}
 
 
-def _os_events(turn, os_readings):
-    """Times at which the OS stream says 'off' for this turn (carry-in mapped to the start)."""
-    out = []
-    last_before = None
-    for t, v in sorted(os_readings, key=lambda tv: tv[0]):
-        if not isinstance(v, int) or isinstance(v, bool):
-            continue
-        if t <= turn.start_ns:
-            last_before = v
-        elif t <= turn.end_ns and v > 0:
-            out.append(t)
-    if last_before is not None and last_before > 0:
-        out.append(turn.start_ns)
-    return out
+def _int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
 
 
-def _pm_events(turn, pm_rows):
-    out = []
-    last_before = 'none'
-    for r in sorted(pm_rows, key=lambda r: r['end_ns']):
-        if r['end_ns'] <= turn.start_ns:
-            last_before = r.get('state')
-        elif r['end_ns'] <= turn.end_ns and r.get('state') not in OK_PM:
-            out.append(r['end_ns'])
-    if last_before != 'none' and last_before not in OK_PM:
-        out.append(turn.start_ns)
-    return out
+def _reading(sample):
+    """(t, level or None, state, fresh) from one normalized journal sample, ages in integer ns."""
+    st = sample.get('status') or {}
+    level = st.get('os_level') if _int(st.get('os_level')) else None
+    pm_ns = st.get('pm_observed_ns')
+    t = sample['monotonic_ns']
+    stamp_ok = _int(pm_ns) and -TWO_S <= t - pm_ns <= TWO_S
+    return t, level, st.get('pm_state'), bool(level is not None and stamp_ok)
 
 
-def _clock_events(turn, pm_rows, reference, ratio, window_s):
+def _evaluate(turn, journal, pm_rows, hazard, state, guard, clock, leg_max, first_tok, hi):
+    """(start verdict, [(row end, reason)]) for one turn by one sweep."""
+    readings = sorted((_reading(s) for s in journal), key=lambda r: r[0])
+    want_level, want_pm = 'os_level' in state, 'pm_state' in state
+
+    def in_state(level, pm):
+        return (not want_level or level == 0) and (not want_pm or pm == 'Nominal')
+
+    carry = None
+    for r in readings:
+        if r[0] <= turn.start_ns:
+            carry = r
+    if carry is None or turn.start_ns - carry[0] > TWO_S or not carry[3] or (want_pm and carry[2] is None):
+        verdict = 'start_state_unobserved'
+    elif in_state(carry[1], carry[2]):
+        verdict = 'ok'
+    else:
+        verdict = 'start_out_of_state'
+
+    stream = []   # (t, order, kind, payload)
+    for t, level, pm, fresh in readings:
+        if turn.start_ns < t <= hi:
+            stream.append((t, 0, 'journal', (level, pm, fresh)))
+    for r in pm_rows:
+        if turn.start_ns < r['end_ns'] <= hi:
+            stream.append((r['end_ns'], 1, 'native', r.get('state')))
+    for t, level in hazard:
+        if turn.start_ns < t <= hi:
+            stream.append((t, 2, 'hazard', level))
+    stream.sort(key=lambda e: (e[0], e[1]))
+
+    carry_fresh = carry is not None and carry[3]
+    last_fresh = carry[0] if carry_fresh else None
+    fresh_in = [carry[0]] if carry_fresh and in_state(carry[1], carry[2]) else []
+    off_t, off_kinds, unobserved = None, set(), None
+    for t, _, kind, payload in stream:
+        kinds = []
+        if kind == 'journal':
+            level, pm, fresh = payload
+            if want_level and level is not None and level > 0:
+                kinds.append('os_level_above_0')
+            if want_pm and pm not in NOT_OFF:
+                kinds.append('journal_pm_state_off')
+            if fresh:
+                if unobserved is None and last_fresh is not None and t - last_fresh > TWO_S:
+                    unobserved = last_fresh
+                last_fresh = t
+                if in_state(level, pm):
+                    fresh_in.append(t)
+        elif kind == 'native' and want_pm and payload not in NOT_OFF:
+            kinds.append('native_pm_state_off')
+        elif kind == 'hazard' and want_level and _int(payload) and payload > 0:
+            kinds.append('hazard_os_level_above_0')
+        if kinds and (off_t is None or t == off_t):
+            off_t = t
+            off_kinds.update(kinds)
+    if unobserved is None and last_fresh is not None and hi - last_fresh > TWO_S:
+        unobserved = last_fresh
+
+    ends = []
+    if off_t is not None:
+        second = max((t for t in fresh_in if t < off_t), default=turn.start_ns)
+        ends.append((min(off_t - guard, second), '+'.join(sorted(off_kinds))))
+    if unobserved is not None:
+        ends.append((unobserved, 'state_unobserved'))
+    if clock is not None and first_tok is not None:
+        ref = clock['base_mhz'] if clock['reference'] == 'registered_base' else leg_max
+        name = 'clock_e20' if clock['reference'] == 'leg_max_state' else 'clock_base_e20'
+        hit = _clock_window(pm_rows, ref, clock, first_tok, hi)
+        if hit is not None:
+            ends.append((hit, name))
+    return verdict, ends
+
+
+def _clock_window(pm_rows, reference, clock, first_tok, hi):
     if not reference:
-        return []
-    w = int(round(window_s * NS))
+        return None
+    w = int(round(clock['window_s'] * NS))
+    floor = first_tok + int(round(clock.get('start_after_first_token_s', 10.0) * NS))
     rows = [r for r in pm_rows if r.get('clock_mhz') is not None and r['end_ns'] > r['start_ns']]
-    hits = []
     for probe in sorted(r['end_ns'] for r in pm_rows):
-        if probe - w < turn.start_ns or probe > turn.end_ns:
-            continue
         a = probe - w
+        if a < floor or probe > hi:
+            continue
         weights = []
         for r in rows:
             ov = min(probe, r['end_ns']) - max(a, r['start_ns'])
             if ov > 0:
                 weights.append((r.get('active_ns', 0) * ov / (r['end_ns'] - r['start_ns']), r['clock_mhz']))
         total = sum(x for x, _ in weights)
-        if total > 0 and sum(x * c for x, c in weights) / total < ratio * reference:
-            hits.append(probe)
-            break
-    return hits
+        if total > 0 and sum(x * c for x, c in weights) / total < clock['ratio'] * reference:
+            return a
+    return None
 
 
-def rows_for(episode, *, token_stamps, finish_reasons, os_readings, pm_rows, state, clock, guard_s,
-             edge_j=1.0, edges='all_boundaries', source='powermetrics', channel='gpu_power'):
-    """Twin output: {'rows': [dict], 'no_row': [dict], 'measured_j', 'half_width_j', 'n_edges'}.
+def rows_for(episode, *, token_stamps, finish_reasons, journal, pm_rows, state, clock, guard_s,
+             hazard_os=(), edge_j=1.0, edges='all_boundaries', source='powermetrics', channel='gpu_power'):
+    """Twin output: {'rows': [dict], 'no_row': [dict], 'measured_j', 'half_width_j', 'n_edges', 'turns'}.
 
-    ``clock`` is None or a dict {reference, ratio, window_s, base_mhz}.
+    ``journal``: normalized samples (``monotonic_ns``, ``status``). ``clock`` is None or a dict
+    {reference, ratio, window_s, base_mhz, start_after_first_token_s}.
     """
     traces = [t for t in episode.power_traces if t.source == source and t.channel == channel]
     trace = traces[0] if len(traces) == 1 else None
@@ -108,47 +178,45 @@ def rows_for(episode, *, token_stamps, finish_reasons, os_readings, pm_rows, sta
     guard = int(round(guard_s * NS))
     holds = [(i['start_ns'], i['end_ns'], i.get('turn')) for i in
              (episode.hardware.get('thermal') or {}).get('intervals', ()) if i.get('kind') == 'H']
-    out_rows, no_row = [], []
+    out_rows, no_row, turns = [], [], []
+    seen_hot = False
     for turn in episode.turns:
-        events = []
-        if 'os_level' in state:
-            events += [(t, 'os_first_nonzero') for t in _os_events(turn, os_readings)]
-        if 'pm_state' in state:
-            events += [(t, 'pm_first_off') for t in _pm_events(turn, pm_rows)]
-        if clock is not None:
-            ref = clock['base_mhz'] if clock['reference'] == 'registered_base' else leg_max
-            name = 'clock_vs_base' if clock['reference'] == 'registered_base' else 'clock_vs_leg_max'
-            events += [(t, name) for t in _clock_events(turn, pm_rows, ref, clock['ratio'], clock['window_s'])]
-        first_off = min(events) if events else None
         stamps = token_stamps.get(turn.index)
+        stamps = None if stamps is None else sorted(stamps)
+        hi = stamps[-1] if stamps else turn.end_ns
+        first_tok = stamps[0] if stamps else turn.first_token_ns
+        verdict, ends = _evaluate(turn, journal, pm_rows, hazard_os, state, guard, clock, leg_max, first_tok, hi)
+        cut_at, cut_name = min(ends) if ends else (None, None)
+        was_hot = seen_hot
+        seen_hot = seen_hot or verdict == 'start_out_of_state' or bool(ends)
+        turns.append({'turn': turn.index, 'start_state': verdict, 'cut': (cut_at, cut_name)})
         dead = finish_reasons.get(turn.index) == 'episode.deadman'
+        if was_hot:
+            no_row.append({'turn': turn.index, 'reason': 'after_hot_turn'})
+            continue
         if turn.decode_tokens == 0 or stamps == []:
             no_row.append({'turn': turn.index,
                            'reason': 'deadman_before_first_token' if dead else 'no_decode_token'})
             continue
-        stamps = None if stamps is None else sorted(stamps)
         if stamps is not None and len(stamps) != turn.decode_tokens:
             no_row.append({'turn': turn.index, 'reason': 'token_stamps_count_mismatch'})
             continue
-        cut_at = None if first_off is None else first_off[0] - guard
-        cut_name = None if first_off is None else first_off[1]
-        state_cut = cut_at is not None and cut_at < turn.end_ns
-        if not state_cut and not dead:
+        if verdict != 'ok':
+            no_row.append({'turn': turn.index, 'reason': verdict})
+            continue
+        if cut_at is None and not dead:
             end, d, reason, is_cut = turn.end_ns, turn.decode_tokens, 'turn_end', False
         elif stamps is None:
-            early = state_cut and turn.first_token_ns is not None and cut_at < turn.first_token_ns
-            no_row.append({'turn': turn.index,
-                           'reason': f'cut_before_first_token:{cut_name}' if early else 'token_stamps_unavailable'})
+            early = cut_at is not None and turn.first_token_ns is not None and cut_at < turn.first_token_ns
+            no_row.append({'turn': turn.index, 'reason': 'cut_in_prefill' if early else 'token_stamps_unavailable'})
             continue
         else:
-            if state_cut and cut_at < stamps[-1]:
-                d = bisect_right(stamps, cut_at)
-                reason = cut_name
+            if cut_at is not None:
+                d, reason = bisect_right(stamps, cut_at), cut_name
             else:
-                d = len(stamps)
-                reason = 'deadman_last_token' if dead else cut_name
+                d, reason = len(stamps), 'deadman_last_token'
             if d == 0:
-                no_row.append({'turn': turn.index, 'reason': f'cut_before_first_token:{cut_name}'})
+                no_row.append({'turn': turn.index, 'reason': 'cut_in_prefill'})
                 continue
             end, is_cut = stamps[d - 1], True
         # Owned pieces: [start, end] minus this turn's holds.
@@ -178,7 +246,8 @@ def rows_for(episode, *, token_stamps, finish_reasons, os_readings, pm_rows, sta
         half = math.hypot(q, math.sqrt(n_edges) * edge_j)
     else:
         measured = half = None
-    return {'rows': out_rows, 'no_row': no_row, 'measured_j': measured, 'half_width_j': half, 'n_edges': n_edges}
+    return {'rows': out_rows, 'no_row': no_row, 'measured_j': measured, 'half_width_j': half,
+            'n_edges': n_edges, 'turns': turns}
 
 
 def _design(c, p, d):
