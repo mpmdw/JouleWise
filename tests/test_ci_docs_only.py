@@ -1,6 +1,6 @@
-"""The CI range classifiers: docs-only (scripts/ci_docs_only.sh) suppresses tests only for
-unreferenced Markdown; class A (scripts/ci_state_only.sh, RL-144 term 1) admits the state records and
-documentation no test reads, and runs the quick tier and fences instead of the shards."""
+"""The CI range classifier: class A (scripts/ci_state_only.sh, RL-144 term 1) admits the state records and
+documentation no test reads, and runs the quick tier, fences and declared extras instead of the shards. The
+former docs-only classifier (scripts/ci_docs_only.sh, no tests at all) is retired: no class runs less."""
 import os
 import subprocess
 import tempfile
@@ -9,86 +9,8 @@ from pathlib import Path
 
 from tests.git_fixture import init_git_fixture
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "ci_docs_only.sh"
 STATE_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "ci_state_only.sh"
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
-
-
-class DocsOnlyClassifierTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.repo = Path(self.tmp.name)
-        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
-               "GIT_COMMITTER_EMAIL": "t@t"}
-        self.env = env
-        init_git_fixture(self.repo, "-q")
-        self.write({"README.md": "x\n", "docs/notes.md": "x\n", "docs/seal.md": "x\n",
-                    "tests/test_seal.py": "PATH = 'docs/seal.md'\n", "joulewise/core.py": "x = 1\n"})
-        self.base = self.commit()
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def git(self, *args):
-        return subprocess.run(["git", *args], cwd=self.repo, env=self.env, check=True,
-                              capture_output=True, text=True).stdout.strip()
-
-    def write(self, files):
-        for name, text in files.items():
-            path = self.repo / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text)
-
-    def commit(self):
-        self.git("add", "-A")
-        self.git("commit", "-q", "--allow-empty", "-m", "c")
-        return self.git("rev-parse", "HEAD")
-
-    def classify(self, files, before=None):
-        self.git("checkout", "-q", self.base)
-        self.write(files)
-        after = self.commit()
-        return subprocess.run(["bash", str(SCRIPT), before or self.base, after], cwd=self.repo,
-                              env=self.env).returncode
-
-    def test_unreferenced_docs_markdown_is_docs_only(self):
-        self.assertEqual(self.classify({"docs/notes.md": "y\n"}), 0)
-
-    def test_root_markdown_is_docs_only(self):
-        self.assertEqual(self.classify({"README.md": "y\n"}), 0)
-
-    def test_python_under_docs_runs_tests(self):
-        self.assertEqual(self.classify({"docs/tool.py": "x = 2\n"}), 1)
-
-    def test_config_under_docs_runs_tests(self):
-        self.assertEqual(self.classify({"docs/table.json": "{}\n"}), 1)
-
-    def test_markdown_referenced_by_a_test_runs_tests(self):
-        self.assertEqual(self.classify({"docs/seal.md": "changed\n"}), 1)
-
-    def test_mixed_range_runs_tests(self):
-        self.assertEqual(self.classify({"docs/notes.md": "y\n", "joulewise/core.py": "x = 2\n"}), 1)
-
-    def test_markdown_outside_docs_and_root_runs_tests(self):
-        self.assertEqual(self.classify({"configs/plan.md": "y\n"}), 1)
-
-    def test_workflow_change_runs_tests(self):
-        self.assertEqual(self.classify({".github/workflows/ci.yml": "on: push\n"}), 1)
-
-    def test_glob_read_docs_directories_run_tests(self):
-        for path in ("docs/paper/new.md", "docs/paper/paper1/paper1.md", "docs/registrations/b9.md", "docs/contracts/c.md", "docs/process_traces/t/r.md",
-                     "docs/null/n.md", "docs/site/s.md"):
-            with self.subTest(path=path):
-                self.assertEqual(self.classify({path: "y\n"}), 1)
-
-    def test_empty_range_runs_tests(self):
-        self.assertEqual(self.classify({}), 1)
-
-    def test_malformed_sha_runs_tests(self):
-        self.assertEqual(self.classify({"docs/notes.md": "y\n"}, before="not-a-sha"), 1)
-
-    def test_unknown_commit_runs_tests(self):
-        self.assertEqual(self.classify({"docs/notes.md": "y\n"}, before="0123456789" * 4), 1)
 
 
 class StateOnlyClassifierTests(unittest.TestCase):
@@ -110,7 +32,18 @@ class StateOnlyClassifierTests(unittest.TestCase):
                     "docs/paper/round7/r.md": "x\n", "docs/read/by_path.md": "x\n",
                     "docs/read/by_name.md": "x\n", "docs/readdir/other.md": "x\n",
                     "docs/readjoin/other.md": "x\n", "docs/readbase.md": "x\n", "docs/fig.svg": "<svg/>\n",
-                    "CANONICAL.md": "x\n",
+                    "CANONICAL.md": "x\n", "README.md": "x\n", "configs/plan.md": "x\n",
+                    "docs/tooldir/tool.py": "SIB = HERE / 'sibling.tsv'\n", "docs/tooldir/sibling.tsv": "a\n",
+                    "tests/test_tooluser.py": "import docs.tooldir.tool  # docs/tooldir/tool.py\n",
+                    "tests/test_readers2.py": (
+                        "A = f\"docs/fdir/{name}.md\"\n"
+                        "B = 'docs/pdir/%s.md' % name\n"
+                        "C = glob('docs/gdir/2026-*.md')\n"
+                        "D = Path('docs') / 'pathdir'\n"
+                        "E = (ROOT / 'docs'\n     / 'mldir')\n"
+                        "F = ROOT / 'docs' / 'c+d'\n"
+                        "G = Path('docs', 'tupdir', 'deep')\n"
+                        "H = ROOT / 'docs'\n     / 'ml1' / 'ml2'\n"),
                     "tests/test_reader.py": ("A = 'docs/read/by_path.md'\n"
                                              "B = ROOT / 'docs' / 'x' / 'by_name.md'\n"
                                              "C = 'docs/readdir/'\n"
@@ -148,6 +81,49 @@ class StateOnlyClassifierTests(unittest.TestCase):
         result = subprocess.run(["bash", str(STATE_SCRIPT), before or self.base, after], cwd=self.repo,
                                 env=self.env, capture_output=True, text=True)
         return result.returncode, result.stdout.split()
+
+    def test_root_markdown_and_unread_docs_are_class_a(self):
+        self.assertEqual(self.classify({"README.md": "y\n"}), 0)
+
+    def test_markdown_outside_docs_and_root_runs_everything(self):
+        self.assertEqual(self.classify({"configs/plan.md": "y\n"}), 1)
+
+    def test_files_beside_a_docs_hosted_tool_a_test_names_run_everything(self):
+        # The test names only docs/tooldir/tool.py; the tool reads its sibling.
+        self.assertEqual(self.classify({"docs/tooldir/sibling.tsv": "b\n"}), 1)
+        self.assertEqual(self.classify({"docs/tooldir/tool.py": "x = 2\n"}), 1)
+
+    def test_directory_named_inside_a_token_runs_everything(self):
+        cases = {
+            "f-string": "docs/fdir/changed_a.md",
+            "%s format": "docs/pdir/changed_b.md",
+            "glob": "docs/gdir/changed_c.md",
+            'Path("docs") / "x"': "docs/pathdir/changed_d.md",
+            "operator on the next line": "docs/mldir/changed_e.md",
+            "directory name with a regex metacharacter": "docs/c+d/changed_f.md",
+            "Path with comma-joined parts": "docs/tupdir/deep/changed_g.md",
+            "two parts on a continuation line": "docs/ml1/ml2/changed_h.md",
+        }
+        for why, path in cases.items():
+            with self.subTest(why=why):
+                self.assertEqual(self.classify({path: "y\n"}), 1)
+
+    def test_similar_directory_names_do_not_trip_the_directory_checks(self):
+        for path in ("docs/fdir2/z1.md", "docs/pathdirs/z2.md", "docs/c-d/z3.md", "docs/mld/z4.md"):
+            with self.subTest(path=path):
+                self.assertEqual(self.classify({path: "y\n"}), 0)
+
+    def test_classifier_runs_from_stdin_as_the_workflow_runs_it(self):
+        self.git("checkout", "-q", self.base)
+        self.write({"docs/paper/new.md": "y\n"})
+        after = self.commit()
+        piped = subprocess.run(["bash", "-s", "--", self.base, after], cwd=self.repo, env=self.env,
+                               input=STATE_SCRIPT.read_text(encoding="utf-8"), capture_output=True, text=True)
+        self.assertEqual((piped.returncode, piped.stdout.split()), (0, [self.CENSUS]))
+
+    def test_docs_only_classifier_is_retired(self):
+        self.assertFalse((STATE_SCRIPT.parent / "ci_docs_only.sh").exists())
+        self.assertNotIn("scripts/ci_docs_only", WORKFLOW.read_text(encoding="utf-8"))
 
     def test_run_state_alone_is_state_only(self):
         self.assertEqual(self.classify({"RUN_STATE.md": "y\n"}), 0)
@@ -211,7 +187,7 @@ class StateOnlyClassifierTests(unittest.TestCase):
         self.assertEqual(self.classify_full({"docs/paper/new.md": "y\n", "joulewise/core.py": "x = 2\n"})[0], 1)
 
     def test_declared_extra_test_exists(self):
-        self.assertTrue((SCRIPT.parents[1] / "tests" / "test_d165_rationale_census.py").is_file())
+        self.assertTrue((STATE_SCRIPT.parents[1] / "tests" / "test_d165_rationale_census.py").is_file())
         self.assertIn("'docs/paper/*|" + self.CENSUS + "'", STATE_SCRIPT.read_text(encoding="utf-8"))
 
     def test_registration_and_other_read_directories_run_everything(self):
@@ -270,7 +246,7 @@ class StateOnlyWorkflowTests(unittest.TestCase):
     def test_workflow_wires_the_classifier_into_the_quick_job(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn('git show "$before:scripts/$1" | bash -s -- "$before" "$after"', text)
-        self.assertIn("elif extra=$(classify ci_state_only.sh); then", text)
+        self.assertIn("if extra=$(classify ci_state_only.sh); then", text)
         self.assertIn("state: ${{ steps.paths.outputs.state || 'false' }}", text)
         self.assertIn("extra: ${{ steps.paths.outputs.extra || '' }}", text)
         self.assertIn("run: python3 -m unittest $EXTRA_TESTS", text)
@@ -280,7 +256,7 @@ class StateOnlyWorkflowTests(unittest.TestCase):
     def test_live_state_readers_are_in_the_quick_tier(self):
         import json
         import sys
-        sys.path.insert(0, str(SCRIPT.parent))
+        sys.path.insert(0, str(STATE_SCRIPT.parent))
         import quick_suite
         import shard_tests
         modules = shard_tests.discover_test_modules()

@@ -21,9 +21,6 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     steps:
-      - name: Docs-only range (required contexts report success without running tests)
-        if: needs.changes.outputs.code != 'true' && needs.changes.outputs.state != 'true'
-        run: echo "No code changes in this range; tests skipped."
       - uses: actions/checkout@v5
         if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
         with:
@@ -50,7 +47,7 @@ jobs:
           EXTRA_TESTS: ${{ needs.changes.outputs.extra }}
         run: python3 -m unittest $EXTRA_TESTS
 
-  # Select interpreters and skip expensive jobs only for proven docs-only ranges.
+  # Select interpreters and skip the shards only for proven class A ranges.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -80,10 +77,10 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Only a successful, non-empty, unreferenced docs-only diff may suppress tests
-          # (scripts/ci_docs_only.sh; tests/test_ci_docs_only.py). A state-only diff
-          # (scripts/ci_state_only.sh, class A: state records or unread documentation; also tested in
-          # tests/test_ci_docs_only.py) runs the plain quick tier and fences instead of the shards. Errors run CI.
+          # Only a successful, non-empty class A diff (scripts/ci_state_only.sh: state records or
+          # documentation no test reads; tests/test_ci_docs_only.py) skips the shards; it runs the quick
+          # tier, fences and the declared extra tests instead. No range runs fewer than fences + quick
+          # (RL-144 term 2). Errors run CI.
           before=; after=
           case "${GITHUB_EVENT_NAME:-}" in
             push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;
@@ -96,9 +93,7 @@ jobs:
             git show "$before:scripts/$1" | bash -s -- "$before" "$after"
           }
           code=true; state=false; extra=
-          if classify ci_docs_only.sh >/dev/null; then
-            code=false
-          elif extra=$(classify ci_state_only.sh); then
+          if extra=$(classify ci_state_only.sh); then
             code=false; state=true
             # Declared extra test modules, one per line; anything else fails closed.
             if [[ -n "$extra" ]] && grep -qvE '^tests\.[A-Za-z0-9_.]+$' <<< "$extra"; then
@@ -190,9 +185,9 @@ jobs:
     # cannot silently skip a shard. Drop the slots once branch protection
     # drops those contexts (contexts first, then the matrix).
     steps:
-      - name: Docs-only range (required contexts report success without running tests)
+      - name: Class A range (required contexts report success; fences, quick and declared extras run in their own jobs)
         if: needs.changes.outputs.code != 'true'
-        run: echo "No code changes in this range; tests skipped."
+        run: echo "Class A range; shards skipped."
       - name: Retired shard slot (required context reports success when the slot is above SHARD_COUNT)
         if: needs.changes.outputs.code == 'true' && matrix.shard > fromJSON(env.SHARD_COUNT)
         env:
@@ -301,9 +296,9 @@ jobs:
       matrix:
         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
     steps:
-      - name: Docs-only range (required contexts report success without running tests)
+      - name: Class A range (required contexts report success; fences, quick and declared extras run in their own jobs)
         if: needs.changes.outputs.code != 'true'
-        run: echo "No code changes in this range; tests skipped."
+        run: echo "Class A range; shards skipped."
       - uses: actions/checkout@v5
         if: needs.changes.outputs.code == 'true'
         with:
@@ -353,9 +348,9 @@ jobs:
         python-version: ${{ fromJSON(needs.changes.outputs.pythons) }}
         shard: [1, 2]
     steps:
-      - name: Docs-only range (required contexts report success without running tests)
+      - name: Class A range (required contexts report success; fences, quick and declared extras run in their own jobs)
         if: needs.changes.outputs.code != 'true'
-        run: echo "No code changes in this range; tests skipped."
+        run: echo "Class A range; shards skipped."
       - uses: actions/checkout@v5
         if: needs.changes.outputs.code == 'true'
         with:
