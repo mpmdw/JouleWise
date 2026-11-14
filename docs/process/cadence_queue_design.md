@@ -518,8 +518,10 @@ looks and desk equal dev-01's. Inclusion rules: dev-01's, with `pilot_counted` r
   hand-read (RL-150 R5).
 - **Timing.** `plan` for L001-L003: expected 6,903 s (1.9 h), worst case 16,650 s (4.6 h). These bytes
   still carry the R1 soak window 11:45-13:15 (no #777), so RL-155a §3's two bounds hold: **no launch
-  between 10:50 and 13:15**, and the fence end (worst case + 1,460 s = 18,110 s) **by 01:50**, so the latest
-  launch is 20:48. Sunday: after dev-01's second span closes plus 20 min, in 07:00-10:50 or 13:15-20:48.
+  between 10:50 and 13:15**, and the fence end (worst case + 1,460 s = 18,110 s) **by 01:50**, so the
+  **latest t0 is 20:48:10** (01:50:00 - 18,110 s). RL-155's "latest t0 21:20" is wrong on these bytes: its
+  worst case ends 01:57:30, inside the 01:50-02:40 quiet. Sunday: after dev-01's second span closes plus
+  20 min, in 07:00-10:50 or 13:15-20:48.
 - **Arm lines beyond item 317's.** `sudo -n -l` lists `/usr/bin/pmset -c powermode 0` and
   `/usr/bin/pmset -c powermode 2`; `pmset -g custom` reads AC powermode 0; no file at
   `/Users/Shared/JouleWise/host-power/high-power.marker`; the host night lock is free (nothing measuring).
@@ -537,8 +539,9 @@ looks and desk equal dev-01's. Inclusion rules: dev-01's, with `pilot_counted` r
 
 - **Gate.** The smoke passed and the lead's hand-read is recorded (RL-150 R5); line 8 then holds for hp-01.
 - **One span**, `cq-hp-01-s02-a1`, L004-L012, appended to the queue: expected 14,409 s (4.0 h), worst case
-  32,850 s (9.1 h). Fence end (34,310 s) by 01:50 puts the latest launch at **16:18**; no launch 10:50-13:15.
+  32,850 s (9.1 h). Fence end (34,310 s) by 01:50 puts the **latest t0 at 16:18:10** (RL-155's 16:50 would
+  end its worst case at 02:02:30); no launch 10:50-13:15.
   Monday after dev-02 closes, so 13:15-16:18 (or 07:00-10:50 if dev-02 ends early).
-- **Or two short spans** (RL-155a §2's practice): L004-L009 (worst 24,750 s, latest launch 18:33) and
-  L010-L012 (worst 16,650 s, latest 20:48). Each takes its own soak, about 55 min more in all, and fits a
+- **Or two short spans** (RL-155a §2's practice): L004-L009 (worst 24,750 s, fence 26,210 s, latest t0
+  18:33:10) and L010-L012 (worst 16,650 s, fence 18,110 s, latest t0 20:48:10). Each takes its own soak, about 55 min more in all, and fits a
   shorter gap. The lead chooses at the append; the queue is append-only either way.
