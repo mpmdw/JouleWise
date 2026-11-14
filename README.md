@@ -7,7 +7,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/lines-dark.svg">
-  <img alt="Three research lines: phase energy (released and replicated), BYTES (lines committed, held-out models sealed) and the energy tripwire (registration and calibration)" src="docs/assets/readme/lines-light.svg" width="100%">
+  <img alt="Three research lines: phase energy (released; both contrasts replicated), BYTES (lines committed, held-out models sealed) and the energy tripwire (registration and calibration)" src="docs/assets/readme/lines-light.svg" width="100%">
 </picture>
 
 ## The question
@@ -20,8 +20,7 @@ answer different questions, from the price of a long prompt to the price of a lo
 A laptop already carries power sensors: macOS's `powermetrics` reports the chip's power with no extra hardware. But
 it reports *averages over records* of about a tenth of a second, and those records don't line up with the instant
 prefill ends and decode begins. So JouleWise treats the instrument's limits as results. Every phase energy carries an
-interval, an **attribution floor** (how far timing alone could move it), a **detection floor** (the smallest real
-difference the instrument can see) and a **dominance ratio** (whether timing, rather than noise, sets that floor).
+interval, an **attribution floor** (how far timing alone could move it), a **detection floor** (the largest difference the instrument produces when nothing differs, and so the smallest the registered analysis will call resolved in one session) and a **dominance ratio** (the factor by which timing uncertainty enlarges that floor).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig1-boundaries-dark.svg">
@@ -45,7 +44,7 @@ largest such movement is printed as the **attribution floor**.
 
 Phase edges and power records sit on one timeline only after calibration. Before the first run of every session and
 after the last, the GPU is driven through 59 commanded one-second pulses, and how far the sampler sees those edges
-from where they were commanded sets the session's timing bound (about 45–49 ms in Block 5).
+from where they were commanded sets the session's timing bound.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig3-session-dark.svg">
@@ -60,38 +59,35 @@ is why each session also carries reference requests and a drift allowance.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig4-quad-dark.svg">
-  <img alt="Figure 4: linear drift cancels in the quad, curved drift leaves a 2 J error" src="docs/assets/readme/fig4-quad-light.svg" width="100%">
+  <img alt="Figure 4 (schematic): linear drift cancels in the quad, curved drift leaves a 2 J error in this example" src="docs/assets/readme/fig4-quad-light.svg" width="100%">
 </picture>
 
 ## What it found
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig5-results-dark.svg">
-  <img alt="Figure 5: decode contrast +146.6 J [141.4, 151.9] against a floor of 10.18 J; prefill contrast +101.8 J [95.8, 107.8] against a floor of 8.83 J" src="docs/assets/readme/fig5-results-light.svg" width="100%">
+  <img alt="Figure 5: decode contrast +146.63 J [141.35, 151.91] against a floor gate of 10.18 J; prefill contrast +101.81 J [95.80, 107.82] against a floor gate of 8.84 J" src="docs/assets/readme/fig5-results-light.svg" width="100%">
 </picture>
 
-Both contrasts are **direction supported** at claim level L2, about 11–14 times their detection floors. About 94–96 %
-of each interval's width is the deterministic timing bound, not run-to-run scatter, so this instrument's limit is
-phase-edge timing. That an 8B model uses more energy than a 1.7B one is not news, and the paper does not present it
-as news: the contrast is a known-direction test of the instrument. **The registered replication (Block 6, nine
-further sessions) gave the same outcome word and sign in each of its three contrast sessions.**
+Both contrasts are **direction supported** and reach claim level L2 under the registered gate: each estimate exceeds its floor gate (146.63 J against 10.18 J for decode, 101.81 J against 8.84 J for prefill). All four published detection floors are set by the clock-anchor timing bound, not by run-to-run repeatability. The registered test for the stronger statement, that timing attribution dominates the detection floor, was not met (three of the twelve dominance ratios are below 2), so the paper makes no statement about which source limits these measurements. That an 8B model uses more energy than a 1.7B one is not news, and the paper does not present it
+as news: the contrast is a known-direction test of the instrument. **The registered replication (Block 6, nine further sessions) gave the same outcome word and sign in each of its three contrast sessions.** "Replicated" is the registered word for that agreement; it is not a new test and carries no new interval.
 
 | Gross energy per request, processor rails | Decode, 512 tokens | Prefill, 2,048 tokens |
 |---|---:|---:|
 | Qwen3-1.7B (4-bit) | 51.21 J [48.92, 53.49] | 26.25 J [23.32, 29.19] |
 | Qwen3-8B (4-bit) | 198.36 J [195.23, 201.49] | 128.28 J [125.19, 131.38] |
 
-One session per model, instrument results (L1); phase attribution was not checked by an independent instrument. The
+One session per model, instrument results (L1); phase attribution was not checked by an independent instrument. The two models were measured in separate sessions in a fixed order, so the rows are not differenced into a comparison; the contrasts above come from their own interleaved session. The
 paper, [`docs/paper/paper1/paper1.md`](docs/paper/paper1/paper1.md), is the authority for every number here.
 
 ## Blinding, release and an independent recomputation
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig6-pipeline-dark.svg">
-  <img alt="Figure 6: register and seal, collect blind, pin the analysis, recompute independently, blinded comparison, unseal" src="docs/assets/readme/fig6-pipeline-light.svg" width="100%">
+  <img alt="Figure 6: register and seal, collect blind, analyse blind, recompute independently, compare under fixed bars, unseal" src="docs/assets/readme/fig6-pipeline-light.svg" width="100%">
 </picture>
 
-The counting rules, exclusions, estimators and even the result sentences were sealed before the first session armed.
+The counting rules, exclusions, estimators and the fixed outcome sentences were registered and sealed before the first session armed. Later errata, blind rulings and analysis-code changes are dated and disclosed in the paper (Section 5.5).
 Energies stayed hidden until a recorded release, and the paper was drafted blind with a placeholder for every number.
 
 ## Part 2, BYTES: what drives decode energy per token?
@@ -99,8 +95,7 @@ Energies stayed hidden until a recorded release, and the paper was drafted blind
 Each decode pass reads the weights it uses. Energy per pass might follow the **bytes read per token**, the **resident
 size**, or the **decode time**. On dense models the first two are nearly equal; mixture-of-experts models read far
 fewer bytes than they hold, which is what lets the study tell the hypotheses apart. The rival lines were fitted on
-three dense models and committed on 12 November 2026, before any held-out model was analysed. The seven held-out models
-remain sealed.
+three dense models and committed on 12 November 2026, before any held-out model's energy was unblinded. The seven held-out models remain sealed. One held-out model's timing had been read before the commitment; the paper discloses it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig7-bytes-dark.svg">
@@ -109,7 +104,7 @@ remain sealed.
 
 ## Next: the energy tripwire
 
-*An agent can edit its own logs. It cannot edit the joules it drew from the wall.* The same instrument, extended with
+*An agent can edit its own logs. It cannot edit the joules it drew.* The same instrument, extended with
 the whole-machine meter and thermal gating, asks whether an LLM agent doing covert work in
 [SHADE-Arena](https://arxiv.org/abs/2506.15740) leaves an energy signature beyond what its own log explains. Protocol
 v4 is in registration and calibration; no outcome has been opened. Overview:
@@ -118,15 +113,11 @@ v4 is in registration and calibration; no outcome has been opened. Overview:
 ## How the research is run
 
 The study is run by AI agents under human direction, and Paper 1 reports that as part of the method, including the
-failures its controls did and did not catch. A lead session on an analysis laptop plans and builds. A headless
-**magistrate** on the measurement Mac does one step at a time and exits before any capture, because no AI process may
-run while power is measured. A research-lead model rules on design and paper text in a public decision log. Every
-change gets an executing cold review that reruns the code, and independent re-implementations check the analyses. Ed
-keeps scope, authorship and every unseal.
+failures its controls did and did not catch. A lead session on an analysis laptop plans and builds. A headless **magistrate** on the measurement Mac does one step at a time and exits before any capture: a live AI agent process on that machine is a registered hazard that refuses the arm. A research-lead model rules on design and paper text in a public decision log. Since 27 October 2026, code that can compute, select or exclude a published number is reviewed by two sessions from different model families that execute and mutate it, and separately written code recomputes the core arithmetic. Ed sets the research direction, the methodological requirements and the process policy, and is the escalation point for changes to what is measured or claimed.
 
 **What this does not claim.** All measurements come from one laptop, one operating-system build per session, one
 inference framework and one sampler. The decode workload uses one fixed prompt and the prefill workload one prompt
-length. Nothing here is a statement about other prompts, models, machines or boundaries.
+length. The replication is across sessions and days on the same machine, not across machines. Nothing here is a statement about other prompts, models, machines or boundaries.
 
 ## Quick start (mock target, no hardware needed)
 
