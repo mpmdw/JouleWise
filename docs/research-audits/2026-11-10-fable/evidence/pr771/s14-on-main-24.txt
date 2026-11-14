@@ -1,0 +1,25 @@
+OK   b5bce6c64bbc1d07 configs/b6/flag_catalog_b6.json
+OK   bf399bec4195b923 configs/b6/recompute/hazard_sizing.json
+OK   e242cab6bb311a9c configs/b6/recompute/precision.json
+OK   62dbfaef9ebc5cfb configs/b6/recompute/production_comparison_keys.json
+OK   ea130c87ece4e8b5 configs/b6/registration/acceptance.json
+OK   513d7d4a98f464c7 configs/b6/registration/identity_pins.json
+OK   df98d6ea46fd21ec joulewise/__init__.py
+OK   fab53ea66a636458 joulewise/axi_decode_config.py
+OK   634c991c527106d3 joulewise/b6_analysis_check.py
+OK   9a907a3671dbe210 joulewise/b6_analysis_hazards.py
+OK   283dfc7834174276 joulewise/b6_analysis_inputs.py
+OK   ac770c9407dad936 joulewise/desk_compress.py
+OK   2ea17e7b30b4101d joulewise/flags/__init__.py
+OK   006840601a37009d joulewise/flags/catalog.py
+OK   ebe1678c0fdd60b1 joulewise/flags/exclusions.py
+OK   cd7ce3c00dec5306 joulewise/flags/schema.py
+OK   9dc6b5d45c1dc138 joulewise/idle_admission.py
+OK   f47fbf68c2c4a931 joulewise/schemas.py
+OK   e717dc7f4b7c3b60 joulewise/twins/__init__.py
+OK   5cd6977d79b2951a joulewise/twins/engine_twin.py
+OK   df39036b24eab0d0 joulewise/twins/harvest_twin.py
+OK   82bb03f3aed62644 joulewise/validation.py
+OK   d49103e884ccae47 scripts/independent_recompute_b5.py
+OK   4a9f594471652581 scripts/independent_recompute_b6.py
+24 files at main 8d54a5779: 24 equal the record's closure_sha256, 0 differ
