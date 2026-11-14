@@ -513,8 +513,8 @@ def fill_contention(R: Src) -> str:
         fail('a contrast keeps 5 quads under the registered contention rule')
     d_text = (f'Applied as registered, the outside-processor exclusion leaves none of the {len(cells)} floor cells with '
               f'the registered minimum of units, and leaves the {len(ns)} contrasts {min(ns)} to {max(ns)} quads of the 5 '
-              'required. It was not adopted for this block for that reason, as registered, and the replication\'s '
-              'sessions confirm it would have removed most of the data. ')
+              'required. It was not adopted for this block, as registered; applied to the replication\'s sessions it '
+              'leaves no cell and no contrast at the registered minimum. ')
     d_text = d_text.replace(f'the {len(ns)} contrasts', 'the six contrasts' if len(ns) == 6 else f'the {len(ns)} contrasts')
     return d_text + f'{lbl[0].upper() + lbl[1:]}: ' + fill_floor_and_contrast_lines(R, 'outside_processor_alternative', LABEL_NIR)
 
@@ -1110,7 +1110,8 @@ S8_NEW = [
     'The replication stayed blinded until its own release, which required its closure and the prior primary release, '
     'because reading replication values first would have unblinded the same quantities.',
     'in the registered replication, nine further sessions, both contrasts gave the primary session\'s outcome word and '
-    'sign, and the sessions differed from one another by more than their within-session intervals cover.',
+    'sign, and the sessions differed from one another by more than their statistical half-widths cover (timing bounds '
+    'not included).',
     'The bars, the counts and the agreement are given per family for the primary block in Table S8 and per class for '
     'the replication block in Table S9 (Section 6.7), with the quantities not covered and their separate reader checks.',
     'must be printed beside the applicable bars (for the replication block the largest difference was not retained; '

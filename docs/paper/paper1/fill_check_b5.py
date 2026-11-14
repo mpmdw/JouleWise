@@ -994,7 +994,7 @@ ABSTRACT_PART1 = (
     'prefill, {r151:e} J [{r152:lo}, {r153:hi}] for Qwen3-8B decode and {r160:e} J [{r161:lo}, {r162:hi}] for its '
     '2,048-token prefill, each an instrument result (L1) whose phase attribution was not checked by an independent '
     'instrument. Timing movement did not at least double every detection floor (dominance branch {r863:id}). The '
-    'decode and 2,048-token prefill contrasts were *{r530:w}* and *{r533:w}*, in the registered direction (the 8B '
+    'decode and 2,048-token prefill contrasts were both *{r530:w}*, in the registered direction (the 8B '
     'model used more phase energy than the 1.7B model), with {r11:n} of '
     '{r12:n} and {r13:n} of {r14:n} planned quads kept in one session.')
 CONCLUSION_9D = ('Allowing each value to move within its registered timing uncertainty at least doubled the detection '
@@ -1184,6 +1184,9 @@ def verify_allowed_literals() -> None:
     # returns L2 (rows 532 and 535, recorded judgments) and the direction rows read the registered one (531, 534).
     if [val(532), val(535), val(531), val(534)] != ['L2', 'L2', 'positive', 'positive']:
         fail('abstract: the direction is printed but a contrast is not L2 in the registered direction')
+    # Final pass on PR #772: the abstract prints one word for both contrasts ("were both"), so row 533 stays bound.
+    if val(530) != val(533):
+        fail('abstract: "were both" but the decode (row 530) and prefill (row 533) outcome words differ')
     if len(CMP_ROWS) != 24 or sum(1 for r in CMP_ROWS if val(r[3]) == '0') != 1:
         fail('Table S8: expected 24 comparator families, exactly one of which compared no rows')
 
