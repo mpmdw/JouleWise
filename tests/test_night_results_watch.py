@@ -420,7 +420,12 @@ class TimingTests(unittest.TestCase):
             path.write_bytes(encoded({"armed": []}))
             with self.assertRaises(w.WatchError):
                 w.read_current(path)
-            for doc in ({"armed": {"t0": "bad"}}, {"wait": {"observable": "mail_received"}}):
+            idle = {"armed": None, "wait": {"observable": "none", "deadline_epoch_s": None,
+                                            "on_early_or_refused": None}}
+            path.write_bytes(encoded(idle))
+            self.assertEqual(w.read_current(path), idle)
+            for doc in ({"armed": {"t0": "bad"}}, {"wait": {"observable": "mail_received"}},
+                        {"wait": {"observable": "none", "deadline_epoch_s": "bad"}}):
                 path.write_bytes(encoded(doc))
                 with self.assertRaises(w.WatchError):
                     w.read_current(path)
