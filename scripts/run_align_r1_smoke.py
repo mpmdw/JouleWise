@@ -9,6 +9,9 @@ RL-94: ``--fresh-soak`` first runs the night's own idle soak (runtime kind
 pair, under the same feeds, and hands the soak reference it writes to the
 parts. It is the smoke's reference only. ``--parts A`` stops after Part A
 (RL-89: Part A on the final night bytes; Part B is not re-run).
+``--parts C --fresh-soak`` runs Part C (RL-145 addendum section 6): the fresh soak, the
+30B predecessor and a full step-D, the gated D_bank member seed 1 and X_G, judged by
+``scripts/align_r1_part_c.py``. It produces no slots and enters nothing.
 """
 from __future__ import annotations
 
@@ -359,6 +362,8 @@ def part(args, which, feeds, *, on_start=lambda: None):
     argv = part_argv(args, which)
     if which == "soak":
         cap = launcher.r1_soak_cap_s()
+    elif which == "C":
+        cap = launcher.r1_part_c_cap_s()
     else:
         cap = launcher.r1_part_caps()[which]
     remaining = work_remaining(args)
@@ -422,7 +427,7 @@ def run(args, *, feeds=None):
     record = {"schema": "joulewise.align.r1_smoke_runner.v1", "started": stamp(),
               "deadline": args.deadline, "work_reserve_s": WORK_RESERVE_S,
               "soak_reference": None if fresh_soak else str(args.soak_reference),
-              "fresh_soak": fresh_soak, "parts_requested": parts, "parts": {"A": False, "B": False},
+              "fresh_soak": fresh_soak, "parts_requested": parts, "parts": {"A": False, "B": False, "C": False},
               "steps": [], "feeds": {}, "rc": 0}
 
     def step(name, operation, *, fatal=True):
@@ -548,7 +553,8 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--soak-reference", type=Path)
     parser.add_argument("--fresh-soak", action="store_true")
-    parser.add_argument("--parts", choices=("AB", "A"), default="AB")
+    parser.add_argument("--parts", choices=("AB", "A", "C"), default="AB",
+                        help="C: RL-145 addendum Part C (fresh soak, step-D, gated D_bank, X_G); needs --fresh-soak")
     parser.add_argument("--soak-child", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
     parser.add_argument("--deadline", type=float)
@@ -561,6 +567,8 @@ def main(argv=None):
         parser.error("deadline must be finite")
     if args.fresh_soak == (args.soak_reference is not None):
         parser.error("give exactly one of --soak-reference and --fresh-soak")
+    if args.parts == "C" and not args.fresh_soak:
+        parser.error("--parts C runs on a fresh soak (RL-145 addendum)")
     args.output = args.output.resolve()
     if args.soak_reference is not None:
         args.soak_reference = args.soak_reference.resolve()

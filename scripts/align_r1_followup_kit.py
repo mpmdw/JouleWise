@@ -459,11 +459,90 @@ def smoke_table(segment_dir):
             "note": "RL-78/84: margins are disclosures; sweep/Tf08 failures fail smoke; other keys fail individually. Classifier unchanged."}
 
 
+PART_C_GATED_D = "D_bank_benign_s1_gated_held"      # r1_phase_table.GATED_D_RUNS[0]
+PART_C_X_G = "X_G_contrast"
+
+
+def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
+                 facts=None, step_facts=None, prints=None):
+    """RL-145 step 3 / addendum section 6, Part C: a gated smoke on the final bytes.
+
+    The 30B predecessor, then step-D as the night runs it (Part A on the final bytes, with the
+    slots it needs), then the gated D_bank member seed 1 (the runtime applies W1's
+    inter-member schedule: the member's own configured idle), then X_G, which the existing
+    runtime kind runs with no further condition-13 code. It produces no slots and enters
+    nothing: the slots the gated runs read stay in this smoke's own step-D result. The verdict
+    is ``align_r1_part_c.evaluate``'s; a failure raises after the table is written.
+    """
+    from scripts import align_r1_part_c as part_c
+    facts = facts or part_c.facts_from_bundle
+    step_facts = step_facts or part_c.step_d_facts
+    if prints is None:
+        from joulewise.align.apple.rl145_prints import bundle_prints
+        prints = lambda bundle: bundle_prints(bundle, estimate_tokens=True)["turns"]
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    started = time.monotonic()
+    result = {"part": "C", "authority": "RL-145 step 3; RL-145 addendum section 6", "slots_entered": False, "members": {}}
+
+    def finish(verdict_doc=None, error=None):
+        if verdict_doc is not None:
+            result["evaluation"] = verdict_doc
+        if error is not None:
+            result["error"] = error
+        result["elapsed_s"] = time.monotonic() - started
+        (output / "smoke_part_c.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    try:
+        result["members"]["predecessor"] = invoke(runtime, "capture-predecessor-30b", output / "capture_predecessor_30b",
+                                                  soak_reference=soak_reference)
+        step_dir = output / rt.STEP_D_SEGMENT
+        step = invoke(runtime, "step-d", step_dir, soak_reference=soak_reference)
+        result["members"]["step_d"] = step
+        slots = step.get("slots")
+        n_chunk = (slots or {}).get("N_chunk")
+        step_line = step_facts(step_dir / step["bundle"], step) if step.get("bundle") else {"g0_outcome": step.get("g0_outcome")}
+        if not isinstance(slots, dict) or not isinstance(n_chunk, int):
+            doc = part_c.evaluate(step_d=step_line, d_bank=None, n_chunk=n_chunk if isinstance(n_chunk, int) else 1)
+            finish(doc, "step-D produced no slots: the gated members cannot run")
+            raise ValueError("Part C: step-D produced no slots; see smoke_part_c.json")
+        bank_dir = output / PART_C_GATED_D
+        bank = invoke(runtime, "d-bank-benign-s1", bank_dir, soak_reference=soak_reference)
+        result["members"]["d_bank"] = bank
+        bank_facts = facts(bank_dir / bank["bundle"], role="d-bank")
+        # The runtime's own X7 flag and T_dead are the authority where it reports them.
+        bank_facts["x7"] = bank.get("x7", bank_facts["x7"])
+        bank_facts["t_dead_s"] = (bank.get("deadman") or {}).get("T_dead_s", bank_facts["t_dead_s"])
+        printed = prints(bank_dir / bank["bundle"])
+        x_g_facts, why = None, None
+        try:
+            x_g = invoke(runtime, "x-g", output / PART_C_X_G, soak_reference=soak_reference)
+            result["members"]["x_g"] = x_g
+            x_g_facts = facts(output / PART_C_X_G / x_g["bundle"], role="x-g")
+            x_g_facts["x7"] = any(f.startswith("episode.deadman:") for f in x_g.get("episode_flags", []))
+        except (r1.Refusal, ValueError, KeyError, OSError) as exc:
+            why = f"{type(exc).__name__}: {exc}"
+            print(f"Part C: X_G left out, the launcher could not run it without more condition-13 code: {why}",
+                  file=sys.stderr)
+        doc = part_c.evaluate(step_d=step_line, d_bank=bank_facts, n_chunk=n_chunk, x_g=x_g_facts,
+                              x_g_not_run_reason=why, printed=printed)
+        result["n_chunk_formula_recorded"] = (step.get("slot_detail") or {}).get("N_chunk_formula")
+        finish(doc)
+    except BaseException as exc:
+        if "evaluation" not in result and "error" not in result:
+            finish(error=f"{type(exc).__name__}: {exc}")
+        raise
+    if not doc["pass"]:
+        raise ValueError(f"Part C failed ({doc['verdict']}): {doc['disposition']}")
+    return result
+
+
 def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
     """Native only when explicitly run by the lead in an agent-free session.
 
     B runs the same admission followed by the D step, in one member. Its
     inventory process spans idle/quiet/load/recovery. A stops after G0.
+    C (RL-145 addendum) runs the gated D_bank (and X_G) behind a full step-D.
     """
     reg.verify_r1_executed_sources(ROOT, {"executed_commit": r1.executed_commit(ROOT)})
     gate = "joulewise/align/apple/thermal_gates.py"
@@ -473,6 +552,8 @@ def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
     if config_path.read_bytes() != (ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes():
         raise ValueError("condition 13: smoke config differs from the bound runtime config")
     config, _ = rt.load_config(config_path)
+    if part == "C":
+        return smoke_part_c(output, runtime, config, soak_reference=soak_reference, invoke=invoke)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -518,7 +599,7 @@ def main(argv=None):
     p.add_argument("--smoke-table", type=Path, required=True)
     p = sub.add_parser("smoke")
     p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--part", choices=("A", "B"), required=True)
+    p.add_argument("--part", choices=("A", "B", "C"), required=True)
     p.add_argument("--soak-reference", type=Path, required=True)
     p.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
     p = sub.add_parser("desk")
