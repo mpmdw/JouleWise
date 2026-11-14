@@ -189,7 +189,7 @@ class ConformanceTests(unittest.TestCase):
                          *contract.HIGH_POWER_KINDS):
                 self.assertEqual(armed[kind], 1200, kind)
             # R7-13: the D classification records its alias groups (none here).
-            self.assertEqual(step["thermometry"]["alias_groups"], [])
+            self.assertEqual(step["thermometry"]["alias_groups"], [[rs.syn.SLOW, rs.syn.FAST]])   # RL-145 close: the synthetic pair is an alias group
             # Every runtime wrote only inside its own segment directory.
             self.assertEqual(sorted(p.name for p in run.iterdir()),
                              sorted([*results, "soak_reference.json"]))

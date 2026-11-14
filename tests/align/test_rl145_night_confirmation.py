@@ -56,22 +56,15 @@ class NightConfirmationTests(unittest.TestCase):
         for slow in ('TVh0', 'Tf48'):
             result = self.confirm(self.c, slow=slow)
             self.assertFalse(result['ok'], slow)
-            self.assertTrue(any('alias group' in r for r in result['reasons']), result)
+            self.assertTrue(any('alias group' in r and 'RL-145 close' in r for r in result['reasons']), result)
 
-    def test_group_not_formed_needs_an_admissible_die_key(self):
+    def test_group_not_formed_refuses_even_for_an_admissible_die_key(self):
         c = deepcopy(self.c)
         c['alias_groups'] = [g for g in c['alias_groups'] if 'TV0h' not in g]
-        ok = self.confirm(c, slow='TVh0')
-        self.assertEqual((ok['ok'], ok['second_key_basis']), (True, 'admissible_die_key'), ok)
-        # Not a die key.
-        self.assertFalse(self.confirm(c, slow='Th0C')['ok'])
-        self.assertTrue(any('R0 die key' in r for r in self.confirm(c, slow='Th0C')['reasons']))
-        # A die key that fails the quality clauses.
-        bad = deepcopy(c)
-        self.row(bad, 'TVh0')['clamped'] = True
-        self.assertFalse(self.confirm(bad, slow='TVh0')['ok'])
-        # TV1h itself is just another key when no group formed: identical rows still pass as a die key.
-        self.assertTrue(self.confirm(c, slow='TV1h')['ok'])
+        for slow in ('TVh0', 'TV1h', 'Th0C'):
+            result = self.confirm(c, slow=slow)
+            self.assertFalse(result['ok'], slow)
+            self.assertTrue(any('no group formed' in r and 'RL-145 close' in r for r in result['reasons']), result)
 
     def test_same_key_twice_and_a_classification_reason_refuse(self):
         self.assertFalse(self.confirm(self.c, slow='TV0h')['ok'])

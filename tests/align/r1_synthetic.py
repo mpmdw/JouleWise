@@ -154,7 +154,9 @@ class SyntheticBackend:
             def read(self, keys):
                 self.reads += 1
                 dither = ((self.reads % 3) - 1) / 256
-                values = {syn.FAST: world.t_fast + dither, syn.SLOW: world.t_slow + dither, syn.FAN: 1200.0,
+                # RL-145 close: the gate pair is one thermometer under two names, so the classification
+                # journal reads the slow key as the fast key's alias (the gates keep their own two series).
+                values = {syn.FAST: world.t_fast + dither, syn.SLOW: world.t_fast + dither, syn.FAN: 1200.0,
                           "Ta0P": syn.AMBIENT_C + 0.001 * world.t_slow}
                 return {"values": {key: round(values[key] * 256) / 256 for key in keys if key in values},
                         "errors": {key: "unknown synthetic sensor" for key in keys if key not in values}, "raw": {}}

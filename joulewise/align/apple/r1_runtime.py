@@ -523,32 +523,29 @@ def sensor_admissibility(classification, picks, r0_keys):
 
 
 def night_confirmation(classification, picks, r0_keys, r0_classes=None):
-    """RL-145 section 3: the session's confirmation of the fixed pair.
+    """RL-145 section 3 as tightened by the RL-145 close (section 5): the session's confirmation.
 
-    The second key is the lexically first other member of the fast pick's alias
-    group on the saved Part B classification (the kit derives it). The pair is
-    confirmed (``ok``) when the fast key is admissible on this D step and the
-    second key is in the fast key's alias group here, or is itself an admissible
-    die key if the group did not form. Any other reason refuses, as
-    ``sensor_admissibility`` always did. Selection, ranking and Part B are not
-    touched: ``sensor_admissibility`` is unchanged.
+    The pair is confirmed (``ok``) when the fast key is admissible on this D step and the second
+    key is in the fast key's alias group there (one thermometer read under two key names; the kit
+    derives the lexically first other member on the saved Part B classification). If the group
+    does not form, or the second key is outside it, the session refuses and the case goes to the
+    research lead: a pair of two different die keys is a different gate nobody has reviewed.
+    ``r0_classes`` is accepted for old callers and unused. ``sensor_admissibility`` is unchanged.
     """
     fast, slow = picks.get("s_fast"), picks.get("s_slow")
     group = next((g for g in classification.get("alias_groups", []) if fast in g), None)
     if group is not None and slow in group and slow != fast:
         # One thermometer read twice: only the fast key's own quality is tested.
-        result = sensor_admissibility(classification, {"s_fast": fast}, r0_keys)
-        reasons, basis = result["reasons"], "alias_group_of_fast_key"
+        reasons = list(sensor_admissibility(classification, {"s_fast": fast}, r0_keys)["reasons"])
     else:
-        result = sensor_admissibility(classification, picks, r0_keys)
-        reasons, basis = list(result["reasons"]), "admissible_die_key"
-        if group is not None and slow != fast:
-            reasons.append(f"s_slow: {slow} is not in the fast key's alias group {group} (RL-145)")
-        if r0_classes is not None and r0_classes.get(slow) != "die":
-            reasons.append(f"s_slow: {slow} is not an R0 die key (RL-145)")
+        reasons = [f"s_slow: {slow} is not in the fast key's alias group "
+                   f"{group if group is not None else '(no group formed)'}; a second key outside it refuses "
+                   "(RL-145 close, section 5)"]
+        if classification.get("reason"):
+            reasons.append(classification["reason"])
     return {"ok": not reasons, "reasons": reasons, **picks,
             "second_key_label": "near-die settling check", "authority": "RL-78",
-            "second_key_rule": "RL-145", "second_key_basis": basis}
+            "second_key_rule": "RL-145", "second_key_basis": "alias_group_of_fast_key"}
 
 
 def select_smoke_sensors(classification, r0_keys):
