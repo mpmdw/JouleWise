@@ -16,6 +16,8 @@ while IFS= read -r path; do
   case "$path" in
     # Directories that code or tests read by glob rather than by literal path: run everything.
     docs/registrations/*|docs/contracts/*|docs/process_traces/*|docs/null/*|docs/site/*) exit 1 ;;
+    # tests.test_d165_rationale_census scans every file under docs/paper/ (scripts/ci_state_only.sh runs it).
+    docs/paper/*) exit 1 ;;
     docs/*.md) ;;
     */*) exit 1 ;;
     *.md) ;;

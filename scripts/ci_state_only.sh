@@ -13,8 +13,11 @@
 #   docs/process/CURRENT.json  generated from RUN_STATE.md (scripts/gen_current.py)
 # Directories that are never class A, whatever greps say, because tests read them as data or by glob:
 #   docs/registrations docs/contracts docs/process docs/process_traces docs/null docs/site docs/site_src
-#   docs/unseals docs/report_src docs/campaign_packs, and docs/paper (tests.test_d165_rationale_census
-#   scans every file under docs/paper/ and is not in the quick tier).
+#   docs/unseals docs/report_src docs/campaign_packs.
+# Paper text (docs/paper/**, the same file types) is class A with a declared extra test: the whole tree
+# is scanned by tests.test_d165_rationale_census (not in the quick tier, 17 s hosted), so the range runs
+# it besides quick. The extra modules are printed on stdout, one per line, and EXTRA_TESTS below is the
+# declared map (path glob -> modules). A paper path any other test names still gets the full suite.
 # "No test reads it" is conservative and static, at the base and at the head of the range; a path is
 # refused when, in tests/, joulewise/, scripts/, configs/, .github/ or pyproject.toml, its full path
 # appears; or, in tests/ alone, its basename appears (tests join path parts, so full paths miss reads),
@@ -22,6 +25,10 @@
 # readers that are in the quick tier (test_docs_freshness globs docs/**/*.md) are covered by running it.
 # Any unplaceable path or detector error runs the full suite.
 set -u
+# Declared extra tests: "<path glob>|<module>". A range whose paths match runs these besides quick.
+EXTRA_TESTS=(
+  'docs/paper/*|tests.test_d165_rationale_census'
+)
 before=${1:-}; after=${2:-}
 [[ "$before" =~ ^[0-9a-f]{40}$ && "$before" != 0000000000000000000000000000000000000000 ]] || exit 1
 [[ "$after" =~ ^[0-9a-f]{40}$ && "$after" != 0000000000000000000000000000000000000000 ]] || exit 1
@@ -31,24 +38,29 @@ paths=$(git diff --name-only --no-renames "$before..$after") || exit 1
 [[ -n "$paths" ]] || exit 1
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/ci-class-a.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT
-: > "$tmp/full"; : > "$tmp/test_regex"
+: > "$tmp/full"; : > "$tmp/test_regex"; : > "$tmp/extra"
 esc() { printf '%s' "$1" | sed -e 's/[][\.*^$+?(){}|\\/]/\\&/g'; }
 while IFS= read -r path; do
   case "$path" in
     RUN_STATE.md|TASK_QUEUE.md|docs/process/CURRENT.json) continue ;;
     docs/registrations/*|docs/contracts/*|docs/process/*|docs/process_traces/*|docs/null/*|docs/site/*) exit 1 ;;
-    docs/site_src/*|docs/unseals/*|docs/report_src/*|docs/campaign_packs/*|docs/paper/*) exit 1 ;;
+    docs/site_src/*|docs/unseals/*|docs/report_src/*|docs/campaign_packs/*) exit 1 ;;
     docs/*.md|docs/*.svg|docs/*.png|docs/*.txt|docs/*.tsv) ;;
     */*) exit 1 ;;
     *.md) ;;
     *) exit 1 ;;
   esac
   [[ "$path" != *[[:cntrl:]]* ]] || exit 1
+  for entry in "${EXTRA_TESTS[@]}"; do
+    # shellcheck disable=SC2254
+    case "$path" in ${entry%%|*}) printf '%s\n' "${entry#*|}" >> "$tmp/extra" ;; esac
+  done
   base=${path##*/}
   printf '%s\n' "$path" >> "$tmp/full"
   printf '%s\n' "$base" >> "$tmp/base"
   dir=${path%/*}
-  while [[ "$dir" == */* ]]; do   # parent directories below the top-level one (docs, ...)
+  while [[ "$dir" == */* ]]; do   # (docs/paper itself is read only by the census, so it is not checked)
+    [[ "$dir" != docs/paper ]] || break   # parent directories below the top-level one (docs, ...)
     printf '%s/?(["'"'"'`)*, ]|$)\n' "$(esc "$dir")" >> "$tmp/test_regex"
     joined=$(printf '%s' "$dir" | awk -F/ '{ for (i = 1; i <= NF; i++) printf "%s[\"'"'"']%s[\"'"'"']", (i > 1 ? "[[:space:]]*[/,][[:space:]]*" : ""), $i }')
     printf '%s\n' "$(printf '%s' "$joined" | sed -e 's/\./\\./g')" >> "$tmp/test_regex"
@@ -66,4 +78,5 @@ for rev in "$before" "$after"; do
     [[ $? -eq 1 ]] || exit 1
   fi
 done
+sort -u "$tmp/extra"
 exit 0

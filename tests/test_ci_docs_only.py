@@ -76,7 +76,7 @@ class DocsOnlyClassifierTests(unittest.TestCase):
         self.assertEqual(self.classify({".github/workflows/ci.yml": "on: push\n"}), 1)
 
     def test_glob_read_docs_directories_run_tests(self):
-        for path in ("docs/registrations/b9.md", "docs/contracts/c.md", "docs/process_traces/t/r.md",
+        for path in ("docs/paper/new.md", "docs/paper/paper1/paper1.md", "docs/registrations/b9.md", "docs/contracts/c.md", "docs/process_traces/t/r.md",
                      "docs/null/n.md", "docs/site/s.md"):
             with self.subTest(path=path):
                 self.assertEqual(self.classify({path: "y\n"}), 1)
@@ -105,7 +105,9 @@ class StateOnlyClassifierTests(unittest.TestCase):
                     "docs/run_reports/2026-11-12-pr746-review.md": "x\n",
                     "docs/analysis/b5/edge-check-reading-rule.md": "x\n",
                     "docs/registrations/block6_freeze_by_commit_addendum.md": "x\n",
-                    "docs/paper/paper1/paper1.md": "x\n", "docs/read/by_path.md": "x\n",
+                    "docs/paper/paper1/paper1.md": "x\n", "docs/paper/paper1/fill_index.md": "x\n",
+                    "docs/paper/paper1/figures/f.svg": "<svg/>\n", "docs/paper/read_by_test.md": "x\n",
+                    "docs/paper/round7/r.md": "x\n", "docs/read/by_path.md": "x\n",
                     "docs/read/by_name.md": "x\n", "docs/readdir/other.md": "x\n",
                     "docs/readjoin/other.md": "x\n", "docs/readbase.md": "x\n", "docs/fig.svg": "<svg/>\n",
                     "CANONICAL.md": "x\n",
@@ -113,7 +115,9 @@ class StateOnlyClassifierTests(unittest.TestCase):
                                              "B = ROOT / 'docs' / 'x' / 'by_name.md'\n"
                                              "C = 'docs/readdir/'\n"
                                              "D = ROOT / \"docs\" / \"readjoin\"\n"
-                                             "E = ROOT / 'CANONICAL.md'\n")})
+                                             "E = ROOT / 'CANONICAL.md'\n"
+                                             "F = ROOT / 'docs' / 'paper' / 'read_by_test.md'\n"
+                                             "G = ROOT / 'docs' / 'paper' / 'round7'\n")})
         self.base = self.commit()
 
     def tearDown(self):
@@ -135,11 +139,15 @@ class StateOnlyClassifierTests(unittest.TestCase):
         return self.git("rev-parse", "HEAD")
 
     def classify(self, files, before=None):
+        return self.classify_full(files, before)[0]
+
+    def classify_full(self, files, before=None):
         self.git("checkout", "-q", self.base)
         self.write(files)
         after = self.commit()
-        return subprocess.run(["bash", str(STATE_SCRIPT), before or self.base, after], cwd=self.repo,
-                              env=self.env).returncode
+        result = subprocess.run(["bash", str(STATE_SCRIPT), before or self.base, after], cwd=self.repo,
+                                env=self.env, capture_output=True, text=True)
+        return result.returncode, result.stdout.split()
 
     def test_run_state_alone_is_state_only(self):
         self.assertEqual(self.classify({"RUN_STATE.md": "y\n"}), 0)
@@ -175,9 +183,40 @@ class StateOnlyClassifierTests(unittest.TestCase):
             with self.subTest(why=why):
                 self.assertEqual(self.classify({path: "y\n"}), 1)
 
-    def test_registration_paper_and_other_read_directories_run_everything(self):
+    CENSUS = "tests.test_d165_rationale_census"
+
+    def test_paper_text_is_class_a_with_the_census_as_declared_extra_test(self):
+        # Shape of PRs #716-#718: paper text plus fill index, figures and a run report.
+        self.assertEqual(self.classify_full({"docs/paper/new.md": "y\n", "docs/paper/paper1/fill_index.md": "y\n",
+                                             "docs/paper/paper1/figures/f.svg": "<svg>y</svg>\n",
+                                             "docs/run_reports/new.md": "y\n"}), (0, [self.CENSUS]))
+
+    def test_paper_text_with_state_records_names_the_census_once(self):
+        self.assertEqual(self.classify_full({"docs/paper/a.md": "y\n", "docs/paper/b.md": "y\n",
+                                             "RUN_STATE.md": "y\n"}), (0, [self.CENSUS]))
+
+    def test_ranges_without_paper_text_name_no_extra_test(self):
+        self.assertEqual(self.classify_full({"docs/notes.md": "y\n", "RUN_STATE.md": "y\n"}), (0, []))
+
+    def test_paper_text_read_by_another_test_runs_everything(self):
+        for path in ("docs/paper/read_by_test.md", "docs/paper/elsewhere/read_by_test.md",
+                     "docs/paper/round7/new.md"):
+            with self.subTest(path=path):
+                self.assertEqual(self.classify_full({path: "y\n"}), (1, []))
+
+    def test_paper_code_and_data_run_everything(self):
+        for path in ("docs/paper/paper1/fill_check_b5.py", "docs/paper/table.json", "docs/paper/protocol"):
+            with self.subTest(path=path):
+                self.assertEqual(self.classify_full({path: "y\n"})[0], 1)
+        self.assertEqual(self.classify_full({"docs/paper/new.md": "y\n", "joulewise/core.py": "x = 2\n"})[0], 1)
+
+    def test_declared_extra_test_exists(self):
+        self.assertTrue((SCRIPT.parents[1] / "tests" / "test_d165_rationale_census.py").is_file())
+        self.assertIn("'docs/paper/*|" + self.CENSUS + "'", STATE_SCRIPT.read_text(encoding="utf-8"))
+
+    def test_registration_and_other_read_directories_run_everything(self):
         for path in ("docs/registrations/block6_freeze_by_commit_addendum.md", "docs/registrations/new.md",
-                     "docs/paper/paper1/paper1.md", "docs/paper/new.md", "docs/contracts/c.md",
+                     "docs/contracts/c.md",
                      "docs/process/NIGHT_HANDBACK.md", "docs/process_traces/t/r.md", "docs/unseals/u.md",
                      "docs/site/s.md", "docs/null/n.md", "docs/campaign_packs/p.md"):
             with self.subTest(path=path):
@@ -231,8 +270,10 @@ class StateOnlyWorkflowTests(unittest.TestCase):
     def test_workflow_wires_the_classifier_into_the_quick_job(self):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn('git show "$before:scripts/$1" | bash -s -- "$before" "$after"', text)
-        self.assertIn("elif classify ci_state_only.sh; then", text)
+        self.assertIn("elif extra=$(classify ci_state_only.sh); then", text)
         self.assertIn("state: ${{ steps.paths.outputs.state || 'false' }}", text)
+        self.assertIn("extra: ${{ steps.paths.outputs.extra || '' }}", text)
+        self.assertIn("run: python3 -m unittest $EXTRA_TESTS", text)
         self.assertIn("if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'\n"
                       "        run: python3 scripts/quick_suite.py --tier quick --workers 4", text)
 

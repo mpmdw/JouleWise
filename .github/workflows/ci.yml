@@ -43,6 +43,12 @@ jobs:
       - name: Quick test tier
         if: needs.changes.outputs.code == 'true' || needs.changes.outputs.state == 'true'
         run: python3 scripts/quick_suite.py --tier quick --workers 4
+      # Declared extra tests of a class A range (EXTRA_TESTS in scripts/ci_state_only.sh).
+      - name: Class A extra tests
+        if: needs.changes.outputs.extra != ''
+        env:
+          EXTRA_TESTS: ${{ needs.changes.outputs.extra }}
+        run: python3 -m unittest $EXTRA_TESTS
 
   # Select interpreters and skip expensive jobs only for proven docs-only ranges.
   changes:
@@ -51,6 +57,7 @@ jobs:
       pythons: ${{ steps.interpreters.outputs.pythons || '["3.13"]' }}
       code: ${{ steps.paths.outputs.code || 'true' }}
       state: ${{ steps.paths.outputs.state || 'false' }}
+      extra: ${{ steps.paths.outputs.extra || '' }}
     steps:
       - name: Select Python interpreters
         id: interpreters
@@ -88,13 +95,20 @@ jobs:
             git cat-file -e "$before:scripts/$1" 2>/dev/null || return 1
             git show "$before:scripts/$1" | bash -s -- "$before" "$after"
           }
-          code=true; state=false
-          if classify ci_docs_only.sh; then
+          code=true; state=false; extra=
+          if classify ci_docs_only.sh >/dev/null; then
             code=false
-          elif classify ci_state_only.sh; then
+          elif extra=$(classify ci_state_only.sh); then
             code=false; state=true
+            # Declared extra test modules, one per line; anything else fails closed.
+            if [[ -n "$extra" ]] && grep -qvE '^tests\.[A-Za-z0-9_.]+$' <<< "$extra"; then
+              code=true; state=false; extra=
+            fi
+            extra=${extra//$'\n'/ }
+          else
+            extra=
           fi
-          printf 'code=%s\nstate=%s\n' "$code" "$state" >> "$GITHUB_OUTPUT"
+          printf 'code=%s\nstate=%s\nextra=%s\n' "$code" "$state" "$extra" >> "$GITHUB_OUTPUT"
 
   # F2 state generation, F4 historical receipt semantics, and F5 CLI/strict
   # mock smokes ran identically inside every ordinary test-matrix shard; they
