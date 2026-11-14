@@ -11,7 +11,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # A state-only range (scripts/ci_state_only.sh) sets code=false, so every
+  # A class A range (RL-144: state records, or documentation no test reads;
+  # scripts/ci_state_only.sh, which keeps its name for the base-commit lookup) sets code=false, so every
   # shard and exclusive job reports success without running, and state=true,
   # so this job still runs the quick tier. The modules that read the live
   # state files (test_gen_state, test_gen_current, test_docs_freshness) are
@@ -74,8 +75,8 @@ jobs:
         run: |
           # Only a successful, non-empty, unreferenced docs-only diff may suppress tests
           # (scripts/ci_docs_only.sh; tests/test_ci_docs_only.py). A state-only diff
-          # (scripts/ci_state_only.sh; also tested in tests/test_ci_docs_only.py) runs the
-          # plain quick tier and fences instead of the shards. Errors run CI.
+          # (scripts/ci_state_only.sh, class A: state records or unread documentation; also tested in
+          # tests/test_ci_docs_only.py) runs the plain quick tier and fences instead of the shards. Errors run CI.
           before=; after=
           case "${GITHUB_EVENT_NAME:-}" in
             push) before=${GITHUB_EVENT_BEFORE:-}; after=${GITHUB_SHA:-} ;;

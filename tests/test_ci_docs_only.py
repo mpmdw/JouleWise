@@ -1,5 +1,6 @@
 """The CI range classifiers: docs-only (scripts/ci_docs_only.sh) suppresses tests only for
-unreferenced Markdown; state-only (scripts/ci_state_only.sh) admits only the state records."""
+unreferenced Markdown; class A (scripts/ci_state_only.sh, RL-144 term 1) admits the state records and
+documentation no test reads, and runs the quick tier and fences instead of the shards."""
 import os
 import subprocess
 import tempfile
@@ -91,6 +92,8 @@ class DocsOnlyClassifierTests(unittest.TestCase):
 
 
 class StateOnlyClassifierTests(unittest.TestCase):
+    """Class A: state records, plus documentation that no test reads (full path, basename, parent dir)."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.repo = Path(self.tmp.name)
@@ -98,7 +101,19 @@ class StateOnlyClassifierTests(unittest.TestCase):
                     "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
         init_git_fixture(self.repo, "-q")
         self.write({"RUN_STATE.md": "x\n", "TASK_QUEUE.md": "x\n", "docs/process/CURRENT.json": "{}\n",
-                    "docs/notes.md": "x\n", "joulewise/core.py": "x = 1\n"})
+                    "docs/notes.md": "x\n", "joulewise/core.py": "x = 1\n",
+                    "docs/run_reports/2026-11-12-pr746-review.md": "x\n",
+                    "docs/analysis/b5/edge-check-reading-rule.md": "x\n",
+                    "docs/registrations/block6_freeze_by_commit_addendum.md": "x\n",
+                    "docs/paper/paper1/paper1.md": "x\n", "docs/read/by_path.md": "x\n",
+                    "docs/read/by_name.md": "x\n", "docs/readdir/other.md": "x\n",
+                    "docs/readjoin/other.md": "x\n", "docs/readbase.md": "x\n", "docs/fig.svg": "<svg/>\n",
+                    "CANONICAL.md": "x\n",
+                    "tests/test_reader.py": ("A = 'docs/read/by_path.md'\n"
+                                             "B = ROOT / 'docs' / 'x' / 'by_name.md'\n"
+                                             "C = 'docs/readdir/'\n"
+                                             "D = ROOT / \"docs\" / \"readjoin\"\n"
+                                             "E = ROOT / 'CANONICAL.md'\n")})
         self.base = self.commit()
 
     def tearDown(self):
@@ -135,8 +150,55 @@ class StateOnlyClassifierTests(unittest.TestCase):
     def test_task_queue_is_state_only(self):
         self.assertEqual(self.classify({"TASK_QUEUE.md": "y\n"}), 0)
 
-    def test_state_with_docs_runs_everything(self):
-        self.assertEqual(self.classify({"RUN_STATE.md": "y\n", "docs/notes.md": "y\n"}), 1)
+    def test_state_with_unread_docs_is_class_a(self):
+        self.assertEqual(self.classify({"RUN_STATE.md": "y\n", "docs/notes.md": "y\n"}), 0)
+
+    def test_pr746_file_list_is_class_a(self):
+        # Real PR #746: a b5 reading rule and its review report.
+        self.assertEqual(self.classify({"docs/analysis/b5/edge-check-reading-rule.md": "y\n",
+                                        "docs/run_reports/2026-11-12-pr746-review.md": "y\n"}), 0)
+
+    def test_new_run_report_and_state_records_are_class_a(self):
+        # Shape of PR #712's report files plus the state records the lead appends.
+        self.assertEqual(self.classify({"docs/run_reports/2026-11-13-new.md": "y\n", "RUN_STATE.md": "y\n",
+                                        "TASK_QUEUE.md": "y\n", "docs/fig.svg": "<svg>y</svg>\n"}), 0)
+
+    def test_docs_read_by_a_test_run_everything(self):
+        cases = {
+            "full path named in a test": "docs/read/by_path.md",
+            "basename named in a test (path parts are joined)": "docs/elsewhere/by_name.md",
+            "parent directory named in a test": "docs/readdir/new.md",
+            "parent directory joined from quoted parts in a test": "docs/readjoin/new.md",
+            "root document named in a test": "CANONICAL.md",
+        }
+        for why, path in cases.items():
+            with self.subTest(why=why):
+                self.assertEqual(self.classify({path: "y\n"}), 1)
+
+    def test_registration_paper_and_other_read_directories_run_everything(self):
+        for path in ("docs/registrations/block6_freeze_by_commit_addendum.md", "docs/registrations/new.md",
+                     "docs/paper/paper1/paper1.md", "docs/paper/new.md", "docs/contracts/c.md",
+                     "docs/process/NIGHT_HANDBACK.md", "docs/process_traces/t/r.md", "docs/unseals/u.md",
+                     "docs/site/s.md", "docs/null/n.md", "docs/campaign_packs/p.md"):
+            with self.subTest(path=path):
+                self.assertEqual(self.classify({path: "y\n"}), 1)
+
+    def test_code_unknown_and_machine_readable_paths_run_everything(self):
+        for path in ("joulewise/core.py", "tests/test_new.py", "scripts/tool.sh", "configs/x.json",
+                     ".github/workflows/ci.yml", "docs/tool.py", "docs/table.json", "docs/data.csv",
+                     "docs/run_reports/derived.json", "unknown.txt", "pyproject.toml", "sub/notes.md",
+                     "docs/noext", "package.json"):
+            with self.subTest(path=path):
+                self.assertEqual(self.classify({path: "y\n"}), 1)
+
+    def test_one_unclassifiable_path_runs_everything(self):
+        self.assertEqual(self.classify({"docs/notes.md": "y\n", "docs/unknown.bin": "y\n"}), 1)
+
+    def test_a_reference_added_in_the_range_runs_everything(self):
+        self.assertEqual(self.classify({"docs/notes.md": "y\n", "tests/test_new.py": "P = 'notes.md'\n"}), 1)
+
+    def test_a_reference_removed_in_the_range_runs_everything(self):
+        self.assertEqual(self.classify({"docs/read/by_path.md": "y\n", "tests/test_reader.py": "pass\n"}), 1)
 
     def test_state_with_code_runs_everything(self):
         self.assertEqual(self.classify({"RUN_STATE.md": "y\n", "joulewise/core.py": "x = 2\n"}), 1)
