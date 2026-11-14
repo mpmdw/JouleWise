@@ -1042,6 +1042,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+310. **Magistrate 823a43f6 (headless, Opus 5.5), 2026-11-13 17:20 PST (`date`): THE SLOT-PRODUCING R1 FOLLOW-UP NIGHT COMPLETED (chain exit 0, 17:04 PST; D-7 packet matches) BUT PRODUCES NO SLOTS. It goes to the RESEARCH LEAD under item 306 dispositions 1, 3 and 8: (1) TVh0 is inadmissible on D under clause D1(b) (max one-second change 25.0 °C > half the step rise, 24.70 °C), which is the 5 °C staircase of item 308; (3) the duty bar FAILS: D_bank admitted 2 turns, gates + holds 621 s = 0.62 × T_dead, and the deadman stopped it (X7). So no slots are entered, W1 does not sign, and no further night is armed. Planning turns R+0/R+2/R+4 all fit the 3(a) pattern. A-B-A `not_adopted` as expected. Restored: uninstalled, powermode 0, network time OFF, frequency word 0. Nothing is armed. Record: `docs/process_traces/2026-11-13-w1-slot-night/AFTER-NIGHT-823a43f6.md`.**
+
+```pointer
+owner: research lead
+wait: the research lead's ruling on the R1 follow-up night (TVh0 D1(b) inadmissibility; duty-bar failure in D_bank: H holds 536.5 s inside one decode turn, X7 deadman)
+next_observable: a research-lead ruling (RL-1xx) naming the next step for the second key and the duty bar; the lead brings the journal table (disposition 3). The magistrate arms nothing until a RUN_STATE item authorizes a night
+```
+
+- **Night:** plan `align-r1-20261113T1508Z`, custody `S=/Users/edr/night-align/r1fu-20261113T144743Z`, `r1_result.json` `status complete` (sha256 `8df1bdd1…8fed`), `chain_wall_s` 35,194, `executed_commit` `a6a09e6d7…`. Results ref `night-results/align-r1-20261113T1508Z` @ `61f88049a`. KM003C capture present (35,515 s, 0 bad, 0 USB errors).
+- **Restore (runbook §4):** `arm_align_r1.py uninstall` rc 0; only `com.joulewise.magistrate` loaded; powermode 0; no stray monitor or powermetrics. Network time: the driver set it ON at 17:04:47; at 17:07:38 it was set OFF again, and `zero.py` changed freq from −188706 to 0; 120 s rate +0.012 ppm. Canonical root fast-forwarded to `a5c698e51`.
+- **For the lead's desk:** `align_r1_followup_kit.py desk` refuses on this night by design (`RL-78: picked sensors inadmissible on night D`). The 3(a) desk print (`215e048ed`, run read-only) and a per-G0 RL-90 table are beside the record. The ticker statistic was not computed. Nothing from `r1_slots.json` was read or committed.
+- **Also for the research lead:** D_spam_b's G0 released at slope +0.211 °C/min (bar ±0.2), and every D-member TVh0 release is 35.000 (staircase-pinned). The 30B record-only thermometry flags `r1.sensor_pick_changed` (`s_slow` Th06).
+
 309. **Laptop lead (interactive, Opus 5.5), 2026-11-13 16:52 PST (`date`): BLOCK 6: ED'S OK ON RECORD (release condition 11) AND THE RL-6 (d) CALL (condition 10). Recorded BEFORE any Block 6 outcome is read. Nothing on the MBP is touched; the armed session stands.**
 
 - **Ed's OK (in session).** 2026-11-13 08:45 PST: unblind Block 6 today, conditional on every RL-134 pre-release check passing (gate, dry run within its stop, structure probe and term 7 with no stop, the digest and census release check); any stop holds the release. Renewed 14:30 PST after the first dry run's hold (RL-142): release today if every RL-134 check passes on r2; any further stop moves it to tomorrow and to the research lead.
