@@ -1,120 +1,132 @@
 # JouleWise
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero-dark.svg">
-    <img alt="JouleWise: an illustrative power trace of one LLM request, split into a short prefill burst and a long decode plateau" src="docs/assets/readme/hero-light.svg" width="100%">
-  </picture>
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero-dark.svg">
+  <img alt="What a laptop’s power counters can resolve: an open, pre-registered, blinded instrument for the energy of local LLM inference on Apple Silicon" src="docs/assets/readme/hero-light.svg" width="100%">
+</picture>
 
-<p align="center">
-  <b>A pre-registered, blinded instrument for measuring the energy of local LLM inference,<br>
-  one that reports what it can resolve, refuses what it cannot, and traces every number to raw evidence.</b>
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/lines-dark.svg">
+  <img alt="Three research lines: phase energy (released and replicated), BYTES (lines committed, held-out models sealed) and the energy tripwire (registration and calibration)" src="docs/assets/readme/lines-light.svg" width="100%">
+</picture>
 
-<p align="center">
-  <img alt="Apple Silicon" src="https://img.shields.io/badge/hardware-Apple%20M3%20Max-1D2433?style=flat-square">
-  <img alt="MLX" src="https://img.shields.io/badge/runtime-MLX-2E9E8F?style=flat-square">
-  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square">
-  <img alt="Pre-registered" src="https://img.shields.io/badge/analysis-pre--registered%20%C2%B7%20blinded-C2410C?style=flat-square">
-  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-5B6476?style=flat-square"></a>
-</p>
+## The question
 
----
+A language model answers a request in two phases. In **prefill** it reads the whole prompt at once, which is mostly
+arithmetic over many tokens. In **decode** it writes the answer one token at a time, and each token is a full pass
+over the weights, which is mostly memory traffic. The two phases cost energy for different reasons, so their energies
+answer different questions, from the price of a long prompt to the price of a long answer.
 
-## Why this exists
+A laptop already carries power sensors: macOS's `powermetrics` reports the chip's power with no extra hardware. But
+it reports *averages over records* of about a tenth of a second, and those records don't line up with the instant
+prefill ends and decode begins. So JouleWise treats the instrument's limits as results. Every phase energy carries an
+interval, an **attribution floor** (how far timing alone could move it), a **detection floor** (the smallest real
+difference the instrument can see) and a **dominance ratio** (whether timing, rather than noise, sets that floor).
 
-Every token a language model writes costs energy, and a laptop already carries the sensors to measure it.
-The hard part is honesty. A software power sampler reports *averages* over records about a tenth of a second
-long, clocks drift, the operating system wakes up at inconvenient moments, and a warm chip draws different
-power from a cold one. It is easy to produce a confident number that the instrument cannot actually support.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig1-boundaries-dark.svg">
+  <img alt="Figure 1: wall socket, 140 W adapter, KM003C meter at the DC input boundary, and inside the MacBook Pro the processor rails measured by powermetrics" src="docs/assets/readme/fig1-boundaries-light.svg" width="100%">
+</picture>
 
-JouleWise treats those limits as part of the result. Each reported energy comes with how far timing alone could
-have moved it, the smallest difference the setup can tell apart from nothing, and a written reason whenever it
-declines to report at all.
+Paper 1 measures on the **processor rails** and never calls that wall or system energy. The meter between charger and
+laptop is a descriptive cross-check there and a primary boundary for BYTES.
 
-<table>
-<tr>
-<td width="33%" valign="top">
+## Splitting a record between phases
 
-### ⚡ Measure
-Run open models locally on Apple Silicon. Record processor power from `powermetrics` and whole-machine input
-power from a USB-C meter between the wall adapter and the laptop. Split energy into **prefill** (reading the
-prompt) and **decode** (writing the answer).
+Each power record contributes its average power times its overlap with a phase. Records wholly inside a phase count in
+full, and a record that straddles the edge counts in proportion. The result is an *assigned* phase energy, not a
+bound on the physical one. Moving the edge within the session's timing bound moves energy between the phases, and the
+largest such movement is printed as the **attribution floor**.
 
-</td>
-<td width="33%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig2-phase-split-dark.svg">
+  <img alt="Figure 2: schematic trace of eight sampler records across a prefill and a decode phase, with the assigned edge and its timing band" src="docs/assets/readme/fig2-phase-split-light.svg" width="100%">
+</picture>
 
-### 🛑 Refuse
-Every check is a gate. A session whose clock fit, thermal state, battery state or background load falls
-outside its registered limits is **refused with a named reason**, and kept and disclosed rather than
-quietly dropped.
+Phase edges and power records sit on one timeline only after calibration. Before the first run of every session and
+after the last, the GPU is driven through 59 commanded one-second pulses, and how far the sampler sees those edges
+from where they were commanded sets the session's timing bound (about 45–49 ms in Block 5).
 
-</td>
-<td width="33%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig3-session-dark.svg">
+  <img alt="Figure 3: one session: settle, opening pulse calibration, reference runs, decode half, midpoint, prefill half, closing calibration" src="docs/assets/readme/fig3-session-light.svg" width="100%">
+</picture>
 
-### 🔗 Trace
-Each run is an immutable **bundle** (config, events, raw power trace, outputs, summary). Strict validation
-re-derives every summary from the raw records, and an independent recompute checks the core arithmetic.
+## Comparing two models: the quad
 
-</td>
-</tr>
-</table>
+Models are compared in **quads** ordered 1.7B, 8B, 8B, 1.7B, each giving one difference
+d = (B₁ + B₂)/2 − (A₁ + A₂)/2. The fixed order cancels a steady drift exactly. A curved drift doesn't cancel, which
+is why each session also carries reference requests and a drift allowance.
 
-## Research lines
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig4-quad-dark.svg">
+  <img alt="Figure 4: linear drift cancels in the quad, curved drift leaves a 2 J error" src="docs/assets/readme/fig4-quad-light.svg" width="100%">
+</picture>
 
-| | Question | Where it stands |
-|---|---|---|
-| **Phase energy** | How finely can a laptop's own power counters divide inference energy between prefill and decode? | Primary block and a nine-session replication collected blind and released; written up in [Paper 1](docs/paper/paper1/paper1.md) |
-| **BYTES** | Does decode energy per token follow the bytes a model reads per token, its resident size, or its decode time? Lines fixed on dense models are committed before held-out models, including mixture-of-experts, are unblinded. | Registered; the held-out unblinding is pending |
-| **The energy tripwire** | *An agent can edit its own logs; it cannot edit the joules it drew from the wall.* Does sabotage by an LLM agent leave an energy signature beyond what its own log explains? | Protocol v4 on SHADE-Arena task pairs: registration and calibration in progress, no outcome opened. Overview: [the energy tripwire](docs/research/energy-tripwire.html) |
+## What it found
 
-## How a measurement works
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig5-results-dark.svg">
+  <img alt="Figure 5: decode contrast +146.6 J [141.4, 151.9] against a floor of 10.18 J; prefill contrast +101.8 J [95.8, 107.8] against a floor of 8.83 J" src="docs/assets/readme/fig5-results-light.svg" width="100%">
+</picture>
 
-```mermaid
-flowchart LR
-    A["Frozen plan<br/>(rules sealed before data)"] --> B["Unattended session<br/>on a quiet laptop"]
-    B --> C["MLX runtime<br/>runs the model"]
-    B --> D["powermetrics<br/>+ USB-C meter"]
-    C --> E["Run bundle<br/>(immutable)"]
-    D --> E
-    E --> F["Strict validation<br/>& independent recompute"]
-    F --> G{"Every gate<br/>passes?"}
-    G -- "no" --> H["Refusal<br/>with a named reason"]
-    G -- "yes" --> I["Blinded desk<br/>(counts, never energies)"]
-    I --> J["Registered analysis<br/>then release"]
-```
+Both contrasts are **direction supported** at claim level L2, about 11–14 times their detection floors. About 94–96 %
+of each interval's width is the deterministic timing bound, not run-to-run scatter, so this instrument's limit is
+phase-edge timing. That an 8B model uses more energy than a 1.7B one is not news, and the paper does not present it
+as news: the contrast is a known-direction test of the instrument. **The registered replication (Block 6, nine
+further sessions) gave the same outcome word and sign in each of its three contrast sessions.**
 
-1. **Plan first.** What is measured, which checks remove a session and how the numbers are analysed are frozen
-   and reviewed before any data exist.
-2. **Collect unattended.** A launchd job arms a session on the measurement laptop, waits for thermal and idle
-   conditions, and runs a fixed list of model requests between opening and closing calibrations.
-3. **Check blind.** A desk program decides whether each session counts by reading only counts and check
-   results. Nobody looks at a measured energy until the registered analysis is written and reviewed.
-4. **Release.** Results are opened in the registered order, with deviations logged publicly.
-
-## What it has found so far
-
-From [Paper 1](docs/paper/paper1/paper1.md), on an M3 Max with MLX and `powermetrics` processor rails, from one
-session per model. These are gross energy per request with intervals, and are instrument results (L1): phase
-attribution was not checked by an independent instrument.
-
-| Model (4-bit) | Decode, 512 tokens | Prefill, 2,048 tokens |
+| Gross energy per request, processor rails | Decode, 512 tokens | Prefill, 2,048 tokens |
 |---|---:|---:|
-| Qwen3-1.7B | 51.21 J [48.92, 53.49] | 26.25 J [23.32, 29.19] |
-| Qwen3-8B | 198.36 J [195.23, 201.49] | 128.28 J [125.19, 131.38] |
+| Qwen3-1.7B (4-bit) | 51.21 J [48.92, 53.49] | 26.25 J [23.32, 29.19] |
+| Qwen3-8B (4-bit) | 198.36 J [195.23, 201.49] | 128.28 J [125.19, 131.38] |
 
-Both registered contrasts came out *direction supported* (the larger model used more phase energy), and both
-replicated: each of the three replication contrast sessions gave the primary session's outcome word and sign.
-The paper, its figures and the exact registered wording are the authority; this table only points to them.
+One session per model, instrument results (L1); phase attribution was not checked by an independent instrument. The
+paper, [`docs/paper/paper1/paper1.md`](docs/paper/paper1/paper1.md), is the authority for every number here.
 
-## How the work is run
+## Blinding, release and an independent recomputation
 
-The study is run by a pipeline of AI agents under human direction. Builders write code. Separate reviewers
-execute it and attack it with mutants. A research lead rules on design questions in a public decision log. A
-resident "magistrate" on the measurement laptop arms sessions and reports by email. The controls that keep
-agents from changing what is measured, or how, are part of the method, and Paper 1 describes where they held
-and where they failed.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig6-pipeline-dark.svg">
+  <img alt="Figure 6: register and seal, collect blind, pin the analysis, recompute independently, blinded comparison, unseal" src="docs/assets/readme/fig6-pipeline-light.svg" width="100%">
+</picture>
+
+The counting rules, exclusions, estimators and even the result sentences were sealed before the first session armed.
+Energies stayed hidden until a recorded release, and the paper was drafted blind with a placeholder for every number.
+
+## Part 2, BYTES: what drives decode energy per token?
+
+Each decode pass reads the weights it uses. Energy per pass might follow the **bytes read per token**, the **resident
+size**, or the **decode time**. On dense models the first two are nearly equal; mixture-of-experts models read far
+fewer bytes than they hold, which is what lets the study tell the hypotheses apart. The rival lines were fitted on
+three dense models and committed on 12 November 2026, before any held-out model was analysed. The seven held-out models
+remain sealed.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/fig7-bytes-dark.svg">
+  <img alt="Figure 7: ten BYTES models on log axes of bytes read per token against bytes held; dense models on the diagonal, three mixture-of-experts models far above" src="docs/assets/readme/fig7-bytes-light.svg" width="100%">
+</picture>
+
+## Next: the energy tripwire
+
+*An agent can edit its own logs. It cannot edit the joules it drew from the wall.* The same instrument, extended with
+the whole-machine meter and thermal gating, asks whether an LLM agent doing covert work in
+[SHADE-Arena](https://arxiv.org/abs/2506.15740) leaves an energy signature beyond what its own log explains. Protocol
+v4 is in registration and calibration; no outcome has been opened. Overview:
+[`docs/research/energy-tripwire.html`](docs/research/energy-tripwire.html).
+
+## How the research is run
+
+The study is run by AI agents under human direction, and Paper 1 reports that as part of the method, including the
+failures its controls did and did not catch. A lead session on an analysis laptop plans and builds. A headless
+**magistrate** on the measurement Mac does one step at a time and exits before any capture, because no AI process may
+run while power is measured. A research-lead model rules on design and paper text in a public decision log. Every
+change gets an executing cold review that reruns the code, and independent re-implementations check the analyses. Ed
+keeps scope, authorship and every unseal.
+
+**What this does not claim.** All measurements come from one laptop, one operating-system build per session, one
+inference framework and one sampler. The decode workload uses one fixed prompt and the prefill workload one prompt
+length. Nothing here is a statement about other prompts, models, machines or boundaries.
 
 ## Quick start (mock target, no hardware needed)
 
