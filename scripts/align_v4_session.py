@@ -996,10 +996,15 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     # MED-4: per-member DC residuals print for BENIGN members only; sabotage (any non-benign)
     # members' DC rows are sealed (hash only) until the v5 addendum registers.
     dc = km003c.seal_non_benign(dc, plan['members'])
+    # Desk release guard (protocol B0/B2/B9/R27): before release a C or T window prints no member's DC row.
+    from joulewise.align.apple import v4_desk_seal
+    sealed_scope = v4_desk_seal.sealed_scope(state)
+    if sealed_scope in ('C', 'T'):
+        dc = v4_desk_seal.seal_dc(dc, plan['members'])
     for rid, row in dc['members'].items():
         if row.get('sealed'):
             print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
-                  ('status', 'sealed', 'sealed_sha256', 'flags')}, sort_keys=True))
+                  ('status', 'sealed', 'sealed_sha256', 'sealed_hmac_sha256', 'flags') if k in row}, sort_keys=True))
         else:
             print(f'{rid} {km003c.LABEL}: ' + json.dumps({k: row[k] for k in
                   ('status', 'dc_in_energy_j', 'dc_in_delta_j', 'dc_in_residual_j', 'flags')}, sort_keys=True))
@@ -1070,17 +1075,34 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     # R22-3: the printed balance check by condition (exclusions + flags per member-second); print only.
     from joulewise.align.apple import v4_balance
     report['balance_check'] = v4_balance.balance_check(records)
-    for line in v4_balance.lines(report['balance_check']):
+    seal_balance = v4_desk_seal.seals_balance(state)
+    if seal_balance:
+        # Member exposure is member time, an outcome by condition (RL-149 section 3): withheld until release.
+        report['balance_check'] = v4_desk_seal.seal_balance(report['balance_check'])
+    for line in (v4_desk_seal.balance_lines(report['balance_check']) if seal_balance
+                 else v4_balance.lines(report['balance_check'])):
         print(line)
     if supplemental_report(records):
         report['supplemental_sentinels'] = supplemental_report(records)
     checks.update(light_triage.u_checks(report['thermal']))
     checks['v4_B_bar'] = battery_windows_pass(report['registration_diagnostics']['battery_windows'])
     for name, row in report['registration_diagnostics']['battery_windows'].items():
+        row = v4_desk_seal.battery_print_row(state, row, plan['members'])      # PR #774 Sol F5
         print(f'{name} battery: '+json.dumps({k: row[k] for k in
               ('B_count', 'unobserved_count', 'assist_count', 'bar_pass', 'consequence')}, sort_keys=True))
     checks['v4_D_cohort'] = report['registration_diagnostics']['d_cohort']['instrument_ok']
     window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
+    if window_id == 'W1':
+        # RL-149 section 1.5 tripwire, evaluated over all six D members in memory; only the verdict prints
+        # (RL-151 section 4 C2).
+        report['w1_g1_tripwire'] = v4_desk_seal.w1_g1_tripwire(records)
+        print('W1 D G1 timeout tripwire (RL-149 section 1.5): ' + report['w1_g1_tripwire']['verdict'])
+    if sealed_scope is not None:
+        # RL-152 section 3.4: the tool-path and unlisted-code lines (in memory; one fact each).
+        trip, lines = v4_desk_seal.tripwires(records, sealed_scope, v4_desk_seal._nonbenign(plan['members']))
+        report.update(trip)
+        for line in lines:
+            print(line)
     if window_id != 'W1':
         # RUN_STATE 226 R15: the desk's provisional counts. The final adjudication
         # may lower them, never raise them (align_v4_series.calibration_rows).
@@ -1105,10 +1127,20 @@ def desk(session_root, **kwargs):
     kwargs.setdefault('extra_checks', powermode_desk_check)
     from joulewise.align.apple import v4_contention
     kwargs.setdefault('exclusion_policy', v4_contention.split_codes)      # R22-1: contention is disclosure-only
-    status = pilot.desk(session_root, **kwargs)
+    # Desk release guard (desk-leak audit 2026-11-13; protocol B0/B2/B9/B7, DC seal, R27/A25): before the
+    # registered release event a C/T desk prints and records only the allowlist; W1 its configured scope.
+    from joulewise.align.apple import v4_desk_seal
+    if kwargs.get('print_policy') is None:          # an explicit None installs the guard (PR #774 Sol F1)
+        kit_path = kwargs['kit']
+        kwargs['print_policy'] = v4_desk_seal.desk_policy(state, lambda: pilot._member_rows(state, kit=kit_path))
+    seal = kwargs['print_policy']
+    # Withheld digests made inside this desk (the extra checks' prints included) use the seal's own key.
+    with v4_desk_seal.keyed(getattr(seal, 'key', None)):
+        status = pilot.desk(session_root, **kwargs)
     # Evidence-aware full-desk verdict (ruling 9) beside the common desk status.
     try:
-        members = pilot.h.read(status['pilot']).get('members', [])
+        full = getattr(seal, 'full', None)
+        members = full['members'] if full is not None else pilot.h.read(status['pilot']).get('members', [])
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         members = None
     removed = [m.get('run_id') for m in members or () if charging_only_exclusion(m)]

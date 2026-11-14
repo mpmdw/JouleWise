@@ -206,17 +206,27 @@ def cmd_triage(args, run=subprocess.run):
         raise ValueError('light triage refused: ' + str(report.get('registration_error')))
     rows = _plan_rows(state)
     captured = {row['run_id'] for row in rows if (runs_root / row['run_id']).is_dir()}
-    eligibility = light_triage.member_eligibility(report['thermal']['members'], rows, captured=captured, final=False)
+    # Desk release guard (protocol B0/B2/B9/R27; RL-149 section 3, RL-151 section 4): the triage's record source
+    # carries the same thermal and meter sections the sealed desk records (the allowlist the packet builder
+    # reads), never member energy, and its verdicts are computed from that sealed section, so an exclusion's
+    # suffix text never reaches the eligibility reasons (RL-151 C1(a)).
+    from joulewise.align.apple import v4_desk_seal
+    scope = v4_desk_seal.sealed_scope(state)
+    thermal, meter = report['thermal'], report.get('km003c')
+    if scope is not None:
+        sealed = v4_desk_seal.seal_extra({'thermal': thermal, 'km003c': meter}, rows, scope)
+        thermal, meter = sealed['thermal'], sealed['km003c']
+    eligibility = light_triage.member_eligibility(thermal['members'], rows, captured=captured, final=False)
     result = {'schema': light_triage.SCHEMA, 'window': args.window_id,
-              'thermal_escalation': light_triage.thermal_escalation(report['thermal'],
+              'thermal_escalation': light_triage.thermal_escalation(thermal,
                                                                      ladder_recorded=args.ladder_recorded),
               'member_eligibility': eligibility,
               'calibration_row': light_triage.calibration_row(args.window_id, rows, eligibility),
               'series_desk_row': report.get('series_desk_row'),
               # The desk's own checks without harvest codes (v4_B_bar for the arm's battery_window row)
               # and its SECONDARY meter tabulation, both read by the packet builder (R17).
-              'checks': checks, 'km003c': report.get('km003c'),
-              'thermal': report['thermal']}
+              'checks': checks, 'km003c': meter,
+              'thermal': thermal}
     if args.out:
         # The record source the arm's packet builder reads for the provisional adjudication (R17).
         from joulewise.align.apple.pilot_analysis import finite_json

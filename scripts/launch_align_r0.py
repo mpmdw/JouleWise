@@ -57,6 +57,18 @@ def r1_part_caps() -> dict[str, float]:
     return {"A": rt.SMOKE_ADMISSION_S + 120, "B": rt.SMOKE_ADMISSION_S + post_g0 + 120}
 
 
+def r1_part_c_cap_s() -> float:
+    """RL-145 addendum Part C: Part B's span (the 30B predecessor and a full step-D), then the gated
+    D_bank member and X_G, each bounded by the runtime's member cap, plus 120 s each for start-up
+    and the result writes."""
+    repo = Path(__file__).resolve().parents[1]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from joulewise.align.apple import r1_runtime as rt
+
+    return r1_part_caps()["B"] + 2 * (rt.MEMBER_CAP_S + 120)
+
+
 def r1_soak_cap_s() -> float:
     """RL-94 fresh soak: the night's idle_soak duration plus the runtime's
     own 30 s child margin and 120 s for start-up and the reference write."""
@@ -69,7 +81,7 @@ def r1_soak_cap_s() -> float:
 
 
 def r1_minimum_seconds(parts: str = "AB", fresh_soak: bool = False) -> float:
-    caps = r1_part_caps()
+    caps = {**r1_part_caps(), "C": r1_part_c_cap_s() if "C" in parts else 0}
     return (sum(caps[p] for p in parts) + (r1_soak_cap_s() if fresh_soak else 0)
             + DISPLAY_SLEEP_DWELL_S + 2 * R1_CLEANUP_GRACE_S + 10)
 
@@ -292,6 +304,8 @@ def launch(args) -> None:
     parts = getattr(args, "parts", "AB")
     if args.runner_kind != "r1-smoke" and (fresh or parts != "AB"):
         raise ValueError("--fresh-soak and --parts apply to r1-smoke only")
+    if parts == "C" and not fresh:
+        raise ValueError("--parts C runs on a fresh soak (RL-145 addendum): give --fresh-soak")
     if args.runner_kind == "r1-smoke" and fresh and args.soak_reference is not None:
         raise ValueError("r1-smoke takes --soak-reference or --fresh-soak, not both")
     if args.runner_kind == "r1-smoke" and not fresh and (args.soak_reference is None or not args.soak_reference.is_file()):
@@ -380,7 +394,8 @@ def main(argv=None) -> int:
     start.add_argument("--soak-reference", type=Path, help="required for r1-smoke unless --fresh-soak")
     start.add_argument("--fresh-soak", action="store_true",
                        help="r1-smoke: run the night's idle soak first and use its reference (RL-94)")
-    start.add_argument("--parts", choices=("AB", "A"), default="AB", help="r1-smoke: AB (default) or A only (RL-89)")
+    start.add_argument("--parts", choices=("AB", "A", "C"), default="AB",
+                       help="r1-smoke: AB (default), A only (RL-89), or C (RL-145 addendum; needs --fresh-soak)")
     start.add_argument("--output", type=Path, required=True)
     start.add_argument("--python-bin", type=Path, required=True)
     start.add_argument("--disk-path", type=Path, required=True)

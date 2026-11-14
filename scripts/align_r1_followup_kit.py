@@ -109,6 +109,17 @@ SECOND_FAST_RULE_CLASSIFICATION_SHA256 = "0b9cdb9e136eee48c742a6bdfef3313373f795
 SECOND_FAST_RULE_TABLE_SHA256 = "b2369b6c78d91b75299e10ff7249f1e8cae7304b48cf022e20b2c6a6f69f2884"
 
 
+# RL-145 section 3 / addendum row 4: the second key is the lexically first other member
+# of the fast pick's alias group on the same saved Part B classification. It replaces
+# RL-122's rule (TVh0 failed its own quality clauses on the 11-13 D step). The Part B
+# table is re-derived from the RL-122 table (itself re-derived from RL-89's), never
+# re-measured; the RL-145 path accepts those exact bytes only.
+ALIAS_SECOND_KEY_RULE = "alias_group_lexical_first"
+ALIAS_SECOND_KEY_RULING = "RL-145"
+ALIAS_SECOND_KEY_SOURCE_TABLE_SHA256 = SECOND_FAST_RULE_TABLE_SHA256   # the RL-122 table
+ALIAS_SECOND_KEY_TABLE_SHA256 = "0dd1d4efeec3acb1e6ee6f26b5ca94e1bd2748560a627a040811c3df6af9498b"
+
+
 def table_bytes(table):
     """The kit's own Part B serialization (smoke() writes exactly this)."""
     return (json.dumps(table, indent=2, sort_keys=True) + "\n").encode()
@@ -183,6 +194,64 @@ def regenerate_second_fast_rule_table(saved_raw, config):
     return table_bytes(regenerated)
 
 
+def alias_second_key_selection(table, config):
+    """RL-145 section 3: the lexically first other member of the fast pick's alias group.
+
+    Derived on the saved Part B table, never supplied: the fast pick is the registered
+    chooser's (``smoke_selection``); its alias group is the one in the classification's
+    ``alias_groups``; the second key is that group's lexically first other member. The
+    pair must pass the session's own confirmation (``rt.night_confirmation``) on this
+    classification. No group, or an inadmissible fast key, gives no pair.
+    """
+    classification = table["classification_table"]["classification"]
+    coverage, r0_keys = table["coverage"], config["r0_classified_keys"]
+    fast = smoke_selection(classification, coverage, r0_keys)["s_fast"]
+    group = next((g for g in classification.get("alias_groups", []) if fast in g), [])
+    others = sorted(k for k in group if k != fast)
+    slow = others[0] if others else None
+    result = rt.night_confirmation(classification, {"s_fast": fast, "s_slow": slow}, r0_keys, config["r0_classes"])
+    return {**result, "ok": result["ok"] and fast is not None and slow is not None, "fallback": False,
+            "selected_at": "smoke_part_b", "slow_rule": ALIAS_SECOND_KEY_RULE, "candidates": others}
+
+
+def alias_second_key_table_identities(saved, regenerated, config):
+    """RL-89's four identities against the RL-122 table, with only ``selection.s_slow`` changed."""
+    pick = alias_second_key_selection(saved, config)
+    failures = []
+    digests = {t["classification_table"]["classification"].get("classification_sha256") for t in (saved, regenerated)}
+    if digests != {SECOND_FAST_RULE_CLASSIFICATION_SHA256}:
+        failures.append("1: classification_sha256 is not the saved D classification's")
+    if saved.get("coverage") != regenerated.get("coverage") or not saved.get("coverage", {}).get("pass"):
+        failures.append("2: coverage differs or did not pass")
+    selection = regenerated.get("selection", {})
+    if not (pick["ok"] and selection.get("ok") is True and selection.get("fallback") is False
+            and selection.get("reasons") == [] and selection.get("s_fast") == pick["s_fast"]
+            and selection.get("s_slow") == pick["s_slow"]):
+        failures.append("3: selection is not ok / no fallback / the rule's pair")
+    others = [k for k in set(saved) | set(regenerated) if k != "selection" and saved.get(k) != regenerated.get(k)]
+    others += [f"selection.{k}" for k in set(saved.get("selection", {})) | set(selection)
+               if k != "s_slow" and saved.get("selection", {}).get(k) != selection.get(k)]
+    if others:
+        failures.append("4: fields other than selection.s_slow changed: " + ", ".join(sorted(others)))
+    if failures:
+        raise ValueError("RL-145: regenerated Part B table fails RL-89's identities: " + "; ".join(failures))
+    return pick
+
+
+def regenerate_alias_second_key_table(saved_raw, config):
+    """Re-derive (never re-measure) the RL-122 Part B table: only the selection's slow key changes."""
+    saved = json.loads(saved_raw)
+    if table_bytes(saved) != saved_raw:
+        raise ValueError("RL-145: the saved Part B table is not in the kit's own serialization")
+    pick = alias_second_key_selection(saved, config)
+    if not pick["ok"]:
+        raise ValueError("RL-145: the alias-group rule gives no confirmed pair: " + "; ".join(pick["reasons"]))
+    regenerated = json.loads(saved_raw)
+    regenerated["selection"]["s_slow"] = pick["s_slow"]
+    alias_second_key_table_identities(saved, regenerated, config)
+    return table_bytes(regenerated)
+
+
 def validate_sensor_ruling(config, ruling, smoke_sha256, table):
     if (not ruling.get("research_lead_ruling") or ruling.get("smoke_part_b_sha256") != smoke_sha256
             or ruling.get("sensors") != config["sensors"] or ruling.get("authorizes_night") is not True):
@@ -197,21 +266,25 @@ def validate_sensor_ruling(config, ruling, smoke_sha256, table):
     if rule is None:
         if digest == SECOND_FAST_RULE_CLASSIFICATION_SHA256:
             raise ValueError("RL-116: the registered slow pick on this D classification was unseated; only "
-                             f"ruling {SECOND_FAST_RULE_RULING}'s {SECOND_FAST_RULE} pick is accepted")
+                             f"ruling {ALIAS_SECOND_KEY_RULING}'s {ALIAS_SECOND_KEY_RULE} pick is accepted")
         selected = smoke_selection(classification, table["coverage"], config["r0_classified_keys"])
         label = "RL-78: policy must use the fixed smoke Part B selection: "
-    elif (rule == SECOND_FAST_RULE and ruling.get("research_lead_ruling") == SECOND_FAST_RULE_RULING
+    elif rule == SECOND_FAST_RULE:
+        raise ValueError(f"slow rule {rule!r} (ruling {SECOND_FAST_RULE_RULING}) is refused: it prepares a session on "
+                         "TVh0, which RL-145 unseated with no fallback role; only the alias-group rule of "
+                         f"{ALIAS_SECOND_KEY_RULING} is accepted")
+    elif (rule == ALIAS_SECOND_KEY_RULE and ruling.get("research_lead_ruling") == ALIAS_SECOND_KEY_RULING
           and ruling.get("classification_sha256") == digest == SECOND_FAST_RULE_CLASSIFICATION_SHA256):
-        if smoke_sha256 != SECOND_FAST_RULE_TABLE_SHA256:
-            raise ValueError(f"{SECOND_FAST_RULE_RULING}: the Part B table must be the regenerated table "
-                             f"{SECOND_FAST_RULE_TABLE_SHA256}, not {smoke_sha256}")
-        selected = second_fast_rule_selection(table, config)
+        if smoke_sha256 != ALIAS_SECOND_KEY_TABLE_SHA256:
+            raise ValueError(f"{ALIAS_SECOND_KEY_RULING}: the Part B table must be the regenerated table "
+                             f"{ALIAS_SECOND_KEY_TABLE_SHA256}, not {smoke_sha256}")
+        selected = alias_second_key_selection(table, config)
         if table.get("selection", {}).get("ok") is not True or table["selection"].get("fallback") is not False:
-            raise ValueError("RL-122: the Part B selection must be ok with no fallback")
-        label = f"{SECOND_FAST_RULE_RULING}: policy must use the fast rule's second application: "
+            raise ValueError("RL-145: the Part B selection must be ok with no fallback")
+        label = f"{ALIAS_SECOND_KEY_RULING}: policy must use the fast pick's lexically first alias: "
     else:
-        raise ValueError(f"slow rule {rule!r} refused: only the registered rule, or {SECOND_FAST_RULE} under "
-                         f"ruling {SECOND_FAST_RULE_RULING} on its own D classification, is accepted")
+        raise ValueError(f"slow rule {rule!r} refused: only the registered rule, or {ALIAS_SECOND_KEY_RULE} under "
+                         f"ruling {ALIAS_SECOND_KEY_RULING} on its own D classification, is accepted")
     mismatched = [r for r in ("s_fast", "s_slow")
                   if selected[r] != config["sensors"][r] or selected[r] != table.get("selection", {}).get(r)]
     if not selected["ok"] or mismatched:
@@ -380,11 +453,90 @@ def smoke_table(segment_dir):
             "note": "RL-78/84: margins are disclosures; sweep/Tf08 failures fail smoke; other keys fail individually. Classifier unchanged."}
 
 
+PART_C_GATED_D = "D_bank_benign_s1_gated_held"      # r1_phase_table.GATED_D_RUNS[0]
+PART_C_X_G = "X_G_contrast"
+
+
+def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
+                 facts=None, step_facts=None, prints=None):
+    """RL-145 step 3 / addendum section 6, Part C: a gated smoke on the final bytes.
+
+    The 30B predecessor, then step-D as the night runs it (Part A on the final bytes, with the
+    slots it needs), then the gated D_bank member seed 1 (the runtime applies W1's
+    inter-member schedule: the member's own configured idle), then X_G, which the existing
+    runtime kind runs with no further condition-13 code. It produces no slots and enters
+    nothing: the slots the gated runs read stay in this smoke's own step-D result. The verdict
+    is ``align_r1_part_c.evaluate``'s; a failure raises after the table is written.
+    """
+    from scripts import align_r1_part_c as part_c
+    facts = facts or part_c.facts_from_bundle
+    step_facts = step_facts or part_c.step_d_facts
+    if prints is None:
+        from joulewise.align.apple.rl145_prints import bundle_prints
+        prints = lambda bundle: bundle_prints(bundle, estimate_tokens=True)
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    started = time.monotonic()
+    result = {"part": "C", "authority": "RL-145 step 3; RL-145 addendum section 6", "slots_entered": False, "members": {}}
+
+    def finish(verdict_doc=None, error=None):
+        if verdict_doc is not None:
+            result["evaluation"] = verdict_doc
+        if error is not None:
+            result["error"] = error
+        result["elapsed_s"] = time.monotonic() - started
+        (output / "smoke_part_c.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    try:
+        result["members"]["predecessor"] = invoke(runtime, "capture-predecessor-30b", output / "capture_predecessor_30b",
+                                                  soak_reference=soak_reference)
+        step_dir = output / rt.STEP_D_SEGMENT
+        step = invoke(runtime, "step-d", step_dir, soak_reference=soak_reference)
+        result["members"]["step_d"] = step
+        slots = step.get("slots")
+        n_chunk = (slots or {}).get("N_chunk")
+        step_line = step_facts(step_dir / step["bundle"], step) if step.get("bundle") else {"g0_outcome": step.get("g0_outcome")}
+        if not isinstance(slots, dict) or not isinstance(n_chunk, int):
+            doc = part_c.evaluate(step_d=step_line, d_bank=None, n_chunk=n_chunk if isinstance(n_chunk, int) else 1)
+            finish(doc, "step-D produced no slots: the gated members cannot run")
+            raise ValueError("Part C: step-D produced no slots; see smoke_part_c.json")
+        bank_dir = output / PART_C_GATED_D
+        bank = invoke(runtime, "d-bank-benign-s1", bank_dir, soak_reference=soak_reference)
+        result["members"]["d_bank"] = bank
+        bank_facts = facts(bank_dir / bank["bundle"], role="d-bank")
+        # The runtime's own X7 flag and T_dead are the authority where it reports them.
+        bank_facts["x7"] = bank.get("x7", bank_facts["x7"])
+        bank_facts["t_dead_s"] = (bank.get("deadman") or {}).get("T_dead_s", bank_facts["t_dead_s"])
+        printed = prints(bank_dir / bank["bundle"])
+        x_g_facts, why = None, None
+        try:
+            x_g = invoke(runtime, "x-g", output / PART_C_X_G, soak_reference=soak_reference)
+            result["members"]["x_g"] = x_g
+            x_g_facts = facts(output / PART_C_X_G / x_g["bundle"], role="x-g")
+            x_g_facts["x7"] = any(f.startswith("episode.deadman:") for f in x_g.get("episode_flags", []))
+        except (r1.Refusal, ValueError, KeyError, OSError) as exc:
+            why = f"{type(exc).__name__}: {exc}"
+            print(f"Part C: X_G left out, the launcher could not run it without more condition-13 code: {why}",
+                  file=sys.stderr)
+        doc = part_c.evaluate(step_d=step_line, d_bank=bank_facts, n_chunk=n_chunk, x_g=x_g_facts,
+                              x_g_not_run_reason=why, printed=printed)
+        result["n_chunk_formula_recorded"] = (step.get("slot_detail") or {}).get("N_chunk_formula")
+        finish(doc)
+    except BaseException as exc:
+        if "evaluation" not in result and "error" not in result:
+            finish(error=f"{type(exc).__name__}: {exc}")
+        raise
+    if not doc["pass"]:
+        raise ValueError(f"Part C failed ({doc['verdict']}): {doc['disposition']}")
+    return result
+
+
 def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
     """Native only when explicitly run by the lead in an agent-free session.
 
     B runs the same admission followed by the D step, in one member. Its
     inventory process spans idle/quiet/load/recovery. A stops after G0.
+    C (RL-145 addendum) runs the gated D_bank (and X_G) behind a full step-D.
     """
     reg.verify_r1_executed_sources(ROOT, {"executed_commit": r1.executed_commit(ROOT)})
     gate = "joulewise/align/apple/thermal_gates.py"
@@ -394,6 +546,8 @@ def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
     if config_path.read_bytes() != (ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes():
         raise ValueError("condition 13: smoke config differs from the bound runtime config")
     config, _ = rt.load_config(config_path)
+    if part == "C":
+        return smoke_part_c(output, runtime, config, soak_reference=soak_reference, invoke=invoke)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -439,7 +593,7 @@ def main(argv=None):
     p.add_argument("--smoke-table", type=Path, required=True)
     p = sub.add_parser("smoke")
     p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--part", choices=("A", "B"), required=True)
+    p.add_argument("--part", choices=("A", "B", "C"), required=True)
     p.add_argument("--soak-reference", type=Path, required=True)
     p.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
     p = sub.add_parser("desk")
@@ -447,12 +601,15 @@ def main(argv=None):
     p = sub.add_parser("regenerate-table", help="RL-122: re-derive (not re-measure) the Part B selection")
     p.add_argument("--saved-table", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--rule", choices=("rl122", "rl145"), default="rl122",
+                   help="rl145: re-derive the RL-122 table's slow key by the alias-group rule")
     args = parser.parse_args(argv)
     if args.command == "prepare":
         prepare(args.output, ruling=json.loads(args.sensor_ruling.read_text()), smoke_table=args.smoke_table)
     elif args.command == "regenerate-table":
         config, _ = rt.load_config(ROOT / r1.DEFAULT_RUNTIME_CONFIG)
-        raw = regenerate_second_fast_rule_table(args.saved_table.read_bytes(), config)
+        regenerate = regenerate_alias_second_key_table if args.rule == "rl145" else regenerate_second_fast_rule_table
+        raw = regenerate(args.saved_table.read_bytes(), config)
         with args.output.open("xb") as handle:
             handle.write(raw)
         print(hashlib.sha256(raw).hexdigest())

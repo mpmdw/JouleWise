@@ -522,6 +522,32 @@ def sensor_admissibility(classification, picks, r0_keys):
             "second_key_label": "near-die settling check", "authority": "RL-78"}
 
 
+def night_confirmation(classification, picks, r0_keys, r0_classes=None):
+    """RL-145 section 3 as tightened by the RL-145 close (section 5): the session's confirmation.
+
+    The pair is confirmed (``ok``) when the fast key is admissible on this D step and the second
+    key is in the fast key's alias group there (one thermometer read under two key names; the kit
+    derives the lexically first other member on the saved Part B classification). If the group
+    does not form, or the second key is outside it, the session refuses and the case goes to the
+    research lead: a pair of two different die keys is a different gate nobody has reviewed.
+    ``r0_classes`` is accepted for old callers and unused. ``sensor_admissibility`` is unchanged.
+    """
+    fast, slow = picks.get("s_fast"), picks.get("s_slow")
+    group = next((g for g in classification.get("alias_groups", []) if fast in g), None)
+    if group is not None and slow in group and slow != fast:
+        # One thermometer read twice: only the fast key's own quality is tested.
+        reasons = list(sensor_admissibility(classification, {"s_fast": fast}, r0_keys)["reasons"])
+    else:
+        reasons = [f"s_slow: {slow} is not in the fast key's alias group "
+                   f"{group if group is not None else '(no group formed)'}; a second key outside it refuses "
+                   "(RL-145 close, section 5)"]
+        if classification.get("reason"):
+            reasons.append(classification["reason"])
+    return {"ok": not reasons, "reasons": reasons, **picks,
+            "second_key_label": "near-die settling check", "authority": "RL-78",
+            "second_key_rule": "RL-145", "second_key_basis": "alias_group_of_fast_key"}
+
+
 def select_smoke_sensors(classification, r0_keys):
     """Registered picks, with only RL-78's empty-slow-class fallback.
 
@@ -917,6 +943,21 @@ def episode_phases(ep):
     return {**gates, "decode": decode / NS, "prefill": prefill / NS, "tool": tool / NS, "tail": tail}
 
 
+def configured_n_chunk(config):
+    """RL-145 addendum row 2: the config's ``d_n_chunk`` (None when the key is absent).
+
+    A multiple of 256 in [256, 4096] (``thermal_gates`` accepts any multiple of 256;
+    4,096 is the frozen ``max_tokens``, so no hold can fire at it). The companion
+    ``d_n_chunk_status`` text is a label only and is never read here.
+    """
+    if "d_n_chunk" not in config:
+        return None
+    value = config["d_n_chunk"]
+    if type(value) is not int or not 256 <= value <= 4096 or value % 256:
+        raise Refused(f"r1 runtime config d_n_chunk {value!r} must be a multiple of 256 in [256, 4096]")
+    return value
+
+
 def t_decline(pm_samples, turn):
     """FD 2.6 slot S9: step start to the first of 2 consecutive PM samples whose
     active-weighted GPU clock is < 0.97 x the median clock of the first 10 s of
@@ -986,7 +1027,7 @@ def recovery_time(rows, sensors, reference, bands, peak_ns):
 
 
 def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_censored, bands,
-                        t_decline_s, t_decline_status, d_class, s5_bands=None):
+                        t_decline_s, t_decline_status, d_class, s5_bands=None, n_chunk_config=None):
     """Slot vocabulary S1-S9, B_D, I_D, T_dead, N_chunk, t_decline, class.
 
     S1-S4 are the R0-picked keys' step response (S1 fast delta T, S2 fast t63,
@@ -1017,7 +1058,10 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
     t_dead = (1750 - i_d) / DEADMAN_FACTOR   # L1 first term; the kit applies the tail
     censored = t_decline_s is None
     t_dec = decode_s if censored else t_decline_s
-    n_chunk = 2048 if censored else max(256, 256 * math.floor(0.6 * t_dec * r_decode / 256))
+    n_chunk_formula = 2048 if censored else max(256, 256 * math.floor(0.6 * t_dec * r_decode / 256))
+    # RL-145 addendum row 2: a configured value replaces the formula's as N_chunk; the
+    # formula's own value is still computed and recorded beside it. Absent key = the formula.
+    n_chunk = n_chunk_formula if n_chunk_config is None else n_chunk_config
     g_turn = min(300.0, 3.0 * recovery_s)
     planning_turn_s = prefill_s + 4096 / r_decode
     fast, slow = responses["s_fast"], responses["s_slow"]
@@ -1037,6 +1081,8 @@ def derive_step_d_slots(*, ep, turn, wall_s, responses, recovery_s, recovery_cen
                       "rule": "max(S6, 3 x soak SD); further FD 2.6 tuning after R1",
                       "tied_to": "the median G1 wait of the R1 gated D runs (r1_slots.s6_tuning)",
                       },
+        "N_chunk_formula": n_chunk_formula,
+        "N_chunk_source": "formula" if n_chunk_config is None else "config.d_n_chunk",
         "recovery_s": recovery_s, "recovery_censored": recovery_censored,
         "t_decline_status": t_decline_status, "t_decline_censored": censored,
         "r_decode_tok_per_s": r_decode, "r_prefill_tok_per_s": r_prefill,
@@ -2077,8 +2123,9 @@ class Segment:
         confirmation = None
         if not record_only and not getattr(self, "smoke_part", None):
             picks = {r: self.sensors[r] for r in ("s_fast", "s_slow")}
-            confirmation = sensor_admissibility(result, picks,
-                self.config.get("r0_classified_keys", list(picks.values())))
+            confirmation = night_confirmation(result, picks,
+                self.config.get("r0_classified_keys", list(picks.values())),
+                r0_classes=self.config.get("r0_classes"))
         path = self.out / "inventory" / "r1_classification.json"
         # classification_sha256 = sha256 of canonical(classification without that field).
         path.write_text(json.dumps({"classification": result, "label": label, "for_record_only": record_only,
@@ -2131,7 +2178,8 @@ class Segment:
             ep=member.ep, turn=turn, wall_s=member.wall_s, responses=responses, recovery_s=recovery_s,
             recovery_censored=censored, bands=bands,
             s5_bands=bands_c(self.soak, sensors, slow_floor=BAND_FLOOR_C), t_decline_s=fields["t_decline_s"],
-            t_decline_status=fields["t_decline_status"], d_class=self.config.get("d_class", "heavy"))
+            t_decline_status=fields["t_decline_status"], d_class=self.config.get("d_class", "heavy"),
+            n_chunk_config=configured_n_chunk(self.config))
         if self.backend.name == "production":
             detail["S6_tuning"] = {"status": "new_sensor_default", "authority": "RL-78 default band",
                                    "S6_now": bands["delta_slow_c"], "receipt_transferred": False}

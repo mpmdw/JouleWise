@@ -56,18 +56,25 @@ def seal_non_benign(report, plan_members):
     BENIGN members only. A sabotage (or any non-benign-condition) member keeps its
     status and flags, but every DC value is replaced by the sha256 of the row's
     canonical JSON, so nothing about its effect is visible and the row stays auditable.
+
+    Cited rebind (PR #774 Sol seat F6, lead disposition, frozen-is-not-sacred): the digest was a plain sha256,
+    which a candidate dictionary can invert for a low-entropy row; it is now the desk release guard's keyed
+    HMAC-SHA256 over the same canonical JSON (``v4_desk_seal.keyed_digest``; the desk's key is kept in its
+    withheld archive, so the row stays auditable at release), recorded as ``sealed_hmac_sha256``. No registered
+    comparison reads this digest (only the desk print and the MED-4 tests).
     """
+    from joulewise.align.apple.v4_desk_seal import keyed_digest, _meter_codes
     conditions = {m['run_id']: m.get('condition') for m in plan_members}
     members = {}
     for run_id, row in report['members'].items():
         if conditions.get(run_id) == 'benign':
             members[run_id] = row
             continue
-        sealed = hashlib.sha256(json.dumps(row, sort_keys=True, separators=(',', ':'),
-                                           default=str).encode()).hexdigest()
-        members[run_id] = {'label': LABEL, 'print_only': True, 'sealed': True, 'sealed_sha256': sealed,
+        sealed = keyed_digest(row)
+        members[run_id] = {'label': LABEL, 'print_only': True, 'sealed': True, 'sealed_hmac_sha256': sealed,
                            'condition': conditions.get(run_id), 'status': row.get('status'),
-                           'flags': list(row.get('flags', ())),
+                           # The meter's health codes only (Sol F3): fit and prediction flags are withheld.
+                           'flags': _meter_codes(row.get('flags', ())),
                            'sealed_until': 'v5 addendum registration'}
     return {**report, 'members': members}
 
