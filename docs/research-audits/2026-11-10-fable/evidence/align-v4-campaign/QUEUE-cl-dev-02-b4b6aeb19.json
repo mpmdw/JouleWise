@@ -1,7 +1,7 @@
 {
   "schema": "joulewise.cadence_queue.v1",
   "queue_id": "cq-cl-dev-02",
-  "expires_at": "2026-11-21T23:59:00-08:00",
+  "expires_at": "2026-11-20T23:59:00-08:00",
   "halt": null,
   "standing_notice": null,
   "spans": [
