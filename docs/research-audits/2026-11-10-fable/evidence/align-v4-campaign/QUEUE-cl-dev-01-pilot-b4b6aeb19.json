@@ -1,0 +1,26 @@
+{
+  "schema": "joulewise.cadence_queue.v1",
+  "queue_id": "cq-cl-dev-01-pilot",
+  "expires_at": "2026-11-20T23:59:00-08:00",
+  "halt": null,
+  "standing_notice": null,
+  "spans": [
+    {
+      "seq": 1,
+      "span_id": "dev-01-s01",
+      "block_id": "dev-01",
+      "kit": {
+        "path": "docs/process/cadence/kits/cl-dev-01.json",
+        "sha256": "c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003"
+      ],
+      "attempt": 1,
+      "not_before": "2026-11-14",
+      "rerun_of": null
+    }
+  ]
+}
