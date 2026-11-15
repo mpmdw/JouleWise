@@ -54,8 +54,10 @@ F0_MAX_PER_DATE = 3
 FALLBACK_HORIZON_S = 2.5 * 3600    # RL-165 section 3 line 3: no staged item can hold within 2 h 30 min
 STALL_S = 2.5 * 3600               # the default bound on any wait
 STALL_SHORT_S = 30 * 60            # waits the host or the lead clears in minutes, or never by themselves
-SHORT_STALL_CODES = frozenset({"AGENT_PRESENT", "PLAN_REFUSED_AT_T0", "JOURNAL_COPY", "SPAN_LIVE", "NIGHT_AGENT",
-                               "CLOSING", "ISSUES_UNREADABLE", "FETCH_FAILED"})
+SHORT_STALL_CODES = frozenset({"AGENT_PRESENT", "PLAN_REFUSED_AT_T0", "JOURNAL_COPY", "SPAN_LIVE", "CLOSING",
+                               "ISSUES_UNREADABLE", "FETCH_FAILED", "NIGHT_UNKNOWN", "LEASE_EXPIRED"})
+STALL_LONG_S = 36 * 3600           # a loaded night agent is a v4 window (28 to 33 h); it pages only past that
+LONG_STALL_CODES = frozenset({"NIGHT_AGENT"})
 MIDNIGHT_MARGIN_S = 120            # a dated arm is refused this close to the end of its date (F19)
 
 PHASES = {"cl-dev-": "development", "cl-qual-": "qualification", "cl-hp-": "extension", "hp-": "extension",
@@ -100,6 +102,9 @@ REASONS = {
     "SMOKE_QUEUE_NOT_PILOT_ONLY": ("halt", "a pilot is not alone in a smoke queue (RL-172 (g) 4)"),
     "SMOKE_REMAINDER_STAGED": ("halt", "a kit's remainder is queued before its pilot's class A gate released (RL-172 (g) 4)"),
     "PILOT_MISSING": ("halt", "a span of a kit arms before any pilot of that kit closed clean"),
+    "PRIOR_GATES_UNKNOWN": ("halt", "a prior span's kit is not readable, so its hand gates cannot be derived"),
+    "PRIOR_CONTRADICTS": ("halt", "a prior span's roster or kit disagrees with its queue entry or its receipt"),
+    "GATE_RECORD_PREMATURE": ("halt", "a gate release was committed before the span it releases closed"),
     "GATE_DISAGREEMENT": ("halt", "the desk's verdict names a hand gate the controller did not derive, or the reverse"),
     "VETO_OPEN": ("halt", "an open owner directive starts STOP, NO, HALT or VETO (line 6)"),
     "CADENCE_STOP_OPEN": ("halt", "an open cadence-stop issue (line 6)"),
@@ -141,6 +146,8 @@ REASONS = {
     "AGENT_PRESENT": ("wait", "an agent process is alive on the host"),
     "NIGHT_AGENT": ("wait", "a night agent (a v4 window) is loaded: the controller stays silent"),
     "PLAN_REFUSED_AT_T0": ("wait", "the pinned plan refuses this t0"),
+    "NIGHT_UNKNOWN": ("wait", "the night-agent read failed: no network until it reads clean"),
+    "LEASE_EXPIRED": ("wait", "the authority read is older than the arm lease: re-read before arming"),
     "SPAN_LIVE": ("wait", "a span or another run holds the host"),
     "CLOSING": ("wait", "the span's fence is gone; its receipt or process absence is not yet proven"),
     "MIDNIGHT": ("wait", "a dated span is not armed within 120 s of the end of its date"),
@@ -179,6 +186,8 @@ def category(reasons):
 
 def stall_bound(codes):
     """How long a wait with these codes may last before it pages (Mythos F7: every wait is bounded)."""
+    if set(codes) and set(codes) <= LONG_STALL_CODES:
+        return STALL_LONG_S
     return STALL_SHORT_S if set(codes) & SHORT_STALL_CODES else STALL_S
 
 
@@ -254,7 +263,8 @@ DESK_GATE_NAMES = {CLASS_A: "class A smoke hand-read",
 STANDING_KEYS = {"schema", "standing_id", "queues", "kits", "hand_gates", "gate_records", "prior_spans", "withdrawn",
                  "dispositions", "sessions", "fallback", "freeze2"}
 KIT_ENTRY_KEYS = {"source", "line1", "line2", "batch_window"}
-PRIOR_KEYS = {"plan_id", "campaign_id", "block_id", "legs", "mixed", "t0", "closed", "desk_final"}
+PRIOR_KEYS = {"plan_id", "campaign_id", "block_id", "kit_sha256", "roster", "legs", "mixed", "t0", "closed",
+              "desk_final"}
 
 
 def _text(v):
@@ -334,13 +344,19 @@ def validate_standing(doc):
         if not (isinstance(s, dict) and set(s) == PRIOR_KEYS):
             p.append(f"prior_spans[{i}]: keys {sorted(PRIOR_KEYS)}")
             continue
+        roster = s["roster"]
+        if not (isinstance(roster, list) and roster and all(_text(x) for x in roster) and len(set(roster)) == len(roster)
+                and isinstance(s["kit_sha256"], str) and HEX64.fullmatch(s["kit_sha256"])
+                and s["kit_sha256"] in kits):
+            p.append(f"prior_spans[{i}]: kit_sha256 (a kit of the index) and roster (its legs): the hand gates of a "
+                     "hand-armed span are derived like any other (Mythos N2)")
         if not (_text(s["plan_id"]) and _text(s["campaign_id"]) and _text(s["block_id"])
-                and type(s["legs"]) is int and s["legs"] >= 0 and type(s["mixed"]) is bool
+                and type(s["legs"]) is int and 0 <= s["legs"] <= len(roster or []) and type(s["mixed"]) is bool
                 and parse_time(s["t0"]) is not None and parse_time(s["closed"]) is not None
                 and parse_time(s["closed"]) >= parse_time(s["t0"])
                 and (s["desk_final"] is None or _text(s["desk_final"]))):
-            p.append(f"prior_spans[{i}]: plan_id, campaign_id, block_id, legs >= 0, mixed, t0 <= closed "
-                     "(ISO with offset), desk_final null or evidence")
+            p.append(f"prior_spans[{i}]: plan_id, campaign_id, block_id, legs run (0 to the roster's length), mixed, "
+                     "t0 <= closed (ISO with offset), desk_final null or evidence")
         if s.get("plan_id") in seen:
             p.append(f"prior_spans[{i}]: {s.get('plan_id')} twice")
         seen.add(s.get("plan_id"))
@@ -418,13 +434,16 @@ def append_only_problems(versions):
     return problems
 
 
-def cross_queue_reasons(views):
+def cross_queue_reasons(views, disposed=frozenset()):
     """Mythos F12: a plan id in two queues, or one kit leg queued twice without ``rerun_of``, is a
-    contradiction, whatever the queues' order."""
+    contradiction, whatever the queues' order. A span the lead disposed of as ``rerun`` or ``withdrawn``
+    frees its legs: its re-run may be queued anywhere (Mythos N3)."""
     out, plans, legs = [], {}, {}
     for v in views:
         for s in (v.get("doc") or {}).get("spans", []):
             pid = q.plan_id(s)
+            if pid in disposed:
+                continue
             if pid in plans and plans[pid] != v["path"]:
                 out.append(reason("QUEUE_DUPLICATE", f"{pid} in {plans[pid]} and {v['path']}"))
             plans.setdefault(pid, v["path"])
@@ -446,8 +465,8 @@ def queue_reasons(view, now, has_pending):
         return out
     if doc.get("halt"):
         out.append(reason("QUEUE_HALT", f"{doc['queue_id']}: {doc['halt'].get('reason')}"))
-    if view["commit_epoch"] is not None and view["commit_epoch"] > now + CLOCK_SKEW_S:
-        out.append(reason("QUEUE_COMMIT_IN_FUTURE", doc["queue_id"]))
+    if any(e is not None and e > now + CLOCK_SKEW_S for e in (view["commit_epoch"], view.get("first_commit_epoch"))):
+        out.append(reason("QUEUE_COMMIT_IN_FUTURE", doc["queue_id"]))      # first or last commit (Mythos N8)
     if has_pending:
         if view["first_commit_epoch"] is None or now > queue_expiry(doc, view["first_commit_epoch"]):
             when = (datetime.fromtimestamp(queue_expiry(doc, view["first_commit_epoch"]), ZONE).isoformat()
@@ -533,6 +552,9 @@ def verdict_state(entry, *, run, accept_mock):
     # counts_as_final keeps every other clause.
     final = desk_final.counts_as_final(doc, manifest_sha256=run.bundle_sha256, allow_mock=accept_mock is True,
                                        **{k: v for k, v in ident.items()})
+    # The replay check needs the campaign's signed history (Mythos N11, Sol R8): a verdict built on a typed or
+    # omitted history never counts.
+    final = final and doc.get("history_source") == "signed-records"
     halts = []
     if doc.get("next_arm_hold") is True:
         codes = sorted({str(h.get("code")) for h in doc.get("holds") or [] if h.get("scope") == "queue"})
@@ -587,20 +609,31 @@ BAD = ("STOPPED", "REFUSED", "FAULT", "STRANDED", "CLOSE_UNPROVEN", "LAUNCH_REFU
        "RECEIPT_MISSING")
 
 
-def build_runs(standing, controller_records, external_runs):
+def build_runs(standing, controller_records, external_runs, kits=None):
+    """Every run in machine order. A prior (hand-armed) span's gates are derived from its kit and roster like a
+    controller span's (Mythos N2); ``kits`` maps sha256 -> kit, and a prior span whose kit is not in it carries
+    ``gates_unknown``."""
     disp = {d["plan_id"]: d["resolution"] for d in standing["dispositions"]}
     runs = []
     for s in standing["prior_spans"]:
         cls = kit_class({"campaign_id": s["campaign_id"]})
+        kit = (kits or {}).get(s["kit_sha256"])
+        gates = derived_gates(kit, s["roster"]) if kit is not None else []
         runs.append(Run(s["plan_id"], "campaign" if cls["k2"] else "f2", cls["phase"], s["block_id"], s["legs"],
                         s["mixed"], parse_time(s["t0"]), parse_time(s["closed"]), "CLOSED_OK", "prior",
-                        campaign=s["campaign_id"], desk="final" if s["desk_final"] else "pending",
-                        resolution=disp.get(s["plan_id"])))
+                        campaign=s["campaign_id"], desk="final" if s["desk_final"] else "pending", gates=gates,
+                        resolution=disp.get(s["plan_id"]),
+                        extra={"kit_sha256": s["kit_sha256"], "roster": list(s["roster"]),
+                               "gates_unknown": kits is not None and kit is None}))
     for r in controller_records:
         closed = r.get("closed_epoch")
-        runs.append(Run(r["plan_id"], r["kind"], r["phase"], r["block_id"],
-                        r["legs_finished"] if closed is not None and r.get("legs_finished") is not None
-                        else len(r["legs"]),
+        if closed is not None and r.get("legs_finished") is not None:
+            legs_run = r["legs_finished"]
+        elif r["status"] in BAD:
+            legs_run = 0           # never ran, or no close: nothing to count on the date (Mythos N16)
+        else:
+            legs_run = len(r["legs"])
+        runs.append(Run(r["plan_id"], r["kind"], r["phase"], r["block_id"], legs_run,
                         r["mixed"], r.get("runner_t0") or r["t0_epoch"], closed, r["status"], "controller",
                         campaign=r.get("campaign_id"), bundle_sha256=r.get("bundle_sha256"),
                         gates=list(r.get("gates") or []), resolution=disp.get(r["plan_id"]),
@@ -624,7 +657,7 @@ def apply_verdicts(runs, verdicts, *, accept_mock):
             continue
         state, hs, kit_holds = verdict_state(verdicts.get(run.plan_id), run=run, accept_mock=accept_mock)
         run.desk = state
-        if run.resolution == "cleared":
+        if run.resolution in RESOLUTIONS:   # cleared lifts the hold; rerun and withdrawn also take it out (N3)
             hs = [h for h in hs if h["code"] != "DESK_HOLD"]
         halts += hs
         if verdicts.get(run.plan_id) is not None and not hs:
@@ -710,48 +743,87 @@ def date_reasons(span, cls, t0, runs, queued, standing):
     return out
 
 
-def pilot_reasons(span, kit, queue_role, queue_len, runs, all_views, standing):
+def _disposed(standing, kinds=("rerun", "withdrawn")):
+    return {d["plan_id"] for d in standing["dispositions"] if d["resolution"] in kinds}
+
+
+def pilot_reasons(span, kit, queue_role, view, runs, all_views, standing):
     """RL-172 (g) 4 with the gates derived. A span holding the kit's first leg is that kit's pilot: it must be
-    alone in a smoke queue, and no other span of the campaign may be queued anywhere until the pilot closed
-    clean and its class A gate was released (or the lead disposed of it). Any other span needs a pilot that
-    closed clean (a prior span of the campaign counts: the lead attested it)."""
+    alone in a smoke queue (spans the lead disposed of as ``rerun`` or ``withdrawn`` do not count, so a refused
+    pilot's re-run is appended to the same smoke queue; Mythos N3), and no other span of the campaign may be queued
+    anywhere until a pilot closed clean and its class A gate was released. Any other span needs such a released
+    pilot: a controller span, or a prior (hand-armed) span whose gates are derived the same way (Mythos N2)."""
     sid, campaign = span["span_id"], kit["campaign_id"]
     out = []
+    disposed = _disposed(standing)
     first = (kit.get("legs") or [{}])[0].get("leg_id")
     released = {(r["plan_id"], r["gate"]) for r in standing["gate_records"] if r["decision"] == "release"}
-    pilots = [r for r in runs if r.campaign == campaign and (r.source == "prior" or CLASS_A in r.gates)]
-    released_pilot = any(r.source == "prior" or (r.status == "CLOSED_OK" and (r.plan_id, CLASS_A) in released)
-                         for r in pilots)
+    pilots = [r for r in runs if r.campaign == campaign and CLASS_A in r.gates and r.plan_id not in disposed]
+    released_pilot = any(r.status == "CLOSED_OK" and (r.plan_id, CLASS_A) in released for r in pilots)
+    live_spans = [s for s in view["doc"]["spans"] if q.plan_id(s) not in disposed]
     if first in span["legs"]:
-        if queue_role != "smoke" or queue_len != 1:
+        if queue_role != "smoke" or len(live_spans) != 1:
             out.append(reason("SMOKE_QUEUE_NOT_PILOT_ONLY", f"{sid} holds {first}: a {queue_role} queue of "
-                                                            f"{queue_len} span(s)", span=sid))
+                                                            f"{len(live_spans)} live span(s)", span=sid))
         others = [s["span_id"] for v in all_views for s in (v.get("doc") or {}).get("spans", [])
                   if s is not span and s["kit"]["sha256"] == span["kit"]["sha256"]
-                  and q.plan_id(s) not in v["closed_ids"] and q.plan_id(s) not in v["withdrawn_ids"]]
+                  and q.plan_id(s) not in v["closed_ids"] and q.plan_id(s) not in v["withdrawn_ids"]
+                  and q.plan_id(s) not in disposed]
         if others and not released_pilot:
             out.append(reason("SMOKE_REMAINDER_STAGED", f"{others[:4]} queued with pilot {sid}", span=sid))
-    elif not any(r.status == "CLOSED_OK" or r.source == "prior" for r in pilots):
+    elif not any(r.status == "CLOSED_OK" for r in pilots):
         out.append(reason("PILOT_MISSING", f"{sid}: no pilot of {campaign} closed clean", span=sid))
     return out
 
 
-def gate_reasons(span, campaign, runs, standing):
-    """Every derived gate raised by an earlier span of this campaign holds this span until the lead's release
-    record for that span and gate (FORMAT.md section 4 item 2; Sol 6). A ``hold`` record keeps it held. The
-    lead's extra named gates (``hand_gates``) hold the spans they name."""
+def gate_reasons(span, campaign, runs, standing, record_epochs=None):
+    """Every derived gate raised by an earlier span of this campaign, a controller span or a prior (hand-armed)
+    one (Mythos N2), holds this span until the lead's release record for that span and gate (FORMAT.md section 4
+    item 2; Sol 6). A ``hold`` record keeps it held. A release committed before the span it releases closed is a
+    contradiction (Mythos N14): ``record_epochs`` maps (plan_id, gate) to the record's first commit time. The lead's
+    extra named gates (``hand_gates``) hold the spans they name."""
     sid = span["span_id"]
     decisions = {(r["plan_id"], r["gate"]): r["decision"] for r in standing["gate_records"]}
+    disposed = _disposed(standing)
     out = []
     for run in runs:
-        if run.source != "controller" or run.campaign != campaign or run.resolution in ("rerun", "withdrawn"):
+        if run.source not in ("controller", "prior") or run.campaign != campaign or run.plan_id in disposed:
+            continue
+        if run.extra.get("gates_unknown"):
+            out.append(reason("PRIOR_GATES_UNKNOWN", f"{run.plan_id}: kit {str(run.extra.get('kit_sha256'))[:12]} "
+                                                     "not readable", span=sid))
             continue
         for gate in run.gates:
             if decisions.get((run.plan_id, gate)) != "release":
                 out.append(reason("HAND_GATE", f"{gate} of {run.plan_id} holds {campaign}", span=sid))
+                continue
+            if record_epochs is not None:
+                epoch = record_epochs.get((run.plan_id, gate))
+                if epoch is None or run.closed is None or epoch < run.closed:
+                    out.append(reason("GATE_RECORD_PREMATURE", f"{gate} of {run.plan_id}: released at "
+                                                               f"{epoch}, closed at {run.closed}", span=sid))
     for gate in standing["hand_gates"]:
         if sid in gate["holds"] and not gate["passed"]:
             out.append(reason("HAND_GATE", f"{gate['id']} holds {sid}", span=sid))
+    return out
+
+
+def prior_reasons(standing, views, receipts):
+    """A prior span's declared roster and kit must equal its queue entry, when a listed queue holds it, and its
+    receipt on the host, when the census finds one (``receipts``: plan_id -> {roster, kit_sha256}). Gates derived
+    from a wrong roster would be wrong gates (Mythos N2)."""
+    out = []
+    entries = {q.plan_id(s): s for v in views for s in (v.get("doc") or {}).get("spans", [])}
+    for p in standing["prior_spans"]:
+        pid = p["plan_id"]
+        entry, receipt = entries.get(pid), (receipts or {}).get(pid)
+        if entry is not None and (entry["legs"] != p["roster"] or entry["kit"]["sha256"] != p["kit_sha256"]):
+            out.append(reason("PRIOR_CONTRADICTS", f"{pid}: the queue entry says {entry['legs']} on "
+                                                   f"{entry['kit']['sha256'][:12]}"))
+        if receipt is not None and (receipt.get("roster") != p["roster"]
+                                    or receipt.get("kit_sha256") != p["kit_sha256"]):
+            out.append(reason("PRIOR_CONTRADICTS", f"{pid}: its receipt says {receipt.get('roster')} on "
+                                                   f"{str(receipt.get('kit_sha256'))[:12]}"))
     return out
 
 
@@ -877,7 +949,7 @@ PROOF_LINES = {
     "kernel_frequency": ("arm", "close"), "high_power_marker": ("arm", "close"), "launchd_labels": ("arm", "close"),
     "sudo_kill": ("arm",), "measurement_mode": ("arm", "close"),
     "monitors": ("arm", "close"), "root_powermetrics": ("arm", "close"), "span_processes": ("arm", "close"),
-    "launch_fence": ("arm", "close"), "agents": ("arm",), "signing": ("arm",),
+    "launch_fence": ("arm", "close"), "agents": ("arm",), "signing": ("arm",), "verdict_signers": ("arm",),
 }
 
 
@@ -893,11 +965,12 @@ def proof_reasons(proof, kind):
             continue
         row = proof.get(line)
         if row is None or row.get("ok") is None:
-            out.append(reason("SIGNING_UNAVAILABLE" if line == "signing" else code, f"{line}: not observed"))
+            out.append(reason("SIGNING_UNAVAILABLE" if line in ("signing", "verdict_signers") else code,
+                              f"{line}: not observed"))
         elif row["ok"] is False:
             if kind == "arm" and (line == "agents" or (line == "measurement_mode" and row.get("agent_only"))):
                 waits.append(reason("AGENT_PRESENT", f"{line}: {row.get('detail', '')}"[:200]))
-            elif line == "signing":
+            elif line in ("signing", "verdict_signers"):
                 out.append(reason("SIGNING_UNAVAILABLE", str(row.get("detail", ""))[:200]))
             else:
                 out.append(reason(code, f"{line}: {row.get('detail', '')}"[:200]))
@@ -985,14 +1058,23 @@ def select(snap):
     views = list(snap["queues"]) + list(snap["fallback_queues"])
     for view in views:   # Sol 5: every listed queue's integrity first, whatever its priority
         globals_ += queue_reasons(view, now, bool(_pending(view)))
-    globals_ += cross_queue_reasons(views)
+    globals_ += cross_queue_reasons(views, _disposed(standing))
+    globals_ += prior_reasons(standing, views, snap.get("receipts"))
+    heads = [_pending(v)[0]["span_id"] for v in views if v.get("doc") and _pending(v)]
+
+    def held(action, rs):
+        # Sol R6: a global reason is a prerequisite of every pending head span; the per-span ledger records it.
+        for sid in heads:
+            gates[sid] = [r["code"] for r in rs]
+        return Decision(action, rs, gates=gates)
+
     if category(globals_) == "halt":
-        return Decision("halt", [r for r in globals_ if r["category"] == "halt"], gates=gates)
+        return held("halt", [r for r in globals_ if r["category"] == "halt"])
     if snap["sessions"]:
         cat = category(snap["sessions"])
-        return Decision("halt" if cat == "halt" else "cede", snap["sessions"], gates=gates)
+        return held("halt" if cat == "halt" else "cede", snap["sessions"])
     if category(globals_) in ("retry", "wait"):
-        return Decision("wait", globals_, gates=gates)
+        return held("wait", globals_)
 
     counted = _heads(snap["queues"], snap, views)
     queued = [(c["span"], c["cls"]) for c in counted if c["cls"]] + [
@@ -1054,9 +1136,8 @@ def _heads(queues, snap, all_views):
             if (cls["phase"] == "filler") != view["fallback"]:
                 static.append(reason("KIT_ROLE_MISMATCH", f"{span['span_id']} ({cls['phase']}) in a "
                                                           f"{'fallback' if view['fallback'] else 'counted'} queue"))
-            static += pilot_reasons(span, kit, view["role"], len(view["doc"]["spans"]), snap["runs"], all_views,
-                                    standing)
-            static += gate_reasons(span, kit["campaign_id"], snap["runs"], standing)
+            static += pilot_reasons(span, kit, view["role"], view, snap["runs"], all_views, standing)
+            static += gate_reasons(span, kit["campaign_id"], snap["runs"], standing, snap.get("record_epochs"))
         later = []
         for s in pending[1:]:
             k = view["kits"].get(s["kit"]["sha256"])

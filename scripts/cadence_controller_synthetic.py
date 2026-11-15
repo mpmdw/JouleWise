@@ -59,7 +59,8 @@ from scripts import cadence_controller as cc  # noqa: E402
 
 RD = "evidence/cadence-standing"
 AUDIT = "audit/synthetic"
-KITS = {"cl-dev-04": "docs/process/cadence/kits/cl-dev-04.v1.1.json",
+KITS = {"cl-dev-01": "docs/process/cadence/kits/cl-dev-01.json",
+        "cl-dev-04": "docs/process/cadence/kits/cl-dev-04.v1.1.json",
         "cl-dev-05": "docs/process/cadence/kits/cl-dev-05.v1.1.json",
         "cl-qual-01": "docs/process/cadence/kits/cl-qual-01.v1.1.json"}
 START = datetime.fromisoformat("2026-11-17T08:00:00-08:00").timestamp()
@@ -70,6 +71,8 @@ WATCHER = "com.joulewise.air-watch"
 class FakeEnv(cc.Env):
     def __init__(self, epoch):
         self.t = float(epoch)
+        self.night_labels = []          # labels a v4 window would have loaded
+        self.launchctl_rc = 0
 
     def now(self):
         return self.t
@@ -80,10 +83,24 @@ class FakeEnv(cc.Env):
     def wait_for_change(self, directory, timeout):
         self.t += timeout
 
+    def watch(self, directory):
+        env = self
+
+        class W:
+            def wait(self, timeout):
+                env.t += timeout
+
+            def close(self):
+                pass
+        return W()
+
     def kernel_frequency(self):
         return {"raw_word": 0}
 
     def run(self, argv, **kw):
+        if argv and str(argv[0]).endswith("launchctl"):
+            rows = ["PID\tStatus\tLabel", "-\t0\tcom.apple.synthetic"] + [f"123\t0\t{x}" for x in self.night_labels]
+            return cc.Result(self.launchctl_rc, "\n".join(rows) + "\n" if self.launchctl_rc == 0 else "", "")
         if argv and argv[0] != "git":    # no host command in the synthetic run (pgrep: "none found")
             return cc.Result(1 if "pgrep" in str(argv[0]) else 0, "", "synthetic: not run")
         return super().run(argv, **kw)
@@ -110,7 +127,7 @@ class World:
     """The synthetic MBP (controller), origin, lead and Air desk."""
 
     def __init__(self, workdir, *, prior=True, freeze2=False):
-        self.w = Path(workdir)
+        self.w = Path(workdir).resolve()      # Mythos N17: a relative workdir broke the pinned children's paths
         if self.w.exists():
             shutil.rmtree(self.w)
         self.w.mkdir(parents=True)
@@ -141,16 +158,21 @@ class World:
                     "line2": "synthetic CI", "batch_window": "rl172" if cid.startswith("cl-dev") else "none"}
         self.standing = {
             "schema": law.STANDING_SCHEMA, "standing_id": "cs-synthetic", "queues": [],
-            "kits": {self.sha[c]: entry(c) for c in KITS}, "hand_gates": [], "gate_records": [], "withdrawn": [],
+            "kits": {self.sha[c]: entry(c) for c in KITS}, "hand_gates": [], "withdrawn": [],
+            # the hand-armed dev-01 pilot's class A gate, released by the lead after its hand-read (Mythos N2)
+            "gate_records": [] if not prior else [{"plan_id": "cq-dev-01-s01-a1", "gate": "class-a",
+                                                   "decision": "release", "record": "item 320 (synthetic)"}],
             "dispositions": [], "sessions": [{"session_id": "r1-slot-1", "kind": "r1-slot",
                                               "route": "docs/align/r1_arm_runbook.md"}],
             "fallback": [], "freeze2": "synthetic freeze 2" if freeze2 else None,
             "prior_spans": [] if not prior else [
-                {"plan_id": "cq-dev-01-s01-a1", "campaign_id": "cl-dev-01", "block_id": "dev-01", "legs": 12,
-                 "mixed": False, "t0": "2026-11-15T01:00:00-08:00", "closed": "2026-11-15T06:00:00-08:00",
+                {"plan_id": "cq-dev-01-s01-a1", "campaign_id": "cl-dev-01", "block_id": "dev-01",
+                 "kit_sha256": self.sha["cl-dev-01"], "roster": L[:3], "legs": 3, "mixed": False,
+                 "t0": "2026-11-15T01:00:00-08:00", "closed": "2026-11-15T03:00:00-08:00",
                  "desk_final": "synthetic hand table"},
-                {"plan_id": "cq-dev-02-s01-a1", "campaign_id": "cl-dev-02", "block_id": "dev-02", "legs": 6,
-                 "mixed": False, "t0": "2026-11-16T10:00:00-08:00", "closed": "2026-11-16T13:00:00-08:00",
+                {"plan_id": "cq-dev-01-s03-a1", "campaign_id": "cl-dev-01", "block_id": "dev-01",
+                 "kit_sha256": self.sha["cl-dev-01"], "roster": L[3:9], "legs": 6, "mixed": False,
+                 "t0": "2026-11-16T10:00:00-08:00", "closed": "2026-11-16T13:00:00-08:00",
                  "desk_final": "synthetic automatic desk"}]}
         stamp = {"schema": law.WATCHER_STAMP_SCHEMA, "watcher": WATCHER, "by": "lead (synthetic)",
                  "observed_live_at": datetime.fromtimestamp(START - 3600, law.ZONE).isoformat()}
@@ -224,6 +246,7 @@ class World:
                 "kit": {"path": KITS[cid], "sha256": self.sha[cid]}, "legs": legs}
 
     def lead_release(self, plan_id, gate, record="the lead's hand read (synthetic)"):
+        self.env.t += 120          # the lead's hand-read takes time: a release is committed after the span closed
         self.standing["gate_records"].append({"plan_id": plan_id, "gate": gate, "decision": "release",
                                               "record": record})
         self.commit({f"{RD}/STANDING.json": self.standing}, f"release {gate} {plan_id}", self.env.now() - 30)
@@ -368,6 +391,8 @@ class MockLauncher:
         self.live = None
         self.flags = {}        # plan id -> runner mock flags (e.g. ["--g0-timeout", "L005"])
         self.launched = []
+        self.fences_at_launch = []
+        self.edit = {}         # plan id -> callable(output dir), run after the span (a faulty projection, say)
 
     def launch(self, request):
         env = self.world.env
@@ -377,6 +402,7 @@ class MockLauncher:
         purpose = f"align-r0:{uuid.uuid4().hex}"
         with cc.fence.fence_lock(root):
             cur = cc.fence.read_fence(root)
+            self.fences_at_launch.append(cur)
             if cur is not None and cur["purpose"] != request["standing_purpose"]:
                 return {"rc": 3, "launch": None, "refused": f"foreign fence {cur}", "stderr": ""}
             record = {"purpose": purpose, "pid": os.getpid(), "deadline": env.now() + 12 * 3600}
@@ -389,6 +415,8 @@ class MockLauncher:
                 *self.flags.get(plan_id, [])]
         done = subprocess.run(argv, cwd=request["repo"], capture_output=True, text=True,
                               env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "JW_B5_SYNTHETIC_ONLY": "1"})
+        if plan_id in self.edit:
+            self.edit[plan_id](Path(request["output"]))
         receipt = json.loads((Path(request["output"]) / cc.RECEIPT).read_text())
         self.live = {"output": Path(request["output"]), "ended": receipt["ended"]["epoch_s"], "root": root,
                      "purpose": purpose, "mock_rc": done.returncode}
@@ -591,8 +619,156 @@ def scenario_tampered(workdir, log=print):
     return w
 
 
+def _remote_refs(w, pattern):
+    return git(w.seed, "ls-remote", "origin", pattern).decode().strip()
+
+
+def scenario_denied_key(workdir, log=print):
+    """Mythos N1, Sol R1: a denied key inside an allowed file (``energy_j`` at the receipt's top level, ``samples_w`` in
+    span/meter.json) is never signed or pushed: BUNDLE_REFUSED, no ref on the remote, a halt."""
+    w = World(workdir, prior=False)
+    w.controller()
+    w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
+
+    def taint(out):
+        receipt = json.loads((out / cc.RECEIPT).read_text())
+        receipt["energy_j"] = "SYNTHETIC_DENIED_KEY_CANARY"
+        (out / cc.RECEIPT).write_text(json.dumps(receipt))
+        meter = json.loads((out / "desk-bundle/span/meter.json").read_text())
+        meter["samples_w"] = ["SYNTHETIC_CANARY"]
+        (out / "desk-bundle/span/meter.json").write_text(json.dumps(meter))
+    w.launcher.edit["cq-dev-05-s01-a1"] = taint
+    w.tick()
+    w.launcher.finish()
+    s = w.tick()
+    close = _close(w, "cq-dev-05-s01-a1")
+    assert _state(s) == "HALTED" and "BUNDLE_REFUSED" in {r["code"] for r in close["reasons"]}, (s, close["reasons"])
+    assert _remote_refs(w, "refs/heads/desk-bundles/*") == "", "nothing reaches the remote"
+    log(f"denied_key: {[r['detail'] for r in close['reasons'] if r['code'] == 'BUNDLE_REFUSED']}; nothing pushed; HALTED")
+    return w
+
+
+def scenario_prior_gate(workdir, log=print):
+    """Mythos N2: dev-04-s01 was hand-armed (a prior span with its roster and kit). dev-04-s02 holds on the derived
+    class A and L005 gates of that prior span until the lead releases both."""
+    w = World(workdir)
+    w.standing["prior_spans"].append({
+        "plan_id": "cq-dev-04-s01-a1", "campaign_id": "cl-dev-04", "block_id": "dev-04", "kit_sha256": w.sha["cl-dev-04"],
+        "roster": L[:6], "legs": 6, "mixed": True, "t0": "2026-11-17T00:30:00-08:00",
+        "closed": "2026-11-17T03:30:00-08:00", "desk_final": "synthetic hand table"})
+    w.controller()
+    w.queue("dev04-rest", [w.span(1, "dev-04-s02", "cl-dev-04", L[6:])])
+    s = w.tick()
+    assert _state(s) == "WAIT" and "HAND_GATE" in _codes(s) and "L005" in s["detail"]["detail"], s
+    w.lead_release("cq-dev-04-s01-a1", "class-a")
+    s = w.tick()
+    assert "HAND_GATE" in _codes(s) and "L005" in s["detail"]["detail"], s
+    w.lead_release("cq-dev-04-s01-a1", "L005", "RL-165 section 4 (synthetic)")
+    s = w.drive(lambda s: _state(s) == "LIVE")
+    assert s["detail"]["plan_id"] == "cq-dev-04-s02-a1", s
+    log(f"prior_gate: hand-armed dev-04-s01's derived [class-a, L005] held dev-04-s02 until both releases; armed {s['at']}")
+    return w
+
+
+def scenario_recovery(workdir, log=print):
+    """Mythos N3, Sol R9: qual-01's pilot is refused (both soaks refused, zero legs). The Air judges it (a REFUSAL that
+    holds the next arm). The lead disposes of it as ``rerun`` and appends its re-run to the same smoke queue with
+    ``rerun_of``: the re-run arms, closes clean, and the refused attempt never holds line 9."""
+    w = World(workdir, freeze2=True)
+    ctl = w.controller()
+    pilot = w.span(1, "qual-01-s01", "cl-qual-01", L[:6])
+    w.queue("qual01-pilot", [pilot], role="smoke")
+    w.launcher.flags["cq-qual-01-s01-a1"] = ["--soak-refusals", "2"]
+    w.tick()
+    w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "HALTED" and _close(w, "cq-qual-01-s01-a1")["status"] == "REFUSED", s
+    v = w.air_final("cq-qual-01-s01-a1")
+    assert v is not None and v["next_arm_hold"] and any(st["code"] == "REFUSAL" for st in v["named_stops"]), v
+    w.ack_all()
+    w.env.t += 400
+    assert "DESK_HOLD" in json.dumps([p["reasons"] for p in (ctl.unacked_pages() or [])] + [w.tick()]), "held"
+    w.standing["dispositions"].append({"plan_id": "cq-qual-01-s01-a1", "resolution": "rerun",
+                                       "record": "the lead: soak refused twice, re-run (synthetic)"})
+    rerun = dict(pilot, seq=2, span_id="qual-01-s01r", rerun_of="qual-01-s01")
+    w.queue("qual01-pilot", [pilot, rerun], role="smoke")
+    w.copy_journals("cq-qual-01-s01-a1")
+    w.ack_all()
+    s = w.drive(lambda s: _state(s) == "LIVE")
+    assert s["detail"]["plan_id"] == "cq-qual-01-s01r-a1", s
+    w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "CLOSED", s
+    log(f"recovery: refused pilot judged REFUSAL (hold); disposition rerun + appended re-run armed {s['at']} and closed")
+    return w
+
+
+def scenario_repage(workdir, log=print):
+    """Mythos N4: a veto pages; acknowledged and withdrawn, the situation clears; a later veto pages again."""
+    w = World(workdir)
+    ctl = w.controller()
+    w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6], nb="2026-11-18")], role="smoke")
+    veto = {"number": 901, "title": "STOP the campaign", "labels": [{"name": "directive"}],
+            "author": {"login": "mpmdw"}, "state": "OPEN"}
+    w.issues.append(veto)
+    w.tick()
+    first = [p["page_id"] for p in ctl.unacked_pages()]
+    assert first and first[0].startswith("halt-"), first
+    w.ack_all()
+    w.issues.clear()
+    w.env.t += 300
+    w.tick()                      # the veto is gone: the acknowledged page clears
+    w.env.t += 3600
+    w.issues.append(dict(veto, number=907, title="STOP again"))
+    w.tick()
+    second = [p["page_id"] for p in ctl.unacked_pages()]
+    assert second and second[0] != first[0], (first, second)
+    log(f"repage: veto paged {first[0]}; acknowledged and cleared; a new veto paged {second[0]}")
+    return w
+
+
+def scenario_night_window(workdir, log=print):
+    """Mythos N5, N15, Sol R2: a W1/C/T window (night agents, no desk fence). While it is loaded the controller is quiet:
+    no network, no fence. When it goes, its close is observed with its restore unproven: a halt until note-run records
+    its Check, then the 1,200 s floor from the observed close."""
+    w = World(workdir)
+    ctl = w.controller()
+    w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
+    w.env.night_labels = ["com.joulewise.night.w1"]
+    fetch = ctl.git.fetch_audit
+    ctl.git.fetch_audit = lambda: (_ for _ in ()).throw(AssertionError("network inside a v4 window"))
+    for _ in range(3):
+        s = w.tick()
+        assert _state(s) == "WAIT" and s["detail"]["quiet"] and _codes(s) == {"NIGHT_AGENT"}, s
+        w.env.t += 300
+    w.env.launchctl_rc = 5
+    s = w.tick()
+    assert _codes(s) == {"NIGHT_UNKNOWN"}, s      # an unreadable census is not "no window"
+    w.env.launchctl_rc, w.env.night_labels = 0, []
+    ctl.git.fetch_audit = fetch
+    s = w.tick()
+    assert "FOREIGN_CLOSE_UNPROVEN" in json.dumps([p["reasons"] for p in ctl.unacked_pages()]), s
+    closed = w.env.now()
+    with contextlib.redirect_stdout(io.StringIO()):
+        cc.cmd_note_run(w.cfg, type("A", (), {"run_id": "night:com.joulewise.night.w1", "kind": "v4", "t0": closed - 900,
+                                              "closed": closed, "restore_ok": "yes",
+                                              "evidence": "RUN_STATE n: the window's Check, every restore line OK"}))
+    w.ack_all()
+    w.env.t += 60
+    s = w.tick()
+    assert "GAP" in _codes(s), s
+    w.env.t += law.GAP_AFTER_OTHER_S
+    s = w.tick()
+    assert _state(s) == "LIVE", s
+    log(f"night_window: quiet while loaded (no network); NIGHT_UNKNOWN on a failed read; after it: unproven until "
+        f"note-run, then the 1,200 s floor; armed {s['at']}")
+    return w
+
+
 SCENARIOS = {"clean": scenario_clean, "soak_retry": scenario_soak_retry, "l005_timeout": scenario_l005_timeout,
-             "redo": scenario_redo, "tampered": scenario_tampered}
+             "redo": scenario_redo, "tampered": scenario_tampered, "denied_key": scenario_denied_key,
+             "prior_gate": scenario_prior_gate, "recovery": scenario_recovery, "repage": scenario_repage,
+             "night_window": scenario_night_window}
 
 
 def run(workdir, log=print):

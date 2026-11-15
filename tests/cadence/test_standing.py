@@ -40,9 +40,11 @@ def entry():
     return {"source": {"commit": "c" * 40, "path": "kits/x.json"}, "line1": "seat", "line2": "ci", "batch_window": "none"}
 
 
-PRIOR = [{"plan_id": "cq-p1-a1", "campaign_id": "cl-dev-01", "block_id": "dev-01", "legs": 12, "mixed": False,
+PRIOR = [{"plan_id": "cq-p1-a1", "campaign_id": "cl-dev-01", "block_id": "dev-01", "kit_sha256": "1" * 64,
+          "roster": [f"L{i:03d}" for i in range(1, 13)], "legs": 12, "mixed": False,
           "t0": "2026-11-15T01:00:00-08:00", "closed": "2026-11-15T06:00:00-08:00", "desk_final": "hand"},
-         {"plan_id": "cq-p2-a1", "campaign_id": "cl-dev-02", "block_id": "dev-02", "legs": 6, "mixed": False,
+         {"plan_id": "cq-p2-a1", "campaign_id": "cl-dev-01", "block_id": "dev-01", "kit_sha256": "1" * 64,
+          "roster": [f"L{i:03d}" for i in range(1, 7)], "legs": 6, "mixed": False,
           "t0": "2026-11-16T01:00:00-08:00", "closed": "2026-11-16T04:00:00-08:00", "desk_final": "auto"}]
 
 
@@ -101,8 +103,10 @@ def kit_holds(rec):
     return [{"code": "HAND_GATE", "scope": f"kit:{campaign}", "gate": GATE_NAMES[g]} for g in rec["gates"]]
 
 
-def verdict(rec, *, final=True, mock=False, holds=None, next_hold=False, signed=True, anchor=None):
+def verdict(rec, *, final=True, mock=False, holds=None, next_hold=False, signed=True, anchor=None,
+            history="signed-records"):
     doc = {"schema": desk_final.VERDICT_SCHEMA, **rec["armed"], "desk_final": final, "next_arm_hold": next_hold,
+           "history_source": history,
            "holds": kit_holds(rec) if holds is None else list(holds), "mock": mock, "transport": {"signed": signed},
            "identities": {"manifest_sha256": anchor or rec["bundle_sha256"]}}
     return {"doc": desk_final._finish(doc)}
@@ -111,7 +115,7 @@ def verdict(rec, *, final=True, mock=False, holds=None, next_hold=False, signed=
 def snap(views, st=None, *, now=NOW, runs=None, verdicts=None, issues=(), watcher=True, sessions=(), census=None,
          fallback_views=(), plan_worst=None, records=(), externals=(), accept_mock=False):
     st = st or standing()
-    runs = runs if runs is not None else law.build_runs(st, list(records), list(externals))
+    runs = runs if runs is not None else law.build_runs(st, list(records), list(externals), kits=KITS)
     halts = law.apply_verdicts(runs, verdicts or {}, accept_mock=accept_mock)
     ran = {r.plan_id for r in runs}
     for v in [*views, *fallback_views]:
@@ -200,7 +204,8 @@ class Condition1Dates(unittest.TestCase):
 
     def test_twenty_four_development_legs_a_date(self):
         prior = copy.deepcopy(PRIOR) + [
-            {"plan_id": f"cq-x{i}-a1", "campaign_id": "cl-dev-01", "block_id": "dev-0x", "legs": 12, "mixed": False,
+            {"plan_id": f"cq-x{i}-a1", "campaign_id": "cl-dev-01", "block_id": "dev-0x", "kit_sha256": "1" * 64,
+             "roster": L[:12], "legs": 12, "mixed": False,
              "t0": f"2026-11-17T0{i}:00:00-08:00", "closed": f"2026-11-17T0{i}:30:00-08:00", "desk_final": "y"}
             for i in (1, 2)]
         d = law.select(snap([pilot("05")], standing(prior_spans=prior)))
@@ -245,7 +250,8 @@ class Condition2Debt(unittest.TestCase):
         self.assertNotIn("K2_DESK_DEBT", codes(d))
 
     def test_only_a_signed_nonmock_final_verdict_on_the_published_anchor_counts(self):   # FORMAT 4.1; Sol 1
-        for bad in (verdict(self.p1, final=False), verdict(self.p1, mock=True), verdict(self.p1, signed=False)):
+        for bad in (verdict(self.p1, final=False), verdict(self.p1, mock=True), verdict(self.p1, signed=False),
+                    verdict(self.p1, history="file"), verdict(self.p1, history="none")):   # Mythos N11, Sol R8
             d = law.select(snap([self.v3], self.st, records=[self.p1, self.p2], verdicts={self.p1["plan_id"]: bad}))
             self.assertIn("K2_DESK_DEBT", codes(d))
         d = law.select(snap([self.v3], self.st, records=[self.p1, self.p2],
@@ -280,6 +286,95 @@ class Condition2Debt(unittest.TestCase):
                       dispositions=[{"plan_id": refused["plan_id"], "resolution": "rerun", "record": "RL-x"}])
         d = law.select(snap([rerun], st, records=[self.p1, refused, p3], verdicts={self.p1["plan_id"]: verdict(self.p1)}))
         self.assertNotIn("K2_DESK_DEBT", codes(d))
+
+
+class SecondGate(unittest.TestCase):
+    """Regressions for the second gate's law-side findings (Mythos N2, N3, N8, N14, N16; Sol R6, R9)."""
+
+    def test_a_hand_armed_pilot_raises_the_same_gates(self):          # Mythos N2: dev-04-s01 was a prior span
+        prior = copy.deepcopy(PRIOR) + [
+            {"plan_id": "cq-dev-04-s01-a1", "campaign_id": "cl-dev-04", "block_id": "dev-04", "kit_sha256": SHA["04"],
+             "roster": L[:6], "legs": 6, "mixed": True, "t0": "2026-11-17T01:00:00-08:00",
+             "closed": "2026-11-17T04:00:00-08:00", "desk_final": "hand"}]
+        rest = view([span(1, "dev-04-s02", "04", L[6:])], path="Q2.json")
+        d = law.select(snap([rest], standing(prior_spans=prior)))
+        self.assertIn("HAND_GATE", codes(d))
+        self.assertIn("L005", json.dumps(d.reasons))
+        st = standing(prior_spans=prior, gate_records=released(("cq-dev-04-s01-a1", "class-a"),
+                                                               ("cq-dev-04-s01-a1", "L005")))
+        self.assertEqual(law.select(snap([rest], st)).action, "arm")
+
+    def test_a_prior_span_whose_kit_is_unreadable_halts(self):
+        prior = copy.deepcopy(PRIOR)
+        st = standing(prior_spans=prior)
+        runs = law.build_runs(st, [], [], kits={})
+        d = law.select(snap([pilot("05")], st, runs=runs))   # dev-05 is not the unreadable campaign
+        self.assertEqual(d.action, "arm")
+        rest = view([span(1, "dev-01-s03", "01", L[9:])], path="Q2.json")
+        self.assertIn("PRIOR_GATES_UNKNOWN", codes(law.select(snap([rest], st, runs=runs))))
+
+    def test_a_prior_span_contradicting_its_queue_or_receipt_halts(self):
+        st = standing()
+        v = view([span(1, "p2", "01", L[:5])], path="Q9.json")   # plan id cq-p2-a1, other roster
+        self.assertIn("PRIOR_CONTRADICTS", codes(law.select(snap([v, pilot("05")], st))))
+        s = snap([pilot("05")], st)
+        s["receipts"] = {"cq-p1-a1": {"roster": L[:11], "kit_sha256": "1" * 64}}
+        self.assertIn("PRIOR_CONTRADICTS", codes(law.select(s)))
+
+    def test_a_release_committed_before_the_close_halts(self):        # Mythos N14
+        rec, rel = pilot_done("05")
+        rest = view([span(1, "dev-05-s02", "05", L[6:])], path="Q2.json")
+        s = snap([rest], standing(gate_records=rel), records=[rec])
+        s["record_epochs"] = {(rec["plan_id"], "class-a"): rec["closed_epoch"] - 60}
+        self.assertIn("GATE_RECORD_PREMATURE", codes(law.select(s)))
+        s["record_epochs"] = {(rec["plan_id"], "class-a"): rec["closed_epoch"] + 60}
+        self.assertEqual(law.select(s).action, "arm")
+
+    def test_a_refused_judged_span_recovers_by_rerun(self):           # Mythos N3, Sol R9
+        p1, rel = pilot_done("05")
+        refused = record("cq-dev-05-s02-a1", "05", L[6:9], NOW - 3 * 3600, closed=NOW - 2 * 3600, status="REFUSED",
+                         finished=0)
+        negative = verdict(refused, final=False, next_hold=True, holds=[{"code": "REFUSAL", "scope": "queue"}])
+        q2 = view([span(1, "dev-05-s02", "05", L[6:9]), span(2, "dev-05-s02r", "05", L[6:9], rerun_of="dev-05-s02")],
+                  path="Q2.json")
+        v = {p1["plan_id"]: verdict(p1), refused["plan_id"]: negative}
+        st = standing(prior_spans=[], gate_records=rel)
+        self.assertIn("DESK_HOLD", codes(law.select(snap([q2], st, records=[p1, refused], verdicts=v))))
+        st = standing(prior_spans=[], gate_records=rel,
+                      dispositions=[{"plan_id": refused["plan_id"], "resolution": "rerun", "record": "RL-x"}])
+        d = law.select(snap([q2], st, records=[p1, refused], verdicts=v))
+        self.assertEqual(d.action, "arm", d.reasons)
+        self.assertEqual(d.candidate["span"]["span_id"], "dev-05-s02r")
+
+    def test_a_refused_pilot_is_rerun_in_its_own_smoke_queue(self):    # Mythos N3: the documented shape
+        refused = dict(pilot_done("05")[0], status="REFUSED", legs_finished=0)
+        smoke = view([span(1, "dev-05-s01", "05", L[:6]), span(2, "dev-05-s01r", "05", L[:6], rerun_of="dev-05-s01")],
+                     role="smoke")
+        st = standing(dispositions=[{"plan_id": refused["plan_id"], "resolution": "rerun", "record": "RL-x"}])
+        self.assertEqual(law.select(snap([smoke], st, records=[refused])).action, "arm")
+        cleared = standing(dispositions=[{"plan_id": refused["plan_id"], "resolution": "cleared", "record": "x"}])
+        self.assertIn("SMOKE_QUEUE_NOT_PILOT_ONLY", codes(law.select(snap([smoke], cleared, records=[refused]))))
+
+    def test_a_refused_launch_counts_no_legs_on_its_date(self):       # Mythos N16
+        refused = record("cq-dev-04-s01-a1", "04", L[:6], NOW - 3600, status="LAUNCH_REFUSED")
+        refused["closed_epoch"] = None
+        st = standing(dispositions=[{"plan_id": refused["plan_id"], "resolution": "rerun", "record": "x"}])
+        run = next(r for r in law.build_runs(st, [refused], [], kits=KITS) if r.plan_id == refused["plan_id"])
+        self.assertEqual(run.legs, 0)
+
+    def test_a_first_commit_in_the_future_halts(self):                # Mythos N8
+        self.assertIn("QUEUE_COMMIT_IN_FUTURE", codes(law.select(snap([pilot("05", commit=NOW - 60,
+                                                                                first=NOW + 30 * 86400)]))))
+
+    def test_a_global_refusal_is_on_the_pending_spans_ledger(self):   # Sol R6
+        owner = {"login": "mpmdw"}
+        d = law.select(snap([pilot("05")], issues=[{"number": 1, "title": "STOP", "labels": ["directive"],
+                                                    "author": owner}]))
+        self.assertEqual(d.gates, {"dev-05-s01": ["VETO_OPEN"]})
+
+    def test_a_night_window_waits_long_before_paging(self):           # Mythos N15
+        self.assertEqual(law.stall_bound(["NIGHT_AGENT"]), law.STALL_LONG_S)
+        self.assertEqual(law.stall_bound(["NIGHT_UNKNOWN"]), law.STALL_SHORT_S)
 
 
 class Condition3Expiry(unittest.TestCase):
@@ -553,7 +648,7 @@ class QueueIntegrity(unittest.TestCase):
 
 class Census(unittest.TestCase):
     def runs(self):
-        return law.build_runs(standing(), [record("cq-dev-05-s01-a1", "05", L[:6], NOW - 9000)], [])
+        return law.build_runs(standing(), [record("cq-dev-05-s01-a1", "05", L[:6], NOW - 9000)], [], kits=KITS)
 
     def test_copy_gate_binds_the_newest_campaign_close(self):                  # Sol 11
         newest = "/o/cl-dev-05/cq-dev-05-s01-a1-20261117T160000Z/runner_receipt.json"

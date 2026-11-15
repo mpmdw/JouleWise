@@ -2146,5 +2146,17 @@
     "locator": "Controller.night_agents:502ee0a584ce0b0b",
     "command": "launchctl",
     "seam": "read-only launchctl list census (a loaded night agent silences the controller; Mythos F5); runs only through Env.run, which the synthetic FakeEnv answers without a host command"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "Controller.night_agents:11b74b7d902684ad",
+    "command": "launchctl",
+    "seam": "read-only launchctl list census, named in the failure message; runs only through Env.run, answered by the synthetic FakeEnv"
+  },
+  {
+    "file": "scripts/cadence_controller_synthetic.py",
+    "locator": "FakeEnv.run:ae17b9a737bf75ad",
+    "command": "launchctl",
+    "seam": "the synthetic FakeEnv's answer to a launchctl list (a string match on the argv); no command runs"
   }
 ]

@@ -157,7 +157,113 @@ class LiveInterlock(WorldCase):
                                                   "closed": w.env.now() - 1300, "restore_ok": "yes",
                                                   "evidence": "RUN_STATE 999 Check: every restore line OK"}))
         w.ack_all()
+        self.assertIn("GAP", w.tick()["detail"]["codes"])   # the floor counts from the observed close, never earlier
+        w.env.t += law.GAP_AFTER_OTHER_S
         self.assertEqual(w.tick()["state"], "LIVE")
+
+    def test_an_expired_foreign_fence_with_a_live_pid_still_holds_the_host(self):   # Sol R2
+        w = self.pilot_world()
+        w.tick()
+        w.launcher.finish()
+        w.ctl.git.push_commit = lambda sha, ref: (None, "synthetic outage")
+        w.tick()
+        cc.fence.write_fence(Path(w.cfg["custody_root"]), {"purpose": "align-r0:f0", "pid": os.getpid(),
+                                                            "deadline": w.env.now() - 1})
+        w.ctl.git.push_commit = lambda sha, ref: self.fail("pushed while a live foreign PID held the host")
+        w.ctl.git.fetch_audit = lambda: self.fail("fetched while a live foreign PID held the host")
+        self.assertEqual(w.tick()["detail"]["codes"], ["SPAN_LIVE"])
+
+    def test_our_fence_gone_and_another_run_up_is_no_close(self):     # Mythos N9
+        w = self.pilot_world()
+        w.tick()
+        live = w.launcher.finish()
+        cc.fence.write_fence(Path(w.cfg["custody_root"]), {"purpose": "align-r0:other", "pid": os.getpid(),
+                                                            "deadline": w.env.now() + 9000})
+        s = w.tick()
+        self.assertEqual(s["state"], "CLOSING")
+        self.assertFalse(self.state(w, "spans/cq-dev-05-s01-a1/close.json").exists())
+        cc.fence.clear_owned(Path(w.cfg["custody_root"]), "align-r0:other")
+        self.assertEqual(w.tick()["state"], "CLOSED")
+        self.assertIn("align-r0:other", self.state(w, "external.jsonl").read_text())
+        del live
+
+
+@unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
+class SecondGate(WorldCase):
+    """The second gate's controller-side findings, each run through the real synthetic chain."""
+
+    def test_denied_key_scenario(self):                                  # Mythos N1, Sol R1
+        synth.scenario_denied_key(Path(self.tmp.name) / "denied", log=quiet)
+
+    def test_prior_gate_scenario(self):                                  # Mythos N2
+        synth.scenario_prior_gate(Path(self.tmp.name) / "prior", log=quiet)
+
+    def test_recovery_scenario(self):                                    # Mythos N3, Sol R9
+        synth.scenario_recovery(Path(self.tmp.name) / "recovery", log=quiet)
+
+    def test_repage_scenario(self):                                      # Mythos N4
+        synth.scenario_repage(Path(self.tmp.name) / "repage", log=quiet)
+
+    def test_night_window_scenario(self):                                # Mythos N5, N15, Sol R2
+        synth.scenario_night_window(Path(self.tmp.name) / "night", log=quiet)
+
+    def test_a_symlinked_desk_bundle_root_is_refused_unread(self):       # Sol R1
+        w = self.pilot_world()
+        w.tick()
+        live = w.launcher.finish()
+        real = live["output"] / "desk-bundle"
+        moved = live["output"].parent / "elsewhere"
+        real.rename(moved)
+        os.symlink(moved, real)
+        self.assertEqual(w.tick()["state"], "HALTED")
+        close = json.loads(self.state(w, "spans/cq-dev-05-s01-a1/close.json").read_text())
+        self.assertIn("BUNDLE_REFUSED", {r["code"] for r in close["reasons"]})
+        self.assertEqual(synth.git(w.seed, "ls-remote", "origin", "refs/heads/desk-bundles/*").decode().strip(), "")
+
+    def test_a_rolled_back_verdict_ref_halts(self):                      # Mythos N10
+        w = self.pilot_world()
+        w.tick()
+        w.launcher.finish()
+        w.tick()
+        w.air_final("cq-dev-05-s01-a1")
+        first = synth.git(w.seed, "rev-parse", "refs/remotes/origin/cadence-desk-final/cq-dev-05-s01-a1").decode().strip()
+        w.air_final("cq-dev-05-s01-a1", hand_table=True)
+        w.copy_journals("cq-dev-05-s01-a1")
+        w.env.t += 400
+        w.tick()                                          # reads and remembers the later tip
+        synth.git(w.seed, "push", "-q", "-f", "origin", f"{first}:refs/heads/cadence-desk-final/cq-dev-05-s01-a1")
+        w.ack_all()
+        w.env.t += 60
+        w.tick()
+        self.assertIn("rolled back", self.pages(w))
+
+    def test_no_verdict_signers_file_halts_before_any_launch(self):      # Mythos N14
+        w = self.pilot_world()
+        os.unlink(w.cfg["verdict_signers"])
+        self.assertEqual(w.tick()["state"], "HALTED")
+        self.assertIn("SIGNING_UNAVAILABLE", self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_the_first_arm_launches_over_the_standing_fence(self):       # Sol R7
+        w = self.pilot_world()
+        self.assertEqual(w.tick()["state"], "LIVE")
+        self.assertTrue(w.launcher.fences_at_launch[0]["purpose"].startswith(cc.STANDING_FENCE_PREFIX))
+
+    def test_slow_clock_and_notice_calls_spend_the_lease(self):          # Sol R3, Mythos N7
+        w = self.pilot_world()
+
+        def slow_clock():
+            w.env.t += 100
+            return w.env.now()
+        notice = w.ctl.notice
+
+        def slow_notice(issue, text):
+            w.env.t += 30
+            return notice(issue, text)
+        w.ctl.clock, w.ctl.notice = slow_clock, slow_notice
+        s = w.tick()
+        self.assertEqual(s["detail"]["codes"], ["LEASE_EXPIRED"])
+        self.assertEqual(w.launcher.launched, [])
 
 
 @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
@@ -429,6 +535,109 @@ class ArmChild(unittest.TestCase):
         self.assertEqual(cc.fence.read_fence(self.custody)["purpose"], "cadence-controller:abc")
 
 
+class ArmChildBootstrapLease(unittest.TestCase):
+    """Sol R3: the lease is enforced at the launcher's bootstrap call itself, not only before the launcher starts."""
+
+    def test_a_lease_that_expires_inside_the_launcher_refuses_the_bootstrap(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        (tmp / "repo/scripts").mkdir(parents=True)
+        shutil.copy(ROOT / "scripts/launch_align_r0.py", tmp / "repo/scripts/launch_align_r0.py")
+        (tmp / "repo/scripts/cadence_legs_runner.py").write_text("def launch_deadline(plan):\n    return 9e9\n")
+        (tmp / "repo/scripts/launch_cadence_span.py").write_text(
+            "import json, subprocess, sys, time\nfrom pathlib import Path\n"
+            "def cadence_plan(kit, legs=None, batch_window=None, t0=None):\n    return {}\n"
+            "def main(argv):\n"
+            "    time.sleep(1.5)       # the launcher's own work, after the arm child's first check\n"
+            "    try:\n"
+            "        subprocess.run(['/usr/bin/true', 'bootstrap', 'gui/0', 'x.plist'], check=True)\n"
+            "    except subprocess.SubprocessError as exc:\n"
+            "        print(f'campaign launch refused: {exc}', file=sys.stderr)\n"
+            "        return 2\n"
+            "    return 0\n")
+        (tmp / "custody").mkdir()
+        req = {"repo": str(tmp / "repo"), "python": sys.executable, "kit": "/k.json", "legs": "L001",
+               "batch_window": None, "output": "/o", "custody_root": str(tmp / "custody"),
+               "lease_until": time.time() + 1.0, "standing_purpose": "cadence-controller:abc",
+               "controller_pid": os.getpid()}
+        done = subprocess.run([sys.executable, "-I", "-B", "-c", cc.ARM_CHILD, json.dumps(req)], capture_output=True,
+                              text=True, cwd=tmp / "repo")
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertIn("lease expired before bootstrap", done.stderr)
+        self.assertIsNone(json.loads(done.stdout.splitlines()[-1])["t0"])
+
+
+PIN_QUAL = "e1b85a59c53bfbeaa3477df46bcbe9dd8fdfc427"
+FAKE_LAUNCHCTL = r"""#!/usr/bin/env python3
+import json, os, plistlib, subprocess, sys
+from pathlib import Path
+args = sys.argv[1:]
+row = {"verb": args[0]}
+if args[0] == "bootstrap":
+    spec = plistlib.load(open(args[2], "rb"))
+    pa = spec["ProgramArguments"]
+    root, purpose, mpid = Path(pa[4]), pa[5], int(pa[6])
+    sys.path.insert(0, spec["WorkingDirectory"])
+    from scripts import launch_align_r0 as base
+    row["fence_at_bootstrap"], row["magistrate_pid"] = base.read_fence(root), mpid
+    agent = subprocess.Popen(["/bin/sleep", "5"], start_new_session=True)
+    with base.fence_lock(root):
+        base.write_fence(root, {"purpose": purpose, "pid": agent.pid, "deadline": float(pa[7])})
+with open(os.environ["FAKE_LAUNCHCTL_LOG"], "a") as fh:
+    fh.write(json.dumps(row) + "\n")
+"""
+
+
+@unittest.skipUnless(subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{PIN_QUAL}^{{commit}}"],
+                                    capture_output=True).returncode == 0, "the qualification pin is not in this clone")
+class ArmChildRealPin(unittest.TestCase):
+    """Mythos N17: the real arm child against the qualification pin's real frozen launcher (exported from git); a fake
+    launchctl bootstraps nothing and claims the fence as the LaunchAgent's wrapper would."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.pin = self.tmp / "pin"
+        self.pin.mkdir()
+        archive = subprocess.run(["git", "-C", str(ROOT), "archive", PIN_QUAL, "joulewise", "scripts", "configs"],
+                                 capture_output=True, check=True).stdout
+        subprocess.run(["tar", "-x", "-C", str(self.pin)], input=archive, check=True)
+        self.launchctl = self.tmp / "launchctl"
+        self.launchctl.write_text(FAKE_LAUNCHCTL.replace("#!/usr/bin/env python3", f"#!{sys.executable}"))
+        self.launchctl.chmod(0o755)
+        self.custody = self.tmp / "custody"
+        self.custody.mkdir()
+        self.log = self.tmp / "launchctl.jsonl"
+
+    def run_child(self, lease):
+        cc.fence.write_fence(self.custody, {"purpose": "cadence-controller:abc", "pid": os.getpid(), "deadline": 4e9})
+        req = {"repo": str(self.pin), "python": sys.executable, "kit": str(ROOT / "docs/process/cadence/kits/cl-qual-01.v1.1.json"),
+               "legs": "L001,L002,L003,L004,L005,L006", "batch_window": None, "output": str(self.tmp / "out"),
+               "custody_root": str(self.custody), "lease_until": lease, "standing_purpose": "cadence-controller:abc",
+               "controller_pid": os.getpid(), "launchctl_bin": str(self.launchctl)}
+        return subprocess.run([sys.executable, "-I", "-B", "-c", cc.ARM_CHILD, json.dumps(req)], capture_output=True,
+                              text=True, cwd=self.pin, timeout=120,
+                              env={"PATH": "/usr/bin:/bin", "LC_ALL": "C", "HOME": str(self.tmp),
+                                   "FAKE_LAUNCHCTL_LOG": str(self.log)})
+
+    def test_the_real_launcher_receives_the_fence_atomically_and_bootstraps_once(self):
+        done = self.run_child(time.time() + 120)
+        self.assertEqual(done.returncode, 0, done.stderr[-800:])
+        rows = [json.loads(x) for x in self.log.read_text().splitlines()]
+        boot = [r for r in rows if r["verb"] == "bootstrap"]
+        self.assertEqual(len(boot), 1)
+        self.assertEqual(boot[0]["fence_at_bootstrap"]["pid"], boot[0]["magistrate_pid"])   # the launch fence, ours gone
+        child = json.loads(done.stdout.splitlines()[-1])
+        self.assertTrue(child["transferred"])
+        self.assertIsNotNone(child["t0"])
+
+    def test_an_expired_lease_reaches_no_bootstrap(self):
+        done = self.run_child(time.time() - 1)
+        self.assertEqual(done.returncode, 4)
+        self.assertFalse(self.log.exists())
+        self.assertEqual(cc.fence.read_fence(self.custody)["purpose"], "cadence-controller:abc")
+
+
 class FakeRunEnv(cc.Env):
     def __init__(self, table, freq=0):
         self.table, self.freq, self.t = table, freq, 1.8e9
@@ -462,7 +671,7 @@ class HostProofParsing(unittest.TestCase):
     def proof(self, table, kind, freq=0):
         with tempfile.TemporaryDirectory() as tmp:
             p = cc.host_proof(self.cfg(tmp), FakeRunEnv(table, freq), kind)
-        p["lines"]["signing"] = {"ok": True}
+        p["lines"]["signing"] = p["lines"]["verdict_signers"] = {"ok": True}
         return p
 
     def test_clean_host(self):

@@ -663,7 +663,7 @@ The controller replaces the per-span work order (the "Start and check", "Run" an
 
 | File | Content |
 |---|---|
-| `STANDING.json` | `joulewise.cadence_standing.v1`, closed schema. **Hand gates are never declared: they are derived** (15.3). Lead records: `gate_records` and `dispositions`. Keys: (1) `queues`: counted queues in priority order with their role (`standing`/`smoke`); (2) per kit sha256: `source` (`commit`, `path`), line 1 and line 2 records, and a batch-window rule (`none`, `rl172`, `HH:MM-HH:MM`); (3) `hand_gates`: extra named gates; (4) `gate_records`: the lead's `release`/`hold` per (plan id, gate); (5) `prior_spans`: hand-armed spans with t0, close and desk-final evidence; (6) `withdrawn`; (7) `dispositions`: `cleared` lifts a desk hold, `rerun`/`withdrawn` takes a span out of line 9's count; (8) v4 `sessions`; (9) `fallback`: F2 queues, or the F0 item; (10) `freeze2` |
+| `STANDING.json` | `joulewise.cadence_standing.v1`, closed schema. **Hand gates are never declared: they are derived** (15.3). Lead records: `gate_records` and `dispositions`. Keys: (1) `queues`: counted queues in priority order with their role (`standing`/`smoke`); (2) per kit sha256: `source` (`commit`, `path`), line 1 and line 2 records, and a batch-window rule (`none`, `rl172`, `HH:MM-HH:MM`); (3) `hand_gates`: extra named gates; (4) `gate_records`: the lead's `release`/`hold` per (plan id, gate); (5) `prior_spans`: hand-armed spans with their kit sha256 and roster (so their hand gates are derived like any other), t0, close and desk-final evidence; (6) `withdrawn`; (7) `dispositions`: `cleared` lifts a desk hold, `rerun`/`withdrawn` takes a span out of line 9's count; (8) v4 `sessions`; (9) `fallback`: F2 queues, or the F0 item; (10) `freeze2` |
 | queue files | `joulewise.cadence_queue.v1`; validated with the kits by hash and `qual_roster_problems`; append-only over their whole history |
 | `watcher-stamp.json` | `joulewise.cadence_watcher_stamp.v1`; must name the configured watcher |
 | `sessions/READY-<id>.json`, `sessions/DONE-<id>.json` | a v4 session READY, and its end |
@@ -848,3 +848,34 @@ no verdict is hand-written.
 - **Watcher stamps.** It does not demand a fresh watcher observation per arm. RL-149 line 7 reads "live within
   the last 24 h", and the stamp is re-read at every arm and bound into the record. Whether one observation may
   serve several arms is put to the research lead (Sol 12).
+
+### 15.12 The second gate (Sol: 5 HIGH, 7 MED; Mythos: N1 to N6)
+
+| Finding | What changed |
+|---|---|
+| N1, Sol R1 | **Packing.** Before signing, every key of every packed file is checked against the desk's own `desk.DENIED_KEY_RE` (imported, not copied). A hit is `BUNDLE_REFUSED`: nothing is signed or pushed. A symlinked output root, `desk-bundle` root, receipt or plan is refused before any read |
+| N2 | **Prior spans' gates.** A prior span carries `kit_sha256` and `roster`, and its gates are derived and released like a controller span's. The pilot rule uses the same gates. The roster and kit are cross-checked against the span's queue entry and its receipt on the host (`PRIOR_CONTRADICTS`). An unreadable kit is `PRIOR_GATES_UNKNOWN` |
+| N3, Sol R9 | **Recovery.** The `rerun` and `withdrawn` dispositions also lift the span's desk hold. A smoke queue's "pilot only" counts live spans, so a refused pilot's re-run is appended to its own smoke queue with `rerun_of`. A disposed span's legs may be queued again |
+| N4 | **Pages by episode.** An acknowledged page whose situation was absent on a later full evaluation is cleared, and the next occurrence pages again (`-e<n>`) |
+| N5 | **Ends of sessions and windows.** The end of a W1, C or T window (a night label that goes) is recorded as a close with its restore unproven, and so is an acknowledged v4 session page. The controller halts until `note-run` with evidence. The 1,200 s floor counts from the observed close, never earlier |
+| Sol R2 | **Interlock.** A foreign fence holds the host while its PID lives, whatever its deadline. An unreadable or empty `launchctl list` is `NIGHT_UNKNOWN`: a quiet wait with no network |
+| Sol R3, N7 | **The lease.** It counts from the second authority read. The clock check and notice post spend it (`LEASE_EXPIRED`). The arm child refuses the frozen launcher's own `bootstrap` call once the lease has passed, and records that call's instant as t0 |
+| N8 | **Commit times.** A first commit dated ahead of the clock is `QUEUE_COMMIT_IN_FUTURE` |
+| N9 | **Foreign fences at the close.** A live span accepts only its own launch fence. With its fence gone and another run's up, it waits and does not close |
+| N10 | **Verdict refs.** Each verdict ref's tip is remembered, and a tip that does not descend from it is `DESK_VERDICT_INVALID` |
+| N11, Sol R8 | **History.** A verdict counts only with `history_source: signed-records` |
+| N14 | **Gate records.** A release first committed before its span closed is `GATE_RECORD_PREMATURE`. The verdict-signers file is a line of the arm proof |
+| N15 | **v4 windows stay quiet.** Ceded: no host command. Night agents: no fence, nothing synced, a look every five minutes, and a 36 h stall bound |
+| N16 | **Leg counts.** A span that never closed counts no legs on its date |
+| N17 | **Tests.** The arm child runs against the qualification pin's real launcher with a fake `launchctl`, and `synthetic` resolves its workdir |
+| Sol R6 | **The per-span ledger.** A global reason is recorded on every pending head span |
+| Sol R7 | **Fences.** No arm without the standing fence held. While a span is live, the kqueue is registered before the tick looks, so no fence removal is lost |
+
+**Left to the desk (#799): Sol R4, R5 and R11; Mythos N6, N12 and N13.**
+
+**Left to the research lead:**
+- **Sol R10 (watcher reuse).** One observation under 24 h old may serve several arms under RL-149 line 7. RL-172 (g) 7's "never reused" reads the other way.
+- **Sol R12 (Q1 print).** Whether the print, done by hand, needs a completion record or is a print with no hold.
+
+**The remaining close-side handoff.** The window runs from the LaunchAgent wrapper's unlink to the controller's write. Closing it needs `scripts/magistrate_watchdog.py` to honour a controller reservation in `desk_fence_active` and `_launch_fence`. That file is in W1's registered closure (`docs/align/v4/dynamic_closure_trace.json`, `configs/campaigns/align_v4/registration/registration_receipt.json`), so the change is a registration change and needs a ruling.
+
