@@ -1595,16 +1595,11 @@ class Controller:
                     roster=list(span["legs"]),
                     producer={"controller": "cadence_controller", "token": self.token, "closed_at": iso(self.env.now())})
             except (deskmod.DeskRefusal, OSError) as exc:
+                # Includes desk_final.DeniedContent (Mythos N1, Sol R1): pack_bundle runs the desk's own deny scan
+                # (desk_final.refuse_denied_content) on every file it writes, so a denied key is never packed.
                 reasons.append(law.reason("BUNDLE_REFUSED", f"{exc}"[:300], span=sid))
                 if publish.exists():
                     shutil.rmtree(publish)   # Sol 2: a rejected input is never shipped
-        denied = self.denied_keys(bundle) if manifest_sha is not None else []
-        if denied:
-            # Mythos N1, Sol R1: a denied key inside an allowed file is never signed or shipped. The deny list is the
-            # desk's own (desk.DENIED_KEY_RE over every key), so both sides refuse the same content.
-            reasons.append(law.reason("BUNDLE_REFUSED", f"denied keys {denied[:5]} in the packed bundle", span=sid))
-            manifest_sha = None
-            shutil.rmtree(publish)
         if manifest_sha is not None:   # one set of bytes: parsed, hashed and pushed from the packed bundle
             receipt = json.loads((bundle / RECEIPT).read_bytes())
             try:
@@ -1663,6 +1658,8 @@ class Controller:
         self.critical_path_event(sid, end=receipt_epoch, refusal=None if status == "CLOSED_OK" else status)
         self.network_open = True
         self.push_close(plan_id)
+        close = read_json(self.span_dir(plan_id) / "close.json")   # sign-time deny refusal rewrites the status
+        status, reasons = close["status"], close["reasons"]
         launch_problems = (read_json(self.span_dir(plan_id) / "arm.json") or {}).get("launch_problems")
         if status != "CLOSED_OK" or launch_problems:
             self.page("HALT", reasons or [law.reason("LAUNCH_REFUSED", "; ".join(launch_problems or [status]))],
@@ -1685,19 +1682,6 @@ class Controller:
         except OSError as exc:
             bad.append(str(exc))
         return bad
-
-    @staticmethod
-    def denied_keys(bundle):
-        """Every key of every packed JSON file, against the desk's own deny list (``desk.DENIED_KEY_RE``)."""
-        hits = []
-        for path in sorted(bundle.rglob("*.json")):
-            try:
-                doc = json.loads(path.read_bytes())
-            except ValueError:
-                hits.append(f"{path.relative_to(bundle)}: not JSON")
-                continue
-            hits += [f"{path.relative_to(bundle)}:{k}" for k in deskmod._keys(doc) if deskmod.DENIED_KEY_RE.search(k)]
-        return hits
 
     def maintenance_line(self, out, rec):
         """RL-171 section 5 item 1 (item 331's maintenance line): one read-only system-log query over the span,
@@ -1729,6 +1713,16 @@ class Controller:
         try:
             sha, anchor = desk_transport.sign_bundle(self.git.dir, bundle, close["transition"], plan_id=plan_id,
                                                      signing_key=self.cfg["signing_key"])
+        except desk_final.DeniedContent as exc:
+            # sign_bundle runs the desk's deny scan on every file it signs, transition.json included. A hit is not a
+            # retry: nothing is signed or shipped, the span closes STOPPED and the lead is paged.
+            shutil.rmtree(bundle.parent, ignore_errors=True)
+            close.update(status="STOPPED", manifest_sha256=None, pushed=None, closed_epoch=math.ceil(self.env.now()),
+                         publish="nothing (denied content)",
+                         reasons=close["reasons"] + [law.reason("BUNDLE_REFUSED", f"sign: {exc}"[:300], span=close["transition"]["span_id"])])
+            atomic_json(self.span_dir(plan_id) / "close.json", close)
+            self.transition(plan_id, "bundle_refused", {"problem": f"sign: {exc}"[:300]})
+            return False
         except (desk_transport.TransportRefusal, OSError) as exc:
             self.transition(plan_id, "push_failed", {"problem": f"sign: {exc}"[:300]})
             return False

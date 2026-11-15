@@ -549,12 +549,9 @@ def verdict_state(entry, *, run, accept_mock):
         return "pending", [reason("DESK_VERDICT_INVALID", f"{pid}: anchor {str((doc.get('identities') or {}).get('manifest_sha256'))[:12]} "
                                                           f"is not the published {str(run.bundle_sha256)[:12]}")], []
     # ``accept_mock`` is the synthetic switch (the production config refuses accept_mock_verdicts); the desk's own
-    # counts_as_final keeps every other clause.
+    # counts_as_final keeps every other clause, including signed-records history (Mythos N11, Sol R8).
     final = desk_final.counts_as_final(doc, manifest_sha256=run.bundle_sha256, allow_mock=accept_mock is True,
                                        **{k: v for k, v in ident.items()})
-    # The replay check needs the campaign's signed history (Mythos N11, Sol R8): a verdict built on a typed or
-    # omitted history never counts.
-    final = final and doc.get("history_source") == "signed-records"
     halts = []
     if doc.get("next_arm_hold") is True:
         codes = sorted({str(h.get("code")) for h in doc.get("holds") or [] if h.get("scope") == "queue"})

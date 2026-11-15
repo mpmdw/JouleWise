@@ -195,6 +195,28 @@ class SecondGate(WorldCase):
     def test_denied_key_scenario(self):                                  # Mythos N1, Sol R1
         synth.scenario_denied_key(Path(self.tmp.name) / "denied", log=quiet)
 
+    def test_a_denied_key_in_the_transition_record_is_refused_at_signing(self):   # Mythos N1 (desk scan at sign)
+        w = self.pilot_world()
+        w.tick()
+        w.launcher.finish()
+        push = w.ctl.git.push_commit
+        w.ctl.git.push_commit = lambda sha, ref: (None, "synthetic outage")
+        w.tick()
+        path = self.state(w, "spans/cq-dev-05-s01-a1/close.json")
+        close = json.loads(path.read_text())
+        self.assertFalse(close["pushed"])
+        close["transition"]["power_w"] = "SYNTHETIC_DENIED_KEY_CANARY"   # signed with transition.json: refused
+        path.write_text(json.dumps(close))
+        w.ctl.git.push_commit = push
+        s = w.tick()     # the retry signs: refused, the span is STOPPED, and the halt pages
+        self.assertEqual((s["state"], s["detail"]["codes"]), ("PAGED", ["SPAN_BAD_TERMINAL"]))
+        close = json.loads(path.read_text())
+        self.assertEqual((close["status"], close["pushed"]), ("STOPPED", None))
+        self.assertIn("BUNDLE_REFUSED", {r["code"] for r in close["reasons"]})
+        self.assertEqual(synth.git(w.seed, "ls-remote", "origin", "refs/heads/desk-bundles/*").decode().strip(), "")
+        self.assertFalse(self.state(w, "spans/cq-dev-05-s01-a1/publish").exists())
+        self.assertIn("bundle_refused", self.state(w, "transitions.jsonl").read_text())
+
     def test_prior_gate_scenario(self):                                  # Mythos N2
         synth.scenario_prior_gate(Path(self.tmp.name) / "prior", log=quiet)
 

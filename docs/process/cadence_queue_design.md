@@ -853,7 +853,7 @@ no verdict is hand-written.
 
 | Finding | What changed |
 |---|---|
-| N1, Sol R1 | **Packing.** Before signing, every key of every packed file is checked against the desk's own `desk.DENIED_KEY_RE` (imported, not copied). A hit is `BUNDLE_REFUSED`: nothing is signed or pushed. A symlinked output root, `desk-bundle` root, receipt or plan is refused before any read |
+| N1, Sol R1 | **Packing.** The desk's own deny scan (`desk_final.refuse_denied_content`, imported, not copied) runs on every file packed (`pack_bundle`) and every file signed, `transition.json` included (`sign_bundle`). A hit is `BUNDLE_REFUSED`: nothing is signed or pushed, and a sign-time hit closes the span `STOPPED` without a retry. A symlinked output root, `desk-bundle` root, receipt or plan is refused before any read |
 | N2 | **Prior spans' gates.** A prior span carries `kit_sha256` and `roster`, and its gates are derived and released like a controller span's. The pilot rule uses the same gates. The roster and kit are cross-checked against the span's queue entry and its receipt on the host (`PRIOR_CONTRADICTS`). An unreadable kit is `PRIOR_GATES_UNKNOWN` |
 | N3, Sol R9 | **Recovery.** The `rerun` and `withdrawn` dispositions also lift the span's desk hold. A smoke queue's "pilot only" counts live spans, so a refused pilot's re-run is appended to its own smoke queue with `rerun_of`. A disposed span's legs may be queued again |
 | N4 | **Pages by episode.** An acknowledged page whose situation was absent on a later full evaluation is cleared, and the next occurrence pages again (`-e<n>`) |
@@ -863,7 +863,7 @@ no verdict is hand-written.
 | N8 | **Commit times.** A first commit dated ahead of the clock is `QUEUE_COMMIT_IN_FUTURE` |
 | N9 | **Foreign fences at the close.** A live span accepts only its own launch fence. With its fence gone and another run's up, it waits and does not close |
 | N10 | **Verdict refs.** Each verdict ref's tip is remembered, and a tip that does not descend from it is `DESK_VERDICT_INVALID` |
-| N11, Sol R8 | **History.** A verdict counts only with `history_source: signed-records` |
+| N11, Sol R8 | **History.** A verdict counts only with `history_source: signed-records`, a clause of the desk's own `counts_as_final` |
 | N14 | **Gate records.** A release first committed before its span closed is `GATE_RECORD_PREMATURE`. The verdict-signers file is a line of the arm proof |
 | N15 | **v4 windows stay quiet.** Ceded: no host command. Night agents: no fence, nothing synced, a look every five minutes, and a 36 h stall bound |
 | N16 | **Leg counts.** A span that never closed counts no legs on its date |
