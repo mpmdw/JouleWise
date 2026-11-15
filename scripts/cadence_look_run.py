@@ -34,6 +34,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -243,7 +244,6 @@ def build_turn(bundle, result, fan_keys):
 
 
 _B_KIND = re.compile(rb'"k":\s*"b"')
-_H_KIND = re.compile(rb'^\{\s*"k"\s*:\s*"h"\s*,')
 _RX = re.compile(rb'"rx":\s*([0-9]+)')
 _RT = re.compile(rb'"rt":\s*([0-9]+)')
 
@@ -263,8 +263,10 @@ def meter_offsets(sdir):
             size = f.tell()
             f.seek(max(0, size - 262144))
             tail = f.read().splitlines()
-        # Mythos N11: decode the first line only when it is a header line; a sample line is never decoded
-        h = json.loads(head) if _H_KIND.match(head) else {}
+        # Mythos r3 N11 / r5 N1: decode the first line only when inclusion_34's recognizer takes it as a header or
+        # trailer (record kind h/t in any key order, as the monitor writes with sorted keys, and none of a sample
+        # line's keys); a sample line is never decoded
+        h = json.loads(head) if (I34._HEADER_TRAILER_RE.search(head) and not I34._SAMPLE_KEY_RE.search(head)) else {}
         if header_off is None and h.get("k") == "h" and isinstance(h.get("start_raw_ns"), int) \
                 and isinstance(h.get("start_real_ns"), int):
             header_off = h["start_real_ns"] - h["start_raw_ns"]
@@ -518,7 +520,12 @@ def stamp_gap_bound_s(L, streams):
     import bisect
     rts = [r[0] for r in rows]
     i0 = max(0, bisect.bisect_right(rts, a) - 1)
-    i1 = min(len(rows) - 1, bisect.bisect_left(rts, b))
+    # Sol r5 NEW-1: run through the first poll whose newest sample surely lies at or after the end (its receipt less
+    # its round trip, one sample period and the margin), not the first receipt after the end; none: unbounded
+    i1 = next((k for k in range(i0, len(rows))
+               if rows[k][0] - rows[k][1] - rows[k][2] - I34.BRACKET_MARGIN_NS >= b), None)
+    if i1 is None:
+        return math.inf
     worst = 0
     for (rt_i, rtt_i, step), (rt_j, _, _) in zip(rows[i0:i1], rows[i0 + 1:i1 + 1]):
         worst = max(worst, rt_j - rt_i + rtt_i + step + I34.BRACKET_MARGIN_NS)
@@ -529,12 +536,16 @@ def require_bracketed(L, streams):
     """Mythos r3 N6, stage 1's preflight: an energy-fit leg not bracketed by sample-bearing polls
     (inclusion_34.meter_bracket, conservative from the stamps) refuses before the stage-1 file is written, so stage 2
     does not meet it after energy opens. Stage 2 then judges its own support on the decoded samples."""
-    if not I34.meter_bracket(leg_meter_interval_ns(L), streams)["bracketed"]:
-        raise F.LookInputError("DC-in: an energy-fit leg's interval is not bracketed by meter samples")
+    br = I34.meter_bracket(leg_meter_interval_ns(L), streams)
+    if not br["bracketed"]:
+        raise F.LookInputError(f"DC-in: {L.get('leg_key', '(leg)')}: its interval is not bracketed by meter samples "
+                               f"(start {br['start']}, end {br['end']})")
     # the same conservative reading for the gaps inside: a leg that passes here, on a stream whose polls decode,
     # integrates in stage 2 (whose test is on the decoded samples themselves)
-    if stamp_gap_bound_s(L, streams) > METER_MAX_GAP_S:
-        raise F.LookInputError("DC-in: an energy-fit leg's meter samples may be more than 2 s apart (from the stamps)")
+    bound = stamp_gap_bound_s(L, streams)
+    if bound > METER_MAX_GAP_S:
+        raise F.LookInputError(f"DC-in: {L.get('leg_key', '(leg)')}: its meter samples may be up to {bound:.3f} s apart "
+                               f"(from the poll stamps; the limit is {METER_MAX_GAP_S:g} s)")
 
 
 def gpu_max_uncovered_s(trace, a, b):
@@ -744,6 +755,11 @@ def main(argv=None):
         _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,
                                        ledger_ref=getattr(a, "ledger_ref", None)), a.manifest)]
         out = cmd_stage1(a) if a.cmd == "stage1" else cmd_stage2(a)
+        if a.cmd == "stage1":
+            # Mythos r5 N7: stage 1 checks its own file as stage 2 and assemble will, before writing it
+            probs = M.stage1_problems(ROOT, _VERIFIED[0][0], out, sha256_file(a.manifest), allow_draft=a.allow_draft)
+            if probs:
+                raise F.LookInputError("stage 1's own output: " + "; ".join(probs))
         sha = write_canonical(a.out, out)
     except F.LookInputError as exc:
         print(f"REFUSED {exc}", file=sys.stderr)

@@ -534,7 +534,7 @@ def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=()):
         f.write(json.dumps({"k": "h", "schema": "synthetic", "status": "streaming", "rate_idx": 0,
                             "poll_s": METER_POLL_S, "sps": 1.0 / METER_STEP_S,
                             "start_raw_ns": raw0, "start_real_ns": raw0 + off_ns,
-                            "start_mono_ns": raw0}, **compact) + "\n")
+                            "start_mono_ns": raw0}, sort_keys=True) + "\n")   # as km003c_monitor: sorted keys
         polls = 0
         for j in range(0, n, per_poll):
             if any(a <= t_lo + j * METER_STEP_S < b for a, b in holes):
@@ -553,7 +553,7 @@ def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=()):
             polls += 1
         f.write(json.dumps({"k": "t", "polls": polls, "empties": 0, "bad": 0, "usb_errors": 0,
                             "elapsed_s": n * METER_STEP_S, "end_raw_ns": raw0 + int(n * METER_STEP_S * 1e9),
-                            "stop_reason": "signal 15"}, **compact) + "\n")
+                            "stop_reason": "signal 15"}, sort_keys=True) + "\n")
 
 
 def _write_bundle(bdir, turn, tok, fan_keys=("F0Ac", "F1Ac")):
