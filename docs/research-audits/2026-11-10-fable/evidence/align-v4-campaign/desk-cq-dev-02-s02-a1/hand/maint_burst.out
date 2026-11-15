@@ -1,0 +1,12 @@
+11:08 XProtect 62
+11:08 XProtectPluginService 1124
+11:08 mobileassetd 1358
+11:08 softwareupdated 1776
+11:09 mobileassetd 686
+11:09 softwareupdated 820
+11:10 mobileassetd 12
+11:10 softwareupdated 24
+11:12 softwareupdated 8
+11:14 mobileassetd 4
+11:14 softwareupdated 1
+first {'XProtect': '11:08:55', 'softwareupdated': '11:08:55', 'XProtectPluginService': '11:08:55', 'mobileassetd': '11:08:55'} last {'XProtect': '11:08:58', 'softwareupdated': '11:14:03', 'XProtectPluginService': '11:08:58', 'mobileassetd': '11:14:53'}

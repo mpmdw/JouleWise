@@ -1,0 +1,127 @@
+{
+ "run": "STANDING-F0 run 1 (item 346, launched by item 351, magistrate Check RUN_STATE 352), Part C only at b2e01464d",
+ "data": "/Volumes/JW-EXT/partc-desk/r1-partc-f0-20261115T211611Z (read-only Air copy; sha256 -c of all 133 manifest entries OK; .air and .mbp manifests byte-equal, sha256 525d141fbe6ca7d5fe294e34fbcca8e1bf6475cab8bed3e742ef771d77bc0b71)",
+ "compared_with": "item 325/328's Part C (c3f4bacd8): its desk outputs partc2-c3f4-desk/{recorded_eval.json,deskpc2.json} (c9fc0339d); no file of that run's OUT reopened",
+ "code": {
+  "desk": "deskf0.py = deskpc2.py with BUILD/BUILD_HEAD -> /Volumes/JW-EXT/jw-wt/partc-b2e0 (clean, detached at b2e01464d6d4fbf2901ff4d4154df9455104a12a); thermal_gates.py sha256 c72937bd... asserted (git diff c3f4bacd8 b2e01464d over thermal_gates.py and thermal_desk.py empty); B1 slot desk tool 04059c26e via git show",
+  "reeval": "reeval_partc_783.py verbatim, PR #783 evaluator at 561f4dd05 (/Volumes/JW-EXT/jw-wt/pr783-eval, clean)",
+  "recorded_eval": "item 346's Check print verbatim (evaluation, N_chunk, T_dead only)"
+ },
+ "evaluation_lines": {
+  "verdict": [
+   "pass",
+   "pass"
+  ],
+  "lines": {
+   "d_bank_mechanics": [
+    true,
+    true
+   ],
+   "d_bank_start_state": [
+    true,
+    true
+   ],
+   "step_d": [
+    true,
+    true
+   ],
+   "x_g": [
+    true,
+    true
+   ]
+  },
+  "log": [
+   [
+    "three-turn clause not evaluated: one D run"
+   ],
+   [
+    "three-turn clause not evaluated: one D run"
+   ]
+  ],
+  "admitted_turns": [
+   "not_applicable: episode returned at turn 1",
+   "not_applicable: episode returned at turn 1"
+  ],
+  "N_chunk": [
+   4096,
+   4096
+  ],
+  "T_dead_s": [
+   975.29,
+   981.04
+  ],
+  "gate_time_s/limit_s": [
+   [
+    200.5,
+    390.12
+   ],
+   [
+    202.71,
+    392.42
+   ]
+  ],
+  "lines_differ": []
+ },
+ "pr783_reeval": "differs [] (0 differing fields); verdict pass = recorded pass; every line pass on both; X_G episode_flags is a list; 'CHECK3: same verdict and lines'",
+ "desk_rows_differing_from_item_328": {
+  "replay_agrees": {
+   "values": [
+    "14/15",
+    "15/15"
+   ],
+   "reading": "X_G G1 turn 6: both outcomes released; the zero-drift B1 replay releases on the row at 50.049 s (finished 50.052 s) and the live gate on the next row at 51.048 s (recorded 51.066 s), one row (0.999 s) later; both rows inside the 1.0 C band (TV0h 35.628 / 35.613 vs reference 34.694), level 0, Nominal. B1 validates a released gate by exact exit sample, so a one-row drift counts as a disagreement (replay_detail.out). Same class as the first Part C (item 319: 13/15, X_G G1 t2 and t3 one row off, 'no verdict effect'); item 328's run had 15/15. No evaluation line reads the replay."
+  },
+  "classifier_free_pick": {
+   "values": [
+    [
+     "Tf3B",
+     "Tp0z"
+    ],
+    [
+     "Tf3B",
+     "Tf0B"
+    ]
+   ],
+   "reading": "the step-D classifier-free key pick (s_slow) moves run to run: item 319 [TV0h, Tp1G], item 328 [Tf3B, Tf0B], F0 run 1 [Tf3B, Tp0z]; the night confirmation is identical in all three ([TV0h, TV1h], ok true, alias group). Print only"
+  },
+  "TV_unequal_rows": {
+   "values": [
+    [
+     [
+      "D_bank",
+      580,
+      [],
+      [
+       "G1 t1"
+      ]
+     ],
+     [
+      "D_bank",
+      581,
+      [],
+      [
+       "G1 t1"
+      ]
+     ],
+     [
+      "D_bank",
+      750,
+      [],
+      []
+     ]
+    ],
+    [
+     [
+      "D_bank",
+      752,
+      [],
+      []
+     ]
+    ]
+   ],
+   "reading": "rows where TV1h reads a whole-degree value (85.0, 90.0) beside TV0h 84.69/84.89/89.97, all D_bank, none inside a gate window (evaluation tv1h_trigger: inside 0, outside 3, fires false); two in G1 t1's look-back. Item 319 had the same shape (583, 584 in G1 t1's look-back, 752); item 328 had one (752)"
+  },
+  "numeric_only": "D_bank_stale_after_turn1 n 40 vs 41 (Heavy, max age 42.0 vs 43.2 s); all timing/temperature prints differ numerically as expected"
+ },
+ "differing_line": "NONE among the evaluation lines (verdict, the four lines' pass, log, admitted_turns status, N_chunk) and the #783 re-evaluation; three desk print rows differ from item 328 (replay 14/15 vs 15/15, classifier-free pick, TV-unequal rows), each inside the range the first Part C (item 319) showed; no verdict effect"
+}

@@ -1,0 +1,4 @@
+RESULT.json nkeys=185 HITS=['6_power_mode_0', 'ac_powermode', 'leg_record_ac_powermode', 'read_power_step_before_soak']
+hand/hand_table.json nkeys=136 HITS=['6_power_mode_0', 'ac_powermode', 'read_power']
+hand/maint_overlap.json nkeys=44 HITS=[]
+auto/desk_summary.json nkeys=33 HITS=[]

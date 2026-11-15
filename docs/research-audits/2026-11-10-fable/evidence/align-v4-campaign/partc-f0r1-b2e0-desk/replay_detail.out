@@ -1,0 +1,74 @@
+{"replay": {"all_agree": false, "counts": {"member": 15, "auxiliary": 0, "agree": 14}, "fails": [["X_G", "G1", 6]]}, "clock_check_us": {"step_D": 1.15, "D_bank": 0.138, "X_G": -0.154}}
+{
+ "member": "X_G",
+ "kind": "G1",
+ "turn": 6,
+ "recorded": [
+  "released",
+  51.06596575,
+  2768513674657208
+ ],
+ "replayed": [
+  "released",
+  51.0,
+  2768512675586333
+ ],
+ "exit_diff_s": 0.999070875,
+ "reference_fast_c": 34.69436264038086,
+ "band_c": [
+  1.0,
+  1.0
+ ],
+ "rows": [
+  {
+   "t_from_gate_start_s": 47.057,
+   "finished_from_gate_start_s": 47.06,
+   "TV0h": 35.6728401184082,
+   "TV1h": 35.6728401184082,
+   "os_level": 0,
+   "pm_state": "Nominal",
+   "is_recorded_exit": false,
+   "is_replayed_exit": false
+  },
+  {
+   "t_from_gate_start_s": 48.057,
+   "finished_from_gate_start_s": 48.06,
+   "TV0h": 35.65656280517578,
+   "TV1h": 35.65656280517578,
+   "os_level": 0,
+   "pm_state": "Nominal",
+   "is_recorded_exit": false,
+   "is_replayed_exit": false
+  },
+  {
+   "t_from_gate_start_s": 49.057,
+   "finished_from_gate_start_s": 49.06,
+   "TV0h": 35.64189529418945,
+   "TV1h": 35.64189529418945,
+   "os_level": 0,
+   "pm_state": "Nominal",
+   "is_recorded_exit": false,
+   "is_replayed_exit": false
+  },
+  {
+   "t_from_gate_start_s": 50.049,
+   "finished_from_gate_start_s": 50.052,
+   "TV0h": 35.628257751464844,
+   "TV1h": 35.628257751464844,
+   "os_level": 0,
+   "pm_state": "Nominal",
+   "is_recorded_exit": false,
+   "is_replayed_exit": true
+  },
+  {
+   "t_from_gate_start_s": 51.048,
+   "finished_from_gate_start_s": 51.051,
+   "TV0h": 35.61299133300781,
+   "TV1h": 35.61299133300781,
+   "os_level": 0,
+   "pm_state": "Nominal",
+   "is_recorded_exit": true,
+   "is_replayed_exit": false
+  }
+ ]
+}
