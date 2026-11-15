@@ -1,0 +1,431 @@
+"""The interim look's fit (RL-166, RL-166a). Synthetic data only: every input is written by
+scripts/cadence_look_synth.py with planted parameters. No custody, campaign or v4 file exists in these tests."""
+from __future__ import annotations
+
+import builtins
+import copy
+import hashlib
+import io
+import json
+import math
+import os
+from pathlib import Path
+import tempfile
+import unittest
+import unittest.mock
+
+import numpy as np
+
+from joulewise.cadence_looks import fit_interim as F
+from scripts import cadence_look_synth as synth
+
+_CACHE = {}
+
+
+def dataset(scenario):
+    """(look_input, energy, truth, input_sha256), built once per scenario (deep-copied for the caller)."""
+    if scenario not in _CACHE:
+        li, en, tr = synth.build(scenario)
+        _CACHE[scenario] = (li, en, tr, hashlib.sha256(synth.dump(li)).hexdigest())
+    li, en, tr, sha = _CACHE[scenario]
+    return copy.deepcopy(li), copy.deepcopy(en), tr, sha
+
+
+_S1 = {}
+
+
+def stage1_of(scenario):
+    if scenario not in _S1:
+        li, _, _, sha = dataset(scenario)
+        _S1[scenario] = F.stage1(li, sha)
+    return copy.deepcopy(_S1[scenario])
+
+
+def rehash(s1):
+    return hashlib.sha256(F.dump(s1)).hexdigest()
+
+
+def plant_onset(s1, truth):
+    """Replace the fitted onset model by the planted one (the exact-arithmetic test)."""
+    on = truth["params"]["onset"]
+    s1["onset"]["coefficients"] = {c: float(on[c]) for c in F.ONSET_COLS}
+    return s1
+
+
+class Exact(unittest.TestCase):
+    """No noise, exact stamps: given the planted onset model, stage 2 recovers every planted coefficient."""
+
+    def test_rates_and_centring_are_the_planted_ones(self):
+        s1 = stage1_of("exact")
+        _, _, tr, _ = dataset("exact")
+        self.assertAlmostEqual(s1["rates"]["r_p"] / tr["params"]["rates"]["r_p"], 1.0, delta=1e-9)
+        self.assertAlmostEqual(s1["rates"]["r_d"] / tr["params"]["rates"]["r_d"], 1.0, delta=1e-9)
+        for k, v in tr["centring"].items():
+            self.assertAlmostEqual(s1["centring"][k], v, delta=1e-9)
+
+    def test_nine_coefficients_recovered_to_1e8(self):
+        _, en, tr, _ = dataset("exact")
+        s1 = plant_onset(stage1_of("exact"), tr)
+        out = F.stage2(s1, rehash(s1), en)
+        self.assertEqual(out["delta_column"], "kept")
+        for ch in F.CHANNELS:
+            got = out["channels"][ch]["coefficients"]
+            self.assertEqual(list(got), list(F.BASE_COLS + F.HEAT_COLS) + ["delta"])
+            for c, v in got.items():
+                want = tr["params"][ch][c]
+                self.assertLess(abs(v - want) / abs(want), 1e-8, f"{ch}.{c}")
+            # no noise at all: the hot-stretch error of the full fit is zero; LODO refits the onset per fold
+            self.assertLess(out["channels"][ch]["lodo"]["hot"]["max_abs"], 0.01)
+
+    def test_planted_hot_flags_and_onsets(self):
+        s1 = stage1_of("exact")
+        _, _, tr, _ = dataset("exact")
+        for L in s1["legs"]:
+            t = tr["legs"][L["leg_key"]]
+            if not L["segments"]:
+                continue
+            self.assertEqual([s["hot"] for s in L["segments"]], t["hot"], L["leg_key"])
+            if t["first_off_observed_s"] is None:
+                self.assertIsNone(L["state"]["first_off_s"])
+            else:
+                self.assertAlmostEqual(L["state"]["first_off_s"], t["first_off_observed_s"], delta=1e-6)
+            for s, u, v in zip(L["segments"], t["u_s"], t["v_s"]):
+                self.assertAlmostEqual(s["u_s"], u, delta=1e-6)
+                self.assertAlmostEqual(s["v_s"], v, delta=1e-6)
+
+    def test_inclusion_and_onset_bookkeeping(self):
+        s1 = stage1_of("exact")
+        _, _, tr, _ = dataset("exact")
+        by = {L["leg_key"]: L for L in s1["legs"]}
+        for k, t in tr["legs"].items():
+            self.assertEqual(by[k]["in_energy_fit"], t["in_energy_fit"], k)
+            self.assertEqual(by[k]["hp_describe"], t["hp_describe"], k)
+            if t["out_of_state"] and t["in_energy_fit"]:
+                self.assertEqual(by[k]["state"]["onset_use"], "left_out_start_out_of_state")
+                self.assertEqual(by[k]["tau_hat_s"], 0.0)
+            if t["unobserved"] and t["in_energy_fit"]:
+                self.assertEqual(by[k]["state"]["onset_use"], "left_out_state_unobserved")
+            if t["missing_start"]:
+                self.assertEqual(by[k]["start"]["status"], "start_reading_missing")
+                self.assertFalse(by[k]["in_energy_fit"])
+        left = s1["onset"]["left_out"]
+        self.assertEqual(left["start_out_of_state"], 2)
+        self.assertEqual(left["state_unobserved"], 2)
+        self.assertEqual(left["start_reading_missing"], 2)
+        self.assertEqual(s1["counts"]["type_T"], 1)
+        self.assertEqual(s1["counts"]["excluded_by_rule"]["km003c_clean"], 1)
+        self.assertFalse(s1["tripwires"]["any"])
+
+
+class Noisy(unittest.TestCase):
+    """Realistic noise, per-leg rate jitter, onsets fitted: every planted coefficient within 4 cluster SEs."""
+
+    @classmethod
+    def setUpClass(cls):
+        _, en, cls.truth, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        cls.s1 = s1
+        cls.out = F.stage2(s1, rehash(s1), en)
+
+    def test_coefficients_within_4_se(self):
+        for ch in F.CHANNELS:
+            c = self.out["channels"][ch]
+            for i, name in enumerate(c["columns"]):
+                se = math.sqrt(c["covariance"][i][i])
+                want = self.truth["params"][ch][name]
+                self.assertLess(abs(c["coefficients"][name] - want), 4 * se, f"{ch}.{name}")
+
+    def test_onset_recovered(self):
+        on, got = self.truth["params"]["onset"], self.s1["onset"]
+        self.assertEqual(got["status"], "estimable")
+        self.assertTrue(got["converged"])
+        tol = {"intercept": 15.0, "tf08_c": 1.5, "fan_rpm": 0.003, "tv0h_excess_c": 1.5, "t_p_s": 0.25}
+        for k, t in tol.items():
+            self.assertLess(abs(got["coefficients"][k] - on[k]), t, k)
+        self.assertLess(abs(got["sigma_s"] - on["sigma_s"]), 4.0)
+        self.assertEqual(got["count_only_cut"]["form"], "tau_hat_minus_2rms")
+        self.assertAlmostEqual(got["count_only_cut"]["offset_s"], 2 * got["lodo"]["rms_s"])
+
+    def test_hot_stretch_passes_and_heat_columns_matter(self):
+        g = self.out["channels"]["gpu_rail"]["lodo"]
+        self.assertEqual(g["hot"]["verdict"], "passes")
+        self.assertGreater(g["no_heat"]["hot"]["max_abs"], 3 * g["hot"]["max_abs"])
+        self.assertEqual(self.out["qualified_interim_half"]["verdict"], "passes")
+        self.assertEqual(sorted(g["hot"]["counted_days"]),
+                         sorted(d for d, n in g["hot"]["n_hot_legs_per_day"].items() if n >= 3))
+
+    def test_output_has_no_per_leg_energy(self):
+        F.output_check(self.out)
+        text = json.dumps(self.out).lower().replace("joulewise", "")
+        for word in ("joule", "watt", "power", "energy"):
+            self.assertFalse(word in text, word)
+        for ch in F.CHANNELS:
+            for v in self.out["channels"][ch]["residuals"]["leg"].values():
+                self.assertLess(abs(v), 0.2)
+
+    def test_prefix_bias_has_three_lengths_and_intervals(self):
+        for ch in F.CHANNELS:
+            pb = self.out["channels"][ch]["prefix_bias"]
+            self.assertEqual({k: v["prefix_len"] for k, v in pb.items()}, {"1.10": 3724, "1.30": 3151, "1.374": 2981})
+            for v in pb.values():
+                lo, hi = v["ci90"]
+                self.assertLess(lo, v["estimate"])
+                self.assertLess(v["estimate"], hi)
+                self.assertEqual(v["n_days"], 5)
+
+    def test_marked_span_print(self):
+        ms = self.out["channels"]["gpu_rail"]["marked_sensitivity"]
+        self.assertEqual(ms["marked_spans"], ["dev-04-s02"])
+        self.assertLess(ms["n_legs_without"], self.out["channels"]["gpu_rail"]["n_legs"])
+        self.assertIsNotNone(ms["coefficients_without"])
+
+
+class Branches(unittest.TestCase):
+
+    def run2(self, scenario):
+        _, en, tr, _ = dataset(scenario)
+        s1 = stage1_of(scenario)
+        return s1, F.stage2(s1, rehash(s1), en), tr
+
+    def test_onset_not_estimable_drops_delta_and_keeps_116(self):
+        s1, out, _ = self.run2("onset_not_estimable")
+        self.assertEqual(s1["onset"]["status"], "not_estimable")
+        self.assertEqual(s1["onset"]["count_only_cut"], {"form": "fixed_116_s", "offset_s": None, "fixed_s": 116.0})
+        self.assertEqual(out["delta_column"], "dropped_onset_not_estimable")
+        for ch in F.CHANNELS:
+            self.assertNotIn("delta", out["channels"][ch]["columns"])
+            self.assertEqual(len(out["channels"][ch]["covariance"]), 8)
+        self.assertTrue(all(L["tau_hat_s"] is None for L in s1["legs"]))
+
+    def test_few_hot_days_is_not_evaluable(self):
+        _, out, _ = self.run2("few_hot_days")
+        self.assertEqual(out["channels"]["gpu_rail"]["lodo"]["hot"]["verdict"], "not_evaluable")
+        self.assertEqual(out["qualified_interim_half"]["verdict"], "not_evaluable")
+
+    def test_no_heat_world_gives_heat_terms_near_zero(self):
+        _, out, tr = self.run2("no_heat")
+        for ch in F.CHANNELS:
+            c = out["channels"][ch]
+            for i, name in enumerate(c["columns"]):
+                if name in F.HEAT_COLS + (F.DELTA_COL,):
+                    self.assertLess(abs(c["coefficients"][name]), 4 * math.sqrt(c["covariance"][i][i]), name)
+
+    def test_estimable_needs_12_uncensored_on_3_days(self):
+        self.assertEqual(F.onset_estimable([False] * 12, ["a"] * 4 + ["b"] * 4 + ["c"] * 4)[0], True)
+        self.assertEqual(F.onset_estimable([False] * 11 + [True], ["a"] * 4 + ["b"] * 4 + ["c"] * 4)[0], False)
+        self.assertEqual(F.onset_estimable([False] * 12, ["a"] * 6 + ["b"] * 6)[0], False)
+
+    def test_tripwires(self):
+        li, _, _, _ = dataset("noisy")
+        for leg in li["legs"]:
+            if leg["span_id"].startswith(("dev-04", "dev-05", "hp-01")):
+                leg["inclusion"]["g0_released"] = False
+        s1 = F.stage1(li, "0" * 64)
+        t = s1["tripwires"]
+        self.assertTrue(t["dev_included_below_45"]["trips"])
+        self.assertTrue(t["hp01_below_9"]["trips"])
+        self.assertEqual(t["hp01_below_9"]["value"], 0)
+        self.assertTrue(t["any"])
+
+
+class Conventions(unittest.TestCase):
+    """RL-166a's column, unit by unit."""
+
+    def leg(self):
+        return {"prefill_tokens": 10000, "start": {"z": [1.0, 2.0, 3.0]}}
+
+    def test_block0_n_255_and_c_P_plus_128(self):
+        s = {"kind": "decode", "edge_lo": 0, "edge_hi": 255, "tok_first": 0, "tok_last": 255, "n_tokens": 256,
+             "u_s": 10.0, "v_s": 30.0}
+        row = F._design_row(self.leg(), s, "decode", list(F.BASE_COLS), None)
+        self.assertEqual(row[2], 255.0)
+        self.assertEqual(row[3], 255.0 * 10128.0)
+        self.assertEqual(row[4], 255.0 * 10000.0)
+
+    def test_block_k_n_256_and_c(self):
+        k = 3
+        s = {"kind": "decode", "edge_lo": 256 * k - 1, "edge_hi": 256 * k + 255, "tok_first": 256 * k,
+             "tok_last": 256 * k + 255, "n_tokens": 256, "u_s": 10.0, "v_s": 30.0}
+        row = F._design_row(self.leg(), s, "decode", list(F.BASE_COLS), None)
+        self.assertEqual(row[2], 256.0)
+        self.assertEqual(row[3], 256.0 * (10000 + 256 * k + 127.5))
+
+    def test_tail_n_and_c(self):
+        s = {"kind": "prefix_tail", "edge_lo": 3583, "edge_hi": 3723, "tok_first": 3584, "tok_last": 3723,
+             "n_tokens": 140, "u_s": 10.0, "v_s": 30.0}
+        row = F._design_row(self.leg(), s, "decode", list(F.BASE_COLS), None)
+        self.assertEqual(row[2], 140.0)
+        self.assertEqual(row[3], 140.0 * (10000 + (3584 + 3723) / 2))
+
+    def test_heat_and_step_columns(self):
+        s = {"kind": "decode", "edge_lo": 255, "edge_hi": 511, "tok_first": 256, "tok_last": 511, "n_tokens": 256,
+             "u_s": 10.0, "v_s": 30.0}
+        cols = list(F.BASE_COLS + F.HEAT_COLS) + ["delta"]
+        row = dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, 25.0)))
+        self.assertEqual(row["k_tf08"], 20.0 * 20.0 * 1.0)
+        self.assertEqual(row["k_fan"], 20.0 * 20.0 * 2.0)
+        self.assertEqual(row["k_tv0h"], 20.0 * 20.0 * 3.0)
+        self.assertEqual(row["delta"], 5.0)
+        self.assertEqual(dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, 0.0)))["delta"], 20.0)
+        self.assertEqual(dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, 40.0)))["delta"], 0.0)
+
+    def test_turn_sum_of_heat_is_half_T_squared(self):
+        """Q1: summed over the tiling segments, d*m sums to T^2/2 and the step to max(0, T - tau)."""
+        s1 = stage1_of("exact")
+        L = next(L for L in s1["legs"] if L["in_energy_fit"])
+        cols = list(F.BASE_COLS + F.HEAT_COLS) + ["delta"]
+        rows = [dict(zip(cols, F._design_row(L, s, s["kind"], cols, 100.0))) for s in L["segments"]]
+        T = L["segments"][-1]["v_s"]
+        self.assertAlmostEqual(T, L["load_s"], delta=1e-9)
+        self.assertAlmostEqual(sum(r["k_tf08"] for r in rows), 0.5 * T * T * L["start"]["z"][0], delta=1e-6)
+        self.assertAlmostEqual(sum(r["delta"] for r in rows), T - 100.0, delta=1e-9)
+
+    def test_rates_use_n_minus_1(self):
+        s1 = stage1_of("exact")
+        self.assertAlmostEqual(s1["rates"]["r_d"], 12.8, delta=1e-9)
+
+    def test_off_state_definitions(self):
+        turn = {"turn_start_s": 100.0, "last_token_s": 200.0,
+                "journal": [{"t_s": 99.0, "os_level": 1, "pm_state": "Nominal", "pm_fresh": True},
+                            {"t_s": 150.0, "os_level": 0, "pm_state": "Unknown", "pm_fresh": True},
+                            {"t_s": 160.0, "os_level": 2, "pm_state": "Nominal", "pm_fresh": False},
+                            {"t_s": 170.0, "os_level": 0, "pm_state": "Moderate", "pm_fresh": True}],
+                "native_pm": [{"t_end_s": 155.0, "state": None}, {"t_end_s": 165.0, "state": "Heavy"}]}
+        self.assertEqual(F.first_off(turn), (60.0, "os_level_above_0"))
+        turn["journal"][2]["os_level"] = 0
+        self.assertEqual(F.first_off(turn), (65.0, "native_pm_state_off"))
+        turn["native_pm"][1]["t_end_s"] = 200.5          # outside (start, last token]
+        self.assertEqual(F.first_off(turn), (70.0, "journal_pm_state_off"))
+
+    def test_t_quantile(self):
+        self.assertAlmostEqual(F.t_quantile(0.95, 4), 2.131847, places=5)
+        self.assertAlmostEqual(F.t_quantile(0.95, 1), 6.313752, places=5)
+        self.assertAlmostEqual(F.t_quantile(0.95, 30), 1.697261, places=5)
+
+
+class CensoredNormal(unittest.TestCase):
+
+    def test_recovers_a_large_tobit(self):
+        rng = np.random.default_rng(7)
+        n = 3000
+        X = np.column_stack([np.ones(n), rng.normal(0, 1, n), rng.normal(0, 2, n)])
+        beta = np.array([200.0, -15.0, 6.0])
+        ystar = X @ beta + rng.normal(0, 12.0, n)
+        c = rng.uniform(170, 260, n)
+        cen = ystar > c
+        y = np.where(cen, c, ystar)
+        f = F.censored_normal_fit(X, y, cen)
+        self.assertTrue(f["converged"])
+        self.assertLess(np.max(np.abs(f["beta"] - beta) / np.array([1.0, 1.0, 1.0])), 1.0)
+        self.assertLess(abs(f["sigma"] - 12.0), 0.6)
+
+    def test_no_censoring_equals_ols(self):
+        rng = np.random.default_rng(8)
+        X = np.column_stack([np.ones(40), rng.normal(0, 1, 40)])
+        y = X @ np.array([5.0, 2.0]) + rng.normal(0, 1, 40)
+        f = F.censored_normal_fit(X, y, np.zeros(40, dtype=bool))
+        b, *_ = np.linalg.lstsq(X, y, rcond=None)
+        self.assertLess(np.max(np.abs(f["beta"] - b)), 1e-8)
+        res = y - X @ b
+        self.assertAlmostEqual(f["sigma"], math.sqrt(res @ res / 40), delta=1e-8)   # ML sigma
+
+
+class Blind(unittest.TestCase):
+    """Stage 1 is a function of non-energy fields only; no in-turn reading enters the energy fit."""
+
+    def test_stage1_ignores_in_turn_readings(self):
+        li, en, _, _ = dataset("noisy")
+        s1 = F.stage1(li, "a" * 64)
+        for leg in li["legs"]:
+            if leg["turn"]:
+                ts = leg["turn"]["turn_start_s"]
+                for r in leg["turn"]["journal"]:
+                    if r["t_s"] > ts:
+                        r["tf08_c"], r["fan_rpm"], r["tv0h_c"] = 99.0, 9999.0, 99.0
+        self.assertEqual(F.dump(F.stage1(li, "a" * 64)), F.dump(s1))
+
+    def test_stage1_reads_no_energy_argument(self):
+        li, _, _, sha = dataset("exact")
+        with unittest.mock.patch.object(builtins, "open", side_effect=AssertionError("stage 1 opened a file")):
+            F.stage1(li, sha)
+
+
+class Refusals(unittest.TestCase):
+
+    def refuse1(self, mutate):
+        li, _, _, _ = dataset("exact")
+        mutate(li)
+        with self.assertRaises(F.LookInputError):
+            F.stage1(li, "0" * 64)
+
+    def first_turn(self, li):
+        return next(leg for leg in li["legs"] if leg["turn"])
+
+    def test_unknown_and_missing_keys(self):
+        self.refuse1(lambda li: self.first_turn(li).update(extra=1))
+        self.refuse1(lambda li: self.first_turn(li).pop("g0_role"))
+        self.refuse1(lambda li: self.first_turn(li)["turn"]["journal"][0].update(tv1h_c=1.0))
+
+    def test_forbidden_fields(self):
+        for k in ("condition", "slot_id", "instruction", "start_band"):
+            self.refuse1(lambda li, k=k: self.first_turn(li)["turn"]["journal"][0].update({k: 1}))
+
+    def test_repeated_leg_and_unknown_span(self):
+        self.refuse1(lambda li: li["legs"].append(copy.deepcopy(self.first_turn(li))))
+        self.refuse1(lambda li: self.first_turn(li).update(span_id="nope"))
+
+    def test_bad_numbers_and_order(self):
+        self.refuse1(lambda li: self.first_turn(li)["turn"].update(turn_start_s=float("nan")))
+        self.refuse1(lambda li: self.first_turn(li)["turn"]["segments"].reverse())
+        self.refuse1(lambda li: self.first_turn(li)["turn"]["segments"].pop())
+        self.refuse1(lambda li: self.first_turn(li)["turn"].update(decode_tokens=4000))
+        self.refuse1(lambda li: self.first_turn(li)["turn"]["segments"][3].update(edge_lo=700))
+        self.refuse1(lambda li: self.first_turn(li)["turn"]["journal"].reverse())
+        self.refuse1(lambda li: self.first_turn(li)["turn"]["journal"].append(
+            dict(self.first_turn(li)["turn"]["journal"][-1], t_s=1e12)))
+        self.refuse1(lambda li: self.first_turn(li)["turn"]["prefix_tails"].pop())
+
+    def test_type_t_with_a_turn(self):
+        def m(li):
+            t = next(leg for leg in li["legs"] if leg["leg_type"] == "T")
+            t["turn"] = copy.deepcopy(self.first_turn(li)["turn"])
+        self.refuse1(m)
+
+    def test_stage2_refusals(self):
+        _, en, tr, _ = dataset("exact")
+        s1 = stage1_of("exact")
+        h = rehash(s1)
+        with self.assertRaises(F.LookInputError):
+            F.stage2(s1, "0" * 64, en)                     # stage-1 hash mismatch
+        e2 = copy.deepcopy(en)
+        e2["input_sha256"] = "0" * 64
+        with self.assertRaises(F.LookInputError):
+            F.stage2(s1, h, e2)                            # energy bound to another input
+        e2 = copy.deepcopy(en)
+        e2["legs"].pop(next(iter(e2["legs"])))
+        with self.assertRaises(F.LookInputError):
+            F.stage2(s1, h, e2)                            # a leg missing
+        e2 = copy.deepcopy(en)
+        e2["legs"]["dev-01-s02/L005"] = copy.deepcopy(next(iter(en["legs"].values())))   # an excluded leg
+        with self.assertRaises(F.LookInputError):
+            F.stage2(s1, h, e2)
+        e2 = copy.deepcopy(en)
+        next(iter(e2["legs"].values()))["gpu_rail"]["segments"].pop()
+        with self.assertRaises(F.LookInputError):
+            F.stage2(s1, h, e2)
+        e2 = copy.deepcopy(en)
+        next(iter(e2["legs"].values()))["dc_in"]["segments"][2] = float("inf")
+        with self.assertRaises(F.LookInputError):
+            F.stage2(s1, h, e2)
+
+    def test_output_check_refuses_energy(self):
+        with self.assertRaises(ValueError):
+            F.output_check({"channels": {"gpu_rail": {"leg_energy": 1.0}}})
+        with self.assertRaises(ValueError):
+            F.output_check({"x": {"dev-01-s01/L001": 0.01}})
+        with self.assertRaises(ValueError):
+            F.output_check({"residuals": {"leg": {"dev-01-s01/L001": 512.0}}})
+
+
+if __name__ == "__main__":
+    unittest.main()

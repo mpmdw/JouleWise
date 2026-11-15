@@ -140,7 +140,7 @@ Window: every reading with `t_s` in [turn_start_s − 60, last_token_s + 5].
   "pm_state": str | null,                 # "Nominal", "Moderate", "Heavy", "Trapping", "Sleeping", "Unknown", or null
   "pm_fresh": bool,                       # started.monotonic_ns - status.pm_observed_ns <= 2 s
   "tf08_c": float | null,                 # sensor Tf08
-  "fan_rpm": float | null,                # the host's fan key(s); see open reading R-7
+  "fan_rpm": float | null,                # mean of the host's fan keys; null if any key is missing (R-7)
   "tv0h_c": float | null }                # sensor TV0h, raw (the excess is formed by stage 1)
 ```
 
@@ -257,7 +257,7 @@ level R.
   "sigma_s": float | null,
   "converged": bool | null,
   "lodo": { "per_day_rms_s": {day: float}, "rms_s": float,
-            "heldout_censored_below_tau": int, "heldout_censored": int } | null,
+            "heldout_censored_below_tau": int, "heldout_censored": int, "folds_not_estimable": [day] } | null,
   "count_only_cut": { "form": "tau_hat_minus_2rms" | "fixed_116_s",
                       "offset_s": float | null, "fixed_s": 116.0 | null } }
 ```
@@ -318,6 +318,7 @@ contract between the two.
               "verdict": "passes" | "fails" | "not_evaluable" },
     "leg":  { "per_day": {day: float}, "pooled": float, "rms_over_legs": float },
     "hot_rms_over_legs": float | null,    # the "frozen holdout relative error" of SD_j (Q3)
+    "folds_delta_dropped": [day],         # R-12
     "no_heat": { "hot": {same as hot}, "leg": {same as leg}, "hot_rms_over_legs": float | null }
   },
   "prefix_bias": {                        # Q2 P2; unit: score SD
@@ -355,16 +356,33 @@ is NaN or infinite; the level-E `input_sha256` differs from the stage-1 file's `
 
 ---
 
-## 6. Open readings (RL-166 does not fix these; listed for the lead, not answered here)
+## 6. Readings
 
-| # | Point | What the generator assumes |
+### 6.1 R-1 to R-9: ruled in RL-166a (Sat 14 Nov 20:49). Both implementations carry exactly this column
+
+| # | Ruling |
+|---|---|
+| R-1 | r_d = Σ (N − 1) / Σ (`last_token_s` − `first_token_s`); r_p = Σ P / Σ (`first_token_s` − `turn_start_s`); over included development legs. T = P / r_p + (N − 1) / r_d |
+| R-2 | n = `edge_hi` − `edge_lo` for every decode segment: 255 for block 0, 256 for k ≥ 1, the tail's own count. `n_tokens` is not read for n |
+| R-3 | c = P + (`edge_lo` + 1 + `edge_hi`) / 2. Block 0: P + 128; block k ≥ 1: P + 256k + 127.5; tail: P + (`tok_first` + `tok_last`) / 2 |
+| R-4 | An off-state reading: a journal reading with level above 0 (whatever its stamp's age), or a journal reading or native row whose state is present and not Nominal or `Unknown`, at a time in (`turn_start_s`, `last_token_s`]. A `state_unobserved` gap is not one. A block is hot when its `first_token_s` is at or after the first such reading |
+| R-5 | Censored at `last_token_s` − `turn_start_s`, wall seconds |
+| R-6 | The onset model uses the Q1 medians, not refitted per fold. T_p enters uncentred |
+| R-7 | `fan_rpm` = the mean of the host's fan keys at that reading; null if any of the host's keys is missing in the reading |
+| R-8 | One SD per channel and length: sample SD (ddof 1) of the LODO residual in joules at that length, over all legs in the energy fit, all folds pooled |
+| R-9 | Legs with τ̂ = 0 count in the hot-stretch error and toward a day's three legs. The hot stretch is set by R-4's observed reading, never by τ̂ |
+
+### 6.2 Further readings the analyst seat's code applies (not yet ruled; for the research lead before item 7)
+
+| # | Point | Applied |
 |---|---|---|
-| R-1 | Q5 "Σ decode tokens / Σ decode seconds": N or N − 1 tokens per leg over `last − first` seconds. Token m at T_p + m/r_d puts token 0 at T_p, which suggests N − 1 | N − 1 |
-| R-2 | n for decode block 0: 256 tokens decoded over 255 inter-token gaps. `n` in the base is the block's token count | 256 for every full block; the tail's own count |
-| R-3 | c, "context tokens at the block's midpoint" | P + (tok_first + tok_last)/2 |
-| R-4 | Q3 "first off-state reading": does a `state_unobserved` gap count as one | No: only clauses (a) and (b) of RL-149 §1.3 |
-| R-5 | Q4 censoring time for a turn with no off-state reading | last_token_s − turn_start_s |
-| R-6 | Q4 the onset model's centring | the same Q1 medians |
-| R-7 | Fan speed on a two-fan host | mean of the host's fan keys at that reading |
-| R-8 | Q2 P2 "residuals ... each divided by the SD of its own length over legs": SD over all included legs of the LODO residual in J at that length | as stated, sample SD (ddof 1) |
-| R-9 | Q3 hot-stretch error when a held-out day's legs include ones with τ̂ = 0 | they count; no special case |
+| R-10 | Cluster-by-leg covariance small-sample factor | CR1: G/(G − 1) · (n − 1)/(n − k), G legs, n segments, k columns |
+| R-11 | Prefix bias sign and centre | residual = measured − predicted (LODO, J); bias = mean over legs of (long/SD_long − short/SD_short); 90 % interval = bias ± t(0.95, D − 1) · SD(day means)/√D, day means of the same per-leg difference |
+| R-12 | A LODO fold in which the onset model is not estimable (fewer than 12 uncensored on 3 days without D) | that fold drops the δ column; the look's own status is unchanged; the fold is listed in `lodo.folds_delta_dropped` (energy) and `onset.lodo.folds_not_estimable` (onset) and gives no onset error |
+| R-13 | Onset LODO RMS | pooled over all held-out uncensored legs (not a mean of per-day values); per-day values print |
+| R-14 | "RMS over held-out legs" (Q3, SD_j's holdout error) | printed twice: over each leg's whole-leg relative residual (`leg.rms_over_legs`) and over each leg's hot-stretch relative residual (`hot_rms_over_legs`) |
+| R-15 | Population of each stage-1 constant | rates: included type-A development legs with a turn (a missing start reading does not remove a leg from the rates); medians and calibrated ranges: legs in the energy fit (valid start reading) |
+| R-16 | "Hit `state_unobserved`" (Q4) | the unobserved time is earlier than the first off-state reading, or there is no off-state reading |
+| R-17 | A counted day (Q3) | at least three legs in the energy fit on that day with at least one hot block; the pooled hot value is over counted days only |
+| R-18 | Signed relative errors | (Σ predicted − Σ measured) / Σ measured |
+| R-19 | Censored-normal fit | Newton's method in Olsen's (β/σ, 1/σ) form, from OLS on the uncensored; ML σ (no degrees-of-freedom correction); converged when the step is under 1e-11 relative and the score under 1e-6 |

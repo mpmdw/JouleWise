@@ -182,7 +182,7 @@ def build(scenario="noisy", seed=20261114):
         span_id = f"{block}-{suf}"
         day_index = (np.datetime64(date) - np.datetime64(DAY0)).astype(int)
         t0 = DAY0_EPOCH + 86400.0 * float(day_index) + 3600.0 * hour
-        soak = 58.0 + float(rng.normal(0, 1.0))
+        soak = round(58.0 + float(rng.normal(0, 1.0)), 3)
         role = "describe" if block == "hp-01" else "fit"
         marks = ["reference from a redo"] if span_id == "dev-04-s02" else []
         spans.append({"span_id": span_id, "block_id": block, "phase": "extension" if role == "describe" else "development",
@@ -201,6 +201,10 @@ def build(scenario="noisy", seed=20261114):
                 exc = st["consume_tv0h"] + float(rng.normal(0, st["consume_tv0h_sd"]))
             else:
                 exc = st["tv0h_cold"] + st["tv0h_span"] * h + float(rng.normal(0, st["tv0h_sd"]))
+            # the values the journal writes (rounded as written), so planted z equals the read z
+            tf08, fan = round(tf08, 3), round(fan, 1)
+            tv0h = round(soak + exc, 3)
+            exc = tv0h - soak
             P = cells[pos] + int(rng.integers(-40, 41))           # realized count near nominal
             N = 4096
             rp_i = r_p * (1 + float(rng.normal(0, par["noise"]["rate_jitter"]["r_p"])))
@@ -211,7 +215,7 @@ def build(scenario="noisy", seed=20261114):
                 "si": si, "pos": pos, "span_id": span_id, "block": block, "role": role, "date": date,
                 "leg_id": leg_id, "leg_key": f"{span_id}/{leg_id}", "cell": cells[pos], "g0_role": roles[pos],
                 "P": P, "N": N, "rp": rp_i, "rd": rd_i, "ts": ts, "soak": soak,
-                "tf08": tf08, "fan": fan, "tv0h": soak + exc, "exc": exc,
+                "tf08": tf08, "fan": fan, "tv0h": tv0h, "exc": exc,
                 "type": "T" if key in plants["type_T"] else "A",
                 "excluded_rule": excluded_rule,
                 "missing_start": key in plants["start_reading_missing"],
@@ -310,10 +314,11 @@ def build(scenario="noisy", seed=20261114):
     truth = {
         "schema": "joulewise.cadence_look_synth_truth.v1", "scenario": scenario, "seed": seed,
         "input_sha256": input_sha,
-        "readings_assumed": {"R-1": "decode rate over N-1 tokens", "R-2": "n = 256 per full block",
-                             "R-3": "c = P + (tok_first + tok_last)/2", "R-4": "state_unobserved is not an off-state reading",
+        "readings_assumed": {"R-1": "decode rate over N-1 tokens", "R-2": "RL-166a: n = edge_hi - edge_lo",
+                             "R-3": "RL-166a: c = P + (edge_lo + 1 + edge_hi)/2", "R-4": "state_unobserved is not an off-state reading",
                              "R-5": "censored at last_token_s - turn_start_s", "R-6": "onset centred on the Q1 medians",
-                             "R-7": "one fan value per reading", "R-8": "sample SD", "R-9": "no special case"},
+                             "R-7": "one fan value per reading (RL-166a: null if any key missing)",
+                             "R-8": "sample SD over all legs, folds pooled", "R-9": "no special case"},
         "params": {k: v for k, v in par.items() if k != "plants"},
         "plants": {k: ([list(x) for x in v] if isinstance(v, list) else {f"{a},{b}": r for (a, b), r in v.items()})
                    for k, v in par["plants"].items()},
@@ -337,7 +342,9 @@ def _turn(p, rng):
         segs.append({"seg": k + 1, "kind": "decode", "block": k, "n_tokens": BLOCK, "tok_first": a, "tok_last": b,
                      "edge_lo": lo, "edge_hi": hi, "wall_start_s": tok[lo], "wall_end_s": tok[hi],
                      "first_token_s": tok[a]})
-        count_segs.append({"kind": "decode", "n": BLOCK, "c": P + (a + b) / 2.0, "u": t_p + lo / rd, "v": t_p + hi / rd})
+        # RL-166a R-2, R-3: n and c on the segment's edges (block 0: n = 255, c = P + 128)
+        count_segs.append({"kind": "decode", "n": hi - lo, "c": P + (lo + 1 + hi) / 2.0, "u": t_p + lo / rd,
+                           "v": t_p + hi / rd})
     tails, count_tails = [], {}
     for L in PREFIX_LENS:
         if L >= N:
@@ -346,7 +353,7 @@ def _turn(p, rng):
         tails.append({"prefix_len": L, "kind": "prefix_tail", "tok_first": a, "tok_last": b, "n_tokens": b - a + 1,
                       "edge_lo": lo, "edge_hi": hi, "wall_start_s": tok[lo], "wall_end_s": tok[hi],
                       "first_token_s": tok[a]})
-        count_tails[str(L)] = {"n": b - a + 1, "c": P + (a + b) / 2.0, "u": t_p + lo / rd, "v": t_p + hi / rd}
+        count_tails[str(L)] = {"n": hi - lo, "c": P + (lo + 1 + hi) / 2.0, "u": t_p + lo / rd, "v": t_p + hi / rd}
 
     # state logs
     journal, native = [], []
