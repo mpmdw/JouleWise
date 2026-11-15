@@ -1,0 +1,37 @@
+2026-11-14 16:37:45 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/runner_receipt.json (allowlisted: receipt)
+2026-11-14 16:38:35 KEYS-ONLY /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/desk-bundle/span/meter.json (structural key check before desk run)
+2026-11-14 16:38:40 DESK(build_desk, allowlist leg-summary-v1) /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/desk-bundle/legs/L001/leg_summary.json
+2026-11-14 16:38:40 DESK(build_desk, allowlist leg-summary-v1) /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/desk-bundle/legs/L002/leg_summary.json
+2026-11-14 16:38:40 DESK(build_desk, allowlist leg-summary-v1) /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/desk-bundle/legs/L003/leg_summary.json
+2026-11-14 16:38:40 DESK(build_desk, allowlist leg-summary-v1) /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/desk-bundle/span/meter.json
+2026-11-14 16:38:40 DESK(build_desk, allowlist leg-summary-v1) /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/desk-bundle/span/result.json
+2026-11-14 16:38:47 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L001/leg_record.json (allowlisted)
+2026-11-14 16:38:47 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L002/leg_record.json (allowlisted)
+2026-11-14 16:38:47 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L003/leg_record.json (allowlisted)
+2026-11-14 16:39:04 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L001/runtime/runs/cadence-cl-dev-01-l001/outputs/align_thermal.jsonl (allowlisted thermal journal; key census first)
+2026-11-14 16:39:27 KEYS-ONLY /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/span_plan.json (structural key check)
+2026-11-14 16:39:27 KEYS-ONLY /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/chain-stages.jsonl (structural key check)
+2026-11-14 16:39:27 KEYS-ONLY /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/censuses.jsonl (structural key check)
+2026-11-14 16:39:27 KEYS-ONLY /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/volume_censuses.jsonl (structural key check)
+2026-11-14 16:39:27 KEYS-ONLY /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/soak/soak_reference.json (structural key check)
+2026-11-14 16:39:27 KEYS-ONLY /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L001/runtime/load_journal.json (structural key check)
+2026-11-14 16:39:42 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/span_plan.json (allowlisted)
+2026-11-14 16:39:42 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/chain-stages.jsonl (allowlisted)
+2026-11-14 16:39:42 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/censuses.jsonl (allowlisted)
+2026-11-14 16:39:42 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/volume_censuses.jsonl (allowlisted)
+2026-11-14 16:40:01 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L001/runtime/load_journal.json (outside-CPU-load journal; keys checked: census/cpu_busy_cores/cpu_busy_t_s/errors/exclude_roots, no energy/power key)
+2026-11-14 16:40:01 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L002/runtime/load_journal.json (outside-CPU-load journal; keys checked: census/cpu_busy_cores/cpu_busy_t_s/errors/exclude_roots, no energy/power key)
+2026-11-14 16:40:01 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L003/runtime/load_journal.json (outside-CPU-load journal; keys checked: census/cpu_busy_cores/cpu_busy_t_s/errors/exclude_roots, no energy/power key)
+2026-11-14 16:40:08 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L002/runtime/runs/cadence-cl-dev-01-l002/outputs/align_thermal.jsonl (allowlisted thermal journal)
+2026-11-14 16:40:08 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L003/runtime/runs/cadence-cl-dev-01-l003/outputs/align_thermal.jsonl (allowlisted thermal journal)
+2026-11-14 16:40:08 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L001/runtime/runs/cadence-cl-dev-01-l001/outputs/align_window_reference.json (allowlisted)
+2026-11-14 16:40:08 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L002/runtime/runs/cadence-cl-dev-01-l002/outputs/align_window_reference.json (allowlisted)
+2026-11-14 16:40:08 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/legs/L003/runtime/runs/cadence-cl-dev-01-l003/outputs/align_window_reference.json (allowlisted)
+2026-11-14 16:41:05 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/soak/soak_reference.json (allowlisted)
+2026-11-14 16:41:05 OPEN /Volumes/JW-EXT/cadence-desk/cl-dev-01/cq-dev-01-s01-a1-20261114T224427Z/soak/idle_soak/sensors/align_thermal.jsonl (allowlisted soak sensors journal; key census first)
+2026-11-14 16:41:05 RE-OPEN (item-317 R1 print script verbatim) soak_reference.json, soak sensors journal, legs/L00{1,2,3}/leg_record.json, outputs/align_window_reference.json x3, outputs/align_thermal.jsonl x3
+2026-11-14 16:42:34 RE-OPEN (hand_table.py) runner_receipt.json, span_plan.json, chain-stages.jsonl, censuses.jsonl, volume_censuses.jsonl, legs/L00{1,2,3}/leg_record.json, legs/L00{1,2,3}/runtime/load_journal.json, leg outputs/align_thermal.jsonl x3; auto/desk_summary.json, auto/stops.json
+2026-11-14 16:43:20 NOTE (backfilled, same session) 16:37 directory listing of OUT by name only (find, hazards/ pruned: nothing under hazards/ listed or opened); deadlines/ and legs/*/deadlines/* listed: all empty dirs
+2026-11-14 16:43:20 NOTE (backfilled) 16:40-16:42 ad-hoc re-reads of legs/L00{1,2,3}/leg_record.json and the three leg outputs/align_thermal.jsonl (empty-cell phase mapping; TV0h/TV1h equality; turn OS level), and soak sensors journal coverage
+2026-11-14 16:43:20 NOTE (backfilled) 16:42 sha256 of censuses.jsonl and volume_censuses.jsonl (copy integrity vs receipt feeds; both equal)
+2026-11-14 16:43:20 NOT OPENED: hazards/**, meter_supervision.jsonl, meter.stdout/stderr.log, soak.stdout/stderr.log, any powermetrics*/rich_telemetry*/power_trace.csv/summary_metrics.json/events.jsonl/align_turns.jsonl/align_transcript.jsonl/align_episode.json/telemetry/logs/raw/battery*/runtime_result.json/runtime_custody.json/config.json/metadata.json/leg_spec.json/L00x.a1.std*.log, soak_row.json, soak/idle_soak/{load_journal,runtime_*,battery}

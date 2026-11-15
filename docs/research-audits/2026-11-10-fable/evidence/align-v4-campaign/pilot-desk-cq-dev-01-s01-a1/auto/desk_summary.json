@@ -1,0 +1,76 @@
+{
+ "adapter": "leg-summary-v1",
+ "feeds_proven_stopped": true,
+ "legs": [
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794699638.807987,
+   "g0_outcome": "released",
+   "g0_s": 205.933801041,
+   "leg_id": "L001",
+   "os_level_max": 2,
+   "pm_nominal": false,
+   "redo_reasons": [],
+   "seed": 2746676187,
+   "start_band": "q0",
+   "started_epoch_s": 1794698387.341322,
+   "wall_s": 1251.466147184372
+  },
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794700892.708166,
+   "g0_outcome": "released",
+   "g0_s": 210.21839423,
+   "leg_id": "L002",
+   "os_level_max": 2,
+   "pm_nominal": false,
+   "redo_reasons": [],
+   "seed": 1842278611,
+   "start_band": "q0",
+   "started_epoch_s": 1794699639.472996,
+   "wall_s": 1253.2347531318665
+  },
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794702144.7276502,
+   "g0_outcome": "released",
+   "g0_s": 205.06245075,
+   "leg_id": "L003",
+   "os_level_max": 2,
+   "pm_nominal": false,
+   "redo_reasons": [],
+   "seed": 2298666168,
+   "start_band": "q0",
+   "started_epoch_s": 1794700893.366057,
+   "wall_s": 1251.361170053482
+  }
+ ],
+ "meter": {
+  "bad_polls": 0,
+  "elapsed_s": 5875.013382125,
+  "polls": 29375,
+  "present": true,
+  "proven_stopped": true,
+  "usb_errors": 0
+ },
+ "plan_id": "cq-dev-01-s01-a1",
+ "result": {
+  "chain_exit_code": 0,
+  "chain_outcome": "COMPLETE",
+  "fault": false,
+  "outcome": "MEASURED_OK",
+  "verdict": "3/3 legs run"
+ }
+}
