@@ -35,9 +35,6 @@ else:
 
 
 def load_tests(loader, tests, pattern):
-    global _REAL_UNPINNED
-    if _NUMPY_MISSING is None and _REAL_UNPINNED is None:
-        _REAL_UNPINNED = M.unpinned_loaded_modules
     """Without numpy the module loads and reports one skip, so shard discovery does not error."""
     if _NUMPY_MISSING is None:
         return tests
@@ -110,10 +107,14 @@ def spy_opens():
                 opened.append(os.fsdecode(file))
             return fn(file, *a, **k)
         return wrapper
-    with unittest.mock.patch.object(builtins, "open", rec(real_open)), \
-            unittest.mock.patch.object(io, "open", rec(real_io_open)), \
-            unittest.mock.patch.object(os, "open", rec(real_os_open)):
-        yield opened
+    _SPIES.append(opened)
+    try:
+        with unittest.mock.patch.object(builtins, "open", rec(real_open)), \
+                unittest.mock.patch.object(io, "open", rec(real_io_open)), \
+                unittest.mock.patch.object(os, "open", rec(real_os_open)):
+            yield opened
+    finally:
+        _SPIES.remove(opened)
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -155,7 +156,7 @@ def looks_file(stage1_sha256, status="stage1_committed"):
 _DEFAULT_MANIFEST = []
 
 
-def run_cli(argv):
+def run_cli(argv, trap=False, mock_stage2=False):
     """The CLI with a draft manifest whose pins match this tree, and, for stage 2, a LOOKS.json that names the
     stage-1 hash, unless the test passes its own."""
     argv = list(argv)
@@ -165,21 +166,70 @@ def run_cli(argv):
         argv += ["--manifest", _DEFAULT_MANIFEST[0], "--allow-draft"]
     if argv[0] == "stage2" and "--looks" not in argv:
         argv += ["--looks", looks_file(argv[argv.index("--stage1-sha256") + 1])]
-    out, err = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
-            unittest.mock.patch.object(M, "unpinned_loaded_modules", _unpinned_outside_tests):
-        rc = R.main(argv)
-    return rc, out.getvalue(), err.getvalue()
+    return _cli_subprocess(argv, trap=trap, mock_stage2=mock_stage2)
 
 
-_REAL_UNPINNED = None
+# The CLI runs in its own `python -I -B` process, from the repository root, so its unpinned-module guard sees only
+# what the CLI itself loads (a test process has loaded other repository modules). The harness lives OUTSIDE the
+# repository, so it is never a loaded repository file; it can install an open() audit hook, an energy-decode trap
+# and a stage-2 stub for the tests that need them, then calls the CLI's main().
+_HARNESS = os.path.join(_PIN_DIR, "cli_harness.py")
+with open(_HARNESS, "w") as _f:
+    _f.write(r'''
+import json, os, re, sys
+opts = json.loads(sys.argv[1]); argv = sys.argv[2:]
+sys.path.insert(0, opts["repo"])
+opened = []
+if opts.get("spy"):
+    def _hook(event, args):
+        if event == "open" and args and isinstance(args[0], (str, bytes, os.PathLike)):
+            opened.append(os.fsdecode(args[0]))
+    sys.addaudithook(_hook)
+if opts.get("trap"):
+    import plistlib
+    _real = json.loads
+    def _loads(s, *a, **k):
+        text = s.decode() if isinstance(s, (bytes, bytearray)) else s
+        if re.search(r'"gpu_(energy|power)":\s*[-0-9]', text) or re.search(r'"p":\s*"[0-9a-f]', text):
+            raise AssertionError("an energy-bearing line was parsed")
+        return _real(s, *a, **k)
+    json.loads = _loads
+    def _no_plist(*a, **k):
+        raise AssertionError("plist parsed")
+    plistlib.loads = plistlib.load = _no_plist
+from scripts import cadence_look_run as R
+calls = []
+if opts.get("mock_stage2"):
+    def _stage2(*a, **k):
+        calls.append(1)
+        return {}
+    R.F.stage2 = _stage2
+try:
+    rc = R.main(argv)
+finally:
+    if opts.get("report"):
+        with open(opts["report"], "w") as f:
+            json.dump({"opened": opened, "stage2_calls": len(calls)}, f)
+sys.exit(rc)
+''')
+
+_SPIES = []           # active spy_opens lists: a subprocess's opens are appended to each
+LAST_RUN = {}
 
 
-def _unpinned_outside_tests(doc, repo):
-    """In-process runs load the test modules and the generator, which no manifest pins. Those (and only those)
-    are dropped here; the guard itself runs live in CliSubprocess."""
-    return [x for x in _REAL_UNPINNED(doc, repo)
-            if not x.startswith(("tests/", "scripts/cadence_look_synth.py"))]
+def _cli_subprocess(argv, trap=False, mock_stage2=False):
+    import subprocess
+    import sys
+    report = os.path.join(_PIN_DIR, f"report-{len(os.listdir(_PIN_DIR))}.json")
+    opts = {"repo": str(REPO), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report}
+    r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv], cwd=REPO,
+                       capture_output=True, text=True, timeout=900)
+    got = rj(report) if os.path.exists(report) else {"opened": [], "stage2_calls": 0}
+    for spy in _SPIES:
+        spy.extend(got["opened"])
+    LAST_RUN.clear()
+    LAST_RUN.update(got)
+    return r.returncode, r.stdout, r.stderr
 
 
 class Stage1Custody(unittest.TestCase):
@@ -217,19 +267,9 @@ class Stage1Custody(unittest.TestCase):
     def test_stage1_decodes_no_power_value(self):
         """rich_telemetry and the plist are read by pattern for stamps and state only: no JSON line of them and no
         plist frame is parsed, so their gpu_energy and gpu_power never become values."""
-        real_loads = json.loads
-
-        def loads(s, *a, **k):
-            text = s.decode() if isinstance(s, (bytes, bytearray)) else s
-            # an energy-bearing record (a telemetry row or a meter poll); the manifest's prose may name the keys
-            if re.search(r'"gpu_(energy|power)":\s*[-0-9]', text) or re.search(r'"p":\s*"[0-9a-f]', text):
-                raise AssertionError("an energy-bearing line was parsed")
-            return real_loads(s, *a, **k)
-        with tempfile.TemporaryDirectory() as d, \
-                unittest.mock.patch.object(json, "loads", loads), \
-                unittest.mock.patch.object(plistlib, "loads", side_effect=AssertionError("plist parsed")), \
-                unittest.mock.patch.object(plistlib, "load", side_effect=AssertionError("plist parsed")):
-            rc, _, err = run_cli(self.args(os.path.join(d, "s1.json")))
+        # the trap (in the CLI's process): any json.loads of an energy-bearing record, or any plist parse, raises
+        with tempfile.TemporaryDirectory() as d:
+            rc, _, err = run_cli(self.args(os.path.join(d, "s1.json")), trap=True)
         self.assertEqual(rc, 0, err)
 
     def test_r7_fan_null_when_a_key_is_missing(self):
@@ -391,11 +431,10 @@ class CliGate(unittest.TestCase):
             wb(ip, synth.dump(li))
             wb(ep, synth.dump(en))
             self.assertEqual(run_cli(["stage1", "--input", ip, "--out", s1p])[0], 0)
-            with unittest.mock.patch.object(F, "stage2", return_value={}) as st2:
-                rc, _, err = run_cli(["stage2", "--stage1", s1p, "--stage1-sha256", "0" * 64, "--energy", ep,
-                                      "--out", os.path.join(d, "fit.json")])
+            rc, _, err = run_cli(["stage2", "--stage1", s1p, "--stage1-sha256", "0" * 64, "--energy", ep,
+                                  "--out", os.path.join(d, "fit.json")], mock_stage2=True)
             self.assertEqual(rc, 2)
-            st2.assert_not_called()
+            self.assertEqual(LAST_RUN["stage2_calls"], 0)
 
 
 class NoHpEnergy(unittest.TestCase):
@@ -770,10 +809,13 @@ class RoundTwoCli(unittest.TestCase):
         d = rj(p)
         self.assertIs(d["allow_draft"], True)
         self.assertEqual(d["manifest_sha256"], R.sha256_file(_DEFAULT_MANIFEST[0]))
+        # code_sha256 = the repository files that stage loaded (M.loaded_repo_files); stage 1 on level R loads no
+        # meter decoder, and no test module (it runs in its own process)
         for k in ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
-                  "joulewise/external/km003c_parse.py", "joulewise/aggregate.py"):
+                  "joulewise/cadence_looks/manifest.py"):
             self.assertIn(k, d["code_sha256"])
-        self.assertNotIn("configs/align/v4/r1_runtime.json", d["code_sha256"])
+        self.assertFalse([k for k in d["code_sha256"] if k.startswith("tests/")])
+        self.assertNotIn("joulewise/external/km003c_parse.py", d["code_sha256"])
         o = os.path.join(self.d, "o.json")
         rc, _, err = run_cli(["stage2", "--stage1", p, "--stage1-sha256", h, "--energy", self.ep, "--out", o])
         self.assertEqual(rc, 0, err)
