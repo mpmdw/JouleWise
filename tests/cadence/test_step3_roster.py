@@ -253,3 +253,15 @@ class Stage1Custody(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunsUnderIsolatedMode(unittest.TestCase):
+    """RL-166 Q1: the look's code runs with -I. Both custody entry points run as files on the stdlib alone."""
+
+    def test_both_files_start_under_dash_i(self):
+        import subprocess
+        import sys
+        for rel in ("joulewise/cadence_looks/inclusion_34.py", "joulewise/cadence_looks/step3_roster.py"):
+            r = subprocess.run([sys.executable, "-I", "-B", str(REPO / rel), "--help"], capture_output=True, text=True,
+                               cwd=tempfile.gettempdir(), timeout=60)
+            self.assertEqual(r.returncode, 0, (rel, r.stderr[-400:]))

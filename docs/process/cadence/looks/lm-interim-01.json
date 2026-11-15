@@ -423,7 +423,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "34c9261a5144973f1776da21d3cdd2bf27380c9c7729549ffa0a47ec5e457315"
+        "sha256": "7e7c17f715d2463b78de03e457a7000c1ecb0165d3550ab86bfb0272c714a710"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -431,7 +431,7 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "15ecee011ec4ef2030ad8f1bb82f9107284f3fdf9872c20a7af7b7d46cfcc5bd"
+        "sha256": "97aa4e3b1fd8d6fbf591fbfb9124d11a9bce068e8d4a07355985323f8e1889f9"
       },
       {
         "path": "scripts/cadence_look_run.py",
@@ -560,10 +560,10 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "15ecee011ec4ef2030ad8f1bb82f9107284f3fdf9872c20a7af7b7d46cfcc5bd"
+        "sha256": "97aa4e3b1fd8d6fbf591fbfb9124d11a9bce068e8d4a07355985323f8e1889f9"
       },
       "statistic": "iii",
-      "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -m joulewise.cadence_looks.step3_roster --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
+      "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
       "kept": [
         "(ii) gamma",
         "gamma's estimability",
@@ -643,12 +643,12 @@
       {
         "rule": 3,
         "id": "sidecar_coverage",
-        "text": "Over the leg's interval (G0's start to the last stamped token): sidecar coverage at least 99 % and no gap over 2 s; powermetrics gaps at most max(1 s, 5 periods), U1's registered number (pilot_protocol_v4.md:451). Coverage and gap are the registered U1 evaluator's definitions (thermal.Coverage; thermal_desk.member_record's pm_gap), copied with a cite and an equality test because both are v4 strict paths. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -m joulewise.cadence_looks.inclusion_34`).",
+        "text": "Over the leg's interval (G0's start to the last stamped token): sidecar coverage at least 99 % and no gap over 2 s; powermetrics gaps at most max(1 s, 5 periods), U1's registered number (pilot_protocol_v4.md:451). Coverage and gap are the registered U1 evaluator's definitions (thermal.Coverage; thermal_desk.member_record's pm_gap), copied with a cite and an equality test because both are v4 strict paths. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -B joulewise/cadence_looks/inclusion_34.py`).",
         "judged_at": "look",
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "34c9261a5144973f1776da21d3cdd2bf27380c9c7729549ffa0a47ec5e457315"
+          "sha256": "7e7c17f715d2463b78de03e457a7000c1ecb0165d3550ab86bfb0272c714a710"
         },
         "cite": [
           "RL-149 §2.4",
@@ -659,12 +659,12 @@
       {
         "rule": 4,
         "id": "km003c_clean",
-        "text": "Header and trailer both present with a normal stop reason; inside the leg's interval, coverage at least 99 % of the header's nominal rate and no gap over 2 s between sample stamps. Timestamps only: each sample line's stamp is taken and the line dropped. The span trailer's counts print in the inclusion table and decide nothing. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -m joulewise.cadence_looks.inclusion_34`).",
+        "text": "Header and trailer both present with a normal stop reason; inside the leg's interval, coverage at least 99 % of the header's nominal rate and no gap over 2 s between sample stamps. Timestamps only: each sample line's stamp is taken and the line dropped. The span trailer's counts print in the inclusion table and decide nothing. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -B joulewise/cadence_looks/inclusion_34.py`).",
         "judged_at": "look",
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "34c9261a5144973f1776da21d3cdd2bf27380c9c7729549ffa0a47ec5e457315"
+          "sha256": "7e7c17f715d2463b78de03e457a7000c1ecb0165d3550ab86bfb0272c714a710"
         },
         "cite": [
           "RL-149 §2.4",

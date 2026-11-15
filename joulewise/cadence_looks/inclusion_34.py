@@ -404,7 +404,7 @@ def judge_leg(bundle, meter_streams, selected_keys, *, period_s=None):
 # ------------------------------------------------------------------------------------------------------------
 # Custody mode: the verdict file the stage-1 CLI reads (docs/process/cadence_look_fit_interface.md section 7).
 #
-#     python3 -I -m joulewise.cadence_looks.inclusion_34 --roster ROSTER.json --custody ROOT
+#     python3 -I -B joulewise/cadence_looks/inclusion_34.py --roster ROSTER.json --custody ROOT
 #         [--span-dir SPAN_ID=PATH ...] [--runtime-config configs/align/v4/r1_runtime.json]
 #         --out VERDICTS.json [--detail-out DETAIL.json]
 #

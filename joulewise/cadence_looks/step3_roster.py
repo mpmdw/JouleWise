@@ -161,7 +161,7 @@ def run_roster(entries, *, threshold=DRIFT_THRESHOLD, loader=load_step3):
 # ------------------------------------------------------------------------------------------------------------
 # Custody mode, stage 2 (the stage-2 CLI does not compute statistic (iii); this file supplies it):
 #
-#     python3 -I -m joulewise.cadence_looks.step3_roster --stage1 STAGE1.json --stage1-sha256 HEX
+#     python3 -I -B joulewise/cadence_looks/step3_roster.py --stage1 STAGE1.json --stage1-sha256 HEX
 #         --custody ROOT [--span-dir SPAN_ID=PATH ...] [--threshold 0.08|0.04] --out STEP3.json
 #
 # The roster is stage 1's committed output (level D, docs/process/cadence_look_fit_interface.md section 3),
@@ -185,10 +185,16 @@ def entries_from_stage1(stage1, sdir_of):
     return out
 
 
+def span_dirs(custody, overrides=()):
+    """span_id -> directory: <custody>/<span_id> unless SPAN_ID=PATH overrides it (as the stage-1 CLI). The same
+    rule as inclusion_34.span_dirs; repeated so that this file runs on the standard library alone under -I."""
+    extra = dict(o.split("=", 1) for o in overrides)
+    return lambda span_id: Path(extra[span_id]) if span_id in extra else Path(custody) / span_id
+
+
 def main(argv=None):
     import argparse
     import json
-    from joulewise.cadence_looks.inclusion_34 import span_dirs
     p = argparse.ArgumentParser(description="Step 3's statistic (iii) per prompt-size cell (RL-166 Q6).")
     p.add_argument("--stage1", required=True)
     p.add_argument("--stage1-sha256", required=True)
