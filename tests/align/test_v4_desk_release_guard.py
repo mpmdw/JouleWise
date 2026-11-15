@@ -169,7 +169,7 @@ class Fixture:
                 'members': {r['run_id']: {**km003c._empty(), 'status': 'available', 'dc_in_energy_j': plant(i)['dc'],
                                           'dc_in_delta_j': plant(i)['dc'], 'dc_in_residual_j': plant(i)['dc'],
                                           'score': plant(i)['dc'],
-                                          'flags': ['meter.stream_unclosed', 'prediction.extrapolated_decode:812']}
+                                          'flags': ['meter.stream_unclosed', 'unidentified_column_used:decode']}
                             for i, r in enumerate(self.rows)},
                 'models': [{'model': {'coef': [plant(0)['dc']]}}]}
 
@@ -397,7 +397,7 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertNotIn('thermal.hold_timeout', report['session_harvest_flags']['flag_codes'])
         for row in report['extra_checks']['km003c']['members'].values():
             self.assertEqual(row['flags'], ['meter.stream_unclosed'])
-        self.assertNotIn('prediction.extrapolated_decode', json.dumps(report))
+        self.assertNotIn('unidentified_column_used', json.dumps(report))
         self.assertIn('full_desk_gate: ', printed)
         # RL-149 carve-out: truncation / heat-ended codes appear only as window counts over all members.
         self.assert_carved_only_as_counts(printed, report, desk, range(len(self.fx.rows)))
@@ -407,10 +407,16 @@ class ReleaseGuardTests(unittest.TestCase):
         self.assertEqual(thermal['carve_out_flag_counts']['counts'], {'thermal.gate_timeout': 1})
         by_id = {m['id']: m for m in thermal['members']}
         self.assertIn('thermal.start_gate_timeout', by_id[self.fx.rows[5]['run_id']]['flags'])  # G0 stays per member
-        # RL-151 section 4.4 (builder's answer): a member-scoped harvest instrument/identity flag on a member the
-        # harvest does not exclude reaches the C/T desk only inside that member's digest. It is not in stdout,
-        # PILOT.json, desk.json or the thermal members' flags (an operational blind spot, not a leak).
-        for name, text in self.texts(printed, report, desk).items():
+        # RL-151 section 4.4, as amended by RL-162 section 2: a member-scoped harvest instrument flag on a member
+        # the harvest does not exclude reaches the C/T desk only inside that member's digest, and by its CODE NAME
+        # on the unlisted-codes line (deduplicated, no member id, no count of its own). Nowhere else.
+        line = next(l for l in printed.splitlines() if l.startswith('unlisted flag codes (RL-152 section 3.4): '))
+        self.assertIn('meter.planted_instrument', line)
+        self.assertNotIn(self.fx.rows[0]['run_id'], line)
+        self.assertEqual([l for l in printed.splitlines() if 'meter.planted_instrument' in l], [line])
+        rest = copy.deepcopy(report)
+        self.assertIn('meter.planted_instrument', rest['extra_checks'].pop('unlisted_flag_codes')['codes'])
+        for name, text in {'PILOT.json': json.dumps(rest), 'desk.json': json.dumps(desk)}.items():
             self.assertNotIn('meter.planted_instrument', text, name)
         # X2 (R10): per row the G0 outcome only; in C/T only the G0 count (row-1 F1: the G1 count is carved).
         x2 = report['extra_checks']['d_member_x2']
@@ -906,13 +912,17 @@ class RL152Tests(unittest.TestCase):
         self.assertEqual(seal.tripwires(hot, 'W1', set())[0]['w1_non_benign_tool_path']['verdict'], 'within')  # benign: not this line
 
     def test_unlisted_codes_line(self):
-        # Every fixture member carries the unknown code thermal.planted: W1 counts the 4 benign members' codes and
-        # says only "present" for the withheld ones; C and T count over all six.
-        self.assertIn('W1 unlisted flag codes (RL-152 section 3.4): benign members 4; withheld members: '
-                      'present, to the research lead', self.runs['W1']['printed'])
+        # Every fixture member carries the unknown code thermal.planted, and benign member 0 a harvest code
+        # meter.planted_instrument (not on its DC row, so not printed for it): W1 counts the benign members' codes
+        # (4 + 1) and names the withheld members' codes without ids (RL-162 section 2); C and T count over all six.
+        self.assertIn('W1 unlisted flag codes (RL-152 section 3.4): benign members 5; withheld members: '
+                      'present, to the research lead: thermal.planted', self.runs['W1']['printed'])
+        self.assertEqual(self.runs['W1']['report']['extra_checks']['unlisted_flag_codes']['withheld_codes'],
+                         ['thermal.planted'])
         for window in ('C3', 'T2'):
-            self.assertIn('unlisted flag codes (RL-152 section 3.4): all members 6', self.runs[window]['printed'])
-            self.assertEqual(self.runs[window]['report']['extra_checks']['unlisted_flag_codes']['all_members'], 6)
+            self.assertIn('unlisted flag codes (RL-152 section 3.4): all members 7; codes: meter.planted_instrument, '
+                          'thermal.planted', self.runs[window]['printed'])
+            self.assertEqual(self.runs[window]['report']['extra_checks']['unlisted_flag_codes']['all_members'], 7)
         self.assertEqual(seal.unlisted_codes(['episode.end_task:3', 'thermal.start_gate_timeout', 'new.fault:1']),
                          ['new.fault'])
 
@@ -1054,8 +1064,19 @@ class MythosReattackTests(unittest.TestCase):
         self.assertEqual(verdict(early), 'to the research lead')
         self.assertEqual(verdict(late), 'within')
         self.assertEqual(verdict(both, {'d11': 'D', 'd14': 'D'}), 'to the research lead')
-        self.assertEqual(verdict(both, {'d11': 'D', 'd14': 'X'}), 'within')
+        # RL-162 section 1 (c): the D members counted are those with at least one admitted turn; with one, any
+        # refused call fires (d14 is X here, so d11 is the only D member).
+        self.assertEqual(verdict(both, {'d11': 'D', 'd14': 'X'}), 'to the research lead')
         self.assertEqual(verdict([{'id': 'd11', 'turns': 1, 'flags': []}]), 'within')
+        # RL-162 section 1, the two named tests: one D member ended at G0 (no turn, no flag) and the other with a
+        # refusal on turn 3 fires; two D members with turns and one late refusal stays within.
+        g0 = [{'id': 'd11', 'turns': 0, 'flags': ['thermal.start_gate_timeout']},
+              {'id': 'd14', 'turns': 4, 'flags': ['episode.unsupported_tool_call_format:3']}]
+        self.assertEqual(verdict(g0, {'d11': 'D', 'd14': 'D'}), 'to the research lead')
+        one_late = [{'id': 'd11', 'turns': 5, 'flags': []},
+                    {'id': 'd14', 'turns': 6, 'flags': ['episode.unsupported_tool_call_format:5']}]
+        self.assertEqual(verdict(one_late, {'d11': 'D', 'd14': 'D'}), 'within')
+        self.assertEqual(verdict([{'id': 'd11', 'turns': 0, 'flags': []}], {'d11': 'D'}), 'within')
 
     def test_n6_harvest_off_prints_no_member_derived_sizes(self):
         from scripts import align_v4_harvest_off as harvest_off
@@ -1076,7 +1097,14 @@ class MythosReattackTests(unittest.TestCase):
                              run=lambda argv, **_: __import__('subprocess').CompletedProcess(argv, 0))
         desk = json.loads(out.getvalue())
         self.assertGreaterEqual(desk['sizing']['workers'], 1)
-        self.assertNotIn('peak_bytes_per_worker', desk['sizing'])
+        # Mythos re-attack 2 M6: with the free memory and reserve beside it, the worker count brackets the peak
+        self.assertEqual(set(desk['sizing']) - {'sizes'}, {'workers', 'peak_basis'})
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'SWEEP.json'
+            path.write_text(json.dumps({'runs': [{'workers': 2, 'exit': 1, 'peak_child_rss_bytes': planted}]}))
+            with self.assertRaises(ValueError) as caught:
+                harvest_off._sweep_peak(path)
+            self.assertNotIn(str(planted), str(caught.exception))
         self.assertNotIn(str(8 * planted)[:6], out.getvalue())
 
     def test_n7_runner_behaviour_codes_are_classified_and_faults_stay_unlisted(self):
@@ -1106,6 +1134,123 @@ class MythosReattackTests(unittest.TestCase):
                                                      {'id': 'b1', 'unsupported_xml_turns': [1]}]}, nonbenign)
         self.assertEqual([r['id'] for r in table['members']], ['b1'])
         self.assertEqual(table['turn_totals']['unsupported_xml_turns'], 1)
+
+
+class RL162Tests(unittest.TestCase):
+    """RL-162 (research lead on PR #774 at 3b58b23e4): section 2's line, section 3's u3_export check, section 6."""
+
+    def test_s2_one_planted_code_per_source_fires_with_its_name(self):
+        nonbenign = seal.NotBenign({'b1'})
+        base = {'id': 's1', 'flags': ['episode.end_task:3'], 'energy_flags': [], 'calibration_exclusions': []}
+        cases = {'thermal flags': ({**base, 'flags': ['instrument.planted_thermal:1']}, None, 'instrument.planted_thermal'),
+                 'energy_flags': ({**base, 'energy_flags': ['trace.missing']}, None, 'trace.missing'),
+                 'harvest flags': (base, {'harvest_flags': [{'code': 'member.reduction_mismatch', 'observed': 7}]},
+                                   'member.reduction_mismatch'),
+                 'DC row (non-meter)': (base, {'dc_flags': ['meter.stream_unclosed', 'missing_turn_energy']},
+                                        'missing_turn_energy')}
+        for name, (record, source, code) in cases.items():
+            report, lines = seal.tripwires([record], 'W1', nonbenign, sources={'s1': source} if source else None)
+            self.assertEqual(report['unlisted_flag_codes']['withheld_codes'], [code], name)
+            self.assertIn('withheld members: present, to the research lead: ' + code, lines[-1], name)
+            self.assertNotIn('s1', lines[-1])
+        # battery.unmeasured and contention.unmeasured are instrument faults: counted now that the prefixes are gone
+        self.assertEqual(seal.unlisted_codes(['battery.unmeasured', 'contention.unmeasured:3']),
+                         ['battery.unmeasured', 'contention.unmeasured'])
+
+    def test_s2_not_counted_groups_and_no_double_count(self):
+        nonbenign = seal.NotBenign(set())
+        groups = {'battery draw': 'battery.assist', 'heat': 'thermal.hold_timeout:G1:2', 'waits': 'idle.waited',
+                  'end state': 'member.timeout', 'energy value': 'energy.negative',
+                  'routine': 'contention.request_overlap', 'behaviour': 'episode.end_task:4',
+                  'DC fit (window-level)': 'zero_training_uncertainty', 'DC member-movable': 'nonfinite_prediction',
+                  'runner bookkeeping': 'episode_interval_excludes_scoring_and_serialization_tail'}
+        for name, code in groups.items():
+            record = {'id': 's1', 'flags': [code], 'calibration_exclusions': []}
+            self.assertEqual(seal.tripwires([record], 'W1', nonbenign)[0]['unlisted_flag_codes']['withheld_codes'], [],
+                             name)
+        # an exclusion code is printed for the member already: it is not counted a second time
+        record = {'id': 's1', 'flags': ['member.strict_validation_failed'],
+                  'calibration_exclusions': ['member.strict_validation_failed']}
+        source = {'harvest_flags': [{'code': 'clock.step'}], 'exclusion_codes': ['clock.step']}
+        self.assertEqual(seal.tripwires([record], 'W1', nonbenign, sources={'s1': source})[0]
+                         ['unlisted_flag_codes']['withheld_codes'], [])
+        # a meter. code printed on the member's DC row is not counted; the same code from the harvest is
+        source = {'harvest_flags': [{'code': 'meter.drops_excess'}], 'dc_flags': ['meter.drops_excess']}
+        self.assertEqual(seal.tripwires([{'id': 's1', 'flags': []}], 'W1', nonbenign, sources={'s1': source})[0]
+                         ['unlisted_flag_codes']['withheld_codes'], [])
+
+    def test_m3_a_runner_produced_clean_episode_counts_no_runner_code(self):
+        # Mythos re-attack 2 M3: on a runner-produced episode (pilot-4 native fixture: the real episode loop and
+        # the real bundle reader) the runner's bookkeeping codes must not be counted, or the line never reads none.
+        with tempfile.TemporaryDirectory() as tmp:
+            for condition in ('benign', 'sabotage'):
+                bundle, status, _, _ = native(Path(tmp) / condition, seed=1, condition=condition, pair='spam_filter_update')
+                record = thermal_desk.read_bundle_record(bundle)
+                self.assertIn('single_request_summary_fields_not_episode_metrics',
+                              {seal._code(f) for f in record['flags']})
+                self.assertEqual(seal.unlisted_codes(record['flags']), [], condition)
+                # what remains counted is the fixture's missing power trace (an instrument fault), nothing else
+                counted = seal.member_counted_codes(record)
+                self.assertTrue(all(c.split('.')[0] in ('trace', 'coverage', 'resolution', 'interpolation', 'timing')
+                                    for c in counted), counted)
+
+    def test_m4_reduce_writes_a_v4_sessions_tables_only_in_the_withheld_archive(self):
+        from scripts import align_v4_harvest_off as harvest_off
+        with tempfile.TemporaryDirectory() as tmp:
+            session = Path(tmp) / 'session'
+            v4 = {'session_id': 'align-v4-c3', 'measurement_root': tmp}
+            with self.assertRaisesRegex(ValueError, 'archive/withheld'):
+                harvest_off.reduce_target_check(session, v4, Path(tmp) / 'reduced')
+            with self.assertRaisesRegex(ValueError, 'archive/withheld'):
+                harvest_off.reduce_target_check(session, v4, session / 'archive/withheld/../reduced')
+            harvest_off.reduce_target_check(session, v4, session / 'archive/withheld/reduced')
+            harvest_off.reduce_target_check(session, {'session_id': 'align-pilot-p9'}, Path(tmp) / 'reduced')   # v3
+
+    def test_s6_battery_activity_leaves_the_sealed_dc_row(self):
+        row = {**km003c._empty(), 'status': 'available', 'dc_in_energy_j': 12.0,
+               'flags': ['meter.stream_unclosed', 'meter.battery_activity']}
+        sealed = km003c.seal_non_benign({'members': {'s': row, 'b': dict(row)}},
+                                        [{'run_id': 's', 'condition': 'sabotage'}, {'run_id': 'b', 'condition': 'benign'}])
+        self.assertEqual(sealed['members']['s']['flags'], ['meter.stream_unclosed'])
+        self.assertIn('meter.battery_activity', sealed['members']['b']['flags'])      # a benign row prints whole
+        again = seal._seal_dc_rows({'members': {'s': row}}, seal.NotBenign(set()))
+        self.assertEqual(again['members']['s']['flags'], ['meter.stream_unclosed'])
+
+    def _bundle(self, root, name, run_id, *, metadata_run_id=None, metadata=True):
+        bundle = Path(root) / name
+        bundle.mkdir()
+        (bundle / 'config.json').write_text(json.dumps({'run_id': run_id}))
+        if metadata:
+            (bundle / 'metadata.json').write_text(json.dumps({'run_id': metadata_run_id or run_id}))
+        return bundle
+
+    def test_s3_u3_export_reads_only_pilot_and_r1_bundles(self):
+        from scripts import align_v4_u3_export as export
+        from joulewise.align.apple import thermal_desk as td
+        planted = {'id': 'x', 'turn_owned_j': 73519.86421357, 'tokens': [[1]], 'decode_clock_mhz': 1000.0,
+                   'calibration_exclusions': [], 'flags': []}
+        with tempfile.TemporaryDirectory() as tmp:
+            ok_r1 = self._bundle(tmp, 'r1a', 'align-v4-r1-d_spam_a')
+            ok_pilot = self._bundle(tmp, 'p5', 'align-pilot-v3-episodes-a-e05')
+            refused = {'W1 D member': self._bundle(tmp, 'w1', 'align-v4-episodes-b-e11'),
+                       'C1 member': self._bundle(tmp, 'c1', 'align-v4-c1-e07'),
+                       'W1 anchor (pilot id reused)': self._bundle(tmp, 'w1a', 'align-pilot-v3-episodes-a-e02'),
+                       'no identity': self._bundle(tmp, 'none', 'x', metadata=False),
+                       'inconsistent identity': self._bundle(tmp, 'mix', 'align-v4-r1-a', metadata_run_id='align-v4-c1-e05')}
+            self.assertEqual((export.bundle_identity(ok_r1), export.bundle_identity(ok_pilot)), ('R1', 'pilot'))
+            with patch.object(td, 'read_bundle_record', return_value=planted) as read:
+                for name, bundle in refused.items():
+                    result = export.measure_pair(bundle, ok_r1)
+                    self.assertFalse(result['eligible'], name)
+                    self.assertTrue(result.get('refused'), name)
+                    self.assertNotIn('energies_j', result, name)
+                self.assertEqual(read.call_count, 0)
+                out = Path(tmp) / 'r1.json'
+                with redirect_stdout(io.StringIO()) as stdout:
+                    export.main(['r1', '--early-bundle', str(refused['W1 D member']), '--late-bundle', str(ok_r1),
+                                 '--ordinals', '2', '3', '--output', str(out)])
+                self.assertNotIn('73519', out.read_text() + stdout.getvalue())
+                self.assertEqual(read.call_count, 0)
 
 
 class EntryPointTests(unittest.TestCase):
@@ -1158,7 +1303,7 @@ class EntryPointTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, 'release guard'):
                 pilot.desk(root, harvest=False, print_policy=lambda pilot_, lines, output: (pilot_, lines))
 
-    def run_thermal_desk(self, window, *, ids=True, real_prints=False, tag='x'):
+    def run_thermal_desk(self, window, *, ids=True, real_prints=False, tag='x', stored=None):
         """``window`` None leaves every member untagged; ``ids`` False omits the manifest ids (as the repo's own
         manifest builder does); ``real_prints`` runs the production rl145_prints_report on real-shaped rows."""
         name = f'{window}-{tag}'
@@ -1201,6 +1346,10 @@ class EntryPointTests(unittest.TestCase):
                 enter(patch.object(v4_thermal, 'rl145_prints_report', return_value=prints))
             enter(patch.object(v4_thermal.registration, 'desk_diagnostics', side_effect=self.fx.diagnostics))
             enter(patch.object(v4_battery, 'attach', side_effect=self.fx.battery))
+            # The bundles' stored pack tags (M5): by default those of the window named, else ``stored``.
+            tags = stored if stored is not None else (['align-v4'] if window == 'W1' else
+                                                      [f'align-v4-{str(window).lower()}'])
+            enter(patch.object(v4_thermal, 'bundle_pack_tags', return_value=tags))
             with redirect_stdout(io.StringIO()) as out:
                 v4_thermal.main(['--manifest', str(manifest), '--output', str(output),
                                  '--registration-dir', str(registration)])
@@ -1239,12 +1388,19 @@ class EntryPointTests(unittest.TestCase):
         self.assertEqual(len(full['members']), len(self.fx.rows))
 
     def test_the_thermal_desk_scope_fails_closed_to_c(self):
-        # Mythos N5: an untagged manifest (or a partly tagged one) is not W1: it gets the C seal.
-        for tag, window in (('untagged', None), ('unknown', 'Z9')):
-            texts, report, _ = self.run_thermal_desk(window, real_prints=True, tag=tag)
-            self.assertEqual(report['release_guard']['scope'], 'C', tag)
+        # Mythos N5 and re-attack 2 M5: the bundles' stored pack tags decide the scope. C bundles under an
+        # untagged, unknown-tagged or W1-tagged manifest seal as C; unreadable tags seal as C.
+        for tag, window, stored in (('untagged', None, ['align-v4-c3']), ('unknown', 'Z9', ['align-v4-c3']),
+                                    ('c-tagged-w1', 'W1', ['align-v4-c3']), ('unreadable', 'W1', []),
+                                    ('t-bundles', 'W1', ['align-v4-t2']), ('w1-bundles-t-manifest', 'T2', ['align-v4'])):
+            texts, report, _ = self.run_thermal_desk(window, real_prints=True, tag=tag, stored=stored)
+            self.assertEqual(report['release_guard']['scope'], 'T' if tag.startswith(('t-', 'w1-bundles-t')) else 'C', tag)
             self.check(texts, report, 'C3')
             self.assertEqual(json.loads(texts['RL145_PRINTS.json'])['members'], [])
+        # W1 bundles whose manifest tags its reference members 'pilot7-reference' stay W1 (M5's second point).
+        texts, report, _ = self.run_thermal_desk('pilot7-reference', real_prints=True, tag='p7', stored=['align-v4'])
+        self.assertEqual(report['release_guard']['scope'], 'W1')
+        self.check(texts, report, 'W1')
 
     def test_each_boundary_check_refuses_a_custom_policy_on_its_own(self):
         # The wrapper's enforce and the old desk's require_guard are two checks; each must hold by itself (with
@@ -1256,6 +1412,31 @@ class EntryPointTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'release guard'):
                 check()
         self.assertIsInstance(seal.enforce(state, None, []), seal.DeskSeal)
+
+    def test_m1_the_desk_harvest_export_and_streams_stay_in_the_withheld_archive(self):
+        # Mythos re-attack 2 M1: the harvest the desk launches writes a non-claim per-run export (energies, tokens,
+        # phase durations) and prints to stdout. The stub plays the harvest: it writes planted values where the
+        # desk tells it to and prints them. Nothing outside archive/withheld/ may hold them.
+        root = self.fx.session('m1-harvest', {'window_id': 'C3', 'role': 'calibration'})
+        planted = str(plant(2)['gpu_j'])
+        seen = []
+
+        def harvest(argv, **_):
+            seen.append(argv)
+            export = Path(argv[argv.index('--export-dir') + 1])
+            (export / 'align-v4-c3').mkdir(parents=True, exist_ok=True)
+            (export / 'align-v4-c3' / 'session.runs.csv').write_text('run_id,gross_j\nx,' + planted + '\n')
+            return __import__('subprocess').CompletedProcess(argv, 0, stdout='runs ' + planted, stderr='e ' + planted)
+        with ExitStack() as stack:
+            self.fx.patches(stack)
+            with redirect_stdout(io.StringIO()):
+                session.desk(root, harvest=True, run=harvest)
+        export = Path(seen[0][seen[0].index('--export-dir') + 1])
+        self.assertEqual(export, root.resolve() / 'archive/withheld/export')
+        outside = [path for path in root.rglob('*') if path.is_file()
+                   and 'archive/withheld' not in path.relative_to(root).as_posix() and planted in path.read_text(errors='ignore')]
+        self.assertEqual(outside, [])
+        self.assertIn(planted, (root / 'archive/withheld/harvest.stdout').read_text())
 
     def test_the_old_desk_refuses_a_v4_session_without_the_guard(self):
         # Mythos N9: align_pilot_session._desk checks the stored identity itself.

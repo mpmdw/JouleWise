@@ -80,6 +80,16 @@ def enrich_record(record, bundle):
     return record
 
 
+def bundle_pack_tags(bundle):
+    """The bundle's stored pack tags (``config.json`` ``run_metadata.tags``), or None when unreadable."""
+    from joulewise.desk_compress import read_bytes
+    try:
+        tags = json.loads(read_bytes(Path(bundle)/'config.json'))['run_metadata']['tags']
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return [str(t) for t in tags] if isinstance(tags, list) else None
+
+
 def rl145_prints_report(manifest, root, journal):
     """RL-145 section 2 prints per manifest member (explicit inputs only, no discovery).
 
@@ -186,7 +196,9 @@ def main(argv=None):
     # RL-145 prints and THERMAL.md carry the C/T or W1 seal; the full ones go to the withheld archive.
     from joulewise.align.apple import v4_desk_seal
     full = result
-    result, prints, sealed = v4_desk_seal.guard_thermal_desk(result, prints, members, args.registration_dir, args.output)
+    stored = [bundle_pack_tags(root/item['bundle']) for item in manifest['members']]
+    result, prints, sealed = v4_desk_seal.guard_thermal_desk(result, prints, members, args.registration_dir, args.output,
+                                                             stored_tags=stored)
     (args.output/'RL145_PRINTS.json').write_text(json.dumps(prints, indent=2, sort_keys=True, allow_nan=False)+'\n')
     (args.output/'PILOT.json').write_text(json.dumps(result, indent=2, sort_keys=True, allow_nan=False)+'\n')
     battery_rows = ['\n## Battery window consequences', '',

@@ -354,10 +354,12 @@ def _sweep_peak(path):
         raise ValueError('sweep receipt has no runs')
     for row in rows:
         if not isinstance(row, dict) or row.get('exit') != 0:
-            raise ValueError(f'sweep run failed ({row!r}); a failed run is not a measured worker peak')
+            # M6: name the run, never its peak (a size over the window's members, PR #774 N6)
+            shown = {k: row.get(k) for k in ('workers', 'exit')} if isinstance(row, dict) else type(row).__name__
+            raise ValueError(f'sweep run failed ({shown}); a failed run is not a measured worker peak')
         peak = row.get('peak_child_rss_bytes')
         if type(peak) is not int or peak <= 0:
-            raise ValueError(f'sweep run has a nonpositive or missing peak ({peak!r})')
+            raise ValueError(f'sweep run has a nonpositive or missing peak ({type(peak).__name__})')
     return max(row['peak_child_rss_bytes'] for row in rows)
 
 
@@ -475,12 +477,25 @@ def cmd_finalize_manifest(args, run=subprocess.run):
             'entries': len(manifest)}
 
 
+def reduce_target_check(session, state, out):
+    """PR #774 Mythos re-attack 2 M4 (RL-162 section 3: reduce keeps no identity check, its cover is the restricted
+    output): before release, a v4 session's per-member energy tables are written only under the session's
+    ``archive/withheld/``, so the cover holds after the merge and whatever ``--out`` an operator names."""
+    from joulewise.align.apple import v4_desk_seal
+    if v4_desk_seal.is_v4_session(state) and not v4_desk_seal.released(state):
+        allowed = (Path(session) / 'archive/withheld').resolve()
+        if not Path(out).resolve().is_relative_to(allowed):
+            raise ValueError(f'reduce: a v4 session writes its tables only under {allowed} before the series '
+                             'release (PR #774 M4)')
+
+
 def cmd_reduce(args, run=subprocess.run):
     """Reduce each member's raw plists once into a sibling directory (never into the archive)."""
     from joulewise.align.apple import pm_reduce
     session, state, plan = _session(args.session_root)
     runs_root = _runs_root(state)
     out = Path(args.out)
+    reduce_target_check(session, state, out)
     out.mkdir(parents=True, exist_ok=False)
     tasks = [{'run_id': row['run_id'], 'bundle_path': str(runs_root / row['run_id']), 'out_dir': str(out),
               'turn_table': True}
@@ -516,8 +531,9 @@ def printed(command, result):
         return result
     if command == 'desk' and isinstance(result.get('sizing'), dict):
         sizing = result['sizing']
-        keep = {k: sizing[k] for k in ('workers', 'free_cores', 'free_memory_bytes', 'reserve_bytes', 'peak_basis')
-                if k in sizing}
+        # Mythos re-attack 2 M6: workers with free memory and the reserve bracket the peak (so the largest plist)
+        # when memory binds; print the worker count and the basis only.
+        keep = {k: sizing[k] for k in ('workers', 'peak_basis') if k in sizing}
         if isinstance(sizing.get('sweep'), dict):
             keep['sweep'] = {k: sizing['sweep'][k] for k in ('reason', 'path') if k in sizing['sweep']}
         return {**result, 'sizing': {**keep, 'sizes': SIZE_WITHHELD}}

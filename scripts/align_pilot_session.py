@@ -308,9 +308,16 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
     from joulewise.align.apple import v4_desk_seal
-    if v4_desk_seal.is_v4_session(state):
+    v4 = v4_desk_seal.is_v4_session(state)
+    if v4:
         # PR #774 Mythos N9: the check sits here too, so no caller of the old desk can run a v4 session unguarded.
         v4_desk_seal.require_guard(print_policy)
+    # PR #774 Mythos re-attack 2 M1: the harvest's non-claim export (per-run energies, tokens, phase durations and
+    # flag codes; export_runs.py writes them unblinded under --non-claim) and its stdout/stderr go to the withheld
+    # archive before release. v3 sessions and a released v4 desk keep the old paths.
+    withheld_streams = v4 and isinstance(print_policy, v4_desk_seal.DeskSeal)
+    export_dir = session / ('archive/withheld/export' if withheld_streams else 'export')
+    streams_dir = session / ('archive/withheld' if withheld_streams else 'staging')
     plan = h.read(state['plan_path'])
     custody = Path(plan['custody_root'])
     if not (custody / 'night/result.json').is_file():
@@ -352,7 +359,7 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
     argv = [str(measurement / '.venv/bin/python'), str(measurement / 'scripts/harvest_b6_session.py'),
             '--plan', state['plan_path'], '--archive-root', str(session / 'archive'),
             '--registration-dir', state['registration_dir'], '--pack-records-root', str(session / 'private'),
-            '--export-dir', str(session / 'export'), '--non-claim']
+            '--export-dir', str(export_dir), '--non-claim']
     if harvest_workers is not None:
         # Member assessment pool (HARVEST-OFF-opus): order-preserving, byte-identical
         # to one worker; absent keeps the recorded argv of a one-worker desk.
@@ -361,8 +368,9 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
         argv += ['--workers', str(harvest_workers)]
     if harvest:
         result = run(argv, check=False, capture_output=True, text=True, timeout=h.HARVEST_TIMEOUT_S)
-        (session / 'staging/harvest.stdout').write_text(result.stdout or '')
-        (session / 'staging/harvest.stderr').write_text(result.stderr or '')
+        streams_dir.mkdir(parents=True, exist_ok=True)
+        (streams_dir / 'harvest.stdout').write_text(result.stdout or '')
+        (streams_dir / 'harvest.stderr').write_text(result.stderr or '')
         output = session
     else:
         from types import SimpleNamespace

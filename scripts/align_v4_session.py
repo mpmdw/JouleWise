@@ -993,6 +993,7 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
     except Exception as exc:  # secondary diagnostics must never become a rails admission gate
         dc = km003c.unavailable_report(plan['members'], 'meter.desk_failed:' + type(exc).__name__,
                                        detail=str(exc))
+    dc_rows = {rid: list((row or {}).get('flags') or ()) for rid, row in (dc.get('members') or {}).items()}
     # MED-4: per-member DC residuals print for BENIGN members only; sabotage (any non-benign)
     # members' DC rows are sealed (hash only) until the v5 addendum registers.
     dc = km003c.seal_non_benign(dc, plan['members'])
@@ -1099,8 +1100,13 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         print('W1 D G1 timeout tripwire (RL-149 section 1.5): ' + report['w1_g1_tripwire']['verdict'])
     if sealed_scope is not None:
         # RL-152 section 3.4: the tool-path and unlisted-code lines (in memory; one fact each).
+        # RL-162 section 2: the unlisted-codes line reads four sources per member, in memory.
+        sources = {rid: {'harvest_flags': (pilot_members.get(rid) or {}).get('harvest_flags') or [],
+                         'exclusion_codes': (pilot_members.get(rid) or {}).get('exclusion_codes') or [],
+                         'dc_flags': dc_rows.get(rid) or []} for rid in {r['run_id'] for r in plan['members']}}
         trip, lines = v4_desk_seal.tripwires(records, sealed_scope, v4_desk_seal._nonbenign(plan['members']),
-                                             roles={m.get('run_id'): m.get('role') for m in plan['members']})
+                                             roles={m.get('run_id'): m.get('role') for m in plan['members']},
+                                             sources=sources)
         report.update(trip)
         for line in lines:
             print(line)

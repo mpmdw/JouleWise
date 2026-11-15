@@ -185,6 +185,15 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
 - If k's desk is not finished by record k+1, commit k+1 without `previous_final`. The arm of k+1's successor then refuses (§6) until a later record carries it.
 - **R17's bound:** window k must be final before the arm of k+2. This holds for **every** window in the chain, test windows included. They still contribute zero calibration.
 
+## Before the series release: standing lines (RL-162 sections 3 and 4; PR #774 re-attack 2)
+
+- **Bundles of a v4 series window** are read only by the guarded desks (`align_v4_session.py desk`, the common desk on a v4 session, `align_v4_thermal_desk.py`) and the harvest-off pipeline (`align_v4_harvest_off.py`). No bundle-level tool or ad hoc reader is run on one before release. This replaces RL-149 §3 line 4 at the merge of PR #774. `align_v4_u3_export.py` refuses any bundle that is not a pilot or R1 slot-session bundle (RL-162 §3).
+- **File sizes** under a series window's `runs/`, `reduced/` and `archive/withheld/` directories are restricted like their contents. No report, status line or custody summary prints them per member or per file before release. Tools may still read them (RL-162 §4).
+- **Restricted like `archive/withheld/`:** `reduced/` (written only under `archive/withheld/` before release), `SWEEP.json`, and the desk harvest's export and stdout/stderr. The guarded desk writes those under `archive/withheld/` (PR #774 M1).
+- **Open for the lead:**
+  - `archive/derived/flags.jsonl` (per-member harvest flags with observed values) and the all-member `flag_counts` in `derived/b6-acceptance.json` have not yet been ruled restricted (re-attack 2 M1, second part).
+  - Neither has the committed finalized manifest's per-file sizes (M2).
+
 ## 5. Air, during window k+1: restore → harvest → desk → final → reduce
 
 The Air must be otherwise quiet: no Sol seats; renice others. The desk-verdict child has a wall budget; a time-out there is a re-run, not a result.
@@ -192,7 +201,7 @@ The Air must be otherwise quiet: no Sol seats; renice others. The desk-verdict c
 ```sh
 $RUN desk  --session-root "$S" --workers auto [--sweep "$SWEEP/SWEEP.json"]   # harvest + full v4 desk
 $RUN final --session-root "$S" --window-id "$K"                               # final eligibility row
-$RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # columnar PM + per-turn tables
+$RUN reduce --session-root "$S" --out "$S/archive/withheld/reduced" --workers 2   # columnar PM + per-turn tables
 ```
 
 - **`desk`** writes `$S/PILOT.json`, `$S/desk.json` and `$S/archive/`.
@@ -206,7 +215,7 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
   - the desk and PILOT.json are this session's;
   - the exclusions agree.
   - Supplemental captures count as captures here (D5). Its rows must be a subset of the light triage's provisional rows. If not, stop and escalate to the lead: the proof says this cannot happen.
-- **`reduced/`** is outcome-bearing (energies) and is restricted like `withheld/`. Its `MANIFEST.json` is restricted with it: its per-member `raw_size` and `reduced_size` encode each member's sample count, so its elapsed time (PR #774 N6). The `reduce` command prints counts of members and files only. Each `<run_id>/turns.json` equals PILOT.json (`turn_table.equal_to_pilot`); check this before any analysis reads tables instead of bundles.
+- **`reduced/`** is outcome-bearing (energies) and is restricted like `withheld/`. Before release, `reduce` refuses an `--out` outside the session's `archive/withheld/` (PR #774 M4). Its `MANIFEST.json` is restricted with it: its per-member `raw_size` and `reduced_size` encode each member's sample count, so its elapsed time (PR #774 N6). The `reduce` command prints counts of members and files only. Each `<run_id>/turns.json` equals PILOT.json (`turn_table.equal_to_pilot`); check this before any analysis reads tables instead of bundles.
 - Hand the three final files to the magistrate for record k+1 (§4).
 - Prune the restored `$S` on the Air only after record k+1 (or k) with the final sources is pushed. The MBP originals follow the air-offload lane's retention rule.
 

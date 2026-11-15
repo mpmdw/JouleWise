@@ -362,8 +362,9 @@ class DeskTests(unittest.TestCase):
         self.assertIn('df=4', text)
         self.assertIn('Δdecode MHz', text)
 
+    @patch('scripts.align_v4_thermal_desk.bundle_pack_tags', return_value=['align-v4'])   # stands in for a W1 member
     @patch('joulewise.align.apple.v4_registration.validate_u3')
-    def test_cli_reads_synthetic_bundle_and_writes_reviewable_tables(self, _unruled_u3):
+    def test_cli_reads_synthetic_bundle_and_writes_reviewable_tables(self, _unruled_u3, _w1_pack_tag):
         # Isolate table rendering from R11's deliberate pending registration gate.
         from tests.align.test_thermal_gate import NativeIntegrationTests
         from scripts.align_v4_thermal_desk import main

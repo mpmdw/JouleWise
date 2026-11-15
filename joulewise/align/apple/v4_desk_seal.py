@@ -263,8 +263,15 @@ def _session_codes(flags):
     return sorted({c for c in (_code(f) for f in flags or ()) if c and c not in CARVE_OUT_CODES})
 
 
+# RL-162 section 6: ``meter.battery_activity`` is raised per member when the battery current is nonzero inside
+# the member's span (km003c_parse.flags, windows=[member span], via km003c.capture_member). On a sealed row it
+# is the battery-assist bit under another name (Sol F5), so it leaves the per-member row with the battery codes.
+METER_SEALED_OUT = frozenset({'meter.battery_activity'})
+
+
 def _meter_codes(flags):
-    return list(dict.fromkeys(c for c in (_code(f) for f in flags or ()) if c and c.startswith(METER_PREFIX)))
+    return list(dict.fromkeys(c for c in (_code(f) for f in flags or ())
+                              if c and c.startswith(METER_PREFIX) and c not in METER_SEALED_OUT))
 
 
 def coverage_verdicts(coverage):
@@ -1072,26 +1079,85 @@ def battery_print_row(state, row, plan_members):
     return row
 
 
-# RL-152 section 3.4, tripwire 2: codes known and deliberately withheld per member (behaviour, outcome, carved,
-# battery and contention disclosures). A code that is neither on FLAG_ALLOWLIST nor here is UNLISTED: a new
-# instrument fault on a withheld member would otherwise be hidden.
+# RL-152 section 3.4, tripwire 2, as ruled in RL-162 section 2: on a withheld member the line counts a code when
+# (1) the member's own generation cannot move it and (2) it is not already printed for that member. A code on no
+# list is counted, so the lists below are the codes NOT counted. Behaviour, end state and duration codes of the
+# episode loop and the runner (prefixes):
 KNOWN_WITHHELD_PREFIXES = (
     'episode.end_task', 'episode.max_turns', 'episode.time_guard', 'episode.deadman', 'episode.decode_budget',
     'episode.context_limit', 'episode.malformed_tool_call', 'episode.unsupported_tool_call_format',
     'episode.turn_token_budget_reached', 'turn_token_budget_reached', 'turn_budget_reached',
     'reasoning_censored_at_token_limit', 'calibration_censored_at_ceiling', 'ended_in_unclosed_reasoning',
-    'cache.rebuilt_untrimmable', 'battery.', 'contention.', 'repetition.', 'energy.nonfinite_half_width',
+    'cache.rebuilt_untrimmable', 'repetition.',
     'thermal.gate_timeout', 'thermal.hold_timeout', 'thermal.os_level_nonzero', 'thermal.powermetrics_non_nominal',
-    # PR #774 Mythos N7: the runner's behaviour codes (a tool call's error or coerced result, a scoring error)
-    # are known and withheld; runtime faults (episode_error, episode.interrupted, episode.g0_unreleased) stay
-    # unlisted on purpose, so they surface on the line.
+    # PR #774 Mythos N7: the runner's behaviour codes (a tool call's error or coerced result, a scoring error).
+    # Runtime faults (episode_error, episode.interrupted, episode.g0_unreleased) are counted (RL-162 section 2).
     'tool_error', 'tool_result_coerced', 'task_scoring_error')
+# RL-162 section 2's table, exact codes: battery draw, heat, waits, end state and duration, energy value, and
+# routine by registration. ``battery.`` and ``contention.`` are no longer prefixes: as prefixes they hid
+# ``battery.unmeasured`` and ``contention.unmeasured``, which are instrument faults and are counted.
+NOT_COUNTED_CODES = frozenset({
+    'battery.assist', 'battery.assist_outside_request', 'battery.member_span', 'battery.accumulator_excursion',
+    'battery.accumulator_activity', 'battery.capture_pair_assist', 'meter.battery_activity',
+    'thermal.stage_battery_rise',
+    'thermal.os_level_nonzero', 'thermal.powermetrics_pressure_elevated', 'thermal.powermetrics_non_nominal',
+    'thermal.gate_timeout', 'thermal.hold_timeout', 'contention.kernel_task_share', 'member.cooldown_cap_hit',
+    'idle.waited', 'idle.wait_cap_skip', 'idle.wait_budget_skip', 'idle.wait_budget_exhausted',
+    'idle.busy_fraction_exceeded',
+    'member.timeout', 'member.status_not_succeeded', 'member.admission_aborted', 'member.retried',
+    'segment.shorter_than_period',
+    'member.anchor_energy_envelope_exceeded', 'member.anchor_not_bounded', 'energy.negative',
+    'contention.request_overlap',
+    # PR #774 Mythos re-attack 2 M3: the runner stamps every episode with these bookkeeping codes
+    # (workload.py: the summary-field and episode-interval notes, and the trace-join note the reader strips);
+    # routine by registration, so a clean member counts nothing.
+    'single_request_summary_fields_not_episode_metrics', 'episode_interval_excludes_scoring_and_serialization_tail',
+    'power_trace_join_in_run_bundle'})
+# RL-162 section 2 check 2 (the builder's placement of the non-``meter.`` DC row flags, km003c.capture_member and
+# _predict via joulewise/align/energy_residual.py; to the research lead):
+#   not counted, member-movable (the member's own tokens and design row): unidentified_column_used,
+#     multiple_episode_ids, variance_roundoff_clamped, negative_prediction_variance, nonfinite_prediction;
+#   not counted, routine by registration: uncertainty.kind_unknown (km003c always scores with
+#     uncertainty_kind='diagnostic_equal_weights', so every available row carries it), uncertainty.bound_read_as_sd;
+#   not counted, window-level fit flags identical on every row (the benign training fit, carried onto each row by
+#     predict_episode): excluded_turn_rows=<n>, unidentified_column, zero_training_uncertainty,
+#     zero_half_width_limit, variance_iteration_limit, insufficient_turns, rank_deficient_design,
+#     invalid_model_shape, nonfinite_model;
+#   counted (records): invalid_token_count, nonfinite_input, invalid_duration, negative_half_width,
+#     missing_turn_energy. The episode flags a DC row carries are placed as above.
+NOT_COUNTED_DC_CODES = frozenset({
+    'unidentified_column_used', 'multiple_episode_ids', 'variance_roundoff_clamped', 'negative_prediction_variance',
+    'nonfinite_prediction', 'uncertainty.kind_unknown', 'uncertainty.bound_read_as_sd', 'unidentified_column',
+    'zero_training_uncertainty', 'zero_half_width_limit', 'variance_iteration_limit', 'insufficient_turns',
+    'rank_deficient_design', 'invalid_model_shape', 'nonfinite_model'})
+NOT_COUNTED_DC_PREFIXES = ('excluded_turn_rows=',)
+
+
+def not_counted(code):
+    return (code in NOT_COUNTED_CODES or code in NOT_COUNTED_DC_CODES
+            or code.startswith(KNOWN_WITHHELD_PREFIXES) or code.startswith(NOT_COUNTED_DC_PREFIXES))
+
+
 TOOL_PATH_CODES = ('episode.unsupported_tool_call_format', 'episode.malformed_tool_call.json')
 
 
 def unlisted_codes(flags):
-    return sorted({c for c in (_code(f) for f in flags or ()) if c and not allowed_code(c)
-                   and not c.startswith(KNOWN_WITHHELD_PREFIXES)})
+    """Codes counted by tripwire 2 (RL-162 section 2), before removing what is printed for the member."""
+    return sorted({c for c in (_code(f) for f in flags or ()) if c and not allowed_code(c) and not not_counted(c)})
+
+
+def member_counted_codes(record, source=None):
+    """RL-162 section 2: one member's counted codes from its four sources (the thermal record's ``flags``, its
+    ``energy_flags``, the member-scoped harvest flags and the non-``meter.`` flags of its DC row), less the codes
+    already printed for it (exclusion codes, and ``meter.`` codes on its DC row; allowlisted flags are never
+    counted). ``source``: ``{'harvest_flags', 'dc_flags', 'exclusion_codes'}`` (any may be missing)."""
+    source = source or {}
+    dc = list(source.get('dc_flags') or ())
+    printed = ({_code(c) for c in (*(source.get('exclusion_codes') or ()), *(record.get('calibration_exclusions') or ()))}
+               | set(_meter_codes(dc)))
+    flags = [*(record.get('flags') or ()), *(record.get('energy_flags') or ()),
+             *(source.get('harvest_flags') or ()), *(f for f in dc if not str(_code(f)).startswith(METER_PREFIX))]
+    return [c for c in unlisted_codes(flags) if c not in printed]
 
 
 def _admitted_turns(record):
@@ -1105,12 +1171,11 @@ def _tool_path_turns(record):
 
 
 def tool_path_fires(record):
-    """RL-152 section 3.4 tripwire 1, one member: (a) as ruled, an unsupported XML or malformed JSON tool call on
-    at least half of its admitted turns and on at least two; or (b) PR #774 Mythos N4, builder's interim form
-    pending the research lead: on the XML path a refused call ends the episode (no tool calls, the loop
-    breaks; ``workload.py``), so (a) cannot fire there. (b) fires when the episode ENDS on a refused or
-    malformed call (the flag on its last admitted turn) with fewer than three admitted turns (the RL-149 1.5
-    three-turn opportunity)."""
+    """RL-152 section 3.4 tripwire 1, one member, as amended by RL-162 section 1: (a) an unsupported XML or
+    malformed JSON tool call on at least half of its admitted turns and on at least two; or (b) the episode ENDS
+    on a refused or malformed call (the flag on its last admitted turn; turn indices are 0-based) with fewer than
+    three admitted turns. On the XML path a refused call ends the episode (no tool calls, the loop breaks;
+    ``workload.py``), so (a) cannot fire there (PR #774 Mythos N4)."""
     turns = _tool_path_turns(record)
     admitted = _admitted_turns(record)
     ruled = len(turns) >= 2 and 2 * len(turns) >= admitted
@@ -1118,32 +1183,42 @@ def tool_path_fires(record):
     return ruled or ends_early
 
 
-def tripwires(records, scope, nonbenign, roles=None):
+def tripwires(records, scope, nonbenign, roles=None, sources=None):
     """RL-152 section 3.4: the two instrument-health lines, computed in memory; each prints one fact, no count
     of a withheld member. Returns (report, printed lines). ``roles`` maps id -> plan role (else the record's).
 
-    Tool path (W1): any non-benign member under :func:`tool_path_fires`, or (Mythos N4, interim) every one of
-    at least two non-benign D members carrying a tool-path flag at all."""
+    Tool path (W1, RL-162 section 1): (a) and (b) of :func:`tool_path_fires` on any non-benign member, or (c)
+    every non-benign D member with at least one admitted turn carries a tool-path flag, and there is at least
+    one such member (a D member that ended at G0 has no turn and no flag, so it is not counted)."""
     report, lines = {}, []
+
+    def counted(record):
+        return member_counted_codes(record, (sources or {}).get(record.get('id')))
     if scope == 'W1':
         held = [r for r in records if r.get('id') in nonbenign]
         role = (lambda r: (roles or {}).get(r.get('id'), r.get('role')))
-        d_members = [r for r in held if role(r) == 'D']
+        d_members = [r for r in held if role(r) == 'D' and _admitted_turns(r) >= 1]
         fires = (any(tool_path_fires(r) for r in held)
-                 or (len(d_members) >= 2 and all(_tool_path_turns(r) for r in d_members)))
+                 or (len(d_members) >= 1 and all(_tool_path_turns(r) for r in d_members)))
         report['w1_non_benign_tool_path'] = {'verdict': 'to the research lead' if fires else 'within',
                                              'rule': 'RL-152 section 3.4 (chair ruling 2(d), :484-489)'}
         lines.append('W1 non-benign tool path (RL-152 section 3.4): ' + report['w1_non_benign_tool_path']['verdict'])
-        benign = sum(len(unlisted_codes(r.get('flags'))) for r in records if r.get('id') not in nonbenign)
-        withheld_present = any(unlisted_codes(r.get('flags')) for r in records if r.get('id') in nonbenign)
+        benign = sum(len(counted(r)) for r in records if r.get('id') not in nonbenign)
+        # RL-162 section 2: the deduplicated code names over the withheld members, no member id, no count.
+        names = sorted({c for r in records if r.get('id') in nonbenign for c in counted(r)})
+        verdict = 'present, to the research lead: ' + ', '.join(names) if names else 'none'
         report['unlisted_flag_codes'] = {'benign_members': benign, 'population': 'benign',
-                                         'withheld_members': 'present, to the research lead' if withheld_present else 'none'}
+                                         'withheld_members': verdict, 'withheld_codes': names,
+                                         'rule': 'RL-152 section 3.4, RL-162 section 2'}
         lines.append(f'W1 unlisted flag codes (RL-152 section 3.4): benign members {benign}; withheld members: '
-                     + report['unlisted_flag_codes']['withheld_members'])
+                     + verdict)
     else:
-        total = sum(len(unlisted_codes(r.get('flags'))) for r in records)
-        report['unlisted_flag_codes'] = {'all_members': total, 'population': 'all'}
-        lines.append(f'unlisted flag codes (RL-152 section 3.4): all members {total}')
+        total = sum(len(counted(r)) for r in records)
+        names = sorted({c for r in records for c in counted(r)})
+        report['unlisted_flag_codes'] = {'all_members': total, 'population': 'all', 'codes': names,
+                                         'rule': 'RL-152 section 3.4, RL-162 section 2'}
+        lines.append(f'unlisted flag codes (RL-152 section 3.4): all members {total}; codes: '
+                     + (', '.join(names) or 'none'))
     return report, lines
 
 
@@ -1214,7 +1289,28 @@ def _thermal_desk_state(registration_dir):
     return {'measurement_root': str(Path(__file__).resolve().parents[3])}
 
 
-def guard_thermal_desk(result, prints, records, registration_dir, output):
+def stored_scope(tag_lists):
+    """PR #774 Mythos re-attack 2 M5: the window scope from each bundle's STORED pack tag (``config.json``
+    ``run_metadata.tags``: ``align-v4`` for a W1 member, ``align-v4-<window>`` for a series member;
+    ``align_v4_kit.py`` and ``align_v4_series.py`` write them). Pilot and reference bundles carry pilot tags and
+    say nothing. T anywhere seals as T, C or D as C; W1 only when the only v4 tag present is W1's; no readable v4
+    tag at all is C (fail closed)."""
+    windows = set()
+    for tags in tag_lists or ():
+        for tag in tags or ():
+            tag = str(tag)
+            if tag == 'align-v4':
+                windows.add('W1')
+            elif re.fullmatch(r'align-v4-[a-z]+[0-9]+', tag):
+                windows.add(tag.rsplit('-', 1)[1].upper())
+    if any(re.fullmatch(r'T[1-9][0-9]*', w) for w in windows):
+        return 'T'
+    if windows == {'W1'}:
+        return 'W1'
+    return 'C'
+
+
+def guard_thermal_desk(result, prints, records, registration_dir, output, stored_tags=None):
     """``align_v4_thermal_desk`` output boundary (Sol F1): (PILOT, RL145_PRINTS, sealed?) to write.
 
     Before release the full PILOT and RL-145 prints go to ``<output>/archive/withheld/`` with the desk key; the
@@ -1231,8 +1327,12 @@ def guard_thermal_desk(result, prints, records, registration_dir, output):
     # PR #774 Mythos N5: W1 only when EVERY member is tagged W1; a T tag anywhere seals as T; anything else
     # (untagged, mixed, unknown) fails closed to the C seal, as window_scope does for sessions.
     windows = [None if r.get('window') is None else str(r.get('window')) for r in records]
-    scope = ('W1' if windows and all(w == 'W1' for w in windows) else
-             'T' if any(w and re.match(r'T[1-9]', w) for w in windows) else 'C')
+    manifest = ('T' if any(w and re.match(r'T[1-9]', w) for w in windows) else
+                'C' if any(w and re.match(r'[CD][1-9]', w) for w in windows) else None)
+    # Mythos re-attack 2 M5: the bundles' stored pack tags decide; a manifest window tag can only narrow W1 to C/T.
+    scope = stored_scope(stored_tags)
+    if scope == 'W1' and manifest is not None:
+        scope = manifest
     plan = [{'run_id': r.get('id'), 'condition': r.get('condition'), 'ordinal': r.get('ordinal')} for r in records]
     nonbenign = _nonbenign(plan)
     key = secrets.token_bytes(32)
