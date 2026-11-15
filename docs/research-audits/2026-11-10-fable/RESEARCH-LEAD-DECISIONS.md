@@ -16482,3 +16482,172 @@ Research lead (Fable 5.2), Sat Nov 14 21:29 PST 2026 (from `date`). The page RL-
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This page rests on rulings, the agenda and source code. F2's cells, its prints and its read rule are fixed before any F2 leg exists.
 
 **For Ed, plainly.** "When the laptop has nothing else ready, it now runs a two-hour instrument check. The check holds the model idle for ten minutes and then does a short, logged burst of work. It tells us how small a burst the wall meter and the laptop's own counters can each see, and how the two readings line up. It uses the code that already runs the calibration blocks, so nothing new has to be built or trusted. We do not look at its energy until the calibration fit is frozen later this week."
+
+# RL-166b. The Mythos attack on the fit form (Q1 to Q4): the onset step is fitted and exported on expected hot seconds; a start reading with no spread is dropped in stage 1; the onset fit needs onsets in two prompt sizes and passes a written convergence test; ½T² stays and its limit is stated; the 2 % line stays as written and the manifest states its pass rate. The dates hold
+
+Research lead (Fable 5.2), Sat Nov 14 21:44 PST 2026 (from `date`). RL-166, RL-166a and RL-167 stand except where "Amends" says otherwise.
+
+**The form changes in one place:** the δ column. Everything else is an estimability rule, a solve convention or a print. The four major items come out as: 1 accepted, 2 refused with the pass rate stated, 3 accepted, 4 refused with the limit stated.
+
+**Read.**
+- The Mythos seat's `REPORT.md` in full, and its brief.
+- Its outputs `q1_identifiability`, `q1b`, `q1c`, `q1d`, `q2_shape`, `q3_onset`, `q3b`, `q4b_gates`, `q5_transfer`; the gate functions in `q4b_gates.py`.
+- RL-166, RL-166a, RL-167 in full; RL-149 §2.7 (the score) and §4 item 1; RL-151 §2.1 and §2.2.
+- `INTERFACE.md`'s field names, by search only.
+
+**Checked myself.**
+- The expected-hot-seconds formula against a 400,000-draw simulation (20.000 against 20.000 s), its limit at zero scatter (the plug-in value), and its ends (0 far before onset, the whole segment far after).
+- ½T² at 75 s is 2.9 % of its value at 439 s, and 11.7 % at 150 s.
+- 4,096 over 3,724, 3,151 and 2,981 is 1.0999, 1.2999 and 1.3740.
+- Item 4.2 and item 6.1 of the report are already ruled: RL-167 row 7 and row 15. The seat was given RL-166 only.
+
+**Not checked.**
+- The simulated world (`world.py`). I ran none of the seat's scripts. Every number quoted from the report is the seat's.
+- `q4_lodo.out` and `q6_prefix.out`.
+- The analyst's code (PR #795) and the twin's code. B-5's test assumes each holds a Hessian or a gradient in Olsen's form.
+- How the fan and the two temperature sensors quantise at a turn's start. B-2's tolerances carry that risk.
+- No SSH. No measurement, energy, power, meter, journal or custody file was opened.
+
+**Not done.** No commit, push or comment. The only file written is this one.
+
+---
+
+## 1. The rulings, by the report's items
+
+| Item | Ruling | In short |
+|---|---|---|
+| 1.2 The exported offset is attenuated (major) | **Accepted** | B-1. The alternative (fit on the observed onset) is refused |
+| 1.3 κ is not stable one by one | **Accepted as a reading rule; the print is deferred to freeze 2** | §4 |
+| 1.4 A start reading with no spread | **Accepted, decided once in stage 1** | B-2 |
+| 1.5 Clustering by leg understates | **Accepted as a print now; the SD_j rule is fixed now and applied at freeze 2** | P-1, §4 |
+| 1.6 Numerics | **Accepted** | B-6 |
+| 2.1 ½T² is inert on short turns (major) | **Refused; the limit is stated** | §2.2 |
+| 2.2 A shift that builds over 60 s | **Accepted as a print** | P-3 |
+| 3.1 The onset fit at its minimum (major) | **Accepted** | B-3, B-4, B-5 |
+| 3.2 Censored share | **Accepted, no new field** | The share is `n_censored` over the two counts. Above 0.30 the lead tells me; the reported error may then understate |
+| 3.3 Legs that start out of state | No change, as the seat proposes | |
+| 3.4 The 116 s fallback | **Accepted** | P-4 |
+| 4.1 The 2 % line (major) | **Refused as a new rule; the pass rate is stated and two prints are added** | §2.1 |
+| 4.2 The fold rule at three days | **Already ruled** (RL-167 row 7), **plus one constant** | B-4, B-7 |
+| 4.2 A day's count by hot exposure | **Accepted as a print** | P-2 |
+| 5.3 Leverage flag, 5.4 hot-prefill flag | **Deferred to freeze 2** | §4 |
+| 5.5 Centre TV0h excess at 0 | **Refused** | §2.3 |
+| 6.1 Prefixes are not whole blocks | **Already ruled** (RL-167 row 15, the prefix tail) | |
+| 6.2 Ratio of tokens or of load | **Accepted, one sentence** | §4 |
+| 6.3 The t interval at two days | **Accepted, for `lm-qual-01`** | §4 |
+
+---
+
+## 2. The three points that need reasons
+
+### 2.1 The 2 % line stays as RL-166 Q3 and RL-151 §2.1 wrote it
+
+**Refused: the seat's rule** (each day within 2 % plus twice its standard error, and the heat columns lower the error near the onset).
+- **It passes more easily when the data are noisier.** At a leg spread of 4 points it says "yes" 0.89 of the time while the held-out error per leg is 5.1 %. A field called `qualified` must not mean "could not be shown wrong".
+- **Its rejection of a wrong heat term was not simulated.** The only wrong model in the table is the base alone, and clause (b) fails that by construction.
+- **The line is already in RL-151.** I do not loosen a registered line because a simulation shows it is hard to pass, even blind.
+
+**What the interim half of `qualified` now claims.** The manifest carries these sentences:
+- "`yes` means that on every counted day the held-out hot-stretch energy on the GPU rail was predicted within 2 %."
+- "In simulation at the design's assumed spreads, a correct model gets `yes` about 4 times in 10 (0.03 to 0.66 over the worlds tried) and a fit with no heat term about 1 time in 12. So `no` is the more likely word for a correct model. It is not evidence that the term is wrong, and no text may read it that way."
+- "The pooled error does not discriminate: it is under 2 % with or without the heat term."
+
+**The pass rate is re-run for this ruling's form.** The 0.42 is for RL-166 as written. The lead has a seat re-run `q4b_gates.py` with B-1's column, synthetic only, and the manifest takes that number before item 11. If it is outside 0.25 to 0.60 in the default world, tell me first.
+
+**Where the evidence that the term does anything now sits:** the with and without lines RL-166 Q3 already prints, and P-2 and P-3. They are prints. No verdict word is added.
+
+**Nothing waits on the word.** Freeze 2 takes the fit either way (RL-166 Q2), and S_w and K_w print either way with the field (RL-151 §2.1).
+
+### 2.2 ½T² stays, and the manifest states its limit
+
+**Refused: the level part (twelve parameters).**
+- **The campaign cannot choose.** Every development and qualification leg runs over 300 s. The seat's own table gives a held-out leg error of 2.2 to 2.3 % for every shape under every truth. The choice would rest on the simulation's assumption alone.
+- **It adds three columns on readings that correlate at 0.81 to 0.88,** where one κ already has a spread of 0.73 on a planted 1.0.
+- **It cuts both ways:** better on a short cold turn if the truth decays (1.71 to 0.46 % of turn energy), worse if RL-166 is right (0.12 to 0.32).
+- Ĥ feeds prints only (S_w, K_w). The onset model, which the rows' count-only cut uses, is not touched by this choice.
+
+**The limit, as the manifest states it:** "The start term is 3 % of its 439 s value on a 75 s turn and 12 % at 150 s. On turns under about 150 s, Ĥ is the onset step alone. Whether a warm start changes the energy of a short turn was not estimated."
+
+### 2.3 TV0h excess keeps its median centre
+
+A series turn pinned near the soak reference gets the fitted slope at its own reading, which is cooler than the campaign's median. That is the term doing its job, not a count-only term. Centring at 0 would make the column positive on every leg, and κ3 would then take up any within-leg drift, which is the fault I refused in `b0`.
+
+---
+
+## 3. What both implementations change
+
+**B is form, estimability and solve: in both before item 7. P is prints.**
+
+| # | What | The rule, exact |
+|---|---|---|
+| B-1 | **The δ column is expected hot seconds** | For a segment [u, v]: **w̃ = σ̂ · [G((v − ℓ)/σ̂) − G((u − ℓ)/σ̂)]**, with G(x) = x·Φ(x) + φ(x), Φ(x) = ½·erfc(−x/√2), φ(x) = exp(−x²/2)/√(2π). ℓ is the onset model's linear predictor, **not clipped**. σ̂ is that onset fit's ML σ (`sigma_s`). The main fit uses the main onset fit; a fold uses its own. A `start_out_of_state` leg takes w̃ = d. If σ̂ is under 1e-6 s, w̃ is the old overlap. **For a turn: Ĥ = ½T²(κ·z) + δ·σ̂·[G((T − ℓ)/σ̂) − G(−ℓ/σ̂)]** |
+| B-1a | What does not change | `tau_hat_s` = max(0, ℓ); the count-only cut (τ̂ less twice the RMS); the hot stretch (R-4, the observed reading); R-13's error. ℓ is formed in stage 2 from stage 1's coefficients and readings, as the folds already do. No new stage-1 field is needed for it |
+| B-2 | **Active start readings** | Stage 1 decides, on energy-fit legs: a reading is active when, for every fit day D, at least 6 energy-fit legs off day D have \|z\| above its tolerance. Tolerances: 0.25 °C for Tf08 and for TV0h excess, 25 rpm for the fan. An inactive reading's κ column and onset predictor are dropped in the main fit, every fold and the marked-spans print. Stage 1 prints `active_readings` with the three counts. The lead tells me of any inactive reading; stage 2 does not wait |
+| B-3 | **`estimable`, the main onset fit** | At least 12 uncensored onsets on at least 3 days, **and at least 4 uncensored onsets in each of at least two prompt-size cells**, and B-5 passes. Stage 1 prints the uncensored count by cell |
+| B-4 | **A fold's onset fit** (amends RL-167 row 7) | At least 6 uncensored onsets on the training legs, **at least 2 in each of at least two cells**, and B-5 passes. Otherwise the fold drops δ, as row 7 has it |
+| B-5 | **The convergence test,** at the returned point, whatever the optimiser | In Olsen's parameters (γ = β/σ, η = 1/σ), with each predictor column, and the responses and censoring times, divided by their RMS over the fitted legs: all values finite, η above 0; the negative Hessian is positive definite with condition number at most 1e10; the Newton decrement gᵀ(−H)⁻¹g is at most 1e-8. A central difference of the analytic gradient may stand in for an analytic Hessian. A failure is RL-167 row 8 in the main fit and B-4 in a fold |
+| B-6 | **The energy solve** | Each design column is divided by its RMS over rows; the solve is SVD or QR on that matrix (`numpy.linalg.lstsq` is enough); the coefficients are scaled back. Rank-deficient means the smallest singular value is under 1e-10 of the largest. The normal matrix is never formed in raw units. CR1 is R-10 |
+| B-7 | **The days tripwire** (amends RL-166 Q8) | Stage 1 comes to me with fewer than **4** fit days. The verdict's "fewer than three counted days is `not_evaluable`" does not change |
+| P-1 | Fold coefficients | Each channel's output gains each fold's coefficient vector, by held-out day and column name. They are already computed |
+| P-2 | Day detail | Per counted day, with and without the heat columns: legs with a hot block, hot blocks, and the standard error s/√n. s is the SD of per-leg signed hot-stretch errors within days, pooled over counted days (the seat's `day_gate` arithmetic). No rule reads it |
+| P-3 | Residual by block from the onset | Legs with an observed in-turn onset. o is the leg's first hot block. For offsets −2 to +5 from o, over full decode blocks: n, the mean and the RMS of the held-out relative residual (predicted less measured, over measured), with and without the heat columns. One summary pair: the RMS over offsets −2 to +3 |
+| P-4 | Onsets before 116 s | Stage 1 prints, by G0 role, the count of legs that start in state and have an observed onset under 116.0 s from the turn start. **If the onset model is `not_estimable` and that count is above zero, the 116 s cut does not stand by default: it comes to me before stage 2** |
+
+**Refused inside item 1.2: fitting δ on the observed onset and exporting with w̃.** It gains about 3 points of export in the seat's table (0.91 against 0.88), needs two regressors for one coefficient, and has no value for a `state_unobserved` leg.
+
+**What B-1 makes of the offset's claim.** The manifest states:
+- "Ĥ is a partial correction. In simulation it carries 0.85 to 0.95 of the heat effect (0.79 before this change). The rest sits in the count-only base, which is not exported. That share cannot be measured on the campaign's own legs."
+- "Ĥ is no longer exactly zero for a turn that ends before its predicted onset. A turn ending 20 s before it, at a scatter of 15 s, carries 0.6 expected hot seconds."
+- "δ's clustered standard error overstates its spread (about 1.8 times in the planted world). The onset coefficients' own uncertainty is still not propagated."
+
+---
+
+## 4. Deferred, with the rule fixed now
+
+| What | When | The rule |
+|---|---|---|
+| κ's signs (1.3) | Freeze 2 | I read no single κ's sign or size. Freeze 2 reports Ĥ with its interval for three reference turns, computed from the coefficient file. No energy is read for it |
+| SD_j's covariance term (1.5) | Freeze 2 | For each reference turn it takes the larger of the leg-clustered standard error and the day-jackknife value from P-1: √((D − 1)/D · Σ (Ĥ₍₋d₎ − their mean)²). Fixed here so that it is not chosen after the output is seen |
+| A leverage flag beside `heat_extrapolated` (5.3) | Freeze 2 | A turn whose start readings lie further from the campaign's centre, by joint distance, than any campaign leg. Stage 1's committed readings are enough; no code now. Until then the manifest says that warm series turns are mostly outside the campaign's joint range (67 to 75 % in simulation) though inside each marginal range |
+| A hot-prefill flag (5.4) | Freeze 2 | A turn with more than 10 expected hot seconds in its prefill, by B-1's formula |
+| Ratio of tokens or of load (6.2) | `lm-qual-01` | "1.10, 1.30 and 1.374 name ratios of decode tokens. The ratio of load seconds is smaller and prints by cell." The lead adds the sentence to the manifest now |
+| Prefix bias on few days (6.3) | `lm-qual-01` | Fewer than 3 days among the pairs prints `not_evaluable` for the ±0.10 word. At 3 days the seat's simulation puts a true bias of 0.01 inside ±0.10 in 0.84 of runs; `lm-qual-01` states that. R-11 stands at the interim look, where the bias carries no word |
+
+---
+
+## 5. Who implements what, and the dates
+
+- **Analyst seat (Opus, PR #795):** B-1 to B-7 and P-1 to P-4, in stage 1, the design row, the predict path and the output.
+- **Sol twin:** the same list, from this ruling's §3 only. It still does not see the analyst's code. Its register lists any reading of §3 it had to make, and those come to me before item 7.
+- **Manifest builder:** the stage-1 schema (B-2's `active_readings`, B-3's count by cell, P-4, B-7's constant), the output schema (P-1 to P-3), and the manifest sentences of §2.1, §2.2, §3 and §4. Inside its Sun 18:00 item.
+- **Lead:** the interface page on §3; the pass-rate re-run; this ruling to all three builders tonight.
+
+**The dates hold.** The report came some 12 hours before its due time, and RL-166's plan already left Sunday for a form change.
+- **Mon 10:00, item 7:** on two implementations that carry B-1 to B-7. The planted set gains a leg set with one reading held constant (B-2) and one with uncensored onsets in a single cell (B-3). `converged` is compared on the planted set only.
+- **P-1 to P-4 may land as late as Mon 14:00.** If they do, the lead runs the agreement test again on those fields before the package comes to me.
+- **Mon 18:00, the package:** holds. It carries the re-run pass rate.
+- If either builder cannot carry B-1 to B-7 by Sun 22:00, tell me then. I would move item 7 before I would compare half-changed code.
+
+---
+
+**Owner.**
+- **Lead:** the three dispatches; the interface page; the pass-rate re-run and its sentence; an inactive reading, a censored share above 0.30, and P-4's count, each to me when stage 1 prints it.
+- **Analyst seat, Sol twin:** §3.
+- **Manifest builder:** the two schemas and the manifest sentences.
+- **Research lead:** the twin's new readings; freeze 2's four deferred rules; `lm-qual-01`'s two.
+
+**Gate.** Item 7 waits for B-1 to B-7 in both implementations. The manifest's commit (item 11) waits for the re-run pass rate. Stage 2 waits, in addition to RL-166's gate, for P-4's count when the onset model is `not_estimable`.
+
+**Amends.**
+- RL-166 Q1: the δ column is w̃, and Ĥ's step is δ times the expected hot seconds. The sentence "Ĥ is zero for a turn that ends before its predicted onset" is withdrawn.
+- RL-166 Q1 and Q4: a start reading enters only if active (B-2). The parameter count is nine less the dropped columns.
+- RL-166 Q2: the solve is B-6. "The uncertainty of τ̂ is not propagated" becomes "the onset's scatter is in the column; its coefficients' uncertainty is not propagated".
+- RL-166 Q3: the manifest states the pass rate of the 2 % line and what `no` may not be read as. P-2 and P-3 join the prints.
+- RL-166 Q4 and RL-167 rows 7 and 8: `estimable` gains the two-cell rule and B-5's test; a fold gains its own two-cell rule.
+- RL-166 Q4 and RL-149 §4 item 1: the 116 s cut stands as the fallback only with P-4's count at zero.
+- RL-166 Q8: the days tripwire is under 4.
+- RL-149 §1.3 (SD_j): the covariance term is the larger of two, as §4 gives it.
+
+**Blind status.** Blind. Nothing measured was opened by me or by the seat. Every number here is from synthetic campaigns built on step 3's disclosed output and on assumed spreads. The form, the rules and the tolerances are fixed before stage 1 runs on any real leg. The 2 % line is unchanged; what changed is that its pass rate is now stated beside it.
+
+**For Ed, plainly.** "A second model attacked the design of the heat fit before the code was finished, and found four real problems. Two I fixed. The correction was coming out about a fifth too small, because the moment heat starts is predicted with some error; the fit now allows for that error, at a cost of a few lines of code. And the model for when heat starts could fail to fit in a thin campaign; it now has a stricter minimum and a written test. Two I did not fix, on purpose. The 2 % accuracy bar turns out to be hard to pass even for a correct model, about 4 times in 10. I kept the bar and wrote that number beside it, rather than loosen a bar we had already set. And the model's shape cannot be checked on short runs with the data we are collecting, so the file now says so. Both programs change in step tomorrow, and Monday's dates hold."
