@@ -423,7 +423,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "371d9483c11c4bf2fa793e6a95241beab4af2479ff2b7e3fca3dda59d2d04e1c"
+        "sha256": "34c9261a5144973f1776da21d3cdd2bf27380c9c7729549ffa0a47ec5e457315"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -648,7 +648,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "371d9483c11c4bf2fa793e6a95241beab4af2479ff2b7e3fca3dda59d2d04e1c"
+          "sha256": "34c9261a5144973f1776da21d3cdd2bf27380c9c7729549ffa0a47ec5e457315"
         },
         "cite": [
           "RL-149 §2.4",
@@ -664,7 +664,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "371d9483c11c4bf2fa793e6a95241beab4af2479ff2b7e3fca3dda59d2d04e1c"
+          "sha256": "34c9261a5144973f1776da21d3cdd2bf27380c9c7729549ffa0a47ec5e457315"
         },
         "cite": [
           "RL-149 §2.4",

@@ -217,6 +217,8 @@ class Readers(Base):
             lines.append('{"k":"b","tx":%d,"rx":%d,"rt":%d,"n":%d,"p":"%s","smc":{"PDTR":123.45,"PSTR":67.8}}'
                          % (100 + i, 200 + i, T0 + i * 200_000_000, 1, self.SENTINEL_HEX))
         lines.append(json.dumps({"k": "e", "rx": 999, "raw": self.SENTINEL_HEX}))
+        lines.append(json.dumps({"k": "b", "tx": 1, "rx": 2, "rt": T0 + 5 * 200_000_000, "n": 1, "p": self.SENTINEL_HEX,
+                                 "smc": {"PDTR": 1.0}}))                     # spaced JSON: stamp taken, never decoded
         lines.append(json.dumps({"k": "t", "polls": 5, "empties": 0, "bad": 1, "usb_errors": 0, "elapsed_s": 1.0,
                                  "stop_reason": "signal 15"}, sort_keys=True))
         p = d / "stream-0001.jsonl"
@@ -233,7 +235,7 @@ class Readers(Base):
             return real(s, *a, **k)
         with unittest.mock.patch.object(i34.json, "loads", spy):
             s = i34.read_meter_stream(p)
-        self.assertEqual(s["stamps"], [T0 + i * 200_000_000 for i in range(5)])
+        self.assertEqual(s["stamps"], [T0 + i * 200_000_000 for i in range(6)])
         self.assertEqual(s["header"]["poll_s"], 0.2)
         self.assertEqual(s["trailer"]["stop_reason"], "signal 15")
         self.assertEqual(len(decoded), 2)                                     # header and trailer only
@@ -272,6 +274,15 @@ class Readers(Base):
         (b / "raw").mkdir()
         (b / "raw" / "powermetrics.plist").write_text("SENTINEL\n")
         return b
+
+    def test_g0_falls_back_to_the_runtime_event_log(self):
+        b = self.make_bundle()
+        lines = (b / "events.jsonl").read_text().splitlines()
+        gate = [l for l in lines if "align_thermal_gate" in l]
+        (b / "events.jsonl").write_text("\n".join(l for l in lines if "align_thermal_gate" not in l) + "\n")
+        self.assertIsNone(i34.read_leg_interval(b))
+        (b / "outputs" / "align_runtime_events.jsonl").write_text("\n".join(gate) + "\n")
+        self.assertEqual(i34.read_leg_interval(b)[0], T0)
 
     def test_interval_and_period(self):
         b = self.make_bundle()

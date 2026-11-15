@@ -66,8 +66,9 @@ METER_MAX_GAP_NS = 2 * NS            # RL-166 Q7
 NORMAL_STOP_REASONS = ("duration", "stop file")     # and any "signal N" (km003c_monitor.py on_signal)
 ABNORMAL_STOP_REASONS = ("absent", "exception", "consecutive USB errors")
 
-_SAMPLE_LINE_RE = re.compile(rb'^\{"k":"b","tx":\d+,"rx":\d+,"rt":(\d+),')
-_ERROR_LINE_PREFIX = b'{"k": "e"'
+# km003c_monitor.py writes sample lines compact ('{"k":"b","tx":..,"rx":..,"rt":..,'); spaced JSON is accepted too.
+_SAMPLE_LINE_RE = re.compile(rb'^\{"k":\s*"b",\s*"tx":\s*\d+,\s*"rx":\s*\d+,\s*"rt":\s*(\d+)\s*,')
+_UNREAD_LINE_RE = re.compile(rb'^\{"k":\s*"[be]"')     # sample or error line: never decoded
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -284,7 +285,7 @@ def read_meter_stream(path):
         m = _SAMPLE_LINE_RE.match(raw)
         if m:
             stamps.append(int(m.group(1)))
-        elif raw.startswith(_ERROR_LINE_PREFIX) or raw.startswith(b'{"k":"b"'):
+        elif _UNREAD_LINE_RE.match(raw):
             pass                                  # an error line, or a sample line in an unknown form: unread
         else:
             doc = json.loads(raw)
@@ -346,13 +347,13 @@ def read_sidecar_rows(bundle):
     return rows
 
 
-def read_leg_interval(bundle):
-    """(G0 start, last stamped token) in wall-clock ns from events.jsonl, or None. The G0 start is the
-    phase_start of the leg's align_thermal_gate with metadata kind G0 (thermal_gates.py); the last token is
-    the latest token event's stamp. Only these fields are kept."""
+G0_EVENT_FILES = ("events.jsonl", "outputs/align_runtime_events.jsonl", "align_runtime_events.jsonl")
+
+
+def _scan_events(path):
     hook = _keep({"event_type", "phase", "timestamp_s", "metadata", "kind"})
     g0, last = None, None
-    for raw in _jsonl_lines(Path(bundle) / "events.jsonl"):
+    for raw in _jsonl_lines(path):
         e = json.loads(raw, object_pairs_hook=hook)
         et, ts = e.get("event_type"), e.get("timestamp_s")
         if not isinstance(ts, (int, float)):
@@ -362,6 +363,21 @@ def read_leg_interval(bundle):
         elif (et == "phase_start" and e.get("phase") == "align_thermal_gate"
               and (e.get("metadata") or {}).get("kind") == "G0" and g0 is None):
             g0 = ts
+    return g0, last
+
+
+def read_leg_interval(bundle):
+    """(G0 start, last stamped token) in wall-clock ns, or None. The last token is the latest token event's
+    stamp in events.jsonl. The G0 start is the phase_start of the leg's align_thermal_gate with metadata kind
+    G0 (thermal_gates.py), from events.jsonl, else from the runtime's align_runtime_events.jsonl (the same
+    fallback the desk and RL-149 section 1.2 item 6 use). Only these fields are kept."""
+    bundle = Path(bundle)
+    g0, last = _scan_events(bundle / "events.jsonl")
+    for name in G0_EVENT_FILES[1:]:
+        if g0 is not None:
+            break
+        if (bundle / name).is_file():
+            g0, _ = _scan_events(bundle / name)
     if g0 is None or last is None:
         return None
     return round(g0 * NS), round(last * NS)
