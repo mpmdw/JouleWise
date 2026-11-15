@@ -673,7 +673,11 @@ def stage2_energy_preflight(s1, a):
     doc, mpath = _VERIFIED[0]
     if s1.get("manifest_sha256") != sha256_file(mpath):
         raise F.LookInputError("the stage-1 file was made under another manifest")
-    stage1_doc_problems_refuse(s1, doc)          # Sol r4 NEW-3: assemble's stage-1 checks, before energy
+    # Sol r4 NEW-3: the shared pre-energy check of the stage-1 file (schema, manifest, run mode, exact code at the
+    # pins, roster hash), the one assemble and step 3 also run
+    problems = M.stage1_problems(ROOT, doc, s1, sha256_file(mpath), allow_draft=a.allow_draft)
+    if problems:
+        raise F.LookInputError("the stage-1 file: " + "; ".join(problems))
     if a.allow_draft and a.custody:
         sdir_of = span_dirs(a.custody, a.span_dir)
         for sp in s1["roster"]["spans"]:
@@ -682,42 +686,6 @@ def stage2_energy_preflight(s1, a):
     importlib.import_module("joulewise.external.km003c_parse")
     importlib.import_module("joulewise.cadence_looks.step3_energy_ratios")
     _guard_loaded(doc)
-
-
-def stage1_code_set():
-    """STAGE1_CODE as scripts/cadence_look_manifest.py (pinned) defines it, read from that file's syntax tree, not
-    imported (importing it would add it to this stage's loaded set): one definition for assemble and stage 2."""
-    import ast
-    tree = ast.parse((ROOT / "scripts/cadence_look_manifest.py").read_text(encoding="utf-8"))
-    env = {}
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) \
-                and node.targets[0].id in ("_SHARED_CODE", "STAGE1_CODE"):
-            expr = node.value
-            if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
-                env[node.targets[0].id] = tuple(env[expr.left.id]) + tuple(ast.literal_eval(expr.right))
-            else:
-                env[node.targets[0].id] = tuple(ast.literal_eval(expr))
-    if "STAGE1_CODE" not in env:
-        raise F.LookInputError("STAGE1_CODE is not readable from scripts/cadence_look_manifest.py")
-    return set(env["STAGE1_CODE"])
-
-
-def stage1_doc_problems_refuse(s1, doc):
-    """The stage-1 file passes its pinned schema, and the code it recorded is the pins, exactly STAGE1_CODE (as
-    assemble checks; Sol r4 NEW-3). Refuses on any problem."""
-    from joulewise.cadence_looks import schema_check as sc
-    schema = json.loads((ROOT / "docs/process/cadence/looks/lm-interim-01.stage1.schema.json").read_text("utf-8"))
-    problems = [f"the stage-1 file does not pass its schema: {e}" for e in sc.errors(s1, schema)[:5]]
-    pins = {path: sha for _, path, sha in M.code_refs(doc)}
-    code = {k: v for k, v in (s1.get("code_sha256") or {}).items() if not k.startswith("input:")}
-    problems += [f"the stage-1 file records {p} at a hash that is not the pin" for p, h in sorted(code.items())
-                 if pins.get(p) != h]
-    exact = stage1_code_set()
-    problems += [f"the stage-1 file does not record {p}" for p in sorted(exact - set(code))]
-    problems += [f"the stage-1 file records {p}, which stage 1 does not run" for p in sorted(set(code) - exact)]
-    if problems:
-        raise F.LookInputError("; ".join(problems))
 
 
 def _guard_loaded(doc):

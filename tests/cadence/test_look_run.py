@@ -1296,12 +1296,6 @@ class RoundFour(unittest.TestCase):
                               str(self.c.root), "--out", os.path.join(self.d, "o-good.json")])
         self.assertEqual(rc, 0, err)
 
-    def test_stage1_code_set_is_read_from_the_assembler(self):
-        got = R.stage1_code_set()
-        self.assertIn("scripts/cadence_look_run.py", got)
-        self.assertIn("joulewise/cadence_looks/inclusion_34.py", got)
-        self.assertNotIn("scripts/cadence_look_manifest.py", got)
-
     def test_n7_stage1_inputs_gate_refuses_an_unnamed_verdict_file(self):
         """Committed mode on look_minirepo: the ledger names the roster and one verdict file; stage 1 given another
         verdict file refuses before custody opens."""
@@ -1350,3 +1344,44 @@ class RoundFour(unittest.TestCase):
                                capture_output=True, text=True, cwd=d)
         self.assertEqual(r.returncode, 2, r.stderr)
         self.assertIn("cached bytecode", r.stderr)
+
+
+class GpuSwitchOn(unittest.TestCase):
+    """Mythos r4 N5: a manifest with fit.gpu_trace_hole_refusal on runs through stage 2. A 6 s hole in one leg's
+    power_trace.csv refuses that stage 2 (no fit written); the same custody under the default manifest (switch
+    absent) integrates."""
+
+    def test_stage2_with_the_switch_on(self):
+        c = _Custody.get()
+        on = pinned_manifest(lambda doc: doc["fit"].update(
+            gpu_trace_hole_refusal={"enabled": True, "max_gap_s": 2.0, "cite": ["RL-999"]}))   # synthetic cite
+        s1 = F.stage1(c.li, "0" * 64)
+        L = next(x for x in s1["legs"] if x["in_energy_fit"])
+        lid = L["leg_key"].split("/")[1]
+        a = L["segments"][3]["wall_start_s"]
+        with tempfile.TemporaryDirectory() as d:
+            sdir = Path(d) / L["span_id"]
+            shutil.copytree(c.root / L["span_id"], sdir)
+            rec = rj(sdir / "legs" / lid / "leg_record.json")
+            pt = sdir / "legs" / lid / "runtime" / rec["result"]["bundle"] / "power_trace.csv"
+            lines = pt.read_text().splitlines()
+            pt.write_text("\n".join([lines[0]] + [r for r in lines[1:] if not (
+                r.split(",")[3] == "gpu_power" and a + 1 <= float(r.split(",")[4]) < a + 7)]) + "\n")
+            for man, want_rc in ((on, 2), (None, 0)):
+                p1 = os.path.join(d, f"s1-{want_rc}.json")
+                argv = ["stage1", "--roster", c.paths["roster.json"], "--custody", str(c.root), "--rules-3-4",
+                        c.paths["rules_3_4.json"], "--span-dir", f"{L['span_id']}={sdir}", "--out", p1]
+                if man:
+                    argv += ["--manifest", man, "--allow-draft"]
+                rc, _, err = run_cli(argv)
+                self.assertEqual(rc, 0, err)
+                o = os.path.join(d, f"o-{want_rc}.json")
+                argv = ["stage2", "--stage1", p1, "--stage1-sha256", R.sha256_file(p1), "--custody", str(c.root),
+                        "--span-dir", f"{L['span_id']}={sdir}", "--out", o]
+                if man:
+                    argv += ["--manifest", man, "--allow-draft"]
+                rc, _, err = run_cli(argv)
+                self.assertEqual(rc, want_rc, err)
+                if want_rc:
+                    self.assertIn("GPU rail", err)
+                    self.assertFalse(os.path.exists(o))
