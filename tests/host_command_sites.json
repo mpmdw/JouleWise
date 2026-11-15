@@ -2046,6 +2046,66 @@
     "seam": "parser default only; ProductionHost.display passes the configured bin to run_align_r1_smoke.display; mock and synthetic tests use FakeHost"
   },
   {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "<module>:ae9add7130c8eda5",
+    "command": "pmset",
+    "seam": "text only (module docstring: the usage lines and the High Power section naming pmset -c powermode 0/2 and sudo -n -l); never executed. The executed High Power commands are the inherited align_r1_rehearsal.PowerModeGuard AUTO/HIGH/LIST tuples, run through ProductionHost.power_runner (run_align_r1_smoke.host_run) under the host night lock; mock and every test use FakeHost.pmset"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "<module>:ae9add7130c8eda5",
+    "command": "sudo",
+    "seam": "text only (module docstring: the usage lines and the High Power section naming pmset -c powermode 0/2 and sudo -n -l); never executed. The executed High Power commands are the inherited align_r1_rehearsal.PowerModeGuard AUTO/HIGH/LIST tuples, run through ProductionHost.power_runner (run_align_r1_smoke.host_run) under the host night lock; mock and every test use FakeHost.pmset"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "FakeHost:1861a38ab34de645",
+    "command": "sudo",
+    "seam": "text only (FakeHost docstring describing the fake pmset/sudo power world); FakeHost.pmset never runs a command and raises on any argv it does not model"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "FakeHost:9cafb4151e84a62b",
+    "command": "kill",
+    "seam": "text only (FakeHost.SUDO_LIST: the fake 'sudo -n -l' stdout listing the narrow rule); returned as a string by the fake, never executed"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "FakeHost:9cafb4151e84a62b",
+    "command": "pmset",
+    "seam": "text only (FakeHost.SUDO_LIST: the fake 'sudo -n -l' stdout listing the narrow rule); returned as a string by the fake, never executed"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "main:8d4c74342b0638c8",
+    "command": "pmset",
+    "seam": "text only (argparse help of mock --fail-close-restore); the flag only sets a FakeHost fault, no host command"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "power_guard_class.CadencePowerModeGuard.high:89ec0fa3697d5029",
+    "command": "pmset",
+    "seam": "text only (the SpanRefusal message when powermode does not read back 2); the command itself is the inherited PowerModeGuard.HIGH tuple (sudo -n /usr/bin/pmset -c powermode 2, the narrow rule), issued only after the host marker is written and under the host night lock; tests use FakeHost.pmset behind a pmset/sudo/kill tripwire"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "power_guard_class:d46732c82ff464cc",
+    "command": "pmset",
+    "seam": "text only (power_guard_class docstring); executed commands are the inherited PowerModeGuard AUTO/HIGH/LIST/QUERY tuples through the injected runner (ProductionHost.power_runner in production, FakeHost.pmset in mock and tests)"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "power_guard_class:d46732c82ff464cc",
+    "command": "sudo",
+    "seam": "text only (power_guard_class docstring); executed commands are the inherited PowerModeGuard AUTO/HIGH/LIST/QUERY tuples through the injected runner (ProductionHost.power_runner in production, FakeHost.pmset in mock and tests)"
+  },
+  {
+    "file": "scripts/cadence_legs_runner.py",
+    "locator": "restore_owed:3da9c3ca171afdf7",
+    "command": "pmset",
+    "seam": "text only (restore_owed docstring); the restore is powermode.restore_owed (RESTORE_AUTOMATIC, the narrow rule's pmset -c powermode 0) under the host night lock without waiting, refusing a W1 marker and removing the marker only on a read-back of 0; tests patch powermode._run with FakeHost.pmset"
+  },
+  {
     "file": "scripts/launch_cadence_span.py",
     "locator": "main:0ad70fd971de1688",
     "command": "kill",
