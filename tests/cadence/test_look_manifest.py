@@ -686,7 +686,7 @@ class Assemble(Base):
         self.stage1 = stage1
         self.s1.write_text(json.dumps(stage1) + "\n")
         h = hashlib.sha256(self.s1.read_bytes()).hexdigest()
-        stage2 = ({FIT, RUNNER, lm.STEP3_PATH} | {d["path"] for d in man["fit"]["dependencies"]}) - \
+        stage2 = (set(cli.STAGE2_CODE) | {d["path"] for d in man["fit"]["dependencies"]}) - \
             {"configs/align/v4/r1_runtime.json"}
         self.fit = self.minimal(self.sc.sub_schema(self.out_schema, "fit_output"))
         self.fit.update(stage1_sha256=h, manifest_sha256=msha, allow_draft=True, numpy_version="2.5.4",
@@ -763,10 +763,9 @@ class Assemble(Base):
         self.dump()
         self.refused_run(f"the fit does not record {dep}'s hash", "--allow-draft")
         self.write_stage1()
-        self.fit["code_sha256"]["joulewise/cadence_looks/inclusion_34.py"] = self.pins()[1]["joulewise/cadence_looks/inclusion_34.py"]
+        self.fit["code_sha256"][ADAPTER] = self.pins()[1][ADAPTER]
         self.dump()
-        self.refused_run("records joulewise/cadence_looks/inclusion_34.py, which the pinned stage does not run",
-                         "--allow-draft")
+        self.refused_run(f"records {ADAPTER}, which the pinned stage does not run", "--allow-draft")
         self.write_stage1()
         self.fit["manifest_sha256"] = "e" * 64            # the two-manifest case: same code, another manifest
         self.dump()

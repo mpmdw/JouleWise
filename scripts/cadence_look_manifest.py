@@ -147,6 +147,10 @@ def _flag(stage1, flag):
     return isinstance(node, dict) and node.get("to_research_lead") is True
 
 
+# What the stage-2 process loads of fit.code: the CLI imports inclusion_34 at module level (for stage 1's
+# soak_retries, RL-172a), so stage 2 loads it too, without calling it.
+STAGE2_CODE = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
+               "joulewise/cadence_looks/inclusion_34.py", "joulewise/cadence_looks/step3_energy_ratios.py")
 STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion_34.py, not by the stages
 
 
@@ -213,8 +217,8 @@ def assemble(args):
     problems += [f"{name} names stage-1 sha256 {str(rec.get('stage1_sha256'))[:12]}, not {s1[:12]}"
                  for name, rec in (("the fit", fit), ("step 3", step3)) if rec.get("stage1_sha256") != s1]
     pins = {path: sha for _, path, sha in lm.code_refs(doc)}
-    stage2_set = ({"joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py", lm.STEP3_PATH}
-                  | {d["path"] for d in (doc.get("fit") or {}).get("dependencies") or []}) - STAGE_ONLY_DEPENDENCIES
+    stage2_set = (set(STAGE2_CODE) | {d["path"] for d in (doc.get("fit") or {}).get("dependencies") or []}) \
+        - STAGE_ONLY_DEPENDENCIES
     problems += _provenance("the fit", fit, doc, manifest_sha, pins, exact=stage2_set)
     problems += _provenance("stage 1", stage1, doc, manifest_sha, pins)
     problems += _provenance("step 3", step3, doc, manifest_sha, pins)
