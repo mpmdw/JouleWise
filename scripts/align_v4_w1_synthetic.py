@@ -395,7 +395,10 @@ def run_desk(out, world):
         import traceback
         return {'status': 'crashed', 'error': f'{type(exc).__name__}: {exc}',
                 'traceback': traceback.format_exc()[-3000:]}
-    return {'status': 'ok', 'pilot': json.loads((out / 'desk/PILOT.json').read_text())}
+    # PR #774 (Sol F1): before release the written desk/PILOT.json carries the C/T or W1 seal and the full PILOT
+    # goes to the withheld archive. This synthetic oracle checks the desk's arithmetic, so it reads the full one.
+    full = out / 'desk/archive/withheld/PILOT.full.json'
+    return {'status': 'ok', 'pilot': json.loads((full if full.is_file() else out / 'desk/PILOT.json').read_text())}
 
 
 def synthetic_registration(out, manifest):
