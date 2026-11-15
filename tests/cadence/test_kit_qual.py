@@ -27,7 +27,9 @@ ANCHOR = legsmod.ANCHOR_PREFILL_TOKENS
 A_TOKENS = [2000, 10000, ANCHOR, ANCHOR]   # RL-165 section 8.1: per span one 2k, one 10k, two 19k type-A legs
 PAIRS = [{"prefill_tokens": ANCHOR, "decode_tokens": [3724, 4096]},
          {"prefill_tokens": ANCHOR, "decode_tokens": [3151, 4096]}]
-QUAL = {"cl-qual-01": 2026111422, "cl-qual-02": 2026111423, "cl-qual-03": 2026111424}
+# Seeds (RL-165 section 8.1): the first unused numbers after the reserved 07-21. qual-03 takes the first seed from
+# 2026111424 up with which the three blocks run each ratio in both orders and each pair in both spans (24-27 fail).
+QUAL = {"cl-qual-01": 2026111422, "cl-qual-02": 2026111423, "cl-qual-03": 2026111428}
 
 
 def local(text):
@@ -253,17 +255,42 @@ class CommittedQualKits(unittest.TestCase):
             QualLaw.check_design(self, kit["legs"])
             self.assertEqual(set(kit["frozen"]["paths"]), set(dev03["frozen"]["paths"]))
             self.assertEqual(kitmod.deny_scan(kit), [])
-            for key in ("runner", "model", "leg_defaults", "stop_rules", "span_template", "checklist", "looks", "desk",
-                        "ruling"):
+            for key in ("runner", "model", "leg_defaults", "span_template", "checklist", "looks", "desk", "ruling"):
                 self.assertEqual(kit[key], dev03[key], key)
+            # The stop rules are dev-03's; the notes add the type-L budgets only.
+            self.assertEqual({k: v for k, v in kit["stop_rules"].items() if k != "notes"},
+                             {k: v for k, v in dev03["stop_rules"].items() if k != "notes"})
+            self.assertIn("1,611 s at 3,724 and 1,563 s at 3,151", kit["stop_rules"]["notes"])
+            self.assertEqual(kit["stop_rules"]["notes"].replace(
+                "A type-L leg (19,458 tokens, a span-reference leg in this kit) is modeled at its own decode cap: "
+                "1,611 s at 3,724 and 1,563 s at 3,151. ", ""), dev03["stop_rules"]["notes"])
+            rules = {r["id"] for r in kit["inclusion_rules"]}
+            self.assertEqual(rules, {r["id"] for r in dev03["inclusion_rules"]} - {"pilot_counted"})
 
-    def test_each_ratio_runs_both_orders_across_the_three_blocks(self):
-        orders = {}
+    def test_each_ratio_runs_both_orders_and_both_spans_across_the_three_blocks(self):
+        orders, spans = {}, {}
         for kit in self.kits().values():
-            for span in spans_of(kit["legs"]):
+            for index, span in enumerate(spans_of(kit["legs"])):
                 pair = [leg for leg in span if leg["leg_type"] == "L"]
                 orders.setdefault(pair[0]["pair"], set()).add(pair[0]["decode_tokens"] == 4096)
+                spans.setdefault(pair[0]["pair"], set()).add(index)
         self.assertEqual(orders, {"p1": {True, False}, "p2": {True, False}})
+        self.assertEqual(spans, {"p1": {0, 1}, "p2": {0, 1}})
+
+    def test_the_seed_rule(self):
+        def features(cid, seed):
+            legs = kit_v11.generate_legs(cid, qlaw(master_seed=seed), {"decode_tokens": 4096})
+            out = []
+            for index, span in enumerate(spans_of(legs)):
+                pair = [leg for leg in span if leg["leg_type"] == "L"]
+                out.append((pair[0]["pair"], index, pair[0]["decode_tokens"] == 4096))
+            return out
+        first_two = features("cl-qual-01", QUAL["cl-qual-01"]) + features("cl-qual-02", QUAL["cl-qual-02"])
+        def balanced(seed):
+            rows = first_two + features("cl-qual-03", seed)
+            return all({o for q, _, o in rows if q == p} == {True, False} and {i for q, i, _ in rows if q == p} == {0, 1}
+                       for p in ("p1", "p2"))
+        self.assertEqual(next(s for s in range(2026111424, 2026111499) if balanced(s)), QUAL["cl-qual-03"])
 
     def test_frozen_paths_hash_at_the_frozen_commit(self):
         for kit in self.kits().values():
