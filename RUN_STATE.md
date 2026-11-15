@@ -1042,6 +1042,22 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+328. **Magistrate de565739 (headless, Opus 5.5), 2026-11-14 23:30 PST (`date`): THE SECOND PART C (item 325, on `c3f4bacd8`) COMPLETED: RECEIPT OK, receipt rc 0, part-C rc 0, verdict `pass`, `slots_entered` false. Soak rc 0, reference sha256 `a3a64d72…289f`, TV0h = TV1h = 34.189 °C. Every line passes and matches the first Part C (item 322) line by line: `d_bank_mechanics` pass/pass (`admitted_turns` not judged: `not_applicable: episode returned at turn 1`, own stop, value 2 of 3; gate_time 202.7 s of 392.4 s), `d_bank_start_state` pass/pass (4 samples, level 0, Nominal, fresh), `step_d` pass/pass (G0 200.0 s), `x_g` pass/pass (X_G ran). N_chunk 4096, T_dead 981.04 s. t0 21:23:25 PST; span 21:23:41-23:22:33; no 00:00 crossing. Restore clean. A diagnostic: nothing adopted, no slots. Its pass is the Part C that RL-149 §5 item 12 reads (RL-156 §4.1, RL-164 §1); it goes to the RESEARCH LEAD with the lead's desk table. Record: `docs/process_traces/2026-11-14-partc2-c3f4/CHECK-de565739.md`.**
+
+```pointer
+owner: lead
+wait: none
+on_early_or_refused: nothing relaunches under item 325; the night is quiet until the lead's next item (dev-01-s04, Sun 02:40, still the lead's to issue after the s03 desk table)
+next_observable: the lead's desk table for this run and the verdict line to the research lead (item 325 "After"); F0 moves to c3f4bacd8 once the lead accepts the pass; the dev-01-s04 item
+```
+
+- `disposition` as printed: "Mechanics and start state hold. The no-hold TV1h design is adopted (RL-149 section 1.1); run at the commit of RL-149 step 3's PR, this is the Part C of the slot session's checklist (RL-149 section 5, items 11 and 12)."
+- `log`: "three-turn clause not evaluated: one D run".
+- Printed, not judged: turn 1 first off-nominal (pm Moderate) at token 1,761; last-512 clock ratio 0.930; token-rate ratio 0.976 (prediction: OS level 2 before token 2,048; clock ratio 0.83-0.93; token-rate ≥ 0.98). Desk verdict excludes the D_bank member for `thermal.powermetrics_non_nominal`. `tv1h_trigger` fires false (1,149 rows; 1 unequal outside gate windows, 0 inside).
+- Close used for the 20-minute gate: 21:01:48 PST (dev-01-s03). First Part C t0 16:43:28 PST.
+- Restore lines: runner `restore` 0, feeds stopped and hash-checked; no fence; no align-r0 label; ProcessType Interactive; powermode 0; Network Time Off; frequency word 0 (offset 0, status 0x2081); no marker, no stray monitor, no root powermetrics.
+- No unread mail from Ed; no new directive. Canonical root fast-forwarded to `f65861a00` (docs only; no night label or plist).
+
 327. **Magistrate b418e121 (headless, Opus 5.5), 2026-11-14 21:24 PST (`date`): THE SECOND PART C (item 325) IS LAUNCHING on `c3f4bacd8`, `--fresh-soak --parts C`, smoke worktree `/Users/edr/code/jw-wt/partc-c3f4`. Gates met: item 324 not launched; item 319 closed and checked (item 322); the sub-span's fence gone and its Check reported (item 326); last close 21:01:48 + 20 min = 21:21:48; item 319's t0 16:43:28 + 4 h = 20:43:28; launch before 22:06:00. Dry tests (six modules) and every Start-and-check line passed. Deadline = 01:30:00 PST cap. A diagnostic: no slots, nothing adopted; the night is quiet after it. Record: `docs/process_traces/2026-11-14-partc2-c3f4/MAGISTRATE-LAUNCH-b418e121.md`; OUT, DEADLINE and launch epoch in custody `r1-partc2-c3f4-out-b418e121.txt` (a "LAUNCH FAILED" line there means nothing ran).**
 
 ```pointer
