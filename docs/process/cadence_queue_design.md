@@ -477,25 +477,29 @@ is overridden only to name this span as the marker's owner and to refuse a mode 
 |---|---|
 | Preflight, before any feed | Take the host night lock (`/Users/Shared/JouleWise/host-power/night.lock`) and hold it to the close; another holder refuses the span. A host marker already present refuses the span untouched (a restore owed by someone else) |
 | After `read_power` reads 0 | `powermode_guard`: the sudo rule check and the Automatic restore proof |
-| After the soak (which stays Automatic, like an Automatic block's) | `high_power`: the marker first (R1 crash tag, owner `cadence span`, campaign id, kit sha, output), then `pmset -c powermode 2`, then a read-back of 2 |
-| Before every leg attempt | `L00n.aK-powermode`: powermode reads 2 and the marker is present, or the span stops |
-| Close, every exit path | `restore` (the guard), `power_proof` (powermode and the marker path read again), `host_lock_release`, then the feeds stop |
+| After the soak (which stays Automatic, like an Automatic block's) | `high_power`: powermode must still read 0; the marker first (R1 crash tag, owner `cadence span`, campaign id, kit sha, output, the restore command and when it is safe), then `pmset -c powermode 2`, then a read-back of 2 |
+| Before every leg attempt | `L00n.aK-powermode`: powermode reads 2 and the marker is this span's own, or the span stops; a failed check withdraws admission from the leg finished since the last good check (rule 6) |
+| Close, every exit path the process survives | `power_last_look` (the same observation after the last leg; a failure withdraws its admission), `restore` (the guard, up to three attempts 2 s apart unless deferred), `power_proof` (powermode and the marker path read again), `host_lock_release`, then the feeds stop |
 
 **Exit paths.** Every one is a test in `tests/cadence/test_high_power.py`.
 
 | Exit | Covered by |
 |---|---|
-| Completion; a leg runtime failure; a refusal anywhere; the work deadline; SIGTERM, SIGINT or SIGHUP (the handler raises `SystemExit`; signals are ignored during the close) | `run_span`'s `finally` runs the close |
+| Completion; a leg runtime failure; a refusal anywhere; the work deadline; SIGTERM, SIGINT or SIGHUP (the handler raises `SystemExit`; signals are ignored during the close) | `run_span`'s `finally` runs the close. A second signal handled while the close sets `SIG_IGN` is recorded (`late_signals`) and the close still runs |
+| A leg child whose process group is not proven stopped | `run_child` refuses with the attempt's name; the attempt is never summarized or counted; the close restores and proves (RL-157 §2) |
 | `pmset -c powermode 2` fails, or does not read back 2 | The marker was written first, so the close restores and removes it |
-| The mode or the marker changes between legs | The per-leg check stops the span before the next leg |
+| The mode or the marker changes between legs, or during the soak | The per-leg check stops the span before the next leg and withdraws the finished leg's admission; the close's last look does the same for the last leg; a change during the soak refuses before the marker is written |
 | The stage journal fails at the close (disk) | The power steps run directly when their step could not start |
-| The restore fails, or does not read back 0 | The marker is kept; the proof fails; rc 2; `restore_proven` false; RESTORE_UNPROVEN |
-| SIGKILL, power loss or a panic | No close. The marker, written before the mode changed and tagged as an owed restore (not a W1 night's), is what every session start, night admission and the arm checklist's `no_high_power_marker` and `powermode_zero` lines act on |
+| The restore fails, raises, or does not read back 0 | Retried up to three times; then the marker is kept, the proof fails, rc 2, `restore_proven` false, RESTORE_UNPROVEN |
+| SIGKILL, power loss or a panic | No close and no result: on a High Power block the desk fires RESTORE_UNPROVEN on the absent proof. The marker (written before the mode changed, R1 crash tag, naming this span, the restore command and when it is safe) stays. Nothing in the campaign lane restores it by itself: every campaign start refuses on it (`read_power`, `high_power_marker_absent`), the arm checklist's `no_high_power_marker` line fails and its detail names the command, and a human runs `cadence_legs_runner.py restore-owed` |
 
 **The proof.** The receipt records `high_power.close_proof` (`ac_powermode`, `pmset_error`, `host_marker`,
 `host_marker_present`, `proven`), the guard's records and the restore. `span/result.json` gains
 `restore_proven` on a High Power span only. The desk projects it (`RESULT_KEYS`); an older desk drops it,
-and the rc 2 still fires REFUSAL. `stops.evaluate_named_stops` fires RESTORE_UNPROVEN when it is false.
+and the rc 2 still fires REFUSAL. `stops.evaluate_named_stops(..., block_mode=2)` fires RESTORE_UNPROVEN on
+anything but `restore_proven: true`, including an absent result (cold seat F1); `build_desk` and
+`scripts/air/cadence_desk.py --kit` pass the kit's `power_mode`. **The Air desk must run at or after this
+branch's code commit for hp-01 spans.**
 Admission (rule 6) is now the block's mode: `legs.leg_admitted(..., block_mode=2)` admits a leg only if
 it recorded AC powermode 2 at its episode start.
 
@@ -504,7 +508,7 @@ on the mock host's fake power world (`FakeHost.pmset`). With `--fail-close-resto
 fails, the proof fails, and the desk fires RESTORE_UNPROVEN (RL-155 §5.2's extra gate line).
 
 **Kit `cl-hp-01`.** `docs/process/cadence/kits/cl-hp-01.json`: dev-01's kit with `power_mode` 2, its own
-campaign id and master seed (2026111403), and the same 37 frozen paths re-pinned at this branch's code
+campaign id and master seed (2026111404; 2026111403 collided with `cl-dev-03`'s, RL-161), and the same 37 frozen paths re-pinned at this branch's code
 commit. Leg ids stay `L001`-`L012`; the calendar's H001-H003 are L001-L003 and H004-H012 are L004-L012.
 Model, leg defaults, cell (19,458-token prompt, decode cap 4,096, band q0), span template, checklist,
 looks and desk equal dev-01's. Inclusion rules: dev-01's, with `pilot_counted` replaced by
@@ -529,19 +533,45 @@ looks and desk equal dev-01's. Inclusion rules: dev-01's, with `pilot_counted` r
 - **Check after the close.** Receipt `high_power.close_proof.proven` true and `span/result.json`
   `restore_proven` true; independently, `pmset -g custom` AC powermode 0 and no marker. Every leg's
   `ac_powermode` 2 (in its leg record). RL-150 R9's four conditions, with rule 6 now meaning High Power.
-- **If the proof fails (RESTORE_UNPROVEN).** Nothing arms. The magistrate restores with the narrow rule
-  (`sudo -n /usr/bin/pmset -c powermode 0`), reads 0 back, removes the marker only then, and mails the lead.
-  The lead clears the stop with a RUN_STATE line.
+- **The close lines are read by hand** (the magistrate's own reads, beside the receipt):
+  `pmset -g custom` AC powermode 0, and no file at `/Users/Shared/JouleWise/host-power/high-power.marker`.
+- **RESTORE_UNPROVEN holds everything** (not only campaign spans, unlike REFUSAL under RL-155 §3.1). For an
+  hp-01 span it is: no receipt, no `span/result.json`, or anything but `restore_proven: true`.
+- **The restore when the proof fails or the span left no receipt.** Only once the span's LaunchAgent job has
+  exited and its desk fence is gone or stale, from the measurement checkout:
+  `python3.13 -B scripts/cadence_legs_runner.py restore-owed`. It takes the host night lock (it defers if a
+  night holds it), runs the narrow rule's `pmset -c powermode 0`, reads 0 back, removes the marker only then,
+  refuses a W1 session's marker, and exits 0 only when powermode 0 and no marker read back. Never a bare
+  `sudo pmset` outside the lock. Then mail the lead; the lead clears the stop with a RUN_STATE line (RL-157 §2
+  condition 2 for an unproven leg child).
+- **Hand-read rule (F3).** A leg whose admission the runner withdrew (`high_power.revoked` in the receipt)
+  goes to the research lead under rule 6, with the observation that withdrew it.
 - **Gate (RL-155 §5.2).** Row-1 review; a Mythos cold seat on `cl-hp-01` against RL-149 §2.3, §2.4, §2.5
   and RL-150 R5; CI on the frozen commit; the mock span with a failing restore (above), recorded.
 
-#### 13.2.2 Plan: H004-H012 (RL-155 slot 7)
+#### 13.2.2 Plan: H004-H012 (RL-155 slot 7; RL-157 §8: the same day as the smoke is allowed)
 
 - **Gate.** The smoke passed and the lead's hand-read is recorded (RL-150 R5); line 8 then holds for hp-01.
 - **One span**, `cq-hp-01-s02-a1`, L004-L012, appended to the queue: expected 14,409 s (4.0 h), worst case
   32,850 s (9.1 h). Fence end (34,310 s) by 01:50 puts the **latest t0 at 16:18:10** (RL-155's 16:50 would
-  end its worst case at 02:02:30); no launch 10:50-13:15.
+  end its worst case at 01:57:30, inside the quiet); no launch 10:50-13:15.
   Monday after dev-02 closes, so 13:15-16:18 (or 07:00-10:50 if dev-02 ends early).
 - **Or two short spans** (RL-155a §2's practice): L004-L009 (worst 24,750 s, fence 26,210 s, latest t0
   18:33:10) and L010-L012 (worst 16,650 s, fence 18,110 s, latest t0 20:48:10). Each takes its own soak, about 55 min more in all, and fits a
   shorter gap. The lead chooses at the append; the queue is append-only either way.
+
+#### 13.2.3 For the research lead: SIGKILL recovery (cold seat F2)
+
+A High Power span that dies without its close (SIGKILL, power loss, a panic) leaves the host at powermode 2
+with the marker in place. Nothing in the campaign lane restores it automatically, and this PR does not change
+that. The watchdog restores only W1 markers it owns. Only v4-lane entries (a v4 session start, a W1 night
+admission, the R1 driver's guard) restore any marker. What this PR does is make the state impossible to miss:
+- the desk fires RESTORE_UNPROVEN on the absent proof;
+- every campaign start refuses on the mode or the marker;
+- the arm checklist's `no_high_power_marker` line fails with the exact restore command and when it is safe;
+- the marker itself names the span that wrote it, the same command and the same condition.
+
+The restore is one human command, `cadence_legs_runner.py restore-owed`. It runs under the host lock and
+proves its own read-back. An automatic restore by the magistrate on a stale campaign marker would be a design
+change to the watchdog's scope, and I have not built it.
+

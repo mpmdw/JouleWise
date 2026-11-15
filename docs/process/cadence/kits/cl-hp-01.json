@@ -7,7 +7,7 @@
   "authorizes_spans": true
  },
  "frozen": {
-  "commit": "d8ae17db2f2d54bce9fb50b2e99fcf3dfac2b428",
+  "commit": "dd206025abb30fd5c07515cd4b34b3e653174810",
   "paths": {
    "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
    "configs/align/v4/r1_runtime.json": "bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df",
@@ -30,16 +30,16 @@
    "joulewise/align/apple/workload.py": "837b74be97616c48c26b0c1277fe2a605b575d5cfc4396dc05e1139079daf1ba",
    "joulewise/b5/driver.py": "88068b64d09d3e335810e3b4718246cb3164223b87f96b56c5a098349882f90b",
    "joulewise/cadence/__init__.py": "f4b0e5a58ba794f75fc831965b4a840bcd07340807c66b42b3efad66bd787630",
-   "joulewise/cadence/desk.py": "2ed3fc0bf576e955375cce54e695b0b51e332859f359b15de701b6e4c82f71be",
-   "joulewise/cadence/kit.py": "abd113b4fb7ed611ed98a21bec3e31fb33963c019e154be2afb2ba8699a610d9",
+   "joulewise/cadence/desk.py": "1bb54672a00de1239bdab1db7bbc759e2450679473b09afe138662f16fbe81b5",
+   "joulewise/cadence/kit.py": "a136339037c4b09ca4757a983c61c48ec062911ace453c511978a03f10b05da6",
    "joulewise/cadence/legs.py": "9df32ae7f6dbc2a37e4604532994da9c6676b8406dc269afd32c6e712dae2d2f",
    "joulewise/cadence/queue.py": "4f926974f23c627d6d245199adf4f979d3397df4b0f6c5ed5eb22177690bc80e",
-   "joulewise/cadence/stops.py": "c98e080006511895895b55bc11ced68cea86214119ee68662e30f8c37151650a",
+   "joulewise/cadence/stops.py": "8edf8addbdf977d367f2e81fa46f6832c52b055f8aa7908949add35fc9558ae1",
    "joulewise/controller.py": "3f0535c976463da1ae99718cfcde2b0ef92241cda36973baaf4b1a6ebe1b12db",
    "scripts/align_r1_rehearsal.py": "2ba005b14bd687a87e749c2ec6f162a603b7e76674924bb282a766164070a710",
    "scripts/align_r1_runtime.py": "7403e69d9aedb54887bfc4218a45db84faa653329ca977bcf97edf20af88f923",
    "scripts/cadence_leg_runtime.py": "345e9064015536f7e1454f42535d7a44d39acdc17494d26fc4200a25b31662f1",
-   "scripts/cadence_legs_runner.py": "27b99cd6a55b43421939e91292f2b6d32cd6f868687eec703beef7a3abdcf0ed",
+   "scripts/cadence_legs_runner.py": "3d194d1bfdcba11ba07a93b9abcdddbbc709192f587c0d081663f3ed6b57a415",
    "scripts/km003c_monitor.py": "211a807f152e18b28b622f1d914fca115f308e5938c979269842e2df91601ef9",
    "scripts/launch_align_r0.py": "242cd7aa0bf5788786ca8630e6931abcaaa3e01dc3bf014255a6191b50c6e799",
    "scripts/launch_cadence_span.py": "50638e0b8b848fe5476b0954dece5dbe2e5813ffe04f94298b2dc2c8fa68f5fd",
@@ -61,7 +61,7 @@
  },
  "seed_law": {
   "method": "sha256-v1",
-  "master_seed": 2026111403,
+  "master_seed": 2026111404,
   "n_legs": 12,
   "bands": [
    "q0"
@@ -70,84 +70,84 @@
  "legs": [
   {
    "leg_id": "L001",
-   "seed": 127698051,
+   "seed": 4048693807,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L002",
-   "seed": 2751955700,
+   "seed": 1251089132,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L003",
-   "seed": 2290436010,
+   "seed": 3543179003,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L004",
-   "seed": 2340480993,
+   "seed": 954626506,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L005",
-   "seed": 150158970,
+   "seed": 983646378,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L006",
-   "seed": 2322978793,
+   "seed": 2048410933,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L007",
-   "seed": 1428932987,
+   "seed": 1350544700,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L008",
-   "seed": 3492818706,
+   "seed": 1180804720,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L009",
-   "seed": 1987842291,
+   "seed": 3701535075,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L010",
-   "seed": 858969803,
+   "seed": 2827066148,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L011",
-   "seed": 4224056921,
+   "seed": 2178814401,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
   },
   {
    "leg_id": "L012",
-   "seed": 2393741260,
+   "seed": 1042807770,
    "start_band": "q0",
    "prefill_tokens": 19458,
    "decode_tokens": 4096
@@ -176,7 +176,7 @@
   },
   {
    "id": "block_power_mode",
-   "text": "RL-149 section 2.4 rule 6: the power mode is the block's. This block is High Power (pmset powermode 2) for its legs (RL-149 section 2.5). The runner sets AC powermode 2 after the span's soak, which stays Automatic as in an Automatic block, and before the first leg; it writes the host High Power marker before the mode changes. A leg is included only if it recorded AC powermode 2 at its episode start. Before every leg attempt the runner reads powermode 2 and the marker, or the span stops. On every exit path the close restores powermode 0 and proves powermode 0 and no marker before anything else arms; an unproven restore is rc 2 and the RESTORE_UNPROVEN named stop."
+   "text": "RL-149 section 2.4 rule 6: the power mode is the block's. This block is High Power (pmset powermode 2) for its legs (RL-149 section 2.5; RL-157 section 1). The runner sets AC powermode 2 after the span's soak, which stays Automatic as in an Automatic block, and before the first leg; it writes the host High Power marker, naming this span, before the mode changes. A leg is included only if it recorded AC powermode 2 at its episode start and the next observation after it (the check before the next leg attempt, or the close's last look before its restore) still reads powermode 2 with this span's marker; otherwise its admission is withdrawn. A failed check before a leg stops the span. On every exit path the runner survives (completion, refusal, leg failure, deadline, SIGTERM, SIGINT or SIGHUP), the close restores powermode 0 (retried up to three times) and proves powermode 0 and no marker; an unproven or absent proof is the RESTORE_UNPROVEN named stop, which holds everything. After a SIGKILL, power loss or panic no close runs: the marker stays as the owed restore, the arm checklist's no_high_power_marker line fails, and a human restores with the runner's restore-owed command before anything arms."
   },
   {
    "id": "no_drop_by_outcome",

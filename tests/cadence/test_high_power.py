@@ -905,6 +905,13 @@ class CommittedHighPowerKitTests(HostStateSandbox):
         self.assertNotIn("pilot_counted", ids)
         rule6 = next(r["text"] for r in hp["inclusion_rules"] if r["id"] == "block_power_mode")
         self.assertIn("powermode 2", rule6)
+        for words in ("the runner survives", "SIGKILL", "restore-owed", "withdrawn", "absent proof"):
+            self.assertIn(words, rule6)                     # cold seat F7 and F3
+        # RL-161: the master seed is unique among the kits (2026111403 collided with cl-dev-03's on #788).
+        self.assertEqual(hp["seed_law"]["master_seed"], 2026111404)
+        others = [json.loads(path.read_text())["seed_law"]["master_seed"] for path in KITS.glob("*.json")
+                  if path.name != "cl-hp-01.json"]
+        self.assertNotIn(2026111404, others + [2026111403])
         self.assertEqual(kitmod.deny_scan(hp), [])
 
     def test_spans_plan_inside_the_launch_ceiling(self):
