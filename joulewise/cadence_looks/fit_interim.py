@@ -891,6 +891,32 @@ def t_quantile(p, df):
     return 0.5 * (lo + hi)
 
 
+def prefix_bias(plen, pairs):
+    """Q2 P2 with RL-166a R-8 and RL-167 R-11. pairs: [(leg_key, day, long residual J, short residual J)],
+    residual = measured - predicted (LODO). Bias = mean over pairs of long/SD_long - short/SD_short; 90 % interval
+    = bias +/- t(0.95, D - 1) SD(day means)/sqrt(D). Null under 3 pairs or an SD at or under 1e-12 J; no
+    interval under 2 days; n_days is always the days among the pairs."""
+    n_days_pairs = len({p[1] for p in pairs})            # RL-167 R-11: always the days among the pairs
+    sd_l = float(np.std([p[2] for p in pairs], ddof=1)) if len(pairs) >= 2 else 0.0
+    sd_s = float(np.std([p[3] for p in pairs], ddof=1)) if len(pairs) >= 2 else 0.0
+    if len(pairs) < 3 or sd_l <= SD_FLOOR_J or sd_s <= SD_FLOOR_J:
+        return {"prefix_len": plen, "estimate": None, "ci90": None, "n_pairs": len(pairs), "n_days": n_days_pairs}
+    diffs = [(d, rl / sd_l - rs / sd_s) for (_, d, rl, rs) in pairs]
+    est = sum(x for _, x in diffs) / len(diffs)
+    dm = {}
+    for d, x in diffs:
+        dm.setdefault(d, []).append(x)
+    means = [sum(v) / len(v) for v in dm.values()]
+    nd = len(means)
+    if nd >= 2:
+        se = float(np.std(means, ddof=1)) / math.sqrt(nd)
+        q = t_quantile(0.95, nd - 1)
+        ci = [est - q * se, est + q * se]
+    else:
+        ci = None
+    return {"prefix_len": plen, "estimate": est, "ci90": ci, "n_pairs": len(pairs), "n_days": nd}
+
+
 def _channel(legs, E, ch, beta_onset, include=None):
     """Everything one channel prints. `beta_onset`: the onset coefficients the full fit uses (None: delta
     dropped). `include`: optional set of leg keys (the marked-span print)."""
@@ -1021,27 +1047,7 @@ def _channel(legs, E, ch, beta_onset, include=None):
             m_short = sum(y[i] for i, s in enumerate(L["segments"]) if s["kind"] == "prefill" or s["block"] < nb)
             m_short += E[k][ch]["prefix_tails"][str(plen)]
             pairs.append((k, L["day"], meas_leg[k] - pp[k]["_long"], m_short - pp[k][lab]))
-        n_days_pairs = len({p[1] for p in pairs})            # RL-167 R-11: always the days among the pairs
-        sd_l = float(np.std([p[2] for p in pairs], ddof=1)) if len(pairs) >= 2 else 0.0
-        sd_s = float(np.std([p[3] for p in pairs], ddof=1)) if len(pairs) >= 2 else 0.0
-        if len(pairs) < 3 or sd_l <= SD_FLOOR_J or sd_s <= SD_FLOOR_J:
-            bias[lab] = {"prefix_len": plen, "estimate": None, "ci90": None, "n_pairs": len(pairs),
-                         "n_days": n_days_pairs}
-            continue
-        diffs = [(d, rl / sd_l - rs / sd_s) for (_, d, rl, rs) in pairs]
-        est = sum(x for _, x in diffs) / len(diffs)
-        dm = {}
-        for d, x in diffs:
-            dm.setdefault(d, []).append(x)
-        means = [sum(v) / len(v) for v in dm.values()]
-        nd = len(means)
-        if nd >= 2:
-            se = float(np.std(means, ddof=1)) / math.sqrt(nd)
-            q = t_quantile(0.95, nd - 1)
-            ci = [est - q * se, est + q * se]
-        else:
-            ci = None
-        bias[lab] = {"prefix_len": plen, "estimate": est, "ci90": ci, "n_pairs": len(pairs), "n_days": nd}
+        bias[lab] = prefix_bias(plen, pairs)
 
     cols = heat_cols
     return {

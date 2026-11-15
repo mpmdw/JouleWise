@@ -323,3 +323,24 @@ class NoHpEnergy(unittest.TestCase):
             e = R.read_segment_energy(s1, R.span_dirs(c.root, None), s3)
         self.assertFalse([p for p in opened if "/hp-01-" in p.replace(os.sep, "/")])
         self.assertFalse([k for k in e["legs"] if k.startswith("hp-01")])
+
+
+class Rules34Agree(unittest.TestCase):
+    """The synthetic custody exercises inclusion_34.py: its verdicts equal the planted ones (type-T legs have no
+    bundle in the synthetic custody and are not read at this look, so they are left out)."""
+
+    def test_inclusion_34_verdicts_match_planted(self):
+        try:
+            from joulewise.cadence_looks import inclusion_34 as I
+        except ImportError:
+            self.skipTest("inclusion_34.py is not on this branch")
+        c = _Custody.get()
+        roster = rj(c.paths["roster.json"])
+        sensors = rj(Path(R.ROOT) / "configs/align/v4/r1_runtime.json")["sensors"]
+        verdicts, _ = I.judge_custody(roster, I.span_dirs(c.root), I.keys(sensors))
+        planted = rj(c.paths["rules_3_4.json"])
+        t_legs = {leg["leg_key"] for leg in c.li["legs"] if leg["leg_type"] == "T"}
+        self.assertEqual({k: v for k, v in verdicts.items() if k not in t_legs},
+                         {k: v for k, v in planted.items() if k not in t_legs})
+        self.assertIn(False, [v["sidecar_coverage"] for v in planted.values()])
+        self.assertIn(False, [v["km003c_clean"] for v in planted.values()])

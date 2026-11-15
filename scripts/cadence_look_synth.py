@@ -35,7 +35,10 @@ PREFIX_LENS = (3724, 3151, 2981)
 CELLS = (2000, 10000, 19458)
 JOURNAL_PRE_S = 60.0
 JOURNAL_POST_S = 5.0
-GUARD_STALE_S = 3.0          # readings removed before turn start for a 'missing start reading' leg
+GUARD_STALE_S = 3.0          # readings on a stale pm stamp before turn start for a 'missing start reading' leg
+SIDECAR_HOLE_S = (100.0, 105.0)   # readings removed in the turn of a leg planted to fail rule 3
+METER_HOLE_S = (100.0, 103.5)     # polls removed in the turn of a leg planted to fail rule 4
+G0_LEAD_S = 120.0                 # G0 starts this long before the turn (the leg interval opens there)
 UNOBSERVED_STALE_S = 4.0     # length of the non-fresh stretch planted for a state_unobserved leg
 LEG_GAP_S = 900.0            # wall seconds between leg starts inside a span (G0 time etc.)
 
@@ -371,16 +374,16 @@ def _turn(p, rng):
     x = ts - JOURNAL_PRE_S + p["phase"]
     traj = _trajectory(p)
     while x <= t_last + JOURNAL_POST_S:
-        keep = True
-        if p["missing_start"] and ts - GUARD_STALE_S < x <= ts:
-            keep = False
+        # a planted rule-3 failure is a real sidecar hole; a missing start reading is a stale pm stamp while the
+        # readings themselves go on (so rule 3 still passes)
+        keep = not (p["excluded_rule"] == "sidecar_coverage" and ts + SIDECAR_HOLE_S[0] <= x < ts + SIDECAR_HOLE_S[1])
         if keep:
             hot = off_abs is not None and x >= off_abs
             lvl = 1 if (p["out_of_state"] or (hot and p["onset_channel"] == "os_level")) else 0
             pm = "Moderate" if (hot and p["onset_channel"] == "journal_pm") else "Nominal"
             if p["start_unknown"] and x <= ts:
                 pm = "Unknown"
-            fresh = True
+            fresh = not (p["missing_start"] and ts - GUARD_STALE_S < x <= ts)
             if p["unobserved"] and ts + 40.0 <= x < ts + 40.0 + UNOBSERVED_STALE_S:
                 fresh = False
             tf08, fan, tv0h = traj(x)
@@ -482,7 +485,7 @@ def _write_power_trace(path, pieces, lo, hi):
             f.write(f"{v!r},{w!r},powermetrics,gpu_power,{u!r},{v!r}\n")
 
 
-def _write_meter(path, pieces, t_lo, t_hi, off_ns):
+def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=()):
     """A KM003C stream: 2 samples/s, Vbus 28 V, Ibus = W / 28, on CLOCK_MONOTONIC_RAW = epoch - off."""
     import bisect
     import struct
@@ -497,12 +500,15 @@ def _write_meter(path, pieces, t_lo, t_hi, off_ns):
     raw0 = int(round(t_lo * 1e9)) - off_ns
     n = int((t_hi - t_lo) / METER_STEP_S) + 1
     per_poll = int(round(METER_POLL_S / METER_STEP_S))
+    compact = {"separators": (",", ":")}                 # the monitor writes compact lines
     with open(path, "w") as f:
         f.write(json.dumps({"k": "h", "schema": "synthetic", "status": "streaming", "rate_idx": 0,
-                            "start_raw_ns": raw0, "start_real_ns": raw0 + off_ns,
-                            "start_mono_ns": raw0}) + "\n")
+                            "poll_s": METER_POLL_S, "start_raw_ns": raw0, "start_real_ns": raw0 + off_ns,
+                            "start_mono_ns": raw0}, **compact) + "\n")
         polls = 0
         for j in range(0, n, per_poll):
+            if any(a <= t_lo + j * METER_STEP_S < b for a, b in holes):
+                continue
             raw = b""
             last = None
             for i in range(j, min(n, j + per_poll)):
@@ -513,18 +519,29 @@ def _write_meter(path, pieces, t_lo, t_hi, off_ns):
                 last = raw0 + dev_ms * 1_000_000
             rx = last + METER_LATENCY_NS
             f.write(json.dumps({"k": "b", "tx": rx - 1_000_000, "rx": rx, "rt": rx + off_ns,
-                                "n": len(raw) // 20, "p": raw.hex(), "smc": {}}) + "\n")
+                                "n": len(raw) // 20, "p": raw.hex(), "smc": {}}, **compact) + "\n")
             polls += 1
-        f.write(json.dumps({"k": "t", "polls": polls, "empty": 0, "bad": 0, "usb_errors": 0,
+        f.write(json.dumps({"k": "t", "polls": polls, "empties": 0, "bad": 0, "usb_errors": 0,
                             "elapsed_s": n * METER_STEP_S, "end_raw_ns": raw0 + int(n * METER_STEP_S * 1e9),
-                            "stop_reason": "synthetic"}) + "\n")
+                            "stop_reason": "signal 15"}, **compact) + "\n")
 
 
 def _write_bundle(bdir, turn, tok, fan_keys=("F0Ac", "F1Ac")):
+    """A bundle that inclusion_34.py can judge: a G0 gate event, config.json's sampling.power_hz, TV1h in the
+    journal, and journal and powermetrics rows from the G0 start on (outside level R's window, so level R is
+    unchanged)."""
     os.makedirs(os.path.join(bdir, "outputs"), exist_ok=True)
     os.makedirs(os.path.join(bdir, "raw"), exist_ok=True)
     ts = turn["turn_start_s"]
+    g0 = ts - G0_LEAD_S
+    with open(os.path.join(bdir, "config.json"), "w") as f:
+        json.dump({"sampling": {"power_hz": 1.0}, "sensors": {"s_fast": "TV0h", "s_slow": "TV1h",
+                                                               "fan_keys": list(fan_keys), "record_keys": ["Tf08"]}}, f)
     with open(os.path.join(bdir, "events.jsonl"), "w") as f:
+        f.write(json.dumps({"event_type": "phase_start", "phase": "align_thermal_gate", "timestamp_s": g0,
+                            "metadata": {"kind": "G0"}}) + "\n")
+        f.write(json.dumps({"event_type": "phase_end", "phase": "align_thermal_gate", "timestamp_s": ts - 2.0,
+                            "metadata": {"kind": "G0"}}) + "\n")
         f.write(json.dumps({"event_type": "run_started", "timestamp_s": ts - 1}) + "\n")
         for i, x in enumerate(tok):
             f.write(json.dumps({"event_type": "token", "timestamp_s": x,
@@ -535,12 +552,18 @@ def _write_bundle(bdir, turn, tok, fan_keys=("F0Ac", "F1Ac")):
                                            "prefill_tokens": turn["prefill_tokens"]}}) + "\n")
     with open(os.path.join(bdir, "outputs/align_thermal.jsonl"), "w") as f:
         f.write(json.dumps({"kind": "session_start"}) + "\n")
-        for r in turn["journal"]:
+        first = turn["journal"][0]
+        pre = []
+        x = first["t_s"] - 1.0
+        while x >= g0 - 1.0:
+            pre.append({**first, "t_s": int(round(x * 1e9)) / 1e9, "pm_fresh": True})
+            x -= 1.0
+        for r in pre[::-1] + turn["journal"]:
             wall = r["t_s"]
             fin = int(round(wall * 1e9))
             mono = fin - 7 * 10**15
             age = 300_000_000 if r["pm_fresh"] else 5_000_000_000
-            sensors = {"TV0h": r["tv0h_c"], "Tf08": r["tf08_c"]}
+            sensors = {"TV0h": r["tv0h_c"], "TV1h": r["tv0h_c"] + 1.0, "Tf08": r["tf08_c"]}
             for k in fan_keys:
                 sensors[k] = r["fan_rpm"]
             f.write(json.dumps({"kind": "reading", "module": "temperature", "error": None,
@@ -552,7 +575,13 @@ def _write_bundle(bdir, turn, tok, fan_keys=("F0Ac", "F1Ac")):
     import plistlib
     with open(os.path.join(bdir, "rich_telemetry.jsonl"), "w") as fr, \
             open(os.path.join(bdir, "raw/powermetrics.plist"), "wb") as fp:
-        for i, r in enumerate(turn["native_pm"]):
+        y0 = turn["native_pm"][0]["t_end_s"] if turn["native_pm"] else ts + 0.5
+        pre = []
+        y = y0 - 1.0
+        while y >= g0 - 1.0:
+            pre.append({"t_end_s": y, "state": "Nominal"})
+            y -= 1.0
+        for i, r in enumerate(pre[::-1] + turn["native_pm"]):
             fr.write(json.dumps({"index": i, "timestamp_s": r["t_end_s"], "elapsed_ns": 1_000_000_000,
                                  "gpu": {"gpu_energy": 12345, "dvfm_states": []}}) + "\n")
             doc = {"elapsed_ns": 1_000_000_000, "processor": {"gpu_power": 17.5, "gpu_energy": 17500}}
@@ -585,7 +614,7 @@ def write_custody(root, look_input, energy, tokens):
         with open(os.path.join(sdir, "soak/soak_reference.json"), "w") as f:
             json.dump({"schema": "joulewise.align.r1_soak_reference.v1",
                        "sensors_c": {"TV0h": span["soak_reference_tv0h_c"], "TV1h": 55.0}}, f)
-        dc_pieces = []
+        dc_pieces, holes = [], []
         t_lo, t_hi = span["t0_epoch_s"], span["t0_epoch_s"] + 600.0
         mode = 2 if span["power_mode"] == "high_power" else 0
         for leg in legs:
@@ -619,6 +648,8 @@ def write_custody(root, look_input, energy, tokens):
                 continue
             bdir = os.path.join(ldir, "runtime", "runs/cadence-leg")
             _write_bundle(bdir, turn, tokens[leg["leg_key"]])
+            if not inc["km003c_clean"]:
+                holes.append((turn["turn_start_s"] + METER_HOLE_S[0], turn["turn_start_s"] + METER_HOLE_S[1]))
             e = energy["legs"].get(leg["leg_key"])
             if e is not None:
                 gp = _pieces(turn, e["gpu_rail"], GPU_IDLE_W)
@@ -630,7 +661,7 @@ def write_custody(root, look_input, energy, tokens):
             t_hi = max(t_hi, turn["last_token_s"] + 60.0)
         dc_pieces.sort()
         _write_meter(os.path.join(sdir, "hazards/meter/stream-0001.jsonl"), dc_pieces, t_lo, t_hi,
-                     off_ns=span["meter_offsets_ns"]["header"])
+                     off_ns=span["meter_offsets_ns"]["header"], holes=holes)
     paths = {}
     for name, obj in (("roster.json", roster), ("rules_3_4.json", rules34)):
         paths[name] = os.path.join(root, name)

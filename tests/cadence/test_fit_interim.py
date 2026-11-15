@@ -705,3 +705,45 @@ class RL167(unittest.TestCase):
         self.assertTrue(F.meter_clock(spans)["to_research_lead"])
         s1 = stage1_of("noisy")
         self.assertEqual(s1["meter_clock"]["max_abs_s"], 0.0)
+
+
+class RL167b(unittest.TestCase):
+
+    def test_r11_prefix_bias_nulls_and_days(self):
+        two = [("a/L001", "d1", 1.0, 2.0), ("a/L002", "d2", 3.0, 1.0)]
+        self.assertEqual(F.prefix_bias(3724, two),
+                         {"prefix_len": 3724, "estimate": None, "ci90": None, "n_pairs": 2, "n_days": 2})
+        flat = [(f"a/L00{i}", f"d{i % 3}", 5.0, float(i)) for i in range(6)]
+        r = F.prefix_bias(3151, flat)
+        self.assertEqual((r["estimate"], r["ci90"], r["n_days"]), (None, None, 3))
+        one_day = [(f"a/L00{i}", "d", float(i), float(i * i)) for i in range(4)]
+        r = F.prefix_bias(2981, one_day)
+        self.assertIsNotNone(r["estimate"])
+        self.assertIsNone(r["ci90"])
+        self.assertEqual(r["n_days"], 1)
+
+    def test_row16_marked_fit_uses_the_refitted_onset(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        keep = sorted(L["leg_key"] for L in s1["legs"] if L["in_energy_fit"] and not L["marks"])
+        real = F.fit_onset_fold
+        base = F.stage2(s1, rehash(s1), en)["channels"]["gpu_rail"]["marked_sensitivity"]["coefficients_without"]
+
+        def shifted(legs_d, keys):
+            b = real(legs_d, keys)
+            if sorted(keys) == keep and b is not None:
+                b = b + np.array([400.0, 0, 0, 0, 0])      # onset pushed past every turn's end: no step
+            return b
+        with unittest.mock.patch.object(F, "fit_onset_fold", shifted):
+            moved = F.stage2(s1, rehash(s1), en)["channels"]["gpu_rail"]["marked_sensitivity"]["coefficients_without"]
+        self.assertGreater(max(abs(moved[k] - base[k]) / abs(base[k]) for k in base), 1e-2)
+
+    def test_fold_lists_wire_fields(self):
+        """The two lists RL-167 row 7 names: level D onset.lodo.folds_not_estimable and level O
+        channels.<ch>.lodo.folds_delta_dropped; sorted day strings, [] when none."""
+        s1 = stage1_of("noisy")
+        self.assertEqual(s1["onset"]["lodo"]["folds_not_estimable"], [])
+        out = F.stage2(s1, rehash(s1), dataset("noisy")[1])
+        for ch in F.CHANNELS:
+            self.assertEqual(out["channels"][ch]["lodo"]["folds_delta_dropped"], [])
+            self.assertNotIn("folds_delta_dropped", out["channels"][ch]["lodo"]["no_heat"])

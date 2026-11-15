@@ -196,6 +196,7 @@ level R.
   "schema": "joulewise.cadence_look_stage1.v1",
   "look_id": "lm-interim-01",
   "input_sha256": hex64,                  # sha256 of the level-R file bytes
+  "synthetic": bool,                      # copied from level R
   "code_sha256": {"<path>": hex64, ...},
   "numpy_version": str,
   "roster": { "spans": [Span minus marks, + "marks"], "fit_days": [ "YYYY-MM-DD", ... ] },
@@ -223,18 +224,19 @@ level R.
   "role": "fit" | "describe", "leg_type": "A" | "T",
   "cell_prompt_tokens": int, "g0_role": null | "capture" | "consume",
   "marks": [str, ...],                    # the span's marks
+  "prefill_tokens": int | null, "decode_tokens": int | null,   # realized P and N; null when the leg has no turn
   "inclusion": {six bools}, "included": bool,
   "in_energy_fit": bool,                  # role fit, type A, included, valid start reading
   "hp_describe": bool,                    # role describe, type A, included; counted, never read for energy
   "not_in_fit_reason": null | "excluded" | "type_T" | "start_reading_missing" | "describe_only",
-  "start": {
+  "start": null | {                       # null for a leg with no turn (type T, never ran, no accepted attempt)
     "status": "ok" | "start_reading_missing",           # missing or stale reading (Q1)
     "state": "in_state" | "start_out_of_state" | "start_state_unobserved",
     "tf08_c": float | null, "fan_rpm": float | null, "tv0h_excess_c": float | null,
     "z": [float, float, float] | null,                  # centred: tf08, fan, tv0h_excess
     "extrapolated": bool                                # any reading outside calibrated_range
   },
-  "state": {
+  "state": null | {                       # null for a leg with no turn
     "first_off_s": float | null,          # seconds from turn_start_s to the first off-state reading (Q4)
     "first_off_kind": str | null,         # "os_level_above_0" | "journal_pm_state_off" | "native_pm_state_off" (joined by "+")
     "unobserved_at_s": float | null,      # seconds from turn start: last fresh reading before a >2 s gap
@@ -264,7 +266,8 @@ level R.
   "sigma_s": float | null,
   "converged": bool | null,               # null: not attempted (fails 12-on-3); false: not_estimable (RL-167 row 8)
   "lodo": { "per_day_rms_s": {day: float}, "rms_s": float,
-            "heldout_censored_below_tau": int, "heldout_censored": int, "folds_not_estimable": [day] } | null,
+            "heldout_censored_below_tau": int, "heldout_censored": int,
+            "folds_not_estimable": [day] } | null,    # see §4.3
   "count_only_cut": { "form": "tau_hat_minus_2rms" | "fixed_116_s",
                       "offset_s": float | null, "fixed_s": 116.0 | null } }
 ```
@@ -284,7 +287,8 @@ level R.
 
 ```
 { "legs_named": int, "legs_included": int, "dev_included": int, "in_energy_fit": int, "hp_describe": int,
-  "type_T": int, "by_block": {block_id: {"named", "included"}}, "by_cell": {...}, "by_g0_role": {...},
+  "type_T": int, "by_block": {block_id: {"named": int, "included": int}},
+  "by_cell": {"2000" | "10000" | "19458": int}, "by_g0_role": {"null" | "capture" | "consume": int},
   "by_day": {day: int}, "excluded_by_rule": {rule_id: int} }   # by_cell/by_g0_role/by_day count energy-fit legs;
                                                                  # the own-reference g0_role key is "null"
 ```
@@ -303,6 +307,7 @@ contract between the two.
   "schema": "joulewise.cadence_look_fit.v1",
   "look_id": "lm-interim-01",
   "stage1_sha256": hex64, "code_sha256": {path: hex64}, "numpy_version": str,
+  "synthetic": bool,                      # copied from level D
   "tau_uncertainty_propagated": false,    # Q2: stated, not computed
   "delta_column": "kept" | "dropped_onset_not_estimable",
   "channels": { "gpu_rail": ChannelFit, "dc_in": ChannelFit },
@@ -327,7 +332,7 @@ contract between the two.
               "verdict": "passes" | "fails" | "not_evaluable" },
     "leg":  { "per_day": {day: float}, "pooled": float, "rms_over_legs": float },
     "hot_rms_over_legs": float | null,    # THE "frozen holdout relative error" freeze 2 takes for SD_j (RL-167 R-14)
-    "folds_delta_dropped": [day],         # R-12
+    "folds_delta_dropped": [day],         # see §4.3
     "no_heat": { "hot": {same as hot}, "leg": {same as leg}, "hot_rms_over_legs": float | null }
   },
   "prefix_bias": {                        # Q2 P2; unit: score SD
@@ -352,6 +357,23 @@ contract between the two.
 The coefficient file of freeze 2 is the subset `{stage1.rates, stage1.centring, stage1.calibrated_range,
 stage1.onset, channels.*.columns/coefficients/covariance, channels.*.lodo.hot_rms_over_legs,
 qualified_interim_half}` plus the hashes. Its exact keys belong to the manifest's `freeze2` block.
+
+### 4.3 The two fold lists (RL-167 row 7: "listed in both lists")
+
+A leave-one-day-out fold whose onset model cannot be fitted on its training legs (fewer than 6 uncensored
+onsets, or the censored-normal fit does not converge) is listed by its held-out day in both of these. Item shape:
+the day string `"YYYY-MM-DD"`; each list sorted ascending, no repeats; `[]` when no fold failed.
+
+| Field | Level | Location | Days it ranges over | Present when |
+|---|---|---|---|---|
+| `folds_not_estimable` | D | `onset.lodo.folds_not_estimable` | the days of energy-fit legs whose `onset_use` is `uncensored` or `censored` | `onset.status == "estimable"` (otherwise `onset.lodo` is null) |
+| `folds_delta_dropped` | O | `channels.gpu_rail.lodo.folds_delta_dropped` and `channels.dc_in.lodo.folds_delta_dropped` (the two lists are equal) | the days of energy-fit legs (`counts.by_day`'s keys) | always; `[]` when `delta_column` is `dropped_onset_not_estimable` (no fold has δ to drop). Not inside `lodo.no_heat` |
+
+A held-out day listed in `folds_not_estimable` contributes no term to the onset RMS or `per_day_rms_s`. A day in
+`folds_delta_dropped` is fitted and predicted without the δ column in that fold only; it still gives hot-stretch
+and leg errors. Neither list makes the look refuse. Both use the same fold rule on the same training legs, so on
+every day of the onset sample the two lists agree. A day with energy-fit legs but none in the onset sample trains
+on the whole onset sample, which the main fit already fitted, so it appears in neither list.
 
 ---
 
