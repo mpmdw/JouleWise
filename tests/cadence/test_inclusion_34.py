@@ -321,5 +321,55 @@ class Readers(Base):
         self.assertEqual(i34.keys(cfg["sensors"]), KEYS)
 
 
+class CustodyVerdictFile(Readers):
+    """The verdict file the stage-1 CLI reads (interface section 7): exact shape, one entry per roster leg."""
+
+    def make_span(self):
+        root = self.tmp()
+        sdir = root / "dev-03-s01"
+        (sdir / "legs" / "L001" / "runtime").mkdir(parents=True)
+        (sdir / "legs" / "L002").mkdir(parents=True)
+        bundle = self.make_bundle()
+        shutil.move(str(bundle), str(sdir / "legs" / "L001" / "runtime" / "b"))
+        (sdir / "legs" / "L001" / "leg_record.json").write_text(json.dumps({"result": {"bundle": "b"}}))
+        (sdir / "runner_receipt.json").write_text(json.dumps({"roster": ["L001", "L002", "L003"], "started": {"epoch_s": 1.0}}))
+        (sdir / "legs" / "L003").mkdir(parents=True)
+        (sdir / "legs" / "L003" / "leg_record.json").write_text(json.dumps({"result": {}}))
+        meter = sdir / "hazards" / "meter"
+        meter.mkdir(parents=True)
+        s = stream()
+        lines = [json.dumps(s["header"], sort_keys=True)]
+        lines += ['{"k":"b","tx":1,"rx":2,"rt":%d,"n":1,"p":"%s","smc":{"PDTR":1.5}}' % (t, self.SENTINEL_HEX)
+                  for t in s["stamps"]]
+        lines.append(json.dumps(s["trailer"], sort_keys=True))
+        (meter / "stream-0001.jsonl").write_text("\n".join(lines) + "\n")
+        roster = root / "roster.json"
+        roster.write_text(json.dumps([{"span_id": "dev-03-s01", "block_id": "dev-03", "role": "fit",
+                                       "t0_local_date": "2026-11-16"}]))
+        return root, roster
+
+    def test_main_writes_the_interface_shape(self):
+        root, roster = self.make_span()
+        out, det = root / "v.json", root / "d.json"
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
+            rc = i34.main(["--roster", str(roster), "--custody", str(root), "--out", str(out), "--detail-out", str(det),
+                           "--runtime-config", str(REPO / "configs/align/v4/r1_runtime.json")])
+        self.assertEqual(rc, 0)
+        v = json.loads(out.read_text())
+        self.assertEqual(v, {"dev-03-s01/L001": {"sidecar_coverage": True, "km003c_clean": True},
+                             "dev-03-s01/L002": {"sidecar_coverage": False, "km003c_clean": False},
+                             "dev-03-s01/L003": {"sidecar_coverage": False, "km003c_clean": False}})
+        d = json.loads(det.read_text())
+        self.assertEqual(d["span_trailers"][0]["stop_reason"], "signal 15")
+        self.assertNotIn(self.SENTINEL_HEX, out.read_text() + det.read_text())
+
+    def test_span_dir_override(self):
+        root, roster = self.make_span()
+        moved = self.tmp() / "elsewhere"
+        shutil.move(str(root / "dev-03-s01"), str(moved))
+        v, _ = i34.judge_custody(json.loads(roster.read_text()), i34.span_dirs(root, [f"dev-03-s01={moved}"]), KEYS)
+        self.assertTrue(v["dev-03-s01/L001"]["sidecar_coverage"])
+
+
 if __name__ == "__main__":
     unittest.main()

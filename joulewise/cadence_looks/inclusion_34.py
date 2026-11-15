@@ -383,3 +383,103 @@ def judge_leg(bundle, meter_streams, selected_keys, *, period_s=None):
     period = period_s if period_s is not None else pm_period_s(bundle)
     return {"rule3": rule3(interval, read_sidecar_rows(bundle), selected_keys, read_pm_supports(bundle), period),
             "rule4": rule4(interval, meter_streams)}
+
+
+# ------------------------------------------------------------------------------------------------------------
+# Custody mode: the verdict file the stage-1 CLI reads (docs/process/cadence_look_fit_interface.md section 7).
+#
+#     python3 -I -m joulewise.cadence_looks.inclusion_34 --roster ROSTER.json --custody ROOT
+#         [--span-dir SPAN_ID=PATH ...] [--runtime-config configs/align/v4/r1_runtime.json]
+#         --out VERDICTS.json [--detail-out DETAIL.json]
+#
+# VERDICTS.json is {"<span_id>/<leg_id>": {"sidecar_coverage": bool, "km003c_clean": bool}}, one entry per leg
+# of each roster span's runner_receipt.json roster. A leg with no leg_record.json, or no accepted bundle, gets
+# both false. DETAIL.json carries each leg's rule_detail and each span's trailer counts; it is a print.
+# Opens per span: runner_receipt.json, hazards/meter/stream-*.jsonl (stamps, header, trailer); per leg:
+# leg_record.json; per accepted bundle: events.jsonl, outputs/align_thermal.jsonl, rich_telemetry.jsonl (two
+# keys) and config.json. Never power_trace.csv or raw/powermetrics.plist.
+
+VERDICT_KEYS = ("sidecar_coverage", "km003c_clean")
+DEFAULT_RUNTIME_CONFIG = "configs/align/v4/r1_runtime.json"
+
+
+def _json(path):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def span_dirs(custody, overrides=()):
+    """span_id -> directory: <custody>/<span_id> unless SPAN_ID=PATH overrides it (as the stage-1 CLI)."""
+    extra = dict(o.split("=", 1) for o in overrides)
+    return lambda span_id: Path(extra[span_id]) if span_id in extra else Path(custody) / span_id
+
+
+def judge_span(sdir, span_id, selected_keys):
+    """({leg_key: {sidecar_coverage, km003c_clean}}, {leg_key: detail}, trailers) for one span directory."""
+    sdir = Path(sdir)
+    streams = [read_meter_stream(p) for p in sorted((sdir / "hazards" / "meter").glob("stream-*.jsonl"))]
+    verdicts, detail = {}, {}
+    for leg_id in _json(sdir / "runner_receipt.json")["roster"]:
+        key = f"{span_id}/{leg_id}"
+        record = sdir / "legs" / leg_id / "leg_record.json"
+        bundle = None
+        if record.is_file():
+            name = (_json(record).get("result") or {}).get("bundle")
+            if isinstance(name, str) and name and (sdir / "legs" / leg_id / "runtime" / name).is_dir():
+                bundle = sdir / "legs" / leg_id / "runtime" / name
+        if bundle is None:
+            verdicts[key] = {k: False for k in VERDICT_KEYS}
+            detail[key] = {"rule3": {"reasons": ["no accepted bundle"]}, "rule4": {"reasons": ["no accepted bundle"]}}
+            continue
+        v = judge_leg(bundle, streams, selected_keys)
+        verdicts[key] = {"sidecar_coverage": v["rule3"]["pass"], "km003c_clean": v["rule4"]["pass"]}
+        detail[key] = {r: {k: x for k, x in v[r].items() if k != "pass"} for r in ("rule3", "rule4")}
+    return verdicts, detail, span_trailers(span_id, streams)
+
+
+def judge_custody(roster, sdir_of, selected_keys):
+    """The verdict file and its detail for every roster span (``manifest.resolve_roster``'s list)."""
+    verdicts, detail, trailers = {}, {}, []
+    for entry in roster:
+        v, d, t = judge_span(sdir_of(entry["span_id"]), entry["span_id"], selected_keys)
+        verdicts.update(v)
+        detail.update(d)
+        trailers += t
+    return verdicts, {"legs": detail, "span_trailers": trailers}
+
+
+def _write(path, doc):
+    import hashlib
+    text = json.dumps(doc, indent=1, sort_keys=True, allow_nan=False) + "\n"
+    Path(path).write_text(text, encoding="utf-8")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def main(argv=None):
+    import argparse
+    p = argparse.ArgumentParser(description="Rules 3 and 4 at the look (RL-166 Q7): the verdict file. No energy.")
+    p.add_argument("--roster", required=True)
+    p.add_argument("--custody", required=True)
+    p.add_argument("--span-dir", action="append", default=[])
+    p.add_argument("--runtime-config", default=DEFAULT_RUNTIME_CONFIG)
+    p.add_argument("--out", required=True)
+    p.add_argument("--detail-out")
+    a = p.parse_args(argv)
+    roster = _json(a.roster)
+    roster = roster["roster"] if isinstance(roster, dict) else roster
+    selected = keys(_json(a.runtime_config)["sensors"])
+    try:
+        verdicts, detail = judge_custody(roster, span_dirs(a.custody, a.span_dir), selected)
+    except Exception as exc:                      # type and line only: a message could carry a value
+        tb = exc.__traceback__
+        while tb.tb_next:
+            tb = tb.tb_next
+        print(f"FAILED {type(exc).__name__} at line {tb.tb_lineno}")
+        return 2
+    print(f"wrote {a.out} sha256={_write(a.out, verdicts)} legs={len(verdicts)}")
+    if a.detail_out:
+        print(f"wrote {a.detail_out} sha256={_write(a.detail_out, detail)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

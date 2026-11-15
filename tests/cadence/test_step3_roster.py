@@ -121,7 +121,8 @@ class Rebinding(Base):
         self.assertTrue(cell["gamma_estimable"])
         self.assertNotIn("v_block_ratio_spread", json.dumps(cell))
         self.assertNotIn("per_leg", json.dumps(cell))
-        self.assertEqual(set(cell), set(json.loads(OUTPUT_SCHEMA.read_text())["$defs"]["step3_cell"]["required"]))
+        cell_schema = json.loads(OUTPUT_SCHEMA.read_text())["$defs"]["step3_output"]["properties"]["cells"]["items"]
+        self.assertEqual(set(cell), set(cell_schema["required"]))
 
 
 class Failures(Base):
@@ -179,8 +180,8 @@ class Tripwire(Base):
 
     def test_tripwire_keys_match_the_output_schema(self):
         out = sr.run_roster([entry("a", 10000)], loader=self.loader)
-        schema = json.loads(OUTPUT_SCHEMA.read_text())["properties"]["step3"]
-        self.assertEqual(set(out), set(schema["required"]))
+        schema = json.loads(OUTPUT_SCHEMA.read_text())["$defs"]["step3_output"]
+        self.assertEqual(set(out) | {"schema", "stage1_sha256", "step3_sha256"}, set(schema["required"]))
         self.assertEqual(set(out["tripwire"]), set(schema["properties"]["tripwire"]["required"]))
 
 
@@ -205,6 +206,49 @@ class RealModule(unittest.TestCase):
         self.assertEqual(cell["status"], "not_run")
         self.assertEqual(cell["failed_legs"], [{"key": f"dev-01:dev-01-s01:L00{i}", "exception_type": "FileNotFoundError"}
                                                for i in range(1, 4)])
+
+
+class Stage1Custody(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp(prefix="s3r-s1-"))
+        self.addCleanup(lambda: shutil.rmtree(self.root, ignore_errors=True))
+        legs = []
+        for i, (cell, inc, role, typ) in enumerate([(10000, True, "fit", "A"), (2000, True, "fit", "A"),
+                                                     (10000, False, "fit", "A"), (10000, True, "describe", "A"),
+                                                     (10000, True, "fit", "T")], 1):
+            span = "hp-01-s01" if role == "describe" else "dev-03-s01"
+            ldir = self.root / span / "legs" / f"L00{i}"
+            ldir.mkdir(parents=True)
+            (ldir / "leg_record.json").write_text(json.dumps({"result": {"bundle": f"b{i}"}}))
+            legs.append({"leg_key": f"{span}/L00{i}", "day": "2026-11-16", "role": role, "leg_type": typ,
+                         "included": inc, "cell_prompt_tokens": cell})
+        self.stage1 = self.root / "stage1.json"
+        self.stage1.write_text(json.dumps({"schema": "joulewise.cadence_look_stage1.v1", "legs": legs}))
+        self.sha = hashlib.sha256(self.stage1.read_bytes()).hexdigest()
+
+    def test_entries_from_stage1(self):
+        from joulewise.cadence_looks.inclusion_34 import span_dirs
+        entries = sr.entries_from_stage1(json.loads(self.stage1.read_text()), span_dirs(self.root))
+        self.assertEqual([e["key"] for e in entries], ["dev-03-s01/L001", "dev-03-s01/L002"])
+        self.assertEqual(entries[0]["bundle"], str(self.root / "dev-03-s01/legs/L001/runtime/b1"))
+        self.assertEqual(entries[1]["prompt_tokens_nominal"], 2000)
+
+    def test_main_takes_stage1_by_hash(self):
+        out = self.root / "step3.json"
+        import io
+        import unittest.mock
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(sr.main(["--stage1", str(self.stage1), "--stage1-sha256", "0" * 64, "--custody",
+                                      str(self.root), "--out", str(out)]), 1)
+            self.assertFalse(out.exists())
+            self.assertEqual(sr.main(["--stage1", str(self.stage1), "--stage1-sha256", self.sha, "--custody",
+                                      str(self.root), "--out", str(out)]), 0)
+        doc = json.loads(out.read_text())
+        schema = json.loads(OUTPUT_SCHEMA.read_text())["$defs"]["step3_output"]
+        self.assertEqual(set(doc), set(schema["required"]))
+        self.assertEqual((doc["stage1_sha256"], doc["step3_sha256"]), (self.sha, sr.STEP3_SHA256))
+        self.assertEqual([c["status"] for c in doc["cells"]], ["not_run", "not_run"])   # bundles absent here
+        self.assertEqual(doc["tripwire"]["decision"], "not_evaluable")
 
 
 if __name__ == "__main__":

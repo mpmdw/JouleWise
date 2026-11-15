@@ -60,16 +60,17 @@
         "journal"
       ],
       "writes": [
-        "the six inclusion verdicts per leg",
+        "the six inclusion verdicts per leg, rules 3 and 4 from inclusion_34.py's verdict file",
         "the roster",
         "the day map",
         "the rates r_p and r_d",
         "the start-reading medians and calibrated ranges",
-        "the onset fit and its leave-one-day-out error"
+        "the onset fit and its leave-one-day-out error",
+        "level D of the analyst seat's interface (docs/process/cadence_look_fit_interface.md section 3)"
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "db4f0cf38cae7011f7a1888acfb4e6b50982046a64ae672ef7695eac1ffa1b27"
+        "sha256": "4e9ed940584f40716039e6f7a1e08ee9dc0117d1e1617dad50176320612019ca"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -84,44 +85,45 @@
         "energy",
         "journal"
       ],
-      "roster_source": "stage 1's committed output, taken by sha256 as its only roster; a mismatch is refused",
+      "roster_source": "stage 1's committed output, taken by sha256 as its only roster; a mismatch is refused. Stage 2 (scripts/cadence_look_run.py) writes level O; step3_roster.py writes step 3's statistic from the same stage-1 file and hash; the output schema embeds both",
       "time_budget_s": 1200,
       "cite": [
         "RL-166 Q8",
+        "RL-166 Q6",
         "RL-166 §2"
       ]
     },
     "tripwires": [
       {
-        "id": "dev_legs_included_below_45",
+        "id": "dev_included_below_45",
         "threshold": 45,
         "cite": [
           "RL-166 Q8"
         ]
       },
       {
-        "id": "calendar_days_below_3",
+        "id": "days_below_3",
         "threshold": 3,
         "cite": [
           "RL-166 Q8"
         ]
       },
       {
-        "id": "cell_included_below_10",
+        "id": "cell_below_10",
         "threshold": 10,
         "cite": [
           "RL-166 Q8"
         ]
       },
       {
-        "id": "start_reading_invalid_above_10pct",
+        "id": "start_reading_invalid_over_10pct",
         "threshold": 0.1,
         "cite": [
           "RL-166 Q8"
         ]
       },
       {
-        "id": "hp01_included_below_9",
+        "id": "hp01_below_9",
         "threshold": 9,
         "cite": [
           "RL-166 Q8",
@@ -294,8 +296,8 @@
     ],
     "custody_files": [
       {
-        "basename": "leg_record.json / leg_summary.json / runner_receipt.json",
-        "scope": "leg and span (operational)",
+        "basename": "runner_receipt.json, soak/soak_reference.json, legs/<id>/leg_record.json, legs/<id>/leg_summary.json",
+        "scope": "span and leg (operational)",
         "carries": "operational",
         "stage": "inclusion"
       },
@@ -306,19 +308,19 @@
         "stage": "inclusion"
       },
       {
-        "basename": "rich_telemetry.jsonl timestamp_s and elapsed_ns only (each line's stamp is taken and the line dropped)",
+        "basename": "rich_telemetry.jsonl timestamp_s and elapsed_ns (inclusion_34.py: a decode hook drops every other key); raw/powermetrics.plist row-end stamp, elapsed_ns and thermal_pressure (the stage-1 CLI: extracted by pattern, no frame parsed)",
         "scope": "accepted attempt",
-        "carries": "timestamps only, for rule 3's powermetrics gap",
+        "carries": "timestamps and power-management state only",
         "stage": "inclusion"
       },
       {
-        "basename": "hazards/meter/stream-*.jsonl header, trailer and the rx stamp of each sample line (the line is dropped)",
+        "basename": "hazards/meter/stream-*.jsonl header, trailer and the rt stamp of each sample line (inclusion_34.py; the line is dropped)",
         "scope": "span, cut to the leg's interval",
         "carries": "timestamps and counts only, for rule 4",
         "stage": "inclusion"
       },
       {
-        "basename": "events.jsonl token, gate and phase stamps; outputs/align_turns.jsonl turn stamps and output lengths",
+        "basename": "events.jsonl token, gate and phase stamps; outputs/align_turns.jsonl turn stamps, prompt count and output length",
         "scope": "accepted attempt",
         "carries": "token index and stamps; output token ids are counted, never kept",
         "stage": "journal"
@@ -330,13 +332,13 @@
         "stage": "energy"
       },
       {
-        "basename": "rich_telemetry.jsonl gpu_energy and dvfm rows; raw/powermetrics.plist frames (step 3's loaders)",
+        "basename": "rich_telemetry.jsonl and raw/powermetrics.plist in full, through step 3's loaders (step3_roster.py only)",
         "scope": "accepted attempt",
         "carries": "energy",
         "stage": "energy"
       },
       {
-        "basename": "hazards/meter/stream-*.jsonl sample values",
+        "basename": "hazards/meter/stream-*.jsonl sample values (joulewise.external.km003c_parse)",
         "scope": "span, cut to each segment",
         "carries": "energy",
         "stage": "energy"
@@ -421,7 +423,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "e79c4471c320caacc8f3118fa5b280608e58a01c7741d2991b34b9eb831d86f0"
+        "sha256": "371d9483c11c4bf2fa793e6a95241beab4af2479ff2b7e3fca3dda59d2d04e1c"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -429,7 +431,7 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "da0ebff63d8e9409a895fb353fbc8e0ae5792a82b5ef84b966fbb6ad62e7e193"
+        "sha256": "15ecee011ec4ef2030ad8f1bb82f9107284f3fdf9872c20a7af7b7d46cfcc5bd"
       },
       {
         "path": "scripts/cadence_look_run.py",
@@ -451,7 +453,7 @@
       "form": "Heat term of a segment: d * m * (k1 z1 + k2 z2 + k3 z3) + delta * w, with w the part of [u, v] at or after the leg's predicted onset tau_hat. For a turn this sums to H = 1/2 T^2 (k . z) + delta * max(0, T - tau_hat), T the turn's count-derived load seconds. H is zero for a turn that starts at the reference readings and ends before its predicted onset. No sign is assumed for any of the four.",
       "response": "The segment's energy on the channel (energy.channels).",
       "base": "A count-only base, fitted jointly and never exported as H: prefill p1 P + p2 P^2; decode block a0 n + a1 n c + a2 n P, with n the block's tokens and c the context tokens at the block's midpoint.",
-      "estimation": "Ordinary least squares per channel: nine parameters (p1, p2, a0, a1, a2, k1, k2, k3, delta), eight without delta. Parameter covariance clustered by leg. The uncertainty of tau_hat is not propagated; the output says so, and the holdout error in SD_j covers it. Freeze 2 takes the fit on all included development legs; the with/without-marked-spans fit is a print and never replaces it.",
+      "estimation": "Ordinary least squares per channel: nine parameters (columns p1, p2, a0, a1, a2, k_tf08, k_fan, k_tv0h, delta, as the interface names them), eight without delta. Parameter covariance clustered by leg. The uncertainty of tau_hat is not propagated; the output says so, and the holdout error in SD_j covers it. Freeze 2 takes the fit on all included development legs; the with/without-marked-spans fit is a print and never replaces it.",
       "predictors": [
         "prefill_tokens",
         "decode_block_tokens",
@@ -558,10 +560,10 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "da0ebff63d8e9409a895fb353fbc8e0ae5792a82b5ef84b966fbb6ad62e7e193"
+        "sha256": "15ecee011ec4ef2030ad8f1bb82f9107284f3fdf9872c20a7af7b7d46cfcc5bd"
       },
       "statistic": "iii",
-      "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling.",
+      "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -m joulewise.cadence_looks.step3_roster --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
       "kept": [
         "(ii) gamma",
         "gamma's estimability",
@@ -641,12 +643,12 @@
       {
         "rule": 3,
         "id": "sidecar_coverage",
-        "text": "Over the leg's interval (G0's start to the last stamped token): sidecar coverage at least 99 % and no gap over 2 s; powermetrics gaps at most max(1 s, 5 periods), U1's registered number (pilot_protocol_v4.md:451). Coverage and gap are the registered U1 evaluator's definitions (thermal.Coverage; thermal_desk.member_record's pm_gap), copied with a cite and an equality test because both are v4 strict paths.",
+        "text": "Over the leg's interval (G0's start to the last stamped token): sidecar coverage at least 99 % and no gap over 2 s; powermetrics gaps at most max(1 s, 5 periods), U1's registered number (pilot_protocol_v4.md:451). Coverage and gap are the registered U1 evaluator's definitions (thermal.Coverage; thermal_desk.member_record's pm_gap), copied with a cite and an equality test because both are v4 strict paths. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -m joulewise.cadence_looks.inclusion_34`).",
         "judged_at": "look",
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "e79c4471c320caacc8f3118fa5b280608e58a01c7741d2991b34b9eb831d86f0"
+          "sha256": "371d9483c11c4bf2fa793e6a95241beab4af2479ff2b7e3fca3dda59d2d04e1c"
         },
         "cite": [
           "RL-149 §2.4",
@@ -657,12 +659,12 @@
       {
         "rule": 4,
         "id": "km003c_clean",
-        "text": "Header and trailer both present with a normal stop reason; inside the leg's interval, coverage at least 99 % of the header's nominal rate and no gap over 2 s between sample stamps. Timestamps only: each sample line's stamp is taken and the line dropped. The span trailer's counts print in the inclusion table and decide nothing.",
+        "text": "Header and trailer both present with a normal stop reason; inside the leg's interval, coverage at least 99 % of the header's nominal rate and no gap over 2 s between sample stamps. Timestamps only: each sample line's stamp is taken and the line dropped. The span trailer's counts print in the inclusion table and decide nothing. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -m joulewise.cadence_looks.inclusion_34`).",
         "judged_at": "look",
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "e79c4471c320caacc8f3118fa5b280608e58a01c7741d2991b34b9eb831d86f0"
+          "sha256": "371d9483c11c4bf2fa793e6a95241beab4af2479ff2b7e3fca3dda59d2d04e1c"
         },
         "cite": [
           "RL-149 §2.4",
@@ -708,7 +710,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "fcc8a8f2f585ed05cf717c7b7ab6b3c77f0008eafc2ffd103ee0052ca7f8c464"
+      "sha256": "50ba8188bc3f7313a712e6c5d0b3812df16c129578fc5209296b958d88084867"
     },
     "prints": [
       {

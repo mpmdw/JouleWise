@@ -1,133 +1,918 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "joulewise.cadence_look_output.interim.v1",
-  "title": "Interim look output, stage 2 (lm-interim-01): the only file the analyst seat writes from campaign energy",
-  "description": "DRAFT, part of freeze 1 (RL-149 section 2.6 item 1; RL-150 R4; RL-166). The lead checks the look's output against this schema before anyone else reads it (RL-149 section 2.6). Closed at every level. No joule or watt per leg, turn or block (RL-166 Q16): fitted parameters, errors, ratios and per-leg signed relative residuals keyed by leg id. Every model-dependent print carries model_sha256 and qualified (RL-149 section 4). The inclusion table, roster, rates and onset model are stage 1's (lm-interim-01.stage1.schema.json), referenced here by hash.",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema", "look_id", "manifest_sha256", "stage1_sha256", "code_sha256", "numpy_version", "channels", "step3", "qualified_interim_half", "decisions", "disclosure"],
-  "properties": {
-    "schema": {"const": "joulewise.cadence_look_output.interim.v1"},
-    "look_id": {"const": "lm-interim-01"},
-    "manifest_sha256": {"$ref": "#/$defs/sha"},
-    "stage1_sha256": {"$ref": "#/$defs/sha"},
-    "code_sha256": {"type": "object", "additionalProperties": {"$ref": "#/$defs/sha"}, "minProperties": 1},
-    "numpy_version": {"type": "string"},
-    "channels": {
-      "description": "The same prints on each channel: gpu_rail and dc_in, and no other (RL-149 section 2.6; RL-166 Q17).",
-      "type": "object", "additionalProperties": false, "required": ["gpu_rail", "dc_in"],
-      "properties": {"gpu_rail": {"$ref": "#/$defs/channel"}, "dc_in": {"$ref": "#/$defs/channel"}}
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "joulewise.cadence_look_output.interim.v1",
+ "title": "Interim look output (lm-interim-01): the fit (level O), step 3's statistic and the decisions",
+ "description": "DRAFT, part of freeze 1 (RL-149 section 2.6 item 1; RL-150 R4; RL-166). The lead checks the look's output against this schema before anyone reads it (RL-149 section 2.6). Closed at every level. fit embeds level O of the analyst seat's interface exactly; step3 is step3_roster.py's file; decisions are read from those two. No joule or watt per leg, turn or block (RL-166 Q16). Field-level conventions under the research lead's open readings (R-10 to R-21) are the interface's and are not restated here.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "decisions",
+  "disclosure",
+  "fit",
+  "high_power_table",
+  "look_id",
+  "manifest_sha256",
+  "schema",
+  "stage1_sha256",
+  "step3"
+ ],
+ "properties": {
+  "schema": {
+   "const": "joulewise.cadence_look_output.interim.v1"
+  },
+  "look_id": {
+   "const": "lm-interim-01"
+  },
+  "manifest_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "stage1_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "fit": {
+   "$ref": "#/$defs/fit_output"
+  },
+  "step3": {
+   "$ref": "#/$defs/step3_output"
+  },
+  "high_power_table": {
+   "oneOf": [
+    {
+     "type": "null"
     },
-    "step3": {
-      "description": "RL-166 Q6: step 3's committed code through step3_roster.py, one call per prompt-size cell, the 10k cell first. Ratios, slopes and fractions only.",
-      "type": "object", "additionalProperties": false, "required": ["cells", "tripwire"],
-      "properties": {
-        "cells": {"type": "array", "items": {"$ref": "#/$defs/step3_cell"}},
-        "tripwire": {"type": "object", "additionalProperties": false,
-          "required": ["value", "cell", "threshold", "fallback_threshold", "threshold_applied", "trips", "decision"],
-          "properties": {"value": {"type": ["number", "null"]}, "cell": {"type": ["integer", "null"]},
-            "threshold": {"const": 0.08}, "fallback_threshold": {"const": 0.04},
-            "threshold_applied": {"enum": [0.08, 0.04], "description": "0.04 only if the cold seat's RL-166 Q11 check failed"},
-            "trips": {"type": ["boolean", "null"]},
-            "decision": {"enum": ["within", "to the research lead", "not_evaluable"]}}}
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "caption",
+      "rows"
+     ],
+     "properties": {
+      "caption": {
+       "type": "string"
+      },
+      "rows": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "automatic_spread",
+         "cell",
+         "clock_ratio",
+         "energy_ratio",
+         "included_automatic",
+         "included_h",
+         "onset_s_ratio",
+         "share_scored_ratio",
+         "span_position"
+        ],
+        "properties": {
+         "cell": {
+          "type": "integer"
+         },
+         "span_position": {
+          "enum": [
+           "cold",
+           "warm"
+          ]
+         },
+         "included_h": {
+          "type": "integer"
+         },
+         "included_automatic": {
+          "type": "integer"
+         },
+         "onset_s_ratio": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "clock_ratio": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "share_scored_ratio": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "energy_ratio": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "automatic_spread": {
+          "type": [
+           "number",
+           "null"
+          ]
+         }
+        }
+       }
       }
+     }
+    }
+   ],
+   "description": "RL-149 section 2.5, RL-157 and RL-166 Q9: ratios only; null when hp-01 runs later as its own disclosed read."
+  },
+  "decisions": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "drift_tripwire",
+    "extension_rule",
+    "hp01_table",
+    "qualified_interim_half"
+   ],
+   "properties": {
+    "drift_tripwire": {
+     "enum": [
+      "within",
+      "to the research lead",
+      "not_evaluable"
+     ]
     },
     "qualified_interim_half": {
-      "description": "RL-151 section 2.1 and RL-166 Q3: the maximum over counted days of the leave-one-day-out hot-stretch error, GPU rail, at or under 0.02. A day counts with at least three included legs that have a hot stretch; fewer than three counted days is not_evaluable, which is no.",
-      "type": "object", "additionalProperties": false, "required": ["max_over_counted_days", "counted_days", "threshold", "result"],
-      "properties": {"max_over_counted_days": {"type": ["number", "null"]}, "counted_days": {"type": "integer"},
-        "threshold": {"const": 0.02}, "result": {"enum": ["yes", "no", "not_evaluable"]}}
+     "enum": [
+      "passes",
+      "fails",
+      "not_evaluable"
+     ]
     },
-    "decisions": {
-      "type": "object", "additionalProperties": false, "required": ["drift_tripwire", "qualified_interim_half", "hp01_table", "extension_rule"],
-      "properties": {
-        "drift_tripwire": {"enum": ["within", "to the research lead", "not_evaluable"]},
-        "qualified_interim_half": {"enum": ["yes", "no", "not_evaluable"]},
-        "hp01_table": {"enum": ["in this output", "later, as its own disclosed read (RL-166 Q9)"]},
-        "extension_rule": {"const": "none written; any extension needs a ruling"}
-      }
+    "hp01_table": {
+     "enum": [
+      "in this output",
+      "later, as its own disclosed read (RL-166 Q9)"
+     ]
     },
-    "disclosure": {
-      "description": "The blind statement's entry for this look (RL-149 section 2.6, as worded by RL-150 R6).",
-      "type": "object", "additionalProperties": false, "required": ["date", "code_sha256", "stage1_sha256", "analyst_seat", "numpy_version", "statement"],
-      "properties": {"date": {"type": "string"}, "code_sha256": {"$ref": "#/$defs/sha"}, "stage1_sha256": {"$ref": "#/$defs/sha"},
-        "analyst_seat": {"type": "string"}, "numpy_version": {"type": "string"}, "statement": {"type": "string"}}
+    "extension_rule": {
+     "const": "none written; any extension needs a ruling"
     }
+   }
   },
-  "$defs": {
-    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "qualified": {"enum": ["yes", "no", "not_run", "not_evaluable"]},
-    "carries": {"type": "object", "additionalProperties": false, "required": ["model_sha256", "qualified"],
-      "properties": {"model_sha256": {"$ref": "#/$defs/sha"}, "qualified": {"$ref": "#/$defs/qualified"}}},
-    "errors": {"type": "object", "additionalProperties": false, "required": ["per_day_signed", "pooled", "max_over_counted_days", "counted_days", "holdout_rms"],
-      "properties": {"per_day_signed": {"type": "object", "additionalProperties": {"type": "number"}},
-        "pooled": {"type": ["number", "null"]}, "max_over_counted_days": {"type": ["number", "null"]},
-        "counted_days": {"type": "integer"}, "holdout_rms": {"type": ["number", "null"]}}},
-    "bias": {"type": "object", "additionalProperties": false, "required": ["estimate", "ci90", "n_legs", "n_days"],
-      "properties": {"estimate": {"type": ["number", "null"]}, "ci90": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
-        "n_legs": {"type": "integer"}, "n_days": {"type": "integer"}}},
-    "fit": {"type": "object", "additionalProperties": false,
-      "required": ["parameters", "coefficients", "covariance_leg_clustered", "delta_dropped", "n_legs", "n_days", "n_segments", "tau_uncertainty", "carries"],
-      "properties": {
-        "parameters": {"type": "array", "items": {"enum": ["p1", "p2", "a0", "a1", "a2", "k1", "k2", "k3", "delta"]}},
-        "coefficients": {"type": "object", "additionalProperties": {"type": "number"}},
-        "covariance_leg_clustered": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}},
-        "delta_dropped": {"type": "boolean"},
-        "n_legs": {"type": "integer"}, "n_days": {"type": "integer"}, "n_segments": {"type": "integer"},
-        "tau_uncertainty": {"const": "not propagated; the holdout error in SD_j covers it"},
-        "carries": {"$ref": "#/$defs/carries"}}},
-    "channel": {
-      "type": "object", "additionalProperties": false,
-      "required": ["heat_term_fit", "lodo_rel_error_hot_stretch", "lodo_rel_error_leg", "without_heat_columns", "per_leg_relative_residuals", "prefix_length_bias", "high_power_table", "marked_span_sensitivity"],
-      "properties": {
-        "heat_term_fit": {"$ref": "#/$defs/fit"},
-        "lodo_rel_error_hot_stretch": {"$ref": "#/$defs/errors"},
-        "lodo_rel_error_leg": {"$ref": "#/$defs/errors"},
-        "without_heat_columns": {"type": "object", "additionalProperties": false, "required": ["hot_stretch", "leg"],
-          "properties": {"hot_stretch": {"$ref": "#/$defs/errors"}, "leg": {"$ref": "#/$defs/errors"}}},
-        "per_leg_relative_residuals": {
-          "description": "RL-166 Q16: signed relative residuals, leg and hot stretch, keyed by the stage-1 leg key. No joule or watt.",
-          "type": "object", "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["leg", "hot_stretch"],
-            "properties": {"leg": {"type": ["number", "null"]}, "hot_stretch": {"type": ["number", "null"]}}}},
-        "prefix_length_bias": {"type": "object", "additionalProperties": false, "required": ["1.10", "1.30", "1.374", "unit", "carries"],
-          "properties": {"1.10": {"$ref": "#/$defs/bias"}, "1.30": {"$ref": "#/$defs/bias"}, "1.374": {"$ref": "#/$defs/bias"},
-            "unit": {"const": "score_sd"}, "carries": {"$ref": "#/$defs/carries"}}},
-        "high_power_table": {
-          "description": "RL-149 section 2.5, RL-157 and RL-166 Q9: onset, clock, share of decode scored and energy RATIOS against Automatic at matched cell, soak and span position; the Automatic block-to-block spread beside each ratio; included count per row; cold starts marked by the measured start reading. Description only, never in the fit. null when hp-01 runs later.",
-          "type": ["object", "null"], "additionalProperties": false, "required": ["caption", "rows"],
-          "properties": {"caption": {"type": "string"},
-            "rows": {"type": "array", "items": {"type": "object", "additionalProperties": false,
-              "required": ["cell", "span_position", "included_h", "included_automatic", "onset_s_ratio", "clock_ratio", "share_scored_ratio", "energy_ratio", "automatic_spread"],
-              "properties": {"cell": {"type": "integer"}, "span_position": {"enum": ["cold", "warm"]},
-                "included_h": {"type": "integer"}, "included_automatic": {"type": "integer"},
-                "onset_s_ratio": {"type": ["number", "null"]}, "clock_ratio": {"type": ["number", "null"]},
-                "share_scored_ratio": {"type": ["number", "null"]}, "energy_ratio": {"type": ["number", "null"]},
-                "automatic_spread": {"type": ["number", "null"]}}}}}},
-        "marked_span_sensitivity": {
-          "description": "RL-161 section 4 and RL-166 Q20: the fit and its hot-stretch error with and without spans marked 'reference from an excluded leg' or 'reference from a redo'. A print; it never replaces the freeze-2 fit.",
-          "type": "object", "additionalProperties": false, "required": ["marked_spans", "coefficients_without", "lodo_hot_stretch_max_without"],
-          "properties": {"marked_spans": {"type": "array", "items": {"type": "string"}},
-            "coefficients_without": {"type": ["object", "null"], "additionalProperties": {"type": "number"}},
-            "lodo_hot_stretch_max_without": {"type": ["number", "null"]}}}
-      }
+  "disclosure": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "analyst_seat",
+    "code_sha256",
+    "date",
+    "numpy_version",
+    "stage1_sha256",
+    "statement"
+   ],
+   "properties": {
+    "date": {
+     "type": "string"
     },
-    "step3_cell": {
-      "type": "object", "additionalProperties": false,
-      "required": ["prompt_tokens", "status", "n_legs", "failed_legs", "ii_gamma", "gamma_estimable", "iii_drift_fraction_linear", "iii_drift_fraction_exp_form", "iv_after_over_before", "vi_slope_lnE_on_lnclock"],
-      "properties": {
-        "prompt_tokens": {"type": "integer"},
-        "status": {"enum": ["ok", "not_run"]},
-        "n_legs": {"type": "integer"},
-        "failed_legs": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["key", "exception_type"],
-          "properties": {"key": {"type": "string"}, "exception_type": {"type": "string"}}}},
-        "ii_gamma": {"type": ["object", "null"]},
-        "gamma_estimable": {"type": ["boolean", "null"]},
-        "iii_drift_fraction_linear": {"type": ["number", "null"]},
-        "iii_drift_fraction_exp_form": {"type": ["number", "null"]},
-        "iv_after_over_before": {"type": ["object", "null"], "additionalProperties": false,
-          "properties": {"median": {"type": ["number", "null"]}, "min": {"type": ["number", "null"]}, "max": {"type": ["number", "null"]}}},
-        "vi_slope_lnE_on_lnclock": {"type": ["object", "null"]}
-      }
+    "code_sha256": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     }
+    },
+    "stage1_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    },
+    "analyst_seat": {
+     "type": "string"
+    },
+    "numpy_version": {
+     "type": "string"
+    },
+    "statement": {
+     "type": "string"
     }
+   }
   }
+ },
+ "$defs": {
+  "fit_output": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "channels",
+    "code_sha256",
+    "delta_column",
+    "look_id",
+    "numpy_version",
+    "qualified_interim_half",
+    "schema",
+    "stage1_sha256",
+    "tau_uncertainty_propagated"
+   ],
+   "properties": {
+    "schema": {
+     "const": "joulewise.cadence_look_fit.v1"
+    },
+    "look_id": {
+     "const": "lm-interim-01"
+    },
+    "stage1_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    },
+    "code_sha256": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     }
+    },
+    "numpy_version": {
+     "type": "string"
+    },
+    "tau_uncertainty_propagated": {
+     "const": false
+    },
+    "delta_column": {
+     "enum": [
+      "kept",
+      "dropped_onset_not_estimable"
+     ]
+    },
+    "channels": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "dc_in",
+      "gpu_rail"
+     ],
+     "properties": {
+      "gpu_rail": {
+       "$ref": "#/$defs/channel_fit"
+      },
+      "dc_in": {
+       "$ref": "#/$defs/channel_fit"
+      }
+     }
+    },
+    "qualified_interim_half": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "statistic",
+      "threshold",
+      "value",
+      "verdict"
+     ],
+     "properties": {
+      "statistic": {
+       "const": "gpu_rail.lodo.hot.max_abs"
+      },
+      "value": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "threshold": {
+       "const": 0.02
+      },
+      "verdict": {
+       "enum": [
+        "passes",
+        "fails",
+        "not_evaluable"
+       ]
+      }
+     }
+    }
+   },
+   "description": "Level O of the analyst seat's data interface (docs/process/cadence_look_fit_interface.md section 4, PR #795), embedded exactly. scripts/cadence_look_run.py stage2 writes this object."
+  },
+  "channel_fit": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "coefficients",
+    "columns",
+    "covariance",
+    "lodo",
+    "marked_sensitivity",
+    "model_sha256",
+    "n_days",
+    "n_legs",
+    "n_segments",
+    "prefix_bias",
+    "qualified",
+    "residuals"
+   ],
+   "properties": {
+    "columns": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "p1",
+       "p2",
+       "a0",
+       "a1",
+       "a2",
+       "k_tf08",
+       "k_fan",
+       "k_tv0h",
+       "delta"
+      ]
+     },
+     "minItems": 8,
+     "maxItems": 9,
+     "uniqueItems": true
+    },
+    "coefficients": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "number"
+     }
+    },
+    "covariance": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "number"
+      }
+     }
+    },
+    "n_legs": {
+     "type": "integer"
+    },
+    "n_segments": {
+     "type": "integer"
+    },
+    "n_days": {
+     "type": "integer"
+    },
+    "lodo": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "folds_delta_dropped",
+      "hot",
+      "hot_rms_over_legs",
+      "leg",
+      "no_heat"
+     ],
+     "properties": {
+      "hot": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "counted_days",
+        "max_abs",
+        "n_hot_legs_per_day",
+        "per_day",
+        "pooled",
+        "verdict"
+       ],
+       "properties": {
+        "per_day": {
+         "type": "object",
+         "additionalProperties": {
+          "type": "number"
+         }
+        },
+        "counted_days": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+         }
+        },
+        "n_hot_legs_per_day": {
+         "type": "object",
+         "additionalProperties": {
+          "type": "integer"
+         }
+        },
+        "max_abs": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "pooled": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "verdict": {
+         "enum": [
+          "passes",
+          "fails",
+          "not_evaluable"
+         ]
+        }
+       }
+      },
+      "leg": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "per_day",
+        "pooled",
+        "rms_over_legs"
+       ],
+       "properties": {
+        "per_day": {
+         "type": "object",
+         "additionalProperties": {
+          "type": "number"
+         }
+        },
+        "pooled": {
+         "type": "number"
+        },
+        "rms_over_legs": {
+         "type": "number"
+        }
+       }
+      },
+      "hot_rms_over_legs": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "folds_delta_dropped": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+       }
+      },
+      "no_heat": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "hot",
+        "hot_rms_over_legs",
+        "leg"
+       ],
+       "properties": {
+        "hot": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "counted_days",
+          "max_abs",
+          "n_hot_legs_per_day",
+          "per_day",
+          "pooled",
+          "verdict"
+         ],
+         "properties": {
+          "per_day": {
+           "type": "object",
+           "additionalProperties": {
+            "type": "number"
+           }
+          },
+          "counted_days": {
+           "type": "array",
+           "items": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+           }
+          },
+          "n_hot_legs_per_day": {
+           "type": "object",
+           "additionalProperties": {
+            "type": "integer"
+           }
+          },
+          "max_abs": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "pooled": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "verdict": {
+           "enum": [
+            "passes",
+            "fails",
+            "not_evaluable"
+           ]
+          }
+         }
+        },
+        "leg": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "per_day",
+          "pooled",
+          "rms_over_legs"
+         ],
+         "properties": {
+          "per_day": {
+           "type": "object",
+           "additionalProperties": {
+            "type": "number"
+           }
+          },
+          "pooled": {
+           "type": "number"
+          },
+          "rms_over_legs": {
+           "type": "number"
+          }
+         }
+        },
+        "hot_rms_over_legs": {
+         "type": [
+          "number",
+          "null"
+         ]
+        }
+       }
+      }
+     }
+    },
+    "prefix_bias": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "1.10",
+      "1.30",
+      "1.374"
+     ],
+     "properties": {
+      "1.10": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "ci90",
+        "estimate",
+        "n_days",
+        "n_pairs",
+        "prefix_len"
+       ],
+       "properties": {
+        "prefix_len": {
+         "const": 3724
+        },
+        "estimate": {
+         "type": "number"
+        },
+        "ci90": {
+         "type": "array",
+         "items": {
+          "type": "number"
+         },
+         "minItems": 2,
+         "maxItems": 2
+        },
+        "n_pairs": {
+         "type": "integer"
+        },
+        "n_days": {
+         "type": "integer"
+        }
+       }
+      },
+      "1.30": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "ci90",
+        "estimate",
+        "n_days",
+        "n_pairs",
+        "prefix_len"
+       ],
+       "properties": {
+        "prefix_len": {
+         "const": 3151
+        },
+        "estimate": {
+         "type": "number"
+        },
+        "ci90": {
+         "type": "array",
+         "items": {
+          "type": "number"
+         },
+         "minItems": 2,
+         "maxItems": 2
+        },
+        "n_pairs": {
+         "type": "integer"
+        },
+        "n_days": {
+         "type": "integer"
+        }
+       }
+      },
+      "1.374": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "ci90",
+        "estimate",
+        "n_days",
+        "n_pairs",
+        "prefix_len"
+       ],
+       "properties": {
+        "prefix_len": {
+         "const": 2981
+        },
+        "estimate": {
+         "type": "number"
+        },
+        "ci90": {
+         "type": "array",
+         "items": {
+          "type": "number"
+         },
+         "minItems": 2,
+         "maxItems": 2
+        },
+        "n_pairs": {
+         "type": "integer"
+        },
+        "n_days": {
+         "type": "integer"
+        }
+       }
+      }
+     }
+    },
+    "residuals": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "hot_stretch",
+      "leg"
+     ],
+     "properties": {
+      "leg": {
+       "type": "object",
+       "additionalProperties": {
+        "type": "number"
+       }
+      },
+      "hot_stretch": {
+       "type": "object",
+       "additionalProperties": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      }
+     }
+    },
+    "marked_sensitivity": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "coefficients_without",
+      "lodo_hot_max_abs_without",
+      "marked_spans",
+      "n_legs_without"
+     ],
+     "properties": {
+      "marked_spans": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      },
+      "n_legs_without": {
+       "type": "integer"
+      },
+      "coefficients_without": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "additionalProperties": {
+        "type": "number"
+       }
+      },
+      "lodo_hot_max_abs_without": {
+       "type": [
+        "number",
+        "null"
+       ]
+      }
+     }
+    },
+    "model_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    },
+    "qualified": {
+     "enum": [
+      "yes",
+      "no",
+      "not_run"
+     ]
+    }
+   }
+  },
+  "step3_output": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "cells",
+    "schema",
+    "stage1_sha256",
+    "step3_sha256",
+    "tripwire"
+   ],
+   "properties": {
+    "schema": {
+     "const": "joulewise.cadence_look_step3.v1"
+    },
+    "stage1_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    },
+    "step3_sha256": {
+     "const": "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
+    },
+    "cells": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "failed_legs",
+       "gamma_estimable",
+       "ii_gamma",
+       "iii_drift_fraction_exp_form",
+       "iii_drift_fraction_linear",
+       "iv_after_over_before",
+       "n_legs",
+       "prompt_tokens",
+       "status",
+       "vi_slope_lnE_on_lnclock"
+      ],
+      "properties": {
+       "prompt_tokens": {
+        "type": "integer"
+       },
+       "status": {
+        "enum": [
+         "ok",
+         "not_run"
+        ]
+       },
+       "n_legs": {
+        "type": "integer"
+       },
+       "failed_legs": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "exception_type",
+          "key"
+         ],
+         "properties": {
+          "key": {
+           "type": "string"
+          },
+          "exception_type": {
+           "type": "string"
+          }
+         }
+        }
+       },
+       "ii_gamma": {
+        "type": [
+         "object",
+         "null"
+        ]
+       },
+       "gamma_estimable": {
+        "type": [
+         "boolean",
+         "null"
+        ]
+       },
+       "iii_drift_fraction_linear": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "iii_drift_fraction_exp_form": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "iv_after_over_before": {
+        "type": [
+         "object",
+         "null"
+        ],
+        "additionalProperties": false,
+        "properties": {
+         "median": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "min": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "max": {
+          "type": [
+           "number",
+           "null"
+          ]
+         }
+        }
+       },
+       "vi_slope_lnE_on_lnclock": {
+        "type": [
+         "object",
+         "null"
+        ]
+       }
+      }
+     }
+    },
+    "tripwire": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "cell",
+      "decision",
+      "fallback_threshold",
+      "threshold",
+      "threshold_applied",
+      "trips",
+      "value"
+     ],
+     "properties": {
+      "value": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "cell": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "threshold": {
+       "const": 0.08
+      },
+      "fallback_threshold": {
+       "const": 0.04
+      },
+      "threshold_applied": {
+       "enum": [
+        0.08,
+        0.04
+       ]
+      },
+      "trips": {
+       "type": [
+        "boolean",
+        "null"
+       ]
+      },
+      "decision": {
+       "enum": [
+        "within",
+        "to the research lead",
+        "not_evaluable"
+       ]
+      }
+     }
+    }
+   },
+   "description": "RL-166 Q6 and RL-151 section 1.3 item 2: step 3's statistic (iii) per prompt-size cell (10k first) and the drift tripwire, written by joulewise/cadence_looks/step3_roster.py; the stage-2 CLI does not compute it."
+  }
+ }
 }

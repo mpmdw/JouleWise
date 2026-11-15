@@ -195,7 +195,7 @@ class RulingInvariants(Base):
         self.refused(lambda: lm.validate_manifest(doc), "time_budget_s")
         doc = draft()
         doc["stages"]["tripwires"][0]["threshold"] = 40
-        self.refused(lambda: lm.validate_manifest(doc), "dev_legs_included_below_45 with threshold 45")
+        self.refused(lambda: lm.validate_manifest(doc), "dev_included_below_45 with threshold 45")
         doc = draft()
         doc["reads"]["custody_files"][1]["carries"] = "energy"
         self.refused(lambda: lm.validate_manifest(doc), "stage 1 opens no energy file")
@@ -540,6 +540,14 @@ class RepoCheck(Base):
         self.refused(lambda: lm.check_repo(doc, tmp, [kp]), "sha256 differs")
         (tmp / FIT).unlink()
         self.refused(lambda: lm.check_repo(doc, tmp, [kp]), "is not in the repository")
+
+    def test_a_draft_may_pin_a_file_from_another_branch(self):
+        tmp, doc, kp = self.make_repo()
+        (tmp / FIT).unlink()
+        doc["status"] = "draft"
+        warnings = lm.check_repo(doc, tmp, [kp])
+        self.assertTrue(any(FIT in w and "draft pin" in w for w in warnings), warnings)
+        self.refused(lambda: lm.check_repo(doc, tmp, [kp], final=True), "is not in the repository")
 
     def test_a_frozen_path_that_imports_look_code_is_refused(self):
         for src in ("from joulewise.cadence_looks import fit_interim\n", "import joulewise.cadence_looks.manifest\n",

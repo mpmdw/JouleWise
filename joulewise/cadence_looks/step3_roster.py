@@ -156,3 +156,69 @@ def run_roster(entries, *, threshold=DRIFT_THRESHOLD, loader=load_step3):
                     "trips": None, "decision": "not_evaluable"}
     tripwire["threshold_applied"] = threshold
     return {"cells": results, "tripwire": tripwire}
+
+
+# ------------------------------------------------------------------------------------------------------------
+# Custody mode, stage 2 (the stage-2 CLI does not compute statistic (iii); this file supplies it):
+#
+#     python3 -I -m joulewise.cadence_looks.step3_roster --stage1 STAGE1.json --stage1-sha256 HEX
+#         --custody ROOT [--span-dir SPAN_ID=PATH ...] [--threshold 0.08|0.04] --out STEP3.json
+#
+# The roster is stage 1's committed output (level D, docs/process/cadence_look_fit_interface.md section 3),
+# taken by its sha256: its included type-A legs of role fit. A leg's bundle is
+# <span dir>/legs/<leg_id>/runtime/<leg_record.json result.bundle>, as the stage-1 CLI reads it.
+
+SCHEMA = "joulewise.cadence_look_step3.v1"
+
+
+def entries_from_stage1(stage1, sdir_of):
+    import json
+    out = []
+    for leg in stage1["legs"]:
+        if not (leg.get("included") is True and leg.get("role") == "fit" and leg.get("leg_type") == "A"):
+            continue
+        span_id, leg_id = leg["leg_key"].split("/", 1)
+        ldir = Path(sdir_of(span_id)) / "legs" / leg_id
+        result = json.loads((ldir / "leg_record.json").read_text(encoding="utf-8")).get("result") or {}
+        out.append({"key": leg["leg_key"], "day": leg["day"], "bundle": str(ldir / "runtime" / result["bundle"]),
+                    "role": "fit", "leg_type": "A", "included": True, "prompt_tokens_nominal": leg["cell_prompt_tokens"]})
+    return out
+
+
+def main(argv=None):
+    import argparse
+    import json
+    from joulewise.cadence_looks.inclusion_34 import span_dirs
+    p = argparse.ArgumentParser(description="Step 3's statistic (iii) per prompt-size cell (RL-166 Q6).")
+    p.add_argument("--stage1", required=True)
+    p.add_argument("--stage1-sha256", required=True)
+    p.add_argument("--custody", required=True)
+    p.add_argument("--span-dir", action="append", default=[])
+    p.add_argument("--threshold", type=float, default=DRIFT_THRESHOLD)
+    p.add_argument("--out", required=True)
+    a = p.parse_args(argv)
+    raw = Path(a.stage1).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
+        print("REFUSE the stage-1 file is not the committed bytes")
+        return 1
+    try:
+        entries = entries_from_stage1(json.loads(raw), span_dirs(a.custody, a.span_dir))
+        doc = {"schema": SCHEMA, "stage1_sha256": a.stage1_sha256, "step3_sha256": STEP3_SHA256,
+               **run_roster(entries, threshold=a.threshold)}
+    except Step3Refused as error:
+        print(f"REFUSE {error}")
+        return 1
+    except Exception as exc:                      # type and line only: a message could carry a value
+        tb = exc.__traceback__
+        while tb.tb_next:
+            tb = tb.tb_next
+        print(f"FAILED {type(exc).__name__} at line {tb.tb_lineno}")
+        return 2
+    text = json.dumps(doc, indent=1, allow_nan=False) + "\n"
+    Path(a.out).write_text(text, encoding="utf-8")
+    print(f"wrote {a.out} sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -40,7 +40,7 @@ def validate(args):
         pending = lm.validate_manifest(doc, final=True if args.final else None)
         if args.repo:
             kits = args.kit or sorted(str(p) for p in (Path(args.repo) / "docs/process/cadence/kits").glob("*.json"))
-            lm.check_repo(doc, args.repo, kits)
+            warnings = lm.check_repo(doc, args.repo, kits, final=True if args.final else None)
             looks = Path(args.looks) if args.looks else Path(args.repo) / lm.LOOK_LEDGER_PATH
             if looks.is_file():
                 lm.validate_look_ledger(lm.load_json(looks), args.repo)
@@ -52,6 +52,8 @@ def validate(args):
             print(f"REFUSE {p}")
         return 1
     print(f"ok {doc['look_id']} ({doc['status']}); open placeholders: {len(pending)}")
+    for w in (warnings if args.repo else []):
+        print(f"  WARN {w}")
     for path, qid in pending:
         print(f"  PENDING {qid} at {path}")
     if roster is not None:

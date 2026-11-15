@@ -113,8 +113,9 @@ REQUIRED_CARRIES = {"model_sha256", "qualified"}   # RL-149 section 4
 REQUIRED_DECISIONS = {"interim": {"drift_tripwire": 0.08, "qualified_interim_half": 0.02, "hp01_included_below_9": 9,
                                   "stage1_tripwires": None, "step3_cell_not_run": 2, "extension_rule": None}}
 DRIFT_FALLBACK = 0.04                              # RL-166 Q11
-STAGE1_TRIPWIRES = {"dev_legs_included_below_45": 45, "calendar_days_below_3": 3, "cell_included_below_10": 10,
-                    "start_reading_invalid_above_10pct": 0.10, "hp01_included_below_9": 9}   # RL-166 Q8
+# RL-166 Q8; ids as the stage-1 output (level D, docs/process/cadence_look_fit_interface.md section 3.3) names them
+STAGE1_TRIPWIRES = {"dev_included_below_45": 45, "days_below_3": 3, "cell_below_10": 10,
+                    "start_reading_invalid_over_10pct": 0.10, "hp01_below_9": 9}
 RETIRED_DECISION_RE = re.compile(r"(?i)rule[_-]?p|s_?w_selection|one_decision")  # RL-151 section 2.1
 FREEZE2_COMMIT_BEFORE = {"qualification_energy_opened", "qualification_leg_runs", "phase_boundary_crossed",
                          "release_run_inputs_signed"}
@@ -820,11 +821,17 @@ def _module_names(path):
     return {dotted, p.stem}
 
 
-def check_repo(doc, repo, kit_paths=()):
+def check_repo(doc, repo, kit_paths=(), *, final=None):
     """Hash the pinned files in ``repo`` and check the import and condition rules. Opens repository source
-    and kit JSON only. Placeholders are skipped (``validate_manifest`` reports them)."""
+    and kit JSON only. Placeholders are skipped (``validate_manifest`` reports them).
+
+    A draft may pin a file that is not on its own branch (code another seat writes on its own branch,
+    pinned on a draft basis): that is returned as a warning. In a committed manifest (or ``final=True``) it
+    is a problem. Returns the warnings."""
     repo = Path(repo)
-    problems = []
+    if final is None:
+        final = doc.get("status") == "committed"
+    problems, warnings = [], []
     code_paths = []
     for where, path, sha in code_refs(doc):
         if not (isinstance(path, str) and _repo_path_ok(path)):
@@ -835,7 +842,8 @@ def check_repo(doc, repo, kit_paths=()):
         if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
             continue
         if not f.is_file():
-            problems.append(f"{where}: {path} is not in the repository")
+            (problems if final else warnings).append(f"{where}: {path} is not in the repository"
+                                                     + ("" if final else " (draft pin; checked where the file is)"))
             continue
         if sha256_file(f) != sha:
             problems.append(f"{where}: {path} sha256 differs from the pin")
@@ -872,6 +880,7 @@ def check_repo(doc, repo, kit_paths=()):
             problems.append(f"{p}:{line} reads a 'condition' field; look code never reads it (RL-150 R6)")
     if problems:
         raise ManifestError(problems)
+    return warnings
 
 
 # ---------------------------------------------------------------------------------------------- look ledger
