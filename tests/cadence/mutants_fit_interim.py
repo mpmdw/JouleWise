@@ -88,6 +88,8 @@ def main(argv=None):
     try:
         for d in ("joulewise", "scripts"):
             shutil.copytree(ROOT / d, tmp / d, ignore=shutil.ignore_patterns("__pycache__"))
+        (tmp / "configs/align/v4").mkdir(parents=True)      # the runtime sensor policy the rules-3/4 test reads
+        shutil.copy(ROOT / "configs/align/v4/r1_runtime.json", tmp / "configs/align/v4/r1_runtime.json")
         (tmp / "tests").mkdir()
         for f in (ROOT / "tests").iterdir():          # tests/__init__.py installs the host-command guard
             if f.is_file() and f.suffix == ".py":

@@ -353,6 +353,15 @@ def _mills(s):
 
 
 def censored_normal_fit(X, y, censored, tol=1e-11, max_iter=200):
+    # Apple Accelerate raises spurious floating-point flags inside matmul (numpy 2.x); results are finite-checked.
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        f = _censored_normal_fit(X, y, censored, tol, max_iter)
+    if not (np.all(np.isfinite(f["beta"])) and math.isfinite(f["sigma"])):
+        f["converged"] = False
+    return f
+
+
+def _censored_normal_fit(X, y, censored, tol, max_iter):
     """Right-censored normal (Tobit) ML by Newton's method in Olsen's (gamma = beta/sigma, theta = 1/sigma) form, in
     which the log likelihood is concave. X: (n, p); y: response or the censoring time; censored: bool array.
     Returns {beta, sigma, converged, loglik, iterations}."""
