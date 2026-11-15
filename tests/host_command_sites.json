@@ -2062,5 +2062,83 @@
     "locator": "main:541443a289d468bd",
     "command": "pmset",
     "seam": "parser default only (the desk launcher's own --pmset-bin default); launch() passes it to the LaunchAgent wrapper; tests patch subprocess.run and never bootstrap"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "Controller.maintenance_line:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "read-only sudo -n log show query over the span (item 331's print-only maintenance line); runs only through Env.run, which the synthetic FakeEnv answers without a host command"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "Controller.maintenance_line:da7280748832c155",
+    "command": "sudo",
+    "seam": "read-only sudo -n log show query over the span (item 331's print-only maintenance line); runs only through Env.run, which the synthetic FakeEnv answers without a host command"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "Launcher.launch:a53a524768ca901e",
+    "command": "python-isolated",
+    "seam": "the arm child under the measurement interpreter (-I -B -c ARM_CHILD); tests replace Launcher with the synthetic MockLauncher, and ArmChild runs ARM_CHILD against a stub launch_cadence_span in a temp repo"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:0ad70fd971de1688",
+    "command": "kill",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:502ee0a584ce0b0b",
+    "command": "launchctl",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:541443a289d468bd",
+    "command": "pmset",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:650aa89ad0060b30",
+    "command": "sudo",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:668741c8bca9cef3",
+    "command": "systemsetup",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:b2ab9eb045fc9365",
+    "command": "kill",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:b2ab9eb045fc9365",
+    "command": "sudo",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:e5455bdce9648460",
+    "command": "pmset",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:fe117ae638014da5",
+    "command": "sudo",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "host_proof:fe117ae638014da5",
+    "command": "systemsetup",
+    "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
   }
 ]
