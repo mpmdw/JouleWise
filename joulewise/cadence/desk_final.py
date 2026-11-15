@@ -61,6 +61,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import time
 
 from joulewise.cadence import desk
@@ -98,7 +99,7 @@ SOAK_RETRIES = 1     # scripts/cadence_legs_runner.SOAK_RETRIES (RL-171): one re
 NON_FATAL_STEPS = ("display",)   # the runner calls display with fatal=False
 
 # Named stops this module adds. "integrity": the automatic table cannot be trusted as final.
-INTEGRITY_CODES = ("DESK_UNAUTHENTICATED", "DESK_IDENTITY", "DESK_ROSTER", "DESK_NO_LEG_ROWS", "DESK_DUPLICATE",
+INTEGRITY_CODES = ("DESK_DENIED_CONTENT", "DESK_UNAUTHENTICATED", "DESK_IDENTITY", "DESK_ROSTER", "DESK_NO_LEG_ROWS", "DESK_DUPLICATE",
                    "DESK_ATTEMPTS", "DESK_SCHEMA", "DESK_FEED_PROOF", "DESK_REFUSAL", "DESK_ERROR")
 HAND_CODES = ("HAND_TABLE_DISAGREES", "HAND_TABLE_INVALID")
 PENDING_CODES = ("HAND_TABLE_DUE",)
@@ -124,10 +125,12 @@ HAND_TOP_REQUIRED = ("schema", "plan_id", "legs", "named_stops", "soak_attempts"
 SECONDS_TOLERANCE = 1.0
 
 # The seeded stratified hand-sample draw (RL-172 section (c); Sol). Fixed here, before any span it selects
-# has run: the selection depends only on the committed queue and kit, so it is prospective.
-HAND_SAMPLE_LAW = "sha256-hand-sample-v1"
+# has run. v2 (gate 2, Mythos N13, Sol R11): each span's draw depends only on its own plan id, its kit sha and
+# its G0 shape, so appending to a queue never changes an earlier span's draw, and queues of any size draw at
+# the same rate. v1's blocks of four were sized by the queue's current length and were not append-stable.
+HAND_SAMPLE_LAW = "sha256-hand-sample-v2"
 HAND_SAMPLE_SEED = 2026111501
-HAND_SAMPLE_BLOCK = 4      # one span in every block of four per stratum (Sol's one-in-four, without its gaps)
+HAND_SAMPLE_RATE = 4       # one span in four per stratum, in expectation
 
 # desk._guard_text's words (whole words, so "joulewise" is not one), plus the leg-summary deny list's names.
 _DENIED_WORD = re.compile(r"(?i)\b(\w*energy\w*|joules?|\w*power_w\w*|watts?|slots?|slot_\w+|\w*transcripts?|"
@@ -137,6 +140,34 @@ _DENIED_WORD = re.compile(r"(?i)\b(\w*energy\w*|joules?|\w*power_w\w*|watts?|slo
 
 class _Fatal(Exception):
     """Nothing further can be judged (the expected roster or the bundle is unreadable)."""
+
+
+# The deny list every bundle file is key-scanned against, on both sides (Mythos N1, Sol R1). The controller
+# imports DENYLIST and denied_content() and runs them before it signs; pack_bundle runs them before it writes;
+# the Air runs them on every file of the signed tree before it trusts or parses anything else in it.
+DENYLIST = desk.DENIED_KEY_RE
+
+
+class DeniedContent(desk.DeskRefusal):
+    """A bundle file carries a denied key (energy, power, meter samples, slot, transcript, token ids)."""
+
+
+def denied_content(raw, where):
+    """Every denied key anywhere in the JSON document ``raw`` (bytes), sorted. A file that is not JSON is
+    refused outright (DeniedContent): a bundle carries JSON only, and a non-JSON file cannot be key-scanned."""
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        raise DeniedContent(f"{where}: not JSON, so it cannot be key-scanned") from None
+    return sorted({k for k in desk._keys(doc) if DENYLIST.search(k)})
+
+
+def refuse_denied_content(files):
+    """``files`` is {relative path: bytes}. Raises DeniedContent naming each file with a denied key."""
+    hits = {rel: denied_content(raw, rel) for rel, raw in sorted(files.items())}
+    hits = {rel: keys for rel, keys in hits.items() if keys}
+    if hits:
+        raise DeniedContent("denied keys in " + "; ".join(f"{rel}: {len(keys)} key(s)" for rel, keys in hits.items()))
 
 
 def sha256_bytes(raw):
@@ -224,26 +255,35 @@ def pack_bundle(span_dir, bundle_dir, *, plan_id, queue_id, span_id, attempt, ki
     before anything is read or written."""
     span_dir, bundle_dir = Path(span_dir), Path(bundle_dir)
     reader = _Reader()
+    if span_dir.is_symlink() or (span_dir / "desk-bundle").is_symlink():
+        raise desk.DeskRefusal("the span output or its desk-bundle is a symlink (not followed)")
     sources = [(span_dir / RECEIPT_NAME, RECEIPT_NAME)]
     if (span_dir / PLAN_NAME).is_file():
         sources.append((span_dir / PLAN_NAME, PLAN_NAME))
     source_root = span_dir / "desk-bundle"
-    for path in sorted(source_root.rglob("*")):
-        if path.is_file() or path.is_symlink():
+    for root, dirs, names in os.walk(source_root, followlinks=False):
+        for d in dirs:
+            if (Path(root) / d).is_symlink():
+                raise desk.DeskRefusal(f"desk-bundle/{(Path(root) / d).relative_to(source_root).as_posix()} is a "
+                                       "symlinked directory (not followed)")
+        for name in sorted(names):
+            path = Path(root) / name
             rel = path.relative_to(source_root).as_posix()
             if path.is_symlink() or not BUNDLE_PATH_RE.fullmatch(rel) or rel in (RECEIPT_NAME, PLAN_NAME):
                 raise desk.DeskRefusal(f"desk-bundle/{rel} is not in the bundle layout (not read)")
             sources.append((path, rel))
-    bundle_dir.mkdir(parents=True, exist_ok=False)
-    files, receipt_doc = {}, None
+    raws = {}
     for path, rel in sources:
-        raw, digest = reader.read(path)
-        if rel == RECEIPT_NAME:
-            receipt_doc = _loads(raw, RECEIPT_NAME)
+        raws[rel] = reader.read(path)[0]
+    refuse_denied_content(raws)          # Mythos N1, Sol R1: nothing with a denied key is written or shipped
+    bundle_dir.mkdir(parents=True, exist_ok=False)
+    files = {}
+    receipt_doc = _loads(raws[RECEIPT_NAME], RECEIPT_NAME)
+    for rel, raw in raws.items():
         target = bundle_dir / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
-        files[rel] = digest
+        files[rel] = sha256_bytes(raw)
     manifest = {"schema": BUNDLE_SCHEMA, "plan_id": plan_id, "queue_id": queue_id, "span_id": span_id,
                 "attempt": attempt, "kit": dict(kit), "receipt": {"path": RECEIPT_NAME, "sha256": files[RECEIPT_NAME]},
                 "files": dict(sorted(files.items())),
@@ -253,6 +293,11 @@ def pack_bundle(span_dir, bundle_dir, *, plan_id, queue_id, span_id, attempt, ki
     if controller is not None:
         manifest["controller"] = controller
     raw = (json.dumps(manifest, indent=1, sort_keys=True) + "\n").encode()
+    try:
+        refuse_denied_content({MANIFEST_NAME: raw})     # producer/controller objects are free text
+    except DeniedContent:
+        shutil.rmtree(bundle_dir, ignore_errors=True)    # created above by this call (exist_ok=False)
+        raise
     (bundle_dir / MANIFEST_NAME).write_bytes(raw)
     return sha256_bytes(raw)
 
@@ -281,33 +326,18 @@ def span_shape(kit, roster):
 
 
 def hand_sample(queue_doc, plan_id, kit, kit_sha256):
-    """The seeded stratified draw (``sha256-hand-sample-v1``). The stratum is (kit sha256, G0 shape of the
-    span). A queue's spans in that stratum, in ``seq`` order, fall in blocks of HAND_SAMPLE_BLOCK (the last
-    block may be shorter); in each block exactly one position is drawn from sha256 of the law, the seed,
-    the queue, the stratum and the block. It reads only the committed queue and kit, so it is prospective:
-    ``cadence_desk.py sample-plan`` prints the selection at READY. Spans on another kit are another stratum."""
-    stratum_spans = []
-    target = None
-    for span in sorted(queue_doc["spans"], key=lambda s: s["seq"]):
-        if span["kit"]["sha256"] != kit_sha256:
-            continue
-        shape = span_shape(kit, span["legs"])
-        if queuemod.plan_id(span) == plan_id:
-            target = shape
-        stratum_spans.append((queuemod.plan_id(span), shape))
-    if target is None:
+    """The seeded stratified draw (``sha256-hand-sample-v2``). The stratum is (kit sha256, G0 shape of the
+    span); the span is selected when sha256 of the law, the seed, the stratum and its plan id is 0 modulo
+    HAND_SAMPLE_RATE. It reads only the span's own committed queue entry and kit, so it is prospective
+    (``cadence_desk.py sample-plan`` prints it at READY) and an append never changes it (Mythos N13, Sol R11)."""
+    span = next((s for s in queue_doc["spans"] if queuemod.plan_id(s) == plan_id), None)
+    if span is None or span["kit"]["sha256"] != kit_sha256:
         return None
-    members = [p for p, shape in stratum_spans if shape == target]
-    ordinal = members.index(plan_id)
-    block = ordinal // HAND_SAMPLE_BLOCK
-    size = min(HAND_SAMPLE_BLOCK, len(members) - block * HAND_SAMPLE_BLOCK)
-    stratum = f"{kit_sha256}|{target}"
-    digest = hashlib.sha256(f"{HAND_SAMPLE_LAW}|{HAND_SAMPLE_SEED}|{queue_doc['queue_id']}|{stratum}|{block}"
-                            .encode()).hexdigest()
-    position = int(digest, 16) % size
-    return {"law": HAND_SAMPLE_LAW, "seed": HAND_SAMPLE_SEED, "stratum": {"kit_sha256": kit_sha256, "shape": target},
-            "ordinal": ordinal, "block": block, "block_size": size, "position": position,
-            "selected": ordinal % HAND_SAMPLE_BLOCK == position}
+    shape = span_shape(kit, span["legs"])
+    digest = hashlib.sha256(f"{HAND_SAMPLE_LAW}|{HAND_SAMPLE_SEED}|{kit_sha256}|{shape}|{plan_id}".encode()).hexdigest()
+    value = int(digest, 16) % HAND_SAMPLE_RATE
+    return {"law": HAND_SAMPLE_LAW, "seed": HAND_SAMPLE_SEED, "stratum": {"kit_sha256": kit_sha256, "shape": shape},
+            "rate": HAND_SAMPLE_RATE, "value": value, "selected": value == 0}
 
 
 def expected_identity(queue_doc, plan_id, kit, kit_sha256, find):
@@ -351,7 +381,11 @@ def authenticate(bundle_dir, manifest_sha256, expected, reader, find):
     if not (bundle_dir / MANIFEST_NAME).is_file():
         find.add("DESK_UNAUTHENTICATED", f"no {MANIFEST_NAME}")
         raise _Fatal()
-    manifest, digest = reader.json(bundle_dir / MANIFEST_NAME)
+    raw_manifest, digest = reader.read(bundle_dir / MANIFEST_NAME)
+    if denied_content(raw_manifest, MANIFEST_NAME):
+        find.add("DESK_DENIED_CONTENT", f"{MANIFEST_NAME} carries denied keys (nothing else is read)")
+        raise _Fatal()
+    manifest = _loads(raw_manifest, MANIFEST_NAME)
     if not (isinstance(manifest_sha256, str) and HEX64.fullmatch(manifest_sha256)):
         find.add("DESK_UNAUTHENTICATED", "no manifest anchor (the signed bundle commit's Manifest-SHA256 trailer)")
     elif digest != manifest_sha256:
@@ -411,6 +445,11 @@ def authenticate(bundle_dir, manifest_sha256, expected, reader, find):
         if got != files[rel]:
             find.add("DESK_UNAUTHENTICATED", f"{rel}: sha256 {got[:12]} is not the manifest's {files[rel][:12]}")
         verified[rel] = raw
+    denied = {rel: denied_content(raw, rel) for rel, raw in verified.items()}
+    denied = {rel: keys for rel, keys in denied.items() if keys}
+    if denied:   # Mythos N1, Sol R1: refuse before any file is parsed, projected or printed
+        find.add("DESK_DENIED_CONTENT", "denied keys in " + ", ".join(sorted(denied)) + " (not parsed)")
+        raise _Fatal()
     if RECEIPT_NAME not in verified:
         find.add("DESK_UNAUTHENTICATED", "no runner receipt in the bundle")
         raise _Fatal()
@@ -460,7 +499,7 @@ def project_receipt(doc):
         if step.get("name") == "restore":
             row["action"] = result.get("action")
             row["has_result"] = isinstance(step.get("result"), dict)
-        if "g0_role" in result:
+        if "leg_id" in result:     # a leg runtime's result (v1 legs carry no g0_role)
             row["leg"] = {k: result.get(k) for k in _LEG_RESULT_KEYS}
         steps.append(row)
     feeds = {}
@@ -625,6 +664,12 @@ def check_attempts(ordered, receipt, expected, find):
                 find.add("DESK_ATTEMPTS", f"{leg_id} attempt {k}: redone={a.get('redone')!r}")
             if not last and a.get("contaminated") is not True:
                 find.add("DESK_ATTEMPTS", f"{leg_id} attempt {k}: a redo of an attempt that was not contaminated")
+        for k in range(1, n + 1):     # Sol R5: every attempt has exactly one command result, rc 0, for this leg
+            stages = [s for s in receipt["steps"] if s.get("name") == f"{leg_id}.a{k}"]
+            if len(stages) != 1:
+                find.add("DESK_ATTEMPTS", f"{leg_id} attempt {k}: {len(stages)} {leg_id}.a{k} stages in the receipt")
+            elif stages[0].get("rc") != 0 or (stages[0].get("leg") or {}).get("leg_id") != leg_id:
+                find.add("DESK_ATTEMPTS", f"{leg_id} attempt {k}: the {leg_id}.a{k} stage is not this leg's clean result")
         redone_total += n - 1
         if row.get("attempts") != n:
             find.add("DESK_ATTEMPTS", f"{leg_id}: summary attempts {row.get('attempts')!r}, receipt {n}")
@@ -632,6 +677,13 @@ def check_attempts(ordered, receipt, expected, find):
         if row.get("contaminated_redos") != contaminated:
             find.add("DESK_ATTEMPTS", f"{leg_id}: summary contaminated_redos {row.get('contaminated_redos')!r}, "
                                       f"receipt {contaminated}")
+    known = {f"{r['leg_id']}.a{k}" for r in ordered
+             for k in range(1, len((by_id.get(r["leg_id"]) or {}).get("attempts") or []) + 1)}
+    stray = sorted(s["name"] for s in receipt["steps"] if isinstance(s.get("name"), str)
+                   and re.fullmatch(rf"{LEG_ID}\.a\d+", s["name"]) and not s["name"].startswith("soak")
+                   and s["name"] not in known)
+    if stray:
+        find.add("DESK_ATTEMPTS", f"leg stages with no attempt record: {stray[:5]}")
     if receipt["load_redos_used"] != redone_total:
         find.add("DESK_ATTEMPTS", f"receipt load_redos_used {receipt['load_redos_used']!r}, kept redos {redone_total}")
     if redone_total > expected["redo_quota"]:
@@ -891,7 +943,7 @@ def hand_table_triggers(ordered, expected, history, hand_sample_flag, soak_attem
         out.append("schema change (kit schema or leg-summary fields differ from the previous span's)")
     sample = expected.get("sample")
     if sample and sample["selected"]:
-        out.append(f"sampled (seeded draw {HAND_SAMPLE_LAW}: block {sample['block']} position {sample['position']})")
+        out.append(f"sampled (seeded draw {HAND_SAMPLE_LAW})")
     if hand_sample_flag:
         out.append("sampled (the lead's selection)")
     return out, keys
@@ -902,7 +954,7 @@ def _same(key, a, b):
         return abs(a - b) <= SECONDS_TOLERANCE
     if key == "span_reference":
         if isinstance(a, dict) and isinstance(b, dict):
-            return all(a.get(k) == b.get(k) for k in ("leg_id", "attempt"))
+            return all(a.get(k) == b.get(k) for k in ("leg_id", "attempt", "redone", "excluded"))
         return a is None and b is None
     return a == b
 
@@ -919,7 +971,9 @@ def _hand_value_ok(key, v):
     if key in ("g0_outcome", "g0_role", "leg_id"):
         return isinstance(v, str) and v != ""
     if key == "span_reference":
-        return v is None or (isinstance(v, dict) and isinstance(v.get("leg_id"), str) and type(v.get("attempt")) is int)
+        return v is None or (isinstance(v, dict) and set(v) == {"leg_id", "attempt", "redone", "excluded"}
+                             and isinstance(v.get("leg_id"), str) and type(v.get("attempt")) is int
+                             and type(v.get("redone")) is bool and type(v.get("excluded")) is bool)
     return True
 
 
@@ -1092,7 +1146,7 @@ def _write(path, text):
 
 def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, out_dir, history=(),
                hand_table_path=None, hand_sample=False, allow_mock=False, transport=None, allow_unsigned=False,
-               history_source="file", refusal=None, now=None):
+               history_source="file", refusal=None, refusal_code="DESK_UNAUTHENTICATED", now=None):
     """Judge one span's bundle. Always writes ``desk_verdict.json`` to ``out_dir`` (a negative or error
     result is also a receipt); writes ``JOURNAL-TABLE.md``, ``desk_summary.json`` and ``stops.json`` when the
     bundle could be read. ``transport`` is ``desk_transport.extract_bundle``'s record of the signed commit;
@@ -1110,8 +1164,11 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
     transport = dict(transport) if transport else {"signed": False, "bundle_commit": None, "signer": None}
     if not transport.get("signed") and not allow_unsigned:
         find.add("DESK_UNAUTHENTICATED", "the bundle is not a verified signed commit (desk_transport.extract_bundle)")
+    if history_source != "signed-records" and not allow_unsigned:   # Mythos N11, Sol R8
+        find.add("DESK_UNAUTHENTICATED", f"history from {history_source!r}, not the signed verdict records "
+                                         "(--history-prefix): receipt replay cannot be checked")
     if refusal is not None:     # the signed transport refused: nothing in the bundle is read
-        find.add("DESK_UNAUTHENTICATED", _sanitize(refusal))
+        find.add(refusal_code if refusal_code in INTEGRITY_CODES else "DESK_UNAUTHENTICATED", _sanitize(refusal))
     try:
         try:
             kit, kit_sha = kitmod.load_kit(kit_path)
@@ -1286,10 +1343,12 @@ def verify_verdict(doc):
 
 def counts_as_final(doc, *, plan_id, queue_id, span_id, attempt, manifest_sha256, allow_mock=False):
     """FORMAT section 4 item 1, as one function the controller can import: a verdict counts for k+2 only if
-    it verifies, is signed-transport and non-mock, names exactly this span and bundle, and is final.
+    it verifies, is signed-transport and non-mock, was judged against the signed history, names exactly this
+    span and bundle, and is final.
     ``allow_mock`` is for synthetic runs only (the controller's synthetic switch); it admits ``mock: true``."""
     return (verify_verdict(doc) and doc.get("desk_final") is True
             and (doc.get("mock") is False or (allow_mock is True and doc.get("mock") is True))
+            and doc.get("history_source") == "signed-records"
             and (doc.get("transport") or {}).get("signed") is True
             and (doc.get("plan_id"), doc.get("queue_id"), doc.get("span_id"), doc.get("attempt"))
             == (plan_id, queue_id, span_id, attempt)

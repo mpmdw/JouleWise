@@ -295,7 +295,7 @@ stage, no accepted soak, or a close status other than CLOSED_OK. A retried soak 
 stop, and the development pins' receipts (no `soak_attempts`) read as one soak.
 
 **The hand table.** It is mandatory on a redo, an exclusion, a retried soak, a schema change, or a span the
-seeded stratified draw (`sha256-hand-sample-v1`) selects. It must carry every comparable field. A
+seeded stratified draw (`sha256-hand-sample-v2`) selects. It must carry every comparable field. A
 disagreeing or incomplete table holds the next arm.
 
 **Hand gates.** The class A smoke hand-read, the L002 and L005 gates and RL-158 Q1's print are printed and
@@ -389,7 +389,7 @@ only `desk_final.ALLOWED_BASENAMES`, each once, and refuses unread anything outs
 | `test_kit` | 18 | closed schema, condition/slot refusal, seed law, stop bounds, template window and capacity, mandatory checklist, look fit, `verify_frozen` on a git fixture |
 | `test_queue` | 12 | format refusals, the clean walk, GO with exit 3 = REFUSED, fault, named stop, stranded, k+2, drained/halt/expiry, transitions, veto scopes and authority |
 | `test_stops_desk` | 14 | each named stop, desk tables, planted energy/slot/unknown keys refuse, allowlist, the R1 adapter never prints token ids or planted energy, the quiet lock is exclusive and is never stolen when stale |
-| `test_desk_final` | 47 | RL-172 (c) desk-final, the #799 gate findings (signed transport and verdict, transition record, legacy pin receipts, command results, complete hand table, seeded draw, reference binding, receipt reuse), the soak retry (no retry, a retry accepted, two refusals), Sol's zero-row probe, a missing summary, a duplicate, roster order and count, redo names, a wrong kit hash, frozen commit and plan id, the span reference, a tampered receipt, the anchor, unlisted and out-of-layout files (unread), every feed's stop proof, the hand table (due, agrees, disagrees), the hand gates, a planted energy key, the CLI |
+| `test_desk_final` | 57 | RL-172 (c) desk-final, the #799 gate findings (signed transport and verdict, transition record, legacy pin receipts, command results, complete hand table, seeded draw, reference binding, receipt reuse), the soak retry (no retry, a retry accepted, two refusals), Sol's zero-row probe, a missing summary, a duplicate, roster order and count, redo names, a wrong kit hash, frozen commit and plan id, the span reference, a tampered receipt, the anchor, unlisted and out-of-layout files (unread), every feed's stop proof, the hand table (due, agrees, disagrees), the hand gates, a planted energy key, the CLI |
 | `test_probe_watch` | 18 | the forced command's projection, PID reuse, unarmed; the parser refuses raw lines; probe alarms; the enabled probe body (patched on) with spacing, deadline and log; queue alarms; evidence from RUN_STATE; the output guard; the ledger |
 
 ## 11. Cross-check with the Sol design (MEMO-sol.md, 22:18)

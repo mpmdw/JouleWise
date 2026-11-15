@@ -118,8 +118,6 @@ def validate_transition(doc):
         problems.append("transition.json kit: {path, sha256}")
     if not (isinstance(doc.get("manifest_sha256"), str) and desk_final.HEX64.fullmatch(doc["manifest_sha256"])):
         problems.append("transition.json manifest_sha256")
-    if [x for x in desk._keys(doc) if desk.DENIED_KEY_RE.search(x)]:
-        problems.append("transition.json carries denied keys")
     return problems
 
 
@@ -161,6 +159,7 @@ def extract_bundle(repo, ref, dest, *, allowed_signers, plan_id, principal=CONTR
         if blob.returncode != 0:
             raise TransportRefusal(f"{path}: blob unreadable")
         blobs[path] = blob.stdout
+    desk_final.refuse_denied_content(blobs)     # Mythos N1, Sol R1: DeniedContent, before anything is trusted
     try:
         transition = json.loads(blobs[TRANSITION_NAME])
     except ValueError:
@@ -253,6 +252,7 @@ def sign_bundle(repo, bundle_dir, transition, *, plan_id, signing_key, principal
     if problems:
         raise TransportRefusal("; ".join(problems))
     files[TRANSITION_NAME] = (json.dumps(transition, indent=1, sort_keys=True) + "\n").encode()
+    desk_final.refuse_denied_content(files)     # the same deny scan the Air runs, before anything is signed
     return _signed_commit(repo, files, message=BUNDLE_SUBJECT.format(plan_id=plan_id), signing_key=signing_key,
                           principal=principal), anchor
 

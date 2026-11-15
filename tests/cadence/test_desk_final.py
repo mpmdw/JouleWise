@@ -27,13 +27,15 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures_desk_final"
 KITS = Path(__file__).resolve().parents[2] / "docs/process/cadence/kits"
 
 
+CANARY = "SYNTHETIC_DENIED_KEY_CANARY"
+
+
 def codes(verdict):
     return sorted({s["code"] for s in verdict["named_stops"]} | {s["code"] for s in verdict["pending"]})
 
 
 class Fixture:
-    """One synthetic kit file, a queue of four six-leg spans (two re-runs pad the draw's block), and mock span
-    outputs to pack. The queue id is the first whose seeded draw samples neither of the first two spans."""
+    """One synthetic kit file, a queue of four six-leg spans (two of them re-runs), and mock span outputs to pack."""
 
     def __init__(self, root):
         self.root = Path(root)
@@ -43,17 +45,19 @@ class Fixture:
         _, self.sha = kitmod.load_kit(self.kit_path)
         self.ids = [leg["leg_id"] for leg in self.kit["legs"]]
         self.spans = {}
-        self.queue_id = next(q for q in (f"cq-df-{i}" for i in range(1, 50))
-                             if not any(desk_final.hand_sample(self.queue(queue_id=q), f"cq-df-s0{n}-a1", self.kit,
-                                                               self.sha)["selected"] for n in (1, 2)))
+        self.queue_id = "cq-df-1"
+        # The seeded draw (v2) depends on the plan id only: the fixture's first two spans are not drawn, so the
+        # draw does not add a hand table to every test; SeededDraw tests the draw itself.
+        assert not any(desk_final.hand_sample(self.queue(), f"cq-dg-s0{n}-a1", self.kit, self.sha)["selected"]
+                       for n in (1, 2))
 
     def queue(self, rosters=None, sha=None, queue_id=None):
         rosters = rosters or [self.ids[:6], self.ids[6:12]]
-        spans = [{"seq": i + 1, "span_id": f"df-s{i + 1:02d}", "block_id": "df-dev",
+        spans = [{"seq": i + 1, "span_id": f"dg-s{i + 1:02d}", "block_id": "df-dev",
                   "kit": {"path": KIT_PATH, "sha256": sha or self.sha}, "legs": roster, "attempt": 1,
                   "not_before": "2026-11-17"} for i, roster in enumerate(rosters)]
         if len(rosters) == 2:
-            spans += [{**spans[i], "seq": 3 + i, "span_id": f"df-s{3 + i:02d}", "rerun_of": spans[i]["span_id"]}
+            spans += [{**spans[i], "seq": 3 + i, "span_id": f"dg-s{3 + i:02d}", "rerun_of": spans[i]["span_id"]}
                       for i in (0, 1)]
         return {"schema": "joulewise.cadence_queue.v1", "queue_id": queue_id or self.queue_id,
                 "expires_at": "2026-12-31T00:00:00-08:00", "halt": None, "standing_notice": None, "spans": spans}
@@ -117,8 +121,8 @@ class DeskFinalCase(unittest.TestCase):
         work = self.work()
         bundle = work / "bundle"
         roster = roster or (self.fx.ids[:6] if seq == 1 else self.fx.ids[6:12])
-        anchor = desk_final.pack_bundle(span or self.clean, bundle, plan_id=f"cq-df-s{seq:02d}-a1",
-                                        queue_id=self.fx.queue_id, span_id=f"df-s{seq:02d}", attempt=1,
+        anchor = desk_final.pack_bundle(span or self.clean, bundle, plan_id=f"cq-dg-s{seq:02d}-a1",
+                                        queue_id=self.fx.queue_id, span_id=f"dg-s{seq:02d}", attempt=1,
                                         kit=kit or self.fx.identity(), roster=roster, **kw)
         return work, bundle, anchor
 
@@ -126,7 +130,7 @@ class DeskFinalCase(unittest.TestCase):
               allow_unsigned=True, **kw):
         qp = work / "QUEUE.json"
         qp.write_text(json.dumps(queue or self.fx.queue()))
-        return desk_final.judge_span(plan_id=f"cq-df-s{seq:02d}-a1", bundle_dir=bundle, manifest_sha256=anchor,
+        return desk_final.judge_span(plan_id=f"cq-dg-s{seq:02d}-a1", bundle_dir=bundle, manifest_sha256=anchor,
                                      queue_path=qp, kit_path=kw.pop("kit_path", self.fx.kit_path),
                                      out_dir=work / "out", history=self.fx.history() if history == "default" else history,
                                      allow_mock=allow_mock, allow_unsigned=allow_unsigned, **kw)
@@ -422,7 +426,7 @@ class SoakRetry(DeskFinalCase):
         self.assertIn("settle or quiet check", summary["soak"]["attempts"][0]["refusal"])
         rows = HandTableAndGates.rows(self, bundle)
         hand = work / desk_final.HAND_TABLE_NAME
-        hand.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-df-s01-a1", "legs": rows,
+        hand.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1", "legs": rows,
                                     "named_stops": [], "soak_attempts": 2}))
         verdict = self.judge(work, bundle, anchor, hand_table_path=hand)
         self.assertTrue(verdict["desk_final"], verdict["reasons"])
@@ -455,7 +459,7 @@ class SoakRetry(DeskFinalCase):
 class HandTableAndGates(DeskFinalCase):
     def hand_table(self, work, rows, **kw):
         path = work / desk_final.HAND_TABLE_NAME
-        path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-df-s01-a1",
+        path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
                                     "legs": rows, "named_stops": [], "soak_attempts": 1, **kw}))
         return path
 
@@ -560,7 +564,8 @@ class BlindingAndCli(DeskFinalCase):
         self.assertTrue(self.judge(work, bundle, anchor)["desk_final"])     # a table now sits in out/
         edit_json(bundle / "legs/L002/leg_summary.json", lambda d: d.update(energy_j=12.5))
         verdict = self.judge(work, bundle, remanifest(bundle))
-        self.assertNotFinal(verdict, "DESK_REFUSAL")
+        self.assertNotFinal(verdict, "DESK_DENIED_CONTENT")
+        self.assertTrue(verdict["next_arm_hold"])
         self.assertFalse((work / "out/JOURNAL-TABLE.md").exists())
         text = (work / "out" / desk_final.VERDICT_NAME).read_text()
         self.assertNotIn("energy_j", text)
@@ -574,7 +579,7 @@ class BlindingAndCli(DeskFinalCase):
         hist = work / "history.json"
         hist.write_text(json.dumps(self.fx.history()))
         lock = work / "AIR-QUIET.lock"
-        argv = ["final", "--plan-id", "cq-df-s01-a1", "--bundle", str(bundle), "--manifest-sha256", anchor,
+        argv = ["final", "--plan-id", "cq-dg-s01-a1", "--bundle", str(bundle), "--manifest-sha256", anchor,
                 "--queue", str(qp), "--kit", str(self.fx.kit_path), "--out", str(work / "o1"), "--history", str(hist),
                 "--lock", str(lock), "--allow-unsigned", "--allow-mock"]
         with redirect_stdout(io.StringIO()) as out:
@@ -775,10 +780,10 @@ class PlanReferenceAndReuse(DeskFinalCase):
     def test_a_receipt_judged_under_another_plan_id_is_refused(self):
         work, bundle, anchor = self.pack()
         receipt_sha = desk_final.sha256_bytes((bundle / desk_final.RECEIPT_NAME).read_bytes())
-        history = [*self.fx.history(), {**self.fx.history()[0], "plan_id": "cq-df-s03-a1", "receipt_sha256": receipt_sha}]
+        history = [*self.fx.history(), {**self.fx.history()[0], "plan_id": "cq-dg-s03-a1", "receipt_sha256": receipt_sha}]
         verdict = self.judge(work, bundle, anchor, history=history)
         self.assertNotFinal(verdict, "DESK_IDENTITY")
-        self.assertIn("already judged under cq-df-s03-a1", " ".join(verdict["reasons"]))
+        self.assertIn("already judged under cq-dg-s03-a1", " ".join(verdict["reasons"]))
 
 
 class IncompleteHandTable(DeskFinalCase):
@@ -787,9 +792,9 @@ class IncompleteHandTable(DeskFinalCase):
     def test_rows_without_measurements_are_invalid_and_hold(self):
         work, bundle, anchor = self.pack()
         path = work / desk_final.HAND_TABLE_NAME
-        for doc in ({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-df-s01-a1",
+        for doc in ({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
                      "legs": [{"leg_id": x} for x in self.fx.ids[:6]], "named_stops": [], "soak_attempts": 1},
-                    {"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-df-s01-a1",
+                    {"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
                      "legs": HandTableAndGates.rows(self, bundle)}):
             path.write_text(json.dumps(doc))
             verdict = self.judge(work, bundle, anchor, hand_sample=True, hand_table_path=path)
@@ -803,35 +808,39 @@ class IncompleteHandTable(DeskFinalCase):
         rows = HandTableAndGates.rows(self, bundle)
         for bad in ([*rows, rows[0]], [{**rows[0], "g0_s": float("nan")}, *rows[1:]],
                     [{**rows[0], "attempts": "1"}, *rows[1:]]):
-            path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-df-s01-a1",
+            path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
                                         "legs": bad, "named_stops": [], "soak_attempts": 1}))
             self.assertNotFinal(self.judge(work, bundle, anchor, hand_table_path=path), "HAND_TABLE_INVALID")
 
 
 class SeededDraw(unittest.TestCase):
-    """The seeded stratified hand-sample draw (sha256-hand-sample-v1): one span per block of four per stratum."""
+    """The seeded stratified hand-sample draw, sha256-hand-sample-v2 (Mythos N13, Sol R11): per span, by plan id
+    within its stratum; append-stable and queue-independent."""
 
-    def queue(self, kit, sha, n, queue_id="cq-draw-1", other=0):
+    def queue(self, kit, sha, n, queue_id="cq-draw-1", other=0, prefix="dr"):
         ids = [leg["leg_id"] for leg in kit["legs"]]
-        spans = [{"seq": i + 1, "span_id": f"dr-s{i + 1:02d}", "kit": {"path": "k", "sha256": sha},
+        spans = [{"seq": i + 1, "span_id": f"{prefix}-s{i + 1:03d}", "kit": {"path": "k", "sha256": sha},
                   "legs": ids[:6], "attempt": 1} for i in range(n)]
-        spans += [{"seq": n + i + 1, "span_id": f"dr-o{i + 1:02d}", "kit": {"path": "o", "sha256": "0" * 64},
+        spans += [{"seq": n + i + 1, "span_id": f"{prefix}-o{i + 1:02d}", "kit": {"path": "o", "sha256": "0" * 64},
                    "legs": ids[:6], "attempt": 1} for i in range(other)]
         return {"queue_id": queue_id, "spans": spans}
 
-    def test_one_per_block_deterministic_and_prospective(self):
+    def test_append_stable_queue_independent_and_one_in_four(self):
         kit = span_kit(legs_per_span=6)
         sha = "a" * 64
-        q = self.queue(kit, sha, 9, other=3)
-        draws = [desk_final.hand_sample(q, f"cq-dr-s{i + 1:02d}-a1", kit, sha) for i in range(9)]
-        for block in (range(0, 4), range(4, 8), range(8, 9)):
-            self.assertEqual(sum(draws[i]["selected"] for i in block), 1, list(block))
-        self.assertEqual(draws, [desk_final.hand_sample(q, f"cq-dr-s{i + 1:02d}-a1", kit, sha) for i in range(9)])
-        self.assertEqual(draws[0]["stratum"], {"kit_sha256": sha, "shape": "span"})
-        self.assertIsNone(desk_final.hand_sample(q, "cq-dr-o01-a1", kit, sha))   # another kit: another stratum
-        moved = [[desk_final.hand_sample(self.queue(kit, sha, 9, queue_id=f"cq-draw-{k}"), f"cq-dr-s{i + 1:02d}-a1",
-                                         kit, sha)["position"] for i in range(9)] for k in range(2, 8)]
-        self.assertGreater(len({tuple(m) for m in moved}), 1)   # the queue id is in the draw
+        full = self.queue(kit, sha, 400, other=3)
+        draws = {f"cq-dr-s{i + 1:03d}-a1": desk_final.hand_sample(full, f"cq-dr-s{i + 1:03d}-a1", kit, sha)
+                 for i in range(400)}
+        for n in (1, 2, 3, 5, 17):    # the queue as committed when it held n spans: no earlier draw moves
+            short = self.queue(kit, sha, n, queue_id=f"cq-draw-{n}")
+            for i in range(n):
+                pid = f"cq-dr-s{i + 1:03d}-a1"
+                self.assertEqual(desk_final.hand_sample(short, pid, kit, sha), draws[pid], (n, pid))
+        rate = sum(d["selected"] for d in draws.values())
+        self.assertTrue(70 <= rate <= 130, rate)                 # one in four, in expectation
+        self.assertEqual(draws["cq-dr-s001-a1"]["stratum"], {"kit_sha256": sha, "shape": "span"})
+        self.assertIsNone(desk_final.hand_sample(full, "cq-dr-o01-a1", kit, sha))   # another kit
+        self.assertIsNone(desk_final.hand_sample(full, "cq-nope-a1", kit, sha))
 
     def test_own_shaped_spans_are_their_own_stratum(self):
         kit = span_kit(legs_per_span=6)
@@ -839,17 +848,165 @@ class SeededDraw(unittest.TestCase):
         self.assertEqual(desk_final.span_shape(kit, own), "own")
         self.assertEqual(desk_final.span_shape(kit, [leg["leg_id"] for leg in kit["legs"]][:6]), "span")
 
-    def test_sample_plan_cli(self):
+    def test_a_drawn_span_needs_a_hand_table_and_sample_plan_prints_it(self):
         with tempfile.TemporaryDirectory(dir=TMP) as tmp:
             fx = Fixture(tmp)
             qp = Path(tmp) / "QUEUE.json"
-            qp.write_text(json.dumps(fx.queue()))
+            queue = fx.queue([fx.ids[:6], fx.ids[6:12]])
+            queue["spans"][2]["span_id"] = "df-s01"      # cq-df-s01-a1 is drawn by v2 under this kit
+            qp.write_text(json.dumps(queue))
             with redirect_stdout(io.StringIO()) as out:
                 self.assertEqual(cli.main(["sample-plan", "--queue", str(qp), "--kit", str(fx.kit_path)]), 0)
             doc = json.loads(out.getvalue())
-            self.assertEqual(doc["law"], desk_final.HAND_SAMPLE_LAW)
-            self.assertEqual(sum(r["selected"] for r in doc["spans"]), 1)
-            self.assertFalse(any(r["selected"] for r in doc["spans"] if r["plan_id"] in ("cq-df-s01-a1", "cq-df-s02-a1")))
+            self.assertEqual((doc["law"], doc["rate"]), (desk_final.HAND_SAMPLE_LAW, 4))
+            chosen = {r["plan_id"] for r in doc["spans"] if r["selected"]}
+            self.assertIn("cq-df-s01-a1", chosen)
+            self.assertFalse(chosen & {"cq-dg-s01-a1", "cq-dg-s02-a1"})
+
+
+class DeniedContent(DeskFinalCase):
+    """Mythos N1, Sol R1: a denied key anywhere in any bundle file is refused on both sides, before signing
+    and before the Air trusts or parses anything else; a symlinked input root is not followed."""
+    CANARY = CANARY
+
+    def plant(self, span, rel, change):
+        work = self.work()
+        copy = work / "span"
+        shutil.copytree(span, copy, symlinks=True)
+        edit_json(copy / rel, change)
+        return work, copy
+
+    PLANTS = (("desk-bundle/legs/L002/leg_summary.json", lambda d: d.update(energy_j=CANARY)),
+              ("desk-bundle/span/meter.json", lambda d: d.update(samples_w=[1, 2])),
+              (runner.RECEIPT_NAME, lambda d: d.update(energy_j=CANARY)),
+              (runner.RECEIPT_NAME, lambda d: d["steps"][-1].setdefault("result", {}).update(power_w=1)),
+              ("span_plan.json", lambda d: d.update(transcript="x")))
+
+    def test_the_packer_refuses_and_writes_nothing(self):
+        for rel, change in self.PLANTS:
+            work, span = self.plant(self.clean, rel, change)
+            with self.assertRaises(desk_final.DeniedContent, msg=rel):
+                desk_final.pack_bundle(span, work / "bundle", plan_id="cq-dg-s01-a1", queue_id=self.fx.queue_id,
+                                       span_id="dg-s01", attempt=1, kit=self.fx.identity(), roster=self.fx.ids[:6])
+            self.assertFalse((work / "bundle").exists(), rel)
+
+    def test_the_air_refuses_every_file_with_a_hold_and_reads_no_further(self):
+        for rel, change in self.PLANTS:
+            work, bundle, anchor = self.pack()
+            edit_json(bundle / rel.removeprefix("desk-bundle/"), change)
+            verdict = self.judge(work, bundle, remanifest(bundle))
+            self.assertNotFinal(verdict, "DESK_DENIED_CONTENT")
+            self.assertTrue(verdict["next_arm_hold"], rel)
+            self.assertFalse((work / "out/JOURNAL-TABLE.md").exists(), rel)
+            text = (work / "out" / desk_final.VERDICT_NAME).read_text()
+            self.assertNotIn(self.CANARY, text)
+            self.assertNotRegex(text, r"(?i)\b(energy_j|samples_w|power_w)\b")
+
+    def test_a_denied_key_in_the_manifest_is_refused_first(self):
+        with self.assertRaises(desk_final.DeniedContent):            # the packer refuses its own manifest
+            self.pack(producer={"energy_j": CANARY})
+        work, bundle, anchor = self.pack()
+        edit_json(bundle / desk_final.MANIFEST_NAME, lambda m: m.update(producer={"energy_j": CANARY}))
+        anchor = desk_final.sha256_bytes((bundle / desk_final.MANIFEST_NAME).read_bytes())
+        verdict = self.judge(work, bundle, anchor)
+        self.assertNotFinal(verdict, "DESK_DENIED_CONTENT")
+        self.assertEqual(verdict["opened"], [desk_final.MANIFEST_NAME])    # nothing else was read
+
+    def test_the_exported_scan(self):
+        self.assertEqual(desk_final.denied_content(b'{"a": {"energy_j": 1, "samples_w": []}}', "x"), ["energy_j", "samples_w"])
+        self.assertEqual(desk_final.denied_content(b'{"leg_id": "L001", "g0_s": 1.0}', "x"), [])
+        with self.assertRaises(desk_final.DeniedContent):
+            desk_final.denied_content(b"energy_j,1\n", "x.csv")
+        self.assertIs(desk_final.DENYLIST, desk.DENIED_KEY_RE)
+
+    def test_a_symlinked_desk_bundle_root_or_directory_is_not_followed(self):
+        work = self.work()
+        span = work / "span"
+        shutil.copytree(self.clean, span)
+        elsewhere = work / "elsewhere"
+        shutil.move(span / "desk-bundle", elsewhere)
+        (span / "desk-bundle").symlink_to(elsewhere)
+        with self.assertRaisesRegex(desk.DeskRefusal, "symlink"):
+            desk_final.pack_bundle(span, work / "b1", plan_id="cq-dg-s01-a1", queue_id=self.fx.queue_id,
+                                   span_id="dg-s01", attempt=1, kit=self.fx.identity(), roster=self.fx.ids[:6])
+        (span / "desk-bundle").unlink()
+        shutil.copytree(elsewhere, span / "desk-bundle")
+        shutil.rmtree(span / "desk-bundle/legs/L003")
+        (span / "desk-bundle/legs/L003").symlink_to(elsewhere / "legs/L003")
+        with self.assertRaisesRegex(desk.DeskRefusal, "symlink"):
+            desk_final.pack_bundle(span, work / "b2", plan_id="cq-dg-s01-a1", queue_id=self.fx.queue_id,
+                                   span_id="dg-s01", attempt=1, kit=self.fx.identity(), roster=self.fx.ids[:6])
+        self.assertFalse((work / "b1").exists() or (work / "b2").exists())
+
+
+class LegStagesAndReference(DeskFinalCase):
+    """Sol R5: every attempt of every leg has exactly one clean command result. Sol R4: the hand table's span
+    reference is compared whole."""
+
+    def test_a_missing_duplicate_or_stray_leg_stage(self):
+        for name, change in (
+                ("missing own-G0 stage", lambda r: r.update(steps=[s for s in r["steps"] if s["name"] != "L004.a1"])),
+                ("duplicate stage", lambda r: r["steps"].append(next(s for s in r["steps"] if s["name"] == "L004.a1"))),
+                ("failed stage", lambda r: next(s for s in r["steps"] if s["name"] == "L005.a1").update(rc=0) or
+                 next(s for s in r["steps"] if s["name"] == "L005.a1")["result"].update(leg_id="L006")),
+                ("stray stage", lambda r: r["steps"].append({"name": "L011.a1", "rc": 0, "result": {"leg_id": "L011"}}))):
+            work, bundle, anchor = self.pack()
+            edit_json(bundle / desk_final.RECEIPT_NAME, change)
+            self.assertNotFinal(self.judge(work, bundle, remanifest(bundle)), "DESK_ATTEMPTS")
+
+    def test_the_hand_tables_reference_marks_are_compared_and_typed(self):
+        work, bundle, anchor = self.pack()
+        path = work / desk_final.HAND_TABLE_NAME
+        rows = HandTableAndGates.rows(self, bundle)
+        flipped = [{**r, "span_reference": {**r["span_reference"], "redone": True, "excluded": True}}
+                   if r["span_reference"] else r for r in rows]
+        path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
+                                    "legs": flipped, "named_stops": [], "soak_attempts": 1}))
+        verdict = self.judge(work, bundle, anchor, hand_table_path=path)
+        self.assertNotFinal(verdict, "HAND_TABLE_DISAGREES")
+        self.assertIn("span_reference", " ".join(verdict["hand_table"]["differences"]))
+        partial = [{**r, "span_reference": {"leg_id": r["span_reference"]["leg_id"], "attempt": 1}}
+                   if r["span_reference"] else r for r in rows]
+        path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
+                                    "legs": partial, "named_stops": [], "soak_attempts": 1}))
+        self.assertNotFinal(self.judge(work, bundle, anchor, hand_table_path=path), "HAND_TABLE_INVALID")
+        extra = [{**r, "span_reference": {**r["span_reference"], "dir": "legs/L001/runtime"}}
+                 if r["span_reference"] else r for r in rows]
+        path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
+                                    "legs": extra, "named_stops": [], "soak_attempts": 1}))
+        self.assertNotFinal(self.judge(work, bundle, anchor, hand_table_path=path), "HAND_TABLE_INVALID")
+
+
+class HistoryProvenance(DeskFinalCase):
+    """Mythos N11, Sol R8: a production verdict is judged against the signed history; a typed or omitted
+    history never counts."""
+
+    def test_signed_transport_with_a_typed_or_omitted_history_is_not_final(self):
+        work, bundle, anchor = self.pack()
+        signed = {"signed": True, "bundle_commit": "c" * 40, "signer": "cadence-controller"}
+        for source in ("file", "none"):
+            verdict = self.judge(work, bundle, anchor, allow_unsigned=False, transport=signed, history_source=source)
+            self.assertNotFinal(verdict, "DESK_UNAUTHENTICATED")
+            self.assertIn("not the signed verdict records", " ".join(verdict["reasons"]))
+        verdict = self.judge(work, bundle, anchor, allow_unsigned=False, transport=signed,
+                             history_source="signed-records")
+        self.assertTrue(verdict["desk_final"], verdict["reasons"])
+        span = self.fx.queue()["spans"][0]
+        ident = dict(plan_id="cq-dg-s01-a1", queue_id=self.fx.queue_id, span_id=span["span_id"], attempt=1,
+                     manifest_sha256=anchor, allow_mock=True)
+        self.assertTrue(desk_final.counts_as_final(verdict, **ident))
+        typed = {**verdict, "history_source": "file"}
+        typed["verdict_sha256"] = desk_final.canonical_sha256({k: v for k, v in typed.items() if k != "verdict_sha256"})
+        self.assertFalse(desk_final.counts_as_final(typed, **ident))
+
+    def test_history_prefix_needs_the_desk_signers(self):
+        work = self.work()
+        with redirect_stdout(io.StringIO()) as out:
+            rc = cli.main(["final", "--plan-id", "p", "--repo", str(work), "--bundle-ref", "r", "--allowed-signers",
+                           str(work / "s"), "--kit", str(self.fx.kit_path), "--out", str(work / "o"),
+                           "--history-prefix", "refs/remotes/origin/cadence-desk-final/"])
+        self.assertEqual(rc, 2)
+        self.assertIn("--history-signers", out.getvalue())
 
 
 class SignedTransport(DeskFinalCase):
@@ -899,7 +1056,7 @@ class SignedTransport(DeskFinalCase):
 
     def transition(self, bundle, queue_doc=None, **kw):
         span = (queue_doc or self.fx.queue())["spans"][0]
-        doc = {"schema": desk_transport.TRANSITION_SCHEMA, "plan_id": "cq-df-s01-a1", "queue_id": self.fx.queue_id,
+        doc = {"schema": desk_transport.TRANSITION_SCHEMA, "plan_id": "cq-dg-s01-a1", "queue_id": self.fx.queue_id,
                "span_id": span["span_id"], "attempt": 1, "queue": self.audit_commit(queue_doc or self.fx.queue()),
                "kit": {"path": KIT_PATH, "sha256": self.fx.sha},
                "plan_sha256": desk_final.sha256_bytes((bundle / desk_final.PLAN_NAME).read_bytes()),
@@ -908,7 +1065,7 @@ class SignedTransport(DeskFinalCase):
         doc.update(kw)
         return doc
 
-    def ship(self, bundle, plan_id="cq-df-s01-a1", key="cadence-controller", **kw):
+    def ship(self, bundle, plan_id="cq-dg-s01-a1", key="cadence-controller", **kw):
         sha, anchor = desk_transport.sign_bundle(self.mbp, bundle, self.transition(bundle, **kw), plan_id=plan_id,
                                                  signing_key=self.keys[key])
         ref = f"{desk_transport.BUNDLE_REF_PREFIX}{plan_id}"
@@ -916,15 +1073,19 @@ class SignedTransport(DeskFinalCase):
         self.git(self.air, "fetch", "-q", "origin", "+refs/heads/desk-bundles/*:refs/remotes/origin/desk-bundles/*")
         return f"refs/remotes/origin/desk-bundles/{plan_id}", anchor
 
-    def final(self, work, ref, *extra):
-        qp = work / "QUEUE.json"
-        qp.write_text(json.dumps(self.fx.queue()))
-        hist = work / "history.json"
-        hist.write_text(json.dumps(self.fx.history()))
-        argv = ["final", "--plan-id", "cq-df-s01-a1", "--repo", str(self.air), "--bundle-ref", ref,
+    def final(self, work, ref, *extra, hand=True):
+        """FORMAT section 2's command: signed bundle, signed history (desk key), and a complete hand table (the
+        first span of a campaign always takes one: no earlier summary is a schema change)."""
+        argv = ["final", "--plan-id", "cq-dg-s01-a1", "--repo", str(self.air), "--bundle-ref", ref,
                 "--allowed-signers", str(self.signers), "--kit", str(self.fx.kit_path),
-                "--out", str(work / "out"), "--history", str(hist), "--lock", str(work / "lock"), "--allow-mock",
-                *extra]
+                "--out", str(work / "out"), "--history-prefix", "refs/remotes/origin/cadence-desk-final/",
+                "--history-signers", str(self.signers), "--lock", str(work / "lock"), "--allow-mock", *extra]
+        if hand and (work / "bundle").is_dir():
+            path = work / desk_final.HAND_TABLE_NAME
+            path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
+                                        "legs": HandTableAndGates.rows(self, work / "bundle"), "named_stops": [],
+                                        "soak_attempts": 1}))
+            argv += ["--hand-table", str(path)]
         with redirect_stdout(io.StringIO()):
             rc = cli.main(argv)
         return rc, json.loads((work / "out" / desk_final.VERDICT_NAME).read_text())
@@ -939,14 +1100,14 @@ class SignedTransport(DeskFinalCase):
         self.assertEqual(verdict["transport"]["signer"], "cadence-controller")
         self.assertFalse(list((work / "out").glob(".bundle-*")))      # the extracted copy is removed
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(cli.main(["publish", "--plan-id", "cq-df-s01-a1", "--out", str(work / "out"), "--repo",
+            self.assertEqual(cli.main(["publish", "--plan-id", "cq-dg-s01-a1", "--out", str(work / "out"), "--repo",
                                        str(self.air), "--signing-key", str(self.keys["cadence-desk"])]), 0)
         self.git(self.mbp, "fetch", "-q", "origin", "+refs/heads/cadence-desk-final/*:refs/remotes/origin/cadence-desk-final/*")
-        vref = "refs/remotes/origin/cadence-desk-final/cq-df-s01-a1"
-        doc, summary = desk_transport.read_verdict(self.mbp, vref, allowed_signers=self.signers, plan_id="cq-df-s01-a1")
+        vref = "refs/remotes/origin/cadence-desk-final/cq-dg-s01-a1"
+        doc, summary = desk_transport.read_verdict(self.mbp, vref, allowed_signers=self.signers, plan_id="cq-dg-s01-a1")
         self.assertEqual(doc, verdict)
         span = self.fx.queue()["spans"][0]
-        ident = dict(plan_id="cq-df-s01-a1", queue_id=self.fx.queue_id, span_id=span["span_id"], attempt=1,
+        ident = dict(plan_id="cq-dg-s01-a1", queue_id=self.fx.queue_id, span_id=span["span_id"], attempt=1,
                      manifest_sha256=anchor)
         self.assertFalse(desk_final.counts_as_final(doc, **ident))          # a mock receipt never counts
         self.assertTrue(desk_final.counts_as_final(doc, **ident, allow_mock=True))   # synthetic runs only
@@ -956,13 +1117,13 @@ class SignedTransport(DeskFinalCase):
         self.assertFalse(desk_final.counts_as_final(doc, **{**ident, "manifest_sha256": "0" * 64}))
         # A second judgment is a child commit on the same ref; the history comes back from the signed records.
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(cli.main(["publish", "--plan-id", "cq-df-s01-a1", "--out", str(work / "out"), "--repo",
+            self.assertEqual(cli.main(["publish", "--plan-id", "cq-dg-s01-a1", "--out", str(work / "out"), "--repo",
                                        str(self.air), "--signing-key", str(self.keys["cadence-desk"])]), 0)
         self.git(self.mbp, "fetch", "-q", "origin", "+refs/heads/cadence-desk-final/*:refs/remotes/origin/cadence-desk-final/*")
         self.assertEqual(self.git(self.mbp, "rev-list", "--count", vref).stdout.strip(), "2")
         hist = desk_transport.history_from_records(self.mbp, "refs/remotes/origin/cadence-desk-final/",
                                                    allowed_signers=self.signers, campaign_id=self.fx.kit["campaign_id"])
-        self.assertEqual([h["plan_id"] for h in hist], ["cq-df-s01-a1"])
+        self.assertEqual([h["plan_id"] for h in hist], ["cq-dg-s01-a1"])
 
     def test_a_bundle_signed_by_another_key_or_unsigned_is_refused(self):
         work, bundle, anchor = self.pack()
@@ -972,18 +1133,18 @@ class SignedTransport(DeskFinalCase):
         self.assertNotFinal(verdict, "DESK_UNAUTHENTICATED")
         self.assertEqual(verdict["opened"], [])      # nothing in the bundle was read
         self.git(self.mbp, "fetch", "-q", "origin", "+refs/heads/desk-bundles/*:refs/remotes/origin/desk-bundles/*")
-        tree = self.git(self.mbp, "rev-parse", "refs/remotes/origin/desk-bundles/cq-df-s01-a1^{tree}")
+        tree = self.git(self.mbp, "rev-parse", "refs/remotes/origin/desk-bundles/cq-dg-s01-a1^{tree}")
         unsigned = self.sp.run(["git", "-C", str(self.mbp), "commit-tree", tree.stdout.strip()], input=(
-            "cadence close bundle cq-df-s01-a1\n"), capture_output=True, text=True,
+            "cadence close bundle cq-dg-s01-a1\n"), capture_output=True, text=True,
             env={**os.environ, "GIT_AUTHOR_NAME": "x", "GIT_AUTHOR_EMAIL": "x@x", "GIT_COMMITTER_NAME": "x",
                  "GIT_COMMITTER_EMAIL": "x@x"}).stdout.strip()
-        self.git(self.mbp, "push", "-q", "-f", "origin", f"{unsigned}:refs/heads/desk-bundles/cq-df-s01-a1")
+        self.git(self.mbp, "push", "-q", "-f", "origin", f"{unsigned}:refs/heads/desk-bundles/cq-dg-s01-a1")
         self.git(self.air, "fetch", "-q", "origin", "+refs/heads/desk-bundles/*:refs/remotes/origin/desk-bundles/*")
         work2 = self.work()
-        rc, verdict = self.final(work2, "refs/remotes/origin/desk-bundles/cq-df-s01-a1")
+        rc, verdict = self.final(work2, "refs/remotes/origin/desk-bundles/cq-dg-s01-a1")
         self.assertNotFinal(verdict, "DESK_UNAUTHENTICATED")
 
-    def signed(self, files, subject="cadence close bundle cq-df-s01-a1"):
+    def signed(self, files, subject="cadence close bundle cq-dg-s01-a1"):
         tree = desk_transport.tree_of(self.mbp, files)
         return self.sp.run(["git", "-C", str(self.mbp), "-c", "gpg.format=ssh", "-c",
                             f"user.signingkey={self.keys['cadence-controller']}", "commit-tree", "-S", tree],
@@ -1000,7 +1161,7 @@ class SignedTransport(DeskFinalCase):
         planted.parent.mkdir(parents=True)
         planted.write_text("{}\n")
         with self.assertRaises(desk_transport.TransportRefusal):     # the packer side refuses it too
-            desk_transport.sign_bundle(self.mbp, bundle, transition, plan_id="cq-df-s01-a1",
+            desk_transport.sign_bundle(self.mbp, bundle, transition, plan_id="cq-dg-s01-a1",
                                        signing_key=self.keys["cadence-controller"])
         reads = []
         original = desk_transport._git
@@ -1014,7 +1175,7 @@ class SignedTransport(DeskFinalCase):
                                ({k: v for k, v in good.items() if k != "transition.json"}, "no transition.json"),
                                ({**good, "transition.json": json.dumps({**transition, "manifest_sha256": "0" * 64}).encode()},
                                 "manifest_sha256"),
-                               ({**good, "transition.json": json.dumps({**transition, "plan_id": "cq-df-s02-a1"}).encode()},
+                               ({**good, "transition.json": json.dumps({**transition, "plan_id": "cq-dg-s02-a1"}).encode()},
                                 "is for"),
                                ({**good, "transition.json": json.dumps({k: v for k, v in transition.items()
                                                                         if k != "queue"}).encode()}, "missing")):
@@ -1023,13 +1184,13 @@ class SignedTransport(DeskFinalCase):
             with mock.patch.object(desk_transport, "_git", spy), \
                     self.assertRaisesRegex(desk_transport.TransportRefusal, pattern):
                 desk_transport.extract_bundle(self.mbp, commit, work / "x", allowed_signers=self.signers,
-                                              plan_id="cq-df-s01-a1")
+                                              plan_id="cq-dg-s01-a1")
             self.assertFalse((work / "x").exists())
             if pattern == "outside the bundle layout":
                 self.assertEqual(reads, [])          # refused before any blob is read
         with self.assertRaisesRegex(desk_transport.TransportRefusal, "subject"):
             desk_transport.extract_bundle(self.mbp, self.signed(good), work / "z", allowed_signers=self.signers,
-                                          plan_id="cq-df-s02-a1")
+                                          plan_id="cq-dg-s02-a1")
 
     def test_the_transition_record_binds_queue_plan_and_close(self):
         work, bundle, anchor = self.pack()
@@ -1066,33 +1227,55 @@ class SignedTransport(DeskFinalCase):
                  desk_final.SUMMARY_NAME: (work / "out" / desk_final.SUMMARY_NAME).read_bytes()}
         for trailer in (f"Verdict-SHA256: {'0' * 64}\nDesk-Final: true", f"Verdict-SHA256: {verdict['verdict_sha256']}\n"
                                                                          "Desk-Final: false"):
-            commit = desk_transport._signed_commit(self.air, files, message=f"cadence desk verdict cq-df-s01-a1\n\n{trailer}",
+            commit = desk_transport._signed_commit(self.air, files, message=f"cadence desk verdict cq-dg-s01-a1\n\n{trailer}",
                                                    signing_key=self.keys["cadence-desk"], principal="cadence-desk")
             with self.assertRaisesRegex(desk_transport.TransportRefusal, "does not verify against its commit"):
-                desk_transport.read_verdict(self.air, commit, allowed_signers=self.signers, plan_id="cq-df-s01-a1")
+                desk_transport.read_verdict(self.air, commit, allowed_signers=self.signers, plan_id="cq-dg-s01-a1")
         good = desk_transport._signed_commit(
-            self.air, files, message=f"cadence desk verdict cq-df-s01-a1\n\nVerdict-SHA256: {verdict['verdict_sha256']}\n"
+            self.air, files, message=f"cadence desk verdict cq-dg-s01-a1\n\nVerdict-SHA256: {verdict['verdict_sha256']}\n"
                                      f"Desk-Final: {str(verdict['desk_final']).lower()}",
             signing_key=self.keys["cadence-desk"], principal="cadence-desk")
         self.assertEqual(desk_transport.read_verdict(self.air, good, allowed_signers=self.signers,
-                                                     plan_id="cq-df-s01-a1")[0], verdict)
+                                                     plan_id="cq-dg-s01-a1")[0], verdict)
         with self.assertRaisesRegex(desk_transport.TransportRefusal, "not cadence-desk"):
             desk_transport.read_verdict(self.air, desk_transport._signed_commit(
-                self.air, files, message=f"cadence desk verdict cq-df-s01-a1\n\nVerdict-SHA256: {verdict['verdict_sha256']}",
+                self.air, files, message=f"cadence desk verdict cq-dg-s01-a1\n\nVerdict-SHA256: {verdict['verdict_sha256']}",
                 signing_key=self.keys["cadence-controller"], principal="x"), allowed_signers=self.signers,
-                plan_id="cq-df-s01-a1")
+                plan_id="cq-dg-s01-a1")
 
     def test_an_unsigned_bundle_is_never_final_outside_synthetic_runs(self):
         work, bundle, anchor = self.pack()
         verdict = self.judge(work, bundle, anchor, allow_unsigned=False)
         self.assertNotFinal(verdict, "DESK_UNAUTHENTICATED")
         self.assertFalse(verdict["transport"]["signed"])
+        self.assertIn("not a verified signed commit", " ".join(verdict["reasons"]))
         qp = work / "Q.json"
         qp.write_text(json.dumps(self.fx.queue()))
         with redirect_stdout(io.StringIO()):
-            self.assertEqual(cli.main(["final", "--plan-id", "cq-df-s01-a1", "--bundle", str(bundle), "--manifest-sha256",
+            self.assertEqual(cli.main(["final", "--plan-id", "cq-dg-s01-a1", "--bundle", str(bundle), "--manifest-sha256",
                                        anchor, "--queue", str(qp), "--kit", str(self.fx.kit_path), "--out",
                                        str(work / "o"), "--lock", str(work / "lock")]), 2)
+
+
+    def test_denied_content_in_a_signed_bundle_is_refused_before_it_is_written(self):
+        work, bundle, anchor = self.pack()
+        transition = {**self.transition(bundle), "manifest_sha256": anchor}
+        with self.assertRaises(desk_final.DeniedContent):     # sign_bundle runs the same scan before signing
+            desk_transport.sign_bundle(self.mbp, bundle, {**transition, "energy_j": 1}, plan_id="cq-dg-s01-a1",
+                                       signing_key=self.keys["cadence-controller"])
+        edit_json(bundle / desk_final.RECEIPT_NAME, lambda r: r.update(energy_j="SYNTHETIC_DENIED_KEY_CANARY"))
+        anchor = remanifest(bundle)
+        files = {"transition.json": json.dumps({**transition, "manifest_sha256": anchor}).encode(),
+                 **{f"bundle/{p.relative_to(bundle).as_posix()}": p.read_bytes() for p in bundle.rglob("*") if p.is_file()}}
+        commit = self.signed(files)
+        self.git(self.mbp, "push", "-q", "-f", "origin", f"{commit}:refs/heads/desk-bundles/cq-dg-s01-a1")
+        self.git(self.air, "fetch", "-q", "origin", "+refs/heads/desk-bundles/*:refs/remotes/origin/desk-bundles/*")
+        rc, verdict = self.final(work, "refs/remotes/origin/desk-bundles/cq-dg-s01-a1", hand=False)
+        self.assertEqual(rc, 3)
+        self.assertNotFinal(verdict, "DESK_DENIED_CONTENT")
+        self.assertTrue(verdict["next_arm_hold"])
+        self.assertEqual(verdict["opened"], [])
+        self.assertFalse(list((work / "out").glob(".bundle-*")))
 
 
 if __name__ == "__main__":

@@ -17,6 +17,11 @@ The scratch copy at `/Volumes/JW-EXT/scratch/desk-final/FORMAT.md` is this file,
 
 Both use SSH signatures (`gpg.format=ssh`, namespace `git`). Allowed-signers lines read
 `<principal> namespaces="git" <public key>`. A signature by any other principal is a refusal.
+- **The Air holds two allowed-signers files:**
+  - `--allowed-signers`, naming `cadence-controller`, for bundles;
+  - `--history-signers`, naming `cadence-desk`, for its own earlier verdict records.
+
+  One file that names both principals also works, because the principal is checked on every signature.
 
 ## 1. The bundle (MBP → Air)
 
@@ -37,6 +42,18 @@ bundle/span/meter.json                     # verbatim from <span output>/desk-bu
 ```
 
 - There are no runtime dirs, `hazards/`, meter stream, journals, soak reference, maintenance log or symlinks.
+  A symlinked span output, `desk-bundle/` root or directory below it is refused, not followed.
+- **Denied content (gate 2, Mythos N1, Sol R1).** Every file (manifest, receipt, plan, leg summaries, span
+  files and `transition.json`) is key-scanned against `desk_final.DENYLIST` with
+  `desk_final.denied_content(raw, where)`, or `refuse_denied_content({path: bytes})` for a set. A file that
+  is not JSON cannot be scanned and is refused. A hit is refused:
+  - in `pack_bundle`, before anything is written;
+  - in `sign_bundle`, before anything is signed;
+  - on the Air (`extract_bundle` and the judge), before anything else in the bundle is parsed or written.
+    The verdict is `DESK_DENIED_CONTENT`, and it holds the next arm.
+
+  The controller imports the same list and function and runs them on every file before it signs. It never
+  ships a bundle with a hit; it halts instead.
 - Anything outside this shape is refused **before any blob is read**, on both sides:
   - the packer, `desk_final.pack_bundle` and `desk_transport.sign_bundle`, refuses to read it;
   - the Air, `desk_transport.extract_bundle`, refuses the commit.
@@ -102,7 +119,8 @@ git fetch origin '+refs/heads/desk-bundles/*:refs/remotes/origin/desk-bundles/*'
                  '+refs/heads/<audit branch>:refs/remotes/origin/<audit branch>'
 python3.13 -B scripts/air/cadence_desk.py final --plan-id PLAN --repo CLONE \
     --bundle-ref refs/remotes/origin/desk-bundles/PLAN --allowed-signers SIGNERS --kit KIT.json --out DIR \
-    --history-prefix refs/remotes/origin/cadence-desk-final/ [--hand-table hand_table.json] [--hand-sample]
+    --history-prefix refs/remotes/origin/cadence-desk-final/ --history-signers DESK_SIGNERS \
+    [--hand-table hand_table.json] [--hand-sample]
 python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --repo CLONE --signing-key AIR_KEY
 ```
 
@@ -114,8 +132,12 @@ python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --rep
   - 1: the desk refused or erred (a verdict is still written);
   - 4: the lock is busy (no verdict, retry);
   - 2: usage.
-- **History.** `--history-prefix` rebuilds the campaign's earlier summaries from the signed verdict records.
-  `--history FILE` is accepted, and the verdict then says `history_source: "file"`.
+- **History.** `--history-prefix`, with `--history-signers`, rebuilds the campaign's earlier summaries from
+  the signed verdict records. This is the only history a production verdict may use (Mythos N11, Sol R8).
+  Zero records for the campaign is an established empty history.
+  - `--history FILE`, or no history at all, makes a signed-bundle verdict not final (`DESK_UNAUTHENTICATED`,
+    "receipt replay cannot be checked").
+  - The verdict records `history_source`.
 - **Synthetic runs.** `--bundle DIR --manifest-sha256 HEX --allow-unsigned --queue Q` judges an unsigned
   directory; that verdict says `transport.signed: false` and never counts. `--allow-mock` accepts a mock
   receipt, and that verdict says `mock: true` and never counts.
@@ -155,7 +177,7 @@ python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --rep
 
 | Kind | Codes | Effect |
 |---|---|---|
-| integrity | `DESK_UNAUTHENTICATED`, `DESK_IDENTITY`, `DESK_ROSTER`, `DESK_NO_LEG_ROWS`, `DESK_DUPLICATE`, `DESK_ATTEMPTS`, `DESK_SCHEMA`, `DESK_FEED_PROOF`, `DESK_REFUSAL`, `DESK_ERROR` | not final; holds |
+| integrity | `DESK_DENIED_CONTENT`, `DESK_UNAUTHENTICATED`, `DESK_IDENTITY`, `DESK_ROSTER`, `DESK_NO_LEG_ROWS`, `DESK_DUPLICATE`, `DESK_ATTEMPTS`, `DESK_SCHEMA`, `DESK_FEED_PROOF`, `DESK_REFUSAL`, `DESK_ERROR` | not final; holds |
 | operational | `REFUSAL`, `INSTRUMENT_FAULT`, `CONTAMINATED_REDOS`, `LEG_OVERTIME` | holds; the record may still be final |
 | hand | `HAND_TABLE_DISAGREES`, `HAND_TABLE_INVALID` | not final; holds |
 | pending | `HAND_TABLE_DUE` | not final; no hold |
@@ -166,6 +188,9 @@ REFUSAL includes each of these:
 - any failed stage, except a refused soak that was retried and the runner's non-fatal `display`;
 - no accepted soak;
 - a transition `status` other than `CLOSED_OK`.
+
+**Leg stages (Sol R5).** Every attempt k of every roster leg has exactly one `<leg>.a<k>` stage in the
+receipt, with rc 0, whose result names that leg. A missing, duplicate or stray leg stage is `DESK_ATTEMPTS`.
 
 **The soak.** Receipts from pins with RL-171's retry carry `soak_attempts`. A `soak` stage with rc ≠ 0
 followed by an accepted `soak.a2` is a completed soak; it is never read as a stop, and it puts the span on
@@ -179,7 +204,7 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
 1. **k+2 (line 9).** Read the verdict with `desk_transport.read_verdict(repo, ref, allowed_signers=, plan_id=)`.
    It checks the signature by `cadence-desk`, the subject, both trailers, `verify_verdict`, the plan id and
    the summary hash. Then apply `desk_final.counts_as_final(doc, plan_id=, queue_id=, span_id=, attempt=,
-   manifest_sha256=<the transition record's>)`. With `allow_mock=True`, which is for synthetic runs only, it
+   manifest_sha256=<the transition record's>)`. That also requires `history_source: "signed-records"`. With `allow_mock=True`, which is for synthetic runs only, it
    also admits `mock: true`. It requires:
    - `desk_final: true`;
    - `mock: false`;
@@ -219,11 +244,16 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
   `g0_role` and `span_reference`.
 - **Comparison.** A missing, duplicate, mistyped or non-finite field makes the table `HAND_TABLE_INVALID`.
   Every field is compared, seconds within 1.0 s.
-- **The draw** (`sha256-hand-sample-v1`, seed 2026111501, block 4) is fixed in code before any span it
+  - `span_reference` is compared whole: `leg_id`, `attempt`, `redone` and `excluded`, typed (Sol R4).
+- **The draw** (`sha256-hand-sample-v2`, seed 2026111501, rate 4) is fixed in code before any span it
   selects has run.
   - The stratum is the kit sha256 and the span's G0 shape (`span` if a leg after the first consumes, else
     `own`).
-  - A queue's spans in a stratum, in seq order, fall in blocks of four; the last block may be shorter.
-  - In each block exactly one position is drawn from sha256 of the law, the seed, the queue id, the stratum
-    and the block.
+  - A span is drawn when sha256(`law|seed|kit_sha256|shape|plan_id`) mod 4 is 0: one in four in expectation,
+    per stratum.
+  - It depends on nothing but the span's own committed entry and kit. An append to its queue, or the size or
+    id of the queue, never changes it.
+  - v1's blocks of four were sized by the queue's current length; that broke both properties (Mythos N13,
+    Sol R11).
   - `cadence_desk.py sample-plan --queue Q --kit K` prints the selection at READY, so it is prospective.
+  - The seed and rate are for the research lead to confirm.

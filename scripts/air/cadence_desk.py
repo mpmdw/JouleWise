@@ -4,7 +4,7 @@
     python3.13 -B scripts/air/cadence_desk.py final --plan-id PLAN --repo CLONE \\
         --bundle-ref refs/remotes/origin/desk-bundles/PLAN --allowed-signers SIGNERS \\
         --kit KIT.json --out DIR [--queue QUEUE.json] \\
-        [--history-prefix refs/remotes/origin/cadence-desk-final/ | --history H.json] \\
+        --history-prefix refs/remotes/origin/cadence-desk-final/ --history-signers DESK_SIGNERS \\
         [--hand-table hand_table.json] [--hand-sample] [--lock PATH]
     python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --repo CLONE --signing-key KEY
     python3.13 -B scripts/air/cadence_desk.py sample-plan --queue QUEUE.json --kit KIT.json
@@ -85,6 +85,10 @@ def final(args):
     if not signed and not (args.manifest_sha256 and args.allow_unsigned):
         print("USAGE an unsigned --bundle directory needs --manifest-sha256 and --allow-unsigned (synthetic only)")
         return 2
+    if args.history_prefix and not args.history_signers:
+        print("USAGE --history-prefix needs --history-signers (the allowed-signers file naming the desk's key, "
+              "cadence-desk; the verdict records are signed by it, not by the controller)")
+        return 2
     if not signed and not args.queue:
         print("USAGE an unsigned --bundle directory needs --queue")
         return 2
@@ -100,6 +104,7 @@ def _final_locked(args, signed):
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     transport, bundle, anchor, tmp, refusal = None, args.bundle, args.manifest_sha256, None, None
+    refusal_code = "DESK_UNAUTHENTICATED"
     history, history_source = [], "none"
     queue = args.queue
     try:
@@ -109,7 +114,7 @@ def _final_locked(args, signed):
             kit, _ = kitmod.load_kit(args.kit)
             history = desk_transport.history_from_records(
                 args.history_repo or args.repo, args.history_prefix,
-                allowed_signers=args.history_signers or args.allowed_signers,
+                allowed_signers=args.history_signers,
                 campaign_id=kit["campaign_id"], exclude_plan_id=args.plan_id)
             history_source = "signed-records"
         if signed:
@@ -119,6 +124,8 @@ def _final_locked(args, signed):
             bundle, anchor = tmp / "bundle", transport["manifest_sha256"]
             if queue is None:   # the queue bytes the span armed from, as the signed transition record names them
                 queue = desk_transport.queue_from_transition(args.repo, transport["transition"], tmp / "QUEUE.json")
+    except desk_final.DeniedContent as error:
+        refusal, refusal_code = f"{type(error).__name__}: {error}", "DESK_DENIED_CONTENT"
     except (desk_transport.TransportRefusal, kitmod.KitError, OSError, ValueError) as error:
         refusal = f"{type(error).__name__}: {error}"
     try:
@@ -128,7 +135,7 @@ def _final_locked(args, signed):
             kit_path=args.kit,
             out_dir=out, history=history, hand_table_path=args.hand_table, hand_sample=args.hand_sample,
             allow_mock=args.allow_mock, transport=transport, allow_unsigned=args.allow_unsigned and not signed,
-            history_source=history_source, refusal=refusal)
+            history_source=history_source, refusal=refusal, refusal_code=refusal_code)
     finally:
         if tmp is not None:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -164,7 +171,7 @@ def sample_plan(args):
             draw = desk_final.hand_sample(queue, queuemod.plan_id(span), kit, sha)
             rows.append({"plan_id": queuemod.plan_id(span), **draw})
     print(json.dumps({"law": desk_final.HAND_SAMPLE_LAW, "seed": desk_final.HAND_SAMPLE_SEED,
-                      "block": desk_final.HAND_SAMPLE_BLOCK, "kit_sha256": sha, "spans": rows}, indent=1))
+                      "rate": desk_final.HAND_SAMPLE_RATE, "kit_sha256": sha, "spans": rows}, indent=1))
     return 0
 
 
@@ -192,7 +199,9 @@ def main(argv=None):
     h = f.add_mutually_exclusive_group()
     h.add_argument("--history", help="a JSON list of earlier desk summaries (verdict says history_source: file)")
     h.add_argument("--history-prefix", help="rebuild the history from signed verdict refs under this prefix")
-    f.add_argument("--history-repo"); f.add_argument("--history-signers")
+    f.add_argument("--history-repo")
+    f.add_argument("--history-signers", help="allowed-signers file naming the desk's key (cadence-desk); "
+                                             "required with --history-prefix")
     f.add_argument("--hand-table", help="the lead's hand table (hand_table.json), compared field by field")
     f.add_argument("--hand-sample", action="store_true", help="the lead selects this span for a hand table")
     f.add_argument("--allow-mock", action="store_true",
