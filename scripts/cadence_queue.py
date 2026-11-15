@@ -175,24 +175,12 @@ def cmd_next(args):
     return 0
 
 
-def soak_window():
-    """The soak path's own blackout: the R1 driver's ``OS_BATCH_WINDOW_LOCAL`` in this tree, read at run time
-    as the runner and the launcher read it (``cadence_legs_runner.default_windows``). 11:45-13:15 before the
-    W1-line merge (so the 10:50-13:15 no-launch interval), 02:00-02:35 after it (RL-165 section 8.1)."""
-    from scripts import align_r1_rehearsal as r1
-    return r1.OS_BATCH_WINDOW_LOCAL
-
-
 def cmd_checklist(args):
-    window = _window(args.batch_window)
-    kit, _ = kitmod.load_kit(args.kit, batch_window=window)
+    kit, _ = kitmod.load_kit(args.kit, batch_window=_window(args.batch_window))
     obs = json.loads(Path(args.observations).read_text())
-    if kit["schema"] == kit_v11.SCHEMA:   # the free t0's span_window line (design doc section 14.3)
-        if not args.batch_window:
-            print("REFUSE a v1.1 kit's checklist needs --batch-window (RL-149 section 2.9 item 4: 02:00-02:35)")
-            return 2
-        rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256, batch_window=window,
-                                          soak_window=soak_window())
+    if kit["schema"] == kit_v11.SCHEMA:   # the free t0's span_window line (design doc section 14.3; RL-171)
+        rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256,
+                                          batch_window=_window(args.batch_window) if args.batch_window else None)
     else:
         rows = kitmod.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256)
     for r in rows:
@@ -234,7 +222,7 @@ def main(argv=None):
     s.add_argument("--evidence"); s.add_argument("--issues"); s.add_argument("--now", type=float)
     s = sub.add_parser("checklist"); s.add_argument("--kit", required=True)
     s.add_argument("--kit-sha256", required=True); s.add_argument("--observations", required=True)
-    s.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (v1.1 span_window line; default 11:45-13:15)")
+    s.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (v1.1 span_window line; default none, RL-171)")
     s = sub.add_parser("blocks"); s.add_argument("ledger", nargs="?", default=str(ROOT / blocks.LEDGER_PATH))
     s.add_argument("--kits-root", default=str(ROOT))
     args = p.parse_args(argv)

@@ -2,7 +2,7 @@
 """Hand one conditionless-campaign span (runner kind ``cadence-legs-v1``) to a one-shot LaunchAgent.
 
     python3.13 -B scripts/launch_cadence_span.py launch --repo R --python-bin PY --kit KIT \\
-        [--legs L001,L002,L003] --batch-window 02:00-02:35 --output OUT --disk-path R \\
+        [--legs L001,L002,L003] [--batch-window HH:MM-HH:MM] --output OUT --disk-path R \\
         --custody-root C --magistrate-pid PID --deadline EPOCH
 
 The campaign launcher of RL-149 section 5 item 6. It is the R0/R1 desk launcher's
@@ -60,21 +60,19 @@ def cadence_plan(kit: Path, legs: str | None = None, batch_window: str | None = 
     # v1 kits and v1.1 kits (design doc section 14). The kit's own runner kind must be one it executes.
     if loaded["runner"]["kind"] not in legsmod.RUNNER_KINDS:
         raise ValueError(f"kit runner.kind is not one of {list(legsmod.RUNNER_KINDS)}")
-    if batch_window is None and loaded["runner"]["kind"] != legsmod.RUNNER_KIND:
-        raise ValueError(f"runner kind {loaded['runner']['kind']} needs --batch-window (RL-149 section 2.9 item 4)")
+    # RL-171: no blackout and no launch fence unless --batch-window names one (backward compatibility).
     windows = [legsmod.parse_window(batch_window)] if batch_window else runner.default_windows()
     plan = legsmod.plan_span(loaded, t0_epoch=time.time() if t0 is None else t0, windows=windows,
                              leg_ids=legs.split(",") if legs else None, max_span_s=runner.max_span_s())
-    # RL-155a section 3: the fence end lands by 01:50, and no launch 10:50-13:15 while the soak path
-    # waits out the driver's window. Every kit; the free t0 of v1.1 does not remove them (#788 F4).
-    fence = legsmod.fence_problems(plan, windows, runner.default_windows())
-    if fence:
-        raise legsmod.PlanError(fence)
+    if cadence_minimum_seconds(plan) > base.MAX_DESK_SECONDS:
+        raise ValueError(f"the span's worst case with its soak retry needs {cadence_minimum_seconds(plan):.0f} s, "
+                         f"over the {base.MAX_DESK_SECONDS} s desk ceiling")
     return plan
 
 
 def cadence_minimum_seconds(plan: dict) -> float:
-    """The span's worst case plus the runner's work reserve and the launcher's cleanup grace."""
+    """The span's worst case plus the soak retry's budget, the runner's work reserve and the launcher's
+    cleanup grace."""
     from scripts import cadence_legs_runner as runner
     return runner.launch_deadline(plan) - plan["t0_epoch_s"]
 
@@ -204,7 +202,7 @@ def main(argv=None) -> int:
     start.add_argument("--repo", type=Path, required=True)
     start.add_argument("--kit", type=Path, required=True, help="the frozen campaign kit (RL-149 section 2)")
     start.add_argument("--legs", help="the queue span's roster, comma-separated kit leg ids")
-    start.add_argument("--batch-window", help="HH:MM-HH:MM blackout (RL-149 section 2.9 item 4)")
+    start.add_argument("--batch-window", help="HH:MM-HH:MM blackout (default: none, RL-171)")
     start.add_argument("--output", type=Path, required=True)
     start.add_argument("--python-bin", type=Path, required=True)
     start.add_argument("--disk-path", type=Path, required=True)

@@ -233,7 +233,7 @@ class MockSpanTests(unittest.TestCase):
         kit = kit or campaign_kit()
         out = self.root / name
         rc, summary, stops, deps = runner.run_mock(kit=kit, kit_sha256="f" * 64, output=out, t0_epoch=local(t0),
-                                                   windows=NEW_WINDOW, **kw)
+                                                   windows=kw.pop("windows", NEW_WINDOW), **kw)
         receipt = json.loads((out / runner.RECEIPT_NAME).read_text())
         return out, rc, summary, stops, deps, receipt
 
@@ -364,19 +364,67 @@ class MockSpanTests(unittest.TestCase):
             started = datetime.fromtimestamp(leg["started_epoch_s"], ZONE)
             self.assertFalse(started.hour == 2 and started.minute < 35, leg)
 
-    def test_soak_does_not_overlap_the_driver_window(self):
-        out = self.root / "soak"
-        clock = runner.FakeClock(local("2026-11-15T11:30"))
-        deps = runner.mock_deps(out, clock)
-        deps.soak_windows, deps.max_span_s = OLD_WINDOW, runner.max_span_s()
-        kit = campaign_kit()
-        plan = legsmod.plan_span(kit, t0_epoch=clock.time(), windows=NEW_WINDOW, leg_ids=["L001"])
-        rc = runner.run_span(kit=kit, kit_sha256="f" * 64, output=out, deadline=runner.launch_deadline(plan) + 7200,
-                             windows=NEW_WINDOW, deps=deps, leg_ids=["L001"])
-        receipt = json.loads((out / runner.RECEIPT_NAME).read_text())
+    def test_a_named_window_holds_the_soak(self):
+        # --batch-window (backward compatibility): a soak that would overlap the named window waits it out.
+        with patch.object(legsmod, "blackout_bound_s", return_value=0.0):
+            out, rc, summary, stops, deps, receipt = self.run_mock(t0="2026-11-15T01:30", leg_ids=["L001"])
         self.assertEqual(rc, 0, receipt.get("error"))
         soak = next(s for s in receipt["steps"] if s["name"] == "soak")
-        self.assertGreaterEqual(soak["started"]["epoch_s"], local("2026-11-15T13:15"))
+        self.assertGreaterEqual(soak["started"]["epoch_s"], local("2026-11-15T02:35"))
+        self.assertEqual([s["name"] for s in receipt["steps"] if s["name"].endswith("blackout-wait")],
+                         ["soak-blackout-wait"])
+
+    def test_no_window_means_no_hold_across_0200(self):
+        # RL-171: with no window, nothing holds at 02:00-02:35; the per-leg checks are the quiet rule.
+        out, rc, summary, stops, deps, receipt = self.run_mock(t0="2026-11-15T00:30", windows=runner.default_windows())
+        self.assertEqual(rc, 0, receipt.get("error"))
+        self.assertEqual(receipt["batch_windows"], [])
+        self.assertEqual([s for s in receipt["steps"] if s["name"].endswith("blackout-wait")], [])
+        self.assertTrue(any(local("2026-11-15T02:00") <= leg["started_epoch_s"] < local("2026-11-15T02:35")
+                            for leg in summary["legs"]), [leg["started_epoch_s"] for leg in summary["legs"]])
+        self.assertEqual(len(summary["legs"]), 12)
+
+    def test_a_refused_soak_is_retried_once_and_the_span_goes_on(self):
+        out, rc, summary, stops, deps, receipt = self.run_mock(soak_refusals=1)
+        self.assertEqual(rc, 0, receipt.get("error"))
+        self.assertEqual(deps.fake.soaks, 2)
+        attempts = receipt["soak_attempts"]
+        self.assertEqual([(a["attempt"], a["output_dir"], a["refused"] is not None) for a in attempts],
+                         [(1, "soak.rejected1", True), (2, "soak", False)])
+        self.assertIn("settle or quiet", attempts[0]["refused"])
+        self.assertTrue((out / "soak.rejected1").is_dir())
+        self.assertTrue((out / "soak/soak_reference.json").is_file())
+        self.assertEqual(receipt["soak_reference"], str(out / "soak/soak_reference.json"))
+        steps = {s["name"]: s["rc"] for s in receipt["steps"]}
+        self.assertEqual((steps["soak"], steps["soak.a2"]), (2, 0))
+        self.assertIn("before-soak.a2-agents", steps)
+        self.assertEqual(len(summary["legs"]), 12)
+        self.assertEqual(stops, [])
+
+    def test_a_second_soak_refusal_stops_the_span_and_closes(self):
+        out, rc, summary, stops, deps, receipt = self.run_mock(soak_refusals=2)
+        self.assertEqual(rc, 2)
+        self.assertIn("settle or quiet", receipt["error"])
+        self.assertEqual((deps.fake.soaks, deps.fake.calls), (2, []))
+        self.assertEqual(len(receipt["soak_attempts"]), 2)
+        self.assertEqual(deps.host.calls[-1], "restore")
+
+    def test_the_retry_needs_its_budget(self):
+        # A deadline without the soak retry's budget (the old launch deadline) refuses the retry, not a leg.
+        kit = campaign_kit()
+        out = self.root / "nobudget"
+        clock = runner.FakeClock(local("2026-11-15T13:20"))
+        deps = runner.mock_deps(out, clock, soak_refusals=1)
+        deps.max_span_s = runner.max_span_s()
+        plan = legsmod.plan_span(kit, t0_epoch=clock.time(), windows=[])
+        self.assertEqual(runner.launch_deadline(plan),
+                         plan["deadline_epoch_s"] + plan["soak_s"] + runner.LAUNCH_RESERVE_S)
+        rc = runner.run_span(kit=kit, kit_sha256="f" * 64, output=out,
+                             deadline=plan["deadline_epoch_s"] + runner.LAUNCH_RESERVE_S, windows=[], deps=deps)
+        receipt = json.loads((out / runner.RECEIPT_NAME).read_text())
+        self.assertEqual(rc, 2)
+        self.assertIn("no retry", receipt["error"])
+        self.assertEqual((deps.fake.soaks, deps.fake.calls), (1, []))
 
     def test_mock_cli(self):
         kit_path = self.root / "kit.json"
@@ -387,11 +435,16 @@ class MockSpanTests(unittest.TestCase):
                               "--legs", "L001,L002,L003"])
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(stdout.getvalue())["legs"], 3)
+        with patch("sys.stdout", io.StringIO()):
+            rc = runner.main(["mock", "--kit", str(kit_path), "--output", str(self.root / "cli-retry"),
+                              "--t0-local", "2026-11-15T13:20", "--legs", "L001", "--soak-refusals", "1"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(json.loads((self.root / "cli-retry" / runner.RECEIPT_NAME).read_text())["soak_attempts"]), 2)
         with patch("sys.stdout", io.StringIO()) as stdout:
             self.assertEqual(runner.main(["plan", "--kit", str(kit_path), "--t0", str(local("2026-11-15T13:20")),
                                           "--batch-window", "02:00-02:35"]), 0)
         plan = json.loads(stdout.getvalue())
-        self.assertEqual(plan["launch_deadline_epoch_s"], plan["deadline_epoch_s"] + runner.LAUNCH_RESERVE_S)
+        self.assertEqual(plan["launch_deadline_epoch_s"], plan["deadline_epoch_s"] + 1950 + runner.LAUNCH_RESERVE_S)
 
 
 # --------------------------------------------------------------------------
@@ -517,6 +570,80 @@ class ProductionSeamTests(unittest.TestCase):
             self.assertEqual(names, ["L001.a1", "L001.a2"])
 
 
+class ProductionSoakTests(unittest.TestCase):
+    """The production soak step and the span's soak child (RL-171): no OS batch window check, one retryable
+    refusal (unsettled or loaded), fresh child names per attempt. Synthetic runtime results only."""
+
+    def soak_result(self, slope=0.0, busy=0.1):
+        times = [float(t) for t in range(1801)]
+        series = {key: [30.0 + slope * t / 60.0 + (0.01 if t % 2 else 0.0) for t in times] for key in ("TV0h", "Th0C")}
+        return {"sensor_series_c": series, "sensor_series_t_s": {k: times for k in series},
+                "sensor_series_end_t_s": 1800.0, "sensor_roles": {"s_fast": "TV0h", "s_slow": "Th0C"},
+                "cpu_busy_cores": [busy] * 1801, "cpu_busy_t_s": times, "census": [{"ok": True}]}
+
+    def run_child(self, result, when="2026-11-15T01:50"):
+        from scripts import align_r1_rehearsal as r1
+        from joulewise.align.apple import v4_registration as reg
+        with tempfile.TemporaryDirectory(dir=TMP) as directory:
+            out = Path(directory) / "soak"
+            moment = r1.datetime.fromisoformat(when).replace(tzinfo=r1.LOCAL_ZONE)
+            with patch.object(reg, "verify_r1_executed_sources"), \
+                 patch.object(r1, "executed_commit", return_value="0" * 40), \
+                 patch.object(r1, "_now_local", lambda: moment), \
+                 patch.object(r1, "wait_outside_os_batch", side_effect=AssertionError("batch window checked")), \
+                 patch.object(r1, "runtime_argv_from_inputs", return_value=["runtime"]), \
+                 patch.object(r1, "_invoke", return_value=result):
+                path = runner.soak_child(out, Path(directory) / "inputs.json")
+                return json.loads(Path(path).read_text()), json.loads((out / "soak_row.json").read_text())
+
+    def test_the_soak_child_has_no_batch_window_check(self):
+        # 01:50: the soak runs through 02:00-02:35, which the Part C path's soak child would refuse.
+        reference, row = self.run_child(self.soak_result())
+        self.assertTrue(all(v["settled"] for v in reference["detrended"].values()))
+        self.assertFalse(row["os_load"]["redo"])
+
+    def test_unsettled_or_loaded_soak_is_the_retryable_refusal(self):
+        with self.assertRaisesRegex(runner.SoakQuietRefusal, "unresolved slope"):
+            self.run_child(self.soak_result(slope=0.5))
+        with self.assertRaisesRegex(runner.SoakQuietRefusal, "sustained CPU load"):
+            self.run_child(self.soak_result(busy=0.9))
+        with patch.object(runner, "soak_child", side_effect=runner.SoakQuietRefusal("idle soak has unresolved slope")), \
+             patch("sys.stderr", io.StringIO()):
+            self.assertEqual(runner.main(["soak-child", "--output", "/synthetic/soak"]), runner.SOAK_REFUSED_RC)
+        with patch.object(runner, "soak_child", side_effect=ValueError("other")), self.assertRaises(ValueError):
+            runner.main(["soak-child", "--output", "/synthetic/soak"])
+
+    def test_run_soak_maps_the_exit_and_names_each_attempt(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            inputs = root / "inputs.json"
+            inputs.write_text(json.dumps({"WP15": {"runtime_entrypoint": [
+                "scripts/align_r1_runtime.py", "--config", "configs/align/v4/r1_runtime.json"]}}))
+            with patch("scripts.run_align_r1_smoke.AgentFeed"), patch("scripts.run_align_r1_smoke.MeterFeed"), \
+                 patch("scripts.run_align_r1_smoke.VolumeFeed"):
+                deps = runner.production_deps(inputs=inputs, pmset_bin="fake", output=root / "span")
+            span = root / "span"
+            span.mkdir()
+            names, codes = [], [runner.SOAK_REFUSED_RC, 0, 1]
+
+            def child(**kw):
+                names.append(kw["name"])
+                out = Path(kw["argv"][kw["argv"].index("--output") + 1])
+                out.mkdir()
+                (out / "soak_reference.json").write_text("{}")
+                return {"rc": codes[len(names) - 1]}
+            with patch.object(runner, "run_child", side_effect=child):
+                with self.assertRaises(runner.SoakRefusal):
+                    deps.run_soak(span / "soak", 1950, [], lambda: 1e9)
+                (span / "soak").rename(span / "soak.rejected1")
+                self.assertEqual(deps.run_soak(span / "soak", 1950, [], lambda: 1e9), span / "soak/soak_reference.json")
+                (span / "soak").rename(span / "soak.rejected2")
+                with self.assertRaises(runner.SpanRefusal) as ctx:
+                    deps.run_soak(span / "soak", 1950, [], lambda: 1e9)
+                self.assertNotIsInstance(ctx.exception, runner.SoakRefusal)
+            self.assertEqual(names, ["soak", "soak.a2", "soak.a3"])
+
+
 class RunnerWithLegRuntimeTests(unittest.TestCase):
     """The driver with its leg step wired to the real leg runtime (in process, synthetic backend)."""
 
@@ -614,7 +741,7 @@ class LauncherTests(unittest.TestCase):
             plan = cadence_launch.cadence_plan(self.kit_file(root), "L001,L002,L003", "02:00-02:35",
                                                t0=local("2026-11-15T13:20"))
             minimum = cadence_launch.cadence_minimum_seconds(plan)
-            self.assertEqual(minimum, plan["worst_case_s"] + runner.LAUNCH_RESERVE_S)
+            self.assertEqual(minimum, plan["worst_case_s"] + plan["soak_s"] + runner.LAUNCH_RESERVE_S)
             spec, plist = self._launch_at(root, minimum)
             spec = json.loads(spec)
             self.assertEqual(spec["kind"], "cadence-legs-v1")

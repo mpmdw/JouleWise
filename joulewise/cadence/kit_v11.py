@@ -16,9 +16,9 @@ What v1.1 adds to v1:
 * **legs that carry their cell**: ``prefill_tokens``, ``decode_tokens`` and ``g0_shape`` on every leg;
   ``leg_defaults`` holds ``decode_tokens`` only;
 * **the free t0** (RL-149 section 2.9 item 6.3): ``span_template.t0_rule = "free"`` replaces
-  ``t0_local`` and ``end_by_local``. A span arms at any hour whose worst case clears the blackout; the
-  plan enforces that per span, and the checklist's ``span_window`` line judges the arm's own
-  ``[t0, end_by]`` against the batch window.
+  ``t0_local`` and ``end_by_local``. A span arms at any hour once its gates hold (RL-171: no clock
+  window by default). Where a batch window is named, the plan refuses a worst case that meets it and the
+  checklist's ``span_window`` line judges the arm's own ``[t0, end_by]`` against it.
 
 **The qualification law** ``sha256-qual-v1`` (RL-165 section 8.1; RL-150 section 3.2) is a second law
 of the same schema. The kit names its spans: ``seed_law.spans`` spans of equal length, each holding the
@@ -419,37 +419,11 @@ def meets_window(t0_epoch, end_epoch, window, zone_name=v1.LOCAL_ZONE_NAME):
     return False
 
 
-# RL-155a section 3 (legs.FENCE_QUIET_LEAD_S, legs.SOAK_LAUNCH_LEAD_S; a test asserts they agree).
-FENCE_QUIET_LEAD_S = 600
-SOAK_LAUNCH_LEAD_S = 3300
-
-
-def _shift(window, seconds):
-    (h0, m0), end = window
-    minutes = h0 * 60 + m0 - seconds // 60
-    return (minutes // 60, minutes % 60), end
-
-
-def launch_in_soak_bound(t0_epoch, soak_window, zone_name=v1.LOCAL_ZONE_NAME):
-    """True when t0 is inside RL-155a section 3's no-launch interval (10:50-13:15 for the 11:45 window)."""
-    zone = ZoneInfo(zone_name)
-    (h0, m0), (h1, m1) = soak_window
-    for offset in (-1, 0, 1):
-        day = datetime.fromtimestamp(t0_epoch, zone).date() + timedelta(days=offset)
-        start = datetime.combine(day, wall_time(h0, m0), tzinfo=zone).timestamp() - SOAK_LAUNCH_LEAD_S
-        end = datetime.combine(day, wall_time(h1, m1), tzinfo=zone).timestamp()
-        if start < t0_epoch < end:
-            return True
-    return False
-
-
-def evaluate_checklist(kit, obs, *, expected_kit_sha256, batch_window=v1.OS_BATCH_WINDOW,
-                       soak_window=v1.OS_BATCH_WINDOW):
-    """v1's ``evaluate_checklist``, with the free t0's ``span_window`` line: the arm's own
-    ``[t0, end_by]`` is longer than 0 s, at most 24 h, ends at least ten minutes before any batch
-    window starts (RL-155a section 3's 01:50), and t0 is not inside the soak path's no-launch interval
-    (10:50-13:15 while the driver's soak window is 11:45-13:15). The launcher and ``plan`` apply the
-    same bounds to the fence end (worst case + 1,460 s)."""
+def evaluate_checklist(kit, obs, *, expected_kit_sha256, batch_window=None):
+    """v1's ``evaluate_checklist``, with the free t0's ``span_window`` line: the arm's own ``[t0, end_by]`` is
+    longer than 0 s and at most 24 h. RL-171: no clock window applies by default (no fence before a batch
+    window, no soak no-launch interval). ``batch_window`` (backward compatibility) adds one rule: the
+    interval does not meet that window."""
     template = kit["span_template"]
     others = [line for line in kit["checklist"] if line["kind"] != "span_window"]
     judged = iter(v1.evaluate_checklist({**kit, "checklist": others}, obs, expected_kit_sha256=expected_kit_sha256))
@@ -460,12 +434,13 @@ def evaluate_checklist(kit, obs, *, expected_kit_sha256, batch_window=v1.OS_BATC
             continue
         t0, end = obs.get("t0_epoch_s"), obs.get("end_by_epoch_s")
         numbers = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (t0, end))
-        quiet = _shift(batch_window, FENCE_QUIET_LEAD_S)
-        ok = (numbers and 0 < end - t0 <= 86400 and not meets_window(t0, end, quiet, template["timezone"])
-              and not launch_in_soak_bound(t0, soak_window, template["timezone"]))
-        (h0, m0), (h1, m1) = quiet
-        rows.append({"id": line["id"], "kind": "span_window", "ok": bool(ok),
-                     "detail": (f"free t0; [t0, end_by] clears {h0:02d}:{m0:02d}-{h1:02d}:{m1:02d}; t0 outside the soak "
-                                "bound" if ok else "t0/end-by not observed, not ordered within 24 h, meeting the quiet "
-                                "before the batch window, or t0 inside the soak path's no-launch interval")})
+        ok = (numbers and 0 < end - t0 <= 86400
+              and (batch_window is None or not meets_window(t0, end, batch_window, template["timezone"])))
+        if batch_window is None:
+            detail = "free t0; [t0, end_by] within 24 h" if ok else "t0/end-by not observed or not ordered within 24 h"
+        else:
+            (h0, m0), (h1, m1) = batch_window
+            detail = (f"free t0; [t0, end_by] clears {h0:02d}:{m0:02d}-{h1:02d}:{m1:02d}" if ok else
+                      "t0/end-by not observed, not ordered within 24 h, or meeting the batch window")
+        rows.append({"id": line["id"], "kind": "span_window", "ok": bool(ok), "detail": detail})
     return rows

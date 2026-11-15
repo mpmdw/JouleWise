@@ -53,22 +53,9 @@ os.kill(pid, getattr(signal, "SIG" + name) if not name.isdigit() else int(name))
 '''
 
 
-# The launcher's launch-time plan applies RL-155a section 3's soak bound (no launch 10:50-13:15 while the R1
-# driver's soak window is 11:45-13:15). These subprocess launches run on the wall clock, so the fixture moves
-# the driver's window, in the child only, to the same far window as --batch-window. Nothing on disk changes.
-LAUNCH_WRAP = """import runpy, sys
-from scripts import align_r1_rehearsal as r1
-argv = sys.argv[1:]
-if "--batch-window" in argv:
-    h0, m0, h1, m1 = (int(x) for x in argv[argv.index("--batch-window") + 1].replace("-", ":").split(":"))
-    r1.OS_BATCH_WINDOW_LOCAL = ((h0, m0), (h1, m1))
-sys.argv = argv
-runpy.run_path(argv[0], run_name="__main__")
-"""
-
-
 def launcher_cmd(argv):
-    return [sys.executable, "-B", "-c", LAUNCH_WRAP, str(SCRIPT), *argv]
+    # RL-171: the launcher reads no R1 driver window, so the wall-clock launches need no patched driver.
+    return [sys.executable, "-B", str(SCRIPT), *argv]
 
 
 def epoch(text):
@@ -368,12 +355,12 @@ class LaunchAgentTests(Fixture):
 
 
 class BlackoutTests(Fixture):
-    """The launch-time plan judges the blackout on an injected clock (B1, B3, B7), with the committed
-    cl-dev-01 kit and the pilot roster: worst case 16,650 s."""
+    """The launch-time plan on an injected clock (B1, B3, B7), with the committed cl-dev-01 kit and the pilot
+    roster: worst case 16,650 s, plus the soak retry's 1,950 s (RL-171)."""
 
     def main_at(self, when, window="02:00-02:35", tag="o"):
         now = epoch(when)
-        argv = self.argv(deadline=now + 18110, window=window, output=self.root / f"out-{tag}")
+        argv = self.argv(deadline=now + 16650 + 1950 + 560 + 900, window=window, output=self.root / f"out-{tag}")
         argv[argv.index("--kit") + 1] = str(REPO / "docs/process/cadence/kits/cl-dev-01.json")
         if window is None:
             i = argv.index("--batch-window"); del argv[i:i + 2]
@@ -384,8 +371,9 @@ class BlackoutTests(Fixture):
             rc = cadence_launch.main(argv)
         return rc, err.getvalue()
 
-    def test_a_2130_t0_meets_the_0200_blackout_and_refuses(self):
-        rc, err = self.main_at("2026-11-15T21:30", tag="late")              # worst case to 02:07:30
+    def test_a_named_window_still_refuses_a_worst_case_that_meets_it(self):
+        # --batch-window is kept for backward compatibility: a 21:30 t0's worst case runs to 02:07:30.
+        rc, err = self.main_at("2026-11-15T21:30", tag="late")
         self.assertEqual(rc, 2)
         self.assertIn("meets a batch blackout (02:00-02:35)", err)
         self.assertNotIn("exit status", err)
@@ -394,23 +382,15 @@ class BlackoutTests(Fixture):
         self.assertEqual(rc, 2)
         self.assertIn("exit status 19", err)                                # the plan passed; bootstrap failed
 
-    def test_no_flag_uses_the_r1_driver_window_and_a_1000_t0_refuses(self):
-        from scripts import align_r1_rehearsal as r1
-        if r1.OS_BATCH_WINDOW_LOCAL != ((11, 45), (13, 15)):
-            # After the W1-line merge (RL-165 section 8.1) the driver's window is 02:00-02:35: a 10:00 t0 plans,
-            # and a 21:30 t0 with no flag meets the driver's own window.
-            rc, err = self.main_at("2026-11-15T10:00", window=None, tag="ten")
-            self.assertIn("exit status 19", err)                            # the plan passed; bootstrap failed
-            rc, err = self.main_at("2026-11-15T21:30", window=None, tag="late")
-            self.assertEqual(rc, 2)
-            self.assertIn("meets a batch blackout (02:00-02:35)", err)
-            return
-        rc, err = self.main_at("2026-11-15T10:00", window=None, tag="ten")  # worst case meets 11:45-13:15
-        self.assertEqual(rc, 2)
-        self.assertIn("meets a batch blackout (11:45-13:15)", err)
-        self.assertFalse((self.root / "launchctl.log").exists())
-        rc, err = self.main_at("2026-11-15T06:00", window=None, tag="six")  # control: ends 10:37:30
-        self.assertIn("exit status 19", err)
+    def test_no_flag_means_no_blackout_and_no_fence(self):
+        # RL-171: with no --batch-window there is no clock rule. A worst case through 02:00 (t0 00:30 and 21:30),
+        # a fence end past 01:50 (21:00), and a t0 in the old 10:50-13:15 no-launch interval (11:00) all plan.
+        for when, tag in (("2026-11-15T00:30", "half"), ("2026-11-15T21:30", "late"), ("2026-11-15T21:00", "nine"),
+                          ("2026-11-15T11:00", "eleven")):
+            rc, err = self.main_at(when, window=None, tag=tag)
+            self.assertEqual(rc, 2, when)
+            self.assertIn("exit status 19", err, when)                      # the plan passed; bootstrap failed
+            self.assertNotIn("blackout", err, when)
 
 
 class OuterRunTests(Fixture):

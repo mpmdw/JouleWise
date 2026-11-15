@@ -16,7 +16,7 @@ import unittest
 from contextlib import redirect_stdout
 
 from joulewise.cadence import kit as kitmod, kit_v11, legs as legsmod
-from scripts import align_r1_rehearsal as r1, cadence_legs_runner as runner, cadence_queue
+from scripts import cadence_legs_runner as runner, cadence_queue
 
 from tests.cadence import test_kit_v11 as v11t
 from tests.cadence.test_kit_v11 import NEW_WINDOW, v11_kit
@@ -218,22 +218,30 @@ class QualLegsReachTheRuntime(unittest.TestCase):
                                                  "--decode-tokens", "4096"]), 2)
 
 
-class ChecklistSoakWindowIsTheDrivers(unittest.TestCase):
-    """At a pin whose R1 driver soaks outside 02:00-02:35 only, the arm checklist has no 10:50-13:15 refusal."""
+class ChecklistHasNoClockWindow(unittest.TestCase):
+    """RL-171: the qualification arm checklist has no 10:50-13:15 refusal and no 01:50 fence; no window by default."""
 
-    def test_checklist_follows_the_driver_constant(self):
-        self.assertEqual(cadence_queue.soak_window(), r1.OS_BATCH_WINDOW_LOCAL)
+    def test_checklist_admits_1100_and_a_span_through_0200(self):
+        self.assertFalse(hasattr(cadence_queue, "soak_window"))
         with tempfile.TemporaryDirectory(dir=TMP) as td:
             kit_path, obs_path = Path(td) / "kit.json", Path(td) / "obs.json"
             kit_path.write_text(json.dumps(qual_kit(), indent=1))
-            t0 = local("2026-11-19T11:00")
-            obs_path.write_text(json.dumps({**v11t.FreeT0Checklist.GOOD, "t0_epoch_s": t0, "end_by_epoch_s": t0 + 26210}))
-            buffer = io.StringIO()
-            with redirect_stdout(buffer):
-                code = cadence_queue.main(["checklist", "--kit", str(kit_path), "--kit-sha256", "f" * 64,
-                                           "--observations", str(obs_path), "--batch-window", "02:00-02:35"])
-        late = r1.OS_BATCH_WINDOW_LOCAL[0][0] < 10
-        self.assertEqual(code, 0 if late else 1, buffer.getvalue())
+            for when in ("2026-11-19T11:00", "2026-11-19T00:30"):
+                t0 = local(when)
+                obs_path.write_text(json.dumps({**v11t.FreeT0Checklist.GOOD, "t0_epoch_s": t0,
+                                                "end_by_epoch_s": t0 + 26210 + 1950}))
+                buffer = io.StringIO()
+                with redirect_stdout(buffer):
+                    code = cadence_queue.main(["checklist", "--kit", str(kit_path), "--kit-sha256", "f" * 64,
+                                               "--observations", str(obs_path)])
+                self.assertEqual(code, 0, (when, buffer.getvalue()))
+
+    def test_qual_span_plans_at_0030_and_1100_with_no_window(self):
+        kit = qual_kit()
+        ids = ["L%03d" % i for i in range(1, 7)]
+        for when in ("2026-11-19T00:30", "2026-11-19T11:00"):
+            plan = legsmod.plan_span(kit, t0_epoch=local(when), windows=runner.default_windows(), leg_ids=ids)
+            self.assertEqual((plan["worst_case_s"], plan["batch_windows"]), (24750, []))
 
 
 class CommittedQualKits(unittest.TestCase):
