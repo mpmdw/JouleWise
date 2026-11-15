@@ -1,0 +1,1 @@
+Final agreement run 2026-11-14 22:46 PST: analyst #795 at a2e94237f vs Sol twin fit_twin.py (sha e5eca3b4d0dae921); all nine sets PASS on D and O under RL-166c §4. The first run (REPORT.md) failed D on F1/F2 (analyst print-field bugs vs INTERFACE); fixed at a2e94237f.
