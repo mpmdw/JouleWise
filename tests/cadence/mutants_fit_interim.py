@@ -29,8 +29,8 @@ MUTANTS = [
     ("start_age_ignored", FIT, 'if ts - r["t_s"] > START_MAX_AGE_S or not r["pm_fresh"]:', 'if not r["pm_fresh"]:', [T_FIT]),
     ("start_fresh_ignored", FIT, 'if ts - r["t_s"] > START_MAX_AGE_S or not r["pm_fresh"]:', 'if ts - r["t_s"] > START_MAX_AGE_S:', [T_FIT]),
     ("tau_out_of_state_not_zero", FIT, 'if L["start"]["state"] == "start_out_of_state":\n        return 0.0', 'if False:\n        return 0.0', [T_FIT]),
-    ("tau_no_floor", FIT, 'return max(0.0, float(x @ beta))', 'return float(x @ beta)', [T_FIT]),
-    ("step_from_segment_start", FIT, 'max(0.0, v - max(u, tau))', 'max(0.0, v - u)', [T_FIT]),
+    ("tau_no_floor", FIT, '    return max(0.0, linear_predictor(L, model))', '    return linear_predictor(L, model)', [T_FIT]),
+    ("step_from_segment_start", FIT, '        return max(0.0, v - max(u, max(0.0, ell)))', '        return max(0.0, v - u)', [T_FIT]),
     ("ramp_without_midpoint", FIT, 'vals.update(k_tf08=d * m * z[0]', 'vals.update(k_tf08=d * z[0]', [T_FIT]),
     ("hot_flag_late", FIT, 'and s["first_token_s"] - turn["turn_start_s"] >= off)', 'and s["first_token_s"] - turn["turn_start_s"] > off + 1.0)', [T_FIT]),
     ("lodo_leaks_heldout_day", FIT, 'train = [k for k in keys_all if by_key[k]["day"] != D]', 'train = list(keys_all)', [T_FIT]),
@@ -45,10 +45,10 @@ MUTANTS = [
     ("row4_any_fresh_counts", FIT, 'return type(r["os_level"]) is int and r["pm_fresh"] and r["pm_state"] is not None and r["pm_state"] != "Unknown"', 'return r["pm_fresh"]', [T_FIT]),
     ("row5_anchor_first_fresh_reading", FIT, 'first = before[-1]["t_s"] if before and fresh_state(before[-1]) else ts\n    anchors = [first] + ', 'anchors = ([before[-1]["t_s"]] if before and fresh_state(before[-1]) else []) + ', [T_FIT]),
     ("row5_no_floor", FIT, 'return max(0.0, a - ts)', 'return a - ts', [T_FIT]),
-    ("row7_fold_needs_12_on_3", FIT, '    if int((~c).sum()) < FOLD_MIN_UNCENSORED:\n        return None', '    if not onset_estimable(c, _)[0]:\n        return None', [T_FIT]),
-    ("row8_unconverged_used", FIT, '    if not f["converged"]:\n        return None, None, False, n_unc, int(c.sum()), n_days\n', '', [T_FIT]),
+    ("row7_fold_needs_12_on_3", FIT, 'if int((~c).sum()) < FOLD_MIN_UNCENSORED or not _two_cells(_unc_by_cell(c, cells), FOLD_MIN_PER_CELL):', 'if not onset_estimable(c, _, cells)[0]:', [T_FIT]),
+    ("row8_unconverged_used", FIT, '    if not f["converged"]:\n        return None, info\n', '', [T_FIT]),
     ("row12_pooled_counted_only", FIT, '                num_h += pn - mn                         # RL-167 row 12: pooled over every hot block, every day\n                den_h += mn\n                if len(hk) >= MIN_HOT_LEGS_PER_DAY:\n                    counted.append(D)', '                if len(hk) >= MIN_HOT_LEGS_PER_DAY:\n                    counted.append(D)\n                    num_h += pn - mn\n                    den_h += mn', [T_FIT]),
-    ("row16_marked_uses_main_onset", FIT, '                cw = _channel(legs, E, ch, beta_keep, include=keep)', '                cw = _channel(legs, E, ch, beta_main, include=keep)', [T_FIT]),
+    ("row16_marked_uses_main_onset", FIT, '                cw = _channel(legs, E, ch, model_keep, active, include=keep)', '                cw = _channel(legs, E, ch, model_main, active, include=keep)', [T_FIT]),
     ("row20_none_key", FIT, '            g = "null" if v is None else str(v)', '            g = str(v)', [T_FIT]),
     ("row21_hp_any_type", FIT, 'if legs_d[k]["included"] and legs_d[k]["leg_type"] == "A") if hp else None', 'if legs_d[k]["included"]) if hp else None', [T_FIT]),
     ("row22_hp_in_level_e", FIT, '    needed = {L["leg_key"]: L for L in legs if L["in_energy_fit"]}', '    needed = {L["leg_key"]: L for L in legs if L["in_energy_fit"] or L["hp_describe"]}', [T_FIT]),
@@ -60,6 +60,27 @@ MUTANTS = [
     ("r11_ci_with_one_day", FIT, '    if nd >= 2:\n        se = ', '    if nd >= 1:\n        se = ', [T_FIT]),
     ("r20_drift_threshold", FIT, 'METER_DRIFT_MAX_S = 0.1', 'METER_DRIFT_MAX_S = 1.0', [T_FIT]),
     ("r20_reader_parses_poll_lines", RUN, '            if _B_KIND.search(line):', '            if _B_KIND.search(line) and json.loads(line):', [T_RUN]),
+    # RL-166b
+    ("b1_overlap_not_expected", FIT, '    return sigma * (_G((v - ell) / sigma) - _G((u - ell) / sigma))', '    return max(0.0, v - max(u, max(0.0, ell)))', [T_FIT]),
+    ("b1_clipped_ell", FIT, 'return {L["leg_key"]: (linear_predictor(L, model), model["sigma"],', 'return {L["leg_key"]: (max(0.0, linear_predictor(L, model)), model["sigma"],', [T_FIT]),
+    ("b1_oos_overlap", FIT, '    if oos:\n        return v - u\n    if sigma < SIGMA_MIN_S:', '    if sigma < SIGMA_MIN_S:', [T_FIT]),
+    ("b1_G_without_phi", FIT, 'return x * 0.5 * math.erfc(-x / _SQRT2) + math.exp(-0.5 * x * x - _LOG_SQRT_2PI)', 'return x * 0.5 * math.erfc(-x / _SQRT2)', [T_FIT]),
+    ("b1_fold_uses_main_sigma", FIT, '                    onsets = _onsets(fit, bo)', '                    onsets = _onsets(fit, dict(bo, sigma=model["sigma"]))', [T_FIT]),
+    ("b2_tolerance_inclusive", FIT, 'counts = [sum(1 for d, z in day_z if d != D and abs(z) > tol) for D in days]', 'counts = [sum(1 for d, z in day_z if d != D and abs(z) >= tol) for D in days]', [T_FIT]),
+    ("b2_count_includes_day", FIT, 'counts = [sum(1 for d, z in day_z if d != D and abs(z) > tol) for D in days]', 'counts = [sum(1 for d, z in day_z if abs(z) > tol) for D in days]', [T_FIT]),
+    ("b2_inactive_kept_in_energy", FIT, '    heat_cols = (list(BASE_COLS) + [HEAT_OF[n] for n in READINGS if active[n]]', '    heat_cols = (list(BASE_COLS) + [HEAT_OF[n] for n in READINGS]', [T_FIT]),
+    ("b2_inactive_kept_in_onset", FIT, '    return ["intercept"] + [n for n in READINGS if active[n]] + ["t_p_s"]', '    return ["intercept"] + list(READINGS) + ["t_p_s"]', [T_FIT]),
+    ("b3_no_cell_rule", FIT, '          and _two_cells(by_cell, ONSET_MIN_PER_CELL))', '          and True)', [T_FIT]),
+    ("b4_no_fold_cell_rule", FIT, 'if int((~c).sum()) < FOLD_MIN_UNCENSORED or not _two_cells(_unc_by_cell(c, cells), FOLD_MIN_PER_CELL):', 'if int((~c).sum()) < FOLD_MIN_UNCENSORED:', [T_FIT]),
+    ("b5_no_decrement_check", FIT, 'out["passes"] = bool(cond <= CONV_MAX_COND and dec <= CONV_DECREMENT and math.isfinite(dec))', 'out["passes"] = bool(cond <= CONV_MAX_COND)', [T_FIT]),
+    ("b5_no_cond_check", FIT, 'out["passes"] = bool(cond <= CONV_MAX_COND and dec <= CONV_DECREMENT and math.isfinite(dec))', 'out["passes"] = bool(dec <= CONV_DECREMENT and math.isfinite(dec))', [T_FIT]),
+    ("b5_no_pd_check", FIT, '    if not ev[0] > 0:\n        return out\n    cond', '    cond', [T_FIT]),
+    ("b6_loose_rank", FIT, 'RANK_RTOL = 1e-10 ', 'RANK_RTOL = 1e-14 ', [T_FIT]),
+    ("b7_days_3", FIT, 'TRIP = {"dev_included": 45, "days": 4,', 'TRIP = {"dev_included": 45, "days": 3,', [T_FIT]),
+    ("p2_se_unpooled", FIT, '                         "se": None if sd_w is None else sd_w / math.sqrt(len(ks))}', '                         "se": None if sd_w is None else sd_w / len(ks)}', [T_FIT]),
+    ("p3_offset_from_first_block", FIT, '            o = blocks.index(hot[0])', '            o = 0', [T_FIT]),
+    ("p4_le_116", FIT, 'if L["start"]["state"] == "in_state" and off is not None and off < COUNT_ONLY_CUT_FIXED_S:', 'if off is not None and off < COUNT_ONLY_CUT_FIXED_S:', [T_FIT]),
+    ("p4_flag_always_false", FIT, '"to_research_lead": onset["status"] == "not_estimable" and n_early > 0}', '"to_research_lead": False}', [T_FIT]),
     ("level_off_requires_fresh", FIT, 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0:', 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0 and r["pm_fresh"]:', [T_FIT]),
     ("cluster_by_day", FIT, '            g += [k] * len(L["segments"])', '            g += [L["day"]] * len(L["segments"])', [T_FIT]),
     ("no_cr1_factor", FIT, 'corr = (G / (G - 1)) * ((n - 1) / (n - k)) if G > 1 and n > k else 1.0', 'corr = 1.0', [T_FIT]),
@@ -90,6 +111,7 @@ def main(argv=None):
             shutil.copytree(ROOT / d, tmp / d, ignore=shutil.ignore_patterns("__pycache__"))
         (tmp / "configs/align/v4").mkdir(parents=True)      # the runtime sensor policy the rules-3/4 test reads
         shutil.copy(ROOT / "configs/align/v4/r1_runtime.json", tmp / "configs/align/v4/r1_runtime.json")
+        shutil.copytree(ROOT / "docs/process/cadence/looks", tmp / "docs/process/cadence/looks")   # the schemas
         (tmp / "tests").mkdir()
         for f in (ROOT / "tests").iterdir():          # tests/__init__.py installs the host-command guard
             if f.is_file() and f.suffix == ".py":

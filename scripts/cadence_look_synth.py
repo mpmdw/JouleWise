@@ -101,6 +101,10 @@ SCENARIOS = {
     "onset_not_estimable": {"onset": {"intercept": 1500.0}},
     # only two days carry hot stretches on at least three legs: not_evaluable
     "few_hot_days": {"onset": {"intercept": 1500.0}, "force_hot_days": ["2026-11-17", "2026-11-18"]},
+    # RL-166b B-2: one start reading held constant (the fan at its floor): inactive, its columns dropped
+    "inactive_fan": {"start": {"fan_span": 0.0, "fan_sd": 0.0}},
+    # RL-166b B-3: uncensored onsets in a single prompt-size cell: not estimable
+    "onsets_one_cell": {"onset_only_cells": [19458]},
     # heat-free world: kappa = delta = 0
     "no_heat": {"gpu_rail": {"k_tf08": 0.0, "k_fan": 0.0, "k_tv0h": 0.0, "delta": 0.0},
                 "dc_in": {"k_tf08": 0.0, "k_fan": 0.0, "k_tv0h": 0.0, "delta": 0.0}},
@@ -159,16 +163,30 @@ def tail_edges(L):
     return (BLOCK * nb, L - 1, BLOCK * nb - 1, L - 1)
 
 
-def planted_segment_energy(par, kind, n, P, c, u, v, z, tau, with_delta=True):
-    """The planted mean energy of one segment on the count-derived clock (RL-166 Q1, Q2)."""
+def _G(x):
+    return x * 0.5 * math.erfc(-x / math.sqrt(2.0)) + math.exp(-0.5 * x * x) / math.sqrt(2.0 * math.pi)
+
+
+def planted_hot_seconds(u, v, onset):
+    """RL-166b B-1's expected hot seconds, computed here independently: onset = (l unclipped, sigma, oos)."""
+    ell, sigma, oos = onset
+    if oos:
+        return v - u
+    if sigma < 1e-6:
+        return max(0.0, v - max(u, max(0.0, ell)))
+    return sigma * (_G((v - ell) / sigma) - _G((u - ell) / sigma))
+
+
+def planted_segment_energy(par, kind, n, P, c, u, v, z, onset, with_delta=True):
+    """The planted mean energy of one segment on the count-derived clock (RL-166 Q1, Q2; RL-166b B-1)."""
     d, m = v - u, 0.5 * (u + v)
     if kind == "prefill":
         base = par["p1"] * P + par["p2"] * P * P
     else:
         base = par["a0"] * n + par["a1"] * n * c + par["a2"] * n * P
     heat = d * m * (par["k_tf08"] * z[0] + par["k_fan"] * z[1] + par["k_tv0h"] * z[2])
-    if with_delta and tau is not None:
-        heat += par["delta"] * max(0.0, v - max(u, tau))
+    if with_delta and onset is not None:
+        heat += par["delta"] * planted_hot_seconds(u, v, onset)
     return base + heat
 
 
@@ -259,6 +277,11 @@ def build(scenario="noisy", seed=20261114, tokens=None):
                  t_first=t_first, t_last=t_last)
 
     # 'few_hot_days': only the forced days' legs reach the cut
+    only = par.get("onset_only_cells")
+    if only:
+        for p in plan:
+            if p["cell"] not in only and not p["out_of_state"]:
+                p["tau_true"] = 5000.0                       # never reached: censored
     force = par.get("force_hot_days")
     if force:
         for p in plan:
@@ -309,14 +332,14 @@ def build(scenario="noisy", seed=20261114, tokens=None):
             segs, mean = [], []
             for s in tlg["count_segments"]:
                 mu = planted_segment_energy(cp, s["kind"], s["n"], p["P"], s["c"], s["u"], s["v"], p["z"],
-                                            p["tau_planted"])
+                                            (p["lin"], on["sigma_s"], p["out_of_state"]))
                 e = mu + leg_w * (s["v"] - s["u"]) + (float(rng.normal(0, sd)) if sd else 0.0)
                 segs.append(e)
                 mean.append(mu)
             tails = {}
             for L, s in tlg["count_tails"].items():
                 mu = planted_segment_energy(cp, "decode", s["n"], p["P"], s["c"], s["u"], s["v"], p["z"],
-                                            p["tau_planted"])
+                                            (p["lin"], on["sigma_s"], p["out_of_state"]))
                 tails[L] = mu + leg_w * (s["v"] - s["u"]) + (float(rng.normal(0, sd)) if sd else 0.0)
             entry[ch] = {"segments": segs, "prefix_tails": tails, "coverage_min": 1.0}
             tlg.setdefault("planted_mean_j", {})[ch] = sum(mean)

@@ -44,17 +44,29 @@ CHANNELS = ("gpu_rail", "dc_in")
 BASE_COLS = ("p1", "p2", "a0", "a1", "a2")
 HEAT_COLS = ("k_tf08", "k_fan", "k_tv0h")
 DELTA_COL = "delta"
-ONSET_COLS = ("intercept", "tf08_c", "fan_rpm", "tv0h_excess_c", "t_p_s")
+READINGS = ("tf08_c", "fan_rpm", "tv0h_excess_c")
+HEAT_OF = {"tf08_c": "k_tf08", "fan_rpm": "k_fan", "tv0h_excess_c": "k_tv0h"}
+ONSET_COLS = ("intercept", "tf08_c", "fan_rpm", "tv0h_excess_c", "t_p_s")   # all readings active
 ONSET_MIN_UNCENSORED = 12
 ONSET_MIN_DAYS = 3
+ONSET_MIN_PER_CELL = 4             # RL-166b B-3: in each of at least two cells
 FOLD_MIN_UNCENSORED = 6
+FOLD_MIN_PER_CELL = 2              # RL-166b B-4
+CONV_DECREMENT = 1e-8              # RL-166b B-5
+CONV_MAX_COND = 1e10
+SIGMA_MIN_S = 1e-6                 # RL-166b B-1
+ACTIVE_TOL = {"tf08_c": 0.25, "fan_rpm": 25.0, "tv0h_excess_c": 0.25}    # RL-166b B-2
+ACTIVE_MIN_LEGS = 6
+RANK_RTOL = 1e-10                  # RL-166b B-6
+ONSET_OFFSETS = (-2, -1, 0, 1, 2, 3, 4, 5)                 # P-3
+ONSET_SUMMARY_OFFSETS = (-2, -1, 0, 1, 2, 3)
 SD_FLOOR_J = 1e-12
 METER_DRIFT_MAX_S = 0.1
 COUNT_ONLY_CUT_FIXED_S = 116.0
 QUALIFIED_THRESHOLD = 0.02
 MIN_COUNTED_DAYS = 3
 MIN_HOT_LEGS_PER_DAY = 3
-TRIP = {"dev_included": 45, "days": 3, "cell": 10, "start_invalid_frac": 0.10, "hp01": 9}
+TRIP = {"dev_included": 45, "days": 4, "cell": 10, "start_invalid_frac": 0.10, "hp01": 9}
 FORBIDDEN_FIELDS = ("condition", "slot", "instruction", "start_band")
 
 
@@ -352,19 +364,48 @@ def _mills(s):
     return -s / (1 - 1 / s ** 2 + 3 / s ** 4)
 
 
-def censored_normal_fit(X, y, censored, tol=1e-11, max_iter=200):
-    # Apple Accelerate raises spurious floating-point flags inside matmul (numpy 2.x); results are finite-checked.
-    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-        f = _censored_normal_fit(X, y, censored, tol, max_iter)
-    if not (np.all(np.isfinite(f["beta"])) and math.isfinite(f["sigma"])):
-        f["converged"] = False
-    return f
+def _tobit(X, y, cen, q):
+    """Log likelihood, gradient and Hessian of the right-censored normal in Olsen's form q = (gamma, eta),
+    gamma = beta/sigma, eta = 1/sigma. Concave in q."""
+    n, p = X.shape
+    g, th = q[:p], q[p]
+    if not (th > 0) or not np.all(np.isfinite(q)):
+        return -math.inf, None, None
+    xg = X @ g
+    ll = 0.0
+    G = np.zeros(p + 1)
+    H = np.zeros((p + 1, p + 1))
+    for i in range(n):
+        if not cen[i]:
+            r = th * y[i] - xg[i]
+            ll += math.log(th) - 0.5 * r * r - _LOG_SQRT_2PI
+            v = np.append(-X[i], y[i])            # dr/dq
+            G += -r * v
+            G[p] += 1.0 / th
+            H -= np.outer(v, v)
+            H[p, p] -= 1.0 / th ** 2
+        else:
+            s = xg[i] - th * y[i]
+            ll += _log_ndtr(s)
+            lam = _mills(s)
+            v = np.append(X[i], -y[i])            # ds/dq
+            G += lam * v
+            H -= lam * (s + lam) * np.outer(v, v)
+    return ll, G, H
 
 
-def _censored_normal_fit(X, y, censored, tol, max_iter):
-    """Right-censored normal (Tobit) ML by Newton's method in Olsen's (gamma = beta/sigma, theta = 1/sigma) form, in
-    which the log likelihood is concave. X: (n, p); y: response or the censoring time; censored: bool array.
-    Returns {beta, sigma, converged, loglik, iterations}."""
+def censored_normal_fit(X, y, censored, max_iter=200):
+    """Right-censored normal (Tobit) ML, hand-coded (RL-166 Q4), with RL-166b B-5's convergence test.
+    Every predictor column, and the responses and censoring times, are divided by their RMS over the fitted legs;
+    Newton's method runs in Olsen's form on that scaled problem; the result is scaled back. `converged` is B-5's
+    test at the returned point: all values finite, eta above 0, the negative Hessian positive definite with
+    condition number at most 1e10, and the Newton decrement g'(-H)^-1 g at most 1e-8.
+    Returns {beta, sigma, converged, decrement, condition_number, iterations}."""
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):   # Accelerate's spurious matmul flags
+        return _censored_normal_fit(X, y, censored, max_iter)
+
+
+def _censored_normal_fit(X, y, censored, max_iter):
     X = np.asarray(X, dtype=float)
     y = np.asarray(y, dtype=float)
     cen = np.asarray(censored, dtype=bool)
@@ -372,75 +413,85 @@ def _censored_normal_fit(X, y, censored, tol, max_iter):
     unc = ~cen
     if unc.sum() < p + 1:
         raise LookInputError("onset: too few uncensored observations to start the fit")
-    b0, *_ = np.linalg.lstsq(X[unc], y[unc], rcond=None)
-    res = y[unc] - X[unc] @ b0
+    cx = np.sqrt((X * X).mean(axis=0))
+    cx[cx == 0] = 1.0
+    cy = math.sqrt(float((y * y).mean())) or 1.0
+    Xs, ys = X / cx, y / cy
+    b0, *_ = np.linalg.lstsq(Xs[unc], ys[unc], rcond=None)
+    res = ys[unc] - Xs[unc] @ b0
     s0 = math.sqrt(max(float(res @ res) / max(1, unc.sum() - p), 1e-6))
-    par = np.concatenate([b0 / s0, [1.0 / s0]])
-
-    def ll_grad_hess(q):
-        g, th = q[:p], q[p]
-        if th <= 0:
-            return -math.inf, None, None
-        xg = X @ g
-        ll = 0.0
-        G = np.zeros(p + 1)
-        H = np.zeros((p + 1, p + 1))
-        for i in range(n):
-            xi = np.append(X[i], 0.0)
-            if not cen[i]:
-                r = th * y[i] - xg[i]
-                ll += math.log(th) - 0.5 * r * r - _LOG_SQRT_2PI
-                v = np.append(-X[i], y[i])            # dr/dq
-                G += -r * v
-                G[p] += 1.0 / th
-                H -= np.outer(v, v)
-                H[p, p] -= 1.0 / th ** 2
-            else:
-                s = xg[i] - th * y[i]
-                ll += _log_ndtr(s)
-                lam = _mills(s)
-                v = np.append(X[i], -y[i])            # ds/dq
-                G += lam * v
-                H -= lam * (s + lam) * np.outer(v, v)
-            del xi
-        return ll, G, H
-
-    ll, G, H = ll_grad_hess(par)
-    converged = False
+    q = np.concatenate([b0 / s0, [1.0 / s0]])
+    ll, G, H = _tobit(Xs, ys, cen, q)
     it = 0
     for it in range(1, max_iter + 1):
         try:
             step = np.linalg.solve(H, -G)
         except np.linalg.LinAlgError:
             break
-        t = 1.0
-        while True:
-            cand = par + t * step
-            ll2, G2, H2 = ll_grad_hess(cand)
-            if ll2 >= ll - 1e-12 or t < 1e-10:
+        t, moved = 1.0, False
+        while t >= 1e-10:
+            cand = q + t * step
+            ll2, G2, H2 = _tobit(Xs, ys, cen, cand)
+            if math.isfinite(ll2) and ll2 >= ll - 1e-12:
+                q, ll, G, H, moved = cand, ll2, G2, H2, True
                 break
             t *= 0.5
-        if not math.isfinite(ll2):
+        if not moved:
             break
-        par, ll, G, H = cand, ll2, G2, H2
-        if float(np.max(np.abs(t * step))) < tol * max(1.0, float(np.max(np.abs(par)))) and \
-                float(np.max(np.abs(G))) < 1e-6:
-            converged = True
+        dec = _decrement(G, H)
+        if dec is not None and dec <= 1e-20:          # run to machine precision; B-5 judges the point
             break
-    sigma = 1.0 / par[p]
-    return {"beta": par[:p] * sigma, "sigma": float(sigma), "converged": converged, "loglik": float(ll),
-            "iterations": it}
+    test = convergence_test(q, G, H)
+    sigma_s = 1.0 / q[p] if q[p] > 0 else math.nan
+    beta = q[:p] * sigma_s * cy / cx
+    return {"beta": beta, "sigma": float(sigma_s * cy), "converged": test["passes"], "decrement": test["decrement"],
+            "condition_number": test["condition_number"], "iterations": it}
 
 
-def _onset_rows(legs_d, keys):
-    X, y, c, days = [], [], [], []
+def _decrement(G, H):
+    try:
+        return float(G @ np.linalg.solve(-H, G))
+    except np.linalg.LinAlgError:
+        return None
+
+
+def convergence_test(q, G, H):
+    """RL-166b B-5, at the returned point of the scaled problem."""
+    out = {"passes": False, "decrement": None, "condition_number": None}
+    if G is None or H is None or not (np.all(np.isfinite(q)) and np.all(np.isfinite(G)) and np.all(np.isfinite(H))):
+        return out
+    if not q[-1] > 0:
+        return out
+    negH = -0.5 * (H + H.T)
+    ev = np.linalg.eigvalsh(negH)
+    if not ev[0] > 0:
+        return out
+    cond = float(ev[-1] / ev[0])
+    dec = float(G @ np.linalg.solve(negH, G))
+    out.update(decrement=dec, condition_number=cond)
+    out["passes"] = bool(cond <= CONV_MAX_COND and dec <= CONV_DECREMENT and math.isfinite(dec))
+    return out
+
+
+# ---------------------------------------------------------------------------------------- the onset model
+def onset_cols(active):
+    """RL-166b B-2: the intercept, the ACTIVE start readings, T_p."""
+    return ["intercept"] + [n for n in READINGS if active[n]] + ["t_p_s"]
+
+
+def onset_x(L, cols):
+    z = dict(zip(READINGS, L["start"]["z"]))
+    return np.array([1.0 if c == "intercept" else L["t_p_s"] if c == "t_p_s" else z[c] for c in cols])
+
+
+def _onset_rows(legs_d, keys, cols):
+    X, y, c, days, cells = [], [], [], [], []
     for k in keys:
         L = legs_d[k]
         st = L["state"]
         if st["onset_use"] not in ("uncensored", "censored"):
             continue
-        z = L["start"]["z"]
-        X.append([1.0, z[0], z[1], z[2], L["t_p_s"]])
+        X.append(onset_x(L, cols))
         if st["onset_use"] == "uncensored":
             y.append(st["first_off_s"])
             c.append(False)
@@ -448,53 +499,77 @@ def _onset_rows(legs_d, keys):
             y.append(st["censored_at_s"])
             c.append(True)
         days.append(L["day"])
-    return np.asarray(X, dtype=float).reshape(-1, len(ONSET_COLS)), np.asarray(y), np.asarray(c, dtype=bool), days
+        cells.append(L["cell_prompt_tokens"])
+    return (np.asarray(X, dtype=float).reshape(-1, len(cols)), np.asarray(y, dtype=float),
+            np.asarray(c, dtype=bool), days, cells)
 
 
-def onset_estimable(cens, days):
+def _unc_by_cell(cens, cells):
+    out = {str(c): 0 for c in CELLS}
+    for c, x in zip(cells, cens):
+        if not x:
+            out[str(c)] += 1
+    return out
+
+
+def _two_cells(by_cell, k):
+    return sum(1 for v in by_cell.values() if v >= k) >= 2
+
+
+def onset_estimable(cens, days, cells):
+    """RL-166b B-3's counts: at least 12 uncensored on at least 3 days, and at least 4 uncensored in each of at
+    least two prompt-size cells. (B-5's test is applied after the fit.)"""
+    cens = np.asarray(cens, dtype=bool)
     unc_days = {d for d, c in zip(days, cens) if not c}
-    n_unc = int((~np.asarray(cens, dtype=bool)).sum()) if len(cens) else 0
-    return n_unc >= ONSET_MIN_UNCENSORED and len(unc_days) >= ONSET_MIN_DAYS, n_unc, len(unc_days)
+    n_unc = int((~cens).sum()) if len(cens) else 0
+    by_cell = _unc_by_cell(cens, cells)
+    ok = (n_unc >= ONSET_MIN_UNCENSORED and len(unc_days) >= ONSET_MIN_DAYS
+          and _two_cells(by_cell, ONSET_MIN_PER_CELL))
+    return ok, n_unc, len(unc_days), by_cell
 
 
-def fit_onset(legs_d, keys):
-    """The MAIN onset model (Q4; RL-167 row 8): estimable at 12 uncensored on 3 days AND converged.
-    Returns (beta or None, sigma, converged or None, n_unc, n_cens, n_days_unc)."""
-    X, y, c, days = _onset_rows(legs_d, keys)
-    ok, n_unc, n_days = onset_estimable(c, days)
+def fit_onset(legs_d, keys, cols):
+    """The MAIN onset model (Q4; RL-167 row 8; RL-166b B-3, B-5). Returns (model or None, info)."""
+    X, y, c, days, cells = _onset_rows(legs_d, keys, cols)
+    ok, n_unc, n_days, by_cell = onset_estimable(c, days, cells)
+    info = {"n_uncensored": n_unc, "n_censored": int(c.sum()), "n_days_uncensored": n_days,
+            "uncensored_by_cell": by_cell, "converged": None, "decrement": None, "condition_number": None}
     if not ok:
-        return None, None, None, n_unc, int(c.sum()), n_days
+        return None, info
     f = censored_normal_fit(X, y, c)
+    info.update(converged=f["converged"], decrement=f["decrement"], condition_number=f["condition_number"])
     if not f["converged"]:
-        return None, None, False, n_unc, int(c.sum()), n_days
-    return f["beta"], f["sigma"], True, n_unc, int(c.sum()), n_days
+        return None, info
+    return {"cols": list(cols), "beta": f["beta"], "sigma": f["sigma"]}, info
 
 
-def fit_onset_fold(legs_d, keys):
-    """A fold's onset model (RL-167 row 7): no 12-on-3 rule; it fits with at least 6 uncensored onsets and
-    convergence, else None."""
-    X, y, c, _ = _onset_rows(legs_d, keys)
-    if int((~c).sum()) < FOLD_MIN_UNCENSORED:
+def fit_onset_fold(legs_d, keys, cols):
+    """A fold's onset model (RL-167 row 7 as RL-166b B-4 amends it): at least 6 uncensored, at least 2 in each of
+    at least two cells, and B-5's test; else None."""
+    X, y, c, _, cells = _onset_rows(legs_d, keys, cols)
+    if int((~c).sum()) < FOLD_MIN_UNCENSORED or not _two_cells(_unc_by_cell(c, cells), FOLD_MIN_PER_CELL):
         return None
     try:
         f = censored_normal_fit(X, y, c)
     except LookInputError:
         return None
-    return f["beta"] if f["converged"] else None
+    return {"cols": list(cols), "beta": f["beta"], "sigma": f["sigma"]} if f["converged"] else None
 
 
-def tau_hat(L, beta):
-    """RL-166 Q4: max(0, the linear predictor); 0 for a leg whose start is out of state."""
-    if beta is None:
+def linear_predictor(L, model):
+    return float(onset_x(L, model["cols"]) @ model["beta"])
+
+
+def tau_hat(L, model):
+    """RL-166 Q4 (B-1a unchanged): max(0, the linear predictor); 0 for a leg whose start is out of state."""
+    if model is None:
         return None
     if L["start"]["state"] == "start_out_of_state":
         return 0.0
-    z = L["start"]["z"]
-    x = np.array([1.0, z[0], z[1], z[2], L["t_p_s"]])
-    return max(0.0, float(x @ beta))
+    return max(0.0, linear_predictor(L, model))
 
 
-def _onset_lodo(legs_d, fit_keys):
+def _onset_lodo(legs_d, fit_keys, cols):
     """Leave-one-day-out error of the onset model (Q4): RMS of predicted less observed over held-out uncensored
     legs. Days are those of in-fit legs in the onset sample."""
     days = sorted({legs_d[k]["day"] for k in fit_keys if legs_d[k]["state"]["onset_use"] in ("uncensored", "censored")})
@@ -503,8 +578,8 @@ def _onset_lodo(legs_d, fit_keys):
     folds_not_estimable = []
     for D in days:
         train = [k for k in fit_keys if legs_d[k]["day"] != D]
-        beta = fit_onset_fold(legs_d, train)
-        if beta is None:
+        model = fit_onset_fold(legs_d, train, cols)
+        if model is None:
             folds_not_estimable.append(D)
             continue
         sq = []
@@ -513,7 +588,7 @@ def _onset_lodo(legs_d, fit_keys):
             if L["day"] != D:
                 continue
             st = L["state"]
-            th = tau_hat(L, beta)
+            th = tau_hat(L, model)
             if st["onset_use"] == "uncensored":
                 sq.append((th - st["first_off_s"]) ** 2)
             elif st["onset_use"] == "censored":
@@ -526,6 +601,22 @@ def _onset_lodo(legs_d, fit_keys):
     rms = math.sqrt(sum(sq_all) / len(sq_all)) if sq_all else None
     return {"per_day_rms_s": per_day, "rms_s": rms, "heldout_censored_below_tau": cens_below,
             "heldout_censored": cens_n, "folds_not_estimable": folds_not_estimable}
+
+
+def _G(x):
+    return x * 0.5 * math.erfc(-x / _SQRT2) + math.exp(-0.5 * x * x - _LOG_SQRT_2PI)
+
+
+def expected_hot_seconds(u, v, onset):
+    """RL-166b B-1: w~ = sigma [G((v - l)/sigma) - G((u - l)/sigma)], G(x) = x Phi(x) + phi(x), l the UNCLIPPED
+    linear predictor, sigma the onset fit's ML sigma. A start_out_of_state leg takes v - u; sigma under 1e-6 s
+    takes the old overlap. `onset` = (l, sigma, out_of_state) or None (no delta column)."""
+    ell, sigma, oos = onset
+    if oos:
+        return v - u
+    if sigma < SIGMA_MIN_S:
+        return max(0.0, v - max(u, max(0.0, ell)))
+    return sigma * (_G((v - ell) / sigma) - _G((u - ell) / sigma))
 
 
 def _count_clock(L, r_p, r_d):
@@ -636,24 +727,38 @@ def stage1(look_input, input_sha256, code_sha256=None):
         elif L["state"] is not None and st["status"] != "ok" and L["included"] and L["role"] == "fit":
             L["state"]["onset_use"] = "left_out_missing_start"
 
-    # Q4: onset
-    beta, sigma, conv, n_unc, n_cens, n_days = fit_onset(legs_d, fit_keys)     # conv False: not_estimable
+    # RL-166b B-2: which start readings are active, decided once here
+    fit_days_all = sorted({legs_d[k]["day"] for k in fit_keys})
+    active_readings = {}
+    for j, n in enumerate(READINGS):
+        act, m = reading_active([(legs_d[k]["day"], legs_d[k]["start"]["z"][j]) for k in fit_keys],
+                                fit_days_all, ACTIVE_TOL[n])
+        active_readings[n] = {"active": act, "tolerance": ACTIVE_TOL[n], "min_count_off_day": m,
+                              "threshold": ACTIVE_MIN_LEGS}
+    active = {n: v["active"] for n, v in active_readings.items()}
+    cols = onset_cols(active)
+
+    # Q4: onset (RL-166b B-3, B-5)
+    model, info = fit_onset(legs_d, fit_keys, cols)                 # converged False: not_estimable
+    n_unc, n_cens, n_days = info["n_uncensored"], info["n_censored"], info["n_days_uncensored"]
     left = {"start_out_of_state": sum(1 for k in fit_keys if legs_d[k]["state"]["onset_use"] == "left_out_start_out_of_state"),
             "state_unobserved": sum(1 for k in fit_keys if legs_d[k]["state"]["onset_use"] == "left_out_state_unobserved"),
             "start_reading_missing": sum(1 for k in order if legs_d[k]["state"] is not None
                                          and legs_d[k]["state"]["onset_use"] == "left_out_missing_start")}
-    if beta is not None:
-        lodo = _onset_lodo(legs_d, fit_keys)
+    if model is not None:
+        lodo = _onset_lodo(legs_d, fit_keys, cols)
         cut = ({"form": "tau_hat_minus_2rms", "offset_s": 2.0 * lodo["rms_s"], "fixed_s": None}
                if lodo["rms_s"] is not None else {"form": "fixed_116_s", "offset_s": None, "fixed_s": COUNT_ONLY_CUT_FIXED_S})
         onset = {"status": "estimable", "n_uncensored": n_unc, "n_censored": n_cens, "n_days_uncensored": n_days,
-                 "left_out": left, "predictors": list(ONSET_COLS),
-                 "coefficients": dict(zip(ONSET_COLS, (float(b) for b in beta))), "sigma_s": sigma,
-                 "converged": bool(conv), "lodo": lodo, "count_only_cut": cut}
+                 "n_uncensored_by_cell": info["uncensored_by_cell"], "left_out": left, "predictors": list(cols),
+                 "coefficients": dict(zip(cols, (float(b) for b in model["beta"]))), "sigma_s": model["sigma"],
+                 "converged": True, "lodo": lodo, "count_only_cut": cut}
     else:
         onset = {"status": "not_estimable", "n_uncensored": n_unc, "n_censored": n_cens, "n_days_uncensored": n_days,
-                 "left_out": left, "predictors": list(ONSET_COLS), "coefficients": None, "sigma_s": None,
-                 "converged": conv, "lodo": None,          # None: not attempted; False: did not converge
+                 "n_uncensored_by_cell": info["uncensored_by_cell"], "left_out": left, "predictors": list(cols),
+                 "coefficients": None, "sigma_s": None,
+                 "converged": info["converged"],          # None: not attempted; False: B-5 failed
+                 "lodo": None,
                  "count_only_cut": {"form": "fixed_116_s", "offset_s": None, "fixed_s": COUNT_ONLY_CUT_FIXED_S}}
 
     out_legs = []
@@ -661,7 +766,7 @@ def stage1(look_input, input_sha256, code_sha256=None):
         L = legs_d[k]
         turn = L.pop("_turn")
         if turn is not None:
-            L["tau_hat_s"] = tau_hat(L, beta) if L["start"]["z"] is not None else None
+            L["tau_hat_s"] = tau_hat(L, model) if L["start"]["z"] is not None else None
             off = L["state"]["first_off_s"]
             for s in L["segments"]:
                 s["hot"] = bool(s["kind"] == "decode" and off is not None
@@ -678,11 +783,23 @@ def stage1(look_input, input_sha256, code_sha256=None):
     invalid = sum(1 for k in dev_inc if legs_d[k]["start"]["status"] != "ok")
     inv_frac = invalid / len(dev_inc) if dev_inc else 1.0
     trip = {"dev_included_below_45": {"value": len(dev_inc), "trips": len(dev_inc) < TRIP["dev_included"]},
-            "days_below_3": {"value": len(fit_days), "trips": len(fit_days) < TRIP["days"]},
+            "days_below_4": {"value": len(fit_days), "trips": len(fit_days) < TRIP["days"]},      # RL-166b B-7
             "cell_below_10": {"value": cell_inc, "trips": any(v < TRIP["cell"] for v in cell_inc.values())},
             "start_reading_invalid_over_10pct": {"value": inv_frac, "trips": inv_frac > TRIP["start_invalid_frac"]},
             "hp01_below_9": {"value": hp_inc, "trips": hp_inc is not None and hp_inc < TRIP["hp01"]}}
     trip["any"] = any(v["trips"] for v in trip.values())
+
+    # RL-166b P-4: legs that start in state with an observed onset under 116 s, by G0 role
+    early_by = {"null": 0, "capture": 0, "consume": 0}
+    for k in fit_keys:
+        L = legs_d[k]
+        off = L["state"]["first_off_s"]
+        if L["start"]["state"] == "in_state" and off is not None and off < COUNT_ONLY_CUT_FIXED_S:
+            g = "null" if L["g0_role"] is None else L["g0_role"]
+            early_by[g] = early_by.get(g, 0) + 1
+    n_early = sum(early_by.values())
+    early = {"by_g0_role": early_by, "total": n_early, "onset_status": onset["status"],
+             "to_research_lead": onset["status"] == "not_estimable" and n_early > 0}
 
     def cnt(keyf, keys):
         out = {}
@@ -712,8 +829,20 @@ def stage1(look_input, input_sha256, code_sha256=None):
         "rates": {"r_p": r_p, "r_d": r_d, "per_cell": per_cell},
         "centring": centring, "calibrated_range": cal, "onset": onset, "tripwires": trip, "counts": counts,
         "meter_clock": meter_clock(look_input["spans"]),
+        "active_readings": active_readings,
+        "onsets_before_116_s": early,
         "legs": out_legs,
     }
+
+
+def reading_active(day_z, days, tol):
+    """RL-166b B-2: active when, for every fit day D, at least 6 energy-fit legs off day D have |z| above the
+    tolerance. day_z = [(day, z)]. Returns (active, min count over days or None)."""
+    counts = [sum(1 for d, z in day_z if d != D and abs(z) > tol) for D in days]
+    if not counts:
+        return False, None
+    m = min(counts)
+    return m >= ACTIVE_MIN_LEGS, m
 
 
 def meter_clock(spans):
@@ -742,9 +871,11 @@ def _count_clock_on(L, r_p, r_d):
 
 
 # =============================================================================================== stage 2
-def _design_row(L, s, kind, cols, tau):
+def _design_row(L, s, kind, cols, onset):
     """One segment's row (Q1, Q2). kind: 'prefill' or 'decode' (prefix tails are decode). RL-166a R-2:
-    n = edge_hi - edge_lo (255 for block 0); R-3: c = P + (edge_lo + 1 + edge_hi)/2. `n_tokens` is not read."""
+    n = edge_hi - edge_lo (255 for block 0); R-3: c = P + (edge_lo + 1 + edge_hi)/2. `n_tokens` is not read.
+    The delta column is RL-166b B-1's expected hot seconds; `onset` = (l, sigma, out_of_state) or None.
+    Only the columns named in `cols` are formed (inactive readings' kappa columns are absent, B-2)."""
     P = float(L["prefill_tokens"])
     u, v = s["u_s"], s["v_s"]
     d, m = v - u, 0.5 * (u + v)
@@ -758,26 +889,27 @@ def _design_row(L, s, kind, cols, tau):
         vals.update(p1=0.0, p2=0.0, a0=n, a1=n * c, a2=n * P)
     vals.update(k_tf08=d * m * z[0], k_fan=d * m * z[1], k_tv0h=d * m * z[2])
     if DELTA_COL in cols:
-        vals[DELTA_COL] = max(0.0, v - max(u, tau)) if tau is not None else 0.0
+        vals[DELTA_COL] = expected_hot_seconds(u, v, onset) if onset is not None else 0.0
     return [vals[c] for c in cols]
 
 
 def _ols(X, y, groups):
-    """OLS with column scaling; covariance clustered by leg (CR1, R-10). Returns (beta, cov)."""
+    """RL-166b B-6: each column divided by its RMS over rows; the solve is an SVD of that matrix; rank deficient
+    when the smallest singular value is under 1e-10 of the largest; the normal matrix is never formed in raw
+    units. Covariance clustered by leg (CR1, R-10), from the SVD. Returns (beta, cov)."""
     X = np.asarray(X, dtype=float)
     y = np.asarray(y, dtype=float)
     scale = np.sqrt((X * X).mean(axis=0))
     scale[scale == 0] = 1.0
     Xs = X / scale
-    # Apple Accelerate raises spurious floating-point flags inside matmul (numpy 2.x); the results are checked
-    # for finiteness below instead.
-    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-        if np.linalg.matrix_rank(Xs) < Xs.shape[1]:
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):   # Accelerate's spurious matmul flags
+        U, S, Vt = np.linalg.svd(Xs, full_matrices=False)
+        if not np.all(np.isfinite(S)) or S[-1] < RANK_RTOL * S[0]:
             raise LookInputError("stage 2: the design is rank deficient")
-        bs, *_ = np.linalg.lstsq(Xs, y, rcond=None)
+        bs = Vt.T @ ((U.T @ y) / S)
         beta = bs / scale
-        e = y - X @ beta
-        XtX_inv = np.linalg.inv(Xs.T @ Xs)
+        e = y - Xs @ bs
+        bread = (Vt.T / (S * S)) @ Vt                     # (Xs'Xs)^-1 from the SVD
         meat = np.zeros((X.shape[1], X.shape[1]))
         gidx = {}
         for i, g in enumerate(groups):
@@ -785,39 +917,43 @@ def _ols(X, y, groups):
         for idx in gidx.values():
             sg = Xs[idx].T @ e[idx]
             meat += np.outer(sg, sg)
-    if not (np.all(np.isfinite(beta)) and np.all(np.isfinite(meat)) and np.all(np.isfinite(XtX_inv))):
+    if not (np.all(np.isfinite(beta)) and np.all(np.isfinite(meat)) and np.all(np.isfinite(bread))):
         raise LookInputError("stage 2: a non-finite fit")
     n, k, G = X.shape[0], X.shape[1], len(gidx)
     corr = (G / (G - 1)) * ((n - 1) / (n - k)) if G > 1 and n > k else 1.0
-    cov_s = corr * XtX_inv @ meat @ XtX_inv
-    cov = cov_s / np.outer(scale, scale)
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        cov = (corr * bread @ meat @ bread) / np.outer(scale, scale)
     return beta, cov
 
 
 class _Fold:
     """The legs' designs for one set of columns and onset predictions."""
 
-    def __init__(self, legs, cols, taus):
+    def __init__(self, legs, cols, onsets):
         self.cols = cols
-        self.taus = taus
+        self.onsets = onsets
         self.legs = legs
 
     def rows(self, L):
-        tau = self.taus.get(L["leg_key"])
-        return [_design_row(L, s, s["kind"], self.cols, tau) for s in L["segments"]]
+        o = self.onsets.get(L["leg_key"])
+        return [_design_row(L, s, s["kind"], self.cols, o) for s in L["segments"]]
 
     def prefix_rows(self, L, plen):
-        tau = self.taus.get(L["leg_key"])
+        o = self.onsets.get(L["leg_key"])
         nb = plen // BLOCK
-        rows = [_design_row(L, s, s["kind"], self.cols, tau) for s in L["segments"]
+        rows = [_design_row(L, s, s["kind"], self.cols, o) for s in L["segments"]
                 if s["kind"] == "prefill" or s["block"] < nb]
         tail = [t for t in L["prefix_tails"] if t["prefix_len"] == plen]
-        rows += [_design_row(L, t, "decode", self.cols, tau) for t in tail]
+        rows += [_design_row(L, t, "decode", self.cols, o) for t in tail]
         return rows
 
 
-def _taus(legs, beta):
-    return {L["leg_key"]: tau_hat(L, beta) for L in legs}
+def _onsets(legs, model):
+    """{leg_key: (l unclipped, sigma, out_of_state)} for the delta column (B-1); {} when model is None."""
+    if model is None:
+        return {}
+    return {L["leg_key"]: (linear_predictor(L, model), model["sigma"],
+                           L["start"]["state"] == "start_out_of_state") for L in legs}
 
 
 def _validate_energy(energy, stage1_out, needed):
@@ -926,21 +1062,23 @@ def prefix_bias(plen, pairs):
     return {"prefix_len": plen, "estimate": est, "ci90": ci, "n_pairs": len(pairs), "n_days": nd}
 
 
-def _channel(legs, E, ch, beta_onset, include=None):
-    """Everything one channel prints. `beta_onset`: the onset coefficients the full fit uses (None: delta
-    dropped). `include`: optional set of leg keys (the marked-span print)."""
+def _channel(legs, E, ch, model, active, include=None):
+    """Everything one channel prints. `model`: the onset model the full fit uses ({cols, beta, sigma}; None:
+    delta dropped). `active`: stage 1's active readings (B-2). `include`: optional set of leg keys (the
+    marked-spans print)."""
     fit = [L for L in legs if L["in_energy_fit"] and (include is None or L["leg_key"] in include)]
-    with_delta = beta_onset is not None
+    with_delta = model is not None
+    onset_cols_ = model["cols"] if with_delta else None
     base_cols = list(BASE_COLS)
-    heat_cols = list(BASE_COLS + HEAT_COLS) + ([DELTA_COL] if with_delta else [])
-    beta_full = beta_onset
+    heat_cols = (list(BASE_COLS) + [HEAT_OF[n] for n in READINGS if active[n]]
+                 + ([DELTA_COL] if with_delta else []))
     by_key = {L["leg_key"]: L for L in fit}
 
     def seg_y(L):
         return E[L["leg_key"]][ch]["segments"]
 
-    def fit_on(keys, cols, taus):
-        fold = _Fold(fit, cols, taus)
+    def fit_on(keys, cols, onsets):
+        fold = _Fold(fit, cols, onsets)
         X, y, g = [], [], []
         for k in keys:
             L = by_key[k]
@@ -951,15 +1089,17 @@ def _channel(legs, E, ch, beta_onset, include=None):
         return b, cov, fold
 
     keys_all = [L["leg_key"] for L in fit]
-    taus_full = _taus(fit, beta_full) if with_delta else {}
-    b_full, cov_full, _ = fit_on(keys_all, heat_cols, taus_full)
+    b_full, cov_full, _ = fit_on(keys_all, heat_cols, _onsets(fit, model))
     days = sorted({L["day"] for L in fit})
 
     folds_dropped = []
+    fold_coef = {}
+    detail_out = []
+    pred_seg = {}
 
     def lodo(cols, use_heat):
         """Per held-out day: fitted without D (base, heat term and onset model). Returns predictions per leg."""
-        pred_leg, pred_hot, pred_prefix = {}, {}, {}
+        pred_leg, pred_hot, pred_prefix, segs = {}, {}, {}, {}
         folds_dropped.clear()
         for D in days:
             train = [k for k in keys_all if by_key[k]["day"] != D]
@@ -969,26 +1109,31 @@ def _channel(legs, E, ch, beta_onset, include=None):
                 # RL-167 row 7: the onset model is refitted without D (at least 6 uncensored, converged; no
                 # 12-on-3 rule); a fold where it cannot be fitted drops delta and is listed. No full-data value
                 # is used for a held-out day.
-                bo = fit_onset_fold({k: by_key[k] for k in keys_all}, train)
+                bo = fit_onset_fold({k: by_key[k] for k in keys_all}, train, onset_cols_)
                 if bo is None:
                     fold_cols = [c for c in cols if c != DELTA_COL]
                     folds_dropped.append(D)
-                    taus = {}
+                    onsets = {}
                 else:
-                    taus = _taus(fit, bo)
+                    onsets = _onsets(fit, bo)
             else:
-                taus = {}
-            b, _, fold = fit_on(train, fold_cols, taus)
+                onsets = {}
+            b, _, fold = fit_on(train, fold_cols, onsets)
+            if use_heat:
+                fold_coef[D] = {c: float(x) for c, x in zip(fold_cols, b)}       # P-1
             for k in test:
                 L = by_key[k]
                 rows = np.asarray(fold.rows(L))
-                p = rows @ b
+                with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                    p = rows @ b
+                segs[k] = p
                 pred_leg[k] = float(p.sum())
                 hot = [i for i, s in enumerate(L["segments"]) if s["hot"]]
                 pred_hot[k] = float(p[hot].sum()) if hot else None
                 pred_prefix[k] = {lab: float((np.asarray(fold.prefix_rows(L, plen)) @ b).sum())
                                   if plen < L["decode_tokens"] else None for lab, plen in PREFIX.items()}
                 pred_prefix[k]["_long"] = pred_leg[k]
+        pred_seg[use_heat] = segs
         return pred_leg, pred_hot, pred_prefix
 
     def errors(pred_leg, pred_hot):
@@ -1021,6 +1166,22 @@ def _channel(legs, E, ch, beta_onset, include=None):
             num_l += pn - mn
             den_l += mn
         mx = max(abs(hot_day[D]) for D in counted) if counted else None
+        # P-2: per counted day, legs with a hot block, hot blocks and s/sqrt(n); s pooled within counted days
+        rh = {k: (pred_hot[k] - meas_hot[k]) / meas_hot[k] for k in keys_all if meas_hot[k] is not None}
+        ss = dfree = 0.0
+        for D in counted:
+            e = [rh[k] for k in keys_all if by_key[k]["day"] == D and k in rh]
+            mu = sum(e) / len(e)
+            ss += sum((x - mu) ** 2 for x in e)
+            dfree += len(e) - 1
+        sd_w = math.sqrt(ss / dfree) if dfree > 0 else None
+        detail = {}
+        for D in counted:
+            ks = [k for k in keys_all if by_key[k]["day"] == D and k in rh]
+            detail[D] = {"legs_with_hot_block": len(ks),
+                         "hot_blocks": sum(sum(1 for s in by_key[k]["segments"] if s["hot"]) for k in ks),
+                         "se": None if sd_w is None else sd_w / math.sqrt(len(ks))}
+        detail_out.append((detail, sd_w))
         if len(counted) < MIN_COUNTED_DAYS:
             verdict = "not_evaluable"
         else:
@@ -1041,6 +1202,38 @@ def _channel(legs, E, ch, beta_onset, include=None):
     pl0, ph0, _ = lodo(base_cols, False)
     err0, _, _, _ = errors(pl0, ph0)
     err["no_heat"] = err0
+
+    # P-3: held-out relative residual by block offset from the leg's first hot block
+    def by_offset(segs_pred):
+        acc = {o: [] for o in ONSET_OFFSETS}
+        for k in keys_all:
+            L = by_key[k]
+            if L["state"]["first_off_s"] is None:
+                continue
+            blocks = [i for i, s in enumerate(L["segments"]) if s["kind"] == "decode"]
+            hot = [i for i in blocks if L["segments"][i]["hot"]]
+            if not hot:
+                continue
+            o = blocks.index(hot[0])
+            y = seg_y(L)
+            for off in ONSET_OFFSETS:
+                j = o + off
+                if 0 <= j < len(blocks):
+                    i = blocks[j]
+                    acc[off].append((segs_pred[k][i] - y[i]) / y[i])
+        tab = {str(off): {"n": len(v), "mean": (sum(v) / len(v)) if v else None,
+                          "rms": math.sqrt(sum(x * x for x in v) / len(v)) if v else None} for off, v in acc.items()}
+        pool = [x for off in ONSET_SUMMARY_OFFSETS for x in acc[off]]
+        return tab, (math.sqrt(sum(x * x for x in pool) / len(pool)) if pool else None)
+    t1, r1 = by_offset(pred_seg[True])
+    t0, r0 = by_offset(pred_seg[False])
+    onset_blocks = {"offsets": {o: {"n": t1[o]["n"], "mean_with_heat": t1[o]["mean"], "rms_with_heat": t1[o]["rms"],
+                                    "mean_no_heat": t0[o]["mean"], "rms_no_heat": t0[o]["rms"]} for o in t1},
+                    "rms_offsets_m2_to_p3": {"with_heat": r1, "no_heat": r0}}
+    (d1, s1_), (d0, s0_) = detail_out
+    day_detail = {"days": {D: {"legs_with_hot_block": v["legs_with_hot_block"], "hot_blocks": v["hot_blocks"],
+                               "se_with_heat": v["se"], "se_no_heat": d0[D]["se"]} for D, v in d1.items()},
+                  "s_with_heat": s1_, "s_no_heat": s0_}
 
     # Q2 P2: prefix bias. Residual = measured - predicted (LODO), each divided by the SD of its own length over
     # legs (R-8); the bias is the mean paired difference long - short (R-11); 90 % t interval on day means.
@@ -1065,6 +1258,9 @@ def _channel(legs, E, ch, beta_onset, include=None):
         "covariance": [[float(x) for x in row] for row in cov_full],
         "n_legs": len(fit), "n_segments": sum(len(L["segments"]) for L in fit), "n_days": len(days),
         "lodo": err, "prefix_bias": bias,
+        "fold_coefficients": fold_coef,
+        "day_detail": day_detail,
+        "onset_offset_residuals": onset_blocks,
         "residuals": {"leg": res_leg, "hot_stretch": res_hot},
     }
 
@@ -1081,23 +1277,26 @@ def stage2(stage1_out, stage1_sha256, energy, code_sha256=None):
     E = energy["legs"]
     on = stage1_out["onset"]
     with_delta = on["status"] == "estimable"
-    beta_main = np.array([on["coefficients"][c] for c in ONSET_COLS]) if with_delta else None
+    model_main = ({"cols": list(on["predictors"]), "beta": np.array([on["coefficients"][c] for c in on["predictors"]]),
+                   "sigma": on["sigma_s"]} if with_delta else None)
+    active = {n: stage1_out["active_readings"][n]["active"] for n in READINGS}
     marked = sorted({L["span_id"] for L in legs if L["in_energy_fit"] and L["marks"]})
     keep = {L["leg_key"] for L in legs if L["in_energy_fit"] and L["span_id"] not in marked}
     # RL-167 row 16: the marked-spans print refits the onset on the remaining legs under row 7's rule; columns as
     # in the main look; a fit that fails gives nulls
-    beta_keep, keep_ok = None, True
+    model_keep, keep_ok = None, True
     if marked and with_delta:
-        beta_keep = fit_onset_fold({L["leg_key"]: L for L in legs if L["leg_key"] in keep}, sorted(keep))
-        keep_ok = beta_keep is not None
+        model_keep = fit_onset_fold({L["leg_key"]: L for L in legs if L["leg_key"] in keep}, sorted(keep),
+                                    model_main["cols"])
+        keep_ok = model_keep is not None
     channels = {}
     for ch in CHANNELS:
-        c = _channel(legs, E, ch, beta_main)
+        c = _channel(legs, E, ch, model_main, active)
         if marked:
             try:
                 if not keep_ok:
                     raise LookInputError("marked print: the onset cannot be refitted on the remaining legs")
-                cw = _channel(legs, E, ch, beta_keep, include=keep)
+                cw = _channel(legs, E, ch, model_keep, active, include=keep)
                 c["marked_sensitivity"] = {"marked_spans": marked, "n_legs_without": cw["n_legs"],
                                            "coefficients_without": cw["coefficients"],
                                            "lodo_hot_max_abs_without": cw["lodo"]["hot"]["max_abs"]}
@@ -1117,7 +1316,8 @@ def stage2(stage1_out, stage1_sha256, energy, code_sha256=None):
         "schema": FIT_SCHEMA, "look_id": LOOK_ID, "stage1_sha256": stage1_sha256,
         "code_sha256": dict(code_sha256 or {}), "numpy_version": np.__version__,
         "synthetic": stage1_out["synthetic"],
-        "tau_uncertainty_propagated": False,
+        "tau_uncertainty_propagated": False,    # RL-166b: the onset's scatter is in the delta column (B-1); its
+                                                # coefficients' uncertainty is not propagated
         "delta_column": "kept" if with_delta else "dropped_onset_not_estimable",
         "channels": channels,
         "qualified_interim_half": {"statistic": "gpu_rail.lodo.hot.max_abs", "value": hot["max_abs"],

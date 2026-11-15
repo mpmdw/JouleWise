@@ -212,6 +212,15 @@ level R.
                                         "end_minus_header_s": float | null}},
                    "max_abs_s": float | null, "threshold_s": 0.1,
                    "to_research_lead": bool },  # RL-167 R-20: over 0.1 s on any span goes to the research lead
+  "active_readings": {                    # RL-166b B-2, decided once here; an inactive reading's kappa column and
+    "tf08_c" | "fan_rpm" | "tv0h_excess_c": {   # onset predictor are dropped everywhere
+        "active": bool, "tolerance": 0.25 | 25.0 | 0.25,
+        "min_count_off_day": int | null,  # min over fit days D of energy-fit legs off D with |z| > tolerance
+        "threshold": 6 } },
+  "onsets_before_116_s": {                # RL-166b P-4
+    "by_g0_role": {"null": int, "capture": int, "consume": int},  # in-state start, observed onset < 116.0 s
+    "total": int, "onset_status": "estimable" | "not_estimable",
+    "to_research_lead": bool },           # not_estimable and total > 0: the 116 s cut does not stand by default
   "legs": [LegD, ...]                     # every Leg of level R, same order
 }
 ```
@@ -260,12 +269,13 @@ level R.
 ```
 { "status": "estimable" | "not_estimable",
   "n_uncensored": int, "n_censored": int, "n_days_uncensored": int,
+  "n_uncensored_by_cell": {"2000": int, "10000": int, "19458": int},       # RL-166b B-3
   "left_out": {"start_out_of_state": int, "state_unobserved": int, "start_reading_missing": int},
-  "predictors": ["intercept", "tf08_c", "fan_rpm", "tv0h_excess_c", "t_p_s"],
+  "predictors": ["intercept", <active readings, in the order tf08_c, fan_rpm, tv0h_excess_c>, "t_p_s"],  # B-2
   "coefficients": {name: float} | null,   # null when not_estimable
   "sigma_s": float | null,
-  "converged": bool | null,               # null: not attempted (fails 12-on-3); false: not_estimable (RL-167 row 8)
-  "lodo": { "per_day_rms_s": {day: float}, "rms_s": float,
+  "converged": bool | null,               # null: not attempted (fails B-3's counts); false: B-5's test failed
+  "lodo": { "per_day_rms_s": {day: float}, "rms_s": float | null,   # null: no held-out uncensored leg (RL-167 row 10)
             "heldout_censored_below_tau": int, "heldout_censored": int,
             "folds_not_estimable": [day] } | null,    # see §4.3
   "count_only_cut": { "form": "tau_hat_minus_2rms" | "fixed_116_s",
@@ -276,7 +286,7 @@ level R.
 
 ```
 { "dev_included_below_45": {"value": int, "trips": bool},
-  "days_below_3": {"value": int, "trips": bool},
+  "days_below_4": {"value": int, "trips": bool},        # RL-166b B-7: fewer than 4 fit days
   "cell_below_10": {"value": {"2000": int, "10000": int, "19458": int}, "trips": bool},
   "start_reading_invalid_over_10pct": {"value": float, "trips": bool},
   "hp01_below_9": {"value": int | null, "trips": bool},     # included type-A hp-01 legs (RL-167 row 21)
@@ -308,7 +318,8 @@ contract between the two.
   "look_id": "lm-interim-01",
   "stage1_sha256": hex64, "code_sha256": {path: hex64}, "numpy_version": str,
   "synthetic": bool,                      # copied from level D
-  "tau_uncertainty_propagated": false,    # Q2: stated, not computed
+  "tau_uncertainty_propagated": false,    # RL-166b: the onset's scatter is in the delta column; its coefficients'
+                                          # uncertainty is not propagated
   "delta_column": "kept" | "dropped_onset_not_estimable",
   "channels": { "gpu_rail": ChannelFit, "dc_in": ChannelFit },
   "qualified_interim_half": { "statistic": "gpu_rail.lodo.hot.max_abs", "value": float | null,
@@ -320,7 +331,8 @@ contract between the two.
 
 ```
 {
-  "columns": ["p1", "p2", "a0", "a1", "a2", "k_tf08", "k_fan", "k_tv0h", "delta"],   # "delta" absent if dropped
+  "columns": ["p1", "p2", "a0", "a1", "a2", <k_tf08, k_fan, k_tv0h for ACTIVE readings>, "delta"],
+                                          # 5 to 9 entries; "delta" absent if dropped (B-2, B-1)
   "coefficients": {column: float},
   "covariance": [[float]],                # cluster-by-leg, column order as above
   "n_legs": int, "n_segments": int, "n_days": int,
@@ -341,6 +353,17 @@ contract between the two.
     "1.30":  {"prefix_len": 3151, ...},
     "1.374": {"prefix_len": 2981, ...}
   },
+  "fold_coefficients": {day: {column: float}},   # RL-166b P-1: each LODO fold's heat-model vector (its own columns)
+  "day_detail": {                         # RL-166b P-2: counted days only
+    "days": {day: {"legs_with_hot_block": int, "hot_blocks": int,
+                   "se_with_heat": float | null, "se_no_heat": float | null}},   # s / sqrt(legs_with_hot_block)
+    "s_with_heat": float | null, "s_no_heat": float | null },   # SD of per-leg signed hot errors within days,
+                                                                # pooled over counted days
+  "onset_offset_residuals": {             # RL-166b P-3: held-out (pred - meas)/meas by block offset from the
+    "offsets": {"-2" .. "5": {"n": int,   # leg's first hot block, legs with an observed onset
+                "mean_with_heat": float | null, "rms_with_heat": float | null,
+                "mean_no_heat": float | null, "rms_no_heat": float | null}},
+    "rms_offsets_m2_to_p3": {"with_heat": float | null, "no_heat": float | null} },
   "residuals": {                          # Q16: signed relative, keyed by leg_key; LODO
     "leg": {leg_key: float},
     "hot_stretch": {leg_key: float | null}
@@ -418,6 +441,26 @@ remaining legs under row 7's rule; a failure gives nulls), 20 (`"null"` key), 21
 reason precedence (type T, excluded, describe-only, missing start).
 
 ---
+
+### 6.3 RL-166b (Sat 14 Nov 21:44): the fit form
+
+RL-166b §3 is the reading both implementations carry for these. In this code:
+- **B-1:** the δ column of a segment [u, v] is the expected hot seconds σ̂·[G((v − ℓ)/σ̂) − G((u − ℓ)/σ̂)],
+  G(x) = x·Φ(x) + φ(x), with ℓ the UNCLIPPED linear predictor and σ̂ the onset fit's `sigma_s`. The main fit uses the
+  main onset model, each fold and the marked-spans print their own. A `start_out_of_state` leg takes v − u; σ̂ under
+  1e-6 s takes the old overlap. `tau_hat_s` stays max(0, ℓ).
+- **B-2:** `active_readings` (level D) decides once which start readings enter.
+- **B-3:** `estimable` needs at least 12 uncensored on at least 3 days, at least 4 uncensored in each of at least two
+  prompt-size cells, and B-5. **B-4:** a fold needs at least 6 uncensored, at least 2 in each of at least two cells,
+  and B-5.
+- **B-5:** the test is applied at the returned point of the problem scaled by column RMS (responses and censoring
+  times by theirs), in Olsen's form: finite, η > 0, −H positive definite with condition number ≤ 1e10, Newton
+  decrement gᵀ(−H)⁻¹g ≤ 1e-8. The Hessian is analytic.
+- **B-6:** columns scaled by RMS over rows; SVD solve; rank deficient when the smallest singular value is under
+  1e-10 of the largest; the covariance is formed from the SVD.
+- **B-7:** `tripwires.days_below_4`.
+- **P-1 to P-4:** `fold_coefficients`, `day_detail`, `onset_offset_residuals` (level O, per channel) and
+  `onsets_before_116_s` (level D).
 
 ## 7. Custody mode (scripts/cadence_look_run.py)
 

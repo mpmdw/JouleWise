@@ -48,7 +48,8 @@ def rehash(s1):
 def plant_onset(s1, truth):
     """Replace the fitted onset model by the planted one (the exact-arithmetic test)."""
     on = truth["params"]["onset"]
-    s1["onset"]["coefficients"] = {c: float(on[c]) for c in F.ONSET_COLS}
+    s1["onset"]["coefficients"] = {c: float(on[c]) for c in s1["onset"]["predictors"]}
+    s1["onset"]["sigma_s"] = float(on["sigma_s"])
     return s1
 
 
@@ -220,9 +221,15 @@ class Branches(unittest.TestCase):
                     self.assertLess(abs(c["coefficients"][name]), 4 * math.sqrt(c["covariance"][i][i]), name)
 
     def test_estimable_needs_12_uncensored_on_3_days(self):
-        self.assertEqual(F.onset_estimable([False] * 12, ["a"] * 4 + ["b"] * 4 + ["c"] * 4)[0], True)
-        self.assertEqual(F.onset_estimable([False] * 11 + [True], ["a"] * 4 + ["b"] * 4 + ["c"] * 4)[0], False)
-        self.assertEqual(F.onset_estimable([False] * 12, ["a"] * 6 + ["b"] * 6)[0], False)
+        cells = [2000] * 6 + [10000] * 6
+        self.assertEqual(F.onset_estimable([False] * 12, ["a"] * 4 + ["b"] * 4 + ["c"] * 4, cells)[0], True)
+        self.assertEqual(F.onset_estimable([False] * 11 + [True], ["a"] * 4 + ["b"] * 4 + ["c"] * 4, cells)[0], False)
+        self.assertEqual(F.onset_estimable([False] * 12, ["a"] * 6 + ["b"] * 6, cells)[0], False)
+        # RL-166b B-3: at least 4 uncensored in each of at least two cells
+        self.assertEqual(F.onset_estimable([False] * 12, ["a"] * 4 + ["b"] * 4 + ["c"] * 4,
+                                           [2000] * 9 + [10000] * 3)[0], False)
+        self.assertEqual(F.onset_estimable([False] * 12, ["a"] * 4 + ["b"] * 4 + ["c"] * 4,
+                                           [2000] * 8 + [10000] * 4)[0], True)
 
     def test_tripwires(self):
         li, _, _, _ = dataset("noisy")
@@ -270,20 +277,22 @@ class Conventions(unittest.TestCase):
         s = {"kind": "decode", "edge_lo": 255, "edge_hi": 511, "tok_first": 256, "tok_last": 511, "n_tokens": 256,
              "u_s": 10.0, "v_s": 30.0}
         cols = list(F.BASE_COLS + F.HEAT_COLS) + ["delta"]
-        row = dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, 25.0)))
+        tiny = 1e-9                                       # sigma under 1e-6 s: the old overlap (B-1)
+        row = dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, (25.0, tiny, False))))
         self.assertEqual(row["k_tf08"], 20.0 * 20.0 * 1.0)
         self.assertEqual(row["k_fan"], 20.0 * 20.0 * 2.0)
         self.assertEqual(row["k_tv0h"], 20.0 * 20.0 * 3.0)
         self.assertEqual(row["delta"], 5.0)
-        self.assertEqual(dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, 0.0)))["delta"], 20.0)
-        self.assertEqual(dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, 40.0)))["delta"], 0.0)
+        self.assertEqual(dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, (-5.0, tiny, False))))["delta"], 20.0)
+        self.assertEqual(dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, (40.0, tiny, False))))["delta"], 0.0)
+        self.assertEqual(dict(zip(cols, F._design_row(self.leg(), s, "decode", cols, (900.0, 15.0, True))))["delta"], 20.0)
 
     def test_turn_sum_of_heat_is_half_T_squared(self):
         """Q1: summed over the tiling segments, d*m sums to T^2/2 and the step to max(0, T - tau)."""
         s1 = stage1_of("exact")
         L = next(L for L in s1["legs"] if L["in_energy_fit"])
         cols = list(F.BASE_COLS + F.HEAT_COLS) + ["delta"]
-        rows = [dict(zip(cols, F._design_row(L, s, s["kind"], cols, 100.0))) for s in L["segments"]]
+        rows = [dict(zip(cols, F._design_row(L, s, s["kind"], cols, (100.0, 1e-9, False)))) for s in L["segments"]]
         T = L["segments"][-1]["v_s"]
         self.assertAlmostEqual(T, L["load_s"], delta=1e-9)
         self.assertAlmostEqual(sum(r["k_tf08"] for r in rows), 0.5 * T * T * L["start"]["z"][0], delta=1e-6)
@@ -449,7 +458,7 @@ class Pins(unittest.TestCase):
         self.assertEqual((F.ONSET_MIN_UNCENSORED, F.ONSET_MIN_DAYS, F.COUNT_ONLY_CUT_FIXED_S), (12, 3, 116.0))
         self.assertEqual((F.START_MAX_AGE_S, F.UNOBSERVED_GAP_S, F.BLOCK), (2.0, 2.0, 256))
         self.assertEqual(F.PREFIX, {"1.10": 3724, "1.30": 3151, "1.374": 2981})
-        self.assertEqual(F.TRIP, {"dev_included": 45, "days": 3, "cell": 10, "start_invalid_frac": 0.10, "hp01": 9})
+        self.assertEqual(F.TRIP, {"dev_included": 45, "days": 4, "cell": 10, "start_invalid_frac": 0.10, "hp01": 9})
         self.assertEqual(F.OK_PM, ("Nominal", "Unknown", None))
 
 
@@ -469,14 +478,16 @@ class Stage2Internals(unittest.TestCase):
         """An independent sandwich, clustered by leg, on the full-data design."""
         out = F.stage2(self.s1, rehash(self.s1), self.en)
         c = out["channels"]["gpu_rail"]
-        beta_on = np.array([self.s1["onset"]["coefficients"][k] for k in F.ONSET_COLS])
+        on = self.s1["onset"]
+        model = {"cols": on["predictors"], "beta": np.array([on["coefficients"][k] for k in on["predictors"]]),
+                 "sigma": on["sigma_s"]}
         X, y, g = [], [], []
+        onsets = F._onsets([L for L in self.s1["legs"] if L["in_energy_fit"]], model)
         for L in self.s1["legs"]:
             if not L["in_energy_fit"]:
                 continue
-            tau = F.tau_hat(L, beta_on)
             for s, e in zip(L["segments"], self.en["legs"][L["leg_key"]]["gpu_rail"]["segments"]):
-                X.append(F._design_row(L, s, s["kind"], c["columns"], tau))
+                X.append(F._design_row(L, s, s["kind"], c["columns"], onsets[L["leg_key"]]))
                 y.append(e)
                 g.append(L["leg_key"])
         X, y = np.array(X), np.array(y)
@@ -541,8 +552,9 @@ class Guards(unittest.TestCase):
 
     def test_tau_hat_is_floored_at_zero(self):
         L = {"start": {"state": "in_state", "z": [0.0, 0.0, 0.0]}, "t_p_s": 10.0}
-        self.assertEqual(F.tau_hat(L, np.array([-50.0, 0, 0, 0, 1.0])), 0.0)
-        self.assertEqual(F.tau_hat(L, np.array([50.0, 0, 0, 0, 1.0])), 60.0)
+        cols = list(F.ONSET_COLS)
+        self.assertEqual(F.tau_hat(L, {"cols": cols, "beta": np.array([-50.0, 0, 0, 0, 1.0]), "sigma": 1.0}), 0.0)
+        self.assertEqual(F.tau_hat(L, {"cols": cols, "beta": np.array([50.0, 0, 0, 0, 1.0]), "sigma": 1.0}), 60.0)
 
     def test_forbidden_fields_anywhere(self):
         for k in ("condition", "Slot_ID", "instruction_kind", "start_band"):
@@ -634,14 +646,14 @@ class RL167(unittest.TestCase):
         calls = []
         real = F.fit_onset_fold
 
-        def spy(legs_d, keys):
+        def spy(legs_d, keys, cols):
             calls.append(sorted(keys))
-            return real(legs_d, keys)
+            return real(legs_d, keys, cols)
         with unittest.mock.patch.object(F, "fit_onset_fold", spy):
             F.stage2(s1, rehash(s1), en)
         keep = sorted(L["leg_key"] for L in s1["legs"] if L["in_energy_fit"] and not L["marks"])
         self.assertIn(keep, calls)
-        with unittest.mock.patch.object(F, "fit_onset_fold", lambda legs_d, keys: None):
+        with unittest.mock.patch.object(F, "fit_onset_fold", lambda legs_d, keys, cols: None):
             out = F.stage2(s1, rehash(s1), en)
         ms = out["channels"]["gpu_rail"]["marked_sensitivity"]
         self.assertIsNone(ms["coefficients_without"])
@@ -729,11 +741,11 @@ class RL167b(unittest.TestCase):
         real = F.fit_onset_fold
         base = F.stage2(s1, rehash(s1), en)["channels"]["gpu_rail"]["marked_sensitivity"]["coefficients_without"]
 
-        def shifted(legs_d, keys):
-            b = real(legs_d, keys)
-            if sorted(keys) == keep and b is not None:
-                b = b + np.array([400.0, 0, 0, 0, 0])      # onset pushed past every turn's end: no step
-            return b
+        def shifted(legs_d, keys, cols):
+            m = real(legs_d, keys, cols)
+            if sorted(keys) == keep and m is not None:
+                m = dict(m, beta=m["beta"] + np.eye(len(cols))[0] * 400.0)   # onset pushed past every turn's end
+            return m
         with unittest.mock.patch.object(F, "fit_onset_fold", shifted):
             moved = F.stage2(s1, rehash(s1), en)["channels"]["gpu_rail"]["marked_sensitivity"]["coefficients_without"]
         self.assertGreater(max(abs(moved[k] - base[k]) / abs(base[k]) for k in base), 1e-2)
@@ -747,3 +759,229 @@ class RL167b(unittest.TestCase):
         for ch in F.CHANNELS:
             self.assertEqual(out["channels"][ch]["lodo"]["folds_delta_dropped"], [])
             self.assertNotIn("folds_delta_dropped", out["channels"][ch]["lodo"]["no_heat"])
+
+
+class RL166b(unittest.TestCase):
+    """RL-166b B-1 to B-7 and P-1 to P-4, each with a test that fails without it."""
+
+    def test_b1_expected_hot_seconds_is_the_integral_of_phi(self):
+        from math import erfc, sqrt
+        for (u, v, ell, sig) in ((0.0, 10.0, -30.0, 15.0), (100.0, 120.0, 110.0, 12.0), (5.0, 25.0, 40.0, 3.0),
+                                 (300.0, 320.0, 290.0, 0.5)):
+            n = 20000
+            h = (v - u) / n
+            f = [0.5 * erfc(-((u + i * h) - ell) / sig / sqrt(2)) for i in range(n + 1)]
+            want = h * (sum(f) - 0.5 * (f[0] + f[-1]))
+            self.assertAlmostEqual(F.expected_hot_seconds(u, v, (ell, sig, False)), want, delta=1e-6)
+        # the ends, the out-of-state leg and the tiny-sigma limit
+        self.assertAlmostEqual(F.expected_hot_seconds(0.0, 20.0, (500.0, 10.0, False)), 0.0, delta=1e-12)
+        self.assertAlmostEqual(F.expected_hot_seconds(400.0, 420.0, (10.0, 10.0, False)), 20.0, delta=1e-9)
+        self.assertEqual(F.expected_hot_seconds(0.0, 20.0, (500.0, 10.0, True)), 20.0)
+        self.assertEqual(F.expected_hot_seconds(0.0, 20.0, (12.0, 1e-7, False)), 8.0)
+        self.assertEqual(F.expected_hot_seconds(0.0, 20.0, (-12.0, 1e-7, False)), 20.0)
+        self.assertEqual(F.SIGMA_MIN_S, 1e-6)
+
+    def test_b1_ell_is_not_clipped(self):
+        L = {"leg_key": "x/L001", "start": {"state": "in_state", "z": [0.0, 0.0, 0.0]}, "t_p_s": 10.0}
+        model = {"cols": ["intercept", "t_p_s"], "beta": np.array([-40.0, 1.0]), "sigma": 15.0}
+        self.assertEqual(F._onsets([L], model)["x/L001"], (-30.0, 15.0, False))
+        self.assertEqual(F.tau_hat(L, model), 0.0)
+
+    def test_b1_folds_use_their_own_sigma(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        base = F.stage2(s1, rehash(s1), en)["channels"]["gpu_rail"]["fold_coefficients"]
+        real = F.fit_onset_fold
+
+        def sharp(legs_d, keys, cols):
+            m = real(legs_d, keys, cols)
+            return None if m is None else dict(m, sigma=1e-9)
+        with unittest.mock.patch.object(F, "fit_onset_fold", sharp):
+            moved = F.stage2(s1, rehash(s1), en)["channels"]["gpu_rail"]["fold_coefficients"]
+        d = next(iter(base))
+        self.assertGreater(abs(moved[d]["delta"] - base[d]["delta"]) / abs(base[d]["delta"]), 1e-3)
+
+    def test_b2_reading_active_rule(self):
+        days = ["a", "b"]
+        six_each = [("a", 1.0)] * 6 + [("b", 1.0)] * 6
+        self.assertEqual(F.reading_active(six_each, days, 0.25), (True, 6))
+        self.assertEqual(F.reading_active(six_each[1:], days, 0.25), (False, 5))
+        at_tol = [("a", 0.25)] * 6 + [("b", -0.25)] * 6          # |z| must be ABOVE the tolerance
+        self.assertEqual(F.reading_active(at_tol, days, 0.25), (False, 0))
+        self.assertEqual((F.ACTIVE_TOL, F.ACTIVE_MIN_LEGS),
+                         ({"tf08_c": 0.25, "fan_rpm": 25.0, "tv0h_excess_c": 0.25}, 6))
+
+    def test_b2_inactive_reading_is_dropped_everywhere(self):
+        li, en, _, sha = dataset("inactive_fan")
+        s1 = F.stage1(li, sha)
+        self.assertFalse(s1["active_readings"]["fan_rpm"]["active"])
+        self.assertTrue(s1["active_readings"]["tf08_c"]["active"])
+        self.assertNotIn("fan_rpm", s1["onset"]["predictors"])
+        self.assertNotIn("fan_rpm", s1["onset"]["coefficients"])
+        out = F.stage2(s1, rehash(s1), en)
+        for ch in F.CHANNELS:
+            c = out["channels"][ch]
+            self.assertEqual(c["columns"], ["p1", "p2", "a0", "a1", "a2", "k_tf08", "k_tv0h", "delta"])
+            self.assertEqual(len(c["covariance"]), 8)
+            for v in c["fold_coefficients"].values():
+                self.assertNotIn("k_fan", v)
+            self.assertNotIn("k_fan", c["marked_sensitivity"]["coefficients_without"])
+
+    def test_b3_onsets_in_one_cell_are_not_estimable(self):
+        li, _, _, sha = dataset("onsets_one_cell")
+        s1 = F.stage1(li, sha)
+        on = s1["onset"]
+        self.assertEqual(on["status"], "not_estimable")
+        self.assertIsNone(on["converged"])
+        self.assertEqual([k for k, v in on["n_uncensored_by_cell"].items() if v], ["19458"])
+        self.assertGreaterEqual(on["n_uncensored"], 12)
+        self.assertEqual(F.ONSET_MIN_PER_CELL, 4)
+
+    def test_b4_fold_needs_two_in_each_of_two_cells(self):
+        s1 = stage1_of("noisy")
+        legs_d = {L["leg_key"]: L for L in s1["legs"]}
+        unc = [L for L in s1["legs"] if L["in_energy_fit"] and L["state"]["onset_use"] == "uncensored"]
+        cens = [L["leg_key"] for L in s1["legs"] if L["in_energy_fit"] and L["state"]["onset_use"] == "censored"]
+        big = [L["leg_key"] for L in unc if L["cell_prompt_tokens"] == 19458]
+        other = [L["leg_key"] for L in unc if L["cell_prompt_tokens"] == 2000]
+        cols = s1["onset"]["predictors"]
+        self.assertIsNone(F.fit_onset_fold(legs_d, big + cens, cols))                  # one cell only
+        self.assertIsNone(F.fit_onset_fold(legs_d, big + other[:1] + cens, cols))      # one in the second cell
+        self.assertIsNotNone(F.fit_onset_fold(legs_d, big + other[:2] + cens, cols))
+        self.assertEqual((F.FOLD_MIN_UNCENSORED, F.FOLD_MIN_PER_CELL), (6, 2))
+
+    def test_b5_convergence_test(self):
+        rng = np.random.default_rng(3)
+        X = np.column_stack([np.ones(200), rng.normal(0, 1, 200)])
+        y = X @ np.array([10.0, 3.0]) + rng.normal(0, 2.0, 200)
+        cen = y > 12.0
+        y = np.where(cen, 12.0, y)
+        f = F.censored_normal_fit(X, y, cen)
+        self.assertTrue(f["converged"])
+        self.assertLessEqual(f["decrement"], 1e-8)
+        # away from the optimum the decrement is large
+        q = np.array([1.0, 0.0, 1.0])
+        _, G, H = F._tobit(X / np.sqrt((X * X).mean(axis=0)), y / math.sqrt((y * y).mean()), cen, q)
+        t = F.convergence_test(q, G, H)
+        self.assertFalse(t["passes"])
+        self.assertGreater(t["decrement"], 1e-8)
+        # a singular Hessian (two identical columns) fails
+        X2 = np.column_stack([X, X[:, 1]])
+        self.assertFalse(F.censored_normal_fit(X2, y, cen)["converged"])
+        # eta at or below 0 fails
+        self.assertFalse(F.convergence_test(np.array([1.0, 0.0, -1.0]), np.zeros(3), -np.eye(3))["passes"])
+        # condition number over 1e10 fails
+        self.assertFalse(F.convergence_test(np.array([1.0, 1.0]), np.zeros(2), -np.diag([1.0, 1e-11]))["passes"])
+        self.assertTrue(F.convergence_test(np.array([1.0, 1.0]), np.zeros(2), -np.diag([1.0, 1e-9]))["passes"])
+        self.assertEqual((F.CONV_DECREMENT, F.CONV_MAX_COND), (1e-8, 1e10))
+
+    def test_b6_rank_rule_and_svd_solve(self):
+        rng = np.random.default_rng(4)
+        X = rng.normal(0, 1, (60, 3)) * np.array([1.0, 1e6, 1e-6])
+        y = X @ np.array([1.0, 2e-6, 3e6]) + rng.normal(0, 0.01, 60)
+        b, cov = F._ols(X, y, list(range(60)))
+        ref, *_ = np.linalg.lstsq(X / np.sqrt((X * X).mean(axis=0)), y, rcond=None)
+        np.testing.assert_allclose(b, ref / np.sqrt((X * X).mean(axis=0)), rtol=1e-9)
+        Xd = np.column_stack([X, X[:, 0] + 1e-12 * rng.normal(0, 1, 60)])     # singular value ratio < 1e-10
+        with self.assertRaises(F.LookInputError):
+            F._ols(Xd, y, list(range(60)))
+        Xok = np.column_stack([X, X[:, 0] + 1e-6 * rng.normal(0, 1, 60)])     # ratio ~1e-6: kept
+        F._ols(Xok, y, list(range(60)))
+        self.assertEqual(F.RANK_RTOL, 1e-10)
+
+    def test_b7_days_tripwire_under_4(self):
+        li, _, _, _ = dataset("noisy")
+        for leg in li["legs"]:
+            if leg["span_id"].startswith("dev-05"):
+                leg["inclusion"]["g0_released"] = False
+        t = F.stage1(li, "0" * 64)["tripwires"]
+        self.assertEqual(t["days_below_4"]["value"], 4)
+        self.assertFalse(t["days_below_4"]["trips"])
+        for leg in li["legs"]:
+            if leg["span_id"] == "dev-01-s01":
+                leg["inclusion"]["g0_released"] = False
+        t = F.stage1(li, "0" * 64)["tripwires"]
+        self.assertEqual(t["days_below_4"]["value"], 3)
+        self.assertTrue(t["days_below_4"]["trips"])
+
+    def test_p1_p2_p3_prints(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        out = F.stage2(s1, rehash(s1), en)
+        c = out["channels"]["gpu_rail"]
+        fit_days = sorted({L["day"] for L in s1["legs"] if L["in_energy_fit"]})
+        self.assertEqual(sorted(c["fold_coefficients"]), fit_days)
+        for v in c["fold_coefficients"].values():
+            self.assertEqual(list(v), c["columns"])
+        # P-2: s pooled within counted days, from the printed per-leg hot-stretch errors
+        res = c["residuals"]["hot_stretch"]
+        day_of = {L["leg_key"]: L["day"] for L in s1["legs"]}
+        ss = df = 0.0
+        for D in c["lodo"]["hot"]["counted_days"]:
+            e = [v for k, v in res.items() if v is not None and day_of[k] == D]
+            mu = sum(e) / len(e)
+            ss += sum((x - mu) ** 2 for x in e)
+            df += len(e) - 1
+        self.assertAlmostEqual(c["day_detail"]["s_with_heat"], math.sqrt(ss / df), delta=1e-12)
+        for D, v in c["day_detail"]["days"].items():
+            self.assertAlmostEqual(v["se_with_heat"], c["day_detail"]["s_with_heat"] / math.sqrt(v["legs_with_hot_block"]),
+                                   delta=1e-15)
+            self.assertEqual(v["legs_with_hot_block"], c["lodo"]["hot"]["n_hot_legs_per_day"][D])
+        self.assertEqual(sorted(c["day_detail"]["days"]), sorted(c["lodo"]["hot"]["counted_days"]))
+        # P-3: offset 0 holds every leg with an observed onset and a hot block
+        n0 = sum(1 for L in s1["legs"] if L["in_energy_fit"] and L["state"]["first_off_s"] is not None
+                 and any(s["hot"] for s in L["segments"]))
+        oo = c["onset_offset_residuals"]
+        self.assertEqual(oo["offsets"]["0"]["n"], n0)
+        self.assertEqual(sorted(oo["offsets"], key=int), [str(i) for i in range(-2, 6)])
+        self.assertGreater(oo["rms_offsets_m2_to_p3"]["no_heat"], oo["rms_offsets_m2_to_p3"]["with_heat"])
+        n_m2 = 0
+        for L in s1["legs"]:
+            if L["in_energy_fit"] and L["state"]["first_off_s"] is not None:
+                blocks = [s for s in L["segments"] if s["kind"] == "decode"]
+                hot = [i for i, s in enumerate(blocks) if s["hot"]]
+                n_m2 += bool(hot) and hot[0] >= 2
+        self.assertEqual(oo["offsets"]["-2"]["n"], n_m2)
+        self.assertGreater(n_m2, 0)
+
+    def test_p4_onsets_before_116(self):
+        li, _, _, sha = dataset("onsets_one_cell")
+        s1 = F.stage1(li, sha)
+        want = {"null": 0, "capture": 0, "consume": 0}
+        for L in s1["legs"]:
+            if (L["in_energy_fit"] and L["start"]["state"] == "in_state" and L["state"]["first_off_s"] is not None
+                    and L["state"]["first_off_s"] < 116.0):
+                want["null" if L["g0_role"] is None else L["g0_role"]] += 1
+        p4 = s1["onsets_before_116_s"]
+        self.assertEqual(p4["by_g0_role"], want)
+        self.assertEqual(p4["to_research_lead"], p4["total"] > 0)
+        # plant an early onset on an in-state leg: the 116 s cut no longer stands by default
+        leg = next(x for x in li["legs"] if x["turn"] and x["span_id"].startswith("dev-02")
+                   and all(x["inclusion"].values()) and x["g0_role"] is None)
+        ts = leg["turn"]["turn_start_s"]
+        for r in leg["turn"]["journal"]:
+            if r["t_s"] > ts + 50.0:
+                r["os_level"] = 1
+        s1 = F.stage1(li, "0" * 64)
+        p4 = s1["onsets_before_116_s"]
+        self.assertEqual(p4["onset_status"], "not_estimable")
+        self.assertGreater(p4["by_g0_role"]["null"], want["null"])
+        self.assertTrue(p4["to_research_lead"])
+
+
+class Schemas(unittest.TestCase):
+    """Level D and level O validate against the manifest builder's schemas (#793), on every planted scenario."""
+
+    LOOKS = Path(__file__).resolve().parents[2] / "docs/process/cadence/looks"
+
+    def test_outputs_validate(self):
+        from tests.cadence import schema_lite as V
+        s1_schema = json.loads((self.LOOKS / "lm-interim-01.stage1.schema.json").read_text())
+        out_schema = json.loads((self.LOOKS / "lm-interim-01.output.schema.json").read_text())
+        fit_schema = {"$ref": "#/$defs/fit_output", "$defs": out_schema["$defs"]}
+        for sc in ("exact", "noisy", "onset_not_estimable", "few_hot_days", "inactive_fan", "onsets_one_cell"):
+            _, en, _, _ = dataset(sc)
+            s1 = stage1_of(sc)
+            self.assertEqual(V.errors(json.loads(json.dumps(s1)), s1_schema), [], sc)
+            out = F.stage2(s1, rehash(s1), en)
+            self.assertEqual(V.errors(json.loads(json.dumps(out)), fit_schema), [], sc)
