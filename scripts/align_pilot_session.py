@@ -285,9 +285,43 @@ def apply_exclusion_policy(entries, policy=None):
 
 
 def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None, exclusion_policy=None,
-         kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None):
+         kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None, print_policy=None):
+    """The common desk entry. A session whose STORED identity is ALIGN v4 runs only under the v4 release guard,
+    whatever the entry point or kit argument (PR #774 Sol F1): an explicit ``None`` installs it and any other
+    policy is refused. Other sessions are unchanged."""
+    kwargs = dict(run=run, harvest=harvest, compare_session=compare_session, exclusion_policy=exclusion_policy,
+                  kit=kit, desk_schema=desk_schema, extra_checks=extra_checks, harvest_workers=harvest_workers)
+    state = h.read(Path(session_root).resolve() / 'session.json')
+    from joulewise.align.apple import v4_desk_seal
+    if not v4_desk_seal.is_v4_session(state):
+        return _desk(session_root, print_policy=print_policy, **kwargs)
+    print_policy = v4_desk_seal.enforce(state, print_policy, lambda: _member_rows(state, kit=kit))
+    with v4_desk_seal.keyed(getattr(print_policy, 'key', None)):
+        return _desk(session_root, print_policy=print_policy, **kwargs)
+
+
+def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None, exclusion_policy=None,
+          kit=KIT, desk_schema=SCHEMA, extra_checks=None, harvest_workers=None, print_policy=None):
+    """The common desk. ``print_policy(pilot, member_lines, *, output) -> (pilot, member_lines)`` is applied
+    before PILOT.json is written and before every print below (v4 release guard,
+    ``joulewise.align.apple.v4_desk_seal``); ``None`` is the identity, so the v3 desk is unchanged."""
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
+    from joulewise.align.apple import v4_desk_seal
+    v4 = v4_desk_seal.is_v4_session(state)
+    if v4:
+        # PR #774 Mythos N9: the check sits here too, so no caller of the old desk can run a v4 session unguarded.
+        v4_desk_seal.require_guard(print_policy)
+    # PR #774 Mythos re-attack 2 M1: the harvest's non-claim export (per-run energies, tokens, phase durations and
+    # flag codes; export_runs.py writes them unblinded under --non-claim) and its stdout/stderr go to the withheld
+    # archive before release. v3 sessions and a released v4 desk keep the old paths.
+    withheld_streams = v4 and isinstance(print_policy, v4_desk_seal.DeskSeal)
+    export_dir = session / ('archive/withheld/export' if withheld_streams else 'export')
+    streams_dir = session / ('archive/withheld' if withheld_streams else 'staging')
+    if withheld_streams and harvest:
+        # Sol audit #5: the lock is held from E6's check to the last write (released when this frame ends).
+        session_lock = v4_desk_seal.SessionLock(session)      # noqa: F841 (held for its lifetime)
+        v4_desk_seal.refuse_rerun(session)          # PR #774 E6: before the harvest or any write
     plan = h.read(state['plan_path'])
     custody = Path(plan['custody_root'])
     if not (custody / 'night/result.json').is_file():
@@ -329,7 +363,7 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
     argv = [str(measurement / '.venv/bin/python'), str(measurement / 'scripts/harvest_b6_session.py'),
             '--plan', state['plan_path'], '--archive-root', str(session / 'archive'),
             '--registration-dir', state['registration_dir'], '--pack-records-root', str(session / 'private'),
-            '--export-dir', str(session / 'export'), '--non-claim']
+            '--export-dir', str(export_dir), '--non-claim']
     if harvest_workers is not None:
         # Member assessment pool (HARVEST-OFF-opus): order-preserving, byte-identical
         # to one worker; absent keeps the recorded argv of a one-worker desk.
@@ -338,8 +372,9 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         argv += ['--workers', str(harvest_workers)]
     if harvest:
         result = run(argv, check=False, capture_output=True, text=True, timeout=h.HARVEST_TIMEOUT_S)
-        (session / 'staging/harvest.stdout').write_text(result.stdout or '')
-        (session / 'staging/harvest.stderr').write_text(result.stderr or '')
+        streams_dir.mkdir(parents=True, exist_ok=True)
+        (streams_dir / 'harvest.stdout').write_text(result.stdout or '')
+        (streams_dir / 'harvest.stderr').write_text(result.stderr or '')
         output = session
     else:
         from types import SimpleNamespace
@@ -350,6 +385,11 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
                                        dir=inspection))
     exclusion_path = session / 'archive/derived/exclusions.json'
     exclusions = h.read(exclusion_path) if exclusion_path.is_file() else None
+    if withheld_streams and harvest and exclusions is not None:
+        # PR #774 E2: the record's exclusions source (runbook: sources.exclusions = $S/exclusions.json) without
+        # the all-member flag_counts; the harvest's full file stays in the restricted archive.
+        h.write(output / 'exclusions.json',
+                v4_desk_seal.committed_exclusions(exclusions, exclusion_path.read_bytes()))
     # ``exclusion_policy(codes) -> (effective, disclosed)``: a pack whose ruling makes some harvest codes
     # disclosure-only (v4 R22-1: contention.*) moves them out of every exclusion decision here; the raw
     # codes stay in ``disclosed_exclusion_codes``. The v3 default leaves every code an exclusion.
@@ -414,6 +454,41 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
              'status': 'instrument_ok' if all(v is True for v in checks.values()) else 'instrument_incomplete'}
     from joulewise.align.apple.pilot_analysis import finite_json
     pilot = finite_json(pilot)
+    # The per-member printed lines, built from the full members, then passed through the policy with the PILOT.
+    def member_lines():
+        lines = []
+        for member in members:
+            record = {'harvest_flags': {'flags': member['harvest_flags'], 'battery_discharge': member['battery_discharge']}}
+            summary = member.get('summary')
+            if summary is None:
+                record.update(unreadable=member['unreadable'], detail={
+                    'excluded': member['excluded'], 'exclusion_codes': member['exclusion_codes']})
+            else:
+                pre = summary['window_evidence_precheck']
+                record['detail'] = {
+                    'end_state': summary['end_state'], 'state_changing_calls': summary['state_changing_calls'],
+                    'episode_seconds': summary['duration_s'], 'sampler_policy': summary['configuration']['sampler'],
+                    'cap_hits': sum(f.startswith('turn_token_budget_reached:') for f in summary['flags']),
+                    **{k: summary[k] for k in ('acted_beyond_read_marking', 'bank_stage', 'cache_statistics', 'repetition_flags_per_turn', 'phase_window_reason_counts')},
+                    **{k: summary[k] for k in ('classification', 'counted_tool_names', 'read_only_tool_names', 'unobserved_tool_names', 'exclusion_codes', 'excluded', 'os_thermal')},
+                    'tool_names_per_turn': summary['tool_names_per_turn'], 'unknown_tool_names': summary['unknown_tool_names'],
+                    'thermal_pressure_seconds': summary['thermal_pressure_seconds'],
+                    'active_gpu_clock_mhz': summary['active_gpu_clock_mhz'],
+                    'per_turn_active_gpu_clock_mhz': summary['per_turn_active_gpu_clock_mhz'],
+                    'chain_eligible': summary['chain_eligible'], 'chain_reasons': pre['reasons'] + summary['exclusion_codes'],
+                    'target_precheck_eligible': pre['eligible'],
+                    'request_window_diagnostics': pre['request_windows'],
+                    'window_evidence_precheck': {r['window']: {'eligible': r['eligible'], 'reasons': r['reasons']} for r in pre['windows']},
+                    'ended_in_unclosed_reasoning': summary['ended_in_unclosed_reasoning']}
+            lines.append((member['run_id'], record))
+        return lines
+    shown = {'repeat_token_identity': deterministic, 'cross_pilot_token_identity': comparison,
+             'repeat_energy_spread': spreads}
+    lines = None
+    if print_policy is not None:
+        pilot, lines = print_policy(pilot, member_lines(), output=output)
+        checks = pilot['checks']
+        shown = {k: pilot.get(k) for k in shown}
     h.write(output / 'PILOT.json', pilot)
     status = {'schema_version': desk_schema, 'non_claim': True, 'plan_id': state['session_id'],
               'pilot': str(output / 'PILOT.json'), 'pilot_status': pilot['status'], 'checks': checks,
@@ -429,38 +504,20 @@ def desk(session_root, *, run=subprocess.run, harvest=True, compare_session=None
         print(f'{name}: {"not_evaluated" if ok == "not_evaluated" else "pass" if ok is True else "fail"}')
     print('model.identity_mismatch: under NON_CLAIM_FILE_IDENTITIES_ONLY pins the runtime identity is unsealed (null); this is expected and is not a claim identity pass.')
     print('session harvest_flags: ' + json.dumps(pilot['session_harvest_flags'], sort_keys=True))
-    for member in members:
-        print(member['run_id'] + ' harvest_flags: ' + json.dumps({'flags': member['harvest_flags'],
-              'battery_discharge': member['battery_discharge']}, sort_keys=True))
-        summary = member.get('summary')
-        if summary is None:
-            print(member['run_id'] + ': unreadable ' + member['unreadable'] + ' ' + json.dumps({
-                'excluded': member['excluded'], 'exclusion_codes': member['exclusion_codes']}, sort_keys=True))
+    for run_id, record in (member_lines() if lines is None else lines):
+        print(run_id + ' harvest_flags: ' + json.dumps(record['harvest_flags'], sort_keys=True))
+        if 'unreadable' in record:
+            print(run_id + ': unreadable ' + record['unreadable'] + ' ' + json.dumps(record['detail'], sort_keys=True))
             continue
-        pre = summary['window_evidence_precheck']
-        print(member['run_id'] + ': ' + json.dumps({
-            'end_state': summary['end_state'], 'state_changing_calls': summary['state_changing_calls'],
-            'episode_seconds': summary['duration_s'], 'sampler_policy': summary['configuration']['sampler'],
-            'cap_hits': sum(f.startswith('turn_token_budget_reached:') for f in summary['flags']),
-            **{k: summary[k] for k in ('acted_beyond_read_marking', 'bank_stage', 'cache_statistics', 'repetition_flags_per_turn', 'phase_window_reason_counts')},
-            **{k: summary[k] for k in ('classification', 'counted_tool_names', 'read_only_tool_names', 'unobserved_tool_names', 'exclusion_codes', 'excluded', 'os_thermal')},
-            'tool_names_per_turn': summary['tool_names_per_turn'], 'unknown_tool_names': summary['unknown_tool_names'],
-            'thermal_pressure_seconds': summary['thermal_pressure_seconds'],
-            'active_gpu_clock_mhz': summary['active_gpu_clock_mhz'],
-            'per_turn_active_gpu_clock_mhz': summary['per_turn_active_gpu_clock_mhz'],
-            'chain_eligible': summary['chain_eligible'], 'chain_reasons': pre['reasons'] + summary['exclusion_codes'],
-            'target_precheck_eligible': pre['eligible'],
-            'request_window_diagnostics': pre['request_windows'],
-            'window_evidence_precheck': {r['window']: {'eligible': r['eligible'], 'reasons': r['reasons']} for r in pre['windows']},
-            'ended_in_unclosed_reasoning': summary['ended_in_unclosed_reasoning']}, sort_keys=True))
-    print('repeat_token_identity (greedy-only; sampled configurations skipped): ' + json.dumps(deterministic, sort_keys=True))
-    if comparison is not None:
-        print('cross_pilot_token_identity: ' + json.dumps(comparison, sort_keys=True))
+        print(run_id + ': ' + json.dumps(record['detail'], sort_keys=True))
+    print('repeat_token_identity (greedy-only; sampled configurations skipped): ' + json.dumps(shown['repeat_token_identity'], sort_keys=True))
+    if shown['cross_pilot_token_identity'] is not None:
+        print('cross_pilot_token_identity: ' + json.dumps(shown['cross_pilot_token_identity'], sort_keys=True))
     for key in ('I4_prime', 'registered_eligible_members', 'episode_scope_alternative_eligible_members',
                 'episode_scope_alternative_ineligible_reasons',
                 'raw_within_cell_energy_sd', 'residual_analysis'):
         print(key + ': ' + json.dumps(pilot[key], sort_keys=True, allow_nan=False))
-    print('repeat_energy_spread: ' + json.dumps(spreads, sort_keys=True))
+    print('repeat_energy_spread: ' + json.dumps(shown['repeat_energy_spread'], sort_keys=True))
     print('harvest_exit: ' + str(result.returncode))
     print('harvest_status: ' + status['harvest_status'])
     return status
