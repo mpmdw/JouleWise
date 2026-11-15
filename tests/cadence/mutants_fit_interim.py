@@ -101,7 +101,7 @@ MUTANTS = [
     ('cs_sol8_no_cli_preflight', RUN, '    F.stage2_preflight(s1)                          # refuses before any energy file is opened\n', '', [T_RUN]),
     ('cs_sol8_no_day_check', FIT, '    if len(stage1_out["roster"]["fit_days"]) < 2:', '    if False:', [T_RUN]),
     ('cs_sol3_guard_below_one', FIT, 'if v is not None and not (isinstance(v, float) and math.isfinite(v)):', 'if v is not None and not (isinstance(v, float) and abs(v) < 1.0):', [T_FIT]),
-    ("pins_not_checked", RUN, '        _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING), a.manifest)]\n', '        _VERIFIED[:] = [(json.loads(Path(a.manifest).read_text()), a.manifest)]\n', [T_RUN]),
+    ("pins_not_checked", RUN, '        _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,\n                                       ledger_ref=getattr(a, "ledger_ref", None)), a.manifest)]\n', '        _VERIFIED[:] = [(json.loads(Path(a.manifest).read_text()), a.manifest)]\n', [T_RUN]),
     ("stage1_commit_not_checked", RUN, '        M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1, ledger_ref=a.ledger_ref)\n', '        pass\n', [T_RUN]),
     ("level_off_requires_fresh", FIT, 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0:', 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0 and r["pm_fresh"]:', [T_FIT]),
     ("cluster_by_day", FIT, '            g += [k] * len(L["segments"])', '            g += [L["day"]] * len(L["segments"])', [T_FIT]),
@@ -120,7 +120,7 @@ MUTANTS = [
     ("fan_mean_over_present_keys", RUN, 'if fans and all(x is not None for x in fans) else None',
      'if fans and any(x is not None for x in fans) and all(x is not None for x in fans[:1]) else None', [T_RUN]),
     ("cli_stage1_hash_not_checked", RUN, '    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:', '    if False:', [T_RUN]),
-    ("meter_left_rectangle", RUN, 'tot += 0.5 * (self._at(lo, i) + self._at(hi, i)) * (hi - lo)', 'tot += self._at(lo, i) * (hi - lo)', [T_RUN]),
+    ("meter_left_rectangle", RUN, 'return sum(0.5 * (self._value(x) + self._value(y)) * (y - x) for x, y in zip(xs, xs[1:]))', 'return sum(self._value(x) * (y - x) for x, y in zip(xs, xs[1:]))', [T_RUN]),
 ]
 
 
