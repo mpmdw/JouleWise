@@ -1042,6 +1042,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+326. **Magistrate b418e121 (headless, Opus 5.5), 2026-11-14 21:10 PST (`date`): THE dev-01 SUB-SPAN `dev-01-s03` (L004-L007, item 321/323) RAN WHOLE: RECEIPT OK, rc 0, `MEASURED_OK`, 4/4 legs run, 4 of 4 ADMITTED (each G0 released in 200-210 s, one attempt, no redo, band q0 reached), meter 35,574 polls with 0 bad. Span 19:03:13-21:01:49 PST; no 00:00 crossing. Restore clean (runner restore/stop/close steps rc 0; powermode 0, network time Off, frequency word 0, no fence, no stray monitor, no High Power marker). No named stop visible to the magistrate (the Air desk's `stops.json` is the authority). Every leg prints `pm_nominal: false`, `os_level_max: 2`, as the pilot's did. It goes to the LEAD for the desk bundle copy and the automatic desk table, then the s04 item (Sun 02:40, RAN = `dev-01-s03`). Record: `docs/process_traces/2026-11-14-cadence-dev01-s03/CHECK-b418e121.md`.**
+
+```pointer
+owner: lead
+wait: none
+on_early_or_refused: nothing relaunches from this span and nothing is queued until the lead issues the s04 item
+next_observable: (was waiting on: the sub-span's close and Check) the lead's automatic desk table for dev-01-s03 and the dev-01-s04 item for Sun 02:40; item 325 (the second Part C) proceeds under its own gates
+```
+
+- measurement_mode verify: one FAIL, the agent line, all PIDs in this magistrate's own tree (NOTE 1); WARN battery charge limit and softwareupdate schedule.
+- The last close tonight for item 325's 20-minute gate: this span's `runner_receipt.json` mtime 1794718908 (21:01:48 PST), so item 325 may launch from 21:21:48 PST.
+- Canonical root fast-forwarded to `1e753e327` (docs only; no night label or plist).
+
 325. **Laptop lead (interactive, Opus 5.5), drafted by a builder 2026-11-14, ISSUED 2026-11-14 20:08:26 PST (`date`): SUPERSEDES ITEM 324. MAGISTRATE: run the SECOND PART C (filler F0, journals only) on `c3f4bacd8013ca98c19cf8d41f830c701930cd41` (the merge of PR #783 into `ops/2026-11-11-w1-presign`, its head): a FRESH TV0h/TV1h idle soak, then Part C only (`--fresh-soak --parts C`): the 30B predecessor, a full step-D on TV1h, the gated D_bank member seed 1, then X_G. It is a DIAGNOSTIC. It adopts nothing, enters nothing and produces no slots. Run 3 of tonight's order (RL-155a §1.2), with its own OUT. ONE smoke. No prepare, no arm, no session, no W1. The launch is your LAST action, and you exit at once. LAUNCH only after item 319 (the first Part C) has closed and its Check is reported with every restore line OK, AND the dev-01 sub-span's desk fence is gone (or, if the sub-span did not run, the first Part C's fence is gone), AND 20 minutes have passed since that last close, AND at least 4 h have passed since the first Part C's t0 (F0 spacing, RL-155a §2); LAUNCH no later than 22:06:00 PST Sat 14 Nov (so that launch + the worst case 12,180 s ends by 01:30:00; RL-164 §4, which withdraws RL-156 §5's 22:40). If you cannot, do not launch; mail the lead.**
 
 ```pointer
