@@ -38,6 +38,7 @@ import math
 import os
 from pathlib import Path
 import re
+import sys
 
 NS = 1_000_000_000
 MAX_GAP_S = 2.0                     # RL-166 Q7, RL-173 E.1: the gap bound on both channels
@@ -112,6 +113,15 @@ def _convert(kind, text):
     return int(text)
 
 
+def _over_int_limit(text):
+    """An integer literal longer than ``sys.get_int_max_str_digits()`` digits: ``json.loads`` raises ValueError on
+    it (int() of the token), so the decoder keeps the line as an error line; the scanner refuses it the same way."""
+    if "." in text or "e" in text or "E" in text:
+        return False
+    limit = sys.get_int_max_str_digits()
+    return bool(limit) and len(text) - text.startswith("-") > limit
+
+
 def _tokens(s):
     pos, n = 0, len(s)
     while True:
@@ -122,7 +132,10 @@ def _tokens(s):
             raise _Bad()
         pos = m.end()
         kind = m.lastgroup
-        yield kind, m.group(kind)
+        text = m.group(kind)
+        if kind == "num" and _over_int_limit(text):
+            raise _Bad()             # json.loads refuses an integer literal over the interpreter's digit limit
+        yield kind, text
         if pos >= n:
             return
 
