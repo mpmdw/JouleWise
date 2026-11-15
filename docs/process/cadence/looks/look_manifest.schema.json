@@ -1073,6 +1073,10 @@
           },
           "pending": {
             "type": "string"
+          },
+          "disposed_by": {
+            "type": "string",
+            "pattern": "^RL-\\d+[a-z]?"
           }
         }
       }

@@ -166,8 +166,9 @@ def run_roster(entries, *, threshold=DRIFT_THRESHOLD, loader=load_step3):
 #     python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest MANIFEST.json --stage1 STAGE1.json
 #         --stage1-sha256 HEX --custody ROOT [--span-dir SPAN_ID=PATH ...] [--allow-draft] --out STEP3.json
 #
-# Before anything is opened: the manifest's pins verify (manifest.verify_pins) and LOOKS.json names this stage-1
-# hash (manifest.require_stage1_committed; --allow-draft skips both for synthetic runs). The drift threshold is
+# Before anything is opened: the manifest's pins verify (manifest.verify_pins) and the committed LOOKS.json names
+# this stage-1 hash and its roster (manifest.require_stage1_committed). --allow-draft waives both for a synthetic
+# stage-1 file only. The output records manifest_sha256, the loaded code's hashes and allow_draft. The drift threshold is
 # the committed manifest's decision drift_tripwire (RL-166 Q11), never a command-line value.
 #
 # The roster is stage 1's committed output (level D, docs/process/cadence_look_fit_interface.md section 3),
@@ -207,30 +208,39 @@ def main(argv=None):
     p.add_argument("--custody", required=True)
     p.add_argument("--span-dir", action="append", default=[])
     p.add_argument("--manifest", required=True)
-    p.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest, no LOOKS.json stage-1 row")
+    p.add_argument("--ledger-ref", help="the shared ref the committed LOOKS.json must be on (default: upstream, else origin/main)")
+    p.add_argument("--allow-draft", action="store_true",
+                   help="synthetic runs only: a draft manifest and no committed stage-1 row; refused unless stage 1 is synthetic")
     p.add_argument("--out", required=True)
     a = p.parse_args(argv)
     repo = Path(__file__).resolve().parents[2]
     if str(repo) not in sys.path:                 # -I drops the repository from sys.path
         sys.path.insert(0, str(repo))
     from joulewise.cadence_looks import manifest as lm
+    raw = Path(a.stage1).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
+        print("REFUSE the stage-1 file is not the committed bytes")
+        return 1
+    stage1 = json.loads(raw)
     try:
-        doc = lm.verify_pins(a.manifest, repo, allow_draft=a.allow_draft, running=[Path(__file__).resolve(), STEP3_PATH])
-        if not a.allow_draft:
-            lm.require_stage1_committed(lm.load_json(repo / lm.LOOK_LEDGER_PATH), doc["look_id"], a.stage1_sha256)
+        doc = lm.verify_pins(a.manifest, repo, allow_draft=a.allow_draft, running=[Path(__file__).resolve(), STEP3_PATH],
+                             ledger_ref=a.ledger_ref)
+        if a.allow_draft:
+            if stage1.get("synthetic") is not True:                      # Mythos N2
+                raise lm.ManifestError(["--allow-draft on a stage-1 file that is not synthetic"])
+        else:
+            if stage1.get("allow_draft") is True:
+                raise lm.ManifestError(["the stage-1 file was made under --allow-draft"])
+            lm.require_stage1_committed(repo, doc["look_id"], a.stage1_sha256, stage1_doc=stage1,
+                                        ledger_ref=a.ledger_ref)
     except lm.ManifestError as error:
         for problem in error.problems:
             print(f"REFUSE {problem}")
         return 1
     threshold = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")["threshold"]
-    raw = Path(a.stage1).read_bytes()
-    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
-        print("REFUSE the stage-1 file is not the committed bytes")
-        return 1
     try:
-        entries = entries_from_stage1(json.loads(raw), span_dirs(a.custody, a.span_dir))
-        doc = {"schema": SCHEMA, "stage1_sha256": a.stage1_sha256, "step3_sha256": STEP3_SHA256,
-               **run_roster(entries, threshold=threshold)}
+        entries = entries_from_stage1(stage1, span_dirs(a.custody, a.span_dir))
+        result = run_roster(entries, threshold=threshold)
     except Step3Refused as error:
         print(f"REFUSE {error}")
         return 1
@@ -240,7 +250,14 @@ def main(argv=None):
             tb = tb.tb_next
         print(f"FAILED {type(exc).__name__} at line {tb.tb_lineno}")
         return 2
-    text = json.dumps(doc, indent=1, allow_nan=False) + "\n"
+    unpinned = lm.unpinned_loaded_modules(doc, repo)                    # Mythos N6
+    if unpinned:
+        print("REFUSE loaded repository modules the manifest does not pin: " + ", ".join(unpinned[:6]))
+        return 1
+    out = {"schema": SCHEMA, "stage1_sha256": a.stage1_sha256, "step3_sha256": STEP3_SHA256,
+           "manifest_sha256": lm.sha256_file(a.manifest), "code_sha256": lm.loaded_repo_files(repo),
+           "allow_draft": bool(a.allow_draft), "synthetic": stage1.get("synthetic") is True, **result}
+    text = json.dumps(out, indent=1, allow_nan=False) + "\n"
     Path(a.out).write_text(text, encoding="utf-8")
     print(f"wrote {a.out} sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()}")
     return 0

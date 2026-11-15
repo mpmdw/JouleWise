@@ -51,6 +51,11 @@ def validate(args):
             looks = Path(args.looks) if args.looks else Path(args.repo) / lm.LOOK_LEDGER_PATH
             if looks.is_file():
                 lm.validate_look_ledger(lm.load_json(looks), args.repo)
+        if args.output:
+            out_problems = check_output(args.output, args.manifest, Path(args.repo) if args.repo else
+                                        Path(args.manifest).resolve().parents[4])
+            if out_problems:
+                raise lm.ManifestError(out_problems)
         roster = None
         if args.span_ledger:
             roster = lm.resolve_roster(doc, lm.load_json(args.span_ledger), lm.sha256_file(args.manifest))
@@ -142,35 +147,90 @@ def _flag(stage1, flag):
     return isinstance(node, dict) and node.get("to_research_lead") is True
 
 
+STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion_34.py, not by the stages
+
+
+def _schemas(repo):
+    looks = Path(repo) / "docs/process/cadence/looks"
+    return (json.loads((looks / "lm-interim-01.stage1.schema.json").read_text(encoding="utf-8")),
+            json.loads((looks / "lm-interim-01.output.schema.json").read_text(encoding="utf-8")))
+
+
+def _provenance(name, rec, doc, manifest_sha, pins, *, exact=None):
+    """Sol N2: the hashes a stage recorded are the pins, exactly: each recorded repository file is pinned with
+    that hash; ``exact`` (when given) is the set the stage must have recorded, no more and no less; and the
+    stage names the manifest being assembled. Keys starting 'input:' record inputs, not code."""
+    problems = []
+    if rec.get("manifest_sha256") != manifest_sha:
+        problems.append(f"{name} was made under manifest {str(rec.get('manifest_sha256'))[:12]}, not this one "
+                        f"({manifest_sha[:12]})")
+    code = {k: v for k, v in (rec.get("code_sha256") or {}).items() if not k.startswith("input:")}
+    for path, sha in sorted(code.items()):
+        if pins.get(path) != sha:
+            problems.append(f"{name} ran {path} at {str(sha)[:12]}, which is not the manifest's pin")
+    if exact is not None:
+        for path in sorted(exact - set(code)):
+            problems.append(f"{name} does not record {path}'s hash")
+        for path in sorted(set(code) - exact):
+            problems.append(f"{name} records {path}, which the pinned stage does not run")
+    return problems
+
+
 def assemble(args):
-    """The look's output file (RL-149 §2.6: the lead checks it against the output schema). Refuses before
-    writing anything unless: the pins verify (``manifest.verify_pins``); LOOKS.json names the stage-1 file's
-    hash (unless --allow-draft); the fit and step 3 files name that hash; every code hash the fit recorded is
-    the manifest's pin; and every held flag of stage 1 has its clearing ruling (RL-166 Q8; RL-166c §2 row 7)."""
+    """The look's output file (RL-149 §2.6: the lead checks it against the output schema). Refuses before writing
+    anything unless:
+    * the pins verify (``manifest.verify_pins``) and, unless --allow-draft, the committed LOOKS.json names the
+      stage-1 file's sha256 and its roster (``require_stage1_committed``);
+    * the stage-1 file, the fit and step 3's file each pass their pinned schema, and so does the assembled output
+      (Sol N3: nothing unknown, no per-leg energy, reaches the output);
+    * all three name the stage-1 hash and were made under this manifest, and the code hashes they recorded are the
+      pins exactly (Sol N2);
+    * --allow-draft only on synthetic input, and no input made under --allow-draft without it (Mythos N2);
+    * every held flag of stage 1 has its clearing ruling (RL-166 Q8; RL-166c §2 row 7)."""
     import datetime
     import re as _re
+    from joulewise.cadence_looks import schema_check as sc
     repo = Path(args.manifest).resolve().parents[4]
     raw = Path(args.stage1).read_bytes()
     s1 = hashlib.sha256(raw).hexdigest()
+    manifest_sha = lm.sha256_file(args.manifest)
+    stage1 = json.loads(raw)
+    fit, step3 = lm.load_json(args.fit), lm.load_json(args.step3)
     problems = []
     try:
-        doc = lm.verify_pins(args.manifest, repo, allow_draft=args.allow_draft, running=[Path(__file__).resolve()])
+        doc = lm.verify_pins(args.manifest, repo, allow_draft=args.allow_draft, running=[Path(__file__).resolve()],
+                             ledger_ref=args.ledger_ref)
         if not args.allow_draft:
-            lm.require_stage1_committed(lm.load_json(repo / lm.LOOK_LEDGER_PATH), doc["look_id"], s1)
+            lm.require_stage1_committed(repo, doc["look_id"], s1, stage1_doc=stage1, ledger_ref=args.ledger_ref)
     except lm.ManifestError as error:
         problems += error.problems
         doc = lm.load_json(args.manifest)
-    fit, step3 = lm.load_json(args.fit), lm.load_json(args.step3)
-    problems += [f"{name} names stage-1 sha256 {doc_.get('stage1_sha256')}, not {s1}"
-                 for name, doc_ in (("fit", fit), ("step3", step3)) if doc_.get("stage1_sha256") != s1]
+    s1_schema, out_schema = _schemas(repo)
+    for name, inst, schema in (("stage 1", stage1, s1_schema),
+                               ("the fit", fit, sc.sub_schema(out_schema, "fit_output")),
+                               ("step 3", step3, sc.sub_schema(out_schema, "step3_output"))):
+        problems += [f"{name} does not pass its schema: {e}" for e in sc.errors(inst, schema)[:20]]
+    problems += [f"{name} names stage-1 sha256 {str(rec.get('stage1_sha256'))[:12]}, not {s1[:12]}"
+                 for name, rec in (("the fit", fit), ("step 3", step3)) if rec.get("stage1_sha256") != s1]
     pins = {path: sha for _, path, sha in lm.code_refs(doc)}
-    for path, sha in (fit.get("code_sha256") or {}).items():
-        if pins.get(path) != sha:
-            problems.append(f"the fit ran {path} at {str(sha)[:12]}, which is not the manifest's pin")
-    for path in ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py"):
-        if path not in (fit.get("code_sha256") or {}):
-            problems.append(f"the fit does not record {path}'s hash")
-    stage1 = json.loads(raw)
+    stage2_set = ({"joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py", lm.STEP3_PATH}
+                  | {d["path"] for d in (doc.get("fit") or {}).get("dependencies") or []}) - STAGE_ONLY_DEPENDENCIES
+    problems += _provenance("the fit", fit, doc, manifest_sha, pins, exact=stage2_set)
+    problems += _provenance("stage 1", stage1, doc, manifest_sha, pins)
+    problems += _provenance("step 3", step3, doc, manifest_sha, pins)
+    for need in ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py"):
+        if need not in (stage1.get("code_sha256") or {}):
+            problems.append(f"stage 1 does not record {need}'s hash")
+    for need in ("joulewise/cadence_looks/step3_roster.py", lm.STEP3_PATH):
+        if need not in (step3.get("code_sha256") or {}):
+            problems.append(f"step 3 does not record {need}'s hash")
+    drafted = [name for name, rec in (("stage 1", stage1), ("the fit", fit), ("step 3", step3))
+               if rec.get("allow_draft") is True]
+    if args.allow_draft:
+        if stage1.get("synthetic") is not True:
+            problems.append("--allow-draft on a stage-1 file that is not synthetic (Mythos N2)")
+    elif drafted:
+        problems.append(f"{', '.join(drafted)} made under --allow-draft; a real output cannot use it (Mythos N2)")
     raised = [f for f in HELD_FLAGS if _flag(stage1, f)]
     cleared = dict(c.split("=", 1) for c in (args.hold_cleared or []) if "=" in c)
     for f in raised:
@@ -184,16 +244,16 @@ def assemble(args):
         return 1
     q = (fit.get("qualified_interim_half") or {}).get("verdict")
     code = dict(fit.get("code_sha256") or {})
-    for rel in ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/inclusion_34.py",
-                "joulewise/cadence_looks/step3_energy_ratios.py", "scripts/cadence_look_manifest.py"):
-        code[rel] = pins.get(rel) or lm.sha256_file(repo / rel)
+    code.update({k: v for k, v in (step3.get("code_sha256") or {}).items()})
+    code["scripts/cadence_look_manifest.py"] = pins["scripts/cadence_look_manifest.py"]
     # RL-158 Q5: legs whose realized prompt count is more than 5 % from nominal, from stage 1's own fields
     realized = [{"leg_key": leg["leg_key"], "nominal": leg["cell_prompt_tokens"], "realized": leg["prefill_tokens"]}
                 for leg in stage1.get("legs") or []
                 if isinstance(leg.get("prefill_tokens"), int) and isinstance(leg.get("cell_prompt_tokens"), int)
                 and abs(leg["prefill_tokens"] - leg["cell_prompt_tokens"]) > 0.05 * leg["cell_prompt_tokens"]]
     out = {"schema": "joulewise.cadence_look_output.interim.v1", "look_id": "lm-interim-01",
-           "manifest_sha256": lm.sha256_file(args.manifest), "stage1_sha256": s1, "fit": fit, "step3": step3,
+           "manifest_sha256": manifest_sha, "stage1_sha256": s1, "fit": fit, "step3": step3,
+           "allow_draft": bool(args.allow_draft), "synthetic": stage1.get("synthetic") is True,
            "realized_prompt_tokens": realized,
            "decisions": {"drift_tripwire": step3["tripwire"]["decision"], "qualified_interim_half": q,
                          "extension_rule": "none written; any extension needs a ruling"},
@@ -204,10 +264,33 @@ def assemble(args):
                           "statement": "An energy read on conditionless campaign legs only, by frozen code at the "
                                        "interim look (RL-149 section 2.6; RL-150 R6): none comes from a run with a "
                                        "sabotage instruction, a slot or a v4 member."}}
+    out_errors = sc.errors(out, out_schema)
+    if out_errors:
+        for e in out_errors[:20]:
+            print(f"REFUSE the assembled output does not pass its schema: {e}")
+        return 1
+    unpinned = lm.unpinned_loaded_modules(doc, repo)                    # Mythos N6
+    if unpinned:
+        print("REFUSE loaded repository modules the manifest does not pin: " + ", ".join(unpinned[:6]))
+        return 1
     text = json.dumps(out, indent=1, allow_nan=False) + "\n"
     Path(args.out).write_text(text, encoding="utf-8")
     print(f"wrote {args.out} sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()}")
     return 0
+
+
+def check_output(path, manifest_path, repo):
+    """``validate --output``: an assembled output passes its pinned schema, names this manifest, and was not made
+    under --allow-draft unless it is synthetic (Mythos N2). Returns problems."""
+    from joulewise.cadence_looks import schema_check as sc
+    out = lm.load_json(path)
+    _, out_schema = _schemas(repo)
+    problems = [f"output: {e}" for e in sc.errors(out, out_schema)[:20]]
+    if out.get("manifest_sha256") != lm.sha256_file(manifest_path):
+        problems.append("output: made under another manifest")
+    if out.get("allow_draft") is True and out.get("synthetic") is not True:
+        problems.append("output: made under --allow-draft on input that is not synthetic")
+    return problems
 
 
 def main(argv=None):
@@ -221,6 +304,7 @@ def main(argv=None):
     v.add_argument("--span-ledger")
     v.add_argument("--looks")
     v.add_argument("--roster-out", help="write the resolved roster (needs --span-ledger)")
+    v.add_argument("--output", help="also check an assembled output against the pinned schema and the draft rule")
     w = sub.add_parser("pin")
     w.add_argument("manifest")
     w.add_argument("--repo", required=True)
@@ -230,6 +314,7 @@ def main(argv=None):
         a.add_argument(k, required=True)
     a.add_argument("--hold-cleared", action="append", metavar="FLAG=RL-n")
     a.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest, no LOOKS.json stage-1 row")
+    a.add_argument("--ledger-ref", help="the shared ref the committed LOOKS.json must be on (default: upstream, else origin/main)")
     args = p.parse_args(argv)
     if args.cmd == "validate":
         if args.kit and not args.repo:

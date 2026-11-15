@@ -181,7 +181,8 @@ class Tripwire(Base):
     def test_tripwire_keys_match_the_output_schema(self):
         out = sr.run_roster([entry("a", 10000)], loader=self.loader)
         schema = json.loads(OUTPUT_SCHEMA.read_text())["$defs"]["step3_output"]
-        self.assertEqual(set(out) | {"schema", "stage1_sha256", "step3_sha256"}, set(schema["required"]))
+        self.assertEqual(set(out) | {"schema", "stage1_sha256", "step3_sha256", "manifest_sha256", "code_sha256",
+                                     "allow_draft", "synthetic"}, set(schema["required"]))
         self.assertEqual(set(out["tripwire"]), set(schema["properties"]["tripwire"]["required"]))
 
 
@@ -223,7 +224,9 @@ class Stage1Custody(unittest.TestCase):
             legs.append({"leg_key": f"{span}/L00{i}", "day": "2026-11-16", "role": role, "leg_type": typ,
                          "included": inc, "cell_prompt_tokens": cell})
         self.stage1 = self.root / "stage1.json"
-        self.stage1.write_text(json.dumps({"schema": "joulewise.cadence_look_stage1.v1", "legs": legs}))
+        self.roster_sha = "c" * 64
+        self.stage1.write_text(json.dumps({"schema": "joulewise.cadence_look_stage1.v1", "legs": legs, "synthetic": True,
+                                           "code_sha256": {"input:roster_sha256": self.roster_sha}}))
         self.sha = hashlib.sha256(self.stage1.read_bytes()).hexdigest()
 
     def test_entries_from_stage1(self):
@@ -257,7 +260,8 @@ class Stage1Custody(unittest.TestCase):
         self.assertEqual(r.returncode, 2)                                              # no run-time threshold
 
     def test_main_needs_stage1_committed_in_looks(self):
-        """Mythos 8: without --allow-draft, LOOKS.json must name this stage-1 hash."""
+        """Mythos 8, Sol N1 / Mythos N1: without --allow-draft, the COMMITTED LOOKS.json must name this stage-1 hash
+        and its roster; a loose (uncommitted) ledger, a ledger off the shared history and a wrong roster refuse."""
         from tests.cadence import look_minirepo as mr
         mini = mr.mini_repo(self)
         out = self.root / "step3.json"
@@ -267,13 +271,43 @@ class Stage1Custody(unittest.TestCase):
         r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("stage 1 is not committed", r.stdout)
-        mr.commit(mini, stage1_sha256="1" * 64)
+        # Sol's loose-LOOKS case: the right row, written but not committed
+        mr.commit(mini, stage1_sha256=self.sha, roster_sha256=self.roster_sha, git_commit_it=False)
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("differs from the one committed", r.stdout)
+        self.assertFalse(out.exists())
+        # committed, but not on the shared history
+        mr.git_commit(mini, "local only", publish=False)
         r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("names stage-1 sha256 111111111111", r.stdout)
-        mr.commit(mini, stage1_sha256=self.sha)
+        self.assertIn("is not on origin/main", r.stdout)
+        mr.git(mini, "update-ref", "refs/remotes/origin/main", "HEAD")
         r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        doc = json.loads(out.read_text())
+        self.assertIs(doc["allow_draft"], False)
+        self.assertEqual(doc["manifest_sha256"], hashlib.sha256((mini / mr.MANIFEST).read_bytes()).hexdigest())
+        # the roster hash must be the one stage 1 recorded
+        mr.commit(mini, stage1_sha256=self.sha, roster_sha256="d" * 64)
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("is not the roster the stage-1 file records", r.stdout)
+
+    def test_allow_draft_needs_a_synthetic_stage1(self):
+        """Mythos N2."""
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        doc = json.loads(self.stage1.read_text())
+        doc["synthetic"] = False
+        self.stage1.write_text(json.dumps(doc))
+        sha = hashlib.sha256(self.stage1.read_bytes()).hexdigest()
+        out = self.root / "step3.json"
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", "--manifest", mini / mr.MANIFEST, "--stage1",
+                  self.stage1, "--stage1-sha256", sha, "--custody", self.root, "--out", out, "--allow-draft")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("--allow-draft on a stage-1 file that is not synthetic", r.stdout)
+        self.assertFalse(out.exists())
 
 
 if __name__ == "__main__":

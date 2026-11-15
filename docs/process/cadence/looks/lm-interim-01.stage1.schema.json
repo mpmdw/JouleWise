@@ -7,6 +7,7 @@
  "additionalProperties": false,
  "required": [
   "active_readings",
+  "allow_draft",
   "calibrated_range",
   "centring",
   "code_sha256",
@@ -14,6 +15,7 @@
   "input_sha256",
   "legs",
   "look_id",
+  "manifest_sha256",
   "meter_clock",
   "numpy_version",
   "onset",
@@ -38,6 +40,15 @@
   "synthetic": {
    "type": "boolean",
    "description": "true only on the generator's data; a production look carries false"
+  },
+  "manifest_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$",
+   "description": "the manifest verify_pins checked before stage 1 opened anything (Sol N2)"
+  },
+  "allow_draft": {
+   "type": "boolean",
+   "description": "the run used --allow-draft (synthetic only; Mythos N2)"
   },
   "code_sha256": {
    "type": "object",

@@ -82,7 +82,7 @@
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "12fbcc5fe8782e29f43daf3975ca59921349d482683f10d715e0a08bae65061a"
+        "sha256": "f6e0860decc49c504c0d5773d4ae6a5232ad03401992a2dac2dc66b6ec942470"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -481,7 +481,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "089e440a70078ff62e6224917de77cc717b2873c43f50a97825bc9ff9e6f6fd3"
+        "sha256": "b4298ccc29a24e325fc0ffa84342259729e6fd7e62201052735a80e6234274fe"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -489,7 +489,7 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "34831c96a51cc3f68eda57393d1ced1dd98754ec4232f823960d1f7adf6caae2"
+        "sha256": "a9f78c061897fd2ff1f433627852751f80037a9a0767c64750e2349d135e6f35"
       },
       {
         "path": "scripts/cadence_look_run.py",
@@ -497,7 +497,11 @@
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "f40fde7a39a63dbbb1521062388de9f7722db64c747720507492efea532725b1"
+        "sha256": "60f73c6c93ec57b06d0545bd1074033089ffe7c4087b36d060860f9258507cce"
+      },
+      {
+        "path": "joulewise/cadence_looks/schema_check.py",
+        "sha256": "c9a96932b9a83c24a9385047d220c2670225df8242ac113c2e5dbdf2095dd37c"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. The numpy version prints in both stages' outputs.",
@@ -627,10 +631,10 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "34831c96a51cc3f68eda57393d1ced1dd98754ec4232f823960d1f7adf6caae2"
+        "sha256": "a9f78c061897fd2ff1f433627852751f80037a9a0767c64750e2349d135e6f35"
       },
       "statistic": "iii",
-      "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
+      "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
       "kept": [
         "(ii) gamma",
         "gamma's estimability",
@@ -783,7 +787,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "e2184ce805e79dcdc354c8525855374d086a1a6ff833cacc1129be935b172044"
+        "sha256": "04fac7a98e4a4ccf08cc42ca49b93e223c09b07460f97577ca5b2e5b13dd748e"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -849,12 +853,12 @@
       {
         "rule": 3,
         "id": "sidecar_coverage",
-        "text": "Over the leg's interval (G0's start to the last stamped token): sidecar coverage at least 99 % and no gap over 2 s; powermetrics gaps at most max(1 s, 5 periods), U1's registered number (pilot_protocol_v4.md:451). Coverage and gap are the registered U1 evaluator's definitions (thermal.Coverage; thermal_desk.member_record's pm_gap), copied with a cite and an equality test because both are v4 strict paths. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -B joulewise/cadence_looks/inclusion_34.py`).",
+        "text": "Over the leg's interval (G0's start to the last stamped token): sidecar coverage at least 99 % and no gap over 2 s; powermetrics gaps at most max(1 s, 5 periods), U1's registered number (pilot_protocol_v4.md:451). Coverage and gap are the registered U1 evaluator's definitions (thermal.Coverage; thermal_desk.member_record's pm_gap), copied with a cite and an equality test because both are v4 strict paths. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -B joulewise/cadence_looks/inclusion_34.py --manifest M ...`).",
         "judged_at": "look",
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "089e440a70078ff62e6224917de77cc717b2873c43f50a97825bc9ff9e6f6fd3"
+          "sha256": "b4298ccc29a24e325fc0ffa84342259729e6fd7e62201052735a80e6234274fe"
         },
         "cite": [
           "RL-149 §2.4",
@@ -865,12 +869,12 @@
       {
         "rule": 4,
         "id": "km003c_clean",
-        "text": "Header and trailer both present with a normal stop reason; inside the leg's interval, coverage at least 99 % of the header's nominal rate and no gap over 2 s between sample stamps. Timestamps only: each sample line's stamp is taken and the line dropped. The span trailer's counts print in the inclusion table and decide nothing. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -B joulewise/cadence_looks/inclusion_34.py`).",
+        "text": "Header and trailer both present with a normal stop reason; inside the leg's interval, samples at least 99 % of the header's nominal rate (the count n of each sample line, summed, against sps x the interval) and no gap over 2 s between polls that carried samples (n > 0). Stamps and counts only: each sample line's rt and n are taken by pattern and the line dropped; no sample value is decoded (Sol cold seat N5). The span trailer's counts print in the inclusion table and decide nothing. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -B joulewise/cadence_looks/inclusion_34.py --manifest M ...`).",
         "judged_at": "look",
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "089e440a70078ff62e6224917de77cc717b2873c43f50a97825bc9ff9e6f6fd3"
+          "sha256": "b4298ccc29a24e325fc0ffa84342259729e6fd7e62201052735a80e6234274fe"
         },
         "cite": [
           "RL-149 §2.4",
@@ -916,7 +920,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "25c07f15565bb5611968c385a2bdd00db44bea319b7eaab39e1bf3f169b11236"
+      "sha256": "066d550d3c1ddb4d5511498491b2ed743bec1bea719a1865956e07acc350fec0"
     },
     "prints": [
       {
@@ -1056,7 +1060,7 @@
       },
       {
         "id": "qualified_interim_half",
-        "what": "Whether the maximum leave-one-day-out hot-stretch error over counted days (GPU rail) is at or under 0.02: yes, no or not_evaluable.",
+        "what": "Whether the maximum leave-one-day-out hot-stretch error over counted days (GPU rail) is at or under 0.02: passes, fails or not_evaluable.",
         "cite": [
           "RL-151 §2.1",
           "RL-166 Q3"
@@ -1400,10 +1404,10 @@
       "RL-150 R6",
       "RL-150 R8",
       "RL-166 Q15",
-      "RL-166 §2",
-      "RL-166 Q8"
+      "RL-166 Q8",
+      "RL-166 §2"
     ],
-    "pin_check": "Every entry point (cadence_look_run.py stage 1 and stage 2, inclusion_34.py, step3_roster.py and assemble) calls joulewise.cadence_looks.manifest.verify_pins before it opens any custody file: the manifest validates as committed, LOOKS.json names its sha256, and every file in fit.code, fit.dependencies and the schema pins hashes to its pin. Stage 2, step3_roster.py and assemble also refuse unless LOOKS.json's row names the stage-1 file's sha256 (status stage1_committed or later). Synthetic runs pass --allow-draft."
+    "pin_check": "Every entry point (cadence_look_run.py stage 1 and stage 2, inclusion_34.py, step3_roster.py and assemble) calls joulewise.cadence_looks.manifest.verify_pins before it opens any custody file: the manifest validates as committed, the committed LOOKS.json (read with git at HEAD, clean, with HEAD on the shared branch) names its sha256 at status committed or later, and every file in fit.code, fit.dependencies and the schema pins hashes to its pin. Stage 2, step3_roster.py and assemble also refuse unless that committed LOOKS.json names the stage-1 file's sha256 and the roster hash it records (require_stage1_committed). Before writing, each entry point refuses if any repository module it loaded is unpinned (unpinned_loaded_modules), and records manifest_sha256, the code hashes of every loaded repository file and allow_draft in its output; assemble requires those to equal the pins exactly and checks every input and its own output against the pinned schemas (schema_check.py). --allow-draft is for synthetic runs only: with it, stage 1 and inclusion_34.py refuse unless every span's runner_receipt.json says synthetic, and stage 2, step3_roster.py and assemble refuse unless the stage-1 file says synthetic; without it, assemble refuses any input made under --allow-draft."
   },
   "review": {
     "cold_seat": "Mythos 5.2: the design attack on RL-166 Q1 to Q4 (Sun 10:00), then a fresh Mythos seat's cold review of the manifest, rules 3 and 4, the step 3 adapter and the fit code against RL-149 §2.6 and §2.7 as amended, with Q6's and Q11's checks (Mon 14:00). Neither wrote any of the code.",

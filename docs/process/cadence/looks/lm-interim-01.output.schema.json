@@ -7,6 +7,7 @@
  "type": "object",
  "additionalProperties": false,
  "required": [
+  "allow_draft",
   "decisions",
   "disclosure",
   "fit",
@@ -15,7 +16,8 @@
   "realized_prompt_tokens",
   "schema",
   "stage1_sha256",
-  "step3"
+  "step3",
+  "synthetic"
  ],
  "properties": {
   "schema": {
@@ -37,6 +39,13 @@
   },
   "step3": {
    "$ref": "#/$defs/step3_output"
+  },
+  "allow_draft": {
+   "type": "boolean",
+   "description": "assembled under --allow-draft; validate --output refuses it on non-synthetic input (Mythos N2)"
+  },
+  "synthetic": {
+   "type": "boolean"
   },
   "realized_prompt_tokens": {
    "type": "array",
@@ -159,10 +168,12 @@
    "type": "object",
    "additionalProperties": false,
    "required": [
+    "allow_draft",
     "channels",
     "code_sha256",
     "delta_column",
     "look_id",
+    "manifest_sha256",
     "numpy_version",
     "qualified_interim_half",
     "schema",
@@ -183,6 +194,15 @@
     },
     "synthetic": {
      "type": "boolean"
+    },
+    "manifest_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$",
+     "description": "the manifest verify_pins checked before stage 2 opened anything (Sol N2)"
+    },
+    "allow_draft": {
+     "type": "boolean",
+     "description": "the run used --allow-draft (synthetic only; Mythos N2)"
     },
     "code_sha256": {
      "type": "object",
@@ -1182,10 +1202,14 @@
    "type": "object",
    "additionalProperties": false,
    "required": [
+    "allow_draft",
     "cells",
+    "code_sha256",
+    "manifest_sha256",
     "schema",
     "stage1_sha256",
     "step3_sha256",
+    "synthetic",
     "tripwire"
    ],
    "properties": {
@@ -1198,6 +1222,23 @@
     },
     "step3_sha256": {
      "const": "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
+    },
+    "manifest_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    },
+    "code_sha256": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     }
+    },
+    "allow_draft": {
+     "type": "boolean"
+    },
+    "synthetic": {
+     "type": "boolean"
     },
     "cells": {
      "type": "array",

@@ -53,6 +53,9 @@ def finalize(doc, shas=None):
                 fill(v)
     fill(doc)
     doc["open_questions"] = []
+    drift = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")
+    if drift.pop("pending", None) is not None:          # Mythos N10: Q11 disposed before commit (synthetic)
+        drift["disposed_by"] = "RL-999"
     return doc
 
 
@@ -531,7 +534,7 @@ class RepoCheck(Base):
                  "docs/process/cadence/looks/lm-interim-01.output.schema.json": "{}\n",
                  "docs/process/cadence/looks/lm-interim-01.stage1.schema.json": "{}\n"}
         doc0 = draft()
-        for ref in doc0["fit"]["dependencies"] + [{"path": "scripts/cadence_look_manifest.py"}] + \
+        for ref in doc0["fit"]["dependencies"] + doc0["fit"]["code"] + \
                 [{"path": p} for p in lm.EVIDENCE]:
             files.setdefault(ref["path"], (REPO / ref["path"]).read_text(encoding="utf-8"))
         for rel, src in files.items():
@@ -649,30 +652,57 @@ class SchemaCopy(Base):
 
 
 class Assemble(Base):
-    """assemble on a pinned copy of the look's files (tests/cadence/look_minirepo.py), run as a file under -I."""
+    """assemble on a pinned copy of the look's files (tests/cadence/look_minirepo.py), run as a file under -I. The
+    three inputs are the smallest documents their pinned schemas admit (tests/cadence/look_fixtures.py), carrying
+    the provenance a real run records: this manifest's sha256 and the pinned hashes of the code each stage runs."""
+
+    ROSTER = "0" * 64
 
     def setUp(self):
         from tests.cadence import look_minirepo as mr
-        self.mr = mr
+        from tests.cadence.look_fixtures import minimal
+        from joulewise.cadence_looks import schema_check as sc
+        self.mr, self.minimal, self.sc = mr, minimal, sc
         self.mini = mr.mini_repo(self)
         self.d = tmpdir(self, "lm-asm-")
         self.s1 = self.d / "stage1.json"
-        self.write_stage1({"schema": "joulewise.cadence_look_stage1.v1", "tripwires": {"any": False},
-                           "legs": [{"leg_key": "dev-03-s01/L001", "cell_prompt_tokens": 2000, "prefill_tokens": 2200},
-                                    {"leg_key": "dev-03-s01/L002", "cell_prompt_tokens": 10000, "prefill_tokens": 10100}]})
+        self.s1_schema = json.loads((self.mini / LOOKS.relative_to(REPO) / "lm-interim-01.stage1.schema.json").read_text())
+        self.out_schema = json.loads((self.mini / LOOKS.relative_to(REPO) / "lm-interim-01.output.schema.json").read_text())
+        leg = minimal(self.s1_schema["properties"]["legs"]["items"], self.s1_schema)
+        self.legs = [dict(leg, leg_key="dev-03-s01/L001", cell_prompt_tokens=2000, prefill_tokens=2200),
+                     dict(leg, leg_key="dev-03-s01/L002", cell_prompt_tokens=10000, prefill_tokens=10100)]
+        self.write_stage1()
 
-    def write_stage1(self, doc):
-        self.s1.write_text(json.dumps(doc) + "\n")
-        h = hashlib.sha256(self.s1.read_bytes()).hexdigest()
+    def pins(self):
         man = json.loads((self.mini / self.mr.MANIFEST).read_text())
-        pins = {p: sha for _, p, sha in lm.code_refs(man)}
-        self.fit = {"schema": "joulewise.cadence_look_fit.v1", "stage1_sha256": h, "numpy_version": "2.5.4",
-                    "code_sha256": {k: pins[k] for k in (FIT, RUNNER, lm.STEP3_PATH)},
-                    "qualified_interim_half": {"verdict": "passes"}}
-        self.step3 = {"schema": "joulewise.cadence_look_step3.v1", "stage1_sha256": h, "cells": [],
-                      "tripwire": {"decision": "within"}}
+        return lm.sha256_file(self.mini / self.mr.MANIFEST), {p: sha for _, p, sha in lm.code_refs(man)}, man
+
+    def write_stage1(self, **changes):
+        msha, pins, man = self.pins()
+        stage1 = self.minimal(self.s1_schema)
+        stage1.update(manifest_sha256=msha, synthetic=True, allow_draft=True, legs=self.legs,
+                      code_sha256={FIT: pins[FIT], RUNNER: pins[RUNNER], "input:roster_sha256": self.ROSTER})
+        stage1.update(changes)
+        self.stage1 = stage1
+        self.s1.write_text(json.dumps(stage1) + "\n")
+        h = hashlib.sha256(self.s1.read_bytes()).hexdigest()
+        stage2 = ({FIT, RUNNER, lm.STEP3_PATH} | {d["path"] for d in man["fit"]["dependencies"]}) - \
+            {"configs/align/v4/r1_runtime.json"}
+        self.fit = self.minimal(self.sc.sub_schema(self.out_schema, "fit_output"))
+        self.fit.update(stage1_sha256=h, manifest_sha256=msha, allow_draft=True, numpy_version="2.5.4",
+                        code_sha256={k: pins[k] for k in sorted(stage2)})
+        self.step3 = self.minimal(self.sc.sub_schema(self.out_schema, "step3_output"))
+        self.step3.update(stage1_sha256=h, manifest_sha256=msha, allow_draft=True, synthetic=True,
+                          code_sha256={ADAPTER: pins[ADAPTER], lm.STEP3_PATH: pins[lm.STEP3_PATH]})
         self.dump()
         return h
+
+    def undraft(self):
+        """The inputs as a run without --allow-draft writes them, on the copy's current (committed) manifest."""
+        self.write_stage1(allow_draft=False)
+        self.fit["allow_draft"] = self.step3["allow_draft"] = False
+        self.dump()
+        return hashlib.sha256(self.s1.read_bytes()).hexdigest()
 
     def dump(self):
         (self.d / "fit.json").write_text(json.dumps(self.fit))
@@ -683,53 +713,110 @@ class Assemble(Base):
                           "--manifest", self.mini / self.mr.MANIFEST, "--stage1", self.s1, "--fit", self.d / "fit.json",
                           "--step3", self.d / "step3.json", "--analyst-seat", "test", "--out", self.d / "out.json", *extra)
 
+    def refused_run(self, fragment, *extra):
+        r = self.run_(*extra)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn(fragment, r.stdout)
+        self.assertFalse((self.d / "out.json").exists())
+        return r
+
     def test_assemble_writes_the_schema_shape(self):
         r = self.run_("--allow-draft")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         out = json.loads((self.d / "out.json").read_text())
-        schema = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
-        self.assertEqual(set(out), set(schema["required"]))
+        self.assertEqual(self.sc.errors(out, self.out_schema), [])
+        self.assertEqual(set(out), set(self.out_schema["required"]))
         self.assertNotIn("high_power_table", out)                                     # RL-167 §3
         self.assertNotIn("hp01_table", out["decisions"])
         self.assertEqual(out["decisions"]["drift_tripwire"], "within")
         self.assertEqual(out["realized_prompt_tokens"],                                 # RL-158 Q5, > 5 %
                          [{"leg_key": "dev-03-s01/L001", "nominal": 2000, "realized": 2200}])
         self.assertEqual(out["disclosure"]["holds_cleared"], [])
+        self.assertEqual((out["allow_draft"], out["synthetic"]), (True, True))         # Mythos N2
         r = self.run_("--allow-draft", "--hp-table", self.d / "fit.json")               # the option is gone
         self.assertEqual(r.returncode, 2)
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:          # validate --output
+            rc = cli.main(["validate", str(self.mini / self.mr.MANIFEST), "--output", str(self.d / "out.json")])
+        self.assertEqual(rc, 0, so.getvalue())
+        out["synthetic"] = False
+        (self.d / "out2.json").write_text(json.dumps(out))
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:
+            rc = cli.main(["validate", str(self.mini / self.mr.MANIFEST), "--output", str(self.d / "out2.json")])
+        self.assertEqual(rc, 1)
+        self.assertIn("made under --allow-draft on input that is not synthetic", so.getvalue())
 
     def test_assemble_refuses_code_that_is_not_the_pin(self):
         """Mythos 3: the hashes the fit recorded are compared with the manifest's pins."""
         self.fit["code_sha256"][FIT] = "f" * 64
         self.dump()
-        r = self.run_("--allow-draft")
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("which is not the manifest's pin", r.stdout)
-        self.assertFalse((self.d / "out.json").exists())
+        self.refused_run("which is not the manifest's pin", "--allow-draft")
         f = self.mini / "joulewise/cadence_looks/step3_roster.py"
         f.write_text(f.read_text() + "\n# edited\n")
-        self.fit["code_sha256"][FIT] = json.loads((self.mini / self.mr.MANIFEST).read_text())["fit"]["code"][0]["sha256"]
+        self.write_stage1()
+        self.refused_run("step3_roster.py sha256 differs from the pin", "--allow-draft")
+
+    def test_the_fit_records_exactly_the_pinned_stage(self):
+        """Sol N2: a fit that recorded fewer files, extra files, or ran under another manifest is refused."""
+        dep = "joulewise/external/km003c_parse.py"
+        del self.fit["code_sha256"][dep]
         self.dump()
-        r = self.run_("--allow-draft")
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("step3_roster.py sha256 differs from the pin", r.stdout)
+        self.refused_run(f"the fit does not record {dep}'s hash", "--allow-draft")
+        self.write_stage1()
+        self.fit["code_sha256"]["joulewise/cadence_looks/inclusion_34.py"] = self.pins()[1]["joulewise/cadence_looks/inclusion_34.py"]
+        self.dump()
+        self.refused_run("records joulewise/cadence_looks/inclusion_34.py, which the pinned stage does not run",
+                         "--allow-draft")
+        self.write_stage1()
+        self.fit["manifest_sha256"] = "e" * 64            # the two-manifest case: same code, another manifest
+        self.dump()
+        self.refused_run("the fit was made under manifest eeeeeeeeeeee, not this one", "--allow-draft")
+
+    def test_inputs_must_pass_their_schemas(self):
+        """Sol N3: an unknown field (here, a per-leg energy payload) is refused before anything is written."""
+        self.fit["per_leg_joules"] = {"dev-03-s01/L001": 1.0}
+        self.dump()
+        self.refused_run("the fit does not pass its schema: $.per_leg_joules: not allowed", "--allow-draft")
+        self.write_stage1()
+        self.step3["cells"] = [{"cell": 2000, "joules": [1.0]}]
+        self.dump()
+        self.refused_run("step 3 does not pass its schema", "--allow-draft")
+        self.write_stage1(legs=[dict(self.legs[0], energy_j=1.0)])
+        self.refused_run("stage 1 does not pass its schema: $.legs[0].energy_j: not allowed", "--allow-draft")
+
+    def test_allow_draft_is_synthetic_only_and_recorded(self):
+        """Mythos N2: --allow-draft on input that is not synthetic, or a draft input without it, is refused."""
+        self.write_stage1(synthetic=False)
+        self.refused_run("--allow-draft on a stage-1 file that is not synthetic", "--allow-draft")
+        self.mr.commit(self.mini)
+        h = self.write_stage1()                     # made under --allow-draft, on the committed manifest
+        self.mr.commit(self.mini, stage1_sha256=h, roster_sha256=self.ROSTER)
+        self.refused_run("made under --allow-draft; a real output cannot use it")
 
     def test_assemble_needs_stage1_committed_unless_draft(self):
-        """Mythos 8."""
+        """Mythos 8 / Sol N1: the stage-1 row is read from the committed, published LOOKS.json."""
         self.mr.commit(self.mini)
-        r = self.run_()
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("stage 1 is not committed", r.stdout)
-        self.mr.commit(self.mini, stage1_sha256=hashlib.sha256(self.s1.read_bytes()).hexdigest())
+        h = self.undraft()
+        self.refused_run("stage 1 is not committed")
+        self.mr.commit(self.mini, stage1_sha256=h, roster_sha256=self.ROSTER, git_commit_it=False)
+        self.refused_run("differs from the one committed at HEAD")      # a loose ledger (Sol N1)
+        self.mr.git_commit(self.mini, "stage 1", publish=False)
+        self.refused_run("is not on")                                   # committed, not on the shared ref
+        self.mr.git(self.mini, "update-ref", "refs/remotes/origin/main", "HEAD")
         r = self.run_()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = json.loads((self.d / "out.json").read_text())
+        self.assertEqual((out["allow_draft"], out["synthetic"]), (False, True))
+        self.mr.commit(self.mini, stage1_sha256=h, roster_sha256="9" * 64)   # another roster
+        (self.d / "out.json").unlink()
+        self.refused_run("is not the roster the stage-1 file records")
 
     def test_held_flags_need_their_clearing_ruling(self):
         """RL-166c §2 row 7 and RL-166 Q8 (Mythos 8): P-4, R-20 and the five tripwires."""
         self.assertEqual(self.run_("--allow-draft", "--hold-cleared", "meter_clock.to_research_lead=RL-170").returncode, 1)
-        self.write_stage1({"schema": "joulewise.cadence_look_stage1.v1", "tripwires": {"any": True},
-                           "onsets_before_116_s": {"to_research_lead": True, "total": 2},
-                           "meter_clock": {"to_research_lead": False}, "legs": []})
+        trip = copy.deepcopy(self.minimal(self.s1_schema)["tripwires"])
+        trip["any"] = True
+        onsets = dict(self.minimal(self.s1_schema)["onsets_before_116_s"], to_research_lead=True, total=2)
+        self.write_stage1(tripwires=trip, onsets_before_116_s=onsets, legs=[])
         r = self.run_("--allow-draft")
         self.assertEqual(r.returncode, 1)
         self.assertIn("onsets_before_116_s.to_research_lead true: stage 2 was held", r.stdout)
@@ -763,6 +850,8 @@ class ColdSeatFixes(Base):
                 node = next(x for x in doc["fit"]["stated_limits"] if x["id"] == name.split(".")[2]); field = "text"
             elif name.startswith("freeze2.deferred_rules."):
                 node = next(x for x in doc["freeze2"]["deferred_rules"] if x["id"] == name.split(".")[2]); field = "rule"
+            elif name.startswith("reads.never_read."):
+                node = next(x for x in doc["reads"]["never_read"] if x["id"] == name.split(".")[2]); field = "what"
             elif name.startswith("stages.stage2.holds."):
                 node = next(x for x in doc["stages"]["stage2"]["holds"] if x["flag"] == name.split("holds.", 1)[1])
                 field = "rule"
@@ -808,7 +897,19 @@ class ColdSeatFixes(Base):
         drift["threshold"] = 0.05
         self.refused(lambda: lm.validate_manifest(doc), "threshold 0.08, or the fallback 0.04")
         drift["threshold"] = 0.04
-        self.refused(lambda: lm.validate_manifest(doc), "carries ruled_threshold 0.08 and the pending")
+        self.refused(lambda: lm.validate_manifest(doc), "carries ruled_threshold 0.08 and either the pending")
+        # Mythos N10: a committed manifest carries the disposing ruling, never the pending note
+        doc = finalize(draft())
+        drift = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")
+        self.assertEqual(lm.validate_manifest(doc, final=True), [])
+        drift["pending"] = "pending the research lead's disposition"
+        self.refused(lambda: lm.validate_manifest(doc, final=True), "a committed manifest carries no pending")
+        del drift["disposed_by"]
+        self.refused(lambda: lm.validate_manifest(doc, final=True), "a committed manifest carries no pending")
+        del drift["pending"]
+        self.refused(lambda: lm.validate_manifest(doc, final=True), "either the pending disposition or the disposing")
+        drift["disposed_by"] = "the lead said so"
+        self.refused(lambda: lm.validate_manifest(doc, final=True), "drift_tripwire.disposed_by: the disposing ruling")
 
     def test_hp01_table_is_out(self):
         """Sol 5 / Mythos 5: RL-167 §3."""
@@ -835,7 +936,7 @@ class ColdSeatFixes(Base):
         self.refused(lambda: lm.validate_manifest(doc), "holds stage 2 on tripwires.any")
 
     def test_looks_rows_record_the_hashes(self):
-        """Mythos 8: a status needs its hashes; require_stage1_committed reads them."""
+        """Mythos 8: a status needs its hashes; require_stage1_committed reads them from the committed ledger."""
         led = lm.load_json(LOOK_LEDGER)
         row = led["looks"][0]
         row["status"] = "stage1_committed"
@@ -844,19 +945,39 @@ class ColdSeatFixes(Base):
         self.assertTrue(any("needs stage1_sha256" in p for p in ctx.exception.problems))
         row.update(stage1_sha256="2" * 64, roster_sha256="3" * 64)
         lm.validate_look_ledger(led)
-        lm.require_stage1_committed(led, "lm-interim-01", "2" * 64)
-        self.refused(lambda: lm.require_stage1_committed(led, "lm-interim-01", "4" * 64), "names stage-1 sha256")
-        row["status"] = "committed"
-        self.refused(lambda: lm.require_stage1_committed(led, "lm-interim-01", "2" * 64), "stage 1 is not committed")
         row["output_sha256"] = "nothex"
         self.refused(lambda: lm.validate_look_ledger(led), "output_sha256: 64 hex or null")
+
+    def test_require_stage1_committed_reads_git(self):
+        """Sol N1: the row is read from LOOKS.json as committed at HEAD and published on the shared ref; a loose
+        or unpublished ledger, a wrong hash, a wrong roster or a plain 'committed' row is refused."""
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        s1doc = {"code_sha256": {"input:roster_sha256": "3" * 64}}
+        req = lambda sha="2" * 64, doc=s1doc: lm.require_stage1_committed(mini, "lm-interim-01", sha, stage1_doc=doc)
+        mr.commit(mini)
+        self.refused(req, "stage 1 is not committed")
+        mr.commit(mini, stage1_sha256="2" * 64, roster_sha256="3" * 64, git_commit_it=False)
+        self.refused(req, "differs from the one committed at HEAD")
+        mr.git_commit(mini, "stage 1", publish=False)
+        self.refused(req, "is not on")
+        mr.git(mini, "update-ref", "refs/remotes/origin/main", "HEAD")
+        req()
+        self.refused(lambda: req("4" * 64), "names stage-1 sha256")
+        self.refused(lambda: req(doc={"code_sha256": {"input:roster_sha256": "5" * 64}}), "is not the roster")
+        led = json.loads((mini / lm.LOOK_LEDGER_PATH).read_text())
+        led["looks"].append(dict(led["looks"][0]))                       # a duplicate row contradicts
+        (mini / lm.LOOK_LEDGER_PATH).write_text(json.dumps(led, indent=2) + "\n")
+        mr.git_commit(mini, "duplicate")
+        with self.assertRaises(lm.ManifestError):
+            req()
 
     def test_verify_pins(self):
         from tests.cadence import look_minirepo as mr
         mini = mr.mini_repo(self)
         m = mini / mr.MANIFEST
         lm.verify_pins(m, mini, allow_draft=True, running=[mini / "scripts/cadence_look_manifest.py"])
-        self.refused(lambda: lm.verify_pins(m, mini), "LOOKS.json lists this look as a draft")
+        self.refused(lambda: lm.verify_pins(m, mini), "LOOKS.json lists this look as 'draft', not committed")
         self.refused(lambda: lm.verify_pins(m, mini, allow_draft=True, running=[mini / "joulewise/schemas_x.py"]),
                      "runs but is not pinned")
         dep = mini / "joulewise/external/km003c_parse.py"
@@ -865,6 +986,43 @@ class ColdSeatFixes(Base):
         mini2 = mr.mini_repo(self)
         mr.commit(mini2)
         lm.verify_pins(mini2 / mr.MANIFEST, mini2)
+        led = json.loads((mini2 / lm.LOOK_LEDGER_PATH).read_text())
+        led["looks"][0]["sha256"] = "6" * 64
+        (mini2 / lm.LOOK_LEDGER_PATH).write_text(json.dumps(led, indent=2) + "\n")
+        mr.git_commit(mini2, "another manifest's row")
+        self.refused(lambda: lm.verify_pins(mini2 / mr.MANIFEST, mini2), "does not name this manifest's sha256")
+
+    def test_a_ledger_status_short_of_committed_is_refused(self):
+        """Mythos N5: superseded (or any status but committed, stage1_committed, run, frozen) does not run."""
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        mr.commit(mini)
+        led = json.loads((mini / lm.LOOK_LEDGER_PATH).read_text())
+        for status, fragment in (("superseded", "lists this look as 'superseded', not committed"),
+                                 ("approved", ".status: one of")):
+            led["looks"][0]["status"] = status
+            (mini / lm.LOOK_LEDGER_PATH).write_text(json.dumps(led, indent=2) + "\n")
+            mr.git_commit(mini, status)
+            self.refused(lambda: lm.verify_pins(mini / mr.MANIFEST, mini), fragment)
+
+    def test_a_loaded_module_the_manifest_does_not_pin_is_named(self):
+        """Mythos N6: each entry point refuses before writing when a repository module it loaded is unpinned."""
+        import importlib.util
+        import sys
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        doc = json.loads((mini / mr.MANIFEST).read_text())
+        self.assertEqual(lm.unpinned_loaded_modules(doc, mini), [])
+        extra = mini / "joulewise/extra_helper.py"
+        extra.write_text("X = 1\n")
+        spec = importlib.util.spec_from_file_location("lm_test_extra_helper", extra)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules["lm_test_extra_helper"] = mod
+        self.addCleanup(sys.modules.pop, "lm_test_extra_helper", None)
+        self.assertEqual(lm.unpinned_loaded_modules(doc, mini), ["joulewise/extra_helper.py (not pinned)"])
+        doc["fit"]["dependencies"].append({"path": "joulewise/extra_helper.py", "sha256": "0" * 64})
+        self.assertEqual(lm.unpinned_loaded_modules(doc, mini), ["joulewise/extra_helper.py (differs from the pin)"])
 
     def test_roster_out_writes_one_list(self):
         led = self_ledger = ledger(sha=lm.sha256_file(MANIFEST))

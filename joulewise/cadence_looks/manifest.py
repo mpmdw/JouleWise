@@ -33,6 +33,8 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import re
+import subprocess
+import sys
 
 SCHEMA = "joulewise.cadence_look_manifest.v1"
 LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
@@ -65,7 +67,9 @@ STEP3_PATH = "joulewise/cadence_looks/step3_energy_ratios.py"
 STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"   # RL-166 Q6
 STEP3_ADAPTER_PATH = "joulewise/cadence_looks/step3_roster.py"
 REQUIRED_CODE_PATHS = {"interim": {"joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
-                                   STEP3_PATH, STEP3_ADAPTER_PATH, "scripts/cadence_look_run.py"}}   # RL-166 Q1
+                                   STEP3_PATH, STEP3_ADAPTER_PATH, "scripts/cadence_look_run.py",
+                                   "scripts/cadence_look_manifest.py",
+                                   "joulewise/cadence_looks/schema_check.py"}}   # RL-166 Q1; Sol N3
 
 # Which block phases each look may read, by role (RL-149 sections 2.3 and 2.6; RL-157 section 4).
 # Phases are BLOCK-QUEUE's (joulewise/cadence/blocks.py PHASES). hp-01 is phase "extension".
@@ -181,6 +185,24 @@ VERBATIM_SHA256 = {
         "affc86ecb35000a844ed9170614c2c49faa869db35e6af112946a36edf960ce7",
     "freeze2.deferred_rules.sd_j_covariance":
         "b62bf853e24e664f0387768874f4cfe13cadf00c719c843630ff32fa7b70f0c2",
+    "reads.never_read.ctl01":
+        "36eb70f3bae26541337fcd2ab3e2da3c66f15116fc37099faaaf8f74cae7211b",
+    "reads.never_read.fillers":
+        "760433e9fc357849a474ac6275c445cf763acccc58e58f6e52918c24e002d39f",
+    "reads.never_read.hp01_energy":
+        "025244fb89f99afe19aebc1d26faebe4c30bbba349c16a6f8893a2e43e80e24d",
+    "reads.never_read.qualification":
+        "84bc01a5199e982997640a70c1cc8c06810644484e36a5c568de5ebecaff6be8",
+    "reads.never_read.rejected_attempts":
+        "daddb48eac886291b17172088a86dde756a659c55378da4e6bb773e5b1c25ec9",
+    "reads.never_read.reserve_qualification":
+        "6e76bddbbae6b730cbd4db23d63754237305d1a801489ab64bf38e6c77a48793",
+    "reads.never_read.step3_legs":
+        "022f20bcd6d9c4f1d121c595385da32564b209120840305ed1e4acf424d4e4c9",
+    "reads.never_read.type_T":
+        "d6f7b145f5b355a76181644c1dbd27759c65f2d6960551ad147f58c3ae57f0cd",
+    "reads.never_read.v4":
+        "e48f0cd818a7f07c4c03a4e9eae140cfa18257c2b39304e7d2ab2d6f5475c81f",
     "stages.stage2.holds.meter_clock.to_research_lead":
         "8a5447e6dde8f07ccccf06ed58557e747237c3080a61efedc122b114eef05250",
     "stages.stage2.holds.onsets_before_116_s.to_research_lead":
@@ -208,6 +230,9 @@ def verbatim_texts(doc):
     for x in ((doc.get("stages") or {}).get("stage2") or {}).get("holds") or []:
         if isinstance(x, dict):
             out[f"stages.stage2.holds.{x.get('flag')}"] = x.get("rule")
+    for x in (doc.get("reads") or {}).get("never_read") or []:              # Mythos N10: the sentence, not only the id
+        if isinstance(x, dict):
+            out[f"reads.never_read.{x.get('id')}"] = x.get("what")
     return out
 
 
@@ -392,7 +417,7 @@ def validate_manifest(doc, *, final=None):
     _fit(doc.get("fit"), kind, problems, final)
     _inclusion(doc.get("inclusion"), problems, final)
     _outputs(doc.get("outputs"), kind, problems, final)
-    _decisions(doc.get("decisions"), kind, problems)
+    _decisions(doc.get("decisions"), kind, problems, final)
     _later_looks(doc.get("later_looks"), problems)
     _freezes(doc.get("freeze1"), doc.get("freeze2"), problems, kind)
     _custody(doc.get("custody"), problems)
@@ -850,7 +875,7 @@ def _outputs(o, kind, problems, final):
         problems.append("outputs.forbidden_content: non-empty list")
 
 
-def _decisions(ds, kind, problems):
+def _decisions(ds, kind, problems, final=False):
     if not isinstance(ds, list):
         problems.append("decisions: list")
         return
@@ -858,7 +883,7 @@ def _decisions(ds, kind, problems):
     for i, d in enumerate(ds):
         where = f"decisions[{i}]"
         if not _closed(d, {"id", "statistic", "rule", "action", "reads_energy", "cite"}, where, problems,
-                       optional={"threshold", "fallback_threshold", "ruled_threshold", "pending"}):
+                       optional={"threshold", "fallback_threshold", "ruled_threshold", "pending", "disposed_by"}):
             continue
         if RETIRED_DECISION_RE.search(str(d.get("id"))):
             problems.append(f"{where}.id: Rule P and the interim look's one decision are retired (RL-151 §2.1)")
@@ -885,10 +910,18 @@ def _decisions(ds, kind, problems):
         if drift.get("fallback_threshold") != DRIFT_FALLBACK:
             problems.append(f"decisions drift_tripwire: fallback_threshold {DRIFT_FALLBACK} (RL-166 Q11)")
         th = drift.get("threshold")
+        if final and "pending" in drift:
+            problems.append("decisions drift_tripwire: a committed manifest carries no pending disposition; the "
+                            "research lead disposes RL-166 Q11 first (Mythos N10)")
+        disposed = drift.get("disposed_by")
+        if disposed is not None and not (isinstance(disposed, str) and RULING_RE.fullmatch(disposed)):
+            problems.append("decisions drift_tripwire.disposed_by: the disposing ruling, RL-n")
+        if disposed is not None and "pending" in drift:
+            problems.append("decisions drift_tripwire: pending and disposed_by both present")
         if th == DRIFT_FALLBACK:
-            if drift.get("ruled_threshold") != DRIFT_RULED or not _text(drift.get("pending")):
-                problems.append("decisions drift_tripwire: the fallback 0.04 carries ruled_threshold 0.08 and the "
-                                "pending disposition (RL-166 Q11)")
+            if drift.get("ruled_threshold") != DRIFT_RULED or not (_text(drift.get("pending")) or disposed):
+                problems.append("decisions drift_tripwire: the fallback 0.04 carries ruled_threshold 0.08 and either "
+                                "the pending disposition or the disposing ruling (RL-166 Q11)")
         elif th != DRIFT_RULED:
             problems.append(f"decisions drift_tripwire: threshold {DRIFT_RULED}, or the fallback {DRIFT_FALLBACK} "
                             "if Q11's condition fails (RL-166 Q11)")
@@ -1135,23 +1168,111 @@ def _look_row(looks_doc, look_id):
     return row
 
 
-def require_stage1_committed(looks_doc, look_id, stage1_sha256):
-    """Refuse unless LOOKS.json's row for the look names this stage-1 file's sha256 at status stage1_committed or
-    later. Stage 2, step3_roster.py and assemble call it before they open anything (Mythos cold seat 8)."""
-    validate_look_ledger(looks_doc)
-    row = _look_row(looks_doc, look_id)
-    if row.get("status") not in ("stage1_committed", "run", "frozen"):
-        raise ManifestError([f"LOOKS.json {look_id} is {row.get('status')!r}: stage 1 is not committed"])
+COMMITTED_STATUSES = ("committed", "stage1_committed", "run", "frozen")
+STAGE1_COMMITTED_STATUSES = ("stage1_committed", "run", "frozen")
+
+
+def _git(repo, *args):
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=60)
+    return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace").strip()
+
+
+def committed_ledger(repo, *, ledger_ref=None):
+    """LOOKS.json as committed, never a file a caller names (Sol cold seat N1; Mythos N1). Refuses unless:
+    ``repo`` is the top of a git worktree; LOOKS.json is committed at HEAD and the working-tree file is
+    identical to it and clean; HEAD is an ancestor of ``ledger_ref`` (default: the branch's upstream, else
+    origin/main), so the commitment is on the shared history; and the committed ledger validates (one row per
+    look, each status carrying the hashes it requires). Returns (head sha, ref, ledger)."""
+    repo = Path(repo).resolve()
+    rc, top, err = _git(repo, "rev-parse", "--show-toplevel")
+    if rc != 0 or Path(top.decode().strip()).resolve() != repo:
+        raise ManifestError([f"{repo} is not the top of a git worktree: the ledger must be committed ({err[:120]})"])
+    rc, head, _ = _git(repo, "rev-parse", "HEAD")
+    head = head.decode().strip()
+    rc, raw, _ = _git(repo, "show", f"{head}:{LOOK_LEDGER_PATH}")
+    if rc != 0:
+        raise ManifestError([f"{LOOK_LEDGER_PATH} is not committed at HEAD {head[:12]}"])
+    working = repo / LOOK_LEDGER_PATH
+    if not working.is_file() or working.read_bytes() != raw:
+        raise ManifestError([f"the working-tree {LOOK_LEDGER_PATH} differs from the one committed at HEAD {head[:12]}"])
+    rc, status, _ = _git(repo, "status", "--porcelain", "--", LOOK_LEDGER_PATH)
+    if rc != 0 or status.strip():
+        raise ManifestError([f"{LOOK_LEDGER_PATH} is not clean"])
+    ref = ledger_ref
+    if ref is None:
+        rc, up, _ = _git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+        ref = up.decode().strip() if rc == 0 and up.strip() else "origin/main"
+    rc, _, err = _git(repo, "merge-base", "--is-ancestor", head, ref)
+    if rc != 0:
+        raise ManifestError([f"HEAD {head[:12]} is not on {ref}: the ledger's commitment is not on the shared history"
+                             + (f" ({err[:120]})" if err else "")])
+    try:
+        ledger = json.loads(raw)
+    except ValueError:
+        raise ManifestError([f"the committed {LOOK_LEDGER_PATH} is not JSON"]) from None
+    validate_look_ledger(ledger)
+    return head, ref, ledger
+
+
+def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger_ref=None):
+    """Refuse unless the committed LOOKS.json (``committed_ledger``) names, for this look: the manifest as committed
+    at HEAD, at status stage1_committed or later; this stage-1 file's sha256; and as roster_sha256 the roster hash
+    the stage-1 file recorded (``code_sha256["input:roster_sha256"]``; Mythos N7). Stage 2, step3_roster.py and
+    assemble call it before they open anything. Returns the ledger row."""
+    head, ref, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
+    row = _look_row(ledger, look_id)
+    problems = []
+    if row.get("status") not in STAGE1_COMMITTED_STATUSES:
+        problems.append(f"LOOKS.json {look_id} is {row.get('status')!r}: stage 1 is not committed")
     if row.get("stage1_sha256") != stage1_sha256:
-        raise ManifestError([f"LOOKS.json {look_id} names stage-1 sha256 {str(row.get('stage1_sha256'))[:12]}, "
-                             f"not {stage1_sha256[:12]}"])
+        problems.append(f"LOOKS.json {look_id} names stage-1 sha256 {str(row.get('stage1_sha256'))[:12]}, "
+                        f"not {stage1_sha256[:12]}")
+    rc, man, _ = _git(repo, "show", f"{head}:{row.get('manifest_path')}")
+    if rc != 0:
+        problems.append(f"the manifest {row.get('manifest_path')} is not committed at HEAD")
+    else:
+        if hashlib.sha256(man).hexdigest() != row.get("sha256"):
+            problems.append("the committed manifest's sha256 is not the one LOOKS.json names")
+        if (Path(repo) / row["manifest_path"]).read_bytes() != man:
+            problems.append("the working-tree manifest differs from the committed one")
+    recorded = ((stage1_doc or {}).get("code_sha256") or {}).get("input:roster_sha256")
+    if recorded is None or row.get("roster_sha256") != recorded:
+        problems.append(f"LOOKS.json {look_id} roster_sha256 {str(row.get('roster_sha256'))[:12]} is not the roster "
+                        f"the stage-1 file records ({str(recorded)[:12]})")
+    if problems:
+        raise ManifestError(problems)
     return row
 
 
-def verify_pins(manifest_path, repo, *, allow_draft=False, running=()):
+def loaded_repo_files(repo):
+    """{repository path: sha256} of every repository source file loaded in this process (sys.modules)."""
+    repo = Path(repo).resolve()
+    out = {}
+    for mod in list(sys.modules.values()):
+        f = getattr(mod, "__file__", None)
+        if not f:
+            continue
+        try:
+            rel = Path(f).resolve().relative_to(repo).as_posix()
+        except ValueError:
+            continue
+        if rel.endswith(".py"):
+            out[rel] = sha256_file(repo / rel)
+    return out
+
+
+def unpinned_loaded_modules(doc, repo):
+    """Repository files loaded in this process that the manifest does not pin, or whose bytes differ from the pin
+    (Mythos N6). Each entry point calls it before it writes, and refuses on a non-empty list."""
+    pins = {path: sha for _, path, sha in code_refs(doc)}
+    return sorted(f"{p} ({'not pinned' if p not in pins else 'differs from the pin'})"
+                  for p, sha in loaded_repo_files(repo).items() if pins.get(p) != sha)
+
+
+def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_ref=None):
     """The run path's pin check (Mythos cold seat 3; Sol 9). Before any custody file is opened, refuse unless:
-    the manifest validates (as committed unless ``allow_draft``); LOOKS.json names its sha256 at a non-draft
-    status (unless ``allow_draft``); every file in fit.code, fit.dependencies, the step 3 pins, the inclusion code
+    the manifest validates (as committed unless ``allow_draft``); the committed LOOKS.json (``committed_ledger``)
+    names its sha256 at status committed or later (unless ``allow_draft``); every file in fit.code, fit.dependencies, the step 3 pins, the inclusion code
     and the two schemas exists and hashes to its pin; and every path in ``running`` (the caller's own files) is
     one of them. Opens the manifest, LOOKS.json and repository files only. Returns the manifest."""
     repo = Path(repo).resolve()
@@ -1163,16 +1284,16 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=()):
         validate_manifest(doc, final=not allow_draft)
     except ManifestError as error:
         problems += error.problems
-    looks_path = repo / LOOK_LEDGER_PATH
     if not allow_draft:
         try:
-            row = _look_row(json.loads(looks_path.read_text(encoding="utf-8")), doc.get("look_id"))
+            _, _, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
+            row = _look_row(ledger, doc.get("look_id"))
             if row.get("sha256") != hashlib.sha256(raw).hexdigest():
                 problems.append("LOOKS.json does not name this manifest's sha256")
-            if row.get("status") == "draft":
-                problems.append("LOOKS.json lists this look as a draft")
+            if row.get("status") not in COMMITTED_STATUSES:                 # Mythos N5
+                problems.append(f"LOOKS.json lists this look as {row.get('status')!r}, not committed")
         except (OSError, ValueError, ManifestError) as error:
-            problems.append(f"LOOKS.json: {getattr(error, 'problems', [type(error).__name__])[0]}")
+            problems += [f"LOOKS.json: {p}" for p in getattr(error, "problems", [type(error).__name__])]
     pinned = {}
     for where, path, sha in code_refs(doc):
         if not (isinstance(path, str) and _repo_path_ok(path)):

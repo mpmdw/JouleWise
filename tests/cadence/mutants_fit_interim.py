@@ -111,8 +111,9 @@ MUTANTS = [
     ("no_output_check", FIT, '    output_check(out)\n    return out', '    return out', [T_FIT]),
     ("energy_input_hash_unchecked", FIT, 'if energy["input_sha256"] != stage1_out["input_sha256"]:', 'if False:', [T_FIT]),
     ("forbidden_fields_allowed", FIT, 'FORBIDDEN_FIELDS = ("condition", "slot", "instruction", "start_band")', 'FORBIDDEN_FIELDS = ("start_band",)', [T_FIT]),
-    ("stage1_opens_power_trace", RUN, '            turn = build_turn(ldir / "runtime" / result["bundle"], result, fan_keys)',
-     '            turn = build_turn(ldir / "runtime" / result["bundle"], result, fan_keys)\n            open(ldir / "runtime" / result["bundle"] / "power_trace.csv").close()', [T_RUN]),
+    # inside build_turn's try block (16 spaces), so the mutant compiles (Sol cold seat N4)
+    ("stage1_opens_power_trace", RUN, '                turn = build_turn(ldir / "runtime" / result["bundle"], result, fan_keys)',
+     '                turn = build_turn(ldir / "runtime" / result["bundle"], result, fan_keys)\n                open(ldir / "runtime" / result["bundle"] / "power_trace.csv").close()', [T_RUN]),
     ("stage1_parses_rich_lines", RUN, '            m, e = _RICH_TS.search(line), _RICH_EL.search(line)',
      '            json.loads(line)\n            m, e = _RICH_TS.search(line), _RICH_EL.search(line)', [T_RUN]),
     ("fan_mean_over_present_keys", RUN, 'if fans and all(x is not None for x in fans) else None',
@@ -138,7 +139,7 @@ def main(argv=None):
             if f.is_file() and f.suffix == ".py":
                 shutil.copy(f, tmp / "tests" / f.name)
         shutil.copytree(ROOT / "tests/cadence", tmp / "tests/cadence", ignore=shutil.ignore_patterns("__pycache__"))
-        survived = []
+        survived, invalid = [], []
         # control: the unmutated copy must pass, or every "kill" below means nothing
         r = subprocess.run([sys.executable, "-B", "-m", "unittest", T_FIT, T_RUN], cwd=tmp, capture_output=True,
                            text=True, timeout=1800, env={**os.environ, "PYTHONPATH": str(tmp)})
@@ -155,7 +156,17 @@ def main(argv=None):
                 print(f"{mid}: STALE (pattern found {orig.count(old)} times)", flush=True)
                 survived.append(mid)
                 continue
-            path.write_text(orig.replace(old, new))
+            mutated = orig.replace(old, new)
+            if rel.endswith(".py"):
+                # Sol cold seat N4: a mutant that does not compile is not a behaviour the tests caught. It is
+                # reported as INVALID and fails the run; it is never counted as killed.
+                try:
+                    compile(mutated, str(path), "exec")
+                except SyntaxError as exc:
+                    print(f"{mid}: INVALID (does not compile: line {exc.lineno})", flush=True)
+                    invalid.append(mid)
+                    continue
+            path.write_text(mutated)
             try:
                 r = subprocess.run([sys.executable, "-B", "-m", "unittest", "-f", *tests], cwd=tmp,
                                    capture_output=True, text=True, timeout=900,
@@ -167,7 +178,8 @@ def main(argv=None):
             if not killed:
                 survived.append(mid)
         print(f"{len(survived)} survived: {survived}")
-        return 1 if survived else 0
+        print(f"{len(invalid)} invalid (did not compile): {invalid}")
+        return 1 if survived or invalid else 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

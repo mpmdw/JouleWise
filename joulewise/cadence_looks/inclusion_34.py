@@ -23,17 +23,18 @@ Copied from: ``joulewise/align/apple/thermal.py`` (sha256 b9b46f9e...d39d7) and
 Rule 4, the KM003C stream (RL-149 section 2.4 rule 4 as RL-166 Q7 reads "clean"):
 * every stream file that overlaps the leg's interval has its header (status "streaming") and its
   trailer, and the trailer's stop reason is a normal one: a signal, "duration" or "stop file";
-* inside the leg's interval, the count of sample lines is at least 99 % of the header's nominal poll
-  rate (1 / poll_s) times the interval;
-* no gap over 2 s between consecutive sample stamps, the interval's edges included.
+* inside the leg's interval, the samples the polls carried (each sample line's count ``n``, summed) are at
+  least 99 % of the header's nominal sample rate (``sps``) times the interval;
+* no gap over 2 s between consecutive polls that carried samples (``n > 0``), the interval's edges included.
+  An empty poll covers nothing, so a stream of empty polls cannot cover a leg (Sol cold seat N5).
 
 The trailer's counts are printed in the inclusion table (``span_trailers``) and decide nothing. RL-166
 refused the "trailer counts zero" clause.
 
 **What is read.**
-* From each KM003C sample line (``{"k":"b",...}``), only its ``rt`` stamp (CLOCK_REALTIME ns at receipt),
-  taken with a fixed-prefix regular expression. The line is never JSON-decoded, and its sample bytes,
-  SMC values and counts are never kept, logged or copied.
+* From each KM003C sample line (``{"k":"b",...}``), only its ``rt`` stamp (CLOCK_REALTIME ns at receipt) and
+  its sample count ``n``, taken with a fixed-prefix regular expression. The line is never JSON-decoded, and its
+  sample bytes and SMC values are never kept, logged or copied.
 * Error lines (``{"k": "e", ...}``) are skipped unread.
 * Only the header and the trailer are decoded, as the runner already does (RL-150 R8).
 * From ``rich_telemetry.jsonl``, only ``timestamp_s`` and ``elapsed_ns``, taken by pattern. The line is never
@@ -70,7 +71,7 @@ NORMAL_STOP_REASONS = ("duration", "stop file")     # and any "signal N" (km003c
 ABNORMAL_STOP_REASONS = ("absent", "exception", "consecutive USB errors")
 
 # km003c_monitor.py writes sample lines compact ('{"k":"b","tx":..,"rx":..,"rt":..,'); spaced JSON is accepted too.
-_SAMPLE_LINE_RE = re.compile(rb'^\{"k":\s*"b",\s*"tx":\s*\d+,\s*"rx":\s*\d+,\s*"rt":\s*(\d+)\s*,')
+_SAMPLE_LINE_RE = re.compile(rb'^\{"k":\s*"b",\s*"tx":\s*\d+,\s*"rx":\s*\d+,\s*"rt":\s*(\d+)\s*,\s*"n":\s*(\d+)\s*,')
 _UNREAD_LINE_RE = re.compile(rb'^\{"k":\s*"[be]"')     # sample or error line: never decoded
 
 
@@ -222,19 +223,21 @@ def normal_stop(reason):
 
 
 def rule4(interval_ns, streams):
-    """Rule 4 on one leg. ``streams`` = [{"name", "header", "trailer", "stamps"}] from ``read_meter_stream``
-    (stamps = sorted rt ns). Returns {"pass", "coverage_fraction", "max_gap_s", "streams", "reasons"}."""
+    """Rule 4 on one leg. ``streams`` = [{"name", "header", "trailer", "polls"}] from ``read_meter_stream``
+    (polls = sorted (rt ns, n samples)). Coverage is the samples the polls in the interval carried against the
+    header's sps over the interval; the gap is between polls that carried samples. Returns {"pass",
+    "coverage_fraction", "max_gap_s", "streams", "reasons"}."""
     reasons = []
     out = {"pass": False, "coverage_fraction": None, "max_gap_s": None, "streams": [], "reasons": reasons}
     if interval_ns is None or interval_ns[1] <= interval_ns[0]:
         reasons.append("no leg interval (G0 start or last stamped token missing)")
         return out
     a, b = interval_ns
-    overlapping, stamps, poll_s = [], [], set()
+    overlapping, polls, sps = [], [], set()
     for s in streams:
         header, trailer = s.get("header"), s.get("trailer")
         start = (header or {}).get("start_real_ns")
-        end = s["stamps"][-1] if s["stamps"] else start
+        end = s["polls"][-1][0] if s["polls"] else start
         if start is not None and (end is None or end < a or start > b):
             continue
         overlapping.append(s)
@@ -242,23 +245,24 @@ def rule4(interval_ns, streams):
         if header is None or header.get("status") != "streaming":
             reasons.append(f"{s['name']}: no streaming header")
         else:
-            poll_s.add(header.get("poll_s"))
+            sps.add(header.get("sps"))
         if trailer is None:
             reasons.append(f"{s['name']}: no trailer")
         elif not normal_stop(trailer.get("stop_reason")):
             reasons.append(f"{s['name']}: stop reason {trailer.get('stop_reason')!r} is not a normal stop")
-        stamps.extend(t for t in s["stamps"] if a <= t <= b)
+        polls.extend((t, n) for t, n in s["polls"] if a <= t <= b)
     if not overlapping:
         reasons.append("no meter stream covers the leg's interval")
-    poll_s.discard(None)
-    if len(poll_s) != 1 or not all(isinstance(p, (int, float)) and p > 0 for p in poll_s):
-        reasons.append("the header's nominal poll period is missing or differs between streams")
+    if len(sps) != 1 or not all(isinstance(r, (int, float)) and not isinstance(r, bool) and r > 0 for r in sps):
+        reasons.append("the header's nominal sample rate (sps) is missing or differs between streams")
     else:
-        expected = (b - a) / NS / poll_s.pop()
-        out["coverage_fraction"] = len(stamps) / expected if expected > 0 else None
+        # Sol cold seat N5: samples, not polls. An empty poll (n = 0) carries no sample, so a stream of empty polls
+        # cannot cover the leg. n is a count the monitor writes beside the stamp; no sample value is decoded.
+        expected = (b - a) / NS * sps.pop()
+        out["coverage_fraction"] = sum(n for _, n in polls) / expected if expected > 0 else None
         if out["coverage_fraction"] is None or out["coverage_fraction"] < METER_MIN_COVERAGE:
-            reasons.append("meter coverage under 99 % of the nominal rate")
-    points = sorted({a, b, *stamps})
+            reasons.append("meter samples under 99 % of the nominal rate")
+    points = sorted({a, b, *(t for t, n in polls if n > 0)})
     gap = max((y - x for x, y in zip(points, points[1:])), default=b - a)
     out["max_gap_s"] = gap / NS
     if gap > METER_MAX_GAP_NS:
@@ -279,15 +283,16 @@ def _jsonl_lines(path):
 
 
 def read_meter_stream(path):
-    """{"name", "header", "trailer", "stamps"} for one KM003C stream. Sample lines give their rt stamp only
-    and are never decoded; error lines are skipped; header and trailer are decoded (RL-150 R8)."""
+    """{"name", "header", "trailer", "polls"} for one KM003C stream. A sample line gives its rt stamp and its
+    sample count n, by pattern, and is never decoded; error lines are skipped; header and trailer are decoded
+    (RL-150 R8)."""
     path = Path(path)
     header = trailer = None
-    stamps, first, last_other = [], True, None
+    polls, first, last_other = [], True, None
     for raw in _jsonl_lines(path):
         m = _SAMPLE_LINE_RE.match(raw)
         if m:
-            stamps.append(int(m.group(1)))
+            polls.append((int(m.group(1)), int(m.group(2))))
         elif _UNREAD_LINE_RE.match(raw):
             pass                                  # an error line, or a sample line in an unknown form: unread
         else:
@@ -299,8 +304,8 @@ def read_meter_stream(path):
         first = False
     if last_other is not None:
         trailer = last_other
-    stamps.sort()
-    return {"name": path.name, "header": header, "trailer": trailer, "stamps": stamps}
+    polls.sort()
+    return {"name": path.name, "header": header, "trailer": trailer, "polls": polls}
 
 
 TRAILER_COUNT_KEYS = ("polls", "empties", "bad", "usb_errors")
@@ -522,19 +527,33 @@ def main(argv=None):
     if not isinstance(roster, list):
         print("REFUSE the roster is a JSON list (validate --span-ledger --roster-out writes it)")
         return 1
+    sdir_of = span_dirs(a.custody, a.span_dir)
+    if a.allow_draft:
+        # Mythos N2: --allow-draft is for synthetic custody only (every span's receipt says so)
+        real = [e["span_id"] for e in roster
+                if _json(Path(sdir_of(e["span_id"])) / "runner_receipt.json").get("synthetic") is not True]
+        if real:
+            print(f"REFUSE --allow-draft on custody that is not synthetic: {', '.join(real[:5])}")
+            return 1
     selected = keys(_json(REPO / RUNTIME_CONFIG)["sensors"])
     try:
-        verdicts, detail = judge_custody(roster, span_dirs(a.custody, a.span_dir), selected)
+        verdicts, detail = judge_custody(roster, sdir_of, selected)
     except Exception as exc:                      # type and line only: a message could carry a value
         tb = exc.__traceback__
         while tb.tb_next:
             tb = tb.tb_next
         print(f"FAILED {type(exc).__name__} at line {tb.tb_lineno}")
         return 2
+    unpinned = lm.unpinned_loaded_modules(doc, REPO)                 # Mythos N6
+    if unpinned:
+        print("REFUSE loaded repository modules the manifest does not pin: " + ", ".join(unpinned[:6]))
+        return 1
     print(f"wrote {a.out} sha256={_write(a.out, verdicts)} legs={len(verdicts)}")
     detail["pins"] = {"manifest_sha256": lm.sha256_file(a.manifest), "look_id": doc["look_id"],
                       "inclusion_34_sha256": lm.sha256_file(Path(__file__).resolve()),
-                      "runtime_config_sha256": lm.sha256_file(REPO / RUNTIME_CONFIG)}
+                      "runtime_config_sha256": lm.sha256_file(REPO / RUNTIME_CONFIG),
+                      "code_sha256": lm.loaded_repo_files(REPO)}
+    detail["allow_draft"] = bool(a.allow_draft)
     if a.detail_out:
         print(f"wrote {a.detail_out} sha256={_write(a.detail_out, detail)}")
     return 0

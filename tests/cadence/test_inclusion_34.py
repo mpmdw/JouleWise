@@ -52,17 +52,22 @@ def pm(start_s, end_s, period_s, holes=()):
     return out
 
 
-def stream(name="stream-0001.jsonl", start_s=-10, end_s=230, poll_s=0.2, stop="signal 15", skip=None,
-           header=True, trailer=True, status="streaming"):
+def stream(name="stream-0001.jsonl", start_s=-10, end_s=230, poll_s=0.2, sps=50, stop="signal 15", skip=None,
+           header=True, trailer=True, status="streaming", empty=None):
+    """A stream as read_meter_stream returns it: polls every poll_s, each carrying sps * poll_s samples; polls in
+    ``skip`` (a, b) seconds are absent; polls in ``empty`` (a, b) seconds carry n = 0."""
     step = round(poll_s * NS)
     stamps = [T0 + start_s * NS + i * step for i in range(int((end_s - start_s) / poll_s) + 1)]
     if skip:
         stamps = [t for t in stamps if not (T0 + round(skip[0] * NS) <= t < T0 + round(skip[1] * NS))]
+    per = round(sps * poll_s)
+    polls = [(t, 0 if empty and T0 + round(empty[0] * NS) <= t < T0 + round(empty[1] * NS) else per) for t in stamps]
     return {"name": name,
-            "header": {"k": "h", "status": status, "poll_s": poll_s, "start_real_ns": T0 + start_s * NS} if header else None,
+            "header": {"k": "h", "status": status, "poll_s": poll_s, "sps": sps, "start_real_ns": T0 + start_s * NS}
+            if header else None,
             "trailer": {"k": "t", "polls": len(stamps), "empties": 3, "bad": 1, "usb_errors": 0, "stop_reason": stop}
             if trailer else None,
-            "stamps": stamps}
+            "polls": polls}
 
 
 INTERVAL = (T0, T0 + 200 * NS)
@@ -185,21 +190,35 @@ class Rule4(Base):
         exact = i34.rule4(INTERVAL, [stream(skip=(100, 102))])                # a 2.2 s hole at 0.2 s polls
         self.assertGreater(exact["max_gap_s"], 2.0)
         self.assertIn("meter gap over 2 s", exact["reasons"])
-        two = i34.rule4(INTERVAL, [stream(skip=(100.1, 101.9))])              # stamps 100.0 and 102.0
+        two = i34.rule4(INTERVAL, [stream(skip=(100.1, 101.9), sps=60)])      # stamps 100.0 and 102.0; samples kept
         self.assertAlmostEqual(two["max_gap_s"], 2.0)
         self.assertTrue(two["pass"], two)
         sparse = i34.rule4(INTERVAL, [stream(skip=(50.1, 51.9)), ] )
         self.assertTrue(sparse["pass"])
         many = dict(stream())
-        many["stamps"] = [t for i, t in enumerate(many["stamps"]) if i % 60 != 0]   # ~1.7 % missing
+        many["polls"] = [p for i, p in enumerate(many["polls"]) if i % 60 != 0]     # ~1.7 % missing
         r = i34.rule4(INTERVAL, [many])
         self.assertLess(r["coverage_fraction"], 0.99)
-        self.assertIn("meter coverage under 99 % of the nominal rate", r["reasons"])
+        self.assertIn("meter samples under 99 % of the nominal rate", r["reasons"])
+        short = dict(stream())
+        short["polls"] = [(t, n - 1) for t, n in short["polls"]]                        # 9 of 10 samples a poll
+        self.assertIn("meter samples under 99 % of the nominal rate", i34.rule4(INTERVAL, [short])["reasons"])
+
+    def test_empty_polls_cover_nothing(self):
+        """Sol cold seat N5: a stretch of polls with n = 0 is a gap, and its samples are missing, however regular
+        the poll stamps are."""
+        r = i34.rule4(INTERVAL, [stream(empty=(60, 160))])
+        self.assertFalse(r["pass"])
+        self.assertIn("meter gap over 2 s", r["reasons"])
+        self.assertIn("meter samples under 99 % of the nominal rate", r["reasons"])
+        self.assertAlmostEqual(r["max_gap_s"], 100.2, places=3)            # the last full poll before 60 s to 160 s
+        ok = i34.rule4(INTERVAL, [stream(empty=(60, 61))])                      # one second of empty polls
+        self.assertLessEqual(ok["max_gap_s"], 2.0)
 
     def test_two_streams_and_a_stream_outside_the_interval(self):
         first = stream(name="stream-0001.jsonl", start_s=-10, end_s=100, stop="signal 15")
         second = stream(name="stream-0002.jsonl", start_s=100, end_s=230, stop="signal 15")
-        second["stamps"] = second["stamps"][1:]
+        second["polls"] = second["polls"][1:]
         old = stream(name="stream-0000.jsonl", start_s=-500, end_s=-300, stop="consecutive USB errors")
         r = i34.rule4(INTERVAL, [old, first, second])
         self.assertTrue(r["pass"], r)
@@ -207,10 +226,14 @@ class Rule4(Base):
         first["trailer"]["stop_reason"] = "consecutive USB errors"
         self.assertFalse(i34.rule4(INTERVAL, [old, first, second])["pass"])
 
-    def test_poll_period_must_agree(self):
-        self.assertIn("the header's nominal poll period is missing or differs between streams",
+    def test_sample_rate_must_agree(self):
+        self.assertIn("the header's nominal sample rate (sps) is missing or differs between streams",
                       i34.rule4(INTERVAL, [stream(start_s=-10, end_s=100),
-                                           stream(name="b", start_s=100, end_s=230, poll_s=0.25)])["reasons"])
+                                           stream(name="b", start_s=100, end_s=230, sps=10)])["reasons"])
+        no_sps = stream()
+        del no_sps["header"]["sps"]
+        self.assertIn("the header's nominal sample rate (sps) is missing or differs between streams",
+                      i34.rule4(INTERVAL, [no_sps])["reasons"])
 
 
 class Readers(Base):
@@ -241,7 +264,7 @@ class Readers(Base):
             return real(s, *a, **k)
         with unittest.mock.patch.object(i34.json, "loads", spy):
             s = i34.read_meter_stream(p)
-        self.assertEqual(s["stamps"], [T0 + i * 200_000_000 for i in range(6)])
+        self.assertEqual(s["polls"], [(T0 + i * 200_000_000, 1) for i in range(6)])
         self.assertEqual(s["header"]["poll_s"], 0.2)
         self.assertEqual(s["trailer"]["stop_reason"], "signal 15")
         self.assertEqual(len(decoded), 2)                                     # header and trailer only
@@ -359,15 +382,16 @@ class CustodyVerdictFile(Readers):
         bundle = self.make_bundle()
         shutil.move(str(bundle), str(sdir / "legs" / "L001" / "runtime" / "b"))
         (sdir / "legs" / "L001" / "leg_record.json").write_text(json.dumps({"result": {"bundle": "b"}}))
-        (sdir / "runner_receipt.json").write_text(json.dumps({"roster": ["L001", "L002", "L003"], "started": {"epoch_s": 1.0}}))
+        (sdir / "runner_receipt.json").write_text(json.dumps({"roster": ["L001", "L002", "L003"], "started": {"epoch_s": 1.0},
+                                                              "synthetic": True}))
         (sdir / "legs" / "L003").mkdir(parents=True)
         (sdir / "legs" / "L003" / "leg_record.json").write_text(json.dumps({"result": {}}))
         meter = sdir / "hazards" / "meter"
         meter.mkdir(parents=True)
         s = stream()
         lines = [json.dumps(s["header"], sort_keys=True)]
-        lines += ['{"k":"b","tx":1,"rx":2,"rt":%d,"n":1,"p":"%s","smc":{"PDTR":1.5}}' % (t, self.SENTINEL_HEX)
-                  for t in s["stamps"]]
+        lines += ['{"k":"b","tx":1,"rx":2,"rt":%d,"n":%d,"p":"%s","smc":{"PDTR":1.5}}' % (t, n, self.SENTINEL_HEX)
+                  for t, n in s["polls"]]
         lines.append(json.dumps(s["trailer"], sort_keys=True))
         (meter / "stream-0001.jsonl").write_text("\n".join(lines) + "\n")
         roster = root / "roster.json"
@@ -393,6 +417,30 @@ class CustodyVerdictFile(Readers):
                          i34_sha(mini / "configs/align/v4/r1_runtime.json"))
         self.assertNotIn(self.SENTINEL_HEX, out.read_text() + det.read_text())
 
+    def test_allow_draft_refuses_custody_that_is_not_synthetic(self):
+        """Mythos N2: --allow-draft is for synthetic custody only, and the detail records it."""
+        mini = look_minirepo.mini_repo(self)
+        root, roster = self.make_span()
+        out, det = root / "v.json", root / "d.json"
+        rec = root / "dev-03-s01" / "runner_receipt.json"
+        doc = json.loads(rec.read_text())
+        del doc["synthetic"]
+        rec.write_text(json.dumps(doc))
+        r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", root,
+                             "--manifest", mini / look_minirepo.MANIFEST, "--allow-draft", "--out", out)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("--allow-draft on custody that is not synthetic: dev-03-s01", r.stdout)
+        self.assertFalse(out.exists())
+        doc["synthetic"] = True
+        rec.write_text(json.dumps(doc))
+        r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", root,
+                             "--manifest", mini / look_minirepo.MANIFEST, "--allow-draft", "--out", out,
+                             "--detail-out", det)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        d = json.loads(det.read_text())
+        self.assertIs(d["allow_draft"], True)
+        self.assertIn("joulewise/cadence_looks/inclusion_34.py", d["pins"]["code_sha256"])
+
     def test_main_verifies_the_pins_before_opening_custody(self):
         """Mythos 3 / Sol 9 and Mythos 12: a changed pinned file (here the sensor policy) refuses the run, and
         no custody file is touched; a committed manifest needs its LOOKS.json row; the roster is a list."""
@@ -411,7 +459,7 @@ class CustodyVerdictFile(Readers):
                              "--manifest", mini / look_minirepo.MANIFEST, "--out", out)          # no --allow-draft
         self.assertEqual(r.returncode, 1)
         self.assertIn("needs status 'committed'", r.stdout)
-        self.assertIn("LOOKS.json lists this look as a draft", r.stdout)
+        self.assertIn("LOOKS.json lists this look as 'draft', not committed", r.stdout)
         self.assertFalse(out.exists())
         wrapped = root / "roster-dict.json"
         wrapped.write_text(json.dumps({"roster": json.loads(roster.read_text())}))
