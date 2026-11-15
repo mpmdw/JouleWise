@@ -60,9 +60,17 @@ def cadence_plan(kit: Path, legs: str | None = None, batch_window: str | None = 
     # v1 kits and v1.1 kits (design doc section 14). The kit's own runner kind must be one it executes.
     if loaded["runner"]["kind"] not in legsmod.RUNNER_KINDS:
         raise ValueError(f"kit runner.kind is not one of {list(legsmod.RUNNER_KINDS)}")
+    if batch_window is None and loaded["runner"]["kind"] != legsmod.RUNNER_KIND:
+        raise ValueError(f"runner kind {loaded['runner']['kind']} needs --batch-window (RL-149 section 2.9 item 4)")
     windows = [legsmod.parse_window(batch_window)] if batch_window else runner.default_windows()
-    return legsmod.plan_span(loaded, t0_epoch=time.time() if t0 is None else t0, windows=windows,
+    plan = legsmod.plan_span(loaded, t0_epoch=time.time() if t0 is None else t0, windows=windows,
                              leg_ids=legs.split(",") if legs else None, max_span_s=runner.max_span_s())
+    # RL-155a section 3: the fence end lands by 01:50, and no launch 10:50-13:15 while the soak path
+    # waits out the driver's window. Every kit; the free t0 of v1.1 does not remove them (#788 F4).
+    fence = legsmod.fence_problems(plan, windows, runner.default_windows())
+    if fence:
+        raise legsmod.PlanError(fence)
+    return plan
 
 
 def cadence_minimum_seconds(plan: dict) -> float:

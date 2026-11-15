@@ -46,7 +46,9 @@ DENIED_KEY_RE = re.compile(r"(?i)(energy|joule|power_w|_j$|^j_|watt|slot|transcr
                            r"token_ids|completion|meter_samples|samples_w)")
 LEG_SUMMARY_KEYS = {"leg_id", "seed", "start_band", "band_reached", "g0_s", "g0_outcome", "wall_s", "budget_s",
                     "attempts", "contaminated_redos", "redo_reasons", "os_level_max", "pm_nominal",
-                    "started_epoch_s", "ended_epoch_s", "admitted"}
+                    "started_epoch_s", "ended_epoch_s", "admitted",
+                    # kit v1.1 legs only (design doc section 14.5): the cell and the G0 reference
+                    "prefill_tokens", "g0_shape", "g0_role", "span_reference"}
 METER_KEYS = {"present", "proven_stopped", "bad_polls", "usb_errors", "elapsed_s", "polls"}
 RESULT_KEYS = {"chain_exit_code", "chain_outcome", "fault", "outcome", "verdict"}
 
@@ -156,8 +158,8 @@ def leg_summary_rows(root):
 
 
 def leg_table(legs, rules):
-    out = ["| leg | band | reached | G0 s | G0 outcome | wall s | budget s | wall/budget | attempts | contaminated redos | redo reasons | OS max | nominal |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    out = ["| leg | band | reached | G0 s | G0 outcome | wall s | budget s | wall/budget | attempts | contaminated redos | redo reasons | OS max | nominal | admitted |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for leg in legs:
         wall, budget = leg.get("wall_s"), leg.get("budget_s")
         ratio = f"{wall / budget:.2f}" if isinstance(wall, (int, float)) and isinstance(budget, (int, float)) and budget else "-"
@@ -166,7 +168,43 @@ def leg_table(legs, rules):
                    f"{_f(leg.get('g0_s'))} | {leg.get('g0_outcome', '-')} | {_f(wall)} | {_f(budget)} | {ratio}{flag} | "
                    f"{leg.get('attempts', '-')} | {leg.get('contaminated_redos', 0)} | "
                    f"{','.join(map(str, leg.get('redo_reasons') or [])) or '-'} | {leg.get('os_level_max', '-')} | "
-                   f"{leg.get('pm_nominal', '-')} |")
+                   f"{leg.get('pm_nominal', '-')} | {leg.get('admitted', '-')} |")
+    return out
+
+
+def span_reference_marks(legs):
+    """The span's reference as the consumers record it, and the hand-read's mark (RL-158 Q2; RL-161
+    section 4): "reference from a redo" when the first leg's supplying attempt was a redo, "reference
+    from an excluded leg" when that leg was not admitted. None when no leg consumed a span reference."""
+    refs = [leg.get("span_reference") for leg in legs if isinstance(leg.get("span_reference"), dict)]
+    if not refs:
+        return None
+    ref = refs[0]
+    marks = [m for m, on in (("reference from a redo", ref.get("redone")),
+                             ("reference from an excluded leg", ref.get("excluded"))) if on]
+    return {"leg_id": ref.get("leg_id"), "attempt": ref.get("attempt"), "consumers": len(refs),
+            "consistent": all(r == ref for r in refs), "marks": marks}
+
+
+def cell_table(legs, mark):
+    """Kit v1.1: each leg's cell, its G0 role and the span reference's source (empty for v1 legs)."""
+    rows = [leg for leg in legs if leg.get("g0_role") is not None]
+    if not rows:
+        return []
+    out = ["", "## Cells and G0 references (kit v1.1)", "",
+           "| leg | prompt tokens | G0 shape | G0 role | reference | G0 outcome | admitted |",
+           "|---|---|---|---|---|---|---|"]
+    for leg in rows:
+        ref = leg.get("span_reference")
+        source = (f"{ref.get('leg_id')} attempt {ref.get('attempt')}" if isinstance(ref, dict)
+                  else "own capture")
+        out.append(f"| {leg.get('leg_id')} | {leg.get('prefill_tokens', '-')} | {leg.get('g0_shape', '-')} | "
+                   f"{leg.get('g0_role')} | {source} | {leg.get('g0_outcome', '-')} | {leg.get('admitted', '-')} |")
+    if mark is not None:
+        out += ["", f"- span reference: {mark['leg_id']} attempt {mark['attempt']}, {mark['consumers']} consumer(s)"
+                + ("" if mark["consistent"] else "; **consumers disagree on the source**")]
+        out += [f"- **MARK: {m}** (RL-158 Q2; RL-161 section 4): the lead marks this span in the hand-read"
+                for m in mark["marks"]]
     return out
 
 
@@ -228,15 +266,18 @@ def build_desk(*, plan_id, input_dir, out_dir, adapter, stop_rules, history=(), 
     lines = [f"# Desk table: {plan_id}", "",
              f"Built automatically on the Air at {time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(now))} "
              f"by joulewise.cadence.desk ({adapter}). Operational fields only.", ""]
-    legs = []
+    legs, mark = [], None
     if adapter == "leg-summary-v1":
         legs = leg_summary_rows(root)
-        lines += ["## Legs", ""] + leg_table(legs, stop_rules)
+        mark = span_reference_marks(legs)
+        lines += ["## Legs", ""] + leg_table(legs, stop_rules) + cell_table(legs, mark)
     else:
         runs = sorted(p for p in root.iterdir() if p.is_dir() and p.name != "span")
         lines += ["## Gated runs", ""] + r1_table([r1_run_rows(p) for p in runs])
     summary = {"plan_id": plan_id, "adapter": adapter, "result": result, "meter": meter,
                "feeds_proven_stopped": bool(meter.get("proven_stopped")), "legs": legs}
+    if mark is not None:   # kit v1.1 spans only; a v1 span's summary is unchanged
+        summary["span_reference"] = mark
     stops = evaluate_named_stops(stop_rules, summary, history)
     lines += ["", "## Named stops", ""]
     lines += [f"- **{s['code']}**: {s['detail']}" for s in stops] or ["- none (no page)"]

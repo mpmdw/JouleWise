@@ -53,6 +53,24 @@ os.kill(pid, getattr(signal, "SIG" + name) if not name.isdigit() else int(name))
 '''
 
 
+# The launcher's launch-time plan applies RL-155a section 3's soak bound (no launch 10:50-13:15 while the R1
+# driver's soak window is 11:45-13:15). These subprocess launches run on the wall clock, so the fixture moves
+# the driver's window, in the child only, to the same far window as --batch-window. Nothing on disk changes.
+LAUNCH_WRAP = """import runpy, sys
+from scripts import align_r1_rehearsal as r1
+argv = sys.argv[1:]
+if "--batch-window" in argv:
+    h0, m0, h1, m1 = (int(x) for x in argv[argv.index("--batch-window") + 1].replace("-", ":").split(":"))
+    r1.OS_BATCH_WINDOW_LOCAL = ((h0, m0), (h1, m1))
+sys.argv = argv
+runpy.run_path(argv[0], run_name="__main__")
+"""
+
+
+def launcher_cmd(argv):
+    return [sys.executable, "-B", "-c", LAUNCH_WRAP, str(SCRIPT), *argv]
+
+
 def epoch(text):
     return datetime.fromisoformat(text).replace(tzinfo=ZONE).timestamp()
 
@@ -196,7 +214,7 @@ sys.exit(0)
                 "--pgrep-bin", str(self.pgrep), "--kill-bin", str(self.kill), *extra]
 
     def launch(self, *extra, **kw):
-        return subprocess.run([sys.executable, "-B", str(SCRIPT), *self.argv(*extra, **kw)], cwd=REPO, env=self.env,
+        return subprocess.run(launcher_cmd(self.argv(*extra, **kw)), cwd=REPO, env=self.env,
                               capture_output=True, text=True, timeout=60)
 
     def fence(self):
@@ -296,7 +314,7 @@ class LaunchAgentTests(Fixture):
         fd = os.open(self.custody / ".desk-fence.lock", os.O_CREAT | os.O_RDWR, 0o600)
         fcntl.flock(fd, fcntl.LOCK_EX)
         (self.root / "no-start").touch()
-        process = subprocess.Popen([sys.executable, "-B", str(SCRIPT), *self.argv()], cwd=REPO, env=self.env,
+        process = subprocess.Popen(launcher_cmd(self.argv()), cwd=REPO, env=self.env,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             until = time.monotonic() + 3
@@ -341,7 +359,7 @@ class LaunchAgentTests(Fixture):
                 self.assertIn(why, result.stderr)
         argv = self.argv(output=self.root / "o4")
         argv[argv.index("--kit") + 1] = str(bad_kit)
-        result = subprocess.run([sys.executable, "-B", str(SCRIPT), *argv], cwd=REPO, env=self.env,
+        result = subprocess.run(launcher_cmd(argv), cwd=REPO, env=self.env,
                                 capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 2)                                       # K3: the kit is validated
         self.assertIn("condition label", result.stderr)

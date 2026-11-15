@@ -69,7 +69,7 @@ class CellLaw(unittest.TestCase):
         legs = kit_v11.generate_legs("cl-test-11", law(), {"decode_tokens": 4096})
         self.assertEqual(legs, kit_v11.generate_legs("cl-test-11", law(), {"decode_tokens": 4096}))
         sizes = [leg["prefill_tokens"] for leg in legs]
-        for block in range(4):   # every run of three legs holds each size once
+        for block in range(4):   # each aligned block of three in kit order holds each size once
             self.assertEqual(sorted(sizes[3 * block:3 * block + 3]), sorted(SIZES))
         self.assertEqual(sorted(sizes[:3]), sorted(SIZES))   # a class A pilot covers every size
         self.assertEqual({leg["decode_tokens"] for leg in legs}, {4096})
@@ -284,6 +284,117 @@ class RunnerConsumesTheCell(unittest.TestCase):
         self.assertEqual(json.loads(buffer.getvalue())["legs"], v11_kit()["legs"])
 
 
+class LaunchBounds(unittest.TestCase):
+    """#788 F4: RL-155a section 3's two bounds in code, for every kit; the free t0 does not remove them."""
+    SOAK = [OLD_WINDOW]          # the R1 driver's soak window on this base
+
+    def plan(self, n_legs, t0):
+        kit = v11_kit()
+        ids = [leg["leg_id"] for leg in kit["legs"]][:n_legs]
+        return legsmod.plan_span(kit, t0_epoch=local(t0), windows=[NEW_WINDOW], leg_ids=ids)
+
+    def test_latest_t0_by_the_fence(self):
+        # RL-158 section 3 and RL-155a: 20:48:10 for 3 legs, 18:33:10 for 6, 16:18:10 for 9, 14:03:10 for 12.
+        for n, latest in ((3, "20:48:10"), (6, "18:33:10"), (9, "16:18:10"), (12, "14:03:10")):
+            self.assertEqual(legsmod.fence_problems(self.plan(n, f"2026-11-17T{latest}"), [NEW_WINDOW], self.SOAK), [])
+            later = datetime.fromisoformat(f"2026-11-17T{latest}") .replace(tzinfo=ZONE).timestamp() + 1
+            plan = legsmod.plan_span(v11_kit(), t0_epoch=later, windows=[NEW_WINDOW],
+                                     leg_ids=[leg["leg_id"] for leg in v11_kit()["legs"]][:n])
+            problems = legsmod.fence_problems(plan, [NEW_WINDOW], self.SOAK)
+            self.assertEqual(len(problems), 1, (n, problems))
+            self.assertIn("passes 01:50:00", problems[0])
+
+    def test_no_launch_between_1050_and_1315(self):
+        for t0, ok in (("10:50:00", True), ("10:50:01", False), ("12:00:00", False), ("13:14:59", False),
+                       ("13:15:00", True)):
+            problems = legsmod.fence_problems(self.plan(3, f"2026-11-17T{t0}"), [NEW_WINDOW], self.SOAK)
+            self.assertEqual(problems == [], ok, (t0, problems))
+            if not ok:
+                self.assertIn("no launch between 10:50 and 13:15", problems[0])
+
+    def test_the_plan_alone_does_not_hold_the_fence(self):
+        # 21:00 with three legs: the worst case ends 01:37:30, clear of 02:00, but the fence ends 02:01:50.
+        plan = self.plan(3, "2026-11-17T21:00")
+        self.assertTrue(plan["blackout_clear"])
+        self.assertTrue(legsmod.fence_problems(plan, [NEW_WINDOW], self.SOAK))
+
+    def test_launcher_and_plan_cli_refuse(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            path = Path(td) / "kit.json"
+            path.write_text(json.dumps(v11_kit(), indent=1))
+            ok = cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local("2026-11-17T02:40"))
+            self.assertEqual(ok["worst_case_s"], 16650)
+            for t0, fragment in (("2026-11-17T21:00", "passes 01:50"), ("2026-11-17T11:00", "no launch between")):
+                with self.assertRaises(ValueError) as ctx:
+                    cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local(t0))
+                self.assertIn(fragment, str(ctx.exception))
+            with self.assertRaises(ValueError) as ctx:      # a v1.1 kit names its blackout
+                cadence_launch.cadence_plan(path, "L001,L002,L003", None, t0=local("2026-11-17T02:40"))
+            self.assertIn("needs --batch-window", str(ctx.exception))
+            err = io.StringIO()
+            from contextlib import redirect_stderr
+            with redirect_stderr(err), redirect_stdout(io.StringIO()):
+                code = runner.main(["plan", "--kit", str(path), "--legs", "L001,L002,L003", "--batch-window",
+                                    "02:00-02:35", "--t0", str(local("2026-11-17T21:00"))])
+            self.assertEqual(code, 1)
+            self.assertIn("passes 01:50", err.getvalue())
+            buffer = io.StringIO()
+            with redirect_stderr(io.StringIO()), redirect_stdout(buffer):
+                code = runner.main(["plan", "--kit", str(path), "--legs", "L001,L002,L003", "--batch-window",
+                                    "02:00-02:35", "--t0", str(local("2026-11-17T02:40"))])
+            self.assertEqual(code, 0)
+            printed = json.loads(buffer.getvalue())
+            self.assertEqual(printed["fence_end_epoch_s"], local("2026-11-17T02:40") + 16650 + 1460)
+            err = io.StringIO()
+            with redirect_stderr(err), redirect_stdout(io.StringIO()):
+                code = runner.main(["mock", "--kit", str(path), "--output", str(Path(td) / "m"),
+                                    "--t0-local", "2026-11-17T02:40"])
+            self.assertEqual(code, 1)
+            self.assertIn("needs --batch-window", err.getvalue())
+
+    def test_constants_agree(self):
+        self.assertEqual((kit_v11.FENCE_QUIET_LEAD_S, kit_v11.SOAK_LAUNCH_LEAD_S),
+                         (legsmod.FENCE_QUIET_LEAD_S, legsmod.SOAK_LAUNCH_LEAD_S))
+
+    def test_v11_checklist_holds_the_quiet_and_the_soak_bound(self):
+        good = FreeT0Checklist.GOOD
+        def ok(t0, end):
+            obs = {**good, "t0_epoch_s": local(t0), "end_by_epoch_s": local(end)}
+            rows = kit_v11.evaluate_checklist(v11_kit(), obs, expected_kit_sha256="f" * 64, batch_window=NEW_WINDOW,
+                                              soak_window=OLD_WINDOW)
+            return next(r for r in rows if r["kind"] == "span_window")["ok"]
+        self.assertTrue(ok("2026-11-17T20:00", "2026-11-18T01:50"))
+        self.assertFalse(ok("2026-11-17T20:00", "2026-11-18T01:55"))
+        self.assertFalse(ok("2026-11-17T11:00", "2026-11-17T16:00"))
+        self.assertTrue(ok("2026-11-17T13:15", "2026-11-17T18:00"))
+        with tempfile.TemporaryDirectory(dir=TMP) as td:     # the CLI refuses a v1.1 checklist with no window
+            kit_path, obs_path = Path(td) / "kit.json", Path(td) / "obs.json"
+            kit_path.write_text(json.dumps(v11_kit(), indent=1))
+            obs_path.write_text(json.dumps(good))
+            with redirect_stdout(io.StringIO()):
+                code = cadence_queue.main(["checklist", "--kit", str(kit_path), "--kit-sha256", "f" * 64,
+                                           "--observations", str(obs_path)])
+            self.assertEqual(code, 2)
+
+
+class DeskAdmittedColumn(unittest.TestCase):
+    """dev-01 F8 (RL-161 section 3): the journal table prints inclusion, for v1 spans too."""
+
+    def test_admitted_column(self):
+        from tests.cadence.test_legs_runner import campaign_kit
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            out = Path(td) / "span"
+            runner.run_mock(kit=campaign_kit(n_legs=3, legs_per_span=3), kit_sha256="f" * 64, output=out,
+                            t0_epoch=local("2026-11-17T02:40"), windows=[NEW_WINDOW], g0_timeout=["L002"])
+            table = (out / "desk/JOURNAL-TABLE.md").read_text()
+            self.assertIn("| nominal | admitted |", table)
+            rows = {line.split("|")[1].strip(): line.rstrip(" |").split("|")[-1].strip()
+                    for line in table.splitlines() if line.startswith("| L00")}
+            self.assertEqual(rows, {"L001": "True", "L002": "False", "L003": "True"})
+            self.assertNotIn("Cells and G0 references", table)     # a v1 span has no cell section
+            self.assertNotIn("span_reference", json.loads((out / "desk/desk_summary.json").read_text()))
+
+
 def _top_level_sources(text, names):
     tree = ast.parse(text)
     out = {}
@@ -325,7 +436,9 @@ class V1Untouched(unittest.TestCase):
                                                "ANCHOR_PREFILL_CHARS", "ANCHOR_PREFILL_TOKENS"},
                  "joulewise/cadence/kit.py": {"deny_scan", "DENY_VALUE_RE", "DENY_KEY_TOKENS", "DENY_KEY_SUBSTRINGS",
                                               "FREE_TEXT_KEYS", "LEG_ID_RE", "CAMPAIGN_ID_RE", "validate_kit",
-                                              "generate_legs", "evaluate_checklist"}}
+                                              "generate_legs", "evaluate_checklist"},
+                 # the leg child imports desk.py through legs.py for the projection guard's key rule
+                 "joulewise/cadence/desk.py": {"DENIED_KEY_RE"}}
         for path, wanted in names.items():
             old = _top_level_sources(self.at_commit(PILOT_COMMIT, path), wanted)
             new = _top_level_sources(self.at_commit(pin, path), wanted)
@@ -342,7 +455,7 @@ class CommittedDev03Kit(unittest.TestCase):
     draft's shape and that it changes no byte a leg executes."""
     NAME = "cl-dev-03.v1.1a.json"
     PLANNING_ONLY = {"joulewise/cadence/kit.py", "joulewise/cadence/kit_v11.py", "joulewise/cadence/legs.py",
-                     "scripts/cadence_legs_runner.py", "scripts/launch_cadence_span.py"}
+                     "joulewise/cadence/desk.py", "scripts/cadence_legs_runner.py", "scripts/launch_cadence_span.py"}
 
     def load(self, window=NEW_WINDOW):
         return kitmod.load_kit(KITS / self.NAME, batch_window=window)

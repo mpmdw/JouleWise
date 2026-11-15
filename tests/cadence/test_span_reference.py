@@ -135,7 +135,16 @@ class MockSpan(unittest.TestCase):
             self.assertEqual(record["result"]["g0_reference_source"], "mock-L001" if source else f"mock-{leg_id}")
         legs = {leg["leg_id"]: leg for leg in receipt["legs"]}
         consumer = next(i for i in shape if shape[i] == "span")
-        self.assertEqual(legs[consumer]["span_reference"], {"leg_id": "L001", "dir": "legs/L001/runtime"})
+        self.assertEqual(legs[consumer]["span_reference"], {"leg_id": "L001", "dir": "legs/L001/runtime", "attempt": 1,
+                                                            "redone": False, "excluded": False})
+        # The desk: a cell section, the source by attempt, and no mark on a clean first leg.
+        desk_summary = json.loads((out / "desk/desk_summary.json").read_text())
+        self.assertEqual(desk_summary["span_reference"], {"leg_id": "L001", "attempt": 1, "consumers": 6,
+                                                          "consistent": True, "marks": []})
+        table = (out / "desk/JOURNAL-TABLE.md").read_text()
+        self.assertIn("## Cells and G0 references (kit v1.1)", table)
+        self.assertIn("| consume | L001 attempt 1 |", table)
+        self.assertNotIn("MARK:", table)
         # The desk projection is unchanged (leg-summary-v1).
         for path in (out / runner.DESK_BUNDLE).glob("legs/*/leg_summary.json"):
             self.assertLessEqual(set(json.loads(path.read_text())), desk.LEG_SUMMARY_KEYS)
@@ -147,6 +156,23 @@ class MockSpan(unittest.TestCase):
         self.assertEqual(rc, 0, receipt.get("error"))
         sources = {source for _, source in deps.fake.span_references if source is not None}
         self.assertEqual(sources, {out / "legs" / rest[0] / "runtime"})
+
+    def test_the_desk_marks_a_reference_from_a_redo_or_an_excluded_leg(self):
+        kit = span_kit()
+        for name, kw, attempt, marks in (
+                ("redo", {"contaminate": ["L001"]}, 2, ["reference from a redo"]),
+                ("excluded", {"g0_timeout": ["L001"]}, 1, ["reference from an excluded leg"])):
+            tmp = tempfile.TemporaryDirectory(dir=TMP)
+            self.addCleanup(tmp.cleanup)
+            out = Path(tmp.name) / name
+            rc, summary, stops, _ = runner.run_mock(kit=kit, kit_sha256="f" * 64, output=out,
+                                                    t0_epoch=local("2026-11-17T02:40"), windows=[NEW_WINDOW], **kw)
+            self.assertEqual(rc, 0, name)
+            self.assertEqual(summary["span_reference"]["marks"], marks, name)
+            self.assertEqual(summary["span_reference"]["attempt"], attempt, name)
+            table = (out / "desk/JOURNAL-TABLE.md").read_text()
+            self.assertIn(f"**MARK: {marks[0]}**", table)
+            self.assertIn(f"| consume | L001 attempt {attempt} |", table)
 
     def test_a_redone_first_leg_is_the_source_by_its_accepted_attempt(self):
         kit = span_kit()
@@ -219,6 +245,8 @@ class LegRuntimeConsumes(unittest.TestCase):
         record, run_id = self.source_record()
         self.assertEqual((result["g0_shape"], result["g0_role"], result["g0_reference_source"], result["leg_status"]),
                          ("span", "consume", run_id, "complete"))
+        self.assertEqual(result["g0_reference_record_sha256"], record["record_sha256"])
+        self.assertIsNone(self.first["g0_reference_record_sha256"])
         episode = json.loads((out / result["bundle"] / "outputs/align_episode.json").read_text())
         g0 = next(r for r in episode["hardware"]["thermal"]["intervals"] if r["kind"] == "G0")
         self.assertEqual((g0["reference"]["fast_c"], g0["reference"]["slow_c"], g0["reference"]["source_member"]),
@@ -240,9 +268,12 @@ class LegRuntimeConsumes(unittest.TestCase):
         cases = {"no-source": (self.spec("L005", "consume"), None, "needs --span-reference"),
                  "capture-with-source": (self.spec("L006", "capture"), source, "consumer (g0_role consume) only"),
                  "own-with-source": (self.spec("L007"), source, "consumer (g0_role consume) only"),
-                 "missing-dir": (self.spec("L008", "consume"), self.root / "nowhere", "no readable result")}
+                 "missing-dir": (self.spec("L008", "consume"), self.root / "span/legs/L099/runtime",
+                                 "no readable result"),
+                 "other-span": (self.spec("L011", "consume"), source, "not a leg attempt of this span")}
         for name, (spec, span, fragment) in cases.items():
-            out = self.root / "refused" / name
+            out = (self.root / "other-span/legs/L011/runtime" if name == "other-span"
+                   else self.root / "span/legs" / f"R-{name}" / "runtime")
             code, _ = self.call(out, spec, span=span)
             self.assertEqual(code, rt.EXIT_REFUSED, name)
             self.assertIn(fragment, json.loads((out / rt.CUSTODY_NAME).read_text())["error"], name)
@@ -252,26 +283,26 @@ class LegRuntimeConsumes(unittest.TestCase):
         from joulewise.align.apple import r1_runtime as rt
         source = self.root / "span/legs/L001/runtime"
         # 1. The source result edited after its custody closed.
-        tampered = self.root / "tampered/runtime"
+        tampered = self.root / "span/legs/T1/runtime"
         shutil.copytree(source, tampered)
         value = json.loads((tampered / rt.RESULT_NAME).read_text())
         value["g0_reference_source"] = "x"
         (tampered / rt.RESULT_NAME).write_text(json.dumps(value))
         # 2. The source's reference record edited (W1's verifier re-derives it from the journal).
-        forged = self.root / "forged/runtime"
+        forged = self.root / "span/legs/T2/runtime"
         shutil.copytree(source, forged)
         record_path = forged / self.first["bundle"] / "outputs/align_window_reference.json"
         record = json.loads(record_path.read_text())
         record["fast_c"] -= 5.0
         record_path.write_text(json.dumps(record))
         # 3. A consumer's attempt offered as the source.
-        consumer = self.root / "consumer-src/runtime"
+        consumer = self.root / "span/legs/T3/runtime"
         code, _ = self.call(consumer, self.spec("L009", "consume"), span=source)
         self.assertEqual(code, 0)
         for name, src, fragment in (("tampered", tampered, "bound by complete runtime custody"),
                                     ("forged", forged, "window_reference"),
                                     ("consumer", consumer, "did not capture")):
-            out = self.root / "refused-src" / name
+            out = self.root / "span/legs" / f"S-{name}" / "runtime"
             code, _ = self.call(out, self.spec("L010", "consume"), span=src)
             self.assertEqual(code, rt.EXIT_REFUSED, name)
             self.assertIn(fragment, json.loads((out / rt.CUSTODY_NAME).read_text())["error"], name)

@@ -60,7 +60,7 @@ LEG_KIND = legsmod.LEG_KIND
 RESULT_FIELDS = ("leg_id", "leg_status", "bundle", "member_status", "g0_outcome", "g0_released", "g0_wait_s",
                  "g0_timeout_s", "quiet_s", "prefill_chars", "prefill_tokens", "decode_cap", "decode_tokens",
                  "decode_cap_reached", "os_level_max", "pm_nominal", "episode_flags", "incomplete_reasons",
-                 "ac_powermode", "g0_shape", "g0_role", "g0_reference_source")
+                 "ac_powermode", "g0_shape", "g0_role", "g0_reference_source", "g0_reference_record_sha256")
 LEG_STATUSES = ("complete", "g0_unreleased", "incomplete")
 
 
@@ -85,6 +85,7 @@ class CadenceLegSegment(rt.Segment):
 
     leg = None
     span_source = None      # --span-reference: the span's first leg's accepted attempt dir (consumers only)
+    span_custody = None     # the verified reference's custody (record_sha256, source run id, journal sha256)
 
     @property
     def g0_role(self):
@@ -102,6 +103,10 @@ class CadenceLegSegment(rt.Segment):
         if self.span_source is None:
             raise rt.Refused("a span-reference consumer needs --span-reference (the span's first leg's attempt)")
         source_dir = Path(self.span_source)
+        # The source is a leg of this span: <span>/legs/<first>/runtime beside <span>/legs/<this>/runtime
+        # (#788 F8: a hand-run leg must not consume another span's capture).
+        if source_dir.name != "runtime" or source_dir.resolve().parent.parent != self.out.resolve().parent.parent:
+            raise rt.Refused(f"span reference {source_dir}: not a leg attempt of this span ({self.out.parent.parent})")
         try:
             raw = (source_dir / rt.RESULT_NAME).read_bytes()
             value = json.loads(raw)
@@ -128,6 +133,7 @@ class CadenceLegSegment(rt.Segment):
             reference, verified = load_window_reference(policy, context)
         except WindowReferenceRefused as error:
             raise rt.Refused(f"span reference {source.name}: {error}") from error
+        self.span_custody = verified
         if session is not None:
             session.reference, session.custody = reference, verified
         return reference
@@ -199,7 +205,9 @@ class CadenceLegSegment(rt.Segment):
                 "ac_powermode": ep.hardware.get("ac_powermode"),
                 "quiet_spans_ns": [list(span) for span in self.quiet_spans],
                 "g0_shape": leg.get("g0_shape", "own"), "g0_role": self.g0_role,
-                "g0_reference_source": reference.get("source_member")}
+                "g0_reference_source": reference.get("source_member"),
+                "g0_reference_record_sha256": (self.span_custody or {}).get("record_sha256")
+                if self.g0_role == "consume" else None}
         rows = rt.journal_rows(member.bundle / "outputs" / "align_thermal.jsonl")
         if not ep.turns:
             level, nominal = _os_status(rows, None, None)

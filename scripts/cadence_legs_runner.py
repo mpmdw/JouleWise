@@ -322,6 +322,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
               "batch_windows": [legsmod.format_window(w) for w in windows], "steps": [], "legs": [],
               "feeds": {}, "rc": 0}
     state = {"power_read": False, "plan": None, "summaries": [], "finished": 0, "fault": False, "redos": 0}
+    kit_legs = {leg["leg_id"]: leg for leg in kit["legs"]}
 
     def work_remaining():
         remaining = deadline - WORK_RESERVE_S - clock.time()
@@ -383,7 +384,12 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
         if spec.get("g0_role") == "consume":
             first = state["plan"]["legs"][0]["leg_id"]
             span_kw["span_reference"] = output / "legs" / first / "runtime"
-            leg_row_source = {"leg_id": first, "dir": str(span_kw["span_reference"].relative_to(output))}
+            # Which attempt of the first leg supplies the reference, read by the hand-read's marks
+            # (RL-158 Q2: a redo's capture; RL-161 section 4: a first leg that was not admitted).
+            supplier = len(record["legs"][0]["attempts"])
+            leg_row_source = {"leg_id": first, "dir": str(span_kw["span_reference"].relative_to(output)),
+                              "attempt": supplier, "redone": supplier > 1,
+                              "excluded": not state["summaries"][0]["admitted"]}
         else:
             leg_row_source = None
         attempts, result, first_start = [], None, None
@@ -417,8 +423,14 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
                 state["redos"] += 1
                 continue
             break
+        cell = None
+        if "g0_shape" in kit_legs[leg_id]:   # kit v1.1: the cell and the G0 reference go to the desk
+            cell = {"prefill_tokens": spec["prefill_tokens"], "g0_shape": kit_legs[leg_id]["g0_shape"],
+                    "g0_role": spec.get("g0_role", "capture"),
+                    "span_reference": ({k: leg_row_source[k] for k in ("leg_id", "attempt", "redone", "excluded")}
+                                       if leg_row_source else None)}
         summary = legsmod.leg_summary(spec=spec, budget_s=budget, attempts=attempts, accepted=result,
-                                      started_epoch_s=first_start, ended_epoch_s=clock.time())
+                                      started_epoch_s=first_start, ended_epoch_s=clock.time(), cell=cell)
         leg_row["summary"] = summary
         (leg_dir / "leg_record.json").write_text(json.dumps(
             {"schema": LEG_RECORD_SCHEMA, "spec": spec, "attempts": attempts,
@@ -493,7 +505,7 @@ _RESULT_KEEP = ("leg_id", "leg_status", "bundle", "member_status", "g0_outcome",
                 "g0_timeout_s", "quiet_s", "prefill_chars", "prefill_tokens", "decode_cap", "decode_tokens",
                 "decode_cap_reached", "os_level_max", "pm_nominal", "incomplete_reasons", "ac_powermode",
                 "turn_start_ns", "turn_end_ns", "first_token_ns", "quiet_spans_ns", "config_sha256",
-                "g0_shape", "g0_role", "g0_reference_source")
+                "g0_shape", "g0_role", "g0_reference_source", "g0_reference_record_sha256")
 
 
 def _close(record, state, deps, output, step, kit):
@@ -690,6 +702,7 @@ class FakeLegRuntime:
                   "g0_shape": spec.get("g0_shape", "own"), "g0_role": role,
                   "g0_reference_source": (f"mock-{Path(span_reference).parent.name}" if role == "consume"
                                           else f"mock-{leg_id}"),
+                  "g0_reference_record_sha256": "e" * 64 if role == "consume" else None,
                   "cpu_busy_cores": [busy] * seconds, "cpu_busy_t_s": [float(i) for i in range(seconds)],
                   "census": [{"mock": True}]}
         legsmod.guard_projection(result, "mock leg result", values=False)
@@ -732,8 +745,14 @@ def run_mock(*, kit, kit_sha256, output, t0_epoch, windows, leg_ids=None, contam
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
-def _windows(args):
-    return [legsmod.parse_window(args.batch_window)] if args.batch_window else default_windows()
+def _windows(args, kit=None):
+    if args.batch_window:
+        return [legsmod.parse_window(args.batch_window)]
+    if kit is not None and kit["runner"]["kind"] != legsmod.RUNNER_KIND:
+        # Kit v1.1 has a free t0: the ruled blackout must be named, never the driver's old constant (#788 F4).
+        raise legsmod.PlanError([f"runner kind {kit['runner']['kind']} needs --batch-window "
+                                 "(RL-149 section 2.9 item 4: 02:00-02:35)"])
+    return default_windows()
 
 
 def _roster(args):
@@ -811,12 +830,16 @@ def main(argv=None):
             sys.stdout.write(text)
         return 0
     kit, sha = _load(args.kit)
-    windows = _windows(args)
     try:
+        windows = _windows(args, kit)
         if args.command == "plan":
             plan = legsmod.plan_span(kit, t0_epoch=args.t0 if args.t0 is not None else time.time(), windows=windows,
                                      leg_ids=_roster(args), max_span_s=max_span_s())
-            print(json.dumps({**plan, "kit_sha256": sha, "launch_deadline_epoch_s": launch_deadline(plan)},
+            fence = legsmod.fence_problems(plan, windows, default_windows())
+            if fence:
+                raise legsmod.PlanError(fence)
+            print(json.dumps({**plan, "kit_sha256": sha, "launch_deadline_epoch_s": launch_deadline(plan),
+                              "fence_end_epoch_s": plan["t0_epoch_s"] + plan["worst_case_s"] + legsmod.FENCE_TAIL_S},
                              indent=1, sort_keys=True))
             return 0
         if args.command == "mock":
