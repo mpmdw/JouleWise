@@ -16902,3 +16902,136 @@ The low end is the world with an onset scatter of 30 s. The report also gives on
 - RL-166b §3, first manifest sentence: "0.85 to 0.95" becomes "0.84 to 0.96 over twelve simulated worlds, and 0.88 in the default one".
 
 **Blind status.** Blind. Code, interface text and schema files only; no measured value and no synthetic output was opened.
+
+# RL-170. PR #790 at `8fc64be4a`: gate row 4 passes (ADMIT). The receipt path is retired in full and nothing wider is in the diff except one kit cross-check, which is ruled in here. The counted Part C pass at `c3f4bacd8` carries to #790's merge: no new Part C. No rebase is needed, but rows 2 and 3 were run before #774 merged and are owed again on the current base
+
+Research lead (Fable 5.2), Sat Nov 14 22:57 PST 2026 (from `date`). The cold final read of PR #790, "W1 kit: retire the R10-2(a) receipt path (RL-148 §2)", for gate row 4, at head `8fc64be4a1ffb28e06233b837741050ada379528`, base `ops/2026-11-11-w1-presign`. This is the cold pass RL-156 §6 item 4 and RL-159 left owed. RL-148 §2, RL-156 and RL-159 stand unchanged.
+
+**Read.**
+- RL-148 §2 and §4, RL-156 §3 and §4, RL-159, RL-164 and RL-168 §3, in the log on `origin/audit/2026-11-10-fable` at `071f5e05f`.
+- The PR body of #790, in full. The Sol report (ADMIT at `dd09ba7ea`) and the Mythos report (ADMIT WITH FIXES at `dd09ba7ea`), in full.
+- `git diff c3f4bacd8 8fc64be4a`, 20 files, every hunk, test files included.
+
+**Checked myself (read-only, `rs-main`; files extracted from git into the session scratchpad).**
+- **Pins.** `sha256` of `scripts/align_v4_kit.py` at head is `4f544dcf…31e7`, the generator value in `plan_tree.json`. `sha256` of `plan_tree.json` is `e8863ef3…6e72`, the `tree_sha256` in `identity_pins.json`.
+- **The kit, base against head, by AST.** 12 top-level names removed, 2 added (`RULING_1F_RECEIPT_RETIRED`, `refuse_ruling_1f_receipt`), 9 changed in code (`README`, `build_files`, `check_r1_budget_and_policy`, `check_r1_evidence`, `gate_policy_fields`, `require_ready`, `require_w1_ready`, `ruling_1f_fit`, `typical_case_fit`), 1 changed in its docstring only (`max_fitting_b_d`). The only other module-level statement that differs is the added `import os`.
+- **What Part C reaches in the kit** (§2).
+- **The 17 Part C and condition-13 paths.** `git diff c3f4bacd8 8fc64be4a` over them is empty.
+- **The base.** `ops/2026-11-11-w1-presign` is at `cd1719441` (#774's merge). `git merge-tree` of it with `8fc64be4a` gives tree `552886acf132d2cb9d1e318d9fa213b2f678f81a` with no conflict. The two diffs share no path. In that tree the kit, `plan_tree.json`, `identity_pins.json` and the template are the same blobs as at `8fc64be4a`. No Python or shell file in it uses a deleted name outside the tests that assert the names are gone.
+- **CI timing.** Run 43682418988 was created at 21:45:14 PST on `8fc64be4a`. #774 merged at 22:15:43 PST.
+- **The timeout cross-check** (finding 2): `thermal_gates._wait` at head, the driver's `g1_timeouts` count (`align_r1_rehearsal.py:790`) and the runtime's `gate_waits_s` (`r1_runtime.py:2268`).
+- **Registration scope of the two edited docs.** Neither `r1_runtime_contract.md` nor `U3-transfer.md` is named in `v4_registration.py`.
+
+**Not checked.**
+- I ran no test and no generator. The test tables are the PR body's; the 30-file regeneration and the perturbation probes are the two seats'.
+- CI's contents beyond its conclusion, head and creation time.
+- A dynamic trace of a real Part C. §2 rests on static reading and the AST comparison.
+- Why Sol's whole-module prequal run took 1,863.571 s against 1,800 s (note 5).
+- No slot, transcript, energy, power, meter or powermetrics file was opened.
+
+**Not done.** No SSH, no edit, commit, push or comment. The only durable file written is this one.
+
+---
+
+## Verdict for gate row 4: ADMIT at `8fc64be4a`
+
+No change to the PR is required. One condition falls on rows 2 and 3 (finding 1).
+
+| # | Finding | Severity | Disposition |
+|---|---|---|---|
+| 1 | Rows 2 and 3 were run on a merged tree that did not contain #774 | Process, gates the merge | Run them again on the current base. No rebase is needed for content |
+| 2 | `typical_case_fit`'s new refusal is a kit admission rule no ruling of mine named | LOW | Ruled here: accepted as built |
+| 3 | One sentence in `r1_runtime_contract.md:163` still says "without a receipt" | NIT, text | Next PR that opens the file. Not gating |
+| 4 | The registered protocol still describes R10-2(a) | Note | RL-148 §4 item 5 carries it. No DEVIATIONS row is owed by this PR |
+| 5 | Sol's prequal run exceeded 1,800 s | Note | Lead's record |
+
+---
+
+## 1. Question 1: is the receipt path retired in full, with nothing wider
+
+**Yes, in full.** Every item of RL-156 §3.1 is in the diff.
+
+| RL-156 §3.1 | Result |
+|---|---|
+| `require_ready` refuses a file at `registration/ruling_1f_receipt.json` | As ruled. It is the first statement, before the pending check. The file is refused by `os.path.lexists` and never read |
+| `require_ready` refuses `g0_cap_receipt` in `inputs.R1.thermal_policy` | As ruled, on the key's presence, whatever its value. `check_r1_budget_and_policy` refuses it again |
+| `receipt=` parameter deleted | Gone from `require_ready`, `check_r1_evidence`, `check_r1_budget_and_policy` and `ruling_1f_fit`; `require_w1_ready` no longer reads a receipt |
+| `verify_ruling_1f_receipt` and both receipt branches deleted | Gone, with the helpers only they used |
+| The procedure's `sign` and `_draft` deleted | Gone, with the `sign` subcommand and `decide --draft-out` |
+| R10 receipt tests replaced by refusal tests | `RetiredReceiptTests` |
+| The worst case stays as a print | `ruling_1f_fit` keeps the e901 rule and `check_r1_budget_and_policy` returns it with `worst_case_refuses: False` |
+
+**D cannot arm below 600 s through the kit.** With the key refused, `thermal_policy.g0_cap_s` must equal the re-derived `g0_cap_w1.value_s`, which is clamped to at least 600 s. The plan validator refuses the key in a filled plan, and since `8fc64be4a` `build_files` refuses before it writes a D spec. `thermal_gates.validate_gate_policy` still accepts a receipt stanza; it is condition 13 and is correctly left alone, so the kit and the plan validator are the barrier. That is what RL-156 §3.1 asked for.
+
+**RL-159 §1.4.** Finding 1's comment and finding 2's docstring text are both in, as written. No code.
+
+**Wider than the rulings, item by item.**
+- **The timeout cross-check in `typical_case_fit`.** Finding 2.
+- **`decide`'s record** loses `branch` and `receipt_draft` and gains the `G1 AT CAP` note. Nothing reads the two keys; the prequal chain check reads only the exit code and the output's tail.
+- **`gate_policy_fields`** no longer pops `g0_cap_receipt` for the contrast role. Every caller (kit lines 1131, 1139 and 1491, and the plan validator) runs after a refusal of the key, so no policy that reaches it can carry one.
+- **The template** loses the slot and is regenerated. **Two docs** (`r1_runtime_contract.md`, `U3-transfer.md`) now say the route is withdrawn. Neither is registration text.
+- **The Mythos row-2 fixes** are the seat's findings and nothing more.
+
+Nothing else is in the diff.
+
+### Finding 1. Rows 2 and 3 predate #774's merge
+
+CI on a `pull_request` event tests the head merged with the base as it stood when the run was created. That was `c3f4bacd8`. The base is now `cd1719441`.
+
+- **No rebase is needed for content.** The paths are disjoint and the merge is clean. #774's new code calls two kit functions, `w1_d_g0_cap` and `w1_g0_cap`, and #790 changes neither. The pins hold on the merged tree because #774 touches none of the pinned files.
+- **Row 2 says "the merged tree", and the tree that will merge has not been tested.** Either route satisfies it:
+  - bring `cd1719441` into the branch and let CI run on the new head; or
+  - run the whole suite on tree `552886acf132…`.
+- **Row 4 extends to that head.** My pass holds at `8fc64be4a` and at a head whose tree is `552886acf132d2cb9d1e318d9fa213b2f678f81a`. A head with any other tree comes back to me.
+
+### Finding 2. The `g1_timeouts` cross-check: accepted
+
+`typical_case_fit` now refuses a gated D run that flags more G1 timeouts than it recorded G1 waits, and counts waits at or above the cap beyond the flagged ones (`g1_waits_at_cap_unflagged`). This is the #783 row-1 review's LOW. No ruling of mine named it, and it changes what the kit admits, so I rule it here.
+
+- **It cannot refuse a record the driver wrote.** `_wait` appends one `thermal.gate_timeout:<turn>` flag and one interval row for the same wait. The driver counts flags with that prefix; the runtime lists every G1 interval's `duration_s`. So the count never exceeds the number of waits.
+- **Counting, not refusing, the unflagged wait is right.** A G1 whose sensors were unobserved runs to the cap and is flagged `thermal.state_unobserved`, not a timeout. Refusing it would refuse valid sessions.
+- **The arithmetic is unchanged.** The G1 term is the largest recorded wait, or `max(cap, largest)` when a timeout is flagged. A wait at the cap gives the same term either way.
+- **The `G1 AT CAP` note compares against `slots.S7`,** which is the kit's cap only when the picks did not change. The note says so. On the ruled design the picks do not change (RL-159 §1.4 finding 2).
+
+---
+
+## 2. Question 2: the Part C carry (RL-156 §4.1)
+
+**The counted pass at `c3f4bacd8` carries to #790's merge. No new Part C is needed.**
+
+- **By the rule as written.** The diff over the ten condition-13 files and Part C's executed paths is empty for #790. On the merged tree it is #774's one line in `v4_registration.py`, which RL-165 §9 and RL-168 §3 already name.
+- **The import edge, which the rule's path list does not see.** Part C loads `scripts/align_v4_kit.py`: the follow-up kit imports `align_v4_session`, which imports the kit at module level, and the R1 driver imports kit names lazily. The kit's bytes change. I rule this change by name, as RL-168 §3 did for `align_v4_session.py`, on four checks of my own:
+  1. **Import time.** The only module-level statement added is `import os`. The rest of the module-level change is definitions removed, two added, and one string constant (`README`) edited. Nothing runs at import that did not run before.
+  2. **What the follow-up kit calls.** It uses three names of `align_v4_session`: `weight_digest_preflight`, `runtime_stack_preflight` and `pilot.h.align_unit_id`. The two preflights and the session functions they call reach one kit name, `valid_digest`. The session's module level reaches `kit.KIT` as a default argument.
+  3. **What the driver imports.** `DEADMAN_FACTOR`, `L1_MARGIN_S`, `MEMBER_CAP_S`, `l1_t_dead`, `w1_inter_member_idle_s` and `r1_g0_timeout_s`.
+  4. **The closure.** From those names, with `W1_PLAN_TEMPLATE` and every other kit name the session module uses, the kit definitions reached number 20. None is among the changed or added definitions.
+- **The two data files.** `w1_inter_member_idle_s` reads the template's `members` and each member's config; the template lost only the `g0_cap_receipt` slot under `thermal_policy`. The stack preflight reads `runtime_versions` from `identity_pins.json`; only `tree_sha256` changed.
+
+The builder's and the Mythos seat's account is confirmed. The next F0 runs at the merge commit under the ladder as usual; it is not a condition of this merge or of the slot session.
+
+**RL-156 §4.1's rule gains one clause.** A Part C pass also carries across a change to a module Part C imports but that is outside the path list, when the lead records, and my cold pass confirms, that no statement executed at import and no definition Part C reaches has changed. A change that fails either test is treated as a change to a listed path.
+
+---
+
+## 3. Question 3: is anything measurement-, calibration- or claim-bearing changed beyond the rulings
+
+**No.**
+- **No member executes differently.** No executed path of R1, Part C, the campaign kit `c76344c5` or a W1 member is in the diff. The generated member configs are unchanged: only the kit's own hash in `plan_tree.json` and the tree hash in `identity_pins.json` move.
+- **Kit admission is tighter in two places and wider in none:** the receipt refusal, which the rulings ask for, and finding 2's cross-check. The Mythos seat's base-against-head probe (260 perturbed records, none newly admitted) agrees with my reading of the code.
+- **No calibration constant, estimator constant, registration document or paper sentence** is touched.
+- **The registered protocol** (`pilot_protocol_v4.md:362-398`) still describes the receipt route. That is right for this PR: RL-148 §4 item 5 puts the text in the blind amendment, and the amendment should cite this merge as the point where the kit stopped honouring a receipt (note 4).
+
+---
+
+## 4. Notes
+
+3. **`r1_runtime_contract.md:163`** keeps "without a receipt that alone is never a refusal" for an X-G that is not `measured`. With no receipt path, "without a receipt" should go. It is not registration text and moves no pin.
+4. **No DEVIATIONS row is owed here.** The retirement brings the kit into line with RL-148 §2; the registered text follows in the amendment.
+5. **Sol's whole-module `test_w1_prequal` run took 1,863.571 s** against the 1,800 s the seats budget for it; Mythos's took 1,484 s on a loaded host. This PR removes one argument from one subprocess call in that module, so I do not attribute the time to it, and I did not measure it. The lead should know the module sits near its budget.
+
+---
+
+**Owner.** Lead: finding 1 (rows 2 and 3 on the current base); the merge record of §2 under RL-156 §4.1 as amended; the two checklist lines of RL-156 §3.1 come off once this merges. Amendment drafter: note 4. Whoever next opens `r1_runtime_contract.md`: note 3. Research lead: a head whose tree is not `552886acf132…`.
+**Gate.** #790's row 4 is passed by this ruling at `8fc64be4a` and at a head with tree `552886acf132d2cb9d1e318d9fa213b2f678f81a`, and at no other. The merge waits for rows 2 and 3 on the current base and for the PR's remaining rows. It merges before the W1 receipt and before the closure regeneration of RL-149 §5 item 13, as RL-156 §3.1 ruled. No new Part C is needed at the merge.
+**Amends.** RL-156 §4.1 (the import clause of §2). Nothing else.
+**Blind status.** Blind: no v4 outcome exists and nothing sealed or measured was opened. This ruling rests on rulings, code, test code, two seat reports, file hashes and an AST comparison of two committed versions of one file.
