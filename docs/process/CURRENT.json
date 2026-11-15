@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as RUN_STATE 318: the receipt asserts, the per-leg admitted lines, the desk bundle, the restore lines, measurement_mode verify again, the RL-150 R9 items and the RL-150 R1 start-reference print",
+  "next_observable": "(launch gate, all true: item 318 on origin/main; the pilot's desk fence gone; PARTC-W1LINE-JOURNAL-COPY-DONE on origin/main; pilot close + 20 min) the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as the next RUN_STATE item: receipt rc, parts, soak rc and sha256, part-C rc; from smoke_part_c.json ONLY the evaluation, N_chunk and T_dead; the restore lines",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "317",
+  "source_item": "319",
   "source_item_heading_date": "2026-11-14",
   "wait": {
-    "deadline_epoch_s": 1794739620,
+    "deadline_epoch_s": 1794738600,
     "observable": "none",
-    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen inside 13:20-20:45 PST: NOTHING launches. A span that ran but ends with any named stop, a receipt rc≠0, or a pilot that does not pass under RL-150 R9: nothing relaunches, nothing is re-run, L004-L012 are not queued; mail the lead. Do not retry, do not extend, do not reuse OUT"
+    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen by 22:00 PST: NOTHING launches. Do not retry, do not extend, do not reuse OUT, and do not run any other smoke on your own; mail the lead. A completed run whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json) is NOT a refusal: it goes to the research lead with the lead's desk table. Nothing is re-run under this item"
   }
 }
