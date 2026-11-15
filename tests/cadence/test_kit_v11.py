@@ -324,7 +324,16 @@ class LaunchBounds(unittest.TestCase):
             path.write_text(json.dumps(v11_kit(), indent=1))
             ok = cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local("2026-11-17T02:40"))
             self.assertEqual(ok["worst_case_s"], 16650)
-            for t0, fragment in (("2026-11-17T21:00", "passes 01:50"), ("2026-11-17T11:00", "no launch between")):
+            # The launcher reads the soak window from the R1 driver at run time: 11:45-13:15 before the W1-line
+            # merge (a no-launch interval 10:50-13:15), 02:00-02:35 after it (RL-165 section 8.1: no dead zone).
+            from scripts import align_r1_rehearsal as r1
+            refusals = [("2026-11-17T21:00", "passes 01:50")]
+            if r1.OS_BATCH_WINDOW_LOCAL == OLD_WINDOW:
+                refusals.append(("2026-11-17T11:00", "no launch between"))
+            else:
+                plan = cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local("2026-11-17T11:00"))
+                self.assertEqual(plan["worst_case_s"], 16650)
+            for t0, fragment in refusals:
                 with self.assertRaises(ValueError) as ctx:
                     cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local(t0))
                 self.assertIn(fragment, str(ctx.exception))

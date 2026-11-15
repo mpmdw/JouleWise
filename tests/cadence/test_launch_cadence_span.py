@@ -395,6 +395,16 @@ class BlackoutTests(Fixture):
         self.assertIn("exit status 19", err)                                # the plan passed; bootstrap failed
 
     def test_no_flag_uses_the_r1_driver_window_and_a_1000_t0_refuses(self):
+        from scripts import align_r1_rehearsal as r1
+        if r1.OS_BATCH_WINDOW_LOCAL != ((11, 45), (13, 15)):
+            # After the W1-line merge (RL-165 section 8.1) the driver's window is 02:00-02:35: a 10:00 t0 plans,
+            # and a 21:30 t0 with no flag meets the driver's own window.
+            rc, err = self.main_at("2026-11-15T10:00", window=None, tag="ten")
+            self.assertIn("exit status 19", err)                            # the plan passed; bootstrap failed
+            rc, err = self.main_at("2026-11-15T21:30", window=None, tag="late")
+            self.assertEqual(rc, 2)
+            self.assertIn("meets a batch blackout (02:00-02:35)", err)
+            return
         rc, err = self.main_at("2026-11-15T10:00", window=None, tag="ten")  # worst case meets 11:45-13:15
         self.assertEqual(rc, 2)
         self.assertIn("meets a batch blackout (11:45-13:15)", err)

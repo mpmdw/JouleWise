@@ -58,7 +58,34 @@ def cmd_validate_kit(args):
     return 0
 
 
+def _pairs(text):
+    """``"19458:3724:4096,19458:3151:4096"`` -> sha256-qual-v1's ``pairs`` (prefill:cap:cap per pair)."""
+    out = []
+    for item in text.split(","):
+        tokens, *caps = (int(x) for x in item.split(":"))
+        out.append({"prefill_tokens": tokens, "decode_tokens": caps})
+    return out
+
+
 def cmd_gen_legs(args):
+    if args.law == kit_v11.QUAL_LAW:
+        if not (args.spans and args.span_a_tokens and args.pairs and args.g0_shapes):
+            print("REFUSE gen-legs --law sha256-qual-v1 needs --spans, --span-a-tokens, --pairs and --g0-shapes")
+            return 2
+        law = {"method": kit_v11.QUAL_LAW, "master_seed": args.master_seed, "n_legs": args.n_legs,
+               "bands": args.bands.split(","), "spans": args.spans,
+               "span_a_tokens": [int(x) for x in args.span_a_tokens.split(",")], "pairs": _pairs(args.pairs),
+               "g0_shapes": args.g0_shapes.split(",")}
+        problems = []
+        kit_v11._check_law(law, problems)
+        try:
+            if problems:
+                raise kitmod.KitError(problems)
+            legs = kit_v11.generate_legs(args.campaign_id, law, {"decode_tokens": args.decode_tokens})
+        except kitmod.KitError as error:
+            return _fail(error.problems)
+        print(json.dumps({"seed_law": law, "legs": legs}, indent=1))
+        return 0
     if args.law == kit_v11.LAW:
         if not (args.prompt_tokens and args.g0_shapes):
             print("REFUSE gen-legs --law sha256-cells-v1 needs --prompt-tokens and --g0-shapes")
@@ -108,6 +135,14 @@ def cmd_next(args):
     return 0
 
 
+def soak_window():
+    """The soak path's own blackout: the R1 driver's ``OS_BATCH_WINDOW_LOCAL`` in this tree, read at run time
+    as the runner and the launcher read it (``cadence_legs_runner.default_windows``). 11:45-13:15 before the
+    W1-line merge (so the 10:50-13:15 no-launch interval), 02:00-02:35 after it (RL-165 section 8.1)."""
+    from scripts import align_r1_rehearsal as r1
+    return r1.OS_BATCH_WINDOW_LOCAL
+
+
 def cmd_checklist(args):
     window = _window(args.batch_window)
     kit, _ = kitmod.load_kit(args.kit, batch_window=window)
@@ -116,7 +151,8 @@ def cmd_checklist(args):
         if not args.batch_window:
             print("REFUSE a v1.1 kit's checklist needs --batch-window (RL-149 section 2.9 item 4: 02:00-02:35)")
             return 2
-        rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256, batch_window=window)
+        rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256, batch_window=window,
+                                          soak_window=soak_window())
     else:
         rows = kitmod.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256)
     for r in rows:
@@ -142,12 +178,15 @@ def main(argv=None):
     s.add_argument("--batch-window", help="HH:MM-HH:MM local blackout for the template check "
                                           "(default 11:45-13:15; RL-149 section 2.9 item 4 rules 02:00-02:35)")
     s = sub.add_parser("gen-legs")
-    s.add_argument("--law", choices=("sha256-v1", kit_v11.LAW), default="sha256-v1")
+    s.add_argument("--law", choices=("sha256-v1", *kit_v11.LAWS), default="sha256-v1")
     s.add_argument("--campaign-id", required=True); s.add_argument("--master-seed", type=int, required=True)
     s.add_argument("--n-legs", type=int, required=True); s.add_argument("--bands", required=True)
     s.add_argument("--prefill-tokens", type=int, help="sha256-v1: every leg's prompt size")
     s.add_argument("--prompt-tokens", help="sha256-cells-v1: the sizes, comma-separated")
-    s.add_argument("--g0-shapes", help="sha256-cells-v1: own (v1.1a) or own,span (v1.1)")
+    s.add_argument("--g0-shapes", help="sha256-cells-v1 and sha256-qual-v1: own (own-shaped) or own,span")
+    s.add_argument("--spans", type=int, help="sha256-qual-v1: the number of spans of equal length")
+    s.add_argument("--span-a-tokens", help="sha256-qual-v1: each span's type-A sizes, comma-separated")
+    s.add_argument("--pairs", help="sha256-qual-v1: one type-L pair per span, prefill:cap:cap, comma-separated")
     s.add_argument("--decode-tokens", type=int, required=True)
     s = sub.add_parser("validate-queue"); s.add_argument("queue", nargs="?", default=str(ROOT / q.QUEUE_PATH))
     s.add_argument("--kits-root", default=str(ROOT))

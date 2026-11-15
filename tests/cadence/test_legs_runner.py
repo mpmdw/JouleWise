@@ -474,7 +474,13 @@ class LegRuntimeTests(unittest.TestCase):
 
     def test_condition13_sources_are_untouched(self):
         from joulewise.align.apple import v4_registration as reg
-        changed = subprocess.run(["git", "diff", "--name-only", "origin/align/2026-11-13-rl145-build", "--",
+        # The base whose condition-13 sources this branch carries: the R1 build line, or (at the qualification
+        # pin, RL-165 section 8.1) the W1-line head it merged, c3f4bacd8.
+        merged = "c3f4bacd8013ca98c19cf8d41f830c701930cd41"
+        has_merge = subprocess.run(["git", "merge-base", "--is-ancestor", merged, "HEAD"], cwd=runner.ROOT,
+                                   capture_output=True).returncode == 0
+        base = merged if has_merge else "origin/align/2026-11-13-rl145-build"
+        changed = subprocess.run(["git", "diff", "--name-only", base, "--",
                                   *reg.R1_EXECUTED_SOURCES], cwd=runner.ROOT, capture_output=True, text=True)
         if changed.returncode == 0:
             self.assertEqual(changed.stdout.strip(), "")

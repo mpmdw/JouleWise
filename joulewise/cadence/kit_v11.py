@@ -20,6 +20,18 @@ What v1.1 adds to v1:
   plan enforces that per span, and the checklist's ``span_window`` line judges the arm's own
   ``[t0, end_by]`` against the batch window.
 
+**The qualification law** ``sha256-qual-v1`` (RL-165 section 8.1; RL-150 section 3.2) is a second law
+of the same schema. The kit names its spans: ``seed_law.spans`` spans of equal length, each holding the
+type-A sizes ``seed_law.span_a_tokens`` at the kit's decode cap and one type-L pair from
+``seed_law.pairs`` (two legs at one prompt size, each with its own decode cap). Which span takes which
+pair, the type-A order, where the pair sits and which of its legs runs first are sha256 draws. A
+span's first leg is type A and not a pair member; the two legs of a pair are adjacent and in one span.
+With ``g0_shapes`` ``own, span`` the first leg of each span is ``own`` (its capture is the span's
+reference) and every other leg is ``span``; with ``own`` every leg is ``own`` (the own-shaped fallback).
+Its legs add ``leg_type`` (``A`` or ``L``) and ``pair`` (``p<k>`` for ``seed_law.pairs[k-1]``, else
+``null``); these are kit labels for the fit code and never reach a leg spec (``legs.leg_specs`` copies
+named fields only). Seeds and bands are v1's ``sha256-v1`` draws, as for the cell law.
+
 Everything else (closed keys, the condition/slot refusal, stop limits, the mandatory checklist,
 frozen fit code for looks, the desk adapter) is v1's rule, applied by v1's own helpers.
 """
@@ -35,18 +47,26 @@ from joulewise.cadence import kit as v1
 SCHEMA = "joulewise.cadence_campaign_kit.v1.1"
 RUNNER_KIND = "cadence-legs-v1.1"
 LAW = "sha256-cells-v1"
+# The qualification law (RL-165 section 8.1): named spans, type-A sizes per span, one type-L pair per span.
+QUAL_LAW = "sha256-qual-v1"
+LAWS = (LAW, QUAL_LAW)
 # G0 shapes a v1.1 kit may draw from. "own": the leg's G0 is judged against its own capture (dev-01's
 # shape; v1.1a). "span": against the span's reference, the capture of the span's first leg, consumed as
 # a series member consumes its session's (RL-150 R1 part 2; design doc section 14.5; v1.1).
 G0_SHAPE_SETS = (("own",), ("own", "span"))
 # legs.PREFILL_TOKENS_RANGE (a test asserts they agree; legs imports kit, so it is not imported here).
 PROMPT_TOKENS_RANGE = (256, 32768)
+# legs.DECODE_TOKENS_RANGE (a test asserts they agree): a type-L leg's own cap must be a leg spec's.
+DECODE_TOKENS_RANGE = (1, 4096)
 # The launcher's ceiling (legs.MAX_SPAN_S = launch_align_r0.MAX_DESK_SECONDS).
 MAX_SPAN_S = 12 * 3600
 
 LEG_KEYS = {"leg_id", "seed", "start_band", "prefill_tokens", "decode_tokens", "g0_shape"}
 LEG_DEFAULT_KEYS = {"decode_tokens"}
 SEED_LAW_KEYS = {"method", "master_seed", "n_legs", "bands", "prompt_tokens", "g0_shapes"}
+QUAL_SEED_LAW_KEYS = {"method", "master_seed", "n_legs", "bands", "spans", "span_a_tokens", "pairs", "g0_shapes"}
+QUAL_LEG_KEYS = LEG_KEYS | {"leg_type", "pair"}
+QUAL_PAIR_KEYS = {"prefill_tokens", "decode_tokens"}
 TEMPLATE_KEYS = {"timezone", "t0_rule", "legs_per_span", "soak_s", "fixed_overhead_s", "leg_budget_s",
                  "leg_worst_case_s", "redo_quota"}
 T0_RULES = ("free",)
@@ -61,9 +81,11 @@ def _permute(items, campaign_id, master, tag):
 
 
 def generate_legs(campaign_id, seed_law, leg_defaults):
-    """The seeded leg list of ``sha256-cells-v1`` (design doc section 14.2)."""
+    """The seeded leg list of ``sha256-cells-v1`` (design doc section 14.2) or ``sha256-qual-v1``."""
+    if seed_law.get("method") == QUAL_LAW:
+        return _generate_qual(campaign_id, seed_law, leg_defaults)
     if seed_law.get("method") != LAW:
-        raise v1.KitError([f"seed_law.method: only {LAW!r} is defined for {SCHEMA}"])
+        raise v1.KitError([f"seed_law.method: one of {list(LAWS)} for {SCHEMA}"])
     n, master = seed_law["n_legs"], seed_law["master_seed"]
     sizes, shapes = list(seed_law["prompt_tokens"]), tuple(seed_law["g0_shapes"])
     k = len(sizes)
@@ -84,6 +106,40 @@ def generate_legs(campaign_id, seed_law, leg_defaults):
                 g0[i] = "span"
     return [{**leg, "prefill_tokens": order[i], "decode_tokens": leg_defaults["decode_tokens"], "g0_shape": g0[i]}
             for i, leg in enumerate(base)]
+
+
+def _generate_qual(campaign_id, seed_law, leg_defaults):
+    """The seeded leg list of ``sha256-qual-v1`` (RL-165 section 8.1; module docstring)."""
+    n, master, spans = seed_law["n_legs"], seed_law["master_seed"], seed_law["spans"]
+    a_tokens, pairs, shapes = list(seed_law["span_a_tokens"]), list(seed_law["pairs"]), tuple(seed_law["g0_shapes"])
+    per = len(a_tokens) + 2
+    if not (type(spans) is int and spans >= 1 and a_tokens and len(pairs) == spans and n == spans * per):
+        raise v1.KitError([f"seed_law: n_legs must be spans x (len(span_a_tokens) + 2) with one pair per span "
+                           f"({n} legs, {spans} spans, {len(a_tokens)} type-A sizes, {len(pairs)} pairs)"])
+    if shapes not in G0_SHAPE_SETS:
+        raise v1.KitError([f"seed_law.g0_shapes: one of {[list(s) for s in G0_SHAPE_SETS]}"])
+    base = v1.generate_legs(campaign_id, {"method": "sha256-v1", "master_seed": master, "n_legs": n,
+                                          "bands": list(seed_law["bands"])})
+    cap = leg_defaults["decode_tokens"]
+    pair_of_span = _permute(range(spans), campaign_id, master, "qual-pairs")
+    cells = []   # (leg_type, prefill_tokens, decode_tokens, pair)
+    for s in range(spans):
+        order = _permute(a_tokens, campaign_id, master, f"qual-a{s}")
+        rest = [("A", t, cap, None) for t in order[1:]]
+        at = v1._draw(campaign_id, master, f"qual-pair-at{s}", 0) % (len(rest) + 1)
+        k = pair_of_span[s]
+        caps = list(pairs[k]["decode_tokens"])
+        if v1._draw(campaign_id, master, f"qual-pair-first{s}", 0) % 2:
+            caps.reverse()
+        pair = [("L", pairs[k]["prefill_tokens"], c, f"p{k + 1}") for c in caps]
+        cells.extend([("A", order[0], cap, None), *rest[:at], *pair, *rest[at:]])
+    legs = []
+    for i, (leg, (kind, tokens, decode, pair)) in enumerate(zip(base, cells)):
+        first = i % per == 0
+        shape = "span" if "span" in shapes and not first else "own"
+        legs.append({**leg, "prefill_tokens": tokens, "decode_tokens": decode, "g0_shape": shape,
+                     "leg_type": kind, "pair": pair})
+    return legs
 
 
 def _window_s(window):
@@ -122,7 +178,9 @@ def _check_template(t, problems, batch_window):
 
 
 def _check_law(law, problems):
-    """The cell law's own fields. Returns the bands (for the leg check)."""
+    """The law's own fields. Returns the bands (for the leg check)."""
+    if isinstance(law, dict) and law.get("method") == QUAL_LAW:
+        return _check_qual_law(law, problems)
     if not v1._closed(law, SEED_LAW_KEYS, "seed_law", problems):
         return []
     bands = law.get("bands") if isinstance(law.get("bands"), list) else []
@@ -141,6 +199,50 @@ def _check_law(law, problems):
         problems.append(f"seed_law.prompt_tokens: distinct integers in {PROMPT_TOKENS_RANGE}")
     elif v1._is_int(law.get("n_legs"), 1) and law["n_legs"] % len(sizes):
         problems.append(f"seed_law.n_legs: must be a multiple of the {len(sizes)} prompt sizes")
+    shapes = law.get("g0_shapes")
+    if not (isinstance(shapes, list) and tuple(shapes) in G0_SHAPE_SETS):
+        problems.append(f"seed_law.g0_shapes: one of {[list(s) for s in G0_SHAPE_SETS]}")
+    return bands
+
+
+def _check_qual_law(law, problems):
+    """``sha256-qual-v1``'s own fields (RL-165 section 8.1). Returns the bands."""
+    if not v1._closed(law, QUAL_SEED_LAW_KEYS, "seed_law", problems):
+        return []
+    bands = law.get("bands") if isinstance(law.get("bands"), list) else []
+    if not (bands and all(isinstance(b, str) and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,30}", b) for b in bands)
+            and len(set(bands)) == len(bands)):
+        problems.append("seed_law.bands: distinct short lowercase names")
+    if not v1._is_int(law.get("n_legs"), 1, 9999):
+        problems.append("seed_law.n_legs: integer 1..9999")
+    if not v1._is_int(law.get("master_seed"), 0, 2 ** 63 - 1):
+        problems.append("seed_law.master_seed: non-negative integer")
+    spans = law.get("spans")
+    if not v1._is_int(spans, 1, 99):
+        problems.append("seed_law.spans: integer 1..99")
+    a_tokens = law.get("span_a_tokens")
+    if not (isinstance(a_tokens, list) and a_tokens and all(v1._is_int(t, *PROMPT_TOKENS_RANGE) for t in a_tokens)):
+        problems.append(f"seed_law.span_a_tokens: a non-empty list of integers in {PROMPT_TOKENS_RANGE}")
+        a_tokens = None
+    pairs = law.get("pairs")
+    if not isinstance(pairs, list) or not pairs:
+        problems.append("seed_law.pairs: non-empty list")
+        pairs = None
+    else:
+        for i, pair in enumerate(pairs):
+            if not v1._closed(pair, QUAL_PAIR_KEYS, f"seed_law.pairs[{i}]", problems):
+                continue
+            if not v1._is_int(pair.get("prefill_tokens"), *PROMPT_TOKENS_RANGE):
+                problems.append(f"seed_law.pairs[{i}].prefill_tokens: integer in {PROMPT_TOKENS_RANGE}")
+            caps = pair.get("decode_tokens")
+            if not (isinstance(caps, list) and len(caps) == 2 and all(v1._is_int(c, *DECODE_TOKENS_RANGE) for c in caps)
+                    and caps[0] != caps[1]):
+                problems.append(f"seed_law.pairs[{i}].decode_tokens: two distinct integers in {DECODE_TOKENS_RANGE}")
+    if v1._is_int(spans, 1) and pairs is not None and len(pairs) != spans:
+        problems.append(f"seed_law.pairs: one pair per span ({spans} spans, {len(pairs)} pairs)")
+    if v1._is_int(spans, 1) and a_tokens and v1._is_int(law.get("n_legs"), 1) \
+            and law["n_legs"] != spans * (len(a_tokens) + 2):
+        problems.append(f"seed_law.n_legs: must be spans x (len(span_a_tokens) + 2) = {spans * (len(a_tokens) + 2)}")
     shapes = law.get("g0_shapes")
     if not (isinstance(shapes, list) and tuple(shapes) in G0_SHAPE_SETS):
         problems.append(f"seed_law.g0_shapes: one of {[list(s) for s in G0_SHAPE_SETS]}")
@@ -193,19 +295,22 @@ def validate_kit(kit, *, batch_window=v1.OS_BATCH_WINDOW):
             problems.append("runner.stage_journal: must be chain-stages.jsonl (the RL-128 probe reads it)")
 
     defaults = kit.get("leg_defaults")
-    if v1._closed(defaults, LEG_DEFAULT_KEYS, "leg_defaults", problems):
-        if not v1._is_int(defaults.get("decode_tokens"), 1):
-            problems.append("leg_defaults.decode_tokens: positive integer")
-
     law = kit.get("seed_law")
+    qual = isinstance(law, dict) and law.get("method") == QUAL_LAW
+    if v1._closed(defaults, LEG_DEFAULT_KEYS, "leg_defaults", problems):
+        if not v1._is_int(defaults.get("decode_tokens"), *((DECODE_TOKENS_RANGE) if qual else (1,))):
+            problems.append("leg_defaults.decode_tokens: positive integer"
+                            + (f" in {DECODE_TOKENS_RANGE}" if qual else ""))
+
     bands = _check_law(law, problems)
+    leg_keys = QUAL_LEG_KEYS if qual else LEG_KEYS
 
     legs = kit.get("legs")
     if not isinstance(legs, list) or not legs:
         problems.append("legs: non-empty list")
         legs = []
     for i, leg in enumerate(legs):
-        if v1._closed(leg, LEG_KEYS, f"legs[{i}]", problems):
+        if v1._closed(leg, leg_keys, f"legs[{i}]", problems):
             if not (isinstance(leg.get("leg_id"), str) and v1.LEG_ID_RE.fullmatch(leg["leg_id"])):
                 problems.append(f"legs[{i}].leg_id: L<digits>")
             if leg.get("start_band") not in bands:
