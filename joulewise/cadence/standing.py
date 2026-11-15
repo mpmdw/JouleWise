@@ -529,11 +529,10 @@ def verdict_state(entry, *, run, accept_mock):
         # A verdict on another bundle is not this span's: never final, and a contradiction worth a page.
         return "pending", [reason("DESK_VERDICT_INVALID", f"{pid}: anchor {str((doc.get('identities') or {}).get('manifest_sha256'))[:12]} "
                                                           f"is not the published {str(run.bundle_sha256)[:12]}")], []
-    final = desk_final.counts_as_final(doc, manifest_sha256=run.bundle_sha256, **{k: v for k, v in ident.items()})
-    if not final and accept_mock and doc.get("mock") is True:
-        # Synthetic runs only (the production config refuses accept_mock_verdicts): the same clauses with mock true.
-        final = (desk_final.verify_verdict(doc) and doc.get("desk_final") is True
-                 and (doc.get("transport") or {}).get("signed") is True)
+    # ``accept_mock`` is the synthetic switch (the production config refuses accept_mock_verdicts); the desk's own
+    # counts_as_final keeps every other clause.
+    final = desk_final.counts_as_final(doc, manifest_sha256=run.bundle_sha256, allow_mock=accept_mock is True,
+                                       **{k: v for k, v in ident.items()})
     halts = []
     if doc.get("next_arm_hold") is True:
         codes = sorted({str(h.get("code")) for h in doc.get("holds") or [] if h.get("scope") == "queue"})
