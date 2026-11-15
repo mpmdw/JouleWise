@@ -484,47 +484,43 @@ def judge_span(sdir, span_id, selected_keys):
     return verdicts, detail, span_trailers(span_id, streams)
 
 
-# RL-171 and RL-172a: the span's soak may be retried once, on a slope or a load refusal. Operational reads only.
-# The receipt's soak_attempts lists each attempt ({"attempt", "refused", "output_dir", ...}); a receipt from the
-# v1/v1.1 pins has no such field, which means one attempt. The receipt's "refused" text is the same for both
-# kinds, so the kind is taken from an operational field when a receipt records one (SOAK_KIND_FIELDS), else from
-# the soak child's own refusal line in that attempt's stderr log (<stage>.stderr.log, the stage "soak" or
-# "soak.a<n>"), matched whole; no other line of the log is kept. Otherwise the kind is "kind not recorded". The
-# soak's soak_row.json is not opened: it carries the soak's result series. A soak retried and then accepted is
-# not a stop: nothing here, or anywhere in the look, reads the stage journal's rc for a soak stage.
+# RL-171 and RL-172a: the span's soak may be retried once, on a slope or a load refusal. Receipt fields only (the
+# lead's ruling on the open list): the receipt's soak_attempts ({"attempt", "refused", ...}) and its steps list,
+# whose soak stages are named "soak" and "soak.a<n>". A receipt from the v1/v1.1 pins has no soak_attempts field,
+# which means one attempt. The receipt's "refused" text is the same for both kinds, so the kind is read from a
+# receipt field that names it (SOAK_KIND_FIELDS; none exists at the RL-171 pin 6010985a3), else it is "kind not
+# recorded". No log and no soak file is opened. A soak retried and then accepted is not a stop: whether the span's
+# soak was accepted is its last soak step's rc, and no look code reads the stage journal.
 SOAK_KINDS = ("slope", "load", "kind not recorded")
 SOAK_KIND_FIELDS = ("refusal_kind",)
-SOAK_REFUSAL_LINES = {b"soak refused: idle soak has unresolved slope": "slope",     # cadence_legs_runner.soak_child
-                      b"soak refused: idle soak: sustained CPU load": "load"}
 
 
 def soak_attempts(sdir):
-    """The span's soak attempts from its receipt, checked for shape; one accepted attempt when the field is absent."""
+    """(attempts, field present, accepted) from the span's receipt. Each attempt is checked against the receipt's
+    soak steps: numbered from 1, one step per attempt in order, every refused attempt's step nonzero."""
     receipt = _json(Path(sdir) / "runner_receipt.json")
     if "soak_attempts" not in receipt:
-        return [{"attempt": 1, "refused": None}], False
+        return [{"attempt": 1, "refused": None}], False, True
     attempts = receipt["soak_attempts"]
-    if not isinstance(attempts, list) or any(
+    steps = [st for st in receipt.get("steps") or []
+             if isinstance(st, dict) and re.fullmatch(r"soak(\.a\d+)?", str(st.get("name")))]
+    names = ["soak" if i == 0 else f"soak.a{i + 1}" for i in range(len(attempts) if isinstance(attempts, list) else 0)]
+    if (not isinstance(attempts, list) or [st["name"] for st in steps] != names or any(
             not isinstance(a, dict) or a.get("attempt") != i + 1
             or not (a.get("refused") is None or isinstance(a.get("refused"), str))
-            or (a.get("refused") is None and i != len(attempts) - 1) for i, a in enumerate(attempts)):
-        raise ValueError(f"{Path(sdir).name}: runner_receipt.json soak_attempts is not a list of numbered attempts, "
-                         "each refused but the last")
-    return attempts, True
+            or (a.get("refused") is None and i != len(attempts) - 1)
+            or (a.get("refused") is not None and steps[i].get("rc") in (0, None)) for i, a in enumerate(attempts))):
+        raise ValueError(f"{Path(sdir).name}: runner_receipt.json soak_attempts does not match its soak steps "
+                         "(numbered attempts, each refused but the last, one soak step each)")
+    accepted = bool(attempts) and attempts[-1].get("refused") is None and steps[-1].get("rc") == 0
+    return attempts, True, accepted
 
 
-def soak_refusal_kind(sdir, attempt):
-    """("slope" | "load" | "kind not recorded", where it was read) for one refused attempt."""
+def soak_refusal_kind(attempt):
+    """("slope" | "load" | "kind not recorded", the receipt field it was read from or None)."""
     for field in SOAK_KIND_FIELDS:
         if attempt.get(field) in ("slope", "load"):
             return attempt[field], f"receipt soak_attempts[].{field}"
-    n = attempt["attempt"]
-    log = Path(sdir) / f"{'soak' if n == 1 else f'soak.a{n}'}.stderr.log"
-    if log.is_file():
-        for line in log.read_bytes().splitlines():
-            kind = SOAK_REFUSAL_LINES.get(line.strip())
-            if kind:
-                return kind, f"{log.name} refusal line"
     return "kind not recorded", None
 
 
@@ -533,13 +529,12 @@ def soak_retries(span_dirs_by_id):
     spans with a retry, the retried soaks by kind, the spans accepted after a retry and those the soak stopped."""
     spans, by_kind = {}, {k: 0 for k in SOAK_KINDS}
     for span_id, sdir in sorted(span_dirs_by_id.items()):
-        attempts, recorded = soak_attempts(sdir)
+        attempts, recorded, accepted = soak_attempts(sdir)
         retried = []
         for a in attempts[:-1]:                     # every attempt with a successor was retried
-            kind, source = soak_refusal_kind(sdir, a)
+            kind, source = soak_refusal_kind(a)
             by_kind[kind] += 1
             retried.append({"attempt": a["attempt"], "kind": kind, "read_from": source})
-        accepted = bool(attempts) and attempts[-1].get("refused") is None
         spans[span_id] = {"attempts": len(attempts), "field_present": recorded, "accepted": accepted,
                           "retried": retried}
     return {"spans": spans, "spans_with_retry": sum(1 for v in spans.values() if v["retried"]),

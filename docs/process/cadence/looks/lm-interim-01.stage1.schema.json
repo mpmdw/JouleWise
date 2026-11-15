@@ -988,7 +988,7 @@
      "type": "integer"
     }
    },
-   "description": "RL-171 and RL-172a: per roster span, its soak attempts (one when the receipt has no soak_attempts field, as on the v1/v1.1 pins) and the kind of each retried soak: slope or load where an operational field or the soak child's own refusal line records it, else 'kind not recorded'. A soak retried and then accepted is not a stop. Written by joulewise/cadence_looks/inclusion_34.py soak_retries(); decides nothing"
+   "description": "RL-171 and RL-172a: per roster span, its soak attempts (one when the receipt has no soak_attempts field, as on the v1/v1.1 pins) and the kind of each retried soak: slope or load where a receipt field names it, else 'kind not recorded' (receipt fields only; the RL-171 receipt names no kind). accepted is the last soak step's rc 0. A soak retried and then accepted is not a stop. Written by joulewise/cadence_looks/inclusion_34.py soak_retries(); decides nothing"
   },
   "legs": {
    "type": "array",

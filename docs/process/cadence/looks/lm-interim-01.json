@@ -85,7 +85,7 @@
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "353aed7150336e715e224f7579f5b8d917f84b6d10324f1eeec59b640ea7cfd3"
+        "sha256": "7a2063e75a01a5c14290f1594f82da2ef427993dfb4c99a3ac3052f817077c73"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -358,9 +358,9 @@
         "stage": "inclusion"
       },
       {
-        "basename": "runner_receipt.json soak_attempts; the soak child's own refusal line in soak.stderr.log or soak.a<n>.stderr.log, matched whole (inclusion_34.py soak_retries; no other line of the log is kept, and the soak's soak_row.json is not opened)",
+        "basename": "runner_receipt.json soak_attempts and its soak steps (inclusion_34.py soak_retries; no log and no soak file is opened)",
         "scope": "span",
-        "carries": "operational: soak attempts and the refusal kind",
+        "carries": "operational: soak attempts, their steps' rc, and the refusal kind where a receipt field names it",
         "stage": "inclusion"
       },
       {
@@ -491,7 +491,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "5ede9e5742c088d67e1821377d7f18e5a0425ca3c445013442d40e2b366eae4b"
+        "sha256": "d68ca576dfa9c01971c5a1fb0fc9a0466f6657d71adec33786e273440ea5a932"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -868,7 +868,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "5ede9e5742c088d67e1821377d7f18e5a0425ca3c445013442d40e2b366eae4b"
+          "sha256": "d68ca576dfa9c01971c5a1fb0fc9a0466f6657d71adec33786e273440ea5a932"
         },
         "cite": [
           "RL-149 §2.4",
@@ -884,7 +884,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "5ede9e5742c088d67e1821377d7f18e5a0425ca3c445013442d40e2b366eae4b"
+          "sha256": "d68ca576dfa9c01971c5a1fb0fc9a0466f6657d71adec33786e273440ea5a932"
         },
         "cite": [
           "RL-149 §2.4",
@@ -1097,7 +1097,7 @@
       },
       {
         "id": "soak_retries",
-        "what": "Stage 1, copied into the output by assemble: per roster span, its soak attempts, and in sum the spans with a retried soak, the retried soaks by refusal kind (slope or load), the spans accepted after a retry and the spans the soak stopped. A receipt with no soak_attempts field (the v1 and v1.1 pins) is one attempt. The receipt's refused text is the same for both kinds, so the kind is read from an operational receipt field where one records it, else from the soak child's own refusal line in that attempt's stderr log; where neither records it the count is under \"kind not recorded\". A soak retried and then accepted is not a stop: its span's legs are judged as any other span's, and the look never reads a soak stage's rc. Decides nothing.",
+        "what": "Stage 1, copied into the output by assemble: per roster span, its soak attempts, and in sum the spans with a retried soak, the retried soaks by refusal kind (slope or load), the spans accepted after a retry and the spans the soak stopped. Read from the receipt only: soak_attempts and its soak steps (soak, soak.a<n>). A receipt with no soak_attempts field (the v1 and v1.1 pins) is one attempt. The kind is read from a receipt field that names it; the RL-171 receipt has none (its refused text is the same for both kinds), so each retry counts under \"kind not recorded\" until a runner pin adds one. A soak retried and then accepted is not a stop: whether the soak was accepted is its last soak step's rc, its span's legs are judged as any other span's, and the look never reads the stage journal. Decides nothing.",
         "cite": [
           "RL-171 §2",
           "RL-172a"
