@@ -949,6 +949,8 @@ class SignedTransport(DeskFinalCase):
         ident = dict(plan_id="cq-df-s01-a1", queue_id=self.fx.queue_id, span_id=span["span_id"], attempt=1,
                      manifest_sha256=anchor)
         self.assertFalse(desk_final.counts_as_final(doc, **ident))          # a mock receipt never counts
+        self.assertTrue(desk_final.counts_as_final(doc, **ident, allow_mock=True))   # synthetic runs only
+        self.assertFalse(desk_final.counts_as_final({**doc, "mock": None}, **ident, allow_mock=True))
         self.assertTrue(desk_final.counts_as_final({**doc, "mock": False} | {"verdict_sha256": desk_final.canonical_sha256(
             {k: v for k, v in {**doc, "mock": False}.items() if k != "verdict_sha256"})}, **ident))
         self.assertFalse(desk_final.counts_as_final(doc, **{**ident, "manifest_sha256": "0" * 64}))

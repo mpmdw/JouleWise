@@ -1284,10 +1284,12 @@ def verify_verdict(doc):
     return doc.get("verdict_sha256") == canonical_sha256({k: v for k, v in doc.items() if k != "verdict_sha256"})
 
 
-def counts_as_final(doc, *, plan_id, queue_id, span_id, attempt, manifest_sha256):
+def counts_as_final(doc, *, plan_id, queue_id, span_id, attempt, manifest_sha256, allow_mock=False):
     """FORMAT section 4 item 1, as one function the controller can import: a verdict counts for k+2 only if
-    it verifies, is signed-transport and non-mock, names exactly this span and bundle, and is final."""
-    return (verify_verdict(doc) and doc.get("desk_final") is True and doc.get("mock") is False
+    it verifies, is signed-transport and non-mock, names exactly this span and bundle, and is final.
+    ``allow_mock`` is for synthetic runs only (the controller's synthetic switch); it admits ``mock: true``."""
+    return (verify_verdict(doc) and doc.get("desk_final") is True
+            and (doc.get("mock") is False or (allow_mock is True and doc.get("mock") is True))
             and (doc.get("transport") or {}).get("signed") is True
             and (doc.get("plan_id"), doc.get("queue_id"), doc.get("span_id"), doc.get("attempt"))
             == (plan_id, queue_id, span_id, attempt)

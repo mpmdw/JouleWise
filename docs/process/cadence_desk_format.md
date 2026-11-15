@@ -179,7 +179,8 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
 1. **k+2 (line 9).** Read the verdict with `desk_transport.read_verdict(repo, ref, allowed_signers=, plan_id=)`.
    It checks the signature by `cadence-desk`, the subject, both trailers, `verify_verdict`, the plan id and
    the summary hash. Then apply `desk_final.counts_as_final(doc, plan_id=, queue_id=, span_id=, attempt=,
-   manifest_sha256=<the transition record's>)`, which requires:
+   manifest_sha256=<the transition record's>)`. With `allow_mock=True`, which is for synthetic runs only, it
+   also admits `mock: true`. It requires:
    - `desk_final: true`;
    - `mock: false`;
    - `transport.signed: true`;
