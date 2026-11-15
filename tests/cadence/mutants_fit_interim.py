@@ -120,7 +120,7 @@ MUTANTS = [
     ("fan_mean_over_present_keys", RUN, 'if fans and all(x is not None for x in fans) else None',
      'if fans and any(x is not None for x in fans) and all(x is not None for x in fans[:1]) else None', [T_RUN]),
     ("cli_stage1_hash_not_checked", RUN, '    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:', '    if False:', [T_RUN]),
-    ("meter_left_rectangle", RUN, 'return sum(0.5 * (self._value(x) + self._value(y)) * (y - x) for x, y in zip(xs, xs[1:]))', 'return sum(self._value(x) * (y - x) for x, y in zip(xs, xs[1:]))', [T_RUN]),
+    ("meter_left_rectangle", RUN, 'tot += 0.5 * (self._at(lo, i) + self._at(hi, i)) * (hi - lo)', 'tot += self._at(lo, i) * (hi - lo)', [T_RUN]),
 ]
 
 

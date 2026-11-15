@@ -507,7 +507,7 @@
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "312d95bdd4cc60dfa6e3ea1ab814977939165ef8a4832992d7c467737b2926be"
+        "sha256": "a11e8b2fa7ac37592943e336aef40a4c379706d844648afb61f97759fe21e6e1"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",

@@ -163,8 +163,15 @@ def _flag(stage1, flag):
     return isinstance(node, dict) and node.get("to_research_lead") is True
 
 
-# The stages' exact code sets live in manifest.py (shared with the energy readers' pre-energy check).
-STAGE2_CODE, STAGE1_CODE, STEP3_CODE = lm.STAGE2_CODE, lm.STAGE1_CODE, lm.STEP3_CODE
+# The stages' exact code sets are defined in manifest.py (shared with the energy readers' pre-energy check). The
+# two literals below are read, not imported, by cadence_look_run.stage1_code_set (round 4); a test holds them
+# equal to manifest.py's until that reader takes manifest.STAGE1_CODE.
+_SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", "joulewise/cadence_looks/manifest.py",
+                "joulewise/cadence_looks/schema_check.py", "joulewise/axi_decode_config.py",
+                "joulewise/idle_admission.py", "joulewise/schemas.py", "joulewise/validation.py")
+STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
+                              "scripts/cadence_look_run.py")
+STAGE2_CODE, STEP3_CODE = lm.STAGE2_CODE, lm.STEP3_CODE
 STAGE_ONLY_DEPENDENCIES = lm.STAGE_ONLY_DEPENDENCIES
 
 
