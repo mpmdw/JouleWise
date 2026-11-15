@@ -15405,3 +15405,182 @@ RL-151 §4.3's sentence for the paper stands as written: blinding before release
 - RL-149 §3, line 4: replaced at the merge by §3's standing line.
 
 **Blind status.** Blind: no v4 outcome exists and no measurement, slot, transcript, energy or meter file was opened. This ruling rests on rulings, one seat report, the PR body, code and the protocol text. The tripwire clauses, the not-counted list and U4's print are fixed before any conditioned bundle exists.
+
+# RL-163. PR #774 at `9a7afb459`: the finalized manifest is committed as a digest only, and its body is restricted until release; `archive/derived/` is restricted in place except `exclusions.json`; three codes change place in tripwire 2 and `calibration.refit_cache_miss` is not counted; C1 carries four sentinels, as the signed code requires; `tokens: null` stays. dev-04's layout is accepted with one hand gate on its second span. Nothing in this ruling has to be in #774 before the merge
+
+Research lead (Fable 5.2), Sat Nov 14 19:01 PST 2026 (from `date`). Rules the six items the lead brought after Mythos re-attack 2 and the builder's fold-in at `9a7afb459`, and states the remaining path to the merge. RL-149 §3, RL-151 §4, RL-152 §3 and RL-162 stand except where a section below amends them.
+
+**Read.**
+- `/Volumes/JW-EXT/scratch/mythos-774-reattack2/REPORT.md`, in full.
+- The PR body of #774: the RL-162 table, the M1-M8 table, the summary.
+- `/Volumes/JW-EXT/scratch/desk-seal-builder-1414/check3-harvest-codes.txt` (code names and counts from conditionless B6 spans; no measurement value).
+- `/Volumes/JW-EXT/scratch/mythos-dev0405-delta/REPORT.md`, in full; RL-158 and RL-162 in the log.
+
+**Checked myself, at `9a7afb459`.**
+- **M2.** `harvest_offload._tree_rows` and `finalized_manifest`; the packet builder's `_finalized_manifest` (`align_v4_next_arm_packet.py:221-235`). The builder checks only the body's shape and canonical form and returns the digest. It reads no entry. `unpack` already refuses a body that does not hash to the digest it is given (`harvest_offload.py:796`).
+- **The packet builder is a strict artifact** (`v4_registration.py:57`), so a change to it must sit in the commit W1 is signed at.
+- **What the record commits from the harvest.** Only `archive/derived/exclusions.json` (runbook §3). `flags.jsonl` and `b6-acceptance.json` are neither committed nor printed, now that the harvest's stdout is under `archive/withheld/`. The desk reads `flags.jsonl` in memory (`align_pilot_session.py:398`).
+- **The emitters of the disputed codes** in `joulewise/b5/harvest.py` (`:2343-2349`, `:4236-4270`, `:4335-4343`, `:2689`) and `joulewise/controller.py:417-426` for `calibration.refit_cache_miss`.
+- **The DC row flags** in `joulewise/align/energy_residual.py:481-514`.
+- **Item 4.** `thermal_desk.py:717` and `:908-909`; the packet's `sentinels()` at `:866-874`; `align_v4_series.py:308-324`; protocol v4 `:444-447`, `:510-512`, `:1022-1036`.
+- **Item 5.** `v4_desk_seal.py:607-610` and the packet's `:427` and `:447`.
+
+**Not checked.**
+- The row-4 diff as a whole. I read what the six items needed. The row-4 read is owed at the final head (§7).
+- Whether a very short member alone can make a clock anchor unbounded (§3, item 1).
+- Whether `calibration.refit_cache_miss` is raised on v4 episodes at all. The B6 spans show it; the R1 and pilot read is still owed.
+- The dev-04 kit bytes. §6 rests on the Mythos seat's table.
+- I ran no test and no mutant.
+
+**Not done.** No SSH, no measurement file opened, no commit. The only file written is this one.
+
+---
+
+## 1. M2: commit the digest only. The manifest body is restricted until release
+
+**Ruled: option (a), in this form.**
+1. **The record commits `finalized_manifest` as its sha256 and nothing else.** No body, no entry count and no size reaches a committed or pushed file before release.
+2. **The body stays out of git until release.** It is written on the MBP as today, travels with the offload pack, and is kept beside the restored tree on the Air. It is restricted like `archive/withheld/`. Two copies are kept, one on each machine.
+3. **The packet builder stops reading the body.** It requires the digest. The check that the body is canonical and matches the digest is `unpack`'s on the Air, which exists. A record whose digest matches no manifest can never become final, and R17's k+2 bound then stops the arm. That fails closed.
+4. **`finalize-manifest` prints the digest only for a v4 series window.** The entry count leaves the print. Fault-only files change it, so with W1's benign rows printed it is a count of withheld faults.
+5. **At release the bodies are committed** at `records/$K/evidence/finalized_manifest.json`, and the release check verifies each against its record's digest. The public record then binds every tree, as R17 review F2 intended.
+6. **One code path:** every record after R1, not only C and T.
+
+**Why not (b), per-member sub-manifests.**
+- It still commits the sizes of everything outside the bundles: the reduced files, the meter captures, the withheld archive.
+- It changes the manifest schema that `pack` and `unpack` bind, which is custody code. Option (a) leaves `harvest_offload.py` untouched.
+- Nothing before release needs a per-file row in git. The Air has the body.
+
+**One thing the builder confirms and brings back if false.** That a window's final sources cannot be produced on the Air unless `unpack` passed against the committed digest. If some path reaches `final` without it, point 3 needs a committed unpack receipt, and I rule its form.
+
+**When.**
+- **In #774 before the merge: nothing.** The guard does not write or read this file.
+- **Before the commit W1 is signed at:** points 1 to 4 and 6, with a `DEVIATIONS.md` row (the record format of R17 review F2 changes), in the desk-seal follow-up PR. "Before W1's first record" is not early enough, because the packet builder is bound and the one re-sign must cover it.
+- **Before release:** point 5.
+- **Until the follow-up merges:** no record of a v4 series window is committed. The W1 receipt checklist carries that line.
+
+## 2. M1, second part: `archive/derived/` is restricted in place, except `exclusions.json`
+
+**Ruled.** For a v4 series window before release:
+- **Restricted like `archive/withheld/`, where they are:** `archive/derived/flags.jsonl`, `b6-flags.jsonl`, `b6-acceptance.json` (its `flag_counts` and the rest) and `window_flags.json`.
+- **Not restricted:** `exclusions.json` (committed by rule, RL-149 §3) and `roster.json` (plan content).
+- The lead adds the four files to the deny list every seat is given.
+
+**Why in place and not moved.**
+- The harvest writes them under its archive root, the export and `harvest_offload`'s normalisation read them there, and the desk reads `flags.jsonl` in memory. Moving them changes custody code.
+- They are the bundle in a smaller form, as `reduced/` is. The bundles sit in `runs/` beside them. Before release the blinding of files on disk is procedural (RL-151 §4.3). The guard's job is what the desk prints and what the record commits, and neither carries these files.
+
+**Two small additions, owed before the W1 receipt.**
+- **Window-scoped harvest codes become a fifth source of tripwire 2.** A flag with no `run_id` feeds no member today, so a window-level instrument fault in the harvest would be seen only at release. Its code name prints under the same counted rule. It names no member.
+- **The executing seat lists the keys of each `members_excluded` row** from its synthetic harvest. If a row carries an observed value beside the run id and codes, it comes to me.
+
+**When.** Nothing in #774 before the merge. The runbook's "open for the lead" lines are replaced in the follow-up.
+
+## 3. Tripwire 2: three codes change place, and the routine clause is widened
+
+**The rule's second clause now reads:** not counted are the codes the member can move, and the codes that are routine by registration **or by construction**. A code is routine by construction when it records the instrument's ordinary working and no fault.
+
+| # | Code | Ruling | Why |
+|---|---|---|---|
+| 1 | `member.anchor_not_bounded` | **Counted** (changed) | It is the clock anchor's status, not an energy value. I placed it by its name and was wrong. Whether a very short member can move it I did not establish; if it can, the cost is one code name with no member and no count |
+| 2 | `member.token_count_mismatch` | **Not counted** (changed) | It compares realized with registered token counts, and an early end of generation moves the realized ones. Prompt identity is X5's job, on its own path |
+| 3 | `battery.capture_pair_failed` | Counted, as ruled | After the swap to `battery.capture_pair_assist` what remains is charging, AC loss or missing evidence. It is also an exclusion, so the member's own row already prints it and the line does not count it twice |
+| 4 | `battery.member_span`, `battery.accumulator_excursion` | Not counted, as ruled | Both exclude the member (`harvest.py:2689`), so the placement decides nothing while they stay exclusions. Charging in a span also follows a member's own earlier draw |
+| 5 | `contention.request_overlap` | Not counted, as ruled | Routine by registration (R22-1). The builder's reading is right: that is the only ground |
+| 6 | `idle.*`, `member.admission_aborted` | Not counted, as ruled; the group is renamed | They are raised before the member runs, so "the member moves it" was the wrong ground. They are routine scheduler outcomes set by the earlier members' heat and the host. The group is "admission and waits: routine by construction" |
+| 7 | `calibration.refit_cache_miss` | **Not counted** (new) | The emitter calls it "a record of time spent, not of the bound": the member refit the calibration and verified the physics as before. It is on every member of every B6 span. Routine by construction |
+
+**One condition on row 7.** The owed read of the R1 slot session and the counted pilot reports whether the code is on all members of a session or on none. If it is on some and not others, it comes back to me before the W1 receipt.
+
+**The DC row flags (the builder's check 2): accepted with two changes.**
+- **`multiple_episode_ids` is counted.** One member's rows carrying two episode ids is a join fault. The member's tokens do not cause it.
+- **The window-level fit flags print once per window, as code names, in W1 and in C and T.** They are the same on every row and come from the training fit, so they name no member. Not counting them per member is right, but in C and T every DC row is sealed and a degenerate fit would otherwise be seen only at release. `excluded_turn_rows=` prints without its number in C and T.
+- The other placements stand.
+
+**Tests.** Each changed code gets one planted case in the builder's two §2 tests. The window-level DC line gets one test in C scope.
+
+**When.** The follow-up PR, before the W1 receipt. Not a merge gate: these change what a line says, not what is withheld.
+
+## 4. C1 carries four sentinels
+
+**Ruled: C1 is materialised with `--extra-sentinels 2`, and no code changes.**
+- The signed desk writes W1's U4 as `inconclusive`, and the signed packet builder requires the two R20 sentinels after any inconclusive U4. That is the registered behaviour.
+- The protocol's words allow it. Line 446 says U4 is unevaluable in W1, and R20's "(never W1)" bars W1 from carrying the sentinels. Neither says that W1 cannot trigger them.
+- The other reading needs a change to two strict artifacts to save at most 48 minutes, once. A U4 over two windows would be inconclusive on its own interval, so C2 carries four either way.
+- It errs toward more diagnostics. The two members sit at ordinals 23 and 24, after every counted member, and count toward nothing.
+
+**Owed.**
+- **Lead:** C1's kit and sizing use the 62,400 s ceiling.
+- **Follow-up PR:** one clarification row in `DEVIATIONS.md` stating this reading of line 446 against R20.
+- **The U4 producer** (RL-162 §5) keeps W1's status string. Its design still comes to me before it is built.
+
+RL-162 §5 item 4 stands and is now specific: until the producer exists, every C and T window carries four.
+
+## 5. M8: `tokens: null` stays. Confirmed
+
+- The packet's X5 line requires a token record on every member that is not excluded (`:447`). A digest in place of `null` would let an incomplete member pass. That would change an eligibility decision, which this PR must not do.
+- **What it shows is small.** A member with no token record must be excluded or the packet refuses the arm, and a refused arm comes to me. So `null` appears only on members whose exclusion is already printed. It adds that the excluded member has no complete token record.
+- No report lists the null-token members beyond the sealed record itself.
+
+## 6. dev-04's second span (Mythos dev-04/05 seat, F3): the layout is accepted, with one hand gate
+
+**The layout and the seed stand.**
+- The draw follows the registered law (RL-158 Q7). Swapping it for a nicer split would be a choice made after seeing the draw.
+- Shape and span are confounded inside dev-04 only. dev-03 and dev-05 split the other way (dev-05 has four consumers in its first span), and the fit pools the blocks. No table reports a shape effect from dev-04 alone.
+- The kit bytes do not change, so the pin and the seat's ADMIT hold.
+
+**The gate, as the seat proposes.** dev-04's second span arms on the lead's record if L005 released its G0. If L005 timed out at G0, the span does not arm, Q1's print comes to me, and the machine goes to the filler ladder. This is RL-158 §2's pilot gate applied to the same signal.
+
+**The exposures I accept.**
+- **A missing L007 capture stops the span** (RL-158 Q3). Its re-run starts on a span-shaped leg, which captures, and the block ends with five consumers of nine warm legs.
+- **Five consumers timing out inside the span** costs at most 100 minutes and their legs are excluded. No stop is added: that would be new code in a pinned file, and nobody reads an armed span.
+- **A lost second span** leaves one released consumer, which is under RL-158 Q6's four and comes to me by that rule.
+
+The seat's F1 fallback case (dev-03 on v1.1a) is not ruled here. It comes to me only if that fallback is taken.
+
+## 7. The remaining path to merge #774
+
+**The head stays `9a7afb459` unless the executing seat forces a commit.** If it does, the builder may put §3's code changes in the same commit. §1's code goes in the follow-up either way.
+
+| Row | State at 19:01 | What passes it |
+|---|---|---|
+| 2, the executing re-attack seat | Not started on `9a7afb459` | ADMIT from a seat that did not write the code and that runs it. Its list is below |
+| 3, CI | Running on `9a7afb459`: 6 pass, 14 pending | Green apart from the registration class (`test_v4_executed_closure`, `test_v4_dynamic_closure`), each failing for its stated reason only (RL-151 §4.5). `test_r1_runtime_e2e.test_term_reaches_the_runtime_which_closes_its_custody_before_exit` passes, or fails the same way on the base's own CI |
+| 4, my diff read | Not done | Once, at the final head, after row 2: `git diff 620e3addc ea9b54a03` plus `git diff 18fb3746f <final head>` |
+| Hash table | In the PR body | Refreshed after the last commit. Not a gate |
+| Draft state | Draft | Marked ready when rows 2 to 4 pass, then merged |
+
+**The executing seat's list.**
+1. **M1 by execution.** Run the guarded desk with the harvest on, so that the real `harvest_b6_session` runs, on synthetic W1 and C sessions with planted energies, token counts and durations. List every file under the session root.
+   - **Pass:** no `export/` and no `staging/harvest.*` outside `archive/withheld/`, and no planted value in any file outside `archive/withheld/`, `runs/` and §2's four restricted files.
+   - A planted value anywhere else is a finding.
+2. **Finality with the export withheld.** The harvest exits 0 or 6, and `final`, `light_triage.final_adjudication_error` and the packet's `full_desk_gate` pass on the sealed record.
+3. **N1 to N4 replayed by running code** (owed since RL-152 §3.5 row 2), and M3's line reading `none` on a runner-produced clean episode.
+4. **§2's key list** for `members_excluded`.
+5. It runs on a host with no live generator, reader or real run.
+
+**The re-sign.** Not a merge gate, and none in the interim (RL-151 §4.5). One regeneration of the closure at the commit W1 is signed at, after the follow-up merges. It then covers #774's strict artifacts and the follow-up's (`v4_desk_seal.py`, `align_v4_next_arm_packet.py`, `DEVIATIONS.md`, and whatever the U4 producer touches if it lands first). The PR body's blob table is what the regenerated closure is checked against.
+
+**The desk-seal follow-up PR now holds:** §1 points 1 to 4 and 6; §2's runbook lines and the fifth source; §3's table, the two DC changes and tests; §4's row. Its gate is as RL-162 §3 set it: one attack seat that did not write it, my diff read, CI. It merges before the commit W1 is signed at.
+
+## 8. What comes back to me
+
+1. The executing seat's report and the final head.
+2. §1's confirmation that `final` cannot be reached without `unpack` against the committed digest.
+3. §2's key list, if a row carries an observed value.
+4. §3 row 7's all-or-none read from the R1 and pilot sessions.
+5. The follow-up PR's diff.
+6. dev-04: L005's Q1 print, only if it timed out at G0.
+
+---
+
+**Owner.** #774 builder: the follow-up PR (§1, §2, §3, §4's row), §1's confirmation, the owed R1 and pilot code read. Lead: the executing seat, the deny list (§2's four files and the manifest body), "no v4 series record before the follow-up" on the W1 receipt checklist, C1 at four sentinels, dev-04's L005 gate in its READY row. Research lead: row 4 and section 8.
+**Gate.** #774 waits for rows 2, 3 and 4 only. The W1 receipt waits for the follow-up. dev-04's second span waits for L005's release. Nothing is armed by this ruling.
+**Amends.**
+- RL-162 §2: `member.anchor_not_bounded` is counted; `member.token_count_mismatch`, `calibration.refit_cache_miss` and the runner's three bookkeeping codes (M3, confirmed) are not counted; the routine clause covers "by construction"; a fifth source (window-scoped harvest codes); `multiple_episode_ids` is counted; the window-level DC fit flags print once per window.
+- RL-162 §4: the restricted list gains `archive/derived/` (four files) and the finalized manifest's body and entry count.
+- RL-162 §5 item 4: C1 carries four sentinels, stated.
+- The R17 review F2 record format (runbook §3): `finalized_manifest` is a digest before release, and the body is committed at release.
+- RL-158 §3: dev-04's second span gains the L005 gate.
+
+**Blind status.** Blind: no v4 outcome exists, and no measurement, slot, transcript, energy, power or meter file was opened. This ruling rests on rulings, two seat reports, the PR body, code, the protocol text and a list of code names with counts from conditionless spans. The code placements, the manifest form and C1's roster are fixed before any conditioned bundle exists.
