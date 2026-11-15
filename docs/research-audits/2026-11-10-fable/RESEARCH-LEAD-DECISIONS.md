@@ -16008,3 +16008,153 @@ Both builders implement exactly this column. "Edges" are the interface's `edge_l
 **Amends.** RL-166 Q2: n and c are defined on the segment's edges, as R-2 and R-3 give them.
 
 **Blind status.** Blind. Nothing measured was opened; all nine are conventions on counts, stamps and state.
+
+# RL-167. One batch: the interim fit's remaining readings (R-10 to R-21) and the twin's register, with one reading for every point where the two implementations differ; the hp-01 table leaves this look; the nine questions on the qualification pin (PR #794), with F3 retired; dev-03 has five consumers, and the dev-04 gate reads "at least four of its five"
+
+Research lead (Fable 5.2), Sat Nov 14 21:22 PST 2026 (from `date`). RL-149 to RL-166a stand except where "Amends" says otherwise.
+
+**Read.**
+- `INTERFACE.md` in scratch, all of it, including §6.2 to R-21 and §7.
+- The Sol twin's `CHOICES.md`, all 21 items and its R-1 to R-9 table.
+- `fit_interim.py` at `acea4a919` (branch `align/2026-11-14-fit-interim`): `start_reading`, `first_off`, `unobserved_at`, `censored_normal_fit`, the onset functions, `stage1`, `_design_row`, `_ols`, `_channel`, `stage2`.
+- The qualification builder's `README.md`, `pr-body.md` and `CAP.md`.
+- My RL-149 §1.3, RL-154 §2.2 and §3, RL-158 Q4 and Q6, RL-161 additions 1 and 2, RL-163 §6, RL-165 §3 to §8, RL-166, RL-166a.
+
+**Checked myself.**
+- **The qual-03 seed.** I ran `gen-legs --law sha256-qual-v1` in the `qual-pin` worktree (`a2a33757b`) for seeds 22, 23 and 24 to 28. Seeds 22, 23 and 28 reproduce the three kits' layouts. Seed 25 fails RL-165 §8.1's own rule (the 3,724 pair never runs short-first). Seeds 24, 26 and 27 pass that rule and fail only the builder's added one (the 3,151 pair is in the first span in all three blocks).
+- **The config label.** `d_n_chunk_status` appears in no Python file outside tests except one docstring (`r1_runtime.py:951`). The diff of `r1_runtime.json` between `2d347f721` and `61e5625a5` is that one line.
+- **The analyst's code against RL-154.** Three places differ from RL-154 §2.2 and §3 (rows 4 to 6 of §2).
+
+**Not checked.**
+- The twin's code. I read its register only.
+- The KM003C stream's header and trailer fields (R-20 carries a condition for that reason).
+- Whether an own-shaped first leg's G0 is the same code path as a capture's (question 2 carries a condition).
+- Anything in #794 the Mythos and Sol seats are reviewing: the merge's class, the validator, the mocks, CI.
+- No SSH. No measurement, energy, power, meter, journal or custody file was opened. I ran no test.
+
+**Not done.** No commit, push or comment. The only file written is this one.
+
+---
+
+## 1. Part A: R-10 to R-21
+
+| # | Ruling | The rule, exact |
+|---|---|---|
+| R-10 | **Accepted** | CR1: G/(G − 1) · (n − 1)/(n − k), with G legs, n segments, k fitted columns. Both implementations already agree |
+| R-11 | **Accepted, two additions** | Residual = measured − predicted, leave-one-day-out, in joules. Bias = mean over leg pairs of (long/SD_long − short/SD_short). Interval = bias ± t(0.95, D − 1) · SD(day means, ddof 1)/√D. **Added:** with fewer than 3 pairs, or an SD not above 1e-12 J, `estimate` and `ci90` are null. With fewer than 2 days `ci90` is null. `n_days` is always the number of days among the pairs |
+| R-12 | **Replaced** | See §2 row 7. A fold does not reapply the 12-on-3-days rule |
+| R-13 | **Accepted** | Pooled over all held-out uncensored legs; per-day values print. The prediction in the error is the clipped τ̂ |
+| R-14 | **Accepted, and one is named** | Both print. **`hot_rms_over_legs` is the "frozen holdout relative error" that freeze 2 takes for SD_j** (RL-149 §1.3 says "on the member's hot exposure"). `leg.rms_over_legs` is a print |
+| R-15 | **Accepted** | Rates: included type-A development legs with a turn. Medians and ranges: legs in the energy fit |
+| R-16 | **Accepted** | Left out when the unobserved time is before the first off-state reading, or there is no off-state reading. A leg whose start state is unobserved is left out as well (§2 row 6) |
+| R-17 | **Accepted in part** | A counted day has at least three legs in the energy fit with a hot block. `max_abs` is over counted days. **`pooled` is over every hot block on every day** (§2 row 14) |
+| R-18 | **Accepted** | (Σ predicted − Σ measured)/Σ measured. A sum of measured energy at or under zero refuses |
+| R-19 | **Accepted, with the free parts named** | Olsen's form, ML σ. The start point, column scaling, step damping and iteration cap are each implementation's own. What is compared is the optimum. A main fit that does not converge is §2 row 8 |
+| R-20 | **Accepted, with a condition** | DC-in is the meter's Vbus × Ibus and nothing else. A battery term would be a second instrument. The single header offset is accepted for this look. **Condition:** the cold seat (item 8) reports whether the stream carries a second pair of raw and wall stamps (trailer or periodic). If it does, stage 1 prints each span's end-of-span offset less its header offset. That is a clock number, not energy. More than 0.1 s on any span comes to me before stage 2. If no second pair exists, the output says `single_offset` and R-20 stands |
+| R-21 | **Accepted** | Type T only by the spec's `leg_type`. A roster leg with no `leg_record.json` is named with all six rules false and no turn |
+
+---
+
+## 2. Part A: the two implementations, point by point
+
+"Change" names who must edit code. Rows not listed in §2.1 are the only differences I found.
+
+| # | Point | Analyst (`acea4a919`) | Sol twin | Ruling | Change |
+|---|---|---|---|---|---|
+| 1 | Block 0's n | 255 | 256 | 255 (RL-166a R-2) | Sol |
+| 2 | Block 0's c | P + 128 | P + 127.5 | P + 128 (RL-166a R-3) | Sol |
+| 3 | A journal reading with a named off state on a stale stamp | Cuts | Does not cut (asks `pm_fresh`) | **Cuts.** Freshness is needed to claim the state, never to leave it (RL-154 §2.2) | Sol |
+| 4 | What counts against the 2 s gap | Any journal reading with `pm_fresh` | Fresh journal readings with known level and state, and native rows | **A journal reading that is fresh state only:** level an integer, `pm_fresh` true, state present and not `Unknown` (RL-154 §3). **Native rows never count** (RL-154 §2.2 item 4) | Both |
+| 5 | The gap rule's first anchor when the carry-in is not fresh state | The first fresh reading in the turn | The turn's start | **The turn's start** (RL-154 finding 1). Anchors: the carry-in's own time if it is fresh state, else `turn_start_s`; then each fresh-state reading in (`turn_start_s`, `last_token_s`]; then `last_token_s`. Any step over 2 s fires. `unobserved_at_s` = the earlier anchor less the start, floored at 0 | Analyst |
+| 6 | Start state on a fresh stamp with `Unknown` or missing state, or a level that is not an integer | `start_out_of_state`, so τ̂ = 0 | `start_state_unobserved` | **`start_state_unobserved`** (RL-154 §3). `start_out_of_state` needs a fresh reading with level above 0 or a named state other than Nominal. An unobserved-start leg stays in the energy fit if its sensors are valid, takes τ̂ from the linear predictor, and is left out of the onset fit under `left_out_state_unobserved` | Analyst |
+| 7 | The onset model inside a fold (R-12) | Reapplies 12 uncensored on 3 days; else the fold drops δ | No count rule; a fold that cannot be fitted refuses the whole result | **No 12-on-3 rule in a fold.** A fold fits when its training legs hold at least 6 uncensored onsets and the fit converges. Otherwise that fold drops δ, is listed in both lists, and gives no onset error. The look does not refuse | Both |
+| 8 | The main onset fit passes 12-on-3 and does not converge | `estimable`, `converged: false`, coefficients used | Refuses | **`not_estimable` with `converged: false`,** coefficients null, δ dropped, the cut at 116 s. The lead tells me | Both |
+| 9 | Sign of `count_only_cut.offset_s` | +2 · RMS | −2 · RMS | **Positive.** The cut is τ̂ − `offset_s`, not clipped in the file | Sol |
+| 10 | Onset estimable and no held-out uncensored leg | `fixed_116_s` | Not stated | `fixed_116_s`, status stays `estimable`, `rms_s` null | Sol confirms |
+| 11 | `heldout_censored_below_tau` | τ̂ < the censoring time | The same | Confirmed: Q4's prose, strict | None |
+| 12 | Hot `pooled` | Counted days only | Every hot block | **Every hot block on every day.** The three-leg guard is for a single day's ratio; a pooled sum does not need it | Analyst |
+| 13 | SD population for a prefix length | Legs that have that prefix, for the long and the short SD | The same | **That.** RL-166a R-8's "all legs in the energy fit" is restated as "all legs in the energy fit that have that prefix". On campaign legs it is the same set | None |
+| 14 | Too few pairs or days for a prefix | Under 3 pairs: null. Under 2 days: no interval | Under 2: refuses | R-11's addition | Sol; analyst sets `n_days` |
+| 15 | A leg whose N is not a multiple of 256 | The leg is its segments | Refuses | **The leg is its segments.** No refusal at this look. `lm-qual-01` must add a final partial block for the 3,724 and 3,151 legs; that comes to me with its draft | Sol |
+| 16 | Onset in the marked-spans print | Full-data onset coefficients; folds by the 12-on-3 rule | Refitted on the remaining legs, no count rule | **Refitted on the remaining legs** under row 7's rule, for the main sensitivity fit and each of its folds. Columns as in the main look. A fit that fails gives nulls. The marks are about the soak reference, which is an onset predictor | Analyst |
+| 17 | No marked span in the fit | Both values null | Copies the main result | **Null.** Nothing was refitted. `n_legs_without` = `n_legs` | Sol |
+| 18 | Per-cell rates of an empty cell | null | 0.0 | **null,** `n_legs` 0. The interface page says `float | null` | Sol; page |
+| 19 | `fit_days` and the days tripwire | Days of legs in the energy fit | Days of included development A legs | **Days of legs in the energy fit.** They are the leave-one-out days | Sol |
+| 20 | `by_cell`, `by_g0_role`, `by_day` | An integer count of energy-fit legs | `{named, included}`; `by_day` over named legs | **The analyst's.** The own-reference key is `"null"` | Sol; analyst's key |
+| 21 | hp-01 tripwire count | Included legs of any type | Included type A | **Included type A** | Analyst |
+| 22 | Level E's keys | Energy-fit and `hp_describe` legs | The same | **Energy-fit legs only** (§3) | Both, and the generator |
+| 23 | `model_sha256`; refusals beyond interface §5; how D is hashed in memory | Its own | Its own | **Not compared in item 7.** The twin must not refuse a file the production fit accepts | None |
+
+### 2.1 Confirmed equal, and now the reading
+
+- **Start validity:** the last journal row at or before the start, at most 2 s old, `pm_fresh`, all three sensors and the soak reference present. No search backward.
+- **Likelihood:** an untruncated normal; an observed onset uses the density; only predictions are clipped at 0.
+- **Energy fit:** no intercept, no cell effect, no weights. A rank-deficient design refuses, in the main fit and in a fold.
+- **No-heat lines:** the five count columns only, refitted per fold.
+- **Signs:** printed errors are predicted less measured; prefix residuals are measured less predicted.
+- **Leg RMS:** root mean square of the per-leg signed relative errors. The hot RMS is over every leg with a hot block.
+- **Verdict:** `max_abs` at or under 0.02; fewer than three counted days is `not_evaluable`; none gives null.
+- **`dev_included`:** included development type-A legs with a turn. The invalid-start fraction is over those legs and trips above 10 %, not at it. An absent hp-01 is null and does not trip.
+- **`extrapolated`:** a start value strictly outside the calibrated range.
+- **`channels.*.qualified`:** `not_run` at this look.
+- **Reason precedence:** type T, excluded, describe-only, missing start.
+
+---
+
+## 3. The hp-01 table is out of this look
+
+**No code for it is written now, and stage 2 opens no hp-01 energy.**
+- RL-166 Q9 already puts the table after freeze 2, as its own disclosed read. The output schema has no field for it.
+- It needs in-turn clock data. Level R carries none by design, and adding it would put a clock reader inside the look that freezes the fit.
+- **So `hp_describe` legs leave level E** (§2 row 22). The flag and the hp-01 tripwire stay in stage 1 as counts.
+- **Later:** look `lm-hp-01`, with its own manifest, committed before any hp-01 energy or in-turn clock is opened. It takes freeze 2's files by hash and can change none of them. The analyst seat (Opus) builds it after freeze 2; a Mythos seat reviews it cold; RL-166 Q16's output rule applies. The campaign has no conditions, so nothing is unblinded by it. The draft manifest comes to me. It is not on the path to qualification.
+
+---
+
+## 4. Part B: the nine questions on PR #794
+
+1. **`config_sha256` differs between development and qualification legs: accepted and disclosed.** The changed line is a label that no code reads (checked above). `lm-qual-01` does not require the two hashes to be equal. It prints both and names the line.
+2. **Each span's first leg is own-shaped: accepted.** It meets RL-165 §8.1 (the first leg captures) and RL-161 addition 1 (the cut lands on an own-shaped leg). A re-run that starts mid-span starts on a span-shaped leg, which captures (RL-163 §6). **Condition:** the #794 cold seat confirms that an own-shaped first leg's G0 runs the same code as a capture's and that the mocks' five consumers read it.
+3. **qual-03's seed is 2026111428: accepted.** The rule is "the first seed from 24 upward whose layout, with qual-01 and qual-02, gives each pair both orders and both spans". The second half is the builder's addition and I adopt it: without it the 3,151 pair would sit in the first span in all three blocks, so order and heat history could not be told apart. The rule reads layouts only and is fixed before any qualification leg exists. The kit's text states it. Seeds 24 to 27 are retired.
+4. **The M-slot legs are type A with no marker: accepted.** They are type A at 19,458 in every table. A marker would make a class with no rule attached. Each kit then has two type-A legs at 2,000, two at 10,000 and four at 19,458; `lm-qual-01` prints by cell.
+5. **A type-L pair with one leg excluded.** Each leg stands on its own six rules. The pair print uses pairs with both legs included. An incomplete pair is counted and named. Its surviving leg stays in the per-leg prints under type L and joins no type-A row. No leg is re-run to complete a pair. A ratio with fewer than two complete pairs over the three blocks prints `not_evaluable`. This goes into `lm-qual-01`; the kits do not change.
+6. **No decode-cap or leg-type column on the desk: accepted.** The desk does not change. The cap is in the leg record (`spec.decode_tokens`, `result.decode_cap`), and rule 1 is already judged against the leg's own cap. Leg type and pair are read from the kit by its sha256. The lead's arm item lists the two short legs of each span, so a desk reader does not take 3,151 tokens for a fault.
+7. **F3 is retired.** It now needs a new runner and a copy of the launcher's LaunchAgent procedure on the measurement host. Its product (soak settle by hour, drift, the fan floor) is already in every campaign span's own soak journal. The builder's two questions are not answered. The ladder's floor is F2, then `DESIGN_QUEUE_LOW`.
+8. **The arm checklist runs from the kit's own pinned worktree: yes, for every kit.** The checklist and `plan` read the driver's batch window from the worktree, and the pins differ (11:45 to 13:15 on the v1.1 and v1.1a pins, 02:00 to 02:35 on the qualification pin). The arm item records the worktree's HEAD beside the kit's frozen commit. A mismatch does not arm.
+9. **dev-03-s02a stays its own queue, `cq-cl-dev-03a`.** It is another kit on another pin and worktree. It is already validated, and taking it then needs no edit to a queue on the night of a timeout. `cq-cl-dev-03` holds the pilot only (RL-161), so the v1.1 remainder is simply never written. Line 9 counts spans in machine order across queues (RL-165 §6). The lead records the withdrawal in the ledger when s02a arms.
+
+---
+
+## 5. Part C: dev-03 has five consumers
+
+**Restated: "if dev-03 ended with at least four of its five consumers released".** The threshold of four stands.
+- RL-165 §4's "six" counted span-shaped legs. L004 heads a span under both layouts and captures. RL-158 Q4 already says five.
+- Four is RL-158 Q6's own number for a block that comes to me.
+- **The reason sentence is corrected.** The worst case that still arms is two timeouts among six (one in dev-03's remainder, and L005), not "one among seven". I accept it: the exposure is RL-163 §6's 100 minutes, and an L002 timeout has already stopped everything span-shaped.
+- If dev-03's remainder ran on v1.1a for any reason, dev-03 has one consumer. That is under four, so dev-04's second span does not arm.
+
+---
+
+**Owner.**
+- **Lead:** this ruling to both fit builders tonight; the interface page (rows 18, 22; §6.1 and §6.2 on this table); item 7 on code that carries §1 and §2; question 6's line in each qualification arm item; question 8's HEAD line in every arm item; question 9's ledger record; "five" in the dev-04 items; dispatching me for F2's page.
+- **Analyst seat (Opus):** rows 4, 5, 6, 7, 8, 12, 14 (`n_days`), 16, 20 (the key), 21, 22; R-20's print if the cold seat finds a second stamp pair; the generator for row 22.
+- **Sol twin:** rows 1, 2, 3, 4, 7, 8, 9, 10, 14, 15, 17, 18, 19, 20, 22.
+- **Qualification builder:** the seed rule's sentence in the kit text; nothing else. F3 is off its list.
+- **#794 cold seat (Mythos):** question 2's condition.
+- **Item 8's cold seat:** R-20's condition.
+- **Research lead:** F2's page; `lm-qual-01`'s partial block and question 5's print; `lm-hp-01`'s draft; a non-converged main onset fit.
+
+**Gate.** Item 7's agreement test runs only on two implementations that carry §1 and §2. Stage 2 waits for R-20's condition. qual-01 waits for question 2's condition with the rest of RL-165 §8.1.
+
+**Amends.**
+- RL-166a R-8: the SD population is the legs that have that prefix.
+- RL-166 Q3: `pooled` is over every hot block; the SD_j error is the hot-stretch RMS.
+- RL-166 Q4: the 12-on-3 rule gates the full fit only; a main fit that does not converge is `not_estimable`.
+- RL-166 Q9 and interface §2: stage 2 opens no hp-01 energy; the table is `lm-hp-01`.
+- RL-165 §4: "four of its five consumers", and the reason sentence.
+- RL-165 §8.1: the qual-03 seed rule gains "each pair in both spans".
+- RL-165 §8.3 and §8.4, RL-155a §2: F3 is retired.
+
+**Blind status.** Blind. Nothing measured was opened. Every reading in §1 and §2 is a convention on counts, stamps, state and arithmetic, fixed before stage 1 runs on any real leg. The seed rule reads kit layouts only.
+
+**For Ed, plainly.** "Two programs compute the same heat fit independently, and they must agree before the real one runs. I compared them point by point and found about twenty places where they would have disagreed. Each now has one answer. Three of those were places where the main program had drifted from an earlier ruling about what counts as 'the laptop's state was not observed'. The kits for the test runs later in the week are accepted as built. One low-value filler run is cancelled, because building it safely had become more work than it was worth."
