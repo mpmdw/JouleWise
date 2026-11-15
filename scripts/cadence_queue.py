@@ -110,13 +110,53 @@ def cmd_gen_legs(args):
     return 0
 
 
+def qual_roster_problems(doc, kits_root):
+    """RL-165 section 8.1 on a ``sha256-qual-v1`` kit's queued rosters (#794 cold seat F2): a span lies inside
+    one of the law's spans, does not split a type-L pair, and does not start on a pair member (which would make
+    that leg the span's capture). A re-run that needs any of these goes to the research lead, not to a queue."""
+    problems = []
+    for span in doc.get("spans", []):
+        path = (span.get("kit") or {}).get("path")
+        if not isinstance(path, str) or not (Path(kits_root) / path).is_file():
+            continue
+        kit, _ = kitmod.load_kit(Path(kits_root) / path)
+        law = kit.get("seed_law") or {}
+        if law.get("method") != kit_v11.QUAL_LAW:
+            continue
+        per = len(kit["legs"]) // law["spans"]
+        index = {leg["leg_id"]: i for i, leg in enumerate(kit["legs"])}
+        roster = [index.get(leg_id) for leg_id in span.get("legs", [])]
+        sid = span.get("span_id")
+        if not roster or None in roster:
+            continue   # validate_queue names unknown legs
+        if len({i // per for i in roster}) != 1:
+            problems.append(f"{sid}: roster crosses the law's spans of {per} (sha256-qual-v1; RL-165 section 8.1)")
+        pairs = {}
+        for leg in kit["legs"]:
+            if leg.get("pair"):
+                pairs.setdefault(leg["pair"], set()).add(leg["leg_id"])
+        names = set(span.get("legs", []))
+        for pair, members in sorted(pairs.items()):
+            if 0 < len(members & names) < len(members):
+                problems.append(f"{sid}: roster splits type-L pair {pair} ({', '.join(sorted(members))}); "
+                                "the research lead rules a re-run that splits a pair")
+        first = kit["legs"][roster[0]]
+        if first.get("leg_type") != "A" or first.get("pair") is not None:
+            problems.append(f"{sid}: roster starts on {first['leg_id']}, a type-L pair member; a span's first leg "
+                            "is type A (RL-165 section 8.1)")
+    return problems
+
+
 def cmd_validate_queue(args):
     try:
         doc = q.load_queue(args.queue, args.kits_root)
+        problems = qual_roster_problems(doc, args.kits_root)
     except q.QueueError as error:
         return _fail(error.problems)
     except (OSError, ValueError, kitmod.KitError) as error:
         return _fail([str(error)])
+    if problems:
+        return _fail(problems)
     print(json.dumps({"ok": True, "queue_id": doc["queue_id"], "spans": len(doc["spans"]),
                       "plan_ids": [q.plan_id(s) for s in doc["spans"]]}, sort_keys=True))
     return 0

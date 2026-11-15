@@ -4,6 +4,7 @@ or energy."""
 from __future__ import annotations
 
 import copy
+import hashlib
 from datetime import datetime
 import io
 import json
@@ -255,8 +256,11 @@ class CommittedQualKits(unittest.TestCase):
             QualLaw.check_design(self, kit["legs"])
             self.assertEqual(set(kit["frozen"]["paths"]), set(dev03["frozen"]["paths"]))
             self.assertEqual(kitmod.deny_scan(kit), [])
-            for key in ("runner", "model", "leg_defaults", "span_template", "checklist", "looks", "desk", "ruling"):
+            for key in ("runner", "model", "leg_defaults", "checklist", "looks", "desk", "ruling"):
                 self.assertEqual(kit[key], dev03[key], key)
+            # dev-03's template with spans of at most six legs (#794 cold seat F2).
+            self.assertEqual(kit["span_template"], {**dev03["span_template"], "legs_per_span": 6})
+            self.assertIn("2026111424 to 2026111427 are retired", kit["title"])    # RL-167 Part B Q3
             # The stop rules are dev-03's; the notes add the type-L budgets only.
             self.assertEqual({k: v for k, v in kit["stop_rules"].items() if k != "notes"},
                              {k: v for k, v in dev03["stop_rules"].items() if k != "notes"})
@@ -299,6 +303,54 @@ class CommittedQualKits(unittest.TestCase):
             if have.returncode:
                 self.skipTest("frozen commit not in this clone")
             self.assertEqual(kitmod.verify_frozen(kit, runner.ROOT), [])
+
+
+class QualQueues(unittest.TestCase):
+    """#794 cold seat F1 and F2: a held queue does not arm; validate-queue binds rosters to the law's spans."""
+
+    def queue(self, rosters, halt=None):
+        kit_path = "docs/process/cadence/kits/cl-qual-01.v1.1.json"
+        sha = hashlib.sha256((runner.ROOT / kit_path).read_bytes()).hexdigest()
+        return {"schema": "joulewise.cadence_queue.v1", "queue_id": "cq-cl-qual-01", "expires_at": "2026-11-22T23:59:00-08:00",
+                "halt": halt, "standing_notice": None,
+                "spans": [{"seq": i, "span_id": f"qual-01-s{i:02d}", "block_id": "qual-01",
+                           "kit": {"path": kit_path, "sha256": sha}, "legs": legs, "attempt": 1,
+                           "not_before": "2026-11-19", "rerun_of": None} for i, legs in enumerate(rosters, 1)]}
+
+    def validate(self, doc):
+        if not (KITS / "cl-qual-01.v1.1.json").exists():
+            self.skipTest("cl-qual-01 not on this branch")
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            path = Path(td) / "queue.json"
+            path.write_text(json.dumps(doc))
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = cadence_queue.main(["validate-queue", str(path), "--kits-root", str(runner.ROOT)])
+            return code, out.getvalue()
+
+    def test_law_spans_validate_and_cuts_refuse(self):
+        ids = ["L%03d" % i for i in range(1, 13)]
+        code, out = self.validate(self.queue([ids[:6], ids[6:]]))
+        self.assertEqual(code, 0, out)
+        for rosters, fragment in (([ids[:4], ids[4:6]], "splits type-L pair p2"),
+                                  ([ids[:3], ids[3:6]], "starts on L004"),
+                                  ([ids[3:9]], "crosses the law's spans"),
+                                  ([ids], "12 > span_template.legs_per_span")):   # legs_per_span 6 (frozen queue.py)
+            with self.subTest(rosters=rosters):
+                code, out = self.validate(self.queue(rosters))
+                self.assertEqual(code, 1)
+                self.assertIn(fragment, out)
+
+    def test_a_held_queue_does_not_arm(self):
+        from joulewise.cadence import queue as q
+        ids = ["L%03d" % i for i in range(1, 13)]
+        held = self.queue([ids[:6], ids[6:]], halt={"reason": "HOLD_FOR_FIT_FREEZE", "by": "builder",
+                                                   "at": "2026-11-14T21:40:00-08:00"})
+        self.assertEqual(self.validate(held)[0], 0)
+        decision = q.next_action(q.validate_queue(held), {}, (), local("2026-11-19T02:40"))
+        self.assertEqual(decision.action, "halt")
+        held["halt"] = None
+        self.assertEqual(q.next_action(q.validate_queue(held), {}, (), local("2026-11-19T02:40")).action, "arm")
 
 
 if __name__ == "__main__":
