@@ -419,7 +419,7 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "PENDING:CODE"
+        "sha256": "5da431af4eff179c8625f3643853ac341de2a360957c6b3409cea8d9502dcc4c"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -435,7 +435,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "PENDING:CODE"
+        "sha256": "c3fc7730384a0a8387eea6f51659accdf421726fff4090f96a5b9bbc820baf5b"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. The numpy version prints in both stages' outputs.",

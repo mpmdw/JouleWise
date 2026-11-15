@@ -230,7 +230,7 @@ custody remains the check of the real layout.
 
 | Item | Who | Due |
 |---|---|---|
-| `fit_interim.py`, `scripts/cadence_look_run.py` and the synthetic generator. Their two sha256 are the only `PENDING:CODE` left; `pin --write` fills them | Analyst seat | Sun 22:00 |
+| Final pins. `fit_interim.py` (5da431af…) and `scripts/cadence_look_run.py` (c3fc7730…) are pinned **on a draft basis** at #795's `acea4a919`. On this branch `validate --repo` warns that they are absent; with #795 merged, the import, condition and hash checks pass. The pins are re-run with `pin --write` after the cold reviews, and every later change to either file needs a re-pin | Lead, after the cold reviews | Mon 18:00 |
 | A planted-truth run of `step3_roster.py` on the generator's bundles | Analyst seat / lead | With item 7 |
 | Q11's check of the step 4 note | Cold seat | Mon 14:00 |
 | RL-166a, if the design attack changes the form | Research lead | Sun 13:00 |

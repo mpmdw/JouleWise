@@ -89,14 +89,15 @@ class Base(unittest.TestCase):
 class CommittedDraft(Base):
     def test_the_committed_draft_validates_with_only_code_hashes_open(self):
         pending = lm.validate_manifest(draft())
-        self.assertTrue(pending)
-        self.assertEqual({q for _, q in pending}, {"CODE"})            # RL-166 §2 item 3
+        self.assertLessEqual({q for _, q in pending}, {"CODE"})        # RL-166 §2 item 3
         self.assertTrue(all(p.endswith(".sha256") for p, _ in pending))
         self.assertEqual(draft()["open_questions"], [])
 
     def test_the_draft_is_refused_as_final(self):
-        problems = self.refused(lambda: lm.validate_manifest(draft(), final=True), "placeholder")
-        self.assertTrue(any("needs status 'committed'" in p for p in problems))
+        self.refused(lambda: lm.validate_manifest(draft(), final=True), "needs status 'committed'")
+        doc = draft()
+        doc["fit"]["code"][0]["sha256"] = lm.PENDING_CODE
+        self.refused(lambda: lm.validate_manifest(doc, final=True), "placeholder")
 
     def test_a_filled_synthetic_manifest_validates_as_final(self):
         self.assertEqual(lm.validate_manifest(finalize(draft()), final=True), [])
@@ -471,6 +472,7 @@ class LookLedger(Base):
             if "code" in rule:
                 rule["code"]["sha256"] = lm.PENDING_CODE                      # as if inclusion_34.py were unwritten
         doc["fit"]["code"][1]["sha256"] = lm.PENDING_CODE
+        doc["fit"]["code"][0]["sha256"] = lm.PENDING_CODE                      # as if fit_interim.py were unwritten
         self.man.write_text(json.dumps(doc), encoding="utf-8")
         self.row = {"look_id": "lm-interim-01", "manifest_path": "docs/process/cadence/looks/lm-interim-01.json",
                     "sha256": lm.sha256_file(self.man), "status": "draft"}
