@@ -42,7 +42,7 @@ def render(run='$RUN', slots='$SLOTS', work='$WORK', python='python3.13 -B'):
                             f'--counts-export {work}/turn_counts_export.json --out {work}/r1_slots.json'),
         ('install-slots', f'cp {work}/r1_slots.json {REGISTRATION}/r1_slots.json'),
         ('derive-contrast', f'{budget} derive-contrast'),
-        ('decide', f'{budget} decide --draft-out {work}/ruling_1f_draft.json'),
+        ('decide', f'{budget} decide'),
         ('regenerate-kit', f'{python} scripts/align_v4_kit.py'),
         ('kit-check', f'{python} scripts/align_v4_kit.py --check'),
     ]

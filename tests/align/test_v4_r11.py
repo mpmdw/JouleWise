@@ -116,7 +116,7 @@ class R11Tests(unittest.TestCase):
         slots['slots']['B_D'] = 6144
         counted(slots, (4096, 4096, 100))
         decision = proc.decide(slots, 12)
-        self.assertEqual((decision['step'], decision['receipt_draft']), ('RESEARCH-LEAD', None))
+        self.assertEqual(decision['step'], 'RESEARCH-LEAD')
         self.assertEqual(decision['turn_opportunity']['status'], 'fail')
         self.assertIn('three-turn opportunity', decision['reason'])
 

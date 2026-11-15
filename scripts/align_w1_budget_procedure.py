@@ -4,13 +4,15 @@
 Blind by construction: it reads only R1 timing and count fields (whitelisted
 in ``timing_view``; never an energy, U5, beta_T, residual or score) plus the
 WP18 X turn count, and computes the decision with the kit's own functions,
-so it cannot disagree with ``--check``.
+so it cannot disagree with ``--check`` on a record whose picks did not change
+(``thermometry.D.sensor_pick_changed`` false). On a changed-pick record the
+kit's G_turn cap is the R1-pick S7 (``thermometry.D.s7_for_r1_picks.S7``),
+which the timing view does not read, and the step goes to the research lead
+(RL-159 section 1.4 finding 2).
 
-  decide        print the step and the inputs to set; it drafts no receipt
-  sign          set the lead's signature line on a ruling 1(f) receipt draft
-                and write the canonical receipt the kit reads
-                (registration/ruling_1f_receipt.json); ``decide`` no longer
-                drafts one (RL-148 section 2)
+  decide        print the step and the inputs to set; there is no ruling 1(f)
+                receipt to draft or sign (RL-148 section 2; the R10-2(a)
+                receipt path is retired, RL-156 section 3.1)
   backfill-x-g  copy X-G's admitted turns, deadman flag and phase seconds from
                 r1_result.json into r1_slots.x_g, for an R1 record written
                 before the driver recorded them (R10-4)
@@ -28,7 +30,8 @@ receipt and 4-bit routes; PR #777 row-2 finding 9):
      the magistrate's call); stop.
   1. B_D is R1's step-d budget (r1_slots.slots.B_D, at least 6,144); missing or
      invalid per-turn count evidence at it: R1-RERUN (or a backfill).
-  2. the typical case fits T_dead at the R1 G_turn cap (slots.S7) and the
+  2. the typical case fits T_dead at the R1 G_turn cap (slots.S7; the kit's
+     source only when sensor_pick_changed is false) and the
      three-turn opportunity at B_D passes: TYPICAL-CASE, with the inputs to set.
   3. otherwise RESEARCH-LEAD: the research lead rules; there is no automatic
      route.
@@ -94,51 +97,15 @@ def timing_view(r1_slots):
     return view
 
 
-def _draft(branch, derived, view):
-    """An R10-2 receipt draft from the kit's derivation. ``decide`` no longer calls it (RL-148 section 2,
-    PR #777 row-2 finding 9); the kit still reads a committed ruling 1(f) receipt, and its tests draft one
-    here."""
-    d = derived['derivation']
-    waits = {run: row['G0_s'] for run, row in derived['inputs']['gated_d'].items()}
-    if branch == 'a':
-        exposure = (f'A W1 D member whose G0 does not release within G0* = {d["d_g0_cap_s"]} s ends X2 before '
-                    f'turn 1 (episode.g0_unreleased), never X7. R1\'s gated D G0 waits were {waits} s '
-                    f'(censored: {d["censored_D"]}).')
-        deviation = (f'{kit.DEVIATION_PREFIX}: lowers FINAL-DESIGN\'s and R7-2\'s 600 s G0-cap floor for W1\'s '
-                     f'D members only, to {d["d_g0_cap_s"]} s; ruling 1(f)\'s worst-case guarantee is kept with '
-                     'that armed cap as its G0 term.')
-    else:
-        exposure = None
-        deviation = (f'No deviation applied: R10-2(a) does not fit (censored gated D G0: {d["censored_D"]}; '
-                     'ceil(1.25 x longest released gated D G0 wait) = '
-                     f'{d["admit_bound_s"]} s against G0* = {d["G0_star_s"]:.1f} s). R10-2(b): 4-bit D next, '
-                     'after its own R1-4bit gated night; the lead rules on it with Ed.')
-    return {'schema': kit.RULING_1F_RECEIPT_SCHEMA, 'authority': kit.R10_AUTHORITY, 'branch': branch,
-            'procedure': {'path': kit.PROCEDURE_SCRIPT.as_posix(),
-                          'sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()},
-            'r1_record': kit.r1_record_identity(view),
-            'inputs': derived['inputs'], 'derivation': derived['derivation'], 'contrast': derived['contrast'],
-            'rules': {'g0_term_rule': 'G0 term = the armed D cap = floor(G0*) (R10-2(a))',
-                      'g0_star_rule': 'G0* = T_dead - holds_proj - max(prefill + tool) - 10,240 / r',
-                      'rate_rule': 'r = min(step-d and every gated run\'s decode rate) (R6-3)',
-                      'holds_term_rule': ('holds_proj = max over the gated D runs of max(G1 + H, '
-                                          '(G1 + H) / decode_tokens x 10,240) (R10-4, the audit\'s corrected D-f)'),
-                      'overshoot_rule': 'the last admitted turn keeps its full 4,096-token cap (R6-3)',
-                      'admit_rule': ('no gated D G0 censored (lead ruling on R10 decision (i)) and '
-                                     'ceil(1.25 x the longest released gated D G0 wait) <= G0*'),
-                      'contrast_rule': derived['contrast']['rule']},
-            'x2_exposure': exposure, 'deviation_log': deviation,
-            'lead_signature': kit.UNSIGNED + ": the lead signs with `align_w1_budget_procedure.py sign "
-                              "--signature 'lead: <name/session> <ISO date>'`"}
-
-
 def decide(r1_slots, x_max_turns, planning_release=None):
     """The post-R1 budget decision on the timing view. Returns the decision record.
 
     RL-148 section 2 (ruling 1(f) withdrawn for D; no R10-2 receipt and no 4-bit path), RL-149 section 1.5
     and RL-152 section 1.2 (PR #777 row-2 finding 9): B_D is R1's step-d budget (``r1_slots.slots.B_D``;
     the fit rule no longer lowers it), and W1 needs the typical case to fit (``kit.typical_case_fit`` at the
-    R1 G_turn cap ``slots.S7``) and the three-turn opportunity at that B_D (``kit.turn_opportunity``). Steps:
+    R1 G_turn cap ``slots.S7``, which is the kit's cap only when ``sensor_pick_changed`` is false: on a
+    changed-pick record the kit binds the R1-pick S7, and the step goes to the research lead; RL-159 section
+    1.4 finding 2) and the three-turn opportunity at that B_D (``kit.turn_opportunity``). Steps:
     ``R1-RERUN`` (an INCONCLUSIVE segment, or missing count evidence), ``TYPICAL-CASE`` (both pass; the
     inputs to set), or ``RESEARCH-LEAD`` (either fails: the research lead rules; there is no automatic
     route). Ruling 1(f)'s worst case is printed for the record and decides nothing.
@@ -153,7 +120,7 @@ def decide(r1_slots, x_max_turns, planning_release=None):
     released = kit.planning_released_segments(r1_slots, planning_release)
     deciding_inconclusive = {k: v for k, v in inconclusive.items() if k != 'X_G_contrast' and k not in released}
     if deciding_inconclusive:
-        return {'step': 'R1-RERUN', 'branch': None, 'receipt_draft': None,
+        return {'step': 'R1-RERUN',
                 'reason': ('inconclusive segment(s) ' + ', '.join(sorted(inconclusive))
                            + ': the remedy is an R1 re-run, the magistrate\'s call (R7-3)')}
     slots = view['slots']
@@ -174,7 +141,7 @@ def decide(r1_slots, x_max_turns, planning_release=None):
     opportunity = kit.turn_opportunity(view, b_d)
     worst = kit.ruling_1f_fit(view, b_d, t_dead)
     base = {'T_dead_s': t_dead, 'B_D': b_d, 'notes': notes, 'typical_case': typical, 'turn_opportunity': opportunity,
-            'worst_case_print_only': worst, 'branch': None, 'receipt_draft': None,
+            'worst_case_print_only': worst,
             'authority': 'RL-148 section 2; RL-149 section 1.5; RL-152 section 1.2'}
     if opportunity['status'] == 'inconclusive':
         return {**base, 'step': 'R1-RERUN',
@@ -193,15 +160,6 @@ def decide(r1_slots, x_max_turns, planning_release=None):
                            'R1.thermal_policy.g0_cap_s': kit.w1_g0_cap(view)['value_s'],
                            'R1.thermal_policy.contrast_g0_cap_s': contrast['value_s'],
                            'R1.thermal_policy.contrast_fit': contrast}}
-
-
-def sign(draft, signature):
-    """The lead's signature on a drafted receipt; returns the receipt."""
-    if not isinstance(draft, dict) or draft.get('schema') != kit.RULING_1F_RECEIPT_SCHEMA:
-        raise ValueError(f'not a {kit.RULING_1F_RECEIPT_SCHEMA} draft')
-    if not kit.valid_lead_signature(signature):
-        raise ValueError("the signature line must read 'lead: <name/session> <ISO date>'")
-    return {**draft, 'lead_signature': signature.strip()}
 
 
 def backfill_x_g(r1_slots, r1_result, r1_result_sha256):
@@ -286,13 +244,8 @@ def main(argv=None):
     p = sub.add_parser('decide')
     p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
     p.add_argument('--inputs', type=Path, default=ROOT / kit.INPUTS, help='read for WP18.X.max_turns only')
-    p.add_argument('--draft-out', type=Path, help='where a receipt draft would be written; decide drafts none since RL-148 section 2')
     p.add_argument('--planning-release', type=Path, default=ROOT / kit.R1_PLANNING_RELEASE,
                    help='the lead\'s RL-122 3(a) record; used only if the file exists')
-    p = sub.add_parser('sign')
-    p.add_argument('draft', type=Path)
-    p.add_argument('--signature', required=True)
-    p.add_argument('--out', type=Path, default=ROOT / kit.RULING_1F_RECEIPT)
     p = sub.add_parser('backfill-x-g')
     p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
     p.add_argument('--r1-result', type=Path, required=True)
@@ -319,20 +272,7 @@ def main(argv=None):
             x_max_turns = _load(args.inputs)['WP18']['X']['max_turns']
             release = _load(args.planning_release) if args.planning_release.is_file() else None
             out = decide(_load(args.r1_slots), x_max_turns, planning_release=release)
-            draft = out.pop('receipt_draft')
-            if draft is not None:
-                if args.draft_out is None:
-                    raise ValueError(f'{out["step"]} drafts a receipt: pass --draft-out')
-                args.draft_out.write_bytes(kit.receipt_bytes(draft))
-                out['receipt_draft_path'] = str(args.draft_out)
             print(json.dumps(out, indent=2, sort_keys=True))
-        elif args.command == 'sign':
-            receipt = sign(_load(args.draft), args.signature)
-            args.out.write_bytes(kit.receipt_bytes(receipt))
-            print(json.dumps({'receipt': str(args.out), 'branch': receipt['branch'],
-                              'g0_cap_receipt': {'authority': kit.thermal_gates.R10_G0_CAP_AUTHORITY,
-                                                 'receipt_sha256': kit.receipt_sha256(receipt)}},
-                             indent=2, sort_keys=True))
         else:
             raw = args.r1_result.read_bytes()
             out = backfill_x_g(_load(args.r1_slots), json.loads(raw), hashlib.sha256(raw).hexdigest())

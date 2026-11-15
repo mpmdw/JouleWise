@@ -722,25 +722,6 @@ def gated_fit_inputs(r1_slots):
     return rows, phases, rate, cap
 
 
-def projected_holds_s(rows, phases, tokens_target):
-    """Audit-corrected D-f (LEAD-RULINGS-2 R10-4): each gated run's G1 + H
-    projected per decoded token to ``tokens_target`` (symmetric with the decode
-    term), never below what the run recorded; the maximum over the runs. A run
-    that decoded nothing projects nothing, and refuses if it still recorded
-    G1 or hold seconds."""
-    values = []
-    for row, p in zip(rows, phases):
-        held, tokens = p['G1'] + p['H'], row['decode_tokens']
-        if not tokens:
-            if held > 0:
-                raise ValueError(f'ruling 1(f): {row.get("run")} recorded {held} s of G1 + H with no decoded '
-                                 'token, so its holds cannot be projected per token (R10-4)')
-            values.append(0.0)
-        else:
-            values.append(max(held, held / tokens * tokens_target))
-    return max(values)
-
-
 def ruling_1f_fit(r1_slots, b_d, t_dead):
     """Council ruling 1(f) for a B_D (lead ruling R5-4): the worst case R1
     measured must fit T_dead.
@@ -798,7 +779,14 @@ def typical_case_fit(r1_slots, t_dead, g_turn_s):
     above 0) is refused: N_chunk 4,096 implies no hold, and an H record is a defect (RL-149 section 5 item 12).
     A run's G1 waits must add up to its ``phases_s.G1`` within ``G1_RECONCILE_TOL_S`` (both come from the same
     G1 intervals). When a G1 timed out, the term is ``max(g_turn_s, largest recorded wait)``: a timed-out wait
-    can overshoot the cap by up to one gate poll."""
+    can overshoot the cap by up to one gate poll.
+
+    PR #783 row-1 review LOW (cross-check of ``g1_timeouts`` against the waits): a run that flags more G1
+    timeouts than it recorded G1 waits is refused (each timeout is one recorded wait). A wait at or above the
+    cap beyond the run's flagged timeouts is not refused, because an unobserved G1 that waited the full cap is
+    recorded without a timeout flag and is legitimate; it is counted per run (``g1_waits_at_cap_unflagged``,
+    waits at or above ``g_turn_s`` less the flagged timeouts) and the
+    arithmetic already takes that wait as the G1 term."""
     rows, phases, _rate, _cap = gated_fit_inputs(r1_slots)
     if not finite(t_dead) or t_dead <= 0 or not finite(g_turn_s) or g_turn_s <= 0:
         raise ValueError('typical-case fit: T_dead and the G_turn cap must be finite and positive')
@@ -813,6 +801,9 @@ def typical_case_fit(r1_slots, t_dead, g_turn_s):
         if type(count) is not int or count < 0:
             raise ValueError(f'typical-case fit: {row.get("run")} must record g1_timeouts (an int >= 0; the RL-149 '
                              'R1 driver reads it from the run\'s episode flags)')
+        if count > len(waits):
+            raise ValueError(f'typical-case fit: {row.get("run")} flags {count} G1 timeout(s) but records '
+                             f'{len(waits)} G1 wait(s); each timeout is one recorded wait (PR #783 row-1 review)')
         g1_waits[row['run']], timeouts[row['run']] = [float(w) for w in waits], count
     for row, p in zip(rows, phases):
         if p['H'] > 0:
@@ -831,8 +822,10 @@ def typical_case_fit(r1_slots, t_dead, g_turn_s):
         n_g1 = len(g1_waits[row['run']])
         own = p['prefill'] + p['tool'] + p['decode']
         total = math.fsum((g0, n_g1 * g1_max, own))
+        unflagged = max(0, sum(1 for w in g1_waits[row['run']] if w >= g_turn_s) - timeouts[row['run']])
         runs[row['run']] = {'prefill_tool_decode_s': own, 'g1_count': n_g1, 'total_s': total,
-                            'margin_s': t_dead - total, 'fits': total <= t_dead + 1e-6}
+                            'margin_s': t_dead - total, 'fits': total <= t_dead + 1e-6,
+                            'g1_waits_at_cap_unflagged': unflagged}
     return {'authority': TYPICAL_CASE_AUTHORITY, 'T_dead_s': t_dead, 'G0_s': g0, 'G1_max_s': g1_max,
             'G1_basis': ('max(G_turn cap, largest recorded gated D G1) (a gated D G1 timed out)' if timed_out
                          else 'largest recorded gated D G1'),
@@ -914,15 +907,10 @@ def w1_contrast_g0_cap(r1_slots, x_max_turns, root=ROOT):
             'rule': 'cap_c=max(0,min(nominal,floor(contrast_deadman-X_G_episode-10))); missing timing gives 0; non-veto INCONCLUSIVE'}
 
 
-# LEAD-RULINGS-2 R10-2 / R10-4: the lead's ruling 1(f) receipt.
+# LEAD-RULINGS-2 R10-2 / R10-4 named the lead's ruling 1(f) receipt here. RL-148 section 2 withdrew it and
+# RL-156 section 3.1 retired the path: the path is kept only so that a file there is refused.
 RULING_1F_RECEIPT = KIT / 'registration/ruling_1f_receipt.json'
-RULING_1F_RECEIPT_SCHEMA = 'joulewise.align_v4.ruling_1f_receipt.v1'
-R10_AUTHORITY = 'LEAD-RULINGS-2 R10-2'
-R10_BRANCHES = {'a': 'budget-sized D G0 cap (8-bit)', 'b': '4-bit D, after its own R1-4bit gated night',
-                'c': 'window council'}
 UNSIGNED = 'PENDING_LEAD_SIGNATURE'
-PROCEDURE_SCRIPT = Path('scripts/align_w1_budget_procedure.py')
-DEVIATION_PREFIX = 'DEVIATION R10-2(a)'
 
 
 def valid_lead_signature(signature):
@@ -948,68 +936,6 @@ def r1_record_identity(r1_slots):
     slots = r1_slots.get('slots') if isinstance(r1_slots.get('slots'), dict) else {}
     return {'schema': r1_slots.get('schema'), 'source': r1_slots.get('source'), 'I_D': slots.get('I_D'),
             'max_r1_tail_s': r1_slots.get('max_r1_tail_s')}
-
-
-def r10_2_derivation(r1_slots, t_dead, x_max_turns, root=ROOT):
-    """LEAD-RULINGS-2 R10-2(a), mechanical: G0* = T_dead - holds - prefill/tool
-    - 10,240/r with r = min(step-d and gated decode rates) and holds projected
-    per decoded token to the same 10,240 tokens (R10-4). Branch (a) when
-    no gated D G0 is censored (timeout, deadman or unobserved: the lead's
-    ruling on R10 builder decision (i), the audit's section 6), ceil(1.25 x
-    the longest released gated D G0 wait) <= G0*, and the armed cap
-    floor(G0*) is below 600 s
-    ('lead' when it is not). It is 'current' whenever the e901 600 s rule
-    fits at some B_D (MEDIUM-1) and 'rerun' when no gated D run decoded a
-    token (LOW-4); otherwise (b), 4-bit next. Reads only R1 timing and count
-    fields."""
-    rows, phases, rate, cap = gated_fit_inputs(r1_slots)
-    tokens = BUDGET_FLOOR + cap
-    d_cap = w1_d_g0_cap(r1_slots, root)
-    holds = projected_holds_s(rows, phases, tokens)
-    prefill_tool = max(p['prefill'] + p['tool'] for p in phases)
-    decode = tokens / rate
-    g0_star = t_dead - holds - prefill_tool - decode
-    largest_current = max_fitting_b_d(r1_slots, t_dead)
-    decoded = any(row['decode_tokens'] > 0 for row in rows)
-    released = [d_cap['waits_s'][name] for name in GATED_D_RUN_NAMES if name not in d_cap['censored']]
-    w_d = max(released) if released else None
-    bound = math.ceil(G0_CAP_FACTOR * w_d) if released else None
-    armed = math.floor(g0_star) if g0_star >= 1 else None
-    if largest_current is not None:
-        # Cold-review disposition MEDIUM-1: the current 600 s rule fits at some
-        # B_D (protocol v4; R10-2's order), so no R10-2 deviation applies.
-        branch = 'current'
-    elif not decoded:
-        # Disposition LOW-4: no gated D run decoded a token, so neither the
-        # rate nor the holds term has gated evidence: an R1 re-run.
-        branch = 'rerun'
-    elif armed is not None and bound is not None and bound <= g0_star and not d_cap['censored']:
-        # G0* >= 600 s while the e901 rule (X-G included) misses: outside what
-        # R10-2(a) was ruled for (a D cap below 600 s); return to the lead.
-        branch = 'a' if armed < thermal_gates.G0_CAP_DEFAULT_S else 'lead'
-    else:
-        branch = 'b'
-    gated = {row['run']: {'g0_outcome': row.get('g0_outcome'), 'decode_tokens': row['decode_tokens'],
-                          **{f'{k}_s': p[k] for k in ('G0', 'G1', 'H', 'prefill', 'tool', 'decode')}}
-             for row, p in zip(rows, phases)}
-    return {'branch': branch,
-            'inputs': {'T_dead_s': t_dead, 'r1_g0_timeout_s': d_cap['r1_g0_timeout_s'],
-                       'budget_floor_tokens': BUDGET_FLOOR, 'turn_cap_tokens': cap,
-                       'r_decode_tok_per_s': rate, 'gated_d': gated},
-            'derivation': {'tokens': tokens, 'decode_s': decode, 'holds_proj_s': holds,
-                           'prefill_tool_s': prefill_tool, 'G0_star_s': g0_star,
-                           'W_D_s': w_d, 'censored_D': d_cap['censored'], 'admit_bound_s': bound,
-                           'current_rule_largest_fitting_B_D': largest_current, 'gated_decode_evidence': decoded,
-                           'd_g0_cap_s': armed if branch == 'a' else None, 'branch': branch},
-            'contrast': w1_contrast_g0_cap(r1_slots, x_max_turns, root)}
-
-
-def receipt_bytes(receipt):
-    return raw_json(receipt)
-
-
-def receipt_sha256(receipt):
-    return sha(receipt_bytes(receipt))
 
 
 RULING_1F_RECEIPT_RETIRED = ('RL-148 section 2 withdrew ruling 1(f) for D, with R10-2\'s receipt; the R10-2(a) '

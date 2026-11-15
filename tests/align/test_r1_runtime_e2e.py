@@ -88,9 +88,9 @@ class DriverRuntimeTests(unittest.TestCase):
             b_leg = [p for p in result["phases"] if p["name"] == "high_power_B"][0]
             self.assertEqual(b_leg["result"]["ac_powermode"]["value"], 2)
             self.assertEqual(registration["slots_ac_powermode"], 0)
-            # RL-145 close sections 5 and 10, RL-149 section 5 item 12: the synthetic gate pair is the
-            # ruled alias pair (TV0h/TV1h by name, RL-156 section 2), confirmed by the runtime's
-            # RL-145 night confirmation, so the driver's R8-6 bar keeps it (it failed it before).
+            # RL-145 close sections 5 and 10, RL-149 section 5 item 12: the synthetic gate pair stands in
+            # for the ruled alias pair (RULED_ALIAS_PAIR is patched above; RL-156 section 2, RL-159), confirmed
+            # by the runtime's RL-145 night confirmation, so the driver's R8-6 bar keeps it.
             self.assertEqual(registration["thermometry"]["D"]["status"], "pass")
             self.assertEqual(registration["thermometry"]["bar"], "pass")
             self.assertIn("r1.picks_alias_pair_rl145", registration["thermometry"]["flags"])
