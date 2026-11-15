@@ -40,6 +40,12 @@ import re
 import sys
 
 sys.dont_write_bytecode = True
+# Mythos N10: -B stops writing bytecode, not reading it. A fresh, empty pycache prefix makes Python look for cached
+# bytecode only there, so a stale __pycache__ entry beside a pinned source is never run; every repository module
+# below compiles from the source bytes verify_pins hashes. _check_sources() confirms it before any energy opens.
+import tempfile  # noqa: E402
+_PYC_PREFIX = tempfile.mkdtemp(prefix="jw-look-pyc-")
+sys.pycache_prefix = _PYC_PREFIX
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -51,6 +57,7 @@ from joulewise.cadence_looks import inclusion_34 as I34  # noqa: E402
 STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
 FAN_KEYS = ("F0Ac", "F1Ac")          # configs/align/v4/r1_runtime.json sensors.fan_keys
 PM_FRESH_S = 2.0
+NS = 1_000_000_000
 METER_MAX_GAP_S = 2.0                # RL-166 Q7: no gap over 2 s between meter sample stamps in the leg's interval
 MODE_BY_POWER = {"automatic": 0, "high_power": 2}
 JOURNAL_PRE_S, JOURNAL_POST_S = 60.0, 5.0
@@ -77,9 +84,7 @@ def _stamp(out, a):
     """Provenance and run mode on a stage output: the manifest verify_pins checked, and allow_draft. Before writing,
     refuse if any repository module loaded in this process is not pinned (manifest.unpinned_loaded_modules)."""
     doc, mpath = _VERIFIED[0]
-    loose = M.unpinned_loaded_modules(doc, ROOT)
-    if loose:
-        raise F.LookInputError(f"modules loaded but not pinned: {sorted(loose)}")
+    _guard_loaded(doc)
     out["manifest_sha256"] = sha256_file(mpath)
     out["allow_draft"] = bool(a.allow_draft)
     return out
@@ -233,6 +238,7 @@ def build_turn(bundle, result, fan_keys):
 
 
 _B_KIND = re.compile(rb'"k":\s*"b"')
+_H_KIND = re.compile(rb'^\{\s*"k"\s*:\s*"h"\s*,')
 _RX = re.compile(rb'"rx":\s*([0-9]+)')
 _RT = re.compile(rb'"rt":\s*([0-9]+)')
 
@@ -252,7 +258,8 @@ def meter_offsets(sdir):
             size = f.tell()
             f.seek(max(0, size - 262144))
             tail = f.read().splitlines()
-        h = json.loads(head)
+        # Mythos N11: decode the first line only when it is a header line; a sample line is never decoded
+        h = json.loads(head) if _H_KIND.match(head) else {}
         if header_off is None and h.get("k") == "h" and isinstance(h.get("start_raw_ns"), int) \
                 and isinstance(h.get("start_real_ns"), int):
             header_off = h["start_real_ns"] - h["start_raw_ns"]
@@ -398,14 +405,15 @@ def load_step3(path=None):
 
 
 class MeterSpan:
-    """KM003C samples of a span on wall-clock epoch seconds; Vbus x Ibus; in memory only."""
+    """KM003C samples of a span on wall-clock epoch seconds; Vbus x Ibus; in memory only. Also the receipt stamps
+    (rt) of the polls that carried samples, which rule 4 judges (inclusion_34.rule4)."""
 
     def __init__(self, sdir):
         from joulewise.external import km003c_parse as kp
         paths = sorted(glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")))
         if not paths:
             raise F.LookInputError("no meter stream in the span")
-        t, w, steps = [], [], []
+        t, w, steps, polls = [], [], [], []
         for p in paths:
             st = kp.parse(p)
             if not st.present or not st.aligned:     # contributes no sample; a fit interval it alone spans refuses
@@ -415,29 +423,44 @@ class MeterSpan:
             off = int(st.header["start_real_ns"]) - int(st.header["start_raw_ns"])    # RAW -> REALTIME (R-20)
             t += [(h + off) / 1e9 for h in st.host_ns]
             w += list(st.watts)
+            polls += [int(b["rt"]) for b in st.batches if b.get("n") and isinstance(b.get("rt"), int)]
             del st
         if not t:
             raise F.LookInputError("no meter stream in the span has aligned samples")
         order = sorted(range(len(t)), key=t.__getitem__)
         self.t = [t[i] for i in order]
         self.w = [w[i] for i in order]
+        self.poll_rt_ns = sorted(polls)
         self.step_s = max(steps)
 
     def _support(self, a, b):
-        """(i0, i1): the samples bracketing [a, b]: the last at or before a, the first at or after b. Refuses when
-        either is missing or when any two consecutive samples between them are more than 2 s apart (RL-166 Q7's
-        rule-4 gap, judged on the interval itself). No energy is ever interpolated across such a gap."""
+        """Rule 4's own gap test on the interval [a, b] (inclusion_34.rule4; RL-166 Q7, Mythos r3 N6): the points
+        {a, b} and the receipt stamps of the sample-carrying polls inside, no two consecutive more than 2 s apart.
+        So a segment of a leg rule 4 admitted is supported, and no longer gap is ever bridged. A sample must also
+        lie within 2 s of the interval, for the value held at an edge."""
         import bisect
         if b < a:
             raise F.LookInputError("a segment with its end before its start")
-        i0 = bisect.bisect_right(self.t, a) - 1
-        i1 = bisect.bisect_left(self.t, b)
-        if i0 < 0 or i1 >= len(self.t):
+        a_ns, b_ns = round(a * NS), round(b * NS)
+        lo, hi = bisect.bisect_left(self.poll_rt_ns, a_ns), bisect.bisect_right(self.poll_rt_ns, b_ns)
+        points = [a_ns] + self.poll_rt_ns[lo:hi] + [b_ns]
+        if max(y - x for x, y in zip(points, points[1:])) > METER_MAX_GAP_S * NS:
+            raise F.LookInputError("DC-in: a gap over 2 s between meter samples inside an energy-fit interval")
+        i = bisect.bisect_left(self.t, a - METER_MAX_GAP_S)
+        if i >= len(self.t) or self.t[i] > b + METER_MAX_GAP_S:
             raise F.LookInputError("DC-in: an energy-fit interval is not bracketed by meter samples")
-        for i in range(i0, i1):
-            if self.t[i + 1] - self.t[i] > METER_MAX_GAP_S:
-                raise F.LookInputError("DC-in: a gap over 2 s between meter samples inside an energy-fit interval")
-        return i0, i1
+
+    def _value(self, x):
+        """Vbus x Ibus at x: linear between samples, held flat beyond the first and last (the edge stretch rule 4
+        admits, at most 2 s)."""
+        import bisect
+        j = bisect.bisect_right(self.t, x) - 1
+        if j < 0:
+            return self.w[0]
+        if j >= len(self.t) - 1:
+            return self.w[-1]
+        t0, t1 = self.t[j], self.t[j + 1]
+        return self.w[j] + (self.w[j + 1] - self.w[j]) * (x - t0) / (t1 - t0) if t1 > t0 else self.w[j]
 
     def coverage(self, a, b):
         """Fraction of [a, b] within half a nominal sample period of a sample (a print; decides nothing)."""
@@ -455,25 +478,37 @@ class MeterSpan:
             i += 1
         return cov / (b - a)
 
-    def _at(self, x, i):
-        t0, t1 = self.t[i], self.t[i + 1]
-        return self.w[i] + (self.w[i + 1] - self.w[i]) * (x - t0) / (t1 - t0) if t1 > t0 else self.w[i]
-
     def energy(self, a, b):
-        """Trapezoid between consecutive samples, cut at a and b (linear value at the cuts), on supported intervals
-        only (see _support)."""
-        i, _ = self._support(a, b)
-        tot = 0.0
-        while i < len(self.t) - 1 and self.t[i] < b:
-            lo, hi = max(a, self.t[i]), min(b, self.t[i + 1])
-            if hi > lo:
-                tot += 0.5 * (self._at(lo, i) + self._at(hi, i)) * (hi - lo)
-            i += 1
-        return tot
+        """Trapezoid between consecutive samples, cut at a and b (linear value at the cuts; held at an edge with no
+        sample beyond it), on supported intervals only (see _support)."""
+        import bisect
+        self._support(a, b)
+        xs = [a] + self.t[bisect.bisect_right(self.t, a):bisect.bisect_left(self.t, b)] + [b]
+        return sum(0.5 * (self._value(x) + self._value(y)) * (y - x) for x, y in zip(xs, xs[1:]))
 
 
-def read_segment_energy(stage1_out, sdir_of, step3_path=None):
-    """The level-E object, in memory (never written in production)."""
+def gpu_max_uncovered_s(trace, a, b):
+    """The longest stretch of [a, b] that no power_trace row covers (the GPU rail's analogue of the DC-in gap)."""
+    edge, worst = a, 0.0
+    for i in trace._range(a, b):
+        s0, e0 = trace.s[i], trace.e[i]
+        if e0 <= edge or s0 >= b:
+            continue
+        worst = max(worst, s0 - edge)
+        edge = max(edge, e0)
+    return max(worst, b - edge)
+
+
+def gpu_gap_rule(doc):
+    """Mythos r3 N7, pending the research lead: refuse a GPU-rail segment with an uncovered stretch over
+    max_gap_s. Read from the manifest's fit.gpu_trace_hole_refusal {"enabled": bool, "max_gap_s": number}; absent
+    or disabled (the default), the GPU rail integrates the rows present, as step 3 does."""
+    sw = ((doc or {}).get("fit") or {}).get("gpu_trace_hole_refusal") or {}
+    return float(sw.get("max_gap_s", METER_MAX_GAP_S)) if sw.get("enabled") is True else None
+
+
+def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None):
+    """The level-E object, in memory (never written in production). gpu_max_gap_s: see gpu_gap_rule."""
     s3, _ = load_step3(step3_path)
     meters = {}
     out = {"schema": F.ENERGY_SCHEMA, "look_id": F.LOOK_ID, "synthetic": False,
@@ -490,7 +525,11 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None):
             meters[L["span_id"]] = MeterSpan(sdir)
         m = meters[L["span_id"]]
         entry = {}
-        for ch, fn, cov in (("gpu_rail", trace.energy, trace.coverage), ("dc_in", m.energy, m.coverage)):
+        def gpu_energy(a, b, trace=trace):
+            if gpu_max_gap_s is not None and gpu_max_uncovered_s(trace, a, b) > gpu_max_gap_s:
+                raise F.LookInputError("GPU rail: a stretch with no power_trace row inside an energy-fit interval")
+            return trace.energy(a, b)
+        for ch, fn, cov in (("gpu_rail", gpu_energy, trace.coverage), ("dc_in", m.energy, m.coverage)):
             segs = [fn(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]]
             tails = {str(t["prefix_len"]): fn(t["wall_start_s"], t["wall_end_s"]) for t in L["prefix_tails"]}
             covs = [c for c in (cov(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]) if c is not None]
@@ -558,11 +597,57 @@ def cmd_stage2(a):
         # the committed ledger at HEAD, HEAD on the ledger ref, the manifest and roster bound (builder's contract)
         M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1, ledger_ref=a.ledger_ref)
     F.stage2_preflight(s1)                          # refuses before any energy file is opened
+    stage2_energy_preflight(s1, a)                  # Mythos round 3 N1, N2: every remaining refusal, before energy
     if a.energy:
         energy = _json(a.energy)
     else:
-        energy = read_segment_energy(s1, span_dirs(a.custody, a.span_dir), a.step3_module)
+        energy = read_segment_energy(s1, span_dirs(a.custody, a.span_dir),
+                                     gpu_max_gap_s=gpu_gap_rule(_VERIFIED[0][0]))
     return _stamp(F.stage2(s1, a.stage1_sha256, energy, code_hashes()), a)
+
+
+def stage2_energy_preflight(s1, a):
+    """Everything stage 2 can refuse on without energy, checked before the first energy file opens:
+    - a stage-1 file made under --allow-draft is refused by a run without it (Mythos r3 N2);
+    - the stage-1 file names the manifest this run verified (N2);
+    - under --allow-draft, every span the custody run opens has a runner receipt saying "synthetic": true (N1);
+    - stage 2's whole module set (the meter decoder, the step 3 file) is imported now and the unpinned-module and
+      cached-bytecode checks run on it (N2, N10)."""
+    if s1.get("allow_draft") is True and not a.allow_draft:
+        raise F.LookInputError("the stage-1 file was made under --allow-draft; a run without it refuses it")
+    doc, mpath = _VERIFIED[0]
+    if s1.get("manifest_sha256") != sha256_file(mpath):
+        raise F.LookInputError("the stage-1 file was made under another manifest")
+    if a.allow_draft and a.custody:
+        sdir_of = span_dirs(a.custody, a.span_dir)
+        for sp in s1["roster"]["spans"]:
+            if _json(sdir_of(sp["span_id"]) / "runner_receipt.json").get("synthetic") is not True:
+                raise F.LookInputError("--allow-draft opens synthetic custody only: a span's receipt is not synthetic")
+    importlib.import_module("joulewise.external.km003c_parse")
+    importlib.import_module("joulewise.cadence_looks.step3_energy_ratios")
+    _guard_loaded(doc)
+
+
+def _guard_loaded(doc):
+    """Refuse on any loaded repository module the manifest does not pin (M.unpinned_loaded_modules), or one whose
+    code did not come from its source under this run's fresh pycache prefix (Mythos N10)."""
+    loose = M.unpinned_loaded_modules(doc, ROOT)
+    if loose:
+        raise F.LookInputError(f"modules loaded but not pinned: {sorted(loose)}")
+    _check_sources()
+
+
+def _check_sources():
+    """No loaded repository module may have a bytecode file at its cache path. This run writes none (-B, and a
+    fresh empty prefix), so a file there is one Python may have run in place of the pinned source."""
+    root = str(ROOT.resolve())
+    for mod in list(sys.modules.values()):
+        f = getattr(mod, "__file__", None)
+        if not f or not str(Path(f).resolve()).startswith(root):
+            continue
+        cached = getattr(mod, "__cached__", None)
+        if f.endswith((".pyc", ".pyo")) or (cached and os.path.exists(cached)):
+            raise F.LookInputError(f"a repository module may have run from cached bytecode: {Path(f).name}")
 
 
 def main(argv=None):
@@ -577,6 +662,7 @@ def main(argv=None):
     p1.add_argument("--rules-3-4")
     p1.add_argument("--span-dir", action="append")
     p1.add_argument("--write-input")
+    p1.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     p2 = sub.add_parser("stage2")
     p2.add_argument("--stage1", required=True)
     p2.add_argument("--stage1-sha256", required=True)
@@ -585,7 +671,6 @@ def main(argv=None):
     g2.add_argument("--energy")
     g2.add_argument("--custody")
     p2.add_argument("--span-dir", action="append")
-    p2.add_argument("--step3-module")
     p2.add_argument("--looks", help="with --allow-draft only: a scratch LOOKS.json in place of the repository's")
     p2.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     for p in (p1, p2):
@@ -596,7 +681,8 @@ def main(argv=None):
         ap.error("--roster needs --custody and --rules-3-4")
     try:
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
-        _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING), a.manifest)]
+        _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,
+                                       ledger_ref=getattr(a, "ledger_ref", None)), a.manifest)]
         out = cmd_stage1(a) if a.cmd == "stage1" else cmd_stage2(a)
         sha = write_canonical(a.out, out)
     except F.LookInputError as exc:

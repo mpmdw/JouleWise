@@ -500,6 +500,24 @@ directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwi
 input is opened. Stage 2 takes `--looks` and calls `manifest.require_stage1_committed(looks, "lm-interim-01",
 stage1_sha256)` after the stage-1 hash check and before any energy is opened.
 
+**Round 3 (cold seats on 553e4cf00).**
+- **Before any energy opens**, stage 2 refuses:
+  - a stage-1 file made under `--allow-draft` when this run is not;
+  - a stage-1 file whose `manifest_sha256` is not the manifest this run verified;
+  - under `--allow-draft`, a custody span whose `runner_receipt.json` lacks `"synthetic": true`;
+  - any repository module of stage 2's whole set (the meter decoder and the step 3 file, imported up front) that
+    the manifest does not pin.
+  `--step3-module` is gone.
+- **DC-in support (Mythos N6)** is rule 4's own test on each segment: the points {a, b} and the `rt` stamps of
+  the sample-carrying polls inside, with no consecutive pair more than 2 s apart. A sample must lie within 2 s of
+  the segment; the edge value is held. A leg that rule 4 admits integrates.
+- **GPU rail (N7):** a manifest switch, `fit.gpu_trace_hole_refusal {enabled, max_gap_s}`, is off by default.
+  When on, a segment with an uncovered stretch longer than `max_gap_s` refuses. The research lead decides
+  (`Q-gpu-hole.md`).
+- **Bytecode (N10):** both stages set a fresh, empty `sys.pycache_prefix` before importing any repository module,
+  and refuse if a loaded repository module has a file at its cache path.
+- **N11:** a meter stream's first line is decoded only when it is a header line.
+
 **Round 2 (cold seats on 632f58fb8).**
 - **Level D and level O** both gain top-level `manifest_sha256` (the manifest verify_pins checked) and `allow_draft`
   (bool). `code_sha256` records every pinned file the stage ran: fit_interim.py, cadence_look_run.py, stage 2's

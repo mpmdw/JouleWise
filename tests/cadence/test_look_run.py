@@ -176,7 +176,9 @@ def run_cli(argv, trap=False, mock_stage2=False):
 _HARNESS = os.path.join(_PIN_DIR, "cli_harness.py")
 with open(_HARNESS, "w") as _f:
     _f.write(r'''
-import json, os, re, sys
+import json, os, re, sys, tempfile
+sys.dont_write_bytecode = True
+sys.pycache_prefix = tempfile.mkdtemp(prefix="jw-harness-pyc-")   # as the CLI does: no cached bytecode is read
 opts = json.loads(sys.argv[1]); argv = sys.argv[2:]
 sys.path.insert(0, opts["repo"])
 opened = []
@@ -217,12 +219,13 @@ _SPIES = []           # active spy_opens lists: a subprocess's opens are appende
 LAST_RUN = {}
 
 
-def _cli_subprocess(argv, trap=False, mock_stage2=False):
+def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None):
     import subprocess
     import sys
+    repo = Path(repo or REPO)
     report = os.path.join(_PIN_DIR, f"report-{len(os.listdir(_PIN_DIR))}.json")
-    opts = {"repo": str(REPO), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report}
-    r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv], cwd=REPO,
+    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report}
+    r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv], cwd=repo,
                        capture_output=True, text=True, timeout=900)
     got = rj(report) if os.path.exists(report) else {"opened": [], "stage2_calls": 0}
     for spy in _SPIES:
@@ -342,11 +345,11 @@ class Stage2Custody(unittest.TestCase):
             h = out.split("sha256=")[1].strip()
             self.assertEqual(h, R.sha256_file(s1p))
             rc, _, err = run_cli(["stage2", "--stage1", s1p, "--stage1-sha256", "0" * 64, "--custody",
-                                  str(self.c.root), "--step3-module", self.s3, "--out", fitp])
+                                  str(self.c.root), "--out", fitp])
             self.assertEqual(rc, 2)
             self.assertFalse(os.path.exists(fitp))
             rc, out, err = run_cli(["stage2", "--stage1", s1p, "--stage1-sha256", h, "--custody", str(self.c.root),
-                                    "--step3-module", self.s3, "--out", fitp])
+                                    "--out", fitp])
             self.assertEqual(rc, 0, err)
             fit = rj(fitp)
         F.output_check(fit)
@@ -389,8 +392,10 @@ class Meter(unittest.TestCase):
         a, b = t0 + 3.33, t0 + 41.07
         want = 10.0 * (b - a) + 0.25 * ((b - t0) ** 2 - (a - t0) ** 2)
         self.assertAlmostEqual(m.energy(a, b), want, delta=1e-3)
+        # 1 s before the first sample: within rule 4's 2 s edge allowance, so the first value is held there
+        self.assertAlmostEqual(m.energy(t0 - 1.0, t0 + 1.0), 10.0 * 1.0 + (10.0 * 1.0 + 0.25 * 1.0), delta=1e-3)
         with self.assertRaises(F.LookInputError):
-            m.energy(t0 - 1.0, t0 + 1.0)
+            m.energy(t0 - 3.0, t0 + 1.0)
 
 
 class LevelR(unittest.TestCase):
@@ -737,10 +742,9 @@ class MeterSupport(unittest.TestCase):
         t0 = 1_790_000_000.0
         with tempfile.TemporaryDirectory() as d:
             m = self.meter(d, [_meter_lines(t0, 100)])
-            with self.assertRaisesRegex(F.LookInputError, "bracketed"):
-                m.energy(t0 + 40, t0 + 60)
-            with self.assertRaisesRegex(F.LookInputError, "bracketed"):
-                m.energy(t0 - 5, t0 + 10)
+            for a, b in ((t0 + 40, t0 + 60), (t0 - 5, t0 + 10)):
+                with self.assertRaisesRegex(F.LookInputError, "gap over 2 s|bracketed"):
+                    m.energy(a, b)
 
     def test_sol_meter_gap_case_through_the_reader(self):
         """Sol's case on the synthetic custody: the meter split into three closed streams, the middle one empty
@@ -946,3 +950,230 @@ class CommittedLedger(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn("stage-1 sha256", r.stderr)
         self.assertFalse(os.path.exists(op))
+
+
+class MeterRuleFourAlignment(unittest.TestCase):
+    """Mythos r3 N6: stage 2's DC-in support is rule 4's own gap test, so a leg rule 4 admits integrates and one it
+    refuses never does. Checked against inclusion_34.rule4 on the same stream, interval by interval."""
+
+    def test_stream_ending_1_2_s_before_the_interval_integrates(self):
+        t0 = 1_790_000_000.0
+        with tempfile.TemporaryDirectory() as d:
+            sdir = Path(d)
+            (sdir / "hazards/meter").mkdir(parents=True)
+            (sdir / "hazards/meter/stream-0001.jsonl").write_text(_meter_lines(t0, 200))   # samples to t0 + 99.5
+            m = R.MeterSpan(sdir)
+            last = m.t[-1]
+            e = m.energy(t0 + 50, last + 1.2)                    # ends 1.2 s after the last sample
+            self.assertAlmostEqual(e, 40.0 * (last + 1.2 - t0 - 50), delta=1e-2)
+
+    def test_stage2_support_equals_rule_4_on_the_same_stream(self):
+        from joulewise.cadence_looks import inclusion_34 as I34
+        t0 = 1_790_000_000.0
+        holes = [(t0 + 30, t0 + 31.5), (t0 + 60, t0 + 63), (t0 + 90, t0 + 91.9)]
+        with tempfile.TemporaryDirectory() as d:
+            sdir = Path(d)
+            (sdir / "hazards/meter").mkdir(parents=True)
+            path = sdir / "hazards/meter/stream-0001.jsonl"
+            path.write_text(_meter_lines(t0, 260, empty=lambda x: any(a <= x < b for a, b in holes)))
+            m = R.MeterSpan(sdir)
+            stream = I34.read_meter_stream(path)
+            import random
+            rng = random.Random(5)
+            cases = [(t0 + 20, t0 + 40), (t0 + 55, t0 + 70), (t0 + 85, t0 + 95), (t0 + 100, t0 + 131.2),
+                     (t0 + 110, t0 + 132.5)]
+            cases += [tuple(sorted((t0 + rng.uniform(0, 135), t0 + rng.uniform(0, 135)))) for _ in range(60)]
+            agree = 0
+            for a, b in cases:
+                if b - a < 0.5:
+                    continue
+                r4 = I34.rule4((round(a * 1e9), round(b * 1e9)), [stream])
+                gap_ok = r4["max_gap_s"] is not None and r4["max_gap_s"] <= 2.0
+                try:
+                    m.energy(a, b)
+                    ok = True
+                except F.LookInputError:
+                    ok = False
+                self.assertEqual(ok, gap_ok, (a - t0, b - t0, r4["max_gap_s"]))
+                agree += 1
+            self.assertGreater(agree, 50)
+
+
+ENERGY_FILES = ("power_trace.csv", "/hazards/meter/stream-", "en.json", "segment_energy.json")
+
+
+def energy_opens(opened):
+    return [p for p in opened if any(m in p.replace(os.sep, "/") for m in ENERGY_FILES)]
+
+
+class RoundThree(unittest.TestCase):
+    """Mythos round 3 (on 553e4cf00): N1, N2, N6 (above), N7, N10, N11 in this package's files."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.c = _Custody.get()
+        cls.d = tempfile.mkdtemp(prefix="jw-look-r3-")
+        cls.ep = os.path.join(cls.d, "en.json")
+        wb(cls.ep, synth.dump(cls.c.en))
+        cls.ip = os.path.join(cls.d, "li.json")
+        wb(cls.ip, synth.dump(cls.c.li))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.d, ignore_errors=True)
+
+    def stage1_custody(self, man=None):
+        p = os.path.join(self.d, f"s1-{len(os.listdir(self.d))}.json")
+        argv = ["stage1", "--roster", self.c.paths["roster.json"], "--custody", str(self.c.root), "--rules-3-4",
+                self.c.paths["rules_3_4.json"], "--out", p]
+        if man:
+            argv += ["--manifest", man, "--allow-draft"]
+        rc, out, err = run_cli(argv)
+        self.assertEqual(rc, 0, err)
+        return p, R.sha256_file(p)
+
+    def test_n1_allow_draft_refuses_custody_whose_receipts_are_not_synthetic(self):
+        p, h = self.stage1_custody()
+        sid = self.c.li["spans"][0]["span_id"]
+        with tempfile.TemporaryDirectory() as d:
+            sdir = Path(d) / sid
+            shutil.copytree(self.c.root / sid, sdir)
+            rec = rj(sdir / "runner_receipt.json")
+            rec.pop("synthetic")                          # as a real runner's receipt is
+            wb(sdir / "runner_receipt.json", json.dumps(rec))
+            with spy_opens() as opened:
+                rc, _, err = run_cli(["stage2", "--stage1", p, "--stage1-sha256", h, "--custody", str(self.c.root),
+                                      "--span-dir", f"{sid}={sdir}", "--out", os.path.join(d, "o.json")])
+        self.assertEqual(rc, 2)
+        self.assertIn("synthetic custody only", err)
+        self.assertEqual(energy_opens(opened), [])
+
+    def test_n2_another_manifest_refuses_before_energy(self):
+        p, h = self.stage1_custody()
+        other = pinned_manifest(lambda doc: doc.update(title=doc["title"] + " (another draft)"))
+        with spy_opens() as opened:
+            rc, _, err = run_cli(["stage2", "--stage1", p, "--stage1-sha256", h, "--custody", str(self.c.root),
+                                  "--out", os.path.join(self.d, "o2.json"), "--manifest", other, "--allow-draft"])
+        self.assertEqual(rc, 2)
+        self.assertIn("another manifest", err)
+        self.assertEqual(energy_opens(opened), [])
+
+    def test_n2_a_draft_stage1_file_refused_without_allow_draft_before_energy(self):
+        p, h = self.stage1_custody()
+        doc = rj(p)
+        self.assertIs(doc["allow_draft"], True)
+        a = R.argparse.Namespace(allow_draft=False, custody=str(self.c.root), span_dir=None)
+        R._VERIFIED[:] = [(rj(_DEFAULT_MANIFEST[0]), _DEFAULT_MANIFEST[0])]
+        with spy_opens() as opened:
+            with self.assertRaisesRegex(F.LookInputError, "made under --allow-draft"):
+                R.stage2_energy_preflight(doc, a)
+        self.assertEqual(energy_opens(opened), [])
+
+    def test_n2_a_missing_stage2_only_pin_refuses_before_energy(self):
+        p, h = self.stage1_custody()
+
+        def drop_dependency(doc):              # a module only stage 2 loads (through the meter decoder)
+            doc["fit"]["dependencies"] = [x for x in doc["fit"]["dependencies"]
+                                          if x["path"] != "joulewise/desk_restore.py"]
+        man = pinned_manifest(drop_dependency)
+        p2, h2 = self.stage1_custody(man)                  # stage 1 never loads the meter decoder: it passes
+        with spy_opens() as opened:
+            rc, _, err = run_cli(["stage2", "--stage1", p2, "--stage1-sha256", h2, "--custody", str(self.c.root),
+                                  "--out", os.path.join(self.d, "o3.json"), "--manifest", man, "--allow-draft"])
+        self.assertEqual(rc, 2)
+        self.assertIn("not pinned", err)
+        self.assertEqual(energy_opens(opened), [])
+
+    def test_n2_step3_module_flag_is_gone(self):
+        rc, _, err = run_cli(["stage2", "--stage1", "x", "--stage1-sha256", "0" * 64, "--custody", "x",
+                              "--out", "x", "--step3-module", "x"])
+        self.assertEqual(rc, 2)
+        self.assertIn("unrecognized arguments", err)
+
+    def test_n7_gpu_hole_switch(self):
+        """Off by default (integrates the rows present); on, a segment with an uncovered stretch over max_gap_s
+        refuses. The rule itself is the research lead's (Q-gpu-hole)."""
+        self.assertIsNone(R.gpu_gap_rule({"fit": {}}))
+        self.assertIsNone(R.gpu_gap_rule({"fit": {"gpu_trace_hole_refusal": {"enabled": False}}}))
+        self.assertEqual(R.gpu_gap_rule({"fit": {"gpu_trace_hole_refusal": {"enabled": True, "max_gap_s": 2}}}), 2.0)
+        s1 = F.stage1(self.c.li, "0" * 64)
+        L = next(x for x in s1["legs"] if x["in_energy_fit"])
+        a = L["segments"][3]["wall_start_s"]
+        sdir = self.c.root / L["span_id"]
+        rec = rj(sdir / "legs" / L["leg_id"] / "leg_record.json") if "leg_id" in L else \
+            rj(sdir / "legs" / L["leg_key"].split("/")[1] / "leg_record.json")
+        with tempfile.TemporaryDirectory() as d:
+            copy_dir = Path(d) / L["span_id"]
+            shutil.copytree(sdir, copy_dir)
+            pt = copy_dir / "legs" / L["leg_key"].split("/")[1] / "runtime" / rec["result"]["bundle"] / "power_trace.csv"
+            lines = pt.read_text().splitlines()
+            keep = [lines[0]] + [r for r in lines[1:] if not (r.split(",")[3] == "gpu_power"
+                                                             and a + 1 <= float(r.split(",")[4]) < a + 7)]
+            pt.write_text("\n".join(keep) + "\n")
+            only = {k: v for k, v in s1.items()}
+            only["legs"] = [x if x["leg_key"] == L["leg_key"] else dict(x, in_energy_fit=False) for x in s1["legs"]]
+            sdir_of = R.span_dirs(self.c.root, [f"{L['span_id']}={copy_dir}"])
+            R.read_segment_energy(only, sdir_of)                     # default: integrates
+            R.read_segment_energy(only, sdir_of, gpu_max_gap_s=10.0)  # a 6 s hole under a 10 s bound: integrates
+            with self.assertRaisesRegex(F.LookInputError, "GPU rail"):
+                R.read_segment_energy(only, sdir_of, gpu_max_gap_s=2.0)
+
+    def test_n10_stale_bytecode_beside_a_pinned_source_is_not_run(self):
+        """A cached fit_interim built from a copy with QUALIFIED_THRESHOLD = 0.92, unchecked-hash (Python would run
+        it whatever the source says), sits in __pycache__ of a copy of the tree. The copy's CLI runs and prints the
+        pinned source's 0.02."""
+        import importlib.util
+        import py_compile
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            for sub in ("joulewise", "scripts", "configs/align/v4", "docs/process/cadence/looks", "docs/research"):
+                if (REPO / sub).is_dir():
+                    shutil.copytree(REPO / sub, root / sub, ignore=shutil.ignore_patterns("__pycache__"))
+            src = root / "joulewise/cadence_looks/fit_interim.py"
+            bad = root / "bad_fit.py"
+            bad.write_text(src.read_text().replace("QUALIFIED_THRESHOLD = 0.02", "QUALIFIED_THRESHOLD = 0.92"))
+            cfile = importlib.util.cache_from_source(str(src))
+            py_compile.compile(str(bad), cfile=cfile, dfile=str(src),
+                               invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)
+            self.assertTrue(os.path.exists(cfile))
+            man = pinned_manifest()
+            s1p, op = root / "s1.json", root / "o.json"
+            cli = str(root / "scripts/cadence_look_run.py")
+            r = subprocess.run([sys.executable, "-I", "-B", cli, "stage1", "--input", self.ip, "--out", str(s1p),
+                                "--manifest", man, "--allow-draft"], capture_output=True, text=True, cwd=d)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            h = R.sha256_file(s1p)
+            r = subprocess.run([sys.executable, "-I", "-B", cli, "stage2", "--stage1", str(s1p), "--stage1-sha256",
+                                h, "--energy", self.ep, "--out", str(op), "--manifest", man, "--allow-draft",
+                                "--looks", looks_file(h)], capture_output=True, text=True, cwd=d)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(rj(op)["qualified_interim_half"]["threshold"], 0.02)
+
+    def test_n10_guard_refuses_a_module_with_a_cache_file(self):
+        import types
+        with tempfile.TemporaryDirectory() as d:
+            fake = types.ModuleType("jw_fake_cached")
+            fake.__file__ = str(R.ROOT / "joulewise" / "fake_cached.py")
+            fake.__cached__ = os.path.join(d, "fake_cached.pyc")
+            Path(fake.__cached__).write_bytes(b"")
+            import sys
+            sys.modules["jw_fake_cached"] = fake
+            try:
+                with self.assertRaisesRegex(F.LookInputError, "cached bytecode"):
+                    R._check_sources()
+            finally:
+                del sys.modules["jw_fake_cached"]
+
+    def test_n11_a_headerless_stream_is_not_decoded(self):
+        sid = self.c.li["spans"][0]["span_id"]
+        with tempfile.TemporaryDirectory() as d:
+            sdir = Path(d) / sid
+            shutil.copytree(self.c.root / sid, sdir, ignore=shutil.ignore_patterns("power_trace.csv"))
+            p = sdir / "hazards/meter/stream-0001.jsonl"
+            lines = p.read_text().splitlines()
+            bad = '{"k":"b","tx":1,"rx":2,"rt":3,"n":2,"p":"zz-not-hex' + "\n"   # not even JSON
+            p.write_text(bad + "\n".join(lines[2:]) + "\n")             # header gone; first line a sample line
+            header, end = R.meter_offsets(sdir)
+        self.assertIsNone(header)
