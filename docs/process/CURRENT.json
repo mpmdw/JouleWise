@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "item 334 (hp-01-s01 smoke) Check after its fence is gone",
+  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as RUN_STATE 339: the magistrate's own power reads (AC powermode 0, no marker, no lock holder), the maintenance line, the receipt asserts with restore_proven and the close proof, the D1 lines (admitted per leg, high_power.revoked, high_power.before_restore), the desk bundle, the restore lines, measurement_mode verify again, the RL-157 §1 and §5 prints and the RL-150 R1 start-reference print (none of the prints gates)",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "336",
+  "source_item": "338",
   "source_item_heading_date": "2026-11-15",
   "wait": {
-    "deadline_epoch_s": 1794822900,
+    "deadline_epoch_s": 1794909300,
     "observable": "none",
-    "on_early_or_refused": "as item 334 (this note changes nothing in item 334)"
+    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), a High Power marker or a held host night lock at the arm, or a launch that cannot happen inside the bands below (Sun 00:30:01 to Mon 19:07:30 PST, outside the 00:30 rule's evening cut and 10:50:00-13:15:00): NOTHING of this item launches; mail the lead (a later t0 needs a re-issued item). The standing F0 item's refusal rule then applies, unless the stop is RESTORE_UNPROVEN or a host-state stop, which hold everything. A span that ran but ends with any named stop, a receipt rc≠0, restore_proven not true, a High Power marker present or AC powermode not 0 at the Check: nothing relaunches, nothing is re-run, nothing else arms (RESTORE_UNPROVEN holds everything, F0 included); run restore-owed ONLY under \"Restore owed\" below; mail the lead. Do not retry, do not extend, do not reuse OUT"
   }
 }
