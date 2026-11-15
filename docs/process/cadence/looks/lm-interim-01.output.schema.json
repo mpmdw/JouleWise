@@ -308,6 +308,7 @@
     "channels",
     "code_sha256",
     "delta_column",
+    "ledger_gate",
     "look_id",
     "manifest_sha256",
     "numpy_version",
@@ -349,6 +350,37 @@
      "propertyNames": {
       "pattern": "^(input:[a-z0-9_]+|(joulewise|scripts)/[A-Za-z0-9_./]+\\.py)$"
      }
+    },
+    "ledger_gate": {
+     "oneOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "commit",
+        "ref",
+        "ref_commit"
+       ],
+       "properties": {
+        "commit": {
+         "type": "string",
+         "pattern": "^[0-9a-f]{40}$"
+        },
+        "ref": {
+         "type": "string",
+         "pattern": "^refs/remotes/[^\\s]+$"
+        },
+        "ref_commit": {
+         "type": "string",
+         "pattern": "^[0-9a-f]{40}$"
+        }
+       }
+      }
+     ],
+     "description": "What satisfied the committed-ledger gate (manifest.ledger_gate): HEAD, the shared remote-tracking ref and its commit; null under --allow-draft (Mythos round-3 N3)"
     },
     "numpy_version": {
      "type": "string"

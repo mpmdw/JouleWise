@@ -85,7 +85,7 @@
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "52f21a14d79a84aae095d3e87c61945ef1ea4aa8e2eac320979aefc892334e6f"
+        "sha256": "9a52c1335d962894c086dca2671586a737c90d126bcbbb58168a6aaf6d8339ac"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -503,7 +503,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "7f2aea2c7c10204fc7b67519f0593db11f6b243902fbfd70b0cb2fd369955183"
+        "sha256": "837a86b69dcf2ae27fe557e859bb1070852d5b94bbde30adf6b87e3b5120ea16"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -930,7 +930,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "3930e2cddbb1f17560f2998b930f619e435800839d6b28b4db2facbe7067e7f5"
+      "sha256": "8dcb900cc168a2aaebb353d4e9f1bbabd0ec9ab2e97864e5ad8d3d6803cba476"
     },
     "prints": [
       {

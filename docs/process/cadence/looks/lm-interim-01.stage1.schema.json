@@ -13,6 +13,7 @@
   "code_sha256",
   "counts",
   "input_sha256",
+  "ledger_gate",
   "legs",
   "look_id",
   "manifest_sha256",
@@ -1040,6 +1041,37 @@
     }
    },
    "description": "RL-171 and RL-172a: per roster span, its soak attempts (one when the receipt has no soak_attempts field, as on the v1/v1.1 pins) and the kind of each retried soak: slope or load where a receipt field names it, else 'kind not recorded' (receipt fields only; the RL-171 receipt names no kind). accepted is the last soak step's rc 0. A soak retried and then accepted is not a stop. Written by joulewise/cadence_looks/inclusion_34.py soak_retries(); decides nothing"
+  },
+  "ledger_gate": {
+   "oneOf": [
+    {
+     "type": "null"
+    },
+    {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "commit",
+      "ref",
+      "ref_commit"
+     ],
+     "properties": {
+      "commit": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{40}$"
+      },
+      "ref": {
+       "type": "string",
+       "pattern": "^refs/remotes/[^\\s]+$"
+      },
+      "ref_commit": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{40}$"
+      }
+     }
+    }
+   ],
+   "description": "What satisfied the committed-ledger gate (manifest.ledger_gate): HEAD, the shared remote-tracking ref and its commit; null under --allow-draft (Mythos round-3 N3)"
   },
   "legs": {
    "type": "array",
