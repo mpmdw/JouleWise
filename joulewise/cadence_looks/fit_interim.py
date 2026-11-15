@@ -26,6 +26,8 @@ import re
 
 import numpy as np
 
+from joulewise.cadence_looks import inclusion_34 as I34
+
 STAGE1_SCHEMA = "joulewise.cadence_look_stage1.v1"
 FIT_SCHEMA = "joulewise.cadence_look_fit.v1"
 INPUT_SCHEMA = "joulewise.cadence_look_input.v1"
@@ -78,8 +80,18 @@ class LookInputError(ValueError):
 
 # =============================================================================================== validation
 _SPAN_KEYS = {"span_id", "block_id", "phase", "role", "power_mode", "t0_epoch_s", "t0_local_date", "meter_offsets_ns",
-              "soak_reference_tv0h_c", "marks"}
-_LEG_KEYS = {"leg_key", "span_id", "leg_id", "leg_type", "cell_prompt_tokens", "g0_role", "inclusion", "turn"}
+              "soak_reference_tv0h_c", "marks", "soak_receipt", "custody"}
+_LEG_KEYS = {"leg_key", "span_id", "leg_id", "leg_type", "cell_prompt_tokens", "g0_role", "inclusion", "turn",
+             "trace_holes", "ruled_exclusion"}
+TRACE_MAX_GAP_S = 2.0               # RL-173 E.1: the gap bound on both channels, and the clock-fit excess bound
+_SOAK_KEYS = {"field_present", "soak_attempts", "soak_steps"}
+_CUSTODY_KEYS = {"files_sha256", "meter_time_sha256", "meter_streams", "meter_unreadable"}
+_STREAM_KEYS = {"name", "present", "aligned", "samples", "duplicates", "clock_fit_excess_s", "clock_rate_ppm",
+                "fit_error"}
+_GPU_HOLE_KEYS = {"max_gap_s", "rows_sha256", "excluded", "reason"}
+_DC_HOLE_KEYS = {"max_gap_s", "bracketed", "clock_fit_excess_s", "excluded", "reason"}
+_RULED_RULES = ("sidecar_coverage", "km003c_clean")
+_HEX64 = re.compile(r"[0-9a-f]{64}")
 _TURN_KEYS = {"prefill_tokens", "decode_tokens", "turn_start_s", "first_token_s", "last_token_s", "segments",
               "prefix_tails", "journal", "native_pm"}
 _SEG_KEYS = {"seg", "kind", "n_tokens", "edge_lo", "edge_hi", "tok_first", "tok_last", "wall_start_s", "wall_end_s",
@@ -150,6 +162,7 @@ def validate_input(doc):
             raise LookInputError(f"{w}: t0_local_date")
         if not isinstance(s["marks"], list) or any(m not in _MARKS for m in s["marks"]):
             raise LookInputError(f"{w}: marks")
+        _validate_span_extras(s, w, doc["synthetic"])
         spans[s["span_id"]] = s
     seen = set()
     for i, leg in enumerate(doc["legs"]):
@@ -173,6 +186,7 @@ def validate_input(doc):
         _keys(leg["inclusion"], set(RULES), w + ".inclusion")
         if any(not isinstance(v, bool) for v in leg["inclusion"].values()):
             raise LookInputError(f"{w}.inclusion: not boolean")
+        _validate_leg_extras(leg, w, spans[leg["span_id"]], doc["synthetic"])
         if leg["leg_type"] == "T":
             if leg["turn"] is not None:
                 raise LookInputError(f"{w}: a type-T leg carries a turn; it is not read at this look (Q14)")
@@ -180,6 +194,76 @@ def validate_input(doc):
         if leg["turn"] is not None:
             _validate_turn(leg["turn"], w + ".turn")
     return spans
+
+
+def _validate_span_extras(s, w, synthetic):
+    """RL-172a's soak fields (the soak-retry print is computed from level R) and the custody digests stage 2 checks
+    before energy (Mythos round-5 N6); a real look always carries the digests."""
+    _keys(s["soak_receipt"], _SOAK_KEYS, w + ".soak_receipt")
+    sr = s["soak_receipt"]
+    if not isinstance(sr["field_present"], bool) or not isinstance(sr["soak_steps"], list) or any(
+            not isinstance(x, dict) or set(x) != {"name", "rc"} or not isinstance(x["name"], str)
+            or not (x["rc"] is None or (isinstance(x["rc"], int) and not isinstance(x["rc"], bool)))
+            for x in sr["soak_steps"]):
+        raise LookInputError(f"{w}.soak_receipt: field_present, soak_steps [{{name, rc}}]")
+    c = s["custody"]
+    if c is None:
+        if not synthetic and s["role"] == "fit":
+            raise LookInputError(f"{w}: a real look's span carries its custody digests")
+        return
+    _keys(c, _CUSTODY_KEYS, w + ".custody")
+    if not isinstance(c["files_sha256"], dict) or any(not isinstance(v, str) or not _HEX64.fullmatch(v)
+                                                      for v in c["files_sha256"].values()):
+        raise LookInputError(f"{w}.custody.files_sha256: path -> sha256")
+    if not (c["meter_time_sha256"] is None or (isinstance(c["meter_time_sha256"], str)
+                                              and _HEX64.fullmatch(c["meter_time_sha256"]))):
+        raise LookInputError(f"{w}.custody.meter_time_sha256")
+    if not isinstance(c["meter_streams"], list):
+        raise LookInputError(f"{w}.custody.meter_streams")
+    for j, m in enumerate(c["meter_streams"]):
+        _keys(m, _STREAM_KEYS, f"{w}.custody.meter_streams[{j}]")
+    if not (c["meter_unreadable"] is None or isinstance(c["meter_unreadable"], str)):
+        raise LookInputError(f"{w}.custody.meter_unreadable")
+
+
+def _validate_leg_extras(leg, w, span, synthetic):
+    """RL-173 E.1: the two time-stamp clauses' record, and a ruled exclusion (item 4). Each clause that excluded the
+    leg has its rule false (rule 3 for the GPU rail, rule 4 for DC-in), and its numbers agree with the bound."""
+    th, rx = leg["trace_holes"], leg["ruled_exclusion"]
+    if th is None:
+        if (not synthetic and span["role"] == "fit" and leg["leg_type"] == "A" and leg["turn"] is not None):
+            raise LookInputError(f"{w}: a real look's development leg with a turn carries its trace clauses")
+    else:
+        if leg["turn"] is None or span["role"] != "fit":
+            raise LookInputError(f"{w}: trace clauses on a leg with no turn or outside the fit")
+        _keys(th, {"gpu_rail", "dc_in"}, w + ".trace_holes")
+        g, d = th["gpu_rail"], th["dc_in"]
+        _keys(g, _GPU_HOLE_KEYS, w + ".trace_holes.gpu_rail")
+        _keys(d, _DC_HOLE_KEYS, w + ".trace_holes.dc_in")
+        for k in ("max_gap_s",):
+            _num(g[k], f"{w}.trace_holes.gpu_rail.{k}", allow_none=True)
+        for k in ("max_gap_s", "clock_fit_excess_s"):
+            _num(d[k], f"{w}.trace_holes.dc_in.{k}", allow_none=True)
+        for name, c in (("gpu_rail", g), ("dc_in", d)):
+            if not isinstance(c["excluded"], bool) or c["excluded"] != (c["reason"] is not None) or not (
+                    c["reason"] is None or isinstance(c["reason"], str)):
+                raise LookInputError(f"{w}.trace_holes.{name}: excluded exactly when a reason is given")
+        if not isinstance(d["bracketed"], bool):
+            raise LookInputError(f"{w}.trace_holes.dc_in.bracketed")
+        over_g = g["max_gap_s"] is None or g["max_gap_s"] > TRACE_MAX_GAP_S
+        over_d = (not d["bracketed"] or d["max_gap_s"] is None or d["max_gap_s"] > TRACE_MAX_GAP_S
+                  or (d["clock_fit_excess_s"] is not None and d["clock_fit_excess_s"] > TRACE_MAX_GAP_S))
+        if g["excluded"] != over_g or d["excluded"] != over_d:
+            raise LookInputError(f"{w}.trace_holes: a clause's verdict disagrees with its numbers and the 2 s bound")
+        if (g["excluded"] and leg["inclusion"]["sidecar_coverage"]) or (d["excluded"] and leg["inclusion"]["km003c_clean"]):
+            raise LookInputError(f"{w}: a trace clause excluded the leg but its rule passes")
+    if rx is not None:
+        _keys(rx, {"rule", "ruling"}, w + ".ruled_exclusion")
+        if rx["rule"] not in _RULED_RULES or not (isinstance(rx["ruling"], str)
+                                                 and re.fullmatch(r"RL-\d+[a-z]?", rx["ruling"])):
+            raise LookInputError(f"{w}.ruled_exclusion: rule 3's or 4's id and an RL-n ruling")
+        if leg["inclusion"][rx["rule"]]:
+            raise LookInputError(f"{w}: a ruled exclusion's rule passes")
 
 
 def _validate_turn(t, w):
@@ -649,7 +733,8 @@ def stage1(look_input, input_sha256, code_sha256=None):
         L = {"leg_key": leg["leg_key"], "span_id": leg["span_id"], "block_id": span["block_id"],
              "day": span["t0_local_date"], "role": span["role"], "leg_type": leg["leg_type"],
              "cell_prompt_tokens": leg["cell_prompt_tokens"], "g0_role": leg["g0_role"], "marks": list(span["marks"]),
-             "inclusion": dict(leg["inclusion"]), "included": included}
+             "inclusion": dict(leg["inclusion"]), "included": included,
+             "trace_holes": leg["trace_holes"], "ruled_exclusion": leg["ruled_exclusion"]}
         turn = leg["turn"]
         if turn is not None:
             status, state, tf, fan, exc = start_reading(turn, span["soak_reference_tv0h_c"])
@@ -829,7 +914,15 @@ def stage1(look_input, input_sha256, code_sha256=None):
               "by_day": cnt(lambda L: L["day"], fit_keys),
               # type-A legs only: a type-T leg is never judged at this look (Mythos N9)
               "excluded_by_rule": {r: sum(1 for k in order if legs_d[k]["leg_type"] == "A"
-                                          and not legs_d[k]["inclusion"][r]) for r in RULES}}
+                                          and not legs_d[k]["inclusion"][r]) for r in RULES},
+              # RL-173 E.1: the type-A legs each time-stamp clause excluded (rule 3: GPU rail; rule 4: DC-in)
+              "excluded_by_trace_clause": {ch: sum(1 for k in order if legs_d[k]["trace_holes"] is not None
+                                                   and legs_d[k]["trace_holes"][ch]["excluded"]) for ch in CHANNELS},
+              "ruled_exclusions": sum(1 for k in order if legs_d[k]["ruled_exclusion"] is not None)}
+    try:
+        soak = I34.soak_retries_from({s["span_id"]: s["soak_receipt"] for s in look_input["spans"]})
+    except ValueError as exc:
+        raise LookInputError(str(exc)) from None
     return {
         "schema": STAGE1_SCHEMA, "look_id": LOOK_ID, "input_sha256": input_sha256,
         "code_sha256": dict(code_sha256 or {}), "numpy_version": np.__version__,
@@ -840,6 +933,7 @@ def stage1(look_input, input_sha256, code_sha256=None):
         "meter_clock": meter_clock(look_input["spans"]),
         "active_readings": active_readings,
         "onsets_before_116_s": early,
+        "soak_retries": soak,                       # RL-172a, from level R's receipt fields
         "legs": out_legs,
     }
 
@@ -1385,3 +1479,145 @@ def output_check(obj, path="$"):
 def dump(obj):
     """Canonical bytes: the hash of every file this module writes is the sha256 of these."""
     return (json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
+
+
+# =============================================================================================== freeze 2
+COEFFICIENTS_SCHEMA = "joulewise.cadence_look_coefficients.v1"
+
+
+def _plain(obj):
+    """A detached JSON-plain copy (the coefficient file shares no object with its inputs)."""
+    return json.loads(json.dumps(obj, allow_nan=False))
+
+
+def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256):
+    """Freeze 2's coefficient file (RL-173 §E; manifest `freeze2`; interface §4.2). Pure: it reads no energy and no
+    file; it takes stage 1's output and the fit's output in memory and returns the document. Its hash (sha256 of
+    `dump` of it) is freeze 2. `predict` reads this document alone."""
+    if stage1_out.get("schema") != STAGE1_SCHEMA or fit_out.get("schema") != FIT_SCHEMA:
+        raise LookInputError("coefficients: not a stage-1 output and a fit output")
+    if stage1_out.get("look_id") != LOOK_ID or fit_out.get("look_id") != LOOK_ID:
+        raise LookInputError("coefficients: look_id")
+    if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:
+        raise LookInputError("coefficients: the stage-1 output does not match the hash it was given")
+    if fit_out.get("stage1_sha256") != stage1_sha256:
+        raise LookInputError("coefficients: the fit's stage1_sha256 differs from the stage-1 hash given")
+    if not (isinstance(manifest_sha256, str) and re.fullmatch(r"[0-9a-f]{64}", manifest_sha256)):
+        raise LookInputError("coefficients: manifest_sha256 is not a sha256")
+    for name, doc in (("stage-1 output", stage1_out), ("fit output", fit_out)):
+        if "manifest_sha256" in doc and doc["manifest_sha256"] != manifest_sha256:
+            raise LookInputError(f"coefficients: the {name}'s manifest_sha256 differs from the one given")
+    if fit_out.get("synthetic") != stage1_out.get("synthetic"):
+        raise LookInputError("coefficients: synthetic differs between stage 1 and the fit")
+    on = stage1_out["onset"]
+    estimable = on["status"] == "estimable"
+    if (fit_out["delta_column"] == "kept") != estimable:
+        raise LookInputError("coefficients: delta_column disagrees with the onset model's status")
+    channels = {}
+    for ch in CHANNELS:
+        c = fit_out["channels"][ch]
+        channels[ch] = {"columns": list(c["columns"]), "coefficients": dict(c["coefficients"]),
+                        "covariance": c["covariance"], "hot_rms_over_legs": c["lodo"]["hot_rms_over_legs"],
+                        "fold_coefficients": c["fold_coefficients"], "model_sha256": c["model_sha256"]}
+        if list(channels[ch]["coefficients"]) != channels[ch]["columns"]:
+            raise LookInputError(f"coefficients: channels.{ch}: coefficients are not keyed by its columns in order")
+    doc = {
+        "schema": COEFFICIENTS_SCHEMA, "look_id": LOOK_ID, "synthetic": stage1_out["synthetic"],
+        "manifest_sha256": manifest_sha256, "stage1_sha256": stage1_sha256,
+        "fit_sha256": hashlib.sha256(dump(fit_out)).hexdigest(),
+        "code_sha256": dict(fit_out["code_sha256"]), "numpy_version": fit_out["numpy_version"],
+        "block_tokens": BLOCK, "prefix": dict(PREFIX),
+        "rates": {"r_p": stage1_out["rates"]["r_p"], "r_d": stage1_out["rates"]["r_d"]},
+        "centring": dict(stage1_out["centring"]),
+        "calibrated_range": stage1_out["calibrated_range"],
+        "active_readings": {n: stage1_out["active_readings"][n]["active"] for n in READINGS},
+        "onset": {"status": on["status"], "predictors": list(on["predictors"]),
+                  "coefficients": on["coefficients"] if estimable else None,
+                  "sigma_s": on["sigma_s"] if estimable else None,
+                  "lodo_rms_s": on["lodo"]["rms_s"] if (estimable and on["lodo"] is not None) else None,
+                  "count_only_cut": on["count_only_cut"]},
+        "delta_column": fit_out["delta_column"],
+        "channels": channels,
+        "qualified_interim_half": fit_out["qualified_interim_half"],
+    }
+    doc = _plain(doc)
+    output_check(doc)                              # no energy or power key, no per-leg value
+    return doc
+
+
+def predict(coefficients, leg, soak_reference_tv0h_c):
+    """RL-173 §E's predict path: from the freeze-2 coefficient file ALONE (no stage-1 or fit file, no energy), the
+    main fit's prediction for one level-R leg (interface §1.2: a type-A leg with a turn) of a span whose soak
+    reference is `soak_reference_tv0h_c`. It runs stage 1's arithmetic for that leg with the frozen rates,
+    centring and onset model (start_reading, _count_clock_on, linear_predictor, tau_hat) and stage 2's design
+    (_onsets, _Fold, _design_row) with each channel's frozen columns and coefficients.
+
+    Returns {leg_key, start, tau_hat_s, t_p_s, load_s, channels: {ch: {segments, heat, H_hat, total,
+    prefix_tails}}}: `segments` are the fitted values per segment in order (the prefill, then the full blocks);
+    `heat` each segment's k_* and delta columns' contribution; `H_hat` the sum of `heat` over the segments (Ĥ);
+    `total` the sum of `segments`; `prefix_tails` per registered prefix length (key str(prefix_len)) the
+    prediction of that prefix (the prefill, the full blocks before it, and its tail), null when the prefix is
+    not shorter than the leg."""
+    c = coefficients
+    if not isinstance(c, dict) or c.get("schema") != COEFFICIENTS_SCHEMA or c.get("look_id") != LOOK_ID:
+        raise LookInputError("predict: not a coefficient file")
+    if c.get("block_tokens") != BLOCK or c.get("prefix") != PREFIX:
+        raise LookInputError("predict: the coefficient file's block or prefix lengths differ from this code's")
+    if not isinstance(leg, dict) or not {"leg_key", "leg_type", "turn"} <= set(leg):
+        raise LookInputError("predict: the leg is not a level-R leg")
+    key = leg["leg_key"]
+    if leg["leg_type"] != "A":
+        raise LookInputError(f"predict: leg {key}: not a type-A leg")
+    turn = leg["turn"]
+    if turn is None:
+        raise LookInputError(f"predict: leg {key}: no turn")
+    _validate_turn(turn, f"predict: leg {key}.turn")
+    _num(soak_reference_tv0h_c, f"predict: leg {key}: soak_reference_tv0h_c", allow_none=True)
+    status, state, tf, fan, exc = start_reading(turn, soak_reference_tv0h_c)
+    if status != "ok":
+        raise LookInputError(f"predict: leg {key}: start reading {status}")
+    centring, cal = c["centring"], c["calibrated_range"]
+    st = {"status": status, "state": state, "tf08_c": tf, "fan_rpm": fan, "tv0h_excess_c": exc}
+    st["z"] = [st[n] - centring[n] for n in READINGS]                       # as stage 1
+    st["extrapolated"] = any(not (cal[n][0] <= st[n] <= cal[n][1]) for n in READINGS)
+    L = {"leg_key": key, "_turn": turn, "prefill_tokens": turn["prefill_tokens"],
+         "decode_tokens": turn["decode_tokens"], "start": st}
+    t_p, T = _count_clock_on(L, c["rates"]["r_p"], c["rates"]["r_d"])
+    L["t_p_s"], L["load_s"] = t_p, T
+
+    on = c["onset"]
+    estimable = on["status"] == "estimable"
+    if (c["delta_column"] == "kept") != estimable:
+        raise LookInputError("predict: delta_column disagrees with the onset model's status")
+    model = ({"cols": list(on["predictors"]), "beta": np.array([on["coefficients"][p] for p in on["predictors"]]),
+              "sigma": on["sigma_s"]} if estimable else None)            # as stage 2 builds model_main
+    th = tau_hat(L, model)
+    onsets = _onsets([L], model) if c["delta_column"] == "kept" else {}
+
+    heat_cols = set(HEAT_COLS) | {DELTA_COL}
+    channels = {}
+    for ch in CHANNELS:
+        cc = c["channels"][ch]
+        cols = list(cc["columns"])
+        if DELTA_COL in cols and not onsets:
+            raise LookInputError(f"predict: channels.{ch}: a delta column without an onset model")
+        if any(h in cols for h in HEAT_OF.values() if not c["active_readings"][_reading_of(h)]):
+            raise LookInputError(f"predict: channels.{ch}: an inactive reading's column is present")
+        b = np.array([cc["coefficients"][col] for col in cols])
+        fold = _Fold([L], cols, onsets)
+        X = np.asarray(fold.rows(L), dtype=float)
+        is_heat = np.array([col in heat_cols for col in cols])
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):   # Accelerate's spurious matmul flags
+            seg = X @ b
+            heat = X[:, is_heat] @ b[is_heat]
+            tails = {str(plen): (float((np.asarray(fold.prefix_rows(L, plen), dtype=float) @ b).sum())
+                                 if plen < L["decode_tokens"] else None) for plen in PREFIX.values()}
+        channels[ch] = {"segments": [float(x) for x in seg], "heat": [float(x) for x in heat],
+                        "H_hat": float(heat.sum()), "total": float(seg.sum()), "prefix_tails": tails}
+    return {"leg_key": key,
+            "start": {"status": status, "state": state, "z": list(st["z"]), "extrapolated": st["extrapolated"]},
+            "tau_hat_s": th, "t_p_s": t_p, "load_s": T, "channels": channels}
+
+
+def _reading_of(heat_col):
+    return next(n for n, h in HEAT_OF.items() if h == heat_col)

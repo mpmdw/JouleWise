@@ -75,7 +75,8 @@ STEP3_ADAPTER_PATH = "joulewise/cadence_looks/step3_roster.py"
 REQUIRED_CODE_PATHS = {"interim": {"joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
                                    STEP3_PATH, STEP3_ADAPTER_PATH, "scripts/cadence_look_run.py",
                                    "scripts/cadence_look_manifest.py",
-                                   "joulewise/cadence_looks/schema_check.py"}}   # RL-166 Q1; Sol N3
+                                   "joulewise/cadence_looks/schema_check.py",
+                                   "joulewise/cadence_looks/time_fields.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1
 
 # Which block phases each look may read, by role (RL-149 sections 2.3 and 2.6; RL-157 section 4).
 # Phases are BLOCK-QUEUE's (joulewise/cadence/blocks.py PHASES). hp-01 is phase "extension".
@@ -262,6 +263,10 @@ def _verbatim(doc, kind, problems):
 # The re-run evidence the dictated sentences cite; check_repo hashes the file.
 EVIDENCE = {"docs/process/cadence/looks/evidence/2026-11-14-mythos-passrate-rerun-REPORT.md":
             "f1c6bc323d736bb13483a1783266d652f6eea2d347b93ed6e5a307ae614773aa"}
+# RL-173 E (Q11): the 8 % cell's two rows at 10,000 repetitions, synthetic (0.0280 and 0.0231, both at or under .035:
+# 0.08). The drift decision cites it when the threshold is the ruled 0.08.
+Q11_EVIDENCE = {"path": "docs/process/cadence/looks/evidence/2026-11-15-q11-drift-10k-REPORT.md",
+                "sha256": "8a0b15223c405e222b96be26a35d4faba42cdd0fe7253684e73c4d5bac92b35f"}
 # RL-166 Q8; ids as the stage-1 output (level D, docs/process/cadence_look_fit_interface.md section 3.3) names them
 STAGE1_TRIPWIRES = {"dev_included_below_45": 45, "days_below_4": 4, "cell_below_10": 10,     # days: RL-166b B-7
                     "start_reading_invalid_over_10pct": 0.10, "hp01_below_9": 9}
@@ -369,7 +374,8 @@ def code_refs(doc, *, look_code_only=False):
         if isinstance(rule, dict) and isinstance(rule.get("code"), dict):
             out.append((f"inclusion.rules[{i}].code", rule["code"].get("path"), rule["code"].get("sha256")))
     for where, node in (("outputs.schema", (doc.get("outputs") or {}).get("schema")),
-                        ("stages.stage1.schema", ((doc.get("stages") or {}).get("stage1") or {}).get("schema"))):
+                        ("stages.stage1.schema", ((doc.get("stages") or {}).get("stage1") or {}).get("schema")),
+                        ("freeze2.schema", (doc.get("freeze2") or {}).get("schema"))):
         if isinstance(node, dict):
             out.append((where, node.get("path"), node.get("sha256")))
     return out
@@ -426,7 +432,7 @@ def validate_manifest(doc, *, final=None):
     _outputs(doc.get("outputs"), kind, problems, final)
     _decisions(doc.get("decisions"), kind, problems, final)
     _later_looks(doc.get("later_looks"), problems)
-    _freezes(doc.get("freeze1"), doc.get("freeze2"), problems, kind)
+    _freezes(doc.get("freeze1"), doc.get("freeze2"), problems, kind, final)
     _custody(doc.get("custody"), problems)
     _review(doc.get("review"), problems)
     _verbatim(doc, kind, problems)
@@ -686,7 +692,12 @@ def _fit(f, kind, problems, final):
     # Mythos round-3 N7 / round-4 N5: the GPU-rail hole refusal, off unless the research lead rules it on. The
     # stage-2 CLI reads it (cadence_look_run.gpu_gap_rule); its shape is checked here so the switch can be set.
     sw = f.get("gpu_trace_hole_refusal")
-    if sw is not None:
+    if "gpu_trace_hole_refusal" in f and not isinstance(sw, dict):      # Mythos r5 N10: as the schema, no null
+        problems.append("fit.gpu_trace_hole_refusal: an object {enabled, max_gap_s[, cite]}")
+    elif kind == "interim" and not (isinstance(sw, dict) and sw.get("enabled") is True and sw.get("max_gap_s") == 2):
+        # RL-173 E.1 item 3: stage 2's refusal stays on as the backstop, at 2 s
+        problems.append("fit.gpu_trace_hole_refusal: enabled at max_gap_s 2 (RL-173 E.1 item 3)")
+    if isinstance(sw, dict):
         if not _closed(sw, {"enabled", "max_gap_s"}, "fit.gpu_trace_hole_refusal", problems, optional={"cite"}):
             pass
         else:
@@ -904,7 +915,8 @@ def _decisions(ds, kind, problems, final=False):
     for i, d in enumerate(ds):
         where = f"decisions[{i}]"
         if not _closed(d, {"id", "statistic", "rule", "action", "reads_energy", "cite"}, where, problems,
-                       optional={"threshold", "fallback_threshold", "ruled_threshold", "pending", "disposed_by"}):
+                       optional={"threshold", "fallback_threshold", "ruled_threshold", "pending", "disposed_by",
+                                 "evidence"}):
             continue
         if RETIRED_DECISION_RE.search(str(d.get("id"))):
             problems.append(f"{where}.id: Rule P and the interim look's one decision are retired (RL-151 §2.1)")
@@ -943,6 +955,9 @@ def _decisions(ds, kind, problems, final=False):
             if drift.get("ruled_threshold") != DRIFT_RULED or not (_text(drift.get("pending")) or disposed):
                 problems.append("decisions drift_tripwire: the fallback 0.04 carries ruled_threshold 0.08 and either "
                                 "the pending disposition or the disposing ruling (RL-166 Q11)")
+        elif th == DRIFT_RULED and drift.get("evidence") != Q11_EVIDENCE:
+            problems.append(f"decisions drift_tripwire: 0.08 cites RL-173's 10,000-repetition run as evidence "
+                            f"{Q11_EVIDENCE} (RL-166 Q11; RL-173 E)")
         elif th != DRIFT_RULED:
             problems.append(f"decisions drift_tripwire: threshold {DRIFT_RULED}, or the fallback {DRIFT_FALLBACK} "
                             "if Q11's condition fails (RL-166 Q11)")
@@ -985,7 +1000,7 @@ def _items_with_ids(items, where, keys, optional, required_ids, ruling, problems
         problems.append(f"{where}: carries {rid} ({ruling})")
 
 
-def _freezes(f1, f2, problems, kind=None):
+def _freezes(f1, f2, problems, kind=None, final=None):
     if _closed(f1, {"contents", "committed_before", "ledger_pointer", "cite"}, "freeze1", problems):
         if f1.get("committed_before") != "any development energy is read":
             problems.append("freeze1.committed_before: 'any development energy is read' (RL-149 §2.6 item 1)")
@@ -995,7 +1010,11 @@ def _freezes(f1, f2, problems, kind=None):
             problems.append("freeze1.ledger_pointer: the look ledger LOOKS.json (RL-166 Q18)")
         _need_cite(f1, "freeze1", problems)
     if _closed(f2, {"artifact", "contents", "commit_before", "used_by", "refit_on_qualification", "deferred_rules",
-                    "cite"}, "freeze2", problems):
+                    "cite"}, "freeze2", problems, optional={"schema"}):
+        if kind == "interim" and "schema" not in f2:
+            problems.append("freeze2.schema: the coefficient file's pinned schema (RL-173 E: write_coefficients)")
+        if "schema" in f2:
+            _code_ref(f2.get("schema"), "freeze2.schema", problems, final)
         _items_with_ids(f2.get("deferred_rules"), "freeze2.deferred_rules", {"id", "when", "rule", "cite"}, (),
                         REQUIRED_DEFERRED.get(kind, set()), "RL-166b §4", problems)
         if f2.get("refit_on_qualification") is not False:
@@ -1121,6 +1140,9 @@ def check_repo(doc, repo, kit_paths=(), *, final=None):
         f = repo / path
         if not f.is_file() or sha256_file(f) != sha:
             problems.append(f"{path}: the evidence the dictated sentences cite is missing or differs from sha256 {sha[:12]}")
+    q11 = repo / Q11_EVIDENCE["path"]
+    if not q11.is_file() or sha256_file(q11) != Q11_EVIDENCE["sha256"]:
+        problems.append(f"{Q11_EVIDENCE['path']}: the Q11 evidence is missing or differs from its sha256")
     if problems:
         raise ManifestError(problems)
     return warnings
@@ -1140,8 +1162,10 @@ def validate_look_ledger(doc, repo=None):
     seen = set()
     for i, row in enumerate(doc.get("looks") or []):
         where = f"looks[{i}]"
-        if not _closed(row, {"look_id", "manifest_path", "sha256", "status"}, where, problems, optional=LOOK_ROW_HASHES):
+        if not _closed(row, {"look_id", "manifest_path", "sha256", "status"}, where, problems,
+                       optional=LOOK_ROW_HASHES + ("stage1_superseded",)):
             continue
+        problems += superseded_problems(row.get("stage1_superseded"), where)
         for k in LOOK_ROW_HASHES:
             if k in row and not (row[k] is None or (isinstance(row[k], str) and SHA_RE.fullmatch(row[k]))):
                 problems.append(f"{where}.{k}: 64 hex or null")
@@ -1180,6 +1204,43 @@ def validate_look_ledger(doc, repo=None):
     if problems:
         raise ManifestError(problems)
     return doc
+
+
+RULED_EXCLUSION_RULES = ("sidecar_coverage", "km003c_clean")
+RULING_ID_RE = re.compile(r"RL-\d+[a-z]?")
+
+
+def superseded_problems(entries, where):
+    """RL-173 E.1 item 4 (and Mythos round-5 N3): a stage-1 commitment is replaced only by a named ruling. The row's
+    optional ``stage1_superseded`` lists each replaced commitment: its three hashes, the ruling that allows the
+    replacement, and the legs that ruling excluded by name (empty for a corrected hash, where stage 1 is not run
+    again)."""
+    if entries is None:
+        return []
+    out = []
+    if not isinstance(entries, list) or not entries:
+        return [f"{where}.stage1_superseded: a non-empty list"]
+    for i, e in enumerate(entries):
+        w = f"{where}.stage1_superseded[{i}]"
+        if not isinstance(e, dict) or set(e) != {"stage1_sha256", "roster_sha256", "verdicts_sha256", "ruling",
+                                                 "ruled_exclusions"}:
+            out.append(f"{w}: stage1_sha256, roster_sha256, verdicts_sha256, ruling, ruled_exclusions")
+            continue
+        for k in ("stage1_sha256", "roster_sha256", "verdicts_sha256"):
+            if not (isinstance(e[k], str) and SHA_RE.fullmatch(e[k])):
+                out.append(f"{w}.{k}: 64 hex")
+        if not (isinstance(e["ruling"], str) and RULING_ID_RE.fullmatch(e["ruling"])):
+            out.append(f"{w}.ruling: the research lead's RL-n")
+        rx = e["ruled_exclusions"]
+        if not isinstance(rx, list) or any(not isinstance(x, dict) or set(x) != {"leg_key", "rule"}
+                                           or not isinstance(x["leg_key"], str)
+                                           or x["rule"] not in RULED_EXCLUSION_RULES for x in rx):
+            out.append(f"{w}.ruled_exclusions: [{{leg_key, rule}}], rule one of {RULED_EXCLUSION_RULES}")
+    return out
+
+
+def _triple(e):
+    return (e.get("stage1_sha256"), e.get("roster_sha256"), e.get("verdicts_sha256"))
 
 
 def _look_row(looks_doc, look_id):
@@ -1281,8 +1342,9 @@ def committed_ledger(repo, *, ledger_ref=None):
 
 def stage1_history(repo, look_id, head):
     """The distinct (stage1_sha256, roster_sha256, verdicts_sha256) the look's LOOKS.json row has named, in every
-    commit reachable from ``head`` that touched the ledger, newest first (Mythos round-4 N3)."""
-    rc, out, err = _git(repo, "log", "--full-history", "--format=%H", head, "--", LOOK_LEDGER_PATH)
+    commit that touched the ledger and is reachable from ``head`` or from ANY remote-tracking ref, newest first (Mythos
+    round-4 N3; round-5 N5: a second line of history, published under another remote branch, is seen too)."""
+    rc, out, err = _git(repo, "log", "--full-history", "--format=%H", head, "--remotes", "--", LOOK_LEDGER_PATH)
     if rc != 0:
         raise ManifestError([f"the history of {LOOK_LEDGER_PATH} cannot be read ({err[:120]})"])
     seen = []
@@ -1309,15 +1371,28 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
     row = _look_row(ledger, look_id)
     problems = []
     history = stage1_history(repo, look_id, head)
-    if len(history) > 1:                              # Mythos round-4 N3: stage 1 is fixed once, before energy
-        problems.append(f"LOOKS.json's history names {len(history)} different stage-1 commitments for {look_id} "
-                        f"({', '.join(h[0][:12] for h in history)}): a committed stage 1 is never replaced "
-                        "(RL-166 Q8)")
+    # Mythos round-4 N3: stage 1 is fixed once, before energy; RL-173 E.1 item 4: a replaced commitment is listed in
+    # the row's stage1_superseded with the research lead's ruling, and nothing else replaces one
+    superseded = {_triple(e): e for e in row.get("stage1_superseded") or []}
+    current = _triple(row)
+    for h in history:
+        if h != current and h not in superseded:
+            problems.append(f"LOOKS.json's history names a stage-1 commitment for {look_id} that the row neither "
+                            f"holds nor lists as superseded by a ruling: stage1 {h[0]}, roster {h[1]}, verdicts {h[2]} "
+                            "(RL-166 Q8; RL-173 E.1 item 4)")
+    if current in superseded:
+        problems.append(f"LOOKS.json {look_id}: the current stage-1 commitment is listed as superseded")
+    last = (row.get("stage1_superseded") or [None])[-1]
+    want = sorted((x["leg_key"], x["rule"]) for x in (last or {}).get("ruled_exclusions") or [])
+    got = sorted((leg["leg_key"], leg["ruled_exclusion"]["rule"]) for leg in (stage1_doc or {}).get("legs") or []
+                 if isinstance(leg, dict) and leg.get("ruled_exclusion"))
+    if got != want:
+        problems.append(f"the stage-1 file's ruled exclusions {got} are not the ones the row's last superseded entry "
+                        f"names {want}")
     if row.get("status") not in STAGE1_COMMITTED_STATUSES:
         problems.append(f"LOOKS.json {look_id} is {row.get('status')!r}: stage 1 is not committed")
-    if row.get("stage1_sha256") != stage1_sha256:
-        problems.append(f"LOOKS.json {look_id} names stage-1 sha256 {str(row.get('stage1_sha256'))[:12]}, "
-                        f"not {stage1_sha256[:12]}")
+    if row.get("stage1_sha256") != stage1_sha256:          # Mythos r5 N3: full hashes, so a typo shows
+        problems.append(f"LOOKS.json {look_id} names stage-1 sha256 {row.get('stage1_sha256')}, not {stage1_sha256}")
     rc, man, _ = _git(repo, "show", f"{head}:{row.get('manifest_path')}")
     if rc != 0:
         problems.append(f"the manifest {row.get('manifest_path')} is not committed at HEAD")
@@ -1330,14 +1405,15 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
     for field, key, what in (("roster_sha256", "input:roster_sha256", "roster"),
                              ("verdicts_sha256", "input:rules_3_4_sha256", "rules-3-4 verdict file")):
         if recorded.get(key) is None or row.get(field) != recorded.get(key):
-            problems.append(f"LOOKS.json {look_id} {field} {str(row.get(field))[:12]} is not the {what} the stage-1 "
-                            f"file records ({str(recorded.get(key))[:12]})")
+            problems.append(f"LOOKS.json {look_id} {field} {row.get(field)} is not the {what} the stage-1 "
+                            f"file records ({recorded.get(key)})")
     if problems:
         raise ManifestError(problems)
     return row
 
 
-def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256, ledger_ref=None):
+def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256, ledger_ref=None,
+                             ruled_exclusions=None):
     """Stage 1's gate on its two inputs (Mythos round-3 N8): the committed LOOKS.json row for this look names this
     manifest at status committed or later, and the roster (``validate --roster-out``) and the rules-3-4 verdict file
     (``inclusion_34.py``) stage 1 was given, by sha256. The lead commits both hashes in the row before stage 1
@@ -1346,9 +1422,37 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
     row = _look_row(ledger, look_id)
     problems = []
     history = stage1_history(repo, look_id, head)
-    if history:                                       # Mythos round-4 N3: stage 1 runs once
-        problems.append(f"LOOKS.json's history already commits a stage 1 for {look_id} ({history[-1][0][:12]}): "
-                        "stage 1 is never run again (RL-166 Q8)")
+    given_rx = sorted((k, v[0]) for k, v in (ruled_exclusions or {}).items())
+    entries = row.get("stage1_superseded") or []
+    if history:
+        # Mythos round-4 N3: stage 1 runs once. RL-173 E.1 item 4: once more only when the research lead has excluded
+        # a leg by name after a stage-2 refusal: every earlier commitment is listed as superseded by a ruling, the
+        # last entry names exactly the exclusions this run applies (with every earlier entry's), and the roster and
+        # the verdict file are the replaced commitment's: no other change.
+        listed = {_triple(e) for e in entries}
+        unlisted = [h for h in history if h not in listed]
+        if unlisted:
+            problems.append(f"LOOKS.json's history already commits a stage 1 for {look_id} ({unlisted[0][0]}) that no "
+                            "ruling supersedes: stage 1 is never run again without one (RL-166 Q8; RL-173 E.1 item 4)")
+        elif not entries[-1]["ruled_exclusions"]:
+            problems.append("the row's last superseded entry excludes no leg: stage 1 runs again only for a ruled "
+                            "exclusion (a corrected hash needs no new stage 1)")
+        else:
+            last = entries[-1]
+            want = sorted((x["leg_key"], x["rule"]) for x in last["ruled_exclusions"])
+            earlier = {(x["leg_key"], x["rule"]) for e in entries[:-1] for x in e["ruled_exclusions"]}
+            if given_rx != want or not earlier <= set(want):
+                problems.append(f"the ruled exclusions given {given_rx} are not the ones the row's last superseded entry "
+                                f"names {want}, with every earlier one")
+            if (roster_sha256, verdicts_sha256) != (last["roster_sha256"], last["verdicts_sha256"]):
+                problems.append("a stage 1 run once more takes the replaced commitment's roster and verdict file")
+            for x in last["ruled_exclusions"]:
+                if (ruled_exclusions or {}).get(x["leg_key"], (None, None))[1] != last["ruling"]:
+                    problems.append(f"the ruled exclusion of {x['leg_key']} does not name {last['ruling']}")
+        if row.get("stage1_sha256") is not None:
+            problems.append(f"LOOKS.json {look_id} still names a stage-1 hash: a rerun starts from a row without one")
+    elif given_rx:
+        problems.append("ruled exclusions apply only to a stage 1 run once more after a committed one")
     if row.get("sha256") != manifest_sha256:
         problems.append("LOOKS.json does not name this manifest's sha256")
     if row.get("status") not in COMMITTED_STATUSES:
@@ -1358,8 +1462,7 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
         if row.get(field) is None:
             problems.append(f"LOOKS.json {look_id} has no {field}: commit the {what}'s sha256 before stage 1")
         elif row.get(field) != given:
-            problems.append(f"the {what} given ({str(given)[:12]}) is not the one LOOKS.json {look_id} names "
-                            f"({row[field][:12]})")
+            problems.append(f"the {what} given ({given}) is not the one LOOKS.json {look_id} names ({row[field]})")
     if problems:
         raise ManifestError(problems)
     return row
@@ -1388,13 +1491,24 @@ def loaded_repo_files(repo):
 _SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", "joulewise/cadence_looks/manifest.py",
                 "joulewise/cadence_looks/schema_check.py", "joulewise/axi_decode_config.py",
                 "joulewise/idle_admission.py", "joulewise/schemas.py", "joulewise/validation.py")
+# RL-173 E.1: stage 1 reads time fields of the energy files through time_fields.py, which runs the pinned meter
+# decoder's unwrap and clock fit on the counters; its import closure joins stage 1's set
+_DECODER_CODE = ("joulewise/aggregate.py", "joulewise/authentication_io.py", "joulewise/bundle_read.py",
+                 "joulewise/desk_compress.py", "joulewise/desk_restore.py", "joulewise/external/__init__.py",
+                 "joulewise/external/km003c_parse.py", "joulewise/provenance.py", "joulewise/suite.py")
 STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
-                              "scripts/cadence_look_run.py")
+                              "joulewise/cadence_looks/time_fields.py", "scripts/cadence_look_run.py") + _DECODER_CODE
 STEP3_CODE = _SHARED_CODE + ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/step3_energy_ratios.py")
 STAGE2_CODE = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
                "joulewise/cadence_looks/inclusion_34.py", "joulewise/cadence_looks/step3_energy_ratios.py",
-               "joulewise/cadence_looks/schema_check.py")
+               "joulewise/cadence_looks/schema_check.py", "joulewise/cadence_looks/time_fields.py")
 STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion_34.py, not by the stages
+
+
+def coefficients_schema(repo):
+    """The coefficient file's schema (freeze 2; RL-173 E) as it stands in ``repo`` (verify_pins has checked its pin)."""
+    return json.loads((Path(repo) / "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json")
+                      .read_text(encoding="utf-8"))
 
 
 def look_schemas(repo):
@@ -1437,7 +1551,20 @@ def stage1_problems(repo, doc, stage1, manifest_sha, *, allow_draft):
         problems.append("stage 1 does not record its roster's hash (input:roster_sha256)")
     if not allow_draft and stage1.get("allow_draft") is True:
         problems.append("the stage-1 file was made under --allow-draft")
+    problems += gate_problems((("stage 1", stage1),))       # Sol round-5 NEW-3: before either reader opens energy
     return problems
+
+
+def gate_problems(named):
+    """Mythos round-4 N6: a record carries a ledger gate exactly when it was not made under --allow-draft."""
+    out = []
+    for name, rec in named:
+        gate, draft = rec.get("ledger_gate"), rec.get("allow_draft") is True
+        if draft and gate is not None:
+            out.append(f"{name} was made under --allow-draft but records a ledger gate")
+        if not draft and not isinstance(gate, dict):
+            out.append(f"{name} was not made under --allow-draft but records no ledger gate")
+    return out
 
 
 def cached_bytecode(repo):

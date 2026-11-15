@@ -212,7 +212,11 @@ def build(scenario="noisy", seed=20261114, tokens=None):
         spans.append({"span_id": span_id, "block_id": block, "phase": "extension" if role == "describe" else "development",
                       "role": role, "power_mode": "high_power" if role == "describe" else "automatic",
                       "t0_epoch_s": t0, "t0_local_date": date, "soak_reference_tv0h_c": soak, "marks": marks,
-                      "meter_offsets_ns": {"header": meter_offset_ns(t0), "end": meter_offset_ns(t0)}})
+                      "meter_offsets_ns": {"header": meter_offset_ns(t0), "end": meter_offset_ns(t0)},
+                      # a v1.1 receipt: one soak, no soak_attempts field (RL-172a); no custody digests in level R
+                      "soak_receipt": {"field_present": False, "soak_attempts": None,
+                                       "soak_steps": [{"name": "soak", "rc": 0}]},
+                      "custody": None})
         cells = _cells(rule, n, rng)
         roles = _g0_roles(kit, n, rng)
         for pos in range(n):
@@ -295,7 +299,7 @@ def build(scenario="noisy", seed=20261114, tokens=None):
                "inclusion": {r: (r != p["excluded_rule"]) for r in
                              ("ran_to_cap", "g0_released", "sidecar_coverage", "km003c_clean",
                               "not_a_contaminated_attempt", "block_power_mode")},
-               "turn": None}
+               "turn": None, "trace_holes": None, "ruled_exclusion": None}
         tl = {"planted": {}}
         if p["type"] == "A":
             leg["turn"], tl = _turn(p, rng)          # always drawn, so the other legs' noise does not move
@@ -654,7 +658,8 @@ def write_custody(root, look_input, energy, tokens):
         legs = legs_by_span[sid]
         with open(os.path.join(sdir, "runner_receipt.json"), "w") as f:
             json.dump({"schema": "joulewise.cadence_span_receipt.v1", "started": {"epoch_s": span["t0_epoch_s"]},
-                       "roster": [leg["leg_id"] for leg in legs], "synthetic": True}, f)
+                       "roster": [leg["leg_id"] for leg in legs], "synthetic": True,
+                       "steps": [{"name": "soak", "rc": 0}]}, f)
         with open(os.path.join(sdir, "soak/soak_reference.json"), "w") as f:
             json.dump({"schema": "joulewise.align.r1_soak_reference.v1",
                        "sensors_c": {"TV0h": span["soak_reference_tv0h_c"], "TV1h": 55.0}}, f)

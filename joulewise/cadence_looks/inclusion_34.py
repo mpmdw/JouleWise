@@ -32,11 +32,12 @@ The trailer's counts are printed in the inclusion table (``span_trailers``) and 
 refused the "trailer counts zero" clause.
 
 **What is read.**
-* From each KM003C sample line (``{"k":"b",...}``), only its ``rt`` stamp (CLOCK_REALTIME ns at receipt) and
-  its sample count ``n``, taken with a fixed-prefix regular expression. The line is never JSON-decoded, and its
-  sample bytes and SMC values are never kept, logged or copied.
+* From each KM003C poll line (top-level ``"k": "b"``), only its ``rt`` stamp (CLOCK_REALTIME ns at receipt) and
+  its sample count ``n``, through the look's one time-field reader (``time_fields.py``, RL-173 E.1): its lexer
+  converts no SMC value and no sample byte; they are never kept, logged or copied.
 * Error lines (``{"k": "e", ...}``) are skipped unread.
-* Only the header and the trailer are decoded, as the runner already does (RL-150 R8).
+* Of the header and the trailer, only their operational keys (``time_fields.HEADER_KEYS``, ``TRAILER_KEYS``).
+* A ``.zst`` sibling of a stream (a desk-compressed custody copy) refuses the span (Mythos round-5 N8).
 * From ``rich_telemetry.jsonl``, only ``timestamp_s`` and ``elapsed_ns``, taken by pattern. The line is never
   JSON-decoded, so no power or energy value is parsed (Sol cold seat 1).
 * A type-T leg (``leg_record.json`` ``spec.leg_type == "T"``, the ruled selector only) is never opened
@@ -69,16 +70,6 @@ METER_MIN_COVERAGE = 0.99            # RL-166 Q7
 METER_MAX_GAP_NS = 2 * NS            # RL-166 Q7
 NORMAL_STOP_REASONS = ("duration", "stop file")     # and any "signal N" (km003c_monitor.py on_signal)
 ABNORMAL_STOP_REASONS = ("absent", "exception", "consecutive USB errors")
-
-# km003c_monitor.py writes sample lines compact ('{"k":"b","tx":..,"rx":..,"rt":..,'); spaced JSON is accepted too.
-_SAMPLE_LINE_RE = re.compile(rb'^\{\s*"k"\s*:\s*"b"\s*,\s*"tx"\s*:\s*(\d+)\s*,\s*"rx"\s*:\s*(\d+)\s*,\s*"rt"\s*:\s*(\d+)\s*,'
-                             rb'\s*"n"\s*:\s*(\d+)\s*,')
-# Sol round-4 NEW-4: only a line positively recognized as a header or a trailer is ever JSON-decoded: its record kind
-# is "h" or "t" (the monitor writes both with sorted keys, so "k" need not come first), and it carries none of a
-# sample line's keys. Every other line is taken by the sample pattern above or left unread.
-_HEADER_TRAILER_RE = re.compile(rb'(?:^\{\s*|,\s*)"k"\s*:\s*"[ht]"\s*[,}]')
-_SAMPLE_KEY_RE = re.compile(rb'"(?:smc|p|n|tx|rx|rt|raw|usb_error)"\s*:')
-
 
 # ------------------------------------------------------------------------------------------------------------
 # Copied from joulewise/align/apple/thermal.py (v4 strict path; see the module docstring). Byte-identical:
@@ -288,63 +279,16 @@ def _jsonl_lines(path):
 
 
 def read_meter_stream(path):
-    """{"name", "header", "trailer", "polls"} for one KM003C stream. A sample line gives its rt stamp and its
-    sample count n, by pattern, and is never decoded; error lines are skipped; header and trailer are decoded
+    """{"name", "header", "trailer", "polls"} for one KM003C stream, through the look's one time-field reader
+    (``time_fields.read_stream``, RL-173 E.1): a poll line gives its ``rt`` stamp and its sample count ``n``; the
+    record kind is the line's top-level ``k`` (Sol round-5 NEW-2); no SMC value or sample value is converted. The header
+    is the first line when it is one, the trailer the last trailer line; only their operational keys are read
     (RL-150 R8)."""
-    path = Path(path)
-    header = trailer = None
-    polls, round_trips, first, last_other = [], [], True, None
-    for raw in _jsonl_lines(path):
-        m = _SAMPLE_LINE_RE.match(raw)
-        if m:
-            tx, rx, rt, n = (int(g) for g in m.groups())
-            polls.append((rt, n))
-            round_trips.append((rt, n, rx - tx))
-        elif not _HEADER_TRAILER_RE.search(raw) or _SAMPLE_KEY_RE.search(raw):
-            pass                                  # an error line, or any line in an unknown form: never decoded
-        else:
-            doc = json.loads(raw)
-            if first and doc.get("k") == "h":
-                header = doc
-            elif doc.get("k") == "t":
-                last_other = doc
-        first = False
-    if last_other is not None:
-        trailer = last_other
-    polls.sort()
-    round_trips.sort()
-    return {"name": path.name, "header": header, "trailer": trailer, "polls": polls, "round_trips": round_trips}
-
-
-# Mythos round-3 N6: stage 2 integrates DC-in only over an interval bracketed by meter samples (a sample at or
-# before its start and one at or after its end, on the samples' fitted clock). Rule 4 is the ruled rule (RL-166
-# Q7) and is not changed; this is the same test from the poll stamps, for stage 1's preflight, so a leg rule 4
-# admits that stage 2 would refuse surfaces before the stage-1 hash is committed. From stamps alone it is
-# conservative: a poll's samples were digitised before its answer arrived (rt), and its newest sample at most one
-# sample period plus the request's round trip (rx - tx) before (km003c_parse's clock fit); the margin covers
-# R-20's 0.1 s clock threshold and the fit's jitter.
-BRACKET_MARGIN_NS = 250_000_000
-
-
-def meter_bracket(interval_ns, streams):
-    """{"start", "end", "bracketed"}: a sample-bearing poll received at least the margin before the interval's start,
-    and one whose newest sample was digitised at least the margin after its end."""
-    out = {"start": False, "end": False, "bracketed": False}
-    if interval_ns is None or interval_ns[1] <= interval_ns[0]:
-        return out
-    a, b = interval_ns
-    for s in streams:
-        sps = (s.get("header") or {}).get("sps")
-        step = NS / sps if isinstance(sps, (int, float)) and not isinstance(sps, bool) and sps > 0 else None
-        for rt, n, rtt in s.get("round_trips") or []:
-            if n <= 0:
-                continue
-            if rt <= a - BRACKET_MARGIN_NS:
-                out["start"] = True
-            if step is not None and rt - rtt - step - BRACKET_MARGIN_NS >= b:
-                out["end"] = True
-    out["bracketed"] = out["start"] and out["end"]
-    return out
+    from joulewise.cadence_looks import time_fields as TF     # lazily: run as a program, the repository joins
+    view = TF.read_stream(path, counters=False)               # sys.path in main(), after the fresh pycache prefix
+    polls = sorted((p["rt"], p["n"]) for p in view["polls"]
+                   if all(type(p.get(k)) is int and p[k] >= 0 for k in ("tx", "rx", "rt", "n")))
+    return {"name": view["name"], "header": view["first_line_header"], "trailer": view["trailer"], "polls": polls}
 
 
 TRAILER_COUNT_KEYS = ("polls", "empties", "bad", "usb_errors")
@@ -453,10 +397,8 @@ def judge_leg(bundle, meter_streams, selected_keys, *, period_s=None):
     outputs/align_thermal.jsonl, rich_telemetry.jsonl (two stamps by pattern) and config.json; no energy value is decoded."""
     interval = read_leg_interval(bundle)
     period = period_s if period_s is not None else pm_period_s(bundle)
-    r4 = rule4(interval, meter_streams)
-    r4["stage2_bracket"] = meter_bracket(interval, meter_streams)       # a print for stage 1's preflight; not rule 4
     return {"rule3": rule3(interval, read_sidecar_rows(bundle), selected_keys, read_pm_supports(bundle), period),
-            "rule4": r4}
+            "rule4": rule4(interval, meter_streams)}
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -491,7 +433,8 @@ def span_dirs(custody, overrides=()):
 def judge_span(sdir, span_id, selected_keys):
     """({leg_key: {sidecar_coverage, km003c_clean}}, {leg_key: detail}, trailers) for one span directory."""
     sdir = Path(sdir)
-    streams = [read_meter_stream(p) for p in sorted((sdir / "hazards" / "meter").glob("stream-*.jsonl"))]
+    from joulewise.cadence_looks import time_fields as TF
+    streams = [read_meter_stream(p) for p in TF.span_streams(sdir)]       # a .zst sibling refuses (Mythos r5 N8)
     verdicts, detail = {}, {}
     for leg_id in _json(sdir / "runner_receipt.json")["roster"]:
         key = f"{span_id}/{leg_id}"
@@ -536,25 +479,37 @@ SOAK_KINDS = ("slope", "load", "kind not recorded")
 SOAK_KIND_FIELDS = ("refusal_kind",)
 
 
-def soak_attempts(sdir):
-    """(attempts, field present, accepted) from the span's receipt. Each attempt is checked against the receipt's
-    soak steps: numbered from 1, one step per attempt in order, every refused attempt's step nonzero."""
-    receipt = _json(Path(sdir) / "runner_receipt.json")
-    if "soak_attempts" not in receipt:
-        return [{"attempt": 1, "refused": None}], False, True
-    attempts = receipt["soak_attempts"]
-    steps = [st for st in receipt.get("steps") or []
+def soak_fields(receipt):
+    """The receipt fields the soak-retry print reads, as level R carries them (fit_interim stage 1 computes the print
+    from level R, so the twin can): whether ``soak_attempts`` is present, its value, and the receipt's soak steps
+    ({"name", "rc"} of each step named "soak" or "soak.a<n>")."""
+    steps = [{"name": st.get("name"), "rc": st.get("rc")} for st in receipt.get("steps") or []
              if isinstance(st, dict) and re.fullmatch(r"soak(\.a\d+)?", str(st.get("name")))]
+    return {"field_present": "soak_attempts" in receipt, "soak_attempts": receipt.get("soak_attempts"),
+            "soak_steps": steps}
+
+
+def soak_attempts_of(span_id, fields):
+    """(attempts, field present, accepted) from a span's soak fields. Each attempt is checked against the receipt's
+    soak steps: numbered from 1, one step per attempt in order, every refused attempt's step nonzero."""
+    if not fields["field_present"]:
+        return [{"attempt": 1, "refused": None}], False, True
+    attempts, steps = fields["soak_attempts"], fields["soak_steps"]
     names = ["soak" if i == 0 else f"soak.a{i + 1}" for i in range(len(attempts) if isinstance(attempts, list) else 0)]
     if (not isinstance(attempts, list) or [st["name"] for st in steps] != names or any(
             not isinstance(a, dict) or a.get("attempt") != i + 1
             or not (a.get("refused") is None or isinstance(a.get("refused"), str))
             or (a.get("refused") is None and i != len(attempts) - 1)
             or (a.get("refused") is not None and steps[i].get("rc") in (0, None)) for i, a in enumerate(attempts))):
-        raise ValueError(f"{Path(sdir).name}: runner_receipt.json soak_attempts does not match its soak steps "
+        raise ValueError(f"{span_id}: runner_receipt.json soak_attempts does not match its soak steps "
                          "(numbered attempts, each refused but the last, one soak step each)")
     accepted = bool(attempts) and attempts[-1].get("refused") is None and steps[-1].get("rc") == 0
     return attempts, True, accepted
+
+
+def soak_attempts(sdir):
+    """soak_attempts_of on the span directory's receipt."""
+    return soak_attempts_of(Path(sdir).name, soak_fields(_json(Path(sdir) / "runner_receipt.json")))
 
 
 def soak_refusal_kind(attempt):
@@ -565,12 +520,13 @@ def soak_refusal_kind(attempt):
     return "kind not recorded", None
 
 
-def soak_retries(span_dirs_by_id):
-    """The look's soak-retry print (RL-172a): per span, its attempts and the kinds of the retried ones; in sum, the
-    spans with a retry, the retried soaks by kind, the spans accepted after a retry and those the soak stopped."""
+def soak_retries_from(fields_by_span):
+    """The look's soak-retry print (RL-172a) from each span's soak fields: per span, its attempts and the kinds of
+    the retried ones; in sum, the spans with a retry, the retried soaks by kind, the spans accepted after a retry and
+    those the soak stopped."""
     spans, by_kind = {}, {k: 0 for k in SOAK_KINDS}
-    for span_id, sdir in sorted(span_dirs_by_id.items()):
-        attempts, recorded, accepted = soak_attempts(sdir)
+    for span_id, fields in sorted(fields_by_span.items()):
+        attempts, recorded, accepted = soak_attempts_of(span_id, fields)
         retried = []
         for a in attempts[:-1]:                     # every attempt with a successor was retried
             kind, source = soak_refusal_kind(a)
@@ -582,6 +538,12 @@ def soak_retries(span_dirs_by_id):
             "retried_by_kind": by_kind,
             "accepted_after_retry": sum(1 for v in spans.values() if v["retried"] and v["accepted"]),
             "stopped_by_soak": sum(1 for v in spans.values() if v["attempts"] and not v["accepted"])}
+
+
+def soak_retries(span_dirs_by_id):
+    """soak_retries_from on each span directory's receipt."""
+    return soak_retries_from({sid: soak_fields(_json(Path(sdir) / "runner_receipt.json"))
+                              for sid, sdir in span_dirs_by_id.items()})
 
 
 def judge_custody(roster, sdir_of, selected_keys):
@@ -660,6 +622,9 @@ def main(argv=None):
     try:
         verdicts, detail = judge_custody(roster, sdir_of, selected)
     except Exception as exc:                      # type and line only: a message could carry a value
+        if type(exc).__name__ == "TimeFieldError":    # time_fields' refusal names a file and a field, never a value
+            print(f"REFUSE {exc}")
+            return 1
         tb = exc.__traceback__
         while tb.tb_next:
             tb = tb.tb_next

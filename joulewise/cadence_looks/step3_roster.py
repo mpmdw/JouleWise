@@ -194,6 +194,43 @@ def entries_from_stage1(stage1, sdir_of):
     return out
 
 
+def custody_problems(stage1, entries, sdir_of):
+    """Mythos round-5 N6, before any bundle opens: each leg's leg_record.json is the one stage 1 read (its sha256 in
+    the stage-1 file's span custody record). A synthetic level-R stage 1 carries no custody record."""
+    spans = {sp["span_id"]: sp for sp in (stage1.get("roster") or {}).get("spans") or []}
+    out = []
+    for e in entries:
+        span_id, leg_id = e["key"].split("/", 1)
+        files = ((spans.get(span_id) or {}).get("custody") or {}).get("files_sha256")
+        if files is None:
+            if stage1.get("synthetic") is not True:
+                out.append(f"{span_id}: the stage-1 file carries no custody record")
+            continue
+        rel = f"legs/{leg_id}/leg_record.json"
+        got = hashlib.sha256((Path(sdir_of(span_id)) / rel).read_bytes()).hexdigest()
+        if files.get(rel) != got:
+            out.append(f"custody: {span_id}/{rel} is not the file stage 1 read")
+    return out
+
+
+def custody_record(custody, overrides, entries, sdir_of):
+    """What step 3 read, by path and sha256 (a hash of bytes, not a value): assemble requires the fit's GPU traces to
+    be these (Mythos round-5 N6)."""
+    files = []
+    for e in entries:
+        span_id = e["key"].split("/", 1)[0]
+        b = Path(e["bundle"])
+        rel = b.relative_to(Path(sdir_of(span_id))).as_posix()
+        for name in ("power_trace.csv", "rich_telemetry.jsonl", "raw/powermetrics.plist"):
+            if (b / name).is_file():
+                files.append({"path": f"{span_id}/{rel}/{name}",
+                              "sha256": hashlib.sha256((b / name).read_bytes()).hexdigest()})
+    return {"root": str(Path(custody).resolve()),
+            "span_dirs": [{"span_id": k, "path": str(Path(v).resolve())}
+                          for k, v in sorted(dict(o.split("=", 1) for o in overrides).items())],
+            "files": sorted(files, key=lambda f: f["path"])}
+
+
 def span_dirs(custody, overrides=()):
     """span_id -> directory: <custody>/<span_id> unless SPAN_ID=PATH overrides it (as the stage-1 CLI). The same
     rule as inclusion_34.span_dirs; repeated so that this file runs on the standard library alone under -I."""
@@ -275,8 +312,13 @@ def main(argv=None):
         return 1
     threshold = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")["threshold"]
     try:
-        entries = entries_from_stage1(stage1, span_dirs(a.custody, a.span_dir))
+        sdir_of = span_dirs(a.custody, a.span_dir)
+        entries = entries_from_stage1(stage1, sdir_of)
+        problems = custody_problems(stage1, entries, sdir_of)
+        if problems:
+            raise Step3Refused("; ".join(problems))
         result = run_roster(entries, threshold=threshold)
+        custody = custody_record(a.custody, a.span_dir, entries, sdir_of)
     except Step3Refused as error:
         print(f"REFUSE {error}")
         return 1
@@ -295,7 +337,7 @@ def main(argv=None):
            # the step 3 module runs from its verified bytes under a fresh name, outside sys.modules: named here
            "code_sha256": {**lm.loaded_repo_files(repo), lm.STEP3_PATH: STEP3_SHA256},
            "allow_draft": bool(a.allow_draft), "synthetic": stage1.get("synthetic") is True, "ledger_gate": gate,
-           **result}
+           "custody": custody, **result}
     text = json.dumps(out, indent=1, allow_nan=False) + "\n"
     Path(a.out).write_text(text, encoding="utf-8")
     print(f"wrote {a.out} sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()}")

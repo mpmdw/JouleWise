@@ -4,6 +4,8 @@
     python3 -B scripts/cadence_look_manifest.py validate MANIFEST.json [--final]
         [--repo DIR [--kit KIT.json ...]] [--span-ledger LEDGER.json [--roster-out ROSTER.json]] [--looks LOOKS.json]
     python3 -B scripts/cadence_look_manifest.py pin MANIFEST.json --repo DIR [--write]
+    python3 -B scripts/cadence_look_manifest.py row --manifest MANIFEST.json --repo DIR
+        (--roster ROSTER.json --verdicts VERDICTS.json | --stage1 STAGE1.json) [--write]
     python3 -B scripts/cadence_look_manifest.py assemble --manifest MANIFEST.json --stage1 STAGE1.json
         --fit FIT.json --step3 STEP3.json --analyst-seat NAME [--hold-cleared FLAG=RL-n ...] [--allow-draft]
         --out OUTPUT.json
@@ -153,6 +155,53 @@ def pin(args):
     return 0
 
 
+def row(args):
+    """Mythos round-5 N3: the LOOKS.json row's hashes are written from the files, never pasted. ``--roster`` with
+    ``--verdicts``: the inputs, on a row at status committed (before stage 1). ``--stage1``: the stage-1 file, after
+    checking it as stage 2 will (``manifest.stage1_problems``, committed mode) and that it records the row's roster
+    and verdict hashes; the status becomes stage1_committed. Prints the change with full hashes; writes LOOKS.json
+    only with ``--write``. Never commits."""
+    repo = Path(args.repo)
+    looks_path = repo / lm.LOOK_LEDGER_PATH
+    looks = lm.load_json(looks_path)
+    doc = lm.load_json(args.manifest)
+    r = next((x for x in looks.get("looks") or [] if x.get("look_id") == doc.get("look_id")), None)
+    problems = []
+    if r is None:
+        problems.append(f"LOOKS.json has no row for {doc.get('look_id')}")
+    elif r.get("sha256") != lm.sha256_file(args.manifest):
+        problems.append("LOOKS.json's row does not name this manifest's sha256")
+    changes = {}
+    if not problems and args.stage1:
+        stage1 = json.loads(Path(args.stage1).read_bytes())
+        problems += lm.stage1_problems(repo, doc, stage1, lm.sha256_file(args.manifest), allow_draft=False)
+        rec = stage1.get("code_sha256") or {}
+        for field, key in (("roster_sha256", "input:roster_sha256"), ("verdicts_sha256", "input:rules_3_4_sha256")):
+            if r.get(field) != rec.get(key):
+                problems.append(f"the stage-1 file records {key} {rec.get(key)}, the row names {r.get(field)}")
+        if r.get("status") != "committed":
+            problems.append(f"the row is {r.get('status')!r}: a stage-1 hash is written on a committed row")
+        changes = {"stage1_sha256": lm.sha256_file(args.stage1), "status": "stage1_committed"}
+    elif not problems:
+        if r.get("status") != "committed" or r.get("stage1_sha256") is not None:
+            problems.append("the inputs are written on a committed row with no stage-1 hash")
+        changes = {"roster_sha256": lm.sha256_file(args.roster), "verdicts_sha256": lm.sha256_file(args.verdicts)}
+    if problems:
+        for p_ in problems:
+            print(f"REFUSE {p_}")
+        return 1
+    for k, v in changes.items():
+        print(f"LOOKS.json {doc['look_id']}.{k}: {r.get(k)} -> {v}")
+    r.update(changes)
+    lm.validate_look_ledger(looks)
+    if args.write:
+        looks_path.write_text(json.dumps(looks, indent=2) + "\n", encoding="utf-8")
+        print(f"wrote {lm.LOOK_LEDGER_PATH} (commit and push it; the stages read the committed ledger)")
+    else:
+        print("nothing written without --write")
+    return 0
+
+
 HELD_FLAGS = ("onsets_before_116_s.to_research_lead", "meter_clock.to_research_lead", "tripwires.any")
 
 
@@ -178,15 +227,7 @@ def _provenance(name, rec, doc, manifest_sha, pins, *, exact=None):
 
 
 def _gate_problems(named):
-    """Mythos round-4 N6: a record carries a ledger gate exactly when it was not made under --allow-draft."""
-    out = []
-    for name, rec in named:
-        gate, draft = rec.get("ledger_gate"), rec.get("allow_draft") is True
-        if draft and gate is not None:
-            out.append(f"{name} was made under --allow-draft but records a ledger gate")
-        if not draft and not isinstance(gate, dict):
-            out.append(f"{name} was not made under --allow-draft but records no ledger gate")
-    return out
+    return lm.gate_problems(named)
 
 
 def _coefficient_problems(fit):
@@ -206,6 +247,24 @@ def _coefficient_problems(fit):
         if isinstance(without, dict) and not set(without) <= cols:
             problems.append(f"the fit's {ch_name} coefficients_without carries a key outside its columns")
     return problems
+
+
+def _custody_problems(fit, step3, allow_draft):
+    """Mythos round-5 N6: the fit and step 3 read one custody copy: the same root and span overrides, and every GPU
+    trace the fit opened is the file step 3 opened (path and sha256). A level-E synthetic fit records none."""
+    fc, sc_ = fit.get("custody"), step3.get("custody")
+    if fc is None:
+        return [] if allow_draft else ["the fit records no custody: a committed look reads custody"]
+    if not isinstance(sc_, dict):
+        return ["step 3 records no custody"]
+    out = []
+    if fc.get("root") != sc_.get("root") or fc.get("span_dirs") != sc_.get("span_dirs"):
+        out.append("the fit and step 3 read different custody roots or span directories")
+    s3 = {f["path"]: f["sha256"] for f in sc_.get("files") or []}
+    for f in fc.get("files") or []:
+        if f["path"].endswith("/power_trace.csv") and s3.get(f["path"]) != f["sha256"]:
+            out.append(f"the fit's {f['path']} is not the file step 3 read")
+    return out
 
 
 def assemble(args):
@@ -255,9 +314,10 @@ def assemble(args):
     if applied != drift.get("threshold"):
         problems.append(f"step 3 applied the drift threshold {applied}, not the manifest's {drift.get('threshold')}")
     problems += _coefficient_problems(fit)
+    problems += _custody_problems(fit, step3, args.allow_draft)
     drafted = [name for name, rec in (("stage 1", stage1), ("the fit", fit), ("step 3", step3))
                if rec.get("allow_draft") is True]
-    problems += _gate_problems((("stage 1", stage1), ("the fit", fit), ("step 3", step3)))
+    problems += _gate_problems((("the fit", fit), ("step 3", step3)))      # stage 1: in stage1_problems
     if args.allow_draft:
         if stage1.get("synthetic") is not True:
             problems.append("--allow-draft on a stage-1 file that is not synthetic (Mythos N2)")
@@ -297,7 +357,8 @@ def assemble(args):
                           "holds_cleared": [{"flag": f, "cleared_by": cleared[f]} for f in raised],
                           "statement": "An energy read on conditionless campaign legs only, by frozen code at the "
                                        "interim look (RL-149 section 2.6; RL-150 R6): none comes from a run with a "
-                                       "sabotage instruction, a slot or a v4 member."}}
+                                       "sabotage instruction, a slot or a v4 member. Of the energy files, stage 1 "
+                                       "read time stamps and sample counters only (RL-173 E.1)."}}
     out_errors = sc.errors(out, out_schema)
     if out_errors:
         for e in out_errors[:20]:
@@ -348,6 +409,14 @@ def main(argv=None):
     w.add_argument("manifest")
     w.add_argument("--repo", required=True)
     w.add_argument("--write", action="store_true")
+    rw = sub.add_parser("row", help="write the LOOKS.json row's hashes from the files (Mythos r5 N3)")
+    rw.add_argument("--manifest", required=True)
+    rw.add_argument("--repo", required=True)
+    g = rw.add_mutually_exclusive_group(required=True)
+    g.add_argument("--stage1")
+    g.add_argument("--roster")
+    rw.add_argument("--verdicts")
+    rw.add_argument("--write", action="store_true")
     a = sub.add_parser("assemble")
     for k in ("--manifest", "--stage1", "--fit", "--step3", "--analyst-seat", "--out"):
         a.add_argument(k, required=True)
@@ -362,6 +431,15 @@ def main(argv=None):
         return validate(args)
     if args.cmd == "assemble":
         return assemble(args)
+    if args.cmd == "row":
+        if bool(args.roster) != bool(args.verdicts):
+            p.error("--roster needs --verdicts")
+        try:
+            return row(args)
+        except lm.ManifestError as error:
+            for p_ in error.problems:
+                print(f"REFUSE {p_}")
+            return 1
     return pin(args)
 
 

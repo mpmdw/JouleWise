@@ -81,19 +81,21 @@
         "the onset model's uncensored count by cell (B-3)",
         "onsets_before_116_s by G0 role (P-4)",
         "meter_clock (RL-167 R-20)",
-        "soak_retries: each roster span's soak attempts and the retried soaks by refusal kind (RL-172a)"
+        "soak_retries: each roster span's soak attempts and the retried soaks by refusal kind (RL-172a)",
+        "the two time-stamp clauses (RL-173 E.1): a development leg whose energy-fit intervals hold a power_trace.csv stretch over 2 s with no gpu_power row fails rule 3, and one whose intervals are not bracketed by decoded meter samples, hold a gap over 2 s between them, or sit on a stream whose decoder clock-fit excess is over 2 s fails rule 4; per leg the numbers, per span the decoder's duplicate count, and the custody digests stage 2 checks before energy"
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "9a52c1335d962894c086dca2671586a737c90d126bcbbb58168a6aaf6d8339ac"
+        "sha256": "5a48edc9bae69390c3953a7fb5e4025825702382f684090a759d5221f8663703"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
       "cite": [
-        "RL-166 Q8",
         "RL-166 Q15",
+        "RL-166 Q8",
         "RL-166 §2",
-        "RL-172a"
+        "RL-172a",
+        "RL-173"
       ]
     },
     "stage2": {
@@ -382,9 +384,9 @@
         "stage": "inclusion"
       },
       {
-        "basename": "hazards/meter/stream-*.jsonl header line and the last 256 KB, by pattern, for the last poll's rx and rt (the stage-1 CLI's R-20 clock print)",
+        "basename": "hazards/meter/stream-*.jsonl through joulewise/cadence_looks/time_fields.py, the look's one time-field reader: the header's and trailer's operational keys, each poll's tx, rx, rt and n, and each sample's 16-bit device counter; no SMC value or sample value is converted (the stage-1 CLI's trace clause, R-20's clock print and the custody digest)",
         "scope": "span",
-        "carries": "timestamps only",
+        "carries": "time stamps and sample counters only (RL-173 E.1)",
         "stage": "inclusion"
       },
       {
@@ -392,6 +394,12 @@
         "scope": "accepted attempt",
         "carries": "token index and stamps; output token ids are counted, never kept",
         "stage": "journal"
+      },
+      {
+        "basename": "power_trace.csv gpu_power rows' interval_start_s and interval_end_s, through joulewise/cadence_looks/time_fields.py (power_w is never converted)",
+        "scope": "accepted attempt of a development leg with a turn",
+        "carries": "row stamps only (RL-173 E.1)",
+        "stage": "inclusion"
       },
       {
         "basename": "power_trace.csv (gpu_power), through the committed step 3 module's loaders and Trace",
@@ -487,11 +495,15 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "10e9ccd0edf172a9ce5459628953d582a985d4e607e759c2b38cd2d1293562e5"
+        "sha256": "8ee72383817558e54ab7b25c18d155fa9493c30097da43b67eb8d9e1f335e8d4"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "f8eb5986ce40ca5761b73cf904b4e9430e3f421142e5069c1a23181d5df71414"
+        "sha256": "18382c9b933c16d6622226e6f405b5dc1eadd6c7ad5a5a80f226167b3c82b477"
+      },
+      {
+        "path": "joulewise/cadence_looks/time_fields.py",
+        "sha256": "a5569acd36ff0311c64e944e30839106ed527361c8d6235a4c3b32483f80b65c"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -499,15 +511,15 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "f6d975cb27ff553b6bd687666afacea6615d377e449ac5354e58b327bc00facc"
+        "sha256": "3295b6c7a673d7b4c0d3d549c0822e672d28fa98bd9eb123b671b26cd338ae09"
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "d778162ed632fcb34c247edded7c4af3b7b452048d3ab801a39745facc8bd050"
+        "sha256": "65f13da8215603ddc872edc93db24c41dbd81f40992c0b92ac79ad167546a906"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "f67ee6e40b85353fe8388117022f09e289c0feede93915483b8870bffdeaa5e5"
+        "sha256": "528467ffc2ef12936909e40c1943980a7972261c64216f8b51dc395d15cd6dc4"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -641,7 +653,7 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "f6d975cb27ff553b6bd687666afacea6615d377e449ac5354e58b327bc00facc"
+        "sha256": "3295b6c7a673d7b4c0d3d549c0822e672d28fa98bd9eb123b671b26cd338ae09"
       },
       "statistic": "iii",
       "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
@@ -797,7 +809,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "c07d52d7022ac1c897c89e1da0d6219fb8ad8057311889c487573f1a71c3403d"
+        "sha256": "90f7692ee9c888d8af5d0367997fe29af4b864a23034929c228030cd26394809"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -835,7 +847,14 @@
         "path": "joulewise/validation.py",
         "sha256": "82bb03f3aed626446298d186e845b7fe75b3371ca6cbabd7160946bd8e7bfcfd"
       }
-    ]
+    ],
+    "gpu_trace_hole_refusal": {
+      "enabled": true,
+      "max_gap_s": 2.0,
+      "cite": [
+        "RL-173"
+      ]
+    }
   },
   "inclusion": {
     "rules": [
@@ -868,7 +887,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "f8eb5986ce40ca5761b73cf904b4e9430e3f421142e5069c1a23181d5df71414"
+          "sha256": "18382c9b933c16d6622226e6f405b5dc1eadd6c7ad5a5a80f226167b3c82b477"
         },
         "cite": [
           "RL-149 §2.4",
@@ -884,7 +903,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "f8eb5986ce40ca5761b73cf904b4e9430e3f421142e5069c1a23181d5df71414"
+          "sha256": "18382c9b933c16d6622226e6f405b5dc1eadd6c7ad5a5a80f226167b3c82b477"
         },
         "cite": [
           "RL-149 §2.4",
@@ -930,7 +949,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "8dcb900cc168a2aaebb353d4e9f1bbabd0ec9ab2e97864e5ad8d3d6803cba476"
+      "sha256": "ebbb2e48cf91dca3689b48a0b1592a5113b957c952a10131de3cca29aed924a0"
     },
     "prints": [
       {
@@ -1196,17 +1215,22 @@
       "id": "drift_tripwire",
       "statistic": "the largest step-3 drift_fraction_linear over prompt-size cells whose gamma is estimable (GPU rail)",
       "rule": "Above the threshold: the S row comes back to the research lead before the W1 receipt is signed. Otherwise nothing happens. Condition (RL-166 Q11): the cold seat confirms from the step 4 note that 8 % is a simulated cell with the rows at or under .035 and that its drift is this quantity; if either fails, the threshold is 0.04, RL-151 §1.3's own top cell.",
-      "threshold": 0.04,
+      "threshold": 0.08,
       "fallback_threshold": 0.04,
       "action": "print 'within' or 'to the research lead'; the exp form prints beside it",
       "reads_energy": true,
       "cite": [
         "RL-151 §1.3",
         "RL-166 Q6",
-        "RL-166 Q11"
+        "RL-166 Q11",
+        "RL-173"
       ],
       "ruled_threshold": 0.08,
-      "pending": "RL-166 Q11's condition is not confirmed: the Sol cold seat could not verify that step 4's 8 % drift is the same quantity as statistic (iii) (/Volumes/JW-EXT/scratch/sol-look-cold/q11.json), though the Mythos seat found the 8 % cell. So RL-166 Q11's ruled fallback, 0.04, applies, pending the research lead's disposition. step3_roster.py reads this threshold from the committed manifest."
+      "disposed_by": "RL-173",
+      "evidence": {
+        "path": "docs/process/cadence/looks/evidence/2026-11-15-q11-drift-10k-REPORT.md",
+        "sha256": "8a0b15223c405e222b96be26a35d4faba42cdd0fe7253684e73c4d5bac92b35f"
+      }
     },
     {
       "id": "qualified_interim_half",
@@ -1327,7 +1351,11 @@
     ]
   },
   "freeze2": {
-    "artifact": "docs/process/cadence/looks/lm-interim-01.coefficients.json (written by stage 2, committed with its sha256)",
+    "artifact": "docs/process/cadence/looks/lm-interim-01.coefficients.json (written by stage 2's --coefficients-out through fit_interim.write_coefficients, committed with its sha256; fit_interim.predict scores a turn from it alone)",
+    "schema": {
+      "path": "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json",
+      "sha256": "945de8454cf58d0470dd5d8c7d8ffaa697b555b044d0c3c7e8a4e7d5ffdd03b3"
+    },
     "contents": [
       "the base and heat parameters per channel, with the leg-clustered covariance (S_w's SD_j)",
       "the holdout RMS relative error (S_w's SD_j)",
@@ -1362,7 +1390,8 @@
       "RL-151 §2.2",
       "RL-165 §8.1",
       "RL-166 Q2",
-      "RL-166b §4"
+      "RL-166b §4",
+      "RL-173"
     ],
     "deferred_rules": [
       {
@@ -1413,7 +1442,7 @@
       "every frozen path of every leg kit"
     ],
     "fit_paths_outside_kit_frozen_paths": true,
-    "disclosure": "The amendment's blind statement lists this look with its date, code hashes and outputs, worded as RL-150 R6 restates RL-149 §2.6: none comes from a run with a sabotage instruction, a slot or a v4 member.",
+    "disclosure": "The amendment's blind statement lists this look with its date, code hashes and outputs, worded as RL-150 R6 restates RL-149 §2.6: none comes from a run with a sabotage instruction, a slot or a v4 member. Of the energy files, stage 1 read time stamps and sample counters only (RL-173 E.1).",
     "pre_run_check": "Planted-truth synthetic bundles (a few legs, not a cohort) for the review and the twin comparison: coefficients to 1e-8 relative, the censored fit to 1e-6, every verdict equal. Then stage 1 as a dry run on the real roster, which opens no energy (RL-166 Q15, §2 items 7 and 12).",
     "cite": [
       "RL-149 §2.6",

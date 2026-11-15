@@ -885,7 +885,21 @@
               "minItems": 1
             }
           },
-          "description": "Mythos round-3 N7: the GPU-rail hole refusal; off unless the research lead rules it on (cite then required)"
+          "description": "RL-173 E.1 item 3: the GPU-rail hole refusal, stage 2's backstop, on at 2 s for the interim look; switched on, it cites its ruling (Mythos r5 N10)",
+          "anyOf": [
+            {
+              "properties": {
+                "enabled": {
+                  "const": false
+                }
+              }
+            },
+            {
+              "required": [
+                "cite"
+              ]
+            }
+          ]
         }
       }
     },

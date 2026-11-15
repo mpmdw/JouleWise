@@ -29,12 +29,10 @@ exception prints its type and line number only (step 3's rule: a message could c
 from __future__ import annotations
 
 import argparse
-import glob
 import hashlib
 import importlib
 import importlib.util
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -57,6 +55,7 @@ if str(ROOT) not in sys.path:
 from joulewise.cadence_looks import fit_interim as F  # noqa: E402
 from joulewise.cadence_looks import manifest as M  # noqa: E402
 from joulewise.cadence_looks import inclusion_34 as I34  # noqa: E402
+from joulewise.cadence_looks import time_fields as TF  # noqa: E402
 
 STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
 FAN_KEYS = ("F0Ac", "F1Ac")          # configs/align/v4/r1_runtime.json sensors.fan_keys
@@ -243,40 +242,21 @@ def build_turn(bundle, result, fan_keys):
             "native_pm": native_states(bundle, ts, tok[-1])}
 
 
-_B_KIND = re.compile(rb'"k":\s*"b"')
-_RX = re.compile(rb'"rx":\s*([0-9]+)')
-_RT = re.compile(rb'"rt":\s*([0-9]+)')
-
-
-def meter_offsets(sdir):
-    """RL-167 R-20: (header wall-minus-raw offset, end-of-span offset) in ns. The header line is decoded (it holds
-    no sample); the last poll line is read by pattern for its `rx` and `rt` stamps only, never parsed. (None, None)
-    with no stream; end None when no poll carries both stamps."""
-    paths = sorted(glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")))
-    if not paths:
-        return None, None
+def meter_offsets(sm):
+    """RL-167 R-20: (header wall-minus-raw offset, end-of-span offset) in ns, from the span's streams through the time
+    reader (``time_fields``): the header offset of the first stream whose header carries both stamps (the header the
+    stage-2 decoder applies; Mythos round-5 N1: the monitor writes it with sorted keys, which the reader takes as any
+    other key order), and rt - rx of the last poll line carrying both, over the streams in order. (None, None) with no
+    stream; end None when no poll carries both stamps."""
     header_off, end_off = None, None
-    for p in paths:
-        with open(p, "rb") as f:
-            head = f.readline(65536)
-            f.seek(0, os.SEEK_END)
-            size = f.tell()
-            f.seek(max(0, size - 262144))
-            tail = f.read().splitlines()
-        # Mythos r3 N11 / r5 N1: decode the first line only when inclusion_34's recognizer takes it as a header or
-        # trailer (record kind h/t in any key order, as the monitor writes with sorted keys, and none of a sample
-        # line's keys); a sample line is never decoded
-        h = json.loads(head) if (I34._HEADER_TRAILER_RE.search(head) and not I34._SAMPLE_KEY_RE.search(head)) else {}
-        if header_off is None and h.get("k") == "h" and isinstance(h.get("start_raw_ns"), int) \
-                and isinstance(h.get("start_real_ns"), int):
+    for v in sm.views:
+        h = v["header"] or {}
+        if header_off is None and type(h.get("start_raw_ns")) is int and type(h.get("start_real_ns")) is int:
             header_off = h["start_real_ns"] - h["start_raw_ns"]
-        for line in reversed(tail):
-            if _B_KIND.search(line):
-                rx, rt = _RX.search(line), _RT.search(line)
-                if rx and rt:
-                    end_off = int(rt.group(1)) - int(rx.group(1))
+        for p in reversed(v["polls"]):
+            if type(p.get("rx")) is int and type(p.get("rt")) is int:
+                end_off = p["rt"] - p["rx"]
                 break
-        del tail
     return header_off, end_off
 
 
@@ -296,9 +276,70 @@ def _mode(result):
     return m.get("value") if isinstance(m, dict) else m
 
 
-def read_span(sdir, entry, rules34, fan_keys):
-    """(span, legs) of one roster span, in level-R shape. Opens no energy file."""
+def span_meter(sdir):
+    """(TF.SpanMeter or None, why). A ``.zst`` sibling refuses the look (Mythos round-5 N8: decompress the custody
+    copy); a stream the decoder could not read gives None and the reason, and every leg of the span is excluded by
+    rule 4's trace clause, so stage 2 never opens it (RL-173 E.1: one bad stream costs its span's legs, not the look)."""
+    try:
+        TF.span_streams(sdir)
+    except TF.TimeFieldError as exc:
+        raise F.LookInputError(f"custody: {exc}") from None
+    try:
+        return TF.SpanMeter(sdir), None
+    except TF.TimeFieldError as exc:
+        return None, str(exc)
+
+
+def trace_holes(L_turn, bundle, sm, sm_why):
+    """RL-173 E.1 items 1 and 2, the two time-stamp clauses (rule 3 for the GPU rail, rule 4 for DC-in), on the
+    leg's energy-fit intervals (its segments and prefix tails), from time fields only (``time_fields``):
+    * GPU rail: the longest stretch of an interval with no power_trace.csv gpu_power row over 2 s excludes the leg;
+    * DC-in: an interval not bracketed by decoded meter samples, a gap over 2 s between consecutive decoded samples
+      in one, or a clock-fit excess over 2 s on a stream whose samples reach the leg, excludes the leg.
+    The numbers are the ones stage 2 would compute (its backstop calls the same functions)."""
+    ivs = [(x["wall_start_s"], x["wall_end_s"]) for x in L_turn["segments"] + L_turn["prefix_tails"]]
+    gpu = {"max_gap_s": None, "rows_sha256": None, "excluded": True, "reason": None}
+    try:
+        rows = TF.gpu_rows(bundle)
+        ss, ee = [r[0] for r in rows], [r[1] for r in rows]
+        gpu["max_gap_s"] = max(TF.gpu_max_uncovered(ss, ee, a, b) for a, b in ivs)
+        gpu["rows_sha256"] = TF.rows_digest(rows)
+        gpu["excluded"] = gpu["max_gap_s"] > TF.MAX_GAP_S
+        gpu["reason"] = "a stretch over 2 s with no power_trace row" if gpu["excluded"] else None
+    except FileNotFoundError:
+        gpu["reason"] = "no power_trace.csv"
+    except TF.TimeFieldError as exc:
+        gpu["reason"] = str(exc)
+    dc = {"max_gap_s": None, "bracketed": False, "clock_fit_excess_s": None, "excluded": True, "reason": None}
+    if sm is None:
+        dc["reason"] = f"a meter stream the decoder cannot read ({sm_why})"
+    else:
+        sup = [TF.support(sm.t, a, b) for a, b in ivs]
+        dc["bracketed"] = all(x is not None for x in sup)
+        gaps = [x[2] for x in sup if x is not None]
+        dc["max_gap_s"] = max(gaps) if gaps else None
+        dc["clock_fit_excess_s"] = sm.excess_over(min(a for a, _ in ivs), max(b for _, b in ivs))
+        if not dc["bracketed"]:
+            dc["reason"] = "an energy-fit interval not bracketed by decoded meter samples"
+        elif dc["max_gap_s"] > TF.MAX_GAP_S:
+            dc["reason"] = "a gap over 2 s between decoded meter samples"
+        elif dc["clock_fit_excess_s"] is not None and dc["clock_fit_excess_s"] > TF.CLOCK_FIT_EXCESS_MAX_S:
+            dc["reason"] = "a meter clock-fit excess over 2 s"
+        dc["excluded"] = dc["reason"] is not None
+    return {"gpu_rail": gpu, "dc_in": dc}
+
+
+RULED_RULES = ("sidecar_coverage", "km003c_clean")
+
+
+def read_span(sdir, entry, rules34, fan_keys, ruled=None):
+    """(span, legs) of one roster span, in level-R shape. Opens no energy value: power_trace.csv and the meter
+    streams only through the time reader (RL-173 E.1). ``ruled``: {leg_key: (rule, ruling)}, the research lead's
+    named exclusions for a stage 1 run once more (RL-173 E.1 item 4)."""
+    ruled = ruled or {}
     receipt = _json(sdir / "runner_receipt.json")
+    files = {"runner_receipt.json": TF.file_sha256(sdir / "runner_receipt.json")}
+    sm, sm_why = span_meter(sdir)
     try:
         soak = float(_json(sdir / "soak/soak_reference.json")["sensors_c"]["TV0h"])
     except (OSError, KeyError, TypeError, ValueError):
@@ -308,7 +349,10 @@ def read_span(sdir, entry, rules34, fan_keys):
             "phase": "extension" if entry["role"] == "describe" else "development", "role": entry["role"],
             "power_mode": power, "t0_epoch_s": float(receipt["started"]["epoch_s"]),
             "t0_local_date": entry["t0_local_date"], "soak_reference_tv0h_c": soak, "marks": [],
-            "meter_offsets_ns": dict(zip(("header", "end"), meter_offsets(sdir)))}
+            "meter_offsets_ns": dict(zip(("header", "end"), meter_offsets(sm) if sm else (None, None))),
+            "soak_receipt": I34.soak_fields(receipt),
+            "custody": {"files_sha256": files, "meter_time_sha256": sm.digest() if sm else None,
+                        "meter_streams": sm.summary() if sm else [], "meter_unreadable": sm_why}}
     legs, marks, suppliers = [], set(), set()
     for leg_id in receipt["roster"]:
         key = f"{entry['span_id']}/{leg_id}"
@@ -319,9 +363,11 @@ def read_span(sdir, entry, rules34, fan_keys):
         if not (ldir / "leg_record.json").is_file():          # the span stopped before this leg (R-21)
             legs.append({"leg_key": key, "span_id": entry["span_id"], "leg_id": leg_id, "leg_type": "A",
                          "cell_prompt_tokens": None, "g0_role": None,
-                         "inclusion": {r: False for r in F.RULES}, "turn": None})
+                         "inclusion": {r: False for r in F.RULES}, "turn": None, "trace_holes": None,
+                         "ruled_exclusion": None})
             continue
         rec = _json(ldir / "leg_record.json")
+        files[f"legs/{leg_id}/leg_record.json"] = TF.file_sha256(ldir / "leg_record.json")
         spec, attempts, result = rec["spec"], rec["attempts"], rec.get("result") or {}
         summ = _json(ldir / "leg_summary.json") if (ldir / "leg_summary.json").is_file() else {}
         ref = summ.get("span_reference")
@@ -348,9 +394,20 @@ def read_span(sdir, entry, rules34, fan_keys):
                 if all(inc.values()):
                     raise F.LookInputError(f"an included leg's bundle has no readable turn ({type(exc).__name__})")
                 turn = None
+        holes = None
+        if turn is not None and entry["role"] != "describe":
+            # RL-173 E.1: the two time-stamp clauses, on every development leg with a turn (hp-01's are never read)
+            holes = trace_holes(turn, ldir / "runtime" / result["bundle"], sm, sm_why)
+            inc["sidecar_coverage"] = inc["sidecar_coverage"] and not holes["gpu_rail"]["excluded"]
+            inc["km003c_clean"] = inc["km003c_clean"] and not holes["dc_in"]["excluded"]
+        ruled_x = None
+        if key in ruled:
+            rule, ruling = ruled.pop(key)
+            inc[rule] = False
+            ruled_x = {"rule": rule, "ruling": ruling}
         legs.append({"leg_key": key, "span_id": entry["span_id"], "leg_id": leg_id, "leg_type": leg_type,
                      "cell_prompt_tokens": int(spec["prefill_tokens"]), "g0_role": spec.get("g0_role"),
-                     "inclusion": inc, "turn": turn})
+                     "inclusion": inc, "turn": turn, "trace_holes": holes, "ruled_exclusion": ruled_x})
     # RL-161 §4 (Mythos cold seats 7 and N3): the leg that supplied the span's reference, excluded AT THE LOOK (any of
     # the six verdicts, rules 3 and 4 included), marks the span when a consumer is on its roster. The supplier is
     # named by each consumer's leg_summary span_reference.leg_id (the runner takes the span's first leg, whatever
@@ -363,18 +420,21 @@ def read_span(sdir, entry, rules34, fan_keys):
     return span, legs
 
 
-def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS):
+def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None):
     """Level R from the custody copy. `synthetic` is true only when every span's runner receipt says so
     (the synthetic generator writes it; a real runner never does)."""
     if not isinstance(roster, list):                # one shape: validate --roster-out's JSON list
         raise F.LookInputError("roster: not a list of spans")
     spans, legs, synth = [], [], []
+    ruled = dict(ruled or {})
     for entry in roster:
         sdir = sdir_of(entry["span_id"])
         synth.append(_json(sdir / "runner_receipt.json").get("synthetic") is True)
-        s, ls = read_span(sdir, entry, rules34, fan_keys)
+        s, ls = read_span(sdir, entry, rules34, fan_keys, ruled)
         spans.append(s)
         legs += ls
+    if ruled:
+        raise F.LookInputError(f"a ruled exclusion names a leg with no record on the roster: {sorted(ruled)[0]}")
     return {"schema": F.INPUT_SCHEMA, "look_id": F.LOOK_ID, "synthetic": bool(synth) and all(synth),
             "spans": spans, "legs": legs}
 
@@ -382,8 +442,8 @@ def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS):
 def stage2_preflight(stage1_out, sdir_of):
     """Structural checks of every file stage 2 will open, by presence only (stat, never a read): each
     energy-fit leg's power_trace.csv, and a meter stream in its span. Run by stage 1, so a layout fault refuses
-    before any energy file is opened (Mythos cold seat 4)."""
-    seen = {}
+    before any energy file is opened (Mythos cold seat 4). Every energy-fit leg passed both trace clauses (RL-173
+    E.1); stage 2 judges the decoded samples again as the backstop."""
     for L in stage1_out["legs"]:
         if not L["in_energy_fit"]:
             continue
@@ -391,12 +451,12 @@ def stage2_preflight(stage1_out, sdir_of):
         leg_id = L["leg_key"].split("/", 1)[1]
         rec = _json(sdir / "legs" / leg_id / "leg_record.json")
         if not (sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"] / "power_trace.csv").is_file():
-            raise F.LookInputError("stage-2 preflight: an energy-fit leg has no power_trace.csv")
-        if L["span_id"] not in seen:
-            if not glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")):
-                raise F.LookInputError("stage-2 preflight: an energy-fit leg's span has no meter stream")
-            seen[L["span_id"]] = span_meter_streams(sdir)
-        require_bracketed(L, seen[L["span_id"]])        # the leg stage 2 would refuse surfaces here (Mythos r3 N6)
+            raise F.LookInputError(f"stage-2 preflight: {L['leg_key']} has no power_trace.csv")
+        if not TF.span_streams(sdir):
+            raise F.LookInputError(f"stage-2 preflight: {L['leg_key']}'s span has no meter stream")
+        th = L.get("trace_holes")
+        if not th or th["gpu_rail"]["excluded"] or th["dc_in"]["excluded"]:
+            raise F.LookInputError(f"stage-2 preflight: {L['leg_key']} is in the energy fit without both trace clauses")
 
 
 # =============================================================================================== stage-2 reader
@@ -413,13 +473,15 @@ def load_step3(path=None):
 
 
 class MeterSpan:
-    """KM003C samples of a span on wall-clock epoch seconds; Vbus x Ibus; in memory only."""
+    """KM003C samples of a span on wall-clock epoch seconds; Vbus x Ibus; in memory only. ``expected_t``: the time
+    reader's decoded sample times for the span (stage 1 judged the trace clauses on them); the decoder's times must
+    be exactly these, or the span refuses (a backstop on the reader: no energy is printed)."""
 
-    def __init__(self, sdir):
+    def __init__(self, sdir, expected_t=None):
         from joulewise.external import km003c_parse as kp
-        paths = sorted(glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")))
+        paths = TF.span_streams(sdir)
         if not paths:
-            raise F.LookInputError("no meter stream in the span")
+            raise F.LookInputError(f"DC-in: {Path(sdir).name}: no meter stream in the span")
         t, w, steps = [], [], []
         for p in paths:
             st = kp.parse(p)
@@ -432,28 +494,29 @@ class MeterSpan:
             w += list(st.watts)
             del st
         if not t:
-            raise F.LookInputError("no meter stream in the span has aligned samples")
+            raise F.LookInputError(f"DC-in: {Path(sdir).name}: no meter stream in the span has aligned samples")
         order = sorted(range(len(t)), key=t.__getitem__)
         self.t = [t[i] for i in order]
         self.w = [w[i] for i in order]
         self.step_s = max(steps)
+        if expected_t is not None and self.t != list(expected_t):
+            raise F.LookInputError(f"DC-in: {Path(sdir).name}: the decoder's sample times differ from the time "
+                                   "reader's, on which stage 1 judged the trace clauses")
 
-    def _support(self, a, b):
-        """(i0, i1): the DECODED samples bracketing [a, b] (the last at or before a, the first at or after b), with
-        no two consecutive decoded samples between them more than 2 s apart (RL-166 Q7's gap, on the series that is
-        integrated). Otherwise refuse. A poll that reports samples the decoder dropped (re-sent duplicates, an empty
-        payload) supports nothing here (Sol r4 NEW-1, Mythos r4 N1). Rule 4 and stage 1's meter_bracket preflight
-        judge the poll stamps; stage 2 judges the samples."""
-        import bisect
+    def _support(self, a, b, leg_key):
+        """(i0, i1): the DECODED samples bracketing [a, b], with no two consecutive decoded samples between them more
+        than 2 s apart (RL-166 Q7's gap, on the series that is integrated; ``time_fields.support``, the function
+        stage 1's DC-in clause calls). Otherwise refuse, naming the leg and the gap (RL-173 E.1 items 3 and 4: the
+        backstop; stage 1 has already excluded every leg this could refuse)."""
         if b < a:
-            raise F.LookInputError("a segment with its end before its start")
-        i0 = bisect.bisect_right(self.t, a) - 1
-        i1 = bisect.bisect_left(self.t, b)
-        if i0 < 0 or i1 >= len(self.t):
-            raise F.LookInputError("DC-in: an energy-fit interval is not bracketed by meter samples")
-        for i in range(i0, i1):
-            if self.t[i + 1] - self.t[i] > METER_MAX_GAP_S:
-                raise F.LookInputError("DC-in: a gap over 2 s between meter samples inside an energy-fit interval")
+            raise F.LookInputError(f"{leg_key}: a segment with its end before its start")
+        sup = TF.support(self.t, a, b)
+        if sup is None:
+            raise F.LookInputError(f"DC-in: {leg_key}: an energy-fit interval is not bracketed by meter samples")
+        i0, i1, gap = sup
+        if gap > METER_MAX_GAP_S:
+            raise F.LookInputError(f"DC-in: {leg_key}: a gap of {gap:.3f} s between meter samples inside an "
+                                   "energy-fit interval")
         return i0, i1
 
     def _at(self, x, i):
@@ -476,10 +539,10 @@ class MeterSpan:
             i += 1
         return cov / (b - a)
 
-    def energy(self, a, b):
+    def energy(self, a, b, leg_key="(leg)"):
         """Trapezoid between consecutive decoded samples, cut at a and b (linear value at the cuts), on supported
         intervals only (see _support). No value is held past the last sample."""
-        i, _ = self._support(a, b)
+        i, _ = self._support(a, b, leg_key)
         tot = 0.0
         while i < len(self.t) - 1 and self.t[i] < b:
             lo, hi = max(a, self.t[i]), min(b, self.t[i + 1])
@@ -489,119 +552,121 @@ class MeterSpan:
         return tot
 
 
-def leg_meter_interval_ns(L):
-    """The span of a level-D leg's energy intervals (its segments and prefix tails), in ns."""
-    ivs = [(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"] + L["prefix_tails"]]
-    return round(min(a for a, _ in ivs) * NS), round(max(b for _, b in ivs) * NS)
-
-
-def span_meter_streams(sdir):
-    """inclusion_34.read_meter_stream for each stream of the span: stamps, counts and round trips by pattern only;
-    no sample is decoded."""
-    return [I34.read_meter_stream(p) for p in sorted(glob.glob(str(Path(sdir) / "hazards/meter/stream-*.jsonl")))]
-
-
-def stamp_gap_bound_s(L, streams):
-    """From the poll stamps alone (no sample decoded), an upper bound on the largest gap between consecutive decoded
-    samples over the leg's energy intervals, for a stream whose polls decode: the newest sample of a poll is digitised
-    at most one sample period plus the request's round trip (and BRACKET_MARGIN_NS) before its receipt rt, and the
-    first sample of the next sample-bearing poll is no later than that poll's rt. So consecutive polls i, j bound
-    the gap by rt_j - rt_i + rtt_i + step + margin. The bound runs over the polls from the last one received at or
-    before the leg's start to the first one received after its end."""
-    a, b = leg_meter_interval_ns(L)
-    rows = []
-    for s in streams:
-        sps = (s.get("header") or {}).get("sps")
-        step = NS / sps if isinstance(sps, (int, float)) and not isinstance(sps, bool) and sps > 0 else None
-        if step is None:
-            continue
-        rows += [(rt, rtt, step) for rt, n, rtt in s.get("round_trips") or [] if n > 0]
-    rows.sort()
-    import bisect
-    rts = [r[0] for r in rows]
-    i0 = max(0, bisect.bisect_right(rts, a) - 1)
-    # Sol r5 NEW-1: run through the first poll whose newest sample surely lies at or after the end (its receipt less
-    # its round trip, one sample period and the margin), not the first receipt after the end; none: unbounded
-    i1 = next((k for k in range(i0, len(rows))
-               if rows[k][0] - rows[k][1] - rows[k][2] - I34.BRACKET_MARGIN_NS >= b), None)
-    if i1 is None:
-        return math.inf
-    worst = 0
-    for (rt_i, rtt_i, step), (rt_j, _, _) in zip(rows[i0:i1], rows[i0 + 1:i1 + 1]):
-        worst = max(worst, rt_j - rt_i + rtt_i + step + I34.BRACKET_MARGIN_NS)
-    return worst / NS
-
-
-def require_bracketed(L, streams):
-    """Mythos r3 N6, stage 1's preflight: an energy-fit leg not bracketed by sample-bearing polls
-    (inclusion_34.meter_bracket, conservative from the stamps) refuses before the stage-1 file is written, so stage 2
-    does not meet it after energy opens. Stage 2 then judges its own support on the decoded samples."""
-    br = I34.meter_bracket(leg_meter_interval_ns(L), streams)
-    if not br["bracketed"]:
-        raise F.LookInputError(f"DC-in: {L.get('leg_key', '(leg)')}: its interval is not bracketed by meter samples "
-                               f"(start {br['start']}, end {br['end']})")
-    # the same conservative reading for the gaps inside: a leg that passes here, on a stream whose polls decode,
-    # integrates in stage 2 (whose test is on the decoded samples themselves)
-    bound = stamp_gap_bound_s(L, streams)
-    if bound > METER_MAX_GAP_S:
-        raise F.LookInputError(f"DC-in: {L.get('leg_key', '(leg)')}: its meter samples may be up to {bound:.3f} s apart "
-                               f"(from the poll stamps; the limit is {METER_MAX_GAP_S:g} s)")
-
-
 def gpu_max_uncovered_s(trace, a, b):
-    """The longest stretch of [a, b] that no power_trace row covers (the GPU rail's analogue of the DC-in gap)."""
-    edge, worst = a, 0.0
-    for i in trace._range(a, b):
-        s0, e0 = trace.s[i], trace.e[i]
-        if e0 <= edge or s0 >= b:
-            continue
-        worst = max(worst, s0 - edge)
-        edge = max(edge, e0)
-    return max(worst, b - edge)
+    """The longest stretch of [a, b] that no power_trace row covers (time_fields.gpu_max_uncovered, the one
+    definition stage 1's GPU clause also calls)."""
+    return TF.gpu_max_uncovered(trace.s, trace.e, a, b)
 
 
 def gpu_gap_rule(doc):
-    """Mythos r3 N7, pending the research lead: refuse a GPU-rail segment with an uncovered stretch over
-    max_gap_s. Read from the manifest's fit.gpu_trace_hole_refusal {"enabled": bool, "max_gap_s": number}; absent
-    or disabled (the default), the GPU rail integrates the rows present, as step 3 does."""
+    """RL-173 E.1 item 3, the backstop: refuse a GPU-rail segment with an uncovered stretch over max_gap_s. Read from
+    the manifest's fit.gpu_trace_hole_refusal {"enabled": bool, "max_gap_s": number}; absent or disabled, the GPU rail
+    integrates the rows present, as step 3 does."""
     sw = ((doc or {}).get("fit") or {}).get("gpu_trace_hole_refusal") or {}
     return float(sw.get("max_gap_s", METER_MAX_GAP_S)) if sw.get("enabled") is True else None
 
 
-def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None):
-    """The level-E object, in memory (never written in production). gpu_max_gap_s: see gpu_gap_rule."""
+def custody_check(stage1_out, sdir_of):
+    """Mythos round-5 N6, before any energy file opens: the custody stage 2 is about to read is the custody stage 1
+    judged. Per span with an energy-fit leg, the runner receipt's and each energy-fit leg's leg_record.json sha256,
+    and the digest of every meter time field (``time_fields.SpanMeter.digest``); per energy-fit leg, the digest of
+    its power_trace.csv gpu rows' stamps. All from the time reader and operational files: no energy value. Returns
+    {span_id: SpanMeter} for the decoder backstop."""
+    meters = {}
+    spans = {sp["span_id"]: sp for sp in stage1_out["roster"]["spans"]}
+    for L in stage1_out["legs"]:
+        if not L["in_energy_fit"]:
+            continue
+        sid = L["span_id"]
+        sdir = sdir_of(sid)
+        cust = spans[sid].get("custody") or {}
+        files = cust.get("files_sha256") or {}
+        leg_id = L["leg_key"].split("/", 1)[1]
+        for rel in ("runner_receipt.json", f"legs/{leg_id}/leg_record.json"):
+            if files.get(rel) is None or TF.file_sha256(sdir / rel) != files[rel]:
+                raise F.LookInputError(f"custody: {sid}/{rel} is not the file stage 1 read")
+        if sid not in meters:
+            try:
+                sm = TF.SpanMeter(sdir)
+            except TF.TimeFieldError as exc:
+                raise F.LookInputError(f"custody: {sid}: {exc}") from None
+            if sm.digest() != cust.get("meter_time_sha256"):
+                raise F.LookInputError(f"custody: {sid}'s meter streams are not the ones stage 1 read (time fields)")
+            meters[sid] = sm
+        rec = _json(sdir / "legs" / leg_id / "leg_record.json")
+        bundle = sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"]
+        try:
+            rows = TF.gpu_rows(bundle)
+        except (OSError, TF.TimeFieldError) as exc:
+            raise F.LookInputError(f"custody: {L['leg_key']}'s power_trace.csv: {type(exc).__name__}") from None
+        if TF.rows_digest(rows) != ((L.get("trace_holes") or {}).get("gpu_rail") or {}).get("rows_sha256"):
+            raise F.LookInputError(f"custody: {L['leg_key']}'s power_trace.csv is not the one stage 1 read "
+                                   "(row stamps)")
+    return meters
+
+
+def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None, span_times=None):
+    """(the level-E object, in memory and never written in production; the custody record). gpu_max_gap_s: see
+    gpu_gap_rule. span_times: custody_check's SpanMeters, whose decoded times the decoder must reproduce. The
+    custody record names every energy file opened by sha256 (a hash of bytes, not a value)."""
     s3, _ = load_step3(step3_path)
     meters = {}
+    opened = {}
     out = {"schema": F.ENERGY_SCHEMA, "look_id": F.LOOK_ID, "synthetic": False,
            "input_sha256": stage1_out["input_sha256"], "legs": {}}
     for L in stage1_out["legs"]:
         if not L["in_energy_fit"]:                  # RL-167 §3: no hp-01 energy is opened
             continue
+        key = L["leg_key"]
         sdir = sdir_of(L["span_id"])
-        leg_id = L["leg_key"].split("/", 1)[1]
+        leg_id = key.split("/", 1)[1]
         rec = _json(sdir / "legs" / leg_id / "leg_record.json")
         bundle = sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"]
+        opened[f"{L['span_id']}/legs/{leg_id}/runtime/{rec['result']['bundle']}/power_trace.csv"] = \
+            TF.file_sha256(bundle / "power_trace.csv")
         trace = s3.Trace(s3.load_gpu_trace(str(bundle)))
         if L["span_id"] not in meters:
-            meters[L["span_id"]] = MeterSpan(sdir)
-        m = meters[L["span_id"]]          # support on the decoded samples (MeterSpan._support); the poll-stamp
-        #                                   bracket is stage 1's conservative preflight only (Mythos r4 N1)
+            sm = (span_times or {}).get(L["span_id"])
+            meters[L["span_id"]] = MeterSpan(sdir, expected_t=sm.t if sm is not None else None)
+            for p in TF.span_streams(sdir):
+                opened[f"{L['span_id']}/hazards/meter/{Path(p).name}"] = TF.file_sha256(p)
+        m = meters[L["span_id"]]
         entry = {}
-        def gpu_energy(a, b, trace=trace):
-            if gpu_max_gap_s is not None and gpu_max_uncovered_s(trace, a, b) > gpu_max_gap_s:
-                raise F.LookInputError("GPU rail: a stretch with no power_trace row inside an energy-fit interval")
+
+        def gpu_energy(a, b, trace=trace, key=key):
+            if gpu_max_gap_s is not None:
+                gap = gpu_max_uncovered_s(trace, a, b)
+                if gap > gpu_max_gap_s:
+                    raise F.LookInputError(f"GPU rail: {key}: {gap:.3f} s with no power_trace row inside an "
+                                           "energy-fit interval")
             return trace.energy(a, b)
-        for ch, fn, cov in (("gpu_rail", gpu_energy, trace.coverage), ("dc_in", m.energy, m.coverage)):
+
+        def dc_energy(a, b, m=m, key=key):
+            return m.energy(a, b, key)
+        for ch, fn, cov in (("gpu_rail", gpu_energy, trace.coverage), ("dc_in", dc_energy, m.coverage)):
             segs = [fn(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]]
             tails = {str(t["prefix_len"]): fn(t["wall_start_s"], t["wall_end_s"]) for t in L["prefix_tails"]}
             covs = [c for c in (cov(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]) if c is not None]
             entry[ch] = {"segments": segs, "prefix_tails": tails, "coverage_min": min(covs) if covs else 1.0}
-        out["legs"][L["leg_key"]] = entry
+        out["legs"][key] = entry
         del trace
-    return out
+    return out, [{"path": k, "sha256": v} for k, v in sorted(opened.items())]
 
 
 # =============================================================================================== main
+def ruled_exclusions(pairs):
+    """--ruled-exclusion LEG_KEY=RULE=RL-n (RL-173 E.1 item 4): {leg_key: (rule, ruling)}; RULE is sidecar_coverage
+    (rule 3's GPU clause) or km003c_clean (rule 4's DC-in clause)."""
+    out = {}
+    for p in pairs or []:
+        parts = p.split("=")
+        if len(parts) != 3 or parts[1] not in RULED_RULES or not re.fullmatch(r"RL-\d+[a-z]?", parts[2]) \
+                or parts[0] in out:
+            raise F.LookInputError("--ruled-exclusion wants LEG_KEY=sidecar_coverage|km003c_clean=RL-n, once per leg")
+        out[parts[0]] = (parts[1], parts[2])
+    return out
+
+
 def cmd_stage1(a):
     if a.input and not a.allow_draft:
         raise F.LookInputError("--input (level R) runs only with --allow-draft; a committed look reads custody")
@@ -612,13 +677,16 @@ def cmd_stage1(a):
         input_sha = hashlib.sha256(raw).hexdigest()
         extra = {"roster_sha256": input_sha}        # a level-R run has no roster: its input file stands in
     else:
+        ruled = ruled_exclusions(a.ruled_exclusion)
         if not a.allow_draft:
-            # Mythos r3 N8: the committed ledger names this manifest, roster and verdict file before custody opens
+            # Mythos r3 N8: the committed ledger names this manifest, roster and verdict file before custody opens;
+            # RL-173 E.1 item 4: a stage 1 run once more names the research lead's ruled exclusions, nothing else
             M.require_inputs_committed(ROOT, F.LOOK_ID, sha256_file(a.manifest), roster_sha256=sha256_file(a.roster),
-                                       verdicts_sha256=sha256_file(a.rules_3_4), ledger_ref=a.ledger_ref)
+                                       verdicts_sha256=sha256_file(a.rules_3_4), ledger_ref=a.ledger_ref,
+                                       ruled_exclusions={k: list(v) for k, v in ruled.items()})
         roster = _json(a.roster)
         rules34 = _json(a.rules_3_4)
-        look_input = read_look_input(roster, span_dirs(a.custody, a.span_dir), rules34)
+        look_input = read_look_input(roster, span_dirs(a.custody, a.span_dir), rules34, ruled=ruled)
         data = F.dump(look_input)
         input_sha = hashlib.sha256(data).hexdigest()
         if a.write_input:
@@ -627,13 +695,7 @@ def cmd_stage1(a):
         extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4)}
     if a.allow_draft and look_input.get("synthetic") is not True:
         raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
-    out = F.stage1(look_input, input_sha, code_hashes())
-    # RL-172a's soak-retry print, from the runner receipts (none in a level-R run)
-    if a.input:
-        out["soak_retries"] = I34.soak_retries({})
-    else:
-        sdir_of = span_dirs(a.custody, a.span_dir)
-        out["soak_retries"] = I34.soak_retries({e["span_id"]: Path(sdir_of(e["span_id"])) for e in roster})
+    out = F.stage1(look_input, input_sha, code_hashes())    # RL-172a's soak-retry print is level R's (F.stage1)
     if not a.input:
         stage2_preflight(out, span_dirs(a.custody, a.span_dir))
     if extra:
@@ -665,11 +727,20 @@ def cmd_stage2(a):
     F.stage2_preflight(s1)                          # refuses before any energy file is opened
     stage2_energy_preflight(s1, a)                  # Mythos round 3 N1, N2: every remaining refusal, before energy
     if a.energy:
-        energy = _json(a.energy)
+        energy, custody = _json(a.energy), None
     else:
-        energy = read_segment_energy(s1, span_dirs(a.custody, a.span_dir),
-                                     gpu_max_gap_s=gpu_gap_rule(_VERIFIED[0][0]))
-    return _stamp(F.stage2(s1, a.stage1_sha256, energy, code_hashes()), a)
+        sdir_of = span_dirs(a.custody, a.span_dir)
+        span_times = custody_check(s1, sdir_of)         # Mythos r5 N6: the custody stage 1 judged, before energy
+        energy, files = read_segment_energy(s1, sdir_of, gpu_max_gap_s=gpu_gap_rule(_VERIFIED[0][0]),
+                                            span_times=span_times)
+        custody = {"root": str(Path(a.custody).resolve()),
+                   "span_dirs": [{"span_id": sid, "path": str(Path(pth).resolve())}
+                                 for sid, pth in sorted(dict(x.split("=", 1) for x in a.span_dir or []).items())],
+                   "files": files}
+    a._stage1_doc = s1
+    out = F.stage2(s1, a.stage1_sha256, energy, code_hashes())
+    out["custody"] = custody                        # Mythos r5 N6: what stage 2 read, by path and sha256
+    return _stamp(out, a)
 
 
 def stage2_energy_preflight(s1, a):
@@ -733,6 +804,9 @@ def main(argv=None):
     p1.add_argument("--rules-3-4")
     p1.add_argument("--span-dir", action="append")
     p1.add_argument("--write-input")
+    p1.add_argument("--ruled-exclusion", action="append", metavar="LEG_KEY=RULE=RL-n",
+                    help="RL-173 E.1 item 4: a leg the research lead excluded by name after a stage-2 refusal; the "
+                         "committed LOOKS.json row's stage1_reruns must name it")
     p1.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     p2 = sub.add_parser("stage2")
     p2.add_argument("--stage1", required=True)
@@ -742,6 +816,7 @@ def main(argv=None):
     g2.add_argument("--energy")
     g2.add_argument("--custody")
     p2.add_argument("--span-dir", action="append")
+    p2.add_argument("--coefficients-out", help="freeze 2's coefficient file (fit_interim.write_coefficients; RL-173 E)")
     p2.add_argument("--looks", help="with --allow-draft only: a scratch LOOKS.json in place of the repository's")
     p2.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     for p in (p1, p2):
@@ -760,7 +835,18 @@ def main(argv=None):
             probs = M.stage1_problems(ROOT, _VERIFIED[0][0], out, sha256_file(a.manifest), allow_draft=a.allow_draft)
             if probs:
                 raise F.LookInputError("stage 1's own output: " + "; ".join(probs))
+        coef = None
+        if a.cmd == "stage2" and a.coefficients_out:
+            # RL-173 E: freeze 2's coefficient file, written from the stage-1 file and this fit (no energy), checked
+            # against its pinned schema before anything is written
+            from joulewise.cadence_looks import schema_check as SC
+            coef = F.write_coefficients(a._stage1_doc, a.stage1_sha256, out, sha256_file(a.manifest))
+            errs = SC.errors(coef, M.coefficients_schema(ROOT))
+            if errs:
+                raise F.LookInputError("the coefficient file does not pass its schema: " + "; ".join(errs[:5]))
         sha = write_canonical(a.out, out)
+        if coef is not None:
+            print(f"wrote {a.coefficients_out} sha256={write_canonical(a.coefficients_out, coef)}")
     except F.LookInputError as exc:
         print(f"REFUSED {exc}", file=sys.stderr)
         return 2
