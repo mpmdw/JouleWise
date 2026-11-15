@@ -209,6 +209,7 @@
     "qualified_interim_half",
     "schema",
     "stage1_sha256",
+    "synthetic",
     "tau_uncertainty_propagated"
    ],
    "properties": {
@@ -221,6 +222,9 @@
     "stage1_sha256": {
      "type": "string",
      "pattern": "^[0-9a-f]{64}$"
+    },
+    "synthetic": {
+     "type": "boolean"
     },
     "code_sha256": {
      "type": "object",

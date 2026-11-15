@@ -25,15 +25,15 @@ The tests build synthetic inputs only.
 |---|---|
 | `docs/process/cadence/looks/lm-interim-01.json` | The draft manifest (`status: draft`) |
 | `docs/process/cadence/looks/LOOKS.json` | The look ledger (RL-166 Q18): look id, manifest path, sha256, status. The block ledger is not changed |
-| `docs/process/cadence/looks/lm-interim-01.stage1.schema.json` | Stage 1's output schema (no energy), pinned in the manifest. RL-166 adds it to freeze 1 |
-| `docs/process/cadence/looks/lm-interim-01.output.schema.json` | Stage 2's output schema, pinned in the manifest |
+| `docs/process/cadence/looks/lm-interim-01.stage1.schema.json` | Stage 1's output schema (no energy): level D of the analyst seat's interface (`docs/process/cadence_look_fit_interface.md` §3, PR #795), field for field. Pinned in the manifest; RL-166 adds it to freeze 1 |
+| `docs/process/cadence/looks/lm-interim-01.output.schema.json` | The look's output: level O (interface §4) embedded exactly as `fit`, step 3's file as `step3`, the High Power table, the decisions and the disclosure. Pinned in the manifest |
 | `docs/process/cadence/looks/look_manifest.schema.json` | JSON Schema copy of the manifest format. The Python validator is authoritative |
 | `joulewise/cadence_looks/manifest.py` | Validator: `validate_manifest`, `check_repo`, `validate_look_ledger`, `resolve_roster` |
 | `joulewise/cadence_looks/step3_energy_ratios.py` | Step 3's script, byte-identical (RL-166 Q6). Any edit needs a ruling |
 | `joulewise/cadence_looks/inclusion_34.py` | Rules 3 and 4, stage 1. The U1 evaluator's definitions are copied verbatim, with cites: `thermal.Coverage`, `valid_value` and `keys`, and `thermal_desk.member_record`'s pm_gap loop. Both source files are v4 strict paths, so they are copied rather than imported. Rule 4 reads only each KM003C sample line's `rt` stamp |
 | `joulewise/cadence_looks/step3_roster.py` | The step 3 adapter. It loads the pinned bytes (and refuses others), rebinds `LEGS` and `ORIGINAL_EIGHT`, and calls `analyse` and `custody_check` once per prompt-size cell, 10k first. It finds a failed leg by its traceback frame. It reads the tripwire. It contains no arithmetic on energy |
 | `tests/cadence/test_inclusion_34.py`, `tests/cadence/test_step3_roster.py` | Equality with the registered U1 source and results; boundary tests at every threshold; spy tests (no sample line decoded, no value key kept, no energy file opened); a stubbed step 3 module for the adapter's behaviour; the real module for the sha gate and failure attribution |
-| `scripts/cadence_look_manifest.py` | CLI: `validate MANIFEST [--final] [--repo R [--kit K]...] [--span-ledger L] [--looks L]`; `pin MANIFEST --repo R [--write]` (drafts only: fills the sha256 of every pinned file that exists, then the manifest's LOOKS.json row) |
+| `scripts/cadence_look_manifest.py` | CLI: `validate MANIFEST [--final] [--repo R [--kit K]...] [--span-ledger L] [--looks L]`; `pin MANIFEST --repo R [--write]` (drafts only: fills the sha256 of every pinned file that exists, then the manifest's LOOKS.json row); `assemble` (one output file from the fit and step 3 files, refused unless both name the stage-1 hash) |
 | `tests/cadence/test_look_manifest.py` | Synthetic tests, including a spy test showing that no custody file is opened |
 
 **Where the look code lives.** It is in `joulewise/cadence_looks/`. RL-150 R4 requires two things: adding the
@@ -202,7 +202,31 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 - **Not yet shown:** that `analyse_leg` runs on a campaign leg's real bundle layout. RL-166 left this to
   the stage-1 dry run, and the planted-truth run waits for the analyst seat's generator.
 
-## 5. Still owed
+## 5. The interface with the fit (PR #795)
+
+| Piece | Who writes it | Command |
+|---|---|---|
+| Rules 3 and 4 verdict file `{"<span_id>/<leg_id>": {"sidecar_coverage", "km003c_clean"}}` | `inclusion_34.py` | `python3 -I -B joulewise/cadence_looks/inclusion_34.py --roster R --custody C --out V.json [--detail-out D.json]` |
+| Level D (stage 1) | `scripts/cadence_look_run.py stage1 ... --rules-3-4 V.json` | #795 |
+| Level O (stage 2) | `scripts/cadence_look_run.py stage2 --stage1 S1 --stage1-sha256 H ...` | #795 |
+| Step 3's statistic (iii) and the drift tripwire (the stage-2 CLI does not compute it) | `step3_roster.py` | `python3 -I -B joulewise/cadence_looks/step3_roster.py --stage1 S1 --stage1-sha256 H --custody C --out STEP3.json` |
+| The output file the lead checks | `cadence_look_manifest.py assemble` | `--manifest M --stage1 S1 --fit FIT --step3 STEP3 --analyst-seat NAME --out OUT` |
+
+**Run end to end on #795's synthetic custody** (an integration of this branch with #795, off any PR). All
+five generator scenarios ran: stage 1, stage 2, step 3 and `assemble`. Stage 1's output and the assembled
+output validate against both schemas under `jsonschema`, which is not installed in CI. The schemas follow
+the code where it is wider than the interface page's text. The code emits a top-level `synthetic` flag; per-leg
+`prefill_tokens` and `decode_tokens` in level D; integer maps for `counts.by_cell` and `counts.by_g0_role`;
+and `start` and `state` null for a leg that never ran. The interface page should say the same.
+
+**The synthetic custody does not exercise rules 3 and 4.** Its bundles have no G0 gate event and no
+`config.json`. Its journal lacks TV1h, which is a registered coverage key. Its meter header has no `poll_s`,
+and its trailer stops as "synthetic". So `inclusion_34.py` judges every leg failed there. On a copy with those
+five things added, it agrees with the generator's planted verdicts on 69 of 72 legs. The other three are
+planted labels with no physical basis in the files (one is a leg that never ran). The stage-1 dry run on real
+custody remains the check of the real layout.
+
+## 6. Still owed
 
 | Item | Who | Due |
 |---|---|---|

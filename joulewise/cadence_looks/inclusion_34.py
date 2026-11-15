@@ -385,8 +385,10 @@ def read_leg_interval(bundle):
 
 def pm_period_s(bundle):
     """1 / sampling.power_hz of the bundle's config.json, as thermal_desk.read_bundle_record takes it."""
-    cfg = json.loads((Path(bundle) / "config.json").read_text(encoding="utf-8"),
-                     object_pairs_hook=_keep({"sampling", "power_hz"}))
+    path = Path(bundle) / "config.json"
+    if not path.is_file():
+        return None
+    cfg = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_keep({"sampling", "power_hz"}))
     hz = (cfg.get("sampling") or {}).get("power_hz")
     return 1 / hz if isinstance(hz, (int, float)) and hz > 0 else None
 
@@ -446,7 +448,13 @@ def judge_span(sdir, span_id, selected_keys):
             verdicts[key] = {k: False for k in VERDICT_KEYS}
             detail[key] = {"rule3": {"reasons": ["no accepted bundle"]}, "rule4": {"reasons": ["no accepted bundle"]}}
             continue
-        v = judge_leg(bundle, streams, selected_keys)
+        try:
+            v = judge_leg(bundle, streams, selected_keys)
+        except (OSError, ValueError, KeyError, TypeError) as exc:   # a missing or malformed journal file
+            verdicts[key] = {k: False for k in VERDICT_KEYS}
+            why = [f"unreadable bundle: {type(exc).__name__}"]  # the type only: a message could carry a value
+            detail[key] = {"rule3": {"reasons": why}, "rule4": {"reasons": why}}
+            continue
         verdicts[key] = {"sidecar_coverage": v["rule3"]["pass"], "km003c_clean": v["rule4"]["pass"]}
         detail[key] = {r: {k: x for k, x in v[r].items() if k != "pass"} for r in ("rule3", "rule4")}
     return verdicts, detail, span_trailers(span_id, streams)

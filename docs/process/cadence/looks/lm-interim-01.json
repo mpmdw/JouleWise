@@ -70,7 +70,7 @@
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "4e9ed940584f40716039e6f7a1e08ee9dc0117d1e1617dad50176320612019ca"
+        "sha256": "a8725eb5b4ac7b4d295e1cb7ddc55423f6e507d343dd220a7c8510cd59c2c2f7"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -423,7 +423,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "7e7c17f715d2463b78de03e457a7000c1ecb0165d3550ab86bfb0272c714a710"
+        "sha256": "738fe8743cf42a29de93c9a8540304ffdcaf117911b1f10eba00964380131b5c"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -648,7 +648,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "7e7c17f715d2463b78de03e457a7000c1ecb0165d3550ab86bfb0272c714a710"
+          "sha256": "738fe8743cf42a29de93c9a8540304ffdcaf117911b1f10eba00964380131b5c"
         },
         "cite": [
           "RL-149 §2.4",
@@ -664,7 +664,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "7e7c17f715d2463b78de03e457a7000c1ecb0165d3550ab86bfb0272c714a710"
+          "sha256": "738fe8743cf42a29de93c9a8540304ffdcaf117911b1f10eba00964380131b5c"
         },
         "cite": [
           "RL-149 §2.4",
@@ -710,7 +710,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "50ba8188bc3f7313a712e6c5d0b3812df16c129578fc5209296b958d88084867"
+      "sha256": "c3d55d5c4c907c887c826189769c3eb308c23a7692ea205d5f46303db4f99d00"
     },
     "prints": [
       {

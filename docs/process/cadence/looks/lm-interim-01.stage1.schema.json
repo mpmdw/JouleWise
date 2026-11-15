@@ -18,6 +18,7 @@
   "rates",
   "roster",
   "schema",
+  "synthetic",
   "tripwires"
  ],
  "properties": {
@@ -30,6 +31,10 @@
   "input_sha256": {
    "type": "string",
    "pattern": "^[0-9a-f]{64}$"
+  },
+  "synthetic": {
+   "type": "boolean",
+   "description": "true only on the generator's data; a production look carries false"
   },
   "code_sha256": {
    "type": "object",
@@ -592,39 +597,13 @@
     "by_cell": {
      "type": "object",
      "additionalProperties": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-       "included",
-       "named"
-      ],
-      "properties": {
-       "named": {
-        "type": "integer"
-       },
-       "included": {
-        "type": "integer"
-       }
-      }
+      "type": "integer"
      }
     },
     "by_g0_role": {
      "type": "object",
      "additionalProperties": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-       "included",
-       "named"
-      ],
-      "properties": {
-       "named": {
-        "type": "integer"
-       },
-       "included": {
-        "type": "integer"
-       }
-      }
+      "type": "integer"
      }
     },
     "by_day": {
@@ -650,6 +629,7 @@
      "block_id",
      "cell_prompt_tokens",
      "day",
+     "decode_tokens",
      "g0_role",
      "hp_describe",
      "in_energy_fit",
@@ -660,6 +640,7 @@
      "load_s",
      "marks",
      "not_in_fit_reason",
+     "prefill_tokens",
      "prefix_tails",
      "role",
      "segments",
@@ -765,112 +746,138 @@
        "describe_only"
       ]
      },
+     "prefill_tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "decode_tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
      "start": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-       "extrapolated",
-       "fan_rpm",
-       "state",
-       "status",
-       "tf08_c",
-       "tv0h_excess_c",
-       "z"
-      ],
-      "properties": {
-       "status": {
-        "enum": [
-         "ok",
-         "start_reading_missing"
-        ]
+      "oneOf": [
+       {
+        "type": "null"
        },
-       "state": {
-        "enum": [
-         "in_state",
-         "start_out_of_state",
-         "start_state_unobserved"
-        ]
-       },
-       "tf08_c": {
-        "type": [
-         "number",
-         "null"
-        ]
-       },
-       "fan_rpm": {
-        "type": [
-         "number",
-         "null"
-        ]
-       },
-       "tv0h_excess_c": {
-        "type": [
-         "number",
-         "null"
-        ]
-       },
-       "z": {
-        "type": [
-         "array",
-         "null"
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "extrapolated",
+         "fan_rpm",
+         "state",
+         "status",
+         "tf08_c",
+         "tv0h_excess_c",
+         "z"
         ],
-        "items": {
-         "type": "number"
-        },
-        "minItems": 3,
-        "maxItems": 3
-       },
-       "extrapolated": {
-        "type": "boolean"
+        "properties": {
+         "status": {
+          "enum": [
+           "ok",
+           "start_reading_missing"
+          ]
+         },
+         "state": {
+          "enum": [
+           "in_state",
+           "start_out_of_state",
+           "start_state_unobserved"
+          ]
+         },
+         "tf08_c": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "fan_rpm": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "tv0h_excess_c": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "z": {
+          "type": [
+           "array",
+           "null"
+          ],
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+         },
+         "extrapolated": {
+          "type": "boolean"
+         }
+        }
        }
-      }
+      ]
      },
      "state": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-       "censored_at_s",
-       "first_off_kind",
-       "first_off_s",
-       "onset_use",
-       "unobserved_at_s"
-      ],
-      "properties": {
-       "first_off_s": {
-        "type": [
-         "number",
-         "null"
-        ]
+      "oneOf": [
+       {
+        "type": "null"
        },
-       "first_off_kind": {
-        "type": [
-         "string",
-         "null"
-        ]
-       },
-       "unobserved_at_s": {
-        "type": [
-         "number",
-         "null"
-        ]
-       },
-       "censored_at_s": {
-        "type": [
-         "number",
-         "null"
-        ]
-       },
-       "onset_use": {
-        "enum": [
-         "uncensored",
-         "censored",
-         "left_out_start_out_of_state",
-         "left_out_state_unobserved",
-         "left_out_missing_start",
-         "not_in_fit"
-        ]
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "censored_at_s",
+         "first_off_kind",
+         "first_off_s",
+         "onset_use",
+         "unobserved_at_s"
+        ],
+        "properties": {
+         "first_off_s": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "first_off_kind": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "unobserved_at_s": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "censored_at_s": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "onset_use": {
+          "enum": [
+           "uncensored",
+           "censored",
+           "left_out_start_out_of_state",
+           "left_out_state_unobserved",
+           "left_out_missing_start",
+           "not_in_fit"
+          ]
+         }
+        }
        }
-      }
+      ]
      },
      "t_p_s": {
       "type": [

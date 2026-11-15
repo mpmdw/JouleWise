@@ -628,5 +628,34 @@ class SchemaCopy(Base):
         jsonschema.validate(finalize(draft()), schema)
 
 
+class Assemble(Base):
+    def test_assemble_cross_checks_the_stage1_hash(self):
+        d = tmpdir(self, "lm-asm-")
+        s1 = d / "stage1.json"
+        s1.write_text('{"schema": "joulewise.cadence_look_stage1.v1"}\n')
+        h = hashlib.sha256(s1.read_bytes()).hexdigest()
+        fit = {"schema": "joulewise.cadence_look_fit.v1", "stage1_sha256": h, "code_sha256": {"a.py": "1" * 64},
+               "numpy_version": "2.5.4", "qualified_interim_half": {"verdict": "passes"}}
+        step3 = {"schema": "joulewise.cadence_look_step3.v1", "stage1_sha256": h, "cells": [],
+                 "tripwire": {"decision": "within"}}
+        (d / "fit.json").write_text(json.dumps(fit))
+        (d / "step3.json").write_text(json.dumps(step3))
+        args = ["assemble", "--manifest", str(MANIFEST), "--stage1", str(s1), "--fit", str(d / "fit.json"),
+                "--step3", str(d / "step3.json"), "--analyst-seat", "test", "--out", str(d / "out.json")]
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(cli.main(args), 0)
+        out = json.loads((d / "out.json").read_text())
+        schema = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
+        self.assertEqual(set(out), set(schema["required"]))
+        self.assertEqual(out["decisions"]["drift_tripwire"], "within")
+        self.assertEqual(out["decisions"]["qualified_interim_half"], "passes")
+        self.assertEqual(out["manifest_sha256"], lm.sha256_file(MANIFEST))
+        self.assertIn("joulewise/cadence_looks/step3_roster.py", out["disclosure"]["code_sha256"])
+        step3["stage1_sha256"] = "0" * 64
+        (d / "step3.json").write_text(json.dumps(step3))
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(cli.main(args), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
