@@ -69,6 +69,7 @@
     "joulewise/align/apple/v4_battery.py": null,
     "joulewise/align/apple/v4_cadence.py": null,
     "joulewise/align/apple/v4_contention.py": null,
+    "joulewise/align/apple/v4_desk_seal.py": null,
     "joulewise/align/apple/v4_estimands.py": null,
     "joulewise/align/apple/v4_registration.py": null,
     "joulewise/align/apple/v4_topup.py": null,

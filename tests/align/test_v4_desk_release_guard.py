@@ -1702,5 +1702,51 @@ class SealUnitTests(unittest.TestCase):
         self.assertIsNone(inspect.signature(pilot.desk).parameters['print_policy'].default)
 
 
+class SyntheticOracleInputTests(unittest.TestCase):
+    """PR #798 Sol finding 5: the WP22 harness reads the withheld full PILOT only after the public one is witnessed."""
+
+    FULL = {'members': [{'id': 'm1', 'turn_owned_j': 12.5, 'calibration_exclusions': ['episode.deadman:3']}]}
+
+    def setUp(self):
+        from scripts.align_v4_w1_synthetic import desk_oracle_input
+        self.read = desk_oracle_input
+        self.desk = Path(tempfile.mkdtemp(prefix='oracle-input-'))
+        self.addCleanup(shutil.rmtree, self.desk, ignore_errors=True)
+
+    def write(self, *, public=True, full=True, digest=None):
+        sha = seal._write_json(self.desk / seal.WITHHELD_PILOT, self.FULL) if full else None
+        if public:
+            guard = {'schema': seal.GUARD_SCHEMA, 'status': seal.WITHHELD, 'withheld_pilot': seal.WITHHELD_PILOT,
+                     'withheld_pilot_sha256': digest or sha}
+            (self.desk / 'PILOT.json').write_text(json.dumps({'members': [], 'release_guard': guard}))
+
+    def test_both_valid_returns_the_full_pilot(self):
+        self.write()
+        self.assertEqual(self.read(self.desk), self.FULL)
+
+    def test_public_missing_raises_even_with_a_valid_archive(self):
+        self.write(public=False)
+        with self.assertRaises(FileNotFoundError):
+            self.read(self.desk)
+
+    def test_public_malformed_raises_even_with_a_valid_archive(self):
+        self.write()
+        (self.desk / 'PILOT.json').write_text('{"members": [')
+        with self.assertRaises(json.JSONDecodeError):
+            self.read(self.desk)
+
+    def test_public_not_sealed_or_not_bound_to_the_archive_raises(self):
+        self.write(digest='0' * 64)
+        with self.assertRaisesRegex(ValueError, 'sealed shape'):
+            self.read(self.desk)
+        (self.desk / 'PILOT.json').write_text(json.dumps({'members': []}))
+        with self.assertRaisesRegex(ValueError, 'sealed shape'):
+            self.read(self.desk)
+
+    def test_without_an_archive_the_public_pilot_is_the_input(self):
+        (self.desk / 'PILOT.json').write_text(json.dumps({'members': [], 'release_guard': {'status': 'released'}}))
+        self.assertEqual(self.read(self.desk)['release_guard'], {'status': 'released'})
+
+
 if __name__ == '__main__':
     unittest.main()
