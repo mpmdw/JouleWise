@@ -15,6 +15,7 @@
   "manifest_sha256",
   "realized_prompt_tokens",
   "schema",
+  "soak_retries",
   "stage1_sha256",
   "step3",
   "synthetic"
@@ -70,6 +71,103 @@
     }
    },
    "description": "RL-158 Q5: legs whose realized prompt count is more than 5 % from nominal, computed by assemble from stage 1's legs"
+  },
+  "soak_retries": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "accepted_after_retry",
+    "retried_by_kind",
+    "spans",
+    "spans_with_retry",
+    "stopped_by_soak"
+   ],
+   "properties": {
+    "spans": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "accepted",
+       "attempts",
+       "field_present",
+       "retried"
+      ],
+      "properties": {
+       "attempts": {
+        "type": "integer"
+       },
+       "field_present": {
+        "type": "boolean"
+       },
+       "accepted": {
+        "type": "boolean"
+       },
+       "retried": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "attempt",
+          "kind",
+          "read_from"
+         ],
+         "properties": {
+          "attempt": {
+           "type": "integer"
+          },
+          "kind": {
+           "enum": [
+            "slope",
+            "load",
+            "kind not recorded"
+           ]
+          },
+          "read_from": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "spans_with_retry": {
+     "type": "integer"
+    },
+    "retried_by_kind": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "kind not recorded",
+      "load",
+      "slope"
+     ],
+     "properties": {
+      "slope": {
+       "type": "integer"
+      },
+      "load": {
+       "type": "integer"
+      },
+      "kind not recorded": {
+       "type": "integer"
+      }
+     }
+    },
+    "accepted_after_retry": {
+     "type": "integer"
+    },
+    "stopped_by_soak": {
+     "type": "integer"
+    }
+   },
+   "description": "RL-172a: stage 1's soak_retries, copied by assemble"
   },
   "decisions": {
    "type": "object",

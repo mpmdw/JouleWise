@@ -32,7 +32,9 @@
     "RL-166c §5",
     "RL-166a",
     "RL-167 §2",
-    "RL-167 §3"
+    "RL-167 §3",
+    "RL-171 §2",
+    "RL-172a"
   ],
   "when": {
     "after_desk_final": [
@@ -78,18 +80,20 @@
         "active_readings (RL-166b B-2)",
         "the onset model's uncensored count by cell (B-3)",
         "onsets_before_116_s by G0 role (P-4)",
-        "meter_clock (RL-167 R-20)"
+        "meter_clock (RL-167 R-20)",
+        "soak_retries: each roster span's soak attempts and the retried soaks by refusal kind (RL-172a)"
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "f6e0860decc49c504c0d5773d4ae6a5232ad03401992a2dac2dc66b6ec942470"
+        "sha256": "353aed7150336e715e224f7579f5b8d917f84b6d10324f1eeec59b640ea7cfd3"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
       "cite": [
         "RL-166 Q8",
         "RL-166 Q15",
-        "RL-166 §2"
+        "RL-166 §2",
+        "RL-172a"
       ]
     },
     "stage2": {
@@ -354,6 +358,12 @@
         "stage": "inclusion"
       },
       {
+        "basename": "runner_receipt.json soak_attempts; the soak child's own refusal line in soak.stderr.log or soak.a<n>.stderr.log, matched whole (inclusion_34.py soak_retries; no other line of the log is kept, and the soak's soak_row.json is not opened)",
+        "scope": "span",
+        "carries": "operational: soak attempts and the refusal kind",
+        "stage": "inclusion"
+      },
+      {
         "basename": "outputs/align_thermal.jsonl",
         "scope": "accepted attempt",
         "carries": "journal: TV0h, TV1h, Tf08, fan, os_level, pm_state, stamps",
@@ -481,7 +491,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "b4298ccc29a24e325fc0ffa84342259729e6fd7e62201052735a80e6234274fe"
+        "sha256": "5ede9e5742c088d67e1821377d7f18e5a0425ca3c445013442d40e2b366eae4b"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -497,7 +507,7 @@
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "60f73c6c93ec57b06d0545bd1074033089ffe7c4087b36d060860f9258507cce"
+        "sha256": "8a41cd758596f6178789f3f3da94b350bceb58568b83f71777ea5ba9c67ef1c1"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -787,7 +797,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "04fac7a98e4a4ccf08cc42ca49b93e223c09b07460f97577ca5b2e5b13dd748e"
+        "sha256": "10c2382822053e1b54fb1c7d0a6263358083a636970b5697cceaa58c0e7485fc"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -858,7 +868,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "b4298ccc29a24e325fc0ffa84342259729e6fd7e62201052735a80e6234274fe"
+          "sha256": "5ede9e5742c088d67e1821377d7f18e5a0425ca3c445013442d40e2b366eae4b"
         },
         "cite": [
           "RL-149 §2.4",
@@ -874,7 +884,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "b4298ccc29a24e325fc0ffa84342259729e6fd7e62201052735a80e6234274fe"
+          "sha256": "5ede9e5742c088d67e1821377d7f18e5a0425ca3c445013442d40e2b366eae4b"
         },
         "cite": [
           "RL-149 §2.4",
@@ -920,7 +930,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "066d550d3c1ddb4d5511498491b2ed743bec1bea719a1865956e07acc350fec0"
+      "sha256": "06329c87d9a41f08dcc81ab1ba2c534be1d5641547fe2dcd55502f3e5dab728b"
     },
     "prints": [
       {
@@ -1083,6 +1093,14 @@
         "what": "Legs whose realized prompt count is more than 5 % from nominal, computed by assemble from stage 1's per-leg prefill_tokens against cell_prompt_tokens.",
         "cite": [
           "RL-158 Q5"
+        ]
+      },
+      {
+        "id": "soak_retries",
+        "what": "Stage 1, copied into the output by assemble: per roster span, its soak attempts, and in sum the spans with a retried soak, the retried soaks by refusal kind (slope or load), the spans accepted after a retry and the spans the soak stopped. A receipt with no soak_attempts field (the v1 and v1.1 pins) is one attempt. The receipt's refused text is the same for both kinds, so the kind is read from an operational receipt field where one records it, else from the soak child's own refusal line in that attempt's stderr log; where neither records it the count is under \"kind not recorded\". A soak retried and then accepted is not a stop: its span's legs are judged as any other span's, and the look never reads a soak stage's rc. Decides nothing.",
+        "cite": [
+          "RL-171 §2",
+          "RL-172a"
         ]
       },
       {

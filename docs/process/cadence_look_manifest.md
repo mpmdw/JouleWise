@@ -327,6 +327,34 @@ Sol N5's stage-2 bridging) are the analyst seat's, on the same branch.
 **Still for the research lead:** Mythos 6 (no coefficient writer or predict path; the later-look declarations in
 `lm-interim-01.json` still name them), the `trace_coverage` print, Q11, and the five-world pass-rate sentence.
 
+## 7b. RL-172a: the soak retry (the qualification pin, #794 at `6010985a3`)
+
+RL-171 lets the runner retry a span's soak once, on a slope or a load refusal. RL-172a (F2, condition from Mythos
+F3) has the look read `soak_attempts` from each receipt and print the retried soaks by refusal kind.
+
+- **What is read** (`inclusion_34.soak_retries`, stage 1, operational): the receipt's `soak_attempts`, checked
+  for shape (numbered from 1; every attempt but the last refused). No field, as on the v1 and v1.1 pins, is one
+  attempt. An empty list is a span stopped before its soak.
+- **The kind.** The receipt does not record it: each attempt's `refused` text is
+  "soak exit 5: the idle soak failed its settle or quiet check" for both. So the kind comes from a receipt field
+  (`refusal_kind`) when a later runner writes one. Otherwise it comes from the soak child's own refusal line,
+  matched whole, in that attempt's `soak.stderr.log` or `soak.a<n>.stderr.log`: "soak refused: idle soak has unresolved
+  slope" or "...: sustained CPU load". No other line is kept. Otherwise the count goes under "kind not recorded".
+  `soak_row.json`, the soak's own verdict, is not opened: it carries the soak's result series.
+- **The print** (`soak_retries`, level D and the output, copied by `assemble`): per span, attempts, accepted, and
+  each retried attempt's kind and where it was read. In sum: spans with a retry, retried soaks by kind,
+  spans accepted after a retry, and spans the soak stopped. It decides nothing.
+- **Not a stop.** No look code reads the stage journal (`chain-stages.jsonl`), so the rejected first soak's
+  `soak` stage at rc 2 is never seen. A span whose retry was accepted has its legs judged as any other span's.
+- **Fit side.** The stage-1 CLI (`cadence_look_run.py`) writes `soak_retries` into level D from the same function
+  (the analyst seat's part).
+
+| Requirement | Where | Test |
+|---|---|---|
+| Read `soak_attempts`; absent is one attempt | `inclusion_34.soak_attempts` | `test_absent_field_is_one_attempt`, `test_malformed_attempts_refuse` |
+| Retried soaks by kind; "kind not recorded" when nothing records it | `soak_refusal_kind`, `soak_retries`; the print, the D and output schemas, `assemble` | `test_kind_from_the_refusal_line_the_receipt_field_or_not_recorded`, `test_a_soak_refused_twice_stopped_the_span`, `test_soak_retries_print_is_required`, `test_assemble_writes_the_schema_shape` |
+| A retried-then-accepted soak is not a stopped span | No stage-journal read; verdicts unchanged | `test_a_retried_then_accepted_soak_is_not_a_stop` |
+
 ## 8. Still owed
 
 | Item | Who | Due |

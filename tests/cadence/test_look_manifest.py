@@ -733,6 +733,7 @@ class Assemble(Base):
                          [{"leg_key": "dev-03-s01/L001", "nominal": 2000, "realized": 2200}])
         self.assertEqual(out["disclosure"]["holds_cleared"], [])
         self.assertEqual((out["allow_draft"], out["synthetic"]), (True, True))         # Mythos N2
+        self.assertEqual(out["soak_retries"], self.stage1["soak_retries"])              # RL-172a
         r = self.run_("--allow-draft", "--hp-table", self.d / "fit.json")               # the option is gone
         self.assertEqual(r.returncode, 2)
         with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:          # validate --output
@@ -910,6 +911,21 @@ class ColdSeatFixes(Base):
         self.refused(lambda: lm.validate_manifest(doc, final=True), "either the pending disposition or the disposing")
         drift["disposed_by"] = "the lead said so"
         self.refused(lambda: lm.validate_manifest(doc, final=True), "drift_tripwire.disposed_by: the disposing ruling")
+
+    def test_soak_retries_print_is_required(self):
+        """RL-172a: the look prints the retried soaks by refusal kind; the receipt read is operational."""
+        doc = draft()
+        doc["outputs"]["prints"] = [p for p in doc["outputs"]["prints"] if p["id"] != "soak_retries"]
+        self.refused(lambda: lm.validate_manifest(doc), "the interim look prints soak_retries")
+        doc = draft()
+        doc["rulings"].remove("RL-172a")
+        self.refused(lambda: lm.validate_manifest(doc), "rulings: must cite 'RL-172a'")
+        doc = draft()
+        row = next(x for x in doc["reads"]["custody_files"] if "soak_attempts" in x["basename"])
+        self.assertEqual((row["stage"], row["carries"].split(":")[0]), ("inclusion", "operational"))
+        for name in ("stage1", "output"):
+            schema = json.loads((LOOKS / f"lm-interim-01.{name}.schema.json").read_text())
+            self.assertIn("soak_retries", schema["required"])
 
     def test_hp01_table_is_out(self):
         """Sol 5 / Mythos 5: RL-167 §3."""

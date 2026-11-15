@@ -501,5 +501,92 @@ class CustodyVerdictFile(Readers):
         self.assertTrue(v["dev-03-s01/L001"]["sidecar_coverage"])
 
 
+
+class SoakRetries(CustodyVerdictFile):
+    """RL-171 and RL-172a: the soak-retry print. Operational reads only; a retried-then-accepted soak is no stop."""
+
+    def set_attempts(self, sdir, attempts, **logs):
+        rec = sdir / "runner_receipt.json"
+        doc = json.loads(rec.read_text())
+        if attempts is None:
+            doc.pop("soak_attempts", None)
+        else:
+            doc["soak_attempts"] = attempts
+        rec.write_text(json.dumps(doc))
+        for name, text in logs.items():
+            (sdir / f"{name.replace('_', '.')}.stderr.log").write_bytes(text)
+
+    REFUSED = "soak exit 5: the idle soak failed its settle or quiet check"
+
+    def test_absent_field_is_one_attempt(self):
+        root, _ = self.make_span()
+        out = i34.soak_retries({"dev-03-s01": root / "dev-03-s01"})
+        self.assertEqual(out["spans"]["dev-03-s01"],
+                         {"attempts": 1, "field_present": False, "accepted": True, "retried": []})
+        self.assertEqual((out["spans_with_retry"], out["accepted_after_retry"], out["stopped_by_soak"]), (0, 0, 0))
+
+    def test_kind_from_the_refusal_line_the_receipt_field_or_not_recorded(self):
+        root, _ = self.make_span()
+        sdir = root / "dev-03-s01"
+        two = [{"attempt": 1, "refused": self.REFUSED, "output_dir": "soak.rejected1"},
+               {"attempt": 2, "refused": None, "output_dir": "soak"}]
+        cases = [({"soak": b"noise 123.4 W\nsoak refused: idle soak has unresolved slope\n"}, "slope", "soak.stderr.log refusal line"),
+                 ({"soak": b"soak refused: idle soak: sustained CPU load\n"}, "load", "soak.stderr.log refusal line"),
+                 ({"soak": b"something else\n"}, "kind not recorded", None),
+                 ({}, "kind not recorded", None)]
+        for logs, kind, source in cases:
+            for f in sdir.glob("*.stderr.log"):
+                f.unlink()
+            self.set_attempts(sdir, two, **logs)
+            out = i34.soak_retries({"dev-03-s01": sdir})
+            self.assertEqual(out["spans"]["dev-03-s01"]["retried"], [{"attempt": 1, "kind": kind, "read_from": source}])
+            self.assertEqual(out["retried_by_kind"][kind], 1)
+            self.assertEqual(sum(out["retried_by_kind"].values()), 1)
+            self.assertEqual((out["spans_with_retry"], out["accepted_after_retry"], out["stopped_by_soak"]), (1, 1, 0))
+            self.assertNotIn("123.4", json.dumps(out))                 # no other line of the log is kept
+        self.set_attempts(sdir, [dict(two[0], refusal_kind="load"), two[1]])
+        out = i34.soak_retries({"dev-03-s01": sdir})
+        self.assertEqual(out["spans"]["dev-03-s01"]["retried"][0]["kind"], "load")
+        self.assertEqual(out["spans"]["dev-03-s01"]["retried"][0]["read_from"], "receipt soak_attempts[].refusal_kind")
+
+    def test_a_soak_refused_twice_stopped_the_span(self):
+        root, _ = self.make_span()
+        sdir = root / "dev-03-s01"
+        self.set_attempts(sdir, [{"attempt": 1, "refused": self.REFUSED}, {"attempt": 2, "refused": self.REFUSED}],
+                          soak=b"soak refused: idle soak has unresolved slope\n",
+                          soak_a2=b"soak refused: idle soak: sustained CPU load\n")
+        out = i34.soak_retries({"dev-03-s01": sdir})
+        self.assertEqual(out["spans"]["dev-03-s01"]["retried"],
+                         [{"attempt": 1, "kind": "slope", "read_from": "soak.stderr.log refusal line"}])
+        self.assertEqual((out["spans_with_retry"], out["accepted_after_retry"], out["stopped_by_soak"]), (1, 0, 1))
+
+    def test_malformed_attempts_refuse(self):
+        root, _ = self.make_span()
+        sdir = root / "dev-03-s01"
+        for bad in ({"attempt": 1}, [{"attempt": 2, "refused": None}],
+                    [{"attempt": 1, "refused": None}, {"attempt": 2, "refused": None}], [{"attempt": 1, "refused": 5}]):
+            self.set_attempts(sdir, bad)
+            with self.assertRaises(ValueError):
+                i34.soak_retries({"dev-03-s01": sdir})
+
+    def test_a_retried_then_accepted_soak_is_not_a_stop(self):
+        """Every verdict equals the same span's without a retry; the stage journal's soak rc 2 is never read."""
+        root, roster = self.make_span()
+        sdir = root / "dev-03-s01"
+        base, _ = i34.judge_custody(json.loads(roster.read_text()), i34.span_dirs(root), KEYS)
+        self.set_attempts(sdir, [{"attempt": 1, "refused": self.REFUSED, "output_dir": "soak.rejected1"},
+                                 {"attempt": 2, "refused": None, "output_dir": "soak"}],
+                          soak=b"soak refused: idle soak has unresolved slope\n")
+        (sdir / "soak.rejected1").mkdir()
+        (sdir / "chain-stages.jsonl").write_text(json.dumps({"stage": "soak", "rc": 2}) + "\n" +
+                                                 json.dumps({"stage": "soak.a2", "rc": 0}) + "\n")
+        v, d = i34.judge_custody(json.loads(roster.read_text()), i34.span_dirs(root), KEYS)
+        self.assertEqual(v, base)
+        self.assertEqual(d["soak_retries"]["accepted_after_retry"], 1)
+        self.assertEqual(d["soak_retries"]["stopped_by_soak"], 0)
+        from joulewise.cadence_looks import schema_check as sc                    # the shape level D carries
+        s1 = json.loads((REPO / "docs/process/cadence/looks/lm-interim-01.stage1.schema.json").read_text())
+        self.assertEqual(sc.errors(d["soak_retries"], s1["properties"]["soak_retries"]), [])
+
 if __name__ == "__main__":
     unittest.main()

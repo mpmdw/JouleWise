@@ -23,6 +23,7 @@
   "rates",
   "roster",
   "schema",
+  "soak_retries",
   "synthetic",
   "tripwires"
  ],
@@ -891,6 +892,103 @@
     }
    },
    "description": "RL-166b P-4: legs that start in state with an observed onset under 116.0 s from the turn start, by G0 role. to_research_lead is true when the onset model is not_estimable and total is above zero: the 116 s cut then does not stand by default."
+  },
+  "soak_retries": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "accepted_after_retry",
+    "retried_by_kind",
+    "spans",
+    "spans_with_retry",
+    "stopped_by_soak"
+   ],
+   "properties": {
+    "spans": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "accepted",
+       "attempts",
+       "field_present",
+       "retried"
+      ],
+      "properties": {
+       "attempts": {
+        "type": "integer"
+       },
+       "field_present": {
+        "type": "boolean"
+       },
+       "accepted": {
+        "type": "boolean"
+       },
+       "retried": {
+        "type": "array",
+        "items": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "attempt",
+          "kind",
+          "read_from"
+         ],
+         "properties": {
+          "attempt": {
+           "type": "integer"
+          },
+          "kind": {
+           "enum": [
+            "slope",
+            "load",
+            "kind not recorded"
+           ]
+          },
+          "read_from": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "spans_with_retry": {
+     "type": "integer"
+    },
+    "retried_by_kind": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "kind not recorded",
+      "load",
+      "slope"
+     ],
+     "properties": {
+      "slope": {
+       "type": "integer"
+      },
+      "load": {
+       "type": "integer"
+      },
+      "kind not recorded": {
+       "type": "integer"
+      }
+     }
+    },
+    "accepted_after_retry": {
+     "type": "integer"
+    },
+    "stopped_by_soak": {
+     "type": "integer"
+    }
+   },
+   "description": "RL-171 and RL-172a: per roster span, its soak attempts (one when the receipt has no soak_attempts field, as on the v1/v1.1 pins) and the kind of each retried soak: slope or load where an operational field or the soak child's own refusal line records it, else 'kind not recorded'. A soak retried and then accepted is not a stop. Written by joulewise/cadence_looks/inclusion_34.py soak_retries(); decides nothing"
   },
   "legs": {
    "type": "array",

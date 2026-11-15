@@ -254,7 +254,7 @@ def assemble(args):
     out = {"schema": "joulewise.cadence_look_output.interim.v1", "look_id": "lm-interim-01",
            "manifest_sha256": manifest_sha, "stage1_sha256": s1, "fit": fit, "step3": step3,
            "allow_draft": bool(args.allow_draft), "synthetic": stage1.get("synthetic") is True,
-           "realized_prompt_tokens": realized,
+           "realized_prompt_tokens": realized, "soak_retries": stage1.get("soak_retries"),   # RL-172a
            "decisions": {"drift_tripwire": step3["tripwire"]["decision"], "qualified_interim_half": q,
                          "extension_rule": "none written; any extension needs a ruling"},
            "disclosure": {"date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),

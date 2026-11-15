@@ -484,6 +484,70 @@ def judge_span(sdir, span_id, selected_keys):
     return verdicts, detail, span_trailers(span_id, streams)
 
 
+# RL-171 and RL-172a: the span's soak may be retried once, on a slope or a load refusal. Operational reads only.
+# The receipt's soak_attempts lists each attempt ({"attempt", "refused", "output_dir", ...}); a receipt from the
+# v1/v1.1 pins has no such field, which means one attempt. The receipt's "refused" text is the same for both
+# kinds, so the kind is taken from an operational field when a receipt records one (SOAK_KIND_FIELDS), else from
+# the soak child's own refusal line in that attempt's stderr log (<stage>.stderr.log, the stage "soak" or
+# "soak.a<n>"), matched whole; no other line of the log is kept. Otherwise the kind is "kind not recorded". The
+# soak's soak_row.json is not opened: it carries the soak's result series. A soak retried and then accepted is
+# not a stop: nothing here, or anywhere in the look, reads the stage journal's rc for a soak stage.
+SOAK_KINDS = ("slope", "load", "kind not recorded")
+SOAK_KIND_FIELDS = ("refusal_kind",)
+SOAK_REFUSAL_LINES = {b"soak refused: idle soak has unresolved slope": "slope",     # cadence_legs_runner.soak_child
+                      b"soak refused: idle soak: sustained CPU load": "load"}
+
+
+def soak_attempts(sdir):
+    """The span's soak attempts from its receipt, checked for shape; one accepted attempt when the field is absent."""
+    receipt = _json(Path(sdir) / "runner_receipt.json")
+    if "soak_attempts" not in receipt:
+        return [{"attempt": 1, "refused": None}], False
+    attempts = receipt["soak_attempts"]
+    if not isinstance(attempts, list) or any(
+            not isinstance(a, dict) or a.get("attempt") != i + 1
+            or not (a.get("refused") is None or isinstance(a.get("refused"), str))
+            or (a.get("refused") is None and i != len(attempts) - 1) for i, a in enumerate(attempts)):
+        raise ValueError(f"{Path(sdir).name}: runner_receipt.json soak_attempts is not a list of numbered attempts, "
+                         "each refused but the last")
+    return attempts, True
+
+
+def soak_refusal_kind(sdir, attempt):
+    """("slope" | "load" | "kind not recorded", where it was read) for one refused attempt."""
+    for field in SOAK_KIND_FIELDS:
+        if attempt.get(field) in ("slope", "load"):
+            return attempt[field], f"receipt soak_attempts[].{field}"
+    n = attempt["attempt"]
+    log = Path(sdir) / f"{'soak' if n == 1 else f'soak.a{n}'}.stderr.log"
+    if log.is_file():
+        for line in log.read_bytes().splitlines():
+            kind = SOAK_REFUSAL_LINES.get(line.strip())
+            if kind:
+                return kind, f"{log.name} refusal line"
+    return "kind not recorded", None
+
+
+def soak_retries(span_dirs_by_id):
+    """The look's soak-retry print (RL-172a): per span, its attempts and the kinds of the retried ones; in sum, the
+    spans with a retry, the retried soaks by kind, the spans accepted after a retry and those the soak stopped."""
+    spans, by_kind = {}, {k: 0 for k in SOAK_KINDS}
+    for span_id, sdir in sorted(span_dirs_by_id.items()):
+        attempts, recorded = soak_attempts(sdir)
+        retried = []
+        for a in attempts[:-1]:                     # every attempt with a successor was retried
+            kind, source = soak_refusal_kind(sdir, a)
+            by_kind[kind] += 1
+            retried.append({"attempt": a["attempt"], "kind": kind, "read_from": source})
+        accepted = bool(attempts) and attempts[-1].get("refused") is None
+        spans[span_id] = {"attempts": len(attempts), "field_present": recorded, "accepted": accepted,
+                          "retried": retried}
+    return {"spans": spans, "spans_with_retry": sum(1 for v in spans.values() if v["retried"]),
+            "retried_by_kind": by_kind,
+            "accepted_after_retry": sum(1 for v in spans.values() if v["retried"] and v["accepted"]),
+            "stopped_by_soak": sum(1 for v in spans.values() if v["attempts"] and not v["accepted"])}
+
+
 def judge_custody(roster, sdir_of, selected_keys):
     """The verdict file and its detail for every roster span (``manifest.resolve_roster``'s list)."""
     verdicts, detail, trailers = {}, {}, []
@@ -492,7 +556,8 @@ def judge_custody(roster, sdir_of, selected_keys):
         verdicts.update(v)
         detail.update(d)
         trailers += t
-    return verdicts, {"legs": detail, "span_trailers": trailers}
+    soaks = soak_retries({e["span_id"]: Path(sdir_of(e["span_id"])) for e in roster})
+    return verdicts, {"legs": detail, "span_trailers": trailers, "soak_retries": soaks}
 
 
 def _write(path, doc):

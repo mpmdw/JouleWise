@@ -117,7 +117,8 @@ REQUIRED_PRINTS = {
                 "per_leg_relative_residuals", "prefix_length_bias", "step3_statistic_iii",
                 "qualified_interim_half", "marked_span_sensitivity", "realized_prompt_tokens", "disclosure",
                 "active_readings", "onsets_before_116_s", "fold_coefficients", "day_detail",
-                "onset_offset_residuals"},                                             # RL-166b B-2, P-1 to P-4
+                "onset_offset_residuals",                                              # RL-166b B-2, P-1 to P-4
+                "soak_retries"},                                                       # RL-172a
 }
 PREFIX_RATIOS = [1.10, 1.30, 1.374]                # RL-150 section 3.2 ("the looks print ... 1.10, 1.30 and 1.374")
 REQUIRED_CARRIES = {"model_sha256", "qualified"}   # RL-149 section 4
@@ -405,7 +406,7 @@ def validate_manifest(doc, *, final=None):
     if not _cites(rulings):
         problems.append("rulings: a non-empty list of ruling cites")
     else:
-        for need in ("RL-149 §2.6", "RL-150 R4", "RL-166 §1", "RL-166b §3"):
+        for need in ("RL-149 §2.6", "RL-150 R4", "RL-166 §1", "RL-166b §3", "RL-172a"):
             if need not in rulings:
                 problems.append(f"rulings: must cite {need!r}")
 
