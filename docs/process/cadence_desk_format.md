@@ -13,7 +13,8 @@ The scratch copy at `/Volumes/JW-EXT/scratch/desk-final/FORMAT.md` is this file,
 | Principal | Key lives on | Signs | Verified by |
 |---|---|---|---|
 | `cadence-controller` | MBP (controller config `signing_key`) | bundle commits | Air: `allowed_signers` naming this key |
-| `cadence-desk` | Air | verdict commits | MBP controller: `verdict_signers` naming this key |
+| `cadence-desk` | Air (or the Actions desk, RL-173 B) | off-host verdict commits | MBP controller: `verdict_signers` naming this key |
+| `cadence-controller` | MBP | the MBP desk's own verdict commits (section 6; local refs only) | the MBP desk's history and the controller: `controller_signers` |
 
 Both use SSH signatures (`gpg.format=ssh`, namespace `git`). Allowed-signers lines read
 `<principal> namespaces="git" <public key>`. A signature by any other principal is a refusal.
@@ -121,7 +122,8 @@ python3.13 -B scripts/air/cadence_desk.py final --plan-id PLAN --repo CLONE \
     --bundle-ref refs/remotes/origin/desk-bundles/PLAN --allowed-signers SIGNERS --kit KIT.json --out DIR \
     --history-prefix refs/remotes/origin/cadence-desk-final/ --history-signers DESK_SIGNERS \
     [--hand-table hand_table.json] [--hand-sample]
-python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --repo CLONE --signing-key AIR_KEY
+python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --repo CLONE --signing-key AIR_KEY \
+    [--principal cadence-desk] [--ref-prefix refs/heads/cadence-desk-final/] [--no-push]
 ```
 
 - **Lock.** `final` runs under `AIR-QUIET.lock` and always writes `DIR/desk_verdict.json`. When the bundle
@@ -138,6 +140,9 @@ python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --rep
   - `--history FILE`, or no history at all, makes a signed-bundle verdict not final (`DESK_UNAUTHENTICATED`,
     "receipt replay cannot be checked").
   - The verdict records `history_source`.
+  - `--history-principal` names who signed the records: `cadence-desk` (the default; the Air or Actions desk)
+    or `cadence-controller` (the MBP desk's own records, section 6). A record signed by another principal is a
+    refusal, so one prefix never mixes the two desks.
 - **Synthetic runs.** `--bundle DIR --manifest-sha256 HEX --allow-unsigned --queue Q` judges an unsigned
   directory; that verdict says `transport.signed: false` and never counts. `--allow-mock` accepts a mock
   receipt, and that verdict says `mock: true` and never counts.
@@ -161,7 +166,7 @@ python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --rep
  "desk_final": true, "reasons": ["CODE: detail"], "named_stops": [{"code", "kind", "detail"}],
  "pending": [{"code": "HAND_TABLE_DUE", ...}], "next_arm_hold": false,
  "holds": [{"code", "scope": "queue" | "kit:<campaign_id>", "cleared_by", "gate"?}],
- "hand_gates": [{"gate", "status": "hand gate required", "ruling", "holds", "why", "print"}],
+ "hand_gates": [{"gate", "status": "hand gate required", "ruling", "holds", "debt"?, "why", "print"}],
  "hand_table": {"required", "triggers", "supplied", "agrees", "problems", "differences", "sample"},
  "identities": {"kit_sha256", "campaign_id", "frozen_commit", "roster", "capture_leg", "manifest_sha256", "receipt_sha256"},
  "transport": {"signed", "bundle_commit", "signer", "queue_commit"}, "history_source": "signed-records|file|none",
@@ -172,6 +177,8 @@ python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --rep
 - **Canonical JSON:** `json.dumps(body, sort_keys=True, separators=(",", ":"))`, in UTF-8.
 - **Stable gate names:** `class A smoke hand-read`, `L002 consumer gate`, `L005 consumer gate`,
   `RL-158 Q1 reference print`.
+- **The Q1 gate** carries `holds: null` and `debt`: it is counted in line 9's debt (RL-173 E), by the lead's
+  typed record (section 6), not by a hold.
 
 **Codes:**
 
@@ -212,7 +219,9 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
    - the exact identities and anchor.
 
    A verdict that is missing, unreadable, unsigned, mismatched or false is **not final**. Never default to
-   final, and never reuse a verdict across plan ids.
+   final, and never reuse a verdict across plan ids. The MBP desk's own record (section 6) is read the same way
+   with `principal="cadence-controller"`; either verdict may make a span final, and a difference between the
+   two holds (RL-173 B).
 2. **Holds.** `next_arm_hold: true` (any named stop) holds the next arm of the queue until the lead's
    disposition record. A `kit:<campaign_id>` hold (a hand gate) holds that kit's next span until the lead's
    gate record.
@@ -245,15 +254,57 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
 - **Comparison.** A missing, duplicate, mistyped or non-finite field makes the table `HAND_TABLE_INVALID`.
   Every field is compared, seconds within 1.0 s.
   - `span_reference` is compared whole: `leg_id`, `attempt`, `redone` and `excluded`, typed (Sol R4).
-- **The draw** (`sha256-hand-sample-v2`, seed 2026111501, rate 4) is fixed in code before any span it
-  selects has run.
-  - The stratum is the kit sha256 and the span's G0 shape (`span` if a leg after the first consumes, else
-    `own`).
-  - A span is drawn when sha256(`law|seed|kit_sha256|shape|plan_id`) mod 4 is 0: one in four in expectation,
-    per stratum.
-  - It depends on nothing but the span's own committed entry and kit. An append to its queue, or the size or
-    id of the queue, never changes it.
-  - v1's blocks of four were sized by the queue's current length; that broke both properties (Mythos N13,
-    Sol R11).
-  - `cadence_desk.py sample-plan --queue Q --kit K` prints the selection at READY, so it is prospective.
-  - The seed and rate are for the research lead to confirm.
+- **The draw** (`sha256-hand-sample-v3`, seed 2026111501, rate 4; RL-173 E confirms the seed and the law) is
+  fixed in code before any span it selects has run.
+  - The group is the kit sha256 and the span's G0 shape (`span` if a leg after the first consumes, else `own`).
+  - A span is drawn when sha256(`seed|kit_sha256|shape|span_id`) mod 4 is 0: one in four in expectation, per
+    group. The attempt is not in the hash, so a re-run of a span draws as the span did.
+  - **The first span of each group is always drawn.** A span is first when no span of its group comes before it
+    in its own queue (by `seq`), or when the signed history holds no span of its group whose first leg started
+    before this span's first leg. Either clause marks a first span, so a group split across queues, or an
+    earlier entry that never ran, never hides the first span that did run. The draw errs towards a hand table.
+  - It reads only the span's own queue entry and spans before it. An append to its queue, a later span's
+    verdict, or a re-judgment (a hand table supplied later) never changes it (Sol R11). A block-of-four draw is
+    refused (RL-173 E).
+  - The verdict's `hand_table.sample` records `value`, `first_in_queue`, `first_in_history`, `first_of_group`
+    and `selected`; each span's `desk_summary.json` records its `sample_stratum`, which later spans' history
+    clause reads.
+  - `cadence_desk.py sample-plan --queue Q --kit K` prints the queue clause at READY, so it is prospective. The
+    desk may add a span by the history clause, never remove one.
+
+## 6. The MBP desk, the off-host re-check and the Q1 record (RL-173 B and E)
+
+- **The MBP desk is a controller step** in the close interval: the same `final` command, from the controller's
+  own checkout (the commit the off-host desk runs; the verdict's `desk_code` records it), on the controller's
+  signed bundle commit, with no agent, before the next soak. Its history is its own earlier records:
+
+  ```
+  cadence_desk.py final --plan-id PLAN --repo CONTROLLER_CLONE --bundle-ref <bundle commit> \
+      --allowed-signers CONTROLLER_SIGNERS --kit KIT --out DIR --lock STATE/desk.lock \
+      --history-prefix refs/heads/cadence-desk-mbp/ --history-signers CONTROLLER_SIGNERS \
+      --history-principal cadence-controller
+  cadence_desk.py publish --plan-id PLAN --out DIR --repo CONTROLLER_CLONE --signing-key CONTROLLER_KEY \
+      --principal cadence-controller --ref-prefix refs/heads/cadence-desk-mbp/ --no-push
+  ```
+
+  It counts as desk-final for line 9 when `counts_as_final` holds on it (RL-172 (c)'s four conditions).
+- **The off-host desk** (the Air, or the Actions desk the lead builds) re-checks every span from the pushed
+  bundle when one is available and publishes to `refs/heads/cadence-desk-final/<plan_id>` signed by
+  `cadence-desk`, as in section 2. When both verdicts exist, `desk_final.compare_verdicts(mbp, offhost)` must
+  return nothing. It compares the automatic part (`agreement_view`): identities, summary hash, every
+  non-hand named stop with its detail, the hand gates, the hand-table triggers (less the lead's own
+  `--hand-sample`), the draw, the transport, the history source, any error and `desk_code`. It leaves out what
+  the lead's later hand table changes. A difference holds the next arm and goes to the research lead.
+- **The hand table** is the lead's input to the off-host desk (any host, from the pushed bundle). A span whose
+  MBP verdict is `HAND_TABLE_DUE` becomes final by the off-host verdict that compares the table.
+- **The Q1 completion record** (RL-158 Q1; RL-173 E). One per v1.1 span, committed by the lead on the audit
+  branch at `<records_dir>/q1/<plan_id>.json`:
+
+  ```json
+  {"schema": "joulewise.cadence_q1_record.v1", "plan_id": "...", "span_id": "...", "attempt": 1,
+   "signer": "<the lead>", "recorded_at": "<ISO 8601 with offset>", "print_ref": "<where the hand print is>"}
+  ```
+
+  Closed keys, no reading, no denied word (`desk_final.validate_q1_record`). The controller counts it in line
+  9's debt: span k's record exists before span k+2 arms; it holds nothing sooner. A record committed before its
+  span closed is a contradiction. The desk reads no Q1 record.

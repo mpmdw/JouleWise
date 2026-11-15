@@ -44,7 +44,11 @@ is HAND_TABLE_INVALID, and one that disagrees is HAND_TABLE_DISAGREES. Both hold
 
 **Hand gates are kept and gate as they do now** (RL-172 section (c)): the class A smoke hand-read of a new
 kit's first span, the L002 and L005 consumer gates, and RL-158 Q1's reference print on every v1.1 span.
-The desk does not clear them. It prints what each hand check needs and marks it ``hand gate required``.
+The desk does not clear them. It prints what each hand check needs and marks it ``hand gate required``. The
+Q1 print is counted in line 9's debt by the lead's typed record (``validate_q1_record``; RL-173 E).
+
+**Where it runs** (RL-173 B). The same command runs on the MBP as a controller step in the close interval and
+off-host (the Air, or GitHub Actions) from the pushed bundle; ``compare_verdicts`` is the agreement check.
 
 **Operational finality only.** Inclusion at a look is still RL-166 Q7's interval checks.
 
@@ -80,6 +84,11 @@ PLAN_NAME = "span_plan.json"
 VERDICT_NAME = "desk_verdict.json"
 SUMMARY_NAME = "desk_summary.json"
 HAND_TABLE_NAME = "hand_table.json"
+# RL-173 E (Sol R12): the lead's typed RL-158 Q1 completion record, one per v1.1 span. The controller reads it
+# from the audit branch (``<records_dir>/q1/<plan_id>.json``) and counts it in line 9's debt; the desk only
+# defines its shape (``validate_q1_record``) and never reads one.
+Q1_RECORD_SCHEMA = "joulewise.cadence_q1_record.v1"
+Q1_RECORD_KEYS = {"schema", "plan_id", "span_id", "attempt", "signer", "recorded_at", "print_ref"}
 ALLOWED_BASENAMES = frozenset({MANIFEST_NAME, RECEIPT_NAME, PLAN_NAME, "leg_summary.json", "result.json",
                                "meter.json", HAND_TABLE_NAME, VERDICT_NAME, SUMMARY_NAME})
 LEG_ID = r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}"
@@ -124,11 +133,12 @@ HAND_REQUIRED_V11 = HAND_REQUIRED_V1 + ("g0_role", "span_reference")
 HAND_TOP_REQUIRED = ("schema", "plan_id", "legs", "named_stops", "soak_attempts")
 SECONDS_TOLERANCE = 1.0
 
-# The seeded stratified hand-sample draw (RL-172 section (c); Sol). Fixed here, before any span it selects
-# has run. v2 (gate 2, Mythos N13, Sol R11): each span's draw depends only on its own plan id, its kit sha and
-# its G0 shape, so appending to a queue never changes an earlier span's draw, and queues of any size draw at
-# the same rate. v1's blocks of four were sized by the queue's current length and were not append-stable.
-HAND_SAMPLE_LAW = "sha256-hand-sample-v2"
+# The seeded stratified hand-sample draw (RL-172 section (c); RL-173 E, which confirms the seed and the law). A
+# span is drawn when sha256 of "<seed>|<kit sha256>|<G0 shape>|<span id>" is 0 modulo 4, and the first span of
+# each kit and G0-shape group is always drawn. Each span's draw depends on its own queue entry and on spans that
+# came before it, never on later ones, so an append never changes an earlier draw (Sol R11) and a re-judgment
+# (a hand table supplied later) draws the same. A block-of-four draw is refused by RL-173 E.
+HAND_SAMPLE_LAW = "sha256-hand-sample-v3"
 HAND_SAMPLE_SEED = 2026111501
 HAND_SAMPLE_RATE = 4       # one span in four per stratum, in expectation
 
@@ -325,19 +335,45 @@ def span_shape(kit, roster):
     return "span" if any(shapes.get(x) == "span" for x in roster[1:]) else "own"
 
 
-def hand_sample(queue_doc, plan_id, kit, kit_sha256):
-    """The seeded stratified draw (``sha256-hand-sample-v2``). The stratum is (kit sha256, G0 shape of the
-    span); the span is selected when sha256 of the law, the seed, the stratum and its plan id is 0 modulo
-    HAND_SAMPLE_RATE. It reads only the span's own committed queue entry and kit, so it is prospective
-    (``cadence_desk.py sample-plan`` prints it at READY) and an append never changes it (Mythos N13, Sol R11)."""
+def _group(kit, span):
+    return span["kit"]["sha256"], span_shape(kit, span["legs"])
+
+
+def hand_sample(queue_doc, plan_id, kit, kit_sha256, history=None, started=None):
+    """The seeded stratified draw (``sha256-hand-sample-v3``, RL-173 E). The group is (kit sha256, G0 shape of
+    the span). The span is drawn when sha256 of ``<seed>|<kit sha256>|<shape>|<span id>`` is 0 modulo
+    HAND_SAMPLE_RATE, or when it is the first span of its group. It is the first of its group when either
+
+    * no span of the group comes before it in its own queue (by ``seq``; the prospective clause, which
+      ``cadence_desk.py sample-plan`` prints at READY), or
+    * ``history`` (the campaign's signed desk summaries) holds no span of the group whose first leg started
+      before this span's (``started``) - so a group split across queues, or an earlier entry that never ran,
+      cannot hide the first span that did run.
+
+    Either clause alone marks a first span, so the draw errs towards a hand table. Both read only this span's
+    entry and spans before it: an append, or a later span's verdict, never changes the draw. ``history`` None
+    (the prospective print) applies the queue clause only."""
     span = next((s for s in queue_doc["spans"] if queuemod.plan_id(s) == plan_id), None)
     if span is None or span["kit"]["sha256"] != kit_sha256:
         return None
-    shape = span_shape(kit, span["legs"])
-    digest = hashlib.sha256(f"{HAND_SAMPLE_LAW}|{HAND_SAMPLE_SEED}|{kit_sha256}|{shape}|{plan_id}".encode()).hexdigest()
+    group = _group(kit, span)
+    stratum = {"kit_sha256": group[0], "shape": group[1]}
+    first_in_queue = not any(s["seq"] < span["seq"] and _group(kit, s) == group for s in queue_doc["spans"]
+                             if s["kit"]["sha256"] == kit_sha256)
+    first_in_history = None
+    if history is not None:
+        first_in_history = started is None or not any(
+            isinstance(h, dict) and h.get("sample_stratum") == stratum and _num(h.get("first_leg_start_epoch_s"))
+            and h["first_leg_start_epoch_s"] < started for h in history)
+    first = first_in_queue or bool(first_in_history)
+    digest = hashlib.sha256(f"{HAND_SAMPLE_SEED}|{kit_sha256}|{group[1]}|{span['span_id']}".encode()).hexdigest()
     value = int(digest, 16) % HAND_SAMPLE_RATE
-    return {"law": HAND_SAMPLE_LAW, "seed": HAND_SAMPLE_SEED, "stratum": {"kit_sha256": kit_sha256, "shape": shape},
-            "rate": HAND_SAMPLE_RATE, "value": value, "selected": value == 0}
+    return {"law": HAND_SAMPLE_LAW, "seed": HAND_SAMPLE_SEED, "stratum": stratum, "rate": HAND_SAMPLE_RATE,
+            "value": value, "first_in_queue": first_in_queue, "first_in_history": first_in_history,
+            "first_of_group": first, "selected": first or value == 0}
+
+
+_draw = hand_sample     # judge_span's ``hand_sample`` argument is the lead's flag; this is the law
 
 
 def expected_identity(queue_doc, plan_id, kit, kit_sha256, find):
@@ -943,7 +979,8 @@ def hand_table_triggers(ordered, expected, history, hand_sample_flag, soak_attem
         out.append("schema change (kit schema or leg-summary fields differ from the previous span's)")
     sample = expected.get("sample")
     if sample and sample["selected"]:
-        out.append(f"sampled (seeded draw {HAND_SAMPLE_LAW})")
+        out.append(f"sampled (seeded draw {HAND_SAMPLE_LAW}: "
+                   f"{'first span of its group' if sample['first_of_group'] else 'hash'})")
     if hand_sample_flag:
         out.append("sampled (the lead's selection)")
     return out, keys
@@ -1046,6 +1083,37 @@ def compare_hand_table(doc, ordered, operational_stops, soak_attempts, plan_id, 
     return [], diffs
 
 
+Q1_DEBT = "line 9's debt: span k's Q1 record before span k+2 arms (RL-173 E)"
+
+
+def validate_q1_record(doc, *, plan_id, span_id, attempt):
+    """RL-173 E (Sol R12): the lead's typed RL-158 Q1 completion record for one span. Returns problems (empty
+    when the record is valid for this span). The controller reads it from the audit branch and counts it in line
+    9's debt: span k's record must exist before span k+2 arms; it holds nothing sooner. The record says the hand
+    print was done and where it is (``print_ref``); it carries no reading (closed keys; no denied word), so
+    neither the controller nor the desk ever holds a thermal or energy value."""
+    if not isinstance(doc, dict):
+        return ["q1 record: not an object"]
+    problems = []
+    if any(isinstance(v, str) and _DENIED_WORD.search(v) for v in doc.values()):
+        problems.append("q1 record: a denied word in its text (a completion record carries no reading)")
+    keys = set(doc)
+    if keys != Q1_RECORD_KEYS:
+        problems.append(f"q1 record keys: missing {sorted(Q1_RECORD_KEYS - keys)}, unknown {sorted(keys - Q1_RECORD_KEYS)}")
+    if doc.get("schema") != Q1_RECORD_SCHEMA:
+        problems.append(f"q1 record schema {doc.get('schema')!r}")
+    for key, want in (("plan_id", plan_id), ("span_id", span_id), ("attempt", attempt)):
+        if doc.get(key) != want:
+            problems.append(f"q1 record {key} {doc.get(key)!r} is not this span's {want!r}")
+    if not (isinstance(doc.get("signer"), str) and doc["signer"].strip()):
+        problems.append("q1 record signer: the lead's name")
+    if queuemod.parse_time(doc.get("recorded_at")) is None:
+        problems.append("q1 record recorded_at: ISO 8601 with an offset")
+    if not (isinstance(doc.get("print_ref"), str) and doc["print_ref"].strip()):
+        problems.append("q1 record print_ref: where the hand print is")
+    return problems
+
+
 def consumer_gates(campaign_id, kit_legs, roster):
     """The consumer gates that apply to a span: [(name, leg_id, ruling, rule)]. For the controller too (F2)."""
     out = []
@@ -1087,10 +1155,11 @@ def hand_gates(ordered, receipt, expected, mark):
         capture = roster[0] if roster else None
         accepted = next((s.get("output_dir") for s in reversed(soak) if not s.get("refused")), None)
         gates.append({
-            "gate": "RL-158 Q1 reference print", "status": GATE_REQUIRED, "ruling": "RL-158 Q1; RL-172 section (c)",
-            "holds": None,
+            "gate": "RL-158 Q1 reference print", "status": GATE_REQUIRED,
+            "ruling": "RL-158 Q1; RL-172 section (c); RL-173 E", "holds": None, "debt": Q1_DEBT,
             "why": "every v1.1 span: the leg summary does not carry the readings (thermal journal values, as "
-                   "RL-150 R1 part 3); it becomes automatic only on the research lead's ruling",
+                   "RL-150 R1 part 3), so the lead prints them by hand and commits a typed completion record "
+                   "(validate_q1_record); it becomes automatic only on the research lead's ruling",
             "print": {"soak_reference": {"dir": accepted, "attempts": len(soak),
                                          "refusals": [a.get("refusal_kind") for a in soak if a.get("refused")]},
                       "capture": None if capture is None else {
@@ -1115,7 +1184,8 @@ def _gate_lines(gates):
         return out + ["- none for this span"]
     for g in gates:
         out.append(f"- **{g['status'].upper()}: {g['gate']}** ({g['ruling']}). {g['why']}."
-                   + (f" Holds `{g['holds']}` until the lead's record." if g["holds"] else " Gates nothing by itself."))
+                   + (f" Holds `{g['holds']}` until the lead's record." if g["holds"]
+                      else f" Counted in {g['debt']}." if g.get("debt") else " Gates nothing by itself."))
         out.append(f"  - print: `{json.dumps(g['print'], sort_keys=True)}`")
     return out
 
@@ -1211,6 +1281,10 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
         transition = transport.get("transition")
         if transition is not None:
             failures += check_transition(transition, expected, verified, queue_path, find)
+        # The draw with its history clause (RL-173 E): spans of the group that started before this one.
+        expected["sample"] = _draw(queue_doc, plan_id, kit, expected["kit"]["sha256"], list(history or ()),
+                                         ordered[0].get("started_epoch_s") if ordered else None)
+        hand["sample"] = expected["sample"]
         triggers, leg_keys = hand_table_triggers(ordered, expected, history, hand_sample, soak_attempts)
         mark = desk.span_reference_marks(ordered)
         summary = {"plan_id": plan_id, "adapter": "leg-summary-v1", "result": result, "meter": meter,
@@ -1219,6 +1293,7 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
                    "receipt_sha256": receipt_sha, "manifest_sha256": manifest_digest,
                    "campaign_id": kit["campaign_id"],
                    "first_leg_start_epoch_s": ordered[0].get("started_epoch_s") if ordered else None,
+                   "sample_stratum": (expected["sample"] or {}).get("stratum"),
                    "soak": {"attempts": soak_attempts, "accepted_attempt": soak_accepted, "note": soak_note,
                             "field": receipt["soak_field"]}}
         if mark is not None:
@@ -1245,7 +1320,7 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
             find.add("HAND_TABLE_DUE", f"a hand table is required: {', '.join(triggers)}")
         gates = hand_gates(ordered, receipt, expected, mark)
         lines = [f"# Desk table: {plan_id}", "",
-                 f"Built automatically on the Air at {time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(now))} "
+                 f"Built automatically at {time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(now))} "
                  "by joulewise.cadence.desk_final (leg-summary-v1, authenticated bundle). Operational fields only.",
                  "", "## Legs", ""] + desk.leg_table(ordered, kit["stop_rules"]) + desk.cell_table(ordered, mark)
         lines += ["", "## Desk-final checks (RL-172 section (c))", "",
@@ -1353,3 +1428,37 @@ def counts_as_final(doc, *, plan_id, queue_id, span_id, attempt, manifest_sha256
             and (doc.get("plan_id"), doc.get("queue_id"), doc.get("span_id"), doc.get("attempt"))
             == (plan_id, queue_id, span_id, attempt)
             and (doc.get("identities") or {}).get("manifest_sha256") == manifest_sha256)
+
+
+LEAD_SELECTION = "sampled (the lead's selection)"
+
+
+def agreement_view(doc):
+    """The automatic part of a verdict (RL-173 B): what two desks judging the same signed bundle at the same desk
+    code must agree on. It leaves out what the lead's later hand input changes (the hand table, its findings, the
+    pending HAND_TABLE_DUE, ``desk_final`` and ``next_arm_hold`` as they follow from those, the lead's own
+    ``--hand-sample`` selection) and when the verdict was built."""
+    doc = doc if isinstance(doc, dict) else {}
+    hand = doc.get("hand_table") if isinstance(doc.get("hand_table"), dict) else {}
+    return {
+        "ident": [doc.get(k) for k in ("schema", "plan_id", "queue_id", "span_id", "attempt")],
+        "identities": doc.get("identities"), "summary_sha256": doc.get("summary_sha256"), "mock": doc.get("mock"),
+        "named_stops": sorted([s.get("code"), s.get("kind"), s.get("detail")] for s in doc.get("named_stops") or []
+                              if isinstance(s, dict) and s.get("kind") != "hand"),
+        "hand_gates": sorted([g.get("gate"), g.get("holds")] for g in doc.get("hand_gates") or []
+                             if isinstance(g, dict)),
+        "triggers": sorted(t for t in hand.get("triggers") or [] if t != LEAD_SELECTION),
+        "sample": hand.get("sample"),
+        "transport": {k: (doc.get("transport") or {}).get(k) for k in ("signed", "bundle_commit", "signer",
+                                                                       "queue_commit")},
+        "history_source": doc.get("history_source"), "error": doc.get("error"), "desk_code": doc.get("desk_code")}
+
+
+def compare_verdicts(a, b):
+    """RL-173 B: an off-host desk re-checks every span from the pushed bundle; a disagreement with the MBP's desk
+    holds the next arm and goes to the research lead. Returns the names of the automatic fields on which the two
+    verdicts differ (empty when they agree). Both must verify; one that does not is itself a difference."""
+    if not (verify_verdict(a) and verify_verdict(b)):
+        return ["verdict_sha256 (a verdict does not verify)"]
+    va, vb = agreement_view(a), agreement_view(b)
+    return [k for k in va if va[k] != vb[k]]

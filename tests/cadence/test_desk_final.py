@@ -39,28 +39,33 @@ class Fixture:
 
     def __init__(self, root):
         self.root = Path(root)
-        self.kit = span_kit(legs_per_span=6)
+        self.kit = span_kit(legs_per_span=6, leg_budget_s=1661)   # 1661: neither dg-s01 nor dg-s02 is hash-drawn
         self.kit_path = self.root / "kit.json"
         self.kit_path.write_text(json.dumps(self.kit, indent=1))
         _, self.sha = kitmod.load_kit(self.kit_path)
         self.ids = [leg["leg_id"] for leg in self.kit["legs"]]
         self.spans = {}
         self.queue_id = "cq-df-1"
-        # The seeded draw (v2) depends on the plan id only: the fixture's first two spans are not drawn, so the
-        # draw does not add a hand table to every test; SeededDraw tests the draw itself.
-        assert not any(desk_final.hand_sample(self.queue(), f"cq-dg-s0{n}-a1", self.kit, self.sha)["selected"]
-                       for n in (1, 2))
+        # The seeded draw (v3, RL-173 E): the first span of a kit and G0-shape group is always drawn, by its queue
+        # (a leader span dg-s00 comes first here) or by the history (Fixture.history holds an earlier span of each
+        # group). The fixture's own spans are not drawn by the hash, so the draw does not add a hand table to every
+        # test; SeededDraw tests the draw itself.
+        assert not any(desk_final.hand_sample(self.queue(), f"cq-dg-s0{n}-a1", self.kit, self.sha, self.history(),
+                                              1.0)["selected"] for n in (1, 2))
 
     def queue(self, rosters=None, sha=None, queue_id=None):
         rosters = rosters or [self.ids[:6], self.ids[6:12]]
-        spans = [{"seq": i + 1, "span_id": f"dg-s{i + 1:02d}", "block_id": "df-dev",
+        spans = [{"seq": i + 2, "span_id": f"dg-s{i + 1:02d}", "block_id": "df-dev",
                   "kit": {"path": KIT_PATH, "sha256": sha or self.sha}, "legs": roster, "attempt": 1,
                   "not_before": "2026-11-17"} for i, roster in enumerate(rosters)]
+        leader = {**spans[0], "seq": 1, "span_id": "dg-s00"}
+        spans[0] = {**spans[0], "rerun_of": "dg-s00"}
         if len(rosters) == 2:
-            spans += [{**spans[i], "seq": 3 + i, "span_id": f"dg-s{3 + i:02d}", "rerun_of": spans[i]["span_id"]}
+            spans += [{**spans[i], "seq": 4 + i, "span_id": f"dg-s{3 + i:02d}", "rerun_of": spans[i]["span_id"]}
                       for i in (0, 1)]
         return {"schema": "joulewise.cadence_queue.v1", "queue_id": queue_id or self.queue_id,
-                "expires_at": "2026-12-31T00:00:00-08:00", "halt": None, "standing_notice": None, "spans": spans}
+                "expires_at": "2026-12-31T00:00:00-08:00", "halt": None, "standing_notice": None,
+                "spans": [leader, *spans]}
 
     def identity(self, **kw):
         return {"path": KIT_PATH, "sha256": self.sha, "campaign_id": self.kit["campaign_id"],
@@ -76,7 +81,9 @@ class Fixture:
         return self.spans[name]
 
     def history(self):
-        return [{"kit_schema": self.kit["schema"], "leg_keys": sorted(desk.LEG_SUMMARY_KEYS), "legs": []}]
+        return [{"kit_schema": self.kit["schema"], "leg_keys": sorted(desk.LEG_SUMMARY_KEYS), "legs": [],
+                 "sample_stratum": {"kit_sha256": self.sha, "shape": shape}, "first_leg_start_epoch_s": 0.0}
+                for shape in ("own", "span")]
 
 
 def remanifest(bundle):
@@ -814,7 +821,7 @@ class IncompleteHandTable(DeskFinalCase):
 
 
 class SeededDraw(unittest.TestCase):
-    """The seeded stratified hand-sample draw, sha256-hand-sample-v2 (Mythos N13, Sol R11): per span, by plan id
+    """The seeded stratified hand-sample draw (v3, RL-173 E; Mythos N13, Sol R11): per span, by span id
     within its stratum; append-stable and queue-independent."""
 
     def queue(self, kit, sha, n, queue_id="cq-draw-1", other=0, prefix="dr"):
@@ -853,15 +860,17 @@ class SeededDraw(unittest.TestCase):
             fx = Fixture(tmp)
             qp = Path(tmp) / "QUEUE.json"
             queue = fx.queue([fx.ids[:6], fx.ids[6:12]])
-            queue["spans"][2]["span_id"] = "df-s01"      # cq-df-s01-a1 is drawn by v2 under this kit
+            queue["spans"][3]["span_id"] = "dh-s01"      # cq-dh-s01-a1 is drawn by the v3 hash under this kit
             qp.write_text(json.dumps(queue))
             with redirect_stdout(io.StringIO()) as out:
                 self.assertEqual(cli.main(["sample-plan", "--queue", str(qp), "--kit", str(fx.kit_path)]), 0)
             doc = json.loads(out.getvalue())
             self.assertEqual((doc["law"], doc["rate"]), (desk_final.HAND_SAMPLE_LAW, 4))
             chosen = {r["plan_id"] for r in doc["spans"] if r["selected"]}
-            self.assertIn("cq-df-s01-a1", chosen)
-            self.assertFalse(chosen & {"cq-dg-s01-a1", "cq-dg-s02-a1"})
+            self.assertEqual(chosen, {"cq-dg-s00-a1", "cq-dh-s01-a1"})   # the group's first, and the hash
+            rows = {r["plan_id"]: r for r in doc["spans"]}
+            self.assertTrue(rows["cq-dg-s00-a1"]["first_in_queue"])
+            self.assertEqual(rows["cq-dh-s01-a1"]["value"], 0)
 
 
 class DeniedContent(DeskFinalCase):
@@ -991,7 +1000,7 @@ class HistoryProvenance(DeskFinalCase):
         verdict = self.judge(work, bundle, anchor, allow_unsigned=False, transport=signed,
                              history_source="signed-records")
         self.assertTrue(verdict["desk_final"], verdict["reasons"])
-        span = self.fx.queue()["spans"][0]
+        span = self.fx.queue()["spans"][1]       # [0] is the leader dg-s00
         ident = dict(plan_id="cq-dg-s01-a1", queue_id=self.fx.queue_id, span_id=span["span_id"], attempt=1,
                      manifest_sha256=anchor, allow_mock=True)
         self.assertTrue(desk_final.counts_as_final(verdict, **ident))
@@ -1055,7 +1064,7 @@ class SignedTransport(DeskFinalCase):
         return {"path": "docs/QUEUE.json", "sha256": desk_final.sha256_bytes(raw), "commit": commit}
 
     def transition(self, bundle, queue_doc=None, **kw):
-        span = (queue_doc or self.fx.queue())["spans"][0]
+        span = (queue_doc or self.fx.queue())["spans"][1]       # [0] is the leader dg-s00
         doc = {"schema": desk_transport.TRANSITION_SCHEMA, "plan_id": "cq-dg-s01-a1", "queue_id": self.fx.queue_id,
                "span_id": span["span_id"], "attempt": 1, "queue": self.audit_commit(queue_doc or self.fx.queue()),
                "kit": {"path": KIT_PATH, "sha256": self.fx.sha},
@@ -1106,7 +1115,7 @@ class SignedTransport(DeskFinalCase):
         vref = "refs/remotes/origin/cadence-desk-final/cq-dg-s01-a1"
         doc, summary = desk_transport.read_verdict(self.mbp, vref, allowed_signers=self.signers, plan_id="cq-dg-s01-a1")
         self.assertEqual(doc, verdict)
-        span = self.fx.queue()["spans"][0]
+        span = self.fx.queue()["spans"][1]       # [0] is the leader dg-s00
         ident = dict(plan_id="cq-dg-s01-a1", queue_id=self.fx.queue_id, span_id=span["span_id"], attempt=1,
                      manifest_sha256=anchor)
         self.assertFalse(desk_final.counts_as_final(doc, **ident))          # a mock receipt never counts
@@ -1276,6 +1285,162 @@ class SignedTransport(DeskFinalCase):
         self.assertTrue(verdict["next_arm_hold"])
         self.assertEqual(verdict["opened"], [])
         self.assertFalse(list((work / "out").glob(".bundle-*")))
+
+
+class DrawV3(unittest.TestCase):
+    """RL-173 E: a span is drawn when sha256 of "<seed>|<kit sha256>|<G0 shape>|<span id>" is 0 modulo 4, and the
+    first span of each kit and G0-shape group is always drawn; no block of four. Append-stable, and a re-judgment
+    draws the same."""
+
+    def setUp(self):
+        self.kit = span_kit(legs_per_span=6)
+        self.sha = "c" * 64
+        self.ids = [leg["leg_id"] for leg in self.kit["legs"]]
+
+    def queue(self, sids, roster=None):
+        return {"queue_id": "cq-v3-1", "spans": [
+            {"seq": i + 1, "span_id": sid, "kit": {"path": "k", "sha256": self.sha}, "legs": roster or self.ids[:6],
+             "attempt": 1} for i, sid in enumerate(sids)]}
+
+    def test_the_hash_is_exactly_seed_kit_shape_span_id(self):
+        import hashlib
+        sids = [f"v3-s{i:03d}" for i in range(1, 41)]
+        queue = self.queue(sids)
+        for sid in sids[1:]:
+            draw = desk_final.hand_sample(queue, f"cq-{sid}-a1", self.kit, self.sha)
+            want = int(hashlib.sha256(f"2026111501|{self.sha}|span|{sid}".encode()).hexdigest(), 16) % 4
+            self.assertEqual(draw["value"], want, sid)
+            self.assertEqual(draw["selected"], want == 0, sid)
+            # the attempt is not in the hash: a re-run of the span draws as the span did
+            rerun = {**queue, "spans": [*queue["spans"], {**queue["spans"][sids.index(sid)], "seq": 99,
+                                                          "span_id": sid, "attempt": 2}]}
+            self.assertEqual(desk_final.hand_sample(rerun, f"cq-{sid}-a2", self.kit, self.sha)["value"], want)
+
+    def test_the_first_span_of_each_group_is_drawn_by_queue_or_by_history(self):
+        own = [x for x in self.ids if next(leg for leg in self.kit["legs"] if leg["leg_id"] == x)["g0_shape"] == "own"]
+        queue = self.queue(["g-s01", "g-s02", "g-s03"])
+        queue["spans"].append({"seq": 4, "span_id": "g-o01", "kit": {"path": "k", "sha256": self.sha}, "legs": own,
+                               "attempt": 1})
+        draws = {sid: desk_final.hand_sample(queue, f"cq-{sid}-a1", self.kit, self.sha)
+                 for sid in ("g-s01", "g-s02", "g-o01")}
+        self.assertTrue(draws["g-s01"]["first_of_group"] and draws["g-s01"]["selected"])   # first span-shaped
+        self.assertTrue(draws["g-o01"]["first_of_group"] and draws["g-o01"]["selected"])   # first own-shaped
+        self.assertFalse(draws["g-s02"]["first_in_queue"])
+        stratum = {"kit_sha256": self.sha, "shape": "span"}
+        earlier = [{"sample_stratum": stratum, "first_leg_start_epoch_s": 100.0}]
+        later = [{"sample_stratum": stratum, "first_leg_start_epoch_s": 900.0}]
+        # A group split across queues: the remainder queue's first span is first in its queue (drawn) ...
+        self.assertTrue(desk_final.hand_sample(queue, "cq-g-s01-a1", self.kit, self.sha, earlier, 500.0)["selected"])
+        # ... and an entry that never ran cannot hide the first span that did: the history clause draws g-s02.
+        d = desk_final.hand_sample(queue, "cq-g-s02-a1", self.kit, self.sha, [], 500.0)
+        self.assertTrue(d["first_in_history"] and d["selected"])
+        d = desk_final.hand_sample(queue, "cq-g-s02-a1", self.kit, self.sha, earlier, 500.0)
+        self.assertFalse(d["first_of_group"])
+        # A span that started later is not "earlier": a re-judgment after later spans ran draws the same.
+        self.assertEqual(desk_final.hand_sample(queue, "cq-g-s02-a1", self.kit, self.sha, later, 500.0),
+                         desk_final.hand_sample(queue, "cq-g-s02-a1", self.kit, self.sha, [], 500.0))
+        self.assertEqual(desk_final.hand_sample(queue, "cq-g-s02-a1", self.kit, self.sha, earlier + later, 500.0),
+                         d)
+
+    def test_append_never_changes_an_earlier_draw(self):
+        sids = [f"a-s{i:03d}" for i in range(1, 30)]
+        full = self.queue(sids)
+        hist = [{"sample_stratum": {"kit_sha256": self.sha, "shape": "span"}, "first_leg_start_epoch_s": 1.0}]
+        for n in range(1, len(sids)):
+            short = self.queue(sids[:n])
+            for sid in sids[:n]:
+                self.assertEqual(desk_final.hand_sample(short, f"cq-{sid}-a1", self.kit, self.sha, hist, 50.0),
+                                 desk_final.hand_sample(full, f"cq-{sid}-a1", self.kit, self.sha, hist, 50.0))
+
+
+class Q1Record(unittest.TestCase):
+    """RL-173 E (Sol R12): the lead's typed Q1 completion record; the controller counts it in line 9's debt."""
+
+    def good(self, **kw):
+        return {"schema": desk_final.Q1_RECORD_SCHEMA, "plan_id": "cq-a-s01-a1", "span_id": "a-s01", "attempt": 1,
+                "signer": "the lead", "recorded_at": "2026-11-16T09:00:00-08:00",
+                "print_ref": "docs/process_traces/x/Q1-PRINT.md", **kw}
+
+    def test_valid_and_each_problem_named(self):
+        ident = dict(plan_id="cq-a-s01-a1", span_id="a-s01", attempt=1)
+        self.assertEqual(desk_final.validate_q1_record(self.good(), **ident), [])
+        self.assertTrue(desk_final.validate_q1_record(self.good(attempt=2), **ident))
+        self.assertTrue(desk_final.validate_q1_record(self.good(recorded_at="yesterday"), **ident))
+        self.assertTrue(desk_final.validate_q1_record(self.good(print_ref=" "), **ident))
+        self.assertTrue(desk_final.validate_q1_record(self.good(reading_c=31.2), **ident))       # closed keys
+        self.assertTrue(desk_final.validate_q1_record(self.good(print_ref="energy 4 J"), **ident))
+        self.assertTrue(desk_final.validate_q1_record([], **ident))
+
+    def test_the_desk_reads_no_q1_record_and_prints_the_debt(self):
+        self.assertNotIn("q1_record.json", desk_final.ALLOWED_BASENAMES)
+        self.assertIn("k+2", desk_final.Q1_DEBT)
+
+
+class VerdictAgreement(DeskFinalCase):
+    """RL-173 B: the MBP's desk and an off-host desk judge the same signed bundle; they must agree on the automatic
+    part. A hand table supplied to one of them later is not a disagreement."""
+
+    def test_same_bundle_agrees_and_tampering_is_named(self):
+        work, bundle, anchor = self.pack()
+        a = self.judge(work, bundle, anchor)
+        work2 = self.work()
+        shutil.copytree(bundle, work2 / "bundle")
+        b = self.judge(work2, work2 / "bundle", anchor, hand_sample=True)     # the lead's own selection
+        self.assertEqual(desk_final.compare_verdicts(a, b), [])
+        def resign(doc, **kw):
+            doc = {**doc, **kw}
+            doc["verdict_sha256"] = desk_final.canonical_sha256({k: v for k, v in doc.items() if k != "verdict_sha256"})
+            return doc
+        self.assertIn("summary_sha256", desk_final.compare_verdicts(a, resign(b, summary_sha256="0" * 64)))
+        self.assertIn("desk_code", desk_final.compare_verdicts(a, resign(b, desk_code={"x": "y"})))
+        self.assertIn("named_stops", desk_final.compare_verdicts(
+            a, resign(b, named_stops=[{"code": "REFUSAL", "kind": "operational", "detail": "x"}])))
+        self.assertEqual(desk_final.compare_verdicts(a, {**b, "desk_final": not b["desk_final"]}),
+                         ["verdict_sha256 (a verdict does not verify)"])
+
+
+class MbpDeskRecords:
+    """RL-173 B: the MBP's desk signs its verdicts with the controller's key under its own ref prefix (local only)
+    and reads its history from them (``--history-principal cadence-controller``). Mixed into SignedTransport."""
+
+    def test_mbp_desk_publish_and_history_under_the_controller_principal(self):
+        work, bundle, anchor = self.pack()
+        ref, _ = self.ship(bundle)
+        rc, verdict = self.final(work, ref)
+        prefix = "refs/heads/cadence-desk-mbp/"
+        with redirect_stdout(io.StringIO()):
+            rc = cli.main(["publish", "--plan-id", "cq-dg-s01-a1", "--out", str(work / "out"), "--repo", str(self.air),
+                           "--signing-key", str(self.keys["cadence-controller"]), "--no-push", "--ref-prefix", prefix,
+                           "--principal", "cadence-controller"])
+        self.assertEqual(rc, 0)
+        doc, _ = desk_transport.read_verdict(self.air, prefix + "cq-dg-s01-a1", allowed_signers=self.signers,
+                                             plan_id="cq-dg-s01-a1", principal="cadence-controller")
+        self.assertEqual(doc, verdict)
+        with self.assertRaisesRegex(desk_transport.TransportRefusal, "not cadence-desk"):
+            desk_transport.read_verdict(self.air, prefix + "cq-dg-s01-a1", allowed_signers=self.signers,
+                                        plan_id="cq-dg-s01-a1")
+        hist = desk_transport.history_from_records(self.air, prefix, allowed_signers=self.signers,
+                                                   campaign_id=self.fx.kit["campaign_id"],
+                                                   principal="cadence-controller")
+        self.assertEqual([h["plan_id"] for h in hist], ["cq-dg-s01-a1"])
+        with self.assertRaisesRegex(desk_transport.TransportRefusal, "not cadence-desk"):   # the Air's principal
+            desk_transport.history_from_records(self.air, prefix, allowed_signers=self.signers,
+                                                campaign_id=self.fx.kit["campaign_id"])
+        argv_base = ["--history-prefix", prefix]
+        work3 = self.work()
+        with redirect_stdout(io.StringIO()):
+            rc = cli.main(["final", "--plan-id", "cq-dg-s01-a1", "--repo", str(self.air), "--bundle-ref", ref,
+                           "--allowed-signers", str(self.signers), "--kit", str(self.fx.kit_path), "--out",
+                           str(work3 / "out"), *argv_base, "--history-signers", str(self.signers),
+                           "--history-principal", "cadence-controller", "--lock", str(work3 / "lock"),
+                           "--allow-mock"])
+        v3 = json.loads((work3 / "out" / desk_final.VERDICT_NAME).read_text())
+        self.assertEqual(v3["history_source"], "signed-records")
+        self.assertNotIn("DESK_UNAUTHENTICATED", codes(v3))
+
+
+SignedTransport.test_mbp_desk_publish_and_history_under_the_controller_principal = \
+    MbpDeskRecords.test_mbp_desk_publish_and_history_under_the_controller_principal
 
 
 if __name__ == "__main__":

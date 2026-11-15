@@ -114,7 +114,7 @@ def _final_locked(args, signed):
             kit, _ = kitmod.load_kit(args.kit)
             history = desk_transport.history_from_records(
                 args.history_repo or args.repo, args.history_prefix,
-                allowed_signers=args.history_signers,
+                allowed_signers=args.history_signers, principal=args.history_principal,
                 campaign_id=kit["campaign_id"], exclude_plan_id=args.plan_id)
             history_source = "signed-records"
         if signed:
@@ -142,7 +142,7 @@ def _final_locked(args, signed):
     for s in verdict["named_stops"]:
         print(f"STOP {s['code']} ({s['kind']}) {s['detail']}")
     for g in verdict["hand_gates"]:
-        print(f"HAND GATE REQUIRED {g['gate']} ({g['ruling']})")
+        print(f"{g['status'].upper()} {g['gate']} ({g['ruling']})")
     print(f"desk_final {str(verdict['desk_final']).lower()}; next_arm_hold {str(verdict['next_arm_hold']).lower()}; "
           f"verdict {out / desk_final.VERDICT_NAME}")
     if verdict["error"] is not None:
@@ -153,7 +153,8 @@ def _final_locked(args, signed):
 def publish(args):
     try:
         sha = desk_transport.publish_verdict(args.repo, args.out, plan_id=args.plan_id, signing_key=args.signing_key,
-                                             remote=args.remote, ref_prefix=args.ref_prefix, push=not args.no_push)
+                                             remote=args.remote, ref_prefix=args.ref_prefix, push=not args.no_push,
+                                             principal=args.principal)
     except desk_transport.TransportRefusal as error:
         print(f"REFUSE {error}")
         return 1
@@ -171,7 +172,10 @@ def sample_plan(args):
             draw = desk_final.hand_sample(queue, queuemod.plan_id(span), kit, sha)
             rows.append({"plan_id": queuemod.plan_id(span), **draw})
     print(json.dumps({"law": desk_final.HAND_SAMPLE_LAW, "seed": desk_final.HAND_SAMPLE_SEED,
-                      "rate": desk_final.HAND_SAMPLE_RATE, "kit_sha256": sha, "spans": rows}, indent=1))
+                      "rate": desk_final.HAND_SAMPLE_RATE, "kit_sha256": sha,
+                      "note": "prospective: the queue clause only. At the desk a span is also first of its group "
+                              "when no span of the group in the signed history started before it, so the desk "
+                              "may draw more than this print, never fewer", "spans": rows}, indent=1))
     return 0
 
 
@@ -202,6 +206,9 @@ def main(argv=None):
     f.add_argument("--history-repo")
     f.add_argument("--history-signers", help="allowed-signers file naming the desk's key (cadence-desk); "
                                              "required with --history-prefix")
+    f.add_argument("--history-principal", default=desk_transport.DESK_PRINCIPAL,
+                   help="the principal that signed the history records: cadence-desk (the Air or Actions desk), or "
+                        "cadence-controller for the MBP desk's own records (RL-173 B; FORMAT section 6)")
     f.add_argument("--hand-table", help="the lead's hand table (hand_table.json), compared field by field")
     f.add_argument("--hand-sample", action="store_true", help="the lead selects this span for a hand table")
     f.add_argument("--allow-mock", action="store_true",
@@ -211,7 +218,9 @@ def main(argv=None):
     u.add_argument("--plan-id", required=True); u.add_argument("--out", required=True)
     u.add_argument("--repo", required=True); u.add_argument("--signing-key", required=True)
     u.add_argument("--remote", default="origin"); u.add_argument("--ref-prefix", default=desk_transport.VERDICT_REF_PREFIX)
-    u.add_argument("--no-push", action="store_true", help="update the local ref only (synthetic)")
+    u.add_argument("--no-push", action="store_true", help="update the local ref only (synthetic; the MBP desk)")
+    u.add_argument("--principal", default=desk_transport.DESK_PRINCIPAL,
+                   help="the signer's principal (cadence-desk; cadence-controller for the MBP desk, RL-173 B)")
     s = sub.add_parser("sample-plan", help="print the seeded stratified hand-table draw for a queue (prospective)")
     s.add_argument("--queue", required=True); s.add_argument("--kit", required=True)
     args = p.parse_args(argv)

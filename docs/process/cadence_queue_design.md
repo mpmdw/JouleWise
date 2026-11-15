@@ -295,11 +295,17 @@ stage, no accepted soak, or a close status other than CLOSED_OK. A retried soak 
 stop, and the development pins' receipts (no `soak_attempts`) read as one soak.
 
 **The hand table.** It is mandatory on a redo, an exclusion, a retried soak, a schema change, or a span the
-seeded stratified draw (`sha256-hand-sample-v2`) selects. It must carry every comparable field. A
-disagreeing or incomplete table holds the next arm.
+seeded stratified draw (`sha256-hand-sample-v3`, RL-173 E: per span, append-stable, and the first span of each
+kit and G0-shape group always) selects. It must carry every comparable field. A disagreeing or incomplete table
+holds the next arm.
 
 **Hand gates.** The class A smoke hand-read, the L002 and L005 gates and RL-158 Q1's print are printed and
-marked `hand gate required`; the desk never clears them.
+marked `hand gate required`; the desk never clears them. The Q1 print is counted in line 9's debt by the lead's
+typed completion record (RL-173 E; FORMAT section 6).
+
+**Where it runs (RL-173 B).** The same `final` command runs on the MBP as a controller step in the close
+interval, and off-host (the Air, or GitHub Actions) from the pushed bundle; a difference between the two verdicts
+(`desk_final.compare_verdicts`) holds the next arm (FORMAT section 6).
 
 **Reads and writes.** `desk_verdict.json` is written for every outcome, a refusal included. The desk reads
 only `desk_final.ALLOWED_BASENAMES`, each once, and refuses unread anything outside the bundle layout.
