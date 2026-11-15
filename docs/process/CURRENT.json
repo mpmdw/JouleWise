@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "(launch gate, all true: item 319 closed and its Check reported (restore lines OK); the sub-span's fence gone (else 319's); last close + 20 min; 319's t0 + 4 h) the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as the next RUN_STATE item: receipt rc, parts, soak rc and sha256, part-C rc; from smoke_part_c.json ONLY the evaluation, N_chunk and T_dead; the restore lines",
+  "next_observable": "(launch gate, all true: item 324 not launched; item 319 closed and its Check reported (restore lines OK); the sub-span's fence gone (else 319's); last close + 20 min; 319's t0 + 4 h) the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as the next RUN_STATE item: receipt rc, parts, soak rc and sha256, part-C rc; from smoke_part_c.json ONLY the evaluation, N_chunk and T_dead; the restore lines",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "324",
+  "source_item": "325",
   "source_item_heading_date": "2026-11-14",
   "wait": {
     "deadline_epoch_s": 1794738600,
     "observable": "none",
-    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen by 22:06:00 PST: NOTHING launches (the night is then quiet from the last close; RL-155a §1.2). Do not retry, do not extend, do not reuse OUT, and do not run any other smoke on your own; mail the lead. A completed run whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json) is NOT a refusal: it goes to the lead and is compared line by line with the first Part C's; a disagreement on any line sends both to the research lead (RL-155a §1.2). Nothing is re-run under this item"
+    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen by 22:06:00 PST: NOTHING launches (the night is then quiet from the last close; RL-155a §1.2). Do not retry, do not extend, do not reuse OUT, and do not run any other smoke on your own (item 324's kit included); mail the lead. A launcher refusal is recorded and goes to the research lead (RL-164 §2(c)). A completed run whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json) is NOT a refusal: it goes to the lead and is compared line by line with the first Part C's; a disagreement on any line sends both to the research lead (RL-155a §1.2). Nothing is re-run under this item"
   }
 }
