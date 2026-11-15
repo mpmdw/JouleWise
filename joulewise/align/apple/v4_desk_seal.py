@@ -504,7 +504,9 @@ def pooled_residuals(analysis):
                 residuals = convention.get('residuals') or []
                 row['members_scored'] += len(residuals)
                 row['members_with_finite_score'] += sum(_finite(r.get('score')) for r in residuals)
-                row['fit_flags'] |= set(convention.get('flags') or ())
+                # Sol audit #3 / final seat F6 (RL-163 section 3): a fit flag's count (excluded_turn_rows=<n>) moves
+                # with one member's hidden unusable rows; C and T print the flag without its number.
+                row['fit_flags'] |= {re.sub(r'=\d+$', '', str(f)) for f in convention.get('flags') or ()}
                 row['s_r_df'] += convention.get('s_r_df') or 0
     for block in scopes.values():
         for row in block.values():
@@ -1359,6 +1361,32 @@ DESK_OUTPUTS = ('desk.json', 'PILOT.json', 'exclusions.json', WITHHELD_PILOT, WI
 
 RESTORE_STEP = ('restore the window afresh from its offload pack into a new session directory (runbook section 2: '
                 'unpack against the committed finalized-manifest digest) and run the desk there once')
+
+
+class SessionLock:
+    """Sol audit #5: an exclusive lock on the session directory itself, held across E6's check, the harvest and
+    every write, so two concurrent desks cannot both pass the check and the later one overwrite the completed
+    record and key. A second desk refuses at once (``flock(LOCK_EX | LOCK_NB)`` on the directory's descriptor:
+    nothing is written for the lock). It is released when the desk returns or its process dies."""
+
+    def __init__(self, session):
+        import fcntl
+        self._fd = os.open(str(session), os.O_RDONLY)
+        try:
+            fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(self._fd)
+            self._fd = None
+            raise ValueError('ALIGN v4 desk refused: another desk holds this session. Nothing was written. Wait for '
+                             'it; a session gets one guarded harvest desk.') from None
+
+    def release(self):
+        if self._fd is not None:
+            os.close(self._fd)              # closing the descriptor releases the flock
+            self._fd = None
+
+    def __del__(self):
+        self.release()
 
 
 def refuse_rerun(output):

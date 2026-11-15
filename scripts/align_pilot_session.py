@@ -319,6 +319,8 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
     export_dir = session / ('archive/withheld/export' if withheld_streams else 'export')
     streams_dir = session / ('archive/withheld' if withheld_streams else 'staging')
     if withheld_streams and harvest:
+        # Sol audit #5: the lock is held from E6's check to the last write (released when this frame ends).
+        session_lock = v4_desk_seal.SessionLock(session)      # noqa: F841 (held for its lifetime)
         v4_desk_seal.refuse_rerun(session)          # PR #774 E6: before the harvest or any write
     plan = h.read(state['plan_path'])
     custody = Path(plan['custody_root'])
