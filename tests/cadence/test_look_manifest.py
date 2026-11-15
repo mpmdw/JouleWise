@@ -566,9 +566,14 @@ class RepoCheck(Base):
         self.refused(lambda: lm.check_repo(doc, tmp, [kp]), "looks must stay []")
 
     def test_look_code_that_reads_condition_is_refused(self):
-        for src in ("def fit(cfg):\n    return cfg['condition']\n", "def fit(b):\n    return b.condition\n"):
+        for src in ("def fit(cfg):\n    return cfg['condition']\n", "def fit(b):\n    return b.condition\n",
+                    "FORBIDDEN = 1\ndef fit(cfg):\n    return cfg.get('condition')\n"):
             tmp, doc, kp = self.make_repo(fit_src=src)
             self.refused(lambda: lm.check_repo(doc, tmp, [kp]), "reads a 'condition' field")
+
+    def test_a_deny_list_that_refuses_condition_is_not_a_read(self):
+        tmp, doc, kp = self.make_repo(fit_src='FORBIDDEN_FIELDS = ("condition", "slot")\nDENY_KEYS = {"condition"}\n')
+        lm.check_repo(doc, tmp, [kp])
 
 
 class OpensNoEnergy(Base):

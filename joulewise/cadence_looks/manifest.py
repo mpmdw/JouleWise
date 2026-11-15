@@ -122,6 +122,8 @@ FREEZE2_COMMIT_BEFORE = {"qualification_energy_opened", "qualification_leg_runs"
 
 CODE_SUFFIXES = (".py", ".json")
 CONDITION_RE = re.compile(r"""(?x)(["']condition["']|\.condition\b|\bcondition\s*=)""")
+# A deny-list that refuses the field is not a read of it (RL-150 R6): FORBIDDEN_FIELDS = ("condition", ...).
+DENY_LIST_LINE_RE = re.compile(r"^\s*[A-Z0-9_]*(FORBIDDEN|DENY|DENIED|REFUSED)[A-Z0-9_]*\s*=")
 
 
 class ManifestError(ValueError):
@@ -874,10 +876,10 @@ def check_repo(doc, repo, kit_paths=(), *, final=None):
         if not (repo / p).is_file():
             continue
         src = (repo / p).read_text(encoding="utf-8", errors="replace")
-        hit = CONDITION_RE.search(src)
-        if hit:
-            line = src.count("\n", 0, hit.start()) + 1
-            problems.append(f"{p}:{line} reads a 'condition' field; look code never reads it (RL-150 R6)")
+        for n, text in enumerate(src.splitlines(), 1):
+            if CONDITION_RE.search(text) and not DENY_LIST_LINE_RE.match(text):
+                problems.append(f"{p}:{n} reads a 'condition' field; look code never reads it (RL-150 R6)")
+                break
     if problems:
         raise ManifestError(problems)
     return warnings
