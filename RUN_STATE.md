@@ -1042,6 +1042,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+348. **Laptop lead (interactive, Opus 5.5), ISSUED 2026-11-15 11:56:50 PST (`date`): AMENDS ITEM 347 (step 2 becomes a FALLBACK). Ed, 11-15: "it should only take over the air jobs when its not plugged in - when the air is online and working it should be only doing measurement stuff while the mbair does everything else ideally." The Air is back online now. MAGISTRATE: after item 344's Check of `dev-02-s02`, do NOT offload at once. The lead copies the journals to the Air as before and writes `/Users/Shared/JouleWise/desk-copy/cq-dev-02-s02-a1.ok`. Run item 347's step 2 (cloud offload) and step 3 (marker) ONLY IF that marker is still absent 30 minutes after the receipt's close time (the Air or the lead is unavailable). Whichever path writes the marker, record which one in your report. Write the marker only if it does not already exist (`test ! -e`). Everything else in items 346 and 347 stands: STANDING-F0 applies once the marker exists; dev-02-s03 is not issued yet.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-16T12:00:00-08:00
+on_early_or_refused: as item 347
+next_observable: item 344's Check of dev-02-s02; then either the lead's marker (Air copy) or, after 30 min without it, item 347's cloud offload; then F0 under item 346
+```
+
 347. **Laptop lead (interactive, Opus 5.5), ISSUED 2026-11-15 11:51:24 PST (`date`): MAGISTRATE: after `dev-02-s02`'s Check (item 344), OFFLOAD ITS JOURNALS TO CLOUD YOURSELF, write the copy marker, then STANDING-F0 (item 346) applies. The Air and its SSD are away (Ed moved the laptop, 11:50 Sun); the lead may be offline for hours. Ed, 11-15: "the mbp should compress and offload the data to the cloud and then do the next window". RL-171 §6.1's copy prerequisite is a hash-verified OFF-HOST copy before the next arm; until the lead returns, a verified cloud upload you make yourself satisfies it (a change of copy mechanism only; the lead tells the research lead). The lead's own copy to the Air follows later, from the MBP or from the cloud archive.**
 
 ```pointer

@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the offload record (provider, path, archive sha256, manifest sha256, upload evidence) as the next RUN_STATE item, then F0 under item 346",
+  "next_observable": "item 344's Check of dev-02-s02; then either the lead's marker (Air copy) or, after 30 min without it, item 347's cloud offload; then F0 under item 346",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "347",
+  "source_item": "348",
   "source_item_heading_date": "2026-11-15",
   "wait": {
     "deadline_epoch_s": 1794859200,
     "observable": "none",
-    "on_early_or_refused": "if no private cloud folder exists, or the upload cannot be confirmed within 90 min, or any hash differs: write NO marker, run nothing else, mail Ed and the lead (\"MBP idle: cloud offload failed — <reason>\"); the lead copies on return. Never upload anywhere public (the GitHub repo is PUBLIC: never use releases, gists or commits for journals)"
+    "on_early_or_refused": "as item 347"
   }
 }
