@@ -28,17 +28,21 @@ through unchanged.
 | `status` / `pilot_status`, `full_desk_gate` | all members | verdict | common desk; `align_v4_session.desk` |
 | `carve_out_flag_counts` | **benign** (`over: benign members only`) | count, labelled | `_benign_counts` |
 | `residual_analysis[*].scopes[*][*].s_r_j`, `s_r_df`, `cell_residual_counts` | **benign** (`s_r_population: benign`) | recomputed over benign residuals | `_seal_residual_rows` |
-| `residual_analysis[*]...distinct_trajectories`, `benign_distinct_trajectories` | all / benign | eligibility counts; equal to `len(representatives)`, which is printed per member, so no withheld term | pass-through |
+| `residual_analysis[*]...distinct_trajectories` | all members | **withheld** (PR #774 Mythos N2: minus the benign count it gives the non-benign eligible count per scope) | `_seal_residual_rows` |
+| `residual_analysis[*]...benign_distinct_trajectories` | **benign** | count | pass-through |
+| `residual_analysis[*].scopes[*].eligible_members`, `representatives` | **benign** ids; non-benign ids one digest (`*_withheld_non_benign`) | per member, benign only (Mythos N2: absence from a scope list is the carved or heat-ended bit) | `_seal_residual_rows` |
+| `residual_analysis[*]...residuals`, `cross_pair_transfer[*].scores` | **benign** rows; non-benign rows one digest (`residuals_withheld_non_benign`, `scores_withheld_non_benign`) | per member, benign only (Mythos N2: per-row digests in roster order named the members) | `_seal_residual_rows` |
 | `residual_analysis[*]...model`, `e_j_per_decode_token`, `mean_context_tokens`, `grouped_threshold`, fit `flags` | benign (the fit trains on benign members only) | as registered | `pilot_analysis.residual_analysis` |
 | `residual_analysis[*]...tamper_detection_curve` | sabotage only | withheld | `_seal_residual_rows` |
 | `I4_prime` cells | cells holding a non-benign member: withheld whole; benign cells as recorded | withheld / per cell | `_seal_pilot_w1` |
 | `repeat_token_identity` cells | cells holding a non-benign member: withheld | withheld / per cell | `_seal_pilot_w1` |
 | `raw_within_cell_energy_sd`, `repeat_energy_spread` cells | cells holding a non-benign member: withheld | withheld / per cell | `_seal_pilot_w1` |
-| `episode_scope_alternative_*` | per member (eligibility); non-benign reasons as allowlisted codes | not pooled | `_seal_pilot_w1` |
+| `episode_scope_alternative_eligible_members`, `episode_scope_alternative_ineligible_reasons` | **benign** ids and reasons; the non-benign entries one digest each (`*_withheld_non_benign`) | per member, benign only (Mythos N2: the alternative scope is not the eligibility in force, so RL-151 C1's per-member rule does not cover it) | `_seal_pilot_w1` |
+| `cross_pilot_token_identity` (with `--compare-session`) | **benign** rows; non-benign rows one digest | per member, benign only (Mythos N8: status, first divergent turn and turn count) | `_seal_pilot_w1` |
 | `extra_checks.d_member_x2.x2_count`, `x2_rate`, `g0_timeout_x2_count` | **benign** D members (`pool: benign D members only`) | count and rate, labelled | `_seal_x2` |
 | `extra_checks.d_member_x2.d_members`, `read`, `unread` | all D members | roster and readability; `unread` is per member, so no withheld term | pass-through |
 | `extra_checks.w1_g1_tripwire` (RL-149 §1.5), stdout `W1 D G1 timeout tripwire …` | all six D members | verdict line only (`within` / `to the research lead`) | `w1_g1_tripwire` |
-| `extra_checks.w1_non_benign_tool_path`, stdout `W1 non-benign tool path (RL-152 section 3.4): …` | non-benign members | verdict line only | `tripwires` |
+| `extra_checks.w1_non_benign_tool_path`, stdout `W1 non-benign tool path (RL-152 section 3.4): …` | non-benign members | verdict line only; fires on the ruled form, or (Mythos N4, builder's interim form pending the research lead) an episode ending on a refused or malformed call with fewer than three admitted turns, or a tool-path flag on every one of at least two non-benign D members | `tripwires`, `tool_path_fires` |
 | `extra_checks.unlisted_flag_codes`, stdout `W1 unlisted flag codes (RL-152 section 3.4): …` | **benign** count; non-benign `none` / `present, to the research lead` | count, labelled, plus a verdict | `tripwires` |
 | `extra_checks.thermal.model_windows[*].U1` | all gated members | verdict only (its all-member counts are withheld) | `seal_thermal` |
 | `extra_checks.thermal.model_windows[*].U2` (`g0_slow_range_c`) | all gated members | exception class (RL-149 §3(a), RL-151 §4.4: G0 readings precede the first token), as registered | pass-through |
@@ -59,8 +63,15 @@ through unchanged.
 | triage record `member_eligibility.captured_members`, `calibration_row.eligible_benign` | all / benign calibrators | capture count (eligibility; every member's capture is printed) / benign by definition | `light_triage` |
 | triage record `thermal_escalation` | all gated members | verdicts | `light_triage.thermal_escalation` |
 | standalone thermal desk `RL145_PRINTS.json` `residual_by_decode_bin`, `residual_by_load_bin` | all residual rows supplied | withheld | `guard_thermal_desk` |
+| standalone thermal desk `RL145_PRINTS.json` `members` | **benign** rows only (`population: benign`), joined on the episode id; an id that fails to join is withheld (Mythos N1, N10) | per member, benign only | `rl145_prints_report`, `guard_thermal_desk` |
 
 Not pooled, and kept per member under the ruled eligibility path (RL-151 C1(a)): `members_excluded`,
 `members_disclosure_only`, `exclusion_codes`, `calibration_exclusions` (codes only, no suffix text),
 `registered_eligible_members`, the allowlisted instrument and identity flags (`FLAG_ALLOWLIST`), and
 coverage verdicts (Sol F2).
+
+**Membership is fail-closed (Mythos N10).** "Non-benign" is the complement of the plan's benign ids (`v4_desk_seal.NotBenign`), so an id that fails to join, or `None`, is sealed.
+
+**Digests (Mythos N3).** Every withheld digest binds a fresh random nonce, printed beside it, so equal plaintexts (an empty list, a clean member's line) never give equal digests in one desk. Token commitments (Sol F6) are the one deliberate equality-preserving digest.
+
+**Standalone thermal desk scope (Mythos N5).** W1 only when every member is tagged `W1`; untagged, mixed or unknown tags get the C seal.

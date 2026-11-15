@@ -1099,7 +1099,8 @@ def powermode_desk_check(*, state, members, runs_root, kit_path):
         print('W1 D G1 timeout tripwire (RL-149 section 1.5): ' + report['w1_g1_tripwire']['verdict'])
     if sealed_scope is not None:
         # RL-152 section 3.4: the tool-path and unlisted-code lines (in memory; one fact each).
-        trip, lines = v4_desk_seal.tripwires(records, sealed_scope, v4_desk_seal._nonbenign(plan['members']))
+        trip, lines = v4_desk_seal.tripwires(records, sealed_scope, v4_desk_seal._nonbenign(plan['members']),
+                                             roles={m.get('run_id'): m.get('role') for m in plan['members']})
         report.update(trip)
         for line in lines:
             print(line)

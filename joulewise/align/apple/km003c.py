@@ -63,15 +63,18 @@ def seal_non_benign(report, plan_members):
     withheld archive, so the row stays auditable at release), recorded as ``sealed_hmac_sha256``. No registered
     comparison reads this digest (only the desk print and the MED-4 tests).
     """
-    from joulewise.align.apple.v4_desk_seal import keyed_digest, _meter_codes
+    from joulewise.align.apple.v4_desk_seal import nonced_digest, _meter_codes
     conditions = {m['run_id']: m.get('condition') for m in plan_members}
     members = {}
     for run_id, row in report['members'].items():
         if conditions.get(run_id) == 'benign':
             members[run_id] = row
             continue
-        sealed = keyed_digest(row)
+        # PR #774 Mythos N3: bound to a fresh nonce, so two identical rows (two unavailable members) are not
+        # equal digests; the nonce prints beside it and the withheld key checks it at release.
+        nonce, sealed = nonced_digest(row)
         members[run_id] = {'label': LABEL, 'print_only': True, 'sealed': True, 'sealed_hmac_sha256': sealed,
+                           'sealed_nonce': nonce,
                            'condition': conditions.get(run_id), 'status': row.get('status'),
                            # The meter's health codes only (Sol F3): fit and prediction flags are withheld.
                            'flags': _meter_codes(row.get('flags', ())),

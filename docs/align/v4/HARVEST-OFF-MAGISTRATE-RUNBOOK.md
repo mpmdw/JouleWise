@@ -206,7 +206,7 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
   - the desk and PILOT.json are this session's;
   - the exclusions agree.
   - Supplemental captures count as captures here (D5). Its rows must be a subset of the light triage's provisional rows. If not, stop and escalate to the lead: the proof says this cannot happen.
-- **`reduced/`** is outcome-bearing (energies) and is restricted like `withheld/`. Its `MANIFEST.json` digests and row counts are structure-only. Each `<run_id>/turns.json` equals PILOT.json (`turn_table.equal_to_pilot`); check this before any analysis reads tables instead of bundles.
+- **`reduced/`** is outcome-bearing (energies) and is restricted like `withheld/`. Its `MANIFEST.json` is restricted with it: its per-member `raw_size` and `reduced_size` encode each member's sample count, so its elapsed time (PR #774 N6). The `reduce` command prints counts of members and files only. Each `<run_id>/turns.json` equals PILOT.json (`turn_table.equal_to_pilot`); check this before any analysis reads tables instead of bundles.
 - Hand the three final files to the magistrate for record k+1 (§4).
 - Prune the restored `$S` on the Air only after record k+1 (or k) with the final sources is pushed. The MBP originals follow the air-offload lane's retention rule.
 
@@ -257,7 +257,7 @@ Then use it for every later desk: `--workers auto --sweep "$OUT/sweep/SWEEP.json
 - `SWEEP.json` (schema `harvest_sweep.v2`) records the swept window's largest plist and the harvest code identity.
 - After a code change, re-run the sweep. Until then, the desk uses the 8× fallback.
 - Record the knee (the fastest count whose peak fits) in RUN_STATE.
-- Keep `SWEEP.json`. It is structure only (times, bytes), with no outcome values.
+- Keep `SWEEP.json`, restricted like `withheld/` until the series release: its peaks and `largest_plist_bytes` are a maximum over the window's members, which encodes the longest member's duration (PR #774 N6). The `sweep` and `desk --workers auto` commands print worker counts and the sizing basis only.
 - The sweep's five archives are engineering copies. Delete them after; they are never record sources.
 
 **Optional native identity check (N2).** On a window whose harvest also ran on the MBP, compare the two archives:

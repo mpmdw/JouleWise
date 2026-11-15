@@ -307,6 +307,10 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
     ``joulewise.align.apple.v4_desk_seal``); ``None`` is the identity, so the v3 desk is unchanged."""
     session = Path(session_root).resolve()
     state = h.read(session / 'session.json')
+    from joulewise.align.apple import v4_desk_seal
+    if v4_desk_seal.is_v4_session(state):
+        # PR #774 Mythos N9: the check sits here too, so no caller of the old desk can run a v4 session unguarded.
+        v4_desk_seal.require_guard(print_policy)
     plan = h.read(state['plan_path'])
     custody = Path(plan['custody_root'])
     if not (custody / 'night/result.json').is_file():

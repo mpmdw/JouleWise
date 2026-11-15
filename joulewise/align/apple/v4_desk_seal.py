@@ -185,7 +185,13 @@ def canonical_sha256(value):
 # withheld value as HMAC-SHA256 over its canonical JSON. Outside a :func:`keyed` block (the light triage, a
 # direct call) the key is a process-ephemeral one that is never written: the digest cannot be checked later,
 # and it cannot be inverted.
-DIGEST = 'HMAC-SHA256 over canonical JSON (sort_keys, separators (",", ":"))'
+# PR #774 Mythos N3: a deterministic digest is equal for equal values within one desk, so a digest of a known
+# plaintext (an empty list, a clean member's harvest line) beside it gives a low-entropy value by comparison.
+# Every withheld digest therefore binds a fresh random nonce, printed beside it: the HMAC is over the canonical
+# JSON of ``{"nonce": <hex>, "value": <value>}``; at release the key plus the printed nonce check it. Token
+# commitments (Sol F6) stay the one deliberate equality-preserving digest (``keyed_digest`` without a nonce).
+DIGEST = ('HMAC-SHA256 over canonical JSON (sort_keys, separators (",", ":")) of {"nonce": <printed nonce>, '
+          '"value": <withheld value>}; token commitments: of the value alone')
 WITHHELD_KEY = 'archive/withheld/desk_seal_key.json'
 _KEY = {'current': None, 'ephemeral': secrets.token_bytes(32)}
 
@@ -204,8 +210,15 @@ def keyed_digest(value):
     return hmac.new(_KEY['current'] or _KEY['ephemeral'], raw, hashlib.sha256).hexdigest()
 
 
+def nonced_digest(value):
+    """``(nonce, digest)``: a keyed digest bound to a fresh random nonce (PR #774 Mythos N3)."""
+    nonce = secrets.token_hex(16)
+    return nonce, keyed_digest({'nonce': nonce, 'value': value})
+
+
 def withheld(value):
-    return {'status': WITHHELD, 'hmac_sha256': keyed_digest(value)}
+    nonce, digest = nonced_digest(value)
+    return {'status': WITHHELD, 'nonce': nonce, 'hmac_sha256': digest}
 
 
 def _code(flag):
@@ -418,11 +431,25 @@ def window_scope(state):
     return 'C'      # calibration, a D alias, or an unknown role: fail closed to the C/T seal
 
 
+class NotBenign:
+    """Every id that is not a known benign member (PR #774 Mythos N10): an id that fails to join, or ``None``,
+    is sealed rather than printed. Membership tests only; it is the complement of :attr:`benign`."""
+
+    def __init__(self, benign):
+        self.benign = frozenset(benign)
+
+    def __contains__(self, run_id):
+        return run_id not in self.benign
+
+    def __iter__(self):
+        raise TypeError('NotBenign is a complement set: test membership only')
+
+
 def _nonbenign(plan_members, pilot_members=()):
     conditions = {m.get('run_id'): m.get('condition') for m in plan_members or ()}
     for m in pilot_members or ():
         conditions.setdefault(m.get('run_id'), m.get('condition'))
-    return {rid for rid, c in conditions.items() if c != 'benign'}
+    return NotBenign(rid for rid, c in conditions.items() if c == 'benign' and rid is not None)
 
 
 # --- members -------------------------------------------------------------------------------------
@@ -523,7 +550,9 @@ def _seal_dc_rows(dc, run_ids):
     members = {}
     for rid, row in (dc.get('members') or {}).items():
         if rid in run_ids and isinstance(row, dict) and not row.get('sealed'):
-            row = {'label': row.get('label'), 'print_only': True, 'sealed': True, 'sealed_hmac_sha256': keyed_digest(row),
+            nonce, digest = nonced_digest(row)                  # Mythos N3: no equal digests for equal rows
+            row = {'label': row.get('label'), 'print_only': True, 'sealed': True, 'sealed_hmac_sha256': digest,
+                   'sealed_nonce': nonce,
                    'status': row.get('status'), 'flags': _meter_codes(row.get('flags')),
                    'sealed_until': 'series_complete'}
         elif rid in run_ids and isinstance(row, dict):          # MED-4-sealed: meter codes only (RL-151 C1(a), Sol F3)
@@ -709,7 +738,7 @@ def seal_extra(extra, plan_members, scope, *, w1_withhold=None):
 
 def _seal_extra_w1(extra, plan_members, withhold):
     nonbenign = _nonbenign(plan_members)
-    ordinals = {m.get('ordinal') for m in plan_members or () if m.get('run_id') in nonbenign}
+    benign_ordinals = {m.get('ordinal') for m in plan_members or () if m.get('run_id') not in nonbenign}
     out = dict(extra)
     if withhold:
         if isinstance(extra.get('balance_check'), dict) and extra['balance_check'].get('status') != WITHHELD:
@@ -752,7 +781,7 @@ def _seal_extra_w1(extra, plan_members, withhold):
         warm = diag.get('warm_reference')
         if withhold and isinstance(warm, dict) and isinstance(warm.get('wait_against_ordinal'), list):
             diag['warm_reference'] = {**warm, 'wait_against_ordinal': [
-                withheld(r) if r.get('ordinal') in ordinals else r for r in warm['wait_against_ordinal']]}
+                withheld(r) if r.get('ordinal') not in benign_ordinals else r for r in warm['wait_against_ordinal']]}
         out['registration_diagnostics'] = diag
     return out
 
@@ -846,8 +875,26 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
         out['repeat_token_identity'] = {cell: (withheld(v) if _in_cells(cell, cells) else v) for cell, v in identity.items()}
     reasons = pilot.get('episode_scope_alternative_ineligible_reasons')
     if withhold and isinstance(reasons, dict):
-        out['episode_scope_alternative_ineligible_reasons'] = {
-            rid: (_codes(codes) if rid in nonbenign else codes) for rid, codes in reasons.items()}
+        # Mythos N2: the alternative scope is not the eligibility in force, so its non-benign entries (carved and
+        # heat-ended reasons, and membership itself) are one digest; benign entries print.
+        out['episode_scope_alternative_ineligible_reasons'] = {rid: codes for rid, codes in reasons.items()
+                                                               if rid not in nonbenign}
+        out['episode_scope_alternative_ineligible_reasons_withheld_non_benign'] = withheld(
+            {rid: codes for rid, codes in reasons.items() if rid in nonbenign})
+    eligible = pilot.get('episode_scope_alternative_eligible_members')
+    if withhold and isinstance(eligible, list):
+        out['episode_scope_alternative_eligible_members'] = [i for i in eligible if i not in nonbenign]
+        out['episode_scope_alternative_eligible_members_withheld_non_benign'] = withheld(
+            [i for i in eligible if i in nonbenign])
+    comparison = pilot.get('cross_pilot_token_identity')
+    if withhold and isinstance(comparison, dict):
+        # Mythos N8: with --compare-session, non-benign rows give status, first divergent turn and turn count.
+        out['cross_pilot_token_identity'] = {
+            key: ([r for r in rows_ if isinstance(r, dict) and r.get('run_id') not in nonbenign]
+                  if isinstance(rows_, list) else withheld(rows_)) for key, rows_ in comparison.items()}
+        out['cross_pilot_token_identity_withheld_non_benign'] = withheld(
+            {key: [r for r in rows_ if not (isinstance(r, dict) and r.get('run_id') not in nonbenign)]
+             for key, rows_ in comparison.items() if isinstance(rows_, list)})
     if withhold:
         out['carve_out_flag_counts'] = _benign_counts(_member_flags(m) for m in members if m.get('run_id') not in nonbenign)
     if 'extra_checks' in pilot:
@@ -859,6 +906,12 @@ def _seal_residual_rows(configuration, run_ids):
     scopes = {}
     for scope, block in (configuration.get('scopes') or {}).items():
         block = dict(block)
+        # PR #774 Mythos N2: the scope's eligibility lists name which non-benign members a scope dropped (the
+        # carved and heat-ended bits); in W1 they list benign ids only, the rest one digest.
+        for key in ('eligible_members', 'representatives'):
+            if isinstance(block.get(key), list):
+                block[key + '_withheld_non_benign'] = withheld([i for i in block[key] if i in run_ids])
+                block[key] = [i for i in block[key] if i not in run_ids]
         for label, convention in list(block.items()):
             if not isinstance(convention, dict) or 'residuals' not in convention:
                 continue
@@ -867,10 +920,18 @@ def _seal_residual_rows(configuration, run_ids):
             # the non-benign rows are replaced by their digests (not by relying on a digest lacking residual_j).
             benign = [r for r in convention['residuals'] if isinstance(r, dict) and r.get('run_id') not in run_ids
                       and _finite(r.get('residual_j'))]
-            convention['residuals'] = [withheld(r) if r.get('run_id') in run_ids else r for r in convention['residuals']]
+            # Mythos N2: one digest for the non-benign rows, not a per-row digest in roster order (whose position
+            # names the member); the same for the cross-pair scores. All-member trajectory counts are withheld.
+            residuals = convention['residuals']
+            convention['residuals'] = [r for r in residuals if isinstance(r, dict) and r.get('run_id') not in run_ids]
+            convention['residuals_withheld_non_benign'] = withheld(
+                [r for r in residuals if not (isinstance(r, dict) and r.get('run_id') not in run_ids)])
             convention['cross_pair_transfer'] = [
-                {**t, 'scores': [withheld(s) if s.get('run_id') in run_ids else s for s in t.get('scores') or ()]}
+                {**t, 'scores': [x for x in t.get('scores') or () if x.get('run_id') not in run_ids],
+                 'scores_withheld_non_benign': withheld([x for x in t.get('scores') or () if x.get('run_id') in run_ids])}
                 for t in convention.get('cross_pair_transfer') or ()]
+            if 'distinct_trajectories' in convention:
+                convention['distinct_trajectories'] = withheld(convention['distinct_trajectories'])
             convention['tamper_detection_curve'] = withheld(convention.get('tamper_detection_curve'))
             # RL-152 section 3.2: s_r and the per-cell residual counts pool cells that hold non-benign members,
             # beside printed benign residuals; they are recomputed over the benign residuals and labelled.
@@ -1020,7 +1081,11 @@ KNOWN_WITHHELD_PREFIXES = (
     'episode.turn_token_budget_reached', 'turn_token_budget_reached', 'turn_budget_reached',
     'reasoning_censored_at_token_limit', 'calibration_censored_at_ceiling', 'ended_in_unclosed_reasoning',
     'cache.rebuilt_untrimmable', 'battery.', 'contention.', 'repetition.', 'energy.nonfinite_half_width',
-    'thermal.gate_timeout', 'thermal.hold_timeout', 'thermal.os_level_nonzero', 'thermal.powermetrics_non_nominal')
+    'thermal.gate_timeout', 'thermal.hold_timeout', 'thermal.os_level_nonzero', 'thermal.powermetrics_non_nominal',
+    # PR #774 Mythos N7: the runner's behaviour codes (a tool call's error or coerced result, a scoring error)
+    # are known and withheld; runtime faults (episode_error, episode.interrupted, episode.g0_unreleased) stay
+    # unlisted on purpose, so they surface on the line.
+    'tool_error', 'tool_result_coerced', 'task_scoring_error')
 TOOL_PATH_CODES = ('episode.unsupported_tool_call_format', 'episode.malformed_tool_call.json')
 
 
@@ -1034,20 +1099,38 @@ def _admitted_turns(record):
     return turns if isinstance(turns, int) and turns >= 0 else len(record.get('turn_observation') or ())
 
 
+def _tool_path_turns(record):
+    return {int(t) for t in (str(f).rsplit(':', 1)[1] for f in record.get('flags') or ()
+                             if str(f).startswith(tuple(c + ':' for c in TOOL_PATH_CODES))) if t.isdigit()}
+
+
 def tool_path_fires(record):
-    """RL-152 section 3.4 tripwire 1, one member: an unsupported XML or malformed JSON tool call on at least
-    half of its admitted turns, and on at least two."""
-    turns = {str(f).rsplit(':', 1)[1] for f in record.get('flags') or ()
-             if str(f).startswith(tuple(c + ':' for c in TOOL_PATH_CODES))}
-    return len(turns) >= 2 and 2 * len(turns) >= _admitted_turns(record)
+    """RL-152 section 3.4 tripwire 1, one member: (a) as ruled, an unsupported XML or malformed JSON tool call on
+    at least half of its admitted turns and on at least two; or (b) PR #774 Mythos N4, builder's interim form
+    pending the research lead: on the XML path a refused call ends the episode (no tool calls, the loop
+    breaks; ``workload.py``), so (a) cannot fire there. (b) fires when the episode ENDS on a refused or
+    malformed call (the flag on its last admitted turn) with fewer than three admitted turns (the RL-149 1.5
+    three-turn opportunity)."""
+    turns = _tool_path_turns(record)
+    admitted = _admitted_turns(record)
+    ruled = len(turns) >= 2 and 2 * len(turns) >= admitted
+    ends_early = bool(turns) and admitted < 3 and max(turns) >= admitted - 1
+    return ruled or ends_early
 
 
-def tripwires(records, scope, nonbenign):
+def tripwires(records, scope, nonbenign, roles=None):
     """RL-152 section 3.4: the two instrument-health lines, computed in memory; each prints one fact, no count
-    of a withheld member. Returns (report, printed lines)."""
+    of a withheld member. Returns (report, printed lines). ``roles`` maps id -> plan role (else the record's).
+
+    Tool path (W1): any non-benign member under :func:`tool_path_fires`, or (Mythos N4, interim) every one of
+    at least two non-benign D members carrying a tool-path flag at all."""
     report, lines = {}, []
     if scope == 'W1':
-        fires = any(tool_path_fires(r) for r in records if r.get('id') in nonbenign)
+        held = [r for r in records if r.get('id') in nonbenign]
+        role = (lambda r: (roles or {}).get(r.get('id'), r.get('role')))
+        d_members = [r for r in held if role(r) == 'D']
+        fires = (any(tool_path_fires(r) for r in held)
+                 or (len(d_members) >= 2 and all(_tool_path_turns(r) for r in d_members)))
         report['w1_non_benign_tool_path'] = {'verdict': 'to the research lead' if fires else 'within',
                                              'rule': 'RL-152 section 3.4 (chair ruling 2(d), :484-489)'}
         lines.append('W1 non-benign tool path (RL-152 section 3.4): ' + report['w1_non_benign_tool_path']['verdict'])
@@ -1103,6 +1186,14 @@ def is_v4_session(state):
     return False
 
 
+def require_guard(policy):
+    """The old desk's own check (PR #774 Mythos N9): a v4 session runs only under the installed guard."""
+    if not isinstance(policy, (DeskSeal, ReleasedDesk)):
+        raise ValueError('ALIGN v4 session (stored identity): the desk runs only under the release guard '
+                         '(joulewise.align.apple.v4_desk_seal); call align_pilot_session.desk, not _desk')
+    return policy
+
+
 def enforce(state, policy, plan_members):
     """The policy a v4 desk must run under: the given guard, or the guard installed now. An explicit ``None``
     installs it (it never disables protection); any other policy is refused."""
@@ -1137,9 +1228,11 @@ def guard_thermal_desk(result, prints, records, registration_dir, output):
         print('release_guard: released ' + json.dumps({k: record[k] for k in
               ('ruling', 'series_complete_sha256', 'release_receipt_sha256')}, sort_keys=True))
         return {**result, 'release_guard': record}, prints, False
-    windows = {str(r.get('window')) for r in records if r.get('window') is not None}
-    scope = ('T' if any(re.match(r'T[1-9]', w) for w in windows) else
-             'C' if any(re.match(r'[CD][1-9]', w) for w in windows) else 'W1')
+    # PR #774 Mythos N5: W1 only when EVERY member is tagged W1; a T tag anywhere seals as T; anything else
+    # (untagged, mixed, unknown) fails closed to the C seal, as window_scope does for sessions.
+    windows = [None if r.get('window') is None else str(r.get('window')) for r in records]
+    scope = ('W1' if windows and all(w == 'W1' for w in windows) else
+             'T' if any(w and re.match(r'T[1-9]', w) for w in windows) else 'C')
     plan = [{'run_id': r.get('id'), 'condition': r.get('condition'), 'ordinal': r.get('ordinal')} for r in records]
     nonbenign = _nonbenign(plan)
     key = secrets.token_bytes(32)
@@ -1167,7 +1260,7 @@ def guard_thermal_desk(result, prints, records, registration_dir, output):
                                  withheld_members=withheld([r for r in rows if r not in visible]))
         bins = {k: prints.get(k) for k in ('residual_by_decode_bin', 'residual_by_load_bin')}
         sealed_prints['residual_bins'] = withheld(bins)
-    trip, lines = tripwires(records, scope, nonbenign)            # RL-152 section 3.4
+    trip, lines = tripwires(records, scope, nonbenign)            # RL-152 section 3.4 (roles from the manifest)
     sealed.update(trip)
     for line in lines:
         print(line)

@@ -195,7 +195,7 @@ class Fixture:
 
     def window_report(self, records, **_):
         self.window_inputs = getattr(self, 'window_inputs', []) + [copy.deepcopy(records)]
-        window = records[0]['window']
+        window = records[0].get('window', 'current')
         return {'schema': 'joulewise.align.thermal_desk.v1',
                 'model_windows': {f'm/{window}': {
                     'U1': {'status': 'pass', 'thermal_excluded_members': []},
@@ -210,7 +210,7 @@ class Fixture:
                 'tool_call_flags': thermal_desk.tool_call_table(records)}
 
     def diagnostics(self, records, **_):
-        window = records[0]['window']
+        window = records[0].get('window', 'current')
         return {'sentinel': {'ordinal': None, 'candidates': {}},
                 'battery_windows': v4_battery.window_consequences(records, None),       # the production builder
                 'warm_reference': {'status': 'print_only', 'R_minus_R1_soak_c': {'slow': 1.5}, 'thermal.reference_warm': True,
@@ -365,8 +365,9 @@ class ReleaseGuardTests(unittest.TestCase):
         # value (a turn list, a small count) cannot be recovered by enumeration and still checks at release.
         key = json.loads((output / 'archive' / 'withheld' / 'desk_seal_key.json').read_text())
         full_pilot = json.loads(full)
-        expected = hmac.new(bytes.fromhex(key['key_hex']), json.dumps(full_pilot['residual_analysis'], sort_keys=True,
-                            separators=(',', ':')).encode(), hashlib.sha256).hexdigest()
+        expected = hmac.new(bytes.fromhex(key['key_hex']), json.dumps(
+            {'nonce': report['residual_analysis']['nonce'], 'value': full_pilot['residual_analysis']}, sort_keys=True,
+            separators=(',', ':')).encode(), hashlib.sha256).hexdigest()
         self.assertEqual(report['residual_analysis']['hmac_sha256'], expected)
         self.assertNotIn(hashlib.sha256(json.dumps(full_pilot['residual_analysis'], sort_keys=True,
                          separators=(',', ':')).encode()).hexdigest(), json.dumps(report))
@@ -450,7 +451,8 @@ class ReleaseGuardTests(unittest.TestCase):
 
     def test_the_detector_fires_when_the_hook_is_removed(self):
         root = self.fx.session('c3-mutant', {'window_id': 'C3', 'role': 'calibration'})
-        with patch.object(seal, 'desk_policy', return_value=None):
+        with patch.object(seal, 'desk_policy', return_value=None), \
+                patch.object(seal, 'require_guard', side_effect=lambda policy: policy):    # both checks removed
             printed, report, desk, _ = self.fx.run_desk(root)
         found = leaks(self.texts(printed, report, desk), planted_values(self.fx.values()))
         self.assertIn(('PILOT.json', self.fx.values()[0]['gpu_j']), found)
@@ -628,7 +630,7 @@ class SentinelDetectorTests(unittest.TestCase):
                     signatures.add(re.sub(r'\D', '', repr(float(x)))[:9] if isinstance(x, float) else str(int(x)))
         hits = set()
         for name, text in texts.items():
-            text = re.sub(r'[0-9a-f]{64}', '', text)      # digests are not printed values (random HMAC hex)
+            text = re.sub(r'[0-9a-f]{32,64}', '', text)   # digests and nonces are not printed values (random hex)
             for token in re.finditer(r'-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?', text):
                 t = float(token.group())
                 hits.update((name, 'num', n) for n in nums if n and abs(t - n) <= 1e-9 * abs(n))
@@ -654,7 +656,7 @@ class SentinelDetectorTests(unittest.TestCase):
 
 def numbers(text):
     import re
-    text = re.sub(r'[0-9a-f]{64}', '', text)                 # digests are not values
+    text = re.sub(r'[0-9a-f]{32,64}', '', text)              # digests and nonces are not values
     return [float(m.group()) for m in re.finditer(r'-?\d+(?:\.\d+)?', text)]
 
 
@@ -972,6 +974,140 @@ class RL152Tests(unittest.TestCase):
         self.assertIn(line, self.runs['W1']['printed'])
 
 
+class MythosReattackTests(unittest.TestCase):
+    """PR #774 Mythos re-attack (REFUSE at 18fb3746f): N2-N4, N6-N8 and N10 on the W1 desk and in units."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory(prefix='jw-desk-mythos-')
+        cls.fx = Fixture(cls.tmp.name)
+        root = cls.fx.session('mythos-W1', None)
+        cls.printed, cls.report, cls.desk, cls.output = cls.fx.run_desk(root)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_n2_w1_eligibility_lists_and_counts_name_no_non_benign_member(self):
+        nonbenign, report = self.fx.nonbenign, self.report
+        self.assertTrue(report['residual_analysis'])
+        for configuration in report['residual_analysis']:
+            for scope in configuration['scopes'].values():
+                for key in ('eligible_members', 'representatives'):
+                    self.assertFalse(set(scope[key]) & nonbenign, key)
+                    self.assertEqual(scope[key + '_withheld_non_benign']['status'], seal.WITHHELD)
+                for label in ('counts_logged_headline', 'counts_withheld'):
+                    convention = scope[label]
+                    # no per-row placeholder whose roster position names a member; one digest for the rest
+                    self.assertTrue(all('run_id' in r and r['run_id'] not in nonbenign for r in convention['residuals']))
+                    self.assertEqual(convention['residuals_withheld_non_benign']['status'], seal.WITHHELD)
+                    self.assertEqual(convention['distinct_trajectories']['status'], seal.WITHHELD)
+                    for t in convention['cross_pair_transfer']:
+                        self.assertTrue(all(x['run_id'] not in nonbenign for x in t['scores']))
+        self.assertFalse(set(report['episode_scope_alternative_eligible_members']) & nonbenign)
+        self.assertFalse(set(report['episode_scope_alternative_ineligible_reasons']) & nonbenign)
+        # The fixture's non-benign members are all alternative-eligible, so plant the dropped case directly:
+        # a sabotage member the alternative scope dropped for a deadman (the carved bit by absence and by reason).
+        plan = [{'run_id': 'b1', 'condition': 'benign'}, {'run_id': 's1', 'condition': 'sabotage'},
+                {'run_id': 'b2', 'condition': 'benign'}]
+        planted = {'members': [], 'episode_scope_alternative_eligible_members': ['b1'],
+                   'episode_scope_alternative_ineligible_reasons': {'s1': ['episode.deadman:3'], 'b2': ['x.y']}}
+        out = seal._seal_pilot_w1(planted, plan, True)
+        self.assertEqual(out['episode_scope_alternative_ineligible_reasons'], {'b2': ['x.y']})
+        self.assertEqual(out['episode_scope_alternative_eligible_members'], ['b1'])
+        self.assertNotIn('s1', json.dumps(out))
+        self.assertNotIn('deadman', json.dumps(out))
+        printed = self.printed
+        for run_id in nonbenign:
+            for key in ('episode_scope_alternative_eligible_members', 'episode_scope_alternative_ineligible_reasons',
+                        'residual_analysis'):
+                line = next(l for l in printed.splitlines() if l.startswith(key + ': '))
+                self.assertNotIn(run_id, line, key)
+
+    def test_n3_no_two_withheld_digests_are_equal(self):
+        # Equal plaintexts (an empty list, a clean member's line) must not give equal digests in one desk.
+        text = json.dumps(self.report) + self.printed
+        import re
+        digests = re.findall(r'"hmac_sha256": "([0-9a-f]{64})"', json.dumps(self.report))
+        self.assertGreater(len(digests), 20)
+        self.assertEqual(len(digests), len(set(digests)))
+        self.assertIn('"nonce": "', text)
+        with seal.keyed(b'n' * 32):
+            a, b = seal.withheld([]), seal.withheld([])
+            row = {**km003c._empty(), 'status': 'unavailable'}
+            dc = km003c.seal_non_benign({'members': {'s1': row, 's2': dict(row)}},
+                                        [{'run_id': 's1', 'condition': 'sabotage'}, {'run_id': 's2', 'condition': 'sabotage'}])
+        self.assertNotEqual(a['hmac_sha256'], b['hmac_sha256'])
+        self.assertNotEqual(dc['members']['s1']['sealed_hmac_sha256'], dc['members']['s2']['sealed_hmac_sha256'])
+        bound = json.dumps({'nonce': dc['members']['s1']['sealed_nonce'], 'value': row}, sort_keys=True,
+                           separators=(',', ':')).encode()
+        self.assertEqual(dc['members']['s1']['sealed_hmac_sha256'], hmac.new(b'n' * 32, bound, hashlib.sha256).hexdigest())
+
+    def test_n4_tool_path_tripwire_fires_on_the_xml_paths_real_shape(self):
+        # On the XML path a refused call ends the episode: one flag, on the last admitted turn (workload.py).
+        def verdict(records, roles=None):          # every record here is a non-benign member
+            return seal.tripwires(records, 'W1', seal.NotBenign(set()), roles)[0]['w1_non_benign_tool_path']['verdict']
+        early = [{'id': 'd11', 'turns': 2, 'flags': ['episode.unsupported_tool_call_format:1']}]
+        late = [{'id': 'd11', 'turns': 6, 'flags': ['episode.unsupported_tool_call_format:5']}]
+        both = [{'id': 'd11', 'turns': 6, 'flags': ['episode.unsupported_tool_call_format:5']},
+                {'id': 'd14', 'turns': 7, 'flags': ['episode.unsupported_tool_call_format:6']}]
+        self.assertEqual(verdict(early), 'to the research lead')
+        self.assertEqual(verdict(late), 'within')
+        self.assertEqual(verdict(both, {'d11': 'D', 'd14': 'D'}), 'to the research lead')
+        self.assertEqual(verdict(both, {'d11': 'D', 'd14': 'X'}), 'within')
+        self.assertEqual(verdict([{'id': 'd11', 'turns': 1, 'flags': []}]), 'within')
+
+    def test_n6_harvest_off_prints_no_member_derived_sizes(self):
+        from scripts import align_v4_harvest_off as harvest_off
+        planted = 987654321
+        receipt = {'schema': harvest_off.SWEEP_SCHEMA, 'session_id': 's', 'largest_plist_bytes': planted,
+                   'runs': [{'workers': 2, 'exit': 0, 'peak_child_rss_bytes': planted + 1, 'wall_s': 12.5}]}
+        reduced = {'reduced_members': 6, 'files': 6, 'raw_bytes': planted + 2, 'reduced_bytes': planted + 3,
+                   'elapsed_s': 1.0, 'workers': 2}
+        cases = (('sweep', 'cmd_sweep', receipt, ['--out', 'x']), ('reduce', 'cmd_reduce', reduced, ['--out', 'x']))
+        for command, name, result, extra in cases:
+            with patch.object(harvest_off, name, return_value=result), redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(harvest_off.main([command, '--session-root', 'unused', *extra]), 0)
+            self.assertNotIn(str(planted)[:6], out.getvalue(), command)
+        with patch.object(harvest_off, 'largest_plist_bytes', return_value=planted), \
+                patch.object(harvest_off, 'free_memory_bytes', return_value=64 << 30), \
+                patch.object(harvest_off, 'free_cores', return_value=4), redirect_stdout(io.StringIO()) as out:
+            harvest_off.main(['desk', '--session-root', 'unused', '--workers', 'auto'],
+                             run=lambda argv, **_: __import__('subprocess').CompletedProcess(argv, 0))
+        desk = json.loads(out.getvalue())
+        self.assertGreaterEqual(desk['sizing']['workers'], 1)
+        self.assertNotIn('peak_bytes_per_worker', desk['sizing'])
+        self.assertNotIn(str(8 * planted)[:6], out.getvalue())
+
+    def test_n7_runner_behaviour_codes_are_classified_and_faults_stay_unlisted(self):
+        self.assertEqual(seal.unlisted_codes(['tool_error:read_file', 'tool_result_coerced:2',
+                                              'task_scoring_error:main:ValueError:x']), [])
+        self.assertEqual(seal.unlisted_codes(['episode_error:RuntimeError:x', 'episode.interrupted',
+                                              'episode.g0_unreleased:0']),
+                         ['episode.g0_unreleased', 'episode.interrupted', 'episode_error'])
+
+    def test_n8_w1_cross_pilot_identity_rows_of_non_benign_members_are_withheld(self):
+        plan = [{'run_id': 'b1', 'condition': 'benign'}, {'run_id': 's1', 'condition': 'sabotage'}]
+        pilot_ = {'members': [], 'cross_pilot_token_identity': {'m/greedy': [
+            {'run_id': 'b1', 'reference_run_id': 'r1', 'status': 'identical', 'first_divergent_turn': None, 'fields': []},
+            {'run_id': 's1', 'reference_run_id': 'r2', 'status': 'divergent', 'first_divergent_turn': 7,
+             'fields': ['turn_count']}]}}
+        out = seal._seal_pilot_w1(pilot_, plan, True)
+        self.assertEqual([r['run_id'] for r in out['cross_pilot_token_identity']['m/greedy']], ['b1'])
+        self.assertEqual(out['cross_pilot_token_identity_withheld_non_benign']['status'], seal.WITHHELD)
+        self.assertNotIn('turn_count', json.dumps(out))
+
+    def test_n10_an_id_that_fails_to_join_is_sealed(self):
+        nonbenign = seal._nonbenign([{'run_id': 'b1', 'condition': 'benign'}, {'run_id': 's1', 'condition': 'sabotage'}])
+        self.assertNotIn('b1', nonbenign)
+        for run_id in ('s1', None, 'never-planned'):
+            self.assertIn(run_id, nonbenign)
+        table = seal.seal_w1_tool_table({'members': [{'id': None, 'unsupported_xml_turns': [3]},
+                                                     {'id': 'b1', 'unsupported_xml_turns': [1]}]}, nonbenign)
+        self.assertEqual([r['id'] for r in table['members']], ['b1'])
+        self.assertEqual(table['turn_totals']['unsupported_xml_turns'], 1)
+
+
 class EntryPointTests(unittest.TestCase):
     """PR #774 Sol F1: every v4 desk entry point installs the guard (keyed on the stored session identity)."""
 
@@ -1022,14 +1158,17 @@ class EntryPointTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, 'release guard'):
                 pilot.desk(root, harvest=False, print_policy=lambda pilot_, lines, output: (pilot_, lines))
 
-    def run_thermal_desk(self, window):
-        registration = self.fx.root / f'thermal-reg-{window}'
+    def run_thermal_desk(self, window, *, ids=True, real_prints=False, tag='x'):
+        """``window`` None leaves every member untagged; ``ids`` False omits the manifest ids (as the repo's own
+        manifest builder does); ``real_prints`` runs the production rl145_prints_report on real-shaped rows."""
+        name = f'{window}-{tag}'
+        registration = self.fx.root / f'thermal-reg-{name}'
         registration.mkdir(exist_ok=True)
         (registration / 'inputs.json').write_text(json.dumps({'R1': {'thermal_policy': {}}}))
-        manifest = self.fx.root / f'thermal-manifest-{window}.json'
+        manifest = self.fx.root / f'thermal-manifest-{name}.json'
         manifest.write_text(json.dumps({'members': [
-            {'id': r['run_id'], 'bundle': 'runs/' + r['run_id'], 'window': window, 'ordinal': r['ordinal'],
-             'role': 'D'} for r in self.fx.rows]}))
+            {**({'id': r['run_id']} if ids else {}), 'bundle': 'runs/' + r['run_id'], 'ordinal': r['ordinal'],
+             'role': 'D', **({'window': window} if window else {})} for r in self.fx.rows]}))
         prints = {'schema': 'joulewise.align.rl145_prints.v1', 'members': [
             {'id': r['run_id'], 'turns': [{'duration_s': plant(i)['seconds'], 'tokens': plant(i)['calls']}]}
             for i, r in enumerate(self.fx.rows)], 'residual_by_decode_bin': [{'residual_j': plant(0)['gpu_j']}]}
@@ -1038,7 +1177,16 @@ class EntryPointTests(unittest.TestCase):
         def record(path, **_):
             rec = self.fx.record(path)
             return {**rec, 'condition': conditions[Path(path).name]}
-        output = self.fx.root / f'thermal-out-{window}'
+        def bundle_prints(path, **_):
+            # real-shaped rl145_prints.bundle_prints row: the episode id, no 'id' (rl145_prints.py)
+            i = self.fx.index[Path(path).name]
+            return {'episode': Path(path).name, 'token_events_source': 'events.jsonl',
+                    'turns': [{'turn': 0, 'decode_tokens': plant(i)['calls'], 'decode_s': plant(i)['seconds'],
+                               'prefill_s': plant(i)['latency'], 'load_s': plant(i)['owned']}],
+                    'desk_verdict': {'member_excluded': False, 'exclusion_reasons': [],
+                                     'flags': [f'episode.end_task:{plant(i)["tool_turn"]}'], 'per_turn': []},
+                    'tv1h_trigger': {'unequal_rows': {'rows_compared': int(plant(i)['seconds'])}}}
+        output = self.fx.root / f'thermal-out-{name}'
         with ExitStack() as stack:
             enter = stack.enter_context
             enter(patch.object(v4_thermal, 'registration_evidence', return_value=({'policy': {}}, {})))
@@ -1046,7 +1194,11 @@ class EntryPointTests(unittest.TestCase):
             enter(patch.object(v4_thermal, 'enrich_record', side_effect=lambda r, p: r))
             enter(patch.object(v4_thermal, 'window_report', side_effect=self.fx.window_report))
             enter(patch.object(v4_thermal, 'contrast_predeclaration', return_value=None))
-            enter(patch.object(v4_thermal, 'rl145_prints_report', return_value=prints))
+            if real_prints:
+                from joulewise.align.apple import rl145_prints as rl145
+                enter(patch.object(rl145, 'bundle_prints', side_effect=bundle_prints))
+            else:
+                enter(patch.object(v4_thermal, 'rl145_prints_report', return_value=prints))
             enter(patch.object(v4_thermal.registration, 'desk_diagnostics', side_effect=self.fx.diagnostics))
             enter(patch.object(v4_battery, 'attach', side_effect=self.fx.battery))
             with redirect_stdout(io.StringIO()) as out:
@@ -1070,6 +1222,50 @@ class EntryPointTests(unittest.TestCase):
             self.assertNotIn('Exact exclusion intervals', texts['THERMAL.md'])
             self.assertEqual(report['release_guard']['withheld_markdown'], 'archive/withheld/THERMAL.full.md')
 
+    def test_the_thermal_desk_prints_no_non_benign_rl145_row_from_the_production_builder(self):
+        # Mythos N1: the production rl145_prints_report on a manifest without ids (as align_v4_w1_synthetic
+        # writes it); the rows carry only 'episode'. W1 must print the benign rows and none of a non-benign one.
+        texts, report, output = self.run_thermal_desk('W1', ids=False, real_prints=True, tag='n1')
+        self.check(texts, report, 'W1')
+        prints = json.loads(texts['RL145_PRINTS.json'])
+        benign = sorted(r['run_id'] for r in self.fx.rows if r['run_id'] not in self.fx.nonbenign)
+        self.assertEqual(sorted(r['id'] for r in prints['members']), benign)
+        self.assertEqual(prints['population'], 'benign')
+        for i, r in enumerate(self.fx.rows):
+            if r['run_id'] in self.fx.nonbenign:
+                self.assertNotIn(str(plant(i)['tool_turn']), texts['RL145_PRINTS.json'])
+                self.assertNotIn(str(int(plant(i)['seconds'])), texts['RL145_PRINTS.json'])
+        full = json.loads((output / 'archive/withheld/RL145_PRINTS.full.json').read_text())
+        self.assertEqual(len(full['members']), len(self.fx.rows))
+
+    def test_the_thermal_desk_scope_fails_closed_to_c(self):
+        # Mythos N5: an untagged manifest (or a partly tagged one) is not W1: it gets the C seal.
+        for tag, window in (('untagged', None), ('unknown', 'Z9')):
+            texts, report, _ = self.run_thermal_desk(window, real_prints=True, tag=tag)
+            self.assertEqual(report['release_guard']['scope'], 'C', tag)
+            self.check(texts, report, 'C3')
+            self.assertEqual(json.loads(texts['RL145_PRINTS.json'])['members'], [])
+
+    def test_each_boundary_check_refuses_a_custom_policy_on_its_own(self):
+        # The wrapper's enforce and the old desk's require_guard are two checks; each must hold by itself (with
+        # both in place, removing one would otherwise go unnoticed).
+        custom = lambda pilot_, lines, output: (pilot_, lines)          # noqa: E731
+        state = {'session_id': 'align-v4-x', 'v4_series': {'window_id': 'C3', 'role': 'calibration'}}
+        for check in (lambda: seal.enforce(state, custom, []), lambda: seal.require_guard(custom),
+                      lambda: seal.require_guard(None)):
+            with self.assertRaisesRegex(ValueError, 'release guard'):
+                check()
+        self.assertIsInstance(seal.enforce(state, None, []), seal.DeskSeal)
+
+    def test_the_old_desk_refuses_a_v4_session_without_the_guard(self):
+        # Mythos N9: align_pilot_session._desk checks the stored identity itself.
+        root = self.fx.session('entry-old-desk', {'window_id': 'C3', 'role': 'calibration'})
+        with ExitStack() as stack:
+            self.fx.patches(stack)
+            with redirect_stdout(io.StringIO()) as out, self.assertRaisesRegex(ValueError, 'release guard'):
+                pilot._desk(root, harvest=False)
+        self.assertEqual(leaks({'stdout': out.getvalue()}, planted_values(self.fx.values())), [])
+
 
 class SealUnitTests(unittest.TestCase):
     def test_withheld_digest_is_keyed_hmac_of_the_canonical_json(self):
@@ -1077,8 +1273,13 @@ class SealUnitTests(unittest.TestCase):
         raw = json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
         key = b'k' * 32
         with seal.keyed(key):
-            self.assertEqual(seal.withheld(value), {'status': seal.WITHHELD,
-                                                    'hmac_sha256': hmac.new(key, raw, hashlib.sha256).hexdigest()})
+            digest = seal.withheld(value)
+        # Mythos N3: the HMAC is over {"nonce": <printed nonce>, "value": <value>}, so it checks with the key
+        # and the printed nonce at release.
+        bound = json.dumps({'nonce': digest['nonce'], 'value': value}, sort_keys=True, separators=(',', ':')).encode()
+        self.assertEqual(digest, {'status': seal.WITHHELD, 'nonce': digest['nonce'],
+                                  'hmac_sha256': hmac.new(key, bound, hashlib.sha256).hexdigest()})
+        self.assertEqual(len(digest['nonce']), 32)
         # Outside a desk the key is ephemeral and never written; it is still not the plain (invertible) sha256.
         self.assertNotEqual(seal.withheld(value)['hmac_sha256'], hashlib.sha256(raw).hexdigest())
         with seal.keyed(b'j' * 32):

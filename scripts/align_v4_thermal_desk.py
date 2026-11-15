@@ -101,7 +101,9 @@ def rl145_prints_report(manifest, root, journal):
         except FileNotFoundError as exc:
             row = {'episode': item.get('id', Path(item['bundle']).name), 'turns': [],
                    'unavailable': f'member.artifact_missing:{exc.filename}'}
-        members.append({'id': item.get('id'), **row})
+        # PR #774 Mythos N1: the join key is the episode id the thermal records carry (manifests need not
+        # name an id); the release guard keeps a prints row only for a known benign id.
+        members.append({'id': row.get('episode') or item.get('id'), **row})
     rows = journal(manifest['residual_rows']) if manifest.get('residual_rows') else None
     return {'schema': 'joulewise.align.rl145_prints.v1', 'authority': 'RL-145 section 2, RL-145 addendum row 6',
             'print_only': True, 'members': members,

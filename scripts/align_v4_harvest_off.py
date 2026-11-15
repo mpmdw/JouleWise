@@ -338,7 +338,7 @@ def auto_workers(*, peak_bytes=None, session_root=None, memory=None, cores=None,
     workers = int(min(cores, by_memory))
     if workers < 1:
         raise ValueError(f'postpone the desk: no harvest worker fits (free {memory} B - reserve {reserve_bytes} B '
-                         f'< one worker peak {peak_bytes} B, basis {basis})')
+                         f'< one worker peak, basis {basis}; the peak is withheld, PR #774 N6)')
     return {'workers': workers, 'free_cores': cores, 'free_memory_bytes': memory,
             'peak_bytes_per_worker': peak_bytes, 'peak_basis': basis, 'reserve_bytes': reserve_bytes}
 
@@ -503,6 +503,33 @@ def _runs_root(state):
     return Path(claim)
 
 
+# PR #774 Mythos N6: byte sizes of a window's raw plists, reduced files and harvest peaks encode member sample
+# counts (elapsed time), and the largest is a maximum over a set holding non-benign members (RL-149 3(c)). The
+# printed records keep the worker count and the sizing basis; the sizes stay in the files the runbook restricts
+# like withheld/ (SWEEP.json, reduced/MANIFEST.json).
+SIZE_WITHHELD = 'withheld (sizes encode member sample counts; PR #774 N6): see the restricted receipt'
+
+
+def printed(command, result):
+    """What a command prints: ``result`` without member-derived sizes (the functions return them whole)."""
+    if not isinstance(result, dict):
+        return result
+    if command == 'desk' and isinstance(result.get('sizing'), dict):
+        sizing = result['sizing']
+        keep = {k: sizing[k] for k in ('workers', 'free_cores', 'free_memory_bytes', 'reserve_bytes', 'peak_basis')
+                if k in sizing}
+        if isinstance(sizing.get('sweep'), dict):
+            keep['sweep'] = {k: sizing['sweep'][k] for k in ('reason', 'path') if k in sizing['sweep']}
+        return {**result, 'sizing': {**keep, 'sizes': SIZE_WITHHELD}}
+    if command == 'sweep':
+        return {'schema': result.get('schema'), 'session_id': result.get('session_id'),
+                'runs': [{'workers': r.get('workers'), 'exit': r.get('exit')} for r in result.get('runs') or ()],
+                'sizes': SIZE_WITHHELD}
+    if command == 'reduce':
+        return {k: v for k, v in result.items() if k not in ('raw_bytes', 'reduced_bytes')} | {'sizes': SIZE_WITHHELD}
+    return result
+
+
 def main(argv=None, run=subprocess.run):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
@@ -545,7 +572,7 @@ def main(argv=None, run=subprocess.run):
                'desk': cmd_desk, 'reduce': cmd_reduce, 'sweep': cmd_sweep,
                'finalize-manifest': cmd_finalize_manifest}[args.command]
     try:
-        print(json.dumps(handler(args, run=run), sort_keys=True))
+        print(json.dumps(printed(args.command, handler(args, run=run)), sort_keys=True))
     except (OSError, ValueError, KeyError) as exc:
         print('align_v4_harvest_off: ' + f'{type(exc).__name__}: {exc}', file=sys.stderr)
         return 1
