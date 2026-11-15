@@ -7,12 +7,17 @@ missing, stale or contradictory input is itself a named reason, never a pass.
 
 Reason categories (``REASONS``):
 
-* ``halt``: nothing arms; the controller pages the magistrate at once and waits for an acknowledgement.
-* ``wait``: this candidate cannot arm yet; ``eta`` says when it could (None: not known). A wait that
-  lasts ``STALL_S`` past the last close pages (``WAIT_STALL``).
+* ``halt``: nothing arms; the controller pages the magistrate and waits for an acknowledgement.
+* ``wait``: this candidate cannot arm yet; ``eta`` says when it could (None: not known). Every wait is
+  bounded: the controller pages ``WAIT_STALL`` when one outlasts its bound (``stall_bound``).
 * ``retry``: a transient read failed (network); treated as a wait, never as a pass.
-* ``cede``: a READY v4 session holds everything below it; the controller pages and never launches it.
+* ``cede``: a READY v4 session holds everything; the controller pages, goes silent, and never launches it.
 * ``page``: an empty queue or a due F0; the magistrate's standing item decides.
+
+The desk contract is ``FORMAT.md`` (desk builder, PR #799): the controller reads the desk's
+``joulewise.cadence_desk_verdict.v1`` records by its §4, and derives the hand gates the desk prints
+(``desk_final.CONSUMER_GATES`` and the class A rule) itself at the close, because the next span may arm
+before any verdict exists.
 
 This module adds no rule. Each check cites the ruling it enforces; where a ruling leaves a choice the
 docstring says which way it is taken (always the stricter one).
@@ -27,17 +32,17 @@ import json
 import re
 from zoneinfo import ZoneInfo
 
-from joulewise.cadence import kit as kitmod, queue as q
+from joulewise.cadence import desk_final, kit as kitmod, queue as q
 
 STANDING_SCHEMA = "joulewise.cadence_standing.v1"
-DESK_FINAL_SCHEMA = "joulewise.cadence_desk_final.v1"
 SESSION_READY_SCHEMA = "joulewise.cadence_session_ready.v1"
 SESSION_DONE_SCHEMA = "joulewise.cadence_session_done.v1"
 WATCHER_STAMP_SCHEMA = "joulewise.cadence_watcher_stamp.v1"
-BUNDLE_SCHEMA = "joulewise.cadence_close_bundle.v1"
+TRANSITION_SCHEMA = "joulewise.cadence_controller_transition.v1"
+VERDICT_SCHEMA = desk_final.VERDICT_SCHEMA
 ZONE = ZoneInfo(kitmod.LOCAL_ZONE_NAME)
 
-QUEUE_TTL_S = 7 * 86400            # RL-149 section 2.8 line 3; RL-172 (g) 3
+QUEUE_TTL_S = 7 * 86400            # RL-149 section 2.8 line 3; RL-172 (g) 3: from the queue file's FIRST commit
 WATCHER_TTL_S = 24 * 3600          # RL-149 section 2.8 line 7
 CLOCK_SKEW_S = 300                 # a commit or stamp further ahead of the host clock is a contradiction
 DEV_MIXED_MAX = 12                 # RL-172 (a) 1
@@ -46,9 +51,12 @@ GAP_AFTER_CAMPAIGN_S = 300         # RL-171 section 6.1, confirmed RL-172 sectio
 GAP_AFTER_OTHER_S = 1200           # after F0, F2 or any non-campaign close (RL-172 section 0)
 F0_SPACING_S = 4 * 3600            # RL-165 section 3 line 5
 F0_MAX_PER_DATE = 3
-F0_WORST_S = 12180                 # RL-165 section 3 lines 6 and 7
 FALLBACK_HORIZON_S = 2.5 * 3600    # RL-165 section 3 line 3: no staged item can hold within 2 h 30 min
-STALL_S = 2.5 * 3600
+STALL_S = 2.5 * 3600               # the default bound on any wait
+STALL_SHORT_S = 30 * 60            # waits the host or the lead clears in minutes, or never by themselves
+SHORT_STALL_CODES = frozenset({"AGENT_PRESENT", "PLAN_REFUSED_AT_T0", "JOURNAL_COPY", "SPAN_LIVE", "NIGHT_AGENT",
+                               "CLOSING", "ISSUES_UNREADABLE", "FETCH_FAILED"})
+MIDNIGHT_MARGIN_S = 120            # a dated arm is refused this close to the end of its date (F19)
 
 PHASES = {"cl-dev-": "development", "cl-qual-": "qualification", "cl-hp-": "extension", "hp-": "extension",
           "cl-f2-": "filler", "f2-": "filler"}
@@ -56,6 +64,9 @@ SESSION_KINDS = ("r1-slot", "w1", "c", "t")
 FALLBACK_KINDS = ("F0", "F2")      # RL-172 (g) 9: nothing else
 QUEUE_ROLES = ("standing", "smoke")
 BATCH_RULES = ("none", "rl172")
+RESOLUTIONS = ("cleared", "rerun", "withdrawn")
+GATE_DECISIONS = ("release", "hold")
+CLASS_A = "class-a"
 HHMM = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d")
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -66,12 +77,16 @@ REASONS = {
     # halts: missing, stale or contradictory inputs, and the ruling's hard lines
     "STANDING_MISSING": ("halt", "the standing index is not on the audit branch"),
     "STANDING_INVALID": ("halt", "the standing index does not validate"),
+    "AUDIT_REWRITTEN": ("halt", "the audit branch no longer descends from the tip the controller last read"),
     "QUEUE_MISSING": ("halt", "a listed queue is not on the audit branch"),
     "QUEUE_INVALID": ("halt", "a queue does not validate (validate-queue)"),
     "QUEUE_NOT_APPEND_ONLY": ("halt", "a queue's history is not append-only (RL-149 section 2.8 line 3)"),
-    "QUEUE_EXPIRED": ("halt", "a queue is past seven days from its commit or its expires_at (line 3)"),
+    "QUEUE_REWRITTEN": ("halt", "a queue no longer extends the version the controller last read or armed from"),
+    "QUEUE_EXPIRED": ("halt", "a queue with spans to run is past seven days from its first commit or its expires_at"),
     "QUEUE_COMMIT_IN_FUTURE": ("halt", "a queue's commit time is ahead of the host clock"),
     "QUEUE_HALT": ("halt", "a queue carries a lead halt"),
+    "QUEUE_NO_NOTICE": ("halt", "a queue with spans to run names no standing notice issue (RL-149 section 2.8)"),
+    "QUEUE_DUPLICATE": ("halt", "a plan id, or a kit leg without rerun_of, is queued twice across queues"),
     "KIT_UNKNOWN": ("halt", "a queued kit sha is not in the standing index"),
     "KIT_UNREADABLE": ("halt", "a queued kit could not be read or does not hash to its pin"),
     "KIT_EVIDENCE_MISSING": ("halt", "a kit has no line 1 or line 2 record (RL-149 section 2.8)"),
@@ -82,41 +97,53 @@ REASONS = {
     "DATE_DEV_CAP": ("halt", "the t0-date would hold more than 24 development legs (RL-172 (a) 2)"),
     "DATE_QUAL_DEV_OVERLAP": ("halt", "qualification and development t0-dates would meet (RL-172 (a) 3)"),
     "DATE_QUAL_SINGLE": ("halt", "the qualification blocks would all fall on one date (RL-172 (a) 3)"),
-    "SMOKE_QUEUE_NOT_PILOT_ONLY": ("halt", "a smoke queue holds more than its pilot (RL-172 (g) 4)"),
-    "SMOKE_REMAINDER_STAGED": ("halt", "a kit's remainder is queued before its hand gate passed (RL-172 (g) 4)"),
+    "SMOKE_QUEUE_NOT_PILOT_ONLY": ("halt", "a pilot is not alone in a smoke queue (RL-172 (g) 4)"),
+    "SMOKE_REMAINDER_STAGED": ("halt", "a kit's remainder is queued before its pilot's class A gate released (RL-172 (g) 4)"),
+    "PILOT_MISSING": ("halt", "a span of a kit arms before any pilot of that kit closed clean"),
+    "GATE_DISAGREEMENT": ("halt", "the desk's verdict names a hand gate the controller did not derive, or the reverse"),
     "VETO_OPEN": ("halt", "an open owner directive starts STOP, NO, HALT or VETO (line 6)"),
     "CADENCE_STOP_OPEN": ("halt", "an open cadence-stop issue (line 6)"),
     "WATCHER_STAMP_MISSING": ("halt", "no results-watcher stamp on the audit branch (line 7)"),
     "WATCHER_STALE": ("halt", "the results-watcher stamp is older than 24 h (line 7)"),
-    "WATCHER_STAMP_INVALID": ("halt", "the watcher stamp is malformed or ahead of its commit"),
-    "SPAN_BAD_TERMINAL": ("halt", "a span closed refused, stopped, faulted, stranded or unproven"),
+    "WATCHER_STAMP_INVALID": ("halt", "the watcher stamp is malformed, names another watcher, or is ahead of its commit"),
+    "SPAN_BAD_TERMINAL": ("halt", "a span closed refused, stopped, faulted, stranded or unproven, with no disposition"),
+    "FOREIGN_CLOSE_UNPROVEN": ("halt", "another run's fence went away; its restore is unproven until note-run records it"),
     "ARM_INDETERMINATE": ("halt", "an arm intent has no launch result and no live span (restart after a crash)"),
-    "DESK_DISAGREEMENT": ("halt", "a desk-final record reports a hand-table disagreement (RL-172 (c))"),
-    "DESK_FINAL_CONTRADICTS": ("halt", "a desk-final record names another bundle than the one pushed"),
-    "DESK_FINAL_INVALID": ("halt", "a desk-final record is malformed"),
+    "DESK_HOLD": ("halt", "a desk verdict holds the next arm (a named stop) until the lead clears it"),
+    "DESK_VERDICT_INVALID": ("halt", "a desk verdict is unsigned, malformed, misnamed or contradicts the armed entry"),
     "SESSION_INVALID": ("halt", "a v4 session READY record is malformed or names an unknown session"),
     "FALLBACK_INVALID": ("halt", "a fallback entry is not F0 or F2 on its standing rules (RL-172 (g) 9)"),
     "HOST_PROOF_FAILED": ("halt", "the arm's host readback or process-group absence failed (RL-172 (g) 5)"),
     "CLOSE_UNPROVEN": ("halt", "the close proof failed: restore, readback or process absence (RL-172 (g) 5)"),
     "RECEIPT_NOT_CLEAN": ("halt", "the span's receipt is a refusal or an error (a receipt all the same)"),
     "RECEIPT_MISSING": ("halt", "the span exited with no receipt"),
+    "UNKNOWN_CAMPAIGN_RECEIPT": ("halt", "a campaign receipt on the host is in no ledger (Mythos F18)"),
+    "CENSUS_FAILED": ("halt", "the host receipt census failed or found nothing"),
     "ROSTER_MISMATCH": ("halt", "the desk inputs do not match the queue entry (RL-172 (c) 1 to 3)"),
-    "NO_LEG_ROWS": ("halt", "the desk bundle has no leg rows: a stop (RL-172 (c) 3; Sol probe)"),
+    "NO_LEG_ROWS": ("halt", "the span has no leg rows: a stop (RL-172 (c) 3; Sol probe)"),
     "NAMED_STOP": ("halt", "a named stop fired on the span's operational summary"),
     "LAUNCH_REFUSED": ("halt", "the launcher refused or did not hand the fence to its LaunchAgent"),
+    "BUNDLE_REFUSED": ("halt", "the packer refused the span's files: nothing is published"),
     "BUNDLE_UNAUTHENTICATED": ("halt", "the close bundle could not be signed and pushed"),
+    "SIGNING_UNAVAILABLE": ("halt", "the controller cannot sign: the span would run and not publish (Mythos F11)"),
+    "CLOCK_SKEW": ("halt", "the host clock disagrees with the server's by more than 120 s"),
     "PREPARE_FAILED": ("halt", "the measurement checkout, kit copy, validate-kit or plan failed"),
+    "STRANDED_ALARM": ("halt", "the live span is past its deadline; nothing is closed while its fence and PID live"),
     "CONFIG_INVALID": ("halt", "the controller's config does not validate"),
-    "STATE_CORRUPT": ("halt", "a controller record does not parse"),
+    "STATE_CORRUPT": ("halt", "a controller record does not parse, or a tick raised"),
     # waits
     "NOT_BEFORE": ("wait", "today is before the span's not_before (RL-172 (g) 1)"),
     "K2_DESK_DEBT": ("wait", "span k's desk is not final before span k+2, in machine order (line 9)"),
     "GAP": ("wait", "the floor after the last close has not run (300 s campaign, 1,200 s otherwise)"),
-    "HAND_GATE": ("wait", "a hand gate holds this span (class A smoke, L002/L005, or a named gate)"),
+    "HAND_GATE": ("wait", "a hand gate holds this span until the lead's record (class A, L002, L005, or named)"),
+    "JOURNAL_COPY": ("wait", "the newest campaign close's journal copy marker is not written (item 331's copy gate)"),
     "FREEZE2": ("wait", "qualification arms only after freeze 2 is committed (RL-149 section 2.8)"),
     "AGENT_PRESENT": ("wait", "an agent process is alive on the host"),
+    "NIGHT_AGENT": ("wait", "a night agent (a v4 window) is loaded: the controller stays silent"),
     "PLAN_REFUSED_AT_T0": ("wait", "the pinned plan refuses this t0"),
     "SPAN_LIVE": ("wait", "a span or another run holds the host"),
+    "CLOSING": ("wait", "the span's fence is gone; its receipt or process absence is not yet proven"),
+    "MIDNIGHT": ("wait", "a dated span is not armed within 120 s of the end of its date"),
     "FALLBACK_SPACING": ("wait", "F0 spacing: 4 h between t0s and at most three a date"),
     "FALLBACK_DAY_COST": ("wait", "a filler here would cost a counted span its date (RL-165 section 3 line 7)"),
     # transient
@@ -126,7 +153,7 @@ REASONS = {
     "V4_SESSION_READY": ("cede", "a v4 session is READY: it takes the next clean close (RL-172 (f))"),
     "QUEUE_EMPTY": ("page", "nothing is queued, waiting or due"),
     "FALLBACK_F0_DUE": ("page", "no counted span can hold within 2 h 30 min; F0 is due on its standing item"),
-    "WAIT_STALL": ("page", "a wait has outlasted 2 h 30 min since the last close"),
+    "WAIT_STALL": ("page", "a wait has outlasted its bound"),
 }
 
 
@@ -148,6 +175,11 @@ def category(reasons):
     order = ("halt", "cede", "page", "retry", "wait")
     cats = {r["category"] for r in reasons}
     return next((c for c in order if c in cats), None)
+
+
+def stall_bound(codes):
+    """How long a wait with these codes may last before it pages (Mythos F7: every wait is bounded)."""
+    return STALL_SHORT_S if set(codes) & SHORT_STALL_CODES else STALL_S
 
 
 def digest(obj):
@@ -192,12 +224,36 @@ def kit_class(kit):
             "dated": phase in ("development", "qualification")}
 
 
+def derived_gates(kit, roster):
+    """The hand gates RL-172 (c) keeps, derived in code from the kit, the campaign and the roster (never from
+    lead data; Sol 6, Mythos F2). The same rules as the desk's ``hand_gates``:
+
+    * ``class-a``: the roster holds the kit's first leg (a kit's first span is its class A smoke);
+    * ``L002`` / ``L005``: ``desk_final.CONSUMER_GATES`` for this campaign, when that leg is in the roster and
+      is span-shaped in the kit.
+
+    Each gate holds every later span of the same campaign until the lead's release record for the span that
+    raised it."""
+    gates = []
+    legs = kit.get("legs") or []
+    if legs and legs[0]["leg_id"] in roster:
+        gates.append(CLASS_A)
+    by_id = {leg["leg_id"]: leg for leg in legs}
+    gates += [leg_id for _name, leg_id, _ruling, _rule in
+              desk_final.consumer_gates(kit.get("campaign_id"), by_id, list(roster))]
+    return gates
+
+
+DESK_GATE_NAMES = {CLASS_A: "class A smoke hand-read",
+                   **{leg: name for (_c, leg), (name, _r, _w) in desk_final.CONSUMER_GATES.items()}}
+
+
 # --------------------------------------------------------------------------
 # The standing index (lead data on the audit branch)
 # --------------------------------------------------------------------------
-STANDING_KEYS = {"schema", "standing_id", "queues", "kits", "hand_gates", "prior_spans", "withdrawn", "dispositions",
-                 "sessions", "fallback", "freeze2"}
-KIT_ENTRY_KEYS = {"source", "line1", "line2", "batch_window", "hand_gate"}
+STANDING_KEYS = {"schema", "standing_id", "queues", "kits", "hand_gates", "gate_records", "prior_spans", "withdrawn",
+                 "dispositions", "sessions", "fallback", "freeze2"}
+KIT_ENTRY_KEYS = {"source", "line1", "line2", "batch_window"}
 PRIOR_KEYS = {"plan_id", "campaign_id", "block_id", "legs", "mixed", "t0", "closed", "desk_final"}
 
 
@@ -216,19 +272,23 @@ def validate_standing(doc):
         p.append(f"schema: {STANDING_SCHEMA}")
     if not (_text(doc.get("standing_id")) and re.fullmatch(r"cs-[a-z0-9-]{3,40}", doc["standing_id"])):
         p.append("standing_id: cs-<lowercase id>")
-    queues = doc.get("queues")
-    if not isinstance(queues, list):
-        p.append("queues: a list")
-        queues = []
-    paths = set()
-    for i, entry in enumerate(queues):
-        if not (isinstance(entry, dict) and set(entry) == {"path", "role"} and _text(entry["path"])
-                and entry["role"] in QUEUE_ROLES):
-            p.append(f"queues[{i}]: {{path, role in {QUEUE_ROLES}}}")
-            continue
-        if entry["path"] in paths:
-            p.append(f"queues[{i}]: {entry['path']} listed twice")
-        paths.add(entry["path"])
+
+    def queue_entries(entries, where):
+        out = []
+        if not isinstance(entries, list):
+            p.append(f"{where}: a list")
+            return out
+        for i, entry in enumerate(entries):
+            if not (isinstance(entry, dict) and set(entry) == {"path", "role"} and _text(entry["path"])
+                    and entry["role"] in QUEUE_ROLES):
+                p.append(f"{where}[{i}]: {{path, role in {QUEUE_ROLES}}}")
+                continue
+            out.append(entry["path"])
+        return out
+
+    paths = queue_entries(doc.get("queues"), "queues")
+    if len(paths) != len(set(paths)):
+        p.append("queues: a path listed twice")
     kits = doc.get("kits")
     if not isinstance(kits, dict):
         p.append("kits: an object keyed by kit sha256")
@@ -238,7 +298,7 @@ def validate_standing(doc):
         if not HEX64.fullmatch(sha):
             p.append(f"{where}: key is a sha256")
         if not (isinstance(e, dict) and set(e) == KIT_ENTRY_KEYS):
-            p.append(f"{where}: keys {sorted(KIT_ENTRY_KEYS)}")
+            p.append(f"{where}: keys {sorted(KIT_ENTRY_KEYS)} (hand gates are derived, never declared)")
             continue
         src = e["source"]
         if not (isinstance(src, dict) and set(src) == {"commit", "path"} and isinstance(src["commit"], str)
@@ -250,13 +310,9 @@ def validate_standing(doc):
         bw = e["batch_window"]
         if not (bw in BATCH_RULES or (isinstance(bw, str) and HHMM.fullmatch(bw))):
             p.append(f"{where}.batch_window: one of {BATCH_RULES} or HH:MM-HH:MM")
-        hg = e["hand_gate"]
-        if not (isinstance(hg, dict) and set(hg) == {"passed", "record"} and type(hg["passed"]) is bool
-                and isinstance(hg["record"], str) and (not hg["passed"] or hg["record"].strip())):
-            p.append(f"{where}.hand_gate: {{passed: bool, record: text (required when passed)}}")
     gates = doc.get("hand_gates")
     if not isinstance(gates, list):
-        p.append("hand_gates: a list")
+        p.append("hand_gates: a list (extra named gates; the mandatory ones are derived)")
         gates = []
     for i, g in enumerate(gates):
         if not (isinstance(g, dict) and set(g) == {"id", "holds", "passed", "record"} and _text(g["id"])
@@ -264,6 +320,11 @@ def validate_standing(doc):
                 and type(g["passed"]) is bool and isinstance(g["record"], str)
                 and (not g["passed"] or g["record"].strip())):
             p.append(f"hand_gates[{i}]: {{id, holds: [span_id], passed, record}}")
+    records = doc.get("gate_records")
+    if not (isinstance(records, list) and all(
+            isinstance(r, dict) and set(r) == {"plan_id", "gate", "decision", "record"} and _text(r["plan_id"])
+            and _text(r["gate"]) and r["decision"] in GATE_DECISIONS and _text(r["record"]) for r in records)):
+        p.append(f"gate_records: a list of {{plan_id, gate, decision in {GATE_DECISIONS}, record}}")
     prior = doc.get("prior_spans")
     if not isinstance(prior, list):
         p.append("prior_spans: a list")
@@ -291,9 +352,10 @@ def validate_standing(doc):
     if not (isinstance(wd, list) and all(_text(x) for x in wd)):
         p.append("withdrawn: a list of plan ids")
     disp = doc.get("dispositions")
-    if not (isinstance(disp, list) and all(isinstance(d, dict) and set(d) == {"plan_id", "record"}
-                                           and _text(d["plan_id"]) and _text(d["record"]) for d in disp)):
-        p.append("dispositions: a list of {plan_id, record}: the lead's disposal of a bad-terminal span")
+    if not (isinstance(disp, list) and all(isinstance(d, dict) and set(d) == {"plan_id", "resolution", "record"}
+                                           and _text(d["plan_id"]) and d["resolution"] in RESOLUTIONS
+                                           and _text(d["record"]) for d in disp)):
+        p.append(f"dispositions: a list of {{plan_id, resolution in {RESOLUTIONS}, record}}")
     sessions = doc.get("sessions")
     if not isinstance(sessions, list):
         p.append("sessions: a list")
@@ -306,12 +368,13 @@ def validate_standing(doc):
     if not isinstance(fb, list):
         p.append("fallback: a list")
         fb = []
+    f2 = []
     for i, f in enumerate(fb):
         kind = f.get("kind") if isinstance(f, dict) else None
-        if kind == "F2":
-            ok = (set(f) == {"kind", "queues"} and isinstance(f["queues"], list) and f["queues"]
-                  and all(isinstance(x, dict) and set(x) == {"path", "role"} and _text(x["path"])
-                          and x["role"] in QUEUE_ROLES for x in f["queues"]))
+        if kind == "F2" and set(f) == {"kind", "queues"}:
+            got = queue_entries(f["queues"], f"fallback[{i}].queues")
+            ok = bool(got) and len(got) == len(f["queues"])
+            f2 += got
         elif kind == "F0":
             ok = (set(f) == {"kind", "standing_item", "worst_case_s"} and _text(f["standing_item"])
                   and type(f["worst_case_s"]) is int and f["worst_case_s"] > 0)
@@ -320,9 +383,7 @@ def validate_standing(doc):
         if not ok:
             p.append(f"FALLBACK_INVALID: fallback[{i}] is {{kind: F2, queues}} or {{kind: F0, standing_item, "
                      "worst_case_s}} and nothing else (RL-172 (g) 9)")
-    f2 = [x.get("path") for f in fb if isinstance(f, dict) and f.get("kind") == "F2"
-          for x in f.get("queues") or [] if isinstance(x, dict)]
-    if set(f2) & paths:
+    if set(f2) & set(paths):
         p.append("fallback: an F2 queue is also a counted queue")
     if doc.get("freeze2") is not None and not _text(doc.get("freeze2")):
         p.append("freeze2: null or the commit record of freeze 2")
@@ -332,12 +393,13 @@ def validate_standing(doc):
 
 
 # --------------------------------------------------------------------------
-# Queues: expiry from the authenticated commit, append-only history
+# Queues: expiry from the first authenticated commit, append-only history, cross-queue identity
 # --------------------------------------------------------------------------
-def queue_expiry(doc, commit_epoch):
-    """RL-172 (g) 3: seven days from the authenticated commit time of the queue file (the latest commit
-    on the audit branch that touched it), or the file's own ``expires_at`` if that is sooner."""
-    return min(commit_epoch + QUEUE_TTL_S, parse_time(doc["expires_at"]))
+def queue_expiry(doc, first_commit_epoch):
+    """RL-172 (g) 3 and RL-149 section 2.8 line 3, read strictly (Mythos F13): seven days from the FIRST
+    authenticated commit of the queue file on the audit branch, or the file's ``expires_at`` if sooner. An
+    append never renews the authority."""
+    return min(first_commit_epoch + QUEUE_TTL_S, parse_time(doc["expires_at"]))
 
 
 def append_only_problems(versions):
@@ -356,8 +418,48 @@ def append_only_problems(versions):
     return problems
 
 
+def cross_queue_reasons(views):
+    """Mythos F12: a plan id in two queues, or one kit leg queued twice without ``rerun_of``, is a
+    contradiction, whatever the queues' order."""
+    out, plans, legs = [], {}, {}
+    for v in views:
+        for s in (v.get("doc") or {}).get("spans", []):
+            pid = q.plan_id(s)
+            if pid in plans and plans[pid] != v["path"]:
+                out.append(reason("QUEUE_DUPLICATE", f"{pid} in {plans[pid]} and {v['path']}"))
+            plans.setdefault(pid, v["path"])
+            for leg in s.get("legs", []):
+                key = (s["kit"]["sha256"], leg)
+                if key in legs and legs[key][0] != v["path"] and s.get("rerun_of") is None:
+                    out.append(reason("QUEUE_DUPLICATE", f"{leg} of kit {key[0][:12]} in {legs[key][0]} "
+                                                         f"({legs[key][1]}) and {v['path']} ({s['span_id']})"))
+                legs.setdefault(key, (v["path"], s["span_id"]))
+    return out
+
+
+def queue_reasons(view, now, has_pending):
+    """Every listed queue's own integrity, read before any candidate is chosen (Sol 5): a missing, invalid,
+    rewritten or halted queue halts the controller whatever its priority."""
+    out = list(view["reasons"])
+    doc = view["doc"]
+    if doc is None:
+        return out
+    if doc.get("halt"):
+        out.append(reason("QUEUE_HALT", f"{doc['queue_id']}: {doc['halt'].get('reason')}"))
+    if view["commit_epoch"] is not None and view["commit_epoch"] > now + CLOCK_SKEW_S:
+        out.append(reason("QUEUE_COMMIT_IN_FUTURE", doc["queue_id"]))
+    if has_pending:
+        if view["first_commit_epoch"] is None or now > queue_expiry(doc, view["first_commit_epoch"]):
+            when = (datetime.fromtimestamp(queue_expiry(doc, view["first_commit_epoch"]), ZONE).isoformat()
+                    if view["first_commit_epoch"] is not None else "unknown")
+            out.append(reason("QUEUE_EXPIRED", f"{doc['queue_id']} expired at {when}"))
+        if not (isinstance(doc.get("standing_notice"), dict) and type(doc["standing_notice"].get("issue")) is int):
+            out.append(reason("QUEUE_NO_NOTICE", doc["queue_id"]))
+    return out
+
+
 # --------------------------------------------------------------------------
-# Evidence: vetoes, the watcher stamp, desk-final records, sessions
+# Evidence: vetoes, the watcher stamp, desk verdicts, sessions
 # --------------------------------------------------------------------------
 def veto_reasons(issues, owner):
     """RL-149 section 2.8 line 6, read strictly: any open issue by the owner labelled ``cadence-stop``, or
@@ -382,15 +484,18 @@ def veto_reasons(issues, owner):
     return out
 
 
-def watcher_reasons(stamp, commit_epoch, now):
+def watcher_reasons(stamp, commit_epoch, now, watcher_name):
     """RL-149 section 2.8 line 7: the results-ref watcher was live within 24 h, by the lead's stamp. The
-    stamp is a committed file on the audit branch; its time may not be after its own commit."""
+    stamp is a committed file on the audit branch; it must name the configured watcher, and its time may not
+    be after its own commit. It is re-read at every arm (never cached) and its commit is bound into the arm
+    record; whether one sub-24 h observation may serve several arms is the reading RL-149 line 7 gives
+    ("live within the last 24 h"), and is put to the research lead (Sol 12)."""
     if stamp is None or commit_epoch is None:
         return [reason("WATCHER_STAMP_MISSING")]
     if not (isinstance(stamp, dict) and stamp.get("schema") == WATCHER_STAMP_SCHEMA
-            and _text(stamp.get("watcher")) and parse_time(stamp.get("observed_live_at")) is not None
+            and stamp.get("watcher") == watcher_name and parse_time(stamp.get("observed_live_at")) is not None
             and _text(stamp.get("by"))):
-        return [reason("WATCHER_STAMP_INVALID", "schema, watcher, observed_live_at, by")]
+        return [reason("WATCHER_STAMP_INVALID", f"schema, watcher {watcher_name!r}, observed_live_at, by")]
     seen = parse_time(stamp["observed_live_at"])
     if seen > commit_epoch + CLOCK_SKEW_S or commit_epoch > now + CLOCK_SKEW_S:
         return [reason("WATCHER_STAMP_INVALID", "observed after its commit, or committed in the future")]
@@ -399,34 +504,48 @@ def watcher_reasons(stamp, commit_epoch, now):
     return []
 
 
-DESK_FINAL_KEYS = {"schema", "plan_id", "bundle_sha256", "verdict", "hand_table", "reference_print", "by", "at"}
+def watcher_lease(stamp):
+    """The last instant the stamp still serves an arm."""
+    return parse_time(stamp["observed_live_at"]) + WATCHER_TTL_S
 
 
-def desk_final_state(record, expected_bundle_sha, needs_print):
-    """One controller span's desk finality (RL-172 (c)). Returns ``("final"|"pending", None)`` or
-    ``("halt", reason)``. The Air desk writes ``verdict`` FINAL only when its automatic table built on
-    exactly this bundle; ``hand_table`` is ``agree``, ``not-sampled`` or ``disagree``; a v1.1 span also
-    needs RL-158 Q1's ``reference_print`` (a hand gate kept by RL-172 (c))."""
-    if record is None:
-        return "pending", None
-    if not (isinstance(record, dict) and set(record) == DESK_FINAL_KEYS and record["schema"] == DESK_FINAL_SCHEMA
-            and record["verdict"] in ("FINAL", "HOLD") and record["hand_table"] in ("agree", "not-sampled", "disagree")
-            and type(record["reference_print"]) is bool and isinstance(record["bundle_sha256"], str)):
-        return "halt", reason("DESK_FINAL_INVALID", f"{record.get('plan_id') if isinstance(record, dict) else '?'}")
-    if record["hand_table"] == "disagree":
-        return "halt", reason("DESK_DISAGREEMENT", record["plan_id"], span=record["plan_id"])
-    if record["bundle_sha256"] != expected_bundle_sha:
-        return "halt", reason("DESK_FINAL_CONTRADICTS", f"{record['plan_id']}: {record['bundle_sha256'][:12]} "
-                                                      f"!= pushed {str(expected_bundle_sha)[:12]}")
-    if record["verdict"] != "FINAL" or (needs_print and not record["reference_print"]):
-        return "pending", None
-    return "final", None
+def verdict_state(entry, *, run, accept_mock):
+    """One controller span's desk verdict by FORMAT.md section 4. ``entry`` is what the controller read from the
+    span's signed verdict ref: ``{"doc": verdict}`` (``desk_transport.read_verdict`` verified the signature by
+    ``cadence-desk``, the subject, the trailers, ``verify_verdict`` and the plan id), ``{"error": text}`` when that
+    reader refused, or None when there is no ref yet. ``run`` is the controller's own record of the span (its
+    armed identities and the anchor it published). Returns ``(state, halts, kit_holds)``."""
+    if entry is None:
+        return "pending", [], []
+    pid = run.plan_id
+    if entry.get("error"):
+        return "pending", [reason("DESK_VERDICT_INVALID", f"{pid}: {entry['error']}"[:300])], []
+    doc = entry["doc"]
+    armed = run.extra.get("armed") or {}
+    ident = {k: armed.get(k) for k in ("plan_id", "queue_id", "span_id", "attempt")}
+    if ident["plan_id"] != pid or any(doc.get(k) != v for k, v in ident.items()):
+        return "pending", [reason("DESK_VERDICT_INVALID", f"{pid}: the verdict names another span")], []
+    if (doc.get("identities") or {}).get("manifest_sha256") != run.bundle_sha256:
+        # A verdict on another bundle is not this span's: never final, and a contradiction worth a page.
+        return "pending", [reason("DESK_VERDICT_INVALID", f"{pid}: anchor {str((doc.get('identities') or {}).get('manifest_sha256'))[:12]} "
+                                                          f"is not the published {str(run.bundle_sha256)[:12]}")], []
+    final = desk_final.counts_as_final(doc, manifest_sha256=run.bundle_sha256, **{k: v for k, v in ident.items()})
+    if not final and accept_mock and doc.get("mock") is True:
+        # Synthetic runs only (the production config refuses accept_mock_verdicts): the same clauses with mock true.
+        final = (desk_final.verify_verdict(doc) and doc.get("desk_final") is True
+                 and (doc.get("transport") or {}).get("signed") is True)
+    halts = []
+    if doc.get("next_arm_hold") is True:
+        codes = sorted({str(h.get("code")) for h in doc.get("holds") or [] if h.get("scope") == "queue"})
+        halts.append(reason("DESK_HOLD", f"{pid}: {', '.join(codes)}", span=pid))
+    kit_holds = sorted({h.get("gate") for h in doc.get("holds") or []
+                        if str(h.get("scope", "")).startswith("kit:") and h.get("gate")})
+    return ("final" if final else "pending"), halts, kit_holds
 
 
 def session_reasons(standing, ready_records, done_ids):
     """RL-172 (f): a READY record from the lead holds everything of lower priority. It names a session of
-    the standing index, whose own route (authorization, notice and veto interval, seal, receipt, restore)
-    the magistrate runs. The controller never launches it."""
+    the standing index, whose own route the magistrate runs. The controller never launches it."""
     known = {s["session_id"]: s for s in standing["sessions"]}
     out = []
     for rec in ready_records:
@@ -451,15 +570,17 @@ class Run:
     kind: str              # campaign | f2 | F0 | v4 | other
     phase: str | None
     block_id: str | None
-    legs: int
+    legs: int              # legs run (finished) for a closed controller span; planned while live
     mixed: bool
-    t0: float
+    t0: float              # the runner's own start for a closed controller span
     closed: float | None
     status: str            # LIVE | CLOSED_OK | STOPPED | REFUSED | ...
     source: str            # prior | controller | external
+    campaign: str | None = None
     desk: str = "pending"  # final | pending
     bundle_sha256: str | None = None
-    needs_print: bool = False
+    gates: list = field(default_factory=list)
+    resolution: str | None = None
     extra: dict = field(default_factory=dict)
 
 
@@ -468,47 +589,58 @@ BAD = ("STOPPED", "REFUSED", "FAULT", "STRANDED", "CLOSE_UNPROVEN", "LAUNCH_REFU
 
 
 def build_runs(standing, controller_records, external_runs):
+    disp = {d["plan_id"]: d["resolution"] for d in standing["dispositions"]}
     runs = []
     for s in standing["prior_spans"]:
         cls = kit_class({"campaign_id": s["campaign_id"]})
         runs.append(Run(s["plan_id"], "campaign" if cls["k2"] else "f2", cls["phase"], s["block_id"], s["legs"],
                         s["mixed"], parse_time(s["t0"]), parse_time(s["closed"]), "CLOSED_OK", "prior",
-                        "final" if s["desk_final"] else "pending"))
+                        campaign=s["campaign_id"], desk="final" if s["desk_final"] else "pending",
+                        resolution=disp.get(s["plan_id"])))
     for r in controller_records:
-        runs.append(Run(r["plan_id"], r["kind"], r["phase"], r["block_id"], len(r["legs"]), r["mixed"],
-                        r["t0_epoch"], r.get("closed_epoch"), r["status"], "controller",
-                        bundle_sha256=r.get("bundle_sha256"), needs_print=r.get("needs_print", False),
-                        extra={"kit_sha256": r.get("kit_sha256")}))
+        closed = r.get("closed_epoch")
+        runs.append(Run(r["plan_id"], r["kind"], r["phase"], r["block_id"],
+                        r["legs_finished"] if closed is not None and r.get("legs_finished") is not None
+                        else len(r["legs"]),
+                        r["mixed"], r.get("runner_t0") or r["t0_epoch"], closed, r["status"], "controller",
+                        campaign=r.get("campaign_id"), bundle_sha256=r.get("bundle_sha256"),
+                        gates=list(r.get("gates") or []), resolution=disp.get(r["plan_id"]),
+                        extra={"kit_sha256": r.get("kit_sha256"), "armed": r.get("armed") or {},
+                               "roster": r["legs"]}))
     for e in external_runs:
         runs.append(Run(e["run_id"], e["kind"], None, None, 0, False, e["t0_epoch"], e.get("closed_epoch"),
-                        "CLOSED_OK" if e.get("restore_ok") else "CLOSE_UNPROVEN", "external"))
+                        "CLOSED_OK" if e.get("restore") == "proven" else "CLOSE_UNPROVEN", "external",
+                        resolution=disp.get(e["run_id"])))
     runs.sort(key=lambda r: (r.t0, r.plan_id))
     return runs
 
 
-def apply_desk_finals(runs, records):
-    """Mark controller spans final from the Air desk's records; return halts (disagreement, contradiction)."""
+def apply_verdicts(runs, verdicts, *, accept_mock):
+    """Mark controller spans desk-final from the Air's verdicts (FORMAT.md section 4). Returns halts: a named-stop
+    hold not cleared by the lead, an invalid verdict, and a verdict whose hand gates disagree with the gates the
+    controller derived."""
     halts = []
     for run in runs:
-        if run.source != "controller" or run.kind != "campaign":
+        if run.source != "controller" or run.kind not in ("campaign", "f2"):
             continue
-        state, why = desk_final_state(records.get(run.plan_id), run.bundle_sha256, run.needs_print)
-        if state == "halt":
-            halts.append(why)
-        else:
-            run.desk = state
-    # A disagreement on any record holds the next arm, whatever span it is on (RL-172 (c)).
-    for plan_id, rec in records.items():
-        if isinstance(rec, dict) and rec.get("hand_table") == "disagree" and not any(
-                h["code"] == "DESK_DISAGREEMENT" and h["span"] == plan_id for h in halts):
-            halts.append(reason("DESK_DISAGREEMENT", plan_id, span=plan_id))
+        state, hs, kit_holds = verdict_state(verdicts.get(run.plan_id), run=run, accept_mock=accept_mock)
+        run.desk = state
+        if run.resolution == "cleared":
+            hs = [h for h in hs if h["code"] != "DESK_HOLD"]
+        halts += hs
+        if verdicts.get(run.plan_id) is not None and not hs:
+            mine = sorted(DESK_GATE_NAMES[g] for g in run.gates)
+            if sorted(kit_holds) != mine:
+                halts.append(reason("GATE_DISAGREEMENT", f"{run.plan_id}: desk {kit_holds}, controller {mine}",
+                                    span=run.plan_id))
     return halts
 
 
 def k2_reasons(runs, span_id=None):
     """Line 9 in machine order across every queue (RL-165 section 6; RL-172 (g) 2): the new span is campaign
-    span n; every campaign span up to n-2 must be desk-final. Stricter than "span n-2 only"."""
-    campaign = [r for r in runs if r.kind == "campaign"]
+    span n; every campaign span up to n-2 must be desk-final. Stricter than "span n-2 only". A span the lead
+    resolved as ``rerun`` or ``withdrawn`` (FORMAT.md section 4 item 4) leaves the count."""
+    campaign = [r for r in runs if r.kind == "campaign" and r.resolution not in ("rerun", "withdrawn")]
     n = len(campaign) + 1
     owed = [r.plan_id for r in campaign[:max(0, n - 2)] if r.desk != "final"]
     if owed:
@@ -523,8 +655,8 @@ def last_close(runs):
 
 def gap_reasons(runs, now, census_epoch=None, span_id=None):
     """The floor after the latest close of anything on the host: 300 s after a campaign span, 1,200 s after
-    F0, F2 or any other close. ``census_epoch``: the newest receipt the host census found (rounded up); a
-    close the ledger does not know is treated as non-campaign."""
+    F0, F2 or any other close. A controller span's close is the end of its own close work (Mythos F25), so the
+    floor counts after the bundle push, not after the receipt."""
     last = last_close(runs)
     ends = []
     if last is not None:
@@ -539,7 +671,7 @@ def gap_reasons(runs, now, census_epoch=None, span_id=None):
 
 def date_reasons(span, cls, t0, runs, queued, standing):
     """RL-172 (a), enforced at the arm. ``queued``: (span, cls) of every unrun counted span in every queue,
-    for the qualification/development date separation."""
+    for the qualification/development date separation. A closed span counts the legs it ran (Mythos F8)."""
     sid = span["span_id"]
     day = local_date(t0)
     out = []
@@ -550,7 +682,11 @@ def date_reasons(span, cls, t0, runs, queued, standing):
         return []
     if day > span["not_before"]:
         out.append(reason("DATE_MISSED", f"{sid}: t0-date {day} is after its date {span['not_before']}", span=sid))
-    same = [r for r in runs if r.kind == "campaign" and local_date(r.t0) == day]
+    if t0 > date_end(day) - MIDNIGHT_MARGIN_S:
+        out.append(reason("MIDNIGHT", f"{sid}: within {MIDNIGHT_MARGIN_S} s of the end of {day}",
+                          eta=date_end(day), span=sid))
+    same = [r for r in runs if r.kind == "campaign" and local_date(r.t0) == day
+            and r.resolution != "withdrawn"]
     if cls["phase"] == "development":
         dev = sum(r.legs for r in same if r.phase == "development") + len(span["legs"])
         mixed = sum(r.legs for r in same if r.phase == "development" and r.mixed) + (
@@ -575,20 +711,45 @@ def date_reasons(span, cls, t0, runs, queued, standing):
     return out
 
 
-def hand_gate_reasons(span, kit_sha, kit_entry, standing, kit_runs_closed, queue_role, queue_len):
-    """RL-172 (g) 4 and (c)'s kept hand gates. A kit whose hand gate has not passed runs its first span
-    only, alone in a smoke queue; its remainder is appended after the gate. A named hand gate (L002, L005,
-    or any the lead lists) holds the spans it names until it passes."""
-    sid = span["span_id"]
+def pilot_reasons(span, kit, queue_role, queue_len, runs, all_views, standing):
+    """RL-172 (g) 4 with the gates derived. A span holding the kit's first leg is that kit's pilot: it must be
+    alone in a smoke queue, and no other span of the campaign may be queued anywhere until the pilot closed
+    clean and its class A gate was released (or the lead disposed of it). Any other span needs a pilot that
+    closed clean (a prior span of the campaign counts: the lead attested it)."""
+    sid, campaign = span["span_id"], kit["campaign_id"]
     out = []
-    if queue_role == "smoke" and queue_len != 1:
-        out.append(reason("SMOKE_QUEUE_NOT_PILOT_ONLY", f"{queue_len} spans", span=sid))
-    if not kit_entry["hand_gate"]["passed"]:
-        if queue_role != "smoke":
-            out.append(reason("SMOKE_REMAINDER_STAGED", f"kit {kit_sha[:12]}'s hand gate has not passed and "
-                                                        f"{sid} is in a standing queue", span=sid))
-        elif kit_runs_closed:
-            out.append(reason("HAND_GATE", f"kit {kit_sha[:12]}: the pilot ran; its hand gate is open", span=sid))
+    first = (kit.get("legs") or [{}])[0].get("leg_id")
+    released = {(r["plan_id"], r["gate"]) for r in standing["gate_records"] if r["decision"] == "release"}
+    pilots = [r for r in runs if r.campaign == campaign and (r.source == "prior" or CLASS_A in r.gates)]
+    released_pilot = any(r.source == "prior" or (r.status == "CLOSED_OK" and (r.plan_id, CLASS_A) in released)
+                         for r in pilots)
+    if first in span["legs"]:
+        if queue_role != "smoke" or queue_len != 1:
+            out.append(reason("SMOKE_QUEUE_NOT_PILOT_ONLY", f"{sid} holds {first}: a {queue_role} queue of "
+                                                            f"{queue_len} span(s)", span=sid))
+        others = [s["span_id"] for v in all_views for s in (v.get("doc") or {}).get("spans", [])
+                  if s is not span and s["kit"]["sha256"] == span["kit"]["sha256"]
+                  and q.plan_id(s) not in v["closed_ids"] and q.plan_id(s) not in v["withdrawn_ids"]]
+        if others and not released_pilot:
+            out.append(reason("SMOKE_REMAINDER_STAGED", f"{others[:4]} queued with pilot {sid}", span=sid))
+    elif not any(r.status == "CLOSED_OK" or r.source == "prior" for r in pilots):
+        out.append(reason("PILOT_MISSING", f"{sid}: no pilot of {campaign} closed clean", span=sid))
+    return out
+
+
+def gate_reasons(span, campaign, runs, standing):
+    """Every derived gate raised by an earlier span of this campaign holds this span until the lead's release
+    record for that span and gate (FORMAT.md section 4 item 2; Sol 6). A ``hold`` record keeps it held. The
+    lead's extra named gates (``hand_gates``) hold the spans they name."""
+    sid = span["span_id"]
+    decisions = {(r["plan_id"], r["gate"]): r["decision"] for r in standing["gate_records"]}
+    out = []
+    for run in runs:
+        if run.source != "controller" or run.campaign != campaign or run.resolution in ("rerun", "withdrawn"):
+            continue
+        for gate in run.gates:
+            if decisions.get((run.plan_id, gate)) != "release":
+                out.append(reason("HAND_GATE", f"{gate} of {run.plan_id} holds {campaign}", span=sid))
     for gate in standing["hand_gates"]:
         if sid in gate["holds"] and not gate["passed"]:
             out.append(reason("HAND_GATE", f"{gate['id']} holds {sid}", span=sid))
@@ -596,16 +757,12 @@ def hand_gate_reasons(span, kit_sha, kit_entry, standing, kit_runs_closed, queue
 
 
 # --------------------------------------------------------------------------
-# The desk-final inputs on the MBP side (RL-172 (c) 1 to 4)
+# The desk-final inputs on the MBP side (RL-172 (c) 1 to 4), on the packed bundle's bytes
 # --------------------------------------------------------------------------
-def bundle_file_list(roster):
-    return sorted([f"legs/{leg}/leg_summary.json" for leg in roster] + ["span/meter.json", "span/result.json"])
-
-
-def desk_input_reasons(*, span, kit_sha, kit, receipt, bundle_files, summaries, plan):
-    """The roster, identity and completeness checks a desk-final needs, done at the close on the MBP.
-    ``bundle_files``: the desk bundle's relative paths; ``summaries``: leg_id -> leg_summary dict (in
-    bundle order); ``plan``: the runner's span_plan.json (or None). Zero leg rows is a stop."""
+def desk_input_reasons(*, span, kit_sha, kit, receipt, summaries, plan):
+    """The roster, identity and completeness checks a desk-final needs, done at the close on the MBP from the
+    packed bundle (the same bytes that are pushed). ``summaries``: leg_id -> leg_summary dict (bundle order);
+    ``plan``: the runner's span_plan.json (or None). Zero leg rows is a stop."""
     sid, roster = span["span_id"], list(span["legs"])
     out = []
 
@@ -631,9 +788,6 @@ def desk_input_reasons(*, span, kit_sha, kit, receipt, bundle_files, summaries, 
         bad("span_plan legs are not the roster")
     if plan is None and summaries:
         bad("span_plan.json missing")
-    expected = bundle_file_list(list(summaries))
-    if sorted(bundle_files) != expected:
-        bad(f"bundle files {sorted(bundle_files)} != expected {expected}")
     if list(summaries) != rows[:len(summaries)]:
         bad(f"bundle legs {list(summaries)} are not the receipt's {rows}")
     for leg_row in receipt.get("legs") or []:
@@ -662,7 +816,7 @@ def receipt_command_reasons(receipt, expected_windows):
     result = receipt.get("span_result") or {}
     clean = (receipt.get("rc") == 0 and result.get("chain_exit_code") == 0 and result.get("chain_outcome") == "COMPLETE"
              and result.get("fault") is False and result.get("outcome") == "MEASURED_OK"
-             and receipt.get("legs_finished") == receipt.get("legs_planned"))
+             and receipt.get("legs_finished") == receipt.get("legs_planned") and not receipt.get("error"))
     if not clean:
         out.append(reason("RECEIPT_NOT_CLEAN", f"rc {receipt.get('rc')}, {result.get('verdict')}, "
                                                f"{receipt.get('error', '')}"[:200]))
@@ -671,7 +825,10 @@ def receipt_command_reasons(receipt, expected_windows):
     if "restore" not in steps or any(steps[n].get("rc") != 0 for n in close):
         out.append(reason("CLOSE_UNPROVEN", "the receipt's restore or a feed stop is missing or failed: "
                                             + ", ".join(f"{n}={steps[n].get('rc')}" for n in close)))
-    for name, feed in (receipt.get("feeds") or {}).items():
+    feeds = receipt.get("feeds") or {}
+    if not feeds:
+        out.append(reason("CLOSE_UNPROVEN", "the receipt names no feed"))
+    for name, feed in feeds.items():
         if not (feed.get("stop") or {}).get("proven_stopped"):
             out.append(reason("CLOSE_UNPROVEN", f"feed {name} not proven stopped"))
     out += soak_attempt_reasons(receipt, clean)
@@ -687,13 +844,16 @@ def soak_attempt_reasons(receipt, clean):
     """The receipt's ``soak_attempts`` (RL-171, pin e1b85a59c on). A retried soak is normal, not a stop:
     every attempt but the last was refused (exit 5, renamed ``soak.rejected<N>``), there are at most
     ``SOAK_RETRIES`` + 1, and a clean span's last soak was accepted. A receipt from a pin before RL-171
-    has no such field; it is accepted only with exactly one ``soak`` step and no ``soak.a<N>`` step."""
-    steps = [s.get("name") for s in receipt.get("steps") or []]
-    retries = [n for n in steps if isinstance(n, str) and re.fullmatch(r"soak\.a\d+", n)]
+    has no such field; it is accepted only with exactly one ``soak`` step (rc 0 when clean) and no
+    ``soak.a<N>`` step."""
+    steps = receipt.get("steps") or []
+    names = [s.get("name") for s in steps]
+    retries = [n for n in names if isinstance(n, str) and re.fullmatch(r"soak\.a\d+", n)]
     attempts = receipt.get("soak_attempts")
     if attempts is None:
-        if retries or (clean and steps.count("soak") != 1):
-            return [reason("ROSTER_MISMATCH", f"no soak_attempts but soak steps {steps.count('soak')} + {retries}")]
+        soak = [s for s in steps if s.get("name") == "soak"]
+        if retries or len(soak) > 1 or (clean and (len(soak) != 1 or soak[0].get("rc") != 0)):
+            return [reason("ROSTER_MISMATCH", f"no soak_attempts but soak steps {len(soak)} + {retries}")]
         return []
     if not isinstance(attempts, list) or (clean and not attempts) or len(attempts) > SOAK_RETRIES + 1:
         return [reason("ROSTER_MISMATCH", f"soak_attempts {attempts!r:.120}: 1 to {SOAK_RETRIES + 1} expected")]
@@ -718,14 +878,15 @@ PROOF_LINES = {
     "kernel_frequency": ("arm", "close"), "high_power_marker": ("arm", "close"), "launchd_labels": ("arm", "close"),
     "sudo_kill": ("arm",), "measurement_mode": ("arm", "close"),
     "monitors": ("arm", "close"), "root_powermetrics": ("arm", "close"), "span_processes": ("arm", "close"),
-    "launch_fence": ("arm", "close"), "agents": ("arm",),
+    "launch_fence": ("arm", "close"), "agents": ("arm",), "signing": ("arm",),
 }
 
 
 def proof_reasons(proof, kind):
     """``proof``: {line: {ok: bool|None, detail, agent_only?: bool}}. A missing line or ``ok`` None (not
     observed) fails: missing evidence never passes. Agents present at the arm is a wait, not a halt;
-    a measurement_mode verify whose only failures are the agent line is the same wait."""
+    a measurement_mode verify whose only failures are the agent line is the same wait. The signing line
+    is its own halt (Mythos F11)."""
     code = "HOST_PROOF_FAILED" if kind == "arm" else "CLOSE_UNPROVEN"
     out, waits = [], []
     for line, kinds in PROOF_LINES.items():
@@ -733,13 +894,47 @@ def proof_reasons(proof, kind):
             continue
         row = proof.get(line)
         if row is None or row.get("ok") is None:
-            out.append(reason(code, f"{line}: not observed"))
+            out.append(reason("SIGNING_UNAVAILABLE" if line == "signing" else code, f"{line}: not observed"))
         elif row["ok"] is False:
             if kind == "arm" and (line == "agents" or (line == "measurement_mode" and row.get("agent_only"))):
                 waits.append(reason("AGENT_PRESENT", f"{line}: {row.get('detail', '')}"[:200]))
+            elif line == "signing":
+                out.append(reason("SIGNING_UNAVAILABLE", str(row.get("detail", ""))[:200]))
             else:
                 out.append(reason(code, f"{line}: {row.get('detail', '')}"[:200]))
     return out + waits
+
+
+# --------------------------------------------------------------------------
+# The host's newest close and the journal-copy gate (item 331's copy_gate; Sol 11, Mythos F18)
+# --------------------------------------------------------------------------
+CAMPAIGN_RECEIPT = re.compile(r"/(?P<campaign>cl-[a-z0-9-]+)/(?P<plan>cq-[a-z0-9-]+-a[0-9]+)-[0-9]{8}T[0-9]{6}Z/"
+                              r"runner_receipt\.json$")
+
+
+def census_reasons(census, runs, output_root, copy_markers):
+    """``census``: {"newest": (epoch, path), "campaign": [paths under the output root]} or an error string.
+
+    * Every campaign receipt under the output root belongs to a span the ledger knows (prior or controller);
+      an unknown one is a halt (Mythos F18: a hand-armed span missing from ``prior_spans``).
+    * The copy gate, bound to the ONE newest close: if the newest receipt is a campaign span's, its journal
+      copy marker (``<plan_id>.ok``, written by the lead after a hash-verified copy) must exist and be
+      non-empty before another arm. After a non-campaign close the Check covers the copy."""
+    if isinstance(census, str) or census is None:
+        return [reason("CENSUS_FAILED", str(census))]
+    out = []
+    known = {r.plan_id for r in runs if r.source in ("prior", "controller")}
+    for path in census["campaign"]:
+        m = CAMPAIGN_RECEIPT.search(path)
+        if m is None or m.group("plan") not in known:
+            out.append(reason("UNKNOWN_CAMPAIGN_RECEIPT", path))
+    _epoch, newest = census["newest"]
+    m = CAMPAIGN_RECEIPT.search(newest) if newest.startswith(output_root.rstrip("/") + "/") else None
+    if m is not None:
+        plan_id = m.group("plan")
+        if not copy_markers.get(plan_id):
+            out.append(reason("JOURNAL_COPY", f"no journal-copy marker for {plan_id}, the newest close ({newest})"))
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -760,38 +955,50 @@ class Decision:
                                                     "class": c["cls"], "role": c["role"]}}
 
 
+def _pending(view):
+    doc = view.get("doc") or {"spans": []}
+    return [s for s in doc["spans"] if q.plan_id(s) not in view["closed_ids"]
+            and q.plan_id(s) not in view["withdrawn_ids"]]
+
+
 def select(snap):
     """``snap`` keys:
 
-    now, standing, input_reasons (list, from reading), queues: [{path, role, doc, commit_epoch, kits:
-    {sha: kit}, closed_ids, withdrawn_ids}], runs (``build_runs`` with desk finals applied), desk_halts,
-    vetoes, watcher, sessions, census_epoch, fallback: [{kind, queues | standing_item, worst_case_s}],
-    fallback_queues: like ``queues``, plan_worst: callable(candidate) -> seconds or None.
+    now, standing, input_reasons (list, from reading), queues and fallback_queues: [{path, role, fallback, doc,
+    commit_epoch, first_commit_epoch, kits: {sha: kit}, reasons, closed_ids, withdrawn_ids}], runs
+    (``build_runs`` with verdicts applied), desk_halts, vetoes, watcher, sessions, census_reasons, census_epoch,
+    fallback, plan_worst: callable(candidate) -> seconds or None.
     """
     now, standing = snap["now"], snap["standing"]
     gates = {}
-    globals_ = list(snap["input_reasons"]) + list(snap["desk_halts"]) + list(snap["vetoes"]) + list(snap["watcher"])
+    globals_ = (list(snap["input_reasons"]) + list(snap["desk_halts"]) + list(snap["vetoes"]) + list(snap["watcher"])
+                + list(snap.get("census_reasons", [])))
     if standing is None:      # the index could not be read: never a pass
         rs = globals_ or [reason("STANDING_MISSING")]
         return Decision("halt" if category(rs) == "halt" else "wait", rs, gates=gates)
     disposed = {d["plan_id"] for d in standing["dispositions"]}
     bad = [r for r in snap["runs"] if r.status in BAD and r.plan_id not in disposed]
-    globals_ += [reason("SPAN_BAD_TERMINAL", f"{r.plan_id} is {r.status}", span=r.plan_id) for r in bad]
+    globals_ += [reason("FOREIGN_CLOSE_UNPROVEN" if r.source == "external" else "SPAN_BAD_TERMINAL",
+                        f"{r.plan_id} is {r.status}", span=r.plan_id) for r in bad]
     live = [r for r in snap["runs"] if r.status == "LIVE"]
     if live:
         globals_.append(reason("SPAN_LIVE", ", ".join(r.plan_id for r in live)))
+    views = list(snap["queues"]) + list(snap["fallback_queues"])
+    for view in views:   # Sol 5: every listed queue's integrity first, whatever its priority
+        globals_ += queue_reasons(view, now, bool(_pending(view)))
+    globals_ += cross_queue_reasons(views)
     if category(globals_) == "halt":
-        return Decision("halt", globals_, gates=gates)
-    if category(globals_) in ("retry", "wait"):
-        return Decision("wait", globals_, gates=gates)
+        return Decision("halt", [r for r in globals_ if r["category"] == "halt"], gates=gates)
     if snap["sessions"]:
         cat = category(snap["sessions"])
         return Decision("halt" if cat == "halt" else "cede", snap["sessions"], gates=gates)
+    if category(globals_) in ("retry", "wait"):
+        return Decision("wait", globals_, gates=gates)
 
-    counted = _heads(snap["queues"], snap)
-    queued = [(c["span"], c["cls"]) for c in counted] + [
+    counted = _heads(snap["queues"], snap, views)
+    queued = [(c["span"], c["cls"]) for c in counted if c["cls"]] + [
         (s, c) for c2 in counted for s, c in c2.get("later", [])]
-    found_halt, waits, empty = [], [], not counted
+    found_halt, waits = [], []
     for cand in counted:
         sid = cand["span"]["span_id"]
         rs = list(cand["static"])
@@ -802,45 +1009,36 @@ def select(snap):
         gates[sid] = [r["code"] for r in rs]
         cand["reasons"] = rs
         cat = category(rs)
-        if cat is None:
-            return Decision("arm", [], candidate=cand, gates=gates)
         if cat == "halt":
             found_halt += [r for r in rs if r["category"] == "halt"]
-        else:
+        elif cat is not None:
             waits += rs
-    if found_halt:
+    if found_halt:   # a halt anywhere outranks an armable candidate elsewhere
         return Decision("halt", found_halt, gates=gates)
+    armable = next((c for c in counted if category(c["reasons"]) is None), None)
+    if armable is not None:
+        return Decision("arm", [], candidate=armable, gates=gates)
 
-    fallback = fallback_select(snap, counted, gates)
+    fallback = fallback_select(snap, counted, gates, views)
     if fallback is not None:
         return fallback
-    if empty:
+    if not counted:
         return Decision("page", [reason("QUEUE_EMPTY")], gates=gates)
     return Decision("wait", waits, gates=gates)
 
 
-def _heads(queues, snap):
+def _heads(queues, snap, all_views):
     """Each queue's next span (seq order, skipping spans the ledger has or the lead withdrew), with the
-    static gates that need no clock: queue validity, expiry, kit evidence and class, hand gates."""
+    static gates that need no clock: kit evidence and class, pilot and hand gates."""
     out = []
     standing = snap["standing"]
     for view in queues:
-        doc = view["doc"]
-        pending = [s for s in doc["spans"] if q.plan_id(s) not in view["closed_ids"]
-                   and q.plan_id(s) not in view["withdrawn_ids"]]
+        pending = _pending(view)
         if not pending:
             continue
         span = pending[0]
         sha = span["kit"]["sha256"]
-        static = list(view["reasons"])
-        if doc.get("halt"):
-            static.append(reason("QUEUE_HALT", f"{doc['queue_id']}: {doc['halt'].get('reason')}"))
-        expiry = queue_expiry(doc, view["commit_epoch"])
-        if view["commit_epoch"] > snap["now"] + CLOCK_SKEW_S:
-            static.append(reason("QUEUE_COMMIT_IN_FUTURE", doc["queue_id"]))
-        if snap["now"] > expiry:
-            static.append(reason("QUEUE_EXPIRED", f"{doc['queue_id']} expired at "
-                                                  f"{datetime.fromtimestamp(expiry, ZONE).isoformat()}"))
+        static = []
         entry = standing["kits"].get(sha)
         kit = view["kits"].get(sha)
         cls = None
@@ -857,15 +1055,9 @@ def _heads(queues, snap):
             if (cls["phase"] == "filler") != view["fallback"]:
                 static.append(reason("KIT_ROLE_MISMATCH", f"{span['span_id']} ({cls['phase']}) in a "
                                                           f"{'fallback' if view['fallback'] else 'counted'} queue"))
-            ran = any(r.source == "controller" and r.extra.get("kit_sha256") == sha for r in snap["runs"])
-            static += hand_gate_reasons(span, sha, entry, standing, ran, view["role"], len(doc["spans"]))
-            # A kit without a passed hand gate must not have any other span queued anywhere.
-            if not entry["hand_gate"]["passed"]:
-                others = [s for v in queues for s in v["doc"]["spans"]
-                          if s["kit"]["sha256"] == sha and s is not span and q.plan_id(s) not in v["withdrawn_ids"]]
-                if others:
-                    static.append(reason("SMOKE_REMAINDER_STAGED", f"{len(others)} other span(s) of kit {sha[:12]} "
-                                                                   "queued before its hand gate"))
+            static += pilot_reasons(span, kit, view["role"], len(view["doc"]["spans"]), snap["runs"], all_views,
+                                    standing)
+            static += gate_reasons(span, kit["campaign_id"], snap["runs"], standing)
         later = []
         for s in pending[1:]:
             k = view["kits"].get(s["kit"]["sha256"])
@@ -877,27 +1069,20 @@ def _heads(queues, snap):
     return out
 
 
-def fallback_select(snap, counted, gates):
+def fallback_select(snap, counted, gates, all_views):
     """RL-172 (g) 9: F2 (a cadence-legs span the controller arms) or F0 (paged to the magistrate's standing
     item), and only when no counted span can arm within 2 h 30 min (RL-165 section 3 line 3) and the filler
     cannot cost a counted span due today its date (line 7)."""
     now = snap["now"]
     if not snap["fallback"]:
         return None
-    soon = []
     for cand in counted:
         rs = cand.get("reasons") or []
-        if category(rs) == "halt":
-            return None
         etas = [r["eta"] for r in rs if r["category"] in ("wait", "retry")]
         unknown = any(e is None for e in etas)
         eta = max((e for e in etas if e is not None), default=now)
-        if not unknown and eta <= now + FALLBACK_HORIZON_S:
-            soon.append(cand["span"]["span_id"])
-        if any(r["code"] == "AGENT_PRESENT" for r in rs):
-            soon.append(cand["span"]["span_id"])
-    if soon:
-        return None
+        if (not unknown and eta <= now + FALLBACK_HORIZON_S) or any(r["code"] == "AGENT_PRESENT" for r in rs):
+            return None
     today = local_date(now)
     due_today = [c for c in counted if c["cls"] and c["cls"]["dated"] and c["span"]["not_before"] == today]
 
@@ -907,7 +1092,7 @@ def fallback_select(snap, counted, gates):
     for entry in snap["fallback"]:
         if entry["kind"] == "F2":
             paths = [x["path"] for x in entry["queues"]]
-            for cand in _heads([v for v in snap["fallback_queues"] if v["path"] in paths], snap):
+            for cand in _heads([v for v in snap["fallback_queues"] if v["path"] in paths], snap, all_views):
                 sid = cand["span"]["span_id"]
                 rs = list(cand["static"])
                 if cand["cls"] is not None:

@@ -1,20 +1,41 @@
 #!/usr/bin/env python3
-"""A full synthetic launch-to-close run through the standing-queue controller (RL-172 (i) row 5).
+"""Real end-to-end synthetic runs of the standing queue (RL-172 (i) row 5): controller → bundle → Air → verdict.
 
     python3.13 -B scripts/cadence_controller.py synthetic --workdir DIR
 
-Everything is real except the host and the span itself: a local bare ``origin`` with an audit branch
-(the standing index, two queues, the kits by hash, the watcher stamp), the controller's own clone, the
-SSH-signed bundle push, the receipt census, the pages and acknowledgements. The span is the campaign
-runner's own ``run_mock`` (fake clock, feeds and leg runtime; no model, sensor or host command), so the
-receipt and the desk bundle the close judges are the runner's real formats. Host readbacks are faked
-all-clean; their parsing has its own tests. The fake clock starts Tue 17 Nov 08:00 PST.
+Nothing on the decision path is hand-written:
 
-The scenario: two dev-04 spans on one date (12 mixed-size legs, the second with five span-reference
-consumers), the 300 s floor between them, a dev-05 span dated the next day (NOT_BEFORE), the k+2 desk
-debt across the two queues until the Air desk's final record lands, a stalled-wait page and its
-acknowledgement, the arm, the close, a READY v4 session (the controller cedes and pages), and the
-drained queue. It prints one line per tick and exits 0 when every expectation held.
+- **Controller and runner.** The controller arms. The **pinned runner of each kit's own frozen commit** runs its
+  mock span, exported from git: dev-04 and dev-05 run the pre-RL-171 runner at ``2d347f721``, with no
+  ``soak_attempts``; the qualification kit runs ``e1b85a59c``, with the soak retry. The controller closes, packs
+  the bundle with ``desk_final.pack_bundle`` and pushes an SSH-signed ref.
+- **Air.** The Air verifies that signature and runs the real ``scripts/air/cadence_desk.py final`` on the verified
+  tree, with the anchor taken from the signed ``transition.json``. It commits the verdict it wrote to the audit
+  branch, signed by the desk key.
+- **Back to the controller.** The controller reads the verdict by FORMAT.md section 4 and arms the next span, or
+  holds.
+- **The lead.** The lead's acts are explicit and named (a journal-copy marker, a hand table, a gate release),
+  never a verdict.
+
+What is synthetic:
+
+- the clock (fake);
+- the host readbacks (all clean; their parsing has its own tests);
+- the issue tracker (a list);
+- the mock leg runtime inside the pinned runner;
+- the hand table, built from the bundle the lead would read. It stands in for the lead's journal read.
+
+A pin missing from this clone falls back to HEAD's runner, and the run says so.
+
+Scenarios:
+
+- ``clean``: a dev-05 pilot, its class A gate, then the next span.
+- ``soak_retry``: qual-01's pilot on the qualification pin, first soak refused.
+- ``l005_timeout``: dev-04's pilot with L005's G0 timing out. The remainder holds on the derived L005 gate until
+  the lead's record.
+- ``redo``: a dev-05 pilot with a load redo. Its verdict waits for the hand table, and the k+2 rule holds span 3
+  until it is final.
+- ``tampered``: an unsigned bundle the Air refuses, and an unsigned verdict the controller refuses.
 """
 from __future__ import annotations
 
@@ -33,14 +54,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from joulewise.cadence import legs as legsmod, standing as law  # noqa: E402
-from scripts import cadence_controller as cc, cadence_legs_runner as runner  # noqa: E402
+from joulewise.cadence import desk_final, standing as law  # noqa: E402
+from scripts import cadence_controller as cc  # noqa: E402
 
 RD = "evidence/cadence-standing"
 AUDIT = "audit/synthetic"
 KITS = {"cl-dev-04": "docs/process/cadence/kits/cl-dev-04.v1.1.json",
-        "cl-dev-05": "docs/process/cadence/kits/cl-dev-05.v1.1.json"}
+        "cl-dev-05": "docs/process/cadence/kits/cl-dev-05.v1.1.json",
+        "cl-qual-01": "docs/process/cadence/kits/cl-qual-01.v1.1.json"}
 START = datetime.fromisoformat("2026-11-17T08:00:00-08:00").timestamp()
+L = [f"L{i:03d}" for i in range(1, 13)]
+WATCHER = "com.joulewise.air-watch"
 
 
 class FakeEnv(cc.Env):
@@ -53,81 +77,22 @@ class FakeEnv(cc.Env):
     def sleep(self, seconds):
         self.t += seconds
 
+    def wait_for_change(self, directory, timeout):
+        self.t += timeout
+
     def kernel_frequency(self):
         return {"raw_word": 0}
 
     def run(self, argv, **kw):
-        if argv and argv[0] != "git":    # no host command in the synthetic run (the log query, for one)
-            return cc.Result(0, "", "synthetic: not run")
+        if argv and argv[0] != "git":    # no host command in the synthetic run (pgrep: "none found")
+            return cc.Result(1 if "pgrep" in str(argv[0]) else 0, "", "synthetic: not run")
         return super().run(argv, **kw)
 
 
 def clean_proof(kind, allowed=()):
-    lines = {name: {"ok": True, "detail": "synthetic"} for name, kinds in law.PROOF_LINES.items() if kind in kinds}
+    lines = {name: {"ok": True, "detail": "synthetic"} for name, kinds in law.PROOF_LINES.items()
+             if kind in kinds and name != "signing"}
     return {"kind": kind, "epoch": None, "lines": lines, "synthetic": True}
-
-
-class MockPreparer:
-    """No worktree: the measurement checkout is this one; the plan is the pinned library's, at the fake t0."""
-
-    def __init__(self, cfg, guard):
-        self.cfg, self.guard = cfg, guard
-
-    def materialize(self, plan_id, kit_sha, kit_raw, frozen_commit):
-        self.guard("synthetic: fetch the frozen commit")
-        kit_path = Path(self.cfg["kits_dir"]) / f"{plan_id}-{kit_sha[:12]}.json"
-        kit_path.parent.mkdir(parents=True, exist_ok=True)
-        if not kit_path.exists():
-            kit_path.write_bytes(kit_raw)
-        return {"kit": str(kit_path), "repo": str(ROOT)}, None
-
-    def check(self, paths, kit, kit_sha, legs, batch_rule, t0):
-        plan = legsmod.plan_span(kit, t0_epoch=t0, windows=[], leg_ids=legs, max_span_s=runner.max_span_s())
-        return {"plan": plan, "batch_window": None, "expected_windows": [],
-                "deadline": runner.launch_deadline(plan) + cc.LAUNCH_GRACE_S, "worst_case_s": plan["worst_case_s"]}, None
-
-
-class MockLauncher:
-    """The LaunchAgent's part: claim the fence, run the span (the runner's mock), and on ``finish`` exit."""
-
-    def __init__(self, cfg, env):
-        self.cfg, self.env = cfg, env
-        self.live = None
-        self.soak_refusals = {}      # plan output name prefix -> soaks refused before one is accepted
-
-    def launch(self, request):
-        from joulewise.cadence import kit as kitmod
-        root = Path(request["custody_root"])
-        root.mkdir(parents=True, exist_ok=True)
-        purpose = f"align-r0:{uuid.uuid4().hex}"
-        with cc.fence.fence_lock(root):
-            cur = cc.fence.read_fence(root)
-            if cur is not None and cur["purpose"] != request["standing_purpose"]:
-                return {"rc": 3, "launch": None, "arm_child_pid": None, "stderr": f"foreign fence {cur}"}
-            record = {"purpose": purpose, "pid": os.getpid(), "deadline": request["deadline"]}
-            cc.fence.write_fence(root, record)
-        kit, sha = kitmod.load_kit(request["kit"])
-        legs = request["legs"].split(",")
-        refusals = next((n for prefix, n in self.soak_refusals.items()
-                         if Path(request["output"]).name.startswith(prefix)), 0)
-        rc, summary, stops, _deps = runner.run_mock(kit=kit, kit_sha256=sha, output=Path(request["output"]),
-                                                    t0_epoch=self.env.now(), windows=[], leg_ids=legs,
-                                                    soak_refusals=refusals)
-        receipt = json.loads((Path(request["output"]) / runner.RECEIPT_NAME).read_text())
-        self.live = {"output": Path(request["output"]), "ended": receipt["ended"]["epoch_s"], "root": root,
-                     "purpose": purpose, "mock_rc": rc, "mock_stops": stops}
-        return {"rc": 0, "arm_child_pid": 2 ** 22 + 1, "stderr": "",
-                "launch": {"label": f"com.joulewise.align-r0.{purpose[9:]}", "fence": record,
-                           "plan": {"batch_windows": [], "worst_case_s": None, "expected_s": None},
-                           "next": "exit the magistrate session now"}}
-
-    def finish(self):
-        live, self.live = self.live, None
-        receipt = live["output"] / runner.RECEIPT_NAME
-        os.utime(receipt, (live["ended"], live["ended"]))
-        cc.fence.clear_owned(live["root"], live["purpose"])
-        self.env.t = max(self.env.t, live["ended"] + 5)
-        return live
 
 
 def git(cwd, *args, epoch=None, check=True):
@@ -135,226 +100,514 @@ def git(cwd, *args, epoch=None, check=True):
            "GIT_COMMITTER_NAME": "lead", "GIT_COMMITTER_EMAIL": "lead@localhost"}
     if epoch is not None:
         env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = f"{int(epoch)} +0000"
-    done = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, env=env)
+    done = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, env=env)
     if check and done.returncode != 0:
-        raise RuntimeError(f"git {args}: {done.stderr}")
-    return done.stdout.strip()
-
-
-def commit_files(seed, files, message, epoch):
-    for rel, value in files.items():
-        path = Path(seed) / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(value, bytes):
-            path.write_bytes(value)
-        else:
-            path.write_text(json.dumps(value, indent=1, sort_keys=True) + "\n")
-        git(seed, "add", rel)
-    git(seed, "commit", "-q", "-m", message, epoch=epoch)
-    git(seed, "push", "-q", "origin", f"HEAD:refs/heads/{AUDIT}")
-    return git(seed, "rev-parse", "HEAD")
+        raise RuntimeError(f"git {args}: {done.stderr.decode()}")
+    return done.stdout
 
 
 class World:
-    """The synthetic MBP, origin and Air desk."""
+    """The synthetic MBP (controller), origin, lead and Air desk."""
 
-    def __init__(self, workdir):
+    def __init__(self, workdir, *, prior=True, freeze2=False):
         self.w = Path(workdir)
         if self.w.exists():
             shutil.rmtree(self.w)
         self.w.mkdir(parents=True)
+        self.env = FakeEnv(START)
         self.origin, self.seed, self.clone = self.w / "origin.git", self.w / "seed", self.w / "ctl-clone"
         subprocess.run(["git", "init", "-q", "--bare", str(self.origin)], check=True)
         subprocess.run(["git", "clone", "-q", str(self.origin), str(self.seed)], check=True, capture_output=True)
         git(self.seed, "checkout", "-q", "-b", AUDIT)
-        self.key = self.w / "bundle_key"
-        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "cadence-bundle", "-f", str(self.key)],
-                       check=True)
-        self.env = FakeEnv(START)
-        t = START - 3600
+        self.keys = {}
+        for name, principal in (("ctl", "cadence-controller"), ("air", "cadence-desk")):
+            key = self.w / f"{name}_key"
+            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", principal, "-f", str(key)], check=True)
+            pub = Path(f"{key}.pub").read_text().split()
+            allowed = self.w / f"{name}_allowed_signers"
+            allowed.write_text(f'{principal} namespaces="git" {pub[0]} {pub[1]}\n')
+            self.keys[name] = {"key": key, "allowed": allowed}
+        self.pins, self.pin_note = {}, {}
         kit_files = {f"kits/{cid}.json": (ROOT / path).read_bytes() for cid, path in KITS.items()}
-        kit_commit = commit_files(self.seed, kit_files, "kits", t - 600)
-        self.sha = {cid: cc.sha256_bytes(raw) for cid, raw in
-                    ((p.split("/")[1][:-5], r) for p, r in kit_files.items())}
-        entry = lambda cid: {"source": {"commit": kit_commit, "path": f"kits/{cid}.json"}, "line1": "synthetic seat",
-                             "line2": "synthetic CI", "batch_window": "none",
-                             "hand_gate": {"passed": True, "record": "synthetic class A pass"}}
+        for raw in kit_files.values():
+            commit = json.loads(raw)["frozen"]["commit"]
+            if commit not in self.pins:
+                self.pins[commit] = self._export_pin(commit)
+        self.kit_commit = self.commit(kit_files, "kits", START - 7200)
+        self.sha = {p.split("/")[1][:-5]: cc.sha256_bytes(r) for p, r in kit_files.items()}
+
+        def entry(cid):
+            return {"source": {"commit": self.kit_commit, "path": f"kits/{cid}.json"}, "line1": "synthetic seat",
+                    "line2": "synthetic CI", "batch_window": "rl172" if cid.startswith("cl-dev") else "none"}
         self.standing = {
-            "schema": law.STANDING_SCHEMA, "standing_id": "cs-synthetic",
-            "queues": [{"path": f"{RD}/queues/QUEUE-dev04.json", "role": "standing"},
-                       {"path": f"{RD}/queues/QUEUE-dev05.json", "role": "standing"}],
-            "kits": {self.sha[c]: entry(c) for c in KITS}, "hand_gates": [],
-            "prior_spans": [
+            "schema": law.STANDING_SCHEMA, "standing_id": "cs-synthetic", "queues": [],
+            "kits": {self.sha[c]: entry(c) for c in KITS}, "hand_gates": [], "gate_records": [], "withdrawn": [],
+            "dispositions": [], "sessions": [{"session_id": "r1-slot-1", "kind": "r1-slot",
+                                              "route": "docs/align/r1_arm_runbook.md"}],
+            "fallback": [], "freeze2": "synthetic freeze 2" if freeze2 else None,
+            "prior_spans": [] if not prior else [
                 {"plan_id": "cq-dev-01-s01-a1", "campaign_id": "cl-dev-01", "block_id": "dev-01", "legs": 12,
                  "mixed": False, "t0": "2026-11-15T01:00:00-08:00", "closed": "2026-11-15T06:00:00-08:00",
                  "desk_final": "synthetic hand table"},
                 {"plan_id": "cq-dev-02-s01-a1", "campaign_id": "cl-dev-02", "block_id": "dev-02", "legs": 6,
                  "mixed": False, "t0": "2026-11-16T10:00:00-08:00", "closed": "2026-11-16T13:00:00-08:00",
-                 "desk_final": "synthetic automatic desk"}],
-            "withdrawn": [], "dispositions": [], "sessions": [{"session_id": "r1-slot-1", "kind": "r1-slot",
-                                           "route": "docs/align/r1_arm_runbook.md"}],
-            "fallback": [], "freeze2": None}
-
-        def span(seq, sid, block, cid, legs, nb):
-            return {"seq": seq, "span_id": sid, "block_id": block, "attempt": 1, "not_before": nb,
-                    "kit": {"path": KITS[cid], "sha256": self.sha[cid]}, "legs": legs}
-        legs = [f"L{i:03d}" for i in range(1, 13)]
-        q04 = {"schema": "joulewise.cadence_queue.v1", "queue_id": "cq-syn-dev04",
-               "expires_at": "2026-11-23T00:00:00-08:00", "halt": None, "standing_notice": None,
-               "spans": [span(1, "dev-04-s01", "dev-04", "cl-dev-04", legs[:6], "2026-11-17"),
-                         span(2, "dev-04-s02", "dev-04", "cl-dev-04", legs[6:], "2026-11-17")]}
-        q05 = {"schema": "joulewise.cadence_queue.v1", "queue_id": "cq-syn-dev05",
-               "expires_at": "2026-11-23T00:00:00-08:00", "halt": None, "standing_notice": None,
-               "spans": [span(1, "dev-05-s01", "dev-05", "cl-dev-05", legs[:6], "2026-11-18")]}
-        stamp = {"schema": law.WATCHER_STAMP_SCHEMA, "watcher": "com.joulewise.air-watch",
-                 "observed_live_at": datetime.fromtimestamp(t, law.ZONE).isoformat(), "by": "lead (synthetic)"}
-        commit_files(self.seed, {f"{RD}/STANDING.json": self.standing, f"{RD}/queues/QUEUE-dev04.json": q04,
-                                 f"{RD}/queues/QUEUE-dev05.json": q05, f"{RD}/watcher-stamp.json": stamp},
-                     "standing index, queues, watcher stamp", t)
+                 "desk_final": "synthetic automatic desk"}]}
+        stamp = {"schema": law.WATCHER_STAMP_SCHEMA, "watcher": WATCHER, "by": "lead (synthetic)",
+                 "observed_live_at": datetime.fromtimestamp(START - 3600, law.ZONE).isoformat()}
+        self.commit({f"{RD}/STANDING.json": self.standing, f"{RD}/watcher-stamp.json": stamp}, "standing", START - 3000)
         subprocess.run(["git", "clone", "-q", "--no-checkout", str(self.origin), str(self.clone)], check=True,
                        capture_output=True)
-        out, seed_receipts = self.w / "campaign-out", self.w / "jw-wt"
-        (seed_receipts / "old-smoke").mkdir(parents=True)
-        old = seed_receipts / "old-smoke" / cc.RECEIPT
+        out, roots = self.w / "campaign-out", self.w / "jw-wt"
+        (roots / "old-smoke").mkdir(parents=True)
+        old = roots / "old-smoke" / cc.RECEIPT
         old.write_text("{}\n")
         os.utime(old, (START - 86400, START - 86400))
         out.mkdir()
         self.cfg = {
             "schema": cc.CONFIG_SCHEMA, "state_dir": str(self.w / "controller"), "git_dir": str(self.clone),
-            "audit_ref": AUDIT, "records_dir": RD, "worktrees_root": str(self.w / "jw-wt"),
-            "output_root": str(out), "kits_dir": str(out / "kits"), "custody_root": str(self.w / "custody"),
-            "measurement_python": sys.executable, "receipt_roots": [str(out), str(seed_receipts)],
-            "signing_key": str(self.key), "bundle_ref_prefix": "refs/heads/cadence-desk/", "owner_login": "mpmdw",
-            "repo_slug": "mpmdw/JouleWise", "gh_argv": ["/bin/false"],
+            "audit_ref": AUDIT, "records_dir": RD, "worktrees_root": str(roots), "output_root": str(out),
+            "kits_dir": str(out / "kits"), "custody_root": str(self.w / "custody"),
+            "measurement_python": sys.executable, "receipt_roots": [str(out), str(roots)],
+            "signing_key": str(self.keys["ctl"]["key"]), "bundle_ref_prefix": "refs/heads/desk-bundles/",
+            "verdict_signers": str(self.keys["air"]["allowed"]), "copy_marker_dir": str(self.w / "desk-copy"),
+            "watcher_name": WATCHER, "owner_login": "mpmdw", "repo_slug": "mpmdw/JouleWise", "gh_argv": ["/bin/false"],
             "measurement_mode_script": "/nonexistent", "high_power_marker": str(self.w / "high-power.marker"),
-            "poll_idle_s": 60, "poll_live_s": 2, "hold_standing_fence": True}
-        self.issues = []
-        self.launcher = MockLauncher(self.cfg, self.env)
+            "poll_idle_s": 60, "poll_live_s": 60, "hold_standing_fence": True, "accept_mock_verdicts": True}
+        (self.w / "custody").mkdir()
+        (self.w / "desk-copy").mkdir()
+        self.issues, self.notices, self.history = [], [], {}
+        self.launcher = MockLauncher(self)
         self.ctl = None
 
+    # -- the pinned runners -------------------------------------------------------------------------
+    def _export_pin(self, commit):
+        have = subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", f"{commit}^{{commit}}"],
+                              capture_output=True).returncode == 0
+        if not have:
+            self.pin_note[commit] = "pin missing from this clone: HEAD's runner used"
+            return ROOT
+        target = self.w / "pins" / commit[:12]
+        target.mkdir(parents=True)
+        archive = subprocess.run(["git", "-C", str(ROOT), "archive", commit, "joulewise", "scripts"],
+                                 capture_output=True, check=True).stdout
+        subprocess.run(["tar", "-x", "-C", str(target)], input=archive, check=True)
+        self.pin_note[commit] = "pinned runner exported from git"
+        return target
+
+    # -- lead and Air commits -----------------------------------------------------------------------
+    def commit(self, files, message, epoch, *, sign=None):
+        for rel, value in files.items():
+            path = self.seed / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(value if isinstance(value, bytes) else
+                             (json.dumps(value, indent=1, sort_keys=True) + "\n").encode())
+            git(self.seed, "add", rel)
+        args = (["-c", "gpg.format=ssh", "-c", f"user.signingkey={self.keys[sign]['key']}", "commit", "-q", "-S"]
+                if sign else ["commit", "-q"])
+        git(self.seed, *args, "-m", message, epoch=epoch)
+        git(self.seed, "push", "-q", "origin", f"HEAD:refs/heads/{AUDIT}")
+        return git(self.seed, "rev-parse", "HEAD").decode().strip()
+
+    def queue(self, name, spans, *, role="standing", notice=900):
+        """The lead commits a queue file and lists it in the standing index."""
+        path = f"{RD}/queues/QUEUE-{name}.json"
+        doc = {"schema": "joulewise.cadence_queue.v1", "queue_id": f"cq-syn-{name}",
+               "expires_at": "2026-11-23T00:00:00-08:00", "halt": None, "standing_notice": {"issue": notice},
+               "spans": spans}
+        if not any(q["path"] == path for q in self.standing["queues"]):
+            self.standing["queues"].append({"path": path, "role": role})
+        self.commit({path: doc, f"{RD}/STANDING.json": self.standing}, f"queue {name}", self.env.now() - 60)
+        return path
+
+    def span(self, seq, sid, cid, legs, nb="2026-11-17"):
+        return {"seq": seq, "span_id": sid, "block_id": sid.rsplit("-s", 1)[0], "attempt": 1, "not_before": nb,
+                "kit": {"path": KITS[cid], "sha256": self.sha[cid]}, "legs": legs}
+
+    def lead_release(self, plan_id, gate, record="the lead's hand read (synthetic)"):
+        self.standing["gate_records"].append({"plan_id": plan_id, "gate": gate, "decision": "release",
+                                              "record": record})
+        self.commit({f"{RD}/STANDING.json": self.standing}, f"release {gate} {plan_id}", self.env.now() - 30)
+
+    def copy_journals(self, plan_id):
+        """The lead's hash-verified journal copy, then its marker (item 331's copy gate)."""
+        (Path(self.cfg["copy_marker_dir"]) / f"{plan_id}.ok").write_text(
+            f"copy manifest sha256 {'c' * 64} {datetime.fromtimestamp(self.env.now(), law.ZONE).isoformat()}\n")
+
+    # -- the controller -----------------------------------------------------------------------------
     def controller(self):
         ctl = cc.Controller(self.cfg, env=self.env, launcher=self.launcher, issues=lambda: self.issues,
-                            proof=clean_proof, pid=os.getpid())
-        ctl.preparer = MockPreparer(self.cfg, ctl.guard)
+                            proof=clean_proof, signing=lambda: cc.signing_check(self.cfg, cc.Env()),
+                            clock=lambda: self.env.now(), notice=self._notice, pid=os.getpid())
+        ctl.preparer = MockPreparer(self, ctl.guard)
         self.ctl = ctl
         return ctl
 
-    def air_desk_final(self, plan_id, *, hand_table="not-sampled"):
-        close = json.loads((Path(self.cfg["state_dir"]) / "spans" / plan_id / "close.json").read_text())
-        ref = f"refs/heads/cadence-desk/{plan_id}"
-        git(self.seed, "fetch", "-q", "origin", f"{ref}:refs/remotes/bundles/{plan_id}")
-        manifest = git(self.seed, "show", f"refs/remotes/bundles/{plan_id}:manifest.json").encode() + b"\n"
-        rec = {"schema": law.DESK_FINAL_SCHEMA, "plan_id": plan_id, "bundle_sha256": cc.sha256_bytes(manifest),
-               "verdict": "FINAL", "hand_table": hand_table, "reference_print": True, "by": "air desk (synthetic)",
-               "at": datetime.fromtimestamp(self.env.now(), law.ZONE).isoformat()}
-        assert rec["bundle_sha256"] == close["bundle_sha256"], "the Air reads the bundle the MBP pushed"
-        commit_files(self.seed, {f"{RD}/desk-final/{plan_id}.json": rec}, f"desk final {plan_id}", self.env.now() - 60)
-        return rec
+    def _notice(self, issue, text):
+        self.ctl.guard("synthetic: standing notice")
+        self.notices.append((issue, text))
+        return True
 
-    def ready_session(self, session_id):
-        rec = {"schema": law.SESSION_READY_SCHEMA, "session_id": session_id, "by": "lead (synthetic)",
-               "ready_at": datetime.fromtimestamp(self.env.now(), law.ZONE).isoformat()}
-        commit_files(self.seed, {f"{RD}/sessions/READY-{session_id}.json": rec}, f"READY {session_id}",
-                     self.env.now() - 30)
+    def tick(self):
+        return self.ctl.tick()
 
-    def verify_signature(self, plan_id):
-        allowed = self.w / "allowed_signers"
-        allowed.write_text(f"cadence-bundle {(self.w / 'bundle_key.pub').read_text().split(' ', 2)[0]} "
-                           f"{(self.w / 'bundle_key.pub').read_text().split(' ', 2)[1]}\n")
-        ref = f"refs/remotes/bundles/{plan_id}"
-        git(self.seed, "fetch", "-q", "origin", f"refs/heads/cadence-desk/{plan_id}:{ref}")
-        done = subprocess.run(["git", "-C", str(self.seed), "-c", "gpg.format=ssh", "-c",
-                               f"gpg.ssh.allowedSignersFile={allowed}", "verify-commit", ref],
-                              capture_output=True, text=True)
-        return done.returncode == 0
+    def ack_all(self, note="synthetic magistrate"):
+        for p in self.ctl.unacked_pages():
+            with contextlib.redirect_stdout(io.StringIO()):
+                cc.cmd_ack(self.cfg, type("A", (), {"page_id": p["page_id"], "by": "magistrate", "note": note}))
+
+    def drive(self, until, *, max_ticks=80, step=300):
+        """Tick, advancing the fake clock on waits, until ``until(status)`` holds."""
+        status = None
+        for _ in range(max_ticks):
+            status = self.tick()
+            if until(status):
+                return status
+            if status["state"] in ("LIVE", "CLOSING"):
+                if self.launcher.live is not None:
+                    self.launcher.finish()
+                continue
+            self.env.t += step
+        raise AssertionError(f"drive: never reached the condition; last {status}")
+
+    # -- the Air desk --------------------------------------------------------------------------------
+    def air_final(self, plan_id, *, hand_table=False):
+        """The Air, as FORMAT.md section 2 runs it: fetch the bundle and verdict refs, ``cadence_desk.py final`` on the
+        signed bundle ref (it verifies the controller's signature, the tree's shape, the anchor and the queue bytes),
+        then ``cadence_desk.py publish`` with the desk key. Returns the verdict, or None if ``final`` wrote none."""
+        git(self.seed, "fetch", "-q", "-f", "origin", "+refs/heads/desk-bundles/*:refs/remotes/origin/desk-bundles/*",
+            "+refs/heads/cadence-desk-final/*:refs/remotes/origin/cadence-desk-final/*")
+        cid = self._campaign(plan_id)
+        work = self.w / "air" / f"{plan_id}-{uuid.uuid4().hex[:6]}"
+        work.mkdir(parents=True)
+        kit = work / "kit.json"
+        kit.write_bytes(git(self.seed, "show", f"{self.kit_commit}:kits/{cid}.json"))
+        out = work / "out"
+        argv = [sys.executable, "-B", str(ROOT / "scripts/air/cadence_desk.py"), "final", "--plan-id", plan_id,
+                "--repo", str(self.seed), "--bundle-ref", f"refs/remotes/origin/desk-bundles/{plan_id}",
+                "--allowed-signers", str(self.keys["ctl"]["allowed"]), "--kit", str(kit), "--out", str(out),
+                "--history-prefix", "refs/remotes/origin/cadence-desk-final/",
+                "--history-signers", str(self.keys["air"]["allowed"]), "--allow-mock",
+                "--lock", str(work / "AIR-QUIET.lock")]
+        if hand_table:
+            argv += ["--hand-table", str(self.hand_table(plan_id, work))]
+        done = subprocess.run(argv, capture_output=True, text=True, cwd=str(ROOT),
+                              env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        self.air_log = done.stdout + done.stderr
+        if not (out / desk_final.VERDICT_NAME).is_file():
+            return None
+        verdict = json.loads((out / desk_final.VERDICT_NAME).read_text())
+        if not (verdict.get("transport") or {}).get("signed"):
+            return None      # the Air refused the bundle: nothing it may publish counts
+        pub = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/air/cadence_desk.py"), "publish", "--plan-id",
+                              plan_id, "--out", str(out), "--repo", str(self.seed), "--signing-key",
+                              str(self.keys["air"]["key"])], capture_output=True, text=True, cwd=str(ROOT),
+                             env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+        if pub.returncode != 0:
+            raise AssertionError(f"publish failed: {pub.stdout} {pub.stderr}")
+        return verdict
+
+    def _campaign(self, plan_id):
+        intent = json.loads((Path(self.cfg["state_dir"]) / "spans" / plan_id / "intent.json").read_text())
+        return intent["kit"]["campaign_id"]
+
+    def hand_table(self, plan_id, work):
+        """The lead's hand table, standing in for the lead's journal read: every required field of every leg, read
+        from the signed bundle the lead was sent, the soak attempt count, and the named stops the lead found (none
+        in these spans)."""
+        ref = f"refs/remotes/origin/desk-bundles/{plan_id}"
+        receipt = json.loads(git(self.seed, "show", f"{ref}:bundle/runner_receipt.json"))
+        legs = []
+        for row in receipt["legs"]:
+            summary = json.loads(git(self.seed, "show", f"{ref}:bundle/legs/{row['leg_id']}/leg_summary.json"))
+            legs.append({"leg_id": row["leg_id"], **{k: summary.get(k) for k in desk_final.HAND_REQUIRED_V11
+                                                     if k != "leg_id" and k in summary}})
+        attempts = len(receipt.get("soak_attempts") or []) or sum(
+            1 for st in receipt["steps"] if st["name"] == "soak" or st["name"].startswith("soak.a"))
+        path = work / "hand_table.json"
+        path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": plan_id, "legs": legs,
+                                    "named_stops": [], "soak_attempts": attempts}))
+        return path
+
+
+class MockPreparer:
+    """No worktree: the pinned runner exported from git is the measurement checkout; ``plan`` is the pin's own."""
+
+    def __init__(self, world, guard):
+        self.world, self.guard = world, guard
+
+    def materialize(self, plan_id, kit_sha, kit_raw, frozen_commit):
+        self.guard("synthetic: fetch the frozen commit")
+        kit_path = Path(self.world.cfg["kits_dir"]) / f"{plan_id}-{kit_sha[:12]}.json"
+        kit_path.parent.mkdir(parents=True, exist_ok=True)
+        if not kit_path.exists():
+            kit_path.write_bytes(kit_raw)
+        return {"kit": str(kit_path), "repo": str(self.world.pins[frozen_commit])}, None
+
+    def check(self, paths, kit, kit_sha, legs, batch_rule, t0):
+        windows = [None] if batch_rule == "none" else ["02:00-02:35", "13:14-13:15"]
+        last = ""
+        for window in windows:
+            done = subprocess.run([sys.executable, "-B", "scripts/cadence_legs_runner.py", "plan", "--kit", paths["kit"],
+                                   "--legs", ",".join(legs), "--t0", repr(t0),
+                                   *(["--batch-window", window] if window else [])],
+                                  cwd=paths["repo"], capture_output=True, text=True,
+                                  env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+            if done.returncode == 0:
+                plan = json.loads(done.stdout)
+                return {"plan": plan, "batch_window": window, "expected_windows": [window] if window else [],
+                        "worst_case_s": plan["worst_case_s"]}, None
+            last = done.stderr.strip()[:200]
+        return None, "PLAN_REFUSED_AT_T0: " + last
+
+
+class MockLauncher:
+    """The arm child and the LaunchAgent: the atomic fence transfer, then the pinned runner's own mock span."""
+
+    def __init__(self, world):
+        self.world = world
+        self.live = None
+        self.flags = {}        # plan id -> runner mock flags (e.g. ["--g0-timeout", "L005"])
+        self.launched = []
+
+    def launch(self, request):
+        env = self.world.env
+        root = Path(request["custody_root"])
+        if env.now() > request["lease_until"]:
+            return {"rc": 4, "launch": None, "refused": "the arm lease expired", "stderr": ""}
+        purpose = f"align-r0:{uuid.uuid4().hex}"
+        with cc.fence.fence_lock(root):
+            cur = cc.fence.read_fence(root)
+            if cur is not None and cur["purpose"] != request["standing_purpose"]:
+                return {"rc": 3, "launch": None, "refused": f"foreign fence {cur}", "stderr": ""}
+            record = {"purpose": purpose, "pid": os.getpid(), "deadline": env.now() + 12 * 3600}
+            cc.fence.write_fence(root, record)        # replaces the standing fence: never a gap
+        plan_id = Path(request["output"]).name.rsplit("-", 1)[0]
+        t0_local = datetime.fromtimestamp(env.now(), law.ZONE).strftime("%Y-%m-%dT%H:%M:%S")
+        argv = [sys.executable, "-B", "scripts/cadence_legs_runner.py", "mock", "--kit", request["kit"], "--legs",
+                request["legs"], "--output", request["output"], "--t0-local", t0_local,
+                *(["--batch-window", request["batch_window"]] if request["batch_window"] else []),
+                *self.flags.get(plan_id, [])]
+        done = subprocess.run(argv, cwd=request["repo"], capture_output=True, text=True,
+                              env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "JW_B5_SYNTHETIC_ONLY": "1"})
+        receipt = json.loads((Path(request["output"]) / cc.RECEIPT).read_text())
+        self.live = {"output": Path(request["output"]), "ended": receipt["ended"]["epoch_s"], "root": root,
+                     "purpose": purpose, "mock_rc": done.returncode}
+        self.launched.append(plan_id)
+        return {"rc": 0, "arm_child_pid": 2 ** 22 + 1, "t0": env.now(), "deadline": record["deadline"], "stderr": "",
+                "launch": {"label": f"com.joulewise.align-r0.{purpose[9:]}", "fence": record,
+                           "plan": {"batch_windows": [request["batch_window"]] if request["batch_window"] else []},
+                           "next": "exit the magistrate session now"}}
+
+    def finish(self):
+        live, self.live = self.live, None
+        receipt = live["output"] / cc.RECEIPT
+        os.utime(receipt, (live["ended"], live["ended"]))
+        cc.fence.clear_owned(live["root"], live["purpose"])
+        self.world.env.t = max(self.world.env.t, live["ended"] + 5)
+        return live
+
+
+def _state(s):
+    return s["state"]
+
+
+def _codes(s):
+    return set((s.get("detail") or {}).get("codes") or [])
+
+
+def _close(w, plan_id):
+    return json.loads((Path(w.cfg["state_dir"]) / "spans" / plan_id / "close.json").read_text())
+
+
+# --------------------------------------------------------------------------
+# The scenarios
+# --------------------------------------------------------------------------
+def scenario_clean(workdir, log=print):
+    """A dev-05 pilot on its pin, closed clean. The remainder holds on the copy gate and the derived class A gate;
+    the Air's verdict needs the first span's hand table; the lead releases; the next span arms."""
+    w = World(workdir)
+    w.controller()
+    w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
+    s = w.tick()
+    assert _state(s) == "LIVE", s
+    w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "CLOSED", s
+    close = _close(w, "cq-dev-05-s01-a1")
+    assert close["gates"] == ["class-a"] and close["pushed"], close
+    w.queue("dev05-rest", [w.span(1, "dev-05-s02", "cl-dev-05", L[6:])])
+    w.env.t += 400
+    s = w.tick()
+    assert "JOURNAL_COPY" in _codes(s), s
+    w.copy_journals("cq-dev-05-s01-a1")
+    s = w.tick()
+    assert _state(s) == "WAIT" and "HAND_GATE" in _codes(s), s
+    v1 = w.air_final("cq-dev-05-s01-a1")
+    assert v1 is not None and not v1["desk_final"], v1
+    v2 = w.air_final("cq-dev-05-s01-a1", hand_table=True)
+    assert v2["desk_final"], v2["reasons"]
+    w.lead_release("cq-dev-05-s01-a1", "class-a")
+    s = w.drive(lambda s: _state(s) == "LIVE")
+    assert s["detail"]["plan_id"] == "cq-dev-05-s02-a1", s
+    log(f"clean: dev-05-s01 CLOSED_OK on {w.pin_note}; JOURNAL_COPY then HAND_GATE held dev-05-s02; Air verdict "
+        f"desk_final {v1['desk_final']} (pending {[p['code'] for p in v1['pending']]}) then {v2['desk_final']} with "
+        f"the hand table; class A released; dev-05-s02 armed {s['at']}")
+    return w
+
+
+def scenario_soak_retry(workdir, log=print):
+    """qual-01's pilot on the qualification pin: the first soak is refused and the retry accepted; the close is clean
+    and the Air judges the same receipt without a REFUSAL."""
+    w = World(workdir, freeze2=True)
+    w.controller()
+    w.queue("qual01-pilot", [w.span(1, "qual-01-s01", "cl-qual-01", L[:6])], role="smoke")
+    w.launcher.flags["cq-qual-01-s01-a1"] = ["--soak-refusals", "1"]
+    s = w.tick()
+    assert _state(s) == "LIVE", s
+    w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "CLOSED", s
+    close = _close(w, "cq-qual-01-s01-a1")
+    assert [a["attempt"] for a in close["transition"]["soak_attempts"]] == [1, 2], close["transition"]
+    v = w.air_final("cq-qual-01-s01-a1")
+    assert v is not None and not any(st["code"] == "REFUSAL" for st in v["named_stops"]), v["named_stops"]
+    log(f"soak_retry: qual-01-s01 CLOSED_OK, soak attempts refused={[bool(a['refused']) for a in close['transition']['soak_attempts']]}; "
+        f"Air: desk_final {v['desk_final']}, stops {[st['code'] for st in v['named_stops']]}, "
+        f"hand table triggers {v['hand_table']['triggers']}")
+    return w, v
+
+
+def scenario_l005_timeout(workdir, log=print):
+    """dev-04's pilot with L005's G0 timing out: a clean close (a G0 timeout is not a stop); the derived L005 gate
+    holds dev-04-s02 with no gate in the standing index; the desk's verdict names the same gates."""
+    w = World(workdir)
+    w.controller()
+    w.queue("dev04-pilot", [w.span(1, "dev-04-s01", "cl-dev-04", L[:6])], role="smoke")
+    w.launcher.flags["cq-dev-04-s01-a1"] = ["--g0-timeout", "L005"]
+    s = w.tick()
+    assert _state(s) == "LIVE", s
+    w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "CLOSED", s
+    close = _close(w, "cq-dev-04-s01-a1")
+    assert close["gates"] == ["class-a", "L005"], close["gates"]
+    w.queue("dev04-rest", [w.span(1, "dev-04-s02", "cl-dev-04", L[6:])])
+    w.copy_journals("cq-dev-04-s01-a1")
+    w.env.t += 400
+    v = w.air_final("cq-dev-04-s01-a1", hand_table=True)
+    s = w.tick()
+    assert _state(s) == "WAIT" and "HAND_GATE" in _codes(s), s
+    w.lead_release("cq-dev-04-s01-a1", "class-a")
+    s = w.tick()
+    assert _state(s) == "WAIT" and "HAND_GATE" in _codes(s) and "L005" in s["detail"]["detail"], s
+    w.lead_release("cq-dev-04-s01-a1", "L005", "RL-165 section 4: dev-03 released >= 4 consumers (synthetic)")
+    s = w.drive(lambda s: _state(s) == "LIVE")
+    assert s["detail"]["plan_id"] == "cq-dev-04-s02-a1", s
+    holds = sorted(h["gate"] for h in v["holds"] if str(h["scope"]).startswith("kit:"))
+    log(f"l005_timeout: dev-04-s01 CLOSED_OK with L005 g0 timeout; derived gates {close['gates']}; desk kit holds "
+        f"{holds}; dev-04-s02 held through the class A release, armed after the L005 record {s['at']}")
+    return w, v
+
+
+def scenario_redo(workdir, log=print):
+    """A dev-05 pilot with a load redo on L002 (no prior spans): span 2 arms; span 3 waits on the k+2 rule until the
+    Air's verdict for span 1 is final, which needs the hand table a redo makes mandatory."""
+    w = World(workdir, prior=False)
+    w.controller()
+    w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:4])], role="smoke")
+    w.launcher.flags["cq-dev-05-s01-a1"] = ["--contaminate", "L002"]
+    s = w.tick()
+    assert _state(s) == "LIVE", s
+    live = w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "CLOSED", s
+    receipt = json.loads((live["output"] / cc.RECEIPT).read_text())
+    assert receipt["load_redos_used"] == 1, receipt["load_redos_used"]
+    v1 = w.air_final("cq-dev-05-s01-a1")
+    assert v1 is not None and not v1["desk_final"] and "redo" in json.dumps(v1["hand_table"]), v1["hand_table"]
+    w.copy_journals("cq-dev-05-s01-a1")
+    w.lead_release("cq-dev-05-s01-a1", "class-a")
+    w.queue("dev05-rest", [w.span(1, "dev-05-s02", "cl-dev-05", L[4:8]), w.span(2, "dev-05-s03", "cl-dev-05", L[8:])])
+    s = w.drive(lambda s: _state(s) == "LIVE")
+    assert s["detail"]["plan_id"] == "cq-dev-05-s02-a1", s
+    w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "CLOSED", s
+    w.copy_journals("cq-dev-05-s02-a1")
+    w.env.t += 400
+    s = w.tick()
+    assert "K2_DESK_DEBT" in _codes(s), s
+    v2 = w.air_final("cq-dev-05-s01-a1", hand_table=True)
+    assert v2["desk_final"], v2["reasons"]
+    s = w.drive(lambda s: _state(s) == "LIVE")
+    assert s["detail"]["plan_id"] == "cq-dev-05-s03-a1", s
+    log(f"redo: dev-05-s01 L002 redone (1 load redo), CLOSED_OK; Air verdict pending {v1['hand_table']['triggers']}; "
+        f"dev-05-s02 armed; dev-05-s03 held on K2_DESK_DEBT until the hand table made span 1 final; armed {s['at']}")
+    return w
+
+
+def scenario_tampered(workdir, log=print):
+    """A bundle replaced by an unsigned commit is refused by the Air (no verdict is published); a verdict ref forged
+    without the desk's key is refused by the controller's reader (a halt)."""
+    w = World(workdir, prior=False)
+    ctl = w.controller()
+    w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
+    w.tick()
+    w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "CLOSED", s
+    ref = "refs/heads/desk-bundles/cq-dev-05-s01-a1"
+    forge = w.w / "forge"
+    subprocess.run(["git", "clone", "-q", str(w.origin), str(forge)], check=True, capture_output=True)
+    git(forge, "fetch", "-q", "origin", f"{ref}:refs/remotes/b")
+    git(forge, "checkout", "-q", "refs/remotes/b")
+    summary = forge / "bundle/legs/L002/leg_summary.json"
+    doc = json.loads(summary.read_text())
+    doc["admitted"] = not doc["admitted"]
+    summary.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
+    git(forge, "commit", "-q", "-am", "tampered")
+    git(forge, "push", "-q", "-f", "origin", f"HEAD:{ref}")
+    assert w.air_final("cq-dev-05-s01-a1") is None, "the Air refuses a bundle not signed by the controller"
+    # A forged verdict on the verdict ref: the right shape and hash, desk_final true, committed without the desk's key.
+    verdict = desk_final._finish({"schema": desk_final.VERDICT_SCHEMA, "plan_id": "cq-dev-05-s01-a1",
+                                  "queue_id": "cq-syn-dev05-pilot", "span_id": "dev-05-s01", "attempt": 1,
+                                  "desk_final": True, "next_arm_hold": False, "holds": [], "mock": False,
+                                  "transport": {"signed": True},
+                                  "identities": {"manifest_sha256": _close(w, "cq-dev-05-s01-a1")["manifest_sha256"]}})
+    (forge / "desk_verdict.json").write_text(json.dumps(verdict, indent=1, sort_keys=True) + "\n")
+    git(forge, "checkout", "-q", "--orphan", "forged")
+    git(forge, "rm", "-rq", "--cached", ".")
+    git(forge, "add", "desk_verdict.json")
+    git(forge, "commit", "-q", "-m", "cadence desk verdict cq-dev-05-s01-a1\n\nVerdict-SHA256: "
+        f"{verdict['verdict_sha256']}\nDesk-Final: true")
+    git(forge, "push", "-q", "origin", "HEAD:refs/heads/cadence-desk-final/cq-dev-05-s01-a1")
+    w.copy_journals("cq-dev-05-s01-a1")
+    w.env.t += 400
+    s = w.tick()
+    pages = json.dumps([p["reasons"] for p in ctl.unacked_pages()])
+    assert _state(s) in ("PAGED", "HALTED") and "DESK_VERDICT_INVALID" in pages, (s, pages)
+    log("tampered: the Air refused the unsigned bundle (no verdict); the controller halted DESK_VERDICT_INVALID on "
+        "the unsigned verdict")
+    return w
+
+
+SCENARIOS = {"clean": scenario_clean, "soak_retry": scenario_soak_retry, "l005_timeout": scenario_l005_timeout,
+             "redo": scenario_redo, "tampered": scenario_tampered}
 
 
 def run(workdir, log=print):
-    world = World(workdir)
-    ctl = world.controller()
-    transcript = []
-
-    def tick(label):
-        status = ctl.tick()
-        row = {"label": label, "at": datetime.fromtimestamp(world.env.now(), law.ZONE).strftime("%a %H:%M:%S"),
-               "state": status.get("state"), "detail": status.get("detail", {k: v for k, v in status.items()
-                                                                              if k != "state"})}
-        transcript.append(row)
-        log(f"{row['at']}  {label:<34} {row['state']:<8} {json.dumps(row['detail'], default=str)[:150]}")
-        return status
-
-    def expect(cond, what):
-        if not cond:
-            raise AssertionError(what)
-
-    s = tick("1 arm dev-04-s01")
-    expect(s["state"] == "LIVE" and s["detail"]["plan_id"] == "cq-dev-04-s01-a1", "first span armed")
-    intent = json.loads((Path(world.cfg["state_dir"]) / "spans/cq-dev-04-s01-a1/intent.json").read_text())
-    arm = json.loads((Path(world.cfg["state_dir"]) / "spans/cq-dev-04-s01-a1/arm.json").read_text())
-    expect(intent["network_end_epoch"] <= arm["launch_epoch"], "network work ended before the launch")
-    expect(ctl.network_open is False, "network closed while armed")
-    s = tick("2 live: fence held")
-    expect(s["state"] == "LIVE", "live while the fence is held")
-    world.launcher.finish()
-    s = tick("3 close dev-04-s01")
-    expect(s["state"] == "CLOSED", f"clean close, got {s}")
-    expect(world.verify_signature("cq-dev-04-s01-a1"), "the bundle commit carries a valid SSH signature")
-    s = tick("4 floor after a campaign close")
-    expect(s["state"] == "WAIT" and "GAP" in s["detail"]["codes"], "300 s floor")
-    expect(cc.fence.read_fence(Path(world.cfg["custody_root"]))["purpose"].startswith(cc.STANDING_FENCE_PREFIX),
-           "the standing fence holds the magistrate off while waiting")
-    world.env.t += law.GAP_AFTER_CAMPAIGN_S
-    world.launcher.soak_refusals["cq-dev-04-s02-a1"] = 1      # RL-171: its first soak is refused, the retry runs
-    s = tick("5 arm dev-04-s02 (consumers)")
-    expect(s["state"] == "LIVE" and s["detail"]["plan_id"] == "cq-dev-04-s02-a1", "second span armed")
-    live = world.launcher.finish()
-    s = tick("6 close dev-04-s02")
-    expect(s["state"] == "CLOSED", f"clean close, got {s}")
-    receipt = json.loads((live["output"] / runner.RECEIPT_NAME).read_text())
-    consumers = [leg["leg_id"] for leg in receipt["legs"] if "span_reference" in leg]
-    expect(len(consumers) >= 1, "the second span has span-reference consumers")
-    expect(len(receipt["soak_attempts"]) == 2 and receipt["soak_attempts"][0]["refused"],
-           "the second span's soak was retried once, and the close is still clean")
-    world.env.t += law.GAP_AFTER_CAMPAIGN_S
-    s = tick("7 dev-05 dated tomorrow")
-    expect(s["state"] == "WAIT" and "NOT_BEFORE" in s["detail"]["codes"], "not before its date")
-    world.env.t = datetime.fromisoformat("2026-11-18T00:05:00-08:00").timestamp()
-    s = tick("8 midnight: k+2 desk debt")
-    expect("K2_DESK_DEBT" in json.dumps(s), f"campaign span 5 waits for span 3's desk: {s}")
-    pages = ctl.unacked_pages()
-    expect(s["state"] == "PAGED" and pages and pages[0]["kind"] == "WAIT_STALL", "a long wait pages once")
-    world.air_desk_final("cq-dev-04-s01-a1")
-    for p in pages:
-        with contextlib.redirect_stdout(io.StringIO()):
-            cc.cmd_ack(world.cfg, type("A", (), {"page_id": p["page_id"], "by": "magistrate (synthetic)",
-                                             "note": "Air desk final landed"}))
-    s = tick("9 arm dev-05-s01 across queues")
-    expect(s["state"] == "LIVE" and s["detail"]["plan_id"] == "cq-dev-05-s01-a1", f"third span armed: {s}")
-    world.launcher.finish()
-    s = tick("10 close dev-05-s01")
-    expect(s["state"] == "CLOSED", "clean close")
-    world.env.t += law.GAP_AFTER_CAMPAIGN_S
-    world.ready_session("r1-slot-1")
-    s = tick("11 READY v4 session")
-    expect(s["state"] == "PAGED" and "V4_SESSION_READY" in json.dumps(s), "cede and page, never launch")
-    expect(cc.fence.read_fence(Path(world.cfg["custody_root"])) is None, "the fence is released for the magistrate")
-    ledger = (Path(world.cfg["state_dir"]) / "transitions.jsonl").read_text().splitlines()
-    kinds = [json.loads(line)["transition"] for line in ledger]
-    expect(kinds.count("armed") == 3 and kinds.count("closed") == 3 and kinds.count("bundle_pushed") == 3,
-           f"three arms, closes and pushes recorded: {kinds}")
-    cp = json.loads((Path(world.cfg["state_dir"]) / "critical-path" / "dev-05-s01.json").read_text())
-    expect({"NOT_BEFORE", "K2_DESK_DEBT"} <= set(cp["blocking"]) and cp["start"] and cp["end"],
-           "the critical-path ledger records each prerequisite, the start and the end")
-    return {"ok": True, "transcript": transcript, "transitions": kinds, "world": world}
+    for name, fn in SCENARIOS.items():
+        fn(Path(workdir) / name, log=log)
+    return list(SCENARIOS)
 
 
 def main(workdir):
     try:
-        result = run(workdir)
+        names = run(workdir)
     except AssertionError as exc:
         print(f"SYNTHETIC FAILED: {exc}")
         return 1
-    print(f"SYNTHETIC OK: {len(result['transcript'])} ticks; transitions {result['transitions']}")
+    print(f"SYNTHETIC OK: {', '.join(names)}")
     return 0
 
 

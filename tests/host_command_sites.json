@@ -2140,5 +2140,11 @@
     "locator": "host_proof:fe117ae638014da5",
     "command": "systemsetup",
     "seam": "host_proof's argv runs only through Env.run; tests pass FakeRunEnv (tests/cadence/test_cadence_controller.py HostProofParsing) and the synthetic run replaces the whole proof; production argv is a read-only readback: pmset -g, pmset -g batt, sudo -n systemsetup -getusingnetworktime, sudo -n -l /bin/kill (a privilege listing), launchctl list, pgrep"
+  },
+  {
+    "file": "scripts/cadence_controller.py",
+    "locator": "Controller.night_agents:502ee0a584ce0b0b",
+    "command": "launchctl",
+    "seam": "read-only launchctl list census (a loaded night agent silences the controller; Mythos F5); runs only through Env.run, which the synthetic FakeEnv answers without a host command"
   }
 ]

@@ -9,15 +9,24 @@
  "kits_dir": "/Users/edr/campaign-out/kits",
  "custody_root": "/Users/edr/night-custody/magistrate",
  "measurement_python": "@@MEASUREMENT_PYTHON@@",
- "receipt_roots": ["/Users/edr/campaign-out", "/Users/edr/code/jw-wt"],
- "signing_key": "/Users/edr/.ssh/jw_cadence_bundle",
- "bundle_ref_prefix": "refs/heads/cadence-desk/",
+ "receipt_roots": [
+  "/Users/edr/campaign-out",
+  "/Users/edr/code/jw-wt"
+ ],
+ "signing_key": "/Users/edr/.ssh/jw_cadence_controller",
+ "bundle_ref_prefix": "refs/heads/desk-bundles/",
+ "verdict_signers": "/Users/edr/cadence-controller/desk_allowed_signers",
+ "copy_marker_dir": "/Users/Shared/JouleWise/desk-copy",
+ "watcher_name": "com.joulewise.air-watch",
  "owner_login": "mpmdw",
  "repo_slug": "mpmdw/JouleWise",
- "gh_argv": ["/opt/homebrew/bin/gh"],
+ "gh_argv": [
+  "/opt/homebrew/bin/gh"
+ ],
  "measurement_mode_script": "/Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh",
  "high_power_marker": "/Users/Shared/JouleWise/host-power/high-power.marker",
  "poll_idle_s": 60,
- "poll_live_s": 2,
- "hold_standing_fence": true
+ "poll_live_s": 60,
+ "hold_standing_fence": true,
+ "accept_mock_verdicts": false
 }
