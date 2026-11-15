@@ -16651,3 +16651,145 @@ A series turn pinned near the soak reference gets the fitted slope at its own re
 **Blind status.** Blind. Nothing measured was opened by me or by the seat. Every number here is from synthetic campaigns built on step 3's disclosed output and on assumed spreads. The form, the rules and the tolerances are fixed before stage 1 runs on any real leg. The 2 % line is unchanged; what changed is that its pass rate is now stated beside it.
 
 **For Ed, plainly.** "A second model attacked the design of the heat fit before the code was finished, and found four real problems. Two I fixed. The correction was coming out about a fifth too small, because the moment heat starts is predicted with some error; the fit now allows for that error, at a cost of a few lines of code. And the model for when heat starts could fail to fit in a thin campaign; it now has a stricter minimum and a written test. Two I did not fix, on purpose. The 2 % accuracy bar turns out to be hard to pass even for a correct model, about 4 times in 10. I kept the bar and wrote that number beside it, rather than loosen a bar we had already set. And the model's shape cannot be checked on short runs with the data we are collecting, so the file now says so. Both programs change in step tomorrow, and Monday's dates hold."
+
+# RL-169a. F2 after its two cold seats: the kit is admitted once six data and text fixes are in. No code and no re-pin. Sol's refusal is not upheld: F2 still gives the floor, the gain and the onset lag in full, and the return to baseline is read after each leg's own warm-up pulse instead of after the turn. Latest t0 is now 22:13:10. Any F2 stop halts every queue until the lead closes its issue
+
+Research lead (Fable 5.2), Sat Nov 14 22:02 PST 2026 (from `date`). Rules on the Mythos seat's F1 to F10 and the Sol seat's 1 to 6 against kit `f2-inst-01` at `e6a9cdb91`. RL-169 stands except where "Amends" says otherwise.
+
+**Read.**
+- Both seat reports in full, and Sol's long report (`sol-f2/kits/docs/run_reports/2026-11-14-sol-f2-review.md`), its `*-edges.out`, `*-coverage-proof.json` and `*-late-g0.json`.
+- The builder's `coverage.out` and `plans.out`, and the committed kit and both queue files at `e6a9cdb91`.
+- At `2d347f721`: `cadence_leg.py`; `r1_runtime.py` (`reference_hook`, `observe_recovery`); `controller.py` (the stage order, `_stage_warmup`, `_stage_measured_run`, the 1.0 s dwell); `workload.py` (`warmup`, `run_workload`); `stops.py`; `queue.py` (`span_state`, `next_action`, `halts_from_issues`); the reserves in `cadence_legs_runner.py`.
+- RL-155 §4 rule 4 and RL-164 §5, from Sol's copy of the ruling log.
+
+**Not checked.**
+- I ran nothing. Every clock time below is my arithmetic from the seats' plan outputs.
+- That the warm-up prompt is the leg's own size. I read it from the time model ("warm-up (one prefill)"), not from a run. The builder prints it (§1).
+- The powermetrics sample interval. It decides how many rail samples the 1 s tail holds.
+- What a launch writes under `--custody-root`. Mythos read `launch()` only; I read less.
+- Whether F0's 12,180 s already holds the 560 s of reserves (§3).
+- `1b20d3b0e` was not read; the seats report the two pins behave alike.
+- No SSH. No measurement, energy, power, meter or custody file was opened.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 1. The recovery gap (Sol 1, Mythos F6)
+
+**The fact is right.** The rails stop 1.0 s after decode end, and the leg has no recovery phase. The builder's coverage row "leg turn + recovery: YES" is wrong and is corrected to "turn + 1 s".
+
+**The refusal is not upheld.** Three reasons:
+1. **Two of the three purposes do not use the tail.** The floor comes from the 600 s hold. The onset lag comes from the prefill start after that hold. Both channels cover both.
+2. **The gain does not need it either.** `lm-inst-01` takes the gain from the plateau: each channel's mean power in the decode and in the long prefill, above the hold's mean. The energy ratio is printed as well, with the DC-in tail cut at decode end plus 1 s and marked so.
+3. **Every leg already holds a recovery observation, before the turn.** The stage order is warm-up, then sampling start, then the G0 wait, the 600 s hold and the turn. The warm-up is a prefill of the leg's size (about 1.3, 10 or 97 s). So the rails and DC-in both record the fall from that pulse: from sampling start through the G0 wait (modeled at 209 s) and the hold. The model is resident and it is one process. That is twelve recoveries, four per pulse size.
+
+**What F2 no longer gives.**
+- **The rails' return after a decode, beyond 1 s.** Printed as censored at the stream end.
+- **The rails' first seconds after the warm-up.** Sampling starts after the warm-up ends. `lm-inst-01` prints that gap per leg, from the stage stamps.
+- **A clean DC-in fall at decode end beyond 1 s.** DC-in runs on, but the leg's teardown starts there. A lag under 1 s is measured; a longer one is printed as "over 1 s".
+- **A clean dose for the warm-up.** It is the process's first inference, so its energy is not printed. Only the return after it is.
+
+**§3's print list, as amended** (`lm-inst-01` is not yet drafted, so nothing is rebuilt):
+- Item 2 becomes: the turn's energy above baseline to decode end plus 1 s; the plateau gain; and the time each channel takes to come back to the hold's level after the warm-up, measured from the warm-up's end stamp.
+- Item 4 becomes: the lag and the 10 to 90 % rise time at prefill onset; at decode end, the lag within the 1 s tail or "over 1 s".
+- Each censored value is printed as censored, with its bound. None is filled in.
+
+**Cheaper designs I rejected.**
+- **A re-pin that calls R1's `observe_recovery`.** It opens a session without powermetrics, so it would add 600 s of temperatures and no rail sample. It does not close the gap, and it is class A.
+- **The next leg's G0 as the previous turn's recovery.** The next leg is a new process: it reloads the model and runs its own warm-up before its sampling starts. It sees its own warm-up's fall, which is item 3 above.
+- **A longer dwell.** The 1.0 s is a controller default behind a campaign policy file. I found no kit field that reaches it and did not look further.
+
+**If the read shows the fall edge matters** (a decode-end lag over 1 s), a rail-sampled recovery is a requirement on ctl-01's runner, which needs one anyway. It is not a second F2 kit.
+
+**One check for the builder, Sunday.** From the synthetic runtime's events for one leg, print: the warm-up prompt's size, the warm-up end stamp, the `sampling_started` stamp and the G0 release stamp. If the warm-up is not the leg's size, or its end is not stamped, tell me; item 3 then needs rewording, not a new kit.
+
+## 2. Each finding
+
+| Finding | Ruling | Who and what |
+|---|---|---|
+| **Mythos F1.** The 19,458 leg is first in all four pieces | **Fix in the kit.** Master seed becomes `2026111443`. Rule: the lowest seed from 2026111441 up, unused on every ref, at which each size holds each of the three positions at least once over the four pieces | Builder: re-seed, `gen-legs`, print the layout, re-run the ref scan. If 43 fails either test, take the next that passes and say so |
+| **Mythos F2.** An F2 stop holds the campaign queue | **Accept the code; RL-169's "holds F2 only" is withdrawn.** §4 | Text in `stop_rules.notes` |
+| **Mythos F3, Sol 2.** CONTAMINATED_REDOS and LEG_OVERTIME can fire | **Accept; they are stops.** §4 gives their disposal. No kit field can switch them off | Text in `stop_rules.notes` |
+| **Mythos F4, Sol 4.** The hand-read cannot be done from the desk table, and the queue does not wait for it | **Fix in text and queue.** The source is each leg's `leg_record.json` and the span's `runner_receipt.json`: operational, no energy. Piece 1 goes in a queue of its own (§5) | Builder: `f2_read_rule`, two queue files |
+| **Mythos F5.** The queue outlives the ruling | **Fix.** "Issue" is RL-169's stamp. Void and `expires_at` are `2026-11-21T21:29:00-08:00`. `not_before` 11-16 stays as a magistrate rule; no code reads it | Builder |
+| **Mythos F6, Sol 1.** No recovery after the turn | **Accept a reduced read.** §1 | Coverage row; `lm-inst-01` |
+| **Mythos F7.** Text is not exactly RL-169's | **Accept the longer inclusion text.** Fix `sidecar_coverage`: "judged by `lm-inst-01` at the read", not "at a look". RL-169 §2's "the leg bytes are the ones dev-01 ran" holds on `1b20d3b0e` only; on `2d347f721` the own-shaped leg takes the v1 spec under the v1.1 file | Builder: one line |
+| **Mythos F8.** 158 s under the process cap on the 19,458 leg | **Accept.** The hand-read records each leg's wall against 2,700 s | Lead |
+| **Mythos F9.** A `reserve` phase skips the `f2-` prefix check in the look manifest | **Not this kit.** Carried to `lm-interim-01`'s cold pass, with Sol 5's roster point | Lead carries it |
+| **Mythos F10, Sol 5.** Staging | **Rules, no code.** (a) One pin's kit and queues are staged, ever; the branch drops the other variant when the lead picks the pin. (b) No F2 row in `BLOCK-QUEUE.json`'s `blocks[]`: it would count toward `ready_ahead`. The ladder's default rule lives in the magistrate's standing item. (c) `--output` is under the F2 root. `--custody-root` is the one a campaign span uses, so the desk fence is single. The builder prints what a mock launch writes under it; if a leg-bearing file lands there, tell me | Builder, lead |
+| **Sol 3.** The 01:30 bound | **Fix: latest t0 22:13:10.** §3 | Magistrate rule; kit text |
+| **Sol 5.** Exclusion rests on staging | **Accept.** No code path takes an F2 leg into a look; both seats found none. Future looks name their kits and receipts explicitly (with F9). The quiet after F2 counts from the actual close (§3) | Lead |
+| **Sol 6.** 10:50:00 and 02:35 are admitted by `plan` | **Magistrate rules.** No t0 in [10:50:00, 13:15:00). None before 02:40:00 after a blackout | Standing item text |
+
+**All of this is class B:** kit data, kit text, queue files and standing-item text. The `frozen` block does not change. The kit's sha changes, so the queues' pins are regenerated.
+
+## 3. Latest t0
+
+**22:13:10.** It replaces RL-169 §5's 22:18:10.
+
+| Mark | At t0 22:13:10 |
+|---|---|
+| Worst-case work end (t0 + 11,250 s) | 01:20:40 |
+| Launcher deadline (+ 560 s of runner and launcher reserves) | 01:30:00 |
+| Fence end (work end + 1,460 s) | 01:45:00 |
+
+- **Why.** RL-155 §4 rule 4 wants the machine quiet from 01:30. The close is machine activity, and at 22:18:10 it could run to 01:35:00. Five minutes of launch window cost a filler nothing.
+- **The code still admits up to 22:18:10.** The magistrate holds the earlier line. No t0 from 22:13:10 (exclusive) to 02:40:00.
+- **The quiet after F2 counts from the actual close stamp in the receipt,** not the modeled end: 30 minutes before a counted t0, 20 before a Part C or another filler.
+- **F0.** Its 22:07:00 was set on work end alone (RL-164 §5). If its 12,180 s does not hold the 560 s, the same reading gives 21:57:40. The lead checks the number and applies it; that needs no further ruling.
+
+## 4. Stop semantics, restated
+
+**What the code does, on any F2 piece.** These are not choices:
+1. A named stop or a refusal makes that span bad-terminal. **F2's own queue halts there and cannot move on.**
+2. The Air desk opens a `cadence-stop` issue. **Every queue halts while it is open, the campaign's included.**
+3. A stop never aborts a running span.
+
+**Named stops on F2:** REFUSAL, INSTRUMENT_FAULT, CONTAMINATED_REDOS (three loaded legs in one piece) and LEG_OVERTIME (two legs over 1.5 times their budget; a G0 that releases after about 890 s does it). A G0 timeout alone, or one or two loaded legs, is recorded and is not a stop.
+
+| What | The lead's disposal | F2 resumes |
+|---|---|---|
+| Restore unproven, or host state changed | The issue stays open. Holds everything | When the lead has the restore proven. A second one comes to me |
+| INSTRUMENT_FAULT | The issue stays open until a fresh `km003c_ready` check passes. The meter is shared, so the campaign waits too | By the lead, with a new queue |
+| REFUSAL | Restore lines and feeds proven stopped in the receipt: close the issue. The campaign arms again | By the lead once, with a new queue. A second one comes to me |
+| LEG_OVERTIME, CONTAMINATED_REDOS | As REFUSAL, with one line of cause in the issue (the G0 waits, or the load journal's census) | By the lead, with a new queue. Two in a row come to me |
+| Piece 1's hand-read fails | No issue. The second queue is not committed | Lead; comes to me if a field of RL-169 §2 must change |
+
+- **Closing an F2 issue is a standing authority of the lead's desk,** under the row's condition. The campaign must not wait for a person on a filler's stop.
+- **"A new queue"** holds the pieces not yet run, under a new `queue_id`, and passes `validate-queue`. A leg with a member bundle is never re-run. Legs of a stopped piece that left no bundle are dropped, not re-cut.
+- **RL-169's INSTRUMENT_FAULT row** ("a campaign span arms on its own `km003c_ready` line") is withdrawn.
+
+## 5. Piece 1 and the hand-read
+
+- **Two queues.** `cq-f2-inst-01-a` holds piece 1 only. `cq-f2-inst-01-b` holds pieces 2 to 4, and the lead commits it only after the hand-read passes. Both expire at §2's void time.
+- **The hand-read,** by the lead, no energy. From each `legs/<id>/leg_record.json`: `leg_status`, `g0_outcome`, `g0_wait_s`, `quiet_spans_ns`, `decode_tokens`, `decode_cap_reached`, `prefill_tokens` and the wall. From `runner_receipt.json`: the meter, the feeds and the restore lines.
+- **It passes when:**
+  1. every leg is `complete` or `g0_unreleased`, and at least two are `complete`;
+  2. each complete leg has one quiet span of 600 s or more and reached 512 tokens;
+  3. the meter was present and clean, every feed is proven stopped, and the restore lines passed.
+- **It records, without judging:** each leg's wall against 2,700 s, and the realized `prefill_tokens` of the 256 leg.
+- **A complete leg that stopped short of 512** is kept and flagged. If the 256 leg does so, the lead tells me before queue b is committed.
+
+## 6. Gate and owners
+
+- **Builder (Sonnet), Sunday:** the seed; the text lines of §2 (`stop_rules.notes`, `f2_read_rule`, `sidecar_coverage`); the two queues with the void time; the corrected coverage row; §1's stamp print; F10's custody print. No code.
+- **Re-check: one executing seat that did not build it,** on the diff only: `validate-kit`, `gen-legs` and the layout rule, `plan` at 22:13:10, `validate-queue` on both queues, and the text against this page. RL-169 §5's READY line 1 is met by that seat reporting no open finding. A second seat is not needed: the remaining findings are closed by ruling.
+- **Lead:** the pin choice and the single staged variant; the standing item with §2's launch rules and §3's t0; §4's disposals; the hand-read; F9 carried to the look line; the F0 check.
+- **Analyst seat:** `lm-inst-01` to §1's print list.
+- **Research lead:** a failed builder check of §1; a second stop; `lm-inst-01`'s cold pass; the output.
+
+---
+
+**Amends.**
+- RL-169 §3 items 2 and 4: as §1.
+- RL-169 §5 "Latest t0 is 22:18:10": 22:13:10 (§3).
+- RL-169 §5's stop table and hand-read line: replaced by §4 and §5.
+- RL-169 §5 "Void seven days after issue": 2026-11-21 21:29 PST.
+- RL-169 §2: the master seed, and the dev-01 leg-bytes sentence (§2, F7).
+- RL-169 §5 READY line 3: two queues, not one of four spans.
+- RL-169 §6: the ladder line is in the standing item, not `BLOCK-QUEUE.json`.
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This page rests on the two seat reports, source code and rulings. The seed rule looks only at layout, and no F2 leg exists.
+
+**For Ed, plainly.** "Two reviewers checked the instrument check. One passed it with fixes; one refused it because the laptop's own power counters stop one second after each burst, so we cannot watch them settle afterwards. I kept the design. Each run already does a warm-up burst and then sits idle for over ten minutes with the counters on, so we watch the settling there instead. What we lose is the settling after the main burst on the laptop's counters, and the report will say so. The other fixes are small: shuffle the order of the bursts, start five minutes earlier at night, and write down that a problem in this check pauses the calibration runs until the lead clears it. Nothing needs new code."
