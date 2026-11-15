@@ -694,9 +694,10 @@ class RL167(unittest.TestCase):
         _, en, _, _ = dataset("noisy")
         s1 = stage1_of("noisy")
         e2 = copy.deepcopy(en)
-        e = next(iter(e2["legs"].values()))["gpu_rail"]
+        cold = next(L for L in s1["legs"] if L["in_energy_fit"] and not any(s["hot"] for s in L["segments"]))
+        e = e2["legs"][cold["leg_key"]]["gpu_rail"]           # no hot block: only the leg rule can see it
         e["segments"] = [-abs(x) for x in e["segments"]]
-        with self.assertRaises(F.LookInputError):
+        with self.assertRaisesRegex(F.LookInputError, "leg's measured energy"):
             F.stage2(s1, rehash(s1), e2)
 
     def test_r11_prefix_n_days_and_floor(self):
