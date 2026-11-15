@@ -47,6 +47,7 @@
    "joulewise/align/apple/v4_battery.py",
    "joulewise/align/apple/v4_cadence.py",
    "joulewise/align/apple/v4_contention.py",
+   "joulewise/align/apple/v4_desk_seal.py",
    "joulewise/align/apple/v4_estimands.py",
    "joulewise/align/apple/v4_registration.py",
    "joulewise/align/apple/v4_topup.py",
@@ -244,6 +245,7 @@
    "joulewise/align/apple/v4_battery.py",
    "joulewise/align/apple/v4_cadence.py",
    "joulewise/align/apple/v4_contention.py",
+   "joulewise/align/apple/v4_desk_seal.py",
    "joulewise/align/apple/v4_estimands.py",
    "joulewise/align/apple/v4_registration.py",
    "joulewise/align/apple/v4_topup.py",
@@ -455,6 +457,7 @@
    "joulewise/align/apple/v4_battery.py",
    "joulewise/align/apple/v4_cadence.py",
    "joulewise/align/apple/v4_contention.py",
+   "joulewise/align/apple/v4_desk_seal.py",
    "joulewise/align/apple/v4_estimands.py",
    "joulewise/align/apple/v4_registration.py",
    "joulewise/align/apple/v4_topup.py",
@@ -1109,6 +1112,7 @@
   "joulewise/align/apple/v4_battery.py",
   "joulewise/align/apple/v4_cadence.py",
   "joulewise/align/apple/v4_contention.py",
+  "joulewise/align/apple/v4_desk_seal.py",
   "joulewise/align/apple/v4_estimands.py",
   "joulewise/align/apple/v4_registration.py",
   "joulewise/align/apple/v4_topup.py",
@@ -1276,7 +1280,7 @@
    "tests_run": 162
   },
   "dct_series_window": {
-   "new_paths": 152,
+   "new_paths": 153,
    "ok": true,
    "tests_run": 56
   },

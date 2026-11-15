@@ -395,7 +395,32 @@ def run_desk(out, world):
         import traceback
         return {'status': 'crashed', 'error': f'{type(exc).__name__}: {exc}',
                 'traceback': traceback.format_exc()[-3000:]}
-    return {'status': 'ok', 'pilot': json.loads((out / 'desk/PILOT.json').read_text())}
+    return {'status': 'ok', 'pilot': desk_oracle_input(out / 'desk')}
+
+
+def desk_oracle_input(desk):
+    """The PILOT this synthetic oracle checks, after the public desk output is witnessed.
+
+    PR #774 (Sol F1): before release the written ``PILOT.json`` carries the C/T or W1 seal and the full PILOT
+    goes to the withheld archive. The public file is parsed first, always (missing or malformed raises, as
+    before PR #798). When the archive exists the public file must carry the seal's shape: a withheld
+    ``release_guard`` naming the archive and its sha256. Only then is the full PILOT returned, since the oracle
+    checks the desk's arithmetic. Without an archive (released) the public PILOT is the oracle input.
+    """
+    from joulewise.align.apple import v4_desk_seal
+    desk = Path(desk)
+    public = json.loads((desk / 'PILOT.json').read_text())
+    full_path = desk / v4_desk_seal.WITHHELD_PILOT
+    if not full_path.is_file():
+        return public
+    guard = public.get('release_guard') if isinstance(public, dict) else None
+    raw = full_path.read_bytes()
+    if not (isinstance(guard, dict) and guard.get('schema') == v4_desk_seal.GUARD_SCHEMA
+            and guard.get('status') == v4_desk_seal.WITHHELD
+            and guard.get('withheld_pilot') == v4_desk_seal.WITHHELD_PILOT
+            and guard.get('withheld_pilot_sha256') == hashlib.sha256(raw).hexdigest()):
+        raise ValueError(f'{desk / "PILOT.json"}: not the sealed shape bound to {v4_desk_seal.WITHHELD_PILOT}')
+    return json.loads(raw)
 
 
 def synthetic_registration(out, manifest):
