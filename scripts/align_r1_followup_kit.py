@@ -488,6 +488,12 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         result["elapsed_s"] = time.monotonic() - started
         (output / "smoke_part_c.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
         (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        # RL-153 section 1.2 note 6, RL-156 section 3.2: the verdict and the evaluation's log (RL-152 section
+        # 1.4's line among them) go to the terminal as well as the record; the record is unchanged.
+        if verdict_doc is not None:
+            print(f"Part C verdict: {verdict_doc.get('verdict')} (pass: {verdict_doc.get('pass')})")
+            for line in verdict_doc.get("log") or ():
+                print(f"Part C log: {line}")
     try:
         result["members"]["predecessor"] = invoke(runtime, "capture-predecessor-30b", output / "capture_predecessor_30b",
                                                   soak_reference=soak_reference)
@@ -517,7 +523,10 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
             x_g = invoke(runtime, "x-g", output / PART_C_X_G, soak_reference=soak_reference)
             result["members"]["x_g"] = x_g
             x_g_facts = facts(output / PART_C_X_G / x_g["bundle"], role="x-g")
-            x_g_facts["x7"] = any(f.startswith("episode.deadman:") for f in x_g.get("episode_flags", []))
+            # PR #777 row-2 finding 7: the runtime's flags decide only when they are recorded (a list), as on
+            # D_bank's path; otherwise the bundle-derived X7 stands.
+            if isinstance(x_g.get("episode_flags"), list):
+                x_g_facts["x7"] = any(str(f).startswith("episode.deadman:") for f in x_g["episode_flags"])
         except (r1.Refusal, ValueError, KeyError, OSError) as exc:
             why = f"{type(exc).__name__}: {exc}"
             print(f"Part C: X_G left out, the launcher could not run it without more condition-13 code: {why}",

@@ -22,7 +22,7 @@ HEATER = kit.planning_heater_key()
 
 def build_member(root, phase, *, outcome='timeout', duration_s=1200, key=HEATER, target=TARGET, os_level=0,
                  pm_state='Nominal', early=40.0, late=30.0, last_s=None, delta=DELTA, step_s=1, run='m',
-                 pm_observed=True, fast_offset=None):
+                 pm_observed=True, fast_offset=None, pm_age_s=0.0, fast_missing=False):
     """One member journal: `early` for the first part of G0, `late` for the last 300 s (or last_s)."""
     last_s = desk.WINDOW_S if last_s is None else last_s
     start, end = T0, T0 + int(duration_s * NS)
@@ -35,11 +35,11 @@ def build_member(root, phase, *, outcome='timeout', duration_s=1200, key=HEATER,
         fast = value
         if fast_offset is not None and t == end - int(fast_offset[0] * NS) and value is not None:
             fast = value + fast_offset[1]
-        sensors = {'TV0h': fast, key: value}
+        sensors = {key: value} if fast_missing else {'TV0h': fast, key: value}
         rows.append({'kind': 'reading', 'started': {'monotonic_ns': t},
                      'values': {'sensors': sensors, 'errors': {},
                                 'status': {'os_level': os_level, 'pm_state': pm_state,
-                                           'pm_observed_ns': t if pm_observed else None}}})
+                                           'pm_observed_ns': t - round(pm_age_s * NS) if pm_observed else None}}})
     rows.append({'kind': 'align_thermal_gate', 'values': {'state': 'end', 'gate': {
         'kind': 'G0', 'turn': 0, 'outcome': outcome, 'start_ns': start, 'end_ns': end,
         'duration_s': duration_s, 'reference': {'fast_c': 150.0, 'slow_c': target}}}})
@@ -98,11 +98,24 @@ class Desk3aTests(unittest.TestCase):
         # RL-152 section 1.1 (RL-149 section 1.7): print only; the class does not read it.
         _, row = self.run_desk(late=31.4)
         self.assertEqual(row['fast_slow_unequal_last_300s'], 0)
+        self.assertEqual(row['fast_slow_pairs_last_300s'], row['samples_last_300s'])
+        # RL-153 section 1.2 finding 1: no fast value recorded, no pair compared: the count is None, not 0.
+        _, none = self.run_desk(late=31.4, fast_missing=True)
+        self.assertEqual((none['fast_slow_pairs_last_300s'], none['fast_slow_unequal_last_300s']), (0, None))
         _, row = self.run_desk(late=31.4, fast_offset=(120, 0.25))
         self.assertEqual(row['fast_slow_unequal_last_300s'], 1)
         self.assertEqual(row['classification'], 'planning-release-3a')
         _, row = self.run_desk(late=31.4, fast_offset=(400, 0.25))      # before the last 300 s: not counted
         self.assertEqual(row['fast_slow_unequal_last_300s'], 0)
+
+    def test_stale_power_state_uses_the_two_sided_2_s_rule(self):
+        # RL-153 section 1.2 finding 2: rl145_prints.stamp_fresh on the same age (RL-152 section 1.6).
+        import contextlib
+        for age, stale in ((-2.01, True), (-2.0, False), (2.0, False), (2.01, True)):
+            with self.subTest(age=age), contextlib.redirect_stderr(io.StringIO()):
+                _, row = self.run_desk(late=31.4, pm_age_s=age)
+                self.assertEqual(row['stale_power_state_samples'], row['samples'] if stale else 0)
+                self.assertEqual(row['classification'], 'to-research-lead' if stale else 'planning-release-3a')
 
     def test_crossing_the_edge_is_3a(self):
         _, row = self.run_desk(late=32.0)
@@ -278,7 +291,8 @@ class Desk3aTests(unittest.TestCase):
         self.assertEqual(len(row['journal_sha256']), 64)
         _, stale = self.run_desk(late=31.4, pm_observed=False)
         self.assertEqual(stale['stale_power_state_samples'], stale['samples'])
-        self.assertEqual(stale['classification'], 'planning-release-3a')
+        # PR #777 row-2 finding 2: a state with no stamp is not recorded, so not "Nominal throughout".
+        self.assertEqual(stale['classification'], 'to-research-lead')
 
     def test_output_is_deterministic_and_has_no_wall_clock(self):
         with tempfile.TemporaryDirectory() as tmp:

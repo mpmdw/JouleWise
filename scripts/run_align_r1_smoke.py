@@ -305,19 +305,26 @@ def soak_seconds():
     return float(next(d for name, _kind, d, _c in r1.phase_plan() if name == "idle_soak"))
 
 
-def soak_child(output, inputs):
+def soak_child(output, inputs, parts="AB"):
     """RL-94: the night's idle-soak path, verbatim, for this config's gate pair.
 
     Same invocation, contract check, settled-slope refusal and reference
     writer as align_r1_rehearsal's idle_soak; one attempt, no redo.
+
+    Ruling 8 (RL-149 section 2.9 item 4): for Part C the blackout check covers the whole
+    span the soak opens, [now, now + soak + r1_part_c_cap_s()), because Part C's step-D and
+    gated members follow the soak with no blackout check of their own (PR #777 row-2
+    finding 1). Parts A and B keep the soak-only check.
     """
     reg.verify_r1_executed_sources(ROOT, {"executed_commit": r1.executed_commit(ROOT)})
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
+    span_s = soak_seconds() + (launcher.r1_part_c_cap_s() if parts == "C" else 0.0)
+    what = "idle soak and Part C" if parts == "C" else "idle soak"
     def overlaps_batch(_delay):
-        raise ValueError(f"idle soak would overlap the {r1.os_batch_window_text()} local OS batch window "
-                         "(ruling 8; RL-149 section 2.9 item 4)")
-    r1.wait_outside_os_batch(soak_seconds(), sleep=overlaps_batch)
+        raise ValueError(f"{what} ({span_s:.0f} s) would overlap the {r1.os_batch_window_text()} local OS batch "
+                         "window (ruling 8; RL-149 section 2.9 item 4)")
+    r1.wait_outside_os_batch(span_s, sleep=overlaps_batch)
     started = time.time_ns()
     result = r1._invoke(r1.runtime_argv_from_inputs(inputs), "idle", output / "idle_soak", soak_seconds(),
                         quiet=True, contract_key="idle_soak")
@@ -337,7 +344,7 @@ def soak_child(output, inputs):
 def part_argv(args, which):
     if which == "soak":
         return [sys.executable, "-B", str(ROOT / "scripts/run_align_r1_smoke.py"), "--soak-child",
-                "--output", str(args.output / "soak")]
+                "--output", str(args.output / "soak"), "--parts", getattr(args, "parts", "AB")]
     return [sys.executable, "-B", str(ROOT / "scripts/align_r1_followup_kit.py"), "smoke", "--part", which,
             "--output", str(args.output / ("part-" + which.lower())), "--soak-reference", str(args.soak_reference)]
 
@@ -562,7 +569,7 @@ def main(argv=None):
     parser.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
     if args.soak_child:
-        soak_child(args.output, args.inputs)
+        soak_child(args.output, args.inputs, args.parts)
         return 0
     if args.deadline is None or not math.isfinite(args.deadline):
         parser.error("deadline must be finite")

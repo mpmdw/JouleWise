@@ -60,7 +60,10 @@ class DriverRuntimeTests(unittest.TestCase):
             argv = ["--output", str(root / "align-r1"), "--registration", str(root / "r1_slots.json"),
                     "--power-marker", str(root / "marker"), "--runtime-entrypoint", str(self.inputs(root, config)),
                     "--synthetic"]
-            with patch.object(r1, "_run", self.boundary(world, mode_file)):
+            # RL-156 section 2: the bar names TV0h/TV1h; the synthetic world's one thermometer under two key
+            # names stands in for that pair here.
+            with patch.object(r1, "_run", self.boundary(world, mode_file)), \
+                    patch.object(r1, "RULED_ALIAS_PAIR", (rs.syn.FAST, rs.syn.SLOW)):
                 rc = r1.main(argv)
             result = json.loads((root / "align-r1/r1_result.json").read_text())
             self.assertEqual(rc, 0, result.get("error"))
@@ -86,7 +89,7 @@ class DriverRuntimeTests(unittest.TestCase):
             self.assertEqual(b_leg["result"]["ac_powermode"]["value"], 2)
             self.assertEqual(registration["slots_ac_powermode"], 0)
             # RL-145 close sections 5 and 10, RL-149 section 5 item 12: the synthetic gate pair is the
-            # ruled alias pair (the fast key and its lexically first alias), confirmed by the runtime's
+            # ruled alias pair (TV0h/TV1h by name, RL-156 section 2), confirmed by the runtime's
             # RL-145 night confirmation, so the driver's R8-6 bar keeps it (it failed it before).
             self.assertEqual(registration["thermometry"]["D"]["status"], "pass")
             self.assertEqual(registration["thermometry"]["bar"], "pass")

@@ -37,7 +37,8 @@ I_D = 516.575
 # Shaped like the R1 driver's record, so the kit's evidence binding (executing
 # review MEDIUM-3) is exercised; the synthetic source is admitted only because
 # build_kit asks require_ready for it explicitly.
-SYN_PHASES = {'G0': 60.0, 'G1': 30.0, 'H': 30.0, 'decode': 200.0, 'prefill': 60.0, 'tool': 5.0}
+# PR #777 row-2 finding 5: no hold seconds (N_chunk 4,096); G1 + H stays 60 s as before.
+SYN_PHASES = {'G0': 60.0, 'G1': 60.0, 'H': 0.0, 'decode': 200.0, 'prefill': 60.0, 'tool': 5.0}
 SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE,
                 'ac_powermode': 0, 'slots_ac_powermode': 0,
                 'thermometry': {'bar': 'pass', 'D': {'s_fast': syn.FAST, 's_slow': syn.SLOW,
@@ -55,8 +56,8 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                                     'phases_s': dict(SYN_PHASES, tail=tail), 'decode_tokens': 8000,
                                     'turn_decode_counts': [2000]*4, 'turn_completed': [True]*4,
                                     'admitted_turns': 4, 'x7': False, 'turn_counts_source_sha256': R0_SHA,
-                                    # RL-148/RL-149 typical-case bar: three G1 waits (30 s of G1), none timed out.
-                                    'gate_waits_s': {'G1': [10.0, 10.0, 10.0]}, 'g1_timeouts': 0,
+                                    # RL-148/RL-149 typical-case bar: three G1 waits (60 s of G1), none timed out.
+                                    'gate_waits_s': {'G1': [20.0, 20.0, 20.0]}, 'g1_timeouts': 0,
                                     'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                    for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'r_decode_step_d_tok_per_s': 40.0,
