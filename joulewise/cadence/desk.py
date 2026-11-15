@@ -48,7 +48,8 @@ LEG_SUMMARY_KEYS = {"leg_id", "seed", "start_band", "band_reached", "g0_s", "g0_
                     "attempts", "contaminated_redos", "redo_reasons", "os_level_max", "pm_nominal",
                     "started_epoch_s", "ended_epoch_s", "admitted"}
 METER_KEYS = {"present", "proven_stopped", "bad_polls", "usb_errors", "elapsed_s", "polls"}
-RESULT_KEYS = {"chain_exit_code", "chain_outcome", "fault", "outcome", "verdict"}
+# ``restore_proven``: a High Power span's close proof (RL-149 section 2.5); absent on an Automatic span.
+RESULT_KEYS = {"chain_exit_code", "chain_outcome", "fault", "outcome", "verdict", "restore_proven"}
 
 
 class DeskRefusal(RuntimeError):
@@ -219,15 +220,17 @@ def _guard_text(text):
         raise DeskRefusal(f"output would carry a denied word {hit.group(0)!r}; nothing written")
 
 
-def build_desk(*, plan_id, input_dir, out_dir, adapter, stop_rules, history=(), now=None):
-    """Build the table, the span summary and the stops. Returns (summary, stops). Raises DeskRefusal."""
+def build_desk(*, plan_id, input_dir, out_dir, adapter, stop_rules, history=(), now=None, block_mode=0):
+    """Build the table, the span summary and the stops. Returns (summary, stops). Raises DeskRefusal.
+    ``block_mode`` is the kit's power mode (2: a High Power span must prove its restore; cold seat F1)."""
     if adapter not in ALLOWED_FILES:
         raise DeskRefusal(f"unknown adapter {adapter}")
     root = Path(input_dir)
     meter, result = _span_extras(root, adapter)
     lines = [f"# Desk table: {plan_id}", "",
              f"Built automatically on the Air at {time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(now))} "
-             f"by joulewise.cadence.desk ({adapter}). Operational fields only.", ""]
+             f"by joulewise.cadence.desk ({adapter}). Operational fields only."
+             + (f" Block AC powermode {block_mode}." if block_mode else ""), ""]
     legs = []
     if adapter == "leg-summary-v1":
         legs = leg_summary_rows(root)
@@ -237,7 +240,7 @@ def build_desk(*, plan_id, input_dir, out_dir, adapter, stop_rules, history=(), 
         lines += ["## Gated runs", ""] + r1_table([r1_run_rows(p) for p in runs])
     summary = {"plan_id": plan_id, "adapter": adapter, "result": result, "meter": meter,
                "feeds_proven_stopped": bool(meter.get("proven_stopped")), "legs": legs}
-    stops = evaluate_named_stops(stop_rules, summary, history)
+    stops = evaluate_named_stops(stop_rules, summary, history, block_mode=block_mode)
     lines += ["", "## Named stops", ""]
     lines += [f"- **{s['code']}**: {s['detail']}" for s in stops] or ["- none (no page)"]
     lines += ["", "## Restore and capture", "",

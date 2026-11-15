@@ -27,14 +27,14 @@ DEFAULT_RULES = {"instrument_fault": True, "refusal": True, "contaminated_redos_
 def build(args):
     if args.kit:
         kit, _ = kitmod.load_kit(args.kit)
-        adapter, rules = kit["desk"]["adapter"], kit["stop_rules"]
+        adapter, rules, mode = kit["desk"]["adapter"], kit["stop_rules"], kitmod.power_mode(kit)
     else:
-        adapter, rules = args.adapter, DEFAULT_RULES
+        adapter, rules, mode = args.adapter, DEFAULT_RULES, kitmod.AUTOMATIC
     history = json.loads(Path(args.history).read_text()) if args.history else []
     try:
         with desk.air_quiet_lock(f"cadence-desk:{args.plan_id}", Path(args.lock)):
             _, stops = desk.build_desk(plan_id=args.plan_id, input_dir=args.input, out_dir=args.out,
-                                       adapter=adapter, stop_rules=rules, history=history)
+                                       adapter=adapter, stop_rules=rules, history=history, block_mode=mode)
     except desk.LockBusy as error:
         print(f"LOCK {error}")
         return 4
