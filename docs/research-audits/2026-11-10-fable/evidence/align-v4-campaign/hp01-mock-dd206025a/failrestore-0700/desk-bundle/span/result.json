@@ -1,0 +1,8 @@
+{
+ "chain_exit_code": 2,
+ "chain_outcome": "INCOMPLETE",
+ "fault": false,
+ "outcome": "REFUSED",
+ "restore_proven": false,
+ "verdict": "3/3 legs run"
+}

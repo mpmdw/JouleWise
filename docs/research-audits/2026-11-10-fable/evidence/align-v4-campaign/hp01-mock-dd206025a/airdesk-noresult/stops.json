@@ -1,0 +1,10 @@
+[
+ {
+  "code": "REFUSAL",
+  "detail": "no terminal result"
+ },
+ {
+  "code": "RESTORE_UNPROVEN",
+  "detail": "a High Power span left no proof of its restore (no result, or no restore_proven); it holds everything until the lead restores and records it"
+ }
+]

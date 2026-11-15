@@ -1,0 +1,10 @@
+[
+ {
+  "code": "REFUSAL",
+  "detail": "chain_exit_code=2 chain_outcome=INCOMPLETE outcome=REFUSED"
+ },
+ {
+  "code": "RESTORE_UNPROVEN",
+  "detail": "the close did not prove AC powermode 0 and no High Power marker; it holds everything until the lead restores and records it"
+ }
+]
