@@ -45,7 +45,20 @@ Units: tokens are integers; temperatures °C; fan speed rpm; energy J. "Epoch" i
   "soak_reference_tv0h_c": float | null,  # the span's soak reference on TV0h (RL-150 R1 part 1); null = missing
   "marks": [ "reference from a redo" | "reference from an excluded leg", ... ],  # Q20; [] if none
   "meter_offsets_ns": { "header": int | null,    # KM003C header start_real_ns − start_raw_ns
-                        "end": int | null }      # the span's last poll line: rt − rx (RL-167 R-20); null if none
+                        "end": int | null },     # the span's last poll line: rt − rx (RL-167 R-20); null if none
+  "soak_receipt": {                       # RL-172a: the receipt fields the soak-retry print reads (§3, soak_retries)
+    "field_present": bool,                # runner_receipt.json carries soak_attempts (absent: one attempt)
+    "soak_attempts": any,                 # its value as written (validated by the print's rule), null when absent
+    "soak_steps": [ {"name": "soak" | "soak.a<n>", "rc": int | null}, ... ] },   # the receipt's soak steps, in order
+  "custody": null | {                     # Mythos r5 N6: what stage 1 read, checked again by stage 2 before energy;
+                                          # null only in a synthetic level-R file (a real look always carries it)
+    "files_sha256": {"runner_receipt.json" | "legs/<id>/leg_record.json": hex64},
+    "meter_time_sha256": hex64 | null,    # time_fields.SpanMeter.digest: every time field read from the streams
+    "meter_streams": [ {"name": str, "present": bool, "aligned": bool, "samples": int,
+                        "duplicates": int | null,          # the decoder's dropped re-sent samples (RL-173 E.1 item 2)
+                        "clock_fit_excess_s": float | null, "clock_rate_ppm": float | null,
+                        "fit_error": str | null}, ... ],
+    "meter_unreadable": str | null }      # a stream the decoder cannot read: every leg of the span fails rule 4
 }
 ```
 
@@ -70,12 +83,29 @@ One leg is one turn. Type-T legs appear (they are counted) but carry no `turn` a
     "not_a_contaminated_attempt": bool,   # rule 5 (runner)
     "block_power_mode": bool              # rule 6 (runner)
   },
-  "turn": Turn | null                     # null for type T, a leg that never ran, or a G0 timeout (a bundle and no
+  "turn": Turn | null,                    # null for type T, a leg that never ran, or a G0 timeout (a bundle and no
                                           # turn): a type-A leg with no turn must fail at least one rule (R-21)
+  "trace_holes": null | {                 # RL-173 E.1: the two time-stamp clauses; on every development leg with a
+                                          # turn in a real look (null otherwise, and in a synthetic level-R file)
+    "gpu_rail": {"max_gap_s": float | null,   # longest stretch of an energy-fit interval with no gpu_power row
+                 "rows_sha256": hex64 | null, # digest of the rows' interval stamps (stage 2 checks it)
+                 "excluded": bool, "reason": str | null},
+    "dc_in": {"max_gap_s": float | null,      # largest gap between consecutive decoded samples over the intervals
+              "bracketed": bool,              # every interval has a decoded sample at/before its start, at/after end
+              "clock_fit_excess_s": float | null,  # largest of the streams reaching the leg
+              "excluded": bool, "reason": str | null} },
+  "ruled_exclusion": null | {"rule": "sidecar_coverage" | "km003c_clean", "ruling": "RL-n"}   # RL-173 E.1 item 4
 }
 ```
 
 `included` is not an input field: it is the AND of the six, computed by stage 1.
+
+**The trace clauses (RL-173 E.1).** A clause that excludes the leg sets its rule false: the GPU clause rule 3
+(`sidecar_coverage`), the DC-in clause rule 4 (`km003c_clean`). The GPU clause excludes when `max_gap_s` is null (no
+readable trace) or over 2 s. The DC-in clause excludes when an interval is not bracketed, `max_gap_s` is over 2 s, or
+`clock_fit_excess_s` is over 2 s. `excluded` is true exactly when `reason` is non-null. Stage 1 refuses a level-R file
+whose clause verdicts disagree with their numbers, or whose excluded clause leaves its rule true. The intervals are
+the leg's segments and prefix tails (§1.3). A ruled exclusion sets its rule false.
 
 ### 1.3 Turn
 
@@ -224,9 +254,28 @@ level R.
     "by_g0_role": {"null": int, "capture": int, "consume": int},  # in-state start, observed onset < 116.0 s
     "total": int, "onset_status": "estimable" | "not_estimable",
     "to_research_lead": bool },           # not_estimable and total > 0: the 116 s cut does not stand by default
-  "legs": [LegD, ...]                     # every Leg of level R, same order
+  "soak_retries": SoakRetries,            # RL-172a, computed from level R's soak_receipt (below)
+  "legs": [LegD, ...]                     # every Leg of level R, same order; each carries trace_holes and
+                                          # ruled_exclusion as level R has them
 }
 ```
+
+`roster.spans` are level R's spans as they are, `soak_receipt` and `custody` included.
+
+**SoakRetries** (`inclusion_34.soak_retries_from` over `{span_id: soak_receipt}`):
+
+```
+{ "spans": {span_id: {"attempts": int, "field_present": bool, "accepted": bool,
+                      "retried": [{"attempt": int, "kind": "slope" | "load" | "kind not recorded",
+                                   "read_from": str | null}]}},
+  "spans_with_retry": int, "retried_by_kind": {"slope": int, "load": int, "kind not recorded": int},
+  "accepted_after_retry": int, "stopped_by_soak": int }
+```
+
+With `field_present` false a span has one attempt, accepted. Otherwise `soak_attempts` must be a list numbered from 1,
+with one soak step per attempt (`soak`, `soak.a2`, ...), every attempt but the last refused (a string) with a nonzero
+step rc, the last not refused; else stage 1 refuses. `accepted` is the last attempt unrefused and its step rc 0. The kind
+is a receipt field `refusal_kind` in ("slope", "load") when present, else "kind not recorded".
 
 ### 3.1 LegD
 
@@ -302,8 +351,10 @@ level R.
 { "legs_named": int, "legs_included": int, "dev_included": int, "in_energy_fit": int, "hp_describe": int,
   "type_T": int, "by_block": {block_id: {"named": int, "included": int}},
   "by_cell": {"2000" | "10000" | "19458": int}, "by_g0_role": {"null" | "capture" | "consume": int},
-  "by_day": {day: int}, "excluded_by_rule": {rule_id: int} }   # by_cell/by_g0_role/by_day count energy-fit legs;
+  "by_day": {day: int}, "excluded_by_rule": {rule_id: int},    # by_cell/by_g0_role/by_day count energy-fit legs;
                                                                  # the own-reference g0_role key is "null"
+  "excluded_by_trace_clause": {"gpu_rail": int, "dc_in": int},  # legs whose clause is excluded (RL-173 E.1)
+  "ruled_exclusions": int }                                      # legs with a ruled_exclusion
 ```
 
 ---
@@ -381,11 +432,35 @@ contract between the two.
 }
 ```
 
-### 4.2 Freeze-2 coefficient file
+### 4.2 Freeze-2 coefficient file and the predict path (RL-173 E)
 
-The coefficient file of freeze 2 is the subset `{stage1.rates, stage1.centring, stage1.calibrated_range,
-stage1.onset, channels.*.columns/coefficients/covariance, channels.*.lodo.hot_rms_over_legs,
-qualified_interim_half}` plus the hashes. Its exact keys belong to the manifest's `freeze2` block.
+`fit_interim.write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256)` writes it (stage 2's
+`--coefficients-out`, canonical bytes as `dump`); its schema is
+`docs/process/cadence/looks/lm-interim-01.coefficients.schema.json` (pinned at `freeze2.schema`). Freeze 2 is its hash.
+
+```
+{ "schema": "joulewise.cadence_look_coefficients.v1", "look_id": "lm-interim-01", "synthetic": bool,
+  "manifest_sha256": hex64, "stage1_sha256": hex64, "fit_sha256": hex64,   # fit_sha256 = sha256(dump(fit_out))
+  "code_sha256": {...}, "numpy_version": str,                              # the fit's
+  "block_tokens": 256, "prefix": {"1.10": 3724, "1.30": 3151, "1.374": 2981},
+  "rates": {"r_p", "r_d"}, "centring": {...}, "calibrated_range": {...},   # stage 1's
+  "active_readings": {"tf08_c": bool, "fan_rpm": bool, "tv0h_excess_c": bool},
+  "onset": {"status", "predictors", "coefficients" | null, "sigma_s" | null, "lodo_rms_s" | null, "count_only_cut"},
+  "delta_column": "kept" | "dropped_onset_not_estimable",
+  "channels": {"gpu_rail" | "dc_in": {"columns", "coefficients", "covariance", "hot_rms_over_legs",
+                                      "fold_coefficients", "model_sha256"}},
+  "qualified_interim_half": {...} }
+```
+
+`fit_interim.predict(coefficients, leg, soak_reference_tv0h_c)` takes a level-R Leg (type A, with a turn) and its
+span's soak reference, and uses the coefficient file alone: the start reading and z = reading − centring; the count
+clock with the frozen rates; τ̂ from the frozen onset model; the δ column with the frozen σ̂ (when kept); each
+channel's own columns. It returns `{"leg_key", "start": {"status", "state", "z", "extrapolated"}, "tau_hat_s", "t_p_s",
+"load_s", "channels": {ch: {"segments": [per segment], "heat": [each segment's k_* and δ part], "H_hat": Σ heat over
+the segments, "total": Σ segments, "prefix_tails": {"3724" | "3151" | "2981": prefill + full blocks before the prefix
++ its tail, or null when the prefix is not shorter than the leg}}}}`. On every energy-fit leg its segments equal the
+main fit's fitted values (tested). A start reading that is not ok, a type-T leg or a leg with no turn refuses by name.
+The twin writes its own `predict`; the agreement compares both on each set's coefficient file.
 
 ### 4.3 The two fold lists (RL-167 row 7: "listed in both lists")
 
@@ -436,7 +511,9 @@ is NaN or infinite; the level-E `input_sha256` differs from the stage-1 file's `
 ### 6.2 R-10 to R-21 and the twin comparison: ruled in RL-167 (Sat 14 Nov 21:22)
 
 RL-167 §1 (R-10 to R-21) and §2 (rows 1 to 23, and §2.1) are the readings both implementations carry; read them
-there. The rows that changed this code: 4 and 5 (the gap rule: only fresh-state journal readings count; first
+there. **The twin comparison (RL-173 E):** a reproduction compares every field of level D, level O and the coefficient
+file except `ledger_gate` (and the provenance hashes and the numpy version); `trace_coverage` and `soak_retries` are
+compared. The custody record of level O (`custody`) is set aside with `ledger_gate`: a level-E run has none. The rows that changed this code: 4 and 5 (the gap rule: only fresh-state journal readings count; first
 anchor at the turn's start without a fresh-state carry-in; floored at 0), 6 (a fresh start reading with Unknown
 or missing state, or a non-integer level, is `start_state_unobserved`: in the energy fit, τ̂ from the linear
 predictor, out of the onset fit), 7 (a fold's onset fits with at least 6 uncensored and convergence, else that
@@ -476,8 +553,15 @@ RL-166b §3 is the reading both implementations carry for these. In this code:
 (`legs/<id>/runtime/<result.bundle>`): `events.jsonl` (token index and stamp), `outputs/align_turns.jsonl`
 (start stamp, prompt count, length of the output ids), `outputs/align_thermal.jsonl`, and the row-end stamp,
 `elapsed_ns` and `thermal_pressure` of `rich_telemetry.jsonl` and `raw/powermetrics.plist`, extracted by pattern
-(no line or frame of those two is parsed). **Per span's meter stream (R-20 only):** the header line, and the last
-poll line's `rx` and `rt` by pattern; no sample payload is decoded. **Never:** `power_trace.csv`.
+(no line or frame of those two is parsed). **Time fields of the energy files (RL-173 E.1), through one reader,
+`joulewise/cadence_looks/time_fields.py`:** of each span's meter streams, the header's and trailer's operational
+keys, each poll line's `tx`, `rx`, `rt`, `n` and each sample's 16-bit device counter; of each development leg's
+`power_trace.csv`, the gpu_power rows' `interval_start_s` and `interval_end_s`. Nothing else in those files is
+converted: the lexer tokenises the other members to skip them, the csv module splits the row. The decoded sample
+times are the pinned decoder's own (`km003c_parse.samples` and `clock_fit` run on the counters with zero value bytes),
+so stage 1 judges DC-in support on exactly the series stage 2 integrates. A test changes every power value of a
+synthetic custody copy and requires inclusion's verdict file and stage 1's output to be byte-identical. A `.zst`
+sibling of a stream or trace refuses (decompress the custody copy).
 
 Rules 1, 2, 5 and 6 come from `leg_record.json`: `result.leg_status == "complete"` and
 `result.decode_cap_reached`; `result.g0_released`; the last attempt not `contaminated`;
@@ -500,17 +584,37 @@ directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwi
 input is opened. Stage 2 takes `--looks` and calls `manifest.require_stage1_committed(looks, "lm-interim-01",
 stage1_sha256)` after the stage-1 hash check and before any energy is opened.
 
+**Round 5 and RL-173 (cold seats on 246a41db6).**
+- **Trace clauses (RL-173 E.1 items 1, 2):** stage 1 judges both channels on the leg's energy-fit intervals from time
+  fields (§1.2), and excludes the leg (rule 3 or rule 4) on a gap over 2 s or a meter clock-fit excess over 2 s. The
+  stamp-only bound and `inclusion_34.meter_bracket` are gone: the support test is exact.
+- **Backstop (item 3):** `fit.gpu_trace_hole_refusal` is on at 2 s (the validator requires it for an interim look), and
+  DC-in support is judged again on the decoded samples (`time_fields.support`, the function the clause calls). A
+  backstop refusal names the leg and the gap and prints no energy. Stage 2 also refuses if the decoder's sample times
+  differ from the time reader's.
+- **A second stage 1 (item 4; Mythos r5 N3):** only with the research lead's ruling in the committed row. The row's
+  `stage1_superseded` lists each replaced (stage1, roster, verdicts) triple with its `ruling` and its
+  `ruled_exclusions` [{leg_key, rule}]. Stage 1 runs once more with `--ruled-exclusion LEG=RULE=RL-n` exactly as the
+  last entry names them (with every earlier entry's), on the replaced roster and verdict file, from a row with no
+  stage-1 hash. A corrected hash (a typo) is an entry with no exclusions; stage 1 is not run again. The history is
+  read over HEAD and every remote-tracking ref (N5). `cadence_look_manifest.py row` writes the row's hashes from the
+  files and checks them first; messages print full hashes.
+- **Custody binding (N6):** level R's span `custody` and leg `trace_holes.gpu_rail.rows_sha256` are checked by stage 2
+  before any energy file opens (receipt and leg records by sha256, meter and trace time fields by digest). Level O
+  records `custody` {root, span_dirs, files [{path, sha256}]}; step 3 checks the leg records and records its own;
+  `assemble` refuses unless both read one root and the same GPU traces.
+- **Pre-energy checks:** `manifest.stage1_problems` also checks the ledger gate against the run mode (Sol r5 NEW-3);
+  stage 1 runs it on its own file before writing (Mythos r5 N7). STAGE1_CODE lives in manifest.py and is shared.
+- **R-20's header (Mythos r5 N1)** is read through the time reader, so the monitor's sorted-key header counts.
+
 **Round 4 (cold seats on d7a5202a0).**
 - **DC-in support** is judged again on the DECODED samples. A segment needs a decoded sample at or before its
   start, one at or after its end, and no two consecutive decoded samples more than 2 s apart. Nothing is held
   past the last sample. A poll whose samples the decoder dropped (re-sent duplicates, an empty payload) supports
   nothing.
-- **Stage 1's preflight** keeps `inclusion_34.meter_bracket` and adds a stamp-only bound on the sample gaps
-  (rt_j − rt_i + rtt_i + step + margin ≤ 2 s). So a leg that passes stage 1, on a stream whose polls decode,
-  integrates in stage 2.
+- **Stage 1's preflight** kept `inclusion_34.meter_bracket` and a stamp-only gap bound (superseded in round 5).
 - **Before any energy opens,** stage 2 checks the stage-1 file against its pinned schema, and checks that its
-  recorded code is exactly the pins and STAGE1_CODE. STAGE1_CODE is read from scripts/cadence_look_manifest.py's
-  syntax tree.
+  recorded code is exactly the pins and `manifest.STAGE1_CODE` (`manifest.stage1_problems`).
 - **The fresh pycache prefix** is removed at exit.
 
 **Round 3 (cold seats on 553e4cf00).**

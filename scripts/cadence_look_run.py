@@ -56,6 +56,9 @@ from joulewise.cadence_looks import fit_interim as F  # noqa: E402
 from joulewise.cadence_looks import manifest as M  # noqa: E402
 from joulewise.cadence_looks import inclusion_34 as I34  # noqa: E402
 from joulewise.cadence_looks import time_fields as TF  # noqa: E402
+# the reader runs the pinned decoder's unwrap and clock fit on counters (RL-173 E.1): loaded up front, so every stage-1
+# run records one code set (manifest.STAGE1_CODE) whatever its input
+from joulewise.external import km003c_parse as _kp  # noqa: E402,F401
 
 STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
 FAN_KEYS = ("F0Ac", "F1Ac")          # configs/align/v4/r1_runtime.json sensors.fan_keys

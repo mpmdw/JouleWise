@@ -72,6 +72,46 @@ class _Bad(Exception):
     pass
 
 
+_ESC = {'"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
+_ESC_RE = re.compile(r'\\(?:u([0-9a-fA-F]{4})|(.))')
+
+
+def _unstring(raw):
+    """A JSON string token's text, as json.loads gives it (escapes, and a \\u surrogate pair joined), without
+    json.loads: the reader never hands any part of an energy file's line to the JSON decoder."""
+    body = raw[1:-1]
+    if "\\" not in body:
+        return body
+    out, pos = [], 0
+    for m in _ESC_RE.finditer(body):
+        out.append(body[pos:m.start()])
+        pos = m.end()
+        if m.group(1) is not None:
+            out.append(chr(int(m.group(1), 16)))
+        else:
+            out.append(_ESC[m.group(2)])
+    out.append(body[pos:])
+    text = "".join(out)
+    # json joins a high surrogate followed by a low one into one character
+    return text.encode("utf-16", "surrogatepass").decode("utf-16", "surrogatepass") if any(
+        0xD800 <= ord(c) <= 0xDFFF for c in text) else text
+
+
+_LITERALS = {"true": True, "false": False, "null": None, "NaN": float("nan"), "Infinity": float("inf"),
+             "-Infinity": float("-inf")}
+
+
+def _convert(kind, text):
+    """One scalar token's value as json.loads gives it: int for an integer literal, float otherwise."""
+    if kind == "str":
+        return _unstring(text)
+    if kind == "lit":
+        return _LITERALS[text]
+    if any(c in text for c in ".eE"):
+        return float(text)
+    return int(text)
+
+
 def _tokens(s):
     pos, n = 0, len(s)
     while True:
@@ -133,7 +173,7 @@ def scan_line(s):
         while not members_done:
             if nxt is None or nxt[0] != "str" or next(it, None) != ("punct", ":"):
                 return None
-            key = json.loads(nxt[1])                   # a member NAME, never a value
+            key = _unstring(nxt[1])                    # a member NAME, never a value
             val = next(it, None)
             if val is None:
                 return None
@@ -159,7 +199,7 @@ def member(members, key):
     """The converted value of one whitelisted member: str, int, float, bool or None; NESTED for an object or
     array; KeyError when absent."""
     kind, text = members[key]
-    return NESTED if kind is NESTED else json.loads(text)
+    return NESTED if kind is NESTED else _convert(kind, text)
 
 
 def _kind(members):
@@ -236,7 +276,7 @@ def read_stream(path, *, counters=True):
                 if pk is NESTED:
                     poll["p_shape"] = "nested"
                 else:
-                    p = json.loads(ptext) if pk == "str" else None
+                    p = _unstring(ptext) if pk == "str" else None
                     if pk == "str" and p:
                         poll["seq"] = _counters(p, f"{path.name}:{number}")
                     elif pk != "str":
