@@ -1,0 +1,44 @@
+name: mbp-watch
+
+# RL-173 C (RL-149 §2.8 line 7): the MBP span watcher runs here, so it works when the Air and the lead are
+# both away. Every 10 minutes it reads docs/process/CURRENT.json on main and the span results refs
+# (desk-bundles/*, night-results/*, cadence-desk-final/*), and opens one `mbp-alarm` issue per new event,
+# assigned to the repository owner: SPAN_SILENT (no results ref by the armed span's deadline + 20 min),
+# SPAN_STOP, DESK_HOLD, RESULT_UNREADABLE, CURRENT_INVALID. Issues carry operational codes only; the
+# repository is public. A failed read fails the run. Each arm checks this workflow's latest completed run
+# with `python3 scripts/mbp_watch.py read --repo mpmdw/JouleWise --after-epoch <previous close>` (C.4).
+# Runbook: docs/ops/MBP-WATCH.md.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: mbp-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    if: github.repository == 'mpmdw/JouleWise'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - name: Watch the MBP's spans
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          python3 scripts/mbp_watch.py watch
+          --repo "$GITHUB_REPOSITORY"
+          --owner "$GITHUB_REPOSITORY_OWNER"
+          --current docs/process/CURRENT.json
+          --grace-s 1200
+          --run-url "$RUN_URL"
