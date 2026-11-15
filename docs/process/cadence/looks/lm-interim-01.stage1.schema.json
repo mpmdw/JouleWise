@@ -6,6 +6,7 @@
  "type": "object",
  "additionalProperties": false,
  "required": [
+  "active_readings",
   "calibrated_range",
   "centring",
   "code_sha256",
@@ -13,8 +14,10 @@
   "input_sha256",
   "legs",
   "look_id",
+  "meter_clock",
   "numpy_version",
   "onset",
+  "onsets_before_116_s",
   "rates",
   "roster",
   "schema",
@@ -62,6 +65,7 @@
       "required": [
        "block_id",
        "marks",
+       "meter_offsets_ns",
        "phase",
        "power_mode",
        "role",
@@ -116,6 +120,28 @@
           "reference from an excluded leg"
          ]
         }
+       },
+       "meter_offsets_ns": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "end",
+         "header"
+        ],
+        "properties": {
+         "header": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "end": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         }
+        }
        }
       }
      }
@@ -159,10 +185,16 @@
        ],
        "properties": {
         "r_p": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "r_d": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "n_legs": {
          "type": "integer"
@@ -179,10 +211,16 @@
        ],
        "properties": {
         "r_p": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "r_d": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "n_legs": {
          "type": "integer"
@@ -199,10 +237,16 @@
        ],
        "properties": {
         "r_p": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "r_d": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "n_legs": {
          "type": "integer"
@@ -280,6 +324,7 @@
     "n_censored",
     "n_days_uncensored",
     "n_uncensored",
+    "n_uncensored_by_cell",
     "predictors",
     "sigma_s",
     "status"
@@ -299,6 +344,26 @@
     },
     "n_days_uncensored": {
      "type": "integer"
+    },
+    "n_uncensored_by_cell": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "10000",
+      "19458",
+      "2000"
+     ],
+     "properties": {
+      "2000": {
+       "type": "integer"
+      },
+      "10000": {
+       "type": "integer"
+      },
+      "19458": {
+       "type": "integer"
+      }
+     }
     },
     "left_out": {
      "type": "object",
@@ -321,13 +386,18 @@
      }
     },
     "predictors": {
-     "const": [
-      "intercept",
-      "tf08_c",
-      "fan_rpm",
-      "tv0h_excess_c",
-      "t_p_s"
-     ]
+     "type": "array",
+     "items": {
+      "enum": [
+       "intercept",
+       "tf08_c",
+       "fan_rpm",
+       "tv0h_excess_c",
+       "t_p_s"
+      ]
+     },
+     "minItems": 2,
+     "uniqueItems": true
     },
     "coefficients": {
      "type": [
@@ -429,7 +499,7 @@
    "required": [
     "any",
     "cell_below_10",
-    "days_below_3",
+    "days_below_4",
     "dev_included_below_45",
     "hp01_below_9",
     "start_reading_invalid_over_10pct"
@@ -451,7 +521,7 @@
       }
      }
     },
-    "days_below_3": {
+    "days_below_4": {
      "type": "object",
      "additionalProperties": false,
      "required": [
@@ -619,6 +689,194 @@
      }
     }
    }
+  },
+  "meter_clock": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "max_abs_s",
+    "spans",
+    "threshold_s",
+    "to_research_lead"
+   ],
+   "properties": {
+    "spans": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "end_minus_header_s",
+       "form"
+      ],
+      "properties": {
+       "form": {
+        "enum": [
+         "two_pairs",
+         "single_offset"
+        ]
+       },
+       "end_minus_header_s": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      }
+     }
+    },
+    "max_abs_s": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "threshold_s": {
+     "const": 0.1
+    },
+    "to_research_lead": {
+     "type": "boolean"
+    }
+   },
+   "description": "RL-167 R-20: the KM003C clock check; over 0.1 s on any span goes to the research lead"
+  },
+  "active_readings": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "fan_rpm",
+    "tf08_c",
+    "tv0h_excess_c"
+   ],
+   "properties": {
+    "tf08_c": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "active",
+      "min_count_off_day",
+      "threshold",
+      "tolerance"
+     ],
+     "properties": {
+      "active": {
+       "type": "boolean"
+      },
+      "tolerance": {
+       "type": "number"
+      },
+      "min_count_off_day": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "threshold": {
+       "const": 6
+      }
+     }
+    },
+    "fan_rpm": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "active",
+      "min_count_off_day",
+      "threshold",
+      "tolerance"
+     ],
+     "properties": {
+      "active": {
+       "type": "boolean"
+      },
+      "tolerance": {
+       "type": "number"
+      },
+      "min_count_off_day": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "threshold": {
+       "const": 6
+      }
+     }
+    },
+    "tv0h_excess_c": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "active",
+      "min_count_off_day",
+      "threshold",
+      "tolerance"
+     ],
+     "properties": {
+      "active": {
+       "type": "boolean"
+      },
+      "tolerance": {
+       "type": "number"
+      },
+      "min_count_off_day": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "threshold": {
+       "const": 6
+      }
+     }
+    }
+   },
+   "description": "RL-166b B-2: a start reading is active when, for every fit day D, at least 6 energy-fit legs off day D have |z| above its tolerance (0.25 degC for Tf08 and TV0h excess, 25 rpm for the fan). min_count_off_day is the smallest such count over fit days. An inactive reading's kappa column and onset predictor are dropped everywhere."
+  },
+  "onsets_before_116_s": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "by_g0_role",
+    "onset_status",
+    "to_research_lead",
+    "total"
+   ],
+   "properties": {
+    "by_g0_role": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "capture",
+      "consume",
+      "null"
+     ],
+     "properties": {
+      "null": {
+       "type": "integer"
+      },
+      "capture": {
+       "type": "integer"
+      },
+      "consume": {
+       "type": "integer"
+      }
+     }
+    },
+    "total": {
+     "type": "integer"
+    },
+    "onset_status": {
+     "enum": [
+      "estimable",
+      "not_estimable"
+     ]
+    },
+    "to_research_lead": {
+     "type": "boolean"
+    }
+   },
+   "description": "RL-166b P-4: legs that start in state with an observed onset under 116.0 s from the turn start, by G0 role. to_research_lead is true when the onset model is not_estimable and total is above zero: the 116 s cut then does not stand by default."
   },
   "legs": {
    "type": "array",

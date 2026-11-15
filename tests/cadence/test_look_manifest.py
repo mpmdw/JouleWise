@@ -664,5 +664,54 @@ class Assemble(Base):
             self.assertEqual(cli.main(args), 1)
 
 
+class RL166b(Base):
+    def test_stated_limits_and_deferred_rules_are_required(self):
+        for sid in sorted(lm.REQUIRED_STATED_LIMITS["interim"]):
+            doc = draft()
+            doc["fit"]["stated_limits"] = [x for x in doc["fit"]["stated_limits"] if x["id"] != sid]
+            self.refused(lambda: lm.validate_manifest(doc), f"fit.stated_limits: carries {sid}")
+        for rid in sorted(lm.REQUIRED_DEFERRED["interim"]):
+            doc = draft()
+            doc["freeze2"]["deferred_rules"] = [x for x in doc["freeze2"]["deferred_rules"] if x["id"] != rid]
+            self.refused(lambda: lm.validate_manifest(doc), f"freeze2.deferred_rules: carries {rid}")
+
+    def test_the_dictated_sentences_are_in_the_manifest(self):
+        lim = {x["id"]: x["text"] for x in draft()["fit"]["stated_limits"]}
+        self.assertIn("about 4 times in 10", lim["qualified_pass_rate"])
+        self.assertIn("about 1 time in 12", lim["qualified_pass_rate"])
+        self.assertIn("It is not evidence that the term is wrong", lim["qualified_pass_rate"])
+        self.assertIn("3 % of its 439 s value on a 75 s turn", lim["half_t2_limit"])
+        self.assertIn("under about 150 s, H is the onset step alone", lim["half_t2_limit"])
+        sd = next(x for x in draft()["freeze2"]["deferred_rules"] if x["id"] == "sd_j_covariance")["rule"]
+        self.assertIn("larger of the leg-clustered standard error and the day-jackknife", sd)
+
+    def test_withdrawn_sentence_days_tripwire_and_116_rule(self):
+        doc = draft()
+        doc["fit"]["heat_term"]["form"] += " H is zero for a turn that ends before its predicted onset."
+        self.refused(lambda: lm.validate_manifest(doc), "withdrawn")
+        doc = draft()
+        next(t for t in doc["stages"]["tripwires"] if t["id"] == "days_below_4")["threshold"] = 3
+        self.refused(lambda: lm.validate_manifest(doc), "days_below_4 with threshold 4")
+        doc = draft()
+        doc["decisions"] = [x for x in doc["decisions"] if x["id"] != "onsets_before_116_s"]
+        self.refused(lambda: lm.validate_manifest(doc), "carries onsets_before_116_s")
+        doc = draft()
+        doc["outputs"]["prints"] = [x for x in doc["outputs"]["prints"] if x["id"] != "onset_offset_residuals"]
+        self.refused(lambda: lm.validate_manifest(doc), "prints onset_offset_residuals")
+        doc = draft()
+        doc["rulings"].remove("RL-166b §3")
+        self.refused(lambda: lm.validate_manifest(doc), "must cite 'RL-166b §3'")
+
+    def test_the_schemas_carry_rl166b_fields(self):
+        s1 = json.loads((LOOKS / "lm-interim-01.stage1.schema.json").read_text())
+        for k in ("active_readings", "onsets_before_116_s", "meter_clock"):
+            self.assertIn(k, s1["required"])
+        self.assertIn("days_below_4", s1["properties"]["tripwires"]["required"])
+        self.assertIn("n_uncensored_by_cell", s1["properties"]["onset"]["required"])
+        out = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
+        for k in ("fold_coefficients", "day_detail", "onset_offset_residuals"):
+            self.assertIn(k, out["$defs"]["channel_fit"]["required"])
+
+
 if __name__ == "__main__":
     unittest.main()

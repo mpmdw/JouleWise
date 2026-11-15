@@ -24,7 +24,10 @@
     "RL-161 §4",
     "RL-165 §8.2",
     "RL-166 §1",
-    "RL-166 §2"
+    "RL-166 §2",
+    "RL-166b §2",
+    "RL-166b §3",
+    "RL-166b §4"
   ],
   "when": {
     "after_desk_final": [
@@ -66,11 +69,15 @@
         "the rates r_p and r_d",
         "the start-reading medians and calibrated ranges",
         "the onset fit and its leave-one-day-out error",
-        "level D of the analyst seat's interface (docs/process/cadence_look_fit_interface.md section 3)"
+        "level D of the analyst seat's interface (docs/process/cadence_look_fit_interface.md section 3)",
+        "active_readings (RL-166b B-2)",
+        "the onset model's uncensored count by cell (B-3)",
+        "onsets_before_116_s by G0 role (P-4)",
+        "meter_clock (RL-167 R-20)"
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "a8725eb5b4ac7b4d295e1cb7ddc55423f6e507d343dd220a7c8510cd59c2c2f7"
+        "sha256": "5af1989b95d9a6b2764d337357a51aeab437f98457b482f01560826af89d28ce"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -102,10 +109,11 @@
         ]
       },
       {
-        "id": "days_below_3",
-        "threshold": 3,
+        "id": "days_below_4",
+        "threshold": 4,
         "cite": [
-          "RL-166 Q8"
+          "RL-166 Q8",
+          "RL-166b §3"
         ]
       },
       {
@@ -131,9 +139,10 @@
         ]
       }
     ],
-    "tripwire_action": "Any tripwire sends stage 1's output to the research lead before stage 2. Otherwise stage 2 runs on the lead's record.",
+    "tripwire_action": "Any tripwire sends stage 1's output to the research lead before stage 2. So does P-4's count above zero when the onset model is not_estimable. Otherwise stage 2 runs on the lead's record.",
     "cite": [
-      "RL-166 Q8"
+      "RL-166 Q8",
+      "RL-166b §3"
     ]
   },
   "reads": {
@@ -449,11 +458,11 @@
       "unit": "segment",
       "segments": "Per leg: the prefill (turn start stamp to the first token), and each full 256-token decode block in step 3's convention (block 0 = [t(tok 0), t(tok 255)], block k >= 1 = [t(tok 256k-1), t(tok 256k+255)]). A leg's prefix is a shorter leg (RL-149 §2.2).",
       "count_clock": "The prefill ends at T_p = P / r_p; decode token m falls at T_p + m / r_d. A segment covers [u, v] on this clock, with d = v - u and midpoint m = (u + v) / 2.",
-      "start_readings": "z1 start Tf08, z2 start fan rpm, z3 start TV0h less the span's soak reference. Each taken under RL-149 §1.3's start rule (the last journal reading at or before the turn start, at most 2 s before it, with a fresh pm stamp), and centred on its median over included development legs. The medians are stage-1 constants.",
-      "form": "Heat term of a segment: d * m * (k1 z1 + k2 z2 + k3 z3) + delta * w, with w the part of [u, v] at or after the leg's predicted onset tau_hat. For a turn this sums to H = 1/2 T^2 (k . z) + delta * max(0, T - tau_hat), T the turn's count-derived load seconds. H is zero for a turn that starts at the reference readings and ends before its predicted onset. No sign is assumed for any of the four.",
+      "start_readings": "z1 start Tf08, z2 start fan rpm, z3 start TV0h less the span's soak reference. Each taken under RL-149 §1.3's start rule (the last journal reading at or before the turn start, at most 2 s before it, with a fresh pm stamp), and centred on its median over included development legs. The medians are stage-1 constants. Active readings only (RL-166b B-2): stage 1 decides, on energy-fit legs, that a reading is active when, for every fit day D, at least 6 energy-fit legs off day D have |z| above its tolerance (0.25 degC for Tf08 and for TV0h excess, 25 rpm for the fan). An inactive reading's kappa column and onset predictor are dropped in the main fit, every fold and the marked-spans print; stage 1 prints active_readings with the three counts, and the lead tells the research lead of any inactive reading. Stage 2 does not wait. TV0h excess keeps its median centre (RL-166b §2.3).",
+      "form": "Heat term of a segment [u, v]: d * m * (k_tf08 z1 + k_fan z2 + k_tv0h z3) + delta * w~, where w~ is the expected hot seconds under the onset model (RL-166b B-1): w~ = sigma * [G((v - l)/sigma) - G((u - l)/sigma)], G(x) = x Phi(x) + phi(x), Phi(x) = erfc(-x/sqrt 2)/2, phi(x) = exp(-x^2/2)/sqrt(2 pi); l is the onset model's linear predictor, not clipped; sigma is that onset fit's ML sigma (sigma_s). The main fit uses the main onset fit and a fold its own. A start_out_of_state leg takes w~ = d. If sigma is under 1e-6 s, w~ is the plain overlap with [tau_hat, inf). For a turn: H = 1/2 T^2 (k . z) + delta * sigma * [G((T - l)/sigma) - G(-l/sigma)], T the turn's count-derived load seconds. tau_hat = max(0, l), the count-only cut, the hot stretch (R-4) and R-13's error do not change; l is formed in stage 2 from stage 1's coefficients and readings. No sign is assumed for any of the four. RL-166's sentence that H is exactly 0 before the predicted onset is withdrawn (RL-166b Amends).",
       "response": "The segment's energy on the channel (energy.channels).",
       "base": "A count-only base, fitted jointly and never exported as H: prefill p1 P + p2 P^2; decode block a0 n + a1 n c + a2 n P, with n the block's tokens and c the context tokens at the block's midpoint.",
-      "estimation": "Ordinary least squares per channel: nine parameters (columns p1, p2, a0, a1, a2, k_tf08, k_fan, k_tv0h, delta, as the interface names them), eight without delta. Parameter covariance clustered by leg. The uncertainty of tau_hat is not propagated; the output says so, and the holdout error in SD_j covers it. Freeze 2 takes the fit on all included development legs; the with/without-marked-spans fit is a print and never replaces it.",
+      "estimation": "Ordinary least squares per channel on the columns p1, p2, a0, a1, a2, k_tf08, k_fan, k_tv0h, delta (as the interface names them), less any column dropped by B-2 or by an onset model that is not estimable. The solve (RL-166b B-6): each design column is divided by its RMS over rows; the solve is SVD or QR on that matrix (numpy.linalg.lstsq is enough) and the coefficients are scaled back; rank-deficient means the smallest singular value is under 1e-10 of the largest; the normal matrix is never formed in raw units. Parameter covariance clustered by leg, CR1 (R-10). The onset's scatter is in the delta column; the onset coefficients' own uncertainty is not propagated (RL-166b Amends). Freeze 2 takes the fit on all included development legs; the with/without-marked-spans fit is a print and never replaces it.",
       "predictors": [
         "prefill_tokens",
         "decode_block_tokens",
@@ -465,7 +474,7 @@
         "start_tf08",
         "start_fan_rpm",
         "start_tv0h_excess_over_soak_reference",
-        "predicted_onset_s"
+        "expected_hot_seconds"
       ],
       "forbidden_predictors": [
         "in_turn_reading",
@@ -482,14 +491,15 @@
       "sign_of_start_term_assumed": false,
       "missing_start_reading": "A leg with a missing or stale start reading is not in the fit and is counted (RL-166 Q1).",
       "out_of_state_start": "A leg whose start reading is out of state takes tau_hat = 0 (RL-166 Q1).",
-      "onset_not_estimable": "If the onset model is not_estimable, the delta column is dropped and the print says so. Nothing else is chosen at the look (RL-166 Q1).",
+      "onset_not_estimable": "If the onset model is not_estimable, the delta column is dropped and the print says so (RL-166 Q1). A LODO fold whose own onset fit fails RL-166b B-4 drops delta in that fold only.",
       "outside_calibrated_range": "The calibrated range of each start reading (min and max over included development legs) is a stage-1 constant frozen in freeze 2; a later reading outside it sets heat_extrapolated (RL-149 §2.7).",
       "cite": [
         "RL-166 Q1",
         "RL-166 Q2",
         "RL-149 §2.7",
         "RL-150 R1",
-        "RL-158 Q1"
+        "RL-158 Q1",
+        "RL-166b §3"
       ]
     },
     "rates": {
@@ -512,14 +522,15 @@
         "prefill_seconds_from_counts"
       ],
       "censoring": "Right-censored at the last token; censored-normal maximum likelihood, hand-coded. tau_hat = max(0, the linear predictor). Legs that start out of state or hit state_unobserved are left out and counted.",
-      "estimable_when": "at least 12 uncensored onsets on at least 3 calendar days; otherwise not_estimable, and the count-only cut stays at 116 s",
+      "estimable_when": "The main onset fit is estimable with at least 12 uncensored onsets on at least 3 calendar days, at least 4 uncensored onsets in each of at least two prompt-size cells (RL-166b B-3), and RL-166b B-5's convergence test passing; otherwise not_estimable, and the count-only cut stays at 116 s only if P-4's count is zero. A fold's onset fit needs at least 6 uncensored onsets on its training legs, at least 2 in each of at least two cells, and B-5; otherwise that fold drops delta (RL-166b B-4, amending RL-167 row 7). B-5, at the returned point whatever the optimiser: in Olsen's parameters (gamma = beta/sigma, eta = 1/sigma), with each predictor column and the responses and censoring times divided by their RMS over the fitted legs, all values finite and eta above 0; the negative Hessian positive definite with condition number at most 1e10; the Newton decrement g'(-H)^-1 g at most 1e-8. A central difference of the analytic gradient may stand in for an analytic Hessian. Stage 1 prints the uncensored count by cell. A censored share (n_censored over n_uncensored + n_censored) above 0.30 goes from the lead to the research lead; the reported error may then understate (RL-166b item 3.2).",
       "error": "The RMS of predicted less observed over held-out uncensored legs, leave-one-day-out. Held-out censored legs with tau_hat under their censoring time are counted and printed.",
       "count_only_cut": "tau_hat less twice the error (RL-149 §4 item 1)",
       "cite": [
         "RL-166 Q4",
         "RL-149 §4",
         "RL-149 §1.3",
-        "RL-151 §2.2"
+        "RL-151 §2.2",
+        "RL-166b §3"
       ]
     },
     "validation": {
@@ -614,7 +625,74 @@
       "RL-161 §3",
       "RL-161 §4",
       "RL-166 Q1",
-      "RL-166 Q2"
+      "RL-166 Q2",
+      "RL-166b §3"
+    ],
+    "stated_limits": [
+      {
+        "id": "qualified_yes_meaning",
+        "text": "yes means that on every counted day the held-out hot-stretch energy on the GPU rail was predicted within 2 %.",
+        "cite": [
+          "RL-166b §2.1"
+        ]
+      },
+      {
+        "id": "qualified_pass_rate",
+        "text": "In simulation at the design's assumed spreads, a correct model gets yes about 4 times in 10 (0.03 to 0.66 over the worlds tried) and a fit with no heat term about 1 time in 12. So no is the more likely word for a correct model. It is not evidence that the term is wrong, and no text may read it that way.",
+        "note": "These figures are for RL-166 as written. The lead's re-run of q4b_gates.py with RL-166b B-1's column (synthetic only) replaces them before the manifest is committed (RL-166 §2 item 11); outside 0.25 to 0.60 in the default world goes to the research lead first.",
+        "cite": [
+          "RL-166b §2.1"
+        ]
+      },
+      {
+        "id": "pooled_error",
+        "text": "The pooled error does not discriminate: it is under 2 % with or without the heat term.",
+        "cite": [
+          "RL-166b §2.1"
+        ]
+      },
+      {
+        "id": "half_t2_limit",
+        "text": "The start term is 3 % of its 439 s value on a 75 s turn and 12 % at 150 s. On turns under about 150 s, H is the onset step alone. Whether a warm start changes the energy of a short turn was not estimated.",
+        "cite": [
+          "RL-166b §2.2"
+        ]
+      },
+      {
+        "id": "partial_correction",
+        "text": "H is a partial correction. In simulation it carries 0.85 to 0.95 of the heat effect (0.79 before RL-166b's change). The rest sits in the count-only base, which is not exported. That share cannot be measured on the campaign's own legs.",
+        "cite": [
+          "RL-166b §3"
+        ]
+      },
+      {
+        "id": "not_zero_before_onset",
+        "text": "H is no longer exactly zero for a turn that ends before its predicted onset. A turn ending 20 s before it, at a scatter of 15 s, carries 0.6 expected hot seconds.",
+        "cite": [
+          "RL-166b §3"
+        ]
+      },
+      {
+        "id": "delta_se_overstates",
+        "text": "delta's clustered standard error overstates its spread (about 1.8 times in the planted world). The onset coefficients' own uncertainty is still not propagated.",
+        "cite": [
+          "RL-166b §3"
+        ]
+      },
+      {
+        "id": "warm_series_outside_joint_range",
+        "text": "Warm series turns are mostly outside the campaign's joint range of start readings (67 to 75 % in simulation), though inside each marginal range. A leverage flag beside heat_extrapolated is fixed for freeze 2.",
+        "cite": [
+          "RL-166b §4"
+        ]
+      },
+      {
+        "id": "ratio_of_tokens",
+        "text": "1.10, 1.30 and 1.374 name ratios of decode tokens. The ratio of load seconds is smaller and prints by cell.",
+        "cite": [
+          "RL-166b §4"
+        ]
+      }
     ]
   },
   "inclusion": {
@@ -710,7 +788,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "c3d55d5c4c907c887c826189769c3eb308c23a7692ea205d5f46303db4f99d00"
+      "sha256": "e64d08deccf48b62d9119c365c1462133f520c32dd4ad7a1e9cea3f51af8f5b9"
     },
     "prints": [
       {
@@ -733,7 +811,7 @@
       },
       {
         "id": "onset_fit",
-        "what": "Stage 1: the onset model's coefficients, its estimability and the counts left out or censored.",
+        "what": "Stage 1: the onset model's coefficients, its estimability and the counts left out or censored. With the uncensored count by cell (B-3) and B-5's convergence verdict.",
         "cite": [
           "RL-149 §2.6",
           "RL-149 §4",
@@ -751,7 +829,7 @@
       },
       {
         "id": "heat_term_fit",
-        "what": "The nine (or eight) parameters per channel and their leg-clustered covariance; a line that tau_hat's uncertainty is not propagated.",
+        "what": "The parameters per channel (nine, less columns dropped by B-2 or a non-estimable onset) and their leg-clustered covariance; the onset's scatter is in the delta column, its coefficients' uncertainty is not propagated.",
         "channels": [
           "gpu_rail",
           "dc_in"
@@ -899,6 +977,54 @@
           "RL-150 R6",
           "RL-166 Q1"
         ]
+      },
+      {
+        "id": "active_readings",
+        "what": "Stage 1: each start reading's activity under RL-166b B-2, with its tolerance and smallest off-day count.",
+        "cite": [
+          "RL-166b §3"
+        ]
+      },
+      {
+        "id": "onsets_before_116_s",
+        "what": "Stage 1: legs starting in state with an observed onset under 116 s, by G0 role (P-4).",
+        "cite": [
+          "RL-166b §3"
+        ]
+      },
+      {
+        "id": "fold_coefficients",
+        "what": "Each LODO fold's coefficient vector, by held-out day and column name (P-1). SD_j's day-jackknife reads it at freeze 2.",
+        "channels": [
+          "gpu_rail",
+          "dc_in"
+        ],
+        "cite": [
+          "RL-166b §3",
+          "RL-166b §4"
+        ]
+      },
+      {
+        "id": "day_detail",
+        "what": "Per counted day, with and without the heat columns: legs with a hot block, hot blocks and s/sqrt(n) (P-2). No rule reads it.",
+        "channels": [
+          "gpu_rail",
+          "dc_in"
+        ],
+        "cite": [
+          "RL-166b §3"
+        ]
+      },
+      {
+        "id": "onset_offset_residuals",
+        "what": "Held-out relative residual by decode block from the leg's first hot block, offsets -2 to +5, with and without the heat columns, and the RMS over -2 to +3 (P-3).",
+        "channels": [
+          "gpu_rail",
+          "dc_in"
+        ],
+        "cite": [
+          "RL-166b §3"
+        ]
       }
     ],
     "every_print_carries": [
@@ -938,13 +1064,14 @@
     {
       "id": "qualified_interim_half",
       "statistic": "the maximum over counted days of the leave-one-day-out hot-stretch relative error (GPU rail)",
-      "rule": "At or under the threshold: the interim half passes. Fewer than three counted days: not_evaluable, which is no. The qualification look supplies the other half.",
+      "rule": "At or under the threshold: the interim half passes. Fewer than three counted days: not_evaluable, which is no. The qualification look supplies the other half. Its stated power and what no may not be read as are fit.stated_limits qualified_pass_rate and qualified_yes_meaning (RL-166b §2.1); the line itself is unchanged.",
       "threshold": 0.02,
       "action": "print yes, no or not_evaluable; S_w and K_w stay print-only either way",
       "reads_energy": true,
       "cite": [
         "RL-151 §2.1",
-        "RL-166 Q3"
+        "RL-166 Q3",
+        "RL-166b §2.1"
       ]
     },
     {
@@ -963,11 +1090,12 @@
     {
       "id": "stage1_tripwires",
       "statistic": "stage 1's counts",
-      "rule": "Fewer than 45 development legs included; fewer than 3 calendar days; a prompt-size cell with fewer than 10 included legs; more than 10 % of legs without a valid start reading; or hp-01 below 9: stage 1 goes to the research lead before stage 2. Otherwise stage 2 runs on the lead's record.",
+      "rule": "Fewer than 45 development legs included; fewer than 4 calendar days (RL-166b B-7); a prompt-size cell with fewer than 10 included legs; more than 10 % of legs without a valid start reading; or hp-01 below 9: stage 1 goes to the research lead before stage 2. Otherwise stage 2 runs on the lead's record.",
       "action": "print each tripwire's count and whether it fired",
       "reads_energy": false,
       "cite": [
-        "RL-166 Q8"
+        "RL-166 Q8",
+        "RL-166b §3"
       ]
     },
     {
@@ -992,6 +1120,18 @@
         "RL-155 §3.3",
         "RL-166 Q12"
       ]
+    },
+    {
+      "id": "onsets_before_116_s",
+      "statistic": "stage 1's count of legs that start in state with an observed onset under 116.0 s from the turn start (P-4)",
+      "rule": "If the onset model is not_estimable and the count is above zero, the 116 s count-only cut does not stand by default: stage 1 comes to the research lead before stage 2.",
+      "threshold": 0,
+      "action": "print the count by G0 role and to_research_lead",
+      "reads_energy": false,
+      "cite": [
+        "RL-166b §3",
+        "RL-149 §4"
+      ]
     }
   ],
   "later_looks": [
@@ -1002,7 +1142,9 @@
         "the length-only bias at 1.10 and 1.30 in score SD, each with its 90 % interval against +/-0.10",
         "1.374 as a grid point",
         "type-L pairs against their prefixes",
-        "the type-M residual as not_run (RL-165 §8.1 took type M out)"
+        "the type-M residual as not_run (RL-165 §8.1 took type M out)",
+        "fewer than 3 days among the pairs prints not_evaluable for the +/-0.10 word; at 3 days the simulation puts a true bias of 0.01 inside +/-0.10 in 0.84 of runs, and lm-qual-01 states that (RL-166b §4)",
+        "the ratios 1.10, 1.30 and 1.374 name ratios of decode tokens; the ratio of load seconds prints by cell (RL-166b §4)"
       ],
       "scorer": "fit_interim.py's predict path at the hash this manifest pins",
       "committed_before": "any qualification energy is opened",
@@ -1010,7 +1152,8 @@
         "RL-166 Q10",
         "RL-151 §2.2",
         "RL-151 §6",
-        "RL-165 §8.1"
+        "RL-165 §8.1",
+        "RL-166b §4"
       ]
     }
   ],
@@ -1045,7 +1188,8 @@
       "the start-reading medians and calibrated ranges (heat_extrapolated)",
       "the onset model's coefficients, its error and the count-only cut, or not_estimable",
       "the interim half of qualified",
-      "the hashes of this manifest, the code that ran, stage 1's output and stage 2's output; the numpy version"
+      "the hashes of this manifest, the code that ran, stage 1's output and stage 2's output; the numpy version",
+      "the active readings (RL-166b B-2) and each fold's coefficient vector (P-1), which the SD_j rule reads"
     ],
     "commit_before": [
       "qualification_energy_opened",
@@ -1070,7 +1214,43 @@
       "RL-151 §2.1",
       "RL-151 §2.2",
       "RL-165 §8.1",
-      "RL-166 Q2"
+      "RL-166 Q2",
+      "RL-166b §4"
+    ],
+    "deferred_rules": [
+      {
+        "id": "kappa_signs",
+        "when": "freeze 2",
+        "rule": "No single kappa's sign or size is read. Freeze 2 reports H with its interval for three reference turns, computed from the coefficient file. No energy is read for it.",
+        "cite": [
+          "RL-166b §4"
+        ]
+      },
+      {
+        "id": "sd_j_covariance",
+        "when": "freeze 2",
+        "rule": "SD_j's covariance term, for each reference turn, is the larger of the leg-clustered standard error and the day-jackknife value from P-1's fold coefficients: sqrt((D - 1)/D * sum over held-out days d of (H(-d) - their mean)^2). Fixed now so that it is not chosen after the output is seen.",
+        "cite": [
+          "RL-166b §4",
+          "RL-149 §1.3"
+        ]
+      },
+      {
+        "id": "leverage_flag",
+        "when": "freeze 2",
+        "rule": "A turn whose start readings lie further from the campaign's centre, by joint distance, than any campaign leg is flagged beside heat_extrapolated. Stage 1's committed readings are enough; no code now.",
+        "cite": [
+          "RL-166b §4"
+        ]
+      },
+      {
+        "id": "hot_prefill_flag",
+        "when": "freeze 2",
+        "rule": "A turn with more than 10 expected hot seconds in its prefill, by RL-166b B-1's formula, is flagged.",
+        "cite": [
+          "RL-166b §4"
+        ]
+      }
     ]
   },
   "custody": {

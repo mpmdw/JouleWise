@@ -226,7 +226,35 @@ five things added, it agrees with the generator's planted verdicts on 69 of 72 l
 planted labels with no physical basis in the files (one is a leg that never ran). The stage-1 dry run on real
 custody remains the check of the real layout.
 
-## 6. Still owed
+## 6. RL-166b (the Mythos attack on the fit form), as the manifest carries it
+
+- **The fit (B-1 to B-7).**
+  - `fit.heat_term.form` uses expected hot seconds w̃ in the δ column. RL-166's sentence that Ĥ is zero before the predicted onset is withdrawn, and the validator refuses it if it comes back.
+  - `start_readings` takes B-2's activity rule; `estimation` takes B-6's scaled solve.
+  - `onset.estimable_when` takes B-3, B-4 and B-5, plus the 0.30 censored-share report.
+  - The days tripwire is `days_below_4`.
+- **Sentences RL-166b dictates.** They sit in `fit.stated_limits`, and the validator requires each id:
+  - what `yes` means, and its pass rate (about 4 in 10 for a correct model, about 1 in 12 with no heat term), and that `no` is not evidence against the term;
+  - the pooled error;
+  - the limit of ½T² (3 % of its 439 s value at 75 s; under about 150 s, Ĥ is the onset step alone);
+  - the partial-correction share;
+  - Ĥ before the onset;
+  - δ's standard error;
+  - the joint range of warm series turns;
+  - token ratios.
+  The pass-rate sentence carries a `note`: the lead's re-run with B-1's column replaces the figures before item 11.
+- **Rules deferred to freeze 2.** They sit in `freeze2.deferred_rules`, and the validator requires each id:
+  - κ's signs;
+  - the SD_j covariance term, which is the larger of the leg-clustered SE and the day-jackknife over P-1;
+  - the leverage flag;
+  - the hot-prefill flag.
+- **The 116 s print rule.** It is decision `onsets_before_116_s`, with threshold 0. When the onset model is `not_estimable` and the count is above zero, the decision sends stage 1 to the research lead.
+- **Schema fields, named here because the interface page does not name them yet.**
+  - Level D: `active_readings.{tf08_c,fan_rpm,tv0h_excess_c}.{active, tolerance, min_count_off_day, threshold}`; `onset.n_uncensored_by_cell`; `onsets_before_116_s.{by_g0_role, total, onset_status, to_research_lead}`; `tripwires.days_below_4`; RL-167's `meter_clock` and `roster.spans[].meter_offsets_ns`; `onset.predictors` as a list (B-2 may drop entries); `rates.per_cell` values nullable (RL-167 row 18).
+  - Level O, per channel: `fold_coefficients` (P-1); `day_detail.{days.{legs_with_hot_block, hot_blocks, se_with_heat, se_no_heat}, s_with_heat, s_no_heat}` (P-2); `onset_offset_residuals.{offsets."-2".."5".{n, mean_with_heat, rms_with_heat, mean_no_heat, rms_no_heat}, rms_offsets_m2_to_p3.{with_heat, no_heat}}` (P-3). `columns` may hold as few as 5 entries.
+  - The analyst seat emits these names, or the interface page renames them and the schemas follow.
+
+## 7. Still owed
 
 | Item | Who | Due |
 |---|---|---|

@@ -302,12 +302,15 @@
     "coefficients",
     "columns",
     "covariance",
+    "day_detail",
+    "fold_coefficients",
     "lodo",
     "marked_sensitivity",
     "model_sha256",
     "n_days",
     "n_legs",
     "n_segments",
+    "onset_offset_residuals",
     "prefix_bias",
     "qualified",
     "residuals"
@@ -328,7 +331,7 @@
        "delta"
       ]
      },
-     "minItems": 8,
+     "minItems": 5,
      "maxItems": 9,
      "uniqueItems": true
     },
@@ -730,6 +733,442 @@
       "no",
       "not_run"
      ]
+    },
+    "fold_coefficients": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": {
+       "type": "number"
+      }
+     },
+     "description": "RL-166b P-1: each LODO fold's coefficient vector, by held-out day and column name"
+    },
+    "day_detail": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "days",
+      "s_no_heat",
+      "s_with_heat"
+     ],
+     "properties": {
+      "days": {
+       "type": "object",
+       "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "hot_blocks",
+         "legs_with_hot_block",
+         "se_no_heat",
+         "se_with_heat"
+        ],
+        "properties": {
+         "legs_with_hot_block": {
+          "type": "integer"
+         },
+         "hot_blocks": {
+          "type": "integer"
+         },
+         "se_with_heat": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "se_no_heat": {
+          "type": [
+           "number",
+           "null"
+          ]
+         }
+        }
+       }
+      },
+      "s_with_heat": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "s_no_heat": {
+       "type": [
+        "number",
+        "null"
+       ]
+      }
+     },
+     "description": "RL-166b P-2: per counted day, legs with a hot block, hot blocks and s/sqrt(n) with and without the heat columns; s is the SD of per-leg signed hot-stretch errors within days, pooled over counted days. No rule reads it"
+    },
+    "onset_offset_residuals": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "offsets",
+      "rms_offsets_m2_to_p3"
+     ],
+     "properties": {
+      "offsets": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "-1",
+        "-2",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+       ],
+       "properties": {
+        "-2": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "mean_no_heat",
+          "mean_with_heat",
+          "n",
+          "rms_no_heat",
+          "rms_with_heat"
+         ],
+         "properties": {
+          "n": {
+           "type": "integer"
+          },
+          "mean_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "mean_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         }
+        },
+        "-1": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "mean_no_heat",
+          "mean_with_heat",
+          "n",
+          "rms_no_heat",
+          "rms_with_heat"
+         ],
+         "properties": {
+          "n": {
+           "type": "integer"
+          },
+          "mean_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "mean_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         }
+        },
+        "0": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "mean_no_heat",
+          "mean_with_heat",
+          "n",
+          "rms_no_heat",
+          "rms_with_heat"
+         ],
+         "properties": {
+          "n": {
+           "type": "integer"
+          },
+          "mean_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "mean_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         }
+        },
+        "1": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "mean_no_heat",
+          "mean_with_heat",
+          "n",
+          "rms_no_heat",
+          "rms_with_heat"
+         ],
+         "properties": {
+          "n": {
+           "type": "integer"
+          },
+          "mean_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "mean_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         }
+        },
+        "2": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "mean_no_heat",
+          "mean_with_heat",
+          "n",
+          "rms_no_heat",
+          "rms_with_heat"
+         ],
+         "properties": {
+          "n": {
+           "type": "integer"
+          },
+          "mean_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "mean_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         }
+        },
+        "3": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "mean_no_heat",
+          "mean_with_heat",
+          "n",
+          "rms_no_heat",
+          "rms_with_heat"
+         ],
+         "properties": {
+          "n": {
+           "type": "integer"
+          },
+          "mean_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "mean_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         }
+        },
+        "4": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "mean_no_heat",
+          "mean_with_heat",
+          "n",
+          "rms_no_heat",
+          "rms_with_heat"
+         ],
+         "properties": {
+          "n": {
+           "type": "integer"
+          },
+          "mean_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "mean_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         }
+        },
+        "5": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "mean_no_heat",
+          "mean_with_heat",
+          "n",
+          "rms_no_heat",
+          "rms_with_heat"
+         ],
+         "properties": {
+          "n": {
+           "type": "integer"
+          },
+          "mean_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_with_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "mean_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          },
+          "rms_no_heat": {
+           "type": [
+            "number",
+            "null"
+           ]
+          }
+         }
+        }
+       }
+      },
+      "rms_offsets_m2_to_p3": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "no_heat",
+        "with_heat"
+       ],
+       "properties": {
+        "with_heat": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "no_heat": {
+         "type": [
+          "number",
+          "null"
+         ]
+        }
+       }
+      }
+     },
+     "description": "RL-166b P-3: legs with an observed in-turn onset; o is the leg's first hot block; for offsets -2 to +5 from o, over full decode blocks, n, mean and RMS of the held-out relative residual (predicted less measured, over measured), with and without the heat columns; the summary is the RMS over offsets -2 to +3"
     }
    }
   },

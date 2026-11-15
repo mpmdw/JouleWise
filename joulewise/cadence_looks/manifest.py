@@ -90,7 +90,8 @@ REQUIRED_CHANNELS = {"interim": {"gpu_rail", "dc_in"}}   # RL-149 2.4 rule 4, 2.
 ALLOWED_PREDICTORS = {"prefill_tokens", "decode_tokens", "decode_block_tokens", "context_tokens", "turn_index",
                       "prefill_rate_frozen", "decode_rate_frozen", "load_seconds_from_counts",
                       "prefill_seconds_from_counts", "segment_duration_s", "segment_midpoint_s", "start_tf08",
-                      "start_fan_rpm", "start_tv0h_excess_over_soak_reference", "predicted_onset_s"}
+                      "start_fan_rpm", "start_tv0h_excess_over_soak_reference", "predicted_onset_s",
+                      "expected_hot_seconds"}                                                # RL-166b B-1
 ONSET_PREDICTORS = {"start_tf08", "start_fan_rpm", "start_tv0h_excess_over_soak_reference",
                     "prefill_seconds_from_counts"}                                           # RL-166 Q4
 REQUIRED_FORBIDDEN = {"in_turn_reading", "in_turn_clock", "in_turn_state", "in_turn_duration",
@@ -105,16 +106,25 @@ REQUIRED_PRINTS = {
     "interim": {"inclusion_table", "rates", "onset_fit", "onset_lodo_error", "heat_term_fit",
                 "lodo_rel_error_hot_stretch", "lodo_rel_error_leg", "holdout_rms_rel_error", "without_heat_columns",
                 "per_leg_relative_residuals", "prefix_length_bias", "high_power_table", "step3_statistic_iii",
-                "qualified_interim_half", "marked_span_sensitivity", "realized_prompt_tokens", "disclosure"},
+                "qualified_interim_half", "marked_span_sensitivity", "realized_prompt_tokens", "disclosure",
+                "active_readings", "onsets_before_116_s", "fold_coefficients", "day_detail",
+                "onset_offset_residuals"},                                             # RL-166b B-2, P-1 to P-4
 }
 PREFIX_RATIOS = [1.10, 1.30, 1.374]                # RL-150 section 3.2 ("the looks print ... 1.10, 1.30 and 1.374")
 REQUIRED_CARRIES = {"model_sha256", "qualified"}   # RL-149 section 4
 # The thresholds RL-166 fixed, by decision id. None: the decision carries no threshold.
 REQUIRED_DECISIONS = {"interim": {"drift_tripwire": 0.08, "qualified_interim_half": 0.02, "hp01_included_below_9": 9,
-                                  "stage1_tripwires": None, "step3_cell_not_run": 2, "extension_rule": None}}
+                                  "stage1_tripwires": None, "step3_cell_not_run": 2, "extension_rule": None,
+                                  "onsets_before_116_s": 0}}                           # RL-166b P-4
+# The sentences RL-166b dictates (fit.stated_limits) and the rules it fixes for freeze 2 (freeze2.deferred_rules).
+REQUIRED_STATED_LIMITS = {"interim": {"qualified_yes_meaning", "qualified_pass_rate", "pooled_error", "half_t2_limit",
+                                      "partial_correction", "not_zero_before_onset", "delta_se_overstates",
+                                      "warm_series_outside_joint_range", "ratio_of_tokens"}}
+REQUIRED_DEFERRED = {"interim": {"kappa_signs", "sd_j_covariance", "leverage_flag", "hot_prefill_flag"}}
+WITHDRAWN_FORM_RE = re.compile(r"(?i)H is zero for a turn")                           # RL-166b Amends
 DRIFT_FALLBACK = 0.04                              # RL-166 Q11
 # RL-166 Q8; ids as the stage-1 output (level D, docs/process/cadence_look_fit_interface.md section 3.3) names them
-STAGE1_TRIPWIRES = {"dev_included_below_45": 45, "days_below_3": 3, "cell_below_10": 10,
+STAGE1_TRIPWIRES = {"dev_included_below_45": 45, "days_below_4": 4, "cell_below_10": 10,     # days: RL-166b B-7
                     "start_reading_invalid_over_10pct": 0.10, "hp01_below_9": 9}
 RETIRED_DECISION_RE = re.compile(r"(?i)rule[_-]?p|s_?w_selection|one_decision")  # RL-151 section 2.1
 FREEZE2_COMMIT_BEFORE = {"qualification_energy_opened", "qualification_leg_runs", "phase_boundary_crossed",
@@ -258,7 +268,7 @@ def validate_manifest(doc, *, final=None):
     if not _cites(rulings):
         problems.append("rulings: a non-empty list of ruling cites")
     else:
-        for need in ("RL-149 §2.6", "RL-150 R4", "RL-166 §1"):
+        for need in ("RL-149 §2.6", "RL-150 R4", "RL-166 §1", "RL-166b §3"):
             if need not in rulings:
                 problems.append(f"rulings: must cite {need!r}")
 
@@ -272,7 +282,7 @@ def validate_manifest(doc, *, final=None):
     _outputs(doc.get("outputs"), kind, problems, final)
     _decisions(doc.get("decisions"), kind, problems)
     _later_looks(doc.get("later_looks"), problems)
-    _freezes(doc.get("freeze1"), doc.get("freeze2"), problems)
+    _freezes(doc.get("freeze1"), doc.get("freeze2"), problems, kind)
     _custody(doc.get("custody"), problems)
     _review(doc.get("review"), problems)
     for path, shas in _pinned_paths(doc).items():
@@ -510,9 +520,11 @@ def _energy(e, kind, problems):
 
 def _fit(f, kind, problems, final):
     keys = {"code", "runtime", "authors", "heat_term", "rates", "onset", "validation", "prefix_bias", "step3",
-            "sensitivity", "reads_from_leg_record", "reads_never", "cite"}
+            "sensitivity", "reads_from_leg_record", "reads_never", "stated_limits", "cite"}
     if not _closed(f, keys, "fit", problems):
         return
+    _items_with_ids(f.get("stated_limits"), "fit.stated_limits", {"id", "text", "cite"}, {"note"},
+                    REQUIRED_STATED_LIMITS.get(kind, set()), "RL-166b", problems)
     _need_cite(f, "fit", problems)
     code = f.get("code")
     if not (isinstance(code, list) and code):
@@ -532,6 +544,8 @@ def _fit(f, kind, problems, final):
                     "predictors", "forbidden_predictors", "sign_of_start_term_assumed", "missing_start_reading",
                     "out_of_state_start", "onset_not_estimable", "outside_calibrated_range", "cite"},
                "fit.heat_term", problems):
+        if WITHDRAWN_FORM_RE.search(str(ht.get("form"))):
+            problems.append("fit.heat_term.form: 'H is zero for a turn ...' is withdrawn (RL-166b Amends)")
         if ht.get("unit") != "segment":
             problems.append("fit.heat_term.unit: 'segment' (RL-166 Q1)")
         preds = ht.get("predictors")
@@ -751,7 +765,25 @@ def _later_looks(ll, problems):
             _need_cite(x, where, problems)
 
 
-def _freezes(f1, f2, problems):
+def _items_with_ids(items, where, keys, optional, required_ids, ruling, problems):
+    if not isinstance(items, list):
+        problems.append(f"{where}: list")
+        return
+    seen = set()
+    for i, x in enumerate(items):
+        if _closed(x, keys, f"{where}[{i}]", problems, optional=optional):
+            if x.get("id") in seen:
+                problems.append(f"{where}[{i}].id: duplicate")
+            seen.add(x.get("id"))
+            for k in keys - {"id", "cite"}:
+                if not _text(x.get(k)):
+                    problems.append(f"{where}[{i}].{k}: text")
+            _need_cite(x, f"{where}[{i}]", problems)
+    for rid in sorted(required_ids - seen):
+        problems.append(f"{where}: carries {rid} ({ruling})")
+
+
+def _freezes(f1, f2, problems, kind=None):
     if _closed(f1, {"contents", "committed_before", "ledger_pointer", "cite"}, "freeze1", problems):
         if f1.get("committed_before") != "any development energy is read":
             problems.append("freeze1.committed_before: 'any development energy is read' (RL-149 §2.6 item 1)")
@@ -760,8 +792,10 @@ def _freezes(f1, f2, problems):
         if not (_text(f1.get("ledger_pointer")) and "LOOKS.json" in f1["ledger_pointer"]):
             problems.append("freeze1.ledger_pointer: the look ledger LOOKS.json (RL-166 Q18)")
         _need_cite(f1, "freeze1", problems)
-    if _closed(f2, {"artifact", "contents", "commit_before", "used_by", "refit_on_qualification", "cite"}, "freeze2",
-               problems):
+    if _closed(f2, {"artifact", "contents", "commit_before", "used_by", "refit_on_qualification", "deferred_rules",
+                    "cite"}, "freeze2", problems):
+        _items_with_ids(f2.get("deferred_rules"), "freeze2.deferred_rules", {"id", "when", "rule", "cite"}, (),
+                        REQUIRED_DEFERRED.get(kind, set()), "RL-166b §4", problems)
         if f2.get("refit_on_qualification") is not False:
             problems.append("freeze2.refit_on_qualification: false (RL-149 §2.6 item 2)")
         cb = f2.get("commit_before")
