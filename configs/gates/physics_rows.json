@@ -7315,9 +7315,9 @@
    },
    "klass": "PHYSICS_DIRECT",
    "line_at_base": 4160,
-   "mapping": "unchanged in core: scripts/run_night.py:run_night.prepare_result",
+   "mapping": "unchanged in core: scripts/run_night.py:_run_night.prepare_result",
    "note": "driver launch path and install probe, unchanged for HAZARD_PACK (lane L2)",
-   "site": "scripts/run_night.py:run_night.prepare_result",
+   "site": "scripts/run_night.py:_run_night.prepare_result",
    "test": "tests/test_run_night.py::CourierDeliveryBoundaryTests::test_result_create_failure_before_any_bytes_still_launches_with_minimal_refusal",
    "test_matched_on": "termination_proven"
   },

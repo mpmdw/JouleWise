@@ -1,4 +1,5 @@
 """RL-26 arm evidence: synthetic helper bytes, timex probes and installer only."""
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from contextlib import ExitStack
 import hashlib
 import json
@@ -71,7 +72,7 @@ class ArmEvidenceTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(session, 'w1_disk_check', return_value={}))
             self.installer = stack.enter_context(mock.patch.object(session.pilot, 'install',
                 return_value={'exit_code': 0}, side_effect=install_effect))
-            return session.install(self.target, runner=host, volume_runner=host, frequency_reader=lambda: host.read())
+            return session.install(self.target, watchdog_check=_watchdog_acceptance, runner=host, volume_runner=host, frequency_reader=lambda: host.read())
 
     def saved(self):
         return json.loads((self.target / 'staging/v4-arm-001.json').read_bytes())

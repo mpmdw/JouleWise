@@ -37,6 +37,15 @@ if [[ -e "$POWER_MARKER" ]]; then
   restore_automatic
 fi
 
+# The arm pins MEASUREMENT_ROOT and these chain bytes. Derive the packet
+# location here, without an unregistered shell/plist environment override.
+# Check only after startup Automatic restore, including the SIGKILL backstop.
+ALIGN_R1_PREPARE_PACKET="$MEASUREMENT_ROOT/.align-r1-prepare.json"
+if [[ ! -f "$ALIGN_R1_PREPARE_PACKET" ]]; then
+  print -u2 -r -- "r1.prepare_packet.missing: lead must prepare $ALIGN_R1_PREPARE_PACKET"
+  exit 2
+fi
+
 # The WP15 runtime argv is the list inputs.WP15.runtime_entrypoint (a
 # repo-relative script run by "$PY" -B, then its arguments). ALIGN_R1_RUNTIME,
 # if set, overrides it with one operator-pinned executable path (not shell text).
@@ -50,4 +59,5 @@ fi
   --output "$NIGHT_DIR/align-r1" \
   --registration "$REGISTRATION" \
   --power-marker "$POWER_MARKER" \
+  --prepare-packet "$ALIGN_R1_PREPARE_PACKET" \
   "${RUNTIME_ARGS[@]}"

@@ -146,7 +146,7 @@ Record k is the index `records/$K/record.json` (schema `joulewise.align_v4.windo
 
 **Full desk DUE** (previous window W1, or code/config changed since the last desk-passed state): **do not arm on the light triage.**
 - Wait for the Air's `desk` and `final` (§5).
-- Commit record k with its own `sources.pilot` (`$S/PILOT.json`), `sources.desk` (`$S/desk.json`) and `sources.exclusions` (`$S/archive/derived/exclusions.json`).
+- Commit record k with its own `sources.pilot` (`$S/PILOT.json`), `sources.desk` (`$S/desk.json`) and `sources.exclusions` (`$S/exclusions.json`, the guarded desk's committed source without the all-member `flag_counts`; PR #774 E2).
 - These count as final only if `desk.harvest_status` is `ok` or `members_excluded`, and the desk's and PILOT's `plan_id` are this window's.
 - A completed desk that did not pass is still final. It just is not a desk pass.
 - `light_triage` is optional in that case.
@@ -179,20 +179,36 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
 }
 ```
 
-- The files are `$S/PILOT.json`, `$S/desk.json` and `$S/archive/derived/exclusions.json` from the Air desk on window k, byte for byte.
+- The files are `$S/PILOT.json`, `$S/desk.json` and `$S/exclusions.json` from the Air desk on window k, byte for byte. Never commit `$S/archive/derived/exclusions.json`: it is restricted (PR #774 E2).
 - If k's desk passed, the series ledger's `last_passed_record` becomes `{commit, path, sha256}` of record k plus `"final_record": {commit, path, sha256}` of record k+1.
 - The same evidence rule as §3 applies: `previous_final` naming a running, faulted or other-plan desk does not make k final.
 - If k's desk is not finished by record k+1, commit k+1 without `previous_final`. The arm of k+1's successor then refuses (§6) until a later record carries it.
 - **R17's bound:** window k must be final before the arm of k+2. This holds for **every** window in the chain, test windows included. They still contribute zero calibration.
+
+## Before the series release: standing lines (RL-162 sections 3 and 4; PR #774 re-attack 2)
+
+- **Bundles of a v4 series window** are read only by the guarded desks (`align_v4_session.py desk`, the common desk on a v4 session, `align_v4_thermal_desk.py`) and the harvest-off pipeline (`align_v4_harvest_off.py`). No bundle-level tool or ad hoc reader is run on one before release. This replaces RL-149 §3 line 4 at the merge of PR #774. `align_v4_u3_export.py` refuses any bundle that is not a pilot or R1 slot-session bundle (RL-162 §3).
+- **File sizes** under a series window's `runs/`, `reduced/` and `archive/withheld/` directories are restricted like their contents. No report, status line or custody summary prints them per member or per file before release. Tools may still read them (RL-162 §4).
+- **Restricted like `archive/withheld/`:**
+  - `reduced/`, written only under `archive/withheld/` before release.
+  - The sweep directory with its `SWEEP.json`, its `wNN/export/` and its archives. It is written only under `archive/withheld/` before release (E3).
+  - The desk harvest's export and stdout/stderr. The guarded desk writes these under `archive/withheld/` (PR #774 M1).
+  - `archive/derived/exclusions.json`, which carries all-member `flag_counts`. Commit `$S/exclusions.json` instead (E2).
+  - **`archive/sources/`** and its `SHA256SUMS`: the harvest's byte copy of every bundle, with file names that mark a deadman member. Deny it to every seat beside `runs/` (E4).
+  - **`archive/harvest.json`**: the harvest's manifest. It holds the full `exclusions.json` digest, the all-member flag total and per-stage yields (PR #774 F4).
+- **One guarded harvest desk at a time per session.** The desk holds an exclusive lock on the session directory from its rerun check to its last write. A second desk started meanwhile refuses at once and writes nothing (Sol audit #5).
+- **A guarded v4 desk refuses a rerun** on a session that already holds `desk.json`, `PILOT.json`, `exclusions.json`, `archive/withheld/PILOT.full.json` or `archive/withheld/desk_seal_key.json`. It refuses before the harvest or any write. Re-run on a fresh session restore (PR #774 E6).
+- **`archive/derived/`** (RL-163 §2): `flags.jsonl`, `b6-flags.jsonl`, `b6-acceptance.json` and `window_flags.json` are restricted like `archive/withheld/`, where they are. `exclusions.json` is restricted too, because of its all-member `flag_counts` (E2 above). `roster.json` is not restricted.
+- **The finalized manifest** (RL-163 §1): before release its body and entry count are restricted, and the record commits its digest only. The code change is in the desk-seal follow-up PR, and no v4 series record is committed before that PR merges.
 
 ## 5. Air, during window k+1: restore → harvest → desk → final → reduce
 
 The Air must be otherwise quiet: no Sol seats; renice others. The desk-verdict child has a wall budget; a time-out there is a re-run, not a result.
 
 ```sh
-$RUN desk  --session-root "$S" --workers auto [--sweep "$SWEEP/SWEEP.json"]   # harvest + full v4 desk
+$RUN desk  --session-root "$S" --workers auto [--sweep "$S_SWEPT/archive/withheld/sweep/SWEEP.json"]   # harvest + full v4 desk; first, on a fresh restore
 $RUN final --session-root "$S" --window-id "$K"                               # final eligibility row
-$RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # columnar PM + per-turn tables
+$RUN reduce --session-root "$S" --out "$S/archive/withheld/reduced" --workers 2   # columnar PM + per-turn tables
 ```
 
 - **`desk`** writes `$S/PILOT.json`, `$S/desk.json` and `$S/archive/`.
@@ -206,7 +222,7 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
   - the desk and PILOT.json are this session's;
   - the exclusions agree.
   - Supplemental captures count as captures here (D5). Its rows must be a subset of the light triage's provisional rows. If not, stop and escalate to the lead: the proof says this cannot happen.
-- **`reduced/`** is outcome-bearing (energies) and is restricted like `withheld/`. Its `MANIFEST.json` digests and row counts are structure-only. Each `<run_id>/turns.json` equals PILOT.json (`turn_table.equal_to_pilot`); check this before any analysis reads tables instead of bundles.
+- **`reduced/`** is outcome-bearing (energies) and is restricted like `withheld/`. Before release, `reduce` refuses an `--out` outside the session's `archive/withheld/` (PR #774 M4). Its `MANIFEST.json` is restricted with it: its per-member `raw_size` and `reduced_size` encode each member's sample count, so its elapsed time (PR #774 N6). The `reduce` command prints counts of members and files only. Each `<run_id>/turns.json` equals PILOT.json (`turn_table.equal_to_pilot`); check this before any analysis reads tables instead of bundles.
 - Hand the three final files to the magistrate for record k+1 (§4).
 - Prune the restored `$S` on the Air only after record k+1 (or k) with the final sources is pushed. The MBP originals follow the air-offload lane's retention rule.
 
@@ -249,15 +265,17 @@ $RUN reduce --session-root "$S" --out "$OUT/reduced" --workers 2              # 
 Run it on the Air with the restored `$S`, during a window, with the Air otherwise quiet. It needs disk for 5 separate archives on top of the restore. The sources are cloned with `cp -c`, so mainly `withheld/` and `derived/`. Check `df` first: there is 49 GB free now, and a window is 18.6-26.4 GB.
 
 ```sh
-$RUN sweep --session-root "$S" --out "$OUT/sweep" --workers 2,4,6,8,10
+$RUN sweep --session-root "$S" --out "$S/archive/withheld/sweep" --workers 2,4,6,8,10   # only AFTER this session's own desk and final; refused elsewhere before release (E3)
 # SWEEP.json: per worker count: exit, wall_s, peak_child_rss_bytes (the per-worker peak); profile.jsonl per run
 ```
 
-Then use it for every later desk: `--workers auto --sweep "$OUT/sweep/SWEEP.json"`.
+Then use it for every later desk by the **swept session's own path**: `--workers auto --sweep "$S_SWEPT/archive/withheld/sweep/SWEEP.json"`. **Never copy the receipt into a later session.** The guarded desk refuses a session that already has an `archive/` before its harvest, and so does the harvest (`archive_root_exists`). That would spend the window's one desk run (PR #774 F2). The whole sweep directory is restricted like `archive/withheld/` (PR #774 E3): its `wNN/export/` holds a non-claim per-run export and full archives.
+- **Order on any session:** restore → `desk` → `final` → then, if wanted, `reduce` and `sweep`. Neither `reduce` nor `sweep` runs before that session's own desk.
+- **Recovery after a faulted or partial desk** (`program_fault`, a killed harvest, or a refused rerun): restore the window afresh from its offload pack into a new session directory (§2, `unpack` against the committed finalized-manifest digest) and run the desk there once. A guarded desk never runs twice on one restore, and it says so when it refuses.
 - `SWEEP.json` (schema `harvest_sweep.v2`) records the swept window's largest plist and the harvest code identity.
 - After a code change, re-run the sweep. Until then, the desk uses the 8× fallback.
 - Record the knee (the fastest count whose peak fits) in RUN_STATE.
-- Keep `SWEEP.json`. It is structure only (times, bytes), with no outcome values.
+- Keep `SWEEP.json`, restricted like `withheld/` until the series release: its peaks and `largest_plist_bytes` are a maximum over the window's members, which encodes the longest member's duration (PR #774 N6). The `sweep` and `desk --workers auto` commands print worker counts and the sizing basis only.
 - The sweep's five archives are engineering copies. Delete them after; they are never record sources.
 
 **Optional native identity check (N2).** On a window whose harvest also ran on the MBP, compare the two archives:

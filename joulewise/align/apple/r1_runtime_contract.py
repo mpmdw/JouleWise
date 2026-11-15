@@ -41,6 +41,7 @@ KIND_FIELDS = {
     # Ruling 4(b): the battery drain rate (%/h) under the 30B and under D.
     # Protocol v4 :243-251 (LEAD-RULINGS-2 R5-5): the full-inventory R1
     # classification around both planning-turn steps (the 30B for the record).
+    "capture-predecessor-30b": ("bundle", "ac_powermode"),
     "step-30b": ("battery_drain_pct_per_h", "thermometry.status", "thermometry.classification_sha256",
                  *G0_WAIT_FIELDS),
     "step-d": ("slots", "e_D_j_per_token", "battery_drain_pct_per_h", "thermometry.status",
@@ -74,7 +75,7 @@ KIND_FIELDS = {
 # (the driver precools and retries it once), not a refusal of the R1 night.
 # Such a result carries segment_status "inconclusive" and g0_released false,
 # and only these fields beside the quiet ones.
-G0_INCONCLUSIVE_KINDS = ("step-d", *PLANNING_KINDS)
+G0_INCONCLUSIVE_KINDS = ("step-30b", "step-d", *PLANNING_KINDS, *HIGH_POWER_KINDS)
 INCONCLUSIVE_FIELDS = ("segment_status", "g0_released", "g0_outcome", *G0_WAIT_FIELDS)
 NEEDS_SOAK_REFERENCE = frozenset(("idle-until-soak", "g0-release-soak", "x-g", *GATED_D_KINDS, *PLANNING_KINDS,
                                   *HIGH_POWER_KINDS))
@@ -106,6 +107,8 @@ def required_fields(kind, *, quiet, contract_key=None, inconclusive=False):
 def missing_fields(kind, result, *, quiet, contract_key=None):
     """Names from ``required_fields`` absent in ``result`` (presence only)."""
     missing = []
+    if kind == "step-d" and "smoke_part_a" in result:
+        return [k for k in ("bundle", "operating_reference", "g0_outcome", "g0_wait_s", "g0_timeout_s") if k not in result]
     inconclusive = is_g0_inconclusive(contract_key or kind, result)
     for name in required_fields(kind, quiet=quiet, contract_key=contract_key, inconclusive=inconclusive):
         value = result

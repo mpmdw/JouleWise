@@ -3,6 +3,7 @@
 Run this module alone. Red assertions state the required property, rather than
 blessing the observed defect. No test invokes a harvest or a measurement job.
 """
+from tests.git_fixture import init_git_fixture
 import copy
 import json
 import os
@@ -41,7 +42,8 @@ class Scratch(unittest.TestCase):
         # Only the installed interpreter; no model, dependency installation or download.
         (root / '.venv/bin').mkdir(parents=True)
         (root / '.venv/bin/python').symlink_to(sys.executable)
-        for args in (('init', '-q'), ('add', '.'), ('commit', '-qm', 'synthetic checkout')):
+        init_git_fixture(root, '-q')
+        for args in (('add', '.'), ('commit', '-qm', 'synthetic checkout')):
             subprocess.run(['git', '-c', 'user.name=Synthetic', '-c',
                             'user.email=synthetic@example.invalid', '-C', str(root), *args],
                            check=True, capture_output=True)

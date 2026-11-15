@@ -276,10 +276,18 @@ class TickSpanTests(WatchdogTestCase):
     def test_unreadable_installed_fence_keeps_normal_unsafe_hold_path(self) -> None:
         with mock.patch.object(wd, "_installed_agent_plans", side_effect=ValueError("torn plist")):
             decision = self.network_free_tick()
-        self.assertEqual("HOLD_UNSAFE", decision.state)
+        # 21029737a (admitted watchdog port, RL-29) names this unsafe hold
+        # and queues its safety notice without permitting a launch.
+        self.assertEqual("HOLD_PLIST_UNREADABLE", decision.state)
+        self.assertIn(decision.state, wd.UNSAFE_STATES)
+        self.assertFalse(decision.launch)
         self.assertIn("torn plist", decision.reason)
-        self.assertEqual("HOLD_UNSAFE", wd.load_state(self.harness.storage)["state"])
+        state = wd.load_state(self.harness.storage)
+        self.assertEqual("HOLD_PLIST_UNREADABLE", state["state"])
+        self.assertEqual(["hold_plist_unreadable"],
+                         [notice["kind"] for notice in state["notice_pending"]])
         self.assertTrue((self.harness.storage.root / "events.jsonl").exists())
+        self.assertEqual([], self.harness.spawn_calls)
 
     def test_tick_before_span_still_probes(self) -> None:
         plan = self.make_plan()
@@ -439,9 +447,10 @@ class TickSpanTests(WatchdogTestCase):
         transport.assert_not_called()
         fork.assert_not_called()
 
-    def test_unreadable_installed_fence_drains_resident_without_notice(self):
+    def test_unreadable_installed_fence_drains_resident_without_remote_notice(self):
         # A torn installed plist uses the same unsafe-plan drain as a torn
-        # discovered plan, without adding a remote-network notice.
+        # discovered plan, without adding a remote-network notice. The
+        # 21029737a port (RL-29) adds an immediate named safety notice.
         plan = self.make_plan()
         self.installed_plan(plan).write_bytes(b"torn plist")
         original = self.supervisor(plan)
@@ -456,10 +465,13 @@ class TickSpanTests(WatchdogTestCase):
         if thread is not None:
             thread.join(5)
             self.assertFalse(thread.is_alive())
-        self.assertEqual("HOLD_UNSAFE", state["state"])
+        self.assertEqual("HOLD_PLIST_UNREADABLE", state["state"])
+        self.assertIn(state["state"], wd.UNSAFE_STATES)
         self.assertIn("unreadable installed agent", state["resident_hold_drain"]["reason"])
         self.assertTrue((self.harness.storage.root / "standdown.request").exists())
-        self.assertEqual([], [notice["kind"] for notice in state["notice_pending"]])
+        self.assertEqual(["hold_plist_unreadable"],
+                         [notice["kind"] for notice in state["notice_pending"]])
+        self.assertEqual([], self.harness.spawn_calls)
 
     def test_unreadable_installed_fence_keeps_cached_observation_age(self):
         # Review F5: a suppressed refresh keeps the completed observation's

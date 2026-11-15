@@ -40,6 +40,7 @@ def arm_seams():
     derives (its own artifact-set digest, an unexpired window) and mocks the live meter and Git.
     """
     import copy
+    from tests.align.test_v4_arm_watchdog_check import acceptance
 
     def builder(root, supplied, *, now_epoch_s, current_artifact_set_sha256):
         if supplied is None:
@@ -49,7 +50,8 @@ def arm_seams():
         built['valid_until_epoch_s'] = now_epoch_s + 600.0
         return built, True
     return dict(packet_builder=builder, meter_probe=lambda root: {'live': True, 'samples': 40},
-                commit_check=lambda root, commit: True, record_check=lambda root, packet: True)
+                commit_check=lambda root, commit: True, record_check=lambda root, packet: True,
+                watchdog_check=acceptance)
 
 
 def write_battery_log(path, now, *, completion_age=600, step=100, end_age=30):

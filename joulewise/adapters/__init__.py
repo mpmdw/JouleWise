@@ -172,14 +172,14 @@ def resolve_telemetry(
         return MockTelemetryAdapter(clock), None
     if backend == TelemetryBackend.POWERMETRICS:
         try:
-            module = importlib.import_module("joulewise.adapters.powermetrics")
+            module = importlib.import_module("joulewise.adapters.powermetrics_reap")
         except ImportError as exc:
             return _failure(
                 FailureReason.TELEMETRY_UNAVAILABLE,
                 "telemetry backend 'powermetrics' could not import its adapter: "
                 f"{exc}",
             )
-        return module.PowermetricsTelemetryAdapter(clock), None
+        return module.ReapingPowermetricsTelemetryAdapter(clock), None
     if backend == TelemetryBackend.NVIDIA_SMI:
         client, failure = _remote_node_client(config, clock)
         if client is None:

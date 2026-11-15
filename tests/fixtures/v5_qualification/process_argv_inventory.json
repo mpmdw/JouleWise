@@ -332,6 +332,16 @@
       "command if command is not None else ['/bin/zsh', str(chain_path)]"
     ],
     [
+      "_run_night",
+      "argv assignment",
+      "['/bin/zsh', '-c', 'sleep 2; echo REHEARSAL']"
+    ],
+    [
+      "_run_night",
+      "argv assignment",
+      "['/bin/zsh', str(chain_path)]"
+    ],
+    [
       "build_parser",
       "argv assignment",
       "subcommands.add_parser(name)"
@@ -385,16 +395,6 @@
       "run_courier",
       "observed_popen",
       "argv"
-    ],
-    [
-      "run_night",
-      "argv assignment",
-      "['/bin/zsh', '-c', 'sleep 2; echo REHEARSAL']"
-    ],
-    [
-      "run_night",
-      "argv assignment",
-      "['/bin/zsh', str(chain_path)]"
     ]
   ]
 }

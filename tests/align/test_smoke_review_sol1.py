@@ -12,6 +12,7 @@ path runs.
 """
 from __future__ import annotations
 
+from tests.git_fixture import init_git_fixture
 import copy
 import hashlib
 import json
@@ -139,7 +140,8 @@ class ReceiptWitnesses(TemporaryContext):
             path.write_text('# synthetic\n')
         env = {**os.environ, 'GIT_AUTHOR_NAME': 'Review witness', 'GIT_AUTHOR_EMAIL': 'review@invalid',
                'GIT_COMMITTER_NAME': 'Review witness', 'GIT_COMMITTER_EMAIL': 'review@invalid'}
-        for args in (('init', '-q'), ('add', '.'), ('commit', '-q', '-m', 'synthetic receipt fixture')):
+        init_git_fixture(repo, '-q')
+        for args in (('add', '.'), ('commit', '-q', '-m', 'synthetic receipt fixture')):
             subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false',
                             '-C', str(repo), *args], check=True, capture_output=True, env=env, timeout=30)
         self.ctx.commit = wp.git(repo, 'rev-parse', 'HEAD')

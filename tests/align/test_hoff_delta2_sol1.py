@@ -3,6 +3,7 @@
 Run this module in its own process. Red tests assert required properties;
 they are not expectedFailure markers. No real custody path is accessed.
 """
+from tests.git_fixture import init_git_fixture
 import contextlib
 import io
 import json
@@ -38,7 +39,8 @@ class Scratch(unittest.TestCase):
         (checkout / '.venv/bin').mkdir(parents=True)
         # The installed interpreter, with no installation or model download.
         (checkout / '.venv/bin/python').symlink_to(sys.executable)
-        for args in (('init', '-q'), ('add', '.'), ('commit', '-qm', 'synthetic checkout')):
+        init_git_fixture(checkout, '-q')
+        for args in (('add', '.'), ('commit', '-qm', 'synthetic checkout')):
             subprocess.run(['git', '-c', 'user.name=Synthetic', '-c',
                             'user.email=synthetic@example.invalid', '-C', str(checkout), *args],
                            capture_output=True, check=True)

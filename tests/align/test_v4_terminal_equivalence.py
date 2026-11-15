@@ -1,7 +1,8 @@
 """Synthetic differential witness for the exporter lane's ARM terminal refactor.
 
 The reference is the complete nested terminal() from r11 at
-52f36f1d8d718f90d3e0d390c53275bce5f3e9c1. The candidate is extracted from
+52f36f1d8d718f90d3e0d390c53275bce5f3e9c1, amended only for the admitted
+454d78142 (RL-35 F-09) git delivery receipt branch. The candidate is extracted from
 the installed build_packet AST, so this exercises its actual helper calls and
 the restored `started` lookup. No historical Git objects are needed at test time.
 Only GitEvidence.git is replaced: source decoding, digest authentication,
@@ -31,7 +32,15 @@ def reference_terminal():
     started, exited = names.get('chain_started') is not None, names.get('chain_exited') is not None
     courier = previous.source('courier')
     previous.source('courier_sent', json_value=False)  # native courier creates an empty marker with touch
-    require(courier.get('sent') is True, 'courier delivery missing')
+    # RL-35 F-09 (454d78142): authenticated git delivery also closes the courier.
+    if courier.get('sent') is not True:
+        receipt = previous.source('courier_delivery')
+        require(receipt.get('transport') == 'git-push' and receipt.get('plan_id') == plan['plan_id']
+                and receipt.get('ref') == 'refs/heads/night-results/' + plan['plan_id']
+                and receipt.get('result_sha256') == digest(previous.source('result', json_value=False))
+                and isinstance(receipt.get('commit'), str)
+                and re.fullmatch(r'[0-9a-f]{40,64}', receipt['commit']) is not None,
+                'courier delivery missing or for another result')
     decision = terminal_window_release(result, plan_id=plan['plan_id'], receipt_class=plan['receipt_class'],
                 now_epoch_s=prepared, chain_started=started, chain_exited=exited, courier_sent=True)
     require(decision.allowed, decision.reason)
@@ -152,6 +161,23 @@ class TerminalEquivalenceTests(unittest.TestCase):
     def assert_equivalent(self, record, blobs, now=111):
         self.assertEqual(run_terminal(REFERENCE, record, blobs, now),
                          run_terminal(CANDIDATE, record, blobs, now))
+
+    def test_git_delivery_receipt_and_field_faults_match_amended_reference(self):
+        valid = {'transport': 'git-push', 'plan_id': 'synthetic',
+                 'ref': 'refs/heads/night-results/synthetic', 'commit': 'd' * 40}
+        for field in (None, *valid, 'result_sha256'):
+            with self.subTest(field=field):
+                record, blobs = fixture(sent=False)
+                receipt = {**valid, 'result_sha256': builder.digest(blobs['synthetic/result'])}
+                if field is not None:
+                    receipt[field] = 'wrong'
+                raw = encoded(receipt)
+                blobs['synthetic/courier_delivery'] = raw
+                record['sources']['courier_delivery'] = {
+                    'path': 'synthetic/courier_delivery', 'sha256': builder.digest(raw)}
+                self.assert_equivalent(record, blobs)
+                if field is None:
+                    self.assertIn(b'collected_window', run_terminal(CANDIDATE, record, blobs, 111)[0])
 
     def test_expanded_checks_match_reference_ast(self):
         """Check statement identity after only the three reviewed substitutions.

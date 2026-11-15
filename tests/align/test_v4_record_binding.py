@@ -2,6 +2,8 @@
 
 Real temporary Git repositories, synthetic record bytes only.
 """
+from tests.git_fixture import init_git_fixture
+from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 import hashlib
 import json
 from pathlib import Path
@@ -21,7 +23,7 @@ class RecordBindingTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self.git('init', '-q')
+        init_git_fixture(self.root, '-q')
 
     def git(self, *args):
         return subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', *args], cwd=self.root, check=True,
@@ -112,7 +114,7 @@ class RecordBindingTests(unittest.TestCase):
              patch('joulewise.battery_float.observe', return_value=(good, b'raw')):
             run = lambda argv: subprocess.CompletedProcess(argv, 0, 'pmset', '')
             log = write_battery_log(self.root / 'battery.jsonl', 5000.)
-            record = session.arm_checks(self.root, {}, runner=run, now=lambda: 5000., obc_off_attested_by='synthetic',
+            record = session.arm_checks(self.root, {}, watchdog_check=_watchdog_acceptance, runner=run, now=lambda: 5000., obc_off_attested_by='synthetic',
                                         battery_log=log, next_arm_triage=self.packet(commit, digest),
                                         packet_builder=lambda root, supplied, **kw: (supplied, True),
                                         meter_probe=lambda root: {'live': True})

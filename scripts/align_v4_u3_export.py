@@ -23,6 +23,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,9 +79,57 @@ def configuration_sha256(bundle):
     return _sha(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode())
 
 
+# RL-162 section 3 (PR #774 Mythos N9): before release this tool reads a bundle only when the bundle's stored
+# identity resolves to a pilot session or the R1 slot session (a positive allowlist; N10's lesson). The identity
+# is the ``run_id`` the bundle stores twice, in ``config.json`` (written from the plan's member config) and in
+# ``metadata.json`` (joulewise/bundle.py, the base ``run_id`` field); the two must agree.
+#   R1 slot session: ``align-v4-r1-<label>`` (joulewise/align/apple/r1_runtime.py member_config run ids).
+#   Pilot sessions:  ``align-pilot-v<N>-episodes-<stage>-e<NN>`` (configs/campaigns/align_pilot_v*/collection_plan.json),
+#                    EXCEPT the run ids a v4 series roster reuses: W1's anchors 1-4 run under the pilot-v3 ids with
+#                    byte-identical configs (configs/campaigns/align_v4/collection_plan.json), so those ids are
+#                    refused (a W1 anchor bundle cannot be told from a pilot one by its own bytes).
+# A series bundle (``align-v4-<window>-eNN``, ``align-v4-episodes-...``), anything else, or an unreadable or
+# inconsistent identity is refused before any energy is read.
+R1_RUN_ID = re.compile(r'align-v4-r1-[A-Za-z0-9_.-]+')
+PILOT_RUN_ID = re.compile(r'align-pilot-v[0-9]+-episodes-[a-z]+-e[0-9]{2}')
+V4_ROSTER_PLAN = ROOT / 'configs/campaigns/align_v4/collection_plan.json'
+
+
+def series_reused_run_ids():
+    """Run ids a v4 series roster (W1's plan) shares with the pilots; refused even though they match PILOT_RUN_ID."""
+    plan = json.loads(V4_ROSTER_PLAN.read_bytes())
+    return {m['run_id'] for m in plan['members'] if PILOT_RUN_ID.fullmatch(str(m.get('run_id')))}
+
+
+def bundle_identity(bundle):
+    """``'R1'`` or ``'pilot'`` for an allowed bundle; ValueError for anything else (RL-162 section 3)."""
+    from joulewise.desk_compress import read_bytes
+    try:
+        stored = {json.loads(read_bytes(Path(bundle) / name)).get('run_id') for name in ('config.json', 'metadata.json')}
+    except (OSError, ValueError, AttributeError) as exc:
+        raise ValueError(f'{Path(bundle).name}: bundle identity unreadable ({type(exc).__name__}); refused') from None
+    if len(stored) != 1 or not isinstance(next(iter(stored)), str):
+        raise ValueError(f'{Path(bundle).name}: bundle identity missing or inconsistent; refused')
+    run_id = next(iter(stored))
+    if R1_RUN_ID.fullmatch(run_id):
+        return 'R1'
+    if PILOT_RUN_ID.fullmatch(run_id) and run_id not in series_reused_run_ids():
+        return 'pilot'
+    raise ValueError(f'{Path(bundle).name}: not a pilot or R1 slot-session bundle; refused before the series '
+                     'release (RL-162 section 3)')
+
+
 def measure_pair(early, late):
     """Desk estimator on two named bundles: energies, identity, clock and eligibility evidence."""
     from joulewise.align.apple.thermal_desk import read_bundle_record, energy_exclusions
+    refused = []
+    for bundle in (early, late):
+        try:
+            bundle_identity(bundle)
+        except ValueError as exc:
+            refused.append(str(exc))
+    if refused:
+        return {'eligible': False, 'reasons': refused, 'refused': True}
     rows, reasons = [], []
     for bundle in (early, late):
         try:

@@ -6,6 +6,7 @@ Run this module alone; no models, network, real host commands or study data.
 """
 from __future__ import annotations
 
+from tests.git_fixture import init_git_fixture
 import copy
 import hashlib
 import json
@@ -278,7 +279,7 @@ class ReceiptWitnesses(ReviewFixture):
             return subprocess.run(['git', '-C', str(repository), *args], env=env,
                                   capture_output=True, text=True, check=True, timeout=30).stdout.strip()
 
-        git('init', '-q')
+        init_git_fixture(repository, '-q')
         git('config', 'commit.gpgsign', 'false')
         git('config', 'core.hooksPath', '/dev/null')
         git('add', '.')

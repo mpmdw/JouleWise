@@ -104,7 +104,7 @@ class HandoffCliDefectTests(unittest.TestCase):
                                 self.assertEqual(0, wd.main(["tick", "--custody-root", temporary]))
                                 self.assertEqual(raw, lock_path.read_text())
                                 state = wd.load_state(harness.storage)
-                                self.assertEqual("HOLD_UNSAFE", state["state"])
+                                self.assertEqual("HOLD_LOCK", state["state"])
                                 self.assertTrue(any("corrupt_lock_no_record" in item["reason"]
                                                     for item in state["notice_pending"]))
                         events = [json.loads(line) for line in
@@ -296,7 +296,7 @@ class MagistrateWatchdogCliTests(unittest.TestCase):
         self.assertNotIn("Traceback", completed.stderr)
         watchdog_root = custody_parent / "magistrate"
         state = json.loads((watchdog_root / "state.json").read_text(encoding="utf-8"))
-        self.assertEqual("HOLD_UNSAFE", state["state"])
+        self.assertEqual("HOLD_PLAN_MALFORMED", state["state"])
         self.assertIn(str(torn_path), state["reason"])
         self.assertIn(str(missing_path), state["reason"])
         self.assertIn(str(v2_label_v1_keys_path), state["reason"])

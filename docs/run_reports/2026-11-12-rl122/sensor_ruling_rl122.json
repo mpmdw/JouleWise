@@ -1,0 +1,37 @@
+{
+  "authority": "docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md RL-119 step 2 and step 3 (audit/2026-11-10-fable @ 7370d548e), RL-122 items 1 and 7 (@ ae2fbb361); RL-116 unseated the RL-89 pick",
+  "authorizes_night": true,
+  "classification_sha256": "0b9cdb9e136eee48c742a6bdfef3313373f795949027779353c31f717630e0a6",
+  "conditions": [
+    "the config commit's diff is the one token, and the file's new hash is the one the arm check pins",
+    "the nine other condition-13 paths hash as at 99622e96c",
+    "the cold review of step 2 has no open finding, and the script-derived pick is TVh0",
+    "Part A passed at that commit, with the G0 duration and the two release values stated",
+    "the 60-key check and D-7 passed",
+    "a dry check shows the W1 kit accepts TV0h / TVh0 given an ok night confirmation (align_v4_kit.py:258-266)",
+    "the kit handles item 3a's planning release",
+    "the dispositions of RL-119 step 4, as amended by RL-122 items 3 and 6, are in the magistrate's arm item"
+  ],
+  "note": "RL-122 item 7: the research lead authorizes the slot-producing night on this checklist; the lead does not return to the research lead if all hold. The slow pick is derived by scripts/align_r1_followup_kit.py second_fast_rule_selection from the saved Part B table, never supplied by hand; validate_sensor_ruling refuses any other pick. Written by the lead.",
+  "research_lead_ruling": "RL-122",
+  "schema": "joulewise.align.r1_sensor_ruling.v1",
+  "sensors": {
+    "fan_keys": [
+      "F0Ac",
+      "F1Ac"
+    ],
+    "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b",
+    "record_keys": [
+      "Tf08"
+    ],
+    "s_fast": "TV0h",
+    "s_slow": "TVh0"
+  },
+  "slow_rule": "fast_rule_second_application",
+  "slow_rule_text": "among keys R0 classed die, admissible for the slow role as sensor_admissibility tests it, not the fast pick or its aliases: the largest rise, lexical ties (RL-119 step 2, RL-122 item 7 step 2)",
+  "smoke_part_b_path": "docs/run_reports/2026-11-12-rl122/smoke_part_b.rl122.json",
+  "smoke_part_b_sha256": "b2369b6c78d91b75299e10ff7249f1e8cae7304b48cf022e20b2c6a6f69f2884",
+  "source_smoke_part_b_path": "docs/run_reports/2026-11-12-rl89/smoke_part_b.rl89.json",
+  "source_smoke_part_b_sha256": "1fdd980c91ceca6ee3907191b499f0108ca84b8709648a638bd49808a298eba3",
+  "superseded_sensor_ruling": "docs/run_reports/2026-11-12-rl89/sensor_ruling_rl89.json (RL-116: authorizes no further night)"
+}

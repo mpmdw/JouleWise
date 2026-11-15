@@ -26,9 +26,6 @@ from joulewise.b5 import plan as night_plan  # noqa: E402  (window-maximum const
 from scripts import align_v4_kit as kit  # noqa: E402  (L1 rule, registered roster)
 
 PLACEHOLDER = "PENDING_R1"
-# LEAD-RULINGS-2 R10 (cold-review dispositions MEDIUM-2, LOW-5): slots that
-# exist only under an R10-2(a) receipt; fill them from the receipt or delete them.
-RECEIPT_ONLY = PLACEHOLDER + ": R10-2(a) receipt only; fill from the receipt, or delete this key without a receipt"
 TEMPLATE_SCHEMA = "joulewise.align_v4.w1_plan_template.v1"
 INPUTS = ROOT / "configs/campaigns/align_v4/registration/inputs.json"
 R1_SLOTS = ROOT / "configs/campaigns/align_v4/registration/r1_slots.json"
@@ -95,9 +92,9 @@ def build_template(collection_plan: dict | None = None) -> dict:
                                "chunk_tokens": pending, "contrast_g0_cap_s": PLACEHOLDER + ": R11 contrast cap on every path",
                                "contrast_fit": PLACEHOLDER + ": R11 complete contrast_fit record on every path",
                                "delta_fast_c": pending, "delta_slow_c": pending,
-                               "g0_cap_receipt": RECEIPT_ONLY,
                                "g0_cap_s": pending, "heavy": True, "per_turn": True,
                                "sensors": {"fan_keys": pending, "r0_sha256": pending,
+                                           "record_keys": [kit.r0_heatsink_key()],
                                            "s_fast": pending, "s_slow": pending},
                                "turn_cap_s": pending},
             "window": 1,
@@ -150,17 +147,21 @@ def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = No
     sensor_keys = {"s_fast", "s_slow", "fan_keys", "r0_sha256"}
     if not isinstance(policy, dict) or not isinstance(policy.get("sensors"), dict):
         _fail("thermal_policy and thermal_policy.sensors must be objects")
-    if set(policy["sensors"]) != sensor_keys:
+    if (not sensor_keys <= set(policy["sensors"])
+            or set(policy["sensors"]) - sensor_keys - {"record_keys"}):
         _fail("thermal_policy.sensors must explicitly contain " + ", ".join(sorted(sensor_keys)))
     # The same canonical gate-policy validation the kit applies to D members:
     # the template's own heavy/per_turn keys are validated, never supplied here.
     if "window_reference" in policy:
         _fail("thermal_policy.window_reference is installed per member by the kit, not templated")
+    if "g0_cap_receipt" in policy:
+        # RL-148 section 2, RL-156 section 3.1: the R10-2(a) receipt path is retired.
+        _fail("thermal_policy.g0_cap_receipt names a ruling 1(f) receipt: " + kit.RULING_1F_RECEIPT_RETIRED)
     from joulewise.align.apple.thermal_gates import validate_gate_policy
     checked = validate_gate_policy({**kit.gate_policy_fields(policy), "window_reference": {"role": "capture"}})
     if checked["heavy"] is not True or checked["per_turn"] is not True:
         _fail("D thermal_policy must be heavy with per-turn gates and holds")
-    # LEAD-RULINGS-2 R10-4: under a receipt the contrast members arm their own G0 cap.
+    # LEAD-RULINGS-2 R10-4, R11: the contrast members arm their own G0 cap.
     validate_gate_policy({**kit.gate_policy_fields(policy, role="contrast"), "heavy": False, "per_turn": True,
                           "window_reference": {"role": "capture"}})
 
@@ -195,6 +196,7 @@ def validate(value: dict, inputs: dict | None = None, r1_slots: dict | None = No
         _fail("member roles do not match the Amendment-1 window-1 roster")
     registered = (collection_plan if collection_plan is not None
                   else json.loads(COLLECTION_PLAN.read_text()))
+    kit.check_w1_record_keys(registered)
     bindings = MEMBER_BINDINGS
     if [[row.get(key) for key in bindings] for row in members] != [
             [row.get(key) for key in bindings] for row in registered["members"]]:

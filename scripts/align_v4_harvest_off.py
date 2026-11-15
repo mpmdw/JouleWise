@@ -206,17 +206,27 @@ def cmd_triage(args, run=subprocess.run):
         raise ValueError('light triage refused: ' + str(report.get('registration_error')))
     rows = _plan_rows(state)
     captured = {row['run_id'] for row in rows if (runs_root / row['run_id']).is_dir()}
-    eligibility = light_triage.member_eligibility(report['thermal']['members'], rows, captured=captured, final=False)
+    # Desk release guard (protocol B0/B2/B9/R27; RL-149 section 3, RL-151 section 4): the triage's record source
+    # carries the same thermal and meter sections the sealed desk records (the allowlist the packet builder
+    # reads), never member energy, and its verdicts are computed from that sealed section, so an exclusion's
+    # suffix text never reaches the eligibility reasons (RL-151 C1(a)).
+    from joulewise.align.apple import v4_desk_seal
+    scope = v4_desk_seal.sealed_scope(state)
+    thermal, meter = report['thermal'], report.get('km003c')
+    if scope is not None:
+        sealed = v4_desk_seal.seal_extra({'thermal': thermal, 'km003c': meter}, rows, scope)
+        thermal, meter = sealed['thermal'], sealed['km003c']
+    eligibility = light_triage.member_eligibility(thermal['members'], rows, captured=captured, final=False)
     result = {'schema': light_triage.SCHEMA, 'window': args.window_id,
-              'thermal_escalation': light_triage.thermal_escalation(report['thermal'],
+              'thermal_escalation': light_triage.thermal_escalation(thermal,
                                                                      ladder_recorded=args.ladder_recorded),
               'member_eligibility': eligibility,
               'calibration_row': light_triage.calibration_row(args.window_id, rows, eligibility),
               'series_desk_row': report.get('series_desk_row'),
               # The desk's own checks without harvest codes (v4_B_bar for the arm's battery_window row)
               # and its SECONDARY meter tabulation, both read by the packet builder (R17).
-              'checks': checks, 'km003c': report.get('km003c'),
-              'thermal': report['thermal']}
+              'checks': checks, 'km003c': meter,
+              'thermal': thermal}
     if args.out:
         # The record source the arm's packet builder reads for the provisional adjudication (R17).
         from joulewise.align.apple.pilot_analysis import finite_json
@@ -327,8 +337,9 @@ def auto_workers(*, peak_bytes=None, session_root=None, memory=None, cores=None,
     by_memory = (memory - reserve_bytes) // peak_bytes
     workers = int(min(cores, by_memory))
     if workers < 1:
-        raise ValueError(f'postpone the desk: no harvest worker fits (free {memory} B - reserve {reserve_bytes} B '
-                         f'< one worker peak {peak_bytes} B, basis {basis})')
+        # PR #774 final seat F5: free memory minus the reserve bounds the withheld peak, so neither prints.
+        raise ValueError(f'postpone the desk: no harvest worker fits (basis {basis}; the byte counts are withheld, '
+                         'PR #774 N6/F5)')
     return {'workers': workers, 'free_cores': cores, 'free_memory_bytes': memory,
             'peak_bytes_per_worker': peak_bytes, 'peak_basis': basis, 'reserve_bytes': reserve_bytes}
 
@@ -344,10 +355,12 @@ def _sweep_peak(path):
         raise ValueError('sweep receipt has no runs')
     for row in rows:
         if not isinstance(row, dict) or row.get('exit') != 0:
-            raise ValueError(f'sweep run failed ({row!r}); a failed run is not a measured worker peak')
+            # M6: name the run, never its peak (a size over the window's members, PR #774 N6)
+            shown = {k: row.get(k) for k in ('workers', 'exit')} if isinstance(row, dict) else type(row).__name__
+            raise ValueError(f'sweep run failed ({shown}); a failed run is not a measured worker peak')
         peak = row.get('peak_child_rss_bytes')
         if type(peak) is not int or peak <= 0:
-            raise ValueError(f'sweep run has a nonpositive or missing peak ({peak!r})')
+            raise ValueError(f'sweep run has a nonpositive or missing peak ({type(peak).__name__})')
     return max(row['peak_child_rss_bytes'] for row in rows)
 
 
@@ -410,6 +423,9 @@ def cmd_sweep(args, run=subprocess.run):
     """Harvest the restored window at each worker count into separate archives (R17 knee)."""
     session, state, plan = _session(args.session_root)
     out = Path(args.out)
+    # PR #774 exec seat E3: the sweep runs the real harvest with a non-claim export and full archives into --out,
+    # so an unreleased v4 session sweeps only into its withheld archive (the M4 rule, reused).
+    reduce_target_check(session, state, out, command='sweep')
     out.mkdir(parents=True, exist_ok=False)
     measurement = Path(state['measurement_root'])
     largest = largest_plist_bytes(args.session_root)
@@ -465,12 +481,25 @@ def cmd_finalize_manifest(args, run=subprocess.run):
             'entries': len(manifest)}
 
 
+def reduce_target_check(session, state, out, *, command='reduce'):
+    """PR #774 Mythos re-attack 2 M4 (RL-162 section 3: reduce keeps no identity check, its cover is the restricted
+    output): before release, a v4 session's per-member energy tables are written only under the session's
+    ``archive/withheld/``, so the cover holds after the merge and whatever ``--out`` an operator names."""
+    from joulewise.align.apple import v4_desk_seal
+    if v4_desk_seal.is_v4_session(state) and not v4_desk_seal.released(state):
+        allowed = (Path(session) / 'archive/withheld').resolve()
+        if not Path(out).resolve().is_relative_to(allowed):
+            raise ValueError(f'{command}: a v4 session writes its outputs only under {allowed} before the series '
+                             'release (PR #774 M4, E3)')
+
+
 def cmd_reduce(args, run=subprocess.run):
     """Reduce each member's raw plists once into a sibling directory (never into the archive)."""
     from joulewise.align.apple import pm_reduce
     session, state, plan = _session(args.session_root)
     runs_root = _runs_root(state)
     out = Path(args.out)
+    reduce_target_check(session, state, out)
     out.mkdir(parents=True, exist_ok=False)
     tasks = [{'run_id': row['run_id'], 'bundle_path': str(runs_root / row['run_id']), 'out_dir': str(out),
               'turn_table': True}
@@ -491,6 +520,34 @@ def _runs_root(state):
     if not claim:
         raise ValueError('session has no claim runs root')
     return Path(claim)
+
+
+# PR #774 Mythos N6: byte sizes of a window's raw plists, reduced files and harvest peaks encode member sample
+# counts (elapsed time), and the largest is a maximum over a set holding non-benign members (RL-149 3(c)). The
+# printed records keep the worker count and the sizing basis; the sizes stay in the files the runbook restricts
+# like withheld/ (SWEEP.json, reduced/MANIFEST.json).
+SIZE_WITHHELD = 'withheld (sizes encode member sample counts; PR #774 N6): see the restricted receipt'
+
+
+def printed(command, result):
+    """What a command prints: ``result`` without member-derived sizes (the functions return them whole)."""
+    if not isinstance(result, dict):
+        return result
+    if command == 'desk' and isinstance(result.get('sizing'), dict):
+        sizing = result['sizing']
+        # Mythos re-attack 2 M6: workers with free memory and the reserve bracket the peak (so the largest plist)
+        # when memory binds; print the worker count and the basis only.
+        keep = {k: sizing[k] for k in ('workers', 'peak_basis') if k in sizing}
+        if isinstance(sizing.get('sweep'), dict):
+            keep['sweep'] = {k: sizing['sweep'][k] for k in ('reason', 'path') if k in sizing['sweep']}
+        return {**result, 'sizing': {**keep, 'sizes': SIZE_WITHHELD}}
+    if command == 'sweep':
+        return {'schema': result.get('schema'), 'session_id': result.get('session_id'),
+                'runs': [{'workers': r.get('workers'), 'exit': r.get('exit')} for r in result.get('runs') or ()],
+                'sizes': SIZE_WITHHELD}
+    if command == 'reduce':
+        return {k: v for k, v in result.items() if k not in ('raw_bytes', 'reduced_bytes')} | {'sizes': SIZE_WITHHELD}
+    return result
 
 
 def main(argv=None, run=subprocess.run):
@@ -535,7 +592,7 @@ def main(argv=None, run=subprocess.run):
                'desk': cmd_desk, 'reduce': cmd_reduce, 'sweep': cmd_sweep,
                'finalize-manifest': cmd_finalize_manifest}[args.command]
     try:
-        print(json.dumps(handler(args, run=run), sort_keys=True))
+        print(json.dumps(printed(args.command, handler(args, run=run)), sort_keys=True))
     except (OSError, ValueError, KeyError) as exc:
         print('align_v4_harvest_off: ' + f'{type(exc).__name__}: {exc}', file=sys.stderr)
         return 1

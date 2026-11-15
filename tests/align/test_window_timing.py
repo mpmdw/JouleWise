@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests.git_fixture import init_git_fixture
 from unittest.mock import patch
 
 from tests.align.window_timing_synthetic import EPOCH, NS, campaign, fixture, options
@@ -309,7 +310,7 @@ class CommittedReaderTest(unittest.TestCase):
             env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
             def git(*args):
                 return subprocess.run(["git", "-C", tmp, *args], check=True, capture_output=True, env=env)
-            git("init", "-q")
+            init_git_fixture(root, "-q")
             for path, raw in fixture().items():
                 dest = root / path
                 dest.parent.mkdir(parents=True, exist_ok=True)

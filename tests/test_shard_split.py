@@ -581,6 +581,194 @@ class UnitExpansionTests(unittest.TestCase):
             shard_tests.expand_units((BETA,), {}, {}, unknown_weight=0.0)
 
 
+class SignalIsolationTests(unittest.TestCase):
+    """#741 CI run 43257905641 shard 10: one module left SIGTERM at SIG_IGN and
+    later modules' children (which inherit it across exec) ignored SIGTERM."""
+
+    def test_a_module_that_leaves_sigterm_ignored_does_not_reach_the_next(self):
+        import signal
+
+        self.addCleanup(signal.signal, signal.SIGTERM, signal.getsignal(signal.SIGTERM))
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        seen = []
+        leaker = types.ModuleType(_import_name(ALPHA))
+        leaker.FixtureTests = type("FixtureTests", (unittest.TestCase,), {
+            "__module__": leaker.__name__,
+            "test_leaks": lambda self: signal.signal(signal.SIGTERM, signal.SIG_IGN),
+        })
+        victim = types.ModuleType(_import_name(BETA))
+        victim.FixtureTests = type("FixtureTests", (unittest.TestCase,), {
+            "__module__": victim.__name__,
+            "test_only": lambda self: seen.append(signal.getsignal(signal.SIGTERM)),
+        })
+        output = io.StringIO()
+        with _installed(leaker, victim), _discovered(ALPHA, BETA), redirect_stdout(output):
+            exit_code = shard_tests.run_units((ALPHA, BETA), 4, 1)
+        text = output.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(seen, [signal.SIG_DFL])
+        self.assertIn(f"SIGNAL RESTORE after {ALPHA}: SIGTERM=IGN->DFL", text)
+        self.assertNotIn(f"SIGNAL RESTORE after {BETA}", text)
+        self.assertEqual(signal.getsignal(signal.SIGTERM), signal.SIG_DFL)
+
+    def test_restore_reports_nothing_when_nothing_changed(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            shard_tests._restore_signals(shard_tests._signal_snapshot(), "tests.quiet")
+        self.assertEqual(output.getvalue(), "")
+
+
+_LEAK_DRIVER = r"""
+import json, os, sys
+from unittest import mock
+sys.path.insert(0, os.path.join(sys.argv[1], "scripts"))
+sys.path.insert(0, sys.argv[2])
+import shard_tests
+entry, alpha, beta = sys.argv[3], sys.argv[4], sys.argv[5]
+with mock.patch.object(shard_tests, "discover_test_modules", return_value=(alpha, beta)):
+    if entry == "run_shard":
+        code = shard_tests.run_shard((alpha, beta), 4, 1)
+    else:
+        code = shard_tests.run_units((alpha, beta), 4, 1)
+print("DRIVER EXIT", code)
+sys.exit(code)
+"""
+
+_LEAK_BODIES = {
+    "sigterm": ("", "signal.signal(signal.SIGTERM, signal.SIG_IGN)"),
+    "pending": (
+        "",
+        "signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGUSR1}); "
+        "signal.raise_signal(signal.SIGUSR1)",
+    ),
+    "import": ("signal.signal(signal.SIGTERM, signal.SIG_IGN)", "pass"),
+    "timer": ("", "signal.setitimer(signal.ITIMER_REAL, 600)"),
+    "alarm_handler": ("", "signal.signal(signal.SIGUSR2, lambda *a: None)"),
+}
+
+
+class SignalLeakSubprocessTests(unittest.TestCase):
+    """Guard behaviour checked in a child interpreter, using only that child's
+    own signal state. A leak the guard misses can kill or wedge the child, which
+    must not be the test runner."""
+
+    def _run(self, scenario, entry, victim_assert="signal.getsignal(signal.SIGTERM) == signal.SIG_DFL"):
+        import subprocess
+
+        at_import, in_test = _LEAK_BODIES[scenario]
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "leak_mod.py").write_text(
+                "import signal, unittest\n"
+                f"{at_import}\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_leaks(self):\n"
+                f"        {in_test}\n",
+                encoding="utf-8",
+            )
+            Path(directory, "victim_mod.py").write_text(
+                "import signal, unittest\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_clean(self):\n"
+                f"        self.assertTrue({victim_assert})\n"
+                "        self.assertEqual(signal.getitimer(signal.ITIMER_REAL)[0], 0)\n",
+                encoding="utf-8",
+            )
+            repo = os.fspath(Path(shard_tests.__file__).resolve().parents[1])
+            return subprocess.run(
+                [sys.executable, "-B", "-c", _LEAK_DRIVER, repo, directory,
+                 entry, "tests.leak_mod", "tests.victim_mod"],
+                capture_output=True, text=True, timeout=120, cwd=directory,
+            )
+
+    def _both_entries(self):
+        return ("run_shard", "run_units")
+
+    def test_pending_blocked_signal_is_drained_not_delivered(self):
+        for entry in self._both_entries():
+            with self.subTest(entry=entry):
+                proc = self._run("pending", entry, victim_assert="True")
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertIn("pending-discarded=SIGUSR1", proc.stdout)
+                self.assertIn("SIGNAL RESTORE after tests.leak_mod:", proc.stdout)
+                self.assertIn("MODULE PASS tests.leak_mod", proc.stdout)
+                self.assertIn("SHARD SUMMARY", proc.stdout)
+
+    def test_import_time_leak_is_restored_and_reported(self):
+        for entry in self._both_entries():
+            with self.subTest(entry=entry):
+                proc = self._run("import", entry)
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertIn("SIGNAL RESTORE after tests.leak_mod: SIGTERM=IGN->DFL", proc.stdout)
+                self.assertIn("MODULE PASS tests.victim_mod", proc.stdout)
+
+    def test_interval_timer_is_disarmed_and_reported(self):
+        for entry in self._both_entries():
+            with self.subTest(entry=entry):
+                proc = self._run("timer", entry, victim_assert="True")
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertIn("itimer-real=disarmed", proc.stdout)
+
+    def test_leak_is_visible_as_annotation_and_recap_without_failing(self):
+        for entry in self._both_entries():
+            with self.subTest(entry=entry):
+                proc = self._run("sigterm", entry)
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertIn("::warning title=shard signal leak::tests.leak_mod", proc.stdout)
+                lines = proc.stdout.splitlines()
+                recap = [i for i, l in enumerate(lines) if l.startswith("SIGNAL LEAK RECAP modules=1: tests.leak_mod")]
+                summary = [i for i, l in enumerate(lines) if l.startswith("SHARD SUMMARY")]
+                self.assertEqual(len(recap), 1)
+                self.assertLess(recap[0], summary[0])
+                self.assertIn("result=PASS", lines[summary[0]])
+
+    def test_run_shard_guard_restores_between_modules(self):
+        proc = self._run("sigterm", "run_shard")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("SIGNAL RESTORE after tests.leak_mod: SIGTERM=IGN->DFL", proc.stdout)
+        self.assertIn("MODULE PASS tests.victim_mod", proc.stdout)
+
+    def test_leaked_python_handler_is_reported_by_run_shard(self):
+        proc = self._run("alarm_handler", "run_shard", victim_assert="True")
+        self.assertIn("SIGUSR2=handler->DFL", proc.stdout)
+
+
+class SignalRestoreUnitTests(unittest.TestCase):
+    def test_failed_restore_is_reported_not_skipped(self):
+        import signal
+
+        self.addCleanup(signal.signal, signal.SIGUSR2, signal.getsignal(signal.SIGUSR2))
+        signal.signal(signal.SIGUSR2, signal.SIG_DFL)
+        snapshot = shard_tests._signal_snapshot()
+        signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+        real = signal.signal
+
+        def refuse(number, handler):
+            if number == signal.SIGUSR2:
+                raise OSError("refused")
+            return real(number, handler)
+
+        output = io.StringIO()
+        with mock.patch.object(signal, "signal", refuse), redirect_stdout(output):
+            changed = shard_tests._restore_signals(snapshot, "tests.x")
+        self.assertIn("SIGUSR2=restore-failed", changed)
+        self.assertIn("SIGUSR2=restore-failed", output.getvalue())
+
+    def test_none_handler_signal_that_changes_is_reported(self):
+        import signal
+
+        self.addCleanup(signal.signal, signal.SIGUSR2, signal.getsignal(signal.SIGUSR2))
+        real = signal.getsignal
+        with mock.patch.object(
+            signal, "getsignal", lambda n: None if n == signal.SIGUSR2 else real(n)
+        ):
+            snapshot = shard_tests._signal_snapshot()
+        signal.signal(signal.SIGUSR2, signal.SIG_IGN)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            changed = shard_tests._restore_signals(snapshot, "tests.x")
+        self.assertIn("SIGUSR2=changed-unrestorable", changed)
+
+
 class RunUnitsTests(unittest.TestCase):
     def test_only_the_assigned_declared_test_id_executes(self):
         executed = []

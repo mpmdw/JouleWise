@@ -16,6 +16,8 @@ ruling 7 record follows the driver's A-B-A and series settings).
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
+from types import SimpleNamespace
 from copy import deepcopy
 import json
 import math
@@ -152,7 +154,9 @@ class SyntheticBackend:
             def read(self, keys):
                 self.reads += 1
                 dither = ((self.reads % 3) - 1) / 256
-                values = {syn.FAST: world.t_fast + dither, syn.SLOW: world.t_slow + dither, syn.FAN: 1200.0,
+                # RL-145 close: the gate pair is one thermometer under two names, so the classification
+                # journal reads the slow key as the fast key's alias (the gates keep their own two series).
+                values = {syn.FAST: world.t_fast + dither, syn.SLOW: world.t_fast + dither, syn.FAN: 1200.0,
                           "Ta0P": syn.AMBIENT_C + 0.001 * world.t_slow}
                 return {"values": {key: round(values[key] * 256) / 256 for key in keys if key in values},
                         "errors": {key: "unknown synthetic sensor" for key in keys if key not in values}, "raw": {}}
@@ -196,9 +200,33 @@ class SyntheticBackend:
                                    status_factory=lambda telemetry, clock: self.world.status,
                                    powermode_reader=self.current_powermode)
         self.world.family, self.world.run_id, self.world.turn = family, config_map["run_id"], 0
-        bundle, summary = run_benchmark(BenchmarkConfig.from_mapping(config_map), Path(runs_root), self.clock,
-                                        registry=registry)
-        return Path(bundle), summary
+        from joulewise.align.apple import thermal
+        from joulewise.align.apple.smc_reader import Reader
+        from joulewise.align.apple.thermal_gates import _EpisodeClocks
+        from joulewise.hazards.base import Context
+        from unittest.mock import patch
+        native_sidecar = thermal.Sidecar
+        sidecars = []
+        def sidecar_factory(outputs, policy):
+            obj = native_sidecar(outputs, policy, reader=Reader(self.world.transport()),
+                ctx=Context(clocks=_EpisodeClocks(SimpleNamespace(clock=self.clock))))
+            obj.sample = obj.tick
+            original = obj.start
+            def start():
+                original(background=False)
+                obj.tick()
+            obj.start = start
+            self.world.register(obj)
+            sidecars.append(obj)
+            return obj
+        try:
+            with patch.object(thermal, "Sidecar", side_effect=sidecar_factory) if "sensors" not in (spec.get("thermal") or {}) and spec.get("thermal") else nullcontext():
+                bundle, summary = run_benchmark(BenchmarkConfig.from_mapping(config_map), Path(runs_root), self.clock,
+                                                registry=registry)
+            return Path(bundle), summary
+        finally:
+            for obj in sidecars:
+                self.world.unregister(obj)
 
     def current_powermode(self):
         path = self.options.get("powermode_file")
@@ -224,11 +252,17 @@ class SyntheticBackend:
         self.stack.close()
 
 
-def synthetic_config(root, *, templates=None, **synthetic):
+def synthetic_config(root, *, templates=None, d_n_chunk=None, **synthetic):
     """Write a synthetic R1 runtime config plus filled kit-template copies under ``root``."""
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     production = json.loads((rt.ROOT / "configs/align/v4/r1_runtime.json").read_text())
+    # RL-145 addendum row 2: the production config carries d_n_chunk (candidate, 4,096). The
+    # synthetic runs keep the registered formula (key absent) unless a test passes a value.
+    production.pop("d_n_chunk", None)
+    production.pop("d_n_chunk_status", None)
+    if d_n_chunk is not None:
+        production["d_n_chunk"] = d_n_chunk
     out_templates = {}
     for key, path in production["templates"].items():
         config, spec = rt.read_template(path)
@@ -242,7 +276,11 @@ def synthetic_config(root, *, templates=None, **synthetic):
         out_templates[key] = str(target)
     out_templates.update(templates or {})
     config = dict(production, backend="synthetic", templates=out_templates,
-                  sensors={"s_fast": syn.FAST, "s_slow": syn.SLOW, "fan_keys": [syn.FAN], "r0_sha256": "a" * 64},
+                  sensors={"s_fast": syn.FAST, "s_slow": syn.SLOW, "fan_keys": [syn.FAN],
+                           "record_keys": ["Tf08"], "r0_sha256": "a" * 64},
+                  r0_classified_keys=[syn.FAST, syn.SLOW],
+                  # RL-145 section 3: the non-alias branch of night_confirmation needs a die second key.
+                  r0_classes={syn.FAST: "die", syn.SLOW: "die"},
                   step={**production["step"], "prefill_chars": 4000},
                   battery_poll_s=30, synthetic={"battery": {"drain_pct_per_h": 9.0}, **synthetic})
     path = root / "r1_runtime_synthetic.json"

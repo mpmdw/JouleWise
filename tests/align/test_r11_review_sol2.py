@@ -3,6 +3,7 @@
 These tests deliberately fail on c3796bf49. Product fixes belong to the lead.
 No hardware, model, measurement loader, network or external study path is used.
 """
+from tests.git_fixture import init_git_fixture
 import hashlib
 import subprocess
 import tempfile
@@ -46,7 +47,7 @@ class RegistrationCandidateWitness(unittest.TestCase):
             def digest(relative):
                 return hashlib.sha256((root / relative).read_bytes()).hexdigest()
 
-            git('init', '-q')
+            init_git_fixture(root, '-q')
             reviewed = commit('Synthetic reviewed candidate')
             receipt = {
                 'schema': registration.RECEIPT_SCHEMA, 'status': 'registered',

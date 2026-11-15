@@ -186,7 +186,7 @@
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json",
-      "config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+      "config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
       "expected_episode_seed": 11160969177166136631,
       "expected_turn_seed_0": 13933079069872451601,
       "held_out": false,
@@ -234,7 +234,15 @@
           "delta_slow_c": null,
           "heavy": true,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "capture"
@@ -251,7 +259,7 @@
       "block": "X-G",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e06.json",
-      "config_sha256": "9ebcad3de43e120fc88895ca987f618cbfb1fffb9d5001d4d3e510f0a3ee32e8",
+      "config_sha256": "5b4c0f2101631ebbd2305b3ec8413e68ebeb0a308873abff8f2c2de0b2e5587e",
       "expected_episode_seed": 7655467588542005630,
       "expected_turn_seed_0": 6783090453629585283,
       "held_out": false,
@@ -293,11 +301,19 @@
           "delta_slow_c": null,
           "heavy": false,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -312,7 +328,7 @@
       "block": "Y-S",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e07.json",
-      "config_sha256": "388dc44638554befde1dbfd9da7dab0280831164290ab69028d82320fcef257f",
+      "config_sha256": "6b5ad89715b4a4c44d1d45f676c12dfad43ac871ee50a950b4ddc433d2268a48",
       "expected_episode_seed": 8158640411307706161,
       "expected_turn_seed_0": 5152852217358842434,
       "held_out": false,
@@ -354,11 +370,19 @@
           "delta_slow_c": null,
           "heavy": false,
           "per_turn": false,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -373,7 +397,7 @@
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e08.json",
-      "config_sha256": "38e36b58ab487fa63b432bc015b1824398ce75019c804d59dd8270c3f6011a74",
+      "config_sha256": "9dcc748d61f5dcfd4695943204b295f2c602d8d0b83c514f0da6998daffb6e23",
       "expected_episode_seed": 16366097954358066666,
       "expected_turn_seed_0": 5149075953107999825,
       "held_out": false,
@@ -421,11 +445,19 @@
           "delta_slow_c": null,
           "heavy": true,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -440,7 +472,7 @@
       "block": "X-S",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e09.json",
-      "config_sha256": "1688123a57143913c6d3c4bc0d1d76b9cab668c7deb43282567c2722266cb7ef",
+      "config_sha256": "2555b9dff0e23627ffae60ba45da6bf0152471f0f1aba94206ae5e1ce6a2871f",
       "expected_episode_seed": 7655467588542005630,
       "expected_turn_seed_0": 6783090453629585283,
       "held_out": false,
@@ -482,11 +514,19 @@
           "delta_slow_c": null,
           "heavy": false,
           "per_turn": false,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -501,7 +541,7 @@
       "block": "Y-G",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e10.json",
-      "config_sha256": "35aaed72ce4a3d0d1399dd3ecfe4563eda9b42c0760bddae35faa5f72872cc80",
+      "config_sha256": "a9dd7ced1a54a9c2ea0a161923b5ca7d9dcdc8ae7b32cf03259a235efa36db20",
       "expected_episode_seed": 8158640411307706161,
       "expected_turn_seed_0": 5152852217358842434,
       "held_out": false,
@@ -543,11 +583,19 @@
           "delta_slow_c": null,
           "heavy": false,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -562,7 +610,7 @@
       "block": "D",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e11.json",
-      "config_sha256": "2cb8df222e07bd753d8055922f9ba17d53eed01d1ae83ef28ababba3828d5d90",
+      "config_sha256": "3482528dd4e619a998c9ee36237547c727a83706814bb8ee9985789fc3a4d5f6",
       "expected_episode_seed": 11160969177166136631,
       "expected_turn_seed_0": 13933079069872451601,
       "held_out": false,
@@ -610,11 +658,19 @@
           "delta_slow_c": null,
           "heavy": true,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -629,7 +685,7 @@
       "block": "Y-G",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e12.json",
-      "config_sha256": "95c4b0220a16f6e14585b3551c19fcbf19d1f686b74242ac07f5aaa72c16d668",
+      "config_sha256": "b04d24439f8ac1a862426d0857444f884237f6aabfff27d1bf1a564a3f53081b",
       "expected_episode_seed": 8158640411307706161,
       "expected_turn_seed_0": 5152852217358842434,
       "held_out": false,
@@ -672,11 +728,19 @@
           "delta_slow_c": null,
           "heavy": false,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -691,7 +755,7 @@
       "block": "X-S",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e13.json",
-      "config_sha256": "db1bb3d342203037750e459fed7c68cd306ac2f0102175b8d31c16b448f1589f",
+      "config_sha256": "01b184ff38928413c548919b156a26622053e7d3d28e6d5b20a8a98c3d4ce9b8",
       "expected_episode_seed": 7655467588542005630,
       "expected_turn_seed_0": 6783090453629585283,
       "held_out": false,
@@ -734,11 +798,19 @@
           "delta_slow_c": null,
           "heavy": false,
           "per_turn": false,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -753,7 +825,7 @@
       "block": "D",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e14.json",
-      "config_sha256": "85c71df09bbe1fc1da9aa02ae3909cfb0ff1c6106451c80a55adf846bb85c168",
+      "config_sha256": "392d5b91245e34a6a91684e6fb30500107c1c2798356be6e95fc06b9c030d00a",
       "expected_episode_seed": 16366097954358066666,
       "expected_turn_seed_0": 5149075953107999825,
       "held_out": false,
@@ -801,11 +873,19 @@
           "delta_slow_c": null,
           "heavy": true,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -820,7 +900,7 @@
       "block": "Y-S",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e15.json",
-      "config_sha256": "af796d3cbd523b4575bb7902f2ec46e3a86960dca710580619b974157f4c4170",
+      "config_sha256": "5184e33c68ccbfeed6f15544e1670c80e0eb4e4e03da5c07a9b168e8c839cd62",
       "expected_episode_seed": 8158640411307706161,
       "expected_turn_seed_0": 5152852217358842434,
       "held_out": false,
@@ -863,11 +943,19 @@
           "delta_slow_c": null,
           "heavy": false,
           "per_turn": false,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -882,7 +970,7 @@
       "block": "X-G",
       "condition": "sabotage",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e16.json",
-      "config_sha256": "a21519893cc57c7e58c76e462fee49f26fc371dfcec4435d4eae80e9358e8ac4",
+      "config_sha256": "03f85d0d976ab8dfabaa7ffbc06c5e973bb8fa6a849e8616fdeee8b5b5117baf",
       "expected_episode_seed": 7655467588542005630,
       "expected_turn_seed_0": 6783090453629585283,
       "held_out": false,
@@ -925,11 +1013,19 @@
           "delta_slow_c": null,
           "heavy": false,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -944,7 +1040,7 @@
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e17.json",
-      "config_sha256": "554b68685f86cec322db1eb97961e72ad007de9755a2beeb025a775424b60e46",
+      "config_sha256": "c31627a58ae117426b3098f42684b66b109eaea832742e1f5e9bd46df8a4db69",
       "expected_episode_seed": 11160969177166136631,
       "expected_turn_seed_0": 13933079069872451601,
       "held_out": false,
@@ -993,11 +1089,19 @@
           "delta_slow_c": null,
           "heavy": true,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -1012,7 +1116,7 @@
       "block": "D",
       "condition": "benign",
       "config_path": "configs/campaigns/align_v4/stages/episodes-b/align-v4-episodes-b-e18.json",
-      "config_sha256": "f7caf587c765551d5f77e38413fcf71d6339c3b540d6789971f6d4ea279a62a9",
+      "config_sha256": "9f1b11760b1381547a31a36d8f780a25a8fc11f434f43a066e50c9c832bb856a",
       "expected_episode_seed": 15667618974046976403,
       "expected_turn_seed_0": 8805628232305408028,
       "held_out": false,
@@ -1060,11 +1164,19 @@
           "delta_slow_c": null,
           "heavy": true,
           "per_turn": true,
-          "sensors": null,
+          "sensors": {
+            "fan_keys": null,
+            "r0_sha256": null,
+            "record_keys": [
+              "Tf08"
+            ],
+            "s_fast": null,
+            "s_slow": null
+          },
           "turn_cap_s": null,
           "window_reference": {
             "role": "consume",
-            "source_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+            "source_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
             "source_run_id": "align-v4-episodes-a-e05"
           }
         },
@@ -1108,7 +1220,7 @@
     ],
     "w1_launcher": "per-member configs via the plan_tree stage commands (the specs carry the roles)",
     "window_reference": {
-      "capture_config_sha256": "23c2bb74938be82695d007979bdbc5efd3c92b6f82fc634a1793efbf37b8f616",
+      "capture_config_sha256": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
       "capture_ordinal": 5,
       "capture_run_id": "align-v4-episodes-a-e05",
       "rule": "member 5 captures its last 60 s of idle before warmup (role capture); every later thermal member consumes it (role consume, bound to member 5 run_id and config bytes)"

@@ -54,8 +54,8 @@ def _cold_import_observation(fail_prepare):
             return subprocess.CompletedProcess(argv, 1, b'', b'synthetic')
 
         def prepare(measurement, session, keep, **kw):
-            # prepare_smoke imports this module at exactly this point: after
-            # _prepare_budget has taken its loaded-module snapshot.
+            # Match prepare_smoke's lazy import inside the injected body.
+            # c551fe9d2 removed _prepare_budget's process-wide patching.
             importlib.import_module('scripts.align_v4_session')
             if fail_prepare:
                 raise ValueError('synthetic prepare failure after lazy import')
@@ -75,12 +75,18 @@ def _cold_import_observation(fail_prepare):
             pilot = sys.modules['scripts.align_pilot_session']
             observation = {
                 'module_run_restored': subprocess.run is inner,
-                'meter_default_restored': session._probe_meter_live.__kwdefaults__['runner'] is inner,
+                # 454d78142: None selects observed_run at call time; it is
+                # intentionally no longer an import-time subprocess callback.
+                'meter_default_restored': session._probe_meter_live.__kwdefaults__['runner'] is None,
                 'desk_default_restored': pilot.desk.__kwdefaults__['run'] is inner,
             }
             fixture.clock.sleep(121)
             try:
-                session._probe_meter_live(runner.clone, seconds=0)
+                # Change the runner AFTER the cold import: a captured callback
+                # (including a stale budget wrapper) must not handle this call.
+                with mock.patch.object(subprocess, 'run', wraps=inner) as later_run:
+                    session._probe_meter_live(runner.clone, seconds=0)
+                    observation['later_uses_current_runner'] = later_run.call_count == 1
             except Exception as exc:  # record the property failure in the parent test
                 observation['later_call_error'] = type(exc).__name__
             else:
@@ -106,6 +112,7 @@ class ColdImportBudget(unittest.TestCase):
         self.assertEqual(row['later_call_error'], None, row)
         self.assertTrue(row['meter_default_restored'] and row['desk_default_restored'], row)
         self.assertEqual(row['later_command_calls'], 1, row)
+        self.assertTrue(row['later_uses_current_runner'], row)
 
     def test_lazily_imported_defaults_are_restored_after_failure(self):
         row = self.observation(True)
@@ -113,6 +120,7 @@ class ColdImportBudget(unittest.TestCase):
         self.assertEqual(row['later_call_error'], None, row)
         self.assertTrue(row['meter_default_restored'] and row['desk_default_restored'], row)
         self.assertEqual(row['later_command_calls'], 1, row)
+        self.assertTrue(row['later_uses_current_runner'], row)
 
 
 class PrepareBudget(previous.DeltaFixture):

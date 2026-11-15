@@ -68,6 +68,36 @@ class OutcomeTests(unittest.TestCase):
                     self.assertEqual(status != 'complete', outcome['fault'])
                     self.assertEqual('COMPLETE' if status == 'complete' else 'CHAIN_FAILED', outcome['chain_outcome'])
 
+    def test_post_start_aborted_and_refused_without_exit_code_are_faults(self):
+        # A-01 executing review F-2 (mutants M16, M17, M19, M20): a night that aborts, or refuses after its chain
+        # started (e.g. termination not proven), with no chain exit code, must still be a fault with its label.
+        rt = load_driver()
+        with tempfile.TemporaryDirectory() as tmp:
+            night = Path(tmp)
+            (night / 'chain.started').touch()
+            plan = types.SimpleNamespace(plan_id='night-synthetic')
+            aborted = rt._chain_outcome(plan, night, 'ABORTED', None, 'operator stop')
+            self.assertEqual('ABORTED', aborted['chain_outcome'])
+            self.assertTrue(aborted['fault'])
+            self.assertEqual(['abort:operator stop'], aborted['fault_reasons'])
+            refused = rt._chain_outcome(plan, night, 'REFUSED', None, 'termination not proven')
+            self.assertEqual('CHAIN_FAILED', refused['chain_outcome'])
+            self.assertTrue(refused['fault'])
+            self.assertEqual(['chain_verdict:REFUSED'], refused['fault_reasons'])
+
+    def test_r1_null_status_is_normalised_to_invalid(self):
+        # A-01 executing review N-5 (mutant M06): a null status must not reach the terminal block unnormalised.
+        rt = load_driver()
+        with tempfile.TemporaryDirectory() as tmp:
+            night = Path(tmp)
+            (night / 'chain.started').touch()
+            payload = night / 'align-r1/r1_result.json'
+            payload.parent.mkdir()
+            payload.write_text(json.dumps({'status': None}))
+            outcome = rt._chain_outcome(types.SimpleNamespace(plan_id='align-r1-synthetic'), night, 'GO', 0)
+            self.assertEqual('invalid', outcome['measurement_outcome'])
+            self.assertEqual(['r1_status:invalid'], outcome['fault_reasons'])
+
     def test_success_has_no_new_fault_and_non_r1_needs_no_r1_payload(self):
         h = Harness(self, g10=False)
         h.replace_chain("#!/bin/zsh -f\nexit 0\n")
@@ -106,7 +136,8 @@ class TerminalDeliveryTests(unittest.TestCase):
         self.repo, self.remote = self.root / 'source', self.root / 'remote.git'
         self.repo.mkdir()
         init_git_fixture(self.repo, '-q')
-        self.git('init', '--bare', '-q', str(self.remote))
+        self.remote.mkdir()
+        init_git_fixture(self.remote, '--bare', '-q')
         self.git('-C', str(self.repo), 'remote', 'add', 'origin', str(self.remote))
         self.custody = self.root / 'custody'
         self.night = self.custody / 'night'

@@ -37,7 +37,8 @@ I_D = 516.575
 # Shaped like the R1 driver's record, so the kit's evidence binding (executing
 # review MEDIUM-3) is exercised; the synthetic source is admitted only because
 # build_kit asks require_ready for it explicitly.
-SYN_PHASES = {'G0': 60.0, 'G1': 30.0, 'H': 30.0, 'decode': 200.0, 'prefill': 60.0, 'tool': 5.0}
+# PR #777 row-2 finding 5: no hold seconds (N_chunk 4,096); G1 + H stays 60 s as before.
+SYN_PHASES = {'G0': 60.0, 'G1': 60.0, 'H': 0.0, 'decode': 200.0, 'prefill': 60.0, 'tool': 5.0}
 SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE,
                 'ac_powermode': 0, 'slots_ac_powermode': 0,
                 'thermometry': {'bar': 'pass', 'D': {'s_fast': syn.FAST, 's_slow': syn.SLOW,
@@ -55,6 +56,8 @@ SYN_R1_SLOTS = {'schema': kit.R1_SLOTS_SCHEMA, 'source': kit.R1_SYNTHETIC_SOURCE
                                     'phases_s': dict(SYN_PHASES, tail=tail), 'decode_tokens': 8000,
                                     'turn_decode_counts': [2000]*4, 'turn_completed': [True]*4,
                                     'admitted_turns': 4, 'x7': False, 'turn_counts_source_sha256': R0_SHA,
+                                    # RL-148/RL-149 typical-case bar: three G1 waits (60 s of G1), none timed out.
+                                    'gate_waits_s': {'G1': [20.0, 20.0, 20.0]}, 'g1_timeouts': 0,
                                     'duty_bar': {'pass': True, 'verdict': 'pass'}}
                                    for name, tail in zip(kit.GATED_D_RUN_NAMES, (30.0, 12.0, 12.0))],
                 'budget_fit_inputs': {'r_decode_tok_per_s': 40.0, 'r_decode_step_d_tok_per_s': 40.0,
@@ -392,7 +395,32 @@ def run_desk(out, world):
         import traceback
         return {'status': 'crashed', 'error': f'{type(exc).__name__}: {exc}',
                 'traceback': traceback.format_exc()[-3000:]}
-    return {'status': 'ok', 'pilot': json.loads((out / 'desk/PILOT.json').read_text())}
+    return {'status': 'ok', 'pilot': desk_oracle_input(out / 'desk')}
+
+
+def desk_oracle_input(desk):
+    """The PILOT this synthetic oracle checks, after the public desk output is witnessed.
+
+    PR #774 (Sol F1): before release the written ``PILOT.json`` carries the C/T or W1 seal and the full PILOT
+    goes to the withheld archive. The public file is parsed first, always (missing or malformed raises, as
+    before PR #798). When the archive exists the public file must carry the seal's shape: a withheld
+    ``release_guard`` naming the archive and its sha256. Only then is the full PILOT returned, since the oracle
+    checks the desk's arithmetic. Without an archive (released) the public PILOT is the oracle input.
+    """
+    from joulewise.align.apple import v4_desk_seal
+    desk = Path(desk)
+    public = json.loads((desk / 'PILOT.json').read_text())
+    full_path = desk / v4_desk_seal.WITHHELD_PILOT
+    if not full_path.is_file():
+        return public
+    guard = public.get('release_guard') if isinstance(public, dict) else None
+    raw = full_path.read_bytes()
+    if not (isinstance(guard, dict) and guard.get('schema') == v4_desk_seal.GUARD_SCHEMA
+            and guard.get('status') == v4_desk_seal.WITHHELD
+            and guard.get('withheld_pilot') == v4_desk_seal.WITHHELD_PILOT
+            and guard.get('withheld_pilot_sha256') == hashlib.sha256(raw).hexdigest()):
+        raise ValueError(f'{desk / "PILOT.json"}: not the sealed shape bound to {v4_desk_seal.WITHHELD_PILOT}')
+    return json.loads(raw)
 
 
 def synthetic_registration(out, manifest):

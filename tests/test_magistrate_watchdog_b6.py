@@ -15,6 +15,8 @@ from tests.test_magistrate_watchdog import WatchdogTestCase
 
 
 class InstalledBlockSixTests(WatchdogTestCase):
+    # 21029737a ports the admitted W-01 watchdog: unsafe holds have specific
+    # states. Keep the drain, deadline, standdown and signal assertions below.
     def set_wall(self, epoch: float) -> None:
         self.harness.clock.mono += epoch - self.harness.clock.wall.timestamp()
         self.harness.clock.wall = dt.datetime.fromtimestamp(epoch, tz=self.local_tz)
@@ -170,12 +172,12 @@ class InstalledBlockSixTests(WatchdogTestCase):
                     alias.symlink_to(Path(second.custody_root) / "night_plan.json")
                 state = wd.initial_state()
                 decision = wd.decide(self.harness.storage, self.harness.deps, state)
-                self.assertEqual("HOLD_UNSAFE", decision.state)
+                self.assertEqual("HOLD_CONFLICT", decision.state)
                 self.assertIn("plan_conflict:", decision.reason)
                 self.assertEqual(3, len(state["fenced_checkouts"]))
                 supervisor = self.supervisor(first)
                 self.assertTrue(supervisor.step())
-                self.assertEqual("HOLD_UNSAFE", supervisor.state["state"])
+                self.assertEqual("HOLD_CONFLICT", supervisor.state["state"])
                 self.assertIn("plan_conflict:", supervisor.state["resident_hold_drain"]["reason"])
                 self.assertTrue((self.harness.storage.root / "standdown.request").exists())
 
@@ -208,10 +210,10 @@ class InstalledBlockSixTests(WatchdogTestCase):
     def test_unreadable_installed_plist_drains_resident_before_any_span(self) -> None:
         plan = self.block_six_plan()
         self.install(plan).write_bytes(b"unreadable plist")
-        self.assertEqual("HOLD_UNSAFE", wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state)
+        self.assertEqual("HOLD_PLIST_UNREADABLE", wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state)
         supervisor = self.supervisor(plan)
         self.assertTrue(supervisor.step())
-        self.assertEqual("HOLD_UNSAFE", supervisor.state["state"])
+        self.assertEqual("HOLD_PLIST_UNREADABLE", supervisor.state["state"])
         self.assertIn("unreadable installed agent", supervisor.state["resident_hold_drain"]["reason"])
         self.assertTrue((self.harness.storage.root / "standdown.request").exists())
 
@@ -226,11 +228,11 @@ class InstalledBlockSixTests(WatchdogTestCase):
         for name, body in bodies.items():
             with self.subTest(body=name):
                 self.install(plan).write_bytes(body)
-                self.assertEqual("HOLD_UNSAFE",
+                self.assertEqual("HOLD_PLIST_UNREADABLE",
                                  wd.decide(self.harness.storage, self.harness.deps, wd.initial_state()).state)
                 supervisor = self.supervisor(plan)
                 self.assertTrue(supervisor.step())
-                self.assertEqual("HOLD_UNSAFE", supervisor.state["state"])
+                self.assertEqual("HOLD_PLIST_UNREADABLE", supervisor.state["state"])
                 self.assertIn("unreadable installed agent", supervisor.state["resident_hold_drain"]["reason"])
                 self.assertTrue((self.harness.storage.root / "standdown.request").exists())
                 (self.harness.storage.root / "standdown.request").unlink()
@@ -245,7 +247,7 @@ class InstalledBlockSixTests(WatchdogTestCase):
                 self.install(plan, torn_label).write_bytes(b"torn plist")
                 supervisor = self.supervisor(plan)
                 self.assertTrue(supervisor.step())
-                self.assertEqual("HOLD_UNSAFE", supervisor.state["state"])
+                self.assertEqual("HOLD_PLIST_UNREADABLE", supervisor.state["state"])
                 self.assertEqual(self.checkout_rows(plan), supervisor.state["fenced_checkouts"])
                 request = json.loads((self.harness.storage.root / "standdown.request").read_text())
                 self.assertEqual(plan.plan_id, request["plan_id"])
