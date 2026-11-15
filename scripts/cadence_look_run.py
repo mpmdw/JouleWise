@@ -87,6 +87,8 @@ def _stamp(out, a):
     _guard_loaded(doc)
     out["manifest_sha256"] = sha256_file(mpath)
     out["allow_draft"] = bool(a.allow_draft)
+    # what satisfied the committed-ledger gate (Sol NEW-2 / Mythos N3); none under --allow-draft
+    out["ledger_gate"] = None if a.allow_draft else M.ledger_gate(ROOT, getattr(a, "ledger_ref", None))
     return out
 
 
@@ -376,7 +378,7 @@ def stage2_preflight(stage1_out, sdir_of):
     """Structural checks of every file stage 2 will open, by presence only (stat, never a read): each
     energy-fit leg's power_trace.csv, and a meter stream in its span. Run by stage 1, so a layout fault refuses
     before any energy file is opened (Mythos cold seat 4)."""
-    seen = set()
+    seen = {}
     for L in stage1_out["legs"]:
         if not L["in_energy_fit"]:
             continue
@@ -388,7 +390,8 @@ def stage2_preflight(stage1_out, sdir_of):
         if L["span_id"] not in seen:
             if not glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")):
                 raise F.LookInputError("stage-2 preflight: an energy-fit leg's span has no meter stream")
-            seen.add(L["span_id"])
+            seen[L["span_id"]] = span_meter_streams(sdir)
+        require_bracketed(L, seen[L["span_id"]])        # the leg stage 2 would refuse surfaces here (Mythos r3 N6)
 
 
 # =============================================================================================== stage-2 reader
@@ -487,6 +490,25 @@ class MeterSpan:
         return sum(0.5 * (self._value(x) + self._value(y)) * (y - x) for x, y in zip(xs, xs[1:]))
 
 
+def leg_meter_interval_ns(L):
+    """The span of a level-D leg's energy intervals (its segments and prefix tails), in ns."""
+    ivs = [(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"] + L["prefix_tails"]]
+    return round(min(a for a, _ in ivs) * NS), round(max(b for _, b in ivs) * NS)
+
+
+def span_meter_streams(sdir):
+    """inclusion_34.read_meter_stream for each stream of the span: stamps, counts and round trips by pattern only;
+    no sample is decoded."""
+    return [I34.read_meter_stream(p) for p in sorted(glob.glob(str(Path(sdir) / "hazards/meter/stream-*.jsonl")))]
+
+
+def require_bracketed(L, streams):
+    """Mythos r3 N6: stage 2 integrates DC-in only over a leg bracketed by meter samples, judged by
+    inclusion_34.meter_bracket (one boundary for stage 1's preflight and stage 2)."""
+    if not I34.meter_bracket(leg_meter_interval_ns(L), streams)["bracketed"]:
+        raise F.LookInputError("DC-in: an energy-fit leg's interval is not bracketed by meter samples")
+
+
 def gpu_max_uncovered_s(trace, a, b):
     """The longest stretch of [a, b] that no power_trace row covers (the GPU rail's analogue of the DC-in gap)."""
     edge, worst = a, 0.0
@@ -522,8 +544,9 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None
         bundle = sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"]
         trace = s3.Trace(s3.load_gpu_trace(str(bundle)))
         if L["span_id"] not in meters:
-            meters[L["span_id"]] = MeterSpan(sdir)
-        m = meters[L["span_id"]]
+            meters[L["span_id"]] = (MeterSpan(sdir), span_meter_streams(sdir))
+        m, streams = meters[L["span_id"]]
+        require_bracketed(L, streams)
         entry = {}
         def gpu_energy(a, b, trace=trace):
             if gpu_max_gap_s is not None and gpu_max_uncovered_s(trace, a, b) > gpu_max_gap_s:
@@ -550,6 +573,10 @@ def cmd_stage1(a):
         input_sha = hashlib.sha256(raw).hexdigest()
         extra = {"roster_sha256": input_sha}        # a level-R run has no roster: its input file stands in
     else:
+        if not a.allow_draft:
+            # Mythos r3 N8: the committed ledger names this manifest, roster and verdict file before custody opens
+            M.require_inputs_committed(ROOT, F.LOOK_ID, sha256_file(a.manifest), roster_sha256=sha256_file(a.roster),
+                                       verdicts_sha256=sha256_file(a.rules_3_4), ledger_ref=a.ledger_ref)
         roster = _json(a.roster)
         rules34 = _json(a.rules_3_4)
         look_input = read_look_input(roster, span_dirs(a.custody, a.span_dir), rules34)

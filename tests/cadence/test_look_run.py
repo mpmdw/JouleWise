@@ -145,11 +145,12 @@ def pinned_manifest(mutate=None):
     return path
 
 
-def looks_file(stage1_sha256, status="stage1_committed"):
+def looks_file(stage1_sha256, status="stage1_committed", verdicts_sha256="3" * 64):
     path = os.path.join(_PIN_DIR, f"looks-{len(os.listdir(_PIN_DIR))}.json")
     wb(path, json.dumps({"schema": "joulewise.cadence_look_ledger.v1", "looks": [
         {"look_id": "lm-interim-01", "manifest_path": "docs/process/cadence/looks/lm-interim-01.json",
-         "sha256": "1" * 64, "status": status, "roster_sha256": "2" * 64, "stage1_sha256": stage1_sha256}]}))
+         "sha256": "1" * 64, "status": status, "roster_sha256": "2" * 64, "stage1_sha256": stage1_sha256,
+         "verdicts_sha256": verdicts_sha256}]}))
     return path
 
 
@@ -812,6 +813,7 @@ class RoundTwoCli(unittest.TestCase):
         self.assertEqual(rc, 0, err)
         d = rj(p)
         self.assertIs(d["allow_draft"], True)
+        self.assertIsNone(d["ledger_gate"])                 # no committed-ledger gate under --allow-draft
         self.assertEqual(d["manifest_sha256"], R.sha256_file(_DEFAULT_MANIFEST[0]))
         # code_sha256 = the repository files that stage loaded (M.loaded_repo_files); stage 1 on level R loads no
         # meter decoder, and no test module (it runs in its own process)
@@ -928,7 +930,9 @@ class CommittedLedger(unittest.TestCase):
         from tests.cadence import look_minirepo as mr
         c = _Custody.get()
         mini = mr.mini_repo(self)
-        mr.commit(mini)                                     # the manifest committed; no stage-1 hash yet
+        roster_sha, verdicts_sha = R.sha256_file(c.paths["roster.json"]), R.sha256_file(c.paths["rules_3_4.json"])
+        # the manifest committed, with the roster and verdict file stage 1 is given (Mythos r3 N8)
+        mr.commit(mini, roster_sha256=roster_sha, verdicts_sha256=verdicts_sha)
         d = tempfile.mkdtemp(prefix="jw-look-committed-")
         self.addCleanup(lambda: shutil.rmtree(d, ignore_errors=True))
         man = mini / mr.MANIFEST
@@ -938,12 +942,15 @@ class CommittedLedger(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         h = R.sha256_file(s1p)
         roster = rj(s1p)["code_sha256"]["input:roster_sha256"]
-        mr.commit(mini, stage1_sha256=h, roster_sha256=roster)
+        self.assertEqual(roster, roster_sha)
+        mr.commit(mini, stage1_sha256=h, roster_sha256=roster, verdicts_sha256=verdicts_sha)
         r = mr.py(mini, "scripts/cadence_look_run.py", "stage2", "--stage1", s1p, "--stage1-sha256", h,
                   "--custody", c.root, "--out", op, "--manifest", man)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIs(rj(op)["allow_draft"], False)
-        mr.commit(mini, stage1_sha256="9" * 64, roster_sha256=roster)     # the ledger names another stage-1 file
+        self.assertEqual(set(rj(op)["ledger_gate"]), {"commit", "ref", "ref_commit"})
+        mr.commit(mini, stage1_sha256="9" * 64, roster_sha256=roster,     # the ledger names another stage-1 file
+                  verdicts_sha256=verdicts_sha)
         os.unlink(op)
         r = mr.py(mini, "scripts/cadence_look_run.py", "stage2", "--stage1", s1p, "--stage1-sha256", h,
                   "--custody", c.root, "--out", op, "--manifest", man)
@@ -1177,3 +1184,31 @@ class RoundThree(unittest.TestCase):
             p.write_text(bad + "\n".join(lines[2:]) + "\n")             # header gone; first line a sample line
             header, end = R.meter_offsets(sdir)
         self.assertIsNone(header)
+
+
+class LegBracket(unittest.TestCase):
+    """Mythos r3 N6 as the builder's design has it: one boundary, inclusion_34.meter_bracket, refuses an energy-fit
+    leg whose meter samples do not bracket it, in stage 1's preflight (before the stage-1 file is written) and in
+    stage 2's reader. The stream here stops 1.2 s before the leg's last token (rule 4 may still admit it)."""
+
+    def test_stream_ending_before_the_last_token(self):
+        c = _Custody.get()
+        s1 = F.stage1(c.li, "0" * 64)
+        sid = "dev-01-s02"
+        L = [x for x in s1["legs"] if x["in_energy_fit"] and x["span_id"] == sid][-1]
+        end_ns = R.leg_meter_interval_ns(L)[1]
+        with tempfile.TemporaryDirectory() as d:
+            sdir = Path(d) / sid
+            shutil.copytree(c.root / sid, sdir)
+            p = sdir / "hazards/meter/stream-0001.jsonl"
+            lines = p.read_text().splitlines()
+            keep = [lines[0]] + [x for x in lines[1:-1] if json.loads(x)["rt"] <= end_ns - 1_200_000_000] + [lines[-1]]
+            p.write_text("\n".join(keep) + "\n")
+            sdir_of = R.span_dirs(c.root, [f"{sid}={sdir}"])
+            with self.assertRaisesRegex(F.LookInputError, "bracketed"):
+                R.stage2_preflight(s1, sdir_of)
+            only = dict(s1, legs=[x if x["leg_key"] == L["leg_key"] else dict(x, in_energy_fit=False)
+                                  for x in s1["legs"]])
+            with self.assertRaisesRegex(F.LookInputError, "bracketed"):
+                R.read_segment_energy(only, sdir_of)
+        R.stage2_preflight(s1, R.span_dirs(c.root, None))      # the intact custody passes
