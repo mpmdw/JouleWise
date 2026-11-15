@@ -1,0 +1,199 @@
+{
+ "verdict": [
+  "pass",
+  "pass"
+ ],
+ "lines": {
+  "d_bank_mechanics": [
+   true,
+   true
+  ],
+  "d_bank_start_state": [
+   true,
+   true
+  ],
+  "step_d": [
+   true,
+   true
+  ],
+  "x_g": [
+   true,
+   true
+  ]
+ },
+ "log": [
+  [
+   "three-turn clause not evaluated: one D run"
+  ],
+  [
+   "three-turn clause not evaluated: one D run"
+  ]
+ ],
+ "admitted_turns": [
+  "not_applicable: episode returned at turn 1",
+  "not_applicable: episode returned at turn 1"
+ ],
+ "gate_time_s/limit_s": [
+  [
+   202.71,
+   392.42
+  ],
+  [
+   201.67,
+   394.2
+  ]
+ ],
+ "N_chunk": [
+  4096,
+  4096
+ ],
+ "T_dead_s": [
+  981.04,
+  985.49
+ ],
+ "lines_differ": [],
+ "desk": {
+  "run2_c3f4bacd8": {
+   "gates_released": "15/15",
+   "gates_release_sample_L0_Nominal_fresh": "15/15",
+   "replay_agrees": "15/15",
+   "step_D_G0_s/clause": [
+    199.96,
+    "slope_slow"
+   ],
+   "step_D_turn_s": 438.98,
+   "step_D_level1_s": 222.85,
+   "step_D_level2_s": 247.85,
+   "step_D_max_TV0h": 93.72,
+   "step_D_p7_level0_x5_s": 50.88,
+   "step_D_p7_band_1C_x5_s": 145.5,
+   "classifier_free_pick": [
+    "Tf3B",
+    "Tf0B"
+   ],
+   "night_confirmation": [
+    "TV0h",
+    "TV1h",
+    true
+   ],
+   "D_bank_G0+G1_s": [
+    102.8,
+    99.91
+   ],
+   "D_bank_turn1_first_off_s": 207.29,
+   "D_bank_exclusion_1Hz": [
+    "thermal.os_level_nonzero",
+    "thermal.powermetrics_non_nominal"
+   ],
+   "D_bank_stale_after_turn1": {
+    "from_s": 16.66,
+    "max_age_s": 43.151789124,
+    "n": 41,
+    "to_s": 56.88,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   },
+   "X_G_turns_all_L0_Nominal": true,
+   "G1_after_hot_turn": {
+    "D_bank": [],
+    "X_G": [],
+    "step_D": []
+   },
+   "TV_unequal_rows (member, seq, in gate, look-back)": [
+    [
+     "D_bank",
+     752,
+     [],
+     []
+    ]
+   ],
+   "soak_TV0h=TV1h": [
+    34.189,
+    true
+   ]
+  },
+  "run1_f30a97d00": {
+   "gates_released": "15/15",
+   "gates_release_sample_L0_Nominal_fresh": "15/15",
+   "replay_agrees": "13/15",
+   "step_D_G0_s/clause": [
+    207.91,
+    "slope_slow"
+   ],
+   "step_D_turn_s": 438.71,
+   "step_D_level1_s": 230.76,
+   "step_D_level2_s": 253.76,
+   "step_D_max_TV0h": 97.8,
+   "step_D_p7_level0_x5_s": 56.05,
+   "step_D_p7_band_1C_x5_s": 144.29,
+   "classifier_free_pick": [
+    "TV0h",
+    "Tp1G"
+   ],
+   "night_confirmation": [
+    "TV0h",
+    "TV1h",
+    true
+   ],
+   "D_bank_G0+G1_s": [
+    104.72,
+    96.94
+   ],
+   "D_bank_turn1_first_off_s": 202.87,
+   "D_bank_exclusion_1Hz": [
+    "thermal.os_level_nonzero",
+    "thermal.powermetrics_non_nominal"
+   ],
+   "D_bank_stale_after_turn1": {
+    "from_s": 16.15,
+    "max_age_s": 41.175674,
+    "n": 39,
+    "to_s": 54.36,
+    "value": [
+     [
+      "Heavy",
+      39
+     ]
+    ]
+   },
+   "X_G_turns_all_L0_Nominal": true,
+   "G1_after_hot_turn": {
+    "D_bank": [],
+    "X_G": [],
+    "step_D": []
+   },
+   "TV_unequal_rows (member, seq, in gate, look-back)": [
+    [
+     "D_bank",
+     583,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     584,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     752,
+     [],
+     []
+    ]
+   ],
+   "soak_TV0h=TV1h": [
+    34.182,
+    true
+   ]
+  }
+ }
+}
