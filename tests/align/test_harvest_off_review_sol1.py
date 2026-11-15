@@ -417,7 +417,8 @@ class TurnTableWitnesses(unittest.TestCase):
                 case = Fixture('test_triage_desk_final_reduce_end_to_end')
                 case.test_triage_desk_final_reduce_end_to_end()
                 for row in Fixture.rows:
-                    table = json.loads((Fixture.root / 'reduced' / row['run_id'] / 'turns.json').read_text())
+                    # PR #774 M4: a v4 session reduces into its withheld archive before release
+                    table = json.loads((Fixture.session / 'archive/withheld/reduced' / row['run_id'] / 'turns.json').read_text())
                     self.assertIn('metadata.json', table['inputs'],
                                   'clock/uncertainty metadata used by both energy readers is not digest-bound')
             finally:

@@ -1034,18 +1034,26 @@ class SyntheticV4SessionE2ETests(unittest.TestCase):
         self.assertEqual(final['member_eligibility']['captured_members'], light['member_eligibility']['captured_members'])
         self.assertTrue(light['thermal_escalation']['models'])                       # U1-U3 were evaluated
         self.assertEqual(final['thermal_escalation'], light['thermal_escalation'])   # U1-U3 ignore the harvest
-        reduced = self.runner(['reduce', '--session-root', str(session), '--out', str(self.root / 'reduced'),
+        # PR #774 M4: before release a v4 session reduces only into its withheld archive; elsewhere is refused.
+        from scripts import align_v4_harvest_off as runner_module
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(runner_module.main(['reduce', '--session-root', str(session), '--out',
+                                                 str(self.root / 'reduced-outside'), '--workers', '2']), 1)
+        self.assertIn('archive/withheld', err.getvalue())
+        self.assertFalse((self.root / 'reduced-outside').exists())
+        reduced_dir = session / 'archive/withheld/reduced'
+        reduced = self.runner(['reduce', '--session-root', str(session), '--out', str(reduced_dir),
                                '--workers', '2'])
         self.assertEqual(reduced['reduced_members'], len(self.rows))
         pilot = json.loads((session / 'PILOT.json').read_text())
-        manifest = json.loads((self.root / 'reduced/MANIFEST.json').read_text())
+        manifest = json.loads((reduced_dir / 'MANIFEST.json').read_text())
         for member in manifest['members']:
-            table = json.loads((self.root / 'reduced' / member['turn_table']['path']).read_text())
+            table = json.loads((reduced_dir / member['turn_table']['path']).read_text())
             self.assertTrue(turn_table.equal_to_pilot(table, pilot), member['run_id'])
             self.assertTrue(any(table['channels'][c]['per_turn_j'] for c in table['channels']))
             self.assertTrue(table['thermal']['per_turn'])
             for row in member['files']:
-                binding, _rows = pm_reduce.read_npy((self.root / 'reduced' / row['reduced']).read_bytes())
+                binding, _rows = pm_reduce.read_npy((reduced_dir / row['reduced']).read_bytes())
                 self.assertEqual(binding['raw_sha256'], row['raw_sha256'])
 
     def test_turn_table_binds_every_file_the_projection_opens(self):
