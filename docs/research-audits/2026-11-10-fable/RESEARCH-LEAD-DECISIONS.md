@@ -16158,3 +16158,184 @@ Research lead (Fable 5.2), Sat Nov 14 21:22 PST 2026 (from `date`). RL-149 to RL
 **Blind status.** Blind. Nothing measured was opened. Every reading in §1 and §2 is a convention on counts, stamps, state and arithmetic, fixed before stage 1 runs on any real leg. The seed rule reads kit layouts only.
 
 **For Ed, plainly.** "Two programs compute the same heat fit independently, and they must agree before the real one runs. I compared them point by point and found about twenty places where they would have disagreed. Each now has one answer. Three of those were places where the main program had drifted from an earlier ruling about what counts as 'the laptop's state was not observed'. The kits for the test runs later in the week are accepted as built. One low-value filler run is cancelled, because building it safely had become more work than it was worth."
+
+# RL-168. PR #774 at `9848520a4`: gate row 4 passes (ADMIT WITH FIXES). The diff is the rulings and the seats' fixes and nothing measurement-bearing beyond them, with one exception: the `u3_export` identity check refuses the registered U3 selection's own pilot bundles, so the U3 bar's pilot export cannot run at this head. That fix and five smaller items ride the desk-seal follow-up. No new Part C is needed
+
+Research lead (Fable 5.2), Sat Nov 14 21:21 PST 2026 (from `date`). The cold final read of PR #774 for gate row 4, at head `9848520a4cc03cbd95d77a0a3f7b57e306224007`, base `c3f4bacd8`. RL-149 §3, RL-151 §4, RL-152 §3, RL-162, RL-163 and RL-165 §9 stand except where §6 amends them.
+
+**Read.**
+- RL-149 §3, RL-151 §4, RL-152 §3, RL-162, RL-163 and RL-165 §9 in the log on `origin/audit/2026-11-10-fable`.
+- The PR body of #774, in full.
+- **Production and docs hunks, every one, myself:** `git diff 620e3addc ea9b54a03`, `git diff 18fb3746f 5446531a4` and `git diff 5e97809f6 9848520a4`, for `v4_desk_seal.py`, `km003c.py`, `v4_registration.py`, `align_pilot_session.py`, `align_v4_session.py`, `align_v4_thermal_desk.py`, `align_v4_harvest_off.py`, `align_v4_u3_export.py`, `DEVIATIONS.md`, the runbook and `w1_pooled_figures.md`.
+- **Test hunks: read by a Sonnet seat on my brief, not by me.** Its points are in §5 and are marked as its reading.
+
+**Checked myself.**
+- The diff from `c3f4bacd8` to `9848520a4` over the 17 Part C paths (§3).
+- The registered U3 selection (`configs/campaigns/align_v4/registration/u3_sources/selection.json`, structure only: session names, ordinals, bundle directory names) against `bundle_identity` and W1's roster (§1, finding 1).
+- The not-counted lists against RL-162 §2's table and RL-163 §3, code by code.
+- Tripwire 1's three clauses against RL-162 §1.
+
+**Not checked.**
+- I ran no test and no mutant. The 111/111 figure and the seats' repro results are the PR body's.
+- The four seat reports (Mythos N, Mythos M, exec E, Mythos final, Sol final). I read the PR body's tables of them, not the reports.
+- Whether the offload pack of a window can carry an `archive/`, `PILOT.json` or `desk.json` from the MBP (finding 3).
+- The stored `run_id` inside the pilot 4 to 10 bundles. Finding 1 rests on their directory names and on the builder's own comment that W1's anchors reuse those ids with byte-identical configs.
+- CI on `9848520a4` (row 3).
+
+**Not done.** No SSH, no measurement file opened, no commit. The only file written is this one.
+
+---
+
+## Verdict for gate row 4: ADMIT WITH FIXES
+
+**Row 4 passes at `9848520a4`.** None of the six findings has to be in #774 before the merge. All six go in the desk-seal follow-up PR, which already merges before the commit W1 is signed at. Finding 1 adds one hold until then.
+
+| # | Finding | Severity | Where it is fixed |
+|---|---|---|---|
+| 1 | `u3_export` refuses the registered U3 selection's pilot bundles | **HIGH for the U3 bar, no leak** | Follow-up PR. Until it merges, nobody runs W1-BLOCKERS step 4 |
+| 2 | `uncertainty.bound_read_as_sd` is placed not counted without a ruling | LOW | Ruled here: accepted (§6) |
+| 3 | The restore-afresh recovery has no retention line, and a restore that already holds `archive/` can never be desked | MED, procedure | Follow-up PR (runbook), plus one builder confirmation |
+| 4 | `SessionLock` reports every `flock` error as "another desk holds this session" | LOW | Follow-up PR |
+| 5 | The DEVIATIONS row `RL149-DESK-SEAL` still reads `PROPOSED for the cold review` | LOW, text | Follow-up PR |
+| 6 | Three tests assert less than their names say (the test seat's reading) | LOW | Follow-up PR |
+
+---
+
+## 1. Question 1: is the PR the rulings, nothing wider and nothing missing
+
+**Yes, with finding 1.**
+
+**As ruled, confirmed in the code:**
+- **RL-149 §3.** The switch is on. T scores open at release only. The carve-out is counted, never listed. The X2 rows keep the G0 outcome.
+- **RL-151 §4.** C1(a): `_strip` on `calibration_exclusions`, `exclusion_codes` and `disclosed_exclusion_codes`. C2 and C3: benign-only counts, labelled. C4: `ReleasedDesk` records and prints. The receipt needs a `ruling` that starts `RL-<n>`.
+- **RL-152 §3.** The population rule, with its table. Both tripwire lines.
+- **RL-162 §1.** Clause (b) is `admitted < 3` with the flag on the last admitted turn. Clause (c) counts non-benign D members with at least one admitted turn and needs at least one.
+- **RL-162 §2 and RL-163 §3.** `battery.` and `contention.` are no longer prefixes. `member.anchor_not_bounded` and `multiple_episode_ids` are counted. `member.token_count_mismatch` and `calibration.refit_cache_miss` are not. The line prints deduplicated names with no member id and no count.
+- **RL-162 §6.** `meter.battery_activity` leaves sealed DC rows.
+- **RL-163 §5.** `tokens: null` stays.
+
+**Correctly left to the follow-up:** RL-163 §1 (manifest digest), §2 (the fifth source as a tripwire-2 source), §3 (the window-level DC fit line) and §4 (the DEVIATIONS row).
+
+### Finding 1. `u3_export` refuses the bundles the registered U3 bar is built from
+
+- **What the code does.** `bundle_identity` allows a pilot run id only if it is not one of the ids W1's roster reuses. Those are `align-pilot-v3-episodes-a-e01` to `e04`.
+- **What the registration names.** In the committed `selection.json`, the chosen pair for every one of the seven sessions (p4 to p10) is ordinals [1, 9], with early bundle `align-pilot-v3-episodes-a-e01`.
+- **The result.** `measure_pair` returns `refused` for all seven, `pilot_pairs` lists seven unavailable sessions, and the pilot export holds zero pairs.
+- **Why it matters.** W1-BLOCKERS step 4 (the pilot export) has not been run yet: `u3_sources/` holds only `selection.json`. It is scheduled after R1 closes and before W1 arms. At this head it cannot produce the U3 bar's inputs.
+- **It fails loudly.** Each session is reported unavailable with the refusal text. No wrong number is produced.
+- **Against the ruling.** RL-162 §3 said the tool reads a bundle whose stored identity resolves to a pilot session. Excluding the reused ids is wider than that and defeats the registered use.
+- **The builder's reason is real.** A W1 anchor bundle carries the same run id and config bytes as a pilot one, so the id alone cannot tell them apart.
+
+**Ruled.**
+1. A reused id is allowed when the bundle's resolved path is one that the committed `selection.json` names. Any other bundle with a reused id stays refused.
+2. A test uses the registered selection's shape (e01 with e09) and shows the pair measured, and shows a W1 anchor at another path refused.
+3. If the builder finds a stored field that separates a pilot bundle from a W1 anchor, that is better, and it comes to me before it is built.
+4. **Hold:** nobody runs step 4 until the follow-up merges. This goes on the W1 receipt checklist.
+
+**One smaller point in the same function.** The refusal text says "before the series release" but the function never asks `released`. The tool has no use after release, so nothing is owed.
+
+### Finding 2. `uncertainty.bound_read_as_sd`
+
+It is in `NOT_COUNTED_DC_CODES` as routine by registration. The PR body's check-2 list, which RL-163 §3 accepted, did not name it. Ruled in §6.
+
+---
+
+## 2. Question 2: is anything measurement-, calibration- or claim-bearing changed beyond the rulings
+
+**No, apart from finding 1.**
+
+- **`km003c.py`.** Only `seal_non_benign` changes: the digest of a sealed row becomes keyed and nonced, and a sealed row's flags are cut to `meter.` codes. No DC value, fit or flag emitter changes. Benign rows pass through untouched.
+- **`align_pilot_session.py`.** The v3 path is unchanged: a session that is not v4 goes straight to `_desk` with the caller's policy, and keeps `export/` and `staging/`.
+- **`align_v4_session.py`.** Only `powermode_desk_check`'s prints and `desk`'s policy change. `full_desk_gate` reads the full members in memory.
+- **The W1 `s_r` recomputation** writes a benign-only figure into the sealed view. The full record keeps the registered value.
+- **Exclusion fields** (`members_excluded`, `members_disclosure_only`) stay verbatim.
+- **Finding 1 is the exception.** It blocks a registered calibration step. It changes no number.
+
+---
+
+## 3. Question 3: the Part C carry
+
+**Confirmed. No new Part C is needed at the merge.**
+
+- `git diff c3f4bacd8 9848520a4` over the 17 paths (the ten in `R1_EXECUTED_SOURCES` plus `launch_align_r0.py`, `run_align_r0_launchagent.sh`, `run_align_r1_smoke.py`, `align_r1_followup_kit.py`, `align_r1_part_c.py`, `rl145_prints.py`, `v4_registration.py`) is one added line: `'joulewise/align/apple/v4_desk_seal.py'` in `EXECUTED_CLOSURE`.
+- **One thing for the lead's record, not a new condition.** `align_r1_followup_kit.py` imports `scripts.align_v4_session`, which #774 changes, and through it `align_pilot_session`. The kit calls `weight_digest_preflight`, `runtime_stack_preflight` and `pilot.h.align_unit_id`. The diff to `align_v4_session.py` touches only `powermode_desk_check` and `desk`. `align_pilot_session.py`'s diff touches only `desk` and `_desk`. Neither adds a module-level import or statement. This was equally true at `5e97809f6`, where RL-165 §9 was ruled.
+
+---
+
+## 4. Question 4: the new behaviours as research procedure
+
+### 4.1 E6's rerun refusal and the restore-afresh recovery: sound, with finding 3
+
+- **Why it is right.** One desk per restore means nobody chooses among reruns, and the key in the withheld archive always matches the digests in the record.
+- **What it costs.** A faulted or timed-out desk now needs a new restore and a new harvest. That is Air wall time. It can push a window past R17's k+2 bound and stop one arm. It loses no data.
+- **The cost is accepted.** A stopped arm is recoverable. An overwritten record is not.
+
+**Finding 3. Two gaps in the recovery.**
+1. **Retention.** The recovery needs the offload pack. The runbook says only when to prune the restored tree on the Air. Add: a window's offload pack and its MBP originals are kept until that window's desk is final and its record is pushed.
+2. **A restore that already holds `archive/`.** The desk refuses any session with an `archive/` before its harvest. The runbook's optional N2 check speaks of a window "whose harvest also ran on the MBP". If such a window's pack carries that `archive/`, every restore of it is refused and the window can never be desked on the Air. The builder confirms what the pack carries. If it can carry `archive/`, `PILOT.json` or `desk.json`, that comes to me with the pack's file rule.
+3. **The runbook's older sentence** ("a time-out there is a re-run, not a result") gains "on a fresh restore".
+
+### 4.2 The flock: sound
+
+- It is taken on the directory's own descriptor, so it writes nothing. It is non-blocking, so a second desk refuses at once. Python opens the descriptor non-inheritable, so the harvest child does not hold it. It is released when the process dies.
+- **Finding 4.** Any `OSError` from `flock` gives "another desk holds this session", including a volume that does not support the call. That fails closed and loud, but the message would mislead the magistrate. Distinguish `EWOULDBLOCK` from the rest.
+
+### 4.3 W1 timestamp rebasing: sound
+
+- It applies to the printed view of benign rows only. The full record keeps the absolute stamps.
+- No registered W1 output reads an absolute stamp from the sealed record: the exception-class outputs are computed in memory from the full members.
+- With no origin the stamp is dropped, which fails closed.
+- **A limit I accept.** `ABS_STAMP_KEYS` is a name list. A new stamp field under another name would print. The F3 test's check that no printed integer lies within 1 s of a member's start or end is the guard for that, and it should stay.
+
+### 4.4 The keyed exclusions binding: sound
+
+- A plain sha256 of the full file was a test for any guess of `flag_counts`. The binding is now the desk's keyed, nonced digest of that sha256.
+- Finality still reads `members_excluded`, `reasons` and `claim_usable` from the committed file, which are unchanged.
+- At release the key, the nonce and the full file check it.
+- **Its dependence:** the binding is only checkable while `desk_seal_key.json` survives. Finding 3's retention line covers the withheld archive too.
+
+---
+
+## 5. The tests (the test seat's reading, not mine)
+
+**No existing assertion was dropped without a replacement. No test signals a process, reads outside a temporary directory or uses the network.** The real-harvest module runs the real harvest as a child.
+
+**Finding 6. Three tests assert less than their names say.**
+1. **`test_e2_…`'s subtraction attack is vacuous.** It builds its counts from `flag_counts['by_code']`, which the same test has just asserted absent, so it compares an empty dict with an empty dict. The digest-absence and HMAC checks in the same test are real.
+2. **`test_sol3_…` has no control.** It does not assert that the fit-flag list is non-empty, or that the full record's count differs between the 0-row and 7-row runs.
+3. **`test_sol5_…` checks the key only after the first desk finishes.** A key overwrite by the refused second desk would not be seen. It is also two threads in one process, not two processes.
+
+Also noted: the sentinel detector now strips hex runs of 32 to 64 characters, where it stripped 64. That is needed for the nonces and slightly narrows the detector.
+
+**Owed in the follow-up:** a real subtraction attempt in `test_e2`, the two controls in `test_sol3`, and a key comparison before and after the second desk in `test_sol5`.
+
+---
+
+## 6. Rulings made here
+
+1. **Finding 1's form** (§1): the reused pilot ids are allowed by resolved path from the committed `selection.json`.
+2. **`uncertainty.bound_read_as_sd` is not counted.** It records how an uncertainty bound was read, by registration, and is no fault. If its emitter shows otherwise, the builder brings it back.
+3. **`RL149-DESK-SEAL` (finding 5).** With this ruling the row is confirmed. The follow-up changes `PROPOSED for the cold review (RL-149 section 3)` to `Confirmed by the research lead (RL-151 section 4, RL-152 section 3, RL-162, RL-163, RL-168)`. `DEVIATIONS.md` is a strict artifact, so the edit sits inside the one re-sign.
+4. **Finding 3's retention line** is added to the runbook.
+
+**The follow-up PR now holds:** RL-163 §1 to §4 as before, plus findings 1, 3, 4, 5 and 6.
+
+## 7. What comes back to me
+
+1. The follow-up PR's diff, with finding 1's test.
+2. Finding 3's answer on what an offload pack carries.
+3. CI on `9848520a4` only if it is not green apart from the registration class.
+
+---
+
+**Owner.** #774 builder: the follow-up PR (findings 1, 3 to 6), the pack answer. Lead: the merge once rows 2 and 3 pass; the diff record for RL-165 §9 with §3's import note; "step 4 waits for the follow-up" and the retention line on the W1 receipt checklist. Magistrate: no step 4 until told. Research lead: section 7.
+**Gate.** #774 waits for rows 2 and 3 only; row 4 is passed. W1-BLOCKERS step 4 waits for the follow-up. The W1 receipt waits for the follow-up, as before. Nothing is armed by this ruling.
+**Amends.**
+- RL-162 §3: the pilot allowlist admits the reused ids by path from the committed selection.
+- RL-163 §3: `uncertainty.bound_read_as_sd` is not counted.
+- RL-163 §7: the follow-up gains findings 1 and 3 to 6.
+- DEVIATIONS `RL149-DESK-SEAL`: confirmed.
+
+**Blind status.** Blind: no v4 outcome exists, and no measurement, slot, transcript, energy, power or meter file was opened. This ruling rests on rulings, the PR body, three diffs, the roster's run ids, the U3 selection's bundle names and one test seat's reading. The U3 allowlist form and the recovery lines are fixed before any conditioned bundle exists.
+
+**For Ed, plainly.** "The desk seal passes my final read and can merge once CI is green. One real bug rides a follow-up: a new safety check also blocks the pilot data we registered for the U3 bar, so that step would have produced nothing. It fails loudly, nothing ran, and it is fixed before W1 is signed. No extra Part C run is needed."
