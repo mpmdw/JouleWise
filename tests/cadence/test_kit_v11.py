@@ -429,6 +429,8 @@ class V1Untouched(unittest.TestCase):
         """At the v1.1a kit's frozen commit, what a leg executes from legs.py and kit.py (spec validation
         and the projection guard) is the pilot commit's, byte for byte: the cell law is class B (RL-150 R5).
         The span-reference leg (a later commit) changes these bytes and is class A."""
+        if not (KITS / "cl-dev-03.v1.1a.json").is_file():
+            self.skipTest("the kit drafts live on the PR #788 line")
         pin = json.loads((KITS / "cl-dev-03.v1.1a.json").read_text())["frozen"]["commit"]
         names = {"joulewise/cadence/legs.py": {"validate_leg_spec", "_int", "prefill_chars", "guard_projection",
                                                "_walk", "LEG_SPEC_KEYS", "LEG_SPEC_SCHEMA", "BAND_RECIPES",
@@ -449,6 +451,7 @@ class V1Untouched(unittest.TestCase):
             self.assertEqual(self.at_commit(pin, path), self.at_commit(PILOT_COMMIT, path), path)
 
 
+@unittest.skipUnless((KITS / "cl-dev-03.v1.1a.json").is_file(), "the kit drafts live on the PR #788 line")
 class CommittedDev03Kit(unittest.TestCase):
     """The dev-03 draft on kit v1.1a (the cell law only; RL-155 section 5.1), the fallback if the
     span-reference leg misses the cut-off. The lead pins and commits the final bytes; this checks the
