@@ -18,6 +18,7 @@ from joulewise.cadence.stops import evaluate_named_stops
 from scripts import cadence_legs_runner as runner
 from scripts.air import cadence_desk as cli
 from tests.cadence.test_kit_v11 import local
+from tests.git_fixture import init_git_fixture
 from tests.cadence.test_span_reference import span_kit
 
 TMP = os.environ.get("TMPDIR")
@@ -874,9 +875,12 @@ class SignedTransport(DeskFinalCase):
         cls.signers.write_text("".join(f'{n} namespaces="git" {(root / (n + ".pub")).read_text().strip()}\n'
                                        for n in ("cadence-controller", "cadence-desk")))
         cls.origin = root / "origin.git"
-        subprocess.run(["git", "init", "-q", "--bare", str(cls.origin)], check=True)
+        cls.origin.mkdir()
+        init_git_fixture(cls.origin, "-q", "--bare")
         for name in ("mbp", "air"):
-            subprocess.run(["git", "clone", "-q", str(cls.origin), str(root / name)], check=True, capture_output=True)
+            (root / name).mkdir()
+            init_git_fixture(root / name, "-q")
+            subprocess.run(["git", "-C", str(root / name), "remote", "add", "origin", str(cls.origin)], check=True)
         cls.mbp, cls.air = root / "mbp", root / "air"
 
     def git(self, repo, *args):
