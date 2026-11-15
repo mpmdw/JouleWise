@@ -1,9 +1,9 @@
 {
  "schema": "joulewise.cadence_campaign_kit.v1.1",
  "campaign_id": "f2-inst-01",
- "title": "Instrument characterization, F2 (RL-169; RL-155 section 4; RL-155a section 1.3 (b); RL-165 section 8.4): kit schema v1.1, cell law sha256-cells-v1, data only on the frozen commit of cl-dev-03's first span, no code change (RL-150 R5 class B). Twelve legs, run as four pieces of three (L001-L003, L004-L006, L007-L009, L010-L012), each piece holding each prompt size (256, 2,000, 19,458 tokens) once; decode 512; band q600 (a 600 s loaded idle after G0 release, then the turn); g0 shape own; Automatic. Not campaign data: no leg counts toward any cap, development day, look or roster. Its energy is sealed until freeze 2 and read once under RL-169 section 3.",
+ "title": "Instrument characterization, F2 (RL-169 and RL-169a; RL-155 section 4; RL-155a section 1.3 (b); RL-165 section 8.4): kit schema v1.1, cell law sha256-cells-v1, data only on the frozen commit of cl-dev-03's first span, no code change (RL-150 R5 class B). Twelve legs, run as four pieces of three (L001-L003, L004-L006, L007-L009, L010-L012), each piece holding each prompt size (256, 2,000, 19,458 tokens) once; decode 512; band q600 (a 600 s loaded idle after G0 release, then the turn); g0 shape own; Automatic. Master seed 2026111443, chosen by RL-169a's layout-only rule: the lowest seed from 2026111441 up, unused on every ref, at which each size holds each of the three positions in a piece at least once over the four pieces. Void 2026-11-21 21:29 PST. Latest t0 22:13:10. Not campaign data: no leg counts toward any cap, development day, look or roster. Its energy is sealed until freeze 2 and read once under RL-169 section 3.",
  "ruling": {
-  "id": "RL-169",
+  "id": "RL-169a",
   "authorizes_spans": true
  },
  "frozen": {
@@ -60,7 +60,7 @@
  },
  "seed_law": {
   "method": "sha256-cells-v1",
-  "master_seed": 2026111441,
+  "master_seed": 2026111443,
   "n_legs": 12,
   "bands": [
    "q600"
@@ -77,7 +77,7 @@
  "legs": [
   {
    "leg_id": "L001",
-   "seed": 3290893649,
+   "seed": 1808890015,
    "start_band": "q600",
    "prefill_tokens": 19458,
    "decode_tokens": 512,
@@ -85,7 +85,7 @@
   },
   {
    "leg_id": "L002",
-   "seed": 3369593150,
+   "seed": 4087299478,
    "start_band": "q600",
    "prefill_tokens": 256,
    "decode_tokens": 512,
@@ -93,7 +93,7 @@
   },
   {
    "leg_id": "L003",
-   "seed": 2785920878,
+   "seed": 3037885276,
    "start_band": "q600",
    "prefill_tokens": 2000,
    "decode_tokens": 512,
@@ -101,73 +101,73 @@
   },
   {
    "leg_id": "L004",
-   "seed": 2311216283,
+   "seed": 3083930040,
    "start_band": "q600",
-   "prefill_tokens": 19458,
+   "prefill_tokens": 2000,
    "decode_tokens": 512,
    "g0_shape": "own"
   },
   {
    "leg_id": "L005",
-   "seed": 115860875,
+   "seed": 3178683063,
    "start_band": "q600",
-   "prefill_tokens": 2000,
+   "prefill_tokens": 256,
    "decode_tokens": 512,
    "g0_shape": "own"
   },
   {
    "leg_id": "L006",
-   "seed": 1220521572,
+   "seed": 755340826,
    "start_band": "q600",
-   "prefill_tokens": 256,
+   "prefill_tokens": 19458,
    "decode_tokens": 512,
    "g0_shape": "own"
   },
   {
    "leg_id": "L007",
-   "seed": 4041831815,
+   "seed": 791951226,
    "start_band": "q600",
-   "prefill_tokens": 19458,
+   "prefill_tokens": 256,
    "decode_tokens": 512,
    "g0_shape": "own"
   },
   {
    "leg_id": "L008",
-   "seed": 911486269,
-   "start_band": "q600",
-   "prefill_tokens": 256,
-   "decode_tokens": 512,
-   "g0_shape": "own"
-  },
-  {
-   "leg_id": "L009",
-   "seed": 3898970813,
+   "seed": 3583144100,
    "start_band": "q600",
    "prefill_tokens": 2000,
    "decode_tokens": 512,
    "g0_shape": "own"
   },
   {
-   "leg_id": "L010",
-   "seed": 856377713,
+   "leg_id": "L009",
+   "seed": 1453542947,
    "start_band": "q600",
    "prefill_tokens": 19458,
    "decode_tokens": 512,
    "g0_shape": "own"
   },
   {
-   "leg_id": "L011",
-   "seed": 3900371021,
+   "leg_id": "L010",
+   "seed": 2365426978,
    "start_band": "q600",
-   "prefill_tokens": 256,
+   "prefill_tokens": 2000,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L011",
+   "seed": 1350390875,
+   "start_band": "q600",
+   "prefill_tokens": 19458,
    "decode_tokens": 512,
    "g0_shape": "own"
   },
   {
    "leg_id": "L012",
-   "seed": 4168306473,
+   "seed": 3330252309,
    "start_band": "q600",
-   "prefill_tokens": 2000,
+   "prefill_tokens": 256,
    "decode_tokens": 512,
    "g0_shape": "own"
   }
@@ -183,7 +183,7 @@
   },
   {
    "id": "sidecar_coverage",
-   "text": "RL-149 section 2.4 rule 3: sidecar coverage of at least 99 % with no gap over 2 s, and powermetrics gaps within the U1 bound. Judged on custody by frozen code at a look, not by the runner."
+   "text": "RL-149 section 2.4 rule 3, as RL-169a section 2 F7 words it: sidecar coverage of at least 99 % with no gap over 2 s, and powermetrics gaps within the U1 bound, judged by lm-inst-01 at the read, not by the runner and not at a look. The rails stop 1.0 s after decode end and no leg has a recovery phase after its turn; each censored value is printed as censored with its bound."
   },
   {
    "id": "km003c_clean",
@@ -219,7 +219,7 @@
   },
   {
    "id": "f2_read_rule",
-   "text": "RL-169 sections 3 and 5: piece 1's hand-read, by the lead from the desk table with no energy: three legs ran to 512 tokens; each has one quiet span of 600 s or more; the meter was present and clean; the restore lines passed. A G0 timeout is not a failure. Pieces 2 to 4 need no one. No leg is re-run."
+   "text": "RL-169a section 5: piece 1's hand-read, by the lead, no energy, from each legs/<id>/leg_record.json (leg_status, g0_outcome, g0_wait_s, quiet_spans_ns, decode_tokens, decode_cap_reached, prefill_tokens and the wall) and from runner_receipt.json (the meter, the feeds, the restore lines). It passes when: (1) every leg is complete or g0_unreleased and at least two are complete; (2) each complete leg has one quiet span of 600 s or more and reached 512 tokens; (3) the meter was present and clean, every feed is proven stopped and the restore lines passed. It records without judging each leg's wall against 2,700 s and the realized prefill_tokens of the 256 leg. A complete leg that stopped short of 512 is kept and flagged; if the 256 leg does so, the lead tells the research lead before queue b is committed. Queue a holds piece 1 only; queue b holds pieces 2 to 4 and is committed only after the hand-read passes. No leg is re-run."
   }
  ],
  "stop_rules": {
@@ -230,7 +230,7 @@
   "band_unreachable_max": 2,
   "band_unreachable_scope": "span",
   "leg_time_factor": 1.5,
-  "notes": "RL-169 section 5: REFUSAL (launcher, runner or leg runtime) holds F2 only; INSTRUMENT_FAULT holds F2 and mails the lead; restore unproven or host state changed holds everything. G0 timeout, a loaded attempt and a leg over time are recorded and the piece goes on; they are not stops. A stop stops the next arm, never a running span. Leg budgets are the runner's time model for band q600 and 512 decode tokens; leg_budget_s is their ceiling and leg_worst_case_s (a G0 at its 1,200 s cap, with margin) is each leg's process cap."
+  "notes": "RL-169a section 4. What the code does on any F2 piece: a named stop or a refusal makes that span bad-terminal, so F2's own queue halts there; the Air desk opens a cadence-stop issue, and every queue halts while it is open, the campaign's included; a stop never aborts a running span. Named stops on F2: REFUSAL, INSTRUMENT_FAULT, CONTAMINATED_REDOS (three loaded legs in one piece) and LEG_OVERTIME (two legs over 1.5 x their budget; a G0 that releases after about 890 s does it). A G0 timeout alone, or one or two loaded legs, is recorded and is not a stop. Disposal: restore unproven or host state changed keeps the issue open and holds everything; INSTRUMENT_FAULT keeps the issue open until a fresh km003c_ready check passes (the meter is shared); REFUSAL, LEG_OVERTIME and CONTAMINATED_REDOS are closed by the lead's desk once the restore lines and feeds are proven stopped in the receipt, with one line of cause, and F2 resumes by the lead with a new queue (a second one comes to the research lead). A new queue holds the pieces not yet run under a new queue_id; a leg with a member bundle is never re-run. Launch rules (RL-169a section 3): latest t0 is 22:13:10 (worst-case work end 01:20:40, launcher deadline 01:30:00, fence end 01:45:00); no t0 in [10:50:00, 13:15:00); none from 22:13:10 (exclusive) to 02:40:00. The quiet after F2 counts from the actual close stamp in the receipt. Void 2026-11-21 21:29 PST. Leg budgets are the runner's time model for band q600 and 512 decode tokens; leg_budget_s is their ceiling and leg_worst_case_s (a G0 at its 1,200 s cap, with margin) is each leg's process cap."
  },
  "span_template": {
   "timezone": "America/Los_Angeles",
