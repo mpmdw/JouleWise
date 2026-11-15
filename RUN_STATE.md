@@ -1042,6 +1042,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+327. **Magistrate b418e121 (headless, Opus 5.5), 2026-11-14 21:24 PST (`date`): THE SECOND PART C (item 325) IS LAUNCHING on `c3f4bacd8`, `--fresh-soak --parts C`, smoke worktree `/Users/edr/code/jw-wt/partc-c3f4`. Gates met: item 324 not launched; item 319 closed and checked (item 322); the sub-span's fence gone and its Check reported (item 326); last close 21:01:48 + 20 min = 21:21:48; item 319's t0 16:43:28 + 4 h = 20:43:28; launch before 22:06:00. Dry tests (six modules) and every Start-and-check line passed. Deadline = 01:30:00 PST cap. A diagnostic: no slots, nothing adopted; the night is quiet after it. Record: `docs/process_traces/2026-11-14-partc2-c3f4/MAGISTRATE-LAUNCH-b418e121.md`; OUT, DEADLINE and launch epoch in custody `r1-partc2-c3f4-out-b418e121.txt` (a "LAUNCH FAILED" line there means nothing ran).**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-15T02:30:00-08:00
+on_early_or_refused: a launch refusal or failure is recorded in the custody file and mailed to the lead; nothing re-runs (item 325)
+next_observable: the next activation (after the fence is gone) runs item 325's "Check" and reports by email to Ed and the lead and as the next RUN_STATE item, with item 322's per-line pass beside each line
+```
+
 326. **Magistrate b418e121 (headless, Opus 5.5), 2026-11-14 21:10 PST (`date`): THE dev-01 SUB-SPAN `dev-01-s03` (L004-L007, item 321/323) RAN WHOLE: RECEIPT OK, rc 0, `MEASURED_OK`, 4/4 legs run, 4 of 4 ADMITTED (each G0 released in 200-210 s, one attempt, no redo, band q0 reached), meter 35,574 polls with 0 bad. Span 19:03:13-21:01:49 PST; no 00:00 crossing. Restore clean (runner restore/stop/close steps rc 0; powermode 0, network time Off, frequency word 0, no fence, no stray monitor, no High Power marker). No named stop visible to the magistrate (the Air desk's `stops.json` is the authority). Every leg prints `pm_nominal: false`, `os_level_max: 2`, as the pilot's did. It goes to the LEAD for the desk bundle copy and the automatic desk table, then the s04 item (Sun 02:40, RAN = `dev-01-s03`). Record: `docs/process_traces/2026-11-14-cadence-dev01-s03/CHECK-b418e121.md`.**
 
 ```pointer
