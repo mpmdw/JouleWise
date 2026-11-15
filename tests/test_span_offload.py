@@ -9,12 +9,14 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
 import textwrap
+import threading
 import time
 import unittest
 from unittest import mock
@@ -34,6 +36,9 @@ FAKE_RCLONE = textwrap.dedent('''\
         with open(log, "a") as handle:
             handle.write(json.dumps(args) + "\\n")
     root = os.environ["FAKE_RCLONE_ROOT"]
+    if os.environ.get("FAKE_RCLONE_PIDFILE"):
+        with open(os.environ["FAKE_RCLONE_PIDFILE"], "a") as handle:
+            handle.write(str(os.getpid()) + "\\n")
     flags_with_value = {"--config", "--retries", "--low-level-retries", "--contimeout", "--timeout", "--stats",
                         "--hash-type"}
     positional, opts, i = [], {}, 0
@@ -133,6 +138,12 @@ class SpanOffloadTests(unittest.TestCase):
 
     def offload(self, **kwargs):
         return so.offload(self.config, PLAN, self.span, allow_local=True, **kwargs)
+
+    def span_for(self, plan):
+        span = self.tmp / "campaign-out" / f"{plan}-20990101T000000Z"
+        if not span.exists():
+            self.make_span(span)
+        return span
 
     def marker(self, plan=PLAN, confirmed=False):
         return so.marker_path(self.tmp / "markers", plan, confirmed)
@@ -297,13 +308,20 @@ class SpanOffloadTests(unittest.TestCase):
         record = self.offload()
         self.assertTrue(record["stage_reused"])
         self.assertEqual(record["ciphertext"]["sha256"], staged)
-        # A partial stage (no descriptor) is renamed aside, never reused.
+        # A directory the tool did not complete (item 347's stage, say) is never moved or reused.
         other = PLAN.replace("s01", "s02")
         (self.tmp / "stage" / other).mkdir()
         (self.tmp / "stage" / other / f"{other}.tgz.enc").write_bytes(b"half")
-        record = so.offload(self.config, other, self.span, allow_local=True)
-        self.assertFalse(record["stage_reused"])
-        self.assertTrue(any(n.startswith(other + ".partial-") for n in os.listdir(self.tmp / "stage")))
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(self.config, other, self.span_for(other), allow_local=True)
+        self.assertEqual(caught.exception.code, "STAGE_CONFLICT")
+        self.assertEqual((self.tmp / "stage" / other / f"{other}.tgz.enc").read_bytes(), b"half")
+        # A failed build leaves nothing behind.
+        third = PLAN.replace("s01", "s03")
+        with mock.patch.object(so, "wrap_passphrase", side_effect=so.refused("OPENSSL_FAILED", "x")):
+            with self.assertRaises(so.OffloadError):
+                so.offload(self.config, third, self.span_for(third), allow_local=True)
+        self.assertEqual([n for n in os.listdir(self.tmp / "stage") if third in n and not n.endswith(".lock")], [])
 
     def test_deadline(self):
         with self.assertRaises(so.OffloadError) as caught:
@@ -419,7 +437,7 @@ class SpanOffloadTests(unittest.TestCase):
             with self.subTest(hash_type=hash_type):
                 plan = f"{PLAN}-{hash_type}"
                 config = dict(self.config, backend=self.fake_rclone(hash_type))
-                record = so.offload(config, plan, self.span)
+                record = so.offload(config, plan, self.span_for(plan))
                 self.assertTrue(record["provider_confirmed"])
                 for row in record["provider_confirmation"]:
                     self.assertEqual(row["provider_size"], row["size"])
@@ -448,7 +466,7 @@ class SpanOffloadTests(unittest.TestCase):
                 plan = f"{PLAN}-f{index}"
                 config = dict(self.config, backend=self.fake_rclone(**env))
                 with self.assertRaises(so.OffloadError) as caught:
-                    so.offload(config, plan, self.span)
+                    so.offload(config, plan, self.span_for(plan))
                 self.assertEqual((caught.exception.code, caught.exception.exit_kind), (code, "unverified"))
                 self.assertEqual(os.listdir(self.tmp / "markers"), [])
                 for key in env:
@@ -632,6 +650,112 @@ class SpanOffloadTests(unittest.TestCase):
         (cloud / names["descriptor"]).write_bytes(so.canonical(descriptor))
         return so.expectations(None, so.sha256_file(cloud / names["manifest"]), so.sha256_file(cloud / names["ciphertext"]))
 
+    # --- round-1 regressions (Mythos r1 F1-F10, N1, N4) ---------------------------------------
+
+    def test_two_offloads_of_one_plan_never_mix(self):
+        real = so.encrypt_span
+        started = threading.Event()
+
+        def slow(*args, **kwargs):
+            started.set()
+            time.sleep(1.0)
+            return real(*args, **kwargs)
+
+        results = {}
+
+        def first():
+            try:
+                results["a"] = self.offload()
+            except so.OffloadError as error:
+                results["a"] = error
+
+        with mock.patch.object(so, "encrypt_span", slow):
+            worker = threading.Thread(target=first)
+            worker.start()
+            started.wait(10)
+            with self.assertRaises(so.OffloadError) as caught:
+                self.offload()
+            worker.join(30)
+        self.assertEqual(caught.exception.code, "BUSY")
+        self.assertIsInstance(results["a"], dict)
+        self.pull()  # the one marker written decrypts and matches
+        self.assertEqual(so.hash_tree(self.tmp / "desk" / "cl-syn-01" / SPAN), so.hash_tree(self.span))
+
+    def test_span_identity_emptiness_and_fence(self):
+        cases = [("PLAN_SPAN_MISMATCH", lambda: so.offload(self.config, "cq-syn-01-s02-a1", self.span, allow_local=True)),
+                 ("SPAN_EMPTY", lambda: so.offload(self.config, PLAN, self.empty_span(receipt=False),
+                                                   require_files=(), allow_local=True))]
+        fence = self.tmp / "desk_fence.json"
+        fence.write_text("{}")
+        cases.append(("FORBIDDEN_PATH_PRESENT", lambda: so.offload(dict(self.config, forbid_paths=[str(fence)]), PLAN,
+                                                                   self.span, allow_local=True)))
+        for code, call in cases:
+            with self.subTest(code=code):
+                with self.assertRaises(so.OffloadError) as caught:
+                    call()
+                self.assertEqual(caught.exception.code, code)
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def empty_span(self, receipt):
+        span = self.tmp / "empty" / f"{PLAN}-20990101T000001Z"
+        span.mkdir(parents=True, exist_ok=True)
+        if receipt:
+            (span / "runner_receipt.json").write_bytes(b"x")
+        return span
+
+    def test_a_ciphertext_that_does_not_decrypt_writes_no_marker(self):
+        liar = self.tmp / "openssl-liar"
+        liar.write_text(f'#!/bin/sh\nif [ "$1" = enc ] && [ "$2" = -e ]; then cat >/dev/null; exit 0; fi\n'
+                        f'exec {OPENSSL} "$@"\n')
+        liar.chmod(0o755)
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, openssl=str(liar)), PLAN, self.span, allow_local=True)
+        self.assertEqual(caught.exception.code, "CIPHERTEXT_UNVERIFIED")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+        self.assertEqual([n for n in os.listdir(self.tmp / "stage") if not n.startswith(".")], [])
+
+    def test_no_time_left_does_nothing(self):
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, default_budget_s=-1), PLAN, self.span, allow_local=True)
+        self.assertEqual(caught.exception.code, "DEADLINE")
+        self.assertEqual([n for n in os.listdir(self.tmp / "stage") if not n.startswith(".")], [])
+
+    def test_remote_must_be_a_named_rclone_remote(self):
+        for remote in (":local:/x", "/path/with:colon", "--flag:x", "noremote"):
+            with self.subTest(remote=remote):
+                with self.assertRaises(so.OffloadError):
+                    so.RcloneBackend({"remote": remote})
+        so.RcloneBackend({"remote": "jwoffload:JouleWise-offload"})
+
+    def test_dropbox_read_back_needs_a_real_hash(self):
+        backend = so.RcloneBackend({"remote": "x:y", "hash_type": "dropbox"})
+        with mock.patch.object(backend, "_run", return_value=b"\n"), self.assertRaises(so.OffloadError) as caught:
+            backend._local_hash(self.span / "empty.txt", None)
+        self.assertEqual(caught.exception.code, "LOCAL_HASH_INVALID")
+
+    def test_sigterm_kills_the_upload_and_exits_5(self):
+        backend = self.fake_rclone(FAKE_RCLONE_SLEEP="30", FAKE_RCLONE_PIDFILE=str(self.tmp / "rclone.pids"))
+        config = self.tmp / "mbp.json"
+        config.write_text(json.dumps(dict(self.config, backend=backend)))
+        root = Path(__file__).resolve().parents[1]
+        proc = subprocess.Popen([sys.executable, str(root / "scripts" / "span_offload.py"), "offload", "--config",
+                                 str(config), "--plan", PLAN, "--span-dir", str(self.span)],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        deadline = time.time() + 30
+        while not (self.tmp / "rclone.pids").exists() and time.time() < deadline:
+            time.sleep(0.1)
+        time.sleep(0.3)
+        proc.send_signal(signal.SIGTERM)
+        out, err = proc.communicate(timeout=30)
+        self.assertEqual(proc.returncode, so.EXIT["unverified"])
+        self.assertIn(b"TERMINATED", err)
+        self.assertEqual(len(err.strip().splitlines()), 1)
+        time.sleep(0.3)
+        for pid in (self.tmp / "rclone.pids").read_text().split():
+            with self.assertRaises(ProcessLookupError):
+                os.kill(int(pid), 0)
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
     # --- CLI ----------------------------------------------------------------------------------
 
     def test_cli_exit_codes_and_one_line_output(self):
@@ -644,7 +768,7 @@ class SpanOffloadTests(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             self.assertEqual(cli.main(argv), so.EXIT["refused"])  # local backend not allowed by default
-            self.assertEqual(cli.main(argv + ["--allow-local-backend"]), 0)
+            self.assertEqual(cli.main(argv + ["--allow-local-backend"]), so.EXIT["unconfirmed"])
             self.assertEqual(cli.main(argv + ["--allow-local-backend"]), so.EXIT["marker_exists"])
         self.assertIn("LOCAL_BACKEND_NOT_ALLOWED", err.getvalue())
         self.assertRegex(out.getvalue(), r"^OFFLOAD_OK_UNCONFIRMED plan=cq-syn-01-s01-a1 backend=local provider_confirmed=false .* "

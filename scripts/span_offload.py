@@ -12,14 +12,16 @@ Air (later; verifies against the marker's hashes and decrypts read-only):
     python3.13 -B scripts/span_offload.py keygen --out-dir DIR [--openssl PATH]
 
 Output is one line of operational codes and hashes. Exit codes: 0 ok, 1 internal, 2 usage, 3 marker
-already exists (nothing done), 4 refused before upload, 5 upload or provider read-back failed (no marker),
-6 pull integrity failure, 7 pull destination exists.
+already exists (nothing done), 4 refused before upload, 5 upload or provider read-back failed, the
+deadline passed or the tool was terminated (no marker), 6 pull integrity failure, 7 pull destination
+exists (or an interrupted landing), 8 offload through the local backend (no copy-gate marker).
 """
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
+import signal
 import sys
 
 if __package__ in (None, ""):
@@ -34,8 +36,9 @@ def parser():
     off.add_argument("--config", required=True)
     off.add_argument("--plan", required=True)
     off.add_argument("--span-dir", required=True)
-    off.add_argument("--require-file", action="append", default=[],
-                     help="a basename that must exist directly under the span (existence only; not read)")
+    off.add_argument("--require-file", action="append", default=None,
+                     help="a basename that must exist directly under the span (existence only; not read); "
+                          "default runner_receipt.json")
     off.add_argument("--deadline-epoch", type=float,
                      help="give up (no marker) if the offload cannot finish by this epoch (the next soak)")
     off.add_argument("--allow-local-backend", action="store_true",
@@ -60,7 +63,8 @@ def parser():
 def run(args):
     if args.command == "offload":
         config = so.load_mbp_config(args.config)
-        record = so.offload(config, args.plan, args.span_dir, require_files=args.require_file,
+        required = args.require_file if args.require_file is not None else ["runner_receipt.json"]
+        record = so.offload(config, args.plan, args.span_dir, require_files=required,
                             allow_local=args.allow_local_backend, deadline_epoch=args.deadline_epoch)
         label = "OFFLOAD_OK" if record["provider_confirmed"] else "OFFLOAD_OK_UNCONFIRMED"
         marker = so.marker_path(config["marker_dir"], record["plan"], record["provider_confirmed"])
@@ -86,17 +90,33 @@ def run(args):
     return f"KEYGEN_OK recipient_sha256={fingerprint} out_dir={args.out_dir}"
 
 
+class Terminated(BaseException):
+    """SIGTERM, SIGHUP or SIGINT: unwinding kills every child (openssl, rclone) before the tool exits."""
+
+
+def _terminate(signum, _frame):
+    raise Terminated(signum)
+
+
 def main(argv=None):
     args = parser().parse_args(argv)
+    previous = {sig: signal.signal(sig, _terminate) for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)}
     try:
-        print(run(args))
-        return so.EXIT["ok"]
+        line = run(args)
+        print(line)
+        return so.EXIT["unconfirmed"] if line.startswith("OFFLOAD_OK_UNCONFIRMED") else so.EXIT["ok"]
+    except Terminated as stop:
+        print(f"{args.command.upper()}_UNVERIFIED TERMINATED signal={stop.args[0]}", file=sys.stderr)
+        return so.EXIT["unverified"]
     except so.OffloadError as error:
         print(f"{args.command.upper()}_{error.exit_kind.upper()} {error.code} {error.detail}".rstrip(), file=sys.stderr)
         return so.EXIT[error.exit_kind]
     except Exception as error:  # noqa: BLE001 - one line, no traceback text from the span
         print(f"{args.command.upper()}_INTERNAL {type(error).__name__}", file=sys.stderr)
         return so.EXIT["internal"]
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
 
 
 if __name__ == "__main__":
