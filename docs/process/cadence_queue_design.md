@@ -271,6 +271,22 @@ Each line is machine-checked at the arm (`kit.CHECK_KINDS`, which every kit must
   after span k+1 is armed and stops k+2. The magistrate evaluates the MBP-visible stops itself before
   arming. The k+2 rule bounds the debt to one span.
 
+### 6.1 Desk-final from the automatic table (RL-172 section (c), on Sol's conditions)
+
+`scripts/air/cadence_desk.py final` (`joulewise/cadence/desk_final.py`) is the only path to line 9's
+desk-final; `build` keeps the frozen table and writes `desk_final: false`. Sol's probe showed the frozen desk
+raises no stop on zero leg rows, skips a missing summary and takes no roster. `final` judges an
+authenticated bundle (`BUNDLE_MANIFEST.json`, the runner receipt, the `leg-summary-v1` files) against the
+queue entry and the kit file, and is final only when: the leg ids, order, count and attempts (redos as
+`runtime.rejected<N>`) equal the roster with nothing missing or duplicated and at least one row; the kit
+sha256, frozen commit, plan id and the consumers' capture leg match by hash; the manifest hashes to the
+anchor in the controller's per-span record and every file to the manifest; and every feed's own stop proof
+is present (a feed not proven stopped is INSTRUMENT_FAULT). A mandatory hand table (a redo, an exclusion, a
+schema change, or the lead's seeded draw) must be supplied; a disagreeing one holds the next arm. The class A
+smoke hand-read, the L002 and L005 gates and RL-158 Q1's print are printed and marked `hand gate required`;
+the desk never clears them. `desk_verdict.json` is written for every outcome, a refusal included. It reads
+only `desk_final.ALLOWED_BASENAMES`, each once, and refuses unread anything outside the bundle layout.
+
 ## 7. Probe and watcher (the prerequisite; phase 1)
 
 - **RL-128 forced command** (`scripts/mbp/night_status.py`). It reads the installed
@@ -356,6 +372,7 @@ Each line is machine-checked at the arm (`kit.CHECK_KINDS`, which every kit must
 | `test_kit` | 18 | closed schema, condition/slot refusal, seed law, stop bounds, template window and capacity, mandatory checklist, look fit, `verify_frozen` on a git fixture |
 | `test_queue` | 12 | format refusals, the clean walk, GO with exit 3 = REFUSED, fault, named stop, stranded, k+2, drained/halt/expiry, transitions, veto scopes and authority |
 | `test_stops_desk` | 14 | each named stop, desk tables, planted energy/slot/unknown keys refuse, allowlist, the R1 adapter never prints token ids or planted energy, the quiet lock is exclusive and is never stolen when stale |
+| `test_desk_final` | 23 | RL-172 (c) desk-final: Sol's zero-row probe, a missing summary, a duplicate, roster order and count, redo names, a wrong kit hash, frozen commit and plan id, the span reference, a tampered receipt, the anchor, unlisted and out-of-layout files (unread), every feed's stop proof, the hand table (due, agrees, disagrees), the hand gates, a planted energy key, the CLI |
 | `test_probe_watch` | 18 | the forced command's projection, PID reuse, unarmed; the parser refuses raw lines; probe alarms; the enabled probe body (patched on) with spacing, deadline and log; queue alarms; evidence from RUN_STATE; the output guard; the ledger |
 
 ## 11. Cross-check with the Sol design (MEMO-sol.md, 22:18)
