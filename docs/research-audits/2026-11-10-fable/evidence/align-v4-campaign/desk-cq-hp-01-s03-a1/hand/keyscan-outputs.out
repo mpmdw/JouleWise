@@ -1,0 +1,4 @@
+RESULT.json nkeys=232 HITS=['6_block_power_mode_2_high_power', '6_high_power', 'ac_powermode', 'block_power_mode', 'high_power', 'high_power_end_epoch_s', 'high_power_revoked', 'high_power_step', 'leg_record_ac_powermode', 'next_observation_powermode', 'power_last_look', 'power_last_look_step', 'power_mode', 'power_proof', 'power_proof_step', 'pre_attempt_powermode_step', 'read_power_step_before_soak']
+hand/hand_table.json nkeys=157 HITS=['6_block_power_mode_2_high_power', 'ac_powermode', 'block_power_mode', 'high_power', 'high_power_step', 'power_last_look', 'power_proof', 'powermode_step', 'read_power']
+hand/maint_overlap.json nkeys=41 HITS=[]
+auto/desk_summary.json nkeys=34 HITS=[]
