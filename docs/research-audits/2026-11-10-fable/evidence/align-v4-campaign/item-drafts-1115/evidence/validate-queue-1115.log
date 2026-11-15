@@ -1,0 +1,12 @@
+== QUEUE-cl-dev-03-2d347f721.json from b7a0d9882 sha256 403e53f91df6f34589a538b506cf57739e5f9d16770adc1e30c5a2a5ea527da2; validate-queue at 2d347f721552fe03bdd19f113e7bad7a7c24908e --kits-root /Volumes/JW-EXT/jw-wt/kit-v1-1 (9cbb365a6957c3737617d8604ba6d06071ab018c); 2026-11-15 15:05:16 PST
+{"ok": true, "plan_ids": ["cq-dev-03-s01-a1"], "queue_id": "cq-cl-dev-03", "spans": 1}
+rc 0
+== QUEUE-cl-dev-03-2d347f721-append-both.json from b7a0d9882 sha256 366662cecb9794b9d13dbc67dd5721acd2bdf00b5055cc8df70861c07b593fbb; validate-queue at 2d347f721552fe03bdd19f113e7bad7a7c24908e --kits-root /Volumes/JW-EXT/jw-wt/kit-v1-1 (9cbb365a6957c3737617d8604ba6d06071ab018c); 2026-11-15 15:05:17 PST
+{"ok": true, "plan_ids": ["cq-dev-03-s01-a1", "cq-dev-03-s02-a1", "cq-dev-03-s02b-a1", "cq-dev-03-s03b-a1"], "queue_id": "cq-cl-dev-03", "spans": 4}
+rc 0
+== QUEUE-cl-dev-04-2d347f721.json from b7a0d9882 sha256 691319634b268f2d2b9c7c6308fea737d3b0f777bb859a6a14fa1322f1870d72; validate-queue at 2d347f721552fe03bdd19f113e7bad7a7c24908e --kits-root /Volumes/JW-EXT/jw-wt/dev04-05 (fecaf73f3579756c6e735f6a9cc74aab011d293a); 2026-11-15 15:05:17 PST
+{"ok": true, "plan_ids": ["cq-dev-04-s01-a1", "cq-dev-04-s02-a1"], "queue_id": "cq-cl-dev-04", "spans": 2}
+rc 0
+== QUEUE-cl-dev-05-2d347f721.json from b7a0d9882 sha256 391f438281af05fece9866ec532e7fdb4b0f478b297e403bd99da6153e2fafbb; validate-queue at 2d347f721552fe03bdd19f113e7bad7a7c24908e --kits-root /Volumes/JW-EXT/jw-wt/dev04-05 (fecaf73f3579756c6e735f6a9cc74aab011d293a); 2026-11-15 15:05:17 PST
+{"ok": true, "plan_ids": ["cq-dev-05-s01-a1", "cq-dev-05-s02-a1"], "queue_id": "cq-cl-dev-05", "spans": 2}
+rc 0

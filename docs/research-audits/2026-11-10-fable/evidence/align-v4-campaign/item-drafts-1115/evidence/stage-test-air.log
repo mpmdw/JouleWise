@@ -1,0 +1,61 @@
+Sun Nov 15 15:07:10 PST 2026
+### real dev-02-s03
+stage dev-02-s03 at 2026-11-15 15:07:10 PST: pin b4b6aeb192da60d895a7529311b06599efff5be4, worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev-02-s03, kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-02-589748f15-s03.json, queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-02-b4b6aeb19-6plus6-append.json
+/Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-02-589748f15-s03.json written, sha d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8
+/Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-02-b4b6aeb19-6plus6-append.json written, sha ad0212ae0f57deea871ccb13ce8f8591ff3247ea406dc8e56dddc59f4f91ca2e
+span dev-02-s03 staged 2026-11-15 15:07:13 PST (epoch 1794784033) by stage_mbp_span.sh on Edrs-MacBook-Air
+worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev-02-s03 HEAD b4b6aeb192da60d895a7529311b06599efff5be4 detached clean
+kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-02-589748f15-s03.json sha256 d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8 from 589748f15af6415dc536520469cd19c7800d9adf:docs/process/cadence/kits/cl-dev-02.json
+queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-02-b4b6aeb19-6plus6-append.json sha256 ad0212ae0f57deea871ccb13ce8f8591ff3247ea406dc8e56dddc59f4f91ca2e from b7a0d98822865a01e67fc3cc1833c9b186be2181:docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/QUEUE-cl-dev-02-b4b6aeb19-6plus6-append.json
+STAGED dev-02-s03 (dry-run 0)
+rc 0
+### real dev-04-s01
+stage dev-04-s01 at 2026-11-15 15:07:13 PST: pin 2d347f721552fe03bdd19f113e7bad7a7c24908e, worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev-04-s01, kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-04.v1.1-fecaf73f3-s01.json, queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-04-2d347f721.json
+/Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-04.v1.1-fecaf73f3-s01.json written, sha 1cc6673d78922a67b381155e24d53744e8515a6ca821e9a4a0ed62943d752228
+/Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-04-2d347f721.json written, sha 691319634b268f2d2b9c7c6308fea737d3b0f777bb859a6a14fa1322f1870d72
+span dev-04-s01 staged 2026-11-15 15:07:16 PST (epoch 1794784036) by stage_mbp_span.sh on Edrs-MacBook-Air
+worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev-04-s01 HEAD 2d347f721552fe03bdd19f113e7bad7a7c24908e detached clean
+kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-04.v1.1-fecaf73f3-s01.json sha256 1cc6673d78922a67b381155e24d53744e8515a6ca821e9a4a0ed62943d752228 from fecaf73f3579756c6e735f6a9cc74aab011d293a:docs/process/cadence/kits/cl-dev-04.v1.1.json
+queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-04-2d347f721.json sha256 691319634b268f2d2b9c7c6308fea737d3b0f777bb859a6a14fa1322f1870d72 from b7a0d98822865a01e67fc3cc1833c9b186be2181:docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/QUEUE-cl-dev-04-2d347f721.json
+STAGED dev-04-s01 (dry-run 0)
+rc 0
+### N1 fence live
+stage dev-03-s01 at 2026-11-15 15:07:16 PST: pin 2d347f721552fe03bdd19f113e7bad7a7c24908e, worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01, kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-03.v1.1-9cbb365a6-s01.json, queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-03-2d347f721.json
+STAGE STOP: a fence is live (/Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/custody/desk_fence.json): a span or F0 is armed; stage in a close interval
+rc 1
+### N2 tampered kit
+stage dev-03-s01 at 2026-11-15 15:07:16 PST: pin 2d347f721552fe03bdd19f113e7bad7a7c24908e, worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01, kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-03.v1.1-9cbb365a6-s01.json, queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-03-2d347f721.json
+34426 /opt/homebrew/Cellar/python@3.13/3.13.18/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -B scripts/cadence_legs_runner.py plan --kit /Volumes/JW-EXT/scratch/ctl-r4/tmp/tmpzndk0k50/clean/campaign-out/kits/cq-dev-05-s02-a1-2747381bf116.json --legs L007,L008,L009,L010,L011,L012 --t0 1794944110.0527678 --batch-window 13:14-13:15
+STAGE STOP: a runner or monitor process is live; stage in a close interval
+rc 1
+### N3 worktree at wrong pin
+stage dev-03-s01 at 2026-11-15 15:07:17 PST: pin 2d347f721552fe03bdd19f113e7bad7a7c24908e, worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01, kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-03.v1.1-9cbb365a6-s01.json, queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-03-2d347f721.json
+STAGE STOP: /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01 exists and is not at 2d347f721552fe03bdd19f113e7bad7a7c24908e; the lead removes it (git -C /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/JouleWise worktree remove /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01)
+rc 1
+### N4 dirty worktree
+stage dev-03-s01 at 2026-11-15 15:07:17 PST: pin 2d347f721552fe03bdd19f113e7bad7a7c24908e, worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01, kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-03.v1.1-9cbb365a6-s01.json, queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-03-2d347f721.json
+STAGE STOP: /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01 is dirty
+rc 1
+### N5 live runner (pattern pointed at a live sleep)
+stage dev-03-s01 at 2026-11-15 15:07:18 PST: pin 2d347f721552fe03bdd19f113e7bad7a7c24908e, worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01, kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-03.v1.1-9cbb365a6-s01.json, queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-03-2d347f721.json
+34504 stage_fake_runner_probe 30
+STAGE STOP: a runner or monitor process is live; stage in a close interval
+rc 1
+### N6 bad span
+STAGE STOP: usage: /Volumes/JW-EXT/scratch/items-1115/stage_mbp_span.sh [--dry-run] dev-02-s03|dev-03-s01|dev-03-s02|dev-04-s01|dev-04-s02|dev-05-s01|dev-05-s02
+rc 1
+### final reuse OK
+STAGED dev-03-s01 (dry-run 0)
+
+### (N2 above stopped on a live 'cadence_legs_runner.py plan' of another Air lane: the runner guard works; N2 re-run with JW_PGREP_PATTERN pointed at nothing) Sun Nov 15 15:07:29 PST 2026
+### N2b tampered kit
+stage dev-03-s01 at 2026-11-15 15:07:29 PST: pin 2d347f721552fe03bdd19f113e7bad7a7c24908e, worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01, kit /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-03.v1.1-9cbb365a6-s01.json, queue /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/queues/QUEUE-cl-dev-03-2d347f721.json
+worktree /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/jw-wt/cadence-dev03-s01 exists at 2d347f721552fe03bdd19f113e7bad7a7c24908e, detached and clean: reused
+STAGE STOP: /Volumes/JW-EXT/scratch/items-1115/tmp/stagetest/campaign-out/kits/cl-dev-03.v1.1-9cbb365a6-s01.json exists with another sha; the lead inspects it
+rc 1
+### final
+STAGED dev-03-s01 (dry-run 0)
+STAGED dev-03-s02 (dry-run 1)
+STAGED dev-04-s02 (dry-run 1)
+STAGED dev-05-s01 (dry-run 1)
+STAGED dev-05-s02 (dry-run 1)
