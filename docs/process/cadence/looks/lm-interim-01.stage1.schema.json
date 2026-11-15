@@ -939,7 +939,10 @@
       ]
      },
      "cell_prompt_tokens": {
-      "type": "integer"
+      "type": [
+       "integer",
+       "null"
+      ]
      },
      "g0_role": {
       "enum": [

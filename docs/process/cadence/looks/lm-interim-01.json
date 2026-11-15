@@ -82,7 +82,7 @@
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "6d60474b5746fed1cd29072b57c9e6e106a3bea0728961397c5bd2223868d551"
+        "sha256": "12fbcc5fe8782e29f43daf3975ca59921349d482683f10d715e0a08bae65061a"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -477,7 +477,7 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "315c1a00631a99b0fe90f98152969ed0640cea1b15b4fbdcc052808056874385"
+        "sha256": "79521d55b6e3373b00a43f9b7cfe27c4ecbc8e73c62e607a94e19a5ed6f63017"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -493,7 +493,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "e1ba9abf42791f9c482d8b8e02b342f4a9e9f72b511fd82183e6572894699e8f"
+        "sha256": "1c6e8382047432ad90531b2efdb64ed77f2812cb105fabd732895ac56fed1e06"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -916,7 +916,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "80f61d2ca6adeca9221419416c198b6572df79976b3ef0d596c6030dcf465f6c"
+      "sha256": "25c07f15565bb5611968c385a2bdd00db44bea319b7eaab39e1bf3f169b11236"
     },
     "prints": [
       {
@@ -1136,6 +1136,17 @@
         ],
         "cite": [
           "RL-166b §3"
+        ]
+      },
+      {
+        "id": "trace_coverage",
+        "what": "Per channel: the minimum over energy-fit legs of the per-segment covered fraction, and the count of legs under 0.99 (Mythos cold seat 9). Printed; decides nothing. A new print, pending the research lead's ruling; RL-166 Q16's output rule holds (no joule or watt).",
+        "channels": [
+          "gpu_rail",
+          "dc_in"
+        ],
+        "cite": [
+          "RL-166 Q16"
         ]
       }
     ],

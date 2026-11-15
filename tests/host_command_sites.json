@@ -2067,6 +2067,6 @@
     "file": "joulewise/cadence_looks/step3_energy_ratios.py",
     "locator": "<module>:fc9ea9bc8b139d43",
     "command": "python-isolated",
-    "seam": "docstring usage line of the step 3 script, committed byte-identical (RL-166 Q6: any edit needs a ruling); the look runs it only through step3_roster.py's in-process loader, never as a host command"
+    "seam": "docstring usage line only (step 3's pinned bytes, RL-166 Q6: not edited); the module starts no process"
   }
 ]

@@ -271,7 +271,8 @@
     "onset_offset_residuals",
     "prefix_bias",
     "qualified",
-    "residuals"
+    "residuals",
+    "trace_coverage"
    ],
    "properties": {
     "columns": {
@@ -721,6 +722,23 @@
       "no",
       "not_run"
      ]
+    },
+    "trace_coverage": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "min",
+      "n_legs_under_0_99"
+     ],
+     "properties": {
+      "min": {
+       "type": "number"
+      },
+      "n_legs_under_0_99": {
+       "type": "integer"
+      }
+     },
+     "description": "Mythos cold seat 9: the minimum over energy-fit legs of the channel's per-segment covered fraction, and the count of legs under 0.99. Printed; decides nothing. A new print, pending the research lead's ruling"
     },
     "fold_coefficients": {
      "type": "object",
