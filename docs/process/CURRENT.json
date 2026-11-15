@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "(launch gate, all true: item 318 on origin/main; the pilot's desk fence gone; PARTC-W1LINE-JOURNAL-COPY-DONE on origin/main; pilot close + 20 min) the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as the next RUN_STATE item: receipt rc, parts, soak rc and sha256, part-C rc; from smoke_part_c.json ONLY the evaluation, N_chunk and T_dead; the restore lines",
+  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as the next RUN_STATE item: the receipt asserts, the per-leg admitted lines, the desk bundle, the restore lines, measurement_mode verify again, and the RL-150 R1 start-reference print (gates nothing)",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "319",
+  "source_item": "321",
   "source_item_heading_date": "2026-11-14",
   "wait": {
-    "deadline_epoch_s": 1794738600,
+    "deadline_epoch_s": 1794739800,
     "observable": "none",
-    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen by 22:00 PST: NOTHING launches. Do not retry, do not extend, do not reuse OUT, and do not run any other smoke on your own; mail the lead. A completed run whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json) is NOT a refusal: it goes to the research lead with the lead's desk table. Nothing is re-run under this item"
+    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen between Part C's close + 20 min and 20:48:00 PST Sat 14 Nov: NOTHING launches; mail the lead (RL-155a §1.2: skip to the second Part C, by 23:15). A span that ran but ends with any named stop or a receipt rc≠0: nothing relaunches, nothing is re-run, nothing else is queued; mail the lead. Do not retry, do not extend, do not reuse OUT"
   }
 }
