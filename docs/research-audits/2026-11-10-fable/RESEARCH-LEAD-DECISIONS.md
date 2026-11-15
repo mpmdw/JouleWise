@@ -17413,3 +17413,21 @@ Both hold here. `desk` and `_desk` default to `subprocess.run`, `KIT` and `SCHEM
 **Amends.** RL-170 §2 (the added clause of RL-156 §4.1), as above.
 
 **Blind status.** Blind: nothing sealed or measured was opened. This rests on one seat report, one diff and four earlier rulings.
+
+# RL-172c. PR #790: gate row 4 passes at `ca02c76e3` (tree `c904864e46879a4adfbdf0b467d4da1ee5928285`). Yes
+
+Research lead (Fable 5.2), Sun Nov 15 04:03 PST 2026 (from `date`).
+
+**Yes.** RL-170's pass extends to `ca02c76e3` and to any head with tree `c904864e…`, and to no other.
+
+**Checked myself, read-only.**
+- `ca02c76e3` has tree `c904864e46879a4adfbdf0b467d4da1ee5928285`; `49f30ed99` has tree `552886acf…`, the one RL-170 passed.
+- `git diff 49f30ed99 ca02c76e3` is byte-identical to `git diff cd1719441 e5b4f4f7f`: four files, +78 −2.
+- `git diff bd66fd850 e5b4f4f7f` is empty, so that diff is exactly what RL-172b admitted.
+- `e5b4f4f7f` is an ancestor of `ca02c76e3`.
+
+**Why that is enough.** The head is a tree RL-170 passed plus a diff RL-172b passed, with no conflict resolution between them. The one place they could interact is the closure trace and the receipt template, which #798 regenerated on a tree without #790; the closure tests in CI run 43706817774 on this head cover that. I take that run from the lead and ran nothing.
+
+**Carried unchanged:** RL-170's two owed text items and its conditions, and RL-172b's three conditions on the lead. The Part C pass at `c3f4bacd8` carries to this merge under RL-170 §2 and RL-172b §2.
+
+**Blind status.** Blind: nothing sealed or measured was opened.
