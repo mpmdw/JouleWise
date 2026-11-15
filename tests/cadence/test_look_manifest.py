@@ -537,10 +537,11 @@ class RepoCheck(Base):
                  ADAPTER: "from joulewise.cadence_looks import step3_energy_ratios\n", RUNNER: "X = 1\n",
                  "scripts/cadence_legs_runner.py": runner_src,
                  "docs/process/cadence/looks/lm-interim-01.output.schema.json": "{}\n",
-                 "docs/process/cadence/looks/lm-interim-01.stage1.schema.json": "{}\n"}
+                 "docs/process/cadence/looks/lm-interim-01.stage1.schema.json": "{}\n",
+                 "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json": "{}\n"}
         doc0 = draft()
         for ref in doc0["fit"]["dependencies"] + doc0["fit"]["code"] + \
-                [{"path": p} for p in lm.EVIDENCE]:
+                [{"path": p} for p in list(lm.EVIDENCE) + [lm.Q11_EVIDENCE["path"]]]:
             files.setdefault(ref["path"], (REPO / ref["path"]).read_text(encoding="utf-8"))
         for rel, src in files.items():
             (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -626,7 +627,8 @@ class OpensNoEnergy(Base):
         for path in opened:
             self.assertNotIn(str(tmp / "custody"), path)
             in_repo_code = path.startswith(str(REPO)) and (path.endswith((".py", ".json")) or
-                                                           path in {str(REPO / e) for e in lm.EVIDENCE})
+                                                           path in {str(REPO / e) for e in
+                                                                    list(lm.EVIDENCE) + [lm.Q11_EVIDENCE["path"]]})
             self.assertTrue(in_repo_code or path == str(led_path), path)
             self.assertFalse(re.search(r"(power_trace\.csv|rich_telemetry\.jsonl|stream-\d+\.jsonl|\.plist$)", path),
                              path)
@@ -714,8 +716,17 @@ class Assemble(Base):
         self.write_stage1(allow_draft=False, ledger_gate=gate)
         self.fit["allow_draft"] = self.step3["allow_draft"] = False
         self.fit["ledger_gate"] = self.step3["ledger_gate"] = gate
+        self.fit["custody"], self.step3["custody"] = self.custody(), self.custody()   # a real run reads custody
         self.dump()
         return hashlib.sha256(self.s1.read_bytes()).hexdigest()
+
+    TRACE = "dev-03-s01/legs/L001/runtime/runs/cadence-leg/power_trace.csv"
+
+    def custody(self, root="/custody", trace_sha="c" * 64):
+        """A custody record as the stage-2 CLI and step 3 write it (Mythos r5 N6): root, span overrides, files."""
+        return {"root": root, "span_dirs": [{"span_id": "dev-03-s01", "path": "/elsewhere/dev-03-s01"}],
+                "files": [{"path": "dev-03-s01/hazards/meter/stream-0001.jsonl", "sha256": "d" * 64},
+                          {"path": self.TRACE, "sha256": trace_sha}]}
 
     def dump(self):
         (self.d / "fit.json").write_text(json.dumps(self.fit))
@@ -832,6 +843,34 @@ class Assemble(Base):
         self.mr.commit(self.mini, stage1_sha256=h, roster_sha256="9" * 64)   # another roster
         (self.d / "out.json").unlink()
         self.refused_run("is not the roster the stage-1 file records")
+
+    def test_the_fit_and_step3_read_one_custody(self):
+        """Mythos round-5 N6: assemble refuses unless the fit and step 3 read one custody root (with the same span
+        directories) and the same GPU traces; a committed look's fit always records its custody."""
+        self.fit["custody"], self.step3["custody"] = self.custody(), self.custody()
+        self.dump()
+        r = self.run_("--allow-draft")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)                     # the control
+        (self.d / "out.json").unlink()
+        for name, fit_c, fragment in (
+                ("root", self.custody(root="/another"), "read different custody roots or span directories"),
+                ("span dirs", dict(self.custody(), span_dirs=[]), "read different custody roots or span directories"),
+                ("trace", self.custody(trace_sha="e" * 64), f"the fit's {self.TRACE} is not the file step 3 read"),
+                ("missing trace", dict(self.custody(), files=self.custody()["files"][:1] +
+                                       [{"path": self.TRACE.replace("L001", "L002"), "sha256": "c" * 64}]),
+                 "is not the file step 3 read")):
+            self.fit["custody"] = fit_c
+            self.dump()
+            self.refused_run(fragment, "--allow-draft")
+        self.fit["custody"] = self.custody()
+        self.step3["custody"] = None
+        self.dump()
+        self.refused_run("step 3", "--allow-draft")
+        self.mr.commit(self.mini)
+        self.undraft()
+        self.fit["custody"] = None                                   # a committed look's fit read no custody
+        self.dump()
+        self.refused_run("the fit records no custody: a committed look reads custody")
 
     def with_cell(self):
         """A step 3 cell in the producer's shape (step3_roster._project of step3_energy_ratios.analyse)."""
@@ -1160,25 +1199,46 @@ class ColdSeatFixes(Base):
             self.assertIn("soak_retries", schema["required"])
 
     def test_the_gpu_hole_switch_can_be_set(self):
-        """Mythos round-4 N5: fit.gpu_trace_hole_refusal (read by the stage-2 CLI) is a known, checked key."""
+        """Mythos round-4 N5, RL-173 E.1 item 3: fit.gpu_trace_hole_refusal (read by the stage-2 CLI) is a known,
+        checked key, and an interim look keeps it on at 2 s as stage 2's backstop."""
         doc = draft()
-        doc["fit"]["gpu_trace_hole_refusal"] = {"enabled": False, "max_gap_s": 2.0}
-        lm.validate_manifest(doc)
         doc["fit"]["gpu_trace_hole_refusal"] = {"enabled": True, "max_gap_s": 2.0, "cite": ["RL-999"]}
         lm.validate_manifest(doc)
-        for bad, fragment in (({"enabled": True, "max_gap_s": 2.0}, "gpu_trace_hole_refusal.cite"),
+        doc["fit"]["gpu_trace_hole_refusal"] = {"enabled": True, "max_gap_s": 2, "cite": ["RL-173"]}
+        lm.validate_manifest(doc)
+        for bad, fragment in (({"enabled": False, "max_gap_s": 2.0}, "enabled at max_gap_s 2 (RL-173 E.1 item 3)"),
+                              ({"enabled": True, "max_gap_s": 3.0, "cite": ["RL-999"]}, "enabled at max_gap_s 2"),
+                              (None, "fit.gpu_trace_hole_refusal: an object"),
+                              ({"enabled": True, "max_gap_s": 2.0}, "gpu_trace_hole_refusal.cite"),
                               ({"enabled": "yes", "max_gap_s": 2.0}, "enabled: true or false"),
                               ({"enabled": False, "max_gap_s": 0}, "max_gap_s: seconds"),
                               ({"enabled": False}, "missing key 'max_gap_s'"),
                               ({"enabled": False, "max_gap_s": 2.0, "x": 1}, "unknown key 'x'")):
             doc["fit"]["gpu_trace_hole_refusal"] = bad
             self.refused(lambda: lm.validate_manifest(doc), fragment)
-        try:
-            import jsonschema
-        except ImportError:
-            return
-        doc["fit"]["gpu_trace_hole_refusal"] = {"enabled": True, "max_gap_s": 2.0, "cite": ["RL-999"]}
-        jsonschema.validate(doc, json.loads(SCHEMA.read_text(encoding="utf-8")))
+        del doc["fit"]["gpu_trace_hole_refusal"]                      # absent: an interim look refuses
+        self.refused(lambda: lm.validate_manifest(doc), "enabled at max_gap_s 2")
+
+    def test_the_gpu_switch_shapes_agree_with_the_json_schema(self):
+        """Mythos round-5 N10: the look_manifest schema and the validator agree on the switch's shapes: null is
+        refused by both, enabled without a cite by both, the cited switch passes both."""
+        from tests.cadence import schema_lite as V
+        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+        sub = schema["properties"]["fit"]["properties"]["gpu_trace_hole_refusal"]
+        doc = draft()
+        for shape, ok in (({"enabled": True, "max_gap_s": 2.0, "cite": ["RL-173"]}, True),
+                          ({"enabled": True, "max_gap_s": 2.0}, False),
+                          (None, False),
+                          ({"enabled": True, "max_gap_s": 0, "cite": ["RL-173"]}, False),
+                          ({"enabled": "yes", "max_gap_s": 2.0, "cite": ["RL-173"]}, False)):
+            doc["fit"]["gpu_trace_hole_refusal"] = shape
+            schema_ok = not V.errors(shape, sub, schema)
+            try:
+                lm.validate_manifest(doc)
+                validator_ok = True
+            except lm.ManifestError:
+                validator_ok = False
+            self.assertEqual((schema_ok, validator_ok), (ok, ok), shape)
 
     def test_hp01_table_is_out(self):
         """Sol 5 / Mythos 5: RL-167 §3."""
@@ -1234,7 +1294,7 @@ class ColdSeatFixes(Base):
         self.refused(req, "is not on")
         mr.git(mini, "update-ref", "refs/remotes/origin/main", "HEAD")
         req()
-        self.refused(lambda: req("4" * 64), "names stage-1 sha256")
+        self.refused(lambda: req("4" * 64), f"names stage-1 sha256 {'2' * 64}, not {'4' * 64}")   # full hashes
         self.refused(lambda: req(doc={"code_sha256": {"input:roster_sha256": "5" * 64,
                                                       "input:rules_3_4_sha256": "1" * 64}}), "is not the roster")
         self.refused(lambda: req(doc={"code_sha256": {"input:roster_sha256": "3" * 64,
@@ -1312,15 +1372,17 @@ class ColdSeatFixes(Base):
         lm.require_stage1_committed(mini, "lm-interim-01", "2" * 64, stage1_doc=doc())
         self.refused(lambda: lm.require_inputs_committed(mini, "lm-interim-01", msha, roster_sha256="3" * 64,
                                                          verdicts_sha256="1" * 64),
-                     "already commits a stage 1 for lm-interim-01 (222222222222): stage 1 is never run again")
+                     f"already commits a stage 1 for lm-interim-01 ({'2' * 64}) that no ruling supersedes: stage 1 is "
+                     "never run again without one")
         mr.commit(mini, stage1_sha256="7" * 64, roster_sha256="3" * 64, verdicts_sha256="6" * 64)   # G11's redo
         self.refused(lambda: lm.require_stage1_committed(mini, "lm-interim-01", "7" * 64, stage1_doc=doc(v="6" * 64)),
-                     "names 2 different stage-1 commitments")
+                     f"neither holds nor lists as superseded by a ruling: stage1 {'2' * 64}, roster {'3' * 64}, "
+                     f"verdicts {'1' * 64}")
         mini2 = mr.mini_repo(self)                    # a changed verdict hash under the same stage-1 hash
         mr.commit(mini2, stage1_sha256="2" * 64, roster_sha256="3" * 64, verdicts_sha256="1" * 64)
         mr.commit(mini2, stage1_sha256="2" * 64, roster_sha256="3" * 64, verdicts_sha256="6" * 64)
         self.refused(lambda: lm.require_stage1_committed(mini2, "lm-interim-01", "2" * 64, stage1_doc=doc(v="6" * 64)),
-                     "names 2 different stage-1 commitments")
+                     f"stage1 {'2' * 64}, roster {'3' * 64}, verdicts {'1' * 64}")
 
     def test_the_gate_ignores_the_caller_s_git_environment(self):
         """Mythos round-3 N5: GIT_DIR (and GIT_WORK_TREE ...) pointing at another repository changes nothing."""
@@ -1366,8 +1428,10 @@ class ColdSeatFixes(Base):
         mr.commit(mini, roster_sha256="3" * 64, verdicts_sha256="4" * 64)
         msha = lm.sha256_file(mini / mr.MANIFEST)
         req(m=msha)
-        self.refused(lambda: req(v="9" * 64, m=msha), "the rules-3-4 verdict file given (999999999999) is not")
-        self.refused(lambda: req(r="9" * 64, m=msha), "the roster given (999999999999) is not")
+        self.refused(lambda: req(v="9" * 64, m=msha),          # Mythos r5 N3: full hashes, so a typo shows
+                     f"the rules-3-4 verdict file given ({'9' * 64}) is not the one LOOKS.json lm-interim-01 names "
+                     f"({'4' * 64})")
+        self.refused(lambda: req(r="9" * 64, m=msha), f"the roster given ({'9' * 64}) is not")
         self.refused(lambda: req(m="8" * 64), "does not name this manifest's sha256")
 
     def test_ci_runs_the_tests_on_a_change_to_the_look_s_frozen_files(self):

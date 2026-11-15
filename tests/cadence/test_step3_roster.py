@@ -183,7 +183,7 @@ class Tripwire(Base):
         out = sr.run_roster([entry("a", 10000)], loader=self.loader)
         schema = json.loads(OUTPUT_SCHEMA.read_text())["$defs"]["step3_output"]
         self.assertEqual(set(out) | {"schema", "stage1_sha256", "step3_sha256", "manifest_sha256", "code_sha256",
-                                     "allow_draft", "synthetic", "ledger_gate"}, set(schema["required"]))
+                                     "allow_draft", "synthetic", "ledger_gate", "custody"}, set(schema["required"]))
         self.assertEqual(set(out["tripwire"]), set(schema["properties"]["tripwire"]["required"]))
 
 
@@ -250,6 +250,12 @@ class Stage1Custody(unittest.TestCase):
         self.sha = hashlib.sha256(self.stage1.read_bytes()).hexdigest()
         return self.sha
 
+    @staticmethod
+    def gate(mini):
+        from tests.cadence import look_minirepo as mr
+        head = mr.git(mini, "rev-parse", "HEAD").stdout.strip()
+        return {"commit": head, "ref": "refs/remotes/origin/main", "ref_commit": head}
+
     def test_entries_from_stage1(self):
         from joulewise.cadence_looks.inclusion_34 import span_dirs
         entries = sr.entries_from_stage1(json.loads(self.stage1.read_text()), span_dirs(self.root))
@@ -291,7 +297,7 @@ class Stage1Custody(unittest.TestCase):
         from tests.cadence import look_minirepo as mr
         mini = mr.mini_repo(self)
         mr.commit(mini)
-        self.write_stage1(mini, allow_draft=False)
+        self.write_stage1(mini, allow_draft=False, ledger_gate=self.gate(mini))      # as a committed stage 1 writes it
         out = self.root / "step3.json"
         base = ["--manifest", mini / mr.MANIFEST, "--stage1", self.stage1, "--stage1-sha256", self.sha,
                 "--custody", self.root, "--out", out]
