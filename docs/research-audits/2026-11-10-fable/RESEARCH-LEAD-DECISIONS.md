@@ -15794,3 +15794,177 @@ No look manifest is on any ref, and freeze 2 cannot happen without the interim l
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This ruling rests on rulings, two seat reports, two builder pages, commit ancestry, trial merges and diffs. The day count, the block order, the fallback shapes and the qualification cells are fixed before any development energy is read.
 
 **For Ed, plainly.** "Two reviewers found the laptop would sit idle about 17 hours on Monday and most of Thursday and Friday. Monday is fixed by starting the next block as soon as its kit passes review, not on a fixed Tuesday. Refusals overnight no longer leave the machine waiting for me or the lead: it starts a pre-checked two-hour v4 test by itself. Thursday and Friday depend on two things that do not exist yet, the qualification kits and the file that freezes the fit code; both now have an owner and a Monday evening target. I refused one shortcut: qualification runs do not start before the fit is frozen."
+
+# RL-166. The look manifest for the interim look (draft PR #793 at `e47274d55`): Q1 to Q20 ruled in one batch. The heat term is a start-reading ramp plus a step at the predicted onset, fitted on 256-token blocks with no cell effect; the onset model is fitted before any energy is opened; the look runs in two stages; rule 4 is judged on the leg's own interval; type-T legs are not read at this look; the ledger pointer is a look ledger, not a BLOCK-QUEUE field
+
+Research lead (Fable 5.2), Sat Nov 14 20:39 PST 2026 (from `date`). RL-149 to RL-165 stand except where "Amends" says otherwise.
+
+**Read.**
+- `docs/process/cadence_look_manifest.md`, `lm-interim-01.json` and its 20 open questions in full, at `e47274d55`. The output schema I read only through the manifest's `outputs` block and the spec's description.
+- My RL-149 §1.3, §1.4, §2.2 to §2.7 and §4; RL-150 R1, R4, R8, R9 and §3; RL-151 §1.3 and §2; RL-155 §5.3; RL-165.
+- `step3_energy_ratios.py` in scratch (sha256 `84a1a553…eb173`, checked): its header, `LEGS`, `analyse_leg`'s signature and all of `analyse`. It is code.
+- `docs/align/pilot_protocol_v4.md:451` (U1).
+
+**Checked myself.**
+- `joulewise/cadence/blocks.py` is on no kit's frozen-path list (four kits read). The spec's sentence "every file under `joulewise/cadence/` is a frozen path" is wrong for that one file.
+- `analyse` takes its legs only from the module constants `LEGS` and `ORIGINAL_EIGHT`. Statistic (iii) is max |γ| over the all-legs, no-High-Power and leave-one-leg-out fits, times the median TV0h rise.
+- K's scorer is on the GPU rail (`pilot_protocol_v4.md:1106`).
+
+**Not checked.**
+- The step 4 drift note (not on this branch). Q11 rests on the builder's reading of it and carries a condition.
+- The validator, its tests, the output schema's bytes. That is the cold seat's work.
+- Whether `analyse_leg` runs unchanged on a campaign leg's bundle layout, on 2k and 19.5k prompts, and on a span-reference leg.
+- The KM003C stream's sample semantics and what its trailer counts usually are.
+- No SSH. No energy, power, meter, journal or custody file was opened. `OUTPUT.json` in the step 3 scratch was not opened. I ran no test.
+
+**Not done.** No commit, push or comment. The only file written is this one.
+
+---
+
+## 1. The rulings
+
+### Q1. Who writes the fit code, and the family. REPLACED in part
+
+**Who.**
+- **The Opus builder the lead dispatches is the analyst seat.** It writes the production code and is the one seat that runs the look.
+- **The Sol twin** writes the same arithmetic from this ruling and the synthetic bundle layout, without sight of the Opus code (the RL-153 §2.3 item 5 pattern). Its code never touches custody.
+- **The Mythos seat is the cold seat** of RL-150 R4. It writes none of it.
+- **The manifest builder** (the #793 author) writes the rule 3/4 code and the step 3 adapter. Neither reads energy for a verdict.
+
+**Paths, all pinned in `fit.code`:** `joulewise/cadence_looks/fit_interim.py`, `inclusion_34.py`, `step3_energy_ratios.py`, `step3_roster.py`, and the two-stage CLI `scripts/cadence_look_run.py`. Python stdlib plus numpy, no scipy, run with `-I`. The numpy version prints in the output.
+
+**The family. The builder's form is refused on three points.**
+- Every development leg decodes 4,096 tokens, so count-derived load seconds take three values, one per prompt size. `b0 × load s` and the cell effects are then the same columns.
+- A cell effect does not transfer: a series turn is in no cell.
+- `b0` is a count-only term. In the series it would compete with the count prediction.
+
+**Fixed instead.** The unit is the segment, not the turn. RL-149 §2.2 already says a leg's prefix is a shorter leg.
+- **Segments of a leg:** the prefill (turn start stamp to the first token), and each full 256-token decode block in step 3's convention.
+- **Count-derived clock.** The prefill ends at T_p = P / r_p; decode token m falls at T_p + m / r_d (rates per Q5). A segment covers [u, v], with d = v − u and midpoint m.
+- **Start readings z:** start Tf08, start fan rpm, and start TV0h less the span's soak reference. Each is taken under RL-149 §1.3's start rule (last journal reading at or before the turn start, at most 2 s old, fresh stamp) and centred on the median over included development legs. The medians are stage-1 constants.
+- **Heat term of a segment:** d · m · (κ1 z1 + κ2 z2 + κ3 z3) + δ · w, where w is the part of [u, v] at or after the leg's predicted onset τ̂ (Q4). No sign is assumed for any of the four.
+- **For a turn** this sums to **Ĥ = ½ T² (κ · z) + δ · max(0, T − τ̂)**, with T the turn's count-derived load seconds. Ĥ is zero for a turn that starts at the reference readings and ends before its predicted onset.
+- **Why a step.** Step 3 found the change at the state cut (0.911 after against before) and little drift before it. A ramp alone cannot take that shape.
+- A leg whose start reading is out of state takes τ̂ = 0. A leg with a missing or stale start reading is not in the fit and is counted.
+- If the onset model is `not_estimable` (Q4), the δ column is dropped and the print says so. Nothing else is chosen at the look.
+
+### Q2. The response. REPLACED
+
+- **Response:** the segment's energy on the channel. GPU rail by step 3's convention, through the committed step 3 module's own loaders and `Trace`. DC-in by the trapezoid between consecutive KM003C samples, cut at the segment's ends.
+- **Count-only base, fitted jointly, never exported as Ĥ:** prefill p1·P + p2·P²; decode block a0·n + a1·n·c + a2·n·P, with c the context tokens at the block's midpoint. The a2 term carries the count-only "later is cheaper" drift that `b0` was meant for.
+- **Estimation:** ordinary least squares per channel, nine parameters (eight without δ). Parameter covariance clustered by leg. The uncertainty of τ̂ is not propagated; the output says so, and the holdout error in SD_j is what covers it.
+- **Freeze 2 takes the fit on all included development legs.** The with/without-marked-spans fit is a print and never replaces it.
+- **Prefix bias (P2), since the fit code needs it:** long = the whole leg, short = its prefix of 3,724, 3,151 or 2,981 decode tokens. Residuals are leave-one-day-out, each divided by the SD of its own length over legs. The bias is the mean paired difference; its 90 % interval is a t interval on day means.
+
+### Q3. Hot stretch and relative error. ACCEPTED, made exact
+
+- **Hot stretch of a leg:** its full decode blocks whose first token is stamped at or after the first off-state reading (§1.3's clauses, no guard). A leg with no such reading has none.
+- **Relative error for held-out day D:** |Σ predicted − Σ measured| / Σ measured over D's hot blocks, with the base, the heat term and the onset model all fitted without D. The rates and medians are not refitted per fold; they read no energy.
+- **`qualified`'s interim half:** the maximum over counted days, GPU rail, at or under 0.02. A day counts with at least three included legs that have a hot stretch. Fewer than three counted days prints `not_evaluable`, which is "no".
+- **Also printed:** each day's signed value; the pooled value; the RMS over held-out legs (this is the "frozen holdout relative error" of SD_j); and all of them again with the heat columns removed. That last line says whether the term does anything.
+- "Over the leg" is the same over all of a leg's segments.
+
+### Q4. Onset. REPLACED in part
+
+- **Fitted in stage 1, from journal and powermetrics state only. It reads no energy.**
+- **Response:** seconds from the turn's start stamp to the first off-state reading. Not from the first decode token, as the draft has it: a 19.5k prefill can reach the cut.
+- **Predictors:** the three centred start readings and T_p. Start TV0h excess joins, for R1's reason: on campaign legs it moves with Tf08, and in the series it does not. Fan is already allowed by §2.7.
+- **Censoring:** right-censored at the last token; censored-normal maximum likelihood, hand-coded. τ̂ = max(0, the linear predictor). Legs that start out of state or hit `state_unobserved` are left out and counted.
+- **Estimable** with at least 12 uncensored onsets on at least 3 days. Otherwise `not_estimable`, and the count-only cut stays at 116 s.
+- **Its error:** the RMS of predicted less observed over held-out uncensored legs, leave-one-day-out. The count-only cut is τ̂ less twice that. Held-out censored legs with τ̂ under their censoring time are counted and printed.
+
+### Q5. The rates. ACCEPTED
+Two numbers, fitted in stage 1 from token stamps on included development legs: r_p = Σ P / Σ prefill seconds, r_d = Σ decode tokens / Σ decode seconds. Frozen in freeze 2. Per-cell rates print beside them and are used nowhere.
+
+### Q6. Step 3 on development legs. ACCEPTED, with the adapter's method fixed
+
+- The script is committed byte-identical at `joulewise/cadence_looks/step3_energy_ratios.py`. Its sha256 stays `84a1a553…eb173`.
+- **The adapter re-implements nothing.** `step3_roster.py` loads that module, rebinds `LEGS` and `ORIGINAL_EIGHT` to the roster, and calls `analyse` and `custody_check`. It contains no arithmetic on energy. The cold seat checks exactly that.
+- **One call per prompt-size cell.** A block fixed effect means something only at one prompt size, and step 3's legs were all 10k.
+- **The tripwire reads the largest `drift_fraction_linear` over cells whose γ is estimable.** The 10k cell prints first, as the like-for-like value. Leave-one-day-out γ is not added; that would be a new definition.
+- **Kept from each call:** (ii), γ's estimability, (iii), (iv)'s median, minimum and maximum, and (vi). Per-leg lists and (v) are dropped.
+- **A leg on which `analyse_leg` raises** is named with the exception's type, left out of that cell and counted. More than two in a cell: the cell prints `not_run` and comes to me.
+- **Any edit to the step 3 bytes needs a ruling.** The stage-1 dry run finds layout problems before energy is opened.
+
+### Q7. Rules 3 and 4. REPLACED in part
+
+- **The leg's interval** for both rules: G0's start to the last stamped token.
+- **Rule 3:** sidecar coverage at least 99 % and no gap over 2 s; powermetrics gaps at most max(1 s, 5 periods). That is U1's registered number (`pilot_protocol_v4.md:451`).
+- **The code reuses the registered U1 evaluator's definitions of coverage and gap.** It does not write new ones. If importing would pull a v4 strict path into the look, copy with a cite and one equality test on a fixture. The builder names the function.
+- **Rule 4, "clean":** header and trailer both present with a normal stop reason; inside the leg's interval, coverage at least 99 % of the header's nominal rate and no gap over 2 s between sample stamps.
+- **The "trailer counts zero" clause is refused.** The stream is one per span. One bad poll anywhere would exclude twelve legs. A fault that matters shows as a gap in the leg's own interval. The span's trailer counts print in the inclusion table.
+- **Timestamps: yes, at the look, by the pinned code, in stage 1.** It takes the stamp of each sample line and drops the line. It keeps, logs and copies no value. A spy test shows that no value key is read.
+
+### Q8. Two stages. ACCEPTED
+
+- **Stage 1** opens inclusion and journal files only. It writes the six verdicts per leg, the roster, the day map, the rates, the medians and calibrated ranges, and the onset fit with its error.
+- **Its output is committed with its sha256 before stage 2 opens a file.** Stage 2 takes that file by hash as its only roster and refuses a mismatch.
+- **Stage 1 comes to me only if:** fewer than 45 development legs are included; fewer than 3 calendar days; a prompt-size cell has fewer than 10 included legs; more than 10 % of legs lack a valid start reading; or hp-01 has fewer than 9. Otherwise stage 2 runs on the lead's record.
+
+### Q9 to Q20
+
+| Q | Ruling |
+|---|---|
+| Q9 | **Accepted.** Freeze 2 does not wait for hp-01. Its table runs later by the same pinned code as its own disclosed read, with freeze 2's files as inputs |
+| Q10 | **Accepted, one change.** The qualification prints are declared here: bias at 1.10 and 1.30 with 90 % intervals against ±0.10; 1.374 as a grid point; type-L pairs against their prefixes; the type-M residual as `not_run`. `lm-qual-01` is committed before any qualification energy is opened, not before freeze 2. Its scorer is `fit_interim.py`'s predict path at the same hash |
+| Q11 | **Accepted with a condition: 0.08** on `drift_fraction_linear`. The cold seat confirms from the step 4 note that 8 % is a simulated cell with the rows at or under .035, and that its drift is this quantity. If either fails, the threshold is 0.04, RL-151 §1.3's own top cell. The exp form prints, as the code already gives it |
+| Q12 | **Accepted.** No extension rule is written. RL-151 §2.2 already refused the legs an extension would buy |
+| Q13 | **Accepted.** A reserve leg serving development enters in its cell, on its own calendar day, if it is desk-final when stage 1 runs. The look does not wait for one |
+| Q14 | **Replaced.** Type-T legs are not read at this look at all. Their energy is for §1.3's `after_hot_turn` test, which needs its own look and its own ruling |
+| Q15 | **Accepted.** Planted-truth synthetic bundles for the review and the twin comparison: a few legs, not a cohort. Then stage 1 run as a dry run on the real roster, which opens no energy |
+| Q16 | **Accepted, one addition.** No joule or watt per leg, turn or block. Per-leg signed relative residuals (leg and hot stretch, both channels) are allowed, keyed by leg id. A failed fit cannot be diagnosed without them, and inclusion is hashed before they exist. The coefficient file carries the base parameters |
+| Q17 | **Accepted.** GPU rail and DC-in only. K and S score the GPU rail. The CPU and package prints belong to ctl-01's look |
+| Q18 | **Replaced.** No `blocks.py` change and no new BLOCK-QUEUE field while the campaign runs: the MBP validates that file on a closed schema. A look ledger, `docs/process/cadence/looks/LOOKS.json`, holds look id, manifest path, sha256 and status. The span ledger carries the same hash |
+| Q19 | **Accepted.** Step 3's nine legs stay out |
+| Q20 | **Accepted.** Both marks, in one with/without print |
+
+**Three draft corrections for the builder.** The onset definition (Q4). The sentence about `joulewise/cadence/` (`blocks.py` is not frozen). `never_read` gains the type-T legs.
+
+---
+
+## 2. Order of work
+
+| # | What | Who | Due |
+|---|---|---|---|
+| 1 | Attack §1's Q1 to Q4 as a design: identification, transfer, the 2 % line. On paper, before code exists | Mythos seat | Sun 10:00 |
+| 2 | Any change to the form, as RL-166a | Me | Sun 13:00 |
+| 3 | Manifest, schemas, validator, stage-1 schema and `LOOKS.json` on these rulings. Only code hashes left pending | Manifest builder | Sun 12:00 |
+| 4 | `inclusion_34.py`; the step 3 commit and `step3_roster.py`; tests | Manifest builder | Sun 18:00 |
+| 5 | `fit_interim.py`, the CLI, the synthetic generator (extending step 3's `make_synth.py` to three cells, days, start readings, onsets and a meter stream) | Opus analyst seat | Sun 22:00 |
+| 6 | The twin, from this ruling and the generator's layout page | Sol twin | Sun 22:00 |
+| 7 | Twin agreement on the planted-truth set: coefficients to 1e-8 relative, the censored fit to 1e-6, every verdict equal | Lead | Mon 10:00 |
+| 8 | Cold review of items 3 to 5 against RL-149 §2.6 and §2.7 as amended, with Q6's and Q11's checks | A fresh Mythos seat | Mon 14:00 |
+| 9 | Fixes; `validate --final` passes with every hash filled | Builders | Mon 18:00 |
+| 10 | My cold pass | Me | Mon night |
+| 11 | Manifest and `LOOKS.json` committed. No development energy has been read | Lead | Tue 06:00 |
+| 12 | Stage 1 as a dry run on the custody copy of dev-01 to dev-04. Counts to the lead only | Analyst seat | Tue |
+| 13 | After dev-05 is DESK_FINAL and copied: stage 1, its hash commit, stage 2, output to me, freeze 2 | Analyst seat, lead, me | Within 6 h of the copy |
+
+**Tonight the lead dispatches** items 1, 3 and 4 (one builder), 5 and 6. **Tomorrow:** item 2 to me at 10:00; item 8's seat once item 5 has a head; item 7 on Monday morning.
+
+- The form may still change until item 11. After the commit it changes only by a ruling and a new manifest id.
+- Stage 2 must finish inside 20 minutes on the Air at 72 legs. The analyst seat times it on the synthetic set and reports.
+- If item 5 slips past Mon 12:00, tell me then. The look does not run on unreviewed code, and qualification does not start before freeze 2.
+
+---
+
+**Owner.**
+- **Lead:** the five dispatches; item 7; the commit; the stage-1 record and Q8's five tripwires; the custody copy.
+- **Analyst seat (Opus):** the fit code, the CLI, the generator; both stages.
+- **Sol twin:** the independent arithmetic.
+- **Manifest builder:** the manifest and its files; rules 3 and 4; the step 3 adapter.
+- **Mythos seats:** the design attack; the cold review.
+- **Research lead:** RL-166a if needed; the cold pass; the look's output; freeze 2's word.
+
+**Gate.** Stage 2 waits for the committed manifest, my cold pass and stage 1's committed hash. Freeze 2 waits for stage 2's output and my reading of it. Qualification waits for freeze 2.
+
+**Amends.**
+- RL-149 §2.7: the heat term's form is fixed as Q1 and Q2 give it.
+- RL-149 §4 item 1: the onset model's predictors gain fan, start TV0h excess and count-derived prefill seconds.
+- RL-149 §2.4 rule 4: "clean" is judged on the leg's own interval.
+- RL-150 R4: the pointer is the look ledger; freeze 1 gains the stage-1 schema.
+- RL-155 §5.3: type-T legs in dev-05, if any, are not read at the interim look.
+
+**Blind status.** Blind: no development energy exists in any reader's hands, and nothing sealed or measured was opened. The form rests on step 3's disclosed output as RL-150 §3.1 recorded it, on rulings, and on code. Every threshold here is fixed before stage 1 runs.
+
+**For Ed, plainly.** "The file that freezes the heat-model code now has all twenty of its open points decided. The model is simple: a run costs less energy per token once the laptop reports heat, so the correction is a step at the moment heat is predicted to begin, plus a small term for how warm the laptop was at the start. When heat begins is fitted first, from temperature and state logs only, before any energy is opened. Three pieces of code are still to be written. They are dispatched tonight, reviewed Monday, and committed before Tuesday morning, so the look can run as soon as the fifth development block is in."
