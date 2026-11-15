@@ -89,6 +89,20 @@ class _Custody:
                 f.write(synth.dump(cls.en))
         return cls
 
+    @classmethod
+    def read_r(cls):
+        """Level R as stage 1 reads it from the custody copy (custody digests and trace clauses filled in)."""
+        if getattr(cls, "_r", None) is None:
+            cls._r = R.read_look_input(rj(cls.paths["roster.json"]), R.span_dirs(cls.root, None),
+                                       rj(cls.paths["rules_3_4.json"]))
+        return copy.deepcopy(cls._r)
+
+    @classmethod
+    def s1_custody(cls):
+        """Stage 1's output on the custody-read level R (every energy-fit leg carries its trace clauses)."""
+        li = cls.read_r()
+        return F.stage1(li, hashlib.sha256(synth.dump(li)).hexdigest())
+
 
 def tearDownModule():
     if _Custody.tmp:
@@ -183,24 +197,55 @@ sys.pycache_prefix = tempfile.mkdtemp(prefix="jw-harness-pyc-")   # as the CLI d
 opts = json.loads(sys.argv[1]); argv = sys.argv[2:]
 sys.path.insert(0, opts["repo"])
 opened = []
+frames = []
 if opts.get("spy"):
     def _hook(event, args):
         if event == "open" and args and isinstance(args[0], (str, bytes, os.PathLike)):
-            opened.append(os.fsdecode(args[0]))
+            path = os.fsdecode(args[0])
+            opened.append(path)
+            f, who = sys._getframe(1), None          # the innermost repository frame that asked for the open
+            while f is not None:
+                fn = f.f_code.co_filename
+                if fn.startswith(opts["repo"] + os.sep):
+                    who = os.path.relpath(fn, opts["repo"])
+                    break
+                f = f.f_back
+            frames.append([path, who])
     sys.addaudithook(_hook)
 if opts.get("trap"):
     import plistlib
     _real = json.loads
     def _loads(s, *a, **k):
         text = s.decode() if isinstance(s, (bytes, bytearray)) else s
-        if re.search(r'"gpu_(energy|power)":\s*[-0-9]', text) or re.search(r'"p":\s*"[0-9a-f]', text):
-            raise AssertionError("an energy-bearing line was parsed")
+        if re.search(r'"gpu_(energy|power)":\s*[-0-9]', text) or re.search(r'"p":\s*"[0-9a-f]', text) \
+                or re.search(r'"k"\s*:\s*"[bhte]"', text):
+            raise AssertionError("an energy-bearing line was parsed")     # no meter line, header and trailer included
         return _real(s, *a, **k)
     json.loads = _loads
     def _no_plist(*a, **k):
         raise AssertionError("plist parsed")
     plistlib.loads = plistlib.load = _no_plist
 from scripts import cadence_look_run as R
+if opts.get("trap"):
+    # RL-173 E.1: the time reader converts only its whitelisted members, and no power_w of power_trace.csv
+    TF = R.TF
+    _member, _allowed = TF.member, set(TF.HEADER_KEYS) | set(TF.TRAILER_KEYS) | set(TF.POLL_KEYS)
+    def _only_whitelisted(members, key):
+        if key not in _allowed:
+            raise AssertionError("the time reader converted a member outside its whitelist")
+        return _member(members, key)
+    TF.member = _only_whitelisted
+    class _Poison(str):
+        def __float__(self):
+            raise AssertionError("a power_w was converted")
+    class _Rows(TF.csv.DictReader):
+        def __next__(self):
+            row = super().__next__()
+            if "power_w" in row:
+                row["power_w"] = _Poison(row["power_w"])
+            return row
+    TF.csv = type(sys)("csv_trap")
+    TF.csv.DictReader = _Rows
 calls = []
 if opts.get("mock_stage2"):
     def _stage2(*a, **k):
@@ -212,7 +257,7 @@ try:
 finally:
     if opts.get("report"):
         with open(opts["report"], "w") as f:
-            json.dump({"opened": opened, "stage2_calls": len(calls)}, f)
+            json.dump({"opened": opened, "frames": frames, "stage2_calls": len(calls)}, f)
 sys.exit(rc)
 ''')
 
@@ -228,7 +273,7 @@ def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None):
     opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report}
     r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv], cwd=repo,
                        capture_output=True, text=True, timeout=900)
-    got = rj(report) if os.path.exists(report) else {"opened": [], "stage2_calls": 0}
+    got = rj(report) if os.path.exists(report) else {"opened": [], "frames": [], "stage2_calls": 0}
     for spy in _SPIES:
         spy.extend(got["opened"])
     LAST_RUN.clear()
@@ -247,22 +292,58 @@ class Stage1Custody(unittest.TestCase):
                 "--rules-3-4", self.c.paths["rules_3_4.json"], "--out", out]
 
     def test_reader_rebuilds_level_r_exactly(self):
-        got = R.read_look_input(rj(self.c.paths["roster.json"]), R.span_dirs(self.c.root, None),
-                                rj(self.c.paths["rules_3_4.json"]))
-        got["synthetic"] = True
+        """The custody reader rebuilds the generator's level R exactly, but for what only custody has: each span's
+        custody digests and each development leg's trace clauses (RL-173 E.1; the generator writes null), which
+        exclude no leg the generator did not plant as failing rule 3 or 4."""
+        got = self.c.read_r()
+        self.assertIs(got["synthetic"], True)
+        spans = {s["span_id"]: s for s in self.c.li["spans"]}
+        for sp in got["spans"]:
+            cust = sp["custody"]
+            self.assertEqual(set(cust["files_sha256"]), {"runner_receipt.json"} | {
+                f"legs/{x['leg_id']}/leg_record.json" for x in self.c.li["legs"]
+                if x["span_id"] == sp["span_id"] and (self.c.root / sp["span_id"] / "legs" / x["leg_id"] /
+                                                      "leg_record.json").is_file()})
+            self.assertRegex(cust["meter_time_sha256"], "^[0-9a-f]{64}$")
+            self.assertIsNone(cust["meter_unreadable"])
+            self.assertEqual([m["name"] for m in cust["meter_streams"]], ["stream-0001.jsonl"])
+            self.assertEqual(cust["meter_streams"][0]["duplicates"], 0)
+            sp["custody"] = None
+            self.assertEqual(sp["soak_receipt"], spans[sp["span_id"]]["soak_receipt"])
+        n_holes = 0
+        for leg, want in zip(got["legs"], self.c.li["legs"]):
+            th = leg["trace_holes"]
+            span = spans[leg["span_id"]]
+            if th is None:
+                self.assertTrue(leg["turn"] is None or span["role"] == "describe", leg["leg_key"])
+            else:
+                n_holes += 1
+                self.assertFalse(th["gpu_rail"]["excluded"], leg["leg_key"])           # the trace has every row
+                self.assertLessEqual(th["gpu_rail"]["max_gap_s"], 2.0)
+                # the planted rule-4 failure (polls removed for 3.5 s) is also a DC-in clause exclusion
+                self.assertEqual(th["dc_in"]["excluded"], not want["inclusion"]["km003c_clean"], leg["leg_key"])
+                self.assertTrue(th["dc_in"]["bracketed"])
+            leg["trace_holes"] = None
+        self.assertGreater(n_holes, 20)
         self.assertEqual(synth.dump(got), synth.dump(self.c.li))
 
     def test_stage1_opens_no_energy_file(self):
+        """RL-173 E.1 item 1: stage 1 may open power_trace.csv and the meter streams for their time fields, and
+        only through the one time reader (joulewise/cadence_looks/time_fields.py); no level-E file is opened."""
         with tempfile.TemporaryDirectory() as d:
             out = os.path.join(d, "s1.json")
             with spy_opens() as opened:
                 rc, _, err = run_cli(self.args(out))
             self.assertEqual(rc, 0, err)
+        frames = LAST_RUN["frames"]
         self.assertTrue(any(p.endswith("events.jsonl") for p in opened))
         self.assertTrue(any(p.endswith("align_thermal.jsonl") for p in opened))
-        bad = [p for p in opened if any(m in p.replace(os.sep, "/") for m in ENERGY_MARKERS)]
-        self.assertEqual(bad, [])
-        # the meter stream is opened for R-20's clock stamps only (no sample decoded: next test)
+        self.assertFalse([p for p in opened if p.endswith("segment_energy.json")])
+        energy = [(p, who) for p, who in frames if p.endswith("power_trace.csv") or "/hazards/meter/" in
+                  p.replace(os.sep, "/")]
+        self.assertTrue([p for p, _ in energy if p.endswith("power_trace.csv")])
+        self.assertTrue([p for p, _ in energy if "/hazards/meter/stream-" in p.replace(os.sep, "/")])
+        self.assertEqual({who for _, who in energy}, {"joulewise/cadence_looks/time_fields.py"})
         self.assertTrue(all("/hazards/meter/stream-" in p.replace(os.sep, "/") for p in opened if "/hazards/" in p))
         # the decoys exist, so the absence is meaningful
         self.assertTrue(list(self.c.root.glob("*/legs/*/runtime/runs/*/power_trace.csv")))
@@ -270,7 +351,9 @@ class Stage1Custody(unittest.TestCase):
 
     def test_stage1_decodes_no_power_value(self):
         """rich_telemetry and the plist are read by pattern for stamps and state only: no JSON line of them and no
-        plist frame is parsed, so their gpu_energy and gpu_power never become values."""
+        plist frame is parsed, so their gpu_energy and gpu_power never become values. RL-173 E.1: no meter line is
+        JSON-decoded (header and trailer included), the time reader converts only whitelisted members, and no
+        power_w of power_trace.csv is converted (the harness's traps raise on any of these)."""
         # the trap (in the CLI's process): any json.loads of an energy-bearing record, or any plist parse, raises
         with tempfile.TemporaryDirectory() as d:
             rc, _, err = run_cli(self.args(os.path.join(d, "s1.json")), trap=True)
@@ -323,8 +406,15 @@ class Stage2Custody(unittest.TestCase):
 
     def test_energy_reader_reproduces_level_e(self):
         s1 = self.s1()
-        got = R.read_segment_energy(s1, R.span_dirs(self.c.root, None), self.s3)
+        got, files = R.read_segment_energy(s1, R.span_dirs(self.c.root, None), self.s3)
         self.assertEqual(set(got["legs"]), set(self.c.en["legs"]))
+        # the custody record: every energy file opened, by path under the root and sha256 (no value)
+        traces = {f["path"] for f in files if f["path"].endswith("/power_trace.csv")}
+        self.assertEqual(len(traces), len(got["legs"]))
+        self.assertEqual({f["path"].split("/")[0] for f in files if "/hazards/meter/" in f["path"]},
+                         {k.split("/")[0] for k in got["legs"]})
+        for f in files:
+            self.assertEqual(f["sha256"], R.sha256_file(self.c.root / f["path"]))
         for k, e in got["legs"].items():
             want = self.c.en["legs"][k]
             for a, b in zip(e["gpu_rail"]["segments"], want["gpu_rail"]["segments"]):
@@ -450,7 +540,7 @@ class NoHpEnergy(unittest.TestCase):
             self.skipTest("no pinned step 3 module")
         s1 = F.stage1(c.li, hashlib.sha256(synth.dump(c.li)).hexdigest())
         with spy_opens() as opened:
-            e = R.read_segment_energy(s1, R.span_dirs(c.root, None), s3)
+            e, _ = R.read_segment_energy(s1, R.span_dirs(c.root, None), s3)
         self.assertFalse([p for p in opened if "/hp-01-" in p.replace(os.sep, "/")])
         self.assertFalse([k for k in e["legs"] if k.startswith("hp-01")])
 
@@ -591,8 +681,11 @@ class ColdSeatFixes(unittest.TestCase):
                 R.MeterSpan(sdir)
 
     def test_m4_stage1_preflight_refuses_a_missing_power_trace_before_stage_2(self):
-        s1 = F.stage1(self.c.li, "0" * 64)
+        s1 = self.c.s1_custody()
         R.stage2_preflight(s1, R.span_dirs(self.c.root, None))
+        # RL-173 E.1: an energy-fit leg without both trace clauses (a level-R file the custody reader did not make)
+        with self.assertRaisesRegex(F.LookInputError, "in the energy fit without both trace clauses"):
+            R.stage2_preflight(F.stage1(self.c.li, "0" * 64), R.span_dirs(self.c.root, None))
         L = next(x for x in s1["legs"] if x["in_energy_fit"])
         with tempfile.TemporaryDirectory() as d:
             self.span_copy(d, L["span_id"])               # the copy carries no power_trace.csv
@@ -730,7 +823,7 @@ class MeterSupport(unittest.TestCase):
                          (t0 + 150, t0 + 250),     # hole at the interval's end
                          (t0 + 590, t0 + 650),     # hole at its start
                          (t0 + 150, t0 + 650)):    # partial overlap, hole inside
-                with self.assertRaisesRegex(F.LookInputError, "gap over 2 s"):
+                with self.assertRaisesRegex(F.LookInputError, r"DC-in: \(leg\): a gap of [0-9.]+ s"):
                     m.energy(a, b)
             self.assertAlmostEqual(m.coverage(t0 + 10, t0 + 100), 1.0, delta=1e-6)
             self.assertLess(m.coverage(t0 + 150, t0 + 250), 0.6)
@@ -743,7 +836,7 @@ class MeterSupport(unittest.TestCase):
             self.assertAlmostEqual(e, 40.0 * 20, delta=1e-2)
             self.assertLess(m.coverage(t0 + 40, t0 + 60), 0.96)
             m2 = self.meter(tempfile.mkdtemp(dir=d), [_meter_lines(t0, 400, empty=lambda x: t0 + 50 <= x < t0 + 52)])
-            with self.assertRaisesRegex(F.LookInputError, "gap over 2 s"):
+            with self.assertRaisesRegex(F.LookInputError, r"DC-in: \(leg\): a gap of 2\.500 s"):
                 m2.energy(t0 + 40, t0 + 60)
 
     def test_interval_beyond_the_samples_refuses(self):
@@ -751,7 +844,7 @@ class MeterSupport(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             m = self.meter(d, [_meter_lines(t0, 100)])
             for a, b in ((t0 + 40, t0 + 60), (t0 - 5, t0 + 10)):
-                with self.assertRaisesRegex(F.LookInputError, "gap over 2 s|bracketed"):
+                with self.assertRaisesRegex(F.LookInputError, "a gap of|bracketed"):
                     m.energy(a, b)
 
     def test_sol_meter_gap_case_through_the_reader(self):
@@ -780,7 +873,7 @@ class MeterSupport(unittest.TestCase):
             (sdir / "hazards/meter/stream-0002.jsonl").write_text("\n".join([head] + empty + [trailer]) + "\n")
             (sdir / "hazards/meter/stream-0003.jsonl").write_text("\n".join([head] + c_ + [trailer]) + "\n")
             sdir_of = R.span_dirs(c.root, [f"{L['span_id']}={sdir}"])
-            with self.assertRaisesRegex(F.LookInputError, "gap over 2 s"):
+            with self.assertRaisesRegex(F.LookInputError, rf"DC-in: {L['leg_key']}: a gap of [0-9.]+ s between meter"):
                 R.read_segment_energy(s1, sdir_of, step3_path())
             self.assertGreater(off, 0)
 
@@ -822,13 +915,14 @@ class RoundTwoCli(unittest.TestCase):
         self.assertIs(d["allow_draft"], True)
         self.assertIsNone(d["ledger_gate"])                 # no committed-ledger gate under --allow-draft
         self.assertEqual(d["manifest_sha256"], R.sha256_file(_DEFAULT_MANIFEST[0]))
-        # code_sha256 = the repository files that stage loaded (M.loaded_repo_files); stage 1 on level R loads no
-        # meter decoder, and no test module (it runs in its own process)
+        # code_sha256 = the repository files that stage loaded (M.loaded_repo_files): exactly manifest.STAGE1_CODE,
+        # the time reader and the meter decoder's closure included whatever the input (RL-173 E.1), and no test module
         for k in ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
-                  "joulewise/cadence_looks/manifest.py"):
+                  "joulewise/cadence_looks/manifest.py", "joulewise/cadence_looks/time_fields.py",
+                  "joulewise/external/km003c_parse.py"):
             self.assertIn(k, d["code_sha256"])
         self.assertFalse([k for k in d["code_sha256"] if k.startswith("tests/")])
-        self.assertNotIn("joulewise/external/km003c_parse.py", d["code_sha256"])
+        self.assertEqual({k for k in d["code_sha256"] if not k.startswith("input:")}, set(M.STAGE1_CODE))
         o = os.path.join(self.d, "o.json")
         rc, _, err = run_cli(["stage2", "--stage1", p, "--stage1-sha256", h, "--energy", self.ep, "--out", o])
         self.assertEqual(rc, 0, err)
@@ -874,7 +968,7 @@ class RoundTwoCli(unittest.TestCase):
         entry = next(e for e in roster if e["span_id"] == span_id)
         with tempfile.TemporaryDirectory() as d:
             sdir = Path(d) / span_id
-            shutil.copytree(self.c.root / span_id, sdir, ignore=shutil.ignore_patterns("power_trace.csv"))
+            shutil.copytree(self.c.root / span_id, sdir)       # power_trace.csv too: the GPU clause reads its stamps
             first = rj(sdir / "runner_receipt.json")["roster"][0]
             rec = rj(sdir / "legs" / first / "leg_record.json")
             rec["spec"].pop("g0_role", None)                   # own-shaped, as dev-03's first span is built
@@ -989,7 +1083,7 @@ class MeterSampleSupport(unittest.TestCase):
             m, path = self.stream(d, **{mode: lambda x: self.T0 + h0 <= x < self.T0 + h1})
             self.assertTrue(self.rule4_passes(path, self.T0 + a, self.T0 + b), mode)
             gaps = [y - x for x, y in zip(m.t, m.t[1:])]
-            with self.assertRaisesRegex(F.LookInputError, "gap over 2 s|bracketed"):
+            with self.assertRaisesRegex(F.LookInputError, r"DC-in: \(leg\): (a gap of [0-9.]+ s|.*not bracketed)"):
                 m.energy(self.T0 + a, self.T0 + b)
             self.assertAlmostEqual(m.energy(self.T0 + 10, self.T0 + 30), 40.0 * 20, delta=1e-2)   # outside it
             return max(gaps)
@@ -1009,20 +1103,23 @@ class MeterSampleSupport(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             m, _ = self.stream(d, nopayload=lambda x: x >= self.T0 + 185)
             self.assertLess(m.t[-1], self.T0 + 185)
-            with self.assertRaisesRegex(F.LookInputError, "bracketed|gap over 2 s"):
+            with self.assertRaisesRegex(F.LookInputError, "bracketed|a gap of"):
                 m.energy(self.T0 + 170, self.T0 + 195)
 
     def test_an_admitted_bracketed_leg_integrates(self):
-        """A leg that rule 4 admits and stage 1's meter_bracket preflight passes integrates in stage 2: every
-        segment inside it is supported by the decoded samples, on a stream whose polls all decode (the N6
-        consistency the preflight relies on). Legs crossing the short hole at 120 s are refused by rule 4 itself."""
+        """RL-173 E.1: stage 1's DC-in clause and stage 2's support test are one definition (time_fields.support on
+        the decoded samples). Over random legs on a stream with a 2.5 s sample gap: the clause admits a leg exactly
+        when stage 2 integrates every cut of it, and refuses the legs that rule 4 alone admits across the gap."""
         from joulewise.cadence_looks import inclusion_34 as I34
+        from joulewise.cadence_looks import time_fields as TF
         import random
         rng = random.Random(11)
         with tempfile.TemporaryDirectory() as d:
             m, path = self.stream(d, empty=lambda x: self.T0 + 120 <= x < self.T0 + 121.5)
+            sm = TF.SpanMeter(d)
+            self.assertEqual(sm.t, m.t)                       # the time reader's times are the decoder's
             st = I34.read_meter_stream(path)
-            n_legs = n_refused_by_rule4 = n_preflight = 0
+            n_legs = n_refused_by_rule4 = n_clause = 0
             for _ in range(60):
                 A = self.T0 + rng.uniform(-5, 150)
                 B = A + rng.uniform(10, 60)
@@ -1031,11 +1128,16 @@ class MeterSampleSupport(unittest.TestCase):
                 if not (r4["max_gap_s"] is not None and r4["max_gap_s"] <= 2.0):
                     n_refused_by_rule4 += 1
                     continue
-                L = {"segments": [{"wall_start_s": A, "wall_end_s": B}], "prefix_tails": []}
+                turn = {"segments": [{"wall_start_s": A, "wall_end_s": B}], "prefix_tails": []}
+                dc = R.trace_holes(turn, Path(d) / "no-bundle", sm, None)["dc_in"]
                 try:
-                    R.require_bracketed(L, [st])                     # stage 1's preflight, from the stamps
+                    m.energy(A, B)
+                    stage2_ok = True
                 except F.LookInputError:
-                    n_preflight += 1
+                    stage2_ok = False
+                self.assertEqual(not dc["excluded"], stage2_ok, (A - self.T0, B - self.T0, dc))
+                if dc["excluded"]:
+                    n_clause += 1
                     continue
                 n_legs += 1
                 cuts = sorted([A, B] + [rng.uniform(A, B) for _ in range(6)])
@@ -1043,7 +1145,7 @@ class MeterSampleSupport(unittest.TestCase):
                     m.energy(a, b)                                     # must not refuse
             self.assertGreater(n_legs, 15)
             self.assertGreater(n_refused_by_rule4, 0)
-            self.assertGreater(n_preflight, 0)       # legs rule 4 admits whose start sits in the 2.5 s sample gap
+            self.assertGreater(n_clause, 0)          # legs rule 4 admits whose start sits in the 2.5 s sample gap
 
 
 ENERGY_FILES = ("power_trace.csv", "/hazards/meter/stream-", "en.json", "segment_energy.json")
@@ -1116,19 +1218,34 @@ class RoundThree(unittest.TestCase):
                 R.stage2_energy_preflight(doc, a)
         self.assertEqual(energy_opens(opened), [])
 
-    def test_n2_a_missing_stage2_only_pin_refuses_before_energy(self):
+    def test_n2_a_missing_pin_refuses_before_energy(self):
+        """A module the stages load that the manifest does not pin refuses before any energy file opens. Since RL-173
+        E.1 stage 1 loads the meter decoder's closure too (the time reader runs its unwrap and clock fit), so a
+        missing pin on it refuses stage 1 as well; stage 2, given a stage-1 file stamped with that manifest, refuses
+        before energy."""
         p, h = self.stage1_custody()
 
-        def drop_dependency(doc):              # a module only stage 2 loads (through the meter decoder)
+        def drop_dependency(doc):              # a module of the meter decoder's closure
             doc["fit"]["dependencies"] = [x for x in doc["fit"]["dependencies"]
                                           if x["path"] != "joulewise/desk_restore.py"]
         man = pinned_manifest(drop_dependency)
-        p2, h2 = self.stage1_custody(man)                  # stage 1 never loads the meter decoder: it passes
-        with spy_opens() as opened:
-            rc, _, err = run_cli(["stage2", "--stage1", p2, "--stage1-sha256", h2, "--custody", str(self.c.root),
-                                  "--out", os.path.join(self.d, "o3.json"), "--manifest", man, "--allow-draft"])
+        out = os.path.join(self.d, "s1-unpinned.json")
+        rc, _, err = run_cli(["stage1", "--roster", self.c.paths["roster.json"], "--custody", str(self.c.root),
+                              "--rules-3-4", self.c.paths["rules_3_4.json"], "--out", out, "--manifest", man,
+                              "--allow-draft"])
         self.assertEqual(rc, 2)
-        self.assertIn("not pinned", err)
+        self.assertIn("joulewise/desk_restore.py (not pinned)", err)
+        self.assertFalse(os.path.exists(out))
+        doc = rj(p)
+        doc["manifest_sha256"] = R.sha256_file(man)
+        q = os.path.join(self.d, "s1-other-manifest.json")
+        wb(q, F.dump(doc))
+        with spy_opens() as opened:
+            rc, _, err = run_cli(["stage2", "--stage1", q, "--stage1-sha256", R.sha256_file(q), "--custody",
+                                  str(self.c.root), "--out", os.path.join(self.d, "o3.json"), "--manifest", man,
+                                  "--allow-draft"])
+        self.assertEqual(rc, 2)
+        self.assertIn("desk_restore.py", err)
         self.assertEqual(energy_opens(opened), [])
 
     def test_n2_step3_module_flag_is_gone(self):
@@ -1222,34 +1339,44 @@ class RoundThree(unittest.TestCase):
             lines = p.read_text().splitlines()
             bad = '{"k":"b","tx":1,"rx":2,"rt":3,"n":2,"p":"zz-not-hex' + "\n"   # not even JSON
             p.write_text(bad + "\n".join(lines[2:]) + "\n")             # header gone; first line a sample line
-            header, end = R.meter_offsets(sdir)
+            sm, why = R.span_meter(sdir)
+            self.assertIsNone(why)
+            header, end = R.meter_offsets(sm)
         self.assertIsNone(header)
+        self.assertIsNotNone(end)                      # the poll lines still carry rx and rt
+        self.assertFalse(any(t["present"] for t in sm.times))      # no header: no sample is decoded
 
 
 class LegBracket(unittest.TestCase):
-    """Mythos r3 N6 as the builder's design has it: one boundary, inclusion_34.meter_bracket, refuses an energy-fit
-    leg whose meter samples do not bracket it, in stage 1's preflight (before the stage-1 file is written) and in
-    stage 2's reader. The stream here stops 1.2 s before the leg's last token (rule 4 may still admit it)."""
+    """Mythos r3 N6 as RL-173 E.1 settles it: an energy-fit interval not bracketed by DECODED meter samples is
+    excluded in stage 1 by rule 4's DC-in clause (named, with its reason), and stage 2's reader refuses it as the
+    backstop, naming the leg. The stream here stops 1.2 s before the leg's last interval ends (rule 4 may admit it)."""
 
     def test_stream_ending_before_the_last_token(self):
         c = _Custody.get()
-        s1 = F.stage1(c.li, "0" * 64)
+        s1 = c.s1_custody()
         sid = "dev-01-s02"
         L = [x for x in s1["legs"] if x["in_energy_fit"] and x["span_id"] == sid][-1]
-        end_ns = R.leg_meter_interval_ns(L)[1]
+        end = max(x["wall_end_s"] for x in L["segments"] + L["prefix_tails"])
+        entry = next(e for e in rj(c.paths["roster.json"]) if e["span_id"] == sid)
         with tempfile.TemporaryDirectory() as d:
             sdir = Path(d) / sid
             shutil.copytree(c.root / sid, sdir)
             p = sdir / "hazards/meter/stream-0001.jsonl"
             lines = p.read_text().splitlines()
-            keep = [lines[0]] + [x for x in lines[1:-1] if json.loads(x)["rt"] <= end_ns - 1_200_000_000] + [lines[-1]]
+            keep = [lines[0]] + [x for x in lines[1:-1] if json.loads(x)["rt"] / 1e9 <= end - 1.2] + [lines[-1]]
             p.write_text("\n".join(keep) + "\n")
+            _, legs = R.read_span(sdir, entry, rj(c.paths["rules_3_4.json"]), R.FAN_KEYS)
+            got = next(x for x in legs if x["leg_key"] == L["leg_key"])
+            dc = got["trace_holes"]["dc_in"]
+            self.assertEqual((dc["excluded"], dc["bracketed"]), (True, False))
+            self.assertEqual(dc["reason"], "an energy-fit interval not bracketed by decoded meter samples")
+            self.assertFalse(got["inclusion"]["km003c_clean"])
+            self.assertTrue(got["inclusion"]["sidecar_coverage"])
             sdir_of = R.span_dirs(c.root, [f"{sid}={sdir}"])
-            with self.assertRaisesRegex(F.LookInputError, "bracketed"):
-                R.stage2_preflight(s1, sdir_of)
             only = dict(s1, legs=[x if x["leg_key"] == L["leg_key"] else dict(x, in_energy_fit=False)
                                   for x in s1["legs"]])
-            with self.assertRaisesRegex(F.LookInputError, "bracketed"):
+            with self.assertRaisesRegex(F.LookInputError, f"DC-in: {L['leg_key']}: .*not bracketed"):
                 R.read_segment_energy(only, sdir_of)
         R.stage2_preflight(s1, R.span_dirs(c.root, None))      # the intact custody passes
 
@@ -1347,15 +1474,14 @@ class RoundFour(unittest.TestCase):
 
 
 class GpuSwitchOn(unittest.TestCase):
-    """Mythos r4 N5: a manifest with fit.gpu_trace_hole_refusal on runs through stage 2. A 6 s hole in one leg's
-    power_trace.csv refuses that stage 2 (no fit written); the same custody under the default manifest (switch
-    absent) integrates."""
+    """Mythos r4 N5 under RL-173 E.1: the manifest keeps fit.gpu_trace_hole_refusal on at 2 s (the backstop). A 6 s
+    hole in one leg's power_trace.csv is now excluded in stage 1 by rule 3's GPU clause, so stage 2 runs (exit 0)
+    without that leg; the backstop itself is exercised in tests/cadence/test_time_fields.py on a hand-built stage 1."""
 
     def test_stage2_with_the_switch_on(self):
         c = _Custody.get()
-        on = pinned_manifest(lambda doc: doc["fit"].update(
-            gpu_trace_hole_refusal={"enabled": True, "max_gap_s": 2.0, "cite": ["RL-999"]}))   # synthetic cite
-        s1 = F.stage1(c.li, "0" * 64)
+        self.assertEqual(R.gpu_gap_rule(rj(MANIFEST)), 2.0)                # on in the checked-in manifest
+        s1 = c.s1_custody()
         L = next(x for x in s1["legs"] if x["in_energy_fit"])
         lid = L["leg_key"].split("/")[1]
         a = L["segments"][3]["wall_start_s"]
@@ -1367,21 +1493,18 @@ class GpuSwitchOn(unittest.TestCase):
             lines = pt.read_text().splitlines()
             pt.write_text("\n".join([lines[0]] + [r for r in lines[1:] if not (
                 r.split(",")[3] == "gpu_power" and a + 1 <= float(r.split(",")[4]) < a + 7)]) + "\n")
-            for man, want_rc in ((on, 2), (None, 0)):
-                p1 = os.path.join(d, f"s1-{want_rc}.json")
-                argv = ["stage1", "--roster", c.paths["roster.json"], "--custody", str(c.root), "--rules-3-4",
-                        c.paths["rules_3_4.json"], "--span-dir", f"{L['span_id']}={sdir}", "--out", p1]
-                if man:
-                    argv += ["--manifest", man, "--allow-draft"]
-                rc, _, err = run_cli(argv)
-                self.assertEqual(rc, 0, err)
-                o = os.path.join(d, f"o-{want_rc}.json")
-                argv = ["stage2", "--stage1", p1, "--stage1-sha256", R.sha256_file(p1), "--custody", str(c.root),
-                        "--span-dir", f"{L['span_id']}={sdir}", "--out", o]
-                if man:
-                    argv += ["--manifest", man, "--allow-draft"]
-                rc, _, err = run_cli(argv)
-                self.assertEqual(rc, want_rc, err)
-                if want_rc:
-                    self.assertIn("GPU rail", err)
-                    self.assertFalse(os.path.exists(o))
+            p1 = os.path.join(d, "s1.json")
+            rc, _, err = run_cli(["stage1", "--roster", c.paths["roster.json"], "--custody", str(c.root),
+                                  "--rules-3-4", c.paths["rules_3_4.json"], "--span-dir", f"{L['span_id']}={sdir}",
+                                  "--out", p1])
+            self.assertEqual(rc, 0, err)
+            got = next(x for x in rj(p1)["legs"] if x["leg_key"] == L["leg_key"])
+            self.assertEqual((got["in_energy_fit"], got["inclusion"]["sidecar_coverage"]), (False, False))
+            self.assertTrue(got["trace_holes"]["gpu_rail"]["excluded"])
+            self.assertGreater(got["trace_holes"]["gpu_rail"]["max_gap_s"], 5.9)
+            self.assertEqual(rj(p1)["counts"]["excluded_by_trace_clause"]["gpu_rail"], 1)
+            o = os.path.join(d, "o.json")
+            rc, _, err = run_cli(["stage2", "--stage1", p1, "--stage1-sha256", R.sha256_file(p1), "--custody",
+                                  str(c.root), "--span-dir", f"{L['span_id']}={sdir}", "--out", o])
+            self.assertEqual(rc, 0, err)
+            self.assertTrue(os.path.exists(o))
