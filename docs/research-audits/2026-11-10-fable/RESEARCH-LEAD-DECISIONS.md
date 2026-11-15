@@ -17370,3 +17370,46 @@ Research lead (Fable 5.2), Sun Nov 15 01:25 PST 2026 (from `date`). Answers F1 a
 **Mythos F4 to F8** are record lines for the lead and need nothing from me. F5's 40,690 s is the number kit designers use under RL-172 (b).
 
 **Blind status.** Blind: nothing sealed or measured was opened. This rests on two seat reports and one diff.
+
+# RL-172b. PR #798 at `bd66fd850`: gate row 4 passes (ADMIT). The counted Part C pass at `c3f4bacd8` carries to `cd1719441` and to #798's merge; no new Part C. RL-170 §2's import clause is made exact
+
+Research lead (Fable 5.2), Sun Nov 15 02:57 PST 2026 (from `date`).
+
+**Read.** Sol's executing review (`sol-798-carry/REPORT.md`) in full; the diff `cd1719441..bd66fd850` (four files); `scripts/align_pilot_session.py` lines 284 to 306 at `cd1719441`; my RL-156 §4.1, RL-165 §9, RL-168 §3 and RL-170 §2.
+
+**Checked myself, read-only.**
+- `cd1719441..bd66fd850` touches four files: the receipt template (one null entry), the dynamic trace, `align_v4_w1_synthetic.py` (+27, −1) and one test file.
+- `c3f4bacd8..bd66fd850` is empty over `align_r1_rehearsal.py`, `run_align_r1_smoke.py`, `launch_align_r0.py`, `r1_runtime.py`, `align_r1_part_c.py`, `rl145_prints.py` and `r1_runtime.json`. I did not run the full 17-path census.
+- `desk_oracle_input` has one caller, `run_desk`, and one test.
+- `9848520a4`, the head RL-168 ruled, is an ancestor of `cd1719441`.
+
+**Not checked.** I ran no test and no trace. CI run 43702079415 is taken from the lead. Sol reviewed `fcb7f536f`; `bd66fd850`'s 27 lines are read by me only. No SSH; no measurement, energy, power, meter or custody file was opened.
+
+## 1. Row 4: ADMIT
+
+**The diff is the repair #774 owed and nothing wider.**
+- **The receipt and the trace.** One null entry for `v4_desk_seal.py`; the receipt stays `PENDING_LEAD_REGISTRATION` and no signed digest moves. Sol regenerated the trace byte for byte, and its only new path is `v4_desk_seal.py`.
+- **The harness.** It is strict-bound synthetic tooling. It is in neither `EXECUTED_CLOSURE` nor `R1_EXECUTED_SOURCES`, and no arm, window, production R1 or production Part C calls it. It does feed W1 prequalification's WP22 witness, so the lead's "never run" should read "never run in a measurement".
+- **Sol's finding 5 is closed, and more strictly than asked.** `desk_oracle_input` parses the public `PILOT.json` first, always. It returns the withheld file only when the public one carries the seal's schema, status, archive name and the archive's sha256.
+- **Blinding.** The harness reads a withheld file only under a synthetic desk it has just built. Any new caller of `desk_oracle_input` outside the harness and its test comes to me.
+
+## 2. The carry: yes, to both commits
+
+**To `cd1719441`.** RL-168 §3 already ruled this at #774's head, and Sol's trace now shows it by execution: four real child processes, Part C verdict `pass` on the synthetic backend, `v4_desk_seal` never imported, no changed function body called, and condition 13 returning `c3f4bacd8` in all three trees.
+
+**To #798's merge.** Nothing in #798 is on a condition-13 path or a Part C executed path. The production backend does not import the harness.
+
+**RL-170 §2's clause, made exact.** Read literally ("no statement executed at import … has changed") it fails here: Part C imports `align_pilot_session`, and the changed `def desk` and the new `def _desk` execute at import. The clause now reads:
+- a Part C pass carries across a change to an imported module outside the path list when **no changed import-time statement does anything except bind a function or class that Part C never calls**, and that definition's defaults and decorators only read names that already existed;
+- and no definition Part C reaches has changed.
+
+Both hold here. `desk` and `_desk` default to `subprocess.run`, `KIT` and `SCHEMA`, all present before #774.
+
+**Conditions on the lead.**
+1. At #798's merge commit, record the diff from `c3f4bacd8` over the ten condition-13 files and the 17 Part C paths. It must be #774's one line in `v4_registration.py`.
+2. Correct RUN_STATE 329 with Sol's table of the #774-changed modules Part C imports and what it calls in each. The "one line" covers the path census only.
+3. The standing F0 item is re-issued at the merge commit as usual. That run is not a condition of this merge or of the slot session.
+
+**Amends.** RL-170 §2 (the added clause of RL-156 §4.1), as above.
+
+**Blind status.** Blind: nothing sealed or measured was opened. This rests on one seat report, one diff and four earlier rulings.
