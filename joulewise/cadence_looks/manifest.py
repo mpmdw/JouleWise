@@ -39,6 +39,11 @@ LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
 LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 LOOK_LEDGER_PATH = "docs/process/cadence/looks/LOOKS.json"
 LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded")
+# What each status needs recorded, so that "committed" is checkable (Mythos cold seat 8).
+LOOK_ROW_HASHES = ("roster_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256")
+LOOK_ROW_REQUIRES = {"stage1_committed": ("roster_sha256", "stage1_sha256"),
+                     "run": ("roster_sha256", "stage1_sha256", "output_sha256"),
+                     "frozen": ("roster_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256")}
 
 TOP_KEYS = {"schema", "look_id", "look_kind", "status", "title", "rulings", "when", "stages", "reads", "energy",
             "fit", "inclusion", "outputs", "decisions", "later_looks", "freeze1", "freeze2", "custody", "review",
@@ -105,7 +110,7 @@ LOOK_JUDGED_RULES = {3, 4}                        # RL-150 R9: "Rules 3 and 4 ar
 REQUIRED_PRINTS = {
     "interim": {"inclusion_table", "rates", "onset_fit", "onset_lodo_error", "heat_term_fit",
                 "lodo_rel_error_hot_stretch", "lodo_rel_error_leg", "holdout_rms_rel_error", "without_heat_columns",
-                "per_leg_relative_residuals", "prefix_length_bias", "high_power_table", "step3_statistic_iii",
+                "per_leg_relative_residuals", "prefix_length_bias", "step3_statistic_iii",
                 "qualified_interim_half", "marked_span_sensitivity", "realized_prompt_tokens", "disclosure",
                 "active_readings", "onsets_before_116_s", "fold_coefficients", "day_detail",
                 "onset_offset_residuals"},                                             # RL-166b B-2, P-1 to P-4
@@ -113,7 +118,7 @@ REQUIRED_PRINTS = {
 PREFIX_RATIOS = [1.10, 1.30, 1.374]                # RL-150 section 3.2 ("the looks print ... 1.10, 1.30 and 1.374")
 REQUIRED_CARRIES = {"model_sha256", "qualified"}   # RL-149 section 4
 # The thresholds RL-166 fixed, by decision id. None: the decision carries no threshold.
-REQUIRED_DECISIONS = {"interim": {"drift_tripwire": 0.08, "qualified_interim_half": 0.02, "hp01_included_below_9": 9,
+REQUIRED_DECISIONS = {"interim": {"drift_tripwire": None, "qualified_interim_half": 0.02, "hp01_included_below_9": 9,
                                   "stage1_tripwires": None, "step3_cell_not_run": 2, "extension_rule": None,
                                   "onsets_before_116_s": 0}}                           # RL-166b P-4
 # The sentences RL-166b dictates (fit.stated_limits) and the rules it fixes for freeze 2 (freeze2.deferred_rules).
@@ -121,9 +126,110 @@ REQUIRED_STATED_LIMITS = {"interim": {"qualified_yes_meaning", "qualified_pass_r
                                       "partial_correction", "not_zero_before_onset", "delta_se_overstates",
                                       "warm_series_outside_joint_range", "ratio_of_tokens"}}
 REQUIRED_DEFERRED = {"interim": {"kappa_signs", "sd_j_covariance", "leverage_flag", "hot_prefill_flag"}}
-STAGE2_HOLD_FLAGS = {"interim": {"onsets_before_116_s.to_research_lead", "meter_clock.to_research_lead"}}  # RL-166c §2 row 7
+STAGE2_HOLD_FLAGS = {"interim": {"onsets_before_116_s.to_research_lead", "meter_clock.to_research_lead",  # RL-166c §2 row 7
+                                 "tripwires.any"}}                                                        # RL-166 Q8
 WITHDRAWN_FORM_RE = re.compile(r"(?i)H is zero for a turn")                           # RL-166b Amends
 DRIFT_FALLBACK = 0.04                              # RL-166 Q11
+DRIFT_RULED = 0.08
+REMOVED_PRINTS = {"high_power_table": "RL-167 §3: the High Power table is look lm-hp-01"}
+REQUIRED_NEVER_READ_IDS = {"interim": {"qualification", "ctl01", "fillers", "v4", "type_T", "rejected_attempts", "step3_legs",
+                                       "reserve_qualification", "hp01_energy"}}
+# The import closure the look's entry points execute that reads or decodes custody, pinned beside the look code
+# (Mythos cold seat 3; Sol 9): the DC-in decoder and the meter-parser's own imports, and rule 3's sensor policy.
+REQUIRED_DEPENDENCIES = {"interim": {"joulewise/external/km003c_parse.py", "joulewise/aggregate.py",
+                                     "joulewise/desk_compress.py", "configs/align/v4/r1_runtime.json",
+                                     "joulewise/cadence_looks/manifest.py"}}
+# Dictated and ruled texts, pinned verbatim (Sol cold seat 7; Mythos cold seat 11): RL-166b section 2.1, 2.2, 3 and
+# 4 (with RL-166c section 5 for the partial correction), RL-166 Q3 and Q4 as amended, RL-166c section 2 row 7. A
+# change to any of them is a change of the ruled text and needs a ruling, then a new hash here.
+VERBATIM_SHA256 = {
+    "fit.heat_term.form":
+        "94c4e5517456edae88dd530a1a9b833f90afb9ec09d34f4fb8921d2621db578c",
+    "fit.onset.estimable_when":
+        "e97ccfef1f293c32528916ae6c34044f81bcbbb0c5ca908dbea09adc2e87482a",
+    "fit.onset.response":
+        "af7f62c15a3a69b0a55fec9be635454d69f96abe25c92a823893c03578b50399",
+    "fit.stated_limits.delta_se_overstates":
+        "9e077ec9144e097e7f3e8fa409e9e7c8d7f1f8278941f129ec34b42688f92460",
+    "fit.stated_limits.half_t2_limit":
+        "e669690b387b4eb839c3bfa057108e1973ebecca27a0f6280c2287d4df82fad3",
+    "fit.stated_limits.not_zero_before_onset":
+        "45f021de90d6a1bfa545af10e9ceb47a6d195c36a28a427322aba6c2a6a2313d",
+    "fit.stated_limits.partial_correction":
+        "673db6e35e56d946dfa020280de145ad12f1fd12f891e60d3a909accf542bba6",
+    "fit.stated_limits.pooled_error":
+        "cb08f40ccf17b470577d649ed5ead00f3f980e8f6de996dd2999b43b5cb60019",
+    "fit.stated_limits.qualified_pass_rate":
+        "8d6044f32b51ddefe790cbacbcb3eebaf53f67f780f699de4a100768fdf87c4a",
+    "fit.stated_limits.qualified_yes_meaning":
+        "6195455f392c51de7021c26ca50351e259519689ccde13d236786b05fa53e80d",
+    "fit.stated_limits.ratio_of_tokens":
+        "938504cefe67ae43bad5ca30fd2b91390bd9f22e01c38f5f6e30e0dbaa28dd07",
+    "fit.stated_limits.warm_series_outside_joint_range":
+        "5e98adbe2a14a646cf868d90d8202ce53be0a9598df907f83de73a15e5aa08a9",
+    "fit.validation.hot_stretch":
+        "2a3239c9fb98dcfc25a7cc9701696ec6bbb670b862da60f08653026cdd37f76c",
+    "fit.validation.qualified_rule":
+        "c897d3dea7075843731bdc85396ea0fd7c002d47824529965b4083fcc4f9dd42",
+    "fit.validation.relative_error":
+        "5e601f7eaaf79acc21c64e8ce4d37100d2135a62e2df1ea9206ad3aa97233921",
+    "freeze2.deferred_rules.hot_prefill_flag":
+        "fff067656f4cf113c204ad8beb99a0e5373cbb67fd0f1e9dd2a833480c2a61ec",
+    "freeze2.deferred_rules.kappa_signs":
+        "8ec186b3e232527cc20bded46202241cde596150252c895292e752358f77cdbd",
+    "freeze2.deferred_rules.leverage_flag":
+        "affc86ecb35000a844ed9170614c2c49faa869db35e6af112946a36edf960ce7",
+    "freeze2.deferred_rules.sd_j_covariance":
+        "b62bf853e24e664f0387768874f4cfe13cadf00c719c843630ff32fa7b70f0c2",
+    "stages.stage2.holds.meter_clock.to_research_lead":
+        "8a5447e6dde8f07ccccf06ed58557e747237c3080a61efedc122b114eef05250",
+    "stages.stage2.holds.onsets_before_116_s.to_research_lead":
+        "9f441e66ac77db3b13620cb5a03ff03e8b8dd8549ef51508f826afe9b36a5108",
+    "stages.stage2.holds.tripwires.any":
+        "5054db332ab4932c7c374bb424179d0cff68a555f8d9dae8107a0c216f29a27b",
+}
+
+
+def verbatim_texts(doc):
+    """name -> text for every text VERBATIM_SHA256 pins."""
+    out = {}
+    f = doc.get("fit") or {}
+    for x in f.get("stated_limits") or []:
+        if isinstance(x, dict):
+            out[f"fit.stated_limits.{x.get('id')}"] = x.get("text")
+    for x in (doc.get("freeze2") or {}).get("deferred_rules") or []:
+        if isinstance(x, dict):
+            out[f"freeze2.deferred_rules.{x.get('id')}"] = x.get("rule")
+    out["fit.heat_term.form"] = (f.get("heat_term") or {}).get("form")
+    for k in ("estimable_when", "response"):
+        out[f"fit.onset.{k}"] = (f.get("onset") or {}).get(k)
+    for k in ("hot_stretch", "relative_error", "qualified_rule"):
+        out[f"fit.validation.{k}"] = (f.get("validation") or {}).get(k)
+    for x in ((doc.get("stages") or {}).get("stage2") or {}).get("holds") or []:
+        if isinstance(x, dict):
+            out[f"stages.stage2.holds.{x.get('flag')}"] = x.get("rule")
+    return out
+
+
+def _verbatim(doc, kind, problems):
+    if kind != "interim":
+        return
+    got = verbatim_texts(doc)
+    for name, sha in VERBATIM_SHA256.items():
+        text = got.get(name)
+        if not isinstance(text, str) or hashlib.sha256(text.encode("utf-8")).hexdigest() != sha:
+            problems.append(f"{name}: differs from the ruled text (pinned verbatim)")
+    for sid in ("qualified_pass_rate", "partial_correction"):
+        note = next((x.get("note") for x in (doc.get("fit") or {}).get("stated_limits") or []
+                     if isinstance(x, dict) and x.get("id") == sid), None)
+        for path, sha in EVIDENCE.items():
+            if not (isinstance(note, str) and path in note and sha in note):
+                problems.append(f"fit.stated_limits.{sid}.note: cites {path} at sha256 {sha[:12]}...")
+
+
+# The re-run evidence the dictated sentences cite; check_repo hashes the file.
+EVIDENCE = {"docs/process/cadence/looks/evidence/2026-11-14-mythos-passrate-rerun-REPORT.md":
+            "f1c6bc323d736bb13483a1783266d652f6eea2d347b93ed6e5a307ae614773aa"}
 # RL-166 Q8; ids as the stage-1 output (level D, docs/process/cadence_look_fit_interface.md section 3.3) names them
 STAGE1_TRIPWIRES = {"dev_included_below_45": 45, "days_below_4": 4, "cell_below_10": 10,     # days: RL-166b B-7
                     "start_reading_invalid_over_10pct": 0.10, "hp01_below_9": 9}
@@ -211,10 +317,15 @@ def _code_ref(ref, where, problems, final):
         problems.append(f"{where}.sha256: 64 lowercase hex" + ("" if final else " or PENDING:CODE"))
 
 
-def code_refs(doc):
-    """Every pinned file reference in the manifest: (where, path, sha256)."""
+def code_refs(doc, *, look_code_only=False):
+    """Every pinned file reference in the manifest: (where, path, sha256). ``look_code_only`` leaves out
+    fit.dependencies (shared repository code the look executes: hashed, but not look code)."""
     out = []
     fit = doc.get("fit") or {}
+    if not look_code_only:
+        for i, ref in enumerate(fit.get("dependencies") or []):
+            if isinstance(ref, dict):
+                out.append((f"fit.dependencies[{i}]", ref.get("path"), ref.get("sha256")))
     for i, ref in enumerate(fit.get("code") or []):
         if isinstance(ref, dict):
             out.append((f"fit.code[{i}]", ref.get("path"), ref.get("sha256")))
@@ -286,6 +397,7 @@ def validate_manifest(doc, *, final=None):
     _freezes(doc.get("freeze1"), doc.get("freeze2"), problems, kind)
     _custody(doc.get("custody"), problems)
     _review(doc.get("review"), problems)
+    _verbatim(doc, kind, problems)
     for path, shas in _pinned_paths(doc).items():
         if len(shas) > 1:
             problems.append(f"{path}: pinned with different sha256 values {sorted(shas)}")
@@ -458,11 +570,15 @@ def _reads(r, kind, when, problems):
     if not (isinstance(nr, list) and nr):
         problems.append("reads.never_read: non-empty list")
     else:
+        got = set()
         for i, item in enumerate(nr):
-            if _closed(item, {"what", "cite"}, f"reads.never_read[{i}]", problems):
+            if _closed(item, {"id", "what", "cite"}, f"reads.never_read[{i}]", problems):
+                got.add(item.get("id"))
+                if not _text(item.get("what")):
+                    problems.append(f"reads.never_read[{i}].what: text")
                 _need_cite(item, f"reads.never_read[{i}]", problems)
-        if kind == "interim" and not any("type-T" in str(x.get("what", "")) for x in nr if isinstance(x, dict)):
-            problems.append("reads.never_read: names the type-T legs (RL-166 Q14)")
+        for nid in sorted(REQUIRED_NEVER_READ_IDS.get(kind, set()) - got):
+            problems.append(f"reads.never_read: carries {nid}" + (" (RL-166 Q14: the type-T legs)" if nid == "type_T" else ""))
     cf = r.get("custody_files")
     if not isinstance(cf, list):
         problems.append("reads.custody_files: list of {basename, scope, carries, stage}")
@@ -531,10 +647,18 @@ def _energy(e, kind, problems):
 
 
 def _fit(f, kind, problems, final):
-    keys = {"code", "runtime", "authors", "heat_term", "rates", "onset", "validation", "prefix_bias", "step3",
-            "sensitivity", "reads_from_leg_record", "reads_never", "stated_limits", "cite"}
+    keys = {"code", "dependencies", "runtime", "authors", "heat_term", "rates", "onset", "validation", "prefix_bias",
+            "step3", "sensitivity", "reads_from_leg_record", "reads_never", "stated_limits", "cite"}
     if not _closed(f, keys, "fit", problems):
         return
+    deps = f.get("dependencies")
+    if not isinstance(deps, list):
+        problems.append("fit.dependencies: list of {path, sha256}")
+        deps = []
+    for i, ref in enumerate(deps):
+        _code_ref(ref, f"fit.dependencies[{i}]", problems, final)
+    for pth in sorted(REQUIRED_DEPENDENCIES.get(kind, set()) - {r.get("path") for r in deps if isinstance(r, dict)}):
+        problems.append(f"fit.dependencies: pins {pth} (Mythos cold seat 3; Sol 9)")
     _items_with_ids(f.get("stated_limits"), "fit.stated_limits", {"id", "text", "cite"}, {"note"},
                     REQUIRED_STATED_LIMITS.get(kind, set()), "RL-166b", problems)
     _need_cite(f, "fit", problems)
@@ -714,6 +838,9 @@ def _outputs(o, kind, problems, final):
         if p.get("id") == "prefix_length_bias" and p.get("ratios") != PREFIX_RATIOS:
             problems.append(f"{where}.ratios: {PREFIX_RATIOS} (RL-150 §3.2)")
         _need_cite(p, where, problems)
+    for gone, why in REMOVED_PRINTS.items():
+        if gone in ids:
+            problems.append(f"outputs.prints: {gone} is not printed by this look ({why})")
     for need in sorted(REQUIRED_PRINTS.get(kind, set()) - ids):
         problems.append(f"outputs.prints: the {kind} look prints {need}")
     carries = o.get("every_print_carries")
@@ -731,14 +858,14 @@ def _decisions(ds, kind, problems):
     for i, d in enumerate(ds):
         where = f"decisions[{i}]"
         if not _closed(d, {"id", "statistic", "rule", "action", "reads_energy", "cite"}, where, problems,
-                       optional={"threshold", "fallback_threshold"}):
+                       optional={"threshold", "fallback_threshold", "ruled_threshold", "pending"}):
             continue
         if RETIRED_DECISION_RE.search(str(d.get("id"))):
             problems.append(f"{where}.id: Rule P and the interim look's one decision are retired (RL-151 §2.1)")
         if d.get("id") in got:
             problems.append(f"{where}.id: duplicate")
         got[d.get("id")] = d
-        for k in ("threshold", "fallback_threshold"):
+        for k in ("threshold", "fallback_threshold", "ruled_threshold"):
             if k in d and not _number(d[k]):
                 problems.append(f"{where}.{k}: a number")
         if not isinstance(d.get("reads_energy"), bool):
@@ -754,8 +881,17 @@ def _decisions(ds, kind, problems):
         elif th is not None and d.get("threshold") != th:
             problems.append(f"decisions {did}: threshold {th} (RL-166)")
     drift = got.get("drift_tripwire")
-    if kind == "interim" and drift is not None and drift.get("fallback_threshold") != DRIFT_FALLBACK:
-        problems.append(f"decisions drift_tripwire: fallback_threshold {DRIFT_FALLBACK} (RL-166 Q11)")
+    if kind == "interim" and drift is not None:
+        if drift.get("fallback_threshold") != DRIFT_FALLBACK:
+            problems.append(f"decisions drift_tripwire: fallback_threshold {DRIFT_FALLBACK} (RL-166 Q11)")
+        th = drift.get("threshold")
+        if th == DRIFT_FALLBACK:
+            if drift.get("ruled_threshold") != DRIFT_RULED or not _text(drift.get("pending")):
+                problems.append("decisions drift_tripwire: the fallback 0.04 carries ruled_threshold 0.08 and the "
+                                "pending disposition (RL-166 Q11)")
+        elif th != DRIFT_RULED:
+            problems.append(f"decisions drift_tripwire: threshold {DRIFT_RULED}, or the fallback {DRIFT_FALLBACK} "
+                            "if Q11's condition fails (RL-166 Q11)")
 
 
 def _later_looks(ll, problems):
@@ -823,7 +959,7 @@ def _freezes(f1, f2, problems, kind=None):
 
 def _custody(c, problems):
     keys = {"runs_by", "seats", "lead_checks_output_against_schema", "custody_copy", "host", "no_import_by",
-            "fit_paths_outside_kit_frozen_paths", "disclosure", "pre_run_check", "cite"}
+            "fit_paths_outside_kit_frozen_paths", "disclosure", "pre_run_check", "pin_check", "cite"}
     if not _closed(c, keys, "custody", problems):
         return
     if c.get("runs_by") != "analyst_seat" or c.get("seats") != 1:
@@ -834,7 +970,7 @@ def _custody(c, problems):
         problems.append("custody.fit_paths_outside_kit_frozen_paths: true (RL-150 R4)")
     if not (isinstance(c.get("no_import_by"), list) and c["no_import_by"]):
         problems.append("custody.no_import_by: non-empty list (the runner and the leg runtime, RL-150 R4)")
-    for k in ("custody_copy", "host", "disclosure", "pre_run_check"):
+    for k in ("custody_copy", "host", "disclosure", "pre_run_check", "pin_check"):
         if not _text(c.get(k)):
             problems.append(f"custody.{k}: text")
     _need_cite(c, "custody", problems)
@@ -880,12 +1016,13 @@ def check_repo(doc, repo, kit_paths=(), *, final=None):
     if final is None:
         final = doc.get("status") == "committed"
     problems, warnings = [], []
+    look_code = {path for _, path, _ in code_refs(doc, look_code_only=True)}
     code_paths = []
     for where, path, sha in code_refs(doc):
         if not (isinstance(path, str) and _repo_path_ok(path)):
             continue
         f = repo / path
-        if path.endswith(".py"):
+        if path.endswith(".py") and path in look_code:
             code_paths.append(path)
         if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
             continue
@@ -926,6 +1063,10 @@ def check_repo(doc, repo, kit_paths=(), *, final=None):
             if CONDITION_RE.search(text) and not DENY_LIST_LINE_RE.match(text):
                 problems.append(f"{p}:{n} reads a 'condition' field; look code never reads it (RL-150 R6)")
                 break
+    for path, sha in EVIDENCE.items():
+        f = repo / path
+        if not f.is_file() or sha256_file(f) != sha:
+            problems.append(f"{path}: the evidence the dictated sentences cite is missing or differs from sha256 {sha[:12]}")
     if problems:
         raise ManifestError(problems)
     return warnings
@@ -945,8 +1086,16 @@ def validate_look_ledger(doc, repo=None):
     seen = set()
     for i, row in enumerate(doc.get("looks") or []):
         where = f"looks[{i}]"
-        if not _closed(row, {"look_id", "manifest_path", "sha256", "status"}, where, problems):
+        if not _closed(row, {"look_id", "manifest_path", "sha256", "status"}, where, problems, optional=LOOK_ROW_HASHES):
             continue
+        for k in LOOK_ROW_HASHES:
+            if k in row and not (row[k] is None or (isinstance(row[k], str) and SHA_RE.fullmatch(row[k]))):
+                problems.append(f"{where}.{k}: 64 hex or null")
+        st = row.get("status")
+        if st in LOOK_LEDGER_STATUSES:
+            for k in LOOK_ROW_REQUIRES.get(st, ()):
+                if not (isinstance(row.get(k), str) and SHA_RE.fullmatch(row[k])):
+                    problems.append(f"{where}: status {st} needs {k} (Mythos cold seat 8)")
         lid = row.get("look_id")
         if not (isinstance(lid, str) and LOOK_ID_RE.fullmatch(lid)) or lid in seen:
             problems.append(f"{where}.look_id: unique lm-<id>")
@@ -974,6 +1123,76 @@ def validate_look_ledger(doc, repo=None):
             problems.append(f"{where}: ledger says draft, the manifest says {man.get('status')!r}")
         if row.get("status") != "draft" and man.get("status") != "committed":
             problems.append(f"{where}: ledger says {row.get('status')}, the manifest is not committed")
+    if problems:
+        raise ManifestError(problems)
+    return doc
+
+
+def _look_row(looks_doc, look_id):
+    row = next((r for r in (looks_doc or {}).get("looks") or [] if r.get("look_id") == look_id), None)
+    if row is None:
+        raise ManifestError([f"LOOKS.json has no row for {look_id}"])
+    return row
+
+
+def require_stage1_committed(looks_doc, look_id, stage1_sha256):
+    """Refuse unless LOOKS.json's row for the look names this stage-1 file's sha256 at status stage1_committed or
+    later. Stage 2, step3_roster.py and assemble call it before they open anything (Mythos cold seat 8)."""
+    validate_look_ledger(looks_doc)
+    row = _look_row(looks_doc, look_id)
+    if row.get("status") not in ("stage1_committed", "run", "frozen"):
+        raise ManifestError([f"LOOKS.json {look_id} is {row.get('status')!r}: stage 1 is not committed"])
+    if row.get("stage1_sha256") != stage1_sha256:
+        raise ManifestError([f"LOOKS.json {look_id} names stage-1 sha256 {str(row.get('stage1_sha256'))[:12]}, "
+                             f"not {stage1_sha256[:12]}"])
+    return row
+
+
+def verify_pins(manifest_path, repo, *, allow_draft=False, running=()):
+    """The run path's pin check (Mythos cold seat 3; Sol 9). Before any custody file is opened, refuse unless:
+    the manifest validates (as committed unless ``allow_draft``); LOOKS.json names its sha256 at a non-draft
+    status (unless ``allow_draft``); every file in fit.code, fit.dependencies, the step 3 pins, the inclusion code
+    and the two schemas exists and hashes to its pin; and every path in ``running`` (the caller's own files) is
+    one of them. Opens the manifest, LOOKS.json and repository files only. Returns the manifest."""
+    repo = Path(repo).resolve()
+    manifest_path = Path(manifest_path)
+    raw = manifest_path.read_bytes()
+    doc = json.loads(raw)
+    problems = []
+    try:
+        validate_manifest(doc, final=not allow_draft)
+    except ManifestError as error:
+        problems += error.problems
+    looks_path = repo / LOOK_LEDGER_PATH
+    if not allow_draft:
+        try:
+            row = _look_row(json.loads(looks_path.read_text(encoding="utf-8")), doc.get("look_id"))
+            if row.get("sha256") != hashlib.sha256(raw).hexdigest():
+                problems.append("LOOKS.json does not name this manifest's sha256")
+            if row.get("status") == "draft":
+                problems.append("LOOKS.json lists this look as a draft")
+        except (OSError, ValueError, ManifestError) as error:
+            problems.append(f"LOOKS.json: {getattr(error, 'problems', [type(error).__name__])[0]}")
+    pinned = {}
+    for where, path, sha in code_refs(doc):
+        if not (isinstance(path, str) and _repo_path_ok(path)):
+            continue
+        pinned[path] = sha
+        f = repo / path
+        if not (isinstance(sha, str) and SHA_RE.fullmatch(sha)):
+            problems.append(f"{where}: {path} has no pin")
+        elif not f.is_file():
+            problems.append(f"{where}: {path} is not in the repository")
+        elif sha256_file(f) != sha:
+            problems.append(f"{where}: {path} sha256 differs from the pin")
+    for r in running:
+        try:
+            rel = Path(r).resolve().relative_to(repo).as_posix() if Path(r).is_absolute() else Path(r).as_posix()
+        except ValueError:
+            problems.append(f"{r} runs from outside the repository {repo}")
+            continue
+        if rel not in pinned:
+            problems.append(f"{rel} runs but is not pinned in the manifest")
     if problems:
         raise ManifestError(problems)
     return doc

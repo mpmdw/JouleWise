@@ -2,6 +2,7 @@
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "joulewise.cadence_look_output.interim.v1",
  "title": "Interim look output (lm-interim-01): the fit (level O), step 3's statistic and the decisions",
+ "$comment": "No High Power table: RL-167 section 3 moved it to look lm-hp-01.",
  "description": "DRAFT, part of freeze 1 (RL-149 section 2.6 item 1; RL-150 R4; RL-166). The lead checks the look's output against this schema before anyone reads it (RL-149 section 2.6). Closed at every level. fit embeds level O of the analyst seat's interface exactly; step3 is step3_roster.py's file; decisions are read from those two. No joule or watt per leg, turn or block (RL-166 Q16). Field-level conventions under the research lead's open readings (R-10 to R-21) are the interface's and are not restated here.",
  "type": "object",
  "additionalProperties": false,
@@ -9,9 +10,9 @@
   "decisions",
   "disclosure",
   "fit",
-  "high_power_table",
   "look_id",
   "manifest_sha256",
+  "realized_prompt_tokens",
   "schema",
   "stage1_sha256",
   "step3"
@@ -37,91 +38,29 @@
   "step3": {
    "$ref": "#/$defs/step3_output"
   },
-  "high_power_table": {
-   "oneOf": [
-    {
-     "type": "null"
-    },
-    {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "caption",
-      "rows"
-     ],
-     "properties": {
-      "caption": {
-       "type": "string"
-      },
-      "rows": {
-       "type": "array",
-       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-         "automatic_spread",
-         "cell",
-         "clock_ratio",
-         "energy_ratio",
-         "included_automatic",
-         "included_h",
-         "onset_s_ratio",
-         "share_scored_ratio",
-         "span_position"
-        ],
-        "properties": {
-         "cell": {
-          "type": "integer"
-         },
-         "span_position": {
-          "enum": [
-           "cold",
-           "warm"
-          ]
-         },
-         "included_h": {
-          "type": "integer"
-         },
-         "included_automatic": {
-          "type": "integer"
-         },
-         "onset_s_ratio": {
-          "type": [
-           "number",
-           "null"
-          ]
-         },
-         "clock_ratio": {
-          "type": [
-           "number",
-           "null"
-          ]
-         },
-         "share_scored_ratio": {
-          "type": [
-           "number",
-           "null"
-          ]
-         },
-         "energy_ratio": {
-          "type": [
-           "number",
-           "null"
-          ]
-         },
-         "automatic_spread": {
-          "type": [
-           "number",
-           "null"
-          ]
-         }
-        }
-       }
-      }
+  "realized_prompt_tokens": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "leg_key",
+     "nominal",
+     "realized"
+    ],
+    "properties": {
+     "leg_key": {
+      "type": "string"
+     },
+     "nominal": {
+      "type": "integer"
+     },
+     "realized": {
+      "type": "integer"
      }
     }
-   ],
-   "description": "RL-149 section 2.5, RL-157 and RL-166 Q9: ratios only; null when hp-01 runs later as its own disclosed read."
+   },
+   "description": "RL-158 Q5: legs whose realized prompt count is more than 5 % from nominal, computed by assemble from stage 1's legs"
   },
   "decisions": {
    "type": "object",
@@ -129,7 +68,6 @@
    "required": [
     "drift_tripwire",
     "extension_rule",
-    "hp01_table",
     "qualified_interim_half"
    ],
    "properties": {
@@ -145,12 +83,6 @@
       "passes",
       "fails",
       "not_evaluable"
-     ]
-    },
-    "hp01_table": {
-     "enum": [
-      "in this output",
-      "later, as its own disclosed read (RL-166 Q9)"
      ]
     },
     "extension_rule": {
@@ -207,7 +139,8 @@
        "flag": {
         "enum": [
          "onsets_before_116_s.to_research_lead",
-         "meter_clock.to_research_lead"
+         "meter_clock.to_research_lead",
+         "tripwires.any"
         ]
        },
        "cleared_by": {
@@ -216,7 +149,7 @@
        }
       }
      },
-     "description": "RL-166c section 2 row 7: the fit does not refuse on P-4's or R-20's flag; the lead holds stage 2 while either is true in stage 1's file until the research lead clears it. One entry per flag that was true, naming the clearing ruling; [] when neither was."
+     "description": "RL-166c section 2 row 7 and RL-166 Q8: the fit does not refuse on P-4's or R-20's flag or on Q8's tripwires; the lead holds stage 2 while any is true in stage 1's file until the research lead clears it. One entry per flag that was true, naming the clearing ruling; [] when none was."
     }
    }
   }

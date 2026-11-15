@@ -26,7 +26,8 @@ largest drift fraction over cells for the tripwire.
   as one number in each form; (iv)'s median, minimum and maximum; (vi) without its per-leg values.
   Per-leg lists and (v) are dropped.
 * **Tripwire.** The largest ``drift_fraction_linear`` over cells whose gamma is estimable, against 0.08.
-  The threshold is 0.04 if the cold seat's RL-166 Q11 check fails; the caller passes it.
+  The threshold is 0.04 if RL-166 Q11's condition fails. The custody entry point reads it from the committed
+  manifest's drift_tripwire decision (Mythos cold seat 11), so it is a frozen value, not a run-time choice.
 
 This runs in stage 2: the module opens energy files, and only through its own loaders.
 """
@@ -35,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 from pathlib import Path
+import sys
 import uuid
 
 STEP3_PATH = Path(__file__).resolve().with_name("step3_energy_ratios.py")
@@ -161,8 +163,12 @@ def run_roster(entries, *, threshold=DRIFT_THRESHOLD, loader=load_step3):
 # ------------------------------------------------------------------------------------------------------------
 # Custody mode, stage 2 (the stage-2 CLI does not compute statistic (iii); this file supplies it):
 #
-#     python3 -I -B joulewise/cadence_looks/step3_roster.py --stage1 STAGE1.json --stage1-sha256 HEX
-#         --custody ROOT [--span-dir SPAN_ID=PATH ...] [--threshold 0.08|0.04] --out STEP3.json
+#     python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest MANIFEST.json --stage1 STAGE1.json
+#         --stage1-sha256 HEX --custody ROOT [--span-dir SPAN_ID=PATH ...] [--allow-draft] --out STEP3.json
+#
+# Before anything is opened: the manifest's pins verify (manifest.verify_pins) and LOOKS.json names this stage-1
+# hash (manifest.require_stage1_committed; --allow-draft skips both for synthetic runs). The drift threshold is
+# the committed manifest's decision drift_tripwire (RL-166 Q11), never a command-line value.
 #
 # The roster is stage 1's committed output (level D, docs/process/cadence_look_fit_interface.md section 3),
 # taken by its sha256: its included type-A legs of role fit. A leg's bundle is
@@ -200,9 +206,23 @@ def main(argv=None):
     p.add_argument("--stage1-sha256", required=True)
     p.add_argument("--custody", required=True)
     p.add_argument("--span-dir", action="append", default=[])
-    p.add_argument("--threshold", type=float, default=DRIFT_THRESHOLD)
+    p.add_argument("--manifest", required=True)
+    p.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest, no LOOKS.json stage-1 row")
     p.add_argument("--out", required=True)
     a = p.parse_args(argv)
+    repo = Path(__file__).resolve().parents[2]
+    if str(repo) not in sys.path:                 # -I drops the repository from sys.path
+        sys.path.insert(0, str(repo))
+    from joulewise.cadence_looks import manifest as lm
+    try:
+        doc = lm.verify_pins(a.manifest, repo, allow_draft=a.allow_draft, running=[Path(__file__).resolve(), STEP3_PATH])
+        if not a.allow_draft:
+            lm.require_stage1_committed(lm.load_json(repo / lm.LOOK_LEDGER_PATH), doc["look_id"], a.stage1_sha256)
+    except lm.ManifestError as error:
+        for problem in error.problems:
+            print(f"REFUSE {problem}")
+        return 1
+    threshold = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")["threshold"]
     raw = Path(a.stage1).read_bytes()
     if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
         print("REFUSE the stage-1 file is not the committed bytes")
@@ -210,7 +230,7 @@ def main(argv=None):
     try:
         entries = entries_from_stage1(json.loads(raw), span_dirs(a.custody, a.span_dir))
         doc = {"schema": SCHEMA, "stage1_sha256": a.stage1_sha256, "step3_sha256": STEP3_SHA256,
-               **run_roster(entries, threshold=a.threshold)}
+               **run_roster(entries, threshold=threshold)}
     except Step3Refused as error:
         print(f"REFUSE {error}")
         return 1

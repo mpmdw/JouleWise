@@ -5,9 +5,10 @@ Branch `align/2026-11-14-look-manifest`, off `align/2026-11-14-kit-v1-1` at `9cb
 `origin/audit/2026-11-10-fable`: RL-149 to RL-165 at `ce12b6924`, RL-166 at `bd090fee1`.
 
 This document is a draft. It authorizes nothing. RL-166 ruled the first draft's twenty open questions in one
-batch. The manifest `lm-interim-01` now carries every value RL-166 fixed. The only items left open are the
-sha256 hashes of code that does not exist yet (RL-166 §2 item 3), and each one is written `PENDING:CODE`.
-The validator refuses a committed manifest (`status: committed`) that still carries one. The form may change
+batch; RL-166a to RL-166c and RL-167 followed; the two cold seats on the combined head `5ea1bdee9` (Mythos:
+ADMIT WITH FIXES; Sol: REFUSE) are answered in section 7. The manifest `lm-interim-01` carries every value those
+rulings fixed. Every file it pins is pinned, the analyst seat's two on a draft basis until the cold reviews close.
+The validator refuses a committed manifest (`status: committed`) that still carries a placeholder. The form may change
 until the manifest is committed (RL-166 §2 item 11, Tue 06:00). After that, any change needs a ruling and a
 new manifest id.
 
@@ -26,7 +27,9 @@ The tests build synthetic inputs only.
 | `docs/process/cadence/looks/lm-interim-01.json` | The draft manifest (`status: draft`) |
 | `docs/process/cadence/looks/LOOKS.json` | The look ledger (RL-166 Q18): look id, manifest path, sha256, status. The block ledger is not changed |
 | `docs/process/cadence/looks/lm-interim-01.stage1.schema.json` | Stage 1's output schema (no energy): level D of the analyst seat's interface (`docs/process/cadence_look_fit_interface.md` §3, PR #795), field for field. Pinned in the manifest; RL-166 adds it to freeze 1 |
-| `docs/process/cadence/looks/lm-interim-01.output.schema.json` | The look's output: level O (interface §4) embedded exactly as `fit`, step 3's file as `step3`, the High Power table, the decisions and the disclosure. Pinned in the manifest |
+| `docs/process/cadence/looks/lm-interim-01.output.schema.json` | The look's output: level O (interface §4) embedded exactly as `fit`, step 3's file as `step3`, `realized_prompt_tokens`, the decisions and the disclosure (with `holds_cleared`). No High Power table: RL-167 §3 moved it to look `lm-hp-01`. Pinned in the manifest |
+| `docs/process/cadence/looks/evidence/` | Synthetic evidence the manifest's dictated sentences cite, byte-identical, hashed by the validator |
+| `tests/cadence/look_minirepo.py` | Test helper: a pinned copy of every file the look runs, so the entry points' pin checks run on real bytes |
 | `docs/process/cadence/looks/look_manifest.schema.json` | JSON Schema copy of the manifest format. The Python validator is authoritative |
 | `joulewise/cadence_looks/manifest.py` | Validator: `validate_manifest`, `check_repo`, `validate_look_ledger`, `resolve_roster` |
 | `joulewise/cadence_looks/step3_energy_ratios.py` | Step 3's script, byte-identical (RL-166 Q6). Any edit needs a ruling |
@@ -65,7 +68,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | # | Requirement | Cite |
 |---|---|---|
 | S1 | Development legs dev-01 to dev-05; the look follows dev-05 | RL-149 §2.6; RL-155 §3.3 |
-| S2 | hp-01 is described only and never in the fit. **Freeze 2 does not wait for it.** If hp-01 is not desk-final at stage 1, its table runs later with the same code, as its own disclosed read | RL-149 §2.5; RL-166 Q9 |
+| S2 | hp-01 is counted only, in stage 1 (its inclusion verdicts and the `hp01_below_9` tripwire). Stage 2 opens no hp-01 energy; the High Power table is look `lm-hp-01`, with its own manifest | RL-149 §2.5; RL-167 §3 (superseding RL-166 Q9) |
 | S3 | Reserve legs serving development enter in their own cell and on their own day, if they are desk-final at stage 1. The look does not wait for them | RL-149 §2.4; RL-166 Q13 |
 | S4 | **Type-T legs are not read at this look at all** (in `never_read`; `leg_types_never` includes T) | RL-166 Q14 |
 | S5 | Never read: qualification, ctl-01 (CPU and package prints belong to its look), F0/F2/F3 and Part C, W1/C/T/v4, rejected attempts, step 3's nine legs | RL-149 §2.6; RL-165 §8.1; RL-166 Q17, Q19 |
@@ -78,7 +81,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 |---|---|---|
 | T1 | **Stage 1 opens inclusion and journal files only.** It writes: the six verdicts per leg, the roster, the day map, the rates, the start medians and calibrated ranges, and the onset fit with its error | RL-166 Q8 |
 | T2 | Stage 1's output is committed with its sha256 before stage 2 opens a file. Stage 2 takes it by that hash as its only roster | RL-166 Q8 |
-| T3 | Stage 1 goes to the research lead if any of these holds: fewer than 45 development legs included; fewer than 3 days; a cell with fewer than 10 included; more than 10 % of legs without a valid start reading; hp-01 below 9 | RL-166 Q8 |
+| T3 | Stage 1 goes to the research lead if any of these holds: fewer than 45 development legs included; fewer than 4 days (RL-166b B-7); a cell with fewer than 10 included; more than 10 % of legs without a valid start reading; hp-01 below 9 | RL-166 Q8 |
 | T4 | Stage 2 finishes within 20 min at 72 legs on the Air | RL-166 §2 |
 | T5 | Stage 1 runs as a dry run on dev-01 to dev-04 after the commit. Counts go to the lead | RL-166 §2 item 12; Q15 |
 
@@ -148,7 +151,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | Q6 | Step 3 byte-identical; adapter; per cell | `fit.step3`, decisions `drift_tripwire`, `step3_cell_not_run` |
 | Q7 | Rules 3 and 4 | `inclusion.rules`, `inclusion.interval` |
 | Q8 | Two stages and the five tripwires | `stages`, decision `stage1_tripwires` |
-| Q9 | hp-01 later if not ready | `when.describe_blocks_rule`, hp-01 `desk_final_if_any` |
+| Q9 | Superseded by RL-167 §3: hp-01 counted only; its table is `lm-hp-01` | `when.describe_blocks_rule`, never_read `hp01_energy` |
 | Q10 | Qualification prints declared here | `later_looks` |
 | Q11 | 0.08, with a 0.04 fallback | decision `drift_tripwire` |
 | Q12 | No extension rule | decision `extension_rule` |
@@ -167,7 +170,10 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 |---|---|
 | Structure | A missing or unknown key at any level; a missing cite. `PENDING:CODE` anywhere but a pinned sha256; `PENDING:Qn` without that open question. In a committed manifest: any placeholder or open question; two different hashes for one path |
 | Stages | Stage 1 opening energy, or any inclusion- or journal-stage file that carries energy; stage 1 not committed first; stage 2 over 1,200 s; a tripwire threshold other than RL-166's |
-| Reads | A forbidden block or phase; hp-01 in the fit; a waited-for development block not read; the look waiting for hp-01 or reserve-01; leg type T not in `leg_types_never`, or no type-T line in `never_read`; any attempt other than the accepted one |
+| Reads | A forbidden block or phase; hp-01 in the fit; a waited-for development block not read; the look waiting for hp-01 or reserve-01; leg type T not in `leg_types_never`; a `never_read` list missing any of its nine ids (qualification, ctl01, fillers, v4, type_T, rejected_attempts, step3_legs, reserve_qualification, hp01_energy); any attempt other than the accepted one |
+| Verbatim | Any of 22 dictated or ruled texts changed by one character (`VERBATIM_SHA256`: the stated limits, the deferred freeze-2 rules, the heat-term form, the onset's response and estimability, the hot stretch, the relative error, the qualified rule, the stage-2 holds); a dictated sentence's note that does not cite the evidence file at its sha256; with `--repo`, an evidence file that differs |
+| Pins | A missing dependency pin (the DC-in decoder `km003c_parse.py` and its imports, the rest of the measured import closure, rule 3's sensor policy `r1_runtime.json`, the validator itself) |
+| Removed | A `high_power_table` print (RL-167 §3) |
 | Energy | Channels other than exactly GPU rail and DC-in; per-leg energy in the output |
 | Fit | A missing pinned code path; a runtime other than "numpy, no scipy, `-I`"; unit not `segment`; a predictor outside the whitelist (no cell effect, nothing read inside the turn, no raw TV0h); an assumed sign; onset not measured from the start stamp, not in stage 1, or with predictors other than RL-166's four; rates outside stage 1; any fold refit other than base, heat term and onset; the step 3 file not at its path and hash; the adapter at another path |
 | Inclusion | Rules not exactly 1 to 6; rules 3 and 4 not at the look or without pinned code; rule 3 without U1's number; rule 4 with the refused clause; verdicts not hashed before energy |
@@ -206,25 +212,22 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 
 | Piece | Who writes it | Command |
 |---|---|---|
-| Rules 3 and 4 verdict file `{"<span_id>/<leg_id>": {"sidecar_coverage", "km003c_clean"}}` | `inclusion_34.py` | `python3 -I -B joulewise/cadence_looks/inclusion_34.py --roster R --custody C --out V.json [--detail-out D.json]` |
+| The roster (one JSON list) | `cadence_look_manifest.py validate` | `--span-ledger L --roster-out R.json`; its sha256 goes into LOOKS.json's `roster_sha256` |
+| Rules 3 and 4 verdict file `{"<span_id>/<leg_id>": {"sidecar_coverage", "km003c_clean"}}` | `inclusion_34.py` | `python3 -I -B joulewise/cadence_looks/inclusion_34.py --manifest M --roster R --custody C --out V.json [--detail-out D.json]` |
 | Level D (stage 1) | `scripts/cadence_look_run.py stage1 ... --rules-3-4 V.json` | #795 |
 | Level O (stage 2) | `scripts/cadence_look_run.py stage2 --stage1 S1 --stage1-sha256 H ...` | #795 |
-| Step 3's statistic (iii) and the drift tripwire (the stage-2 CLI does not compute it) | `step3_roster.py` | `python3 -I -B joulewise/cadence_looks/step3_roster.py --stage1 S1 --stage1-sha256 H --custody C --out STEP3.json` |
-| The output file the lead checks | `cadence_look_manifest.py assemble` | `--manifest M --stage1 S1 --fit FIT --step3 STEP3 --analyst-seat NAME --out OUT` |
+| Step 3's statistic (iii) and the drift tripwire (the stage-2 CLI does not compute it) | `step3_roster.py` | `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody C --out STEP3.json` |
+| The output file the lead checks | `cadence_look_manifest.py assemble` | `--manifest M --stage1 S1 --fit FIT --step3 STEP3 --analyst-seat NAME [--hold-cleared FLAG=RL-n ...] --out OUT` |
 
-**Run end to end on #795's synthetic custody** (an integration of this branch with #795, off any PR). All
-five generator scenarios ran: stage 1, stage 2, step 3 and `assemble`. Stage 1's output and the assembled
-output validate against both schemas under `jsonschema`, which is not installed in CI. The schemas follow
-the code where it is wider than the interface page's text. The code emits a top-level `synthetic` flag; per-leg
-`prefill_tokens` and `decode_tokens` in level D; integer maps for `counts.by_cell` and `counts.by_g0_role`;
-and `start` and `state` null for a leg that never ran. The interface page should say the same.
+Every entry point verifies the manifest's pins before it opens a custody file (`manifest.verify_pins`), and every
+stage-2 entry point refuses unless LOOKS.json names the stage-1 file's sha256 (`require_stage1_committed`).
+`--allow-draft` waives both for synthetic runs only.
 
-**The synthetic custody does not exercise rules 3 and 4.** Its bundles have no G0 gate event and no
-`config.json`. Its journal lacks TV1h, which is a registered coverage key. Its meter header has no `poll_s`,
-and its trailer stops as "synthetic". So `inclusion_34.py` judges every leg failed there. On a copy with those
-five things added, it agrees with the generator's planted verdicts on 69 of 72 legs. The other three are
-planted labels with no physical basis in the files (one is a leg that never ran). The stage-1 dry run on real
-custody remains the check of the real layout.
+**Run end to end on #795's synthetic custody** (an integration of this branch with #795, off any PR): all seven
+generator scenarios run stage 1, stage 2, step 3 and `assemble`, and every stage-1 file and assembled output
+validates against both schemas under `jsonschema` (not installed in CI). The generator now plants rules 3 and 4
+(bc03018d2 on #795); the Mythos cold seat found `inclusion_34.py` agreeing with the planted verdicts on 71 of 72
+legs. The stage-1 dry run on real custody remains the check of the real layout.
 
 ## 6. RL-166b (the Mythos attack on the fit form), as the manifest carries it
 
@@ -255,11 +258,32 @@ custody remains the check of the real layout.
   - Level O, per channel: `fold_coefficients` (P-1); `day_detail.{days.{legs_with_hot_block, hot_blocks, se_with_heat, se_no_heat}, s_with_heat, s_no_heat}` (P-2); `onset_offset_residuals.{offsets."-2".."5".{n, mean_with_heat, rms_with_heat, mean_no_heat, rms_no_heat}, rms_offsets_m2_to_p3.{with_heat, no_heat}}` (P-3). `columns` may hold as few as 5 entries.
   - The analyst seat emits these names, or the interface page renames them and the schemas follow.
 
-## 7. Still owed
+## 7. The cold seats on `5ea1bdee9`, answered on this branch
+
+| Finding | Fix here | Test |
+|---|---|---|
+| Sol 1 (blinding): inclusion decodes energy values before discarding them | `read_pm_supports` takes `timestamp_s` and `elapsed_ns` by pattern; no rich-telemetry line is JSON-decoded. Meter sample and error lines were already pattern-only | energy fields written as bytes no JSON parser accepts; `json.loads` spied, never called |
+| Sol 2, Mythos 12: type-T bundles opened; a legacy field overrides the selector; unpinned sensor policy | A leg with `spec.leg_type == "T"` is never opened (both verdicts false, reason printed); no other field selects; `r1_runtime.json` resolves from the module's path and is pinned and its hash recorded | open-spy on a type-T leg; a legacy `spec.type` selects nothing; a changed policy refuses the run |
+| Sol 5, Mythos 5: the hp-01 table | Out of the manifest (title, describe rule, print), the output schema and `assemble` (`--hp-table` removed); `never_read` names hp-01 energy; RL-166a and RL-167 §3 cited | validator refuses the print; schema carries neither field; the option is gone |
+| Sol 6: Q11 | `drift_tripwire.threshold` 0.04, `ruled_threshold` 0.08, `pending` names the research lead's disposition; `step3_roster.py` reads the threshold from the manifest (its `--threshold` flag is gone) | 0.04 and 0.08 accepted, 0.05 refused, 0.04 without the pending note refused; the applied threshold equals the manifest's |
+| Sol 7, Mythos 11: verbatim texts, complete never_read, the fallback | `VERBATIM_SHA256` (22 texts); `never_read` ids, all nine required; evidence note and file hash checked | every pinned text, one character changed, refused; each id removed refused |
+| Mythos 3, Sol 9: pins not enforced; DC-in decoder unpinned | `fit.dependencies` pins the measured import closure (17 files, with `km003c_parse.py`, `aggregate.py`, `desk_compress.py`, `r1_runtime.json`, the validator); `scripts/cadence_look_manifest.py` joins `fit.code`; `verify_pins` runs in `inclusion_34.py`, `step3_roster.py` and `assemble` before anything is opened; `assemble` compares every hash the fit recorded with its pin | a changed dependency, a changed adapter, a fit hash not the pin, an unpinned running file: each refused |
+| Mythos 8: "committed" not checkable; no roster writer | LOOKS.json rows carry `roster_sha256`, `stage1_sha256`, `output_sha256`, `coefficients_sha256`, required by status; `require_stage1_committed`; `validate --roster-out` writes the one roster shape (a list), which `inclusion_34.py` alone accepts; `assemble` also holds on Q8's tripwires | status without its hashes refused; stage-1 hash mismatch refused in step 3 and assemble; a `{"roster": ...}` file refused; tripwire hold needs a ruling |
+| Mythos 10: text | Off-state reading per R-4 (any stamp age; Unknown never cuts); r_p, r_d per R-1; n and c per R-2, R-3; `passes`/`fails`/`not_evaluable`; custody_files gains the stage-1 meter read for R-20; `realized_prompt_tokens` computed by `assemble`; span trailer counts from the detail file; this spec | verbatim pins cover the ruled texts |
+| Mythos 2 (part): host-command census | The step 3 file's usage line is listed in `tests/host_command_sites.json` with its seam; the file itself is unchanged (RL-166 Q6) | `tests.test_host_command_sites` |
+
+**For the research lead (not changed here):** Mythos 10 notes the pass-rate sentence says "0.04 to 0.69 over the
+five worlds" while its evidence file has twelve worlds (down to 0.001); RL-166c §5 moved the other sentence to
+twelve worlds. Mythos's Q11 reading (the 8 % cell exists and is the same quantity) differs from Sol's (not
+verified); the manifest takes the ruled fallback 0.04 until the research lead disposes.
+
+**On the fit side (#795):** Mythos 1, 4, 6, 7, 9, 13, 14, Sol 3, Sol 4 / Mythos 2 (numpy in CI, the synth census
+entry), and wiring `verify_pins` and `require_stage1_committed` into `cadence_look_run.py` stage 1 and stage 2.
+
+## 8. Still owed
 
 | Item | Who | Due |
 |---|---|---|
-| Final pins. `fit_interim.py` (5da431af…) and `scripts/cadence_look_run.py` (c3fc7730…) are pinned **on a draft basis** at #795's `acea4a919`. On this branch `validate --repo` warns that they are absent; with #795 merged, the import, condition and hash checks pass. The pins are re-run with `pin --write` after the cold reviews, and every later change to either file needs a re-pin | Lead, after the cold reviews | Mon 18:00 |
+| Final pins. `fit_interim.py` and `scripts/cadence_look_run.py` are pinned **on a draft basis** at #795's latest head; on this branch `validate --repo` warns that they are absent, and with #795 merged every check passes. `pin --write` re-pins after the fit-side fixes and again after the cold reviews; a change on main to any pinned dependency needs a re-pin too | Lead, after the cold reviews | Mon 18:00 |
+| The research lead's disposition of Q11 (0.04 stands until then) | Research lead | Before item 11 |
 | A planted-truth run of `step3_roster.py` on the generator's bundles | Analyst seat / lead | With item 7 |
-| Q11's check of the step 4 note | Cold seat | Mon 14:00 |
-| RL-166a, if the design attack changes the form | Research lead | Sun 13:00 |

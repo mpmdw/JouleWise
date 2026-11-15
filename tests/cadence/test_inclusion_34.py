@@ -19,6 +19,12 @@ import unittest.mock
 
 from joulewise.align.apple import thermal
 from joulewise.cadence_looks import inclusion_34 as i34
+from tests.cadence import look_minirepo
+
+
+def i34_sha(path):
+    import hashlib
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 REPO = Path(__file__).resolve().parents[2]
 NS = 1_000_000_000
@@ -293,25 +299,35 @@ class Readers(Base):
         (b / "events.jsonl").write_text(json.dumps({"event_type": "token", "timestamp_s": 1.0}) + "\n")
         self.assertIsNone(i34.read_leg_interval(b))
 
-    def test_rich_telemetry_keeps_two_keys(self):
+    def test_rich_telemetry_value_fields_are_never_parsed(self):
+        """Sol cold seat 1: only the two stamps are taken; no value field of a rich-telemetry line is parsed.
+        The energy fields are written as bytes no JSON parser accepts: any decode of such a line raises."""
         b = self.make_bundle()
-        kept = []
-        real_keep = i34._keep
+        good = [json.loads(l) for l in (b / "rich_telemetry.jsonl").read_text().splitlines()]
+        lines = []
+        for r in good:
+            lines.append('{"index": %d, "timestamp_s": %r, "elapsed_ns": %d, "gpu": {"gpu_energy": NOT_JSON_4242, '
+                         '"dvfm_states": [{"freq": 1380, "used_ns": BAD}]}, "processor_combined_power_w": 31.5x}'
+                         % (r["index"], r["timestamp_s"], r["elapsed_ns"]))
+        (b / "rich_telemetry.jsonl").write_text("\n".join(lines) + "\n")
+        decoded = []
+        real = json.loads
 
-        def keep(allowed):
-            hook = real_keep(allowed)
-
-            def spy(pairs):
-                out = hook(pairs)
-                kept.append(dict(out))
-                return out
-            return spy
-        with unittest.mock.patch.object(i34, "_keep", keep):
+        def spy(s_, *a, **k):
+            decoded.append(s_ if isinstance(s_, str) else s_.decode())
+            return real(s_, *a, **k)
+        with unittest.mock.patch.object(i34.json, "loads", spy):
             supports = i34.read_pm_supports(b)
-        self.assertTrue(supports)
-        self.assertEqual(set().union(*(d.keys() for d in kept)), {"timestamp_s", "elapsed_ns"})
-        self.assertEqual(set().union(*(s.keys() for s in supports)), {"start_ns", "end_ns"})
+        self.assertEqual(len(supports), len(good))
+        self.assertEqual(supports[0]["end_ns"] - supports[0]["start_ns"], good[0]["elapsed_ns"])
+        self.assertEqual(decoded, [])                                         # json.loads never called
         self.assertNotIn("4242", json.dumps(supports))
+
+    def test_rich_telemetry_line_without_exactly_one_stamp_gives_no_support(self):
+        b = self.make_bundle()
+        (b / "rich_telemetry.jsonl").write_text(
+            '{"timestamp_s": 1.0, "elapsed_ns": 5, "gpu": {"timestamp_s": 2.0}}\n{"elapsed_ns": 5}\n')
+        self.assertEqual(i34.read_pm_supports(b), [])
 
     def test_judge_leg_opens_no_energy_file(self):
         b = self.make_bundle()
@@ -360,19 +376,74 @@ class CustodyVerdictFile(Readers):
         return root, roster
 
     def test_main_writes_the_interface_shape(self):
+        mini = look_minirepo.mini_repo(self)
         root, roster = self.make_span()
         out, det = root / "v.json", root / "d.json"
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
-            rc = i34.main(["--roster", str(roster), "--custody", str(root), "--out", str(out), "--detail-out", str(det),
-                           "--runtime-config", str(REPO / "configs/align/v4/r1_runtime.json")])
-        self.assertEqual(rc, 0)
+        r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", root,
+                             "--manifest", mini / look_minirepo.MANIFEST, "--allow-draft", "--out", out,
+                             "--detail-out", det)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         v = json.loads(out.read_text())
         self.assertEqual(v, {"dev-03-s01/L001": {"sidecar_coverage": True, "km003c_clean": True},
                              "dev-03-s01/L002": {"sidecar_coverage": False, "km003c_clean": False},
                              "dev-03-s01/L003": {"sidecar_coverage": False, "km003c_clean": False}})
         d = json.loads(det.read_text())
         self.assertEqual(d["span_trailers"][0]["stop_reason"], "signal 15")
+        self.assertEqual(d["pins"]["runtime_config_sha256"],
+                         i34_sha(mini / "configs/align/v4/r1_runtime.json"))
         self.assertNotIn(self.SENTINEL_HEX, out.read_text() + det.read_text())
+
+    def test_main_verifies_the_pins_before_opening_custody(self):
+        """Mythos 3 / Sol 9 and Mythos 12: a changed pinned file (here the sensor policy) refuses the run, and
+        no custody file is touched; a committed manifest needs its LOOKS.json row; the roster is a list."""
+        mini = look_minirepo.mini_repo(self)
+        root, roster = self.make_span()
+        out = root / "v.json"
+        cfg = mini / "configs/align/v4/r1_runtime.json"
+        cfg.write_text(cfg.read_text().replace('"Tf08"', '"TV1h"', 1))
+        r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", root,
+                             "--manifest", mini / look_minirepo.MANIFEST, "--allow-draft", "--out", out)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("r1_runtime.json sha256 differs from the pin", r.stdout)
+        self.assertFalse(out.exists())
+        mini = look_minirepo.mini_repo(self)
+        r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", root,
+                             "--manifest", mini / look_minirepo.MANIFEST, "--out", out)          # no --allow-draft
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("needs status 'committed'", r.stdout)
+        self.assertIn("LOOKS.json lists this look as a draft", r.stdout)
+        self.assertFalse(out.exists())
+        wrapped = root / "roster-dict.json"
+        wrapped.write_text(json.dumps({"roster": json.loads(roster.read_text())}))
+        r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", wrapped, "--custody", root,
+                             "--manifest", mini / look_minirepo.MANIFEST, "--allow-draft", "--out", out)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("the roster is a JSON list", r.stdout)
+
+    def test_type_t_legs_are_never_opened(self):
+        """Sol 2 / Mythos 12: a type-T leg (spec.leg_type) is never opened; a legacy spec.type is not a selector."""
+        root, roster = self.make_span()
+        sdir = root / "dev-03-s01"
+        rec = sdir / "legs" / "L001" / "leg_record.json"
+        rec.write_text(json.dumps({"spec": {"leg_type": "T"}, "result": {"bundle": "b"}}))
+        opened = []
+        real_open = builtins.open
+
+        def spy(file, *a, **k):
+            opened.append(str(file))
+            return real_open(file, *a, **k)
+        with unittest.mock.patch.object(builtins, "open", spy), unittest.mock.patch.object(io, "open", spy):
+            v, d = i34.judge_custody(json.loads(roster.read_text()), i34.span_dirs(root), KEYS)
+        self.assertEqual(v["dev-03-s01/L001"], {"sidecar_coverage": False, "km003c_clean": False})
+        self.assertEqual(d["legs"]["dev-03-s01/L001"]["rule3"]["reasons"], ["type T: never read (RL-166 Q14)"])
+        self.assertFalse([p for p in opened if "/legs/L001/runtime/" in p], opened)
+        rec.write_text(json.dumps({"spec": {"leg_type": "A", "type": "T"}, "result": {"bundle": "b"}}))
+        v, _ = i34.judge_custody(json.loads(roster.read_text()), i34.span_dirs(root), KEYS)
+        self.assertTrue(v["dev-03-s01/L001"]["sidecar_coverage"])            # the legacy field selects nothing
+
+    def test_the_sensor_policy_resolves_from_the_module_not_the_working_directory(self):
+        self.assertEqual(i34.REPO, REPO)
+        self.assertTrue((i34.REPO / i34.RUNTIME_CONFIG).is_file())
 
     def test_span_dir_override(self):
         root, roster = self.make_span()

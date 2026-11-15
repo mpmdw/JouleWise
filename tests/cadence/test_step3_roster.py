@@ -233,22 +233,47 @@ class Stage1Custody(unittest.TestCase):
         self.assertEqual(entries[0]["bundle"], str(self.root / "dev-03-s01/legs/L001/runtime/b1"))
         self.assertEqual(entries[1]["prompt_tokens_nominal"], 2000)
 
-    def test_main_takes_stage1_by_hash(self):
+    def test_main_takes_stage1_by_hash_and_the_threshold_from_the_manifest(self):
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
         out = self.root / "step3.json"
-        import io
-        import unittest.mock
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
-            self.assertEqual(sr.main(["--stage1", str(self.stage1), "--stage1-sha256", "0" * 64, "--custody",
-                                      str(self.root), "--out", str(out)]), 1)
-            self.assertFalse(out.exists())
-            self.assertEqual(sr.main(["--stage1", str(self.stage1), "--stage1-sha256", self.sha, "--custody",
-                                      str(self.root), "--out", str(out)]), 0)
+        base = ["--manifest", mini / mr.MANIFEST, "--stage1", self.stage1, "--custody", self.root, "--out", out]
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base, "--stage1-sha256", "0" * 64, "--allow-draft")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertFalse(out.exists())
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base, "--stage1-sha256", self.sha, "--allow-draft")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         doc = json.loads(out.read_text())
         schema = json.loads(OUTPUT_SCHEMA.read_text())["$defs"]["step3_output"]
         self.assertEqual(set(doc), set(schema["required"]))
         self.assertEqual((doc["stage1_sha256"], doc["step3_sha256"]), (self.sha, sr.STEP3_SHA256))
         self.assertEqual([c["status"] for c in doc["cells"]], ["not_run", "not_run"])   # bundles absent here
         self.assertEqual(doc["tripwire"]["decision"], "not_evaluable")
+        manifest = json.loads((mini / mr.MANIFEST).read_text())
+        drift = next(d for d in manifest["decisions"] if d["id"] == "drift_tripwire")
+        self.assertEqual(doc["tripwire"]["threshold_applied"], drift["threshold"])   # Mythos 11: frozen, not a flag
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base, "--stage1-sha256", self.sha, "--allow-draft",
+                  "--threshold", "0.08")
+        self.assertEqual(r.returncode, 2)                                              # no run-time threshold
+
+    def test_main_needs_stage1_committed_in_looks(self):
+        """Mythos 8: without --allow-draft, LOOKS.json must name this stage-1 hash."""
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        out = self.root / "step3.json"
+        base = ["--manifest", mini / mr.MANIFEST, "--stage1", self.stage1, "--stage1-sha256", self.sha,
+                "--custody", self.root, "--out", out]
+        mr.commit(mini)
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("stage 1 is not committed", r.stdout)
+        mr.commit(mini, stage1_sha256="1" * 64)
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("names stage-1 sha256 111111111111", r.stdout)
+        mr.commit(mini, stage1_sha256=self.sha)
+        r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

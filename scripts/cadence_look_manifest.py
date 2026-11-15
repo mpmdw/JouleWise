@@ -2,11 +2,11 @@
 """Validate a look manifest (RL-150 R4, RL-166); pin a draft's hashes. Opens no energy, power, meter or custody file.
 
     python3 -B scripts/cadence_look_manifest.py validate MANIFEST.json [--final]
-        [--repo DIR [--kit KIT.json ...]] [--span-ledger LEDGER.json] [--looks LOOKS.json]
+        [--repo DIR [--kit KIT.json ...]] [--span-ledger LEDGER.json [--roster-out ROSTER.json]] [--looks LOOKS.json]
     python3 -B scripts/cadence_look_manifest.py pin MANIFEST.json --repo DIR [--write]
     python3 -B scripts/cadence_look_manifest.py assemble --manifest MANIFEST.json --stage1 STAGE1.json
-        --fit FIT.json --step3 STEP3.json --analyst-seat NAME [--hp-table HP.json]
-        [--hold-cleared FLAG=RL-n ...] --out OUTPUT.json
+        --fit FIT.json --step3 STEP3.json --analyst-seat NAME [--hold-cleared FLAG=RL-n ...] [--allow-draft]
+        --out OUTPUT.json
 
 validate:
 * structure and ruling invariants always; ``--final`` treats it as committed (no placeholder left);
@@ -54,6 +54,8 @@ def validate(args):
         roster = None
         if args.span_ledger:
             roster = lm.resolve_roster(doc, lm.load_json(args.span_ledger), lm.sha256_file(args.manifest))
+        elif args.roster_out:
+            raise lm.ManifestError(["--roster-out needs --span-ledger"])
     except lm.ManifestError as error:
         for p in error.problems:
             print(f"REFUSE {p}")
@@ -68,6 +70,12 @@ def validate(args):
         print(f"roster: {len(roster)} span(s); fit days {len(days)}: {', '.join(days)}")
         for r in roster:
             print(f"  {r['block_id']:<10} {r['span_id']:<16} {r['role']:<8} {r['t0_local_date']}")
+        if args.roster_out:
+            # The one roster shape (a JSON list), written by this command only; its sha256 goes into LOOKS.json's
+            # roster_sha256 when stage 1 is committed (Mythos cold seat 8).
+            text = json.dumps(roster, indent=1) + "\n"
+            Path(args.roster_out).write_text(text, encoding="utf-8")
+            print(f"wrote {args.roster_out} sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()}")
     return 0
 
 
@@ -124,46 +132,70 @@ def pin(args):
     return 0
 
 
+HELD_FLAGS = ("onsets_before_116_s.to_research_lead", "meter_clock.to_research_lead", "tripwires.any")
+
+
+def _flag(stage1, flag):
+    if flag == "tripwires.any":
+        return (stage1.get("tripwires") or {}).get("any") is True
+    node = stage1.get(flag.split(".")[0])
+    return isinstance(node, dict) and node.get("to_research_lead") is True
+
+
 def assemble(args):
+    """The look's output file (RL-149 §2.6: the lead checks it against the output schema). Refuses before
+    writing anything unless: the pins verify (``manifest.verify_pins``); LOOKS.json names the stage-1 file's
+    hash (unless --allow-draft); the fit and step 3 files name that hash; every code hash the fit recorded is
+    the manifest's pin; and every held flag of stage 1 has its clearing ruling (RL-166 Q8; RL-166c §2 row 7)."""
     import datetime
+    import re as _re
+    repo = Path(args.manifest).resolve().parents[4]
     raw = Path(args.stage1).read_bytes()
     s1 = hashlib.sha256(raw).hexdigest()
+    problems = []
+    try:
+        doc = lm.verify_pins(args.manifest, repo, allow_draft=args.allow_draft, running=[Path(__file__).resolve()])
+        if not args.allow_draft:
+            lm.require_stage1_committed(lm.load_json(repo / lm.LOOK_LEDGER_PATH), doc["look_id"], s1)
+    except lm.ManifestError as error:
+        problems += error.problems
+        doc = lm.load_json(args.manifest)
     fit, step3 = lm.load_json(args.fit), lm.load_json(args.step3)
-    problems = [f"{name} names stage-1 sha256 {doc.get('stage1_sha256')}, not {s1}"
-                for name, doc in (("fit", fit), ("step3", step3)) if doc.get("stage1_sha256") != s1]
+    problems += [f"{name} names stage-1 sha256 {doc_.get('stage1_sha256')}, not {s1}"
+                 for name, doc_ in (("fit", fit), ("step3", step3)) if doc_.get("stage1_sha256") != s1]
+    pins = {path: sha for _, path, sha in lm.code_refs(doc)}
+    for path, sha in (fit.get("code_sha256") or {}).items():
+        if pins.get(path) != sha:
+            problems.append(f"the fit ran {path} at {str(sha)[:12]}, which is not the manifest's pin")
+    for path in ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py"):
+        if path not in (fit.get("code_sha256") or {}):
+            problems.append(f"the fit does not record {path}'s hash")
+    stage1 = json.loads(raw)
+    raised = [f for f in HELD_FLAGS if _flag(stage1, f)]
+    cleared = dict(c.split("=", 1) for c in (args.hold_cleared or []) if "=" in c)
+    for f in raised:
+        if not _re.fullmatch(r"RL-\d+[a-z]?(?: .*)?", cleared.get(f, "")):
+            problems.append(f"stage 1 shows {f} true: stage 2 was held; name the clearing ruling with --hold-cleared {f}=RL-n")
+    for f in sorted(set(cleared) - set(raised)):
+        problems.append(f"--hold-cleared {f}: stage 1 does not show that flag true")
     if problems:
         for p in problems:
             print(f"REFUSE {p}")
         return 1
-    # RL-166c section 2 row 7: the fit does not refuse on P-4's or R-20's flag; the lead holds stage 2 until the
-    # research lead clears it. An output is assembled only with each true flag's clearing ruling named.
-    stage1 = json.loads(raw)
-    raised = [flag for flag, node in (("onsets_before_116_s.to_research_lead", stage1.get("onsets_before_116_s")),
-                                      ("meter_clock.to_research_lead", stage1.get("meter_clock")))
-              if isinstance(node, dict) and node.get("to_research_lead") is True]
-    cleared = dict(c.split("=", 1) for c in (args.hold_cleared or []) if "=" in c)
-    import re as _re
-    missing = [f for f in raised if not _re.fullmatch(r"RL-\d+[a-z]?(?: .*)?", cleared.get(f, ""))]
-    extra = sorted(set(cleared) - set(raised))
-    if missing or extra:
-        for f in missing:
-            print(f"REFUSE stage 1 shows {f} true: stage 2 was held; name the clearing ruling with --hold-cleared {f}=RL-n")
-        for f in extra:
-            print(f"REFUSE --hold-cleared {f}: stage 1 does not show that flag true")
-        return 1
-    hp = lm.load_json(args.hp_table) if args.hp_table else None
     q = (fit.get("qualified_interim_half") or {}).get("verdict")
     code = dict(fit.get("code_sha256") or {})
     for rel in ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/inclusion_34.py",
-                "joulewise/cadence_looks/step3_energy_ratios.py"):
-        f = Path(args.manifest).resolve().parents[4] / rel
-        if f.is_file():
-            code[rel] = lm.sha256_file(f)
+                "joulewise/cadence_looks/step3_energy_ratios.py", "scripts/cadence_look_manifest.py"):
+        code[rel] = pins.get(rel) or lm.sha256_file(repo / rel)
+    # RL-158 Q5: legs whose realized prompt count is more than 5 % from nominal, from stage 1's own fields
+    realized = [{"leg_key": leg["leg_key"], "nominal": leg["cell_prompt_tokens"], "realized": leg["prefill_tokens"]}
+                for leg in stage1.get("legs") or []
+                if isinstance(leg.get("prefill_tokens"), int) and isinstance(leg.get("cell_prompt_tokens"), int)
+                and abs(leg["prefill_tokens"] - leg["cell_prompt_tokens"]) > 0.05 * leg["cell_prompt_tokens"]]
     out = {"schema": "joulewise.cadence_look_output.interim.v1", "look_id": "lm-interim-01",
            "manifest_sha256": lm.sha256_file(args.manifest), "stage1_sha256": s1, "fit": fit, "step3": step3,
-           "high_power_table": hp,
+           "realized_prompt_tokens": realized,
            "decisions": {"drift_tripwire": step3["tripwire"]["decision"], "qualified_interim_half": q,
-                         "hp01_table": "in this output" if hp is not None else "later, as its own disclosed read (RL-166 Q9)",
                          "extension_rule": "none written; any extension needs a ruling"},
            "disclosure": {"date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
                           "code_sha256": code, "stage1_sha256": s1, "analyst_seat": args.analyst_seat,
@@ -188,6 +220,7 @@ def main(argv=None):
     v.add_argument("--kit", action="append")
     v.add_argument("--span-ledger")
     v.add_argument("--looks")
+    v.add_argument("--roster-out", help="write the resolved roster (needs --span-ledger)")
     w = sub.add_parser("pin")
     w.add_argument("manifest")
     w.add_argument("--repo", required=True)
@@ -195,8 +228,8 @@ def main(argv=None):
     a = sub.add_parser("assemble")
     for k in ("--manifest", "--stage1", "--fit", "--step3", "--analyst-seat", "--out"):
         a.add_argument(k, required=True)
-    a.add_argument("--hp-table")
     a.add_argument("--hold-cleared", action="append", metavar="FLAG=RL-n")
+    a.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest, no LOOKS.json stage-1 row")
     args = p.parse_args(argv)
     if args.cmd == "validate":
         if args.kit and not args.repo:

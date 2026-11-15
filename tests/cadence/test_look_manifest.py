@@ -318,8 +318,16 @@ class RulingInvariants(Base):
         doc["reads"]["leg_types_read"].append("T")
         self.refused(lambda: lm.validate_manifest(doc), "both read and never read")
         doc = draft()
-        doc["reads"]["never_read"] = [x for x in doc["reads"]["never_read"] if "type-T" not in x["what"]]
-        self.refused(lambda: lm.validate_manifest(doc), "names the type-T legs")
+        doc["reads"]["never_read"] = [x for x in doc["reads"]["never_read"] if x["id"] != "type_T"]
+        self.refused(lambda: lm.validate_manifest(doc), "carries type_T (RL-166 Q14: the type-T legs)")
+        for nid in sorted(lm.REQUIRED_NEVER_READ_IDS["interim"]):          # Sol 7 / Mythos 11: the complete list
+            doc = draft()
+            doc["reads"]["never_read"] = [x for x in doc["reads"]["never_read"] if x["id"] != nid]
+            self.refused(lambda: lm.validate_manifest(doc), f"reads.never_read: carries {nid}")
+        doc = draft()
+        doc["reads"]["never_read"] = [x for x in doc["reads"]["never_read"] if x["id"] == "type_T"]
+        problems = self.refused(lambda: lm.validate_manifest(doc), "carries hp01_energy")
+        self.assertGreaterEqual(len([p for p in problems if "reads.never_read: carries" in p]), 8)
 
     def test_freezes_custody_review(self):
         doc = draft()
@@ -522,6 +530,10 @@ class RepoCheck(Base):
                  "scripts/cadence_legs_runner.py": runner_src,
                  "docs/process/cadence/looks/lm-interim-01.output.schema.json": "{}\n",
                  "docs/process/cadence/looks/lm-interim-01.stage1.schema.json": "{}\n"}
+        doc0 = draft()
+        for ref in doc0["fit"]["dependencies"] + [{"path": "scripts/cadence_look_manifest.py"}] + \
+                [{"path": p} for p in lm.EVIDENCE]:
+            files.setdefault(ref["path"], (REPO / ref["path"]).read_text(encoding="utf-8"))
         for rel, src in files.items():
             (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
             (tmp / rel).write_text(src, encoding="utf-8")
@@ -605,7 +617,8 @@ class OpensNoEnergy(Base):
         self.assertTrue(opened)
         for path in opened:
             self.assertNotIn(str(tmp / "custody"), path)
-            in_repo_code = path.startswith(str(REPO)) and path.endswith((".py", ".json"))
+            in_repo_code = path.startswith(str(REPO)) and (path.endswith((".py", ".json")) or
+                                                           path in {str(REPO / e) for e in lm.EVIDENCE})
             self.assertTrue(in_repo_code or path == str(led_path), path)
             self.assertFalse(re.search(r"(power_trace\.csv|rich_telemetry\.jsonl|stream-\d+\.jsonl|\.plist$)", path),
                              path)
@@ -636,132 +649,237 @@ class SchemaCopy(Base):
 
 
 class Assemble(Base):
-    def test_assemble_cross_checks_the_stage1_hash(self):
-        d = tmpdir(self, "lm-asm-")
-        s1 = d / "stage1.json"
-        s1.write_text('{"schema": "joulewise.cadence_look_stage1.v1"}\n')
-        h = hashlib.sha256(s1.read_bytes()).hexdigest()
-        fit = {"schema": "joulewise.cadence_look_fit.v1", "stage1_sha256": h, "code_sha256": {"a.py": "1" * 64},
-               "numpy_version": "2.5.4", "qualified_interim_half": {"verdict": "passes"}}
-        step3 = {"schema": "joulewise.cadence_look_step3.v1", "stage1_sha256": h, "cells": [],
-                 "tripwire": {"decision": "within"}}
-        (d / "fit.json").write_text(json.dumps(fit))
-        (d / "step3.json").write_text(json.dumps(step3))
-        args = ["assemble", "--manifest", str(MANIFEST), "--stage1", str(s1), "--fit", str(d / "fit.json"),
-                "--step3", str(d / "step3.json"), "--analyst-seat", "test", "--out", str(d / "out.json")]
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
-            self.assertEqual(cli.main(args), 0)
-        out = json.loads((d / "out.json").read_text())
+    """assemble on a pinned copy of the look's files (tests/cadence/look_minirepo.py), run as a file under -I."""
+
+    def setUp(self):
+        from tests.cadence import look_minirepo as mr
+        self.mr = mr
+        self.mini = mr.mini_repo(self)
+        self.d = tmpdir(self, "lm-asm-")
+        self.s1 = self.d / "stage1.json"
+        self.write_stage1({"schema": "joulewise.cadence_look_stage1.v1", "tripwires": {"any": False},
+                           "legs": [{"leg_key": "dev-03-s01/L001", "cell_prompt_tokens": 2000, "prefill_tokens": 2200},
+                                    {"leg_key": "dev-03-s01/L002", "cell_prompt_tokens": 10000, "prefill_tokens": 10100}]})
+
+    def write_stage1(self, doc):
+        self.s1.write_text(json.dumps(doc) + "\n")
+        h = hashlib.sha256(self.s1.read_bytes()).hexdigest()
+        man = json.loads((self.mini / self.mr.MANIFEST).read_text())
+        pins = {p: sha for _, p, sha in lm.code_refs(man)}
+        self.fit = {"schema": "joulewise.cadence_look_fit.v1", "stage1_sha256": h, "numpy_version": "2.5.4",
+                    "code_sha256": {k: pins[k] for k in (FIT, RUNNER, lm.STEP3_PATH)},
+                    "qualified_interim_half": {"verdict": "passes"}}
+        self.step3 = {"schema": "joulewise.cadence_look_step3.v1", "stage1_sha256": h, "cells": [],
+                      "tripwire": {"decision": "within"}}
+        self.dump()
+        return h
+
+    def dump(self):
+        (self.d / "fit.json").write_text(json.dumps(self.fit))
+        (self.d / "step3.json").write_text(json.dumps(self.step3))
+
+    def run_(self, *extra):
+        return self.mr.py(self.mini, "scripts/cadence_look_manifest.py", "assemble",
+                          "--manifest", self.mini / self.mr.MANIFEST, "--stage1", self.s1, "--fit", self.d / "fit.json",
+                          "--step3", self.d / "step3.json", "--analyst-seat", "test", "--out", self.d / "out.json", *extra)
+
+    def test_assemble_writes_the_schema_shape(self):
+        r = self.run_("--allow-draft")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = json.loads((self.d / "out.json").read_text())
         schema = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
         self.assertEqual(set(out), set(schema["required"]))
+        self.assertNotIn("high_power_table", out)                                     # RL-167 §3
+        self.assertNotIn("hp01_table", out["decisions"])
         self.assertEqual(out["decisions"]["drift_tripwire"], "within")
-        self.assertEqual(out["decisions"]["qualified_interim_half"], "passes")
-        self.assertEqual(out["manifest_sha256"], lm.sha256_file(MANIFEST))
-        self.assertIn("joulewise/cadence_looks/step3_roster.py", out["disclosure"]["code_sha256"])
+        self.assertEqual(out["realized_prompt_tokens"],                                 # RL-158 Q5, > 5 %
+                         [{"leg_key": "dev-03-s01/L001", "nominal": 2000, "realized": 2200}])
         self.assertEqual(out["disclosure"]["holds_cleared"], [])
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):              # a clearance with no flag
-            self.assertEqual(cli.main(args + ["--hold-cleared", "meter_clock.to_research_lead=RL-170"]), 1)
-        # RL-166c §2 row 7: a raised flag needs its clearing ruling named
-        s1.write_text(json.dumps({"schema": "joulewise.cadence_look_stage1.v1",
-                                  "onsets_before_116_s": {"to_research_lead": True, "total": 2},
-                                  "meter_clock": {"to_research_lead": False}}) + "\n")
-        h2 = hashlib.sha256(s1.read_bytes()).hexdigest()
-        for doc, name in ((fit, "fit.json"), (step3, "step3.json")):
-            doc["stage1_sha256"] = h2
-            (d / name).write_text(json.dumps(doc))
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:
-            self.assertEqual(cli.main(args), 1)
-        self.assertIn("stage 2 was held", so.getvalue())
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
-            self.assertEqual(cli.main(args + ["--hold-cleared", "onsets_before_116_s.to_research_lead=not-a-ruling"]), 1)
-            self.assertEqual(cli.main(args + ["--hold-cleared", "onsets_before_116_s.to_research_lead=RL-170"]), 0)
-        out = json.loads((d / "out.json").read_text())
+        r = self.run_("--allow-draft", "--hp-table", self.d / "fit.json")               # the option is gone
+        self.assertEqual(r.returncode, 2)
+
+    def test_assemble_refuses_code_that_is_not_the_pin(self):
+        """Mythos 3: the hashes the fit recorded are compared with the manifest's pins."""
+        self.fit["code_sha256"][FIT] = "f" * 64
+        self.dump()
+        r = self.run_("--allow-draft")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("which is not the manifest's pin", r.stdout)
+        self.assertFalse((self.d / "out.json").exists())
+        f = self.mini / "joulewise/cadence_looks/step3_roster.py"
+        f.write_text(f.read_text() + "\n# edited\n")
+        self.fit["code_sha256"][FIT] = json.loads((self.mini / self.mr.MANIFEST).read_text())["fit"]["code"][0]["sha256"]
+        self.dump()
+        r = self.run_("--allow-draft")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("step3_roster.py sha256 differs from the pin", r.stdout)
+
+    def test_assemble_needs_stage1_committed_unless_draft(self):
+        """Mythos 8."""
+        self.mr.commit(self.mini)
+        r = self.run_()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("stage 1 is not committed", r.stdout)
+        self.mr.commit(self.mini, stage1_sha256=hashlib.sha256(self.s1.read_bytes()).hexdigest())
+        r = self.run_()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_held_flags_need_their_clearing_ruling(self):
+        """RL-166c §2 row 7 and RL-166 Q8 (Mythos 8): P-4, R-20 and the five tripwires."""
+        self.assertEqual(self.run_("--allow-draft", "--hold-cleared", "meter_clock.to_research_lead=RL-170").returncode, 1)
+        self.write_stage1({"schema": "joulewise.cadence_look_stage1.v1", "tripwires": {"any": True},
+                           "onsets_before_116_s": {"to_research_lead": True, "total": 2},
+                           "meter_clock": {"to_research_lead": False}, "legs": []})
+        r = self.run_("--allow-draft")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("onsets_before_116_s.to_research_lead true: stage 2 was held", r.stdout)
+        self.assertIn("tripwires.any true: stage 2 was held", r.stdout)
+        r = self.run_("--allow-draft", "--hold-cleared", "onsets_before_116_s.to_research_lead=RL-170",
+                      "--hold-cleared", "tripwires.any=not-a-ruling")
+        self.assertEqual(r.returncode, 1)
+        r = self.run_("--allow-draft", "--hold-cleared", "onsets_before_116_s.to_research_lead=RL-170",
+                      "--hold-cleared", "tripwires.any=RL-171")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = json.loads((self.d / "out.json").read_text())
         self.assertEqual(out["disclosure"]["holds_cleared"],
-                         [{"flag": "onsets_before_116_s.to_research_lead", "cleared_by": "RL-170"}])
-        step3["stage1_sha256"] = "0" * 64
-        (d / "step3.json").write_text(json.dumps(step3))
+                         [{"flag": "onsets_before_116_s.to_research_lead", "cleared_by": "RL-170"},
+                          {"flag": "tripwires.any", "cleared_by": "RL-171"}])
+        self.step3["stage1_sha256"] = "0" * 64
+        self.dump()
+        self.assertEqual(self.run_("--allow-draft", "--hold-cleared", "onsets_before_116_s.to_research_lead=RL-170",
+                                   "--hold-cleared", "tripwires.any=RL-171").returncode, 1)
+
+
+class ColdSeatFixes(Base):
+    def test_dictated_texts_are_pinned_verbatim(self):
+        """Sol 7 / Mythos 11: one character changed in any pinned text is refused."""
+        texts = lm.verbatim_texts(draft())
+        self.assertEqual(set(texts), set(lm.VERBATIM_SHA256))
+        for name in sorted(lm.VERBATIM_SHA256):
+            doc = draft()
+            section, key = name.rsplit(".", 1) if name.count(".") >= 2 else (None, None)
+            node = None
+            if name.startswith("fit.stated_limits."):
+                node = next(x for x in doc["fit"]["stated_limits"] if x["id"] == name.split(".")[2]); field = "text"
+            elif name.startswith("freeze2.deferred_rules."):
+                node = next(x for x in doc["freeze2"]["deferred_rules"] if x["id"] == name.split(".")[2]); field = "rule"
+            elif name.startswith("stages.stage2.holds."):
+                node = next(x for x in doc["stages"]["stage2"]["holds"] if x["flag"] == name.split("holds.", 1)[1])
+                field = "rule"
+            else:
+                parts = name.split(".")
+                node = doc
+                for p_ in parts[:-1]:
+                    node = node[p_]
+                field = parts[-1]
+            node[field] = node[field].replace("0", "1", 1) if "0" in node[field] else node[field] + "."
+            self.refused(lambda: lm.validate_manifest(doc), f"{name}: differs from the ruled text")
+
+    def test_old_figures_and_withdrawn_form_are_refused(self):
+        doc = draft()
+        pc = next(x for x in doc["fit"]["stated_limits"] if x["id"] == "partial_correction")
+        pc["text"] = pc["text"].replace("0.84 to 0.96", "0.85 to 0.95")
+        self.refused(lambda: lm.validate_manifest(doc), "partial_correction: differs from the ruled text")
+        doc = draft()
+        doc["fit"]["onset"]["estimable_when"] = "always"
+        self.refused(lambda: lm.validate_manifest(doc), "fit.onset.estimable_when: differs")
+        doc = draft()
+        doc["fit"]["heat_term"]["form"] = "d * m * (k . z) + delta * w, w the overlap with [tau_hat, inf)."
+        self.refused(lambda: lm.validate_manifest(doc), "fit.heat_term.form: differs")
+
+    def test_evidence_is_cited_and_hashed(self):
+        doc = draft()
+        pr = next(x for x in doc["fit"]["stated_limits"] if x["id"] == "qualified_pass_rate")
+        pr["note"] = pr["note"].replace(list(lm.EVIDENCE.values())[0], "0" * 64)
+        self.refused(lambda: lm.validate_manifest(doc), "qualified_pass_rate.note: cites")
+        tmp, doc2, kp = RepoCheck.make_repo(self)
+        ev = tmp / list(lm.EVIDENCE)[0]
+        ev.write_text(ev.read_text() + "x")
+        self.refused(lambda: lm.check_repo(doc2, tmp, [kp]), "the evidence the dictated sentences cite")
+
+    def test_q11_fallback_and_ruled_threshold(self):
+        doc = draft()
+        drift = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")
+        self.assertEqual((drift["threshold"], drift["ruled_threshold"]), (0.04, 0.08))       # Sol 6
+        self.assertIn("pending the research lead's disposition", drift["pending"])
+        drift["threshold"] = 0.08
+        del drift["pending"], drift["ruled_threshold"]
+        lm.validate_manifest(doc)                                                         # the ruled value
+        drift["threshold"] = 0.05
+        self.refused(lambda: lm.validate_manifest(doc), "threshold 0.08, or the fallback 0.04")
+        drift["threshold"] = 0.04
+        self.refused(lambda: lm.validate_manifest(doc), "carries ruled_threshold 0.08 and the pending")
+
+    def test_hp01_table_is_out(self):
+        """Sol 5 / Mythos 5: RL-167 §3."""
+        doc = draft()
+        self.assertNotIn("high_power_table", {p["id"] for p in doc["outputs"]["prints"]})
+        doc["outputs"]["prints"].append({"id": "high_power_table", "what": "x", "cite": ["RL-157 §1"]})
+        self.refused(lambda: lm.validate_manifest(doc), "high_power_table is not printed by this look")
+        out = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
+        self.assertNotIn("high_power_table", out["properties"])
+        self.assertNotIn("hp01_table", out["properties"]["decisions"]["properties"])
+        self.assertIn("RL-167 §3", doc["rulings"])
+        self.assertIn("RL-166a", doc["rulings"])
+
+    def test_dependencies_are_pinned(self):
+        """Mythos 3 / Sol 9: the DC-in decoder and its imports."""
+        for dep in sorted(lm.REQUIRED_DEPENDENCIES["interim"]):
+            doc = draft()
+            doc["fit"]["dependencies"] = [x for x in doc["fit"]["dependencies"] if x["path"] != dep]
+            self.refused(lambda: lm.validate_manifest(doc), f"fit.dependencies: pins {dep}")
+
+    def test_holds_include_the_tripwires(self):
+        doc = draft()
+        doc["stages"]["stage2"]["holds"] = [h for h in doc["stages"]["stage2"]["holds"] if h["flag"] != "tripwires.any"]
+        self.refused(lambda: lm.validate_manifest(doc), "holds stage 2 on tripwires.any")
+
+    def test_looks_rows_record_the_hashes(self):
+        """Mythos 8: a status needs its hashes; require_stage1_committed reads them."""
+        led = lm.load_json(LOOK_LEDGER)
+        row = led["looks"][0]
+        row["status"] = "stage1_committed"
+        with self.assertRaises(lm.ManifestError) as ctx:
+            lm.validate_look_ledger(led)
+        self.assertTrue(any("needs stage1_sha256" in p for p in ctx.exception.problems))
+        row.update(stage1_sha256="2" * 64, roster_sha256="3" * 64)
+        lm.validate_look_ledger(led)
+        lm.require_stage1_committed(led, "lm-interim-01", "2" * 64)
+        self.refused(lambda: lm.require_stage1_committed(led, "lm-interim-01", "4" * 64), "names stage-1 sha256")
+        row["status"] = "committed"
+        self.refused(lambda: lm.require_stage1_committed(led, "lm-interim-01", "2" * 64), "stage 1 is not committed")
+        row["output_sha256"] = "nothex"
+        self.refused(lambda: lm.validate_look_ledger(led), "output_sha256: 64 hex or null")
+
+    def test_verify_pins(self):
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        m = mini / mr.MANIFEST
+        lm.verify_pins(m, mini, allow_draft=True, running=[mini / "scripts/cadence_look_manifest.py"])
+        self.refused(lambda: lm.verify_pins(m, mini), "LOOKS.json lists this look as a draft")
+        self.refused(lambda: lm.verify_pins(m, mini, allow_draft=True, running=[mini / "joulewise/schemas_x.py"]),
+                     "runs but is not pinned")
+        dep = mini / "joulewise/external/km003c_parse.py"
+        dep.write_text(dep.read_text() + "\n# changed\n")
+        self.refused(lambda: lm.verify_pins(m, mini, allow_draft=True), "km003c_parse.py sha256 differs from the pin")
+        mini2 = mr.mini_repo(self)
+        mr.commit(mini2)
+        lm.verify_pins(mini2 / mr.MANIFEST, mini2)
+
+    def test_roster_out_writes_one_list(self):
+        led = self_ledger = ledger(sha=lm.sha256_file(MANIFEST))
+        d = tmpdir(self, "lm-roster-")
+        lp, ro = d / "ledger.json", d / "roster.json"
+        lp.write_text(json.dumps(led))
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:
+            rc = cli.main(["validate", str(MANIFEST), "--span-ledger", str(lp), "--roster-out", str(ro)])
+        self.assertEqual(rc, 0, so.getvalue())
+        roster = json.loads(ro.read_text())
+        self.assertIsInstance(roster, list)
+        self.assertEqual({r["block_id"] for r in roster}, {"dev-01", "dev-02", "dev-03", "dev-04", "dev-05", "hp-01"})
+        self.assertIn(f"sha256={lm.sha256_file(ro)}", so.getvalue())
         with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
-            self.assertEqual(cli.main(args), 1)
-
-
-class RL166b(Base):
-    def test_stated_limits_and_deferred_rules_are_required(self):
-        for sid in sorted(lm.REQUIRED_STATED_LIMITS["interim"]):
-            doc = draft()
-            doc["fit"]["stated_limits"] = [x for x in doc["fit"]["stated_limits"] if x["id"] != sid]
-            self.refused(lambda: lm.validate_manifest(doc), f"fit.stated_limits: carries {sid}")
-        for rid in sorted(lm.REQUIRED_DEFERRED["interim"]):
-            doc = draft()
-            doc["freeze2"]["deferred_rules"] = [x for x in doc["freeze2"]["deferred_rules"] if x["id"] != rid]
-            self.refused(lambda: lm.validate_manifest(doc), f"freeze2.deferred_rules: carries {rid}")
-
-    def test_the_dictated_sentences_are_in_the_manifest(self):
-        lim = {x["id"]: x["text"] for x in draft()["fit"]["stated_limits"]}
-        self.assertIn("0.421 of the time", lim["qualified_pass_rate"])
-        self.assertIn("about 4 times in 10", lim["qualified_pass_rate"])
-        self.assertIn("0.04 to 0.69 over the five worlds", lim["qualified_pass_rate"])
-        self.assertIn("about 1 time in 10.5", lim["qualified_pass_rate"])
-        note = next(x for x in draft()["fit"]["stated_limits"] if x["id"] == "qualified_pass_rate")["note"]
-        self.assertNotIn("replaces", note)
-        ev = LOOKS / "evidence" / "2026-11-14-mythos-passrate-rerun-REPORT.md"
-        self.assertIn(lm.sha256_file(ev), note)
-        self.assertIn("It is not evidence that the term is wrong", lim["qualified_pass_rate"])
-        self.assertIn("3 % of its 439 s value on a 75 s turn", lim["half_t2_limit"])
-        self.assertIn("under about 150 s, H is the onset step alone", lim["half_t2_limit"])
-        sd = next(x for x in draft()["freeze2"]["deferred_rules"] if x["id"] == "sd_j_covariance")["rule"]
-        self.assertIn("larger of the leg-clustered standard error and the day-jackknife", sd)
-
-    def test_withdrawn_sentence_days_tripwire_and_116_rule(self):
-        doc = draft()
-        doc["fit"]["heat_term"]["form"] += " H is zero for a turn that ends before its predicted onset."
-        self.refused(lambda: lm.validate_manifest(doc), "withdrawn")
-        doc = draft()
-        next(t for t in doc["stages"]["tripwires"] if t["id"] == "days_below_4")["threshold"] = 3
-        self.refused(lambda: lm.validate_manifest(doc), "days_below_4 with threshold 4")
-        doc = draft()
-        doc["decisions"] = [x for x in doc["decisions"] if x["id"] != "onsets_before_116_s"]
-        self.refused(lambda: lm.validate_manifest(doc), "carries onsets_before_116_s")
-        doc = draft()
-        doc["outputs"]["prints"] = [x for x in doc["outputs"]["prints"] if x["id"] != "onset_offset_residuals"]
-        self.refused(lambda: lm.validate_manifest(doc), "prints onset_offset_residuals")
-        doc = draft()
-        doc["rulings"].remove("RL-166b §3")
-        self.refused(lambda: lm.validate_manifest(doc), "must cite 'RL-166b §3'")
-
-    def test_rl166c_sentence_and_stage2_holds(self):
-        lim = {x["id"]: x for x in draft()["fit"]["stated_limits"]}
-        self.assertEqual(lim["partial_correction"]["text"],
-                         "Ĥ is a partial correction. In simulation it carries 0.84 to 0.96 of the heat effect over twelve "
-                         "simulated worlds, and 0.88 in the default one (0.79 before this change). The rest sits in the "
-                         "count-only base, which is not exported. That share cannot be measured on the campaign's own legs.")
-        self.assertIn(lm.sha256_file(LOOKS / "evidence" / "2026-11-14-mythos-passrate-rerun-REPORT.md"),
-                      lim["partial_correction"]["note"])
-        for flag in sorted(lm.STAGE2_HOLD_FLAGS["interim"]):
-            doc = draft()
-            doc["stages"]["stage2"]["holds"] = [h for h in doc["stages"]["stage2"]["holds"] if h["flag"] != flag]
-            self.refused(lambda: lm.validate_manifest(doc), f"holds stage 2 on {flag}")
-
-    def test_rl167_nullable_fields(self):
-        s1 = json.loads((LOOKS / "lm-interim-01.stage1.schema.json").read_text())
-        lodo = next(o for o in s1["properties"]["onset"]["properties"]["lodo"]["oneOf"] if o.get("type") == "object")
-        self.assertEqual(set(lodo["required"]), {"per_day_rms_s", "rms_s", "heldout_censored_below_tau",
-                                                 "heldout_censored", "folds_not_estimable"})
-        self.assertIn("null", lodo["properties"]["rms_s"]["type"])                       # RL-167 row 10
-        self.assertIn("null", s1["properties"]["rates"]["properties"]["per_cell"]["properties"]["2000"]["properties"]["r_p"]["type"])
-        out = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
-        bias = out["$defs"]["channel_fit"]["properties"]["prefix_bias"]["properties"]["1.10"]["properties"]
-        self.assertIn("null", bias["estimate"]["type"])                                  # R-11's null rules
-        self.assertIn({"type": "null"}, bias["ci90"]["oneOf"])
-
-    def test_the_schemas_carry_rl166b_fields(self):
-        s1 = json.loads((LOOKS / "lm-interim-01.stage1.schema.json").read_text())
-        for k in ("active_readings", "onsets_before_116_s", "meter_clock"):
-            self.assertIn(k, s1["required"])
-        self.assertIn("days_below_4", s1["properties"]["tripwires"]["required"])
-        self.assertIn("n_uncensored_by_cell", s1["properties"]["onset"]["required"])
-        out = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
-        for k in ("fold_coefficients", "day_detail", "onset_offset_residuals"):
-            self.assertIn(k, out["$defs"]["channel_fit"]["required"])
+            self.assertEqual(cli.main(["validate", str(MANIFEST), "--roster-out", str(ro)]), 1)
 
 
 if __name__ == "__main__":

@@ -36,8 +36,10 @@ refused the "trailer counts zero" clause.
   SMC values and counts are never kept, logged or copied.
 * Error lines (``{"k": "e", ...}``) are skipped unread.
 * Only the header and the trailer are decoded, as the runner already does (RL-150 R8).
-* From ``rich_telemetry.jsonl``, only ``timestamp_s`` and ``elapsed_ns``. A JSON hook drops every other key
-  as it is decoded, so no power or energy value reaches any structure this module keeps.
+* From ``rich_telemetry.jsonl``, only ``timestamp_s`` and ``elapsed_ns``, taken by pattern. The line is never
+  JSON-decoded, so no power or energy value is parsed (Sol cold seat 1).
+* A type-T leg (``leg_record.json`` ``spec.leg_type == "T"``, the ruled selector only) is never opened
+  (RL-166 Q14; RL-167 R-21).
 * The sidecar journal (``outputs/align_thermal.jsonl``) and ``events.jsonl`` are journal files.
 
 **Clock.** The leg's interval, the rich-telemetry stamps and the meter's ``rt`` stamps are all on the wall
@@ -50,6 +52,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 import json
+import sys
 import math
 from pathlib import Path
 import re
@@ -319,17 +322,24 @@ def _keep(allowed):
     return hook
 
 
+_TS_RE = re.compile(rb'"timestamp_s":\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*[,}]')
+_EL_RE = re.compile(rb'"elapsed_ns":\s*(\d+)\s*[,}]')
+
+
 def read_pm_supports(bundle):
     """[{start_ns, end_ns}] from rich_telemetry.jsonl: timestamp_s is the sample's end (D-078), elapsed_ns
-    its length, as thermal_desk.native_pm_samples builds the supports. Every other key is dropped while the
-    line is decoded."""
-    hook = _keep({"timestamp_s", "elapsed_ns"})
+    its length, as thermal_desk.native_pm_samples builds the supports. The two stamps are taken from each line
+    by pattern; the line is never JSON-decoded, so no power or energy value is parsed (Sol cold seat 1). A line
+    that does not carry each key exactly once gives no support (a gap rule 3 then sees)."""
     out = []
     for raw in _jsonl_lines(Path(bundle) / "rich_telemetry.jsonl"):
-        d = json.loads(raw, object_pairs_hook=hook)
-        if "timestamp_s" in d and "elapsed_ns" in d:
-            end = round(float(d["timestamp_s"]) * NS)
-            out.append({"start_ns": end - int(d["elapsed_ns"]), "end_ns": end})
+        if raw.count(b'"timestamp_s"') != 1 or raw.count(b'"elapsed_ns"') != 1:
+            continue
+        ts, el = _TS_RE.search(raw), _EL_RE.search(raw)
+        if ts is None or el is None:
+            continue
+        end = round(float(ts.group(1)) * NS)
+        out.append({"start_ns": end - int(el.group(1)), "end_ns": end})
     return out
 
 
@@ -396,7 +406,7 @@ def pm_period_s(bundle):
 def judge_leg(bundle, meter_streams, selected_keys, *, period_s=None):
     """Rules 3 and 4 for one leg's accepted attempt. ``meter_streams`` are ``read_meter_stream`` results for
     the span. ``selected_keys`` = ``keys(policy sensors)`` of the leg's runtime config. Opens events.jsonl,
-    outputs/align_thermal.jsonl, rich_telemetry.jsonl (stamps) and config.json; no energy file."""
+    outputs/align_thermal.jsonl, rich_telemetry.jsonl (two stamps by pattern) and config.json; no energy value is decoded."""
     interval = read_leg_interval(bundle)
     period = period_s if period_s is not None else pm_period_s(bundle)
     return {"rule3": rule3(interval, read_sidecar_rows(bundle), selected_keys, read_pm_supports(bundle), period),
@@ -407,7 +417,7 @@ def judge_leg(bundle, meter_streams, selected_keys, *, period_s=None):
 # Custody mode: the verdict file the stage-1 CLI reads (docs/process/cadence_look_fit_interface.md section 7).
 #
 #     python3 -I -B joulewise/cadence_looks/inclusion_34.py --roster ROSTER.json --custody ROOT
-#         [--span-dir SPAN_ID=PATH ...] [--runtime-config configs/align/v4/r1_runtime.json]
+#         [--span-dir SPAN_ID=PATH ...] --manifest MANIFEST.json [--allow-draft]
 #         --out VERDICTS.json [--detail-out DETAIL.json]
 #
 # VERDICTS.json is {"<span_id>/<leg_id>": {"sidecar_coverage": bool, "km003c_clean": bool}}, one entry per leg
@@ -418,7 +428,8 @@ def judge_leg(bundle, meter_streams, selected_keys, *, period_s=None):
 # keys) and config.json. Never power_trace.csv or raw/powermetrics.plist.
 
 VERDICT_KEYS = ("sidecar_coverage", "km003c_clean")
-DEFAULT_RUNTIME_CONFIG = "configs/align/v4/r1_runtime.json"
+REPO = Path(__file__).resolve().parents[2]
+RUNTIME_CONFIG = "configs/align/v4/r1_runtime.json"    # rule 3's sensor policy; pinned in fit.dependencies
 
 
 def _json(path):
@@ -440,8 +451,16 @@ def judge_span(sdir, span_id, selected_keys):
         key = f"{span_id}/{leg_id}"
         record = sdir / "legs" / leg_id / "leg_record.json"
         bundle = None
-        if record.is_file():
-            name = (_json(record).get("result") or {}).get("bundle")
+        rec = _json(record) if record.is_file() else {}
+        if (rec.get("spec") or {}).get("leg_type") == "T":
+            # RL-166 Q14: a type-T leg is not read at this look at all. The ruled selector only (RL-167 R-21):
+            # spec.leg_type, no legacy field.
+            verdicts[key] = {k: False for k in VERDICT_KEYS}
+            why = ["type T: never read (RL-166 Q14)"]
+            detail[key] = {"rule3": {"reasons": why}, "rule4": {"reasons": why}}
+            continue
+        if rec:
+            name = (rec.get("result") or {}).get("bundle")
             if isinstance(name, str) and name and (sdir / "legs" / leg_id / "runtime" / name).is_dir():
                 bundle = sdir / "legs" / leg_id / "runtime" / name
         if bundle is None:
@@ -484,13 +503,26 @@ def main(argv=None):
     p.add_argument("--roster", required=True)
     p.add_argument("--custody", required=True)
     p.add_argument("--span-dir", action="append", default=[])
-    p.add_argument("--runtime-config", default=DEFAULT_RUNTIME_CONFIG)
+    p.add_argument("--manifest", required=True, help="the look manifest; every pin is verified before custody is opened")
+    p.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest")
     p.add_argument("--out", required=True)
     p.add_argument("--detail-out")
     a = p.parse_args(argv)
+    if str(REPO) not in sys.path:                 # -I drops the repository from sys.path
+        sys.path.insert(0, str(REPO))
+    from joulewise.cadence_looks import manifest as lm
+    try:
+        doc = lm.verify_pins(a.manifest, REPO, allow_draft=a.allow_draft,
+                             running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG])
+    except lm.ManifestError as error:
+        for problem in error.problems:
+            print(f"REFUSE {problem}")
+        return 1
     roster = _json(a.roster)
-    roster = roster["roster"] if isinstance(roster, dict) else roster
-    selected = keys(_json(a.runtime_config)["sensors"])
+    if not isinstance(roster, list):
+        print("REFUSE the roster is a JSON list (validate --span-ledger --roster-out writes it)")
+        return 1
+    selected = keys(_json(REPO / RUNTIME_CONFIG)["sensors"])
     try:
         verdicts, detail = judge_custody(roster, span_dirs(a.custody, a.span_dir), selected)
     except Exception as exc:                      # type and line only: a message could carry a value
@@ -500,6 +532,9 @@ def main(argv=None):
         print(f"FAILED {type(exc).__name__} at line {tb.tb_lineno}")
         return 2
     print(f"wrote {a.out} sha256={_write(a.out, verdicts)} legs={len(verdicts)}")
+    detail["pins"] = {"manifest_sha256": lm.sha256_file(a.manifest), "look_id": doc["look_id"],
+                      "inclusion_34_sha256": lm.sha256_file(Path(__file__).resolve()),
+                      "runtime_config_sha256": lm.sha256_file(REPO / RUNTIME_CONFIG)}
     if a.detail_out:
         print(f"wrote {a.detail_out} sha256={_write(a.detail_out, detail)}")
     return 0
