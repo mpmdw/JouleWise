@@ -90,6 +90,25 @@ class RetiredReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'g0_cap_receipt'):
             kit.check_r1_budget_and_policy(dict(inputs['R1'], thermal_policy=policy), slots, x_max_turns=12)
 
+    def test_a_dangling_symlink_at_the_receipt_path_is_refused(self):
+        # PR #790 row-2 NIT 5: os.path.lexists, so a link to nothing still counts.
+        inputs, _slots = eight_bit_case()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / kit.RULING_1F_RECEIPT
+            path.parent.mkdir(parents=True)
+            path.symlink_to(Path(tmp) / 'nowhere.json')
+            self.assertFalse(path.exists())
+            with self.assertRaisesRegex(ValueError, 'exists'):
+                kit.refuse_ruling_1f_receipt(inputs, tmp)
+
+    def test_generation_without_check_writes_no_receipt_armed_config(self):
+        # PR #790 row-2 LOW 3: build_files refuses the key and the file before it writes a D spec.
+        inputs, slots = eight_bit_case()
+        with patch.object(kit, 'read_inputs', lambda root=kit.ROOT: arm_receipt(deepcopy(inputs))), \
+                patch.object(kit, 'read_r1_slots', lambda root=kit.ROOT: deepcopy(slots)), \
+                self.assertRaisesRegex(ValueError, 'g0_cap_receipt'):
+            kit.build_files(kit.ROOT)
+
     def test_a_committed_receipt_file_is_refused_unread(self):
         inputs, slots = eight_bit_case()
         with tempfile.TemporaryDirectory() as tmp:
@@ -166,10 +185,9 @@ class RetiredReceiptTests(unittest.TestCase):
 
 
 class RoleCapTests(unittest.TestCase):
-    """R10-4 item 2, as the cold-review disposition MEDIUM-2 scopes it: separate
-    D and contrast caps and the contrast proof apply only under an R10-2(a)
-    receipt; with no receipt the kit is e901eb2a4's (R7-2's one G0_cap_W1,
-    X-G included; R7-12's INCONCLUSIVE X-G does not refuse on that alone)."""
+    """R10-4 item 2, cold-review disposition MEDIUM-2, R11: D keeps e901eb2a4's rule (R7-2's one G0_cap_W1,
+    X-G included; R7-12's INCONCLUSIVE X-G does not refuse on that alone); contrast members arm their own
+    deadman-fitted cap. There is no receipt path (RL-148 section 2, RL-156 section 3.1)."""
 
     def reviewer_case(self):
         inputs, slots = ready_inputs(i_d=400.0, tail=20.0)

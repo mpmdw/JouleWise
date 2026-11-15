@@ -11,6 +11,7 @@ import argparse
 from copy import deepcopy
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -945,8 +946,9 @@ RULING_1F_RECEIPT_RETIRED = ('RL-148 section 2 withdrew ruling 1(f) for D, with 
 def refuse_ruling_1f_receipt(inputs, root=ROOT):
     """RL-148 section 2, RL-156 section 3.1: W1 has no ruling 1(f) receipt. A file at RULING_1F_RECEIPT, or a
     ``g0_cap_receipt`` in inputs.R1.thermal_policy (a D G0 cap below 600 s, the design RL-148 excluded), is
-    refused; nothing is read from either."""
-    if (Path(root) / RULING_1F_RECEIPT).exists():
+    refused; nothing is read from either. A dangling symlink at the path counts as a file (``os.path.lexists``;
+    PR #790 row-2 NIT 5)."""
+    if os.path.lexists(Path(root) / RULING_1F_RECEIPT):
         raise ValueError(f'{RULING_1F_RECEIPT} exists: {RULING_1F_RECEIPT_RETIRED}; remove it')
     policy = ((inputs or {}).get('R1') or {}).get('thermal_policy')
     if isinstance(policy, dict) and 'g0_cap_receipt' in policy:
@@ -956,7 +958,8 @@ def refuse_ruling_1f_receipt(inputs, root=ROOT):
 
 def max_fitting_b_d(r1_slots, t_dead):
     """The largest admissible B_D (a multiple of 1024 in [6144, r1_slots B_D])
-    that satisfies ruling 1(f), or None: a sizing aid for the lead."""
+    that satisfies ruling 1(f), or None. Print-only since RL-148 section 2: no kit or procedure decision reads
+    it (RL-156 section 3.1 retired the R10-2 route that did); tests use it to state where 1(f) would fit."""
     top = (r1_slots.get('slots') or {}).get('B_D')
     if type(top) is not int:
         return None
@@ -1435,7 +1438,6 @@ def gate_policy_fields(policy, role='D'):
     fields = {key: deepcopy(value) for key, value in policy.items()
               if key not in ('classification_sha256', 'contrast_g0_cap_s', 'contrast_fit')}
     if role == 'contrast':
-        fields.pop('g0_cap_receipt', None)
         if 'contrast_g0_cap_s' in policy:
             fields['g0_cap_s'] = deepcopy(policy['contrast_g0_cap_s'])
             fields['contrast_fit'] = deepcopy(policy.get('contrast_fit'))
@@ -1497,6 +1499,8 @@ def thermal_policy(inputs, *, heavy, per_turn, window_reference, role='D', root=
 def build_files(root=ROOT):
     root = Path(root)
     inputs = read_inputs(root)
+    # PR #790 row-2 LOW 3: generation without --check writes no receipt-armed D config either (RL-156 section 3.1).
+    refuse_ruling_1f_receipt(inputs, root)
     files = {INPUTS: (root / INPUTS).read_bytes(), R1_SLOTS: (root / R1_SLOTS).read_bytes()}
     w1_plan_raw = read_w1_plan_bytes(root)
     if w1_plan_raw is not None:

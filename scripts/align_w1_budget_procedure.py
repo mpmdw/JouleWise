@@ -138,6 +138,13 @@ def decide(r1_slots, x_max_turns, planning_release=None):
     if duty.get('pass') is not True:
         notes.append(f'DUTY BAR: verdict {duty.get("verdict")!r}; W1 does not arm on a failed duty bar')
     typical = kit.typical_case_fit(view, t_dead, g_turn)
+    # PR #790 row-2 LOW 4: a G1 wait at or above the G_turn cap with no timeout flag (an unobserved G1, which is
+    # legitimate) is named, not hidden; the arithmetic already takes that wait as the G1 term.
+    unflagged = {run: r['g1_waits_at_cap_unflagged'] for run, r in typical['runs'].items()
+                 if r.get('g1_waits_at_cap_unflagged')}
+    if unflagged:
+        notes.append(f'G1 AT CAP: {unflagged} G1 wait(s) at or above the G_turn cap {g_turn!r} s with no timeout '
+                     'flag (unobserved G1s; the cap is slots.S7, the kit\'s only when sensor_pick_changed is false)')
     opportunity = kit.turn_opportunity(view, b_d)
     worst = kit.ruling_1f_fit(view, b_d, t_dead)
     base = {'T_dead_s': t_dead, 'B_D': b_d, 'notes': notes, 'typical_case': typical, 'turn_opportunity': opportunity,

@@ -71,7 +71,7 @@ class R11Tests(unittest.TestCase):
         slots['x_g']['phases_s']['decode'] = 2000
         self.assertTrue(kit.w1_contrast_g0_cap(slots, 12)['predeclared'].startswith('INCONCLUSIVE'))
 
-    def test_contrast_cap_record_is_required_on_receipt_and_no_receipt_paths(self):
+    def test_contrast_cap_record_is_required(self):
         inputs, slots = ready_inputs()
         fit = kit.w1_contrast_g0_cap(slots, 12)
         policy = inputs['R1']['thermal_policy']

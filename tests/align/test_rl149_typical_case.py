@@ -10,6 +10,7 @@ import unittest
 
 from scripts import align_r1_rehearsal as r1
 from scripts import align_v4_kit as kit
+from scripts import align_w1_budget_procedure as proc
 from tests.align.test_v4_kit import ready_inputs, set_decode_rate
 
 # RL-149 section 1.5's table: T_dead 983.10 s, G0 110.78 s, largest D G1 99.82 s.
@@ -105,6 +106,13 @@ class TypicalCaseTests(unittest.TestCase):
         self.assertEqual(fit['runs']['D_spam_benign_s1_gated_held_a']['g1_waits_at_cap_unflagged'], 0)
         self.assertEqual(fit['G1_max_s'], 300.0)
         self.assertEqual(fit['G1_basis'], 'largest recorded gated D G1')
+        # PR #790 row-2 LOW 4: the budget procedure names the count in its notes.
+        slots['slots']['S7'] = 300.0
+        notes = ' '.join(proc.decide(slots, 12)['notes'])
+        self.assertIn("G1 AT CAP: {'D_bank_benign_s1_gated_held': 1}", notes)
+        _inputs, clean = rl149_case()
+        clean['slots']['S7'] = 300.0
+        self.assertNotIn('G1 AT CAP', ' '.join(proc.decide(clean, 12)['notes']))
 
     def test_the_driver_records_the_fields_the_bar_reads(self):
         result = {'admitted_turns': 2, 'x7': False, 'episode_flags': ['thermal.gate_timeout:2'],

@@ -8,7 +8,7 @@ Steps, in order (the doc's command block is tested against ``render``):
   3 backfill-counts  per-turn counts into the gated rows (R11/R16)
   4 install-slots    copy the completed record to registration/r1_slots.json
   5 derive-contrast  print the contrast cap/fit for inputs.json (``--write-contrast`` merges it)
-  6 decide           the R10-2 budget procedure (writes a receipt draft when needed)
+  6 decide           the budget procedure (RL-148 section 2; prints the step, drafts nothing)
   7 regenerate-kit   scripts/align_v4_kit.py (regenerates the committed kit from the new slots)
   8 kit-check        scripts/align_v4_kit.py --check (fails closed while inputs are pending)
 
