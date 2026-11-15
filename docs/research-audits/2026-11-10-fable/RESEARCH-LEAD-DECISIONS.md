@@ -17035,3 +17035,165 @@ The builder's and the Mythos seat's account is confirmed. The next F0 runs at th
 **Gate.** #790's row 4 is passed by this ruling at `8fc64be4a` and at a head with tree `552886acf132d2cb9d1e318d9fa213b2f678f81a`, and at no other. The merge waits for rows 2 and 3 on the current base and for the PR's remaining rows. It merges before the W1 receipt and before the closure regeneration of RL-149 §5 item 13, as RL-156 §3.1 ruled. No new Part C is needed at the merge.
 **Amends.** RL-156 §4.1 (the import clause of §2). Nothing else.
 **Blind status.** Blind: no v4 outcome exists and nothing sealed or measured was opened. This ruling rests on rulings, code, test code, two seat reports, file hashes and an AST comparison of two committed versions of one file.
+
+# RL-171. Quiet is a rule about processes, not about clock times. The 01:30-02:40 quiet, the "worst case ends by 01:30 / fence ends by 01:50" rule, the 02:40 start and the "none between X and 02:40" lines are retired tonight, by ruling alone. The 02:00-02:35 blackout stops being a rule; what is left of it is what the pinned bytes do (a hold of at most 35 min at a soak or leg start), and it leaves the code at the qualification pin. The 10:50-13:15 dead zone is a defect of the pins without #777 and ends with them. No registered timeout and no claim rested on any of these windows. Short fillers and tighter caps are ranked after this and mostly lose their purpose
+
+Research lead (Fable 5.2), Sat Nov 14 23:43 PST 2026 (from `date`). Answers Ed's question about the 23:22 to 02:40 idle, and the lead's addendum relaying Ed: "quiet was only meant to indicate no interactive agent or otherwise unpredictable power profile program was running in addition to the normal measurement process." That sentence governs. RL-149 to RL-170 stand except where "Amends" says otherwise.
+
+**Read.**
+- Both schedule reviews in full: `mythos-schedule-review/REPORT.md` and `sol-schedule-review/REPORT.md`.
+- My RL-149 §2.9 items 3, 4 and 6; RL-150's chores note on the batch; RL-155 §1 and §4; RL-155a §2 and §3; RL-156 §5; RL-157 §8; RL-164; RL-165 §3 and §8; RL-169 in full; RL-169a §3. The log is at `origin/audit/2026-11-10-fable`.
+- Code, read-only: `joulewise/cadence/legs.py`, `queue.py`, `scripts/cadence_legs_runner.py` and `scripts/launch_cadence_span.py` at `2d347f721` and at the qualification branch head; `kit.py` and the runner at `b4b6aeb19`; `scripts/align_r1_rehearsal.py`, `run_align_r1_smoke.py`, `launch_align_r0.py` and `joulewise/align/r1_arm.py` at `c3f4bacd8`; row 8 of `docs/align/pilot_protocol_v4.md`, `r1_runtime_contract.md` and `docs/align/v4/DEVIATIONS.md` at `c3f4bacd8`.
+
+**Not checked.**
+- I ran no `plan`, validator, mock or test. Every time below is my arithmetic. Section 3's launch argument is unproven until a seat runs it.
+- The night-jobs investigator's report (`/Volumes/JW-EXT/scratch/os-batch-window/REPORT.md`) did not exist at 23:43. Section 5 is written without it.
+- The W1 and C/T registration texts. I rely on RL-149 §2.9 item 4's last line, that those windows never waited for the batch.
+- What the per-leg process census records (names only, or CPU time too), and rule 5's exact threshold in the campaign runner.
+- Whether hp-01's pin `dd206025a` has the v1 launcher (no fence check) or the v1.1 one.
+- No SSH. No measurement, energy, power, meter or custody file was opened.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 1. The answer to Ed
+
+**Tonight's idle was the rules working as I wrote them, and most of those rules were wrong.**
+- **What the design needs** is the one Ed states: no agent and no unpredictable program beside the measurement. It is already enforced per leg by the 30 s agent census, the per-leg process census, and rule 5 (the per-second outside-load journal, with a redo or an exclusion, quota 2).
+- **What I added on top** was a set of clock rules in RL-155 to RL-169a, so that the macOS daily batch (about 02:08; the XProtect scan 02:08 to 02:25) would fire in an idle machine. Requiring every launch's worst case to clear 01:30 cost 2 to 3.5 h a night, because worst cases are 2 to 2.5 times the real length. The quiet itself cost another 70 min.
+- **A maintenance job that fires in a leg is the case rule 5 exists for.** It costs one redo of about 21 min.
+- **v4 never had the blackout.** W1 and the C and T windows do not wait for the batch (RL-149 §2.9 item 4). Only the R1 driver and the campaign runner did.
+
+**Will the Mac be saturated? Not by this alone.** With the clock rules gone, the binding limit is READY work.
+- Through Friday the counted campaign is about 108 legs (dev-01 to dev-05, hp-01, qual-01 to qual-03), roughly 45 to 50 machine-hours with soaks. The slot session is 28 to 33 h, W1 is one session, F0 is at most 6 h a day and F2 is 8.5 h in total. The week has 144 h.
+- Both reviews show the large gaps (Monday, Wednesday, Thursday, Friday) come from kits, the look manifest and freeze 2 not being READY. RL-165 §8 gave those owners. The 18 C/T windows and W1 are the demand that can fill the machine, and their kits are the work to bring forward.
+
+## 2. Retired now, by this ruling, with no byte changed
+
+| Rule | Where I wrote it | Status |
+|---|---|---|
+| Machine quiet 01:30 to 02:40 | RL-155 §1 R-B, §4 rule 4 | **Retired** |
+| Worst case ends by 01:30 (F0 22:07:00, F2 22:13:10) | RL-164 §4 and §5, RL-165 §3 line 6, RL-169 §5, RL-169a §3 | **Retired** |
+| Fence end by 01:50, as a magistrate rule | RL-155a §3, RL-156a §2, RL-157 §8, RL-158 §3 | **Retired** where the pin's launcher does not enforce it (section 3) |
+| Counted spans start at 02:40; "none between X and 02:40" | RL-155 §2, RL-165, RL-169a | **Retired.** A span arms when its gates hold, at any hour |
+| hp-01's "worst case by 00:30" | RL-165 §7 | **Kept.** It is about the lead being present to clear a "restore unproven", not about the batch |
+| The 02:00-02:35 blackout | RL-149 §2.9 item 4 | **No longer a rule.** Section 3 says what the bytes still do |
+| No launch 10:50 to 13:15 | RL-155a §3 | **Not a rule.** It describes a defect of four pins (section 3) |
+
+**What replaces them: process-based quiet, which is what the runner already does.**
+1. The agent census, the per-leg process census and rule 5 decide whether an attempt is clean. Nothing else excludes a leg.
+2. A leg in flight when a maintenance job fires is judged by rule 5. That was already RL-149's sentence.
+3. A soak is the one segment with no redo. Its own slope and load refusals are its detector. Section 4 adds one retry.
+
+**R-B is restated:** the only ruled idle time is the interval after a close (section 6).
+
+**The calendar-day rules stand.** A leg's day is the local date of its span's t0. dev-01's second span is a Sunday span, and qualification runs on two days with no development leg.
+
+**Tonight.** `dev-01-s04` may arm at any t0 from Sun 00:00:00 once its gates hold. Pin `b4b6aeb19` admits it, and its soak ends before 02:00. The lead decides whether the item can be re-issued in time; nothing is lost if it runs at 02:40 as issued.
+
+## 3. Where the windows are hard-coded, and the cheapest way off each
+
+| Pin | Used by | What the bytes do | Cheapest way off | Class |
+|---|---|---|---|---|
+| `b4b6aeb19` (kit v1) | dev-01 `s04`, dev-02 | `--batch-window 02:00-02:35` is a launch argument. The runner delays a soak that would overlap it and holds a leg start inside it. `plan` prints the fence and admits the launch. The soak path also waits out 11:45-13:15 (the old `OS_BATCH_WINDOW_LOCAL`), unbudgeted | **Nothing to change.** Launch at any hour. Keep the argument. A span crossing 02:00 holds at most 35 min at one leg start. The midday soak wait stays until the pin retires | None |
+| `dd206025a` | hp-01 | As the row above if its launcher is v1; as the row below if not | The lead reads which | None |
+| `2d347f721`, `1b20d3b0e` (kit v1.1) | dev-03 to dev-05, F2 | `launch_cadence_span.cadence_plan` calls `legs.fence_problems`: it **refuses** a launch whose worst case plus 1,460 s passes ten minutes before the window passed in `--batch-window`, and any t0 from 10:50 to 13:15 | **Per launch, data only:** if the launcher refuses on the fence with `02:00-02:35`, launch with `--batch-window 13:14-13:15`. That minute lies inside the pin's own midday soak wait, so it adds no new hold. The soak of such a launch ends before 02:00 by construction. No re-pin | B: item text and one argument. A seat proves it first (section 7) |
+| `c3f4bacd8` (W1 line) | F0, the slot session | `soak_child` refuses a Part C whose soak plus 9,560 s cap overlaps 02:00-02:35. The R1 driver waits out the window and budgets two encounters; `r1_arm.py` pins the span at 102,168 s | **F0: the latest soak start is 22:50:40, launch by 22:40** (RL-156 §5, restored). **The R1 driver is left alone** (section 4) | None now |
+| Qualification pin (PR #794, contains #777) | qual-01 to qual-03, ctl-01, reserve-01, later kits | Inherits `fence_problems` and the 02:00-02:35 constant. The 11:45-13:15 soak wait is gone | **Code, in #794:** the campaign launcher and runner take "no window"; `fence_problems` and its two constants go; the soak gets one retry after a load refusal | B if no changed line is reached between a leg's start and its close; the cold seat says. Otherwise it comes to me |
+
+**With the alternate argument on a v1.1 pin, the only refused launches are these.** t0 must be at or after 13:15, or early enough that the worst case plus 1,460 s ends by 13:04:
+
+| Legs (redo quota 2) | Refused t0 |
+|---|---|
+| 3 | 08:02 to 13:15 |
+| 6 | 05:47 to 13:15 |
+| 9 | 03:32 to 13:15 |
+| F2 piece (3 legs, quota 0) | 09:32 to 13:15 |
+
+- **In that band the magistrate uses `02:00-02:35`,** which admits every morning launch before 10:50.
+- **So on these pins the dead time is 10:50 to 13:15 and nothing else.** F0 at `c3f4bacd8` has no midday wait and fills it.
+- **If the qualification builder says the removal is not class B, or it would delay the kits,** qualification keeps the 35 min hold and the alternate argument. The removal then rides the next pin.
+
+## 4. What rested on the windows, and how each is retired blind
+
+**No registered timeout, threshold, score or claim depends on a clock window.** These are process and scheduling rules. No energy has been read under any look, and no leg already run is reclassified.
+
+| Item | What it is | Disposition |
+|---|---|---|
+| Council ruling 8, row 8 of `pilot_protocol_v4.md`: "Soak and step tests outside 11:45-13:15 local", with the load journal and the redo | A registered R1 procedure. RL-149 rebound it to 02:00-02:35 (deviation row RL149-BATCH-WINDOW). It sizes the R1 span and `window_max_s`, which are reservation and kill bounds | **Kept for the slot session.** Changing it is a W1-line change on a Part C path, days before the session, to save at most 70 min in 28 h. The R1 driver does not run again after the slot session |
+| RL-72 E2's two load redos | Rule 5 itself | Stands |
+| `soak_child`'s Part C overlap refusal | A launch refusal on the v4 smoke path | Kept until the slot session has run. If F0 is still on the ladder then, one W1-line PR removes it, with a deviation row citing this ruling; the next F0 is that PR's Part C (RL-156 §4.1) |
+| RL-149 §2.9 item 4's campaign sentence | Runner behaviour, not an inclusion rule | Its reason ("so the batch fires there") is withdrawn. The behaviour stays on the old pins |
+| The fence, 01:30, 02:40 and 10:50-13:15 | My scheduling rulings, RL-155 to RL-169a | Retired in section 2. None is in a registration, a kit's inclusion rule or a look manifest |
+| W1 and the C and T windows | Never waited | Nothing to retire |
+
+**The paper's sentence becomes:** quiet was enforced per leg by a process census and a per-second outside-load journal, with no time-of-day exclusion in the campaign; R1's calibration session kept its registered window, as disclosed.
+
+**One line in the public deviation log,** by the lead: the scheduling rules of RL-155 to RL-169a retired on this date, before any development energy was read.
+
+## 5. The extra detector, and host hygiene
+
+**Rule 5 sees CPU load. A job that moves power through disk or network at low CPU could pass it.** So:
+1. **A maintenance line at each close, with no code.** In the close interval the magistrate runs one read-only system-log query over the span's interval for `dasd` activity starts and for XProtect, `mds` and `mdworker`, `backupd`, `softwareupdated` and `mobileassetd`. It saves the result beside the span's journals. The desk prints, per leg, which jobs overlapped it. No energy is involved.
+2. **Print-only for the development blocks.** Rule 5 stays the only exclusion. Adding an exclusion in the middle of a campaign would change which legs count.
+3. **Decided at freeze 2, before any qualification leg:** whether the flag joins qualification's inclusion rule. The evidence is a count: flagged legs that passed rule 5, by job. If that count is zero, rule 5 is enough.
+4. **The look prints redos by hour of day.** That shows what the retirement cost.
+5. **In #794, if it is class B:** the per-leg census records CPU time for the named daemons at leg start and end, so the desk reads the difference without the log.
+
+**Hygiene through `measurement_mode`: allowed in principle, as a way to cut redos and not as the guard.**
+- **Candidates:** automatic software-update checks and downloads, Time Machine's automatic backups, and whatever the investigator finds that a supported, remote, reversible setting turns off.
+- **Not candidates:** XProtect and `dasd`. Switching them off needs system-protection changes, and a deferred batch fires at an unknown time.
+- **When.** Once, at a block boundary between dev-05's close and freeze 2, recorded as a host event with a restore line for each setting. Qualification, ctl-01 and W1 then run on one host state.
+- **It comes to me first,** with the investigator's report. I have not seen it.
+
+## 6. The rest of the original scope, ranked after the above
+
+**6.1 The interval after a close: 20 min becomes "when the checks are done".**
+- A successor arms once every restore line has passed and the journal copy is hash-verified, and not less than 5 min after the close.
+- The start state belongs to the successor's own soak, which RL-155 §4 rule 4 already said.
+- **Kept at 20 min:** a counted span after F0 or F2.
+- The lead confirms from today's closes that the checks and the copy finish inside 5 min; if they do not, the floor is their longest time plus 2 min.
+
+**6.2 Short fillers: not needed once section 2 holds.**
+- **The smallest useful unit is one F2 leg as its own span:** a 600 s loaded-idle hold and one logged turn. Worst case 1,950 + 1,200 + 2,700 = 5,850 s (1 h 37 min 30 s); about 1 h in practice. Both v1.1 pins admit a one-leg roster (`legs.py` and `queue.py` refuse only a roster above `legs_per_span`).
+- **Its use now** is the alternate argument's morning band, or the hours before a counted span that is about to become READY. The lead may cut F2's remaining legs into spans of one or two by a queue append. No new kit.
+- **Part C without the 30B predecessor: refused.** It needs code on a Part C path, and it changes step-D's start history into one nothing registered uses.
+
+**6.3 Tighter worst-case bounds: no change to any timeout or cap.**
+- **The G0 timeout (1,200 s; R7-2 for R1, kit and runtime data for the campaign), the member cap (1,800 s) and the leg process cap (2,700 s) stay,** for counted spans and for fillers. The G0 timeout decides which legs are excluded, so re-deriving it mid-campaign would change the population.
+- **The evidence is thin:** about eight own-shaped legs and one Part C, on one day, with G0 at 200 to 210 s. No consumer leg has run.
+- **The worst case no longer gates a launch,** apart from the three code checks in section 3. It remains the kill bound, which is its proper use.
+- **The lead keeps one operational table** from stage stamps and desk bundles (no energy): G0 wait, leg wall, soak, preflight and close times, by span, hour and leg shape. RL-158's "revisit once after dev-03" uses it.
+
+**6.4 Other structure.**
+- **A clock cut in the runner** (stop cleanly before a leg whose cap does not fit) was my answer under the old rules. It is not needed now and is not built.
+- **Longer spans.** Short spans were ruled so blocks would fit gaps (RL-155a §2). Where the fence is gone, a soak per three legs is 31 % of the span's time against 19 % for six. From the qualification pin on, queues use the longest span the layout allows, up to six legs.
+- **F0's spacing and cap stand.** More than three a day is load without product.
+
+## 7. Idle saved, order and owners
+
+| # | Change | Idle saved | Owner | Needs |
+|---|---|---|---|---|
+| 1 | Section 2 on the v1 pins: launch when the gates hold. F0 launches by 22:40 | About 3 to 4 h a night when READY work exists (the 2 to 3.5 h before 01:30, plus the 70 min quiet, less a hold of at most 35 min). Tonight up to 2 h | Lead: items and standing-item text. Magistrate: every slot | Nothing |
+| 2 | The alternate argument on the v1.1 pins | The same hours for dev-03 to dev-05 and F2. dev-05 can finish Tuesday night; freeze 2 moves up by about 9 h | Lead | One executing seat (Sonnet; Sol if it stalls): `plan` at the boundary times on both pins, and a mock span crossing 02:00. Before first use |
+| 3 | Section 6.1's close interval | About 15 min a close: 1 to 1.5 h a day | Lead, magistrate | The lead's reading of today's closes |
+| 4 | The maintenance line | None. It is the evidence that keeps 1 and 2 honest | Lead writes the query; magistrate runs it at each close; desk builder adds the column | No code on a frozen path |
+| 5 | Removal in #794 | The last 35 min hold, and 10:50 to 13:15 (up to 2 h 25 min on a day it bites) for every later kit | Qualification builder (Opus); Mythos cold seat on the class | Must not delay the kits |
+| 6 | Hygiene | None directly; fewer redos | Lead proposes from the investigator's report; I rule | The report |
+| 7 | F0's refusal on the W1 line | 22:40 to 02:35 for F0 only | Lead, after the slot session | A W1-line PR and its Part C |
+| 8 | Short fillers, tighter caps | About nothing after 1 and 2 | Nobody | Not built |
+
+**A Mythos cold seat attacks this ruling** on one question: is there a path by which a leg hit by a daily job is counted clean? It does not gate rows 1 and 3. Its findings come to me before qualification's inclusion text is frozen.
+
+**Stop rule.** If CONTAMINATED_REDOS fires on a span that crossed 02:00 to 02:35 on two nights in one week, the lead puts the hold back for that pin (the default argument only) and tells me.
+
+**Amends.**
+- RL-155 §1 R-B and §4 rule 4; RL-155a §3 as a magistrate rule; RL-156a §2; RL-157 §8's table; RL-158 §3's bounds; RL-164 §4 and §5; RL-165 §3 lines 6 and 7; RL-169 §5's latest t0; RL-169a §3.
+- RL-156 §5's 22:40 is restored for F0.
+- RL-149 §2.9 item 4: the campaign sentence loses its reason and stays as pin behaviour; the R1 part stands.
+- RL-155 §1's 20 minutes, by section 6.1.
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This ruling rests on rulings, two seat reports, source files at four commits and the operational timings in the brief. The rules it retires are scheduling rules, and they are retired before any development energy is read.
+
+**For Ed, plainly.** "You are right. The fixed quiet hours were my addition, not the design. The design's quiet is the per-leg process and load checks, and those stay. From now the laptop starts the next run whenever its checks pass, at any hour. A system job that lands in a run costs one 21-minute redo. Two leftovers remain in frozen code until Wednesday: a wait of at most 35 minutes around 02:00, and no launches from 10:50 to 13:15 on the older kits; both are removed in the qualification build. That recovers about three to four hours a night. It will not fill the machine by itself: from Monday the limit is how fast reviewed kits are ready, and that is where the effort goes."
