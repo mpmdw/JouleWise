@@ -5,41 +5,53 @@ probe showed that clean status and meter metadata with zero leg rows raise no na
 loader skips a missing summary, and that ``build_desk`` takes no expected roster. "The automatic table
 builds with no stop" is therefore not finality. ``judge_span`` is: it builds the same table from an
 authenticated bundle, against the queue entry's roster and the kit's identities, and writes a
-machine-readable verdict that the queue controller reads for the k+2 rule.
+machine-readable verdict that the queue controller reads for the k+2 rule. The wire format (bundle,
+signed commits, verdict) is ``docs/process/cadence_desk_format.md``; ``desk_transport`` moves it.
 
-A span is desk-final only when all of these hold (RL-172 section (c) items 1-4; Sol):
+A span is desk-final only when all of these hold (RL-172 section (c) items 1-4; Sol; the #799 gate):
 
-1. **Roster.** The leg ids, their order and count equal the queue entry's ``legs``; every leg's attempts
-   are numbered 1..n, every redo kept as ``legs/<id>/runtime.rejected<k>`` and the accepted attempt as
-   ``legs/<id>/runtime``. No leg record is missing or duplicated, and zero leg rows is a stop.
+1. **Roster.** The leg ids, their order and count equal the queue entry's ``legs`` and the span plan's; every
+   leg's attempts are numbered 1..n, every redo kept as ``legs/<id>/runtime.rejected<k>`` and the accepted
+   attempt as ``legs/<id>/runtime``. No leg record is missing or duplicated, and zero leg rows is a stop.
 2. **Identities, by hash.** The kit file hashes as the queue pins it; the receipt and the manifest name
    that kit sha256, its campaign and its frozen commit; the manifest names the plan id, queue, span and
-   attempt; every leg's seed, band, size and G0 shape are the kit's; every consumer's span reference is
-   the roster's first leg (the capture leg) at its accepted attempt, and all consumers carry one
-   reference record hash.
-3. **An authenticated receipt.** ``BUNDLE_MANIFEST.json`` hashes to the anchor the controller published
-   in its per-span record; every file it lists hashes as listed, nothing else is in the bundle, and the
-   receipt's hash is the one the manifest names. A negative or error result is also a receipt: a verdict
-   is written for every outcome, including a refusal.
+   attempt; the span plan is the kit's (campaign, runner kind, roster, seeds, budgets, redo quota); every
+   leg's seed, band, size and G0 shape are the kit's; every consumer's span reference is the roster's first
+   leg (the capture leg) at its accepted attempt, names that attempt's run as its source, and carries the
+   one reference record hash (the manifest's, when the producer supplies it). A receipt already judged
+   under another plan id is refused.
+3. **An authenticated receipt.** The bundle arrives as an SSH-signed commit by the controller's key
+   (``desk_transport.extract_bundle``), whose trailer names the manifest's sha256; every file the manifest
+   lists hashes as listed, nothing else is in the bundle, and the receipt's hash is the one the manifest
+   names. A negative or error result is also a receipt: a verdict is written for every outcome.
 4. **Feeds.** ``feeds_proven_stopped`` comes from every feed's own stop proof in the receipt (agents,
    meter, volumes), not from the meter's alone. A missing proof is an integrity stop; a proof that says
    not stopped is the named stop INSTRUMENT_FAULT.
 
-Also: a sampled hand table that disagrees with the automatic table holds the next arm
-(HAND_TABLE_DISAGREES); a hand table that RL-172 makes mandatory (a redo, an exclusion, a schema change,
-or the lead's seeded draw) keeps the span from being final until it is supplied (HAND_TABLE_DUE).
+**Command results** (the #799 gate, Sol 9). A receipt with a non-zero rc or an error, a missing or failed
+restore, or any failed stage (other than a refused soak that was retried, or the runner's non-fatal display
+step) is a REFUSAL, which holds the next arm. A span result that contradicts the receipt is not final.
 
-**Hand gates are kept and gate as they do now** (RL-172 section (c)): the class A smoke hand-read of a
-new kit's first span, the L002 and L005 consumer gates, and RL-158 Q1's reference print on every v1.1
-span. The desk does not clear them. It prints what each hand check needs and marks it
-``hand gate required``.
+**The soak** (RL-171; Mythos #794 F3). Receipts from the pins with the retry carry ``soak_attempts``: a
+refused first soak followed by an accepted retry is a completed soak, never a stop; no accepted soak is a
+REFUSAL. Receipts from the development pins (``b4b6aeb19``, ``2d347f721``) carry no such field: one ``soak``
+stage with rc 0 is one accepted soak. The refusal text and its kind are kept wherever the receipt gives them.
+
+**The hand table.** It is mandatory on a redo, an exclusion, a retried soak (RL-172a), a schema change, or
+when the seeded stratified draw (``hand_sample``) selects the span; until it is supplied the span is not
+final (HAND_TABLE_DUE). It must carry every comparable field for every leg; an incomplete or malformed one
+is HAND_TABLE_INVALID, and one that disagrees is HAND_TABLE_DISAGREES. Both hold the next arm.
+
+**Hand gates are kept and gate as they do now** (RL-172 section (c)): the class A smoke hand-read of a new
+kit's first span, the L002 and L005 consumer gates, and RL-158 Q1's reference print on every v1.1 span.
+The desk does not clear them. It prints what each hand check needs and marks it ``hand gate required``.
 
 **Operational finality only.** Inclusion at a look is still RL-166 Q7's interval checks.
 
 **Blinding.** Only ``ALLOWED_BASENAMES`` are ever read, each once (hashed and parsed from the same bytes).
-A bundle path outside the bundle layout is refused unread. No energy, power, meter-sample,
-powermetrics, transcript or slot file is opened; leg summaries carrying such keys are refused, and the
-finished text, summary and verdict are scanned for denied words before anything is written.
+A bundle path outside the bundle layout is refused unread. No energy, power, meter-sample, powermetrics,
+transcript or slot file is opened; leg summaries carrying such keys are refused, and the finished text,
+summary and verdict are scanned for denied words before anything is written.
 """
 from __future__ import annotations
 
@@ -60,35 +72,40 @@ BUNDLE_SCHEMA = "joulewise.cadence_desk_bundle.v1"
 VERDICT_SCHEMA = "joulewise.cadence_desk_verdict.v1"
 HAND_TABLE_SCHEMA = "joulewise.cadence_hand_table.v1"
 RECEIPT_SCHEMA = "joulewise.cadence_span_receipt.v1"      # scripts/cadence_legs_runner.RECEIPT_SCHEMA
-RUNNER_KINDS = ("cadence-legs-v1", "cadence-legs-v1.1")
+PLAN_SCHEMAS = ("joulewise.cadence_span_plan.v1",)         # joulewise.cadence.legs.plan_span
 MANIFEST_NAME = "BUNDLE_MANIFEST.json"
 RECEIPT_NAME = "runner_receipt.json"
+PLAN_NAME = "span_plan.json"
 VERDICT_NAME = "desk_verdict.json"
+SUMMARY_NAME = "desk_summary.json"
 HAND_TABLE_NAME = "hand_table.json"
-ALLOWED_BASENAMES = frozenset({MANIFEST_NAME, RECEIPT_NAME, "leg_summary.json", "result.json", "meter.json",
-                               HAND_TABLE_NAME})
+ALLOWED_BASENAMES = frozenset({MANIFEST_NAME, RECEIPT_NAME, PLAN_NAME, "leg_summary.json", "result.json",
+                               "meter.json", HAND_TABLE_NAME, VERDICT_NAME, SUMMARY_NAME})
 LEG_ID = r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}"
-BUNDLE_PATH_RE = re.compile(rf"{re.escape(RECEIPT_NAME)}|legs/({LEG_ID})/leg_summary\.json|span/result\.json|"
-                            rf"span/meter\.json")
+BUNDLE_PATH_RE = re.compile(rf"{re.escape(RECEIPT_NAME)}|{re.escape(PLAN_NAME)}|legs/({LEG_ID})/leg_summary\.json|"
+                            rf"span/result\.json|span/meter\.json")
 HEX64 = re.compile(r"[0-9a-f]{64}")
-HEX40 = re.compile(r"[0-9a-f]{40}")
 # The runner's production feeds (run_align_r1_smoke.AgentFeed, MeterFeed, VolumeFeed; the mock's FakeFeeds).
 EXPECTED_FEEDS = ("agents", "meter", "volumes")
-MANIFEST_KEYS = {"schema", "plan_id", "queue_id", "span_id", "attempt", "kit", "receipt", "files"}
-MANIFEST_OPTIONAL = {"producer"}
+MANIFEST_KEYS = {"schema", "plan_id", "queue_id", "span_id", "attempt", "kit", "receipt", "files", "reference"}
+MANIFEST_OPTIONAL = {"producer", "controller"}
 KIT_IDENTITY_KEYS = {"path", "sha256", "campaign_id", "frozen_commit"}
+REFERENCE_KEYS = {"capture_leg", "attempt", "record_sha256"}
 V11_KEYS = {"prefill_tokens", "g0_shape", "g0_role", "span_reference"}
 V1_REQUIRED = desk.LEG_SUMMARY_KEYS - V11_KEYS
 V11_SCHEMA = "joulewise.cadence_campaign_kit.v1.1"
+SOAK_RETRIES = 1     # scripts/cadence_legs_runner.SOAK_RETRIES (RL-171): one retry after a settle or quiet refusal
+NON_FATAL_STEPS = ("display",)   # the runner calls display with fatal=False
 
 # Named stops this module adds. "integrity": the automatic table cannot be trusted as final.
 INTEGRITY_CODES = ("DESK_UNAUTHENTICATED", "DESK_IDENTITY", "DESK_ROSTER", "DESK_NO_LEG_ROWS", "DESK_DUPLICATE",
                    "DESK_ATTEMPTS", "DESK_SCHEMA", "DESK_FEED_PROOF", "DESK_REFUSAL", "DESK_ERROR")
-HAND_CODES = ("HAND_TABLE_DISAGREES",)
+HAND_CODES = ("HAND_TABLE_DISAGREES", "HAND_TABLE_INVALID")
 PENDING_CODES = ("HAND_TABLE_DUE",)
 GATE_REQUIRED = "hand gate required"
 
 # Consumer gates RL-172 keeps by name: (campaign, leg) -> the ruling and what the lead's record decides.
+# The controller imports this table (consumer_gates) so that the gate is derived, never typed (Mythos F2).
 CONSUMER_GATES = {
     ("cl-dev-03", "L002"): ("L002 consumer gate", "RL-158 section 2 (the pilot's gate on the remainder)",
                             "dev-03's remainder arms on the lead's record only if L002 released its G0; if it "
@@ -99,12 +116,19 @@ CONSUMER_GATES = {
                             "consumers released"),
 }
 
-# Hand-table fields compared with the automatic table, and the tolerance on seconds (rounding in the
-# hand table's journal reads).
-HAND_COMPARE = ("attempts", "contaminated_redos", "redo_reasons", "g0_outcome", "band_reached", "admitted",
-                "start_band", "seed", "budget_s", "os_level_max", "pm_nominal", "prefill_tokens", "g0_shape",
-                "g0_role", "g0_s", "wall_s", "span_reference")
+# The hand table (Sol 7): every row carries every one of these; seconds compare within the tolerance.
+HAND_REQUIRED_V1 = ("leg_id", "attempts", "contaminated_redos", "g0_outcome", "g0_s", "wall_s", "band_reached",
+                    "admitted")
+HAND_REQUIRED_V11 = HAND_REQUIRED_V1 + ("g0_role", "span_reference")
+HAND_TOP_REQUIRED = ("schema", "plan_id", "legs", "named_stops", "soak_attempts")
 SECONDS_TOLERANCE = 1.0
+
+# The seeded stratified hand-sample draw (RL-172 section (c); Sol). Fixed here, before any span it selects
+# has run: the selection depends only on the committed queue and kit, so it is prospective.
+HAND_SAMPLE_LAW = "sha256-hand-sample-v1"
+HAND_SAMPLE_SEED = 2026111501
+HAND_SAMPLE_BLOCK = 4      # one span in every block of four per stratum (Sol's one-in-four, without its gaps)
+
 # desk._guard_text's words (whole words, so "joulewise" is not one), plus the leg-summary deny list's names.
 _DENIED_WORD = re.compile(r"(?i)\b(\w*energy\w*|joules?|\w*power_w\w*|watts?|slots?|slot_\w+|\w*transcripts?|"
                           r"\w*meter_samples\w*|\w*samples_w\w*|\w*token_ids\w*|\w*output_text\w*|"
@@ -119,8 +143,8 @@ def sha256_bytes(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def _sanitize(text):
-    return _DENIED_WORD.sub("[denied]", str(text))[:400]
+def _sanitize(text, limit=400):
+    return _DENIED_WORD.sub("[denied]", str(text))[:limit]
 
 
 class _Reader:
@@ -142,10 +166,7 @@ class _Reader:
 
     def json(self, path):
         raw, digest = self.read(path)
-        try:
-            return json.loads(raw, object_pairs_hook=_unique), digest
-        except ValueError as error:
-            raise desk.DeskRefusal(f"{Path(path).name}: not JSON ({_sanitize(error)})") from None
+        return _loads(raw, Path(path).name), digest
 
 
 def _unique(pairs):
@@ -155,6 +176,13 @@ def _unique(pairs):
             raise ValueError(f"duplicate key {k!r}")
         out[k] = v
     return out
+
+
+def _loads(raw, where):
+    try:
+        return json.loads(raw, object_pairs_hook=_unique)
+    except ValueError as error:
+        raise desk.DeskRefusal(f"{where}: not JSON ({_sanitize(error)})") from None
 
 
 class _Findings:
@@ -170,37 +198,60 @@ class _Findings:
         return [{"code": c, "kind": kind, "detail": "; ".join(d)[:2000]} for c, d in self.items.items()]
 
 
+def _num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 # --------------------------------------------------------------------------
 # The bundle: reference packer (what the controller publishes) and the walk
 # --------------------------------------------------------------------------
-def pack_bundle(span_dir, bundle_dir, *, plan_id, queue_id, span_id, attempt, kit, producer=None):
-    """The reference packer: copy the runner's ``runner_receipt.json`` and its ``desk-bundle/`` files into
-    ``bundle_dir`` and write ``BUNDLE_MANIFEST.json``. ``kit`` is the queue entry's identity
-    ({path, sha256, campaign_id, frozen_commit}). Returns the manifest's sha256 (the anchor the controller
-    publishes in its per-span record). Opens only allowlisted basenames."""
+def reference_identity(receipt_doc, roster, record_sha256=None):
+    """The manifest's ``reference``: the capture leg (the roster's first), its accepted attempt, and the
+    capture's reference record sha256 if the producer has it. None when no leg consumed a span reference."""
+    legs = [leg for leg in receipt_doc.get("legs") or [] if isinstance(leg, dict)]
+    if not roster or not any(isinstance(leg.get("span_reference"), dict) for leg in legs):
+        return None
+    capture = next((leg for leg in legs if leg.get("leg_id") == roster[0]), {})
+    return {"capture_leg": roster[0], "attempt": len(capture.get("attempts") or []), "record_sha256": record_sha256}
+
+
+def pack_bundle(span_dir, bundle_dir, *, plan_id, queue_id, span_id, attempt, kit, roster, reference_record_sha256=None,
+                producer=None, controller=None):
+    """The reference packer: copy the runner's ``runner_receipt.json``, ``span_plan.json`` and its
+    ``desk-bundle/`` files into ``bundle_dir`` and write ``BUNDLE_MANIFEST.json``. ``kit`` is the queue entry's
+    identity ({path, sha256, campaign_id, frozen_commit}); ``roster`` the queue entry's legs. Returns the
+    manifest's sha256. Opens only allowlisted basenames; a desk-bundle path outside the layout is refused
+    before anything is read or written."""
     span_dir, bundle_dir = Path(span_dir), Path(bundle_dir)
     reader = _Reader()
-    bundle_dir.mkdir(parents=True, exist_ok=False)
-    files = {}
     sources = [(span_dir / RECEIPT_NAME, RECEIPT_NAME)]
+    if (span_dir / PLAN_NAME).is_file():
+        sources.append((span_dir / PLAN_NAME, PLAN_NAME))
     source_root = span_dir / "desk-bundle"
     for path in sorted(source_root.rglob("*")):
         if path.is_file() or path.is_symlink():
             rel = path.relative_to(source_root).as_posix()
-            if not BUNDLE_PATH_RE.fullmatch(rel):
-                raise desk.DeskRefusal(f"desk-bundle/{rel} is not in the bundle layout")
+            if path.is_symlink() or not BUNDLE_PATH_RE.fullmatch(rel) or rel in (RECEIPT_NAME, PLAN_NAME):
+                raise desk.DeskRefusal(f"desk-bundle/{rel} is not in the bundle layout (not read)")
             sources.append((path, rel))
+    bundle_dir.mkdir(parents=True, exist_ok=False)
+    files, receipt_doc = {}, None
     for path, rel in sources:
         raw, digest = reader.read(path)
+        if rel == RECEIPT_NAME:
+            receipt_doc = _loads(raw, RECEIPT_NAME)
         target = bundle_dir / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
         files[rel] = digest
     manifest = {"schema": BUNDLE_SCHEMA, "plan_id": plan_id, "queue_id": queue_id, "span_id": span_id,
                 "attempt": attempt, "kit": dict(kit), "receipt": {"path": RECEIPT_NAME, "sha256": files[RECEIPT_NAME]},
-                "files": dict(sorted(files.items()))}
+                "files": dict(sorted(files.items())),
+                "reference": reference_identity(receipt_doc or {}, list(roster), reference_record_sha256)}
     if producer is not None:
         manifest["producer"] = producer
+    if controller is not None:
+        manifest["controller"] = controller
     raw = (json.dumps(manifest, indent=1, sort_keys=True) + "\n").encode()
     (bundle_dir / MANIFEST_NAME).write_bytes(raw)
     return sha256_bytes(raw)
@@ -223,6 +274,42 @@ def _walk(bundle_dir, find):
 # --------------------------------------------------------------------------
 # Expected identities: the queue entry and the kit
 # --------------------------------------------------------------------------
+def span_shape(kit, roster):
+    """``span`` when a leg after the roster's first is span-shaped (a consumer), else ``own``."""
+    shapes = {leg["leg_id"]: leg.get("g0_shape", "own") for leg in kit["legs"]}
+    return "span" if any(shapes.get(x) == "span" for x in roster[1:]) else "own"
+
+
+def hand_sample(queue_doc, plan_id, kit, kit_sha256):
+    """The seeded stratified draw (``sha256-hand-sample-v1``). The stratum is (kit sha256, G0 shape of the
+    span). A queue's spans in that stratum, in ``seq`` order, fall in blocks of HAND_SAMPLE_BLOCK (the last
+    block may be shorter); in each block exactly one position is drawn from sha256 of the law, the seed,
+    the queue, the stratum and the block. It reads only the committed queue and kit, so it is prospective:
+    ``cadence_desk.py sample-plan`` prints the selection at READY. Spans on another kit are another stratum."""
+    stratum_spans = []
+    target = None
+    for span in sorted(queue_doc["spans"], key=lambda s: s["seq"]):
+        if span["kit"]["sha256"] != kit_sha256:
+            continue
+        shape = span_shape(kit, span["legs"])
+        if queuemod.plan_id(span) == plan_id:
+            target = shape
+        stratum_spans.append((queuemod.plan_id(span), shape))
+    if target is None:
+        return None
+    members = [p for p, shape in stratum_spans if shape == target]
+    ordinal = members.index(plan_id)
+    block = ordinal // HAND_SAMPLE_BLOCK
+    size = min(HAND_SAMPLE_BLOCK, len(members) - block * HAND_SAMPLE_BLOCK)
+    stratum = f"{kit_sha256}|{target}"
+    digest = hashlib.sha256(f"{HAND_SAMPLE_LAW}|{HAND_SAMPLE_SEED}|{queue_doc['queue_id']}|{stratum}|{block}"
+                            .encode()).hexdigest()
+    position = int(digest, 16) % size
+    return {"law": HAND_SAMPLE_LAW, "seed": HAND_SAMPLE_SEED, "stratum": {"kit_sha256": kit_sha256, "shape": target},
+            "ordinal": ordinal, "block": block, "block_size": size, "position": position,
+            "selected": ordinal % HAND_SAMPLE_BLOCK == position}
+
+
 def expected_identity(queue_doc, plan_id, kit, kit_sha256, find):
     """The queue entry for ``plan_id`` and the kit, as the desk's expectation. Raises _Fatal when there is
     no roster to judge against."""
@@ -250,7 +337,8 @@ def expected_identity(queue_doc, plan_id, kit, kit_sha256, find):
                     "frozen_commit": kit["frozen"]["commit"]},
             "kit_schema": kit["schema"], "runner_kind": kit["runner"]["kind"],
             "redo_quota": kit["span_template"]["redo_quota"], "kit_first_leg": kit_ids[0] if kit_ids else None,
-            "kit_legs": {leg["leg_id"]: leg for leg in kit["legs"]}}
+            "kit_legs": {leg["leg_id"]: leg for leg in kit["legs"]},
+            "sample": hand_sample(queue_doc, plan_id, kit, span["kit"]["sha256"])}
 
 
 # --------------------------------------------------------------------------
@@ -258,14 +346,14 @@ def expected_identity(queue_doc, plan_id, kit, kit_sha256, find):
 # --------------------------------------------------------------------------
 def authenticate(bundle_dir, manifest_sha256, expected, reader, find):
     """Verify the manifest against the anchor and every file against the manifest. Returns
-    {rel: (raw-sha256 verified bool)} for the files present and allowlisted."""
+    (manifest, manifest sha256, {rel: verified bytes})."""
     bundle_dir = Path(bundle_dir)
     if not (bundle_dir / MANIFEST_NAME).is_file():
         find.add("DESK_UNAUTHENTICATED", f"no {MANIFEST_NAME}")
         raise _Fatal()
     manifest, digest = reader.json(bundle_dir / MANIFEST_NAME)
     if not (isinstance(manifest_sha256, str) and HEX64.fullmatch(manifest_sha256)):
-        find.add("DESK_UNAUTHENTICATED", "no manifest anchor (the controller's per-span record carries it)")
+        find.add("DESK_UNAUTHENTICATED", "no manifest anchor (the signed bundle commit's Manifest-SHA256 trailer)")
     elif digest != manifest_sha256:
         find.add("DESK_UNAUTHENTICATED", f"manifest sha256 {digest[:12]} is not the anchor {manifest_sha256[:12]}")
     if not isinstance(manifest, dict):
@@ -288,6 +376,15 @@ def authenticate(bundle_dir, manifest_sha256, expected, reader, find):
             if kit[key] != expected["kit"][key]:
                 find.add("DESK_IDENTITY", f"manifest kit.{key} {str(kit[key])[:16]!r} is not the expected "
                                           f"{str(expected['kit'][key])[:16]!r}")
+    ref = manifest.get("reference")
+    if ref is not None and not (isinstance(ref, dict) and set(ref) == REFERENCE_KEYS
+                                and (ref["record_sha256"] is None or (isinstance(ref["record_sha256"], str)
+                                                                      and HEX64.fullmatch(ref["record_sha256"])))):
+        find.add("DESK_IDENTITY", "manifest reference: null or {capture_leg, attempt, record_sha256}")
+    for key in MANIFEST_OPTIONAL:
+        bad = [k for k in desk._keys(manifest.get(key) or {}) if desk.DENIED_KEY_RE.search(k)]
+        if bad:
+            raise desk.DeskRefusal(f"manifest {key} carries denied keys")
     files = manifest.get("files")
     if not (isinstance(files, dict) and all(isinstance(k, str) and isinstance(v, str) and HEX64.fullmatch(v)
                                             for k, v in files.items())):
@@ -320,19 +417,26 @@ def authenticate(bundle_dir, manifest_sha256, expected, reader, find):
     return manifest, digest, verified
 
 
-def _loads(raw, where):
-    try:
-        return json.loads(raw, object_pairs_hook=_unique)
-    except ValueError as error:
-        raise desk.DeskRefusal(f"{where}: not JSON ({_sanitize(error)})") from None
-
-
 # --------------------------------------------------------------------------
 # The receipt, projected (operational fields only)
 # --------------------------------------------------------------------------
 _ATTEMPT_KEYS = ("attempt", "redone", "contaminated", "output_dir", "leg_status", "redo_reason")
-_LEG_RESULT_KEYS = ("leg_id", "g0_role", "g0_shape", "g0_outcome", "leg_status", "g0_reference_source",
+_LEG_RESULT_KEYS = ("leg_id", "bundle", "g0_role", "g0_shape", "g0_outcome", "leg_status", "g0_reference_source",
                     "g0_reference_record_sha256")
+
+
+def refusal_kind(text):
+    """The soak refusal's kind, as far as the receipt's text gives it (RL-172a's look print)."""
+    t = str(text or "").lower()
+    if "slope" in t:
+        return "slope"
+    if "load" in t:
+        return "load"
+    if "no retry" in t:
+        return "settle_or_quiet; no retry budget"
+    if "settle or quiet" in t:
+        return "settle_or_quiet"
+    return "unspecified"
 
 
 def project_receipt(doc):
@@ -355,6 +459,7 @@ def project_receipt(doc):
         result = step.get("result") if isinstance(step.get("result"), dict) else {}
         if step.get("name") == "restore":
             row["action"] = result.get("action")
+            row["has_result"] = isinstance(step.get("result"), dict)
         if "g0_role" in result:
             row["leg"] = {k: result.get(k) for k in _LEG_RESULT_KEYS}
         steps.append(row)
@@ -364,15 +469,19 @@ def project_receipt(doc):
         feeds[name] = ({"rc": stop.get("rc"), "proven_stopped": stop.get("proven_stopped")}
                        if isinstance(stop, dict) else None)
     error = doc.get("error")
+    soak = None
+    if "soak_attempts" in doc:   # absent on the development pins' runners (b4b6aeb19, 2d347f721)
+        soak = [{"attempt": a.get("attempt"), "refused": bool(a.get("refused")), "output_dir": a.get("output_dir"),
+                 "refusal": _sanitize(a.get("refused"), 200) if a.get("refused") else None,
+                 "refusal_kind": refusal_kind(a.get("refused")) if a.get("refused") else None}
+                if isinstance(a, dict) else {} for a in (doc.get("soak_attempts") or [])]
     out = {"schema": doc.get("schema"), "runner_kind": doc.get("runner_kind"), "mock": doc.get("mock"),
            "kit": doc.get("kit"), "roster": doc.get("roster"), "rc": doc.get("rc"),
            "error_type": str(error).split(":", 1)[0][:80] if error else None,
            "span_result": doc.get("span_result"), "meter": doc.get("meter"),
            "legs_finished": doc.get("legs_finished"), "legs_planned": doc.get("legs_planned"),
            "load_redos_used": doc.get("load_redos_used"), "legs": legs, "steps": steps, "feeds": feeds,
-           "soak_attempts": [{"attempt": a.get("attempt"), "refused": bool(a.get("refused")),
-                              "output_dir": a.get("output_dir")}
-                             for a in doc.get("soak_attempts") or [] if isinstance(a, dict)],
+           "soak_attempts": soak, "soak_field": "soak_attempts" in doc,
            "desk_bundle_error": bool(doc.get("desk_bundle_error"))}
     bad = [k for k in desk._keys(out) if desk.DENIED_KEY_RE.search(k)]
     if bad:
@@ -383,11 +492,7 @@ def project_receipt(doc):
 # --------------------------------------------------------------------------
 # Conditions 1, 2 and 4 on the parsed bundle
 # --------------------------------------------------------------------------
-def _num(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-
-
-def check_receipt_identity(receipt, expected, allow_mock, find):
+def check_receipt_identity(receipt, receipt_sha, expected, allow_mock, history, find):
     if receipt["schema"] != RECEIPT_SCHEMA:
         find.add("DESK_IDENTITY", f"receipt schema {receipt['schema']!r}")
     if receipt["runner_kind"] != expected["runner_kind"]:
@@ -400,6 +505,12 @@ def check_receipt_identity(receipt, expected, allow_mock, find):
                                       f"{str(expected['kit'][key])[:16]!r}")
     if receipt["mock"] is not False and not (allow_mock and receipt["mock"] is True):
         find.add("DESK_IDENTITY", f"receipt mock={receipt['mock']!r}: a mock span is never desk-final")
+    # Mythos F17: the receipt does not name its plan id, so a receipt already judged under another plan id
+    # (a span output relabelled as a re-run) is refused.
+    for past in history or ():
+        if isinstance(past, dict) and past.get("receipt_sha256") == receipt_sha and past.get("plan_id") != expected[
+                "plan_id"]:
+            find.add("DESK_IDENTITY", f"this receipt was already judged under {past.get('plan_id')}")
 
 
 def load_rows(verified, find):
@@ -449,6 +560,38 @@ def check_roster(rows, receipt, expected, find):
     return ordered
 
 
+def check_plan(verified, expected, find):
+    """The span plan (``span_plan.json``) binds the plan identity: the kit's campaign and runner kind, the
+    roster, each leg's seed, band, size and budget, and the redo quota."""
+    if PLAN_NAME not in verified:
+        find.add("DESK_IDENTITY", f"no {PLAN_NAME} in the bundle")
+        return None
+    plan = _loads(verified[PLAN_NAME], PLAN_NAME)
+    if not isinstance(plan, dict) or not isinstance(plan.get("legs"), list):
+        find.add("DESK_IDENTITY", f"{PLAN_NAME}: not a span plan")
+        return None
+    bad = [k for k in desk._keys(plan) if desk.DENIED_KEY_RE.search(k)]
+    if bad:
+        raise desk.DeskRefusal(f"{PLAN_NAME} carries denied keys")
+    if plan.get("schema") not in PLAN_SCHEMAS:
+        find.add("DESK_IDENTITY", f"{PLAN_NAME} schema {plan.get('schema')!r}")
+    for key, want in (("campaign_id", expected["kit"]["campaign_id"]), ("runner_kind", expected["runner_kind"]),
+                      ("redo_quota", expected["redo_quota"])):
+        if plan.get(key) != want:
+            find.add("DESK_IDENTITY", f"{PLAN_NAME} {key} {plan.get(key)!r} is not the kit's {want!r}")
+    ids = [leg.get("leg_id") if isinstance(leg, dict) else None for leg in plan["legs"]]
+    if ids != expected["roster"]:
+        find.add("DESK_ROSTER", f"{PLAN_NAME} legs {ids} are not the queue's roster {expected['roster']}")
+    for leg in plan["legs"]:
+        if not isinstance(leg, dict):
+            continue
+        kit_leg = expected["kit_legs"].get(leg.get("leg_id")) or {}
+        for key in ("seed", "start_band", "prefill_tokens"):
+            if key in kit_leg and leg.get(key) != kit_leg.get(key):
+                find.add("DESK_IDENTITY", f"{PLAN_NAME} {leg.get('leg_id')}.{key} is not the kit's")
+    return {leg.get("leg_id"): leg for leg in plan["legs"] if isinstance(leg, dict)}
+
+
 def check_schema(ordered, receipt, expected, find):
     required = desk.LEG_SUMMARY_KEYS if expected["kit_schema"] == V11_SCHEMA else V1_REQUIRED
     copies = {leg["leg_id"]: leg for leg in receipt["legs"]}
@@ -495,9 +638,14 @@ def check_attempts(ordered, receipt, expected, find):
         find.add("DESK_ATTEMPTS", f"{redone_total} redos over the kit's quota {expected['redo_quota']}")
 
 
-def check_kit_legs(ordered, receipt, expected, find):
+def _accepted_step(receipt, leg_id, n):
+    return next((s for s in receipt["steps"] if s.get("name") == f"{leg_id}.a{n}"), None)
+
+
+def check_kit_legs(ordered, receipt, expected, plan_legs, manifest_ref, find):
     """Each row is the kit's leg (seed, band, budget, size, G0 shape and role); each consumer's reference is
-    the roster's first leg at its accepted attempt; consumers carry one reference record hash."""
+    the roster's first leg at its accepted attempt and names that attempt's run as its source; consumers
+    carry one reference record hash, the manifest's when it gives one (Sol 1)."""
     v11 = expected["kit_schema"] == V11_SCHEMA
     roster = expected["roster"]
     capture = roster[0] if roster else None
@@ -510,6 +658,8 @@ def check_kit_legs(ordered, receipt, expected, find):
                 find.add("DESK_IDENTITY", f"{leg_id}: {key} {row.get(key)!r} is not the kit's {kit_leg.get(key)!r}")
         if row.get("budget_s") != (receipt_legs.get(leg_id) or {}).get("budget_s"):
             find.add("DESK_IDENTITY", f"{leg_id}: budget_s is not the receipt's")
+        if plan_legs is not None and row.get("budget_s") != (plan_legs.get(leg_id) or {}).get("budget_s"):
+            find.add("DESK_IDENTITY", f"{leg_id}: budget_s is not the span plan's")
         if not v11:
             continue
         shape = kit_leg.get("g0_shape")
@@ -534,16 +684,35 @@ def check_kit_legs(ordered, receipt, expected, find):
         rref = (receipt_legs.get(leg_id) or {}).get("span_reference")
         if not isinstance(rref, dict) or rref.get("dir") != f"legs/{capture}/runtime":
             find.add("DESK_IDENTITY", f"{leg_id}: receipt reference dir is not legs/{capture}/runtime")
-    if v11:
-        hashes = {}
-        for step in receipt["steps"]:
-            leg = step.get("leg")
-            if leg and leg.get("g0_role") == "consume" and step.get("rc") == 0:
-                hashes[leg.get("leg_id")] = leg.get("g0_reference_record_sha256")
-        consumers = [r["leg_id"] for r in ordered if r.get("g0_role") == "consume"]
-        values = {hashes.get(c) for c in consumers}
-        if consumers and (len(values) != 1 or not all(isinstance(v, str) and HEX64.fullmatch(v) for v in values)):
-            find.add("DESK_IDENTITY", f"consumers do not carry one reference record sha256 ({len(values)} values)")
+    if not v11:
+        return
+    consumers = [r["leg_id"] for r in ordered if r.get("g0_role") == "consume"]
+    if not consumers:
+        if manifest_ref is not None:
+            find.add("DESK_IDENTITY", "the manifest names a span reference but no leg consumed one")
+        return
+    n = len((receipt_legs.get(capture) or {}).get("attempts") or [])
+    capture_step = _accepted_step(receipt, capture, n)
+    capture_run = Path(((capture_step or {}).get("leg") or {}).get("bundle") or "").name or None
+    hashes, sources = {}, {}
+    for c in consumers:
+        step = _accepted_step(receipt, c, len((receipt_legs.get(c) or {}).get("attempts") or []))
+        leg = (step or {}).get("leg") or {}
+        hashes[c], sources[c] = leg.get("g0_reference_record_sha256"), leg.get("g0_reference_source")
+    values = set(hashes.values())
+    if len(values) != 1 or not all(isinstance(v, str) and HEX64.fullmatch(v) for v in values):
+        find.add("DESK_IDENTITY", f"consumers do not carry one reference record sha256 ({len(values)} values)")
+    if capture_run is None or any(s != capture_run for s in sources.values()):
+        find.add("DESK_IDENTITY", f"consumers' reference source {sorted(set(map(str, sources.values())))} is not the "
+                                  f"capture's accepted run {capture_run!r}")
+    if manifest_ref is None:
+        find.add("DESK_IDENTITY", "consumers ran but the manifest names no span reference")
+        return
+    if manifest_ref.get("capture_leg") != capture or manifest_ref.get("attempt") != n:
+        find.add("DESK_IDENTITY", f"manifest reference {manifest_ref.get('capture_leg')} attempt "
+                                  f"{manifest_ref.get('attempt')} is not the capture leg {capture} attempt {n}")
+    if manifest_ref.get("record_sha256") is not None and values != {manifest_ref["record_sha256"]}:
+        find.add("DESK_IDENTITY", "consumers' reference record sha256 is not the capture's record in the manifest")
 
 
 def check_span_files(verified, receipt, find):
@@ -584,50 +753,126 @@ def feed_proofs(receipt, meter, find):
     return all(p["proven_stopped"] for p in proofs.values()), proofs
 
 
-SOAK_RETRIES = 1     # scripts/cadence_legs_runner.SOAK_RETRIES (RL-171): one retry after a settle or quiet refusal
+def _soak_stage(k):
+    return "soak" if k == 1 else f"soak.a{k}"
 
 
 def check_soak(receipt, find):
-    """The soak retry (RL-171; Mythos #794 F3). Attempts are numbered 1..n with n <= 1 + SOAK_RETRIES; a refused
-    attempt that was retried is kept as ``soak.rejected<k>`` and its stage (``soak``, ``soak.a<k>``) has a non-zero
-    rc; the accepted attempt is ``soak`` with rc 0. A refused first soak followed by an accepted retry is a
-    completed soak, never a stopped span. Returns (accepted attempt or None, detail for the print)."""
-    attempts = receipt["soak_attempts"]
+    """The soak (RL-171; Mythos #794 F3, #799 F3; Sol 9 and 13). Returns (accepted attempt or None, attempts as
+    judged, note). With ``soak_attempts`` (the pins with the retry): attempts are numbered 1..n, n <= 1 +
+    SOAK_RETRIES; each has its stage (``soak``, ``soak.a<k>``) with rc 0 exactly when it was accepted; a refused
+    attempt that was retried is kept as ``soak.rejected<k>``; the accepted one as ``soak``. Without the field
+    (the development pins): exactly one ``soak`` stage and no retry stage; rc 0 is one accepted soak."""
     step_rc = {}
     for step in receipt["steps"]:
         step_rc.setdefault(step.get("name"), step.get("rc"))
+    stages = sorted(n for n in step_rc if isinstance(n, str) and re.fullmatch(r"soak(\.a\d+)?", n))
+    attempts = receipt["soak_attempts"]
+    if attempts is None:
+        if any(n != "soak" for n in stages):
+            find.add("DESK_ATTEMPTS", f"soak retry stages {stages} but no soak_attempts in the receipt")
+        if "soak" not in step_rc:
+            return None, [], "no soak stage (legacy receipt: no soak_attempts field)"
+        ok = step_rc["soak"] == 0
+        judged = [{"attempt": 1, "refused": not ok, "output_dir": "soak", "refusal": None if ok else
+                   f"soak stage rc {step_rc['soak']}", "refusal_kind": None if ok else "unspecified"}]
+        return (1, judged, "accepted attempt 1 (legacy receipt: no soak_attempts field)") if ok else \
+            (None, judged, f"no soak accepted (legacy receipt: soak stage rc {step_rc['soak']})")
     if not attempts:
-        return None, "no soak attempt recorded"
+        return None, [], "no soak attempt recorded"
     if len(attempts) > 1 + SOAK_RETRIES:
         find.add("DESK_ATTEMPTS", f"{len(attempts)} soak attempts; the runner allows {1 + SOAK_RETRIES}")
+    extra = [n for n in stages if n not in {_soak_stage(k) for k in range(1, len(attempts) + 1)}]
+    if extra:
+        find.add("DESK_ATTEMPTS", f"soak stages {extra} have no soak attempt record")
     accepted = None
     for k, a in enumerate(attempts, start=1):
         last = k == len(attempts)
-        stage = "soak" if k == 1 else f"soak.a{k}"
+        stage = _soak_stage(k)
         if a.get("attempt") != k:
             find.add("DESK_ATTEMPTS", f"soak attempt {k} is numbered {a.get('attempt')!r}")
         if not last and (a.get("refused") is not True or a.get("output_dir") != f"soak.rejected{k}"):
             find.add("DESK_ATTEMPTS", f"soak attempt {k} was retried but is not kept as a refused soak.rejected{k}")
-        if stage in step_rc and (step_rc[stage] == 0) == bool(a.get("refused")):
+        if stage not in step_rc:
+            find.add("DESK_ATTEMPTS", f"soak attempt {k}: no {stage} stage in the receipt")
+        elif (step_rc[stage] == 0) == bool(a.get("refused")):
             find.add("DESK_ATTEMPTS", f"soak attempt {k}: stage {stage} rc {step_rc[stage]} disagrees with "
                                       f"refused={a.get('refused')}")
         if last and not a.get("refused"):
             if a.get("output_dir") != "soak":
                 find.add("DESK_ATTEMPTS", f"the accepted soak is kept as {a.get('output_dir')!r}, not soak")
-            accepted = k
-    refused = sum(1 for a in attempts if a.get("refused"))
+            if step_rc.get(stage) == 0:
+                accepted = k
+    refused = [a for a in attempts if a.get("refused")]
+    kinds = ", ".join(str(a.get("refusal_kind")) for a in refused)
     if accepted is None:
-        return None, f"no soak accepted ({refused} refused)"
-    return accepted, (f"accepted attempt {accepted} after {refused} refused (retry)" if refused
-                      else "accepted attempt 1")
+        return None, attempts, f"no soak accepted ({len(refused)} refused: {kinds})"
+    return accepted, attempts, (f"accepted attempt {accepted} after {len(refused)} refused ({kinds}; retry)"
+                                if refused else "accepted attempt 1")
+
+
+def _retried_soak(step, receipt):
+    attempts = receipt["soak_attempts"] or []
+    name = step.get("name") or ""
+    k = 1 if name == "soak" else int(name[6:]) if re.fullmatch(r"soak\.a\d+", name) else None
+    return k is not None and k < len(attempts) and bool(attempts[k - 1].get("refused"))
+
+
+def command_failures(receipt, result, soak_accepted, soak_note, find):
+    """Sol 9: the receipt's own command results. Returns REFUSAL details (each holds the next arm)."""
+    out = []
+    if receipt["rc"] != 0:
+        out.append(f"receipt rc {receipt['rc']!r}" + (f" ({receipt['error_type']})" if receipt["error_type"] else ""))
+    elif receipt["error_type"]:
+        out.append(f"receipt error ({receipt['error_type']}) with rc 0")
+    if receipt["desk_bundle_error"]:
+        out.append("the runner could not write its desk bundle")
+    restore = [s for s in receipt["steps"] if s.get("name") == "restore"]
+    if len(restore) != 1:
+        find.add("DESK_SCHEMA", f"{len(restore)} restore steps in the receipt (one is required)")
+        out.append("restore unproven (no restore step)")
+    elif restore[0].get("rc") != 0 or not restore[0].get("has_result"):
+        out.append(f"restore unproven (rc {restore[0].get('rc')!r})")
+    for s in receipt["steps"]:
+        name, rc = s.get("name"), s.get("rc")
+        if rc == 0 or name == "restore" or _retried_soak(s, receipt):
+            continue
+        if name in NON_FATAL_STEPS:
+            continue
+        out.append(f"step {name} rc {rc!r}")
+    if soak_accepted is None:
+        out.append(soak_note)
+    if isinstance(result, dict) and result.get("chain_exit_code") != receipt["rc"]:
+        find.add("DESK_SCHEMA", f"span result chain_exit_code {result.get('chain_exit_code')!r} contradicts the "
+                                f"receipt rc {receipt['rc']!r}")
+    return out
+
+
+def check_transition(transition, expected, verified, queue_path, find):
+    """The controller's signed per-span transition record (FORMAT section 1): it names this span, its kit, the
+    queue bytes it armed from, and the span plan's sha256. Returns REFUSAL details (a close that was not
+    CLOSED_OK)."""
+    for key in ("plan_id", "queue_id", "span_id", "attempt"):
+        if transition.get(key) != expected[key]:
+            find.add("DESK_IDENTITY", f"transition {key} {transition.get(key)!r} is not the queue's {expected[key]!r}")
+    if (transition.get("kit") or {}).get("sha256") != expected["kit"]["sha256"]:
+        find.add("DESK_IDENTITY", "transition kit sha256 is not the queue's pin")
+    queue_sha = sha256_bytes(Path(queue_path).read_bytes())
+    if (transition.get("queue") or {}).get("sha256") != queue_sha:
+        find.add("DESK_IDENTITY", "the queue file is not the one the transition record armed from")
+    plan_raw = verified.get(PLAN_NAME)
+    if plan_raw is None or transition.get("plan_sha256") != sha256_bytes(plan_raw):
+        find.add("DESK_IDENTITY", "span_plan.json is not the plan the transition record names")
+    status = transition.get("status")
+    return [] if status == "CLOSED_OK" else [f"controller close status {_sanitize(status, 40)}"]
 
 
 # --------------------------------------------------------------------------
 # Hand table and hand gates
 # --------------------------------------------------------------------------
-def hand_table_triggers(ordered, expected, history, hand_sample):
-    """RL-172 section (c): the hand table is always taken on a span with a redo, an exclusion or a schema
-    change; otherwise by the lead's seeded draw (``hand_sample``)."""
+def hand_table_triggers(ordered, expected, history, hand_sample_flag, soak_attempts):
+    """RL-172 section (c) and RL-172a: the hand table is always taken on a span with a redo, an exclusion, a
+    retried soak or a schema change, and on a span the seeded draw (or the lead) selects."""
     out = []
     redos = [r["leg_id"] for r in ordered if (r.get("attempts") or 1) > 1]
     if redos:
@@ -635,61 +880,125 @@ def hand_table_triggers(ordered, expected, history, hand_sample):
     excluded = [r["leg_id"] for r in ordered if r.get("admitted") is not True]
     if excluded:
         out.append(f"exclusion ({', '.join(excluded)})")
+    refused = [a for a in soak_attempts or [] if a.get("refused")]
+    if refused:
+        out.append(f"retried soak ({', '.join(str(a.get('refusal_kind')) for a in refused)}; RL-172a)")
     keys = sorted(set().union(*(set(r) for r in ordered))) if ordered else []
     previous = next((h for h in reversed(list(history or [])) if isinstance(h, dict)), None)
     if previous is None:
         out.append("schema change (no earlier desk summary in the history)")
     elif previous.get("kit_schema") != expected["kit_schema"] or previous.get("leg_keys") != keys:
         out.append("schema change (kit schema or leg-summary fields differ from the previous span's)")
-    if hand_sample:
-        out.append("sampled (the lead's seeded draw)")
+    sample = expected.get("sample")
+    if sample and sample["selected"]:
+        out.append(f"sampled (seeded draw {HAND_SAMPLE_LAW}: block {sample['block']} position {sample['position']})")
+    if hand_sample_flag:
+        out.append("sampled (the lead's selection)")
     return out, keys
 
 
 def _same(key, a, b):
     if key in ("g0_s", "wall_s") and _num(a) and _num(b):
         return abs(a - b) <= SECONDS_TOLERANCE
-    if key == "span_reference" and isinstance(a, dict) and isinstance(b, dict):
-        return all(a.get(k) == b.get(k) for k in ("leg_id", "attempt"))
+    if key == "span_reference":
+        if isinstance(a, dict) and isinstance(b, dict):
+            return all(a.get(k) == b.get(k) for k in ("leg_id", "attempt"))
+        return a is None and b is None
     return a == b
 
 
-def compare_hand_table(doc, ordered, operational_stops, plan_id):
-    """Field-by-field comparison of a hand table with the automatic table. Returns differences."""
-    diffs = []
-    if not isinstance(doc, dict) or doc.get("schema") != HAND_TABLE_SCHEMA:
-        return [f"hand table schema is not {HAND_TABLE_SCHEMA}"]
+def _hand_value_ok(key, v):
+    if key in ("attempts",):
+        return type(v) is int and v >= 1
+    if key == "contaminated_redos":
+        return type(v) is int and v >= 0
+    if key in ("g0_s", "wall_s"):
+        return v is None or _num(v)
+    if key in ("band_reached", "admitted"):
+        return type(v) is bool
+    if key in ("g0_outcome", "g0_role", "leg_id"):
+        return isinstance(v, str) and v != ""
+    if key == "span_reference":
+        return v is None or (isinstance(v, dict) and isinstance(v.get("leg_id"), str) and type(v.get("attempt")) is int)
+    return True
+
+
+def validate_hand_table(doc, plan_id, v11):
+    """Sol 7: a hand table carries every comparable field for every leg; anything less is invalid."""
+    problems = []
+    if not isinstance(doc, dict):
+        return ["hand table: not an object"]
+    missing = [k for k in HAND_TOP_REQUIRED if k not in doc]
+    if missing:
+        problems.append(f"hand table: missing {missing}")
+    if doc.get("schema") != HAND_TABLE_SCHEMA:
+        problems.append(f"hand table schema is not {HAND_TABLE_SCHEMA}")
     if doc.get("plan_id") != plan_id:
-        return [f"hand table is for {doc.get('plan_id')!r}, not {plan_id}"]
-    bad = [k for k in desk._keys(doc) if desk.DENIED_KEY_RE.search(k)]
-    if bad:
+        problems.append(f"hand table is for {doc.get('plan_id')!r}, not {plan_id}")
+    if not (isinstance(doc.get("named_stops"), list) and all(isinstance(x, str) for x in doc["named_stops"])):
+        problems.append("hand table named_stops: a list of codes")
+    if type(doc.get("soak_attempts")) is not int or doc.get("soak_attempts", 0) < 0:
+        problems.append("hand table soak_attempts: the count of soak attempts")
+    legs = doc.get("legs")
+    if not (isinstance(legs, list) and legs):
+        return problems + ["hand table legs: a non-empty list"]
+    required = HAND_REQUIRED_V11 if v11 else HAND_REQUIRED_V1
+    seen = set()
+    for i, row in enumerate(legs):
+        if not isinstance(row, dict):
+            problems.append(f"hand row {i}: not an object")
+            continue
+        lid = row.get("leg_id")
+        if lid in seen:
+            problems.append(f"hand row {lid}: duplicate")
+        seen.add(lid)
+        absent = [k for k in required if k not in row]
+        if absent:
+            problems.append(f"hand row {lid}: missing {absent}")
+        bad = [k for k in required if k in row and not _hand_value_ok(k, row[k])]
+        if bad:
+            problems.append(f"hand row {lid}: invalid {bad}")
+    return problems
+
+
+def compare_hand_table(doc, ordered, operational_stops, soak_attempts, plan_id, v11):
+    """Returns (problems, differences). Problems make the table invalid; differences are disagreements."""
+    if not isinstance(doc, dict):
+        return ["hand table: not an object"], []
+    if [k for k in desk._keys(doc) if desk.DENIED_KEY_RE.search(k)]:
         raise desk.DeskRefusal("hand_table.json carries denied keys")
-    hand = doc.get("legs") if isinstance(doc.get("legs"), list) else []
-    hand_ids = [h.get("leg_id") for h in hand if isinstance(h, dict)]
+    problems = validate_hand_table(doc, plan_id, v11)
+    if problems:
+        return problems, []
+    diffs = []
+    hand_ids = [h.get("leg_id") for h in doc["legs"]]
     auto_ids = [r["leg_id"] for r in ordered]
     if hand_ids != auto_ids:
         diffs.append(f"legs: hand {hand_ids}, automatic {auto_ids}")
     auto = {r["leg_id"]: r for r in ordered}
-    for h in hand:
-        if not isinstance(h, dict) or h.get("leg_id") not in auto:
+    for h in doc["legs"]:
+        a = auto.get(h["leg_id"])
+        if a is None:
             continue
-        a = auto[h["leg_id"]]
-        for key in HAND_COMPARE:
-            if key in h and not _same(key, h[key], a.get(key)):
+        for key in (HAND_REQUIRED_V11 if v11 else HAND_REQUIRED_V1)[1:]:
+            if not _same(key, h[key], a.get(key)):
                 diffs.append(f"{h['leg_id']}.{key}: hand {h[key]!r}, automatic {a.get(key)!r}")
-    if "named_stops" in doc:
-        hand_codes = sorted(doc.get("named_stops") or [])
-        auto_codes = sorted(s["code"] for s in operational_stops)
-        if hand_codes != auto_codes:
-            diffs.append(f"named stops: hand {hand_codes}, automatic {auto_codes}")
-    return diffs
+    hand_codes = sorted(doc["named_stops"])
+    auto_codes = sorted(s["code"] for s in operational_stops)
+    if hand_codes != auto_codes:
+        diffs.append(f"named stops: hand {hand_codes}, automatic {auto_codes}")
+    if doc["soak_attempts"] != len(soak_attempts or []):
+        diffs.append(f"soak attempts: hand {doc['soak_attempts']}, automatic {len(soak_attempts or [])}")
+    return [], diffs
 
 
-def _retried_soak(step, receipt):
-    attempts = receipt["soak_attempts"]
-    name = step.get("name") or ""
-    k = 1 if name == "soak" else int(name[6:]) if re.fullmatch(r"soak\.a\d+", name) else None
-    return k is not None and k < len(attempts) and bool(attempts[k - 1].get("refused"))
+def consumer_gates(campaign_id, kit_legs, roster):
+    """The consumer gates that apply to a span: [(name, leg_id, ruling, rule)]. For the controller too (F2)."""
+    out = []
+    for (gate_campaign, leg_id), (name, ruling, rule) in CONSUMER_GATES.items():
+        if campaign_id == gate_campaign and leg_id in roster and (kit_legs.get(leg_id) or {}).get("g0_shape") == "span":
+            out.append((name, leg_id, ruling, rule))
+    return out
 
 
 def hand_gates(ordered, receipt, expected, mark):
@@ -698,6 +1007,7 @@ def hand_gates(ordered, receipt, expected, mark):
     campaign = expected["kit"]["campaign_id"]
     roster = expected["roster"]
     steps = receipt["steps"]
+    soak = receipt["soak_attempts"] or []
     if expected["kit_first_leg"] in roster:
         gates.append({
             "gate": "class A smoke hand-read", "status": GATE_REQUIRED,
@@ -707,30 +1017,28 @@ def hand_gates(ordered, receipt, expected, mark):
             "print": {"steps": len(steps),
                       "steps_nonzero": [s["name"] + (" (refused soak, retried)" if _retried_soak(s, receipt) else "")
                                         for s in steps if s.get("rc") != 0],
-                      "soak_attempts": receipt["soak_attempts"],
+                      "soak_attempts": soak,
                       "restore": next(({"rc": s.get("rc"), "action": s.get("action")} for s in steps
                                        if s.get("name") == "restore"), None),
                       "feeds": receipt["feeds"], "result": receipt["span_result"]}})
     rows = {r["leg_id"]: r for r in ordered}
-    for (gate_campaign, leg_id), (name, ruling, rule) in CONSUMER_GATES.items():
-        kit_leg = expected["kit_legs"].get(leg_id) or {}
-        if campaign == gate_campaign and leg_id in roster and kit_leg.get("g0_shape") == "span":
-            row = rows.get(leg_id) or {}
-            gates.append({"gate": name, "status": GATE_REQUIRED, "ruling": ruling, "holds": f"kit:{campaign}",
-                          "why": rule,
-                          "print": {"leg_id": leg_id, "g0_role": row.get("g0_role"),
-                                    "g0_outcome": row.get("g0_outcome"), "g0_s": row.get("g0_s"),
-                                    "admitted": row.get("admitted")}})
+    for name, leg_id, ruling, rule in consumer_gates(campaign, expected["kit_legs"], roster):
+        row = rows.get(leg_id) or {}
+        gates.append({"gate": name, "status": GATE_REQUIRED, "ruling": ruling, "holds": f"kit:{campaign}",
+                      "why": rule,
+                      "print": {"leg_id": leg_id, "g0_role": row.get("g0_role"),
+                                "g0_outcome": row.get("g0_outcome"), "g0_s": row.get("g0_s"),
+                                "admitted": row.get("admitted")}})
     if expected["kit_schema"] == V11_SCHEMA:
         capture = roster[0] if roster else None
-        accepted = next((s.get("output_dir") for s in reversed(receipt["soak_attempts"]) if not s.get("refused")),
-                        None)
+        accepted = next((s.get("output_dir") for s in reversed(soak) if not s.get("refused")), None)
         gates.append({
             "gate": "RL-158 Q1 reference print", "status": GATE_REQUIRED, "ruling": "RL-158 Q1; RL-172 section (c)",
             "holds": None,
             "why": "every v1.1 span: the leg summary does not carry the readings (thermal journal values, as "
                    "RL-150 R1 part 3); it becomes automatic only on the research lead's ruling",
-            "print": {"soak_reference": {"dir": accepted, "attempts": len(receipt["soak_attempts"])},
+            "print": {"soak_reference": {"dir": accepted, "attempts": len(soak),
+                                         "refusals": [a.get("refusal_kind") for a in soak if a.get("refused")]},
                       "capture": None if capture is None else {
                           "leg_id": capture, "dir": f"legs/{capture}/runtime",
                           "attempt": len(next((leg["attempts"] for leg in receipt["legs"]
@@ -758,9 +1066,12 @@ def _gate_lines(gates):
     return out
 
 
+def canonical_sha256(doc):
+    return sha256_bytes(json.dumps(doc, sort_keys=True, separators=(",", ":")).encode())
+
+
 def _finish(verdict):
-    body = {k: v for k, v in verdict.items() if k != "verdict_sha256"}
-    verdict["verdict_sha256"] = sha256_bytes(json.dumps(body, sort_keys=True, separators=(",", ":")).encode())
+    verdict["verdict_sha256"] = canonical_sha256({k: v for k, v in verdict.items() if k != "verdict_sha256"})
     return verdict
 
 
@@ -780,18 +1091,27 @@ def _write(path, text):
 
 
 def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, out_dir, history=(),
-               hand_table_path=None, hand_sample=False, allow_mock=False, now=None):
+               hand_table_path=None, hand_sample=False, allow_mock=False, transport=None, allow_unsigned=False,
+               history_source="file", refusal=None, now=None):
     """Judge one span's bundle. Always writes ``desk_verdict.json`` to ``out_dir`` (a negative or error
     result is also a receipt); writes ``JOURNAL-TABLE.md``, ``desk_summary.json`` and ``stops.json`` when the
-    bundle could be read. Returns the verdict."""
+    bundle could be read. ``transport`` is ``desk_transport.extract_bundle``'s record of the signed commit;
+    without one the bundle is unsigned and never final unless ``allow_unsigned`` (synthetic tests only).
+    Returns the verdict."""
     from joulewise.cadence import kit as kitmod
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     find, reader = _Findings(), _Reader()
     expected, operational, gates, hand = None, [], [], {"required": False, "triggers": [], "supplied": False,
-                                                         "agrees": None, "differences": []}
+                                                         "agrees": None, "problems": [], "differences": [],
+                                                         "sample": None}
     identities, error, mock = {"manifest_sha256": None, "receipt_sha256": None}, None, None
     text = summary = summary_text = None
+    transport = dict(transport) if transport else {"signed": False, "bundle_commit": None, "signer": None}
+    if not transport.get("signed") and not allow_unsigned:
+        find.add("DESK_UNAUTHENTICATED", "the bundle is not a verified signed commit (desk_transport.extract_bundle)")
+    if refusal is not None:     # the signed transport refused: nothing in the bundle is read
+        find.add("DESK_UNAUTHENTICATED", _sanitize(refusal))
     try:
         try:
             kit, kit_sha = kitmod.load_kit(kit_path)
@@ -807,45 +1127,62 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
             find.add("DESK_IDENTITY", f"adapter {kit['desk']['adapter']}: desk-final is defined for leg-summary-v1")
             raise _Fatal()
         expected = expected_identity(queue_doc, plan_id, kit, kit_sha, find)
+        hand["sample"] = expected["sample"]
         identities.update(kit_sha256=kit_sha, campaign_id=kit["campaign_id"], frozen_commit=kit["frozen"]["commit"],
                           roster=expected["roster"], capture_leg=expected["roster"][0] if expected["roster"] else None)
+        if refusal is not None:
+            raise _Fatal()
         manifest, manifest_digest, verified = authenticate(bundle_dir, manifest_sha256, expected, reader, find)
-        identities.update(manifest_sha256=manifest_digest,
-                          receipt_sha256=sha256_bytes(verified[RECEIPT_NAME]))
+        receipt_sha = sha256_bytes(verified[RECEIPT_NAME])
+        identities.update(manifest_sha256=manifest_digest, receipt_sha256=receipt_sha)
         receipt = project_receipt(_loads(verified[RECEIPT_NAME], RECEIPT_NAME))
         mock = receipt["mock"]
-        check_receipt_identity(receipt, expected, allow_mock, find)
+        check_receipt_identity(receipt, receipt_sha, expected, allow_mock, history, find)
+        plan_legs = check_plan(verified, expected, find)
         rows = load_rows(verified, find)
         ordered = check_roster(rows, receipt, expected, find)
         check_schema(ordered, receipt, expected, find)
         check_attempts(ordered, receipt, expected, find)
-        check_kit_legs(ordered, receipt, expected, find)
+        check_kit_legs(ordered, receipt, expected, plan_legs, manifest.get("reference"), find)
         result, meter = check_span_files(verified, receipt, find)
         proven, proofs = feed_proofs(receipt, meter, find)
-        triggers, leg_keys = hand_table_triggers(ordered, expected, history, hand_sample)
+        soak_accepted, soak_attempts, soak_note = check_soak(receipt, find)
+        failures = command_failures(receipt, result, soak_accepted, soak_note, find)
+        controller = manifest.get("controller") if isinstance(manifest.get("controller"), dict) else {}
+        if controller.get("status") not in (None, "CLOSED_OK"):
+            failures.append(f"controller close status {_sanitize(controller.get('status'), 40)}")
+        transition = transport.get("transition")
+        if transition is not None:
+            failures += check_transition(transition, expected, verified, queue_path, find)
+        triggers, leg_keys = hand_table_triggers(ordered, expected, history, hand_sample, soak_attempts)
         mark = desk.span_reference_marks(ordered)
         summary = {"plan_id": plan_id, "adapter": "leg-summary-v1", "result": result, "meter": meter,
                    "feeds_proven_stopped": proven, "feeds": proofs, "legs": ordered,
-                   "kit_schema": expected["kit_schema"], "leg_keys": leg_keys}
+                   "kit_schema": expected["kit_schema"], "leg_keys": leg_keys,
+                   "receipt_sha256": receipt_sha, "manifest_sha256": manifest_digest,
+                   "campaign_id": kit["campaign_id"],
+                   "first_leg_start_epoch_s": ordered[0].get("started_epoch_s") if ordered else None,
+                   "soak": {"attempts": soak_attempts, "accepted_attempt": soak_accepted, "note": soak_note,
+                            "field": receipt["soak_field"]}}
         if mark is not None:
             summary["span_reference"] = mark
-        soak_accepted, soak_note = check_soak(receipt, find)
-        summary["soak"] = {"attempts": len(receipt["soak_attempts"]), "accepted_attempt": soak_accepted,
-                           "note": soak_note}
         operational = [{**s, "kind": "operational"} for s in evaluate_named_stops(kit["stop_rules"], summary, history)]
-        if soak_accepted is None:   # every soak refused: the span stopped before any leg (a REFUSAL)
+        if failures:
             refusal = next((s for s in operational if s["code"] == "REFUSAL"), None)
             if refusal is None:
-                operational.insert(0, {"code": "REFUSAL", "detail": soak_note, "kind": "operational"})
+                operational.insert(0, {"code": "REFUSAL", "detail": "; ".join(failures), "kind": "operational"})
             else:
-                refusal["detail"] += f"; {soak_note}"
+                refusal["detail"] += "; " + "; ".join(failures)
         hand.update(required=bool(triggers), triggers=triggers)
         if hand_table_path is not None:
             doc, _ = reader.json(hand_table_path)
             hand.update(supplied=True)
-            diffs = compare_hand_table(doc, ordered, operational, plan_id)
-            hand.update(agrees=not diffs, differences=diffs[:50])
-            if diffs:
+            problems, diffs = compare_hand_table(doc, ordered, operational, soak_attempts, plan_id,
+                                                 expected["kit_schema"] == V11_SCHEMA)
+            hand.update(agrees=None if problems else not diffs, problems=problems[:50], differences=diffs[:50])
+            if problems:
+                find.add("HAND_TABLE_INVALID", "; ".join(problems[:10]))
+            elif diffs:
                 find.add("HAND_TABLE_DISAGREES", "; ".join(diffs[:10]))
         elif triggers:
             find.add("HAND_TABLE_DUE", f"a hand table is required: {', '.join(triggers)}")
@@ -858,18 +1195,22 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
                   f"- roster (queue {expected['queue_id']}, span {expected['span_id']} attempt {expected['attempt']}): "
                   f"{', '.join(expected['roster'])}",
                   f"- kit {kit['campaign_id']} sha256 {kit_sha[:12]}, frozen {kit['frozen']['commit'][:12]}",
-                  f"- manifest sha256 {manifest_digest[:12]}; receipt sha256 {identities['receipt_sha256'][:12]}",
+                  f"- bundle commit {str(transport.get('bundle_commit'))[:12]} signed by {transport.get('signer')}; "
+                  f"manifest sha256 {manifest_digest[:12]}; receipt sha256 {receipt_sha[:12]}",
                   f"- soak (RL-171 retry): {soak_note}",
                   "- feeds (each feed's own stop proof): "
                   + ", ".join(f"{n} {'proven' if p['proven_stopped'] else 'NOT proven'}" for n, p in proofs.items()),
                   f"- hand table: {'required (' + '; '.join(triggers) + ')' if triggers else 'not required'}"
-                  f"{'; supplied, ' + ('agrees' if hand['agrees'] else 'DISAGREES') if hand['supplied'] else ''}"]
+                  + (f"; supplied, {'INVALID' if hand['problems'] else 'agrees' if hand['agrees'] else 'DISAGREES'}"
+                     if hand["supplied"] else ""),
+                  f"- seeded draw: {json.dumps(expected['sample'], sort_keys=True)}"]
         lines += _gate_lines(gates)
         lines += ["", "## Receipt", "",
                   f"- rc {receipt['rc']}{'; error ' + receipt['error_type'] if receipt['error_type'] else ''}; "
                   f"steps {len(receipt['steps'])}, non-zero: "
-                  f"{', '.join(s['name'] + (' (refused soak, retried)' if _retried_soak(s, receipt) else '') for s in receipt['steps'] if s.get('rc') != 0) or 'none'}",
-                  f"- soak: {soak_note}; attempts {json.dumps(receipt['soak_attempts'], sort_keys=True)}",
+                  + (', '.join(s['name'] + (' (refused soak, retried)' if _retried_soak(s, receipt) else '')
+                               for s in receipt['steps'] if s.get('rc') != 0) or 'none'),
+                  f"- soak: {soak_note}; attempts {json.dumps(soak_attempts, sort_keys=True)}",
                   f"- result: {json.dumps(result, sort_keys=True)}",
                   f"- KM003C: {json.dumps(meter, sort_keys=True)}"]
         text = "\n".join(lines) + "\n"
@@ -903,10 +1244,14 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
         "desk_final": desk_final, "reasons": reasons, "named_stops": named, "pending": pending,
         "next_arm_hold": any(h["scope"] == "queue" for h in holds), "holds": holds,
         "hand_gates": gates, "hand_table": hand, "identities": identities, "mock": mock,
+        "transport": {**{k: transport.get(k) for k in ("signed", "bundle_commit", "signer")},
+                      "queue_commit": ((transport.get("transition") or {}).get("queue") or {}).get("commit")},
+        "history_source": history_source,
+        "summary_sha256": canonical_sha256(summary) if summary is not None else None,
         "opened": [Path(p).name for p in reader.opened], "error": error,
         "desk_code": _code_identity(),
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now))}))
-    for name in ("JOURNAL-TABLE.md", "desk_summary.json", "stops.json"):   # no stale table beside a new verdict
+    for name in ("JOURNAL-TABLE.md", SUMMARY_NAME, "stops.json"):   # no stale table beside a new verdict
         if text is None and (out / name).exists():
             (out / name).unlink()
     if text is not None:
@@ -915,7 +1260,7 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
                 + ["", "## Verdict", "", f"- **desk_final: {str(desk_final).lower()}**; next arm held: "
                    f"{str(verdict['next_arm_hold']).lower()}"] + [f"- {r}" for r in verdict["reasons"]])
         _write(out / "JOURNAL-TABLE.md", text + "\n".join(tail) + "\n")
-        _write(out / "desk_summary.json", summary_text + "\n")
+        _write(out / SUMMARY_NAME, summary_text + "\n")
         _write(out / "stops.json", json.dumps(verdict["named_stops"], sort_keys=True, indent=1) + "\n")
     _write(out / VERDICT_NAME, json.dumps(verdict, sort_keys=True, indent=1) + "\n")
     return verdict
@@ -936,5 +1281,14 @@ def verify_verdict(doc):
     """True when a verdict's ``verdict_sha256`` matches its content (the controller's first check)."""
     if not isinstance(doc, dict) or doc.get("schema") != VERDICT_SCHEMA:
         return False
-    body = {k: v for k, v in doc.items() if k != "verdict_sha256"}
-    return doc.get("verdict_sha256") == sha256_bytes(json.dumps(body, sort_keys=True, separators=(",", ":")).encode())
+    return doc.get("verdict_sha256") == canonical_sha256({k: v for k, v in doc.items() if k != "verdict_sha256"})
+
+
+def counts_as_final(doc, *, plan_id, queue_id, span_id, attempt, manifest_sha256):
+    """FORMAT section 4 item 1, as one function the controller can import: a verdict counts for k+2 only if
+    it verifies, is signed-transport and non-mock, names exactly this span and bundle, and is final."""
+    return (verify_verdict(doc) and doc.get("desk_final") is True and doc.get("mock") is False
+            and (doc.get("transport") or {}).get("signed") is True
+            and (doc.get("plan_id"), doc.get("queue_id"), doc.get("span_id"), doc.get("attempt"))
+            == (plan_id, queue_id, span_id, attempt)
+            and (doc.get("identities") or {}).get("manifest_sha256") == manifest_sha256)
