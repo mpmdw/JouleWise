@@ -1016,7 +1016,7 @@ class Schemas(unittest.TestCase):
             _, en, _, _ = dataset(sc)
             s1 = stage1_of(sc)
             from joulewise.cadence_looks import inclusion_34 as I34
-            stamp = {"allow_draft": True, "manifest_sha256": "0" * 64}   # the CLI stamps these (round 2)
+            stamp = {"allow_draft": True, "manifest_sha256": "0" * 64, "ledger_gate": None}   # the CLI stamps these
             d1 = dict(json.loads(json.dumps(s1)), **stamp, soak_retries=I34.soak_retries({}))   # CLI: RL-172a
             self.assertEqual(V.errors(d1, s1_schema), [], sc)
             out = dict(json.loads(json.dumps(F.stage2(s1, rehash(s1), en))), **stamp)
