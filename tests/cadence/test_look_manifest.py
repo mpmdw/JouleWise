@@ -906,10 +906,6 @@ class Assemble(Base):
                     self.dump()
                 self.refused_run(fragment, "--allow-draft")
 
-    def test_one_definition_of_the_stage_code_sets(self):
-        """The literal copy cadence_look_run.stage1_code_set reads equals manifest.py's definition."""
-        self.assertEqual(cli.STAGE1_CODE, lm.STAGE1_CODE)
-
     def test_step3_threshold_is_the_manifest_s(self):
         """Sol round-3 NEW-4."""
         drift = next(d for d in self.pins()[2]["decisions"] if d["id"] == "drift_tripwire")

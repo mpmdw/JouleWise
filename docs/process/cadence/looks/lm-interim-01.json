@@ -503,11 +503,11 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "e020e9131ed058d2c6f90ad0cd412227f33886f931cbd553dcfd53014669fe81"
+        "sha256": "d778162ed632fcb34c247edded7c4af3b7b452048d3ab801a39745facc8bd050"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "a11e8b2fa7ac37592943e336aef40a4c379706d844648afb61f97759fe21e6e1"
+        "sha256": "f67ee6e40b85353fe8388117022f09e289c0feede93915483b8870bffdeaa5e5"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
