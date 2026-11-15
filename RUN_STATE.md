@@ -1042,6 +1042,33 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+323. **Magistrate e4e64e98 (headless, Opus 5.5), 2026-11-14 19:02 PST (`date`): THE dev-01 SUB-SPAN `dev-01-s03` (L004-L007) IS LAUNCHED under item 321 on `b4b6aeb19`, kit `c76344c5…66d7`, four legs (launch before 20:03:00 PST). Counted development legs of dev-01. Part C's close 18:42:40 PST + 20 min = 19:02:40 gate; every Start-and-check line passed (measurement_mode: the one FAIL is the agent line naming only this magistrate's own tree, NOTE 1). `dev-01-s03b`/`dev-01-s04b` and `dev-01-s02` are WITHDRAWN UNARMED. Record: `docs/process_traces/2026-11-14-cadence-dev01-s03/MAGISTRATE-LAUNCH-e4e64e98.md`.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-15T01:49:32-08:00
+on_early_or_refused: if the custody file `/Users/edr/night-custody/magistrate/cadence-dev01-s03-out-e4e64e98.txt` carries a launch failure line, nothing launched and nothing relaunches; mail the lead (RL-155a §1.2: the second Part C, F0, by 23:15, has its own item). A span that ran but ends with any named stop or a receipt rc≠0: nothing relaunches, nothing is re-run, nothing else is queued; mail the lead
+next_observable: the next activation (after the fence is gone) runs item 321's "Check" on OUT with LEGS L004,L005,L006,L007 and reports by email to Ed and the lead and as the next RUN_STATE item
+```
+
+- SPAN `dev-01-s03`; LEGS `L004,L005,L006,L007`; PARTC_CLOSE_EPOCH 1794710560; PY `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python`; MAGISTRATE_PID 96186; KIT `/Users/edr/campaign-out/kits/cl-dev-01-589748f15-s03.json` sha256 `c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7`.
+- OUT `/Users/edr/campaign-out/cl-dev-01/cq-dev-01-s03-a1-20261115T030242Z`; DEADLINE `1794732572.4040508` (now + 20,810 s at 19:02:42 PST). Worst-case end about 00:25 PST; the span may cross 00:00 only in the worst case.
+- Plan: `batch_windows ["02:00-02:35"]`, `blackout_clear true`, expected 8,154 s, worst case 19,350 s, budget 1,251 s per leg. Launcher output and exact launch epoch: custody file above.
+
+322. **Magistrate e4e64e98 (headless, Opus 5.5), 2026-11-14 18:55 PST (`date`): PART C AT THE W1-LINE COMMIT (item 319) COMPLETED: RECEIPT OK, receipt rc 0, part-C rc 0, verdict `pass`. Soak rc 0, reference sha256 `9442b655…45c5`, TV0h = TV1h = 34.182 °C. D_bank mechanics pass (`admitted_turns` not judged: `not_applicable: episode returned at turn 1`, own stop, value 2 of 3); start state pass (4 samples, level 0, Nominal, fresh); step-D pass (G0 207.9 s); X_G ran and passed. N_chunk 4096, T_dead 985.49 s. Span 16:43:46-18:42:40 PST; no 00:00 crossing. Restore clean. A diagnostic: nothing adopted, no slots. It goes to the RESEARCH LEAD with the lead's desk table and the RL-156 §4.2 hand checks (#783 evaluator). Record: `docs/process_traces/2026-11-14-partc-w1line/CHECK-e4e64e98.md`.**
+
+```pointer
+owner: lead
+wait: none
+next_observable: the lead's desk table and RL-156 §4.2 re-evaluation of this run (item 319 "After"); the second Part C (F0) has its own item
+```
+
+- `disposition` as printed: "Mechanics and start state hold. The no-hold TV1h design is adopted (RL-149 section 1.1); run at the commit of RL-149 step 3's PR, this is the Part C of the slot session's checklist (RL-149 section 5, items 11 and 12)."
+- `log`: "three-turn clause not evaluated: one D run". `gate_time` 201.7 s of a 394.2 s limit (0.205 × T_dead).
+- Printed, not judged: turn 1 first off-nominal (pm Moderate) at token 1,710; last-512 clock ratio 0.935; token-rate ratio 0.979 (item 315's prediction: OS level 2 before token 2,048; clock ratio 0.83-0.93; token-rate ≥ 0.98). Desk verdict excludes the D_bank member for `thermal.powermetrics_non_nominal`. `tv1h_trigger` fires false.
+- Pilot close used for its gate: 16:22:39 PST (f6c8a352). Restore lines: runner `restore` 0 (powermode 0 observed), feeds stopped; no fence; no align-r0 label; ProcessType Interactive; Network Time Off; frequency word 0; no marker, no stray monitor, no root powermetrics.
+
 321. **Laptop lead (interactive, Opus 5.5), drafted by the dev02-ready builder 2026-11-14 PST, ISSUED 2026-11-14 16:46:24 PST (`date`): MAGISTRATE: arm a SUB-SPAN of block dev-01 (RL-155a §1.2), kit `cl-dev-01`, runner kind `cadence-legs-v1`, on `b4b6aeb192da60d895a7529311b06599efff5be4` checked out detached in a fresh scratch worktree. The roster is chosen by the launch time: **L004-L007 (span `dev-01-s03`) if you launch by 20:03:00 PST; L004-L006 (span `dev-01-s03b`) if you launch after 20:03:00 and by 20:48:00 PST; after 20:48:00 nothing launches.** One span: a fresh soak, then three or four type-A legs (19,458-token step prompt, decode cap 4,096, Automatic, band q0). They are counted development legs of dev-01 (RL-149 §2.3). No other span, no queue extension, no session, no W1. EARLIEST: 20 min after Part C's close (RL-155a §1.2 order 1 to 2, RL-155 R-B), and only with Part C's fence gone and its restore lines clean. The launch is your LAST action and you exit at once. If you cannot, do not launch; mail the lead (RL-155a §1.2: the second Part C, filler F0, then takes the slot by 23:15).**
 
 ```pointer
