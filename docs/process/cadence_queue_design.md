@@ -631,118 +631,220 @@ they pin differ). The lead picks one at the cut-off, enters it in the ledger and
 
 ## 15. The standing-queue controller (RL-172 (g), (f), (c) MBP side, (i) rows 5 and 6)
 
-Opus builder, Sun 15 Nov 2026. Code: `joulewise/cadence/standing.py` (the law: pure functions, named reasons) and
-`scripts/cadence_controller.py` (the I/O: git, `gh`, host readbacks, the launch). Synthetic run:
-`scripts/cadence_controller_synthetic.py`. Install: `configs/launchd/com.joulewise.cadence-controller.plist.template`
-(KeepAlive, `ProcessType Standard`, Aqua) and `configs/launchd/cadence-controller.config.json.template`. It replaces
-the per-span work order (the "Start and check", "Run" and "Check" blocks of an item like 331) for campaign spans.
-It changes no frozen path: no kit pins `standing.py`, the controller scripts or the templates, and nothing it adds
-is imported inside a leg (it imports `queue`, `stops`, `desk`, `kit`, `kit_v11` and `legs` read-only; the arm
-child imports the measurement checkout's own `launch_cadence_span` and `launch_align_r0`).
+Opus builder, Sun 15 Nov 2026, rewritten after the #800 gate (Sol: REFUSE, 11 HIGH and 4 MED; Mythos: REFUSE,
+5 HIGH, 13 MED and 8 LOW).
 
-### 15.1 What it reads, and where (lead data on the audit branch, under `records_dir`)
+| Part | Where |
+|---|---|
+| The law (pure functions, named reasons) | `joulewise/cadence/standing.py` |
+| The I/O (git, `gh`, host readbacks, the launch) | `scripts/cadence_controller.py` |
+| The end-to-end synthetic runs | `scripts/cadence_controller_synthetic.py` |
+| Install | `configs/launchd/com.joulewise.cadence-controller.plist.template` (KeepAlive, `ProcessType Standard`, Aqua) and `configs/launchd/cadence-controller.config.json.template` |
 
-| File | Writer | Content |
-|---|---|---|
-| `STANDING.json` | lead | `joulewise.cadence_standing.v1`: the counted queues in priority order with their role (`standing` or `smoke`); per kit sha256 its source (`commit`, `path`), line 1 and line 2 records, batch-window rule (`none`, `rl172` = RL-172 §0's items-builder rule, or `HH:MM-HH:MM`) and class A hand gate; named hand gates (`holds` span ids: L002, L005); `prior_spans` (campaign spans run before the controller, with t0, close and desk-final evidence); `withdrawn` plan ids; `dispositions` (the lead's disposal of a bad-terminal span); v4 `sessions` (id, kind, route); `fallback` (F2 queues, F0 standing item); `freeze2` |
-| queue files | lead | `joulewise.cadence_queue.v1`, unchanged schema, validated with the kits by hash and `qual_roster_problems` |
-| `watcher-stamp.json` | lead | `joulewise.cadence_watcher_stamp.v1`: the results watcher observed live at a time (line 7) |
-| `desk-final/<plan_id>.json` | Air desk (separate builder) | `joulewise.cadence_desk_final.v1`: `bundle_sha256` (sha256 of the pushed `manifest.json`), `verdict` FINAL or HOLD, `hand_table` agree, not-sampled or disagree, `reference_print` (RL-158 Q1, v1.1), `by`, `at` |
-| `sessions/READY-<id>.json`, `sessions/DONE-<id>.json` | lead | a v4 session READY, and its end |
+**The wire contract is the desk's `docs/process/cadence_desk_format.md`** (the lead's decision): the controller
+conforms to it and does not re-implement it. It imports:
+- `desk_final.pack_bundle`;
+- `desk_transport.sign_bundle`;
+- `desk_transport.read_verdict`;
+- `desk_final.counts_as_final`;
+- `desk_final.consumer_gates`.
 
-The owner's open issues are read with `gh issue list --author mpmdw` (title and first body line only).
+The controller replaces the per-span work order (the "Start and check", "Run" and "Check" blocks of an item like
+331) for campaign spans.
 
-### 15.2 The nine conditions of RL-172 (g), as enforced
+**Frozen paths.** It changes no frozen path:
+- no kit pins an added file;
+- the controller imports `queue`, `stops`, `desk`, `kit` and `legs` read-only;
+- the arm child imports the measurement checkout's own launcher.
 
-1. **Dates at the arm.** t0 is the arm instant; its local date must be at or after `not_before` (else wait, with
-   the date's midnight as the eta). For development and qualification spans the date must equal `not_before`: a
-   later date is `DATE_MISSED` and the lead re-dates (RL-172 (a) 5). Per t0-date: at most 12 mixed-size
-   development legs, at most 24 development legs (ledger of prior and controller spans); qualification only with
-   `freeze2` set, never on a date that holds or plans development, and never all qualification blocks on one date.
-   Mixed size and phase are derived from the kit (prompt sizes; campaign-id prefix), never declared.
-2. **Line 9 in machine order.** All campaign spans (development, qualification, hp; not F0, F2, Part C or v4) from
-   every queue and `prior_spans`, ordered by t0. A new span n arms only if every span up to n-2 is desk-final:
-   a prior span by its evidence, a controller span by an Air record naming the bundle the controller pushed (a
-   v1.1 span also needs `reference_print`). A `disagree` on any record halts.
-3. **Expiry** = min(`expires_at`, commit time + 7 days), the commit time being that of the latest audit-branch
-   commit touching the queue file; a commit ahead of the host clock is a contradiction. Every historical version
-   must be a prefix of the next (append-only).
-4. **Smoke.** A `smoke` queue holds one span. A kit whose hand gate has not passed may be queued only in a smoke
-   queue and only once; after its pilot closes it waits for the gate (`HAND_GATE`). Named hand gates hold their
-   spans.
-5. **Typed proofs.** Arm: the launch's own result (rc, the claimed fence, the plan's batch windows) plus readback
-   (`pmset -g` powermode 0, AC, `systemsetup -getusingnetworktime` Off, `ntp_adjtime` frequency word 0, no High
-   Power marker, no night or align-r0 label, `sudo -n -l /bin/kill`, `measurement_mode.zsh verify`) and absence
-   (`km003c_monitor`, `hazard_monitor`, root `powermetrics`, runner, leg runtime and LaunchAgent wrapper, any
-   fence but the controller's, and no agent: an agent is a wait). Close: the receipt's `restore`, `stop-*` and
-   `close-*` steps and feeds proven stopped, plus the same readback and absence. A line not observed fails.
-6. **Trigger.** State is derived every tick from durable files (intent, arm, close records; the fence; the
-   receipt), so a restart repeats nothing. The arm intent is created once (O_EXCL) before the launch; after a
-   crash an intent with an output or a launch fence is adopted, and one with neither halts `ARM_INDETERMINATE`;
-   nothing is ever relaunched. The launch runs under the existing desk-fence lock. `heartbeat.json` is written
-   every tick; the controller's standing fence expires 15 min after its last refresh, so a dead controller
-   becomes the watchdog's `desk_fence_stale` notice (the alarm), and `check-heartbeat` serves any watcher.
-7. **Fresh evidence.** Each tick that can arm fetches the audit branch and reads the issues anew. Any open owner
-   `directive` starting STOP, NO, HALT or VETO, whatever it names, and any `cadence-stop` issue halt; a failed read
-   is a wait, never "no veto". The watcher stamp must be under 24 h old and not after its own commit.
-8. **Records.** `transitions.jsonl` (global and per span) for every arm intent, arm, adoption, close, push and
-   page, with the queue digest, plan id and plan digest, arm-proof, arm-command and close-proof digests and the
-   decision. Network work is guarded: it is refused once the arm's network phase ends and while a span is live;
-   the arm records `network_end_epoch`, which precedes the launch (and so the soak).
-9. **Fallback** entries are `F2` (queues the controller arms like any span, outside the date counts and line 9)
-   or `F0` (paged to the magistrate's standing item; spacing 4 h, three a date), nothing else. Either only when
-   no counted span can arm within 2 h 30 min, and only if it ends 20 min before the end of a date on which a
-   counted span is due.
+### 15.1 Inputs (all read fresh; a missing, stale or contradictory input is a named reason, never a pass)
 
-**Gaps.** 300 s after a controller campaign close, 1,200 s after anything else, the latest close being the
-newest of the ledger, the host receipt census (item 331's census: depth 4, rounded up, an empty or failed census
-stops) and any foreign fence the controller saw end. A soak retry (RL-171, `soak_attempts`) is normal: at most
-one, every attempt but the last refused, the last accepted on a clean receipt.
+**On the audit branch, under `records_dir`** (lead data):
 
-### 15.3 RL-172 (f): v4 sessions
+| File | Content |
+|---|---|
+| `STANDING.json` | `joulewise.cadence_standing.v1`, closed schema. **Hand gates are never declared: they are derived** (15.3). Lead records: `gate_records` and `dispositions`. Keys: (1) `queues`: counted queues in priority order with their role (`standing`/`smoke`); (2) per kit sha256: `source` (`commit`, `path`), line 1 and line 2 records, and a batch-window rule (`none`, `rl172`, `HH:MM-HH:MM`); (3) `hand_gates`: extra named gates; (4) `gate_records`: the lead's `release`/`hold` per (plan id, gate); (5) `prior_spans`: hand-armed spans with t0, close and desk-final evidence; (6) `withdrawn`; (7) `dispositions`: `cleared` lifts a desk hold, `rerun`/`withdrawn` takes a span out of line 9's count; (8) v4 `sessions`; (9) `fallback`: F2 queues, or the F0 item; (10) `freeze2` |
+| queue files | `joulewise.cadence_queue.v1`; validated with the kits by hash and `qual_roster_problems`; append-only over their whole history |
+| `watcher-stamp.json` | `joulewise.cadence_watcher_stamp.v1`; must name the configured watcher |
+| `sessions/READY-<id>.json`, `sessions/DONE-<id>.json` | a v4 session READY, and its end |
 
-A READY record for a session in `sessions` makes `select` return `cede`: nothing lower arms, the controller pages
-`V4_SESSION_READY` with the session's route and releases its fence at the next clean close (it never acts while
-a span is live). It never launches the session; the magistrate runs the session's own authorization, notice and
-veto interval, seal, receipt and restore. A DONE record ends the hold.
+**Elsewhere:**
+- **The desk's verdicts:** `refs/heads/cadence-desk-final/<plan_id>`, signed by `cadence-desk`. They are fetched
+  with the audit branch in one fetch.
+- **The owner's open issues:** `gh issue list --author mpmdw --limit 1000`. A full page is unreadable.
+- **The host's receipt census:** item 331's census, which also lists every campaign receipt under the output root.
+- **The journal-copy markers:** `/Users/Shared/JouleWise/desk-copy/<plan_id>.ok`.
 
-### 15.4 RL-172 (c), the MBP side
+**The controller's memory.** It keeps the audit tip it last read and each queue's first commit and spans. A tip
+that does not descend from the last one read halts (`AUDIT_REWRITTEN`). So does a queue whose first commit or
+already-read spans changed (`QUEUE_REWRITTEN`). Either one is cleared only by `accept-audit-tip`, after review
+(Mythos F4).
 
-At the close, before anything is pushed: the receipt's roster equals the queue entry's legs, in order; the kit
-sha and frozen commit match the pin; `legs_planned` equals the roster; receipt rows are unique and in roster
-order; `span_plan.json`'s legs equal the roster; the bundle holds exactly one `leg_summary.json` per receipt leg
-plus `span/meter.json` and `span/result.json`; each summary's attempts equal the receipt's; each consumer's
-`span_reference` names the first leg's accepted attempt. **Zero leg rows is a stop** (`NO_LEG_ROWS`, Sol's probe).
-Named stops are evaluated on the projected summary (campaign-scope redos are the Air desk's). The bundle
-(`manifest.json`, `runner_receipt.json`, `span_plan.json`, `desk-bundle/`) is scanned for denied keys and committed
-with an SSH signature (`signing_key`) and pushed to `refs/heads/cadence-desk/<plan_id>`; a refused or faulted span
-is pushed too (a negative receipt is a receipt). The manifest carries the roster, attempts, soak attempts, every
-file's sha256, the receipt, plan and soak-reference hashes (the soak reference is hashed, never parsed), the
-arm and close proof digests and the status. The Air desk verifies the signature against the controller's public
-key and writes its `desk-final` record naming `sha256(manifest.json)`.
+### 15.2 The nine conditions, as enforced
 
-### 15.5 Who wakes whom
+1. **Dates.** The local date of t0 must be on or after `not_before`. For development and qualification spans it
+   must equal `not_before`; a later date is `DATE_MISSED`.
+   - Per date: at most 12 mixed-size and 24 development legs, counting the legs a closed span ran.
+   - Qualification needs `freeze2`, stays off development dates, and its blocks use at least two dates.
+   - **The lease.** No dated arm within 120 s of midnight. The arm intent carries a lease: the end of the span's
+     date less 120 s, the queue's expiry, the watcher stamp's 24 h, and 120 s after the last authority read. The
+     arm child refuses to launch past it.
+   - **t0.** The recorded t0 is the arm child's own clock, then the runner's receipt `started` (Sol 4; Mythos
+     F10, F19).
+2. **Line 9 across queues.** Campaign spans are counted in machine order (prior plus controller). Every span up
+   to n-2 must count as final by `desk_final.counts_as_final` on its signed verdict, anchored to the
+   `manifest_sha256` this controller published. A `rerun` or `withdrawn` disposition takes a span out of the count
+   (Mythos F8).
+3. **Expiry.** Seven days from the queue file's **first** commit, or `expires_at` if that is sooner. An append
+   never renews (Mythos F13).
+4. **Smoke and pilots.** A span holding the kit's first leg is that kit's pilot.
+   - It must be alone in a smoke queue.
+   - No other span of the kit is queued anywhere until the pilot closed clean and its class A gate was released.
+   - Any other span needs such a pilot (`PILOT_MISSING`).
+   - A refused pilot may be re-run alone after a `rerun` disposition.
+5. **Typed proofs.**
+   - **At the arm:** the readback (powermode, AC, network time, the kernel frequency word, the High Power marker,
+     launchd labels, `sudo -n -l /bin/kill`, `measurement_mode.zsh verify`), process absence (monitors, root
+     powermetrics, runner/runtime/LaunchAgent processes, any fence not the controller's), no agent (a bounded
+     wait), and a **signing probe** (`ssh-keygen -Y sign`; Mythos F11). Then the launch command's result.
+   - **At the close:** the receipt's restore, feed stops and command result, plus the same readback and absence.
+6. **Trigger.**
+   - **Durable state.** State comes from durable files every tick. The arm intent is created once.
+   - **Adoption.** After a crash an intent is adopted only if its output exists. A launch fence without an output
+     is waited for, not adopted (Mythos F21). Neither halts `ARM_INDETERMINATE`. Nothing is ever relaunched.
+   - **Heartbeat.** `heartbeat.json` is written every tick (no fsync while live). The prompt's first act is
+     `check-heartbeat`, whose failure is a page (Mythos F15). A dead controller's standing fence expires into the
+     watchdog's `desk_fence_stale` notice.
+7. **Fresh evidence, twice.** Every authority is read before preparation and **again after the arm proof**:
+   - the audit branch, queues, kits, verdicts, sessions and watcher;
+   - the issues, the census and the copy marker.
 
-While waiting with nothing to report, the controller holds its own desk fence (`cadence-controller:<token>`,
-deadline +15 min, refreshed each tick), which the watchdog honours, so no magistrate activation starts. Any page
-releases it. Halts block arming until `ack`; informational pages (QUEUE_EMPTY, FALLBACK_F0_DUE, WAIT_STALL,
-V4_SESSION_READY) keep the fence released until acknowledged. Pages are keyed by kind, codes, spans and the last
-close, so a persisting situation pages once. The arm child (a short process under the measurement interpreter)
-clears the standing fence under the fence lock, then calls the frozen `launch_cadence_span.main` in-process with
-its own PID as the handoff PID, and exits; the LaunchAgent's handoff then proceeds.
+   The selector must choose the same span again, or nothing arms (Sol 4).
+   - **Vetoes.** Any open owner directive starting STOP/NO/HALT/VETO halts, as does a `cadence-stop` issue. A
+     failed read is a wait, never "no veto".
+   - **The host clock.** It must be within 120 s of the server's `Date` (Mythos F23).
+   - **The stamp.** The watcher stamp's commit is bound into the arm record.
+8. **Records and network.**
+   - **The transition record.** `transition.json` (FORMAT section 1) is the per-span transition record, and it
+     travels in the signed bundle commit. `transitions.jsonl` keeps every arm intent, arm, adoption, close, push
+     and page, with their digests.
+   - **The standing notice.** The span's line is posted on the queue's standing notice issue before the network
+     closes (RL-149 section 2.8; Mythos F16). A queue with spans to run and no notice halts.
+   - **The network guard.** Network work is refused after the arm's network phase and while a span or another
+     run is live (Sol 3).
+9. **Fallback.** F2 queues arm like spans, outside the date counts and line 9. F0 is a page to its standing item.
+   Either happens only when no counted span can hold within 2 h 30 min, and only if it ends 20 min before the end
+   of a date a counted span is due.
 
-**Residual.** Between the arm child clearing the standing fence and the launcher writing its own (milliseconds:
-the launcher is imported and its plan computed before the fence moves), and between the LaunchAgent clearing its
-fence and the controller's next tick (`poll_live_s`, 2 s), the watchdog could start an activation. The prompt
-line makes such an activation exit at once, and the runner's agent census refuses a span that an agent overlaps.
+**Every listed queue first (Sol 5).** A missing, invalid, rewritten, halted, expired-with-pending,
+notice-less or duplicated queue halts before any candidate is chosen. The same plan id, or the same kit leg
+without `rerun_of`, in two queues halts (Mythos F12).
 
-### 15.6 Critical-path ledger (RL-172 (i) row 6)
+### 15.3 Hand gates, derived (Sol 6; Mythos F2)
 
-`critical-path/<span_id>.json`: for each blocking reason its first and last tick and the tick it cleared (when that
-prerequisite became ready), the start (launch), the end (receipt close) and any refusal. `ledger` prints it as CSV.
+At the close the controller derives the span's gates in code:
+- `class-a` when the roster holds the kit's first leg;
+- `L002` / `L005` from `desk_final.consumer_gates` (dev-03's L002 and dev-04's L005, when span-shaped and in the
+  roster).
 
-### 15.7 What it does not do
+Each gate holds every later span of that campaign until a `gate_records` entry says `release` for that plan id
+and gate. A G0 timeout is not a named stop, so this gate is what holds dev-04's second span after L005 times out.
+The desk's verdict names the same gates as `kit:` holds. A verdict naming a gate the controller did not derive
+halts (`GATE_DISAGREEMENT`).
 
-It runs no unit tests on the MBP (RL-172 (i) row 4: tests run elsewhere; line 2 is CI's). It does not read any
-leg's thermal journal (the RL-150 R1 and RL-158 Q1 prints stay hand work at the desk). It does not decide a
-re-run, a re-date, a disposition or an F0 launch.
+### 15.4 The close (RL-172 (c), MBP side; Sol 1, 2, 3)
+
+1. **The interlock.** While a launch fence is held by a live PID, the controller only stats. A deadline that
+   passes is a `STRANDED_ALARM` page, never a close.
+2. **When the fence goes.** The controller takes its standing fence at once, then proves the runner's processes
+   absent (pgrep). Only then does it close.
+3. **Packing.** `desk_final.pack_bundle` copies only the allowlisted files: receipt, plan, leg summaries, result,
+   meter. It refuses anything else **before reading it**; then nothing is published and the controller halts
+   `BUNDLE_REFUSED`.
+4. **One set of bytes.** The receipt, summaries and plan are parsed from the packed copy, the same bytes that are
+   pushed.
+5. **The checks.** The controller's own checks: the command result, the roster and identities, zero leg rows, the
+   named stops, and the close proof.
+6. **The push.** `desk_transport.sign_bundle` builds the signed parentless commit (`bundle/` and
+   `transition.json`). The controller pushes it once to `refs/heads/desk-bundles/<plan_id>`; the same tree again
+   is success, another tree a refusal.
+7. **The close time.** It is the end of the close work, so the 300 s floor counts after the push (Mythos F25).
+
+### 15.5 The verdict, read (FORMAT section 4)
+
+- **Reading.** `desk_transport.read_verdict` runs on each `cadence-desk-final` ref. It checks the
+  `cadence-desk` signature, subject and trailers, `verify_verdict`, and the plan id. A refusal there halts
+  (`DESK_VERDICT_INVALID`), as does a verdict on another span or another anchor.
+- **Counting.** `counts_as_final` decides line 9. A synthetic run may set `accept_mock_verdicts`, which the
+  production config refuses outside `JW_B5_SYNTHETIC_ONLY=1`.
+- **Holds.** `next_arm_hold` halts (`DESK_HOLD`) until a `cleared` disposition.
+
+### 15.6 v4 sessions (RL-172 (f); Mythos F5)
+
+- **A READY record** makes `select` return `cede`. The controller pages `V4_SESSION_READY` with the session's
+  route, releases its fence, and goes **silent**: no network and no host command until the magistrate
+  acknowledges the page after the session's close.
+- **Night agents.** A loaded `com.joulewise.night*` agent (a W1, C or T window) also silences the controller.
+- **It never launches a session.**
+
+### 15.7 Who wakes whom, and the handoffs (Sol 15; Mythos F14)
+
+- **The standing fence.** While waiting with nothing to report, the controller holds its own desk fence, which
+  the watchdog honours. A page releases it. Halts and v4 pages block until acknowledged. Informational pages
+  (`QUEUE_EMPTY`, `FALLBACK_F0_DUE`, `WAIT_STALL`) keep the fence released until acknowledged.
+- **The arm handoff is atomic.** The arm child hides only the controller's own fence from the launcher's busy
+  check, so the launcher's `write_fence` (an `os.replace` under the fence lock) replaces it. The fence file names
+  a live owner at every instant. The launcher's bytes are unchanged; this is a call-time substitution in the arm
+  child, which the gate should weigh.
+- **The close handoff is not atomic.** The LaunchAgent's wrapper unlinks its fence. The controller sleeps on a
+  kqueue event on the custody directory and takes its standing fence on the wake. The residual is that event
+  latency (milliseconds). The arm proof's agent census still waits out any activation that slipped in.
+- **Every wait is bounded (Mythos F7).** It pages `WAIT_STALL` after 30 min (an agent, a refused plan, a missing
+  copy marker, a foreign run, a failed read) or 2 h 30 min (anything else). That includes the waits inside the
+  arm path.
+
+### 15.8 The journal-copy gate and foreign runs (Sol 10, 11; Mythos F18)
+
+- **The copy gate.** When the host's newest receipt is a campaign span's, its `<plan_id>.ok` marker must exist
+  and be non-empty before another arm (item 331's copy gate). The lead writes the marker after a hash-verified
+  copy.
+- **Unknown receipts.** A campaign receipt under the output root that no ledger knows halts
+  (`UNKNOWN_CAMPAIGN_RECEIPT`). This is the switch-over day's hand-armed spans missing from `prior_spans`.
+- **Foreign runs.** When another run's fence goes, its close is recorded as observed with its restore
+  **unproven**. That halts until `note-run --restore-ok yes --evidence <its Check>` records the run's Check. It is
+  never assumed.
+
+### 15.9 Critical-path ledger (RL-172 (i) row 6; Sol 14)
+
+`critical-path/<span_id>.json` records, per prerequisite (every selector reason, and the arm stages `PREPARE`,
+`VALIDATE_PLAN`, `HOST_PROOF`, `AUTHORITY`, `CLOCK`, `NOTICE`):
+- its first and last blocking observation;
+- `ready_at`, the observation at which it passed.
+
+It also records `ready_all` (set only at the arm intent), `start` (the launch t0), `end` (the receipt) and every
+refusal. `ledger` prints the CSV.
+
+### 15.10 The end-to-end runs (RL-172 (i) row 5)
+
+`synthetic` runs five scenarios. Each exercises the whole chain: the controller arms; **the pinned runner of the
+kit's own frozen commit** (exported from git) runs its mock; the controller closes, packs, signs and pushes;
+then the Air runs the real `cadence_desk.py final --bundle-ref` and `publish`; finally the controller reads the
+signed verdict and arms or holds. The lead's acts are explicit (a copy marker, a hand table, a gate release);
+no verdict is hand-written.
+
+| Scenario | What it shows |
+|---|---|
+| `clean` | dev-05 pilot on `2d347f721` (no `soak_attempts`) closes clean. JOURNAL_COPY, then the class A gate, hold dev-05-s02. The verdict is `HAND_TABLE_DUE`, then final with the hand table. The release arms s02 |
+| `soak_retry` | qual-01 pilot on `e1b85a59c`, first soak refused. The close is clean; the desk raises no REFUSAL and a "retried soak" hand-table trigger |
+| `l005_timeout` | dev-04 pilot with L005's G0 timing out. The close is clean; the derived gates are `class-a` and `L005`; the desk's kit holds match. dev-04-s02 waits through the class A release and arms only after the L005 record |
+| `redo` | dev-05 pilot with a load redo, no prior spans. Span 2 arms; span 3 waits on `K2_DESK_DEBT` until the hand table makes span 1 final |
+| `tampered` | A bundle re-pushed without the controller's key: the Air refuses it and publishes no verdict. A verdict ref forged without the desk's key: the controller halts `DESK_VERDICT_INVALID` |
+
+### 15.11 What it does not do
+
+- It runs no unit tests on the MBP (RL-172 (i) row 4).
+- It reads no thermal journal: the RL-150 R1 and RL-158 Q1 prints stay hand work, and are the desk's hand gate.
+- It does not decide a re-run, a re-date, a disposition, a gate release or an F0 launch.
+- **Watcher stamps.** It does not demand a fresh watcher observation per arm. RL-149 line 7 reads "live within
+  the last 24 h", and the stamp is re-read at every arm and bound into the record. Whether one observation may
+  serve several arms is put to the research lead (Sol 12).
