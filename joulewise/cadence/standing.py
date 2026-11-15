@@ -38,6 +38,8 @@ STANDING_SCHEMA = "joulewise.cadence_standing.v1"
 SESSION_READY_SCHEMA = "joulewise.cadence_session_ready.v1"
 SESSION_DONE_SCHEMA = "joulewise.cadence_session_done.v1"
 WATCHER_STAMP_SCHEMA = "joulewise.cadence_watcher_stamp.v1"
+OFFLOAD_MARKER_SCHEMA = "joulewise.offload_marker.v1"     # the offload tool's marker (RL-173 A.2; design 15.13)
+WATCHER_KINDS = ("actions", "stamp")                        # RL-173 C.4 (GitHub Actions) and C.5 (the Air's stamp)
 TRANSITION_SCHEMA = "joulewise.cadence_controller_transition.v1"
 VERDICT_SCHEMA = desk_final.VERDICT_SCHEMA
 ZONE = ZoneInfo(kitmod.LOCAL_ZONE_NAME)
@@ -55,10 +57,14 @@ FALLBACK_HORIZON_S = 2.5 * 3600    # RL-165 section 3 line 3: no staged item can
 STALL_S = 2.5 * 3600               # the default bound on any wait
 STALL_SHORT_S = 30 * 60            # waits the host or the lead clears in minutes, or never by themselves
 SHORT_STALL_CODES = frozenset({"AGENT_PRESENT", "PLAN_REFUSED_AT_T0", "JOURNAL_COPY", "SPAN_LIVE", "CLOSING",
-                               "ISSUES_UNREADABLE", "FETCH_FAILED", "NIGHT_UNKNOWN", "LEASE_EXPIRED"})
+                               "ISSUES_UNREADABLE", "FETCH_FAILED", "NIGHT_UNKNOWN", "LEASE_EXPIRED",
+                               "WATCHER_UNREADABLE"})
 STALL_LONG_S = 36 * 3600           # a loaded night agent is a v4 window (28 to 33 h); it pages only past that
 LONG_STALL_CODES = frozenset({"NIGHT_AGENT"})
 MIDNIGHT_MARGIN_S = 120            # a dated arm is refused this close to the end of its date (F19)
+# RL-173 A.1: until the offload key has a second copy off the MBP, the offload counts for at most 24 h from the
+# ruling (Sun 15 Nov 2026 11:58 PST). After this instant a marker must name the key's second copy.
+KEY_SECOND_COPY_DEADLINE = datetime(2026, 11, 16, 11, 58, tzinfo=ZoneInfo("America/Los_Angeles")).timestamp()
 
 PHASES = {"cl-dev-": "development", "cl-qual-": "qualification", "cl-hp-": "extension", "hp-": "extension",
           "cl-f2-": "filler", "f2-": "filler"}
@@ -111,6 +117,16 @@ REASONS = {
     "WATCHER_STAMP_MISSING": ("halt", "no results-watcher stamp on the audit branch (line 7)"),
     "WATCHER_STALE": ("halt", "the results-watcher stamp is older than 24 h (line 7)"),
     "WATCHER_STAMP_INVALID": ("halt", "the watcher stamp is malformed, names another watcher, or is ahead of its commit"),
+    "WATCHER_RUN_MISSING": ("halt", "the Actions watcher has no completed run (RL-173 C.4)"),
+    "WATCHER_FAILED": ("halt", "the Actions watcher's latest completed run did not succeed, or is malformed (RL-173 C.4)"),
+    "OFFLOAD_FAILED": ("halt", "the newest close's offload failed or its marker does not verify: nothing arms, F0 neither "
+                               "(RL-173 A.7)"),
+    "Q1_RECORD_INVALID": ("halt", "a Q1 completion record does not validate, or was committed before its span closed "
+                                  "(RL-173 E)"),
+    "L002_TIMEOUT": ("halt", "L002 timed out at G0: nothing arms until the lead's release record after the research "
+                             "lead's ruling (RL-161; RL-173 E)"),
+    "DESK_DISAGREEMENT": ("halt", "the MBP desk and the off-host desk disagree on a span: to the research lead "
+                                  "(RL-173 B)"),
     "SPAN_BAD_TERMINAL": ("halt", "a span closed refused, stopped, faulted, stranded or unproven, with no disposition"),
     "FOREIGN_CLOSE_UNPROVEN": ("halt", "another run's fence went away; its restore is unproven until note-run records it"),
     "ARM_INDETERMINATE": ("halt", "an arm intent has no launch result and no live span (restart after a crash)"),
@@ -139,9 +155,12 @@ REASONS = {
     # waits
     "NOT_BEFORE": ("wait", "today is before the span's not_before (RL-172 (g) 1)"),
     "K2_DESK_DEBT": ("wait", "span k's desk is not final before span k+2, in machine order (line 9)"),
+    "K2_Q1_DEBT": ("wait", "span k's RL-158 Q1 completion record is not committed before span k+2 (line 9; RL-173 E)"),
+    "WATCHER_NOT_NEWER": ("wait", "the watcher's latest completed run is not newer than the previous close (RL-173 C.4)"),
     "GAP": ("wait", "the floor after the last close has not run (300 s campaign, 1,200 s otherwise)"),
     "HAND_GATE": ("wait", "a hand gate holds this span until the lead's record (class A, L002, L005, or named)"),
-    "JOURNAL_COPY": ("wait", "the newest campaign close's journal copy marker is not written (item 331's copy gate)"),
+    "JOURNAL_COPY": ("wait", "the newest campaign close's offload marker is not written yet (RL-173 A; item 331's "
+                             "copy gate)"),
     "FREEZE2": ("wait", "qualification arms only after freeze 2 is committed (RL-149 section 2.8)"),
     "AGENT_PRESENT": ("wait", "an agent process is alive on the host"),
     "NIGHT_AGENT": ("wait", "a night agent (a v4 window) is loaded: the controller stays silent"),
@@ -156,6 +175,7 @@ REASONS = {
     # transient
     "FETCH_FAILED": ("retry", "the audit branch could not be fetched"),
     "ISSUES_UNREADABLE": ("retry", "the owner's open issues could not be read; no veto is assumed absent"),
+    "WATCHER_UNREADABLE": ("retry", "the Actions watcher's runs could not be read; never a pass"),
     # cede and pages
     "V4_SESSION_READY": ("cede", "a v4 session is READY: it takes the next clean close (RL-172 (f))"),
     "QUEUE_EMPTY": ("page", "nothing is queued, waiting or due"),
@@ -504,11 +524,11 @@ def veto_reasons(issues, owner):
 
 
 def watcher_reasons(stamp, commit_epoch, now, watcher_name):
-    """RL-149 section 2.8 line 7: the results-ref watcher was live within 24 h, by the lead's stamp. The
-    stamp is a committed file on the audit branch; it must name the configured watcher, and its time may not
-    be after its own commit. It is re-read at every arm (never cached) and its commit is bound into the arm
-    record; whether one sub-24 h observation may serve several arms is the reading RL-149 line 7 gives
-    ("live within the last 24 h"), and is put to the research lead (Sol 12)."""
+    """RL-149 section 2.8 line 7 by the hand-stamped Air watcher, while it is still used (RL-173 C.5): the
+    results-ref watcher was live within 24 h, by the lead's stamp. The stamp is a committed file on the audit
+    branch; it must name the configured watcher, and its time may not be after its own commit. One observation
+    under 24 h old may serve more than one arm, and each arm re-reads it (both authority reads; never a cached
+    answer: RL-173 C.5 reads RL-172 (g) 7's "never reused" that way). Its commit is bound into the arm record."""
     if stamp is None or commit_epoch is None:
         return [reason("WATCHER_STAMP_MISSING")]
     if not (isinstance(stamp, dict) and stamp.get("schema") == WATCHER_STAMP_SCHEMA
@@ -526,6 +546,47 @@ def watcher_reasons(stamp, commit_epoch, now, watcher_name):
 def watcher_lease(stamp):
     """The last instant the stamp still serves an arm."""
     return parse_time(stamp["observed_live_at"]) + WATCHER_TTL_S
+
+
+def actions_run_view(run):
+    """The fields of one GitHub Actions workflow run (the REST API's ``workflow_runs[]`` item) the arm binds."""
+    if not isinstance(run, dict):
+        return None
+    return {k: run.get(k) for k in ("id", "name", "path", "status", "conclusion", "run_started_at", "updated_at",
+                                    "event", "head_branch", "head_sha", "html_url")}
+
+
+def actions_watcher_reasons(run, now, last_close_epoch, workflow):
+    """RL-173 C.4: line 7 by the GitHub Actions watcher. Each arm reads the watcher's latest completed run through
+    the API (``run`` is ``actions_run_view`` of it; None when no completed run exists; the string ``"unreadable"``
+    when the read failed), and that run must be newer than the previous span's close: it STARTED after the latest
+    close of anything on this host (``last_close_epoch``; None before any close), so it observed the host after that
+    close. It must also have succeeded, be the configured workflow, be no older than 24 h (line 7) and not be dated
+    ahead of the host clock. A failed read is a retry, never a pass."""
+    if run == "unreadable":
+        return [reason("WATCHER_UNREADABLE")]
+    if run is None:
+        return [reason("WATCHER_RUN_MISSING", f"workflow {workflow}")]
+    started, done = parse_time(run.get("run_started_at")), parse_time(run.get("updated_at"))
+    path = str(run.get("path") or "")
+    if (started is None or done is None or run.get("status") != "completed" or done < started
+            or not (path == workflow or path.endswith("/" + workflow))):
+        return [reason("WATCHER_FAILED", f"run {run.get('id')}: status {run.get('status')}, path {path!r}, "
+                                         f"started {run.get('run_started_at')}, updated {run.get('updated_at')}")]
+    if run.get("conclusion") != "success":
+        return [reason("WATCHER_FAILED", f"run {run.get('id')} concluded {run.get('conclusion')}")]
+    if started > now + CLOCK_SKEW_S:
+        return [reason("WATCHER_FAILED", f"run {run.get('id')} started after the host clock")]
+    if now - started > WATCHER_TTL_S:
+        return [reason("WATCHER_STALE", f"run {run.get('id')} started {run.get('run_started_at')}")]
+    if last_close_epoch is not None and started <= last_close_epoch:
+        return [reason("WATCHER_NOT_NEWER", f"run {run.get('id')} started {run.get('run_started_at')}, not after the "
+                                            f"close at {datetime.fromtimestamp(last_close_epoch, ZONE).isoformat()}")]
+    return []
+
+
+def actions_watcher_lease(run):
+    return parse_time(run["run_started_at"]) + WATCHER_TTL_S
 
 
 def verdict_state(entry, *, run, accept_mock):
@@ -606,10 +667,11 @@ BAD = ("STOPPED", "REFUSED", "FAULT", "STRANDED", "CLOSE_UNPROVEN", "LAUNCH_REFU
        "RECEIPT_MISSING")
 
 
-def build_runs(standing, controller_records, external_runs, kits=None):
+def build_runs(standing, controller_records, external_runs, kits=None, prior_receipts=None):
     """Every run in machine order. A prior (hand-armed) span's gates are derived from its kit and roster like a
     controller span's (Mythos N2); ``kits`` maps sha256 -> kit, and a prior span whose kit is not in it carries
-    ``gates_unknown``."""
+    ``gates_unknown``. ``g0_timeouts`` (the legs whose G0 timed out; None when not known) comes from the controller's
+    close for its spans and from the host receipt (``prior_receipts``) for a prior span."""
     disp = {d["plan_id"]: d["resolution"] for d in standing["dispositions"]}
     runs = []
     for s in standing["prior_spans"]:
@@ -621,7 +683,8 @@ def build_runs(standing, controller_records, external_runs, kits=None):
                         campaign=s["campaign_id"], desk="final" if s["desk_final"] else "pending", gates=gates,
                         resolution=disp.get(s["plan_id"]),
                         extra={"kit_sha256": s["kit_sha256"], "roster": list(s["roster"]),
-                               "gates_unknown": kits is not None and kit is None}))
+                               "gates_unknown": kits is not None and kit is None,
+                               "g0_timeouts": ((prior_receipts or {}).get(s["plan_id"]) or {}).get("g0_timeouts")}))
     for r in controller_records:
         closed = r.get("closed_epoch")
         if closed is not None and r.get("legs_finished") is not None:
@@ -635,7 +698,7 @@ def build_runs(standing, controller_records, external_runs, kits=None):
                         campaign=r.get("campaign_id"), bundle_sha256=r.get("bundle_sha256"),
                         gates=list(r.get("gates") or []), resolution=disp.get(r["plan_id"]),
                         extra={"kit_sha256": r.get("kit_sha256"), "armed": r.get("armed") or {},
-                               "roster": r["legs"]}))
+                               "roster": r["legs"], "g0_timeouts": r.get("g0_timeouts")}))
     for e in external_runs:
         runs.append(Run(e["run_id"], e["kind"], None, None, 0, False, e["t0_epoch"], e.get("closed_epoch"),
                         "CLOSED_OK" if e.get("restore") == "proven" else "CLOSE_UNPROVEN", "external",
@@ -644,37 +707,119 @@ def build_runs(standing, controller_records, external_runs, kits=None):
     return runs
 
 
-def apply_verdicts(runs, verdicts, *, accept_mock):
-    """Mark controller spans desk-final from the Air's verdicts (FORMAT.md section 4). Returns halts: a named-stop
-    hold not cleared by the lead, an invalid verdict, and a verdict whose hand gates disagree with the gates the
-    controller derived."""
+def apply_verdicts(runs, verdicts, *, accept_mock, mbp_verdicts=None):
+    """Mark controller spans desk-final from their verdicts (FORMAT.md sections 4 and 6). ``verdicts`` are the
+    off-host desk's (``cadence-desk``); ``mbp_verdicts`` the MBP desk's own records (``cadence-controller``; RL-173
+    B), each read the same way. A span is final when either counts as final. Returns halts: a named-stop hold not
+    cleared by the lead (from either), an invalid verdict, a verdict whose hand gates disagree with the gates the
+    controller derived, and a difference between the two desks on the automatic part (DESK_DISAGREEMENT)."""
     halts = []
     for run in runs:
         if run.source != "controller" or run.kind not in ("campaign", "f2"):
             continue
-        state, hs, kit_holds = verdict_state(verdicts.get(run.plan_id), run=run, accept_mock=accept_mock)
-        run.desk = state
-        if run.resolution in RESOLUTIONS:   # cleared lifts the hold; rerun and withdrawn also take it out (N3)
-            hs = [h for h in hs if h["code"] != "DESK_HOLD"]
-        halts += hs
-        if verdicts.get(run.plan_id) is not None and not hs:
-            mine = sorted(DESK_GATE_NAMES[g] for g in run.gates)
-            if sorted(kit_holds) != mine:
-                halts.append(reason("GATE_DISAGREEMENT", f"{run.plan_id}: desk {kit_holds}, controller {mine}",
-                                    span=run.plan_id))
+        entries = [e for e in (verdicts.get(run.plan_id), (mbp_verdicts or {}).get(run.plan_id)) if e is not None]
+        states = []
+        for entry in entries:
+            state, hs, kit_holds = verdict_state(entry, run=run, accept_mock=accept_mock)
+            states.append(state)
+            if run.resolution in RESOLUTIONS:   # cleared lifts the hold; rerun and withdrawn also take it out (N3)
+                hs = [h for h in hs if h["code"] != "DESK_HOLD"]
+            halts += hs
+            if not hs:
+                mine = sorted(DESK_GATE_NAMES[g] for g in run.gates)
+                if sorted(kit_holds) != mine:
+                    halts.append(reason("GATE_DISAGREEMENT", f"{run.plan_id}: desk {kit_holds}, controller {mine}",
+                                        span=run.plan_id))
+        run.desk = "final" if "final" in states else "pending"
+        docs = [e["doc"] for e in entries if e.get("doc") is not None]
+        if len(docs) == 2:
+            diff = desk_final.compare_verdicts(docs[1], docs[0])
+            if diff and run.resolution != "cleared":
+                halts.append(reason("DESK_DISAGREEMENT", f"{run.plan_id}: {', '.join(diff)}", span=run.plan_id))
     return halts
 
 
 def k2_reasons(runs, span_id=None):
     """Line 9 in machine order across every queue (RL-165 section 6; RL-172 (g) 2): the new span is campaign
-    span n; every campaign span up to n-2 must be desk-final. Stricter than "span n-2 only". A span the lead
-    resolved as ``rerun`` or ``withdrawn`` (FORMAT.md section 4 item 4) leaves the count."""
+    span n; every campaign span up to n-2 must be desk-final, and, when its kit is v1.1, must have the lead's
+    RL-158 Q1 completion record (RL-173 E: span k's record exists before span k+2 arms; it holds nothing sooner).
+    Stricter than "span n-2 only". A span the lead resolved as ``rerun`` or ``withdrawn`` (FORMAT.md section 4
+    item 4) leaves the count."""
     campaign = [r for r in runs if r.kind == "campaign" and r.resolution not in ("rerun", "withdrawn")]
     n = len(campaign) + 1
-    owed = [r.plan_id for r in campaign[:max(0, n - 2)] if r.desk != "final"]
+    due = campaign[:max(0, n - 2)]
+    out = []
+    owed = [r.plan_id for r in due if r.desk != "final"]
     if owed:
-        return [reason("K2_DESK_DEBT", f"campaign span {n}: desk not final for {', '.join(owed)}", span=span_id)]
-    return []
+        out.append(reason("K2_DESK_DEBT", f"campaign span {n}: desk not final for {', '.join(owed)}", span=span_id))
+    q1 = [r.plan_id for r in due if r.extra.get("q1") not in ("ok", "not-required")]   # never applied: owed
+    if q1:
+        out.append(reason("K2_Q1_DEBT", f"campaign span {n}: no Q1 completion record for {', '.join(q1)}",
+                          span=span_id))
+    return out
+
+
+PLAN_RE = re.compile(r"cq-(?P<span>[a-z0-9][a-z0-9-]*?)-a(?P<attempt>[0-9]+)")
+
+
+def apply_q1(runs, records, kits, record_epochs=None):
+    """RL-173 E: mark each campaign span's Q1 state, ``ok``, ``missing`` or ``not-required`` (a kit that is not v1.1),
+    in ``run.extra["q1"]``. ``records`` maps plan_id -> {"doc": parsed record or None, "error": text or None} from
+    ``<records_dir>/q1/<plan_id>.json``; ``record_epochs`` maps plan_id -> the record's first commit time. A span
+    whose kit cannot be read owes a record (missing evidence never passes). Returns halts: a record that does not
+    validate for its span, or that was committed before its span closed, is Q1_RECORD_INVALID."""
+    halts = []
+    for run in runs:
+        if run.kind != "campaign" or run.source not in ("controller", "prior"):
+            continue
+        kit = (kits or {}).get(run.extra.get("kit_sha256"))
+        required = kit is None or kit.get("schema") == desk_final.V11_SCHEMA
+        rec = (records or {}).get(run.plan_id)
+        if not required:
+            run.extra["q1"] = "not-required"
+            if rec is None:
+                continue
+        armed = run.extra.get("armed") or {}
+        m = PLAN_RE.fullmatch(run.plan_id)
+        span_id = armed.get("span_id") or (m.group("span") if m else None)
+        attempt = armed.get("attempt") or (int(m.group("attempt")) if m else None)
+        if rec is None:
+            run.extra["q1"] = "missing"
+            continue
+        problems = ([rec["error"]] if rec.get("error") else
+                    desk_final.validate_q1_record(rec.get("doc"), plan_id=run.plan_id, span_id=span_id,
+                                                  attempt=attempt))
+        epoch = (record_epochs or {}).get(run.plan_id)
+        if not problems and (epoch is None or run.closed is None or epoch < run.closed):
+            problems = [f"committed at {epoch}, span closed at {run.closed}"]
+        if problems:
+            run.extra["q1"] = "missing"
+            halts.append(reason("Q1_RECORD_INVALID", f"{run.plan_id}: {'; '.join(problems)}"[:300], span=run.plan_id))
+        elif required:
+            run.extra["q1"] = "ok"
+    return halts
+
+
+def l002_reasons(runs, standing):
+    """RL-161 and RL-173 E: after an L002 G0 timeout nothing arms and the Q1 print goes to the research lead. A span
+    that raised the L002 consumer gate and whose L002 timed out at G0 (or whose G0 outcome is not known: missing
+    evidence never passes) halts every arm, every queue and the fallback included, until the lead's ``release``
+    record for that span's L002 gate (written after the research lead's ruling). A span the lead disposed of as
+    ``rerun`` or ``withdrawn`` leaves the rule; so does an L002 that released."""
+    decisions = {(r["plan_id"], r["gate"]): r["decision"] for r in standing["gate_records"]}
+    disposed = _disposed(standing)
+    out = []
+    for run in runs:
+        if run.source not in ("controller", "prior") or run.plan_id in disposed or "L002" not in run.gates:
+            continue
+        timeouts = run.extra.get("g0_timeouts")
+        if timeouts is not None and "L002" not in timeouts:
+            continue
+        if decisions.get((run.plan_id, "L002")) != "release":
+            out.append(reason("L002_TIMEOUT", f"{run.plan_id}: L002 "
+                                              f"{'timed out' if timeouts is not None else 'G0 outcome not known'}",
+                              span=run.plan_id))
+    return out
 
 
 def last_close(runs):
@@ -981,14 +1126,64 @@ CAMPAIGN_RECEIPT = re.compile(r"/(?P<campaign>cl-[a-z0-9-]+)/(?P<plan>cq-[a-z0-9
                               r"runner_receipt\.json$")
 
 
-def census_reasons(census, runs, output_root, copy_markers):
+OFFLOAD_MARKER_KEYS = {"schema", "plan_id", "source", "manifest_sha256", "manifest_files", "ciphertext_sha256",
+                       "ciphertext_bytes", "provider", "remote_path", "upload", "verified", "key_second_copy",
+                       "written_at"}
+UPLOAD_KEYS = {"confirmed", "readback", "value", "evidence"}
+
+
+def offload_marker_problems(doc, plan_id, now):
+    """RL-173 A: the MBP's verified encrypted cloud offload is the off-host copy. Its marker
+    (``<copy_marker_dir>/<plan_id>.ok``, written by the offload tool once the upload is verified; design 15.13)
+    must record the plaintext manifest's sha256, the ciphertext's sha256 and size, and the provider's confirmation
+    that the upload finished, read back as the ciphertext's sha256 or size (A.2). After RL-173 A.1's 24 h it must
+    also name where the key's second copy is (never the cloud folder or the repo). Returns problems."""
+    if not isinstance(doc, dict):
+        return ["the marker is not a JSON object (a typed offload marker; RL-173 A.2)"]
+    p = []
+    if set(doc) != OFFLOAD_MARKER_KEYS:
+        p.append(f"keys: missing {sorted(OFFLOAD_MARKER_KEYS - set(doc))}, unknown {sorted(set(doc) - OFFLOAD_MARKER_KEYS)}")
+    if doc.get("schema") != OFFLOAD_MARKER_SCHEMA:
+        p.append(f"schema {doc.get('schema')!r}")
+    if doc.get("plan_id") != plan_id:
+        p.append(f"plan_id {doc.get('plan_id')!r} is not {plan_id}")
+    for k in ("manifest_sha256", "ciphertext_sha256"):
+        if not (isinstance(doc.get(k), str) and HEX64.fullmatch(doc[k])):
+            p.append(f"{k}: 64 hex")
+    for k in ("ciphertext_bytes", "manifest_files"):
+        if not (type(doc.get(k)) is int and doc[k] > 0):
+            p.append(f"{k}: a positive integer")
+    for k in ("provider", "remote_path", "source"):
+        if not _text(doc.get(k)):
+            p.append(f"{k}: text")
+    up = doc.get("upload")
+    if not (isinstance(up, dict) and set(up) == UPLOAD_KEYS and up.get("confirmed") is True and _text(up.get("evidence"))
+            and ((up.get("readback") == "sha256" and up.get("value") == doc.get("ciphertext_sha256"))
+                 or (up.get("readback") == "size" and up.get("value") == doc.get("ciphertext_bytes")))):
+        p.append("upload: {confirmed: true, readback: sha256|size, value: the ciphertext's, evidence} (A.2)")
+    if doc.get("verified") is not True:
+        p.append("verified: true")
+    key = doc.get("key_second_copy")
+    if not (key is None or _text(key)):
+        p.append("key_second_copy: null or where the key's second copy is")
+    elif key is None and now > KEY_SECOND_COPY_DEADLINE:
+        p.append("key_second_copy: required 24 h after RL-173 (A.1)")
+    if parse_time(doc.get("written_at")) is None:
+        p.append("written_at: ISO 8601 with an offset")
+    return p
+
+
+def census_reasons(census, runs, output_root, copy_markers, now=None, offload_failures=()):
     """``census``: {"newest": (epoch, path), "campaign": [paths under the output root]} or an error string.
 
     * Every campaign receipt under the output root belongs to a span the ledger knows (prior or controller);
       an unknown one is a halt (Mythos F18: a hand-armed span missing from ``prior_spans``).
-    * The copy gate, bound to the ONE newest close: if the newest receipt is a campaign span's, its journal
-      copy marker (``<plan_id>.ok``, written by the lead after a hash-verified copy) must exist and be
-      non-empty before another arm. After a non-campaign close the Check covers the copy."""
+    * The copy gate, bound to the ONE newest close (RL-173 A): if the newest receipt is a campaign span's, its
+      offload marker must be there and verify (``offload_marker_problems``) before another arm. ``copy_markers``
+      maps plan_id -> {"doc": parsed JSON or None, "error": text or None, "failed": bool (a ``<plan_id>.failed``
+      file)}. Not there yet: a wait (JOURNAL_COPY). There but unverified, a ``.failed`` file, or the controller's
+      own offload step failed (``offload_failures``): OFFLOAD_FAILED, a halt. Either holds F0 too (A.7): the copy
+      gate is a global reason, read before the fallback. After a non-campaign close the Check covers the copy."""
     if isinstance(census, str) or census is None:
         return [reason("CENSUS_FAILED", str(census))]
     out = []
@@ -1001,8 +1196,19 @@ def census_reasons(census, runs, output_root, copy_markers):
     m = CAMPAIGN_RECEIPT.search(newest) if newest.startswith(output_root.rstrip("/") + "/") else None
     if m is not None:
         plan_id = m.group("plan")
-        if not copy_markers.get(plan_id):
-            out.append(reason("JOURNAL_COPY", f"no journal-copy marker for {plan_id}, the newest close ({newest})"))
+        marker = copy_markers.get(plan_id) or {}
+        if marker.get("failed"):
+            out.append(reason("OFFLOAD_FAILED", f"{plan_id}: the offload left {plan_id}.failed"))
+        elif marker.get("doc") is None and marker.get("error") is None:
+            if plan_id in set(offload_failures or ()):
+                out.append(reason("OFFLOAD_FAILED", f"{plan_id}: the controller's offload step failed, no marker"))
+            else:
+                out.append(reason("JOURNAL_COPY", f"no offload marker for {plan_id}, the newest close ({newest})"))
+        else:
+            problems = ([marker["error"]] if marker.get("error") else
+                        offload_marker_problems(marker["doc"], plan_id, now if now is not None else 0))
+            if problems:
+                out.append(reason("OFFLOAD_FAILED", f"{plan_id}: {'; '.join(problems)}"[:400]))
     return out
 
 
@@ -1057,6 +1263,7 @@ def select(snap):
         globals_ += queue_reasons(view, now, bool(_pending(view)))
     globals_ += cross_queue_reasons(views, _disposed(standing))
     globals_ += prior_reasons(standing, views, snap.get("receipts"))
+    globals_ += l002_reasons(snap["runs"], standing)        # RL-173 E: nothing arms, the fallback included
     heads = [_pending(v)[0]["span_id"] for v in views if v.get("doc") and _pending(v)]
 
     def held(action, rs):

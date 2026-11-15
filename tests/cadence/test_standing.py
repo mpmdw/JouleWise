@@ -112,11 +112,22 @@ def verdict(rec, *, final=True, mock=False, holds=None, next_hold=False, signed=
     return {"doc": desk_final._finish(doc)}
 
 
+def q1_doc(plan_id):
+    sid, attempt = plan_id[3:].rsplit("-a", 1)
+    return {"schema": desk_final.Q1_RECORD_SCHEMA, "plan_id": plan_id, "span_id": sid, "attempt": int(attempt),
+            "signer": "lead", "recorded_at": "2026-11-17T08:00:00-08:00", "print_ref": "Q1 print"}
+
+
 def snap(views, st=None, *, now=NOW, runs=None, verdicts=None, issues=(), watcher=True, sessions=(), census=None,
-         fallback_views=(), plan_worst=None, records=(), externals=(), accept_mock=False):
+         fallback_views=(), plan_worst=None, records=(), externals=(), accept_mock=False, mbp_verdicts=None, q1=None,
+         q1_epochs=None):
     st = st or standing()
     runs = runs if runs is not None else law.build_runs(st, list(records), list(externals), kits=KITS)
-    halts = law.apply_verdicts(runs, verdicts or {}, accept_mock=accept_mock)
+    halts = law.apply_verdicts(runs, verdicts or {}, accept_mock=accept_mock, mbp_verdicts=mbp_verdicts)
+    if q1 is None:      # every span's Q1 record present, committed after its close (RL-173 E has its own tests)
+        q1 = {r.plan_id: {"doc": q1_doc(r.plan_id), "error": None} for r in runs if r.kind == "campaign"}
+        q1_epochs = {r.plan_id: (r.closed or 0) + 60 for r in runs if r.kind == "campaign"}
+    halts += law.apply_q1(runs, q1, KITS, q1_epochs or {})
     ran = {r.plan_id for r in runs}
     for v in [*views, *fallback_views]:
         v["closed_ids"] = ran
@@ -646,6 +657,16 @@ class QueueIntegrity(unittest.TestCase):
         self.assertIn("QUEUE_DUPLICATE", codes(law.select(snap([a, c]))))
 
 
+def marker(plan_id, **over):
+    doc = {"schema": law.OFFLOAD_MARKER_SCHEMA, "plan_id": plan_id, "source": f"/o/{plan_id}",
+           "manifest_sha256": "a" * 64, "manifest_files": 10, "ciphertext_sha256": "b" * 64, "ciphertext_bytes": 4096,
+           "provider": "cloud", "remote_path": f"offload/{plan_id}.enc",
+           "upload": {"confirmed": True, "readback": "size", "value": 4096, "evidence": "provider size readback"},
+           "verified": True, "key_second_copy": "the Air's custody root", "written_at": "2026-11-17T08:30:00-08:00"}
+    doc.update(over)
+    return doc
+
+
 class Census(unittest.TestCase):
     def runs(self):
         return law.build_runs(standing(), [record("cq-dev-05-s01-a1", "05", L[:6], NOW - 9000)], [], kits=KITS)
@@ -654,7 +675,8 @@ class Census(unittest.TestCase):
         newest = "/o/cl-dev-05/cq-dev-05-s01-a1-20261117T160000Z/runner_receipt.json"
         census = {"newest": (int(NOW), newest), "campaign": [newest]}
         self.assertEqual([r["code"] for r in law.census_reasons(census, self.runs(), "/o", {})], ["JOURNAL_COPY"])
-        self.assertEqual(law.census_reasons(census, self.runs(), "/o", {"cq-dev-05-s01-a1": "sha date"}), [])
+        good = {"cq-dev-05-s01-a1": {"doc": marker("cq-dev-05-s01-a1"), "error": None, "failed": False}}
+        self.assertEqual(law.census_reasons(census, self.runs(), "/o", good, now=NOW), [])
         other = {"newest": (int(NOW), "/w/f0/runner_receipt.json"), "campaign": [newest]}
         self.assertEqual(law.census_reasons(other, self.runs(), "/o", {}), [])
 
@@ -682,6 +704,150 @@ class Bounds(unittest.TestCase):
         self.assertEqual(law.kit_class({"campaign_id": "cl-hp-01"})["dated"], False)
         with self.assertRaises(law.StandingError):
             law.kit_class({"campaign_id": "mystery-01"})
+
+
+class RL173(unittest.TestCase):
+    """RL-173's owner list for the controller, on the law's side: the Q1 record in line 9's debt (E), the L002
+    timeout (E), the MBP desk and the off-host re-check (B), the Actions watcher (C.4), the offload marker (A)."""
+
+    def setUp(self):
+        self.p1, self.rel = pilot_done("05")
+        self.p2 = record("cq-dev-05-s02-a1", "05", L[6:9], NOW - 3 * 3600, closed=NOW - 2 * 3600)
+        self.v3 = view([span(1, "dev-05-s03", "05", L[9:])], path="Q3.json")
+        self.st = standing(prior_spans=[], gate_records=self.rel)
+        self.final = {self.p1["plan_id"]: verdict(self.p1), self.p2["plan_id"]: verdict(self.p2)}
+
+    def test_span_k_q1_record_before_span_k_plus_2_and_nothing_sooner(self):
+        recs, epochs = {}, {}
+        d = law.select(snap([self.v3], self.st, records=[self.p1], q1=recs, q1_epochs=epochs))
+        self.assertEqual(d.action, "arm")           # span 2 owes nothing for span 1's print (it holds nothing sooner)
+        d = law.select(snap([self.v3], self.st, records=[self.p1, self.p2], verdicts=self.final, q1=recs,
+                            q1_epochs=epochs))
+        self.assertIn("K2_Q1_DEBT", codes(d))
+        self.assertNotIn("K2_DESK_DEBT", codes(d))
+        recs[self.p1["plan_id"]] = {"doc": q1_doc(self.p1["plan_id"]), "error": None}
+        epochs[self.p1["plan_id"]] = self.p1["closed_epoch"] + 600
+        d = law.select(snap([self.v3], self.st, records=[self.p1, self.p2], verdicts=self.final, q1=recs,
+                            q1_epochs=epochs))
+        self.assertEqual(d.action, "arm")
+
+    def test_a_bad_or_premature_q1_record_halts_and_a_v1_kit_owes_none(self):
+        pid = self.p1["plan_id"]
+        for rec, epoch in (({"doc": dict(q1_doc(pid), attempt=2), "error": None}, self.p1["closed_epoch"] + 60),
+                           ({"doc": q1_doc(pid), "error": None}, self.p1["closed_epoch"] - 60),
+                           ({"doc": None, "error": "q1/x.json: a denied key"}, self.p1["closed_epoch"] + 60)):
+            d = law.select(snap([self.v3], self.st, records=[self.p1, self.p2], verdicts=self.final,
+                                q1={pid: rec}, q1_epochs={pid: epoch}))
+            self.assertEqual(d.action, "halt")
+            self.assertIn("Q1_RECORD_INVALID", codes(d))
+        runs = law.build_runs(standing(), [], [], kits=KITS)            # the prior dev-01 spans: kit v1
+        self.assertEqual(law.apply_q1(runs, {}, KITS, {}), [])
+        self.assertEqual({r.extra.get("q1") for r in runs}, {"not-required"})
+        runs = law.build_runs(standing(), [], [], kits={})               # a kit that cannot be read owes a record
+        law.apply_q1(runs, {}, {}, {})
+        self.assertEqual({r.extra.get("q1") for r in runs}, {"missing"})
+
+    def test_an_l002_timeout_halts_every_arm_until_the_lead_releases_it(self):
+        dev03 = kit("cl-dev-03.v1.1")
+        kits = dict(KITS, **{"3" * 64: dev03})
+        rec = record("cq-dev-03-s01-a1", "05", L[:3], NOW - 5 * 3600, closed=NOW - 4 * 3600)
+        rec.update(kit_sha256="3" * 64, campaign_id="cl-dev-03", gates=law.derived_gates(dev03, L[:3]),
+                   g0_timeouts=["L002"])
+        self.assertEqual(rec["gates"], [law.CLASS_A, "L002"])
+        other = pilot("04")
+        st = standing(prior_spans=[], kits={**{sha: entry() for sha in kits}})
+        runs = law.build_runs(st, [rec], [], kits=kits)
+        d = law.select(snap([other], st, runs=runs))
+        self.assertEqual(d.action, "halt")
+        self.assertIn("L002_TIMEOUT", codes(d))
+        runs = law.build_runs(st, [dict(rec, g0_timeouts=None)], [], kits=kits)      # not known: never a pass
+        self.assertIn("L002_TIMEOUT", codes(law.select(snap([other], st, runs=runs))))
+        runs = law.build_runs(st, [dict(rec, g0_timeouts=[])], [], kits=kits)        # L002 released its G0
+        self.assertNotIn("L002_TIMEOUT", codes(law.select(snap([other], st, runs=runs))))
+        st2 = standing(prior_spans=[], kits={**{sha: entry() for sha in kits}},
+                       gate_records=released(("cq-dev-03-s01-a1", "L002")))
+        runs = law.build_runs(st2, [rec], [], kits=kits)
+        self.assertNotIn("L002_TIMEOUT", codes(law.select(snap([other], st2, runs=runs))))
+
+    def test_the_mbp_desk_counts_and_a_disagreement_with_the_off_host_desk_halts(self):
+        mbp = {self.p1["plan_id"]: verdict(self.p1)}
+        d = law.select(snap([self.v3], self.st, records=[self.p1, self.p2], mbp_verdicts=mbp))
+        self.assertNotIn("K2_DESK_DEBT", codes(d))                     # the MBP desk alone counts for line 9
+        pending = verdict(self.p1, final=False)
+        d = law.select(snap([self.v3], self.st, records=[self.p1, self.p2], mbp_verdicts={self.p1["plan_id"]: pending},
+                            verdicts=mbp))
+        self.assertNotIn("K2_DESK_DEBT", codes(d))                     # final by the off-host desk (a hand table)
+        self.assertNotIn("DESK_DISAGREEMENT", codes(d))                # desk_final alone is not the automatic part
+        other = {"doc": desk_final._finish({**{k: v for k, v in mbp[self.p1["plan_id"]]["doc"].items()
+                                               if k != "verdict_sha256"}, "summary_sha256": "9" * 64})}
+        d = law.select(snap([self.v3], self.st, records=[self.p1, self.p2], mbp_verdicts=mbp,
+                            verdicts={self.p1["plan_id"]: other}))
+        self.assertEqual(d.action, "halt")
+        self.assertIn("DESK_DISAGREEMENT", codes(d))
+        hold = verdict(self.p1, next_hold=True, holds=[{"code": "REFUSAL", "scope": "queue"}] + kit_holds(self.p1))
+        d = law.select(snap([self.v3], self.st, records=[self.p1], mbp_verdicts={self.p1["plan_id"]: hold}))
+        self.assertIn("DESK_HOLD", codes(d))                           # the MBP desk's hold holds too
+        d = law.select(snap([self.v3], self.st, records=[self.p1],
+                            mbp_verdicts={self.p1["plan_id"]: {"error": "TransportRefusal: x"}}))
+        self.assertIn("DESK_VERDICT_INVALID", codes(d))
+
+    def test_actions_watcher_each_arm_needs_a_successful_run_newer_than_the_last_close(self):
+        wf = "mbp-watcher.yml"
+
+        def run(started, conclusion="success", **over):
+            return law.actions_run_view({"id": 1, "path": f".github/workflows/{wf}", "status": "completed",
+                                         "conclusion": conclusion,
+                                         "run_started_at": datetime.fromtimestamp(started, law.ZONE).isoformat(),
+                                         "updated_at": datetime.fromtimestamp(started + 30, law.ZONE).isoformat(),
+                                         **over})
+        close = NOW - 600
+        self.assertEqual(law.actions_watcher_reasons(run(NOW - 300), NOW, close, wf), [])
+        self.assertEqual(law.actions_watcher_reasons(run(NOW - 300), NOW, None, wf), [])
+        for r, code in ((run(close - 1), "WATCHER_NOT_NEWER"), (run(close), "WATCHER_NOT_NEWER"),
+                        (run(NOW - 300, "failure"), "WATCHER_FAILED"), (run(NOW - 300, None), "WATCHER_FAILED"),
+                        (run(NOW - 300, status="in_progress"), "WATCHER_FAILED"),
+                        (run(NOW - 300, path=".github/workflows/other.yml"), "WATCHER_FAILED"),
+                        (run(NOW + 3600), "WATCHER_FAILED"), (run(NOW - 25 * 3600), "WATCHER_STALE"),
+                        (None, "WATCHER_RUN_MISSING"), ("unreadable", "WATCHER_UNREADABLE")):
+            self.assertEqual([x["code"] for x in law.actions_watcher_reasons(r, NOW, close, wf)], [code], r)
+        self.assertEqual(law.category(law.actions_watcher_reasons("unreadable", NOW, close, wf)), "retry")
+        self.assertEqual(law.category(law.actions_watcher_reasons(run(close - 1), NOW, close, wf)), "wait")
+
+    def test_the_offload_marker_must_verify_and_a_failure_holds_f0_too(self):
+        pid = "cq-dev-05-s01-a1"
+        self.assertEqual(law.offload_marker_problems(marker(pid), pid, NOW), [])
+        for bad in (dict(marker(pid), plan_id="cq-x-a1"), marker(pid, ciphertext_bytes=0), marker(pid, verified=False),
+                    marker(pid, upload={"confirmed": True, "readback": "size", "value": 1, "evidence": "e"}),
+                    marker(pid, upload={"confirmed": False, "readback": "size", "value": 4096, "evidence": "e"}),
+                    marker(pid, manifest_sha256="x"), dict(marker(pid), extra=1), "legacy text line"):
+            self.assertTrue(law.offload_marker_problems(bad, pid, NOW), bad)
+        late = law.KEY_SECOND_COPY_DEADLINE + 1
+        self.assertTrue(law.offload_marker_problems(marker(pid, key_second_copy=None), pid, late))   # A.1
+        self.assertEqual(law.offload_marker_problems(marker(pid, key_second_copy=None), pid,
+                                                     law.KEY_SECOND_COPY_DEADLINE - 1), [])
+        runs = law.build_runs(standing(), [record(pid, "05", L[:6], NOW - 9000)], [], kits=KITS)
+        newest = f"/o/cl-dev-05/{pid}-20261117T160000Z/runner_receipt.json"
+        census = {"newest": (int(NOW), newest), "campaign": [newest]}
+
+        def got(markers, failures=()):
+            return [r["code"] for r in law.census_reasons(census, runs, "/o", markers, now=NOW,
+                                                          offload_failures=failures)]
+        self.assertEqual(got({}), ["JOURNAL_COPY"])
+        self.assertEqual(got({}, [pid]), ["OFFLOAD_FAILED"])
+        self.assertEqual(got({pid: {"doc": None, "error": None, "failed": True}}), ["OFFLOAD_FAILED"])
+        self.assertEqual(got({pid: {"doc": None, "error": "not JSON", "failed": False}}), ["OFFLOAD_FAILED"])
+        self.assertEqual(got({pid: {"doc": marker(pid, verified=False), "error": None, "failed": False}}),
+                         ["OFFLOAD_FAILED"])
+        f0 = [{"kind": "F0", "standing_item": "item 346", "worst_case_s": 12180}]
+        st = standing(fallback=f0)
+        sn = snap([], st)
+        self.assertEqual(law.select(sn).action, "page")                                 # F0 due with nothing queued
+        sn["census_reasons"] = law.census_reasons(census, runs, "/o", {}, now=NOW, offload_failures=[pid])
+        d = law.select(sn)
+        self.assertEqual(d.action, "halt")                                              # A.7: F0 is held too
+        self.assertNotIn("FALLBACK_F0_DUE", codes(d))
+        sn["census_reasons"] = law.census_reasons(census, runs, "/o", {}, now=NOW)
+        self.assertEqual(law.select(sn).action, "wait")                                 # an offload under way
 
 
 if __name__ == "__main__":

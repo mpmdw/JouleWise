@@ -774,5 +774,129 @@ class ConfigAndInstall(unittest.TestCase):
                 self.assertEqual(cc.cmd_check_heartbeat(cfg, args), 0)
 
 
+@unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
+class RL173EndToEnd(WorldCase):
+    """RL-173's owner list for the controller builder, end to end (synthetic scenarios), plus the MBP desk step."""
+
+    def test_actions_watcher(self):                          # C.4
+        synth.scenario_actions_watcher(Path(self.tmp.name) / "aw", log=quiet)
+
+    def test_offload_failed_or_unverified_holds_the_next_arm_and_f0(self):   # A.2, A.7
+        synth.scenario_offload(Path(self.tmp.name) / "off", log=quiet)
+
+    def test_l002_timeout_holds_every_arm(self):            # E
+        synth.scenario_l002_timeout(Path(self.tmp.name) / "l002", log=quiet)
+
+    def test_the_fence_is_continuous(self):                  # E
+        synth.scenario_fence(Path(self.tmp.name) / "fence", log=quiet)
+
+    def test_the_mbp_desk_runs_in_the_close_interval_and_counts(self):        # B
+        w = self.pilot_world()
+        w.tick()
+        w.launcher.finish()
+        s = w.tick()
+        self.assertEqual(s["state"], "CLOSED", s)
+        close = json.loads(self.state(w, "spans", "cq-dev-05-s01-a1", "close.json").read_text())
+        rec = close["mbp_desk"]
+        self.assertTrue(rec["published"] and rec["rc"] == 3 and rec["problem"] is None, rec)
+        doc, _ = desk_transport.read_verdict(w.cfg["git_dir"], f"{cc.MBP_VERDICT_PREFIX}cq-dev-05-s01-a1",
+                                             allowed_signers=w.cfg["controller_signers"], plan_id="cq-dev-05-s01-a1",
+                                             principal=desk_transport.CONTROLLER_PRINCIPAL)
+        self.assertEqual(doc["history_source"], "signed-records")
+        self.assertEqual(doc["transport"]["signer"], "cadence-controller")
+        self.assertEqual(doc["identities"]["manifest_sha256"], close["manifest_sha256"])
+        # the desk ran after the push, inside the close: the floor counts from after it
+        rows = [json.loads(x) for x in self.state(w, "transitions.jsonl").read_text().splitlines()]
+        kinds = [r["transition"] for r in rows if r["plan_id"] == "cq-dev-05-s01-a1"]
+        self.assertLess(kinds.index("bundle_pushed"), kinds.index("mbp_desk"))
+        # the off-host desk (the Air) re-checks the pushed bundle and agrees on the automatic part
+        w.copy_journals("cq-dev-05-s01-a1")
+        w.queue("rest", [w.span(1, "dev-05-s02", "cl-dev-05", L[6:])])
+        v = w.air_final("cq-dev-05-s01-a1", hand_table=True)
+        self.assertTrue(v["desk_final"])
+        self.assertEqual(desk_final_compare(doc, v), [])
+        w.lead_release("cq-dev-05-s01-a1", "class-a")
+        s = w.drive(lambda s: s["state"] == "LIVE")
+        self.assertNotIn("DESK_DISAGREEMENT", self.pages(w))
+
+    def test_a_desk_run_that_left_no_verdict_is_retried_next_tick(self):
+        w = self.pilot_world()
+        calls = []
+        real = w.ctl.host_run
+
+        def flaky(argv, **kw):
+            calls.append(argv)
+            if len(calls) == 1:
+                return cc.Result(4, "LOCK held", "")
+            return real(argv, **kw)
+        w.ctl.host_run = flaky
+        w.tick()
+        w.launcher.finish()
+        w.tick()
+        close = json.loads(self.state(w, "spans", "cq-dev-05-s01-a1", "close.json").read_text())
+        self.assertIsNone(close["mbp_desk"]["published"])
+        w.env.t += 400
+        w.tick()
+        close = json.loads(self.state(w, "spans", "cq-dev-05-s01-a1", "close.json").read_text())
+        self.assertTrue(close["mbp_desk"]["published"], close["mbp_desk"])
+        self.assertEqual(len(calls), 2)
+
+
+def desk_final_compare(a, b):
+    from joulewise.cadence import desk_final
+    return desk_final.compare_verdicts(a, b)
+
+
+class RL173Units(unittest.TestCase):
+    def test_read_watcher_run(self):
+        cfg = {"gh_argv": ["gh"], "repo_slug": "o/r", "watcher_name": "mbp-watcher.yml"}
+        run = {"id": 5, "path": ".github/workflows/mbp-watcher.yml", "status": "completed", "conclusion": "success",
+               "run_started_at": "2026-11-17T08:00:00Z", "updated_at": "2026-11-17T08:01:00Z", "secret": "x"}
+        env = FakeRunEnv({"gh api repos/o/r/actions/workflows/mbp-watcher.yml/runs?status=completed&per_page=1":
+                          cc.Result(0, json.dumps({"workflow_runs": [run]}), "")})
+        got = cc.read_watcher_run(cfg, env, lambda w: None)
+        self.assertEqual(got["id"], 5)
+        self.assertNotIn("secret", got)
+        env = FakeRunEnv({"gh api": cc.Result(0, json.dumps({"workflow_runs": []}), "")})
+        self.assertIsNone(cc.read_watcher_run(cfg, env, lambda w: None))
+        for res in (cc.Result(1, "", "HTTP 502"), cc.Result(0, "not json", ""), cc.Result(0, "{}", "")):
+            self.assertEqual(cc.read_watcher_run(cfg, FakeRunEnv({"gh api": res}), lambda w: None), "unreadable")
+
+    def test_config_watcher_kind_and_offload_argv(self):
+        base = ConfigAndInstall.cfg(self)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "c.json"
+            for over in ({"watcher_kind": "air"}, {"watcher_kind": "actions", "watcher_name": "com.joulewise.air-watch"},
+                         {"offload_argv": ["offload", "{plan_id}"]}, {"offload_argv": ["/bin/offload"]},
+                         {"offload_argv": "/bin/offload {plan_id}"}, {"controller_signers": "rel/path"}):
+                path.write_text(json.dumps({**base, **over}))
+                with self.assertRaises(cc.ConfigError, msg=over):
+                    cc.load_config(path)
+            for over in ({"watcher_kind": "stamp", "watcher_name": "com.joulewise.air-watch"},
+                         {"offload_argv": ["/usr/local/bin/jw-offload", "--plan", "{plan_id}", "--out", "{output}"]}):
+                path.write_text(json.dumps({**base, **over}))
+                cc.load_config(path)
+
+    def test_the_fence_is_renewed_before_every_network_call_and_never_taken_after_a_release(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = synth.World(Path(tmp) / "w", prior=False)
+            ctl = w.controller()
+            root = Path(w.cfg["custody_root"])
+            self.assertEqual(ctl.hold_fence(), "held")
+            first = cc.fence.read_fence(root)["deadline"]
+            w.env.t += 500
+            ctl.guard("a network call")
+            self.assertEqual(cc.fence.read_fence(root)["deadline"], first + 500)
+            ctl.release_fence()
+            ctl.guard("another")
+            self.assertIsNone(cc.fence.read_fence(root))       # a release is deliberate: guard never re-takes it
+            self.assertEqual(ctl.refresh_fence(), "not held")
+            self.assertEqual(ctl.startup_fence(), "held")
+            w.env.night_labels = ["com.joulewise.night.w1"]
+            ctl.release_fence()
+            self.assertEqual(ctl.startup_fence(), "night")      # a loaded v4 window: the queue is ceded
+            self.assertIsNone(cc.fence.read_fence(root))
+
+
 if __name__ == "__main__":
     unittest.main()

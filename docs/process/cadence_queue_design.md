@@ -665,7 +665,8 @@ The controller replaces the per-span work order (the "Start and check", "Run" an
 |---|---|
 | `STANDING.json` | `joulewise.cadence_standing.v1`, closed schema. **Hand gates are never declared: they are derived** (15.3). Lead records: `gate_records` and `dispositions`. Keys: (1) `queues`: counted queues in priority order with their role (`standing`/`smoke`); (2) per kit sha256: `source` (`commit`, `path`), line 1 and line 2 records, and a batch-window rule (`none`, `rl172`, `HH:MM-HH:MM`); (3) `hand_gates`: extra named gates; (4) `gate_records`: the lead's `release`/`hold` per (plan id, gate); (5) `prior_spans`: hand-armed spans with their kit sha256 and roster (so their hand gates are derived like any other), t0, close and desk-final evidence; (6) `withdrawn`; (7) `dispositions`: `cleared` lifts a desk hold, `rerun`/`withdrawn` takes a span out of line 9's count; (8) v4 `sessions`; (9) `fallback`: F2 queues, or the F0 item; (10) `freeze2` |
 | queue files | `joulewise.cadence_queue.v1`; validated with the kits by hash and `qual_roster_problems`; append-only over their whole history |
-| `watcher-stamp.json` | `joulewise.cadence_watcher_stamp.v1`; must name the configured watcher |
+| `watcher-stamp.json` | `joulewise.cadence_watcher_stamp.v1`; must name the configured watcher (only with `watcher_kind: stamp`, RL-173 C.5) |
+| `q1/<plan_id>.json` | the lead's RL-158 Q1 completion record, `joulewise.cadence_q1_record.v1` (RL-173 E; FORMAT section 6) |
 | `sessions/READY-<id>.json`, `sessions/DONE-<id>.json` | a v4 session READY, and its end |
 
 **Elsewhere:**
@@ -673,7 +674,10 @@ The controller replaces the per-span work order (the "Start and check", "Run" an
   with the audit branch in one fetch.
 - **The owner's open issues:** `gh issue list --author mpmdw --limit 1000`. A full page is unreadable.
 - **The host's receipt census:** item 331's census, which also lists every campaign receipt under the output root.
-- **The journal-copy markers:** `/Users/Shared/JouleWise/desk-copy/<plan_id>.ok`.
+- **The offload markers:** `/Users/Shared/JouleWise/desk-copy/<plan_id>.ok`, typed (15.13; RL-173 A).
+- **The Actions watcher's latest completed run** (`watcher_kind: actions`), through the API (15.13; RL-173 C.4).
+- **The MBP desk's own verdicts:** local refs `refs/heads/cadence-desk-mbp/<plan_id>`, signed by
+  `cadence-controller` (15.13; RL-173 B).
 
 **The controller's memory.** It keeps the audit tip it last read and each queue's first commit and spans. A tip
 that does not descend from the last one read halts (`AUDIT_REWRITTEN`). So does a queue whose first commit or
@@ -692,9 +696,10 @@ already-read spans changed (`QUEUE_REWRITTEN`). Either one is cleared only by `a
    - **t0.** The recorded t0 is the arm child's own clock, then the runner's receipt `started` (Sol 4; Mythos
      F10, F19).
 2. **Line 9 across queues.** Campaign spans are counted in machine order (prior plus controller). Every span up
-   to n-2 must count as final by `desk_final.counts_as_final` on its signed verdict, anchored to the
-   `manifest_sha256` this controller published. A `rerun` or `withdrawn` disposition takes a span out of the count
-   (Mythos F8).
+   to n-2 must count as final by `desk_final.counts_as_final` on its signed verdict (the MBP desk's or the
+   off-host desk's), anchored to the `manifest_sha256` this controller published, and, on a v1.1 kit, must have the
+   lead's Q1 completion record (`K2_Q1_DEBT`; RL-173 E). A `rerun` or `withdrawn` disposition takes a span out of
+   the count (Mythos F8).
 3. **Expiry.** Seven days from the queue file's **first** commit, or `expires_at` if that is sooner. An append
    never renews (Mythos F13).
 4. **Smoke and pilots.** A span holding the kit's first leg is that kit's pilot.
@@ -716,14 +721,17 @@ already-read spans changed (`QUEUE_REWRITTEN`). Either one is cleared only by `a
      `check-heartbeat`, whose failure is a page (Mythos F15). A dead controller's standing fence expires into the
      watchdog's `desk_fence_stale` notice.
 7. **Fresh evidence, twice.** Every authority is read before preparation and **again after the arm proof**:
-   - the audit branch, queues, kits, verdicts, sessions and watcher;
-   - the issues, the census and the copy marker.
+   - the audit branch, queues, kits, verdicts (both desks), Q1 records, sessions and watcher;
+   - the issues, the census and the offload marker.
 
    The selector must choose the same span again, or nothing arms (Sol 4).
    - **Vetoes.** Any open owner directive starting STOP/NO/HALT/VETO halts, as does a `cadence-stop` issue. A
      failed read is a wait, never "no veto".
    - **The host clock.** It must be within 120 s of the server's `Date` (Mythos F23).
-   - **The stamp.** The watcher stamp's commit is bound into the arm record.
+   - **The watcher (RL-173 C).** With the Actions watcher, each arm reads its latest completed run through the API;
+     it must have succeeded and have started after the previous close (`WATCHER_NOT_NEWER` is a wait). With the
+     Air's hand stamp, one observation under 24 h old may serve several arms, and each arm re-reads it. Either is
+     bound into the arm record.
 8. **Records and network.**
    - **The transition record.** `transition.json` (FORMAT section 1) is the per-span transition record, and it
      travels in the signed bundle commit. `transitions.jsonl` keeps every arm intent, arm, adoption, close, push
@@ -787,27 +795,40 @@ halts (`GATE_DISAGREEMENT`).
 - **Night agents.** A loaded `com.joulewise.night*` agent (a W1, C or T window) also silences the controller.
 - **It never launches a session.**
 
-### 15.7 Who wakes whom, and the handoffs (Sol 15; Mythos F14)
+### 15.7 Who wakes whom, and the handoffs (Sol 15; Mythos F14; RL-173 E)
 
-- **The standing fence.** While waiting with nothing to report, the controller holds its own desk fence, which
-  the watchdog honours. A page releases it. Halts and v4 pages block until acknowledged. Informational pages
-  (`QUEUE_EMPTY`, `FALLBACK_F0_DUE`, `WAIT_STALL`) keep the fence released until acknowledged.
+- **The standing fence, continuous (RL-173 E).** The controller holds its own desk fence, which the watchdog
+  honours, from startup through arm and close while a queue is live:
+  - **startup:** `startup_fence` takes it before the first tick's network work, unless a span it armed is live
+    (that launch fence holds the host), an unacknowledged page has handed the host to the magistrate, or a v4
+    window is loaded;
+  - **every tick and arm stage** renews its deadline (`refresh_fence`), so a long fetch never lets it lapse into
+    the watchdog's stale removal; an arm whose fence is gone before the intent halts and writes nothing;
+  - **the arm:** the launcher replaces it atomically (below);
+  - **the close:** the tick that sees the launch fence gone takes it before anything else, and holds it through
+    the push, the MBP desk and the offload.
+
+  A page releases it: that is the deliberate handoff to the magistrate, which wakes only on a page. Halts and v4
+  pages block until acknowledged. Informational pages (`QUEUE_EMPTY`, `FALLBACK_F0_DUE`, `WAIT_STALL`) keep it
+  released until acknowledged. `magistrate_watchdog.py` is not touched; the agent census in the arm proof is the
+  validity backstop.
 - **The arm handoff is atomic.** The arm child hides only the controller's own fence from the launcher's busy
   check, so the launcher's `write_fence` (an `os.replace` under the fence lock) replaces it. The fence file names
   a live owner at every instant. The launcher's bytes are unchanged; this is a call-time substitution in the arm
   child, which the gate should weigh.
-- **The close handoff is not atomic.** The LaunchAgent's wrapper unlinks its fence. The controller sleeps on a
-  kqueue event on the custody directory and takes its standing fence on the wake. The residual is that event
-  latency (milliseconds). The arm proof's agent census still waits out any activation that slipped in.
+- **The close handoff is not atomic.** The LaunchAgent's wrapper unlinks its fence. The controller registers its
+  wake (a kqueue on the custody directory) before its last observation of the live fence, and takes its standing
+  fence on the wake. The residual is that event latency (milliseconds; Mythos measured 0.1 to 0.2 ms), accepted by
+  RL-173 E with the agent census as the backstop.
 - **Every wait is bounded (Mythos F7).** It pages `WAIT_STALL` after 30 min (an agent, a refused plan, a missing
   copy marker, a foreign run, a failed read) or 2 h 30 min (anything else). That includes the waits inside the
   arm path.
 
 ### 15.8 The journal-copy gate and foreign runs (Sol 10, 11; Mythos F18)
 
-- **The copy gate.** When the host's newest receipt is a campaign span's, its `<plan_id>.ok` marker must exist
-  and be non-empty before another arm (item 331's copy gate). The lead writes the marker after a hash-verified
-  copy.
+- **The copy gate (RL-173 A).** When the host's newest receipt is a campaign span's, its offload marker must exist
+  and verify before another arm (15.13). Absent: `JOURNAL_COPY`, a wait. Unverified, a `.failed` file, or the
+  controller's own offload step failed: `OFFLOAD_FAILED`, a halt. Either is a global reason, so F0 is held too.
 - **Unknown receipts.** A campaign receipt under the output root that no ledger knows halts
   (`UNKNOWN_CAMPAIGN_RECEIPT`). This is the switch-over day's hand-armed spans missing from `prior_spans`.
 - **Foreign runs.** When another run's fence goes, its close is recorded as observed with its restore
@@ -843,11 +864,11 @@ no verdict is hand-written.
 ### 15.11 What it does not do
 
 - It runs no unit tests on the MBP (RL-172 (i) row 4).
-- It reads no thermal journal: the RL-150 R1 and RL-158 Q1 prints stay hand work, and are the desk's hand gate.
+- It reads no thermal journal: the RL-150 R1 and RL-158 Q1 prints stay hand work. The Q1 print is counted in
+  line 9's debt by the lead's typed record (RL-173 E).
 - It does not decide a re-run, a re-date, a disposition, a gate release or an F0 launch.
-- **Watcher stamps.** It does not demand a fresh watcher observation per arm. RL-149 line 7 reads "live within
-  the last 24 h", and the stamp is re-read at every arm and bound into the record. Whether one observation may
-  serve several arms is put to the research lead (Sol 12).
+- **Watcher stamps.** With the Air's stamp it does not demand a fresh observation per arm: RL-173 C.5 lets one
+  observation under 24 h old serve several arms, each re-reading it.
 
 ### 15.12 The second gate (Sol: 5 HIGH, 7 MED; Mythos: N1 to N6)
 
@@ -873,9 +894,60 @@ no verdict is hand-written.
 
 **Left to the desk (#799): Sol R4, R5 and R11; Mythos N6, N12 and N13.**
 
-**Left to the research lead:**
-- **Sol R10 (watcher reuse).** One observation under 24 h old may serve several arms under RL-149 line 7. RL-172 (g) 7's "never reused" reads the other way.
-- **Sol R12 (Q1 print).** Whether the print, done by hand, needs a completion record or is a print with no hold.
+**Ruled since by RL-173** (15.13): Sol R10 (C.4, C.5), Sol R12 (E, the Q1 record), Sol R7 (E, the continuous fence;
+the watchdog is not touched).
 
-**The remaining close-side handoff.** The window runs from the LaunchAgent wrapper's unlink to the controller's write. Closing it needs `scripts/magistrate_watchdog.py` to honour a controller reservation in `desk_fence_active` and `_launch_fence`. That file is in W1's registered closure (`docs/align/v4/dynamic_closure_trace.json`, `configs/campaigns/align_v4/registration/registration_receipt.json`), so the change is a registration change and needs a ruling.
+### 15.13 RL-173's owner list for the controller builder (fix round 4)
 
+Research lead RL-173 (Sun 15 Nov 11:58). Each item, and where it is enforced:
+
+| RL-173 | What the controller does | Where |
+|---|---|---|
+| E, watchdog interlock (Sol R7) | The fence is held continuously from startup through arm and close while a queue is live (15.7); the wake is registered before the last observation. `magistrate_watchdog.py` is not touched | `startup_fence`, `refresh_fence`, `run_loop`, `monitor`, `close` |
+| C.4 (Sol R10) | `watcher_kind: actions`: each arm (both authority reads) reads the watcher workflow's latest completed run with `gh api repos/<slug>/actions/workflows/<watcher_name>/runs?status=completed&per_page=1`. The run must be `completed`/`success`, the configured workflow file, started after the latest close of anything on the host and within 24 h, and not after the host clock. A failed read is `WATCHER_UNREADABLE` (retry); not newer, `WATCHER_NOT_NEWER` (wait); failed or malformed, `WATCHER_FAILED` (halt); none, `WATCHER_RUN_MISSING` (halt). The run is bound into the intent; the lease is its start plus 24 h | `read_watcher_run`, `law.actions_watcher_reasons` |
+| C.5 | `watcher_kind: stamp`: the Air's stamp, re-read at every arm; one observation under 24 h may serve several arms | `law.watcher_reasons` |
+| E, the draw (Sol R11) | The desk's v3 draw (FORMAT section 5): per span, append-stable, first of each group always | #799 |
+| E, Q1 (Sol R12) | The lead's typed record `<records_dir>/q1/<plan_id>.json` on the audit branch, validated by `desk_final.validate_q1_record`; span k's record before span k+2 arms (`K2_Q1_DEBT`), nothing sooner. Invalid, or committed before its span closed: `Q1_RECORD_INVALID` (halt). A kit that cannot be read owes one | `read_audit`, `law.apply_q1`, `law.k2_reasons` |
+| E, L002 timeout | A span that raised the L002 gate and whose L002 timed out at G0 (from the packed summaries; for a prior span, its receipt; unknown counts as timed out) halts every arm, fallback included (`L002_TIMEOUT`), until the lead's `release` record for that span's L002 gate | `close` (`g0_timeouts`), `law.l002_reasons` |
+| B, the desk | In the close interval, after the push, the controller runs `cadence_desk.py final` from its own checkout on the signed bundle commit, with its own records as history, and signs the verdict with its key under `refs/heads/cadence-desk-mbp/<plan_id>` (local). Either desk's final verdict counts for line 9; either's hold holds; a difference on the automatic part (`desk_final.compare_verdicts`) is `DESK_DISAGREEMENT` (halt, to the research lead) unless the lead records `cleared`. A desk run that left no verdict is retried on the next tick | `desk_close`, `law.apply_verdicts` |
+| A.2, A.7 | The offload marker contract below; absent is a wait, unverified or failed a halt; F0 held too | `read_marker`, `law.offload_marker_problems`, `law.census_reasons` |
+| A.3 | The maintenance line always lists `bird`, `cloudd`, `fileproviderd` | `MAINTENANCE` |
+
+**The offload interface (consumed, not built here).** The permanent offload tool is built on
+`ops/2026-11-15-air-independence`. The controller consumes it by this contract:
+
+- **Invocation (optional).** With `offload_argv` in the config (an absolute program; placeholders `{plan_id}`,
+  `{output}` (the span's output directory, read-only to the tool) and `{marker}` (the marker path)), the
+  controller runs it once in the close interval, after the push and the MBP desk, with a 3,600 s timeout, and
+  records its exit code (`close.json` `offload`). A non-zero exit with no verified marker is `OFFLOAD_FAILED`.
+  With `offload_argv: null` another process runs the tool; the gate is the same.
+- **The marker** `<copy_marker_dir>/<plan_id>.ok`, a regular file under 64 KiB, created once when the upload is
+  verified, JSON with exactly these keys:
+
+  ```json
+  {"schema": "joulewise.offload_marker.v1", "plan_id": "cq-...-a1", "source": "<span output dir>",
+   "manifest_sha256": "<plaintext manifest sha256>", "manifest_files": 226,
+   "ciphertext_sha256": "<sha256 of the uploaded ciphertext>", "ciphertext_bytes": 110295072,
+   "provider": "<provider>", "remote_path": "<object path in the private folder>",
+   "upload": {"confirmed": true, "readback": "sha256" | "size",
+              "value": "<the provider's read-back hash or size; must equal the ciphertext's>",
+              "evidence": "<the provider's confirmation that the upload finished>"},
+   "verified": true, "key_second_copy": "<where the key's second copy is>" | null,
+   "written_at": "<ISO 8601 with offset>"}
+  ```
+
+  `key_second_copy` may be null only until 2026-11-16 11:58 PST (A.1's 24 h). A failed offload may leave
+  `<plan_id>.failed` (any content), which holds like a bad marker. The controller opens nothing else the tool
+  writes; the marker carries no denied key.
+- **The Actions watcher.** The controller reads the workflow named by `watcher_name` (a file name, e.g.
+  `mbp-watcher.yml`) through the runs API. A run concludes `success` when it checked the host's results ref
+  (alarm or not); the alarm itself is the watcher's own issue (C.1-C.3).
+
+**Install additions:** `controller_signers` (an allowed-signers file naming `cadence-controller` with the
+controller's public key), `watcher_kind`, `offload_argv`. The deterministic desk needs no new key.
+
+**Synthetic runs (RL-172 (i) row 5)** add `actions_watcher`, `offload`, `l002_timeout` and `fence`; every
+scenario's close runs the MBP desk, and the Air's verdict is its off-host re-check.
+
+**Left open, for the research lead:** Mythos N12 (the reference record hash is bound by the capture run's name
+only; the frozen pins record no hash).
