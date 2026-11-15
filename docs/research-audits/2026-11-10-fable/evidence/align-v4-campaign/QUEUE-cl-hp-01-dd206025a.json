@@ -1,0 +1,26 @@
+{
+  "schema": "joulewise.cadence_queue.v1",
+  "queue_id": "cq-cl-hp-01",
+  "expires_at": "2026-11-21T23:59:00-08:00",
+  "halt": null,
+  "standing_notice": null,
+  "spans": [
+    {
+      "seq": 1,
+      "span_id": "hp-01-s01",
+      "block_id": "hp-01",
+      "kit": {
+        "path": "docs/process/cadence/kits/cl-hp-01.json",
+        "sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003"
+      ],
+      "attempt": 1,
+      "not_before": "2026-11-15",
+      "rerun_of": null
+    }
+  ]
+}
