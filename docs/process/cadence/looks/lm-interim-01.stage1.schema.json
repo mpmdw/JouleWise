@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "joulewise.cadence_look_stage1.interim.v1",
+  "title": "Interim look, stage 1 output (lm-interim-01): inclusion, roster, rates, start medians and the onset model. Opens no energy.",
+  "description": "DRAFT, part of freeze 1 (RL-166 Q8; RL-166 'Amends': freeze 1 gains the stage-1 schema). Stage 1 opens inclusion and journal files only. This output is committed with its sha256 before stage 2 opens a file; stage 2 takes it by that hash as its only roster and refuses a mismatch. Closed at every level. It carries no energy, power or meter value: stamps, counts, temperatures, fan speeds, verdicts and the onset model only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "look_id", "manifest_sha256", "span_ledger_sha256", "code_sha256", "numpy_version", "legs", "span_trailers", "counts", "tripwires", "day_map", "rates", "start_medians", "calibrated_ranges", "onset", "realized_prompt_tokens", "dry_run"],
+  "properties": {
+    "schema": {"const": "joulewise.cadence_look_stage1.interim.v1"},
+    "look_id": {"const": "lm-interim-01"},
+    "manifest_sha256": {"$ref": "#/$defs/sha"},
+    "span_ledger_sha256": {"$ref": "#/$defs/sha"},
+    "code_sha256": {"type": "object", "additionalProperties": {"$ref": "#/$defs/sha"}, "minProperties": 1},
+    "numpy_version": {"type": "string"},
+    "dry_run": {"type": "boolean", "description": "true for the RL-166 section 2 item 12 dry run on dev-01 to dev-04; such an output is never a roster for stage 2"},
+    "legs": {
+      "description": "Every leg of every rostered span, included or not (RL-149 section 2.4: every attempt stays in custody). The roster stage 2 reads is the set with included true and role fit or describe.",
+      "type": "array",
+      "items": {"type": "object", "additionalProperties": false,
+        "required": ["key", "span_id", "block_id", "leg_id", "leg_type", "role", "day", "prompt_tokens_nominal", "prompt_tokens_realized", "g0_role", "rules", "rule_detail", "included", "marks", "start_reading", "bundle"],
+        "properties": {
+          "key": {"type": "string", "pattern": "^[a-z0-9-]+:[a-z0-9-]+:[LH]\\d{3}$", "description": "block:span:leg, unique"},
+          "span_id": {"type": "string"}, "block_id": {"type": "string"}, "leg_id": {"type": "string", "pattern": "^[LH]\\d{3}$"},
+          "leg_type": {"enum": ["A", "H"]},
+          "role": {"enum": ["fit", "describe"]},
+          "day": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+          "prompt_tokens_nominal": {"type": "integer"},
+          "prompt_tokens_realized": {"type": ["integer", "null"]},
+          "g0_role": {"enum": ["own", "capture", "consumer", null]},
+          "rules": {"type": "object", "additionalProperties": false,
+            "required": ["ran_to_cap", "g0_released", "sidecar_coverage", "km003c_clean", "not_a_contaminated_attempt", "block_power_mode"],
+            "properties": {
+              "ran_to_cap": {"type": "boolean"}, "g0_released": {"type": "boolean"},
+              "sidecar_coverage": {"type": "boolean"}, "km003c_clean": {"type": "boolean"},
+              "not_a_contaminated_attempt": {"type": "boolean"}, "block_power_mode": {"type": "boolean"}}},
+          "rule_detail": {
+            "description": "Rules 3 and 4 as inclusion_34.py reports them: fractions, gaps in seconds, the stop reason. Stamps and counts only.",
+            "type": "object", "additionalProperties": false, "required": ["rule3", "rule4"],
+            "properties": {
+              "rule3": {"type": "object", "additionalProperties": false,
+                "required": ["sample_fraction", "max_interval_s", "pm_max_gap_s", "pm_gap_limit_s", "reasons"],
+                "properties": {"sample_fraction": {"type": ["number", "null"]}, "max_interval_s": {"type": ["number", "null"]},
+                  "pm_max_gap_s": {"type": ["number", "null"]}, "pm_gap_limit_s": {"type": ["number", "null"]},
+                  "reasons": {"type": "array", "items": {"type": "string"}}}},
+              "rule4": {"type": "object", "additionalProperties": false,
+                "required": ["coverage_fraction", "max_gap_s", "streams", "reasons"],
+                "properties": {"coverage_fraction": {"type": ["number", "null"]}, "max_gap_s": {"type": ["number", "null"]},
+                  "streams": {"type": "array", "items": {"type": "string"}},
+                  "reasons": {"type": "array", "items": {"type": "string"}}}}}},
+          "included": {"type": "boolean"},
+          "marks": {"type": "array", "items": {"enum": ["reference from a redo", "reference from an excluded leg"]}},
+          "start_reading": {"type": "object", "additionalProperties": false,
+            "required": ["status", "tf08_c", "fan_rpm", "tv0h_excess_c"],
+            "properties": {"status": {"enum": ["valid", "missing_or_stale", "out_of_state"]},
+              "tf08_c": {"type": ["number", "null"]}, "fan_rpm": {"type": ["number", "null"]}, "tv0h_excess_c": {"type": ["number", "null"]}}},
+          "bundle": {"type": "string", "description": "the accepted attempt's bundle path in the custody copy; stage 2 opens only these"}
+        }}
+    },
+    "span_trailers": {
+      "description": "RL-166 Q7: the span's KM003C trailer counts print here and decide nothing.",
+      "type": "array", "items": {"type": "object", "additionalProperties": false,
+        "required": ["span_id", "stream", "polls", "empties", "bad", "usb_errors", "stop_reason"],
+        "properties": {"span_id": {"type": "string"}, "stream": {"type": "string"}, "polls": {"type": ["integer", "null"]},
+          "empties": {"type": ["integer", "null"]}, "bad": {"type": ["integer", "null"]}, "usb_errors": {"type": ["integer", "null"]},
+          "stop_reason": {"type": ["string", "null"]}}}
+    },
+    "counts": {
+      "type": "object", "additionalProperties": false, "required": ["by_block", "by_cell", "by_g0_role"],
+      "properties": {
+        "by_block": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+        "by_cell": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}},
+        "by_g0_role": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}}}
+    },
+    "tripwires": {
+      "description": "RL-166 Q8's five. Any fired: stage 1 goes to the research lead before stage 2.",
+      "type": "object", "additionalProperties": false,
+      "required": ["dev_legs_included_below_45", "calendar_days_below_3", "cell_included_below_10", "start_reading_invalid_above_10pct", "hp01_included_below_9"],
+      "properties": {
+        "dev_legs_included_below_45": {"$ref": "#/$defs/tripwire"},
+        "calendar_days_below_3": {"$ref": "#/$defs/tripwire"},
+        "cell_included_below_10": {"$ref": "#/$defs/tripwire"},
+        "start_reading_invalid_above_10pct": {"$ref": "#/$defs/tripwire"},
+        "hp01_included_below_9": {"$ref": "#/$defs/tripwire"}}
+    },
+    "day_map": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}},
+      "description": "calendar day -> leg keys; a leg's day is its span's t0 date (RL-155a section 1.2)"},
+    "rates": {"type": "object", "additionalProperties": false, "required": ["r_p_tokens_per_s", "r_d_tokens_per_s", "per_cell"],
+      "properties": {"r_p_tokens_per_s": {"type": "number"}, "r_d_tokens_per_s": {"type": "number"},
+        "per_cell": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": false,
+          "required": ["r_p_tokens_per_s", "r_d_tokens_per_s"],
+          "properties": {"r_p_tokens_per_s": {"type": "number"}, "r_d_tokens_per_s": {"type": "number"}}}}}},
+    "start_medians": {"type": "object", "additionalProperties": false, "required": ["tf08_c", "fan_rpm", "tv0h_excess_c"],
+      "properties": {"tf08_c": {"type": "number"}, "fan_rpm": {"type": "number"}, "tv0h_excess_c": {"type": "number"}}},
+    "calibrated_ranges": {"type": "object", "additionalProperties": false, "required": ["tf08_c", "fan_rpm", "tv0h_excess_c"],
+      "properties": {"tf08_c": {"$ref": "#/$defs/range"}, "fan_rpm": {"$ref": "#/$defs/range"}, "tv0h_excess_c": {"$ref": "#/$defs/range"}}},
+    "onset": {
+      "description": "RL-166 Q4: censored-normal maximum likelihood on journal and powermetrics state only. tau_hat = max(0, linear predictor).",
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "predictors", "coefficients", "sigma_s", "n_uncensored", "n_censored", "n_left_out", "days_uncensored", "lodo_rmse_s", "heldout_censored_below_tau", "count_only_cut"],
+      "properties": {
+        "status": {"enum": ["estimable", "not_estimable"]},
+        "predictors": {"const": ["start_tf08", "start_fan_rpm", "start_tv0h_excess_over_soak_reference", "prefill_seconds_from_counts"]},
+        "coefficients": {"type": ["object", "null"], "additionalProperties": {"type": "number"}},
+        "sigma_s": {"type": ["number", "null"]},
+        "n_uncensored": {"type": "integer"}, "n_censored": {"type": "integer"},
+        "n_left_out": {"type": "object", "additionalProperties": false, "required": ["start_out_of_state", "state_unobserved"],
+          "properties": {"start_out_of_state": {"type": "integer"}, "state_unobserved": {"type": "integer"}}},
+        "days_uncensored": {"type": "integer"},
+        "lodo_rmse_s": {"type": ["number", "null"]},
+        "heldout_censored_below_tau": {"type": "integer"},
+        "count_only_cut": {"type": "object", "additionalProperties": false, "required": ["rule", "fixed_s"],
+          "properties": {"rule": {"enum": ["tau_hat_less_twice_lodo_rmse", "fixed_116_s"]}, "fixed_s": {"type": ["number", "null"]}}}
+      }
+    },
+    "realized_prompt_tokens": {
+      "description": "RL-158 Q5: legs whose realized prompt count is more than 5 % from nominal.",
+      "type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["key", "nominal", "realized"],
+        "properties": {"key": {"type": "string"}, "nominal": {"type": "integer"}, "realized": {"type": "integer"}}}
+    }
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "count": {"type": "object", "additionalProperties": false, "required": ["legs", "included"],
+      "properties": {"legs": {"type": "integer"}, "included": {"type": "integer"}}},
+    "tripwire": {"type": "object", "additionalProperties": false, "required": ["value", "threshold", "fired"],
+      "properties": {"value": {"type": ["number", "null"]}, "threshold": {"type": "number"}, "fired": {"type": "boolean"}}},
+    "range": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+  }
+}
