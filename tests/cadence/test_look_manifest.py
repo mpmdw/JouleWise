@@ -677,8 +677,14 @@ class RL166b(Base):
 
     def test_the_dictated_sentences_are_in_the_manifest(self):
         lim = {x["id"]: x["text"] for x in draft()["fit"]["stated_limits"]}
+        self.assertIn("0.421 of the time", lim["qualified_pass_rate"])
         self.assertIn("about 4 times in 10", lim["qualified_pass_rate"])
-        self.assertIn("about 1 time in 12", lim["qualified_pass_rate"])
+        self.assertIn("0.04 to 0.69 over the five worlds", lim["qualified_pass_rate"])
+        self.assertIn("about 1 time in 10.5", lim["qualified_pass_rate"])
+        note = next(x for x in draft()["fit"]["stated_limits"] if x["id"] == "qualified_pass_rate")["note"]
+        self.assertNotIn("replaces", note)
+        ev = LOOKS / "evidence" / "2026-11-14-mythos-passrate-rerun-REPORT.md"
+        self.assertIn(lm.sha256_file(ev), note)
         self.assertIn("It is not evidence that the term is wrong", lim["qualified_pass_rate"])
         self.assertIn("3 % of its 439 s value on a 75 s turn", lim["half_t2_limit"])
         self.assertIn("under about 150 s, H is the onset step alone", lim["half_t2_limit"])

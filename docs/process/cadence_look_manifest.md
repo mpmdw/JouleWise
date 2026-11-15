@@ -234,7 +234,7 @@ custody remains the check of the real layout.
   - `onset.estimable_when` takes B-3, B-4 and B-5, plus the 0.30 censored-share report.
   - The days tripwire is `days_below_4`.
 - **Sentences RL-166b dictates.** They sit in `fit.stated_limits`, and the validator requires each id:
-  - what `yes` means, and its pass rate (about 4 in 10 for a correct model, about 1 in 12 with no heat term), and that `no` is not evidence against the term;
+  - what `yes` means, and its pass rate (0.421 for a correct model, about 4 in 10, 0.04 to 0.69 over five worlds; 0.095 with no heat term, about 1 in 10.5), and that `no` is not evidence against the term;
   - the pooled error;
   - the limit of ½T² (3 % of its 439 s value at 75 s; under about 150 s, Ĥ is the onset step alone);
   - the partial-correction share;
@@ -242,7 +242,7 @@ custody remains the check of the real layout.
   - δ's standard error;
   - the joint range of warm series turns;
   - token ratios.
-  The pass-rate sentence carries a `note`: the lead's re-run with B-1's column replaces the figures before item 11.
+  The pass-rate figures come from the re-run with B-1's column (Mythos, Sat 14 Nov 22:19 PST, 40,000 synthetic campaigns). The report is held byte-identical at `docs/process/cadence/looks/evidence/2026-11-14-mythos-passrate-rerun-REPORT.md`, and the sentence's `note` pins its sha256. The correct-model rate is inside RL-166b's 0.25 to 0.60 band, so nothing went to the research lead.
 - **Rules deferred to freeze 2.** They sit in `freeze2.deferred_rules`, and the validator requires each id:
   - κ's signs;
   - the SD_j covariance term, which is the larger of the leg-clustered SE and the day-jackknife over P-1;

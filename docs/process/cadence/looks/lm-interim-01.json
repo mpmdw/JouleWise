@@ -638,8 +638,8 @@
       },
       {
         "id": "qualified_pass_rate",
-        "text": "In simulation at the design's assumed spreads, a correct model gets yes about 4 times in 10 (0.03 to 0.66 over the worlds tried) and a fit with no heat term about 1 time in 12. So no is the more likely word for a correct model. It is not evidence that the term is wrong, and no text may read it that way.",
-        "note": "These figures are for RL-166 as written. The lead's re-run of q4b_gates.py with RL-166b B-1's column (synthetic only) replaces them before the manifest is committed (RL-166 §2 item 11); outside 0.25 to 0.60 in the default world goes to the research lead first.",
+        "text": "In simulation at the design's assumed spreads, a correct model gets yes 0.421 of the time (± 0.0025; about 4 times in 10; 0.04 to 0.69 over the five worlds tried) and a fit with no heat term 0.095 of the time (± 0.0015; about 1 time in 10.5). So no is the more likely word for a correct model. It is not evidence that the term is wrong, and no text may read it that way.",
+        "note": "Figures from the RL-166b pass-rate re-run with B-1's column: Mythos 5.2 seat, Sat 14 Nov 2026 22:19:48 PST, 40,000 synthetic campaigns in the default world (two seeds of 20,000), 20,000 per other world; no measurement opened. Held at docs/process/cadence/looks/evidence/2026-11-14-mythos-passrate-rerun-REPORT.md (sha256 f1c6bc323d736bb13483a1783266d652f6eea2d347b93ed6e5a307ae614773aa). The correct-model rate lies inside RL-166b's 0.25 to 0.60, so nothing went to the research lead.",
         "cite": [
           "RL-166b §2.1"
         ]
