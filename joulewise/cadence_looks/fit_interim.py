@@ -827,7 +827,9 @@ def stage1(look_input, input_sha256, code_sha256=None):
               "by_cell": cnt(lambda L: L["cell_prompt_tokens"], fit_keys),
               "by_g0_role": cnt(lambda L: L["g0_role"], fit_keys),
               "by_day": cnt(lambda L: L["day"], fit_keys),
-              "excluded_by_rule": {r: sum(1 for k in order if not legs_d[k]["inclusion"][r]) for r in RULES}}
+              # type-A legs only: a type-T leg is never judged at this look (Mythos N9)
+              "excluded_by_rule": {r: sum(1 for k in order if legs_d[k]["leg_type"] == "A"
+                                          and not legs_d[k]["inclusion"][r]) for r in RULES}}
     return {
         "schema": STAGE1_SCHEMA, "look_id": LOOK_ID, "input_sha256": input_sha256,
         "code_sha256": dict(code_sha256 or {}), "numpy_version": np.__version__,

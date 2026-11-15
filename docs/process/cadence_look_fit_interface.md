@@ -199,6 +199,7 @@ level R.
   "look_id": "lm-interim-01",
   "input_sha256": hex64,                  # sha256 of the level-R file bytes
   "synthetic": bool,                      # copied from level R
+  "manifest_sha256": hex64, "allow_draft": bool,   # round 2: the verified manifest; the run mode
   "code_sha256": {"<path>": hex64, ...},
   "numpy_version": str,
   "roster": { "spans": [Span minus marks, + "marks"], "fit_days": [ "YYYY-MM-DD", ... ] },
@@ -320,6 +321,7 @@ contract between the two.
   "look_id": "lm-interim-01",
   "stage1_sha256": hex64, "code_sha256": {path: hex64}, "numpy_version": str,
   "synthetic": bool,                      # copied from level D
+  "manifest_sha256": hex64, "allow_draft": bool,   # round 2: the verified manifest; the run mode
   "tau_uncertainty_propagated": false,    # RL-166b: the onset's scatter is in the delta column; its coefficients'
                                           # uncertainty is not propagated
   "delta_column": "kept" | "dropped_onset_not_estimable",
@@ -497,6 +499,25 @@ directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwi
 `manifest.verify_pins(manifest, repo, allow_draft=..., running=(fit_interim.py, cadence_look_run.py))` before any
 input is opened. Stage 2 takes `--looks` and calls `manifest.require_stage1_committed(looks, "lm-interim-01",
 stage1_sha256)` after the stage-1 hash check and before any energy is opened.
+
+**Round 2 (cold seats on 632f58fb8).**
+- **Level D and level O** both gain top-level `manifest_sha256` (the manifest verify_pins checked) and `allow_draft`
+  (bool). `code_sha256` records every pinned file the stage ran: fit_interim.py, cadence_look_run.py, stage 2's
+  step 3 file, and fit.dependencies except `configs/align/v4/r1_runtime.json`. Before writing, each stage refuses if
+  `manifest.unpinned_loaded_modules` names any module.
+- **`--allow-draft`** refuses input that is not synthetic (stage 1: every receipt's `"synthetic": true`, or the level-R
+  flag; stage 2: the stage-1 file's flag). `stage1 --input`, `stage2 --energy` and `stage2 --looks` run only with it.
+- **Commit gate.** Without `--allow-draft`, stage 2 calls `manifest.require_stage1_committed(repo, look_id,
+  stage1_sha256, stage1_doc=..., ledger_ref=...)` on the committed ledger (`--ledger-ref`). With it, a scratch
+  LOOKS row naming the stage-1 hash at `stage1_committed` or later stands in.
+- **DC-in support (Sol N5).** Energy over a segment [a, b] needs a meter sample at or before a, one at or after b,
+  and no two consecutive samples between them more than 2 s apart (RL-166 Q7's rule-4 gap, judged on the interval
+  itself); otherwise stage 2 refuses. Nothing is interpolated across a longer gap or an empty stream. DC-in's
+  `coverage_min` (and so `trace_coverage`) is the fraction of each segment within half a nominal sample period of a
+  sample.
+- **Reference mark (Mythos N3).** The supplier is each consumer's `leg_summary.span_reference.leg_id` (or a
+  capture-role leg); excluded at the look, it marks the span.
+- **`counts.excluded_by_rule`** counts type-A legs only (Mythos N9).
 
 **Cold-seat fixes (5ea1bdee9).** A leg whose bundle has no readable turn is excluded (`turn: null`) when any of
 its six verdicts already fails (a G0 timeout); an included leg with no readable turn refuses. A span whose

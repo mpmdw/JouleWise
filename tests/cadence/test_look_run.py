@@ -617,3 +617,210 @@ class PinsAndCommit(unittest.TestCase):
         rc, _, err = run_cli(["stage2", "--stage1", self.s1p, "--stage1-sha256", self.h, "--energy", self.ep,
                               "--out", os.path.join(self.d, "y.json"), "--looks", looks_file(self.h)])
         self.assertEqual(rc, 0, err)
+
+
+def _meter_lines(t0, n, step=0.5, per_poll=2, watts=40.0, empty=lambda x: False, off=10**18):
+    """A KM003C stream as the monitor writes it (compact lines). Polls whose time is `empty` carry n:0, p:""."""
+    sample = struct.Struct("<HHiiHHHH")
+    raw0 = int(round(t0 * 1e9)) - off
+    lines = [json.dumps({"k": "h", "status": "streaming", "rate_idx": 0, "poll_s": step * per_poll,
+                         "sps": 1.0 / step, "start_raw_ns": raw0, "start_real_ns": raw0 + off},
+                        separators=(",", ":"))]
+    for j in range(0, n, per_poll):
+        x = t0 + j * step
+        rx = raw0 + int(round((j + per_poll - 1) * step * 1e9)) + 400_000
+        if empty(x):
+            lines.append(json.dumps({"k": "b", "tx": rx - 10**6, "rx": rx, "rt": rx + off, "n": 0, "p": ""},
+                                    separators=(",", ":")))
+            continue
+        raw = b"".join(sample.pack(int(round((j + i) * step * 1000)) % 65536, 0, 28_000_000,
+                                   int(round(watts / 28 * 1e6)), 0, 0, 0, 0) for i in range(per_poll))
+        lines.append(json.dumps({"k": "b", "tx": rx - 10**6, "rx": rx, "rt": rx + off, "n": per_poll,
+                                 "p": raw.hex(), "smc": {}}, separators=(",", ":")))
+    lines.append(json.dumps({"k": "t", "polls": n // per_poll, "empties": 0, "bad": 0, "usb_errors": 0,
+                             "stop_reason": "signal 15"}, separators=(",", ":")))
+    return "\n".join(lines) + "\n"
+
+
+class MeterSupport(unittest.TestCase):
+    """Sol delta N5 (HIGH): no DC-in energy across an interval without aligned samples; coverage per interval."""
+
+    def meter(self, d, streams):
+        sdir = Path(d)
+        (sdir / "hazards/meter").mkdir(parents=True, exist_ok=True)
+        for i, text in enumerate(streams, 1):
+            (sdir / f"hazards/meter/stream-{i:04d}.jsonl").write_text(text)
+        return R.MeterSpan(sdir)
+
+    def test_three_streams_middle_empty_refuses_inside_and_works_outside(self):
+        t0 = 1_790_000_000.0
+        with tempfile.TemporaryDirectory() as d:
+            m = self.meter(d, [_meter_lines(t0, 400), _meter_lines(t0 + 200, 800, empty=lambda x: True),
+                               _meter_lines(t0 + 600, 400)])
+            self.assertAlmostEqual(m.energy(t0 + 10, t0 + 100), 40.0 * 90, delta=1e-2)       # before the hole
+            self.assertAlmostEqual(m.energy(t0 + 650, t0 + 700), 40.0 * 50, delta=1e-2)      # after it
+            for a, b in ((t0 + 250, t0 + 590),     # a whole turn inside the hole (Sol's case)
+                         (t0 + 150, t0 + 250),     # hole at the interval's end
+                         (t0 + 590, t0 + 650),     # hole at its start
+                         (t0 + 150, t0 + 650)):    # partial overlap, hole inside
+                with self.assertRaisesRegex(F.LookInputError, "gap over 2 s"):
+                    m.energy(a, b)
+            self.assertAlmostEqual(m.coverage(t0 + 10, t0 + 100), 1.0, delta=1e-6)
+            self.assertLess(m.coverage(t0 + 150, t0 + 250), 0.6)
+
+    def test_short_hole_is_bridged_and_shows_in_coverage(self):
+        t0 = 1_790_000_000.0
+        with tempfile.TemporaryDirectory() as d:
+            m = self.meter(d, [_meter_lines(t0, 400, empty=lambda x: t0 + 50 <= x < t0 + 51)])
+            e = m.energy(t0 + 40, t0 + 60)                      # a 1.5 s sample gap: within rule 4's 2 s
+            self.assertAlmostEqual(e, 40.0 * 20, delta=1e-2)
+            self.assertLess(m.coverage(t0 + 40, t0 + 60), 0.96)
+            m2 = self.meter(tempfile.mkdtemp(dir=d), [_meter_lines(t0, 400, empty=lambda x: t0 + 50 <= x < t0 + 52)])
+            with self.assertRaisesRegex(F.LookInputError, "gap over 2 s"):
+                m2.energy(t0 + 40, t0 + 60)
+
+    def test_interval_beyond_the_samples_refuses(self):
+        t0 = 1_790_000_000.0
+        with tempfile.TemporaryDirectory() as d:
+            m = self.meter(d, [_meter_lines(t0, 100)])
+            with self.assertRaisesRegex(F.LookInputError, "bracketed"):
+                m.energy(t0 + 40, t0 + 60)
+            with self.assertRaisesRegex(F.LookInputError, "bracketed"):
+                m.energy(t0 - 5, t0 + 10)
+
+    def test_sol_meter_gap_case_through_the_reader(self):
+        """Sol's case on the synthetic custody: the meter split into three closed streams, the middle one empty
+        across a whole fit turn. Stage 2's reader refuses instead of interpolating; the intact span reads."""
+        c = _Custody.get()
+        s1 = F.stage1(c.li, "0" * 64)
+        L = next(x for x in s1["legs"] if x["in_energy_fit"] and x["span_id"] == "dev-01-s02")
+        ts, tl = L["segments"][0]["wall_start_s"], L["segments"][-1]["wall_end_s"]
+        with tempfile.TemporaryDirectory() as d:
+            sdir = Path(d) / L["span_id"]
+            shutil.copytree(c.root / L["span_id"], sdir)
+            src = (sdir / "hazards/meter/stream-0001.jsonl").read_text().splitlines()
+            head, polls, trailer = src[0], src[1:-1], src[-1]
+            hdr = json.loads(head)
+            off = hdr["start_real_ns"] - hdr["start_raw_ns"]
+
+            def in_gap(line):
+                rt = json.loads(line)["rt"] / 1e9
+                return ts - 10 <= rt <= tl + 10
+            a = [p for p in polls if json.loads(p)["rt"] / 1e9 < ts - 10]
+            b = [p for p in polls if in_gap(p)]
+            c_ = [p for p in polls if json.loads(p)["rt"] / 1e9 > tl + 10]
+            empty = [json.dumps(dict(json.loads(p), n=0, p=""), separators=(",", ":")) for p in b]
+            (sdir / "hazards/meter/stream-0001.jsonl").write_text("\n".join([head] + a + [trailer]) + "\n")
+            (sdir / "hazards/meter/stream-0002.jsonl").write_text("\n".join([head] + empty + [trailer]) + "\n")
+            (sdir / "hazards/meter/stream-0003.jsonl").write_text("\n".join([head] + c_ + [trailer]) + "\n")
+            sdir_of = R.span_dirs(c.root, [f"{L['span_id']}={sdir}"])
+            with self.assertRaisesRegex(F.LookInputError, "gap over 2 s"):
+                R.read_segment_energy(s1, sdir_of, step3_path())
+            self.assertGreater(off, 0)
+
+
+class RoundTwoCli(unittest.TestCase):
+    """Mythos N2 and N7, Sol N1/N2 (this package's side) and Mythos N3, N9."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.c = _Custody.get()
+        li, cls.en, _ = synth.build("exact")
+        cls.d = tempfile.mkdtemp(prefix="jw-look-r2-")
+        cls.ip, cls.ep = os.path.join(cls.d, "li.json"), os.path.join(cls.d, "en.json")
+        wb(cls.ip, synth.dump(li))
+        wb(cls.ep, synth.dump(cls.en))
+        real = copy.deepcopy(li)
+        real["synthetic"] = False
+        cls.rp = os.path.join(cls.d, "real.json")
+        wb(cls.rp, synth.dump(real))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.d, ignore_errors=True)
+
+    def s1(self, ip=None):
+        p = os.path.join(self.d, f"s1-{len(os.listdir(self.d))}.json")
+        rc, out, err = run_cli(["stage1", "--input", ip or self.ip, "--out", p])
+        return rc, p, (out.split("sha256=")[1].strip() if rc == 0 else None), err
+
+    def test_n2_allow_draft_needs_synthetic_input(self):
+        rc, _, _, err = self.s1(self.rp)
+        self.assertEqual(rc, 2)
+        self.assertIn("synthetic input only", err)
+
+    def test_n2_outputs_record_allow_draft_and_the_manifest(self):
+        rc, p, h, err = self.s1()
+        self.assertEqual(rc, 0, err)
+        d = rj(p)
+        self.assertIs(d["allow_draft"], True)
+        self.assertEqual(d["manifest_sha256"], R.sha256_file(_DEFAULT_MANIFEST[0]))
+        for k in ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
+                  "joulewise/external/km003c_parse.py", "joulewise/aggregate.py"):
+            self.assertIn(k, d["code_sha256"])
+        self.assertNotIn("configs/align/v4/r1_runtime.json", d["code_sha256"])
+        o = os.path.join(self.d, "o.json")
+        rc, _, err = run_cli(["stage2", "--stage1", p, "--stage1-sha256", h, "--energy", self.ep, "--out", o])
+        self.assertEqual(rc, 0, err)
+        self.assertIs(rj(o)["allow_draft"], True)
+        self.assertEqual(rj(o)["manifest_sha256"], d["manifest_sha256"])
+
+    def test_n2_stage2_refuses_a_non_synthetic_stage1_under_allow_draft(self):
+        rc, p, h, _ = self.s1()
+        doc = rj(p)
+        doc["synthetic"] = False
+        q = os.path.join(self.d, "s1-real.json")
+        wb(q, F.dump(doc))
+        rc, _, err = run_cli(["stage2", "--stage1", q, "--stage1-sha256", R.sha256_file(q), "--energy", self.ep,
+                              "--out", os.path.join(self.d, "x.json")])
+        self.assertEqual(rc, 2)
+        self.assertIn("synthetic input only", err)
+
+    def test_n7_level_r_e_and_scratch_ledger_only_with_allow_draft(self):
+        man = _DEFAULT_MANIFEST[0] if _DEFAULT_MANIFEST else pinned_manifest()
+        rc, _, err = run_cli(["stage1", "--input", self.ip, "--out", os.path.join(self.d, "y.json"),
+                              "--manifest", man])
+        self.assertEqual(rc, 2)
+        rc, p, h, _ = self.s1()
+        # without --allow-draft a draft manifest already refuses; the guards below are checked in the stage itself
+        a = R.argparse.Namespace(stage1=p, stage1_sha256=h, energy=self.ep, custody=None, span_dir=None,
+                                 step3_module=None, looks=None, ledger_ref=None, allow_draft=False, manifest=man)
+        with self.assertRaisesRegex(F.LookInputError, "--energy"):
+            R.cmd_stage2(a)
+        a = R.argparse.Namespace(stage1=p, stage1_sha256=h, energy=None, custody=str(self.c.root), span_dir=None,
+                                 step3_module=None, looks=looks_file(h), ledger_ref=None, allow_draft=False,
+                                 manifest=man)
+        with self.assertRaisesRegex(F.LookInputError, "--looks"):
+            R.cmd_stage2(a)
+        a = R.argparse.Namespace(input=self.ip, allow_draft=False)
+        with self.assertRaisesRegex(F.LookInputError, "--input"):
+            R.cmd_stage1(a)
+
+    def test_n3_own_shaped_supplier_excluded_marks_the_span(self):
+        roster = rj(self.c.paths["roster.json"])
+        rules = rj(self.c.paths["rules_3_4.json"])
+        span_id = next(s["span_id"] for s in self.c.li["spans"] if not s["marks"]
+                       and any(x["g0_role"] == "consume" for x in self.c.li["legs"] if x["span_id"] == s["span_id"]))
+        entry = next(e for e in roster if e["span_id"] == span_id)
+        with tempfile.TemporaryDirectory() as d:
+            sdir = Path(d) / span_id
+            shutil.copytree(self.c.root / span_id, sdir, ignore=shutil.ignore_patterns("power_trace.csv"))
+            first = rj(sdir / "runner_receipt.json")["roster"][0]
+            rec = rj(sdir / "legs" / first / "leg_record.json")
+            rec["spec"].pop("g0_role", None)                   # own-shaped, as dev-03's first span is built
+            wb(sdir / "legs" / first / "leg_record.json", json.dumps(rec))
+            span, _ = R.read_span(sdir, entry, rules, R.FAN_KEYS)
+            self.assertEqual(span["marks"], [])
+            rules = dict(rules)
+            rules[f"{span_id}/{first}"] = {"sidecar_coverage": True, "km003c_clean": False}
+            span, legs = R.read_span(sdir, entry, rules, R.FAN_KEYS)
+        self.assertIsNone(next(x for x in legs if x["leg_id"] == first)["g0_role"])
+        self.assertEqual(span["marks"], ["reference from an excluded leg"])
+
+    def test_n9_type_t_not_counted_under_the_rules(self):
+        li = copy.deepcopy(self.c.li)
+        t = next(x for x in li["legs"] if x["leg_type"] == "T")
+        t["inclusion"].update(sidecar_coverage=False, km003c_clean=False)
+        base = F.stage1(self.c.li, "0" * 64)["counts"]["excluded_by_rule"]
+        got = F.stage1(li, "0" * 64)["counts"]["excluded_by_rule"]
+        self.assertEqual(got, base)

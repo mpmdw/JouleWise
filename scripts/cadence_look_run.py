@@ -50,6 +50,7 @@ from joulewise.cadence_looks import manifest as M  # noqa: E402
 STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
 FAN_KEYS = ("F0Ac", "F1Ac")          # configs/align/v4/r1_runtime.json sensors.fan_keys
 PM_FRESH_S = 2.0
+METER_MAX_GAP_S = 2.0                # RL-166 Q7: no gap over 2 s between meter sample stamps in the leg's interval
 MODE_BY_POWER = {"automatic": 0, "high_power": 2}
 JOURNAL_PRE_S, JOURNAL_POST_S = 60.0, 5.0
 CODE_PATHS = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py")
@@ -63,11 +64,33 @@ def sha256_file(path):
 
 
 def code_hashes(extra=()):
+    """Every pinned file the stage ran (Sol N2 / Mythos 3; the manifest builder's round-2 contract): the fit and the
+    CLI, `extra` (stage 2: the step 3 file), and fit.dependencies except the runtime sensor config."""
     out = {}
-    for rel in (*CODE_PATHS, *extra):
+    paths = list(CODE_PATHS) + list(extra)
+    if _VERIFIED:
+        doc, _ = _VERIFIED[0]
+        paths += [path for where, path, _ in M.code_refs(doc)
+                  if where.startswith("fit.dependencies") and path != "configs/align/v4/r1_runtime.json"]
+    for rel in dict.fromkeys(paths):
         p = ROOT / rel
         if p.is_file():
             out[rel] = sha256_file(p)
+    return out
+
+
+_VERIFIED = []
+
+
+def _stamp(out, a):
+    """Provenance and run mode on a stage output: the manifest verify_pins checked, and allow_draft. Before writing,
+    refuse if any repository module loaded in this process is not pinned (manifest.unpinned_loaded_modules)."""
+    doc, mpath = _VERIFIED[0]
+    loose = M.unpinned_loaded_modules(doc, ROOT)
+    if loose:
+        raise F.LookInputError(f"modules loaded but not pinned: {sorted(loose)}")
+    out["manifest_sha256"] = sha256_file(mpath)
+    out["allow_draft"] = bool(a.allow_draft)
     return out
 
 
@@ -252,6 +275,17 @@ def meter_offsets(sdir):
     return header_off, end_off
 
 
+def draft_ledger_check(looks_doc, stage1_sha256):
+    """Synthetic runs (--allow-draft) only: a scratch ledger's row for this look names this stage-1 hash at
+    stage1_committed or later. A real look uses manifest.require_stage1_committed on the committed ledger."""
+    M.validate_look_ledger(looks_doc)
+    row = next((r for r in looks_doc["looks"] if r.get("look_id") == F.LOOK_ID), None)
+    if row is None or row.get("status") not in ("stage1_committed", "run", "frozen"):
+        raise F.LookInputError("draft ledger: the look's row is not at stage1_committed or later")
+    if row.get("stage1_sha256") != stage1_sha256:
+        raise F.LookInputError("draft ledger: the row does not name this stage-1 file's sha256")
+
+
 def _mode(result):
     m = result.get("ac_powermode")
     return m.get("value") if isinstance(m, dict) else m
@@ -270,7 +304,7 @@ def read_span(sdir, entry, rules34, fan_keys):
             "power_mode": power, "t0_epoch_s": float(receipt["started"]["epoch_s"]),
             "t0_local_date": entry["t0_local_date"], "soak_reference_tv0h_c": soak, "marks": [],
             "meter_offsets_ns": dict(zip(("header", "end"), meter_offsets(sdir)))}
-    legs, marks = [], set()
+    legs, marks, suppliers = [], set(), set()
     for leg_id in receipt["roster"]:
         key = f"{entry['span_id']}/{leg_id}"
         ldir = sdir / "legs" / leg_id
@@ -287,6 +321,8 @@ def read_span(sdir, entry, rules34, fan_keys):
         summ = _json(ldir / "leg_summary.json") if (ldir / "leg_summary.json").is_file() else {}
         ref = summ.get("span_reference")
         if isinstance(ref, dict):
+            if isinstance(ref.get("leg_id"), str):
+                suppliers.add(ref["leg_id"])
             if ref.get("redone"):
                 marks.add("reference from a redo")
             if ref.get("excluded"):
@@ -310,10 +346,13 @@ def read_span(sdir, entry, rules34, fan_keys):
         legs.append({"leg_key": key, "span_id": entry["span_id"], "leg_id": leg_id, "leg_type": leg_type,
                      "cell_prompt_tokens": int(spec["prefill_tokens"]), "g0_role": spec.get("g0_role"),
                      "inclusion": inc, "turn": turn})
-    # RL-161 §4 (Mythos cold seat 7): the reference's capture leg excluded AT THE LOOK (any of the six verdicts,
-    # rules 3 and 4 included) marks the span when a consumer is on its roster
-    capture = [leg for leg in legs if leg["g0_role"] == "capture"]
-    if capture and not all(capture[0]["inclusion"].values()) and any(leg["g0_role"] == "consume" for leg in legs):
+    # RL-161 §4 (Mythos cold seats 7 and N3): the leg that supplied the span's reference, excluded AT THE LOOK (any of
+    # the six verdicts, rules 3 and 4 included), marks the span when a consumer is on its roster. The supplier is
+    # named by each consumer's leg_summary span_reference.leg_id (the runner takes the span's first leg, whatever
+    # its shape: an own-shaped first leg supplies dev-03's first span); a capture-role leg also counts.
+    consumers = any(leg["g0_role"] == "consume" for leg in legs)
+    supplier_ids = suppliers | {leg["leg_id"] for leg in legs if leg["g0_role"] == "capture"}
+    if consumers and any(not all(leg["inclusion"].values()) for leg in legs if leg["leg_id"] in supplier_ids):
         marks.add("reference from an excluded leg")
     span["marks"] = sorted(marks)
     return span, legs
@@ -375,12 +414,13 @@ class MeterSpan:
         paths = sorted(glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")))
         if not paths:
             raise F.LookInputError("no meter stream in the span")
-        t, w = [], []
+        t, w, steps = [], [], []
         for p in paths:
             st = kp.parse(p)
-            if not st.present or not st.aligned:     # skipped; a segment it would have covered refuses in energy()
+            if not st.present or not st.aligned:     # contributes no sample; a fit interval it alone spans refuses
                 del st
                 continue
+            steps.append(kp.STEP_MS[st.header["rate_idx"]] / 1000.0)
             off = int(st.header["start_real_ns"]) - int(st.header["start_raw_ns"])    # RAW -> REALTIME (R-20)
             t += [(h + off) / 1e9 for h in st.host_ns]
             w += list(st.watts)
@@ -390,17 +430,48 @@ class MeterSpan:
         order = sorted(range(len(t)), key=t.__getitem__)
         self.t = [t[i] for i in order]
         self.w = [w[i] for i in order]
+        self.step_s = max(steps)
+
+    def _support(self, a, b):
+        """(i0, i1): the samples bracketing [a, b]: the last at or before a, the first at or after b. Refuses when
+        either is missing or when any two consecutive samples between them are more than 2 s apart (RL-166 Q7's
+        rule-4 gap, judged on the interval itself). No energy is ever interpolated across such a gap."""
+        import bisect
+        if b < a:
+            raise F.LookInputError("a segment with its end before its start")
+        i0 = bisect.bisect_right(self.t, a) - 1
+        i1 = bisect.bisect_left(self.t, b)
+        if i0 < 0 or i1 >= len(self.t):
+            raise F.LookInputError("DC-in: an energy-fit interval is not bracketed by meter samples")
+        for i in range(i0, i1):
+            if self.t[i + 1] - self.t[i] > METER_MAX_GAP_S:
+                raise F.LookInputError("DC-in: a gap over 2 s between meter samples inside an energy-fit interval")
+        return i0, i1
+
+    def coverage(self, a, b):
+        """Fraction of [a, b] within half a nominal sample period of a sample (a print; decides nothing)."""
+        if b <= a:
+            return None
+        h = 0.5 * self.step_s
+        import bisect
+        i = max(0, bisect.bisect_left(self.t, a - h))
+        cov, edge = 0.0, a
+        while i < len(self.t) and self.t[i] - h < b:
+            lo, hi = max(edge, self.t[i] - h, a), min(b, self.t[i] + h)
+            if hi > lo:
+                cov += hi - lo
+                edge = hi
+            i += 1
+        return cov / (b - a)
 
     def _at(self, x, i):
         t0, t1 = self.t[i], self.t[i + 1]
         return self.w[i] + (self.w[i + 1] - self.w[i]) * (x - t0) / (t1 - t0) if t1 > t0 else self.w[i]
 
     def energy(self, a, b):
-        """Trapezoid between consecutive samples, cut at a and b (linear value at the cuts)."""
-        import bisect
-        if a < self.t[0] or b > self.t[-1] or b < a:
-            raise F.LookInputError("a segment outside the meter stream")
-        i = max(0, bisect.bisect_right(self.t, a) - 1)
+        """Trapezoid between consecutive samples, cut at a and b (linear value at the cuts), on supported intervals
+        only (see _support)."""
+        i, _ = self._support(a, b)
         tot = 0.0
         while i < len(self.t) - 1 and self.t[i] < b:
             lo, hi = max(a, self.t[i]), min(b, self.t[i + 1])
@@ -428,12 +499,11 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None):
             meters[L["span_id"]] = MeterSpan(sdir)
         m = meters[L["span_id"]]
         entry = {}
-        for ch, fn, cov in (("gpu_rail", trace.energy, trace.coverage), ("dc_in", m.energy, None)):
+        for ch, fn, cov in (("gpu_rail", trace.energy, trace.coverage), ("dc_in", m.energy, m.coverage)):
             segs = [fn(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]]
             tails = {str(t["prefix_len"]): fn(t["wall_start_s"], t["wall_end_s"]) for t in L["prefix_tails"]}
-            covs = [cov(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]] if cov else [1.0]
-            entry[ch] = {"segments": segs, "prefix_tails": tails,
-                         "coverage_min": min(c for c in covs if c is not None) if covs else 1.0}
+            covs = [c for c in (cov(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]) if c is not None]
+            entry[ch] = {"segments": segs, "prefix_tails": tails, "coverage_min": min(covs) if covs else 1.0}
         out["legs"][L["leg_key"]] = entry
         del trace
     return out
@@ -441,6 +511,8 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None):
 
 # =============================================================================================== main
 def cmd_stage1(a):
+    if a.input and not a.allow_draft:
+        raise F.LookInputError("--input (level R) runs only with --allow-draft; a committed look reads custody")
     if a.input:
         with open(a.input, "rb") as f:
             raw = f.read()
@@ -457,12 +529,14 @@ def cmd_stage1(a):
             with open(a.write_input, "wb") as f:
                 f.write(data)
         extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4)}
+    if a.allow_draft and look_input.get("synthetic") is not True:
+        raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
     out = F.stage1(look_input, input_sha, code_hashes())
     if not a.input:
         stage2_preflight(out, span_dirs(a.custody, a.span_dir))
     if extra:
         out["code_sha256"].update({f"input:{k}": v for k, v in extra.items()})
-    return out
+    return _stamp(out, a)
 
 
 def cmd_stage2(a):
@@ -473,8 +547,19 @@ def cmd_stage2(a):
     s1 = json.loads(raw)
     if F.dump(s1) != raw:
         raise F.LookInputError("stage 2: the stage-1 file is not in canonical form")
-    # committed: LOOKS.json's row names this stage-1 file's sha256 (Mythos cold seat 8), before any energy opens
-    M.require_stage1_committed(_json(a.looks), F.LOOK_ID, a.stage1_sha256)
+    if a.allow_draft and s1.get("synthetic") is not True:
+        raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
+    if a.energy and not a.allow_draft:
+        raise F.LookInputError("--energy (level E) runs only with --allow-draft; a committed look reads custody")
+    # committed: the repository's LOOKS.json row names this stage-1 file's sha256 (Mythos cold seat 8; N1), before any
+    # energy opens. A caller-named ledger is accepted for synthetic (--allow-draft) runs only.
+    if a.looks and not a.allow_draft:
+        raise F.LookInputError("--looks names a ledger other than the repository's; only with --allow-draft")
+    if a.allow_draft:
+        draft_ledger_check(_json(a.looks) if a.looks else _json(ROOT / M.LOOK_LEDGER_PATH), a.stage1_sha256)
+    else:
+        # the committed ledger at HEAD, HEAD on the ledger ref, the manifest and roster bound (builder's contract)
+        M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1, ledger_ref=a.ledger_ref)
     F.stage2_preflight(s1)                          # refuses before any energy file is opened
     if a.energy:
         energy = _json(a.energy)
@@ -482,7 +567,7 @@ def cmd_stage2(a):
     else:
         energy = read_segment_energy(s1, span_dirs(a.custody, a.span_dir), a.step3_module)
         extra = ("joulewise/cadence_looks/step3_energy_ratios.py",)
-    return F.stage2(s1, a.stage1_sha256, energy, code_hashes(extra))
+    return _stamp(F.stage2(s1, a.stage1_sha256, energy, code_hashes(extra)), a)
 
 
 def main(argv=None):
@@ -506,8 +591,8 @@ def main(argv=None):
     g2.add_argument("--custody")
     p2.add_argument("--span-dir", action="append")
     p2.add_argument("--step3-module")
-    p2.add_argument("--looks", required=True,
-                    help="LOOKS.json; stage 2 refuses unless its row names this stage-1 file's sha256 (Mythos 8)")
+    p2.add_argument("--looks", help="with --allow-draft only: a scratch LOOKS.json in place of the repository's")
+    p2.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     for p in (p1, p2):
         p.add_argument("--manifest", required=True, help="the look manifest whose pins the running code must match")
         p.add_argument("--allow-draft", action="store_true", help="synthetic runs: accept a draft manifest")
@@ -516,7 +601,7 @@ def main(argv=None):
         ap.error("--roster needs --custody and --rules-3-4")
     try:
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
-        M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING)
+        _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING), a.manifest)]
         out = cmd_stage1(a) if a.cmd == "stage1" else cmd_stage2(a)
         sha = write_canonical(a.out, out)
     except F.LookInputError as exc:

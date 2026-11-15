@@ -532,7 +532,8 @@ def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=()):
     compact = {"separators": (",", ":")}                 # the monitor writes compact lines
     with open(path, "w") as f:
         f.write(json.dumps({"k": "h", "schema": "synthetic", "status": "streaming", "rate_idx": 0,
-                            "poll_s": METER_POLL_S, "start_raw_ns": raw0, "start_real_ns": raw0 + off_ns,
+                            "poll_s": METER_POLL_S, "sps": 1.0 / METER_STEP_S,
+                            "start_raw_ns": raw0, "start_real_ns": raw0 + off_ns,
                             "start_mono_ns": raw0}, **compact) + "\n")
         polls = 0
         for j in range(0, n, per_poll):
