@@ -69,6 +69,14 @@ TIME_MODEL = {"fixed_s": 500.0, "warmup_extra_s": 6.0, "prefill_s_per_token": 0.
 # The launcher's ceiling (launch_align_r0.MAX_DESK_SECONDS); a plan longer than this cannot be armed.
 MAX_SPAN_S = 12 * 3600
 
+# The launch bounds of RL-155a section 3 (restated by RL-156a section 2 and RL-158 section 3):
+# 1. the fence end, worst case + 1,460 s, lands by 01:50: ten minutes before each batch blackout starts;
+# 2. no launch between 10:50 and 13:15 while the soak path waits out the R1 driver's 11:45-13:15 window
+#    unbudgeted: no t0 from 55 min before a soak window starts until it ends.
+FENCE_TAIL_S = 1460
+FENCE_QUIET_LEAD_S = 600
+SOAK_LAUNCH_LEAD_S = 3300
+
 LEG_SPEC_KEYS = {"schema", "campaign_id", "leg_id", "seed", "start_band", "prefill_tokens", "prefill_chars",
                  "decode_tokens", "quiet_s"}
 
@@ -243,6 +251,32 @@ def blackout_bound_s(t0, span_s, windows):
     return total
 
 
+def _hms(epoch):
+    return datetime.fromtimestamp(epoch, LOCAL_ZONE).strftime("%H:%M:%S")
+
+
+def fence_problems(plan, windows, soak_windows):
+    """RL-155a section 3's two launch bounds for a plan's t0 (empty list = the launch is legal).
+
+    The free t0 of kit v1.1 does not remove them: the launcher and ``plan`` apply them to every kit."""
+    t0 = plan["t0_epoch_s"]
+    end = t0 + plan["worst_case_s"] + FENCE_TAIL_S
+    problems = []
+    for start, stop in window_epochs(t0, windows) + window_epochs(end, windows):
+        quiet = start - FENCE_QUIET_LEAD_S
+        if t0 < stop and end > quiet:
+            problems.append(f"the fence end (worst case + {FENCE_TAIL_S} s) at {_hms(end)} passes {_hms(quiet)}, "
+                            f"{FENCE_QUIET_LEAD_S // 60} min before the {_hms(start)[:5]}-{_hms(stop)[:5]} blackout "
+                            "(RL-155a section 3)")
+            break
+    for start, stop in window_epochs(t0, soak_windows):
+        if start - SOAK_LAUNCH_LEAD_S < t0 < stop:
+            problems.append(f"no launch between {_hms(start - SOAK_LAUNCH_LEAD_S)[:5]} and {_hms(stop)[:5]}: the soak "
+                            f"path waits out {_hms(start)[:5]}-{_hms(stop)[:5]} unbudgeted (RL-155a section 3)")
+            break
+    return problems
+
+
 # --------------------------------------------------------------------------
 # The plan adapter
 # --------------------------------------------------------------------------
@@ -350,12 +384,15 @@ def leg_admitted(result, *, contaminated):
                 and mode == 0)
 
 
-def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_epoch_s):
+def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_epoch_s, cell=None):
     """The ``leg-summary-v1`` projection of one leg (the desk's allowlist, nothing else).
 
     ``attempts`` are this leg's attempt records in order ({wall_s, contaminated, redo_reason}); an
     attempt is contaminated when the load-redo rule fired on it, whether or not quota remained to
-    redo it. ``accepted`` is the last attempt's runtime result (None when none returned one)."""
+    redo it. ``accepted`` is the last attempt's runtime result (None when none returned one).
+    ``cell`` (kit v1.1 legs only) adds ``prefill_tokens``, ``g0_shape``, ``g0_role`` and, for a consumer,
+    ``span_reference`` ({leg_id, attempt, redone, excluded}: which attempt of the span's first leg
+    supplied the reference; RL-158 Q2, RL-161 section 4). A v1 leg's summary is unchanged."""
     rejected = [a for a in attempts if a.get("contaminated")]
     last = attempts[-1] if attempts else {}
     contaminated = bool(last.get("contaminated"))
@@ -370,6 +407,8 @@ def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_ep
         "started_epoch_s": started_epoch_s, "ended_epoch_s": ended_epoch_s,
         "admitted": leg_admitted(accepted, contaminated=contaminated),
     }
+    if cell is not None:
+        summary.update({k: cell.get(k) for k in ("prefill_tokens", "g0_shape", "g0_role", "span_reference")})
     assert set(summary) <= LEG_SUMMARY_KEYS
     return guard_projection(summary, f"legs/{spec['leg_id']}/leg_summary.json")
 

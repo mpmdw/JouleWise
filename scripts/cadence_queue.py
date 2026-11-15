@@ -113,6 +113,9 @@ def cmd_checklist(args):
     kit, _ = kitmod.load_kit(args.kit, batch_window=window)
     obs = json.loads(Path(args.observations).read_text())
     if kit["schema"] == kit_v11.SCHEMA:   # the free t0's span_window line (design doc section 14.3)
+        if not args.batch_window:
+            print("REFUSE a v1.1 kit's checklist needs --batch-window (RL-149 section 2.9 item 4: 02:00-02:35)")
+            return 2
         rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256, batch_window=window)
     else:
         rows = kitmod.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256)

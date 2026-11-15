@@ -481,14 +481,16 @@ Inputs: `campaign_id`, `master_seed`, `n_legs`, `bands` (as v1), `prompt_tokens`
 1. **Seeds and bands** are v1's draws on the same `campaign_id` and `master_seed` (tags `seed`, `band`), so a
    leg's seed does not depend on the cell law.
 2. **Prompt size by permuted blocks.** `n_legs` must be a multiple of k = len(`prompt_tokens`). Positions
-   3b+1..3b+3 (block b) take a Fisher-Yates permutation of the k sizes drawn with tag `size<b>`. So every size
-   appears once in every run of k legs: size is balanced against span position (the heat history), each size
-   appears 4 times in a 12-leg block, and **the first three legs (a class A pilot) cover all three sizes.**
+   3b+1..3b+3 (block b) take a Fisher-Yates permutation of the k sizes drawn with tag `size<b>`. So each aligned
+   block of three in kit order (L001-L003, L004-L006, L007-L009, L010-L012) holds each size once; two
+   neighbouring legs across a block boundary may share a size. Size is balanced against span position (the heat
+   history), each size appears 4 times in a 12-leg block, and **the first three legs (a class A pilot) cover all
+   three sizes.**
 3. **G0 shape** (only when `g0_shapes` holds `span`). L001 is `own`. For each size, the warm legs of that size
-   (positions 2..n) are shuffled with tag `shape-<size>` and the first ceil(m/2) become `span`. In a 12-leg
-   block that is 2 of each size's warm legs, 6 of 11 warm legs. With the pilot split (L001-L003, then
-   L004-L012) the block has 10 warm legs and at least 5 span legs, still at least half (RL-150 R1 part 2;
-   RL-155 §5.1). Draws for size and shape use separate tags, so **v1.1 and v1.1a kits of the same block have
+   (positions 2..n) are shuffled with tag `shape-<size>` and the first ceil(m/2) become `span`: six span-shaped
+   legs in a 12-leg block. A span-shaped leg that is first in its span captures, so the consumers depend on the
+   queued layout, and "at least half of the warm legs" is counted on that layout at READY (RL-158 Q6; RL-161
+   §1: a chosen cut lands on an own-shaped leg). dev-03 on 3 + 9: 5 of 10 (L002, L008, L009, L010, L012). Draws for size and shape use separate tags, so **v1.1 and v1.1a kits of the same block have
    the same seeds, bands and sizes; only `g0_shape` differs.**
 4. `decode_tokens` comes from `leg_defaults` (type A: 4,096).
 
@@ -547,11 +549,40 @@ override lives in `cadence_leg.py` (`CadenceLegSegment`).
 - **Budget.** A consumer's modeled G0 is 600 s (own: 209 s), so a consumer whose G0 runs to its 1,200 s cap is
   still under 1.5 x its budget: a long G0 alone never trips LEG_OVERTIME. The cap and the 2,700 s leg bound
   are unchanged, so the worst case is unchanged (11.4 h for 12 legs).
-- **Projection.** The leg result and record gain `g0_shape`, `g0_role` and `g0_reference_source` (a run id).
-  No temperature, energy or power is projected; `leg-summary-v1` is unchanged.
+- **Projection.** The leg result and record gain `g0_shape`, `g0_role` and `g0_reference_source` (a run id);
+  the receipt names each consumer's source (`legs[].span_reference`). No temperature, energy or power is
+  projected; `leg-summary-v1` is unchanged, so the desk table shows no cell column (the hand-read joins the
+  kit by leg id).
+- **Which attempt is the source.** The first leg's accepted attempt (`legs/<first>/runtime`). If that leg was
+  redone for outside load, the source is the redo's capture, taken after the rejected attempt ran.
 
-### 14.6 Cut-off (RL-155 §5.1)
+### 14.6 Launch bounds, desk marks, review fixes (#788 cold seat; RL-158; RL-161)
+
+- **The fence (#788 F4; RL-155a §3).** `legs.fence_problems`, applied by the launcher's `cadence_plan` and by
+  `plan` to every kit: the fence end (worst case + 1,460 s) must not pass 10 min before a batch blackout
+  starts (01:50 for 02:00-02:35), and no t0 falls in the 55 min before the R1 driver's soak window until its
+  end (10:50-13:15 while that window is 11:45-13:15). The v1.1 checklist's `span_window` line applies the same
+  two bounds to the arm's `[t0, end_by]`. A v1.1 kit refuses `plan`, `mock`, `run`, `launch` and `checklist`
+  without `--batch-window`: the free t0 never falls back to the driver's old constant.
+- **The desk (#788 F3, F8; dev-01 F8; RL-158 Q2; RL-161 §3 and §4).** `JOURNAL-TABLE.md` gains an `admitted`
+  column for every kit. A v1.1 leg summary adds `prefill_tokens`, `g0_shape`, `g0_role` and, for a consumer,
+  `span_reference` = {first leg, its supplying attempt, `redone`, `excluded`}; the table gains a cell section
+  and prints **MARK: reference from a redo** or **MARK: reference from an excluded leg**, and
+  `desk_summary.json` carries `span_reference` with those marks. A consumer's result carries the verified
+  reference's `record_sha256` (`g0_reference_record_sha256`).
+- **Same span (#788 F8).** A consumer refuses a source that is not `<this span>/legs/<leg>/runtime`.
+- **The two drafts share** a campaign id, seeds and run ids: only one may ever run.
+
+### 14.7 Cut-off (RL-155 §5.1)
 
 Sun 15 Nov 18:00 PST. If the span-reference leg is code-complete and has no gate-module edit by then, dev-03
 runs on v1.1 (class A: L001-L003 as their own span are its counted smoke). Otherwise dev-03 runs on v1.1a
 (class B), pinned at the cell-law commit, and the span leg enters at dev-04 or dev-05 as its own class A kit.
+
+**The two drafts** (same `campaign_id`, master seed 2026111403, seeds, bands and sizes; only `g0_shape` and what
+they pin differ). The lead picks one at the cut-off, enters it in the ledger and pins its sha256 in the queue.
+
+| File | Kit | Pin | Class | First span |
+|---|---|---|---|---|
+| `kits/cl-dev-03.v1.1.json` | cell law and six span-shaped legs (5 of 10 warm legs consume on 3 + 9) | the span-leg commit (re-pinned) | A | L001-L003 as their own span (the counted smoke, one leg per size), then L004-L012 after the hand-read |
+| `kits/cl-dev-03.v1.1a.json` | cell law only | the cell-law line (re-pinned on its class B side branch) | B | the whole block, one span |

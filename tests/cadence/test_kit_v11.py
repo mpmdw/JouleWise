@@ -69,7 +69,7 @@ class CellLaw(unittest.TestCase):
         legs = kit_v11.generate_legs("cl-test-11", law(), {"decode_tokens": 4096})
         self.assertEqual(legs, kit_v11.generate_legs("cl-test-11", law(), {"decode_tokens": 4096}))
         sizes = [leg["prefill_tokens"] for leg in legs]
-        for block in range(4):   # every run of three legs holds each size once
+        for block in range(4):   # each aligned block of three in kit order holds each size once
             self.assertEqual(sorted(sizes[3 * block:3 * block + 3]), sorted(SIZES))
         self.assertEqual(sorted(sizes[:3]), sorted(SIZES))   # a class A pilot covers every size
         self.assertEqual({leg["decode_tokens"] for leg in legs}, {4096})
@@ -95,8 +95,8 @@ class CellLaw(unittest.TestCase):
             kit_v11.generate_legs("c-id", law(n_legs=10), {"decode_tokens": 1})
         with self.assertRaises(kitmod.KitError):
             kit_v11.generate_legs("c-id", law(method="sha256-v1"), {"decode_tokens": 1})
-        with self.assertRaises(kitmod.KitError):     # no span-reference leg runtime at this commit
-            kit_v11.generate_legs("c-id", law(g0_shapes=["own", "span"]), {"decode_tokens": 1})
+        with self.assertRaises(kitmod.KitError):
+            kit_v11.generate_legs("c-id", law(g0_shapes=["span"]), {"decode_tokens": 1})
 
     def test_prompt_range_is_the_leg_specs(self):
         self.assertEqual(kit_v11.PROMPT_TOKENS_RANGE, legsmod.PREFILL_TOKENS_RANGE)
@@ -141,7 +141,7 @@ class Validator(unittest.TestCase):
         for overrides, fragment in (({"n_legs": 10}, "multiple of the 3 prompt sizes"),
                                     ({"prompt_tokens": [2000, 2000, 19458]}, "seed_law.prompt_tokens"),
                                     ({"prompt_tokens": [100, 19458]}, "seed_law.prompt_tokens"),
-                                    ({"g0_shapes": ["own", "span"]}, "seed_law.g0_shapes"),
+                                    ({"g0_shapes": ["span", "own"]}, "seed_law.g0_shapes"),
                                     ({"g0_shapes": ["span"]}, "seed_law.g0_shapes"),
                                     ({"method": "sha256-v1"}, "seed_law.method")):
             kit = v11_kit(validate=False)
@@ -243,9 +243,9 @@ class RunnerConsumesTheCell(unittest.TestCase):
         with self.assertRaises(legsmod.PlanError):   # 02:00 inside the worst case
             legsmod.plan_span(kit, t0_epoch=local("2026-11-16T20:00"), windows=[NEW_WINDOW])
 
-    def test_a_span_shaped_leg_has_no_runtime_at_this_commit(self):
+    def test_an_unknown_g0_shape_has_no_runtime(self):
         kit = v11_kit()
-        kit["legs"][4]["g0_shape"] = "span"
+        kit["legs"][4]["g0_shape"] = "session"
         with self.assertRaises(legsmod.PlanError) as ctx:
             legsmod.leg_specs(kit)
         self.assertIn("no leg runtime", str(ctx.exception))
@@ -284,6 +284,117 @@ class RunnerConsumesTheCell(unittest.TestCase):
         self.assertEqual(json.loads(buffer.getvalue())["legs"], v11_kit()["legs"])
 
 
+class LaunchBounds(unittest.TestCase):
+    """#788 F4: RL-155a section 3's two bounds in code, for every kit; the free t0 does not remove them."""
+    SOAK = [OLD_WINDOW]          # the R1 driver's soak window on this base
+
+    def plan(self, n_legs, t0):
+        kit = v11_kit()
+        ids = [leg["leg_id"] for leg in kit["legs"]][:n_legs]
+        return legsmod.plan_span(kit, t0_epoch=local(t0), windows=[NEW_WINDOW], leg_ids=ids)
+
+    def test_latest_t0_by_the_fence(self):
+        # RL-158 section 3 and RL-155a: 20:48:10 for 3 legs, 18:33:10 for 6, 16:18:10 for 9, 14:03:10 for 12.
+        for n, latest in ((3, "20:48:10"), (6, "18:33:10"), (9, "16:18:10"), (12, "14:03:10")):
+            self.assertEqual(legsmod.fence_problems(self.plan(n, f"2026-11-17T{latest}"), [NEW_WINDOW], self.SOAK), [])
+            later = datetime.fromisoformat(f"2026-11-17T{latest}") .replace(tzinfo=ZONE).timestamp() + 1
+            plan = legsmod.plan_span(v11_kit(), t0_epoch=later, windows=[NEW_WINDOW],
+                                     leg_ids=[leg["leg_id"] for leg in v11_kit()["legs"]][:n])
+            problems = legsmod.fence_problems(plan, [NEW_WINDOW], self.SOAK)
+            self.assertEqual(len(problems), 1, (n, problems))
+            self.assertIn("passes 01:50:00", problems[0])
+
+    def test_no_launch_between_1050_and_1315(self):
+        for t0, ok in (("10:50:00", True), ("10:50:01", False), ("12:00:00", False), ("13:14:59", False),
+                       ("13:15:00", True)):
+            problems = legsmod.fence_problems(self.plan(3, f"2026-11-17T{t0}"), [NEW_WINDOW], self.SOAK)
+            self.assertEqual(problems == [], ok, (t0, problems))
+            if not ok:
+                self.assertIn("no launch between 10:50 and 13:15", problems[0])
+
+    def test_the_plan_alone_does_not_hold_the_fence(self):
+        # 21:00 with three legs: the worst case ends 01:37:30, clear of 02:00, but the fence ends 02:01:50.
+        plan = self.plan(3, "2026-11-17T21:00")
+        self.assertTrue(plan["blackout_clear"])
+        self.assertTrue(legsmod.fence_problems(plan, [NEW_WINDOW], self.SOAK))
+
+    def test_launcher_and_plan_cli_refuse(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            path = Path(td) / "kit.json"
+            path.write_text(json.dumps(v11_kit(), indent=1))
+            ok = cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local("2026-11-17T02:40"))
+            self.assertEqual(ok["worst_case_s"], 16650)
+            for t0, fragment in (("2026-11-17T21:00", "passes 01:50"), ("2026-11-17T11:00", "no launch between")):
+                with self.assertRaises(ValueError) as ctx:
+                    cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local(t0))
+                self.assertIn(fragment, str(ctx.exception))
+            with self.assertRaises(ValueError) as ctx:      # a v1.1 kit names its blackout
+                cadence_launch.cadence_plan(path, "L001,L002,L003", None, t0=local("2026-11-17T02:40"))
+            self.assertIn("needs --batch-window", str(ctx.exception))
+            err = io.StringIO()
+            from contextlib import redirect_stderr
+            with redirect_stderr(err), redirect_stdout(io.StringIO()):
+                code = runner.main(["plan", "--kit", str(path), "--legs", "L001,L002,L003", "--batch-window",
+                                    "02:00-02:35", "--t0", str(local("2026-11-17T21:00"))])
+            self.assertEqual(code, 1)
+            self.assertIn("passes 01:50", err.getvalue())
+            buffer = io.StringIO()
+            with redirect_stderr(io.StringIO()), redirect_stdout(buffer):
+                code = runner.main(["plan", "--kit", str(path), "--legs", "L001,L002,L003", "--batch-window",
+                                    "02:00-02:35", "--t0", str(local("2026-11-17T02:40"))])
+            self.assertEqual(code, 0)
+            printed = json.loads(buffer.getvalue())
+            self.assertEqual(printed["fence_end_epoch_s"], local("2026-11-17T02:40") + 16650 + 1460)
+            err = io.StringIO()
+            with redirect_stderr(err), redirect_stdout(io.StringIO()):
+                code = runner.main(["mock", "--kit", str(path), "--output", str(Path(td) / "m"),
+                                    "--t0-local", "2026-11-17T02:40"])
+            self.assertEqual(code, 1)
+            self.assertIn("needs --batch-window", err.getvalue())
+
+    def test_constants_agree(self):
+        self.assertEqual((kit_v11.FENCE_QUIET_LEAD_S, kit_v11.SOAK_LAUNCH_LEAD_S),
+                         (legsmod.FENCE_QUIET_LEAD_S, legsmod.SOAK_LAUNCH_LEAD_S))
+
+    def test_v11_checklist_holds_the_quiet_and_the_soak_bound(self):
+        good = FreeT0Checklist.GOOD
+        def ok(t0, end):
+            obs = {**good, "t0_epoch_s": local(t0), "end_by_epoch_s": local(end)}
+            rows = kit_v11.evaluate_checklist(v11_kit(), obs, expected_kit_sha256="f" * 64, batch_window=NEW_WINDOW,
+                                              soak_window=OLD_WINDOW)
+            return next(r for r in rows if r["kind"] == "span_window")["ok"]
+        self.assertTrue(ok("2026-11-17T20:00", "2026-11-18T01:50"))
+        self.assertFalse(ok("2026-11-17T20:00", "2026-11-18T01:55"))
+        self.assertFalse(ok("2026-11-17T11:00", "2026-11-17T16:00"))
+        self.assertTrue(ok("2026-11-17T13:15", "2026-11-17T18:00"))
+        with tempfile.TemporaryDirectory(dir=TMP) as td:     # the CLI refuses a v1.1 checklist with no window
+            kit_path, obs_path = Path(td) / "kit.json", Path(td) / "obs.json"
+            kit_path.write_text(json.dumps(v11_kit(), indent=1))
+            obs_path.write_text(json.dumps(good))
+            with redirect_stdout(io.StringIO()):
+                code = cadence_queue.main(["checklist", "--kit", str(kit_path), "--kit-sha256", "f" * 64,
+                                           "--observations", str(obs_path)])
+            self.assertEqual(code, 2)
+
+
+class DeskAdmittedColumn(unittest.TestCase):
+    """dev-01 F8 (RL-161 section 3): the journal table prints inclusion, for v1 spans too."""
+
+    def test_admitted_column(self):
+        from tests.cadence.test_legs_runner import campaign_kit
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            out = Path(td) / "span"
+            runner.run_mock(kit=campaign_kit(n_legs=3, legs_per_span=3), kit_sha256="f" * 64, output=out,
+                            t0_epoch=local("2026-11-17T02:40"), windows=[NEW_WINDOW], g0_timeout=["L002"])
+            table = (out / "desk/JOURNAL-TABLE.md").read_text()
+            self.assertIn("| nominal | admitted |", table)
+            rows = {line.split("|")[1].strip(): line.rstrip(" |").split("|")[-1].strip()
+                    for line in table.splitlines() if line.startswith("| L00")}
+            self.assertEqual(rows, {"L001": "True", "L002": "False", "L003": "True"})
+            self.assertNotIn("Cells and G0 references", table)     # a v1 span has no cell section
+            self.assertNotIn("span_reference", json.loads((out / "desk/desk_summary.json").read_text()))
+
+
 def _top_level_sources(text, names):
     tree = ast.parse(text)
     out = {}
@@ -299,11 +410,11 @@ def _top_level_sources(text, names):
 class V1Untouched(unittest.TestCase):
     """dev-01 and dev-02 measure from b4b6aeb19. v1 keeps validating, and nothing a leg executes moves."""
 
-    def at_pilot_commit(self, path):
-        shown = subprocess.run(["git", "-C", str(runner.ROOT), "show", f"{PILOT_COMMIT}:{path}"],
+    def at_commit(self, commit, path):
+        shown = subprocess.run(["git", "-C", str(runner.ROOT), "show", f"{commit}:{path}"],
                                capture_output=True, text=True)
         if shown.returncode:
-            self.skipTest("the pilot commit is not in this clone")
+            self.skipTest(f"{commit[:12]} is not in this clone")
         return shown.stdout
 
     def test_committed_v1_kits_validate_unchanged(self):
@@ -314,24 +425,82 @@ class V1Untouched(unittest.TestCase):
             self.assertIs(kitmod.validate_kit(kit), kit)
             self.assertEqual(kitmod.generate_legs(kit["campaign_id"], kit["seed_law"], kit["leg_defaults"]), kit["legs"])
 
-    def test_the_leg_runtime_reads_the_pilot_commits_bytes(self):
-        """What a leg executes from legs.py and kit.py (spec validation and the projection guard) is the
-        pilot commit's, byte for byte: the cell law is class B (RL-150 R5)."""
+    def test_the_v11a_pin_runs_the_pilot_commits_leg_bytes(self):
+        """At the v1.1a kit's frozen commit, what a leg executes from legs.py and kit.py (spec validation
+        and the projection guard) is the pilot commit's, byte for byte: the cell law is class B (RL-150 R5).
+        The span-reference leg (a later commit) changes these bytes and is class A."""
+        if not (KITS / "cl-dev-03.v1.1a.json").is_file():
+            self.skipTest("the kit drafts live on the PR #788 line")
+        pin = json.loads((KITS / "cl-dev-03.v1.1a.json").read_text())["frozen"]["commit"]
         names = {"joulewise/cadence/legs.py": {"validate_leg_spec", "_int", "prefill_chars", "guard_projection",
                                                "_walk", "LEG_SPEC_KEYS", "LEG_SPEC_SCHEMA", "BAND_RECIPES",
                                                "PREFILL_TOKENS_RANGE", "DECODE_TOKENS_RANGE", "LEG_KIND",
                                                "ANCHOR_PREFILL_CHARS", "ANCHOR_PREFILL_TOKENS"},
                  "joulewise/cadence/kit.py": {"deny_scan", "DENY_VALUE_RE", "DENY_KEY_TOKENS", "DENY_KEY_SUBSTRINGS",
                                               "FREE_TEXT_KEYS", "LEG_ID_RE", "CAMPAIGN_ID_RE", "validate_kit",
-                                              "generate_legs", "evaluate_checklist"}}
+                                              "generate_legs", "evaluate_checklist"},
+                 # the leg child imports desk.py through legs.py for the projection guard's key rule
+                 "joulewise/cadence/desk.py": {"DENIED_KEY_RE"}}
         for path, wanted in names.items():
-            old = _top_level_sources(self.at_pilot_commit(path), wanted)
-            new = _top_level_sources((runner.ROOT / path).read_text(), wanted)
+            old = _top_level_sources(self.at_commit(PILOT_COMMIT, path), wanted)
+            new = _top_level_sources(self.at_commit(pin, path), wanted)
             self.assertEqual(set(old), wanted, path)
             self.assertEqual(new, old, path)
         for path in ("joulewise/align/apple/cadence_leg.py", "scripts/cadence_leg_runtime.py",
                      "joulewise/align/apple/r1_runtime.py", "joulewise/align/apple/thermal_gates.py"):
-            self.assertEqual((runner.ROOT / path).read_text(), self.at_pilot_commit(path), path)
+            self.assertEqual(self.at_commit(pin, path), self.at_commit(PILOT_COMMIT, path), path)
+
+
+@unittest.skipUnless((KITS / "cl-dev-03.v1.1a.json").is_file(), "the kit drafts live on the PR #788 line")
+class CommittedDev03Kit(unittest.TestCase):
+    """The dev-03 draft on kit v1.1a (the cell law only; RL-155 section 5.1), the fallback if the
+    span-reference leg misses the cut-off. The lead pins and commits the final bytes; this checks the
+    draft's shape and that it changes no byte a leg executes."""
+    NAME = "cl-dev-03.v1.1a.json"
+    PLANNING_ONLY = {"joulewise/cadence/kit.py", "joulewise/cadence/kit_v11.py", "joulewise/cadence/legs.py",
+                     "joulewise/cadence/desk.py", "scripts/cadence_legs_runner.py", "scripts/launch_cadence_span.py"}
+
+    def load(self, window=NEW_WINDOW):
+        return kitmod.load_kit(KITS / self.NAME, batch_window=window)
+
+    def test_shape(self):
+        kit, _ = self.load()
+        self.load(OLD_WINDOW)
+        self.assertEqual((kit["schema"], kit["runner"]["kind"], kit["campaign_id"]),
+                         (kit_v11.SCHEMA, kit_v11.RUNNER_KIND, "cl-dev-03"))
+        self.assertEqual(kit["ruling"], {"id": "RL-149 §2", "authorizes_spans": True})
+        self.assertEqual(kit["seed_law"]["prompt_tokens"], SIZES)
+        sizes = [leg["prefill_tokens"] for leg in kit["legs"]]
+        self.assertEqual({s: sizes.count(s) for s in SIZES}, {s: 4 for s in SIZES})
+        self.assertEqual({(leg["decode_tokens"], leg["start_band"]) for leg in kit["legs"]}, {(4096, "q0")})
+        self.assertEqual(kitmod.deny_scan(kit), [])
+        dev02, _ = kitmod.load_kit(KITS / "cl-dev-02.json")
+        self.assertEqual(set(kit["frozen"]["paths"]), set(dev02["frozen"]["paths"]) | {"joulewise/cadence/kit_v11.py"})
+        self.assertEqual(kit["looks"], [])
+        rules = {r["id"]: r["text"] for r in kit["inclusion_rules"]}
+        self.assertIn("whether or not a redo replaced it", rules["not_a_replaced_attempt"])   # RL-150 R7
+
+    def test_class_b_no_executed_leg_byte_moves(self):
+        kit, _ = self.load()
+        dev01, _ = kitmod.load_kit(KITS / "cl-dev-01.json")
+        changed = {p for p, h in kit["frozen"]["paths"].items() if dev01["frozen"]["paths"].get(p) != h}
+        if kit["seed_law"]["g0_shapes"] == ["own"]:
+            self.assertLessEqual(changed, self.PLANNING_ONLY)
+
+    def test_frozen_paths_hash_at_the_frozen_commit_and_the_plan_fits(self):
+        kit, _ = self.load()
+        have = subprocess.run(["git", "-C", str(runner.ROOT), "cat-file", "-e", kit["frozen"]["commit"] + "^{commit}"],
+                              capture_output=True)
+        if have.returncode:
+            self.skipTest("frozen commit not in this clone")
+        self.assertEqual(kitmod.verify_frozen(kit, runner.ROOT), [])
+        t0 = local("2026-11-17T02:40")
+        pilot = legsmod.plan_span(kit, t0_epoch=t0, windows=[NEW_WINDOW], leg_ids=["L001", "L002", "L003"],
+                                  max_span_s=runner.max_span_s())
+        whole = legsmod.plan_span(kit, t0_epoch=t0, windows=[NEW_WINDOW], max_span_s=runner.max_span_s())
+        self.assertEqual(sorted(leg["prefill_tokens"] for leg in pilot["legs"]), SIZES)
+        self.assertLessEqual(whole["expected_s"], 5.0 * 3600)
+        self.assertEqual(whole["worst_case_s"], 40950)
 
 
 if __name__ == "__main__":

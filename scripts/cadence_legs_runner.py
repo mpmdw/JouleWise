@@ -320,6 +320,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
               "batch_windows": [legsmod.format_window(w) for w in windows], "steps": [], "legs": [],
               "feeds": {}, "rc": 0}
     state = {"power_read": False, "plan": None, "summaries": [], "finished": 0, "fault": False, "redos": 0}
+    kit_legs = {leg["leg_id"]: leg for leg in kit["legs"]}
 
     def work_remaining():
         remaining = deadline - WORK_RESERVE_S - clock.time()
@@ -404,8 +405,12 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
                 state["redos"] += 1
                 continue
             break
+        cell = None
+        if "g0_shape" in kit_legs[leg_id]:   # kit v1.1: the cell goes to the desk (own legs only on this line)
+            cell = {"prefill_tokens": spec["prefill_tokens"], "g0_shape": kit_legs[leg_id]["g0_shape"],
+                    "g0_role": "capture", "span_reference": None}
         summary = legsmod.leg_summary(spec=spec, budget_s=budget, attempts=attempts, accepted=result,
-                                      started_epoch_s=first_start, ended_epoch_s=clock.time())
+                                      started_epoch_s=first_start, ended_epoch_s=clock.time(), cell=cell)
         leg_row["summary"] = summary
         (leg_dir / "leg_record.json").write_text(json.dumps(
             {"schema": LEG_RECORD_SCHEMA, "spec": spec, "attempts": attempts,
@@ -708,8 +713,14 @@ def run_mock(*, kit, kit_sha256, output, t0_epoch, windows, leg_ids=None, contam
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
-def _windows(args):
-    return [legsmod.parse_window(args.batch_window)] if args.batch_window else default_windows()
+def _windows(args, kit=None):
+    if args.batch_window:
+        return [legsmod.parse_window(args.batch_window)]
+    if kit is not None and kit["runner"]["kind"] != legsmod.RUNNER_KIND:
+        # Kit v1.1 has a free t0: the ruled blackout must be named, never the driver's old constant (#788 F4).
+        raise legsmod.PlanError([f"runner kind {kit['runner']['kind']} needs --batch-window "
+                                 "(RL-149 section 2.9 item 4: 02:00-02:35)"])
+    return default_windows()
 
 
 def _roster(args):
@@ -787,12 +798,16 @@ def main(argv=None):
             sys.stdout.write(text)
         return 0
     kit, sha = _load(args.kit)
-    windows = _windows(args)
     try:
+        windows = _windows(args, kit)
         if args.command == "plan":
             plan = legsmod.plan_span(kit, t0_epoch=args.t0 if args.t0 is not None else time.time(), windows=windows,
                                      leg_ids=_roster(args), max_span_s=max_span_s())
-            print(json.dumps({**plan, "kit_sha256": sha, "launch_deadline_epoch_s": launch_deadline(plan)},
+            fence = legsmod.fence_problems(plan, windows, default_windows())
+            if fence:
+                raise legsmod.PlanError(fence)
+            print(json.dumps({**plan, "kit_sha256": sha, "launch_deadline_epoch_s": launch_deadline(plan),
+                              "fence_end_epoch_s": plan["t0_epoch_s"] + plan["worst_case_s"] + legsmod.FENCE_TAIL_S},
                              indent=1, sort_keys=True))
             return 0
         if args.command == "mock":
