@@ -1,0 +1,14 @@
+{"cwd": "/Volumes/JW-EXT/scratch/items-rl171/wt/2d347f721", "kit_sha256": "0f535774b413654d9d72b153a7dc8369df81575b34c5fa120898d76dfe04e14b", "roster": ["L004", "L005", "L006"], "window": "02:00-02:35", "v11": true, "soak_windows": ["11:45-13:15"], "step_s": 10}
+Sun 00:00:00 .. Sun 02:34:50  [1794729600..1794738890]  REFUSE plan_span: the worst-case span [t0, t0 + 16650 s] meets a batch blackout (02:00-02:35); arm after it 
+Sun 02:35:00 .. Sun 10:50:00  [1794738900..1794768600]  ADMIT
+Sun 10:50:10 .. Sun 13:14:50  [1794768610..1794777290]  REFUSE fence_problems: no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)
+Sun 13:15:00 .. Sun 20:48:10  [1794777300..1794804490]  ADMIT
+Sun 20:48:20 .. Sun 20:58:00  [1794804500..1794805080]  REFUSE fence_problems: the fence end (worst case + 1460 s) at 01:50:10 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-15
+Sun 20:58:10 .. Sun 21:22:30  [1794805090..1794806550]  REFUSE fence_problems: the fence end (worst case + 1460 s) at 02:00:00 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-15
+Sun 21:22:40 .. Mon 02:34:50  [1794806560..1794825290]  REFUSE plan_span: the worst-case span [t0, t0 + 16650 s] meets a batch blackout (02:00-02:35); arm after it 
+Mon 02:35:00 .. Mon 10:50:00  [1794825300..1794855000]  ADMIT
+Mon 10:50:10 .. Mon 13:14:50  [1794855010..1794863690]  REFUSE fence_problems: no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)
+Mon 13:15:00 .. Mon 20:48:10  [1794863700..1794890890]  ADMIT
+Mon 20:48:20 .. Mon 20:58:00  [1794890900..1794891480]  REFUSE fence_problems: the fence end (worst case + 1460 s) at 01:50:10 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-15
+Mon 20:58:10 .. Mon 21:22:30  [1794891490..1794892950]  REFUSE fence_problems: the fence end (worst case + 1460 s) at 02:00:00 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-15
+Mon 21:22:40 .. Tue 00:00:00  [1794892960..1794902400]  REFUSE plan_span: the worst-case span [t0, t0 + 16650 s] meets a batch blackout (02:00-02:35); arm after it 

@@ -1,0 +1,11 @@
+dev03-s02: pin 2d347f721 kit cl-dev-03.v1.1.json legs L004,L005,L006,L007,L008,L009,L010,L011,L012 W 32850 window 2026-11-16T00:00:00 .. 2026-11-16T23:59:59
+  OK  plan --t0 1794816000 (Mon 16 Nov 00:00:00) --batch-window 13:14-13:15: rc 0 ok
+  OK  plan --t0 1794825299 (Mon 16 Nov 02:34:59) --batch-window 13:14-13:15: rc 0 ok
+  OK  plan --t0 1794825300 (Mon 16 Nov 02:35:00) --batch-window 02:00-02:35: rc 0 ok
+  OK  plan --t0 1794855000 (Mon 16 Nov 10:50:00) --batch-window 02:00-02:35: rc 0 ok
+  OK  plan --t0 1794855001 (Mon 16 Nov 10:50:01) --batch-window 02:00-02:35: rc 1 REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)
+  OK  plan --t0 1794863700 (Mon 16 Nov 13:15:00) --batch-window 02:00-02:35: rc 0 ok
+  OK  plan --t0 1794874690 (Mon 16 Nov 16:18:10) --batch-window 02:00-02:35: rc 0 ok
+  OK  plan --t0 1794874691 (Mon 16 Nov 16:18:11) --batch-window 02:00-02:35: rc 1 REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout
+  OK  plan --t0 1794874691 (Mon 16 Nov 16:18:11) --batch-window 13:14-13:15: rc 0 ok
+  OK  plan --t0 1794902399 (Mon 16 Nov 23:59:59) --batch-window 13:14-13:15: rc 0 ok

@@ -1,0 +1,18 @@
+{
+ "admitted": true,
+ "attempts": 1,
+ "band_reached": true,
+ "budget_s": 1251,
+ "contaminated_redos": 0,
+ "ended_epoch_s": 1794826091.3106403,
+ "g0_outcome": "released",
+ "g0_s": 138.0,
+ "leg_id": "L005",
+ "os_level_max": 0,
+ "pm_nominal": true,
+ "redo_reasons": [],
+ "seed": 2522171568,
+ "start_band": "q0",
+ "started_epoch_s": 1794824912.2485123,
+ "wall_s": 1179.0621280670166
+}

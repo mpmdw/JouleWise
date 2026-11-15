@@ -1,0 +1,87 @@
+1c1
+< TBD. **Laptop lead (interactive, Opus 5.5), drafted by the items-rl165 drafter 2026-11-14 PST and re-drafted under RL-171 by the items-rl171 builder 2026-11-15 PST, ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): STANDING ITEM (RL-165 §3). MAGISTRATE: you may run filler F0, the Part C bridge, ON YOUR OWN, without a further item from the lead, whenever one of the three triggers below holds and every rule below holds: a FRESH TV0h/TV1h idle soak, then Part C only (`--fresh-soak --parts C`: the 30B predecessor, a full step-D on TV1h, the gated D_bank member seed 1, then X_G) on `c3f4bacd8013ca98c19cf8d41f830c701930cd41` (the merge of PR #783, head of `ops/2026-11-11-w1-presign`), in the staged worktree `/Users/edr/code/jw-wt/partc-c3f4`. Each run is a DIAGNOSTIC, journals only: it adopts nothing, enters nothing and produces no slots. ONE run per activation, with its own OUT. No prepare, no arm, no session, no W1, no other smoke. The launch is your LAST action and you exit at once. The item stays live after each run. It is VOID as soon as the W1-line head is not `c3f4bacd8` (the lead re-issues it with that merge), and it EXPIRES at <LEAD FILLS: issue time + 7 days, as a PST time and its epoch>. If any rule fails, do not launch; mail the lead.**
+---
+> TBD. **Laptop lead (interactive, Opus 5.5), drafted by the items-rl165 drafter 2026-11-14 PST and re-drafted under RL-171 and RL-172 and re-pinned to the W1-line head `b2e01464d` (RL-172b condition 3; RL-172c) by the items-rl171 builder 2026-11-15 PST, ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): STANDING ITEM (RL-165 §3). MAGISTRATE: you may run filler F0, the Part C bridge, ON YOUR OWN, without a further item from the lead, whenever one of the three triggers below holds and every rule below holds: a FRESH TV0h/TV1h idle soak, then Part C only (`--fresh-soak --parts C`: the 30B predecessor, a full step-D on TV1h, the gated D_bank member seed 1, then X_G) on `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (the merge of PR #790, head of `ops/2026-11-11-w1-presign`), in the staged worktree `/Users/edr/code/jw-wt/partc-b2e01464d`. Each run is a DIAGNOSTIC, journals only: it adopts nothing, enters nothing and produces no slots. ONE run per activation, with its own OUT. No prepare, no arm, no session, no W1, no other smoke. The launch is your LAST action and you exit at once. The item stays live after each run. It is VOID as soon as the W1-line head is not `b2e01464d` (the lead re-issues it with that merge), and it EXPIRES at <LEAD FILLS: issue time + 7 days, as a PST time and its epoch>. If any rule fails, do not launch; mail the lead.**
+7c7
+< on_early_or_refused: any failed line of "Start and check", a void or expired item, a launch refusal (rc≠0 or no claimed fence), or a launch that cannot meet rules 5 to 7 (rule 6 is now the c3f4bacd8 launch window 02:35:00-22:40:00, RL-171): NOTHING launches; mail the lead. Do not retry, do not extend, do not reuse OUT. A launcher refusal at c3f4bacd8 is recorded and goes to the research lead (RL-164 §2(c)). A completed run, whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json), is NOT a refusal: it is reported and compared line by line with the previous Part C's verdict (rule 10). A running F0 is never aborted (rule 9)
+---
+> on_early_or_refused: any failed line of "Start and check", a void or expired item, a launch refusal (rc≠0 or no claimed fence), or a launch that cannot meet rules 5 to 7 (rule 6 is now the b2e01464d launch window 02:35:00-22:40:00, RL-171): NOTHING launches; mail the lead. Do not retry, do not extend, do not reuse OUT. A launcher refusal at b2e01464d is recorded and goes to the research lead (RL-164 §2(c)). A completed run, whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json), is NOT a refusal: it is reported and compared line by line with the previous Part C's verdict (rule 10). A running F0 is never aborted (rule 9)
+15,16c15,16
+< 1. **Pin.** The full sha `c3f4bacd8013ca98c19cf8d41f830c701930cd41`, the 17-hash table below, the Mac-check line below and the staged worktree `/Users/edr/code/jw-wt/partc-c3f4` (item 325's smoke worktree; created by the script if absent). The lead checked these once, for item 325: the Air tests at `c3f4bacd8` (`/Volumes/JW-EXT/scratch/partc2-c3f4/tests/`, six modules OK) and the 17 hashes, which equal Mythos's independent table (`/Volumes/JW-EXT/scratch/mythos-schedule-review/partc-paths-at-c3f4bacd8.txt`). No new Air check is made for this item.
+< 2. **Void and expiry.** The item is VOID when the W1-line head (`origin/ops/2026-11-11-w1-presign`) is not `c3f4bacd8`. The lead re-issues it as part of that merge (for example PR #774's: RL-165 §9 lets a pass carry to #774's merge commit, but this item names a sha, so it is re-issued there). It EXPIRES 7 days after issue. A void or expired item launches nothing: mail the lead.
+---
+> 1. **Pin.** The full sha `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (tree `c904864e46879a4adfbdf0b467d4da1ee5928285`), the 17-hash table below, the Mac-check line below and the staged worktree `/Users/edr/code/jw-wt/partc-b2e01464d` (created by the script if absent). Pre-qualified on the Air at `b2e01464d` by the items-rl171 builder, 2026-11-15: the six dry-check modules OK (`/Volumes/JW-EXT/scratch/items-rl171/probe/tests-b2e01464d.log`: 1, 31, 15, 58, 24 and 24 tests, one skip), the 17 hashes (`probe/hashes-b2e01464d.txt`: sixteen equal the `c3f4bacd8` table, Mythos's independent one; `v4_registration.py` differs by one line, below), and the bounds re-derived from these bytes (`probe/b2e01464d-derived.txt`). The six modules still run once on the MBP at this sha (Start and check).
+> 2. **Void and expiry.** The item is VOID when the W1-line head (`origin/ops/2026-11-11-w1-presign`) is not `b2e01464d`. The lead re-issues it as part of that merge (for example PR #774's: RL-165 §9 lets a pass carry to #774's merge commit, but this item names a sha, so it is re-issued there). This issue replaces the one at `c3f4bacd8` (RL-172b condition 3: re-issued at the merge commit; the W1-line head moved by #798's merge `e5b4f4f7f` and then #790's merge `b2e01464d`). It EXPIRES 7 days after issue. A void or expired item launches nothing: mail the lead.
+25c25
+< 6. **Launch window: 02:35:00 to 22:40:00 local (RL-171 §2 and §3; RL-156 §5's 22:40 restored).** RL-171 retires "launch + 12,180 s by 01:30" (RL-164 §5) and "no F0 between 01:30 and 02:40". What is left is what the bytes at `c3f4bacd8` do: `soak_child` refuses a soak whose start lies in (22:50:40, 02:35:00), because the soak plus Part C's cap (11,360 s) would meet 02:00-02:35 (run on the Air at `c3f4bacd8`: soak start 22:50:40 admitted, 22:50:41 refused, 02:34:59 refused, 02:35:00 admitted; `/Volumes/JW-EXT/scratch/items-rl171/probe/c3f4-soak-child-boundary.txt`). So the launch is at or after 02:35:00 and at or before 22:40:00 (ten minutes of preflight before the latest soak start). RL-171 §4 keeps this refusal until the slot session has run. A run that crosses 00:00 is recorded, not a gate.
+---
+> 6. **Launch window: 02:35:00 to 22:40:00 local (RL-171 §2 and §3; RL-156 §5's 22:40 restored).** RL-171 retires "launch + 12,180 s by 01:30" (RL-164 §5) and "no F0 between 01:30 and 02:40". What is left is what the bytes at `b2e01464d` do (re-derived on the Air at this sha, unchanged from `c3f4bacd8`): `soak_child` refuses a soak whose start lies in (22:50:40, 02:35:00), because the soak plus Part C's cap (11,360 s) would meet 02:00-02:35 (run on the Air at `b2e01464d`: `OS_BATCH_WINDOW_LOCAL` 02:00-02:35, soak 1,800 s + Part C cap 9,560 s = 11,360 s; soak start 22:50:40 admitted, 22:50:41 refused, 02:34:59 refused, 02:35:00 admitted; `/Volumes/JW-EXT/scratch/items-rl171/probe/b2e01464d-derived.txt`). So the launch is at or after 02:35:00 and at or before 22:40:00 (ten minutes of preflight before the latest soak start). RL-171 §4 keeps this refusal until the slot session has run. A run that crosses 00:00 is recorded, not a gate.
+31,33c31,35
+< - **Why F0 at this commit (RL-149 §5; RL-155a §2; RL-156 §4.1).** One more step-D leg and D_bank run on a new start and hour: G0 times by hour of day, onset, the first G1 after a hot turn if one occurs. Journals only. Its energy is not read under any look unless the research lead rules so (RL-149 §5 bridge; RL-155 §4 rule 5). Item 325's run at this commit is the counted pass that RL-149 §5 item 12 reads if it passes; runs under this item are F0 diagnostics and are compared with it.
+< - **Smoke commit `c3f4bacd8013ca98c19cf8d41f830c701930cd41`** (`origin/ops/2026-11-11-w1-presign`; merge of PR #783 head `0ec600128cb5e5040fe0dad2d30e4a10a38eae67` into `f30a97d00`). Its tree equals #783's head (`git diff 0ec600128 c3f4bacd8` is empty). It contains `f30a97d00` (PR #777's merge), `f006b7aa6` and `a6a09e6d7`. The commit, bytes, launcher CLI, runner spec and plist (`ProcessType Interactive`, `ExitTimeOut 400`) are exactly item 325's.
+< - **Condition-13 paths at `c3f4bacd8`** (`v4_registration.R1_EXECUTED_SOURCES`, the ten paths), and **Part C's executed paths** (seven). The 17 hashes, as in item 325:
+---
+> - **Why F0 at this commit (RL-149 §5; RL-155a §2; RL-156 §4.1).** One more step-D leg and D_bank run on a new start and hour: G0 times by hour of day, onset, the first G1 after a hot turn if one occurs. Journals only. Its energy is not read under any look unless the research lead rules so (RL-149 §5 bridge; RL-155 §4 rule 5). Item 325's run at `c3f4bacd8` is the counted pass that RL-149 §5 item 12 reads; it carries to `b2e01464d` (RL-172b §2: to #798's merge; RL-172c: to #790 at `ca02c76e3` and any head with tree `c904864e…`, which `b2e01464d` has), so no new counted Part C is needed. Runs under this item are F0 diagnostics and are compared with it.
+> - **Smoke commit `b2e01464d6d4fbf2901ff4d4154df9455104a12a`** (`origin/ops/2026-11-11-w1-presign`; merge of PR #790, parents `e5b4f4f7f` (#798's merge) and `ca02c76e3` (#790's head)). Its tree is `c904864e46879a4adfbdf0b467d4da1ee5928285`, equal to `ca02c76e3`'s (RL-172c's tree). It contains `c3f4bacd8`, `0ec600128` (#783's head), `f30a97d00` (PR #777's merge), `f006b7aa6`, `a6a09e6d7`, `e5b4f4f7f` and `ca02c76e3`. Against `c3f4bacd8` it changes 40 files, none of them the launcher, the LaunchAgent wrapper, the smoke runner, the rehearsal driver, the Part C kit or `r1_runtime.json`: the launcher CLI, runner spec and plist (`ProcessType Interactive`, `ExitTimeOut 400`) are item 325's.
+> - **Line 2 for `b2e01464d`.** CI `ci` run 43706817774 on #790's head `ca02c76e3`: completed, success. Its tree is `b2e01464d`'s (`git diff ca02c76e3 b2e01464d` is empty), so the diff over every path, frozen or not, is empty. A push run on `b2e01464d` itself (43712204542) was queued at re-pin: <LEAD FILLS: its conclusion, if finished>. **Frozen-path diff `c3f4bacd8` → `b2e01464d` over the 17 asserted paths:** one file, `joulewise/align/apple/v4_registration.py`, +1 line (`EXECUTED_CLOSURE` gains `joulewise/align/apple/v4_desk_seal.py`, a W1 desk path that Part C never imports, RL-172b). `R1_EXECUTED_SOURCES` (the ten condition-13 paths) is unchanged, and `verify_r1_executed_sources` returns the new full sha.
+> - **Re-derived from the bytes at `b2e01464d` (Air, `probe/b2e01464d-derived.txt`):** the soak child still refuses a soak start in (22:50:40, 02:35:00); the launcher's minimum for `--fresh-soak --parts C` is still 12,180 s (`r1_minimum_seconds('C', True)`; `MAX_DESK_SECONDS` 43,200); so the launch window stays 02:35:00-22:40:00 (rule 6), with the 20-min gap after F0 (rule 9) unchanged.
+> - **Condition-13 paths at `b2e01464d`** (`v4_registration.R1_EXECUTED_SOURCES`, the ten paths), and **Part C's executed paths** (seven). The 17 hashes at `b2e01464d` (sixteen as in item 325; `v4_registration.py` new):
+35c37
+< | Path | sha256 at `c3f4bacd8` |
+---
+> | Path | sha256 at `b2e01464d` |
+53c55
+< | `joulewise/align/apple/v4_registration.py` | `6815d1b65fee6bc67743a8905a3e61dcc8f5294b62fdd238938ca1e77b16ef57` |
+---
+> | `joulewise/align/apple/v4_registration.py` | `28caceeba15c30ca679e25c49a7c85b828096bb3b1ab3e2c676d8d1c8d10db80` |
+55c57
+<   `verify_r1_executed_sources` at `c3f4bacd8` returns the full sha. The RL-89 Mac check prints `RL-89 MAC CHECK OK e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b 60 16 44 272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46`.
+---
+>   `verify_r1_executed_sources` at `b2e01464d` returns the full sha (Air, 2026-11-15). The RL-89 Mac check prints `RL-89 MAC CHECK OK e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b 60 16 44 272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46`.
+70c72
+< **Start and check (while you are still alive).** From the staged worktree, own TMPDIR, `JW_B5_SYNTHETIC_ONLY=1`, `python3.13 -B`. The six dry-check modules of item 325 (`tests.align.test_rl145_gate_hashes`, `test_rl145_part_c`, `test_pr777_attack_repros`, `test_r1_smoke_launcher`, `test_v4_registration`, `tests.hazards.test_refusal_allowlist`, one module at a time, from a scratch worktree detached at the full sha) run ONCE on this host at this sha: skip them if item 325's Start and check recorded all six OK, or if `$CUSTODY/standing-f0/tests-ok-c3f4bacd8` exists; otherwise run them and, if all are OK, write that file. Any failure: nothing launches; mail the lead. Everything in the script below runs at every launch.
+---
+> **Start and check (while you are still alive).** From the staged worktree, own TMPDIR, `JW_B5_SYNTHETIC_ONLY=1`, `python3.13 -B`. The six dry-check modules of item 325 (`tests.align.test_rl145_gate_hashes`, `test_rl145_part_c`, `test_pr777_attack_repros`, `test_r1_smoke_launcher`, `test_v4_registration`, `tests.hazards.test_refusal_allowlist`, one module at a time, from a scratch worktree detached at the full sha) run ONCE on this host at this sha: skip them only if `$CUSTODY/standing-f0/tests-ok-b2e01464d` exists (item 325's run was at `c3f4bacd8` and does not count here); otherwise run them and, if all are OK, write that file. Any failure: nothing launches; mail the lead. Everything in the script below runs at every launch.
+82,83c84,85
+< WT=/Users/edr/code/jw-wt/partc-c3f4
+< test -e "$WT" || git -C /Users/edr/code/JouleWise worktree add --detach "$WT" c3f4bacd8013ca98c19cf8d41f830c701930cd41
+---
+> WT=/Users/edr/code/jw-wt/partc-b2e01464d
+> test -e "$WT" || git -C /Users/edr/code/JouleWise worktree add --detach "$WT" b2e01464d6d4fbf2901ff4d4154df9455104a12a
+159c161
+<   test "$W1HEAD" = c3f4bacd8013ca98c19cf8d41f830c701930cd41 || { echo "VOID: the W1-line head is $W1HEAD; mail the lead"; return 1; }
+---
+>   test "$W1HEAD" = b2e01464d6d4fbf2901ff4d4154df9455104a12a || { echo "VOID: the W1-line head is $W1HEAD; mail the lead"; return 1; }
+162c164
+<   test "$(git -C "$WT" rev-parse HEAD)" = c3f4bacd8013ca98c19cf8d41f830c701930cd41 || { echo "STOP: worktree HEAD"; return 1; }
+---
+>   test "$(git -C "$WT" rev-parse HEAD)" = b2e01464d6d4fbf2901ff4d4154df9455104a12a || { echo "STOP: worktree HEAD"; return 1; }
+164c166
+<   git -C "$WT" diff --quiet 0ec600128cb5e5040fe0dad2d30e4a10a38eae67 HEAD || { echo "STOP: tree differs from PR #783's head"; return 1; }
+---
+>   test "$(git -C "$WT" rev-parse 'HEAD^{tree}')" = c904864e46879a4adfbdf0b467d4da1ee5928285 || { echo "STOP: tree is not RL-172c's c904864e4"; return 1; }
+184c186
+< 6815d1b65fee6bc67743a8905a3e61dcc8f5294b62fdd238938ca1e77b16ef57 joulewise/align/apple/v4_registration.py
+---
+> 28caceeba15c30ca679e25c49a7c85b828096bb3b1ab3e2c676d8d1c8d10db80 joulewise/align/apple/v4_registration.py
+231c233
+< if not (9300 <= hm <= 81600): sys.exit("STOP: outside 02:35:00-22:40:00, the c3f4bacd8 soak child's window (rule 6, RL-171)")
+---
+> if not (9300 <= hm <= 81600): sys.exit("STOP: outside 02:35:00-22:40:00, the b2e01464d soak child's window (rule 6, RL-171)")
+252,253c254,255
+< cd /Users/edr/code/jw-wt/partc-c3f4
+< test "$(git rev-parse HEAD)" = c3f4bacd8013ca98c19cf8d41f830c701930cd41
+---
+> cd /Users/edr/code/jw-wt/partc-b2e01464d
+> test "$(git rev-parse HEAD)" = b2e01464d6d4fbf2901ff4d4154df9455104a12a
+257c259,262
+< git diff --quiet 0ec600128cb5e5040fe0dad2d30e4a10a38eae67 HEAD || { echo "STOP: tree differs from PR #783's head"; exit 1; }
+---
+> test "$(git rev-parse 'HEAD^{tree}')" = c904864e46879a4adfbdf0b467d4da1ee5928285 || { echo "STOP: tree is not RL-172c's c904864e4"; exit 1; }
+> git merge-base --is-ancestor c3f4bacd8013ca98c19cf8d41f830c701930cd41 HEAD
+> git merge-base --is-ancestor e5b4f4f7fbc05d3c1ff661356867f95a24e0cf9a HEAD
+> git merge-base --is-ancestor ca02c76e3b06118a6bcb5d612f034c93ceafb003 HEAD
+266c271
+< # must print c3f4bacd8013ca98c19cf8d41f830c701930cd41
+---
+> # must print b2e01464d6d4fbf2901ff4d4154df9455104a12a

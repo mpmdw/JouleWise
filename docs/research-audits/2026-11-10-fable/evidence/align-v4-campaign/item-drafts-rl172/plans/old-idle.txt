@@ -1,0 +1,23 @@
+old idle h/day {'Sun': 10.34, 'Mon': 9.29, 'Tue': 14.45, 'Wed': 18.05}
+gap Sun 00:00:00 Sun 02:40:00 2.67 dev-01-s04
+gap Sun 05:16:45 Sun 05:36:45 0.33 hp-01-s01 smoke
+gap Sun 07:31:48 Sun 07:51:48 0.33 hp-01-s02 (mirror 4)
+gap Sun 10:07:42 Sun 10:27:42 0.33 hp-01-s03 (mirror 5)
+gap Sun 13:04:27 Sun 13:24:27 0.33 dev-02-s02 L001-L006
+gap Sun 16:22:03 Sun 16:42:03 0.33 F0 Sun-a (standing)
+gap Sun 18:40:57 Sun 20:42:03 2.02 F0 Sun-b (standing)
+gap Sun 22:40:57 Mon 02:40:00 3.98 dev-02-s03 L007-L012
+gap Mon 05:37:36 Mon 05:57:36 0.33 dev-03 pilot L001-L003
+gap Mon 07:54:40 Mon 08:14:40 0.33 dev-03 rest L004-L012
+gap Mon 12:27:23 Mon 13:15:00 0.79 dev-04 s01 L001-L006
+gap Mon 16:10:07 Mon 16:30:07 0.33 dev-04 s02 L007-L012
+gap Mon 19:51:18 Mon 20:11:18 0.33 F0 Mon (standing)
+gap Mon 22:10:12 Tue 02:40:00 4.5 dev-05 s01 L001-L006
+gap Tue 05:54:40 Tue 06:14:40 0.33 dev-05 s02 L007-L012
+gap Tue 09:16:18 Tue 09:36:18 0.33 F0 Tue-a
+gap Tue 11:35:12 Tue 13:36:18 2.02 F0 Tue-b
+gap Tue 15:35:12 Tue 17:36:18 2.02 F0 Tue-c
+gap Tue 19:35:12 Wed 02:40:00 7.08 F0 Wed-a
+gap Wed 04:38:54 Wed 06:40:00 2.02 F0 Wed-b
+gap Wed 08:38:54 Wed 10:40:00 2.02 F0 Wed-c
+gap Wed 12:38:54 Thu 00:00:00 11.35

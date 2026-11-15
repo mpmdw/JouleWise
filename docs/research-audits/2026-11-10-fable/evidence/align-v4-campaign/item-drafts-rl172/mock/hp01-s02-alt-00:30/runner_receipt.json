@@ -1,0 +1,1158 @@
+{
+  "batch_windows": [
+    "13:14-13:15"
+  ],
+  "deadline": 1794837710.0,
+  "ended": {
+    "epoch_s": 1794824971.2485123,
+    "monotonic_ns": 8171248512053
+  },
+  "feeds": {
+    "agents": {
+      "files": [
+        {
+          "path": "mock-agents.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    },
+    "meter": {
+      "files": [
+        {
+          "path": "hazards/meter/stream-0001.jsonl",
+          "sha256": "e066cf13c68bb938a3f099b6118433ab1a01e7ea2f67663d9caf391077cf3e82"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    },
+    "volumes": {
+      "files": [
+        {
+          "path": "mock-volumes.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    }
+  },
+  "high_power": {
+    "before_restore": {
+      "ac_powermode": 2,
+      "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+      "host_marker_present": true,
+      "marker_is_this_spans": true,
+      "pmset_error": null
+    },
+    "block_power_mode": 2,
+    "close_proof": {
+      "ac_powermode": 0,
+      "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+      "host_marker_present": false,
+      "pmset_error": null,
+      "proven": true
+    },
+    "guard": [
+      {
+        "exit_code": 0,
+        "point": "restore_automatic",
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "exit_code": 0,
+        "observed": 0,
+        "point": "after_restore_automatic",
+        "stdout": "Battery Power:\n lowpowermode         0\n powermode            0\nAC Power:\n lowpowermode         0\n powermode            0\n"
+      },
+      {
+        "point": "before_high",
+        "stdout": "Battery Power:\n lowpowermode         0\n powermode            0\nAC Power:\n lowpowermode         0\n powermode            0\n"
+      },
+      {
+        "point": "after_high",
+        "stdout": "Battery Power:\n lowpowermode         0\n powermode            0\nAC Power:\n lowpowermode         0\n powermode            2\n"
+      },
+      {
+        "exit_code": 0,
+        "point": "restore_automatic",
+        "stderr": "",
+        "stdout": ""
+      },
+      {
+        "exit_code": 0,
+        "observed": 0,
+        "point": "after_restore_automatic",
+        "stdout": "Battery Power:\n lowpowermode         0\n powermode            0\nAC Power:\n lowpowermode         0\n powermode            0\n"
+      }
+    ],
+    "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+    "restore": {
+      "action": "restore_automatic",
+      "attempts": 1,
+      "deferred": false,
+      "ok": true
+    }
+  },
+  "kit": {
+    "campaign_id": "cl-hp-01",
+    "frozen_commit": "dd206025abb30fd5c07515cd4b34b3e653174810",
+    "sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965"
+  },
+  "legs": [
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794821167.062128,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1237
+          },
+          "output_dir": "legs/L004/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794819930.0,
+          "wall_s": 1237.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L004",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794821167.062128,
+        "g0_outcome": "released",
+        "g0_s": 196.0,
+        "leg_id": "L004",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 954626506,
+        "start_band": "q0",
+        "started_epoch_s": 1794819930.0,
+        "wall_s": 1237.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794822436.1242561,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1269
+          },
+          "output_dir": "legs/L005/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794821167.062128,
+          "wall_s": 1269.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L005",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794822436.1242561,
+        "g0_outcome": "released",
+        "g0_s": 228.0,
+        "leg_id": "L005",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 983646378,
+        "start_band": "q0",
+        "started_epoch_s": 1794821167.062128,
+        "wall_s": 1269.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794823700.1863842,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1264
+          },
+          "output_dir": "legs/L006/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794822436.1242561,
+          "wall_s": 1264.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L006",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794823700.1863842,
+        "g0_outcome": "released",
+        "g0_s": 223.0,
+        "leg_id": "L006",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 2048410933,
+        "start_band": "q0",
+        "started_epoch_s": 1794822436.1242561,
+        "wall_s": 1264.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794824971.2485123,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1271
+          },
+          "output_dir": "legs/L007/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794823700.1863842,
+          "wall_s": 1271.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L007",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794824971.2485123,
+        "g0_outcome": "released",
+        "g0_s": 230.0,
+        "leg_id": "L007",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 1350544700,
+        "start_band": "q0",
+        "started_epoch_s": 1794823700.1863842,
+        "wall_s": 1271.0621280670166
+      }
+    }
+  ],
+  "legs_finished": 4,
+  "legs_planned": 4,
+  "load_redos_used": 0,
+  "meter": {
+    "bad_polls": 0,
+    "elapsed_s": 7171.248512268066,
+    "polls": 71712,
+    "present": true,
+    "proven_stopped": true,
+    "usb_errors": 0
+  },
+  "mock": true,
+  "rc": 0,
+  "roster": [
+    "L004",
+    "L005",
+    "L006",
+    "L007"
+  ],
+  "runner_kind": "cadence-legs-v1",
+  "schema": "joulewise.cadence_span_receipt.v1",
+  "soak_reference": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/soak/soak_reference.json",
+  "span_result": {
+    "chain_exit_code": 0,
+    "chain_outcome": "COMPLETE",
+    "fault": false,
+    "outcome": "MEASURED_OK",
+    "restore_proven": true,
+    "verdict": "4/4 legs run"
+  },
+  "started": {
+    "epoch_s": 1794817800.0,
+    "monotonic_ns": 1000000000000
+  },
+  "steps": [
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "deadline",
+      "rc": 0,
+      "result": {
+        "rc": 0,
+        "remaining_s": 19540.0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "frozen",
+      "rc": 0,
+      "result": {
+        "rc": 0,
+        "skipped": "mock (no measurement checkout)"
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "night_agents",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "ac_power",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "condition13",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "host_lock",
+      "rc": 0,
+      "result": {
+        "lock_path": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/night.lock",
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "high_power_marker_absent",
+      "rc": 0,
+      "result": {
+        "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+        "present": false,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "read_power",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 0,
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "powermode_guard",
+      "rc": 0,
+      "result": {
+        "automatic_proved": true,
+        "rc": 0,
+        "sudo_rule": "listed"
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "display",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "dwell",
+      "rc": 0,
+      "result": {
+        "dwell_s": 300.0,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "plan",
+      "rc": 0,
+      "result": {
+        "deadline_epoch_s": 1794837150.0,
+        "expected_s": 8154,
+        "legs": [
+          "L004",
+          "L005",
+          "L006",
+          "L007"
+        ],
+        "rc": 0,
+        "worst_case_s": 19350
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "soak",
+      "rc": 0,
+      "result": {
+        "path": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/soak/soak_reference.json",
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "high_power",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 2,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L004-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L004-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L004-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "L004.a1-powermode",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 2,
+        "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+        "host_marker_present": true,
+        "marker_is_this_spans": true,
+        "pmset_error": null,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      },
+      "name": "L004.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 2
+        },
+        "bundle": "runs/mock-L004",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 196.0,
+        "incomplete_reasons": [],
+        "leg_id": "L004",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      },
+      "name": "before-L005-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      },
+      "name": "before-L005-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      },
+      "name": "before-L005-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      },
+      "name": "L005.a1-powermode",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 2,
+        "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+        "host_marker_present": true,
+        "marker_is_this_spans": true,
+        "pmset_error": null,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      },
+      "name": "L005.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 2
+        },
+        "bundle": "runs/mock-L005",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 228.0,
+        "incomplete_reasons": [],
+        "leg_id": "L005",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794821167.062128,
+        "monotonic_ns": 4367062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      },
+      "name": "before-L006-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      },
+      "name": "before-L006-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      },
+      "name": "before-L006-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      },
+      "name": "L006.a1-powermode",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 2,
+        "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+        "host_marker_present": true,
+        "marker_is_this_spans": true,
+        "pmset_error": null,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      },
+      "name": "L006.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 2
+        },
+        "bundle": "runs/mock-L006",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 223.0,
+        "incomplete_reasons": [],
+        "leg_id": "L006",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794822436.1242561,
+        "monotonic_ns": 5636124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      },
+      "name": "before-L007-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      },
+      "name": "before-L007-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      },
+      "name": "before-L007-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      },
+      "name": "L007.a1-powermode",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 2,
+        "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+        "host_marker_present": true,
+        "marker_is_this_spans": true,
+        "pmset_error": null,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      },
+      "name": "L007.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 2
+        },
+        "bundle": "runs/mock-L007",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 230.0,
+        "incomplete_reasons": [],
+        "leg_id": "L007",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794823700.1863842,
+        "monotonic_ns": 6900186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      },
+      "name": "power_last_look",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 2,
+        "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+        "host_marker_present": true,
+        "marker_is_this_spans": true,
+        "pmset_error": null,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      },
+      "name": "restore",
+      "rc": 0,
+      "result": {
+        "action": "restore_automatic",
+        "attempts": 1,
+        "deferred": false,
+        "ok": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      },
+      "name": "power_proof",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 0,
+        "host_marker": "/Volumes/JW-EXT/scratch/items-rl171/mock/hp01-s02-alt-00:30/mock-host-power/high-power.marker",
+        "host_marker_present": false,
+        "pmset_error": null,
+        "proven": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      },
+      "name": "host_lock_release",
+      "rc": 0,
+      "result": {
+        "rc": 0,
+        "released": true
+      },
+      "started": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      },
+      "name": "stop-volumes",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      },
+      "name": "stop-meter",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      },
+      "name": "stop-agents",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824971.2485123,
+        "monotonic_ns": 8171248512053
+      }
+    }
+  ],
+  "work_reserve_s": 370
+}

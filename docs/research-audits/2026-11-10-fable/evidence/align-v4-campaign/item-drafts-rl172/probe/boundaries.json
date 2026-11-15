@@ -1,0 +1,1010 @@
+{
+ "dev02-s02-6": {
+  "pin": "b4b6aeb19",
+  "worst": 24750,
+  "d_last": "Sun 2026-11-15 19:07:30",
+  "a_last": "Mon 2026-11-16 06:21:30",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 19:07:30",
+    1794798450,
+    0,
+    "exp 10656 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 19:07:31",
+    1794798451,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 06:21:30",
+    1794838890,
+    0,
+    "exp 10656 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 06:21:31",
+    1794838891,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 10656 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 10656 worst 24750"
+   ]
+  ]
+ },
+ "dev02-s03-6": {
+  "pin": "b4b6aeb19",
+  "worst": 24750,
+  "d_last": "Sun 2026-11-15 19:07:30",
+  "a_last": "Mon 2026-11-16 06:21:30",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 19:07:30",
+    1794798450,
+    0,
+    "exp 10656 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 19:07:31",
+    1794798451,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 06:21:30",
+    1794838890,
+    0,
+    "exp 10656 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 06:21:31",
+    1794838891,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 10656 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 10656 worst 24750"
+   ]
+  ]
+ },
+ "dev02-s01-12": {
+  "pin": "b4b6aeb19",
+  "worst": 40950,
+  "d_last": "Sun 2026-11-15 14:37:30",
+  "a_last": "Mon 2026-11-16 01:51:30",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 14:37:30",
+    1794782250,
+    0,
+    "exp 18162 worst 40950"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 14:37:31",
+    1794782251,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 40950 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 01:51:30",
+    1794822690,
+    0,
+    "exp 18162 worst 40950"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 01:51:31",
+    1794822691,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 40950 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 40950 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 18162 worst 40950"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 40950 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 18162 worst 40950"
+   ]
+  ]
+ },
+ "hp01-s01-3": {
+  "pin": "dd206025a",
+  "worst": 16650,
+  "d_last": "Sun 2026-11-15 21:22:30",
+  "a_last": "Mon 2026-11-16 08:36:30",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 21:22:30",
+    1794806550,
+    0,
+    "exp 6903 worst 16650"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 21:22:31",
+    1794806551,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 08:36:30",
+    1794846990,
+    0,
+    "exp 6903 worst 16650"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 08:36:31",
+    1794846991,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 6903 worst 16650"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 6903 worst 16650"
+   ]
+  ]
+ },
+ "hp01-s02-4": {
+  "pin": "dd206025a",
+  "worst": 19350,
+  "d_last": "Sun 2026-11-15 20:37:30",
+  "a_last": "Mon 2026-11-16 07:51:30",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 20:37:30",
+    1794803850,
+    0,
+    "exp 8154 worst 19350"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 20:37:31",
+    1794803851,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 19350 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 07:51:30",
+    1794844290,
+    0,
+    "exp 8154 worst 19350"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 07:51:31",
+    1794844291,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 19350 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 19350 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 8154 worst 19350"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 19350 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 8154 worst 19350"
+   ]
+  ]
+ },
+ "hp01-s03-5": {
+  "pin": "dd206025a",
+  "worst": 22050,
+  "d_last": "Sun 2026-11-15 19:52:30",
+  "a_last": "Mon 2026-11-16 07:06:30",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 19:52:30",
+    1794801150,
+    0,
+    "exp 9405 worst 22050"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 19:52:31",
+    1794801151,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 22050 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 07:06:30",
+    1794841590,
+    0,
+    "exp 9405 worst 22050"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 07:06:31",
+    1794841591,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 22050 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 22050 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 9405 worst 22050"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 22050 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 9405 worst 22050"
+   ]
+  ]
+ },
+ "dev03-s01-3": {
+  "pin": "2d347f721",
+  "worst": 16650,
+  "d_last": "Sun 2026-11-15 20:48:10",
+  "a_last": "Mon 2026-11-16 08:02:10",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 20:48:10",
+    1794804490,
+    0,
+    "exp 7024 worst 16650"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 20:48:11",
+    1794804491,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a "
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 08:02:10",
+    1794844930,
+    0,
+    "exp 7024 worst 16650"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 08:02:11",
+    1794844931,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a "
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 7024 worst 16650"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 7024 worst 16650"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:00",
+    1794855000,
+    0,
+    "exp 7024 worst 16650"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:01",
+    1794855001,
+    1,
+    "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+   ]
+  ]
+ },
+ "dev03-s02-9": {
+  "pin": "2d347f721",
+  "worst": 32850,
+  "d_last": "Sun 2026-11-15 16:18:10",
+  "a_last": "Mon 2026-11-16 03:32:10",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 16:18:10",
+    1794788290,
+    0,
+    "exp 15163 worst 32850"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 16:18:11",
+    1794788291,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a "
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 03:32:10",
+    1794828730,
+    0,
+    "exp 15163 worst 32850"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 03:32:11",
+    1794828731,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a "
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 32850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 15163 worst 32850"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 32850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 15163 worst 32850"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:00",
+    1794855000,
+    0,
+    "exp 15163 worst 32850"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:01",
+    1794855001,
+    1,
+    "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+   ]
+  ]
+ },
+ "dev03-s02b-3": {
+  "pin": "2d347f721",
+  "worst": 16650,
+  "d_last": "Sun 2026-11-15 20:48:10",
+  "a_last": "Mon 2026-11-16 08:02:10",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 20:48:10",
+    1794804490,
+    0,
+    "exp 6633 worst 16650"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 20:48:11",
+    1794804491,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a "
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 08:02:10",
+    1794844930,
+    0,
+    "exp 6633 worst 16650"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 08:02:11",
+    1794844931,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a "
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 6633 worst 16650"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 6633 worst 16650"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:00",
+    1794855000,
+    0,
+    "exp 6633 worst 16650"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:01",
+    1794855001,
+    1,
+    "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+   ]
+  ]
+ },
+ "dev03-s03b-6": {
+  "pin": "2d347f721",
+  "worst": 24750,
+  "d_last": "Sun 2026-11-15 18:33:10",
+  "a_last": "Mon 2026-11-16 05:47:10",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:10",
+    1794796390,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:11",
+    1794796391,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a "
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:10",
+    1794836830,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:11",
+    1794836831,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a "
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:00",
+    1794855000,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:01",
+    1794855001,
+    1,
+    "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+   ]
+  ]
+ },
+ "dev04-s01-6": {
+  "pin": "2d347f721",
+  "worst": 24750,
+  "d_last": "Sun 2026-11-15 18:33:10",
+  "a_last": "Mon 2026-11-16 05:47:10",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:10",
+    1794796390,
+    0,
+    "exp 10507 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:11",
+    1794796391,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a "
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:10",
+    1794836830,
+    0,
+    "exp 10507 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:11",
+    1794836831,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a "
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 10507 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 10507 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:00",
+    1794855000,
+    0,
+    "exp 10507 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:01",
+    1794855001,
+    1,
+    "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+   ]
+  ]
+ },
+ "dev04-s02-6": {
+  "pin": "2d347f721",
+  "worst": 24750,
+  "d_last": "Sun 2026-11-15 18:33:10",
+  "a_last": "Mon 2026-11-16 05:47:10",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:10",
+    1794796390,
+    0,
+    "exp 12071 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:11",
+    1794796391,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a "
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:10",
+    1794836830,
+    0,
+    "exp 12071 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:11",
+    1794836831,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a "
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 12071 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 12071 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:00",
+    1794855000,
+    0,
+    "exp 12071 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:01",
+    1794855001,
+    1,
+    "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+   ]
+  ]
+ },
+ "dev05-s01-6": {
+  "pin": "2d347f721",
+  "worst": 24750,
+  "d_last": "Sun 2026-11-15 18:33:10",
+  "a_last": "Mon 2026-11-16 05:47:10",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:10",
+    1794796390,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:11",
+    1794796391,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a "
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:10",
+    1794836830,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:11",
+    1794836831,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a "
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:00",
+    1794855000,
+    0,
+    "exp 11680 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:01",
+    1794855001,
+    1,
+    "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+   ]
+  ]
+ },
+ "dev05-s02-6": {
+  "pin": "2d347f721",
+  "worst": 24750,
+  "d_last": "Sun 2026-11-15 18:33:10",
+  "a_last": "Mon 2026-11-16 05:47:10",
+  "plans": [
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:10",
+    1794796390,
+    0,
+    "exp 10898 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Sun 2026-11-15 18:33:11",
+    1794796391,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a "
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:10",
+    1794836830,
+    0,
+    "exp 10898 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 05:47:11",
+    1794836831,
+    1,
+    "REFUSE the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a "
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:34:59",
+    1794825299,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 02:35:00",
+    1794825300,
+    0,
+    "exp 10898 worst 24750"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:14:59",
+    1794863699,
+    1,
+    "REFUSE the worst-case span [t0, t0 + 24750 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+   ],
+   [
+    "13:14-13:15",
+    "Mon 2026-11-16 13:15:00",
+    1794863700,
+    0,
+    "exp 10898 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:00",
+    1794855000,
+    0,
+    "exp 10898 worst 24750"
+   ],
+   [
+    "02:00-02:35",
+    "Mon 2026-11-16 10:50:01",
+    1794855001,
+    1,
+    "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+   ]
+  ]
+ }
+}

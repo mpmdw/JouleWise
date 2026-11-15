@@ -1,0 +1,411 @@
+{
+ "tag": "new-nodaybal",
+ "daybal": false,
+ "events": [
+  [
+   "Sun 14:08:00",
+   "Sun 14:28:00",
+   "RL-172 (h) restart and readback"
+  ]
+ ],
+ "held": [
+  [
+   "Sun 14:48:00",
+   "Mon 00:00:00",
+   "dev-02-s03 dated Monday (6 + 6 split; RL-172 (a))"
+  ],
+  [
+   "Mon 09:37:23",
+   "Mon 09:32:23",
+   "dev-04 dated Tuesday (RL-172 (a): <= 12 mixed-size legs a date)"
+  ],
+  [
+   "Mon 16:41:11",
+   "Mon 16:36:11",
+   "dev-05 dated Wednesday (RL-172 (a))"
+  ]
+ ],
+ "idle_daybalance_h": {
+  "Sun": 5.24,
+  "Mon": 0.0,
+  "Tue": 0.0,
+  "Wed": 0.0
+ },
+ "quiet": 300,
+ "hand": 1200,
+ "f2": false,
+ "rows": [
+  {
+   "name": "dev-01-s04 (item 331)",
+   "kind": "span",
+   "kit": "dev01",
+   "legs": "L008,L009,L010,L011,L012",
+   "t0": 1794730800,
+   "arg": "13:14-13:15",
+   "exp": 9405,
+   "worst_s": 22050,
+   "end": 1794740205,
+   "worst_end": 1794752850,
+   "wait": 0,
+   "gate": "issued; t0 00:20 forecast by the lead"
+  },
+  {
+   "name": "hp-01-s01 smoke",
+   "kind": "span",
+   "kit": "hp01",
+   "legs": "L001,L002,L003",
+   "t0": 1794740505,
+   "arg": "02:00-02:35",
+   "exp": 6903,
+   "worst_s": 16650,
+   "end": 1794747408,
+   "worst_end": 1794757155,
+   "wait": 0,
+   "gate": "s04 closed + Check; RL-155 \u00a75.2; line 2; line 9 s03 desk"
+  },
+  {
+   "name": "hp-01-s02",
+   "kind": "span",
+   "kit": "hp01",
+   "legs": "L004,L005,L006,L007",
+   "t0": 1794748608,
+   "arg": "02:00-02:35",
+   "exp": 8154,
+   "worst_s": 19350,
+   "end": 1794756762,
+   "worst_end": 1794767958,
+   "wait": 0,
+   "gate": "smoke hand-read + R9; s04 desk final; CI base+0"
+  },
+  {
+   "name": "hp-01-s03",
+   "kind": "span",
+   "kit": "hp01",
+   "legs": "L008,L009,L010,L011,L012",
+   "t0": 1794757062,
+   "arg": "02:00-02:35",
+   "exp": 9405,
+   "worst_s": 22050,
+   "end": 1794766467,
+   "worst_end": 1794779112,
+   "wait": 0,
+   "gate": "s02 closed clean; smoke desk final"
+  },
+  {
+   "name": "dev-02-s02",
+   "kind": "span",
+   "kit": "dev02",
+   "legs": "L001,L002,L003,L004,L005,L006",
+   "t0": 1794766767,
+   "arg": "02:00-02:35",
+   "exp": 10656,
+   "worst_s": 24750,
+   "end": 1794777423,
+   "worst_end": 1794791517,
+   "wait": 0,
+   "gate": "append committed; RL-155 \u00a73.3; line 9 hp-01-s02 desk; Sunday"
+  },
+  {
+   "name": "F0 (standing, trigger c)",
+   "kind": "F0",
+   "kit": "partc",
+   "legs": "Part C",
+   "t0": 1794782880,
+   "arg": "(c3f4)",
+   "exp": 7134,
+   "worst_s": 12180,
+   "end": 1794790014,
+   "worst_end": 1794795060,
+   "wait": 0,
+   "gate": "no staged item can hold within 2 h 30"
+  },
+  {
+   "name": "F0 (standing, trigger c)",
+   "kind": "F0",
+   "kit": "partc",
+   "legs": "Part C",
+   "t0": 1794797280,
+   "arg": "(c3f4)",
+   "exp": 7134,
+   "worst_s": 12180,
+   "end": 1794804414,
+   "worst_end": 1794809460,
+   "wait": 0,
+   "gate": "no staged item can hold within 2 h 30"
+  },
+  {
+   "name": "dev-02-s03",
+   "kind": "span",
+   "kit": "dev02",
+   "legs": "L007,L008,L009,L010,L011,L012",
+   "t0": 1794816000,
+   "arg": "13:14-13:15",
+   "exp": 10656,
+   "worst_s": 24750,
+   "end": 1794826656,
+   "worst_end": 1794840750,
+   "wait": 10386,
+   "gate": "s02 checked; line 9 hp-01-s03 desk; Monday"
+  },
+  {
+   "name": "dev-03-s01 pilot",
+   "kind": "span",
+   "kit": "dev03",
+   "legs": "L001,L002,L003",
+   "t0": 1794826956,
+   "arg": "02:00-02:35",
+   "exp": 7024,
+   "worst_s": 16650,
+   "end": 1794833980,
+   "worst_end": 1794843606,
+   "wait": 0,
+   "gate": "READY+staged; dev-02 closed; line 9 dev-02-s02 desk; dated Monday"
+  },
+  {
+   "name": "dev-03-s02 rest (nine)",
+   "kind": "span",
+   "kit": "dev03",
+   "legs": "L004,L005,L006,L007,L008,L009,L010,L011,L012",
+   "t0": 1794835180,
+   "arg": "02:00-02:35",
+   "exp": 15163,
+   "worst_s": 32850,
+   "end": 1794850343,
+   "worst_end": 1794868030,
+   "wait": 0,
+   "gate": "hand-read R9 + L002 released; append; line 9 dev-02-s03 desk; dated Monday"
+  },
+  {
+   "name": "dev-04-s01",
+   "kind": "span",
+   "kit": "dev04",
+   "legs": "L001,L002,L003,L004,L005,L006",
+   "t0": 1794850643,
+   "arg": "02:00-02:35",
+   "exp": 10507,
+   "worst_s": 24750,
+   "end": 1794861150,
+   "worst_end": 1794875393,
+   "wait": 0,
+   "gate": "delta ADMIT; Q6; line 9 dev-03 pilot desk; dated Tuesday"
+  },
+  {
+   "name": "dev-04-s02",
+   "kind": "span",
+   "kit": "dev04",
+   "legs": "L007,L008,L009,L010,L011,L012",
+   "t0": 1794863700,
+   "arg": "02:00-02:35",
+   "exp": 12071,
+   "worst_s": 24750,
+   "end": 1794875771,
+   "worst_end": 1794888450,
+   "wait": 2250,
+   "gate": "L005 released or >=4 of dev-03's 5 consumers; line 9 dev-03 rest desk; Tuesday"
+  },
+  {
+   "name": "dev-05-s01",
+   "kind": "span",
+   "kit": "dev05",
+   "legs": "L001,L002,L003,L004,L005,L006",
+   "t0": 1794876071,
+   "arg": "02:00-02:35",
+   "exp": 11680,
+   "worst_s": 24750,
+   "end": 1794887751,
+   "worst_end": 1794900821,
+   "wait": 0,
+   "gate": "delta ADMIT; Q6; line 9 dev-04-s01 desk; dated Wednesday"
+  },
+  {
+   "name": "dev-05-s02",
+   "kind": "span",
+   "kit": "dev05",
+   "legs": "L007,L008,L009,L010,L011,L012",
+   "t0": 1794888051,
+   "arg": "13:14-13:15",
+   "exp": 10898,
+   "worst_s": 24750,
+   "end": 1794898949,
+   "worst_end": 1794912801,
+   "wait": 0,
+   "gate": "line 9 dev-04-s02 desk; Wednesday"
+  },
+  {
+   "name": "F0 (standing, trigger c)",
+   "kind": "F0",
+   "kit": "partc",
+   "legs": "Part C",
+   "t0": 1794911700,
+   "arg": "(c3f4)",
+   "exp": 7134,
+   "worst_s": 12180,
+   "end": 1794918834,
+   "worst_end": 1794923880,
+   "wait": 0,
+   "gate": "no staged item can hold within 2 h 30"
+  },
+  {
+   "name": "F0 (standing, trigger c)",
+   "kind": "F0",
+   "kit": "partc",
+   "legs": "Part C",
+   "t0": 1794926100,
+   "arg": "(c3f4)",
+   "exp": 7134,
+   "worst_s": 12180,
+   "end": 1794933234,
+   "worst_end": 1794938280,
+   "wait": 0,
+   "gate": "no staged item can hold within 2 h 30"
+  },
+  {
+   "name": "F0 (standing, trigger c)",
+   "kind": "F0",
+   "kit": "partc",
+   "legs": "Part C",
+   "t0": 1794940500,
+   "arg": "(c3f4)",
+   "exp": 7134,
+   "worst_s": 12180,
+   "end": 1794947634,
+   "worst_end": 1794952680,
+   "wait": 0,
+   "gate": "no staged item can hold within 2 h 30"
+  },
+  {
+   "name": "F0 (standing, trigger c)",
+   "kind": "F0",
+   "kit": "partc",
+   "legs": "Part C",
+   "t0": 1794998100,
+   "arg": "(c3f4)",
+   "exp": 7134,
+   "worst_s": 12180,
+   "end": 1795005234,
+   "worst_end": 1795010280,
+   "wait": 0,
+   "gate": "no staged item can hold within 2 h 30"
+  },
+  {
+   "name": "F0 (standing, trigger c)",
+   "kind": "F0",
+   "kit": "partc",
+   "legs": "Part C",
+   "t0": 1795012500,
+   "arg": "(c3f4)",
+   "exp": 7134,
+   "worst_s": 12180,
+   "end": 1795019634,
+   "worst_end": 1795024680,
+   "wait": 0,
+   "gate": "no staged item can hold within 2 h 30"
+  },
+  {
+   "name": "F0 (standing, trigger c)",
+   "kind": "F0",
+   "kit": "partc",
+   "legs": "Part C",
+   "t0": 1795026900,
+   "arg": "(c3f4)",
+   "exp": 7134,
+   "worst_s": 12180,
+   "end": 1795034034,
+   "worst_end": 1795039080,
+   "wait": 0,
+   "gate": "no staged item can hold within 2 h 30"
+  }
+ ],
+ "idle_h": {
+  "Sun": 7.67,
+  "Mon": 4.92,
+  "Tue": 20.64,
+  "Wed": 18.05
+ },
+ "gaps": [
+  [
+   "Sun 00:00:00",
+   "Sun 00:20:00",
+   0.33,
+   "dev-01-s04 (item 331)"
+  ],
+  [
+   "Sun 04:56:48",
+   "Sun 05:16:48",
+   0.33,
+   "hp-01-s02"
+  ],
+  [
+   "Sun 13:17:03",
+   "Sun 14:48:00",
+   1.52,
+   "F0 (standing, trigger c)"
+  ],
+  [
+   "Sun 16:46:54",
+   "Sun 18:48:00",
+   2.02,
+   "F0 (standing, trigger c)"
+  ],
+  [
+   "Sun 20:46:54",
+   "Mon 00:00:00",
+   3.22,
+   "dev-02-s03"
+  ],
+  [
+   "Mon 04:59:40",
+   "Mon 05:19:40",
+   0.33,
+   "dev-03-s02 rest (nine)"
+  ],
+  [
+   "Mon 12:32:30",
+   "Mon 13:15:00",
+   0.71,
+   "dev-04-s02"
+  ],
+  [
+   "Mon 23:02:29",
+   "Tue 02:35:00",
+   3.54,
+   "F0 (standing, trigger c)"
+  ],
+  [
+   "Tue 04:33:54",
+   "Tue 06:35:00",
+   2.02,
+   "F0 (standing, trigger c)"
+  ],
+  [
+   "Tue 08:33:54",
+   "Tue 10:35:00",
+   2.02,
+   "F0 (standing, trigger c)"
+  ],
+  [
+   "Tue 12:33:54",
+   "Wed 02:35:00",
+   14.02,
+   "F0 (standing, trigger c)"
+  ],
+  [
+   "Wed 04:33:54",
+   "Wed 06:35:00",
+   2.02,
+   "F0 (standing, trigger c)"
+  ],
+  [
+   "Wed 08:33:54",
+   "Wed 10:35:00",
+   2.02,
+   "F0 (standing, trigger c)"
+  ],
+  [
+   "Wed 12:33:54",
+   "Thu 00:00:00",
+   11.44,
+   null
+  ]
+ ]
+}

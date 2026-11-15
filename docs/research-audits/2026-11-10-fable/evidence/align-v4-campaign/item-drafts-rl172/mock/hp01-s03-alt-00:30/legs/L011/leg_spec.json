@@ -1,0 +1,11 @@
+{
+ "campaign_id": "cl-hp-01",
+ "decode_tokens": 4096,
+ "leg_id": "L011",
+ "prefill_chars": 40000,
+ "prefill_tokens": 19458,
+ "quiet_s": 0,
+ "schema": "joulewise.cadence_leg_spec.v1",
+ "seed": 2178814401,
+ "start_band": "q0"
+}

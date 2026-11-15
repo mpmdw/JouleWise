@@ -1,0 +1,112 @@
+$ plan --t0 1794796390 (Sun 2026-11-15 18:33:10) --batch-window 02:00-02:35  [pin 2d347f721]
+rc 0
+{
+ "batch_windows": [
+  "02:00-02:35"
+ ],
+ "blackout_clear": true,
+ "campaign_id": "cl-dev-03",
+ "deadline_epoch_s": 1794821140.0,
+ "expected_s": 11680,
+ "fence_end_epoch_s": 1794822600.0,
+ "fixed_overhead_s": 1200,
+ "kit_sha256": "0f535774b413654d9d72b153a7dc8369df81575b34c5fa120898d76dfe04e14b",
+ "launch_deadline_epoch_s": 1794821700.0,
+ "leg_cap_s": 2700,
+ "legs": [
+  {
+   "budget_s": 1156,
+   "campaign_id": "cl-dev-03",
+   "decode_tokens": 4096,
+   "leg_id": "L007",
+   "prefill_chars": 20557,
+   "prefill_tokens": 10000,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2633008529,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1467,
+   "campaign_id": "cl-dev-03",
+   "decode_tokens": 4096,
+   "g0_role": "consume",
+   "g0_shape": "span",
+   "leg_id": "L008",
+   "prefill_chars": 4111,
+   "prefill_tokens": 2000,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1.1",
+   "seed": 1075127983,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1642,
+   "campaign_id": "cl-dev-03",
+   "decode_tokens": 4096,
+   "g0_role": "consume",
+   "g0_shape": "span",
+   "leg_id": "L009",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1.1",
+   "seed": 1056162900,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1467,
+   "campaign_id": "cl-dev-03",
+   "decode_tokens": 4096,
+   "g0_role": "consume",
+   "g0_shape": "span",
+   "leg_id": "L010",
+   "prefill_chars": 4111,
+   "prefill_tokens": 2000,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1.1",
+   "seed": 2111502221,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-03",
+   "decode_tokens": 4096,
+   "leg_id": "L011",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 3657592638,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1547,
+   "campaign_id": "cl-dev-03",
+   "decode_tokens": 4096,
+   "g0_role": "consume",
+   "g0_shape": "span",
+   "leg_id": "L012",
+   "prefill_chars": 20557,
+   "prefill_tokens": 10000,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1.1",
+   "seed": 1183198644,
+   "start_band": "q0"
+  }
+ ],
+ "redo_quota": 2,
+ "runner_kind": "cadence-legs-v1.1",
+ "schema": "joulewise.cadence_span_plan.v1",
+ "soak_s": 1950,
+ "t0_epoch_s": 1794796390.0,
+ "time_model": {
+  "decode_tokens_per_s": 12.03,
+  "fixed_s": 500.0,
+  "g0_s": 209.0,
+  "prefill_s_per_token": 0.005,
+  "span_g0_s": 600.0,
+  "warmup_extra_s": 6.0
+ },
+ "worst_case_s": 24750
+}

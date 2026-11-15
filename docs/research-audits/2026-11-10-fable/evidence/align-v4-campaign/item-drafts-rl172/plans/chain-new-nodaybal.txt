@@ -1,0 +1,37 @@
+dev-01-s04 (item 331)        dev01  L008,L009..  t0 Sun 00:20:00 (1794730800) arg 13:14-13:15  exp   9405 end Sun 02:56:45 worst Sun 06:27:30 waited 0s
+hp-01-s01 smoke              hp01   L001,L002..  t0 Sun 03:01:45 (1794740505) arg 02:00-02:35  exp   6903 end Sun 04:56:48 worst Sun 07:39:15 waited 0s
+hp-01-s02                    hp01   L004,L005..  t0 Sun 05:16:48 (1794748608) arg 02:00-02:35  exp   8154 end Sun 07:32:42 worst Sun 10:39:18 waited 0s
+hp-01-s03                    hp01   L008,L009..  t0 Sun 07:37:42 (1794757062) arg 02:00-02:35  exp   9405 end Sun 10:14:27 worst Sun 13:45:12 waited 0s
+dev-02-s02                   dev02  L001,L002..  t0 Sun 10:19:27 (1794766767) arg 02:00-02:35  exp  10656 end Sun 13:17:03 worst Sun 17:11:57 waited 0s
+F0 (standing, trigger c)     partc  Part C       t0 Sun 14:48:00 (1794782880) arg (c3f4)       exp   7134 end Sun 16:46:54 worst Sun 18:11:00 waited 0s
+F0 (standing, trigger c)     partc  Part C       t0 Sun 18:48:00 (1794797280) arg (c3f4)       exp   7134 end Sun 20:46:54 worst Sun 22:11:00 waited 0s
+dev-02-s03                   dev02  L007,L008..  t0 Mon 00:00:00 (1794816000) arg 13:14-13:15  exp  10656 end Mon 02:57:36 worst Mon 06:52:30 waited 10386s
+dev-03-s01 pilot             dev03  L001,L002..  t0 Mon 03:02:36 (1794826956) arg 02:00-02:35  exp   7024 end Mon 04:59:40 worst Mon 07:40:06 waited 0s
+dev-03-s02 rest (nine)       dev03  L004,L005..  t0 Mon 05:19:40 (1794835180) arg 02:00-02:35  exp  15163 end Mon 09:32:23 worst Mon 14:27:10 waited 0s
+dev-04-s01                   dev04  L001,L002..  t0 Mon 09:37:23 (1794850643) arg 02:00-02:35  exp  10507 end Mon 12:32:30 worst Mon 16:29:53 waited 0s
+dev-04-s02                   dev04  L007,L008..  t0 Mon 13:15:00 (1794863700) arg 02:00-02:35  exp  12071 end Mon 16:36:11 worst Mon 20:07:30 waited 2250s
+dev-05-s01                   dev05  L001,L002..  t0 Mon 16:41:11 (1794876071) arg 02:00-02:35  exp  11680 end Mon 19:55:51 worst Mon 23:33:41 waited 0s
+dev-05-s02                   dev05  L007,L008..  t0 Mon 20:00:51 (1794888051) arg 13:14-13:15  exp  10898 end Mon 23:02:29 worst Tue 02:53:21 waited 0s
+F0 (standing, trigger c)     partc  Part C       t0 Tue 02:35:00 (1794911700) arg (c3f4)       exp   7134 end Tue 04:33:54 worst Tue 05:58:00 waited 0s
+F0 (standing, trigger c)     partc  Part C       t0 Tue 06:35:00 (1794926100) arg (c3f4)       exp   7134 end Tue 08:33:54 worst Tue 09:58:00 waited 0s
+F0 (standing, trigger c)     partc  Part C       t0 Tue 10:35:00 (1794940500) arg (c3f4)       exp   7134 end Tue 12:33:54 worst Tue 13:58:00 waited 0s
+F0 (standing, trigger c)     partc  Part C       t0 Wed 02:35:00 (1794998100) arg (c3f4)       exp   7134 end Wed 04:33:54 worst Wed 05:58:00 waited 0s
+F0 (standing, trigger c)     partc  Part C       t0 Wed 06:35:00 (1795012500) arg (c3f4)       exp   7134 end Wed 08:33:54 worst Wed 09:58:00 waited 0s
+F0 (standing, trigger c)     partc  Part C       t0 Wed 10:35:00 (1795026900) arg (c3f4)       exp   7134 end Wed 12:33:54 worst Wed 13:58:00 waited 0s
+idle h/day {'Sun': 7.67, 'Mon': 4.92, 'Tue': 20.64, 'Wed': 18.05}
+of which idle for day balance {'Sun': 5.24, 'Mon': 0.0, 'Tue': 0.0, 'Wed': 0.0}
+held [('Sun 14:48:00', 'Mon 00:00:00', 'dev-02-s03 dated Monday (6 + 6 split; RL-172 (a))'), ('Mon 09:37:23', 'Mon 09:32:23', 'dev-04 dated Tuesday (RL-172 (a): <= 12 mixed-size legs a date)'), ('Mon 16:41:11', 'Mon 16:36:11', 'dev-05 dated Wednesday (RL-172 (a))')]
+gap ('Sun 00:00:00', 'Sun 00:20:00', 0.33, 'dev-01-s04 (item 331)')
+gap ('Sun 04:56:48', 'Sun 05:16:48', 0.33, 'hp-01-s02')
+gap ('Sun 13:17:03', 'Sun 14:48:00', 1.52, 'F0 (standing, trigger c)')
+gap ('Sun 16:46:54', 'Sun 18:48:00', 2.02, 'F0 (standing, trigger c)')
+gap ('Sun 20:46:54', 'Mon 00:00:00', 3.22, 'dev-02-s03')
+gap ('Mon 04:59:40', 'Mon 05:19:40', 0.33, 'dev-03-s02 rest (nine)')
+gap ('Mon 12:32:30', 'Mon 13:15:00', 0.71, 'dev-04-s02')
+gap ('Mon 23:02:29', 'Tue 02:35:00', 3.54, 'F0 (standing, trigger c)')
+gap ('Tue 04:33:54', 'Tue 06:35:00', 2.02, 'F0 (standing, trigger c)')
+gap ('Tue 08:33:54', 'Tue 10:35:00', 2.02, 'F0 (standing, trigger c)')
+gap ('Tue 12:33:54', 'Wed 02:35:00', 14.02, 'F0 (standing, trigger c)')
+gap ('Wed 04:33:54', 'Wed 06:35:00', 2.02, 'F0 (standing, trigger c)')
+gap ('Wed 08:33:54', 'Wed 10:35:00', 2.02, 'F0 (standing, trigger c)')
+gap ('Wed 12:33:54', 'Thu 00:00:00', 11.44, None)

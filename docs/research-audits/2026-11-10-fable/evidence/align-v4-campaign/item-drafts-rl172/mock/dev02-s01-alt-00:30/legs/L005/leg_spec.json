@@ -1,0 +1,11 @@
+{
+ "campaign_id": "cl-dev-02",
+ "decode_tokens": 4096,
+ "leg_id": "L005",
+ "prefill_chars": 40000,
+ "prefill_tokens": 19458,
+ "quiet_s": 0,
+ "schema": "joulewise.cadence_leg_spec.v1",
+ "seed": 2522171568,
+ "start_band": "q0"
+}

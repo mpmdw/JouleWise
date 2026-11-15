@@ -1,0 +1,86 @@
+{
+ "batch_windows": [
+  "13:14-13:15"
+ ],
+ "blackout_clear": true,
+ "campaign_id": "cl-hp-01",
+ "deadline_epoch_s": 1794839850.0,
+ "expected_s": 9405,
+ "fixed_overhead_s": 1200,
+ "leg_cap_s": 2700,
+ "legs": [
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-hp-01",
+   "decode_tokens": 4096,
+   "leg_id": "L008",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 1180804720,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-hp-01",
+   "decode_tokens": 4096,
+   "leg_id": "L009",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 3701535075,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-hp-01",
+   "decode_tokens": 4096,
+   "leg_id": "L010",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2827066148,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-hp-01",
+   "decode_tokens": 4096,
+   "leg_id": "L011",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2178814401,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-hp-01",
+   "decode_tokens": 4096,
+   "leg_id": "L012",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 1042807770,
+   "start_band": "q0"
+  }
+ ],
+ "redo_quota": 2,
+ "runner_kind": "cadence-legs-v1",
+ "schema": "joulewise.cadence_span_plan.v1",
+ "soak_s": 1950,
+ "t0_epoch_s": 1794817800.0,
+ "time_model": {
+  "decode_tokens_per_s": 12.03,
+  "fixed_s": 500.0,
+  "g0_s": 209.0,
+  "prefill_s_per_token": 0.005,
+  "warmup_extra_s": 6.0
+ },
+ "worst_case_s": 22050
+}

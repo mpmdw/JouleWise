@@ -1,0 +1,1 @@
+{"campaign_id": "cl-dev-05", "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e", "frozen_paths_verified": true, "kit_sha256": "2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a", "legs": 12, "ok": true}

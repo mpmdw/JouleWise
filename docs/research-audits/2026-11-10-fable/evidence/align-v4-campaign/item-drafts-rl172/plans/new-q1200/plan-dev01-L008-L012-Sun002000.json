@@ -1,0 +1,88 @@
+{
+ "batch_windows": [
+  "13:14-13:15"
+ ],
+ "blackout_clear": true,
+ "campaign_id": "cl-dev-01",
+ "deadline_epoch_s": 1794752850.0,
+ "expected_s": 9405,
+ "fixed_overhead_s": 1200,
+ "kit_sha256": "c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7",
+ "launch_deadline_epoch_s": 1794753410.0,
+ "leg_cap_s": 2700,
+ "legs": [
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-01",
+   "decode_tokens": 4096,
+   "leg_id": "L008",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 4194947539,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-01",
+   "decode_tokens": 4096,
+   "leg_id": "L009",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 1934072354,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-01",
+   "decode_tokens": 4096,
+   "leg_id": "L010",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 1942037262,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-01",
+   "decode_tokens": 4096,
+   "leg_id": "L011",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2179981163,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-01",
+   "decode_tokens": 4096,
+   "leg_id": "L012",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 4264228373,
+   "start_band": "q0"
+  }
+ ],
+ "redo_quota": 2,
+ "runner_kind": "cadence-legs-v1",
+ "schema": "joulewise.cadence_span_plan.v1",
+ "soak_s": 1950,
+ "t0_epoch_s": 1794730800.0,
+ "time_model": {
+  "decode_tokens_per_s": 12.03,
+  "fixed_s": 500.0,
+  "g0_s": 209.0,
+  "prefill_s_per_token": 0.005,
+  "warmup_extra_s": 6.0
+ },
+ "worst_case_s": 22050
+}

@@ -1,0 +1,174 @@
+$ plan --t0 1794822690 (Mon 2026-11-16 01:51:30) --batch-window 13:14-13:15  [pin b4b6aeb19]
+rc 0
+{
+ "batch_windows": [
+  "13:14-13:15"
+ ],
+ "blackout_clear": true,
+ "campaign_id": "cl-dev-02",
+ "deadline_epoch_s": 1794863640.0,
+ "expected_s": 18162,
+ "fixed_overhead_s": 1200,
+ "kit_sha256": "d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8",
+ "launch_deadline_epoch_s": 1794864200.0,
+ "leg_cap_s": 2700,
+ "legs": [
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L001",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 3407196167,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L002",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 1200148396,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L003",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 4048253495,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L004",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2129654160,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L005",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2522171568,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L006",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 606134315,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L007",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 756369387,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L008",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2814803342,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L009",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 3757715371,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L010",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2990673426,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L011",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 3918830640,
+   "start_band": "q0"
+  },
+  {
+   "budget_s": 1251,
+   "campaign_id": "cl-dev-02",
+   "decode_tokens": 4096,
+   "leg_id": "L012",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 0,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2835741939,
+   "start_band": "q0"
+  }
+ ],
+ "redo_quota": 2,
+ "runner_kind": "cadence-legs-v1",
+ "schema": "joulewise.cadence_span_plan.v1",
+ "soak_s": 1950,
+ "t0_epoch_s": 1794822690.0,
+ "time_model": {
+  "decode_tokens_per_s": 12.03,
+  "fixed_s": 500.0,
+  "g0_s": 209.0,
+  "prefill_s_per_token": 0.005,
+  "warmup_extra_s": 6.0
+ },
+ "worst_case_s": 40950
+}

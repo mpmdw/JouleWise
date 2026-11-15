@@ -1,0 +1,62 @@
+{
+ "attempts": [
+  {
+   "attempt": 1,
+   "contaminated": false,
+   "ended_epoch_s": 1794825590.5085118,
+   "leg_status": "complete",
+   "os_batch_wait_s": 0.0,
+   "os_load": {
+    "max_busy_cores": 0.1,
+    "max_gap_s": 1.0,
+    "seconds": 1264
+   },
+   "output_dir": "legs/L010/runtime",
+   "redo_reason": null,
+   "redone": false,
+   "started_epoch_s": 1794824326.0263839,
+   "wall_s": 1264.482127904892
+  }
+ ],
+ "result": {
+  "ac_powermode": {
+   "value": 0
+  },
+  "bundle": "runs/mock-L010",
+  "decode_cap": 4096,
+  "decode_cap_reached": true,
+  "decode_tokens": 4096,
+  "g0_outcome": "released",
+  "g0_reference_record_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "g0_reference_source": "mock-L007",
+  "g0_released": true,
+  "g0_role": "consume",
+  "g0_shape": "span",
+  "g0_timeout_s": 1200,
+  "g0_wait_s": 398.0,
+  "incomplete_reasons": [],
+  "leg_id": "L010",
+  "leg_status": "complete",
+  "member_status": "succeeded",
+  "os_level_max": 0,
+  "pm_nominal": true,
+  "prefill_chars": 4111,
+  "prefill_tokens": 2000,
+  "quiet_s": 0
+ },
+ "schema": "joulewise.cadence_leg_record.v1",
+ "spec": {
+  "budget_s": 1467,
+  "campaign_id": "cl-dev-04",
+  "decode_tokens": 4096,
+  "g0_role": "consume",
+  "g0_shape": "span",
+  "leg_id": "L010",
+  "prefill_chars": 4111,
+  "prefill_tokens": 2000,
+  "quiet_s": 0,
+  "schema": "joulewise.cadence_leg_spec.v1.1",
+  "seed": 4078530008,
+  "start_band": "q0"
+ }
+}

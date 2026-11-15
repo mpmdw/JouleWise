@@ -1,0 +1,422 @@
+[
+ {
+  "case": "sol1-newest-f0-wrong-kind-old-marker",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/sol1-newest-f0-wrong-kind-old-marker/campaign-out/r1-partc-f0/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/sol1-newest-f0-wrong-kind-old-marker/campaign-out/r1-partc-f0/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "sol2-newest-f0-wrong-kind-wrong-marker",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/sol2-newest-f0-wrong-kind-wrong-marker/campaign-out/r1-partc-f0/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/sol2-newest-f0-wrong-kind-wrong-marker/campaign-out/r1-partc-f0/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "sol3-newest-jwwt-f0-stale-kind",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/sol3-newest-jwwt-f0-stale-kind/jw-wt/partc/notes/r1-partc-f0/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/sol3-newest-jwwt-f0-stale-kind/jw-wt/partc/notes/r1-partc-f0/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "sol4-newest-f0-correct-other",
+  "expect": "PASS",
+  "got": "PASS",
+  "ok": true,
+  "bash": [
+   0,
+   "copy gate: newest close is non-campaign (/Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/sol4-newest-f0-correct-other/jw-wt/partc/notes/r1-partc-f0/runner_receipt.json); its Check covers the copy"
+  ],
+  "zsh": [
+   0,
+   "copy gate: newest close is non-campaign (/Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/sol4-newest-f0-correct-other/jw-wt/partc/notes/r1-partc-f0/runner_receipt.json); its Check covers the copy"
+  ]
+ },
+ {
+  "case": "campaign-with-marker",
+  "expect": "PASS",
+  "got": "PASS",
+  "ok": true,
+  "bash": [
+   0,
+   "journal copy of cq-dev-01-s04-a1: manifest-sha256 deadbeef  Sun Nov 15 01:00:00 PST 2026"
+  ],
+  "zsh": [
+   0,
+   "journal copy of cq-dev-01-s04-a1: manifest-sha256 deadbeef  Sun Nov 15 01:00:00 PST 2026"
+  ]
+ },
+ {
+  "case": "campaign-no-marker",
+  "expect": "WAIT",
+  "got": "WAIT",
+  "ok": true,
+  "bash": [
+   1,
+   "WAIT: no journal-copy marker /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/campaign-no-marker/desk-copy/cq-dev-01-s04-a1.ok for the newest close, campaign span cq-dev-01-s04-a1 (/Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/campaign-no-marker/campaign-out/cl-dev-01/cq-dev-01-s04-a1-20261115T082000Z/runner_receipt.json): the lead's hash-verified copy is not done; retry at the next activation"
+  ],
+  "zsh": [
+   1,
+   "WAIT: no journal-copy marker /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/campaign-no-marker/desk-copy/cq-dev-01-s04-a1.ok for the newest close, campaign span cq-dev-01-s04-a1 (/Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/campaign-no-marker/campaign-out/cl-dev-01/cq-dev-01-s04-a1-20261115T082000Z/runner_receipt.json): the lead's hash-verified copy is not done; retry at the next activation"
+  ]
+ },
+ {
+  "case": "other-kind-but-newest-campaign",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (other): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/other-kind-but-newest-campaign/campaign-out/cl-dev-01/cq-dev-01-s04-a1-20261115T082000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (other): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/other-kind-but-newest-campaign/campaign-out/cl-dev-01/cq-dev-01-s04-a1-20261115T082000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "noncampaign-dir-under-campaign-out-kind-campaign",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/noncampaign-dir-under-campaign-out-kind-campaign/campaign-out/kits/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/noncampaign-dir-under-campaign-out-kind-campaign/campaign-out/kits/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "session-newer-kind-other",
+  "expect": "PASS",
+  "got": "PASS",
+  "ok": true,
+  "bash": [
+   0,
+   "copy gate: newest close is non-campaign (OTHER_CLOSE_EPOCH 1794733441 (a session or W1 close outside the census roots)); its Check covers the copy"
+  ],
+  "zsh": [
+   0,
+   "copy gate: newest close is non-campaign (OTHER_CLOSE_EPOCH 1794733441 (a session or W1 close outside the census roots)); its Check covers the copy"
+  ]
+ },
+ {
+  "case": "session-newer-kind-campaign",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794733441 (a session or W1 close outside the census roots); mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794733441 (a session or W1 close outside the census roots); mail the lead"
+  ]
+ },
+ {
+  "case": "other-close-epoch-unset",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: OTHER_CLOSE_EPOCH must be a whole epoch (rounded up) of a session/W1 close, or an explicit 0"
+  ],
+  "zsh": [
+   1,
+   "STOP: OTHER_CLOSE_EPOCH must be a whole epoch (rounded up) of a session/W1 close, or an explicit 0"
+  ]
+ },
+ {
+  "case": "empty-census",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: the receipt census found no runner_receipt.json; receipts are expected on this host"
+  ],
+  "zsh": [
+   1,
+   "STOP: the receipt census found no runner_receipt.json; receipts are expected on this host"
+  ]
+ },
+ {
+  "case": "day-valid",
+  "expect": "PASS",
+  "got": "PASS",
+  "ok": true,
+  "bash": [
+   0,
+   "t0-date 2026-11-15: development legs already launched 3 (mixed-size 3) [('cq-dev-03-s01-a1-20261116T110000Z', 3)]; this span 6, mixed True"
+  ],
+  "zsh": [
+   0,
+   "t0-date 2026-11-15: development legs already launched 3 (mixed-size 3) [('cq-dev-03-s01-a1-20261116T110000Z', 3)]; this span 6, mixed True"
+  ]
+ },
+ {
+  "case": "day-valid-cap-exceeded",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: RL-172 (a): more than 12 mixed-size development legs on this t0-date; the lead re-dates this span (never doubled up)"
+  ],
+  "zsh": [
+   1,
+   "STOP: RL-172 (a): more than 12 mixed-size development legs on this t0-date; the lead re-dates this span (never doubled up)"
+  ]
+ },
+ {
+  "case": "day-roster-missing",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-missing/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-missing/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-roster-null",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-null/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-null/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-roster-dict",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-dict/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-dict/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-roster-string",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-string/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-string/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-roster-empty",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-empty/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-empty/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-roster-dup",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-dup/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-dup/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-roster-bad-id",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-bad-id/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-bad-id/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-roster-int",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-int/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-roster-int/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-started-missing",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-started-missing/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-started-missing/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-started-no-epoch",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-started-no-epoch/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-started-no-epoch/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-started-string",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-started-string/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-started-string/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-started-bool",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-started-bool/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-started-bool/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-other-date-ignored",
+  "expect": "PASS",
+  "got": "PASS",
+  "ok": true,
+  "bash": [
+   0,
+   "t0-date 2026-11-15: development legs already launched 0 (mixed-size 0) []; this span 1, mixed True"
+  ],
+  "zsh": [
+   0,
+   "t0-date 2026-11-15: development legs already launched 0 (mixed-size 0) []; this span 1, mixed True"
+  ]
+ },
+ {
+  "case": "day-notjson",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: receipt unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-notjson/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ],
+  "zsh": [
+   1,
+   "STOP: receipt unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-notjson/campaign-out/cl-dev-03/cq-dev-03-s01-a1-20261116T110000Z/runner_receipt.json; mail the lead"
+  ]
+ },
+ {
+  "case": "day-qualification-same-date",
+  "expect": "STOP",
+  "got": "STOP",
+  "ok": true,
+  "bash": [
+   1,
+   "STOP: RL-172 (a): 2026-11-15 is a qualification t0-date (/Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-qualification-same-date/campaign-out/cl-qual-01/cq-qual-01-s01-a1-20261119T110000Z/runner_receipt.json); no development span arms on it"
+  ],
+  "zsh": [
+   1,
+   "STOP: RL-172 (a): 2026-11-15 is a qualification t0-date (/Volumes/JW-EXT/scratch/items-rl171/tests/cases-010541/day-qualification-same-date/campaign-out/cl-qual-01/cq-qual-01-s01-a1-20261119T110000Z/runner_receipt.json); no development span arms on it"
+  ]
+ },
+ {
+  "case": "day-qualification-other-date",
+  "expect": "PASS",
+  "got": "PASS",
+  "ok": true,
+  "bash": [
+   0,
+   "t0-date 2026-11-15: development legs already launched 0 (mixed-size 0) []; this span 1, mixed True"
+  ],
+  "zsh": [
+   0,
+   "t0-date 2026-11-15: development legs already launched 0 (mixed-size 0) []; this span 1, mixed True"
+  ]
+ }
+]

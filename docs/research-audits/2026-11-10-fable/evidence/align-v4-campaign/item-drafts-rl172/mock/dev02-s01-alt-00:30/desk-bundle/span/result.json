@@ -1,0 +1,7 @@
+{
+ "chain_exit_code": 0,
+ "chain_outcome": "COMPLETE",
+ "fault": false,
+ "outcome": "MEASURED_OK",
+ "verdict": "12/12 legs run"
+}

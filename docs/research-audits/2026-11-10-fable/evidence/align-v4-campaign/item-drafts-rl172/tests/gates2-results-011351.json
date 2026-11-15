@@ -1,0 +1,604 @@
+[
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "sol1-newest-f0-wrong-kind-old-marker",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-sol1-newest"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-sol1-newest"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "sol2-newest-f0-wrong-kind-wrong-marker",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-sol2-newest"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-sol2-newest"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "sol3-newest-jwwt-f0-stale-kind",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-sol3-newest"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-sol3-newest"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "sol4-newest-f0-correct-other",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "copy gate: newest close is non-campaign (/Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-sol4-newest-f0-correct-other/jw-wt"
+  ],
+  "zsh": [
+   "PASS",
+   "copy gate: newest close is non-campaign (/Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-sol4-newest-f0-correct-other/jw-wt"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "campaign-marker",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "journal copy of cq-dev-01-s04-a1: manifest-sha256 deadbeef  Sun Nov 15 01:00:00 PST 2026"
+  ],
+  "zsh": [
+   "PASS",
+   "journal copy of cq-dev-01-s04-a1: manifest-sha256 deadbeef  Sun Nov 15 01:00:00 PST 2026"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "campaign-no-marker",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: no journal-copy marker /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-campaign-no-marker/desk-copy/cq-dev-01-s04-a1."
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: no journal-copy marker /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/hp01-s01-campaign-no-marker/desk-copy/cq-dev-01-s04-a1."
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "session-newer-kind-campaign",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794733871 (a session or W1 close outside the census roots"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794733871 (a session or W1 close outside the census roots"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "run-campaign-299s",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: close interval (300 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: close interval (300 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "run-campaign-300s",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "zsh": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "run-other-close-1s",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "run-other-close-1199s",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "run-other-close-1200s",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "zsh": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "run-f0-receipt-1199s",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "run-f0-receipt-1200s",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "zsh": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-hp01-s01.md",
+  "case": "run-other-close-kind-campaign",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794732671 (a session or W1 close outside the census roots"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794732671 (a session or W1 close outside the census roots"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "sol1-newest-f0-wrong-kind-old-marker",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-sol1-newes"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-sol1-newes"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "sol2-newest-f0-wrong-kind-wrong-marker",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-sol2-newes"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-sol2-newes"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "sol3-newest-jwwt-f0-stale-kind",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-sol3-newes"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-sol3-newes"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "sol4-newest-f0-correct-other",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "copy gate: newest close is non-campaign (/Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-sol4-newest-f0-correct-other/jw-w"
+  ],
+  "zsh": [
+   "PASS",
+   "copy gate: newest close is non-campaign (/Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-sol4-newest-f0-correct-other/jw-w"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "campaign-marker",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "journal copy of cq-dev-01-s04-a1: manifest-sha256 deadbeef  Sun Nov 15 01:00:00 PST 2026"
+  ],
+  "zsh": [
+   "PASS",
+   "journal copy of cq-dev-01-s04-a1: manifest-sha256 deadbeef  Sun Nov 15 01:00:00 PST 2026"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "campaign-no-marker",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: no journal-copy marker /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-campaign-no-marker/desk-copy/cq-dev-01-s04-a1"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: no journal-copy marker /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev02-s02-campaign-no-marker/desk-copy/cq-dev-01-s04-a1"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "session-newer-kind-campaign",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794733871 (a session or W1 close outside the census roots"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794733871 (a session or W1 close outside the census roots"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "run-campaign-299s",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: close interval (300 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: close interval (300 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "run-campaign-300s",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "zsh": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "run-other-close-1s",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "run-other-close-1199s",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "run-other-close-1200s",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "zsh": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "run-f0-receipt-1199s",
+  "expect": "WAIT",
+  "bash": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "zsh": [
+   "WAIT",
+   "WAIT: close interval (1200 s) after the latest close of anything on this host (RL-171 \u00a76.1)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "run-f0-receipt-1200s",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "zsh": [
+   "PASS",
+   "REACHED-LAUNCH"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev02-s02.md",
+  "case": "run-other-close-kind-campaign",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794732671 (a session or W1 close outside the census roots"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: contradictory LAST_CLOSE_KIND (campaign): newest close is OTHER_CLOSE_EPOCH 1794732671 (a session or W1 close outside the census roots"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-roster-valid",
+  "expect": "PASS",
+  "bash": [
+   "PASS",
+   "date 2026-11-15: development legs already launched 3 (mixed-size 3) [('cq-dev-03-s01-a1-20261116T110000Z', 3)]; this span 1, mixed True\nrc=0"
+  ],
+  "zsh": [
+   "PASS",
+   "date 2026-11-15: development legs already launched 3 (mixed-size 3) [('cq-dev-03-s01-a1-20261116T110000Z', 3)]; this span 1, mixed True\nrc=0"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-roster-missing",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-missing/campaign-out/cl-dev-"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-missing/campaign-out/cl-dev-"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-roster-null",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-null/campaign-out/cl-dev-03/"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-null/campaign-out/cl-dev-03/"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-roster-dict",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-dict/campaign-out/cl-dev-03/"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-dict/campaign-out/cl-dev-03/"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-roster-string",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-string/campaign-out/cl-dev-0"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-string/campaign-out/cl-dev-0"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-roster-empty",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-empty/campaign-out/cl-dev-03"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-empty/campaign-out/cl-dev-03"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-roster-dup",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-dup/campaign-out/cl-dev-03/c"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-dup/campaign-out/cl-dev-03/c"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-roster-bad-id",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-bad-id/campaign-out/cl-dev-0"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt roster unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-roster-bad-id/campaign-out/cl-dev-0"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-started-missing",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-started-missing/campaign-o"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-started-missing/campaign-o"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-started-string",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-started-string/campaign-ou"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-started-string/campaign-ou"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-started-bool",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-started-bool/campaign-out/"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: receipt started.epoch_s unreadable: /Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-started-bool/campaign-out/"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-mixed-cap",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: RL-172 (a): more than 12 mixed-size development legs on this t0-date; the lead re-dates this span (never doubled up)"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: RL-172 (a): more than 12 mixed-size development legs on this t0-date; the lead re-dates this span (never doubled up)"
+  ],
+  "ok": true
+ },
+ {
+  "item": "ITEM-dev03-pilot.md",
+  "case": "day-qualification-same-date",
+  "expect": "STOP",
+  "bash": [
+   "STOP",
+   "STOP: RL-172 (a): 2026-11-15 is a qualification t0-date (/Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-qualificati"
+  ],
+  "zsh": [
+   "STOP",
+   "STOP: RL-172 (a): 2026-11-15 is a qualification t0-date (/Volumes/JW-EXT/scratch/items-rl171/tests/cases2-011351/dev03-pilot-day-qualificati"
+  ],
+  "ok": true
+ }
+]

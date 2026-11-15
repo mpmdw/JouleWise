@@ -1,0 +1,1139 @@
+{
+  "batch_windows": [
+    "13:14-13:15"
+  ],
+  "deadline": 1794843110.0,
+  "ended": {
+    "epoch_s": 1794827061.3727684,
+    "monotonic_ns": 10261372768079
+  },
+  "feeds": {
+    "agents": {
+      "files": [
+        {
+          "path": "mock-agents.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    },
+    "meter": {
+      "files": [
+        {
+          "path": "hazards/meter/stream-0001.jsonl",
+          "sha256": "ce2d3f420cd76d9ab894043a03b32e449f00769675ee47c8ea7b98b654f726e4"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    },
+    "volumes": {
+      "files": [
+        {
+          "path": "mock-volumes.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    }
+  },
+  "kit": {
+    "campaign_id": "cl-dev-02",
+    "frozen_commit": "b4b6aeb192da60d895a7529311b06599efff5be4",
+    "sha256": "d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8"
+  },
+  "legs": [
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794821088.062128,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1158
+          },
+          "output_dir": "legs/L007/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794819930.0,
+          "wall_s": 1158.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L007",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794821088.062128,
+        "g0_outcome": "released",
+        "g0_s": 117.0,
+        "leg_id": "L007",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 756369387,
+        "start_band": "q0",
+        "started_epoch_s": 1794819930.0,
+        "wall_s": 1158.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794822281.1242561,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1193
+          },
+          "output_dir": "legs/L008/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794821088.062128,
+          "wall_s": 1193.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L008",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794822281.1242561,
+        "g0_outcome": "released",
+        "g0_s": 152.0,
+        "leg_id": "L008",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 2814803342,
+        "start_band": "q0",
+        "started_epoch_s": 1794821088.062128,
+        "wall_s": 1193.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794823503.1863842,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1222
+          },
+          "output_dir": "legs/L009/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794822281.1242561,
+          "wall_s": 1222.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L009",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794823503.1863842,
+        "g0_outcome": "released",
+        "g0_s": 181.0,
+        "leg_id": "L009",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 3757715371,
+        "start_band": "q0",
+        "started_epoch_s": 1794822281.1242561,
+        "wall_s": 1222.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794824700.2485123,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1197
+          },
+          "output_dir": "legs/L010/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794823503.1863842,
+          "wall_s": 1197.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L010",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794824700.2485123,
+        "g0_outcome": "released",
+        "g0_s": 156.0,
+        "leg_id": "L010",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 2990673426,
+        "start_band": "q0",
+        "started_epoch_s": 1794823503.1863842,
+        "wall_s": 1197.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794825831.3106403,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1131
+          },
+          "output_dir": "legs/L011/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794824700.2485123,
+          "wall_s": 1131.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L011",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794825831.3106403,
+        "g0_outcome": "released",
+        "g0_s": 90.0,
+        "leg_id": "L011",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 3918830640,
+        "start_band": "q0",
+        "started_epoch_s": 1794824700.2485123,
+        "wall_s": 1131.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794827061.3727684,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1230
+          },
+          "output_dir": "legs/L012/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794825831.3106403,
+          "wall_s": 1230.0621280670166
+        }
+      ],
+      "budget_s": 1251,
+      "leg_id": "L012",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1251,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794827061.3727684,
+        "g0_outcome": "released",
+        "g0_s": 189.0,
+        "leg_id": "L012",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "redo_reasons": [],
+        "seed": 2835741939,
+        "start_band": "q0",
+        "started_epoch_s": 1794825831.3106403,
+        "wall_s": 1230.0621280670166
+      }
+    }
+  ],
+  "legs_finished": 6,
+  "legs_planned": 6,
+  "load_redos_used": 0,
+  "meter": {
+    "bad_polls": 0,
+    "elapsed_s": 9261.3727684021,
+    "polls": 92613,
+    "present": true,
+    "proven_stopped": true,
+    "usb_errors": 0
+  },
+  "mock": true,
+  "rc": 0,
+  "roster": [
+    "L007",
+    "L008",
+    "L009",
+    "L010",
+    "L011",
+    "L012"
+  ],
+  "runner_kind": "cadence-legs-v1",
+  "schema": "joulewise.cadence_span_receipt.v1",
+  "soak_reference": "/Volumes/JW-EXT/scratch/items-rl171/mock/dev02-s03-alt-00:30/soak/soak_reference.json",
+  "span_result": {
+    "chain_exit_code": 0,
+    "chain_outcome": "COMPLETE",
+    "fault": false,
+    "outcome": "MEASURED_OK",
+    "verdict": "6/6 legs run"
+  },
+  "started": {
+    "epoch_s": 1794817800.0,
+    "monotonic_ns": 1000000000000
+  },
+  "steps": [
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "deadline",
+      "rc": 0,
+      "result": {
+        "rc": 0,
+        "remaining_s": 24940.0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "frozen",
+      "rc": 0,
+      "result": {
+        "rc": 0,
+        "skipped": "mock (no measurement checkout)"
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "night_agents",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "ac_power",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "condition13",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "read_power",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 0,
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "display",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "dwell",
+      "rc": 0,
+      "result": {
+        "dwell_s": 300.0,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "plan",
+      "rc": 0,
+      "result": {
+        "deadline_epoch_s": 1794842550.0,
+        "expected_s": 10656,
+        "legs": [
+          "L007",
+          "L008",
+          "L009",
+          "L010",
+          "L011",
+          "L012"
+        ],
+        "rc": 0,
+        "worst_case_s": 24750
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "soak",
+      "rc": 0,
+      "result": {
+        "path": "/Volumes/JW-EXT/scratch/items-rl171/mock/dev02-s03-alt-00:30/soak/soak_reference.json",
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L007-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L007-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L007-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821088.062128,
+        "monotonic_ns": 4288062128013
+      },
+      "name": "L007.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L007",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 117.0,
+        "incomplete_reasons": [],
+        "leg_id": "L007",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821088.062128,
+        "monotonic_ns": 4288062128013
+      },
+      "name": "before-L008-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821088.062128,
+        "monotonic_ns": 4288062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821088.062128,
+        "monotonic_ns": 4288062128013
+      },
+      "name": "before-L008-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821088.062128,
+        "monotonic_ns": 4288062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821088.062128,
+        "monotonic_ns": 4288062128013
+      },
+      "name": "before-L008-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821088.062128,
+        "monotonic_ns": 4288062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822281.1242561,
+        "monotonic_ns": 5481124256026
+      },
+      "name": "L008.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L008",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 152.0,
+        "incomplete_reasons": [],
+        "leg_id": "L008",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794821088.062128,
+        "monotonic_ns": 4288062128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822281.1242561,
+        "monotonic_ns": 5481124256026
+      },
+      "name": "before-L009-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822281.1242561,
+        "monotonic_ns": 5481124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822281.1242561,
+        "monotonic_ns": 5481124256026
+      },
+      "name": "before-L009-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822281.1242561,
+        "monotonic_ns": 5481124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822281.1242561,
+        "monotonic_ns": 5481124256026
+      },
+      "name": "before-L009-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822281.1242561,
+        "monotonic_ns": 5481124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823503.1863842,
+        "monotonic_ns": 6703186384039
+      },
+      "name": "L009.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L009",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 181.0,
+        "incomplete_reasons": [],
+        "leg_id": "L009",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794822281.1242561,
+        "monotonic_ns": 5481124256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823503.1863842,
+        "monotonic_ns": 6703186384039
+      },
+      "name": "before-L010-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794823503.1863842,
+        "monotonic_ns": 6703186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823503.1863842,
+        "monotonic_ns": 6703186384039
+      },
+      "name": "before-L010-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794823503.1863842,
+        "monotonic_ns": 6703186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794823503.1863842,
+        "monotonic_ns": 6703186384039
+      },
+      "name": "before-L010-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794823503.1863842,
+        "monotonic_ns": 6703186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824700.2485123,
+        "monotonic_ns": 7900248512053
+      },
+      "name": "L010.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L010",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 156.0,
+        "incomplete_reasons": [],
+        "leg_id": "L010",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794823503.1863842,
+        "monotonic_ns": 6703186384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824700.2485123,
+        "monotonic_ns": 7900248512053
+      },
+      "name": "before-L011-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824700.2485123,
+        "monotonic_ns": 7900248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824700.2485123,
+        "monotonic_ns": 7900248512053
+      },
+      "name": "before-L011-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824700.2485123,
+        "monotonic_ns": 7900248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824700.2485123,
+        "monotonic_ns": 7900248512053
+      },
+      "name": "before-L011-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824700.2485123,
+        "monotonic_ns": 7900248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794825831.3106403,
+        "monotonic_ns": 9031310640066
+      },
+      "name": "L011.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L011",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 90.0,
+        "incomplete_reasons": [],
+        "leg_id": "L011",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794824700.2485123,
+        "monotonic_ns": 7900248512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794825831.3106403,
+        "monotonic_ns": 9031310640066
+      },
+      "name": "before-L012-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794825831.3106403,
+        "monotonic_ns": 9031310640066
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794825831.3106403,
+        "monotonic_ns": 9031310640066
+      },
+      "name": "before-L012-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794825831.3106403,
+        "monotonic_ns": 9031310640066
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794825831.3106403,
+        "monotonic_ns": 9031310640066
+      },
+      "name": "before-L012-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794825831.3106403,
+        "monotonic_ns": 9031310640066
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      },
+      "name": "L012.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L012",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_released": true,
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 189.0,
+        "incomplete_reasons": [],
+        "leg_id": "L012",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794825831.3106403,
+        "monotonic_ns": 9031310640066
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      },
+      "name": "restore",
+      "rc": 0,
+      "result": {
+        "action": "restore_automatic",
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      },
+      "name": "stop-volumes",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      },
+      "name": "stop-meter",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      },
+      "name": "stop-agents",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794827061.3727684,
+        "monotonic_ns": 10261372768079
+      }
+    }
+  ],
+  "work_reserve_s": 370
+}

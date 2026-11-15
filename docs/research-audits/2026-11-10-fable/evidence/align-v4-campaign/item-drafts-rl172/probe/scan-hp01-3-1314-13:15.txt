@@ -1,0 +1,6 @@
+{"cwd": "/Volumes/JW-EXT/scratch/items-rl171/wt/dd206025a", "kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965", "roster": ["L001", "L002", "L003"], "window": "13:14-13:15", "v11": false, "soak_windows": ["11:45-13:15"], "step_s": 10}
+Sun 00:00:00 .. Sun 08:36:30  [1794729600..1794760590]  ADMIT
+Sun 08:36:40 .. Sun 13:14:50  [1794760600..1794777290]  REFUSE plan_span: the worst-case span [t0, t0 + 16650 s] meets a batch blackout (13:14-13:15); arm after it 
+Sun 13:15:00 .. Mon 08:36:30  [1794777300..1794846990]  ADMIT
+Mon 08:36:40 .. Mon 13:14:50  [1794847000..1794863690]  REFUSE plan_span: the worst-case span [t0, t0 + 16650 s] meets a batch blackout (13:14-13:15); arm after it 
+Mon 13:15:00 .. Tue 00:00:00  [1794863700..1794902400]  ADMIT

@@ -1,0 +1,10 @@
+pin b2e01464d6d4fbf2901ff4d4154df9455104a12a
+OS_BATCH_WINDOW_LOCAL ((2, 0), (2, 35))
+soak_seconds 1800.0 r1_part_c_cap_s 9560 soak_child Part C span_s 11360.0
+r1_minimum_seconds('C', fresh_soak=True) 12180.0 MAX_DESK_SECONDS 43200
+R1_EXECUTED_SOURCES 10 verify -> b2e01464d6d4fbf2901ff4d4154df9455104a12a
+soak start 2026-11-15 22:50:40 ADMIT
+soak start 2026-11-15 22:50:41 REFUSE (soak_child: overlaps 02:00-02:35)
+soak start 2026-11-16 02:34:59 REFUSE (soak_child: overlaps 02:00-02:35)
+soak start 2026-11-16 02:35:00 ADMIT
+soak start 2026-11-16 12:00:00 ADMIT

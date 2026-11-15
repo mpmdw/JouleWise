@@ -1,0 +1,65 @@
+{
+ "batch_windows": [
+  "02:00-02:35"
+ ],
+ "blackout_clear": true,
+ "campaign_id": "f2-inst-01",
+ "deadline_epoch_s": 1794945162.0,
+ "expected_s": 7442,
+ "fence_end_epoch_s": 1794946622.0,
+ "fixed_overhead_s": 1200,
+ "kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+ "launch_deadline_epoch_s": 1794945722.0,
+ "leg_cap_s": 2700,
+ "legs": [
+  {
+   "budget_s": 1378,
+   "campaign_id": "f2-inst-01",
+   "decode_tokens": 512,
+   "leg_id": "L010",
+   "prefill_chars": 4111,
+   "prefill_tokens": 2000,
+   "quiet_s": 600,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 2365426978,
+   "start_band": "q600"
+  },
+  {
+   "budget_s": 1553,
+   "campaign_id": "f2-inst-01",
+   "decode_tokens": 512,
+   "leg_id": "L011",
+   "prefill_chars": 40000,
+   "prefill_tokens": 19458,
+   "quiet_s": 600,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 1350390875,
+   "start_band": "q600"
+  },
+  {
+   "budget_s": 1361,
+   "campaign_id": "f2-inst-01",
+   "decode_tokens": 512,
+   "leg_id": "L012",
+   "prefill_chars": 526,
+   "prefill_tokens": 256,
+   "quiet_s": 600,
+   "schema": "joulewise.cadence_leg_spec.v1",
+   "seed": 3330252309,
+   "start_band": "q600"
+  }
+ ],
+ "redo_quota": 0,
+ "runner_kind": "cadence-legs-v1.1",
+ "schema": "joulewise.cadence_span_plan.v1",
+ "soak_s": 1950,
+ "t0_epoch_s": 1794933912.0,
+ "time_model": {
+  "decode_tokens_per_s": 12.03,
+  "fixed_s": 500.0,
+  "g0_s": 209.0,
+  "prefill_s_per_token": 0.005,
+  "warmup_extra_s": 6.0
+ },
+ "worst_case_s": 11250
+}

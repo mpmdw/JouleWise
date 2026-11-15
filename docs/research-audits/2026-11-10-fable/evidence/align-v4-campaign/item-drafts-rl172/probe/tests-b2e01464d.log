@@ -1,0 +1,83 @@
+== tests.align.test_rl145_gate_hashes
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+tests.align.test_rl145_gate_hashes rc 0
+== tests.align.test_rl145_part_c
+..................Part C: X_G left out, the launcher could not run it without more condition-13 code: Refusal: runtime.x-g: exit 2: synthetic
+...usage: python3.13 -m unittest [-h] --output OUTPUT
+                              [--soak-reference SOAK_REFERENCE] [--fresh-soak]
+                              [--parts {AB,A,C}] [--inputs INPUTS]
+                              [--deadline DEADLINE] [--pmset-bin PMSET_BIN]
+python3.13 -m unittest: error: --parts C runs on a fresh soak (RL-145 addendum)
+..........
+----------------------------------------------------------------------
+Ran 31 tests in 0.056s
+
+OK
+Part C verdict: start_state_failed (pass: False)
+Part C log: three-turn clause not evaluated: one D run
+Part C verdict: other_failure (pass: False)
+Part C log: X_G was not run: no reason recorded
+Part C log: D_bank did not run (no step-D slots or an earlier failure): nothing to judge
+Part C verdict: pass (pass: True)
+Part C log: three-turn clause not evaluated: one D run
+Part C verdict: pass (pass: True)
+Part C log: three-turn clause not evaluated: one D run
+Part C log: X_G was not run: Refusal: runtime.x-g: exit 2: synthetic
+tests.align.test_rl145_part_c rc 0
+== tests.align.test_pr777_attack_repros
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 0.113s
+
+OK
+Part C verdict: other_failure (pass: False)
+Part C log: three-turn clause not evaluated: one D run
+tests.align.test_pr777_attack_repros rc 0
+== tests.align.test_r1_smoke_launcher
+...........................................align_r1_runtime: failed: Stop: 
+align_r1_runtime: failed: Stop: 
+....align_r1_runtime: failed: RuntimeFailure: smoke part wall cap reached; partial smoke is not a pass
+.align_r1_runtime: failed: RuntimeFailure: smoke part wall cap reached; partial smoke is not a pass
+...align_r1_runtime: failed: Stop: 
+align_r1_runtime: failed: Stop: 
+align_r1_runtime: failed: Stop: 
+.......
+----------------------------------------------------------------------
+Ran 58 tests in 11.753s
+
+OK
+tests.align.test_r1_smoke_launcher rc 0
+== tests.align.test_v4_registration
+...........{"activity": "v4_install", "attempt": null, "boot_session_id": null, "clock_domain": "host-monotonic", "epoch_ns": 1794744525006990000, "event": "start", "kind": "timing_boundary", "member": null, "monotonic_after_ns": 60637082603916, "monotonic_before_ns": 60637082603708, "monotonic_resolution_s": 4.166666666666666e-08, "parent_span_id": null, "phase": "arm", "plan_id": null, "producer": "v4_arm", "producer_id": "v4_arm:55642:60637082377458", "schema": "joulewise.timing_boundary.v1", "sequence": 1, "span_id": "v4_arm:55642:60637082377458:1", "stage": null, "wall_resolution_s": 1.0000000000000002e-06}
+{"activity": "v4_install", "attempt": null, "boot_session_id": null, "clock_domain": "host-monotonic", "epoch_ns": 1794744525007045000, "event": "end", "kind": "timing_boundary", "member": null, "monotonic_after_ns": 60637082658125, "monotonic_before_ns": 60637082657916, "monotonic_resolution_s": 4.166666666666666e-08, "parent_span_id": null, "phase": "arm", "plan_id": null, "producer": "v4_arm", "producer_id": "v4_arm:55642:60637082377458", "rc": null, "schema": "joulewise.timing_boundary.v1", "sequence": 2, "span_id": "v4_arm:55642:60637082377458:1", "stage": null, "status": "error", "wall_resolution_s": 1.0000000000000002e-06}
+.............
+----------------------------------------------------------------------
+Ran 24 tests in 18.974s
+
+OK
+5 SECONDARY / not yet registered: {"flags": ["meter.custody_unavailable"], "sealed": true, "sealed_hmac_sha256": "d5640d8f4383c0d0876d6613c77014bd8325204eaaebd6ea686dff57445c8449", "status": "missing"}
+17 SECONDARY / not yet registered: {"flags": ["meter.custody_unavailable"], "sealed": true, "sealed_hmac_sha256": "291825cb2a36d31d66352b68ed6a9d900243fe9d21969e06115586c0547309dc", "status": "missing"}
+balance (R22-3): withheld_until_series_complete hmac_sha256=8cffc0012c9979374daf95b237a4780945f78c5c4a8fc30b7ea32e9c6a84ce46 members=0 (print only)
+synthetic/W1 battery: {"B_count": 0, "assist_count": 0, "bar_pass": true, "consequence": "retain GPU members; disclose assist; print no-assist sensitivity; DC-in remains secondary", "unobserved_count": 0}
+W1 D G1 timeout tripwire (RL-149 section 1.5): within
+W1 non-benign tool path (RL-152 section 3.4): within
+W1 unlisted flag codes (RL-152 section 3.4): benign members 0; withheld members: none
+5 SECONDARY / not yet registered: {"flags": ["meter.custody_unavailable"], "sealed": true, "sealed_hmac_sha256": "3433dd6ce0816b99728b5d68557436c555ba506fa85dcb9d067505dcf1626f2e", "status": "missing"}
+17 SECONDARY / not yet registered: {"flags": ["meter.custody_unavailable"], "sealed": true, "sealed_hmac_sha256": "7d64341202636140242af4dc7a251e3e729139d73fd7be82a35b5e4e86701c50", "status": "missing"}
+balance (R22-3): withheld_until_series_complete hmac_sha256=c1e78b4c1a11f056b6212a83f8d0760251f4ff0a02d0303774afa09cede3f485 members=0 (print only)
+synthetic/W1 battery: {"B_count": 0, "assist_count": 0, "bar_pass": true, "consequence": "retain GPU members; disclose assist; print no-assist sensitivity; DC-in remains secondary", "unobserved_count": 0}
+W1 D G1 timeout tripwire (RL-149 section 1.5): within
+W1 non-benign tool path (RL-152 section 3.4): within
+W1 unlisted flag codes (RL-152 section 3.4): benign members 0; withheld members: none
+tests.align.test_v4_registration rc 0
+== tests.hazards.test_refusal_allowlist
+................s.......
+----------------------------------------------------------------------
+Ran 24 tests in 12.250s
+
+OK (skipped=1)
+tests.hazards.test_refusal_allowlist rc 0

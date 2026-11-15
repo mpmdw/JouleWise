@@ -1,0 +1,22 @@
+{
+ "admitted": true,
+ "attempts": 1,
+ "band_reached": true,
+ "budget_s": 1251,
+ "contaminated_redos": 0,
+ "ended_epoch_s": 1794823451.0263839,
+ "g0_outcome": "released",
+ "g0_role": "capture",
+ "g0_s": 265.0,
+ "g0_shape": "own",
+ "leg_id": "L006",
+ "os_level_max": 0,
+ "pm_nominal": true,
+ "prefill_tokens": 19458,
+ "redo_reasons": [],
+ "seed": 2996931055,
+ "span_reference": null,
+ "start_band": "q0",
+ "started_epoch_s": 1794822144.9642558,
+ "wall_s": 1306.0621280670166
+}

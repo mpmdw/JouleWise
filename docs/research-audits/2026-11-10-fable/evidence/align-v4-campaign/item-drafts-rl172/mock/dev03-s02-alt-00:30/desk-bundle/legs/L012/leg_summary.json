@@ -1,0 +1,27 @@
+{
+ "admitted": true,
+ "attempts": 1,
+ "band_reached": true,
+ "budget_s": 1547,
+ "contaminated_redos": 0,
+ "ended_epoch_s": 1794831894.0791516,
+ "g0_outcome": "released",
+ "g0_role": "consume",
+ "g0_s": 474.0,
+ "g0_shape": "span",
+ "leg_id": "L012",
+ "os_level_max": 0,
+ "pm_nominal": true,
+ "prefill_tokens": 10000,
+ "redo_reasons": [],
+ "seed": 1183198644,
+ "span_reference": {
+  "attempt": 1,
+  "excluded": false,
+  "leg_id": "L004",
+  "redone": false
+ },
+ "start_band": "q0",
+ "started_epoch_s": 1794830473.5970237,
+ "wall_s": 1420.482127904892
+}

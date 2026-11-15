@@ -1,0 +1,1235 @@
+{
+  "batch_windows": [
+    "13:14-13:15"
+  ],
+  "deadline": 1794843110.0,
+  "ended": {
+    "epoch_s": 1794828385.0527678,
+    "monotonic_ns": 11585052768079
+  },
+  "feeds": {
+    "agents": {
+      "files": [
+        {
+          "path": "mock-agents.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    },
+    "meter": {
+      "files": [
+        {
+          "path": "hazards/meter/stream-0001.jsonl",
+          "sha256": "c07395423a33c5b1655f29cd94259396e7b7728675eb52e73506ed515af1d247"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    },
+    "volumes": {
+      "files": [
+        {
+          "path": "mock-volumes.jsonl",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ],
+      "stop": {
+        "proven_stopped": true,
+        "rc": 0
+      }
+    }
+  },
+  "kit": {
+    "campaign_id": "cl-dev-05",
+    "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+    "sha256": "2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a"
+  },
+  "legs": [
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794821151.482128,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1221
+          },
+          "output_dir": "legs/L001/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794819930.0,
+          "wall_s": 1221.482127904892
+        }
+      ],
+      "budget_s": 1156,
+      "leg_id": "L001",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1156,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794821151.482128,
+        "g0_outcome": "released",
+        "g0_role": "capture",
+        "g0_s": 275.0,
+        "g0_shape": "own",
+        "leg_id": "L001",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_tokens": 10000,
+        "redo_reasons": [],
+        "seed": 4273557785,
+        "span_reference": null,
+        "start_band": "q0",
+        "started_epoch_s": 1794819930.0,
+        "wall_s": 1221.482127904892
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794822631.9642558,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1480
+          },
+          "output_dir": "legs/L002/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794821151.482128,
+          "wall_s": 1480.482127904892
+        }
+      ],
+      "budget_s": 1467,
+      "leg_id": "L002",
+      "span_reference": {
+        "attempt": 1,
+        "dir": "legs/L001/runtime",
+        "excluded": false,
+        "leg_id": "L001",
+        "redone": false
+      },
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1467,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794822631.9642558,
+        "g0_outcome": "released",
+        "g0_role": "consume",
+        "g0_s": 614.0,
+        "g0_shape": "span",
+        "leg_id": "L002",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_tokens": 2000,
+        "redo_reasons": [],
+        "seed": 1747827584,
+        "span_reference": {
+          "attempt": 1,
+          "excluded": false,
+          "leg_id": "L001",
+          "redone": false
+        },
+        "start_band": "q0",
+        "started_epoch_s": 1794821151.482128,
+        "wall_s": 1480.482127904892
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794824278.0263839,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1646
+          },
+          "output_dir": "legs/L003/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794822631.9642558,
+          "wall_s": 1646.0621280670166
+        }
+      ],
+      "budget_s": 1642,
+      "leg_id": "L003",
+      "span_reference": {
+        "attempt": 1,
+        "dir": "legs/L001/runtime",
+        "excluded": false,
+        "leg_id": "L001",
+        "redone": false
+      },
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1642,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794824278.0263839,
+        "g0_outcome": "released",
+        "g0_role": "consume",
+        "g0_s": 605.0,
+        "g0_shape": "span",
+        "leg_id": "L003",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_tokens": 19458,
+        "redo_reasons": [],
+        "seed": 2210127335,
+        "span_reference": {
+          "attempt": 1,
+          "excluded": false,
+          "leg_id": "L001",
+          "redone": false
+        },
+        "start_band": "q0",
+        "started_epoch_s": 1794822631.9642558,
+        "wall_s": 1646.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794825467.5085118,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1189
+          },
+          "output_dir": "legs/L004/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794824278.0263839,
+          "wall_s": 1189.482127904892
+        }
+      ],
+      "budget_s": 1076,
+      "leg_id": "L004",
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1076,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794825467.5085118,
+        "g0_outcome": "released",
+        "g0_role": "capture",
+        "g0_s": 323.0,
+        "g0_shape": "own",
+        "leg_id": "L004",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_tokens": 2000,
+        "redo_reasons": [],
+        "seed": 2535821993,
+        "span_reference": null,
+        "start_band": "q0",
+        "started_epoch_s": 1794824278.0263839,
+        "wall_s": 1189.482127904892
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794826955.5706398,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1488
+          },
+          "output_dir": "legs/L005/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794825467.5085118,
+          "wall_s": 1488.0621280670166
+        }
+      ],
+      "budget_s": 1642,
+      "leg_id": "L005",
+      "span_reference": {
+        "attempt": 1,
+        "dir": "legs/L001/runtime",
+        "excluded": false,
+        "leg_id": "L001",
+        "redone": false
+      },
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1642,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794826955.5706398,
+        "g0_outcome": "released",
+        "g0_role": "consume",
+        "g0_s": 447.0,
+        "g0_shape": "span",
+        "leg_id": "L005",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_tokens": 19458,
+        "redo_reasons": [],
+        "seed": 1700193897,
+        "span_reference": {
+          "attempt": 1,
+          "excluded": false,
+          "leg_id": "L001",
+          "redone": false
+        },
+        "start_band": "q0",
+        "started_epoch_s": 1794825467.5085118,
+        "wall_s": 1488.0621280670166
+      }
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "contaminated": false,
+          "ended_epoch_s": 1794828385.0527678,
+          "leg_status": "complete",
+          "os_batch_wait_s": 0.0,
+          "os_load": {
+            "max_busy_cores": 0.1,
+            "max_gap_s": 1.0,
+            "seconds": 1429
+          },
+          "output_dir": "legs/L006/runtime",
+          "redo_reason": null,
+          "redone": false,
+          "started_epoch_s": 1794826955.5706398,
+          "wall_s": 1429.482127904892
+        }
+      ],
+      "budget_s": 1547,
+      "leg_id": "L006",
+      "span_reference": {
+        "attempt": 1,
+        "dir": "legs/L001/runtime",
+        "excluded": false,
+        "leg_id": "L001",
+        "redone": false
+      },
+      "summary": {
+        "admitted": true,
+        "attempts": 1,
+        "band_reached": true,
+        "budget_s": 1547,
+        "contaminated_redos": 0,
+        "ended_epoch_s": 1794828385.0527678,
+        "g0_outcome": "released",
+        "g0_role": "consume",
+        "g0_s": 483.0,
+        "g0_shape": "span",
+        "leg_id": "L006",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_tokens": 10000,
+        "redo_reasons": [],
+        "seed": 2253010653,
+        "span_reference": {
+          "attempt": 1,
+          "excluded": false,
+          "leg_id": "L001",
+          "redone": false
+        },
+        "start_band": "q0",
+        "started_epoch_s": 1794826955.5706398,
+        "wall_s": 1429.482127904892
+      }
+    }
+  ],
+  "legs_finished": 6,
+  "legs_planned": 6,
+  "load_redos_used": 0,
+  "meter": {
+    "bad_polls": 0,
+    "elapsed_s": 10585.052767753601,
+    "polls": 105850,
+    "present": true,
+    "proven_stopped": true,
+    "usb_errors": 0
+  },
+  "mock": true,
+  "rc": 0,
+  "roster": [
+    "L001",
+    "L002",
+    "L003",
+    "L004",
+    "L005",
+    "L006"
+  ],
+  "runner_kind": "cadence-legs-v1.1",
+  "schema": "joulewise.cadence_span_receipt.v1",
+  "soak_reference": "/Volumes/JW-EXT/scratch/items-rl171/mock/dev05-s01-alt-00:30/soak/soak_reference.json",
+  "span_result": {
+    "chain_exit_code": 0,
+    "chain_outcome": "COMPLETE",
+    "fault": false,
+    "outcome": "MEASURED_OK",
+    "verdict": "6/6 legs run"
+  },
+  "started": {
+    "epoch_s": 1794817800.0,
+    "monotonic_ns": 1000000000000
+  },
+  "steps": [
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "deadline",
+      "rc": 0,
+      "result": {
+        "rc": 0,
+        "remaining_s": 24940.0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "frozen",
+      "rc": 0,
+      "result": {
+        "rc": 0,
+        "skipped": "mock (no measurement checkout)"
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "night_agents",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "ac_power",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "condition13",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "start-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "read_power",
+      "rc": 0,
+      "result": {
+        "ac_powermode": 0,
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      },
+      "name": "display",
+      "rc": 0,
+      "result": {
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "dwell",
+      "rc": 0,
+      "result": {
+        "dwell_s": 300.0,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794817800.0,
+        "monotonic_ns": 1000000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "plan",
+      "rc": 0,
+      "result": {
+        "deadline_epoch_s": 1794842550.0,
+        "expected_s": 11680,
+        "legs": [
+          "L001",
+          "L002",
+          "L003",
+          "L004",
+          "L005",
+          "L006"
+        ],
+        "rc": 0,
+        "worst_case_s": 24750
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      },
+      "name": "before-soak-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "soak",
+      "rc": 0,
+      "result": {
+        "path": "/Volumes/JW-EXT/scratch/items-rl171/mock/dev05-s01-alt-00:30/soak/soak_reference.json",
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794818100.0,
+        "monotonic_ns": 1300000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L001-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L001-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      },
+      "name": "before-L001-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821151.482128,
+        "monotonic_ns": 4351482128013
+      },
+      "name": "L001.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L001",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_reference_record_sha256": null,
+        "g0_reference_source": "mock-L001",
+        "g0_released": true,
+        "g0_role": "capture",
+        "g0_shape": "own",
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 275.0,
+        "incomplete_reasons": [],
+        "leg_id": "L001",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 20557,
+        "prefill_tokens": 10000,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794819930.0,
+        "monotonic_ns": 3130000000000
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821151.482128,
+        "monotonic_ns": 4351482128013
+      },
+      "name": "before-L002-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821151.482128,
+        "monotonic_ns": 4351482128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821151.482128,
+        "monotonic_ns": 4351482128013
+      },
+      "name": "before-L002-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821151.482128,
+        "monotonic_ns": 4351482128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794821151.482128,
+        "monotonic_ns": 4351482128013
+      },
+      "name": "before-L002-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794821151.482128,
+        "monotonic_ns": 4351482128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822631.9642558,
+        "monotonic_ns": 5831964256026
+      },
+      "name": "L002.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L002",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_reference_record_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "g0_reference_source": "mock-L001",
+        "g0_released": true,
+        "g0_role": "consume",
+        "g0_shape": "span",
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 614.0,
+        "incomplete_reasons": [],
+        "leg_id": "L002",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794821151.482128,
+        "monotonic_ns": 4351482128013
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822631.9642558,
+        "monotonic_ns": 5831964256026
+      },
+      "name": "before-L003-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822631.9642558,
+        "monotonic_ns": 5831964256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822631.9642558,
+        "monotonic_ns": 5831964256026
+      },
+      "name": "before-L003-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822631.9642558,
+        "monotonic_ns": 5831964256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794822631.9642558,
+        "monotonic_ns": 5831964256026
+      },
+      "name": "before-L003-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794822631.9642558,
+        "monotonic_ns": 5831964256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824278.0263839,
+        "monotonic_ns": 7478026384039
+      },
+      "name": "L003.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L003",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_reference_record_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "g0_reference_source": "mock-L001",
+        "g0_released": true,
+        "g0_role": "consume",
+        "g0_shape": "span",
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 605.0,
+        "incomplete_reasons": [],
+        "leg_id": "L003",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794822631.9642558,
+        "monotonic_ns": 5831964256026
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824278.0263839,
+        "monotonic_ns": 7478026384039
+      },
+      "name": "before-L004-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824278.0263839,
+        "monotonic_ns": 7478026384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824278.0263839,
+        "monotonic_ns": 7478026384039
+      },
+      "name": "before-L004-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824278.0263839,
+        "monotonic_ns": 7478026384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794824278.0263839,
+        "monotonic_ns": 7478026384039
+      },
+      "name": "before-L004-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794824278.0263839,
+        "monotonic_ns": 7478026384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794825467.5085118,
+        "monotonic_ns": 8667508512053
+      },
+      "name": "L004.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L004",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_reference_record_sha256": null,
+        "g0_reference_source": "mock-L004",
+        "g0_released": true,
+        "g0_role": "capture",
+        "g0_shape": "own",
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 323.0,
+        "incomplete_reasons": [],
+        "leg_id": "L004",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794824278.0263839,
+        "monotonic_ns": 7478026384039
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794825467.5085118,
+        "monotonic_ns": 8667508512053
+      },
+      "name": "before-L005-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794825467.5085118,
+        "monotonic_ns": 8667508512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794825467.5085118,
+        "monotonic_ns": 8667508512053
+      },
+      "name": "before-L005-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794825467.5085118,
+        "monotonic_ns": 8667508512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794825467.5085118,
+        "monotonic_ns": 8667508512053
+      },
+      "name": "before-L005-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794825467.5085118,
+        "monotonic_ns": 8667508512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794826955.5706398,
+        "monotonic_ns": 10155570640066
+      },
+      "name": "L005.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L005",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_reference_record_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "g0_reference_source": "mock-L001",
+        "g0_released": true,
+        "g0_role": "consume",
+        "g0_shape": "span",
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 447.0,
+        "incomplete_reasons": [],
+        "leg_id": "L005",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794825467.5085118,
+        "monotonic_ns": 8667508512053
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794826955.5706398,
+        "monotonic_ns": 10155570640066
+      },
+      "name": "before-L006-agents",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794826955.5706398,
+        "monotonic_ns": 10155570640066
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794826955.5706398,
+        "monotonic_ns": 10155570640066
+      },
+      "name": "before-L006-meter",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794826955.5706398,
+        "monotonic_ns": 10155570640066
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794826955.5706398,
+        "monotonic_ns": 10155570640066
+      },
+      "name": "before-L006-volumes",
+      "rc": 0,
+      "result": {
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794826955.5706398,
+        "monotonic_ns": 10155570640066
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      },
+      "name": "L006.a1",
+      "rc": 0,
+      "result": {
+        "ac_powermode": {
+          "value": 0
+        },
+        "bundle": "runs/mock-L006",
+        "decode_cap": 4096,
+        "decode_cap_reached": true,
+        "decode_tokens": 4096,
+        "g0_outcome": "released",
+        "g0_reference_record_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "g0_reference_source": "mock-L001",
+        "g0_released": true,
+        "g0_role": "consume",
+        "g0_shape": "span",
+        "g0_timeout_s": 1200,
+        "g0_wait_s": 483.0,
+        "incomplete_reasons": [],
+        "leg_id": "L006",
+        "leg_status": "complete",
+        "member_status": "succeeded",
+        "os_level_max": 0,
+        "pm_nominal": true,
+        "prefill_chars": 20557,
+        "prefill_tokens": 10000,
+        "quiet_s": 0
+      },
+      "started": {
+        "epoch_s": 1794826955.5706398,
+        "monotonic_ns": 10155570640066
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      },
+      "name": "restore",
+      "rc": 0,
+      "result": {
+        "action": "restore_automatic",
+        "mock": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      },
+      "name": "stop-volumes",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      },
+      "name": "stop-meter",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      }
+    },
+    {
+      "ended": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      },
+      "name": "stop-agents",
+      "rc": 0,
+      "result": {
+        "proven_stopped": true,
+        "rc": 0
+      },
+      "started": {
+        "epoch_s": 1794828385.0527678,
+        "monotonic_ns": 11585052768079
+      }
+    }
+  ],
+  "work_reserve_s": 370
+}

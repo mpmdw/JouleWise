@@ -1,0 +1,3 @@
+$ plan --t0 1794825299 (Mon 2026-11-16 02:34:59) --batch-window 02:00-02:35  [pin 2d347f721]
+rc 1
+REFUSE the worst-case span [t0, t0 + 16650 s] meets a batch blackout (02:00-02:35); arm after it or earlier

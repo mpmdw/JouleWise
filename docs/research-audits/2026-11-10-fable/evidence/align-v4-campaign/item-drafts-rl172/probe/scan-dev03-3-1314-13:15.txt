@@ -1,0 +1,8 @@
+{"cwd": "/Volumes/JW-EXT/scratch/items-rl171/wt/2d347f721", "kit_sha256": "0f535774b413654d9d72b153a7dc8369df81575b34c5fa120898d76dfe04e14b", "roster": ["L001", "L002", "L003"], "window": "13:14-13:15", "v11": true, "soak_windows": ["11:45-13:15"], "step_s": 10}
+Sun 00:00:00 .. Sun 08:02:10  [1794729600..1794758530]  ADMIT
+Sun 08:02:20 .. Sun 08:36:30  [1794758540..1794760590]  REFUSE fence_problems: the fence end (worst case + 1460 s) at 13:04:10 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-15
+Sun 08:36:40 .. Sun 13:14:50  [1794760600..1794777290]  REFUSE plan_span: the worst-case span [t0, t0 + 16650 s] meets a batch blackout (13:14-13:15); arm after it 
+Sun 13:15:00 .. Mon 08:02:10  [1794777300..1794844930]  ADMIT
+Mon 08:02:20 .. Mon 08:36:30  [1794844940..1794846990]  REFUSE fence_problems: the fence end (worst case + 1460 s) at 13:04:10 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-15
+Mon 08:36:40 .. Mon 13:14:50  [1794847000..1794863690]  REFUSE plan_span: the worst-case span [t0, t0 + 16650 s] meets a batch blackout (13:14-13:15); arm after it 
+Mon 13:15:00 .. Tue 00:00:00  [1794863700..1794902400]  ADMIT

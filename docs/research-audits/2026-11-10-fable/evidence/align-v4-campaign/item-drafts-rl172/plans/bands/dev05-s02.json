@@ -1,0 +1,45 @@
+{
+ "item": "dev05-s02",
+ "pin": "2d347f721",
+ "kit": "cl-dev-05.v1.1.json",
+ "legs": "L007,L008,L009,L010,L011,L012",
+ "worst_case_s": 24750,
+ "window": [
+  "2026-11-18T00:00:00",
+  "2026-11-18T23:59:59"
+ ],
+ "bands": [
+  {
+   "start": 1794988800,
+   "end": 1794998099,
+   "start_local": "Wed 18 Nov 00:00:00",
+   "end_local": "Wed 18 Nov 02:34:59",
+   "arg": "13:14-13:15",
+   "bounded_by": "default-takes-over"
+  },
+  {
+   "start": 1794998100,
+   "end": 1795027800,
+   "start_local": "Wed 18 Nov 02:35:00",
+   "end_local": "Wed 18 Nov 10:50:00",
+   "arg": "02:00-02:35",
+   "bounded_by": "bytes"
+  },
+  {
+   "start": 1795036500,
+   "end": 1795055590,
+   "start_local": "Wed 18 Nov 13:15:00",
+   "end_local": "Wed 18 Nov 18:33:10",
+   "arg": "02:00-02:35",
+   "bounded_by": "bytes"
+  },
+  {
+   "start": 1795055591,
+   "end": 1795075199,
+   "start_local": "Wed 18 Nov 18:33:11",
+   "end_local": "Wed 18 Nov 23:59:59",
+   "arg": "13:14-13:15",
+   "bounded_by": "window"
+  }
+ ]
+}

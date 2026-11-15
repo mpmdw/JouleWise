@@ -1,0 +1,1 @@
+{"campaign_id": "cl-hp-01", "frozen_commit": "dd206025abb30fd5c07515cd4b34b3e653174810", "frozen_paths_verified": true, "kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965", "legs": 12, "ok": true}

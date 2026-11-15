@@ -1,0 +1,7 @@
+hp01-s01: pin dd206025a kit cl-hp-01@bbd34dc87.json legs L001,L002,L003 W 16650 window 2026-11-15T00:00:00 .. 2026-11-15T19:52:30
+  OK  plan --t0 1794729600 (Sun 15 Nov 00:00:00) --batch-window 13:14-13:15: rc 0 ok
+  OK  plan --t0 1794738899 (Sun 15 Nov 02:34:59) --batch-window 13:14-13:15: rc 0 ok
+  OK  plan --t0 1794738900 (Sun 15 Nov 02:35:00) --batch-window 02:00-02:35: rc 0 ok
+  OK  plan --t0 1794768600 (Sun 15 Nov 10:50:00) --batch-window 02:00-02:35: rc 0 ok
+  OK  plan --t0 1794777300 (Sun 15 Nov 13:15:00) --batch-window 02:00-02:35: rc 0 ok
+  OK  plan --t0 1794801150 (Sun 15 Nov 19:52:30) --batch-window 02:00-02:35: rc 0 ok

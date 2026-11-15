@@ -1,0 +1,3 @@
+$ plan --t0 1794855001 (Mon 2026-11-16 10:50:01) --batch-window 02:00-02:35  [pin 2d347f721]
+rc 1
+REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)

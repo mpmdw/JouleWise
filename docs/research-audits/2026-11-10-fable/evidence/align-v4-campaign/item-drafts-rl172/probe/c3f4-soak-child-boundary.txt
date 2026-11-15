@@ -1,0 +1,7 @@
+pin c3f4bacd8; OS_BATCH_WINDOW_LOCAL ((2, 0), (2, 35)) Part C soak_child span_s 11360.0 r1_minimum_seconds('C', True) 12180.0
+soak start 2026-11-15 22:50:40 ADMIT
+soak start 2026-11-15 22:50:41 REFUSE (soak_child: overlaps 02:00-02:35)
+soak start 2026-11-16 02:34:59 REFUSE (soak_child: overlaps 02:00-02:35)
+soak start 2026-11-16 02:35:00 ADMIT
+soak start 2026-11-16 12:00:00 ADMIT
+soak start 2026-11-15 00:20:00 REFUSE (soak_child: overlaps 02:00-02:35)
