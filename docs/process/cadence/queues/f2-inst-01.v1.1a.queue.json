@@ -1,0 +1,73 @@
+{
+ "schema": "joulewise.cadence_queue.v1",
+ "queue_id": "cq-f2-inst-01-v11a",
+ "expires_at": "2026-11-22T23:59:00-08:00",
+ "halt": null,
+ "standing_notice": null,
+ "spans": [
+  {
+   "seq": 1,
+   "span_id": "f2-inst-p1",
+   "block_id": "f2-inst",
+   "kit": {
+    "path": "docs/process/cadence/kits/f2-inst-01.v1.1a.json",
+    "sha256": "edc1bbe306fb5cbbc5d9457d31cb3217690c16634befef84022c15f61e006db1"
+   },
+   "legs": [
+    "L001",
+    "L002",
+    "L003"
+   ],
+   "attempt": 1,
+   "not_before": "2026-11-16"
+  },
+  {
+   "seq": 2,
+   "span_id": "f2-inst-p2",
+   "block_id": "f2-inst",
+   "kit": {
+    "path": "docs/process/cadence/kits/f2-inst-01.v1.1a.json",
+    "sha256": "edc1bbe306fb5cbbc5d9457d31cb3217690c16634befef84022c15f61e006db1"
+   },
+   "legs": [
+    "L004",
+    "L005",
+    "L006"
+   ],
+   "attempt": 1,
+   "not_before": "2026-11-16"
+  },
+  {
+   "seq": 3,
+   "span_id": "f2-inst-p3",
+   "block_id": "f2-inst",
+   "kit": {
+    "path": "docs/process/cadence/kits/f2-inst-01.v1.1a.json",
+    "sha256": "edc1bbe306fb5cbbc5d9457d31cb3217690c16634befef84022c15f61e006db1"
+   },
+   "legs": [
+    "L007",
+    "L008",
+    "L009"
+   ],
+   "attempt": 1,
+   "not_before": "2026-11-16"
+  },
+  {
+   "seq": 4,
+   "span_id": "f2-inst-p4",
+   "block_id": "f2-inst",
+   "kit": {
+    "path": "docs/process/cadence/kits/f2-inst-01.v1.1a.json",
+    "sha256": "edc1bbe306fb5cbbc5d9457d31cb3217690c16634befef84022c15f61e006db1"
+   },
+   "legs": [
+    "L010",
+    "L011",
+    "L012"
+   ],
+   "attempt": 1,
+   "not_before": "2026-11-16"
+  }
+ ]
+}
