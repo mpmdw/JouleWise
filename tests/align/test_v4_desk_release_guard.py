@@ -1218,6 +1218,18 @@ class RL162Tests(unittest.TestCase):
             harvest_off.reduce_target_check(session, v4, session / 'archive/withheld/reduced')
             harvest_off.reduce_target_check(session, {'session_id': 'align-pilot-p9'}, Path(tmp) / 'reduced')   # v3
 
+    def test_e5_benign_flag_timing_is_dropped_with_the_switch_either_way(self):
+        # E5 holds even with the W1 switch off (the F3 rebase then does not run): no emission stamp or interval.
+        flag = {'code': 'battery.smc_unavailable', 'observed': {'n': 1}, 'emitted': {'monotonic_ns': 7, 'wall_s': 1.0},
+                'interval': {'start_ns': 1, 'end_ns': 2}}
+        plan = [{'run_id': 'b1', 'condition': 'benign'}, {'run_id': 's1', 'condition': 'sabotage'}]
+        for withhold in (True, False):
+            line = seal.seal_w1_line('b1', {'harvest_flags': {'flags': [flag]}, 'detail': {}},
+                                     seal.NotBenign({'b1'}), withhold)
+            self.assertEqual(line['harvest_flags']['flags'], [{'code': 'battery.smc_unavailable', 'observed': {'n': 1}}])
+            out = seal._seal_pilot_w1({'members': [{'run_id': 'b1', 'harvest_flags': [flag]}]}, plan, withhold)
+            self.assertEqual(out['members'][0]['harvest_flags'], [{'code': 'battery.smc_unavailable', 'observed': {'n': 1}}])
+
     def test_f3_w1_thermal_benign_records_are_rebased_to_their_own_start(self):
         t0 = 500_000 * NS
         thermal = {'schema': 'joulewise.align.thermal_desk.v1', 'model_windows': {}, 'members': [
