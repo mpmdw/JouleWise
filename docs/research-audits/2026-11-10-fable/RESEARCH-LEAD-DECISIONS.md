@@ -16339,3 +16339,146 @@ Also noted: the sentinel detector now strips hex runs of 32 to 64 characters, wh
 **Blind status.** Blind: no v4 outcome exists, and no measurement, slot, transcript, energy, power or meter file was opened. This ruling rests on rulings, the PR body, three diffs, the roster's run ids, the U3 selection's bundle names and one test seat's reading. The U3 allowlist form and the recovery lines are fixed before any conditioned bundle exists.
 
 **For Ed, plainly.** "The desk seal passes my final read and can merge once CI is green. One real bug rides a follow-up: a new safety check also blocks the pilot data we registered for the U3 bar, so that step would have produced nothing. It fails loudly, nothing ran, and it is fixed before W1 is signed. No extra Part C run is needed."
+
+# RL-169. F2's design page: instrument characterization runs as four 3-leg spans of the existing campaign runner on a kit that is data only (`f2-inst-01`): a 600 s loaded-idle hold, then a short logged turn. It gives each channel's noise floor, the DC-in to rail gain, and the lag at known edges. No code changes. Its energy is sealed until freeze 2 and is read once, by frozen code. Ladder order: P, F0, F2, `DESIGN_QUEUE_LOW`
+
+Research lead (Fable 5.2), Sat Nov 14 21:29 PST 2026 (from `date`). The page RL-155 §4, RL-155a §1.3 (b) and RL-165 §8.4 owe. RL-149 to RL-168 stand except where "Amends" says otherwise.
+
+**Read.**
+- RL-149 §2.1, §2.2, §2.5, §2.6; RL-155 §4; RL-155a §2; RL-164; RL-165 §3, §5, §8; RL-167 §4. The log is at `origin/audit/2026-11-10-fable`.
+- `docs/research/AGENDA.md` on main (experiment 3).
+- `cadence_queue_design.md` §13 and §14, `kit_v11.py`, `legs.py`, `stops.py`, `cadence_legs_runner.py`, `cadence_leg.py` and `cl-qual-01.v1.1.json` at `origin/align/2026-11-14-qual-pin` (`a2a33757b`).
+- `legs.py` and `r1_runtime.py` (`reference_hook`) at `2d347f721`; `kit.py` at `b4b6aeb19`.
+
+**Not checked.**
+- I ran no validator, `plan`, mock or test. Every number below is my arithmetic from `legs.TIME_MODEL`. The `plan` output governs.
+- Whether powermetrics covers the soak. I read that the KM003C feed covers the whole span and that powermetrics is in each leg's member bundle. The builder prints the coverage by stage from the code.
+- Whether a 600 s quiet has ever run on the MBP. `tests/cadence/test_legs_runner.py` covers `q300` only.
+- No SSH. No measurement, energy, power, meter or custody file was opened.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 1. What it characterizes, and why this
+
+**Three things about the two energy channels (powermetrics rails and the KM003C DC-in), on the campaign's own model and host state:**
+1. **The noise floor at loaded idle.** The spread of mean power over 10, 40 and 128 s windows, with the model resident and the GPU idle. Those are the lengths of ctl-01's doses: 128, 512 and 1,536 tokens, and the 10, 30 and 90 s CPU burns (RL-149 §2.5).
+2. **The gain.** DC-in energy against rail energy for a logged pulse of known size, and the idle gap between the two channels against fan speed and temperature.
+3. **The lag.** The delay and rise time of DC-in against the rails at a prefill onset and a decode end, and how long each channel takes to return to baseline.
+
+**Why these.**
+- **v4.** They give the smallest unlogged work each channel can see, before ctl-01 exists. That is the instrument half of "calibrated sensitivity", and it tells me whether ctl-01's doses sit above the floor while its kit can still change.
+- **The campaign.** Every look prints "the same for DC-in". The gain against fan speed says whether a DC-in heat term is the fan or the silicon.
+- **No campaign leg has it.** Every campaign leg is band `q0`: the turn starts at G0 release, with no idle hold before it.
+
+**What I dropped, and the amendment to F2's row.**
+- **Weightless scripted loads and IOReport counters.** They need a new runner or collector, which is the reason RL-167 retired F3. They stay banked as AGENDA experiment 3. RL-155 §4's F2 row said "no model weights"; that is amended: the load is a short campaign-shaped leg.
+- **Idle drift and soak settling.** Every span's soak journal already has them.
+
+## 2. Procedure
+
+**One kit, `f2-inst-01`, schema v1.1, cell law `sha256-cells-v1`. Twelve legs, run as four pieces of three: L001-L003, L004-L006, L007-L009, L010-L012.**
+
+| Field | Value |
+|---|---|
+| `prompt_tokens` | `[256, 2000, 19458]`: each piece holds each size once (about 1.3, 10 and 97 s of prefill) |
+| `leg_defaults.decode_tokens` | 512 (about 43 s) |
+| `bands` | `["q600"]`: 600 s idle after G0 release, then the turn |
+| `g0_shapes` | `["own"]`, so the leg spec is v1's and the leg bytes are the ones dev-01 ran |
+| `span_template` | `t0_rule` free, `legs_per_span` 3, `soak_s` 1950, `fixed_overhead_s` 1200, `leg_budget_s` 1660, `leg_worst_case_s` 2700, `redo_quota` 0 |
+| `ruling` | `RL-169`, `authorizes_spans` true |
+| `looks` | empty. `desk.adapter` `leg-summary-v1` |
+| Checklist and `stop_rules` | The dev-03 kit's, unchanged |
+| `inclusion_rules` | Two lines: "No leg of this kit is campaign data or enters any look, fit or count", and §3's read rule |
+
+- **Time.** Legs are modeled at 1,361, 1,378 and 1,553 s. A piece is expected at 7,442 s (2 h 04 min). Its worst case is 11,250 s (3 h 07 min 30 s).
+- **A loaded attempt is kept and flagged, not redone** (`redo_quota` 0). Outside load is part of what the floor measures.
+- **Runner and launch.** `scripts/launch_cadence_span.py launch --kit K --legs <one piece> --batch-window 02:00-02:35`, with `--output` under an F2 root outside every campaign and v4 custody root. Pieces run in kit order. Each runs once.
+- **Pin.** The frozen commit of the kit dev-03's first span ran on: `2d347f721` or `1b20d3b0e`. The builder emits the kit on both; they differ only in `frozen`, and the lead stages one. The `frozen` block is byte-equal to the dev-03 kit's on that pin, so line 1's path hashes and line 2 (RL-165 §5) are the ones already held.
+- **Class B** (RL-150 R5): kit data, a queue, a `plan` and a mock span. No byte on a frozen path changes.
+  - **If the validator, plan or launcher refuses any field above, the builder stops and tells me.** F2 is not worth a re-pin.
+  - One fallback needs no word from me: `q300` in place of `q600` if the 600 s recipe fails the mock or the leg-runtime test. A piece is then expected at 6,542 s.
+- **Piece 1 is F2's own smoke.** The 600 s hold and the 256-token prompt have not run on the MBP from this runner.
+
+## 3. What it records, and blinding
+
+**It records what a campaign span records:** stage stamps, the soak journal, each leg's member bundle (sidecar and powermetrics), the KM003C stream for the whole span, the receipt and the desk bundle. The runner reads no energy. The desk reads the leg summary only.
+
+**It does open energy: its own, once, after the runs.**
+- **Sealed until freeze 2 is committed.** F2's legs have the campaign's shape, so an early free read would be a development read under another name. The paper's sentence stays: no conditionless leg's energy was read outside a registered look before the fit was frozen.
+- **Who and how.** One analyst seat, with code and an output schema frozen in a manifest `lm-inst-01`. The lead checks the output against the schema. The output comes to me. No desk, watcher, queue or agent opens an F2 energy, power or meter file.
+- **`lm-inst-01` prints, per leg and per channel (GPU rail, rail sum, DC-in):**
+  1. the hold's mean, its drift, and the SD of window means at 10, 40 and 128 s;
+  2. the turn's energy above that baseline, and the time back to baseline;
+  3. the DC-in to rail ratio of 2, and the idle gap between channels with fan speed and temperature;
+  4. the lag and the 10 to 90 % rise time at prefill onset and decode end;
+  5. the floor of 1 in tokens, by the leg's own decode pulse.
+  It prints nothing by 256-token block and no heat or onset term.
+- **Print only.** No F2 number enters a fit, a coefficient, a threshold or a score. If it argues for other ctl-01 doses, that is my ruling, made before ctl-01's kit is frozen.
+- **Not campaign data.** No leg counts toward the 132 cap, line 9, a development day or any look's roster.
+- **Disclosed.** The read is one line in the amendment's rehearsal-energy list (RL-149 §2.6): date, code hash, output.
+- The manifest does not gate the runs. It comes to me for a cold pass before the read.
+
+## 4. Footprint
+
+- **Start.** Its own fresh soak, as any span. Nothing is carried in.
+- **End.** The runner's close: Automatic restore, feeds stopped and hashed. Then the same restore lines as a span's close (RL-155 §4 rule 3). A failed line is "restore unproven" and holds everything.
+- **Quiet after it: 30 minutes before a counted t0** (RL-155 §4 rule 4; F2 loads the GPU). The first 20 are the restore check and the journal copy. A Part C or another filler may arm at close plus 20 min. The counted span then runs its own 32.5 min soak, so its first leg starts at least an hour after F2's last decode.
+- **Host state.** Nothing outside `measurement_mode`. No install, no reboot, no new process kind. Disk is checked by the kit's 40 GB line.
+
+## 5. Gates, stop rules and the ladder
+
+**The ladder's default rule is now: "Block not READY: P, else F0, else F2, else report `DESIGN_QUEUE_LOW`."** The slot session and hp-01's unrun spans still come before P, as RL-165 §1 and §2 order them. F0 is the standing item of RL-165 §3. F2 takes the gap when F0's 4 h spacing or its three-a-day cap refuses it.
+
+**READY, once:**
+1. the Mythos seat and the Sol seat of §6 report no open finding;
+2. dev-03's first span on the same pin closed with every restore line passed;
+3. the queue (four spans, one per piece, expiring in seven days) is committed and `validate-queue` passes;
+4. the kit, queue and that pin's worktree are staged on the MBP in a close interval.
+
+**Each launch.** RL-165 §3 lines 3, 7, 8, 9 and 10 apply, with 11,250 s in place of 12,180 s and 30 min in place of 20 before a counted span. In addition:
+- **Latest t0 is 22:18:10.** That is the fence: t0 plus 11,250 s plus 1,460 s is at or before 01:50. The worst-case end is then 01:25:40, inside the 01:30 rule. None between 22:18:10 and 02:40.
+- **No t0 from 10:50 to 13:15** on these two pins (RL-155a §3).
+- Every line of the kit's checklist passes.
+- **No spacing and no daily cap.** F2 is finite: four pieces.
+
+**Stops.**
+
+| What | Effect | Who clears |
+|---|---|---|
+| Restore unproven, or host state changed | Holds everything | Lead; a second one comes to me |
+| REFUSAL (launcher, runner or leg runtime) | Holds F2 only | Lead once; a second one comes to me |
+| INSTRUMENT_FAULT (meter or a feed) | Holds F2. The lead is mailed at once. A campaign span arms on its own `km003c_ready` line | Lead |
+| G0 timeout, loaded attempt, leg over time | Recorded. The piece goes on. Not a stop | Nobody |
+| Piece 1's hand-read fails | Holds F2 | Lead; comes to me if a field of §2 must change |
+
+- **Piece 1's hand-read,** by the lead from the desk table, no energy: three legs ran to 512 tokens; each has one quiet span of 600 s or more; the meter was present and clean; the restore lines passed. A G0 timeout is not a failure. Pieces 2 to 4 need no one.
+- **No leg is re-run.** After piece 4, F2 leaves the ladder. More kits (other decode sizes) wait for my reading of `lm-inst-01`'s output.
+- **Void** seven days after issue, or when that pin's worktree leaves the MBP.
+
+## 6. Owners
+
+- **Builder: one Sonnet seat,** in its own scratch directory. The kit on both pins, the queue, a `plan` print per piece, a mock span of piece 1 and the coverage print of "Not checked". Done by Sunday evening. It writes no code.
+- **Cold review, two seats that did not build it.**
+  - **Mythos 5.2:** the kit against this page; the `frozen` block's equality with the dev-03 kit; that no ledger, desk, look or count takes an `f2-` leg for a campaign leg.
+  - **Sol, executing:** `validate-kit`, the leg list regenerated from the law, `plan` for each piece (it prints 7,442 s, 11,250 s and the latest t0), the mock of piece 1 with a contaminated leg and with a G0 timeout, `validate-queue`. Not on a host with a live run.
+- **Lead:** staging, the standing item, piece 1's hand-read, the ladder line in `BLOCK-QUEUE.json`.
+- **Magistrate:** every launch, on §5's rules, with no word from the lead.
+- **Analyst seat:** `lm-inst-01`, drafted before freeze 2 so the read does not wait on it.
+- **Research lead:** a refused field; a second stop; `lm-inst-01`'s cold pass; the output.
+
+---
+
+**Gate.** F2's first launch waits for §5's four READY lines. Its read waits for freeze 2 and `lm-inst-01`.
+
+**Amends.**
+- RL-155 §4's F2 row: the load is a campaign-shaped leg, not a weightless script; its energy is read once under §3.
+- RL-155 §4 rule 5: "unless I rule so" is ruled here for F2.
+- RL-155 §4 rule 1, for a running F2 piece: it is never aborted (as RL-165 §3 line 9).
+- RL-155a §2 and RL-167 §4 item 7: the default rule, as §5 states it.
+- RL-155a §2's "pieces of 2 h or less": a piece is expected at 2 h 04 min.
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This page rests on rulings, the agenda and source code. F2's cells, its prints and its read rule are fixed before any F2 leg exists.
+
+**For Ed, plainly.** "When the laptop has nothing else ready, it now runs a two-hour instrument check. The check holds the model idle for ten minutes and then does a short, logged burst of work. It tells us how small a burst the wall meter and the laptop's own counters can each see, and how the two readings line up. It uses the code that already runs the calibration blocks, so nothing new has to be built or trusted. We do not look at its energy until the calibration fit is frozen later this week."
