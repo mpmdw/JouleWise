@@ -77,7 +77,7 @@
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "5af1989b95d9a6b2764d337357a51aeab437f98457b482f01560826af89d28ce"
+        "sha256": "6d60474b5746fed1cd29072b57c9e6e106a3bea0728961397c5bd2223868d551"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -428,7 +428,7 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "5da431af4eff179c8625f3643853ac341de2a360957c6b3409cea8d9502dcc4c"
+        "sha256": "1a5625cc889a52092a803c25e4deb320ce106721ceba1628465d06d332ad7477"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -444,7 +444,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "c3fc7730384a0a8387eea6f51659accdf421726fff4090f96a5b9bbc820baf5b"
+        "sha256": "e1ba9abf42791f9c482d8b8e02b342f4a9e9f72b511fd82183e6572894699e8f"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. The numpy version prints in both stages' outputs.",
@@ -788,7 +788,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "e64d08deccf48b62d9119c365c1462133f520c32dd4ad7a1e9cea3f51af8f5b9"
+      "sha256": "a1d250ef81d62747d93f36c55336683599f97d6d4b779dd68fb67a801bf271ec"
     },
     "prints": [
       {

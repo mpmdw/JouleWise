@@ -576,15 +576,25 @@
          "const": 3724
         },
         "estimate": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "ci90": {
-         "type": "array",
-         "items": {
-          "type": "number"
-         },
-         "minItems": 2,
-         "maxItems": 2
+         "oneOf": [
+          {
+           "type": "null"
+          },
+          {
+           "type": "array",
+           "items": {
+            "type": "number"
+           },
+           "minItems": 2,
+           "maxItems": 2
+          }
+         ]
         },
         "n_pairs": {
          "type": "integer"
@@ -609,15 +619,25 @@
          "const": 3151
         },
         "estimate": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "ci90": {
-         "type": "array",
-         "items": {
-          "type": "number"
-         },
-         "minItems": 2,
-         "maxItems": 2
+         "oneOf": [
+          {
+           "type": "null"
+          },
+          {
+           "type": "array",
+           "items": {
+            "type": "number"
+           },
+           "minItems": 2,
+           "maxItems": 2
+          }
+         ]
         },
         "n_pairs": {
          "type": "integer"
@@ -642,15 +662,25 @@
          "const": 2981
         },
         "estimate": {
-         "type": "number"
+         "type": [
+          "number",
+          "null"
+         ]
         },
         "ci90": {
-         "type": "array",
-         "items": {
-          "type": "number"
-         },
-         "minItems": 2,
-         "maxItems": 2
+         "oneOf": [
+          {
+           "type": "null"
+          },
+          {
+           "type": "array",
+           "items": {
+            "type": "number"
+           },
+           "minItems": 2,
+           "maxItems": 2
+          }
+         ]
         },
         "n_pairs": {
          "type": "integer"

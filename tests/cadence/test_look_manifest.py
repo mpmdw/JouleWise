@@ -702,6 +702,18 @@ class RL166b(Base):
         doc["rulings"].remove("RL-166b §3")
         self.refused(lambda: lm.validate_manifest(doc), "must cite 'RL-166b §3'")
 
+    def test_rl167_nullable_fields(self):
+        s1 = json.loads((LOOKS / "lm-interim-01.stage1.schema.json").read_text())
+        lodo = next(o for o in s1["properties"]["onset"]["properties"]["lodo"]["oneOf"] if o.get("type") == "object")
+        self.assertEqual(set(lodo["required"]), {"per_day_rms_s", "rms_s", "heldout_censored_below_tau",
+                                                 "heldout_censored", "folds_not_estimable"})
+        self.assertIn("null", lodo["properties"]["rms_s"]["type"])                       # RL-167 row 10
+        self.assertIn("null", s1["properties"]["rates"]["properties"]["per_cell"]["properties"]["2000"]["properties"]["r_p"]["type"])
+        out = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
+        bias = out["$defs"]["channel_fit"]["properties"]["prefix_bias"]["properties"]["1.10"]["properties"]
+        self.assertIn("null", bias["estimate"]["type"])                                  # R-11's null rules
+        self.assertIn({"type": "null"}, bias["ci90"]["oneOf"])
+
     def test_the_schemas_carry_rl166b_fields(self):
         s1 = json.loads((LOOKS / "lm-interim-01.stage1.schema.json").read_text())
         for k in ("active_readings", "onsets_before_116_s", "meter_clock"):
