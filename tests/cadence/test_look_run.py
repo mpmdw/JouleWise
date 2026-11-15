@@ -78,7 +78,8 @@ class _Custody:
 
     @classmethod
     def get(cls):
-        if cls.tmp is None:
+        if cls.tmp is None or not os.path.isdir(cls.tmp):     # another module's teardown may have removed it
+            cls._r = None
             cls.tmp = tempfile.mkdtemp(prefix="jw-look-run-")
             cls.tokens = {}
             cls.li, cls.en, cls.tr = synth.build("exact", tokens=cls.tokens)
@@ -105,8 +106,12 @@ class _Custody:
 
 
 def tearDownModule():
+    """Remove the shared custody copy and the pin directory; the helpers recreate them on next use, so a module that
+    imports these helpers (tests/cadence/test_time_fields.py) runs before or after this one."""
     if _Custody.tmp:
         shutil.rmtree(_Custody.tmp, ignore_errors=True)
+    _Custody.tmp = None
+    _DEFAULT_MANIFEST.clear()
     shutil.rmtree(_PIN_DIR, ignore_errors=True)
 
 
@@ -151,6 +156,7 @@ def _repin(node):
 
 
 def pinned_manifest(mutate=None):
+    _pin_dir()
     doc = _repin(rj(MANIFEST))
     if mutate:
         mutate(doc)
@@ -160,6 +166,7 @@ def pinned_manifest(mutate=None):
 
 
 def looks_file(stage1_sha256, status="stage1_committed", verdicts_sha256="3" * 64):
+    _pin_dir()
     path = os.path.join(_PIN_DIR, f"looks-{len(os.listdir(_PIN_DIR))}.json")
     wb(path, json.dumps({"schema": "joulewise.cadence_look_ledger.v1", "looks": [
         {"look_id": "lm-interim-01", "manifest_path": "docs/process/cadence/looks/lm-interim-01.json",
@@ -171,7 +178,7 @@ def looks_file(stage1_sha256, status="stage1_committed", verdicts_sha256="3" * 6
 _DEFAULT_MANIFEST = []
 
 
-def run_cli(argv, trap=False, mock_stage2=False):
+def run_cli(argv, trap=False, mock_stage2=False, extra=None):
     """The CLI with a draft manifest whose pins match this tree, and, for stage 2, a LOOKS.json that names the
     stage-1 hash, unless the test passes its own."""
     argv = list(argv)
@@ -181,7 +188,7 @@ def run_cli(argv, trap=False, mock_stage2=False):
         argv += ["--manifest", _DEFAULT_MANIFEST[0], "--allow-draft"]
     if argv[0] == "stage2" and "--looks" not in argv:
         argv += ["--looks", looks_file(argv[argv.index("--stage1-sha256") + 1])]
-    return _cli_subprocess(argv, trap=trap, mock_stage2=mock_stage2)
+    return _cli_subprocess(argv, trap=trap, mock_stage2=mock_stage2, extra=extra)
 
 
 # The CLI runs in its own `python -I -B` process, from the repository root, so its unpinned-module guard sees only
@@ -189,8 +196,7 @@ def run_cli(argv, trap=False, mock_stage2=False):
 # repository, so it is never a loaded repository file; it can install an open() audit hook, an energy-decode trap
 # and a stage-2 stub for the tests that need them, then calls the CLI's main().
 _HARNESS = os.path.join(_PIN_DIR, "cli_harness.py")
-with open(_HARNESS, "w") as _f:
-    _f.write(r'''
+_HARNESS_SRC = r'''
 import json, os, re, sys, tempfile
 sys.dont_write_bytecode = True
 sys.pycache_prefix = tempfile.mkdtemp(prefix="jw-harness-pyc-")   # as the CLI does: no cached bytecode is read
@@ -226,6 +232,8 @@ if opts.get("trap"):
         raise AssertionError("plist parsed")
     plistlib.loads = plistlib.load = _no_plist
 from scripts import cadence_look_run as R
+if opts.get("stage1_problems"):                  # a planted problem in the shared stage-1 check (Mythos r5 N7)
+    R.M.stage1_problems = lambda *a, **k: list(opts["stage1_problems"])
 if opts.get("trap"):
     # RL-173 E.1: the time reader converts only its whitelisted members, and no power_w of power_trace.csv
     TF = R.TF
@@ -259,18 +267,31 @@ finally:
         with open(opts["report"], "w") as f:
             json.dump({"opened": opened, "frames": frames, "stage2_calls": len(calls)}, f)
 sys.exit(rc)
-''')
+'''
+
+
+def _pin_dir():
+    """The pin directory and the CLI harness in it, recreated if a module teardown removed them."""
+    os.makedirs(_PIN_DIR, exist_ok=True)
+    if not os.path.exists(_HARNESS):
+        with open(_HARNESS, "w") as f:
+            f.write(_HARNESS_SRC)
+
+
+_pin_dir()
 
 _SPIES = []           # active spy_opens lists: a subprocess's opens are appended to each
 LAST_RUN = {}
 
 
-def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None):
+def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
     import subprocess
     import sys
     repo = Path(repo or REPO)
+    _pin_dir()
     report = os.path.join(_PIN_DIR, f"report-{len(os.listdir(_PIN_DIR))}.json")
-    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report}
+    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report,
+            **(extra or {})}
     r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv], cwd=repo,
                        capture_output=True, text=True, timeout=900)
     got = rj(report) if os.path.exists(report) else {"opened": [], "frames": [], "stage2_calls": 0}
