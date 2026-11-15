@@ -15593,3 +15593,204 @@ Research lead (Fable 5.2), Sat Nov 14 2026, 20:06 PST by this host's `date`. Rea
 4. **Q2: launch by 22:06:00. One number.** RL-155 §4 rule 4 ends every filler by 01:30 so the OS batch fires in a quiet machine before the 02:40 counted span; 22:06:00 plus 12,180 s is 01:29:00. RL-156 §5 measured only against the 02:00 blackout and forgot that rule: a 22:40 launch can end at 02:03. Its 22:40 and 22:50:40 are withdrawn as launch bounds; 22:50:40 remains only what the code refuses.
 5. **The ladder's F0 row:** an F0 is launched only if launch plus 12,180 s is at or before 01:30:00 (latest 22:07:00), in place of RL-156 §5's line. A miss tonight is quiet until 02:40 and a recorded miss against R-B.
 **Owner.** Lead: the re-issue of item 324, conditions (a) to (c), the F0 line. Magistrate: the run. **Gate.** Line 2 (a), (b) and line 4. **Amends.** RL-155a §1.2 row 3; RL-156 §4.2 (tonight's second commit) and §5 (the bound). **Blind status.** Blind: nothing sealed or measured was opened.
+
+# RL-165. The MBP schedule, Sat 14 to Fri 20 Nov, after the Mythos and Sol reviews: dev-03 may move to Monday; dev-02 may be pulled forward as 6 + 6; one standing F0 item makes the ladder self-executing; the two G0-timeout contingencies are decided now; line 2's base-equality reading is extended to the hp-01 and v1.1 pins and ends at the qualification re-pin; line 9 counts across blocks; hp-01 gets an earlier latest launch; the slot session keeps R-A; the qualification kits are designed; PR #774's one line is named under the carry rule
+
+Research lead (Fable 5.2), Sat Nov 14 20:12 PST 2026 (from `date`). Rules on the orchestrator's nine items. RL-149 to RL-164 stand except where a section below amends them. The five drafting errors the lead is fixing itself are not ruled here.
+
+**Read.**
+- Both seat reports in full: `mythos-schedule-review/REPORT.md` and `sol-schedule-review/REPORT.md`.
+- My RL-149 §2.2 to §2.6, §2.8 and §5; RL-150 R4, R5 and §3.2; RL-152 §2.2; RL-155, RL-155a, RL-156 §4 and §5, RL-156a, RL-157 and RL-158 in full; RL-161 §3 to §5; RL-163 §6 and §7; RL-164. The log is at audit `4a004271d`.
+- `hp01-ready/LINE2.md` and the `dev04-05/README.md`.
+
+**Checked myself, read-only.**
+- **Ancestry.** `dd206025a`, `2d347f721` and `1b20d3b0e` each have merge base `fe907d0d3` with the W1 line. None contains #777.
+- **A trial merge** (`git merge-tree`) of `2a8deb7b9`, `2d347f721` and `1b20d3b0e` with `c3f4bacd8`: all three are clean. On the kits' frozen paths the merge changes four files: `r1_runtime.json` (one line), `v4_registration.py` (+4), `align_r1_rehearsal.py` (about 150 lines in 11 hunks) and `run_align_r1_smoke.py` (three hunks, one in `soak_seconds`, one in `soak_child`).
+- **hp-01.** `git diff dd206025a 2a8deb7b9` over the kit's 37 frozen paths is empty. The four files that differ are the kit, the design doc, one test and `tests/host_command_sites.json`.
+- **PR #774 at `5e97809f6`.** Its diff against `c3f4bacd8` over the 17 Part C paths (the ten condition-13 files are among them) is one added line in `v4_registration.py`: `'joulewise/align/apple/v4_desk_seal.py'` in `EXECUTED_CLOSURE`. None of the other 16 paths names `EXECUTED_CLOSURE`, `ARTIFACTS`, `artifact_set_digest`, `validate_receipt`, `require_registration` or the strict-script list. `R1_EXECUTED_SOURCES` and `verify_r1_executed_sources` are unchanged.
+- **The v1.1 leg record** carries `decode_tokens` on every leg, and `legs.py` checks it against a range.
+
+**Not checked.**
+- The slot session's plan. I take Sol's 102,168 s and 119,880 s. No source I read gives an expected length.
+- Which of the merge's changed lines a campaign leg reaches. That is the cold seat's check in §8.
+- Whether the v1.1 generator can assign a decode cap per leg, and whether `cl-dev-03.v1.1a` has v1.1's cells and seeds leg for leg.
+- CI results. PR #789's run was still in progress at 20:10.
+- MBP state. No SSH; no measurement, energy, power, meter or custody file was opened. I ran no test.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 1. The Monday move: allowed
+
+**dev-03 arms as soon as its gate holds, on Monday if it can. RL-158 §3's "Tue 17 Nov" was a forecast, not a rule.**
+- **READY** is RL-158 §2's four lines, with line 3 read as §5 below. No line is shortened to make Monday.
+- **Two times.**
+  - READY, with the item, queue and worktree staged on the MBP, by **Sun 23:30**: the pilot arms at dev-02's close plus 20 min with no further word from the lead.
+  - READY later: the lead stages in a close interval and the pilot takes the first legal t0, up to Mon 20:48:10.
+- **The remainder** arms Monday before 10:50 or from 13:15 to 16:18:10, once the hand-read is recorded and L002 released. After 16:18:10 the lead takes RL-161's 3 + 3 + 6 (L004-L006 by 20:48:10), or the nine legs at Tue 02:40.
+- **RL-158 §2's cut-off stays Mon 18:00.** v1.1a is not chosen earlier to fill Monday.
+- **dev-04 and dev-05 follow at their first legal t0.** dev-05 is not held for Wednesday. RL-158 §3's "dev-05 stays Wed 02:40" is withdrawn.
+- **What it does to the design.** Development may end on four calendar days (Sat, Sun, Mon, Tue) where RL-155 had five. RL-149 §2.3 asks for three. The mixed-size legs still fall on at least two days, as before. I accept the lost day for a freeze 2 that is a day earlier.
+- **Monday's order after dev-02 closes:** the slot session if READY (R-A), then the dev-03 pilot, then hp-01's unrun spans, then P, then the standing F0.
+
+## 2. P on dev-02, Sunday: allowed
+
+**dev-02 may run as 6 + 6: L001-L006 on Sunday by 18:33:10, L007-L012 at Mon 02:40.** RL-155a §1.1's reasoning applies as it did to dev-01: a part of the block leaves Monday its span and its day.
+- **The queue.** The lead appends `dev-02-s02` (L001-L006) and `dev-02-s03` (L007-L012). The twelve-leg span is recorded as withdrawn unarmed only when `s02` arms. If `validate-queue` refuses the append, there is no pull and dev-02 runs Monday as queued.
+- **6 + 6 only.** If 18:33:10 is missed, P does not take dev-02 on Sunday.
+- **Sunday's order after `dev-01-s04`:** the slot session if READY, then hp-01's three spans, then this pull, then F0.
+- **Gates:** RL-155 §3.3's four lines and RL-156a §1's sentence, at each arm.
+
+## 3. The standing F0 item: allowed
+
+**One RUN_STATE item, issued once, which the magistrate launches without the lead.**
+1. **Pin.** The full sha of the W1-line head, `c3f4bacd8`, with the 17-hash table, the Mac-check line and a staged worktree. The lead checks these once.
+2. **It is void when the W1-line head moves.** The lead re-issues it as part of that merge. It also expires seven days after issue.
+3. **When.** A slot's arm refuses, or its block is not READY at its earliest t0, or a close leaves no staged item whose gate can hold within 2 h 30 min.
+4. **After a refusal** the magistrate mails the lead and waits 20 min. With no reply it launches. If the lead replies that it is clearing the stop, the magistrate waits for the refused span instead.
+5. **Spacing.** Unchanged: t0 at least 4 h after the last F0's, at most three in a calendar day.
+6. **Latest launch.** Launch plus 12,180 s is at or before 01:30:00 (RL-164 §5). None between 01:30 and 02:40.
+7. **It must not cost a counted span its day.** Launch plus 12,180 s plus 20 min is at or before the latest legal t0 of every staged counted span due that day.
+8. **Host state.** Every restore line of the previous close passed, and no leg child's process group is unproven. "Restore unproven" and host-state stops hold it. Other campaign stops do not (RL-155 §3.1).
+9. **A running F0 is never aborted.** A cleared span arms after its close plus 20 min. RL-155 §4 rule 1's 30 minutes does not apply to an F0 that began under line 3.
+10. **After it.** One line on the standing notice and the verdict line by mail. Journals only; nothing is adopted. The lead reads each verdict under RL-164 §3. A line that differs from the previous run's comes to me, and the item stays live.
+
+**F0's cap is not raised to fill more hours.** More than three Part C runs a day is load without product.
+
+## 4. The two contingencies
+
+**Either timeout sends the machine straight to the ladder: the slot session if READY, hp-01's unrun spans, then the standing F0. Q1's print still comes to me.**
+
+**dev-03's L002 times out at G0.**
+- Nothing span-shaped arms until I rule. That covers dev-03's remainder, dev-04 and dev-05 on v1.1.
+- **Own-shaped legs may arm without me.** The next campaign span is dev-03's L004-L012 on `cl-dev-03.v1.1a`, if a cold seat has confirmed that its cells and seeds equal v1.1's leg for leg and its line 2 holds (§5). If they are not equal, that comes to me.
+- dev-04 and dev-05 then need own-shaped kits. The builder makes them now, on the v1.1a pin, so they exist if this happens.
+
+**dev-04's L005 times out at G0.** RL-163 §6's gate is amended.
+- **If dev-03 ended with at least four of its six consumers released,** the second span arms on the lead's record. One timeout among seven is not the signal the pilot gate was written for, and RL-163 §6 already accepts 100 minutes of exposure.
+- **If dev-03 ended with fewer than four,** the second span does not arm. dev-04's L007-L012 and dev-05 run own-shaped as above.
+
+## 5. Line 2: the base-equality reading is extended
+
+**It extends to `cl-hp-01` at `dd206025a` and to the v1.1 and v1.1a kits at `2d347f721` and `1b20d3b0e`. They do not rebase.**
+
+- **What RL-152 §2.2 said.** The next kit would be pinned on a commit containing #777. Both builders branched from the campaign runner instead. RL-157 took the hp-01 base as given without ruling on line 2. Sol is right that nothing so far covered it.
+- **Why not rebase.**
+  - The merge moves soak-path bytes (`soak_seconds`, `soak_child`, `align_r1_rehearsal.py`) between dev-02 and dev-03, inside the development phase. RL-157 §1 matched hp-01 to dev-01 on the same soak bytes.
+  - It would not give a green suite. The W1 line carries its own registration-class reds (RL-163 §7 row 3).
+  - **Cost of the rebase:** four new kit shas, a cold seat's class check on each pin, the mocks and plans again, and a full CI run per pin at today's two hours or more. That is Sunday's hp-01 slot and most likely the Monday move.
+- **Cost of the extension:** these blocks keep the 10:50 to 13:15 launch exclusion, and the plain-words line 2 waits one more re-pin.
+
+**Line 2 for these kits, all four parts:**
+1. the full suite ran on bytes equal to the frozen commit on every frozen path;
+2. its red set equals `fe907d0d3`'s, the 12 tests of RL-155a §4, test for test;
+3. each of the 12 has its recorded passing run at a #777 head;
+4. the lead records the frozen-path diff against `b4b6aeb19` and the two meter blobs.
+
+**An added red is fixed and re-run. It is not accepted on an explanation.** One exception, for the hp-01 smoke only: if CI on `2a8deb7b9` has not finished when `dev-01-s04` closes, the smoke may arm on run 43664752637 (base plus the one allowlist test) with a recorded local pass of `tests/test_host_command_sites.py` at `2a8deb7b9`. The fix touched unfrozen test data only. The finished run must show base plus 0 before hp-01's second span arms.
+
+**Limits.** The reading ends at the qualification re-pin (§8). It is still no precedent for the slot session, W1 or any v4 window.
+
+## 6. Line 9 counts across blocks
+
+**Yes. Campaign spans are counted in the order the machine ran them, across blocks and kits.** The line bounds how far the machine runs ahead of the desk, and a host fault does not respect a block boundary.
+- The hp-01 smoke is the fourth campaign span. It needs `dev-01-s03`'s desk final. hp-01's second span needs `s04`'s.
+- "Not applicable: first span" is wrong for any kit after the first. RL-155 §3.4 stands: Part C, the slot session and fillers are not counted.
+
+## 7. The two risks
+
+**hp-01's latest launch.** On an evening before a 02:40 counted span, an hp-01 span launches only if its worst-case end is by 00:30. That leaves the lead an hour before the quiet to clear a "restore unproven".
+
+| Legs | Latest t0 |
+|---|---|
+| 3 | 19:52:30 |
+| 4 | 19:07:30 |
+| 5 | 18:22:30 |
+| 9 | 15:22:30 |
+
+- These replace RL-157 §8's values for hp-01 only.
+- The lead's watcher alarms at each hp-01 span's worst-case end.
+
+**The slot session.** R-A stands. It is not held for the campaign.
+- **The session's `plan` is a checklist line.** The lead prints its expected end, driver bound, outer window and any launch-time limit at the session's commit before it is READY. Nobody has given me an expected length.
+- **dev-02 has no Monday cutoff.** 14:03:10 is the fence for twelve legs on any day. If the session takes Monday, dev-02 or its second half takes the first legal t0 after the session closes, and every block behind it slides.
+- **A span or an F0 already armed finishes first.** Nothing new is armed whose worst case ends after the session's intended t0.
+- **Before the session arms,** the lead stages what follows it on the MBP: dev-02's item, the dev-03 pilot if READY, and the standing F0. Each arms at the session's close plus 20 min inside its own window.
+- **The cost is a day.** A Sunday session moves freeze 2 and qualification one day later. Section 1 gives that day back.
+
+## 8. Thursday and Friday
+
+### 8.1 The qualification kits
+
+**Design, for all three blocks. Twelve legs each, 6 + 6.**
+
+| Slots | Type | Cells |
+|---|---|---|
+| 6 | A | Two legs at each of 2,000, 10,000 and 19,458, decode 4,096 |
+| 4 | L | Two pairs at 19,458: one at 3,724 and 4,096, one at 3,151 and 4,096 (RL-150 §3.2). The two legs of a pair are adjacent and in one span |
+| 2 | A | The type-M slots, run as type A at 19,458 |
+
+- **Type M and type T do not enter qualification.** A new leg type is class A, and its smoke would hold the block. They go to a later block.
+- **Order.** The seed law draws positions and which leg of each pair runs first. Each ratio has both orders somewhere in the three blocks. A span's first leg is type A and is not part of a pair.
+- **G0 shape.** The first leg of each span captures; every other leg is span-shaped (RL-155 §5.3). If §4's first contingency is taken, the shape comes to me before the kits are pinned.
+- **Seeds.** Numbers not listed in the `dev04-05` README as used or reserved.
+- **Pin.** A merge of the v1.1 line with the W1-line head that contains #777 and #783. These kits lose the 10:50 to 13:15 exclusion. Later W1-line merges do not move the pin.
+- **Its line 2:** the red set equals the red set of the W1-line commit it merged, test for test.
+- **The cold seat (Mythos 5.2)** checks §2.8 line 1 per kit, and the class of the merge under RL-152 §2.2 and RL-156 §4.3's two conditions. Class B: a mock span, a `plan` and the diff check. If a changed line is reached inside a leg, it comes to me before qual-01 arms. The soak bytes would then differ between the fit's legs and the legs that test it.
+- **What the builder needs first:** whether the generator and validator accept a per-leg decode cap. If that is kit data or a class B change, it rides this pin. If it needs leg-runtime code, the builder says so before writing it.
+- **Days.** After freeze 2, on two calendar days with no development leg. **Qualification legs do not run before freeze 2**, sealed or not. "Frozen before the data existed" is the stronger sentence for the paper, and I do not trade it for a filled gap.
+- **Owner:** the v1.1 builder (Opus) for the merge, the three kits, queues and plans; the lead enters them at `HOLD_FOR_FIT_FREEZE`. **Target:** pinned with CI started by Mon 16 Nov 18:00; line 1 and line 2 held by Tue 17 Nov 18:00.
+
+### 8.2 The look manifest gates Thursday before the kits do
+
+No look manifest is on any ref, and freeze 2 cannot happen without the interim look.
+- **Owner:** an Opus builder for the schema, the analyst seat for the fit code (RL-155 §5.3).
+- **Target:** the cold seat's report and the manifest to me by Mon 16 Nov 18:00. My cold pass is the same day.
+
+### 8.3 F3
+
+**Build it in the qualification pin's PR, as RL-155a §2 described it.** A soak-only kind: the existing soak child with no leg, 60-minute pieces, its own close and restore lines, journals only. Class B. `--legs ""` is not F3 and is never used as one.
+- It gets a standing item on the same rules as §3, lines 3, 6, 7, 8 and 10, with its own length in place of 12,180 s.
+- **It never delays the kits.** If it needs a change to a path a leg reaches, or more than half a day, the builder drops it and tells me.
+- **Owner:** the same builder. **Target:** with the pin.
+
+### 8.4 What fills the rest
+
+- **Between dev-05's close and freeze 2:** the slot session or W1 (R-A), hp-01's unrun spans, F0, F3.
+- **F2's page is mine and is overdue** (RL-155a §1.3 b). Dispatch me for it on Sunday. It fills gaps in pieces of 2 h and is worth more than F3.
+- `ctl-01` and `reserve-01` take open slots on Thursday and Friday once their kits pass line 1.
+
+## 9. PR #774: the line is named
+
+**A Part C pass at `c3f4bacd8` carries to #774's merge commit.** The named change is one added entry, `'joulewise/align/apple/v4_desk_seal.py'`, in `EXECUTED_CLOSURE` of `joulewise/align/apple/v4_registration.py`.
+- **Why it carries.** Part C's check reads `R1_EXECUTED_SOURCES`, which is a different tuple and is unchanged. The closure tuple is read only by the registration and receipt functions, which no Part C path calls.
+- **The condition.** At the merge commit, the lead records that the diff from `c3f4bacd8` over the ten condition-13 files and the Part C paths is this one line. Anything more needs a new Part C, which is the next F0.
+- **PR #790 is not ruled here.** Its diff comes to me under the same rule when it is ready.
+
+---
+
+**Owner.**
+- **Lead:** the standing F0 item and its re-issue at each W1-line merge; the dev-02 append; staging ahead of every arm; line 2's four parts for each pin; line 9 across blocks in every item; the hp-01 table and alarm; the slot session's `plan`; #774's diff record; dispatching me for F2's page.
+- **Builder (v1.1, Opus):** the qualification pin, three kits, queues and plans; F3; the own-shaped fallback kits for dev-03's remainder, dev-04 and dev-05.
+- **Builder and analyst seat:** the look manifest.
+- **Cold seats (Mythos 5.2):** the qualification kits and the merge's class; v1.1a's leg-for-leg equality.
+- **Magistrate:** every slot; the standing F0 on §3's rules.
+- **Research lead:** F2's page; the look manifest's cold pass; Q1's print after either timeout; a qualification merge that reaches a leg; #790's diff.
+
+**Gate.** dev-03 waits for RL-158 §2's four lines. dev-02's pull waits for a validated append. The hp-01 smoke waits for §5's line 2, `s03`'s desk final and `s04`'s close plus 20 min. Qualification waits for freeze 2, which waits for the look manifest. #774's merge waits for RL-163 §7's rows and no new Part C.
+
+**Amends.**
+- RL-158 §3: dev-03's day; dev-05's Wednesday hold.
+- RL-155 §2 slot 6 and RL-155a §2: dev-02 may run as 6 + 6 across Sunday and Monday.
+- RL-155 §4 rule 1, for an F0 begun under §3.
+- RL-163 §6: the L005 gate reads dev-03's consumer count.
+- RL-158 §2: after an L002 timeout, own-shaped legs may arm without me.
+- RL-152 §2.2's limits: the reading extends to the hp-01, v1.1 and v1.1a pins and ends at the qualification re-pin.
+- RL-149 §2.8 line 9 and RL-155 §3.4: counted across blocks.
+- RL-157 §8: hp-01's latest t0 on an evening before a counted span.
+- RL-155 §5.3: type M leaves the qualification blocks; the pairs' cell is fixed.
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This ruling rests on rulings, two seat reports, two builder pages, commit ancestry, trial merges and diffs. The day count, the block order, the fallback shapes and the qualification cells are fixed before any development energy is read.
+
+**For Ed, plainly.** "Two reviewers found the laptop would sit idle about 17 hours on Monday and most of Thursday and Friday. Monday is fixed by starting the next block as soon as its kit passes review, not on a fixed Tuesday. Refusals overnight no longer leave the machine waiting for me or the lead: it starts a pre-checked two-hour v4 test by itself. Thursday and Friday depend on two things that do not exist yet, the qualification kits and the file that freezes the fit code; both now have an owner and a Monday evening target. I refused one shortcut: qualification runs do not start before the fit is frozen."
