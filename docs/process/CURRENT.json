@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as RUN_STATE 345: the receipt asserts, the per-leg admitted lines, the desk bundle, the restore lines, measurement_mode verify again, and the RL-150 R1 start-reference print (gates nothing)",
+  "next_observable": "the offload record (provider, path, archive sha256, manifest sha256, upload evidence) as the next RUN_STATE item, then F0 under item 346",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "344",
-  "source_item_heading_date": "2026-11-14",
+  "source_item": "347",
+  "source_item_heading_date": "2026-11-15",
   "wait": {
-    "deadline_epoch_s": 1794845820,
+    "deadline_epoch_s": 1794859200,
     "observable": "none",
-    "on_early_or_refused": "any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen inside (the last Sunday close + the close interval) to 23:59:59 PST Sun 15 Nov (epoch 1794815999), outside 10:50:00-13:15:00: NOTHING of this item launches; there is no Sunday pull and dev-02 runs Monday as queued (`dev-02-s01`, twelve legs, by the Monday item; RL-165 §2); mail the lead, and the standing F0 item applies. A span that ran but ends with any named stop or a receipt rc≠0: nothing relaunches, nothing is re-run, nothing else is queued; mail the lead. Do not retry, do not extend, do not reuse OUT"
+    "on_early_or_refused": "if no private cloud folder exists, or the upload cannot be confirmed within 90 min, or any hash differs: write NO marker, run nothing else, mail Ed and the lead (\"MBP idle: cloud offload failed — <reason>\"); the lead copies on return. Never upload anywhere public (the GitHub repo is PUBLIC: never use releases, gists or commits for journals)"
   }
 }
