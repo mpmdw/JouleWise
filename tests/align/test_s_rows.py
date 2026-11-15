@@ -1,4 +1,5 @@
-"""Reference-state rows (RL-148 desk step 6; RL-149 section 1.3; RL-153 section 2; RL-154): production and twin.
+"""Reference-state rows (RL-148 desk step 6; RL-149 section 1.3; RL-153 section 2; RL-154; RL-160): production
+and twin.
 
 Synthetic only: in-memory episodes, traces, member journals, OS readings and PM
 rows. No bundle, no measurement, no model. The optional world test
@@ -506,7 +507,12 @@ class MissingIsUnobservedTests(unittest.TestCase):
     def test_carry_in_more_than_2_s_before_the_start(self):
         # The carry-in is the reading at 10 s; the next one is at 13 s or 12 s.
         m = build('a', SPEC1, start=12 * NS + 100 * MS, keep=lambda x: not (10 * NS < x <= 12 * NS + 100 * MS))
-        self.assertEqual(outcome(m, C_BOTH).no_row, ({'turn': 0, 'reason': 'start_state_unobserved'},))
+        far = outcome(m, C_BOTH)
+        self.assertEqual(far.no_row, ({'turn': 0, 'reason': 'start_state_unobserved'},))
+        # RL-160 #6: the fresh carry-in anchors the gap whatever its distance from the start; the stretch to
+        # the next fresh reading (13 s) is 3 s, so the turn is hot.
+        self.assertEqual((far.candidates[0]['state_unobserved_ns'], far.candidates[0]['hot']), (10 * NS, True))
+        self.assertEqual(run_twin(m, C_BOTH)['turns'][0]['cut'], (10 * NS, 'state_unobserved'))
         ok = build('a', SPEC1, start=11 * NS + 900 * MS, keep=lambda x: not (10 * NS < x <= 11 * NS + 900 * MS))
         self.assertEqual([r.reason for r in outcome(ok, C_BOTH).rows], ['turn_end'])
 
@@ -742,6 +748,70 @@ class RL154DocstringTests(unittest.TestCase):
         self.assertIn('T12 Clock reference', twin.__doc__)
         self.assertIn('counted\n  from the fresh carry-in or else from the start', s_rows.__doc__)
         self.assertIn('clock_reference_missing', s_rows.__doc__)
+
+
+def without_stamps(member, turn):
+    stamps = dict(member[1])
+    del stamps[turn]
+    return (member[0], stamps, *member[2:])
+
+
+class RL160Tests(unittest.TestCase):
+    """RL-160 section 2: D5 (no stamp list, no row), D1 (the first stamped token anchors e20), D3."""
+
+    def test_d5_turn_without_stamps_and_no_cut_gives_no_row_and_is_not_hot(self):
+        m = without_stamps(build('a', SPEC3), 1)
+        for constants in (REG, C_BOTH):
+            with self.subTest(constants=constants.record()['clock']):
+                out = outcome(m, constants)
+                self.assertEqual([(r.turn, r.reason) for r in out.rows], [(0, 'turn_end'), (2, 'turn_end')])
+                self.assertEqual(out.no_row, ({'turn': 1, 'reason': 'token_stamps_unavailable'},))
+                self.assertFalse(out.candidates[1]['hot'])
+
+    def test_d5_turn_without_stamps_and_an_os_cut_gives_no_row_and_is_hot(self):
+        probe = build('a', SPEC3)
+        t1 = probe[0].turns[1]
+        m = without_stamps(build('a', SPEC3, os_level=lambda x: 1 if t1.first_token_ns + 10 * NS <= x <= t1.end_ns
+                                 else 0), 1)
+        for constants in (REG, C_BOTH):
+            with self.subTest(constants=constants.record()['clock']):
+                out = outcome(m, constants)
+                self.assertEqual([(r.turn, r.reason) for r in out.rows], [(0, 'turn_end')])
+                self.assertEqual(out.no_row, ({'turn': 1, 'reason': 'token_stamps_unavailable'},
+                                              {'turn': 2, 'reason': 'after_hot_turn'}))
+                self.assertTrue(out.candidates[1]['hot'])
+
+    def test_d5_turn_without_stamps_and_a_cut_in_prefill_gives_cut_in_prefill(self):
+        probe = build('a', SPEC3)
+        t0 = probe[0].turns[0]
+        m = without_stamps(build('a', SPEC3, os_level=lambda x: 1 if t0.start_ns + 3 * NS <= x <= t0.end_ns else 0), 0)
+        out = outcome(m, C_BOTH)
+        self.assertEqual(out.rows, ())
+        self.assertEqual([x['reason'] for x in out.no_row], ['cut_in_prefill', 'after_hot_turn', 'after_hot_turn'])
+
+    def test_d1_clock_windows_start_from_the_first_stamped_token(self):
+        # The turn record's first_token_ns (the end of prefill) lies 1.5 s before the first stamp; the clock is
+        # under 0.97 x the top state from the first token on. The first window starts at or after the first
+        # STAMP + 10 s.
+        base = build('a', SPEC1, clock=lambda x: 1300.0, max_state=lambda x: 1500.0)
+        ep, stamps = base[0], base[1]
+        first_stamp = stamps[0][0]
+        turn = replace(ep.turns[0], first_token_ns=first_stamp - 1500 * MS)
+        m = (replace(ep, turns=(turn,)), *base[1:])
+        out = outcome(m, REG)
+        w0, _ = out.candidates[0]['clock_window_ns']
+        self.assertGreaterEqual(w0, first_stamp + 10 * NS)
+        self.assertLess(w0, first_stamp + 10 * NS + 250 * MS)
+        row = out.rows[0]
+        self.assertEqual((row.reason, row.end_ns), ('clock_e20', max(s for s in stamps[0] if s <= w0)))
+
+    def test_d3_fresh_state_holds_under_os_only(self):
+        os_only = RowConstants(state={'os_level'}, clock=None, guard_s=2.0)
+        for value in (None, 'Unknown'):
+            with self.subTest(state=value):
+                m = build('a', SPEC1, journal_pm=lambda x, v=value: v if x <= 10 * NS else 'Nominal')
+                out = outcome(m, os_only)
+                self.assertEqual(out.no_row, ({'turn': 0, 'reason': 'start_state_unobserved'},))
 
 
 class BundleStampTests(unittest.TestCase):

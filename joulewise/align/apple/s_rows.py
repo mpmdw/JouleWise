@@ -1,5 +1,5 @@
 """Reference-state rows for the registered test S (RL-148 desk step 6; RL-149 section 1.3; RL-153 section 2;
-RL-154).
+RL-154; RL-160).
 
 A row is the part of one turn's model call that ran in the reference state:
 from the turn's start to the earliest cut, less the guard, snapped down to the
@@ -55,7 +55,10 @@ when the OS level is 0 and the power-management state is Nominal.
   (``leg_max_state``). Windows end at powermetrics row ends, lie wholly inside the
   decode (end at or before the last stamped token) and start no earlier than the
   first token plus 10 s; the cut is the window's start (``clock_e20``). A window
-  with no active time gives no value and no cut.
+  with no active time gives no value and no cut. "First token" is the first
+  stamped decode token (RL-160 D1): ``Turn.first_token_ns`` is the end of
+  prefill, not a token, and stands in only for a turn with no stamp list, where
+  the clock search decides hot and nothing else.
 - Clock reference (RL-154 finding 3). When the constants carry a clock clause and
   the member has no reference (no ``max_state_mhz`` on its PM rows, or no PM
   rows), the member gives no row: every turn's no-row reason is
@@ -64,13 +67,25 @@ when the OS level is 0 and the power-management state is Nominal.
 - The row ends at the earliest of these; ties take the first reason code in sort
   order, as the step-3 script does. A cut before the first stamped token gives no
   row (``cut_in_prefill``).
+- A row needs at least one stamped decode token, cut or not (RL-160 D5). A turn
+  with logged decode and no stamp list gives no row: ``cut_in_prefill`` when a
+  cut lies before ``Turn.first_token_ns``, otherwise ``token_stamps_unavailable``
+  (with or without a cut or the deadman). Its search still runs over (start, the
+  turn record's end] with clock windows from ``first_token_ns`` + 10 s; that
+  decides only whether the turn is hot.
 - ``after_hot_turn`` (RL-154 section 2; T9 kept). A turn is hot when its start
   read out of state; an off reading fired in (start, last stamped token]; the
   clock clause fired; or more than 2 s of it went by with no fresh state, counted
   from the fresh carry-in or else from the start. No later turn of the member
   gives a row. Hot is decided whether or not the turn gave a row. A turn that is
   only ``start_state_unobserved`` (in-turn readings fresh and in state, no gap)
-  is not hot: it loses its own row and nothing else.
+  is not hot: it loses its own row and nothing else. A fresh carry-in anchors the
+  gap whatever its distance from the start (RL-160 #6): the 2 s distance belongs
+  to the start verdict only, so a turn whose fresh carry-in lies more than 2 s
+  before the start, with no fresh reading until more than 2 s after it, is hot.
+- Member half-width (RL-149 T7 as RL-160 D4 confirms): sqrt(Q^2 + n_edges *
+  edge_j^2), with Q the summed query half-widths of the rows (integration bounds
+  add linearly) and the boundary timing noise of each edge in quadrature.
 
 Truncated members (RL-148 section 2): a member ended by the deadman, a G1
 timeout or the decode budget is kept on the rows it produced. A turn cut by the
@@ -114,6 +129,7 @@ START_STATE_UNOBSERVED = 'start_state_unobserved'
 STATE_UNOBSERVED = 'state_unobserved'
 CUT_IN_PREFILL = 'cut_in_prefill'
 CLOCK_REFERENCE_MISSING = 'clock_reference_missing'
+TOKEN_STAMPS_UNAVAILABLE = 'token_stamps_unavailable'
 AFTER_HOT_TURN = 'after_hot_turn'
 OFF_KINDS = ('os_level_above_0', 'journal_pm_state_off', 'native_pm_state_off', 'hazard_os_level_above_0')
 TRUNCATING_STOPS = (('episode.deadman:', 'deadman'), ('thermal.gate_timeout:', 'g1_timeout'),
@@ -559,14 +575,16 @@ def member_rows(episode, *, token_stamps, finish_reasons, journal, pm_rows, cons
         if start != 'ok':
             refuse(start)
             continue
+        if stamps is None:
+            # RL-160 D5: a row needs at least one stamped decode token, cut or not. Every stamp is at or
+            # after the prefill-end stamp, so a cut before it needs none. The search to the record's end
+            # above decides hot only.
+            early = cut_t is not None and turn.first_token_ns is not None and cut_t < turn.first_token_ns
+            refuse(CUT_IN_PREFILL if early else TOKEN_STAMPS_UNAVAILABLE)
+            continue
         if cut_t is None and not deadman_cut:
             end, d_prime, reason, cut = turn.end_ns, turn.decode_tokens, 'turn_end', False
         else:
-            if stamps is None:
-                # Every stamp is at or after the prefill-end stamp, so a cut before it needs none.
-                early = cut_t is not None and turn.first_token_ns is not None and cut_t < turn.first_token_ns
-                refuse(CUT_IN_PREFILL if early else 'token_stamps_unavailable')
-                continue
             if cut_t is not None:
                 # The search ends at the last stamp and every candidate lies before it.
                 d_prime, reason = bisect_right(stamps, cut_t), cut_name
