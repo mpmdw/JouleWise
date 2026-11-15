@@ -15220,3 +15220,188 @@ RL-155 §5.1 bundled them into v1.1 for convenience. RL-150 §2 had put them on 
 - RL-156a §1: the "one limit" paragraph.
 
 **Blind status.** Blind: no measurement file was opened and no campaign or v4 energy has been read. This ruling rests on rulings, two seat reports and the facts in the brief.
+
+# RL-162. PR #774 at `3b58b23e4`: the builder's interim tripwire is confirmed with one change to its second clause; tripwire 2 counts every code a member cannot move and prints the code names; `align_v4_u3_export.py` needs a bundle-identity check before W1 and `reduce` does not; the withheld archive is not padded; U4 unevaluated through the series is not intended, is not caused by this PR, and gets a producer before C1's desk. None of the five items gates the merge
+
+Research lead (Fable 5.2), Sat Nov 14 18:19 PST 2026 (from `date`). Rules the five items the #774 builder left to me after the Mythos re-attack (N4, N7, N9, N11, U4) and lists what the merge still waits for. RL-149 §3, RL-151 §4 and RL-152 §3 stand except where a section below amends them.
+
+**Read.**
+- `/Volumes/JW-EXT/scratch/mythos-774-reattack/REPORT.md`, in full.
+- The PR body of #774 (N1-N11 table, F1-F6 table, W1 exception list, evidence).
+- RL-149 §3, RL-151 §4 and RL-152 §3 in the log on `origin/audit/2026-11-10-fable`.
+- At `3b58b23e4`:
+  - `v4_desk_seal.py`: the flag allowlist, `KNOWN_WITHHELD_PREFIXES`, `tool_path_fires`, `tripwires`, `DeskSeal`, `_seal_dc_rows`.
+  - `workload.py:540-700` (the episode loop).
+  - `attribution.py` (where each energy flag is raised) and `thermal_desk.py` (`energy_exclusions`, `window_report`'s U4 row, `session_desk_evidence`).
+  - `v4_estimands.u4_reference`, `align_v4_next_arm_packet.py:866-874`, `align_v4_u3_export.py:1-130`.
+  - The harvest catalogue's `CODES` table in `joulewise/b5/harvest.py`, grouped by family and class.
+  - Protocol v4 `:444-466`, `:500-514`, `:684-690`, `:1018-1036`.
+
+**Checked myself.**
+- **Turn indices are 0-based.** The flags carry the loop index (`workload.py`, `episode.unsupported_tool_call_format:{index}`), so `max(turns) >= admitted - 1` in the interim clause does mean "the flag is on the last admitted turn".
+- **The JSON path has the same shape as the XML path in practice.** The loop breaks on any turn with no tool calls, so a turn whose only call is malformed ends the episode there too.
+- **The v4 desk never passes U4 evidence.** `align_v4_session.py` calls `window_report(records, v4=True, u3_bar=bar, ...)` with no `u4`, so `thermal_desk.py:717` writes `{'status': 'inconclusive'}` for every model-window. This is true with or without #774.
+- **The ceilings.** 62,400 s against 59,520 s is 2,880 s, 48 minutes.
+
+**Not checked.**
+- **The harvest emitters.** I classified the catalogue's codes from their family, class and names. I read the emitting code only for the attribution flags. §2 says what the builder verifies.
+- **Whether C1's packet reads W1's U4 string as inconclusive** (§5, confirmation owed).
+- **`meter.battery_activity` on sealed DC rows** (§6, a pointer, not a finding).
+- **The row-4 diff as a whole.** From `18fb3746f..3b58b23e4` I read only what the five items needed. The row-4 read is still owed (§7).
+- I ran no test and no mutant.
+
+**Not done.** No SSH, no measurement file opened, no commit. The only file written is this one.
+
+---
+
+## 1. N4: the interim form is confirmed, with one change to clause (c)
+
+**Ruled. Tripwire 1 fires when any of these holds, in memory, over W1's non-benign members:**
+- **(a)** as RL-152 §3.4 ruled: a tool-path flag on at least half of a member's admitted turns, and on at least two;
+- **(b)** a member's episode ends on a refused or malformed call (the flag on its last admitted turn) with fewer than three admitted turns;
+- **(c)** every non-benign D member that has at least one admitted turn carries a tool-path flag, and there is at least one such member.
+
+**The change from the builder's (c).** The builder's clause needs at least two D members and a flag on each. A sabotage D member that ends at G0 has no turn and no flag, so the clause can never fire for the other one. The members counted are now those with at least one admitted turn. With one such member, any refused call fires the line, because nothing else in W1 could tell us about D's tool path.
+
+**Why (b) and (c) are right.**
+- Mythos is correct that (a) cannot fire on D. A refused XML call returns no calls and the loop ends the episode, so the flag appears at most once, on the last turn. My RL-152 wording assumed a shape the runner cannot produce on that path.
+- **(b), "fewer than three":** a path the instruction breaks fails at the member's first call, which is in turn 0 or 1.
+- **A single late refusal on one of two D members stays `within`.** That is the sporadic kind, and the benign table prints its base rate. If both D members end on a refusal at any turn, (c) fires.
+- (a) stays for the JSON path, where a turn can mix a malformed call with good ones.
+
+**When the line reads `to the research lead`.** Nobody opens the withheld archive. The line and the benign table's rate of the same two codes come to me, and I rule on what is read next.
+
+**Tests.** Add two to the builder's N4 test: one D member ended at G0 and the other with a refusal on turn 3 fires; two D members with turns and one late refusal is `within`.
+
+## 2. N7: tripwire 2 counts every code the member cannot move, and prints the names
+
+**The rule.** On a withheld member the line counts a code when both hold:
+1. the member's own generation cannot move it;
+2. it is not already printed for that member (an allowlisted flag, an exclusion code, a `meter.` code on its DC row).
+
+**A code on no list is counted.** That is the builder's present default and it stays. So the list the code maintains is the list of codes that are **not** counted.
+
+**Three sources feed the line,** where today only the thermal record's `flags` do:
+- the member-scoped harvest flags (`member['harvest_flags']`);
+- `energy_flags`;
+- the non-`meter.` flags of the member's DC row.
+
+**Not counted: codes the member's draw, heat, duration or end state can move, or that are routine by registration.**
+
+| Group | Codes |
+|---|---|
+| Battery draw | `battery.assist`, `battery.assist_outside_request`, `battery.member_span`, `battery.accumulator_excursion`, `battery.accumulator_activity`, `battery.capture_pair_assist`, `meter.battery_activity`, `thermal.stage_battery_rise` |
+| Heat | `thermal.os_level_nonzero`, `thermal.powermetrics_pressure_elevated`, `thermal.powermetrics_non_nominal`, `thermal.gate_timeout`, `thermal.hold_timeout`, `contention.kernel_task_share`, `member.cooldown_cap_hit` |
+| Waits | `idle.waited`, `idle.wait_cap_skip`, `idle.wait_budget_skip`, `idle.wait_budget_exhausted`, `idle.busy_fraction_exceeded` |
+| End state and duration | `member.timeout`, `member.status_not_succeeded`, `member.admission_aborted`, `member.retried`, `segment.shorter_than_period`, and the episode and behaviour codes already in `KNOWN_WITHHELD_PREFIXES` |
+| Energy value | `member.anchor_energy_envelope_exceeded`, `member.anchor_not_bounded`, `energy.negative` |
+| Routine by registration | `contention.request_overlap` (R22-1: disclosure-only, expected on nearly every member) |
+
+**Counted: everything else.** In particular:
+- the catalogue families RECORDS, ROSTER, MODEL_IDENTITY, CODE_IDENTITY, PACK_IDENTITY, INSTRUMENT, CALIBRATION, CLOCK_SYSTEMATIC and NEG8;
+- `instrument.*`, `clock.*`, `sleep.*`, `agent.*`, `monitor.*`, `census.*`, `env.*`, `disk.low`;
+- every code that says the instrument did not observe: `battery.unmeasured`, `battery.smc_unavailable`, `battery.accumulator_unavailable`, `battery.capture_pair_missing`, `battery.capture_pair_missing_covered`, `battery.capture_pair_failed`, `thermal.unmeasured`, `thermal.battery_temperature_unmeasured`, `contention.unmeasured`, `member.span_unknown`, `cooldown.result_unknown`;
+- the remaining member-validity codes: `member.unreadable`, `member.bytes_missing`, `member.bytes_ambiguous`, `member.strict_validation_failed`, `member.reduction_mismatch`, `member.anchor_recompute_mismatch`, `member.token_count_mismatch`, `member.config_not_in_inventory`, `member.cooldown_evidence_unverified`, `member.target_phase_precheck_failed`, `member.idle_window_suspect`, `member.idle_admission_telemetry_missing`, `member.whole_window_member_failure`;
+- the attribution flags: `trace.*`, `window.*`, `coverage.*`, `duty.*`, `resolution.*`, `interpolation.*`, `clock_anchor_unresolved`, `energy.nonfinite_half_width`, `energy.uncertainty_unavailable`, `energy.value_unavailable`;
+- the three runtime faults the builder left unlisted (`episode_error`, `episode.interrupted`, `episode.g0_unreleased`). Confirmed as built.
+
+**One code change this forces.** `'battery.'` and `'contention.'` leave `KNOWN_WITHHELD_PREFIXES` as prefixes and become the explicit codes in the table. As prefixes they hide `battery.unmeasured` and `contention.unmeasured`, which are instrument faults.
+
+**The line prints the names.** `withheld members: none`, or `present, to the research lead: <codes>`. The codes are deduplicated code names with no member id, no count and no text after the colon. The record carries the same list.
+- This answers Mythos's masking point: a routine code can no longer hide a new one behind the word `present`.
+- It also makes the line usable without opening the archive.
+- A counted code is one the member cannot move, so its name says nothing about behaviour by condition.
+
+**What the builder verifies, because I did not read the harvest emitters.**
+1. For each code in the "not counted" table and each `member.*` code in the counted list, read the emitter. Bring back any code whose placement disagrees with the rule.
+2. List the non-`meter.` DC row flag codes and place each by the rule.
+3. Print the member-scoped harvest codes, codes only, carried by the conditionless sessions already harvested (the R1 slot session, the counted pilot, the campaign spans). A counted code that appears on more than a quarter of the members of any session comes to me before the W1 receipt. This is a structure read of conditionless custody.
+
+**Tests.** One planted code per source on a non-benign member fires the line with its name. One planted code from each "not counted" group does not. A member's exclusion code is not counted twice.
+
+## 3. N9: `align_v4_u3_export.py` needs the check before W1. `reduce` does not
+
+**`align_v4_u3_export.py`: a bundle-identity check is required before the W1 receipt.**
+- It prints `energies_j` for whatever bundle is named. Its registered use is on pilot and R1 bundles, and that use ends when the U3 bar is signed. It has no use on a series bundle before release: W1's U3 is computed by the desk in memory.
+- **Form: a positive allowlist,** which is N10's lesson. `measure_pair` reads a bundle only when its stored identity resolves to a pilot session or the R1 slot session. Anything else is refused before release, including a bundle whose identity cannot be read. The builder chooses the fields that carry the identity and cites them.
+- A test names a synthetic W1 bundle and a bundle with no identity. Both are refused, and no energy is printed.
+
+**`reduce`: no identity check.**
+- It is a step of the harvest-off pipeline and has to run on every window's raw files. Its per-member tables are the bundle in a smaller form.
+- Its cover is what `3b58b23e4` already does: stdout prints counts only (N6), and `reduced/` and `SWEEP.json` are restricted like `archive/withheld/`.
+- The lead adds `reduced/`, `SWEEP.json` and `archive/withheld/` to the deny list every seat is given.
+
+**RL-149 §3 line 4 after the merge.** It ends at the merge, as ruled. One standing line replaces it and goes in the runbook: before release, a bundle of a v4 series window is read only by the guarded desks and the harvest-off pipeline. No bundle-level tool or ad hoc reader is run on one.
+
+**Which PR.** A follow-up PR, "desk-seal follow-up", holding §1's change to (c), §2, this check and §4's line. It merges before the commit W1 is signed at, so the one re-sign covers it. Its gate is one attack seat that did not write it, my diff read, and CI. If the re-attack now running refuses `3b58b23e4`, the builder may put these in the same fix commit on #774 and there is no follow-up PR.
+
+## 4. N11: the archive is not padded
+
+**Not padded, though it is cheap.**
+- The size of `PILOT.full.json` is the weakest size signal in the session directory. Each member's raw plist and reduced file sit beside it, and N6 showed that their sizes give that member's sample count and so its duration. A lister who can see the archive's size can see those, per member.
+- Padding one file would close a small door beside a large open one. It would also suggest in the paper a protection we do not have.
+- It complicates the "kept byte-for-byte" property and the sha256 check for no gain.
+
+**What is ruled instead: one line, in the runbook and the seats' brief.** File sizes under a series window's `runs/`, `reduced/` and `archive/withheld/` directories are restricted like their contents. No report, status line or custody summary prints them per member or per file before release. Tools may still read them.
+
+RL-151 §4.3's sentence for the paper stands as written: blinding before release was procedural.
+
+## 5. U4: not intended. It is not this PR's doing, and it gets a producer before C1's desk
+
+**What is true today.**
+- The v4 desk passes no U4 evidence to `window_report`, so every model-window's U4 is `inconclusive` for want of an input. `u4_reference` has no caller and `v4_desk_evidence` has no producer in the repo.
+- The packet builder then requires the two R20 sentinels in the next window. By the registered ceilings that is up to 48 minutes of MBP per window, for every C and T window after the first: 18 windows, about 14 hours.
+- A U4 **fail** ("state not controlled") would be seen only at release, after the whole series.
+
+**This is not caused by #774.** The seal withholds the sentinel energies in C and T, but the desk never computed U4 from them. The PR is not held for it.
+
+**It is not what I intended, and RL-152 §3.4 confirmation 2 is corrected.** I wrote that U4 and E_ref "are computed from bundles in memory". They are not computed at all before release. The builder's test shows only that nothing reads a digest. U3's part of the confirmation stands.
+
+**Ruled.**
+1. **U4 joins the exception class in U2's form.** Its inputs are the R1 replay pair, W1 ordinals 5 and 17 and each window's two sentinels. All are benign replays. It is computed in memory from bundles, across windows.
+2. **Before release it prints its verdict, the window count W and the reason for an inconclusive.** The shift and its interval go into the withheld record and print at release. They are means of benign energies that C and T seal (B0, B7).
+3. **The producer is owed before C1's desk runs.** It is not a W1 gate: U4 is unevaluable in W1 by registration, and W1 carries no escalation sentinels.
+4. **Until the producer exists, the registered consequence applies as written.** An inconclusive U4 adds the two sentinels. Nobody suppresses the roster check. It errs toward more diagnostics and never toward a looser margin.
+5. **An honest limit.** At small W a computed U4 will often be inconclusive on its own interval (df = W − 1), and the sentinels will be added anyway. So the hours saved are unknown. The reason for the producer is that a U4 fail is seen when it happens.
+
+**Confirmation owed by the builder, by trace, before the W1 receipt.** W1's U4 row carries the string `inconclusive`, and `align_v4_next_arm_packet.py:869` tests for that string. Does C1's packet therefore require four sentinels in C1? The protocol says U4 to U6 "remain unevaluable" in W1 (`:446`), and R20 speaks of a window whose U4 is inconclusive. If the packet does require them, bring it to me with the line numbers. I do not rule on it from a partial read.
+
+## 6. One pointer for the re-attack seat or the builder. I did not trace it
+
+`_seal_dc_rows` keeps every `meter.` code on a sealed row. The catalogue has `meter.battery_activity`, emitted per member when battery current is non-zero in the member's request window. If that code reaches a non-benign member's DC row in the v4 desk, it is F5's assist bit under another name, and it should leave the per-member row as `battery.assist` did. If the v4 DC rows never carry it, nothing is owed. One grep and one test settle it.
+
+## 7. What #774 still waits for
+
+| Row | State | What passes it |
+|---|---|---|
+| 2, the re-attack seat | Running on `3b58b23e4` | ADMIT from a seat that executes. The first Mythos seat was a static trace and asked for N1 to N4 to be replayed by running code. §6's pointer goes to this seat or to the builder |
+| 3, CI | Pending on `3b58b23e4` at 18:19 | Green apart from the registration class (`test_v4_executed_closure`, `test_v4_dynamic_closure`), each failing for its stated reason only (RL-151 §4.5). `test_r1_runtime_e2e.test_term_reaches_the_runtime_which_closes_its_custody_before_exit` passes, or is shown to fail the same way on the base's own CI |
+| 4, my diff read | Not done | Once, at the final head: `git diff 620e3addc ea9b54a03` plus `git diff 18fb3746f <final head>`. I do it after row 2, so that I read one head |
+| Re-sign hash table | Not a merge gate | The PR body lists the changed strict artifacts with their blob ids at the final head, so the closure regenerated at the W1 commit can be checked against it. Refresh it after the last commit. No interim re-sign (RL-151 §4.5) |
+| Draft state | Draft | Marked ready when rows 2 to 4 pass |
+
+**None of §1 to §5 gates the merge.** The merged guard withholds everything these items touch. They change what a line can tell us, and they are owed before the W1 receipt (§1 to §4) or C1's desk (§5).
+
+**The W1 receipt checklist gains:** §1's clause (c) and tests; §2's sources, lists, names and the builder's three checks; §3's `u3_export` check and the standing line; §4's size line; §5's trace. C1(b) is already on it.
+
+## 8. What comes back to me
+
+1. The re-attack report on `3b58b23e4`, and the final head for the row-4 read.
+2. §2's disagreements, the DC flag list and any routine counted code.
+3. §5's trace of C1's packet.
+4. §6's answer.
+5. The follow-up PR's diff, or the fix commit that carries it.
+6. The U4 producer's design before it is built: the print, and where E_ref is authenticated.
+
+---
+
+**Owner.** #774 builder: §1's clause and tests, §2, §3's check, §5's trace, §6, the hash table. Lead: the deny list and the two runbook lines (§3, §4), arranging the follow-up's attack seat, scheduling the U4 producer before C1. Research lead: section 8.
+**Gate.** #774 waits for rows 2, 3 and 4 only. The W1 receipt waits for the checklist in §7. C1's desk waits for the U4 producer. Nothing is armed by this ruling.
+**Amends.**
+- RL-152 §3.4, tripwire 1: clauses (b) and (c) are added.
+- RL-152 §3.4, the unlisted-codes line: three sources, the not-counted list, and the names printed.
+- RL-152 §3.4, confirmation 2: U4 and E_ref are not computed before release.
+- RL-151 §4.4, W1 exception list: U4 is in the class for C and T windows, verdict only.
+- RL-149 §3, line 4: replaced at the merge by §3's standing line.
+
+**Blind status.** Blind: no v4 outcome exists and no measurement, slot, transcript, energy or meter file was opened. This ruling rests on rulings, one seat report, the PR body, code and the protocol text. The tripwire clauses, the not-counted list and U4's print are fixed before any conditioned bundle exists.
