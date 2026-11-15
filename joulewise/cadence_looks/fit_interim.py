@@ -47,6 +47,9 @@ DELTA_COL = "delta"
 ONSET_COLS = ("intercept", "tf08_c", "fan_rpm", "tv0h_excess_c", "t_p_s")
 ONSET_MIN_UNCENSORED = 12
 ONSET_MIN_DAYS = 3
+FOLD_MIN_UNCENSORED = 6
+SD_FLOOR_J = 1e-12
+METER_DRIFT_MAX_S = 0.1
 COUNT_ONLY_CUT_FIXED_S = 116.0
 QUALIFIED_THRESHOLD = 0.02
 MIN_COUNTED_DAYS = 3
@@ -60,7 +63,7 @@ class LookInputError(ValueError):
 
 
 # =============================================================================================== validation
-_SPAN_KEYS = {"span_id", "block_id", "phase", "role", "power_mode", "t0_epoch_s", "t0_local_date",
+_SPAN_KEYS = {"span_id", "block_id", "phase", "role", "power_mode", "t0_epoch_s", "t0_local_date", "meter_offsets_ns",
               "soak_reference_tv0h_c", "marks"}
 _LEG_KEYS = {"leg_key", "span_id", "leg_id", "leg_type", "cell_prompt_tokens", "g0_role", "inclusion", "turn"}
 _TURN_KEYS = {"prefill_tokens", "decode_tokens", "turn_start_s", "first_token_s", "last_token_s", "segments",
@@ -124,6 +127,10 @@ def validate_input(doc):
             raise LookInputError(f"{w}: power_mode")
         _num(s["t0_epoch_s"], w + ".t0_epoch_s")
         _num(s["soak_reference_tv0h_c"], w + ".soak_reference_tv0h_c", allow_none=True)
+        _keys(s["meter_offsets_ns"], {"header", "end"}, w + ".meter_offsets_ns")
+        for k in ("header", "end"):
+            if s["meter_offsets_ns"][k] is not None:
+                _int(s["meter_offsets_ns"][k], f"{w}.meter_offsets_ns.{k}")
         d = s["t0_local_date"]
         if not (isinstance(d, str) and len(d) == 10 and d[4] == "-" and d[7] == "-" and d.replace("-", "").isdigit()):
             raise LookInputError(f"{w}: t0_local_date")
@@ -260,10 +267,28 @@ def start_reading(turn, soak_ref):
     r = before[-1]
     if ts - r["t_s"] > START_MAX_AGE_S or not r["pm_fresh"]:
         return "start_reading_missing", "start_state_unobserved", None, None, None
-    state = "in_state" if (r["os_level"] == 0 and r["pm_state"] == "Nominal") else "start_out_of_state"
+    state = start_state_of(r)
     if r["tf08_c"] is None or r["fan_rpm"] is None or r["tv0h_c"] is None or soak_ref is None:
         return "start_reading_missing", state, None, None, None
     return "ok", state, float(r["tf08_c"]), float(r["fan_rpm"]), float(r["tv0h_c"]) - float(soak_ref)
+
+
+def start_state_of(r):
+    """RL-154 §3 (RL-167 row 6), on a fresh reading: out of state needs a level above 0 or a named state other
+    than Nominal; in state needs level 0 and Nominal; anything else (Unknown or missing state, a level that is
+    not an integer) is unobserved."""
+    lvl, pm = r["os_level"], r["pm_state"]
+    if (type(lvl) is int and lvl > 0) or (pm is not None and pm not in ("Nominal", "Unknown")):
+        return "start_out_of_state"
+    if type(lvl) is int and lvl == 0 and pm == "Nominal":
+        return "in_state"
+    return "start_state_unobserved"
+
+
+def fresh_state(r):
+    """A journal reading that is fresh state (RL-167 row 4): integer level, fresh stamp, state present and not
+    Unknown."""
+    return type(r["os_level"]) is int and r["pm_fresh"] and r["pm_state"] is not None and r["pm_state"] != "Unknown"
 
 
 def first_off(turn):
@@ -290,15 +315,17 @@ def first_off(turn):
 
 
 def unobserved_at(turn):
-    """Seconds from turn start to the last fresh reading before a stretch of more than 2 s with no fresh state
-    (RL-149 §1.3 clause c, as step 3 codes it), or None."""
+    """RL-149 §1.3 clause c as RL-167 rows 4 and 5 fix it. Anchors: the carry-in's own time if it is fresh state,
+    else the turn's start; then each fresh-state journal reading in (start, last token]; then the last token.
+    Native rows never count. The first step over 2 s fires; the value is the earlier anchor less the start,
+    floored at 0. None when no step fires."""
     ts, tl = turn["turn_start_s"], turn["last_token_s"]
     before = [r for r in turn["journal"] if r["t_s"] <= ts]
-    fresh = ([before[-1]["t_s"]] if before and before[-1]["pm_fresh"] else []) + \
-        [r["t_s"] for r in turn["journal"] if ts < r["t_s"] <= tl and r["pm_fresh"]]
-    for a, b in zip(fresh, fresh[1:] + [tl]):
+    first = before[-1]["t_s"] if before and fresh_state(before[-1]) else ts
+    anchors = [first] + [r["t_s"] for r in turn["journal"] if ts < r["t_s"] <= tl and fresh_state(r)] + [tl]
+    for a, b in zip(anchors, anchors[1:]):
         if b - a > UNOBSERVED_GAP_S:
-            return a - ts
+            return max(0.0, a - ts)
     return None
 
 
@@ -422,13 +449,29 @@ def onset_estimable(cens, days):
 
 
 def fit_onset(legs_d, keys):
-    """The onset model on the given in-fit legs: (beta or None, sigma, converged, n_unc, n_cens, n_days_unc)."""
+    """The MAIN onset model (Q4; RL-167 row 8): estimable at 12 uncensored on 3 days AND converged.
+    Returns (beta or None, sigma, converged or None, n_unc, n_cens, n_days_unc)."""
     X, y, c, days = _onset_rows(legs_d, keys)
     ok, n_unc, n_days = onset_estimable(c, days)
     if not ok:
         return None, None, None, n_unc, int(c.sum()), n_days
     f = censored_normal_fit(X, y, c)
-    return f["beta"], f["sigma"], f["converged"], n_unc, int(c.sum()), n_days
+    if not f["converged"]:
+        return None, None, False, n_unc, int(c.sum()), n_days
+    return f["beta"], f["sigma"], True, n_unc, int(c.sum()), n_days
+
+
+def fit_onset_fold(legs_d, keys):
+    """A fold's onset model (RL-167 row 7): no 12-on-3 rule; it fits with at least 6 uncensored onsets and
+    convergence, else None."""
+    X, y, c, _ = _onset_rows(legs_d, keys)
+    if int((~c).sum()) < FOLD_MIN_UNCENSORED:
+        return None
+    try:
+        f = censored_normal_fit(X, y, c)
+    except LookInputError:
+        return None
+    return f["beta"] if f["converged"] else None
 
 
 def tau_hat(L, beta):
@@ -451,7 +494,7 @@ def _onset_lodo(legs_d, fit_keys):
     folds_not_estimable = []
     for D in days:
         train = [k for k in fit_keys if legs_d[k]["day"] != D]
-        beta, *_ = fit_onset(legs_d, train)
+        beta = fit_onset_fold(legs_d, train)
         if beta is None:
             folds_not_estimable.append(D)
             continue
@@ -514,10 +557,10 @@ def stage1(look_input, input_sha256, code_sha256=None):
         else:
             L.update(_turn=None, start=None, state=None)
         reason = None
-        if not included:
-            reason = "excluded"
-        elif leg["leg_type"] == "T":
+        if leg["leg_type"] == "T":                      # RL-167 §2.1: type T, excluded, describe-only, missing start
             reason = "type_T"
+        elif not included:
+            reason = "excluded"
         elif turn is None:
             reason = "excluded"
         elif span["role"] == "describe":
@@ -575,6 +618,8 @@ def stage1(look_input, input_sha256, code_sha256=None):
             s = L["state"]
             if st["state"] == "start_out_of_state":
                 s["onset_use"] = "left_out_start_out_of_state"
+            elif st["state"] == "start_state_unobserved":       # RL-167 row 6, R-16
+                s["onset_use"] = "left_out_state_unobserved"
             elif s["unobserved_at_s"] is not None and (s["first_off_s"] is None or s["unobserved_at_s"] < s["first_off_s"]):
                 s["onset_use"] = "left_out_state_unobserved"
             else:
@@ -583,7 +628,7 @@ def stage1(look_input, input_sha256, code_sha256=None):
             L["state"]["onset_use"] = "left_out_missing_start"
 
     # Q4: onset
-    beta, sigma, conv, n_unc, n_cens, n_days = fit_onset(legs_d, fit_keys)
+    beta, sigma, conv, n_unc, n_cens, n_days = fit_onset(legs_d, fit_keys)     # conv False: not_estimable
     left = {"start_out_of_state": sum(1 for k in fit_keys if legs_d[k]["state"]["onset_use"] == "left_out_start_out_of_state"),
             "state_unobserved": sum(1 for k in fit_keys if legs_d[k]["state"]["onset_use"] == "left_out_state_unobserved"),
             "start_reading_missing": sum(1 for k in order if legs_d[k]["state"] is not None
@@ -599,7 +644,7 @@ def stage1(look_input, input_sha256, code_sha256=None):
     else:
         onset = {"status": "not_estimable", "n_uncensored": n_unc, "n_censored": n_cens, "n_days_uncensored": n_days,
                  "left_out": left, "predictors": list(ONSET_COLS), "coefficients": None, "sigma_s": None,
-                 "converged": None, "lodo": None,
+                 "converged": conv, "lodo": None,          # None: not attempted; False: did not converge
                  "count_only_cut": {"form": "fixed_116_s", "offset_s": None, "fixed_s": COUNT_ONLY_CUT_FIXED_S}}
 
     out_legs = []
@@ -619,7 +664,7 @@ def stage1(look_input, input_sha256, code_sha256=None):
 
     fit_days = sorted({legs_d[k]["day"] for k in fit_keys})
     hp = [k for k in order if legs_d[k]["block_id"] == "hp-01"]
-    hp_inc = sum(1 for k in hp if legs_d[k]["included"]) if hp else None
+    hp_inc = sum(1 for k in hp if legs_d[k]["included"] and legs_d[k]["leg_type"] == "A") if hp else None
     cell_inc = {str(c): sum(1 for k in dev_inc if legs_d[k]["cell_prompt_tokens"] == c) for c in CELLS}
     invalid = sum(1 for k in dev_inc if legs_d[k]["start"]["status"] != "ok")
     inv_frac = invalid / len(dev_inc) if dev_inc else 1.0
@@ -633,7 +678,8 @@ def stage1(look_input, input_sha256, code_sha256=None):
     def cnt(keyf, keys):
         out = {}
         for k in keys:
-            g = str(keyf(legs_d[k]))
+            v = keyf(legs_d[k])
+            g = "null" if v is None else str(v)
             out[g] = out.get(g, 0) + 1
         return out
     by_block = {}
@@ -656,8 +702,26 @@ def stage1(look_input, input_sha256, code_sha256=None):
         "roster": {"spans": [dict(s) for s in look_input["spans"]], "fit_days": fit_days},
         "rates": {"r_p": r_p, "r_d": r_d, "per_cell": per_cell},
         "centring": centring, "calibrated_range": cal, "onset": onset, "tripwires": trip, "counts": counts,
+        "meter_clock": meter_clock(look_input["spans"]),
         "legs": out_legs,
     }
+
+
+def meter_clock(spans):
+    """RL-167 R-20's print: per span, the meter's end-of-span wall-minus-raw offset less its header offset, in
+    seconds. A clock number, not energy. `single_offset` when no second pair exists. Over 0.1 s on any span goes
+    to the research lead before stage 2."""
+    per, worst = {}, None
+    for s in spans:
+        o = s["meter_offsets_ns"]
+        if o["header"] is None or o["end"] is None:
+            per[s["span_id"]] = {"form": "single_offset", "end_minus_header_s": None}
+            continue
+        d = (o["end"] - o["header"]) / 1e9
+        per[s["span_id"]] = {"form": "two_pairs", "end_minus_header_s": d}
+        worst = abs(d) if worst is None else max(worst, abs(d))
+    return {"spans": per, "max_abs_s": worst, "threshold_s": METER_DRIFT_MAX_S,
+            "to_research_lead": worst is not None and worst > METER_DRIFT_MAX_S}
 
 
 def _count_clock_on(L, r_p, r_d):
@@ -754,7 +818,7 @@ def _validate_energy(energy, stage1_out, needed):
     if energy["input_sha256"] != stage1_out["input_sha256"]:
         raise LookInputError("segment_energy: input_sha256 differs from stage 1's")
     if set(energy["legs"]) != set(needed):
-        raise LookInputError("segment_energy: legs differ from the legs stage 1 put in the fit or the describe set")
+        raise LookInputError("segment_energy: legs differ from the legs stage 1 put in the energy fit")
     for k, L in needed.items():
         e = energy["legs"][k]
         _keys(e, set(CHANNELS), f"segment_energy[{k}]")
@@ -827,13 +891,14 @@ def t_quantile(p, df):
     return 0.5 * (lo + hi)
 
 
-def _channel(stage1_out, legs, E, ch, with_delta, include=None):
-    """Everything one channel prints. `include`: optional set of leg keys (the marked-span print)."""
+def _channel(legs, E, ch, beta_onset, include=None):
+    """Everything one channel prints. `beta_onset`: the onset coefficients the full fit uses (None: delta
+    dropped). `include`: optional set of leg keys (the marked-span print)."""
     fit = [L for L in legs if L["in_energy_fit"] and (include is None or L["leg_key"] in include)]
+    with_delta = beta_onset is not None
     base_cols = list(BASE_COLS)
     heat_cols = list(BASE_COLS + HEAT_COLS) + ([DELTA_COL] if with_delta else [])
-    on = stage1_out["onset"]
-    beta_full = np.array([on["coefficients"][c] for c in ONSET_COLS]) if with_delta else None
+    beta_full = beta_onset
     by_key = {L["leg_key"]: L for L in fit}
 
     def seg_y(L):
@@ -866,10 +931,10 @@ def _channel(stage1_out, legs, E, ch, with_delta, include=None):
             test = [k for k in keys_all if by_key[k]["day"] == D]
             fold_cols = cols
             if use_heat and with_delta:
-                # R-12: the onset model is refitted without D under the same estimability rule; a fold in which
-                # it is not estimable drops the delta column, as the whole look would (Q4). No full-data value
+                # RL-167 row 7: the onset model is refitted without D (at least 6 uncensored, converged; no
+                # 12-on-3 rule); a fold where it cannot be fitted drops delta and is listed. No full-data value
                 # is used for a held-out day.
-                bo, *_ = fit_onset({k: by_key[k] for k in keys_all}, train)
+                bo = fit_onset_fold({k: by_key[k] for k in keys_all}, train)
                 if bo is None:
                     fold_cols = [c for c in cols if c != DELTA_COL]
                     folds_dropped.append(D)
@@ -893,6 +958,8 @@ def _channel(stage1_out, legs, E, ch, with_delta, include=None):
 
     def errors(pred_leg, pred_hot):
         meas_leg = {k: float(sum(seg_y(by_key[k]))) for k in keys_all}
+        if any(v <= 0 for v in meas_leg.values()):
+            raise LookInputError("stage 2: a leg's measured energy is not positive (R-18)")
         meas_hot = {}
         for k in keys_all:
             L = by_key[k]
@@ -907,11 +974,13 @@ def _channel(stage1_out, legs, E, ch, with_delta, include=None):
             n_hot[D] = len(hk)
             if hk:
                 pn, mn = sum(pred_hot[k] for k in hk), sum(meas_hot[k] for k in hk)
+                if mn <= 0:
+                    raise LookInputError("stage 2: a day's measured hot energy is not positive (R-18)")
                 hot_day[D] = (pn - mn) / mn
+                num_h += pn - mn                         # RL-167 row 12: pooled over every hot block, every day
+                den_h += mn
                 if len(hk) >= MIN_HOT_LEGS_PER_DAY:
                     counted.append(D)
-                    num_h += pn - mn
-                    den_h += mn
             pn, mn = sum(pred_leg[k] for k in ks), sum(meas_leg[k] for k in ks)
             leg_day[D] = (pn - mn) / mn
             num_l += pn - mn
@@ -952,11 +1021,13 @@ def _channel(stage1_out, legs, E, ch, with_delta, include=None):
             m_short = sum(y[i] for i, s in enumerate(L["segments"]) if s["kind"] == "prefill" or s["block"] < nb)
             m_short += E[k][ch]["prefix_tails"][str(plen)]
             pairs.append((k, L["day"], meas_leg[k] - pp[k]["_long"], m_short - pp[k][lab]))
-        if len(pairs) < 3:
-            bias[lab] = {"prefix_len": plen, "estimate": None, "ci90": None, "n_pairs": len(pairs), "n_days": 0}
+        n_days_pairs = len({p[1] for p in pairs})            # RL-167 R-11: always the days among the pairs
+        sd_l = float(np.std([p[2] for p in pairs], ddof=1)) if len(pairs) >= 2 else 0.0
+        sd_s = float(np.std([p[3] for p in pairs], ddof=1)) if len(pairs) >= 2 else 0.0
+        if len(pairs) < 3 or sd_l <= SD_FLOOR_J or sd_s <= SD_FLOOR_J:
+            bias[lab] = {"prefix_len": plen, "estimate": None, "ci90": None, "n_pairs": len(pairs),
+                         "n_days": n_days_pairs}
             continue
-        sd_l = float(np.std([p[2] for p in pairs], ddof=1))
-        sd_s = float(np.std([p[3] for p in pairs], ddof=1))
         diffs = [(d, rl / sd_l - rs / sd_s) for (_, d, rl, rs) in pairs]
         est = sum(x for _, x in diffs) / len(diffs)
         dm = {}
@@ -990,18 +1061,28 @@ def stage2(stage1_out, stage1_sha256, energy, code_sha256=None):
     if stage1_out.get("schema") != STAGE1_SCHEMA:
         raise LookInputError("stage 2: not a stage-1 output")
     legs = stage1_out["legs"]
-    needed = {L["leg_key"]: L for L in legs if L["in_energy_fit"] or L["hp_describe"]}
+    needed = {L["leg_key"]: L for L in legs if L["in_energy_fit"]}      # RL-167 §3: no hp-01 energy
     _validate_energy(energy, stage1_out, needed)
     E = energy["legs"]
-    with_delta = stage1_out["onset"]["status"] == "estimable"
+    on = stage1_out["onset"]
+    with_delta = on["status"] == "estimable"
+    beta_main = np.array([on["coefficients"][c] for c in ONSET_COLS]) if with_delta else None
+    marked = sorted({L["span_id"] for L in legs if L["in_energy_fit"] and L["marks"]})
+    keep = {L["leg_key"] for L in legs if L["in_energy_fit"] and L["span_id"] not in marked}
+    # RL-167 row 16: the marked-spans print refits the onset on the remaining legs under row 7's rule; columns as
+    # in the main look; a fit that fails gives nulls
+    beta_keep, keep_ok = None, True
+    if marked and with_delta:
+        beta_keep = fit_onset_fold({L["leg_key"]: L for L in legs if L["leg_key"] in keep}, sorted(keep))
+        keep_ok = beta_keep is not None
     channels = {}
     for ch in CHANNELS:
-        c = _channel(stage1_out, legs, E, ch, with_delta)
-        marked = sorted({L["span_id"] for L in legs if L["in_energy_fit"] and L["marks"]})
+        c = _channel(legs, E, ch, beta_main)
         if marked:
-            keep = {L["leg_key"] for L in legs if L["in_energy_fit"] and L["span_id"] not in marked}
             try:
-                cw = _channel(stage1_out, legs, E, ch, with_delta, include=keep)
+                if not keep_ok:
+                    raise LookInputError("marked print: the onset cannot be refitted on the remaining legs")
+                cw = _channel(legs, E, ch, beta_keep, include=keep)
                 c["marked_sensitivity"] = {"marked_spans": marked, "n_legs_without": cw["n_legs"],
                                            "coefficients_without": cw["coefficients"],
                                            "lodo_hot_max_abs_without": cw["lodo"]["hot"]["max_abs"]}

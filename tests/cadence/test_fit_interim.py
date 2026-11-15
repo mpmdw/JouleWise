@@ -105,12 +105,21 @@ class Exact(unittest.TestCase):
                 self.assertEqual(by[k]["tau_hat_s"], 0.0)
             if t["unobserved"] and t["in_energy_fit"]:
                 self.assertEqual(by[k]["state"]["onset_use"], "left_out_state_unobserved")
+            if t["start_unknown"]:                               # RL-167 row 6
+                self.assertEqual(by[k]["start"]["state"], "start_state_unobserved")
+                self.assertTrue(by[k]["in_energy_fit"])
+                self.assertEqual(by[k]["state"]["onset_use"], "left_out_state_unobserved")
+                beta = np.array([s1["onset"]["coefficients"][c] for c in F.ONSET_COLS])
+                z = by[k]["start"]["z"]
+                self.assertAlmostEqual(by[k]["tau_hat_s"],
+                                       max(0.0, float(np.array([1.0, *z, by[k]["t_p_s"]]) @ beta)), delta=1e-9)
+                self.assertGreater(by[k]["tau_hat_s"], 0.0)
             if t["missing_start"]:
                 self.assertEqual(by[k]["start"]["status"], "start_reading_missing")
                 self.assertFalse(by[k]["in_energy_fit"])
         left = s1["onset"]["left_out"]
         self.assertEqual(left["start_out_of_state"], 2)
-        self.assertEqual(left["state_unobserved"], 2)
+        self.assertEqual(left["state_unobserved"], 3)          # two in-turn gaps and one Unknown start
         self.assertEqual(left["start_reading_missing"], 2)
         self.assertEqual(s1["counts"]["type_T"], 1)
         self.assertEqual(s1["counts"]["excluded_by_rule"]["km003c_clean"], 1)
@@ -495,20 +504,27 @@ class Stage2Internals(unittest.TestCase):
         for lab in F.PREFIX:
             self.assertLess(bumped[lab]["estimate"], base[lab]["estimate"] - 0.05, lab)
 
-    def test_fold_without_estimable_onset_drops_delta(self):
-        """R-12: uncensored onsets on exactly three days; each fold that holds out one of them drops delta."""
+    def test_fold_with_under_6_uncensored_drops_delta(self):
+        """RL-167 row 7: a fold fits its onset with at least 6 uncensored onsets (no 12-on-3 rule); the fold
+        holding out the day with 7 of 12 uncensored onsets keeps 5 and drops delta; the others keep it."""
         s1 = copy.deepcopy(self.s1)
-        days = sorted({L["day"] for L in s1["legs"] if L["in_energy_fit"]})
-        keep = days[-3:]
+        unc = {}
+        for L in s1["legs"]:
+            if L["in_energy_fit"] and L["state"]["onset_use"] == "uncensored":
+                unc.setdefault(L["day"], []).append(L["leg_key"])
+        days = sorted(unc, key=lambda d: -len(unc[d]))
+        quota = {days[0]: 7, days[1]: 3, days[2]: 2}
+        keep = {k for d, n in quota.items() for k in unc[d][:n]}
         for L in s1["legs"]:
             st = L.get("state")
-            if L["in_energy_fit"] and st["onset_use"] == "uncensored" and L["day"] not in keep:
+            if L["in_energy_fit"] and st["onset_use"] == "uncensored" and L["leg_key"] not in keep:
                 st["onset_use"] = "censored"
                 st["censored_at_s"] = L["load_s"] + 1000.0
                 st["first_off_s"] = None
         out = F.stage2(s1, rehash(s1), self.en)
         self.assertEqual(out["delta_column"], "kept")
-        self.assertEqual(sorted(out["channels"]["gpu_rail"]["lodo"]["folds_delta_dropped"]), keep)
+        for ch in F.CHANNELS:
+            self.assertEqual(out["channels"][ch]["lodo"]["folds_delta_dropped"], [days[0]])
 
 
 class Guards(unittest.TestCase):
@@ -532,3 +548,160 @@ class Guards(unittest.TestCase):
         for k in ("condition", "Slot_ID", "instruction_kind", "start_band"):
             with self.assertRaises(F.LookInputError):
                 F._no_forbidden({"a": [{"b": {k: 1}}]})
+
+
+class RL167(unittest.TestCase):
+    """RL-167 §2's analyst rows, each with a test that fails without the change."""
+
+    def turn(self, journal, native=()):
+        return {"turn_start_s": 100.0, "last_token_s": 200.0, "journal": journal, "native_pm": list(native)}
+
+    def j(self, t, lvl=0, pm="Nominal", fresh=True):
+        return {"t_s": t, "os_level": lvl, "pm_state": pm, "pm_fresh": fresh, "tf08_c": 40.0, "fan_rpm": 2000.0,
+                "tv0h_c": 60.0}
+
+    def test_row6_start_state(self):
+        self.assertEqual(F.start_state_of(self.j(0, 0, "Nominal")), "in_state")
+        self.assertEqual(F.start_state_of(self.j(0, 0, "Unknown")), "start_state_unobserved")
+        self.assertEqual(F.start_state_of(self.j(0, 0, None)), "start_state_unobserved")
+        self.assertEqual(F.start_state_of(self.j(0, None, "Nominal")), "start_state_unobserved")
+        self.assertEqual(F.start_state_of(self.j(0, 1, "Unknown")), "start_out_of_state")
+        self.assertEqual(F.start_state_of(self.j(0, None, "Moderate")), "start_out_of_state")
+        t = self.turn([self.j(99.5, 0, "Unknown")])
+        self.assertEqual(F.start_reading(t, 58.0)[:2], ("ok", "start_state_unobserved"))
+
+    def test_row4_only_fresh_state_counts_against_the_gap(self):
+        base = [self.j(99.5)] + [self.j(100.5 + i) for i in range(100)]
+        self.assertIsNone(F.unobserved_at(self.turn(base)))
+        for bad in ({"pm_state": "Unknown"}, {"pm_state": None}, {"os_level": None}, {"pm_fresh": False}):
+            jj = [dict(r) for r in base]
+            for r in jj[10:14]:                        # readings at 109.5 .. 112.5 do not count
+                r.update(bad)
+            self.assertEqual(F.unobserved_at(self.turn(jj)), 8.5, bad)
+        # native rows never count: a journal gap stays a gap however many native rows fall in it
+        jj = base[:10] + base[14:]
+        self.assertEqual(F.unobserved_at(self.turn(jj, [{"t_end_s": 110.0 + i * 0.5, "state": "Nominal"}
+                                                        for i in range(8)])), 8.5)
+
+    def test_row5_anchor_at_turn_start_without_fresh_carry_in(self):
+        later = [self.j(102.5 + i) for i in range(98)]
+        # carry-in not fresh state: anchor 100.0; next fresh-state reading at 102.5 -> gap 2.5 s fires at 0
+        self.assertEqual(F.unobserved_at(self.turn([self.j(99.5, 0, "Unknown")] + later)), 0.0)
+        # fresh carry-in at 99.9: 99.9 -> 102.5 is 2.6 s; the earlier anchor less the start, floored at 0
+        self.assertEqual(F.unobserved_at(self.turn([self.j(99.9)] + later)), 0.0)
+        # fresh carry-in and a fresh reading at 101 bridge it
+        self.assertIsNone(F.unobserved_at(self.turn([self.j(99.9), self.j(101.0)] + later)))
+
+    def test_row8_main_fit_not_converged_is_not_estimable(self):
+        li, _, _, sha = dataset("noisy")
+        real = F.censored_normal_fit
+
+        def no_conv(*a, **k):
+            f = real(*a, **k)
+            f["converged"] = False
+            return f
+        with unittest.mock.patch.object(F, "censored_normal_fit", no_conv):
+            s1 = F.stage1(li, sha)
+        on = s1["onset"]
+        self.assertEqual((on["status"], on["converged"], on["coefficients"]), ("not_estimable", False, None))
+        self.assertEqual(on["count_only_cut"]["form"], "fixed_116_s")
+
+    def test_row12_pooled_is_every_hot_block(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        # leave one day with fewer than three hot legs, so counted days and all days differ
+        days = sorted({L["day"] for L in s1["legs"] if L["in_energy_fit"]})
+        thin = days[0]
+        hot_legs = [L for L in s1["legs"] if L["in_energy_fit"] and L["day"] == thin and any(s["hot"] for s in L["segments"])]
+        for L in hot_legs[2:]:
+            for s in L["segments"]:
+                s["hot"] = False
+        out = F.stage2(s1, rehash(s1), en)
+        hot = out["channels"]["gpu_rail"]["lodo"]["hot"]
+        self.assertNotIn(thin, hot["counted_days"])
+        M = {}
+        for L in s1["legs"]:
+            if L["in_energy_fit"]:
+                y = en["legs"][L["leg_key"]]["gpu_rail"]["segments"]
+                M[L["day"]] = M.get(L["day"], 0.0) + sum(e for e, s in zip(y, L["segments"]) if s["hot"])
+        want = sum(hot["per_day"][d] * M[d] for d in hot["per_day"]) / sum(M[d] for d in hot["per_day"])
+        self.assertAlmostEqual(hot["pooled"], want, delta=1e-12)
+        self.assertIn(thin, hot["per_day"])
+
+    def test_row16_marked_print_refits_onset_on_remaining_legs(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        calls = []
+        real = F.fit_onset_fold
+
+        def spy(legs_d, keys):
+            calls.append(sorted(keys))
+            return real(legs_d, keys)
+        with unittest.mock.patch.object(F, "fit_onset_fold", spy):
+            F.stage2(s1, rehash(s1), en)
+        keep = sorted(L["leg_key"] for L in s1["legs"] if L["in_energy_fit"] and not L["marks"])
+        self.assertIn(keep, calls)
+        with unittest.mock.patch.object(F, "fit_onset_fold", lambda legs_d, keys: None):
+            out = F.stage2(s1, rehash(s1), en)
+        ms = out["channels"]["gpu_rail"]["marked_sensitivity"]
+        self.assertIsNone(ms["coefficients_without"])
+        self.assertIsNone(ms["lodo_hot_max_abs_without"])
+
+    def test_row20_null_key_and_row21_hp_type_a(self):
+        s1 = stage1_of("noisy")
+        self.assertIn("null", s1["counts"]["by_g0_role"])
+        self.assertNotIn("None", s1["counts"]["by_g0_role"])
+        li, _, _, _ = dataset("noisy")
+        hp = next(leg for leg in li["legs"] if leg["span_id"].startswith("hp-01") and leg["turn"]
+                  and all(leg["inclusion"].values()))
+        before = F.stage1(copy.deepcopy(li), "0" * 64)["tripwires"]["hp01_below_9"]["value"]
+        hp["leg_type"], hp["turn"] = "T", None
+        after = F.stage1(li, "0" * 64)
+        self.assertEqual(after["tripwires"]["hp01_below_9"]["value"], before - 1)
+        L = next(x for x in after["legs"] if x["leg_key"] == hp["leg_key"])
+        self.assertEqual(L["not_in_fit_reason"], "type_T")
+
+    def test_reason_precedence_type_t_before_excluded(self):
+        li, _, _, _ = dataset("noisy")
+        t = next(leg for leg in li["legs"] if leg["leg_type"] == "T")
+        t["inclusion"]["g0_released"] = False
+        L = next(x for x in F.stage1(li, "0" * 64)["legs"] if x["leg_key"] == t["leg_key"])
+        self.assertEqual(L["not_in_fit_reason"], "type_T")
+
+    def test_row22_level_e_is_energy_fit_legs_only(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        self.assertEqual(set(en["legs"]), {L["leg_key"] for L in s1["legs"] if L["in_energy_fit"]})
+        hp = next(L for L in s1["legs"] if L["hp_describe"])
+        e2 = copy.deepcopy(en)
+        e2["legs"][hp["leg_key"]] = copy.deepcopy(next(iter(en["legs"].values())))
+        with self.assertRaises(F.LookInputError):
+            F.stage2(s1, rehash(s1), e2)
+
+    def test_r18_non_positive_measured_refuses(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        e2 = copy.deepcopy(en)
+        e = next(iter(e2["legs"].values()))["gpu_rail"]
+        e["segments"] = [-abs(x) for x in e["segments"]]
+        with self.assertRaises(F.LookInputError):
+            F.stage2(s1, rehash(s1), e2)
+
+    def test_r11_prefix_n_days_and_floor(self):
+        out = F.stage2(stage1_of("noisy"), rehash(stage1_of("noisy")), dataset("noisy")[1])
+        for v in out["channels"]["gpu_rail"]["prefix_bias"].values():
+            self.assertEqual(v["n_days"], 5)
+        self.assertEqual(F.SD_FLOOR_J, 1e-12)
+        self.assertEqual(F.FOLD_MIN_UNCENSORED, 6)
+
+    def test_r20_meter_clock_print(self):
+        spans = [{"span_id": "a", "meter_offsets_ns": {"header": 10**9, "end": 10**9 + 50_000_000}},
+                 {"span_id": "b", "meter_offsets_ns": {"header": 5, "end": None}}]
+        mc = F.meter_clock(spans)
+        self.assertEqual(mc["spans"]["a"], {"form": "two_pairs", "end_minus_header_s": 0.05})
+        self.assertEqual(mc["spans"]["b"]["form"], "single_offset")
+        self.assertFalse(mc["to_research_lead"])
+        spans[0]["meter_offsets_ns"]["end"] = 10**9 + 150_000_000
+        self.assertTrue(F.meter_clock(spans)["to_research_lead"])
+        s1 = stage1_of("noisy")
+        self.assertEqual(s1["meter_clock"]["max_abs_s"], 0.0)

@@ -47,7 +47,7 @@ def wb(p, data):
         f.write(data)
 
 
-ENERGY_MARKERS = ("power_trace.csv", "/hazards/meter/", "segment_energy.json")
+ENERGY_MARKERS = ("power_trace.csv", "segment_energy.json")
 
 
 class _Custody:
@@ -122,6 +122,8 @@ class Stage1Custody(unittest.TestCase):
         self.assertTrue(any(p.endswith("align_thermal.jsonl") for p in opened))
         bad = [p for p in opened if any(m in p.replace(os.sep, "/") for m in ENERGY_MARKERS)]
         self.assertEqual(bad, [])
+        # the meter stream is opened for R-20's clock stamps only (no sample decoded: next test)
+        self.assertTrue(all("/hazards/meter/stream-" in p.replace(os.sep, "/") for p in opened if "/hazards/" in p))
         # the decoys exist, so the absence is meaningful
         self.assertTrue(list(self.c.root.glob("*/legs/*/runtime/runs/*/power_trace.csv")))
         self.assertTrue(list(self.c.root.glob("*/hazards/meter/stream-*.jsonl")))
@@ -133,7 +135,7 @@ class Stage1Custody(unittest.TestCase):
 
         def loads(s, *a, **k):
             text = s.decode() if isinstance(s, (bytes, bytearray)) else s
-            if "gpu_energy" in text or "gpu_power" in text:
+            if "gpu_energy" in text or "gpu_power" in text or '"p":' in text:
                 raise AssertionError("an energy-bearing line was parsed")
             return real_loads(s, *a, **k)
         with tempfile.TemporaryDirectory() as d, \
@@ -307,3 +309,17 @@ class CliGate(unittest.TestCase):
                                       "--out", os.path.join(d, "fit.json")])
             self.assertEqual(rc, 2)
             st2.assert_not_called()
+
+
+class NoHpEnergy(unittest.TestCase):
+
+    def test_stage2_opens_no_hp01_energy(self):
+        c = _Custody.get()
+        s3 = step3_path()
+        if s3 is None:
+            self.skipTest("no pinned step 3 module")
+        s1 = F.stage1(c.li, hashlib.sha256(synth.dump(c.li)).hexdigest())
+        with spy_opens() as opened:
+            e = R.read_segment_energy(s1, R.span_dirs(c.root, None), s3)
+        self.assertFalse([p for p in opened if "/hp-01-" in p.replace(os.sep, "/")])
+        self.assertFalse([k for k in e["legs"] if k.startswith("hp-01")])

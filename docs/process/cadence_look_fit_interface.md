@@ -43,7 +43,9 @@ Units: tokens are integers; temperatures °C; fan speed rpm; energy J. "Epoch" i
   "t0_epoch_s": float,                    # the span's t0
   "t0_local_date": "YYYY-MM-DD",          # the calendar day; the unit of every leave-one-out (RL-149 §2.3)
   "soak_reference_tv0h_c": float | null,  # the span's soak reference on TV0h (RL-150 R1 part 1); null = missing
-  "marks": [ "reference from a redo" | "reference from an excluded leg", ... ]   # Q20; [] if none
+  "marks": [ "reference from a redo" | "reference from an excluded leg", ... ],  # Q20; [] if none
+  "meter_offsets_ns": { "header": int | null,    # KM003C header start_real_ns − start_raw_ns
+                        "end": int | null }      # the span's last poll line: rt − rx (RL-167 R-20); null if none
 }
 ```
 
@@ -177,8 +179,8 @@ level R.
 }
 ```
 
-- Keys: exactly the legs that stage 1 marked `in_energy_fit` or `hp_describe` (section 3). A missing or extra
-  key is refused.
+- Keys: exactly the legs that stage 1 marked `in_energy_fit` (RL-167 §3: no hp-01 energy is opened at this look).
+  A missing or extra key is refused.
 - **gpu_rail**: step 3's convention over `[wall_start_s, wall_end_s]`, through the committed step 3 module's
   own loaders and `Trace` (Q2).
 - **dc_in**: trapezoid between consecutive KM003C samples, cut at the interval's ends (Q2).
@@ -198,12 +200,17 @@ level R.
   "numpy_version": str,
   "roster": { "spans": [Span minus marks, + "marks"], "fit_days": [ "YYYY-MM-DD", ... ] },
   "rates": { "r_p": float, "r_d": float,                 # tokens/s (Q5)
-             "per_cell": {"2000": {"r_p", "r_d", "n_legs"}, "10000": {...}, "19458": {...}} },  # print only
+             "per_cell": {"2000": {"r_p": float | null, "r_d": float | null, "n_legs": int},
+                          "10000": {...}, "19458": {...}} },  # print only; null with n_legs 0 (RL-167 row 18)
   "centring": { "tf08_c": float, "fan_rpm": float, "tv0h_excess_c": float },   # medians (Q1)
   "calibrated_range": { "tf08_c": [min, max], "fan_rpm": [min, max], "tv0h_excess_c": [min, max] },
   "onset": Onset,
   "tripwires": Tripwires,
   "counts": Counts,
+  "meter_clock": { "spans": {span_id: {"form": "two_pairs" | "single_offset",
+                                        "end_minus_header_s": float | null}},
+                   "max_abs_s": float | null, "threshold_s": 0.1,
+                   "to_research_lead": bool },  # RL-167 R-20: over 0.1 s on any span goes to the research lead
   "legs": [LegD, ...]                     # every Leg of level R, same order
 }
 ```
@@ -218,7 +225,7 @@ level R.
   "marks": [str, ...],                    # the span's marks
   "inclusion": {six bools}, "included": bool,
   "in_energy_fit": bool,                  # role fit, type A, included, valid start reading
-  "hp_describe": bool,                    # role describe, type A, included
+  "hp_describe": bool,                    # role describe, type A, included; counted, never read for energy
   "not_in_fit_reason": null | "excluded" | "type_T" | "start_reading_missing" | "describe_only",
   "start": {
     "status": "ok" | "start_reading_missing",           # missing or stale reading (Q1)
@@ -255,7 +262,7 @@ level R.
   "predictors": ["intercept", "tf08_c", "fan_rpm", "tv0h_excess_c", "t_p_s"],
   "coefficients": {name: float} | null,   # null when not_estimable
   "sigma_s": float | null,
-  "converged": bool | null,
+  "converged": bool | null,               # null: not attempted (fails 12-on-3); false: not_estimable (RL-167 row 8)
   "lodo": { "per_day_rms_s": {day: float}, "rms_s": float,
             "heldout_censored_below_tau": int, "heldout_censored": int, "folds_not_estimable": [day] } | null,
   "count_only_cut": { "form": "tau_hat_minus_2rms" | "fixed_116_s",
@@ -269,7 +276,7 @@ level R.
   "days_below_3": {"value": int, "trips": bool},
   "cell_below_10": {"value": {"2000": int, "10000": int, "19458": int}, "trips": bool},
   "start_reading_invalid_over_10pct": {"value": float, "trips": bool},
-  "hp01_below_9": {"value": int | null, "trips": bool},
+  "hp01_below_9": {"value": int | null, "trips": bool},     # included type-A hp-01 legs (RL-167 row 21)
   "any": bool }
 ```
 
@@ -278,7 +285,8 @@ level R.
 ```
 { "legs_named": int, "legs_included": int, "dev_included": int, "in_energy_fit": int, "hp_describe": int,
   "type_T": int, "by_block": {block_id: {"named", "included"}}, "by_cell": {...}, "by_g0_role": {...},
-  "by_day": {day: int}, "excluded_by_rule": {rule_id: int} }
+  "by_day": {day: int}, "excluded_by_rule": {rule_id: int} }   # by_cell/by_g0_role/by_day count energy-fit legs;
+                                                                 # the own-reference g0_role key is "null"
 ```
 
 ---
@@ -314,15 +322,17 @@ contract between the two.
   "lodo": {
     "hot":  { "per_day": {day: float},    # SIGNED (Σpred − Σmeas)/Σmeas over the day's hot blocks
               "counted_days": [day], "n_hot_legs_per_day": {day: int},
-              "max_abs": float | null, "pooled": float | null,
+              "max_abs": float | null,       # over counted days
+              "pooled": float | null,        # over every hot block on every day (RL-167 row 12)
               "verdict": "passes" | "fails" | "not_evaluable" },
     "leg":  { "per_day": {day: float}, "pooled": float, "rms_over_legs": float },
-    "hot_rms_over_legs": float | null,    # the "frozen holdout relative error" of SD_j (Q3)
+    "hot_rms_over_legs": float | null,    # THE "frozen holdout relative error" freeze 2 takes for SD_j (RL-167 R-14)
     "folds_delta_dropped": [day],         # R-12
     "no_heat": { "hot": {same as hot}, "leg": {same as leg}, "hot_rms_over_legs": float | null }
   },
   "prefix_bias": {                        # Q2 P2; unit: score SD
-    "1.10":  {"prefix_len": 3724, "estimate": float, "ci90": [lo, hi], "n_pairs": int, "n_days": int},
+    "1.10":  {"prefix_len": 3724, "estimate": float | null, "ci90": [lo, hi] | null, "n_pairs": int,
+              "n_days": int},             # null under 3 pairs or an SD ≤ 1e-12 J; ci90 null under 2 days
     "1.30":  {"prefix_len": 3151, ...},
     "1.374": {"prefix_len": 2981, ...}
   },
@@ -372,22 +382,18 @@ is NaN or infinite; the level-E `input_sha256` differs from the stage-1 file's `
 | R-8 | One SD per channel and length: sample SD (ddof 1) of the LODO residual in joules at that length, over all legs in the energy fit, all folds pooled |
 | R-9 | Legs with τ̂ = 0 count in the hot-stretch error and toward a day's three legs. The hot stretch is set by R-4's observed reading, never by τ̂ |
 
-### 6.2 Further readings the analyst seat's code applies (not yet ruled; for the research lead before item 7)
+### 6.2 R-10 to R-21 and the twin comparison: ruled in RL-167 (Sat 14 Nov 21:22)
 
-| # | Point | Applied |
-|---|---|---|
-| R-10 | Cluster-by-leg covariance small-sample factor | CR1: G/(G − 1) · (n − 1)/(n − k), G legs, n segments, k columns |
-| R-11 | Prefix bias sign and centre | residual = measured − predicted (LODO, J); bias = mean over legs of (long/SD_long − short/SD_short); 90 % interval = bias ± t(0.95, D − 1) · SD(day means)/√D, day means of the same per-leg difference |
-| R-12 | A LODO fold in which the onset model is not estimable (fewer than 12 uncensored on 3 days without D) | that fold drops the δ column; the look's own status is unchanged; the fold is listed in `lodo.folds_delta_dropped` (energy) and `onset.lodo.folds_not_estimable` (onset) and gives no onset error |
-| R-13 | Onset LODO RMS | pooled over all held-out uncensored legs (not a mean of per-day values); per-day values print |
-| R-14 | "RMS over held-out legs" (Q3, SD_j's holdout error) | printed twice: over each leg's whole-leg relative residual (`leg.rms_over_legs`) and over each leg's hot-stretch relative residual (`hot_rms_over_legs`) |
-| R-15 | Population of each stage-1 constant | rates: included type-A development legs with a turn (a missing start reading does not remove a leg from the rates); medians and calibrated ranges: legs in the energy fit (valid start reading) |
-| R-16 | "Hit `state_unobserved`" (Q4) | the unobserved time is earlier than the first off-state reading, or there is no off-state reading |
-| R-17 | A counted day (Q3) | at least three legs in the energy fit on that day with at least one hot block; the pooled hot value is over counted days only |
-| R-18 | Signed relative errors | (Σ predicted − Σ measured) / Σ measured |
-| R-20 | DC-in time base | KM003C samples on CLOCK_MONOTONIC_RAW (km003c_parse's clock fit) moved to wall epoch by the stream header's `start_real_ns − start_raw_ns`; power is the meter's Vbus × Ibus only, with no battery term |
-| R-21 | Which roster legs are type T, and a roster leg that never ran | type T when the leg spec carries `leg_type: "T"` (no other marker exists yet); a roster leg with no `leg_record.json` is named with all six rules false |
-| R-19 | Censored-normal fit | Newton's method in Olsen's (β/σ, 1/σ) form, from OLS on the uncensored; ML σ (no degrees-of-freedom correction); converged when the step is under 1e-11 relative and the score under 1e-6 |
+RL-167 §1 (R-10 to R-21) and §2 (rows 1 to 23, and §2.1) are the readings both implementations carry; read them
+there. The rows that changed this code: 4 and 5 (the gap rule: only fresh-state journal readings count; first
+anchor at the turn's start without a fresh-state carry-in; floored at 0), 6 (a fresh start reading with Unknown
+or missing state, or a non-integer level, is `start_state_unobserved`: in the energy fit, τ̂ from the linear
+predictor, out of the onset fit), 7 (a fold's onset fits with at least 6 uncensored and convergence, else that
+fold drops δ and is listed in both lists; no refusal), 8 (a main fit that does not converge is `not_estimable`),
+12 (`pooled` over every hot block), 14 (`n_days` always set), 16 (the marked print refits the onset on the
+remaining legs under row 7's rule; a failure gives nulls), 20 (`"null"` key), 21 (hp-01 tripwire: type A), 22
+(level E: energy-fit legs only), R-11's null rules, R-14's naming, R-18's refusal, R-20's print, and §2.1's
+reason precedence (type T, excluded, describe-only, missing start).
 
 ---
 
@@ -399,7 +405,8 @@ is NaN or infinite; the level-E `input_sha256` differs from the stage-1 file's `
 (`legs/<id>/runtime/<result.bundle>`): `events.jsonl` (token index and stamp), `outputs/align_turns.jsonl`
 (start stamp, prompt count, length of the output ids), `outputs/align_thermal.jsonl`, and the row-end stamp,
 `elapsed_ns` and `thermal_pressure` of `rich_telemetry.jsonl` and `raw/powermetrics.plist`, extracted by pattern
-(no line or frame of those two is parsed). **Never:** `power_trace.csv`, `hazards/meter/*`.
+(no line or frame of those two is parsed). **Per span's meter stream (R-20 only):** the header line, and the last
+poll line's `rx` and `rt` by pattern; no sample payload is decoded. **Never:** `power_trace.csv`.
 
 Rules 1, 2, 5 and 6 come from `leg_record.json`: `result.leg_status == "complete"` and
 `result.decode_cap_reached`; `result.g0_released`; the last attempt not `contaminated`;
@@ -415,6 +422,6 @@ the stage-1 output:
 **The roster** is `manifest.resolve_roster`'s list `[{span_id, block_id, role, t0_local_date}]`; a span's
 directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwise.
 
-**Stage 2 opens** each needed leg's `leg_record.json` and `power_trace.csv` (through step 3's
+**Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` (through step 3's
 `load_gpu_trace`, the module's sha256 checked against `84a1a553…eb173`), and each span's
 `hazards/meter/stream-*.jsonl` (through `joulewise.external.km003c_parse.parse`). Level E stays in memory.

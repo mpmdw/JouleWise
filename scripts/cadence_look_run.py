@@ -14,7 +14,9 @@ Stage 1 opens NO energy file. In custody mode it opens, per span: `runner_receip
 `outputs/align_thermal.jsonl` (journal readings), and, for the native power-management state only,
 `rich_telemetry.jsonl` and `raw/powermetrics.plist`, from which it extracts by pattern the row end stamp,
 `elapsed_ns` and `thermal_pressure` and nothing else: no line or frame of those two files is parsed as a whole,
-so no power or energy value is decoded. It never opens `power_trace.csv` or a meter stream.
+so no power or energy value is decoded. It never opens `power_trace.csv`. Of each span's meter stream it decodes
+the header line (no sample) and reads the last poll line's `rx` and `rt` stamps by pattern, for RL-167 R-20's clock
+print; no sample payload is decoded.
 
 Stage 2 takes the stage-1 file by its sha256 as its only roster. In custody mode it computes the level-E object
 in memory (GPU rail through the committed step 3 module's `load_gpu_trace` and `Trace`; DC-in by the trapezoid
@@ -213,6 +215,40 @@ def build_turn(bundle, result, fan_keys):
             "native_pm": native_states(bundle, ts, tok[-1])}
 
 
+_B_KIND = re.compile(rb'"k":\s*"b"')
+_RX = re.compile(rb'"rx":\s*([0-9]+)')
+_RT = re.compile(rb'"rt":\s*([0-9]+)')
+
+
+def meter_offsets(sdir):
+    """RL-167 R-20: (header wall-minus-raw offset, end-of-span offset) in ns. The header line is decoded (it holds
+    no sample); the last poll line is read by pattern for its `rx` and `rt` stamps only, never parsed. (None, None)
+    with no stream; end None when no poll carries both stamps."""
+    paths = sorted(glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")))
+    if not paths:
+        return None, None
+    header_off, end_off = None, None
+    for p in paths:
+        with open(p, "rb") as f:
+            head = f.readline(65536)
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 262144))
+            tail = f.read().splitlines()
+        h = json.loads(head)
+        if header_off is None and h.get("k") == "h" and isinstance(h.get("start_raw_ns"), int) \
+                and isinstance(h.get("start_real_ns"), int):
+            header_off = h["start_real_ns"] - h["start_raw_ns"]
+        for line in reversed(tail):
+            if _B_KIND.search(line):
+                rx, rt = _RX.search(line), _RT.search(line)
+                if rx and rt:
+                    end_off = int(rt.group(1)) - int(rx.group(1))
+                break
+        del tail
+    return header_off, end_off
+
+
 def _mode(result):
     m = result.get("ac_powermode")
     return m.get("value") if isinstance(m, dict) else m
@@ -229,7 +265,8 @@ def read_span(sdir, entry, rules34, fan_keys):
     span = {"span_id": entry["span_id"], "block_id": entry["block_id"],
             "phase": "extension" if entry["role"] == "describe" else "development", "role": entry["role"],
             "power_mode": power, "t0_epoch_s": float(receipt["started"]["epoch_s"]),
-            "t0_local_date": entry["t0_local_date"], "soak_reference_tv0h_c": soak, "marks": []}
+            "t0_local_date": entry["t0_local_date"], "soak_reference_tv0h_c": soak, "marks": [],
+            "meter_offsets_ns": dict(zip(("header", "end"), meter_offsets(sdir)))}
     legs, marks = [], set()
     for leg_id in receipt["roster"]:
         key = f"{entry['span_id']}/{leg_id}"
@@ -339,7 +376,7 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None):
     out = {"schema": F.ENERGY_SCHEMA, "look_id": F.LOOK_ID, "synthetic": False,
            "input_sha256": stage1_out["input_sha256"], "legs": {}}
     for L in stage1_out["legs"]:
-        if not (L["in_energy_fit"] or L["hp_describe"]):
+        if not L["in_energy_fit"]:                  # RL-167 §3: no hp-01 energy is opened
             continue
         sdir = sdir_of(L["span_id"])
         leg_id = L["leg_key"].split("/", 1)[1]

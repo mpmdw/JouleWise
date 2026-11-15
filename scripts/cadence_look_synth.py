@@ -79,6 +79,7 @@ BASE_PARAMS = {
         "start_reading_missing": [(3, 2), (7, 1)],
         "start_out_of_state": [(5, 6), (8, 4)],
         "state_unobserved": [(4, 1), (7, 4)],
+        "start_unknown": [(2, 3)],          # fresh carry-in reading with state Unknown (RL-167 row 6)
         "native_pm_onset": [(1, 2), (5, 7), (8, 2)],
         "journal_pm_onset": [(3, 4), (9, 1)],
         "type_T": [(9, 3)],
@@ -189,7 +190,8 @@ def build(scenario="noisy", seed=20261114, tokens=None):
         marks = ["reference from a redo"] if span_id == "dev-04-s02" else []
         spans.append({"span_id": span_id, "block_id": block, "phase": "extension" if role == "describe" else "development",
                       "role": role, "power_mode": "high_power" if role == "describe" else "automatic",
-                      "t0_epoch_s": t0, "t0_local_date": date, "soak_reference_tv0h_c": soak, "marks": marks})
+                      "t0_epoch_s": t0, "t0_local_date": date, "soak_reference_tv0h_c": soak, "marks": marks,
+                      "meter_offsets_ns": {"header": meter_offset_ns(t0), "end": meter_offset_ns(t0)}})
         cells = _cells(rule, n, rng)
         roles = _g0_roles(kit, n, rng)
         for pos in range(n):
@@ -223,6 +225,7 @@ def build(scenario="noisy", seed=20261114, tokens=None):
                 "missing_start": key in plants["start_reading_missing"],
                 "out_of_state": key in plants["start_out_of_state"],
                 "unobserved": key in plants["state_unobserved"],
+                "start_unknown": key in plants["start_unknown"],
                 "onset_channel": ("native" if key in plants["native_pm_onset"] else
                                   "journal_pm" if key in plants["journal_pm_onset"] else "os_level"),
                 "phase": float(rng.uniform(0.05, 0.95)),
@@ -280,6 +283,7 @@ def build(scenario="noisy", seed=20261114, tokens=None):
                                     and p["excluded_rule"] is None,
                                     "excluded_rule": p["excluded_rule"], "missing_start": p["missing_start"],
                                     "out_of_state": p["out_of_state"], "unobserved": p["unobserved"],
+                                    "start_unknown": p["start_unknown"],
                                     "day": span["t0_local_date"]}
 
     look_input = {"schema": "joulewise.cadence_look_input.v1", "look_id": "lm-interim-01", "synthetic": True,
@@ -292,7 +296,7 @@ def build(scenario="noisy", seed=20261114, tokens=None):
               "input_sha256": input_sha, "legs": {}}
     for p, leg in zip(plan, legs):
         tlg = truth_legs[p["leg_key"]]
-        if not (tlg["in_energy_fit"] or tlg["hp_describe"]):
+        if not tlg["in_energy_fit"]:            # RL-167 §3: level E holds energy-fit legs only
             continue
         entry = {}
         for ch in ("gpu_rail", "dc_in"):
@@ -374,6 +378,8 @@ def _turn(p, rng):
             hot = off_abs is not None and x >= off_abs
             lvl = 1 if (p["out_of_state"] or (hot and p["onset_channel"] == "os_level")) else 0
             pm = "Moderate" if (hot and p["onset_channel"] == "journal_pm") else "Nominal"
+            if p["start_unknown"] and x <= ts:
+                pm = "Unknown"
             fresh = True
             if p["unobserved"] and ts + 40.0 <= x < ts + 40.0 + UNOBSERVED_STALE_S:
                 fresh = False
@@ -433,6 +439,11 @@ METER_LATENCY_NS = 400_000
 DC_IDLE_W = 5.0
 GPU_IDLE_W = 2.0
 RAW_BASE_NS = 10**12
+
+
+def meter_offset_ns(t0):
+    """The synthetic meter's wall-minus-raw offset (constant: no drift)."""
+    return int(round(t0 * 1e9)) - RAW_BASE_NS
 
 
 def _pieces(turn, energy_ch, idle_w):
@@ -619,7 +630,7 @@ def write_custody(root, look_input, energy, tokens):
             t_hi = max(t_hi, turn["last_token_s"] + 60.0)
         dc_pieces.sort()
         _write_meter(os.path.join(sdir, "hazards/meter/stream-0001.jsonl"), dc_pieces, t_lo, t_hi,
-                     off_ns=int(round(t_lo * 1e9)) - RAW_BASE_NS)
+                     off_ns=span["meter_offsets_ns"]["header"])
     paths = {}
     for name, obj in (("roster.json", roster), ("rules_3_4.json", rules34)):
         paths[name] = os.path.join(root, name)
