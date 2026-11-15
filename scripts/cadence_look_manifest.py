@@ -5,7 +5,8 @@
         [--repo DIR [--kit KIT.json ...]] [--span-ledger LEDGER.json] [--looks LOOKS.json]
     python3 -B scripts/cadence_look_manifest.py pin MANIFEST.json --repo DIR [--write]
     python3 -B scripts/cadence_look_manifest.py assemble --manifest MANIFEST.json --stage1 STAGE1.json
-        --fit FIT.json --step3 STEP3.json --analyst-seat NAME [--hp-table HP.json] --out OUTPUT.json
+        --fit FIT.json --step3 STEP3.json --analyst-seat NAME [--hp-table HP.json]
+        [--hold-cleared FLAG=RL-n ...] --out OUTPUT.json
 
 validate:
 * structure and ruling invariants always; ``--final`` treats it as committed (no placeholder left);
@@ -134,6 +135,22 @@ def assemble(args):
         for p in problems:
             print(f"REFUSE {p}")
         return 1
+    # RL-166c section 2 row 7: the fit does not refuse on P-4's or R-20's flag; the lead holds stage 2 until the
+    # research lead clears it. An output is assembled only with each true flag's clearing ruling named.
+    stage1 = json.loads(raw)
+    raised = [flag for flag, node in (("onsets_before_116_s.to_research_lead", stage1.get("onsets_before_116_s")),
+                                      ("meter_clock.to_research_lead", stage1.get("meter_clock")))
+              if isinstance(node, dict) and node.get("to_research_lead") is True]
+    cleared = dict(c.split("=", 1) for c in (args.hold_cleared or []) if "=" in c)
+    import re as _re
+    missing = [f for f in raised if not _re.fullmatch(r"RL-\d+[a-z]?(?: .*)?", cleared.get(f, ""))]
+    extra = sorted(set(cleared) - set(raised))
+    if missing or extra:
+        for f in missing:
+            print(f"REFUSE stage 1 shows {f} true: stage 2 was held; name the clearing ruling with --hold-cleared {f}=RL-n")
+        for f in extra:
+            print(f"REFUSE --hold-cleared {f}: stage 1 does not show that flag true")
+        return 1
     hp = lm.load_json(args.hp_table) if args.hp_table else None
     q = (fit.get("qualified_interim_half") or {}).get("verdict")
     code = dict(fit.get("code_sha256") or {})
@@ -151,6 +168,7 @@ def assemble(args):
            "disclosure": {"date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
                           "code_sha256": code, "stage1_sha256": s1, "analyst_seat": args.analyst_seat,
                           "numpy_version": fit.get("numpy_version", ""),
+                          "holds_cleared": [{"flag": f, "cleared_by": cleared[f]} for f in raised],
                           "statement": "An energy read on conditionless campaign legs only, by frozen code at the "
                                        "interim look (RL-149 section 2.6; RL-150 R6): none comes from a run with a "
                                        "sabotage instruction, a slot or a v4 member."}}
@@ -178,6 +196,7 @@ def main(argv=None):
     for k in ("--manifest", "--stage1", "--fit", "--step3", "--analyst-seat", "--out"):
         a.add_argument(k, required=True)
     a.add_argument("--hp-table")
+    a.add_argument("--hold-cleared", action="append", metavar="FLAG=RL-n")
     args = p.parse_args(argv)
     if args.cmd == "validate":
         if args.kit and not args.repo:

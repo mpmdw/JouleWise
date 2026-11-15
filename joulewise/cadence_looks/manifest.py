@@ -121,6 +121,7 @@ REQUIRED_STATED_LIMITS = {"interim": {"qualified_yes_meaning", "qualified_pass_r
                                       "partial_correction", "not_zero_before_onset", "delta_se_overstates",
                                       "warm_series_outside_joint_range", "ratio_of_tokens"}}
 REQUIRED_DEFERRED = {"interim": {"kappa_signs", "sd_j_covariance", "leverage_flag", "hot_prefill_flag"}}
+STAGE2_HOLD_FLAGS = {"interim": {"onsets_before_116_s.to_research_lead", "meter_clock.to_research_lead"}}  # RL-166c §2 row 7
 WITHDRAWN_FORM_RE = re.compile(r"(?i)H is zero for a turn")                           # RL-166b Amends
 DRIFT_FALLBACK = 0.04                              # RL-166 Q11
 # RL-166 Q8; ids as the stage-1 output (level D, docs/process/cadence_look_fit_interface.md section 3.3) names them
@@ -367,7 +368,18 @@ def _stages(st, kind, problems, final):
             problems.append("stages.stage1.dry_run: text")
         _need_cite(s1, "stages.stage1", problems)
     s2 = st.get("stage2")
-    if _closed(s2, {"opens", "roster_source", "time_budget_s", "cite"}, "stages.stage2", problems):
+    if _closed(s2, {"opens", "roster_source", "time_budget_s", "holds", "hold_record", "cite"}, "stages.stage2", problems):
+        flags = set()
+        for i, h in enumerate(s2.get("holds") if isinstance(s2.get("holds"), list) else []):
+            if _closed(h, {"flag", "rule", "cite"}, f"stages.stage2.holds[{i}]", problems):
+                flags.add(h.get("flag"))
+                if not _text(h.get("rule")):
+                    problems.append(f"stages.stage2.holds[{i}].rule: text")
+                _need_cite(h, f"stages.stage2.holds[{i}]", problems)
+        for fl in sorted(STAGE2_HOLD_FLAGS.get(kind, set()) - flags):
+            problems.append(f"stages.stage2.holds: the lead holds stage 2 on {fl} (RL-166c §2 row 7)")
+        if not _text(s2.get("hold_record")):
+            problems.append("stages.stage2.hold_record: text")
         _texts(s2.get("opens"), "stages.stage2.opens", problems, allowed=("energy", "journal"))
         if not (_text(s2.get("roster_source")) and "sha256" in s2["roster_source"]):
             problems.append("stages.stage2.roster_source: stage 1's committed output, taken by sha256 (RL-166 Q8)")

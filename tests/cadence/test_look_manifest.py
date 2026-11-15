@@ -658,6 +658,26 @@ class Assemble(Base):
         self.assertEqual(out["decisions"]["qualified_interim_half"], "passes")
         self.assertEqual(out["manifest_sha256"], lm.sha256_file(MANIFEST))
         self.assertIn("joulewise/cadence_looks/step3_roster.py", out["disclosure"]["code_sha256"])
+        self.assertEqual(out["disclosure"]["holds_cleared"], [])
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):              # a clearance with no flag
+            self.assertEqual(cli.main(args + ["--hold-cleared", "meter_clock.to_research_lead=RL-170"]), 1)
+        # RL-166c §2 row 7: a raised flag needs its clearing ruling named
+        s1.write_text(json.dumps({"schema": "joulewise.cadence_look_stage1.v1",
+                                  "onsets_before_116_s": {"to_research_lead": True, "total": 2},
+                                  "meter_clock": {"to_research_lead": False}}) + "\n")
+        h2 = hashlib.sha256(s1.read_bytes()).hexdigest()
+        for doc, name in ((fit, "fit.json"), (step3, "step3.json")):
+            doc["stage1_sha256"] = h2
+            (d / name).write_text(json.dumps(doc))
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:
+            self.assertEqual(cli.main(args), 1)
+        self.assertIn("stage 2 was held", so.getvalue())
+        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
+            self.assertEqual(cli.main(args + ["--hold-cleared", "onsets_before_116_s.to_research_lead=not-a-ruling"]), 1)
+            self.assertEqual(cli.main(args + ["--hold-cleared", "onsets_before_116_s.to_research_lead=RL-170"]), 0)
+        out = json.loads((d / "out.json").read_text())
+        self.assertEqual(out["disclosure"]["holds_cleared"],
+                         [{"flag": "onsets_before_116_s.to_research_lead", "cleared_by": "RL-170"}])
         step3["stage1_sha256"] = "0" * 64
         (d / "step3.json").write_text(json.dumps(step3))
         with unittest.mock.patch("sys.stdout", new_callable=io.StringIO):
@@ -707,6 +727,19 @@ class RL166b(Base):
         doc = draft()
         doc["rulings"].remove("RL-166b §3")
         self.refused(lambda: lm.validate_manifest(doc), "must cite 'RL-166b §3'")
+
+    def test_rl166c_sentence_and_stage2_holds(self):
+        lim = {x["id"]: x for x in draft()["fit"]["stated_limits"]}
+        self.assertEqual(lim["partial_correction"]["text"],
+                         "Ĥ is a partial correction. In simulation it carries 0.84 to 0.96 of the heat effect over twelve "
+                         "simulated worlds, and 0.88 in the default one (0.79 before this change). The rest sits in the "
+                         "count-only base, which is not exported. That share cannot be measured on the campaign's own legs.")
+        self.assertIn(lm.sha256_file(LOOKS / "evidence" / "2026-11-14-mythos-passrate-rerun-REPORT.md"),
+                      lim["partial_correction"]["note"])
+        for flag in sorted(lm.STAGE2_HOLD_FLAGS["interim"]):
+            doc = draft()
+            doc["stages"]["stage2"]["holds"] = [h for h in doc["stages"]["stage2"]["holds"] if h["flag"] != flag]
+            self.refused(lambda: lm.validate_manifest(doc), f"holds stage 2 on {flag}")
 
     def test_rl167_nullable_fields(self):
         s1 = json.loads((LOOKS / "lm-interim-01.stage1.schema.json").read_text())

@@ -27,7 +27,9 @@
     "RL-166 §2",
     "RL-166b §2",
     "RL-166b §3",
-    "RL-166b §4"
+    "RL-166b §4",
+    "RL-166c §2",
+    "RL-166c §5"
   ],
   "when": {
     "after_desk_final": [
@@ -97,8 +99,27 @@
       "cite": [
         "RL-166 Q8",
         "RL-166 Q6",
-        "RL-166 §2"
-      ]
+        "RL-166 §2",
+        "RL-166c §2"
+      ],
+      "holds": [
+        {
+          "flag": "onsets_before_116_s.to_research_lead",
+          "rule": "If true in stage 1's committed output, the lead holds stage 2 until the research lead clears it. The fit does not refuse on it (RL-166c §2 row 7; RL-166b P-4).",
+          "cite": [
+            "RL-166c §2",
+            "RL-166b §3"
+          ]
+        },
+        {
+          "flag": "meter_clock.to_research_lead",
+          "rule": "If true in stage 1's committed output, the lead holds stage 2 until the research lead clears it. The fit does not refuse on it (RL-166c §2 row 7; RL-167 R-20).",
+          "cite": [
+            "RL-166c §2"
+          ]
+        }
+      ],
+      "hold_record": "scripts/cadence_look_manifest.py assemble refuses an output whose stage-1 file shows either flag true unless --hold-cleared FLAG=RL-n names the clearing ruling for each; the output's disclosure.holds_cleared records them."
     },
     "tripwires": [
       {
@@ -660,10 +681,12 @@
       },
       {
         "id": "partial_correction",
-        "text": "H is a partial correction. In simulation it carries 0.85 to 0.95 of the heat effect (0.79 before RL-166b's change). The rest sits in the count-only base, which is not exported. That share cannot be measured on the campaign's own legs.",
+        "text": "Ĥ is a partial correction. In simulation it carries 0.84 to 0.96 of the heat effect over twelve simulated worlds, and 0.88 in the default one (0.79 before this change). The rest sits in the count-only base, which is not exported. That share cannot be measured on the campaign's own legs.",
         "cite": [
-          "RL-166b §3"
-        ]
+          "RL-166b §3",
+          "RL-166c §5"
+        ],
+        "note": "Verbatim from RL-166c §5. Figures from the RL-166b re-run, held at docs/process/cadence/looks/evidence/2026-11-14-mythos-passrate-rerun-REPORT.md (sha256 f1c6bc323d736bb13483a1783266d652f6eea2d347b93ed6e5a307ae614773aa), section 'Attenuation of delta'."
       },
       {
         "id": "not_zero_before_onset",
@@ -788,7 +811,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "a1d250ef81d62747d93f36c55336683599f97d6d4b779dd68fb67a801bf271ec"
+      "sha256": "9d8193be0dc32d1de7bf5cb1fb75038f8f928bfca3df9f125040115cb22828d5"
     },
     "prints": [
       {

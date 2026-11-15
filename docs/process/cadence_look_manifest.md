@@ -248,6 +248,7 @@ custody remains the check of the real layout.
   - the SD_j covariance term, which is the larger of the leg-clustered SE and the day-jackknife over P-1;
   - the leverage flag;
   - the hot-prefill flag.
+- **RL-166c.** The partial-correction sentence is RL-166c §5's, verbatim: 0.84 to 0.96 over twelve worlds, 0.88 in the default world. Its `note` cites the re-run's evidence file. `stages.stage2.holds` names the two flags the lead holds stage 2 on, `onsets_before_116_s.to_research_lead` and `meter_clock.to_research_lead` (RL-166c §2 row 7). The fit itself does not refuse on them. `assemble` refuses while either flag is true in stage 1's file, unless `--hold-cleared FLAG=RL-n` names the clearing ruling. The output's `disclosure.holds_cleared` records those rulings.
 - **The 116 s print rule.** It is decision `onsets_before_116_s`, with threshold 0. When the onset model is `not_estimable` and the count is above zero, the decision sends stage 1 to the research lead.
 - **Schema fields, named here because the interface page does not name them yet.**
   - Level D: `active_readings.{tf08_c,fan_rpm,tv0h_excess_c}.{active, tolerance, min_count_off_day, threshold}`; `onset.n_uncensored_by_cell`; `onsets_before_116_s.{by_g0_role, total, onset_status, to_research_lead}`; `tripwires.days_below_4`; RL-167's `meter_clock` and `roster.spans[].meter_offsets_ns`; `onset.predictors` as a list (B-2 may drop entries); `rates.per_cell` values nullable (RL-167 row 18).

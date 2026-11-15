@@ -165,6 +165,7 @@
     "analyst_seat",
     "code_sha256",
     "date",
+    "holds_cleared",
     "numpy_version",
     "stage1_sha256",
     "statement"
@@ -192,6 +193,30 @@
     },
     "statement": {
      "type": "string"
+    },
+    "holds_cleared": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "cleared_by",
+       "flag"
+      ],
+      "properties": {
+       "flag": {
+        "enum": [
+         "onsets_before_116_s.to_research_lead",
+         "meter_clock.to_research_lead"
+        ]
+       },
+       "cleared_by": {
+        "type": "string",
+        "pattern": "^RL-\\d+[a-z]?"
+       }
+      }
+     },
+     "description": "RL-166c section 2 row 7: the fit does not refuse on P-4's or R-20's flag; the lead holds stage 2 while either is true in stage 1's file until the research lead clears it. One entry per flag that was true, naming the clearing ruling; [] when neither was."
     }
    }
   }

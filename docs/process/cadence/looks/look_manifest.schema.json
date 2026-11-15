@@ -139,7 +139,9 @@
             "opens",
             "roster_source",
             "time_budget_s",
-            "cite"
+            "cite",
+            "holds",
+            "hold_record"
           ],
           "properties": {
             "opens": {
@@ -162,6 +164,32 @@
             },
             "cite": {
               "$ref": "#/$defs/cites"
+            },
+            "holds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "flag",
+                  "rule",
+                  "cite"
+                ],
+                "properties": {
+                  "flag": {
+                    "type": "string"
+                  },
+                  "rule": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "cite": {
+                    "$ref": "#/$defs/cites"
+                  }
+                }
+              }
+            },
+            "hold_record": {
+              "$ref": "#/$defs/text"
             }
           }
         },
