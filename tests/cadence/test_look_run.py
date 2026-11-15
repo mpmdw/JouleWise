@@ -14,6 +14,7 @@ import math
 import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import struct
 import tempfile
@@ -91,6 +92,7 @@ class _Custody:
 def tearDownModule():
     if _Custody.tmp:
         shutil.rmtree(_Custody.tmp, ignore_errors=True)
+    shutil.rmtree(_PIN_DIR, ignore_errors=True)
 
 
 @contextlib.contextmanager
@@ -110,7 +112,55 @@ def spy_opens():
         yield opened
 
 
+REPO = Path(__file__).resolve().parents[2]
+MANIFEST = REPO / "docs/process/cadence/looks/lm-interim-01.json"
+_PIN_DIR = tempfile.mkdtemp(prefix="jw-look-pins-")
+
+
+def _repin(node):
+    """Every {path, sha256} pin re-pointed at the file's current hash (the mechanism under test is the check,
+    not the manifest builder's pins, which follow this branch's head)."""
+    if isinstance(node, dict):
+        if isinstance(node.get("path"), str) and "sha256" in node and (REPO / node["path"]).is_file():
+            node["sha256"] = R.sha256_file(REPO / node["path"])
+        for v in node.values():
+            _repin(v)
+    elif isinstance(node, list):
+        for v in node:
+            _repin(v)
+    return node
+
+
+def pinned_manifest(mutate=None):
+    doc = _repin(rj(MANIFEST))
+    if mutate:
+        mutate(doc)
+    path = os.path.join(_PIN_DIR, f"manifest-{len(os.listdir(_PIN_DIR))}.json")
+    wb(path, json.dumps(doc))
+    return path
+
+
+def looks_file(stage1_sha256, status="stage1_committed"):
+    path = os.path.join(_PIN_DIR, f"looks-{len(os.listdir(_PIN_DIR))}.json")
+    wb(path, json.dumps({"schema": "joulewise.cadence_look_ledger.v1", "looks": [
+        {"look_id": "lm-interim-01", "manifest_path": "docs/process/cadence/looks/lm-interim-01.json",
+         "sha256": "1" * 64, "status": status, "roster_sha256": "2" * 64, "stage1_sha256": stage1_sha256}]}))
+    return path
+
+
+_DEFAULT_MANIFEST = []
+
+
 def run_cli(argv):
+    """The CLI with a draft manifest whose pins match this tree, and, for stage 2, a LOOKS.json that names the
+    stage-1 hash, unless the test passes its own."""
+    argv = list(argv)
+    if "--manifest" not in argv:
+        if not _DEFAULT_MANIFEST:
+            _DEFAULT_MANIFEST.append(pinned_manifest())
+        argv += ["--manifest", _DEFAULT_MANIFEST[0], "--allow-draft"]
+    if argv[0] == "stage2" and "--looks" not in argv:
+        argv += ["--looks", looks_file(argv[argv.index("--stage1-sha256") + 1])]
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         rc = R.main(argv)
@@ -156,7 +206,8 @@ class Stage1Custody(unittest.TestCase):
 
         def loads(s, *a, **k):
             text = s.decode() if isinstance(s, (bytes, bytearray)) else s
-            if "gpu_energy" in text or "gpu_power" in text or '"p":' in text:
+            # an energy-bearing record (a telemetry row or a meter poll); the manifest's prose may name the keys
+            if re.search(r'"gpu_(energy|power)":\s*[-0-9]', text) or re.search(r'"p":\s*"[0-9a-f]', text):
                 raise AssertionError("an energy-bearing line was parsed")
             return real_loads(s, *a, **k)
         with tempfile.TemporaryDirectory() as d, \
@@ -510,3 +561,59 @@ class ColdSeatFixes(unittest.TestCase):
         self.assertEqual(rc, 2)
         self.assertIn("two fit days", err)
         self.assertFalse([p for p in opened if p.endswith("en.json")])
+
+
+class PinsAndCommit(unittest.TestCase):
+    """verify_pins runs first in both stages; stage 2 requires LOOKS.json to name the stage-1 hash."""
+
+    @classmethod
+    def setUpClass(cls):
+        li, cls.en, _ = synth.build("exact")
+        cls.d = tempfile.mkdtemp(prefix="jw-look-pins-run-")
+        cls.ip, cls.ep = os.path.join(cls.d, "li.json"), os.path.join(cls.d, "en.json")
+        wb(cls.ip, synth.dump(li))
+        wb(cls.ep, synth.dump(cls.en))
+        cls.s1p = os.path.join(cls.d, "s1.json")
+        rc, out, err = run_cli(["stage1", "--input", cls.ip, "--out", cls.s1p])
+        assert rc == 0, err
+        cls.h = out.split("sha256=")[1].strip()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.d, ignore_errors=True)
+
+    def test_a_pin_mismatch_refuses_before_any_input_opens(self):
+        def wrong(doc):
+            for ref in doc["fit"]["code"]:
+                if ref["path"] == "joulewise/cadence_looks/fit_interim.py":
+                    ref["sha256"] = "0" * 64
+        bad = pinned_manifest(wrong)
+        with spy_opens() as opened:
+            rc, _, err = run_cli(["stage1", "--input", self.ip, "--out", os.path.join(self.d, "x.json"),
+                                  "--manifest", bad, "--allow-draft"])
+        self.assertEqual(rc, 2)
+        self.assertIn("differs from the pin", err)
+        self.assertFalse([p for p in opened if p.endswith("li.json")])
+        with spy_opens() as opened:
+            rc, _, err = run_cli(["stage2", "--stage1", self.s1p, "--stage1-sha256", self.h, "--energy", self.ep,
+                                  "--out", os.path.join(self.d, "y.json"), "--manifest", bad, "--allow-draft"])
+        self.assertEqual(rc, 2)
+        self.assertFalse([p for p in opened if p.endswith(("s1.json", "en.json"))])
+
+    def test_a_draft_manifest_refuses_without_allow_draft(self):
+        rc, _, err = run_cli(["stage1", "--input", self.ip, "--out", os.path.join(self.d, "x.json"),
+                              "--manifest", pinned_manifest()])
+        self.assertEqual(rc, 2)
+        self.assertIn("REFUSED", err)
+
+    def test_stage2_needs_the_committed_stage1_hash_before_energy(self):
+        for looks in (looks_file("9" * 64), looks_file(self.h, status="draft")):
+            with spy_opens() as opened:
+                rc, _, err = run_cli(["stage2", "--stage1", self.s1p, "--stage1-sha256", self.h,
+                                      "--energy", self.ep, "--out", os.path.join(self.d, "y.json"),
+                                      "--looks", looks])
+            self.assertEqual(rc, 2, err)
+            self.assertFalse([p for p in opened if p.endswith("en.json")])
+        rc, _, err = run_cli(["stage2", "--stage1", self.s1p, "--stage1-sha256", self.h, "--energy", self.ep,
+                              "--out", os.path.join(self.d, "y.json"), "--looks", looks_file(self.h)])
+        self.assertEqual(rc, 0, err)

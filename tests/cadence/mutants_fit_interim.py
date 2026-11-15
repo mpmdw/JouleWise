@@ -100,6 +100,8 @@ MUTANTS = [
     ('cs_sol8_no_cli_preflight', RUN, '    F.stage2_preflight(s1)                          # refuses before any energy file is opened\n', '', [T_RUN]),
     ('cs_sol8_no_day_check', FIT, '    if len(stage1_out["roster"]["fit_days"]) < 2:', '    if False:', [T_RUN]),
     ('cs_sol3_guard_below_one', FIT, 'if v is not None and not (isinstance(v, float) and math.isfinite(v)):', 'if v is not None and not (isinstance(v, float) and abs(v) < 1.0):', [T_FIT]),
+    ("pins_not_checked", RUN, '        M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING)\n', '', [T_RUN]),
+    ("stage1_commit_not_checked", RUN, '    M.require_stage1_committed(_json(a.looks), F.LOOK_ID, a.stage1_sha256)\n', '', [T_RUN]),
     ("level_off_requires_fresh", FIT, 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0:', 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0 and r["pm_fresh"]:', [T_FIT]),
     ("cluster_by_day", FIT, '            g += [k] * len(L["segments"])', '            g += [L["day"]] * len(L["segments"])', [T_FIT]),
     ("no_cr1_factor", FIT, 'corr = (G / (G - 1)) * ((n - 1) / (n - k)) if G > 1 and n > k else 1.0', 'corr = 1.0', [T_FIT]),

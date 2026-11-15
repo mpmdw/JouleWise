@@ -4,7 +4,8 @@
     stage1 --out STAGE1.json  (--input LOOK_INPUT.json
                                | --roster ROSTER.json --custody ROOT --rules-3-4 VERDICTS.json
                                  [--span-dir SPAN_ID=PATH ...] [--write-input LOOK_INPUT.json])
-    stage2 --stage1 STAGE1.json --stage1-sha256 HEX --out FIT.json
+           --manifest MANIFEST.json [--allow-draft]   (both stages; checked first, before any input opens)
+    stage2 --stage1 STAGE1.json --stage1-sha256 HEX --looks LOOKS.json --out FIT.json
                               (--energy SEGMENT_ENERGY.json
                                | --custody ROOT [--span-dir SPAN_ID=PATH ...] [--step3-module PATH])
 
@@ -44,6 +45,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.cadence_looks import fit_interim as F  # noqa: E402
+from joulewise.cadence_looks import manifest as M  # noqa: E402
 
 STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
 FAN_KEYS = ("F0Ac", "F1Ac")          # configs/align/v4/r1_runtime.json sensors.fan_keys
@@ -51,6 +53,7 @@ PM_FRESH_S = 2.0
 MODE_BY_POWER = {"automatic": 0, "high_power": 2}
 JOURNAL_PRE_S, JOURNAL_POST_S = 60.0, 5.0
 CODE_PATHS = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py")
+RUNNING = tuple(ROOT / p for p in CODE_PATHS)          # the files verify_pins requires to be pinned
 
 
 # =============================================================================================== helpers
@@ -470,6 +473,8 @@ def cmd_stage2(a):
     s1 = json.loads(raw)
     if F.dump(s1) != raw:
         raise F.LookInputError("stage 2: the stage-1 file is not in canonical form")
+    # committed: LOOKS.json's row names this stage-1 file's sha256 (Mythos cold seat 8), before any energy opens
+    M.require_stage1_committed(_json(a.looks), F.LOOK_ID, a.stage1_sha256)
     F.stage2_preflight(s1)                          # refuses before any energy file is opened
     if a.energy:
         energy = _json(a.energy)
@@ -501,14 +506,24 @@ def main(argv=None):
     g2.add_argument("--custody")
     p2.add_argument("--span-dir", action="append")
     p2.add_argument("--step3-module")
+    p2.add_argument("--looks", required=True,
+                    help="LOOKS.json; stage 2 refuses unless its row names this stage-1 file's sha256 (Mythos 8)")
+    for p in (p1, p2):
+        p.add_argument("--manifest", required=True, help="the look manifest whose pins the running code must match")
+        p.add_argument("--allow-draft", action="store_true", help="synthetic runs: accept a draft manifest")
     a = ap.parse_args(argv)
     if a.cmd == "stage1" and a.roster and not (a.custody and a.rules_3_4):
         ap.error("--roster needs --custody and --rules-3-4")
     try:
+        # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
+        M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING)
         out = cmd_stage1(a) if a.cmd == "stage1" else cmd_stage2(a)
         sha = write_canonical(a.out, out)
     except F.LookInputError as exc:
         print(f"REFUSED {exc}", file=sys.stderr)
+        return 2
+    except M.ManifestError as exc:
+        print(f"REFUSED {'; '.join(exc.problems)}", file=sys.stderr)
         return 2
     except Exception as exc:  # noqa: BLE001 - no message: it could carry a value
         tb = exc.__traceback__

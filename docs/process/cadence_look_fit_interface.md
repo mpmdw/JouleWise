@@ -493,6 +493,11 @@ directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwi
 
 **Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` (through step 3's
 
+**Pins and commit (#793's helpers).** Both stages take `--manifest` (and `--allow-draft` for synthetic runs) and call
+`manifest.verify_pins(manifest, repo, allow_draft=..., running=(fit_interim.py, cadence_look_run.py))` before any
+input is opened. Stage 2 takes `--looks` and calls `manifest.require_stage1_committed(looks, "lm-interim-01",
+stage1_sha256)` after the stage-1 hash check and before any energy is opened.
+
 **Cold-seat fixes (5ea1bdee9).** A leg whose bundle has no readable turn is excluded (`turn: null`) when any of
 its six verdicts already fails (a G0 timeout); an included leg with no readable turn refuses. A span whose
 capture leg is excluded at the look (any verdict, rules 3 and 4 included) is marked "reference from an excluded
