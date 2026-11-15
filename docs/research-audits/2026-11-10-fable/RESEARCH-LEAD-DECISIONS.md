@@ -16793,3 +16793,112 @@ Research lead (Fable 5.2), Sat Nov 14 22:02 PST 2026 (from `date`). Rules on the
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This page rests on the two seat reports, source code and rulings. The seed rule looks only at layout, and no F2 leg exists.
 
 **For Ed, plainly.** "Two reviewers checked the instrument check. One passed it with fixes; one refused it because the laptop's own power counters stop one second after each burst, so we cannot watch them settle afterwards. I kept the design. Each run already does a warm-up burst and then sits idle for over ten minutes with the counters on, so we watch the settling there instead. What we lose is the settling after the main burst on the laptop's counters, and the report will say so. The other fixes are small: shuffle the order of the bursts, start five minutes earlier at night, and write down that a problem in this check pauses the calibration runs until the lead clears it. Nothing needs new code."
+
+# RL-166c: the twin's last readings before item 7
+
+Sat 14 Nov 22:24 PST. Research lead (Fable 5.2). Follows RL-166b §5 ("the twin's new readings come to me before item 7").
+
+**Read for this:**
+- Analyst seat: PR #795 head `e8e2c43c1`, `joulewise/cadence_looks/fit_interim.py`, and the interface page (§3, §4, §6.3). The scratch copy of the page is byte-identical to the worktree's.
+- Sol twin v3: `CHOICES.md`, `fit_twin.py`, `REPORT.md`.
+- The two #793 schema files in `/Volumes/JW-EXT/scratch/fit-interim/schemas/`, byte-identical to the worktree's.
+- For §5 only: `/Volumes/JW-EXT/scratch/mythos-passrate/REPORT.md` (simulation, no measured value).
+
+No ssh, no data file opened, nothing run, nothing committed.
+
+**Result: 11 rows, plus one manifest sentence (§5). Sol changes on rows 1 to 10. The analyst seat changes on 2 (rows 4 and 5, both in the P-3 print). Row 11 changes nobody. No B-rule changes its arithmetic in the analyst's code.**
+
+---
+
+## 1. Sol's NEEDS_RULING items
+
+| # | Item | Analyst (`e8e2c43c1`) | Sol v3 | Ruling | Who changes |
+|---|---|---|---|---|---|
+| 1 | NR-1: wire shapes of the new prints | Emits the #793 names | None; prints held in a non-wire review file | **The #793 names, as §3 below lists them.** Not a research choice | Sol |
+| 2 | NR-2: B-2's count | `min_count_off_day`: the minimum, over fit days D, of the count of energy-fit legs off D with \|z\| strictly above the tolerance. Null with no fit day, and then inactive | Full per-day mapping kept; recommends the minimum | **The minimum, one integer per reading.** No fit day: null and inactive. One fit day: 0 and inactive. The per-day mapping is not printed | Sol |
+| 3 | NR-3: P-2's pooled s | Each counted day's mean is subtracted; s = √(Σ squared deviations / Σ(n_d − 1)) over counted days. The per-leg error is (predicted − measured)/measured over the leg's hot blocks. SE = s/√n_d, n_d = that day's legs with a hot block | Both readings coded, none chosen | **The analyst's: within-day, de-meaned, Σ(n_d − 1).** No counted day: both s null, `days` empty | Sol |
+| 4 | NR-4: P-3's population | Energy-fit legs with any observed off reading and a hot block. That includes out-of-state starts and legs with a state gap before the reading | Takes an explicit set; none chosen | **Energy-fit legs with `state.onset_use == "uncensored"` and at least one hot block.** An out-of-state start has no onset in the turn. A gap before the reading may hide an earlier onset. Both would blur the profile this print exists to show. `n` by offset prints, so a thin table is visible | **Both.** Analyst: one condition |
+| 5 | NR-4: P-3's zero and empty rules | An empty offset gives n 0, mean and RMS null. A zero block energy raises an uncaught error. A negative one passes silently | Empty: the same. Zero: stops, asks | **Empty: n 0, nulls; all eight offset keys always present. A block that enters P-3 with measured energy at or below zero refuses stage 2 (R-18's rule).** Offsets count full decode blocks from the leg's first hot block. The −2 to +3 summary pools single blocks; it is not a mean of the offsets' RMS values | **Both.** Analyst: the explicit refusal |
+| 6 | NR-5: P-4's population | Energy-fit legs with start `in_state` and `first_off_s` < 116.0, whatever comes between. Three role keys always present | Takes an explicit set; recommends energy-fit legs | **Energy-fit legs.** A leg with a gap before its off reading still counts: its onset is no later than the reading. `to_research_lead` = `not_estimable` and total above 0 | Sol |
+
+---
+
+## 2. Other differences found in CHOICES.md and the twin's code
+
+| # | Item | Analyst | Sol v3 | Ruling | Who changes |
+|---|---|---|---|---|---|
+| 7 | P-4 and R-20 as code stops | `stage2()` does not refuse on either flag. The hold is the lead's | `stage2_readiness` refuses on either flag, and also on an early onset outside the energy fit | **The fit does not refuse.** RL-167 row 23: the twin must not refuse a file the production fit accepts. The hold is on the printed flag, and the lead keeps it. The "outside the energy fit" stop goes with row 6 | Sol |
+| 8 | B-5: what decides `converged` | The optimiser runs until the decrement is at most 1e-20 or it stalls. B-5's test at the last point is the only verdict | Stops at 1e-12. A line-search stall, the 200-step cap or a norm guard counts as failure before B-5 is asked | **B-5 at the last finite point is the only verdict,** as B-5 says ("whatever the optimiser"). Run to 1e-20 or to a stall. At 1e-12 the coefficients can sit 1e-7 from the optimum, which would break row 4.1's 1e-8 downstream | Sol |
+| 9 | B-7's key | `tripwires.days_below_4` | `days_below_3`, testing under 4 | **`days_below_4`** | Sol |
+| 10 | Where stage 2 reads the active mask | `active_readings.<name>.active` | Membership in `onset.predictors` | **`active_readings`.** The two agree by construction; one field is the source | Sol |
+| 11 | B-1's clamp | None | Clamps w̃ to [0, v − u] and uses G(x) = x + G(−x) | **No change required.** w̃ lies in that range exactly, so the clamp moves rounding only. Listed so that nobody rules it again | None (Sol may keep it) |
+
+**Checked and the same in both, no row:**
+- B-2's criterion and tolerances.
+- B-3's and B-4's counts, and the three cell keys.
+- B-5's scaling (one RMS over responses and censoring times together), its 1e10 and its 1e-8.
+- B-6's scaling, its 1e-10 and its covariance from the SVD.
+- P-1's shape (the with-heat fit only; a dropped fold's vector has no `delta`).
+- The marked-spans print: marks are per span, so "legs with marks" and "legs of marked spans" are one set.
+- `rms_s` null under RL-167 row 10.
+
+---
+
+## 3. Wire shapes: confirmed
+
+Both use the #793 schema names. I checked that every name below is in the schema files.
+
+- **Level D:** `active_readings.{tf08_c, fan_rpm, tv0h_excess_c}.{active, tolerance, min_count_off_day, threshold}`; `onset.n_uncensored_by_cell` with keys `"2000"`, `"10000"`, `"19458"`; `onsets_before_116_s.{by_g0_role.{null, capture, consume}, total, onset_status, to_research_lead}`; `tripwires.days_below_4`; `onset.predictors` as the active list.
+- **Level O, per channel:** `fold_coefficients.{day}.{column}`; `day_detail.{days.{day}.{legs_with_hot_block, hot_blocks, se_with_heat, se_no_heat}, s_with_heat, s_no_heat}`; `onset_offset_residuals.{offsets."-2".."5".{n, mean_with_heat, rms_with_heat, mean_no_heat, rms_no_heat}, rms_offsets_m2_to_p3.{with_heat, no_heat}}`; `columns` of 5 to 9 entries.
+
+Sol's sandbox copy of the interface page predates RL-166b. The lead replaces it with `/Volumes/JW-EXT/scratch/fit-interim/INTERFACE.md` and adds the two schema files and this ruling. Sol still does not see the analyst's code.
+
+---
+
+## 4. Item 7: the pass criterion
+
+**4.1 How it runs.** Each implementation runs stage 1 and then stage 2, end to end, on the same level-R and level-E files. Each uses its own level D. All files are synthetic.
+
+**4.2 What must hold, on every set:**
+- **Exact:** the key set of every object; every string, boolean, null and integer; every list, in order. That covers `status`, `converged`, the verdicts, `delta_column`, `columns`, `predictors`, `counted_days`, both fold lists, every count, every `n`, every `trips` and every `to_research_lead`.
+- **Floats, D and O:** \|a − b\| ≤ 1e-8 · max(\|a\|, \|b\|) + 1e-10. The floor is for values that are zero by cancellation: residuals, mean errors, the prefix bias.
+- **The censored fit** (`onset.coefficients`, `sigma_s`, `tau_hat_s`, the onset's `lodo` values, `count_only_cut.offset_s`): 1e-6 relative, as RL-166 item 7 set it. With row 8 I expect about 1e-10.
+- **Energy coefficients, and each `fold_coefficients` entry:** \|Δ\| ≤ 1e-8 · (\|β\| + SE), SE from the main fit's covariance diagonal for that column. A κ near zero is then not failed on its last digits.
+- **Covariance:** \|Δ_ij\| ≤ 1e-6 · √(cov_ii · cov_jj).
+- **Not compared (RL-167 row 23):** `model_sha256`, `code_sha256`, `stage1_sha256`, `numpy_version`, refusal messages.
+- **A refusal** by one implementation on a set the other accepts is a failure.
+
+**4.3 The sets, nine:**
+- The analyst's six: `exact`, `exact-c`, `few_hot_days`, `no_heat`, `noisy`, `onset_not_estimable`.
+- Sol's three: the baseline, `constant_start` (fan held constant, B-2) and `single_cell_onsets` (B-3). On the last, both must print `not_estimable`, `converged: null`, P-4's total of 16 and `to_research_lead: true`, and both then run stage 2 with δ dropped (row 7).
+
+A set that either validator refuses on its wire form is the lead's to regenerate. It is not a reading.
+
+**4.4 Timing.** The B fields and rows 2, 6, 7, 8, 9 and 10 are in the Monday 10:00 run. The P prints (rows 3, 4, 5 and their wire fields) may land by Monday 14:00 under RL-166b §5. If they do, the lead runs 4.2 again on those fields.
+
+---
+
+## 5. The partial-correction sentence (the lead's addition, 22:22)
+
+**Update it to the measured range.** RL-166b's "0.85 to 0.95" was my estimate before the re-run; the re-run measured it, and the measured range is wider at both ends. The manifest's sentence becomes:
+
+- "Ĥ is a partial correction. In simulation it carries 0.84 to 0.96 of the heat effect over twelve simulated worlds, and 0.88 in the default one (0.79 before this change). The rest sits in the count-only base, which is not exported. That share cannot be measured on the campaign's own legs."
+
+The low end is the world with an onset scatter of 30 s. The report also gives one campaign's own spread in the default world (5th to 95th percentile 0.81 to 0.95). That stays in the report; the manifest sentence is about worlds, not about one campaign. The other two sentences of RL-166b §3 stand as written.
+
+---
+
+**Owner.**
+- **Sol twin:** rows 1 to 10.
+- **Analyst seat:** rows 4 and 5.
+- **Lead:** the refreshed page and schemas into Sol's sandbox; the nine sets through both; the hold on the two `to_research_lead` flags before any real stage 2; §5's sentence in the manifest.
+- **Research lead:** any float that fails 4.2.
+
+**Gate.** Item 7 passes on 4.2 over all nine sets. A real stage 2 still waits for RL-166's gate, R-20's flag and P-4's flag.
+
+**Amends.**
+- RL-166b P-3: "legs with an observed in-turn onset" is read as the uncensored legs of the onset sample.
+- RL-166 item 7: gains the float floor, the coefficient and covariance forms, and the nine sets.
+- RL-166b §3, first manifest sentence: "0.85 to 0.95" becomes "0.84 to 0.96 over twelve simulated worlds, and 0.88 in the default one".
+
+**Blind status.** Blind. Code, interface text and schema files only; no measured value and no synthetic output was opened.
