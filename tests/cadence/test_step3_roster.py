@@ -11,6 +11,7 @@ import shutil
 import tempfile
 import unittest
 
+from joulewise.cadence_looks import manifest as lm
 from joulewise.cadence_looks import step3_roster as sr
 
 REPO = Path(__file__).resolve().parents[2]
@@ -253,6 +254,10 @@ class Stage1Custody(unittest.TestCase):
         self.assertEqual([c["status"] for c in doc["cells"]], ["not_run", "not_run"])   # bundles absent here
         self.assertEqual(doc["tripwire"]["decision"], "not_evaluable")
         manifest = json.loads((mini / mr.MANIFEST).read_text())
+        pins = {p: sha for _, p, sha in lm.code_refs(manifest)}
+        self.assertEqual(doc["code_sha256"][lm.STEP3_PATH], pins[lm.STEP3_PATH])     # runs outside sys.modules
+        self.assertEqual(doc["code_sha256"]["joulewise/cadence_looks/step3_roster.py"],
+                         pins["joulewise/cadence_looks/step3_roster.py"])
         drift = next(d for d in manifest["decisions"] if d["id"] == "drift_tripwire")
         self.assertEqual(doc["tripwire"]["threshold_applied"], drift["threshold"])   # Mythos 11: frozen, not a flag
         r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", *base, "--stage1-sha256", self.sha, "--allow-draft",

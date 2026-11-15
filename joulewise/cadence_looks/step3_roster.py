@@ -255,7 +255,9 @@ def main(argv=None):
         print("REFUSE loaded repository modules the manifest does not pin: " + ", ".join(unpinned[:6]))
         return 1
     out = {"schema": SCHEMA, "stage1_sha256": a.stage1_sha256, "step3_sha256": STEP3_SHA256,
-           "manifest_sha256": lm.sha256_file(a.manifest), "code_sha256": lm.loaded_repo_files(repo),
+           "manifest_sha256": lm.sha256_file(a.manifest),
+           # the step 3 module runs from its verified bytes under a fresh name, outside sys.modules: named here
+           "code_sha256": {**lm.loaded_repo_files(repo), lm.STEP3_PATH: STEP3_SHA256},
            "allow_draft": bool(a.allow_draft), "synthetic": stage1.get("synthetic") is True, **result}
     text = json.dumps(out, indent=1, allow_nan=False) + "\n"
     Path(a.out).write_text(text, encoding="utf-8")

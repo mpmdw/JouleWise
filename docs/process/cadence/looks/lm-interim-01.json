@@ -477,7 +477,7 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "79521d55b6e3373b00a43f9b7cfe27c4ecbc8e73c62e607a94e19a5ed6f63017"
+        "sha256": "10e9ccd0edf172a9ce5459628953d582a985d4e607e759c2b38cd2d1293562e5"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -489,11 +489,11 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "a9f78c061897fd2ff1f433627852751f80037a9a0767c64750e2349d135e6f35"
+        "sha256": "0aa6c82098f09398d9a168aac24f7195ef256f5d03bef13ee17a83f9b8d2c1ae"
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "2a124ec3b4bc949cbc908642e6ce43008c91fdc3571e6a5b26ac95ba1fbc094d"
+        "sha256": "016e67b2db561ec75265cf2e4af77ff1bdb360b1090e6f8560c0c97c70647e82"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -631,7 +631,7 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "a9f78c061897fd2ff1f433627852751f80037a9a0767c64750e2349d135e6f35"
+        "sha256": "0aa6c82098f09398d9a168aac24f7195ef256f5d03bef13ee17a83f9b8d2c1ae"
       },
       "statistic": "iii",
       "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
