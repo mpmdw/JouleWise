@@ -15,6 +15,7 @@ import sys
 import tarfile
 import tempfile
 import textwrap
+import time
 import unittest
 from unittest import mock
 
@@ -254,7 +255,7 @@ class SpanOffloadTests(unittest.TestCase):
         with self.assertRaises(so.OffloadError) as caught:
             so.offload(self.config, PLAN, self.span)
         self.assertEqual(caught.exception.code, "LOCAL_BACKEND_NOT_ALLOWED")
-        self.assertEqual(os.listdir(self.tmp / "stage"), [])
+        self.assertEqual([n for n in os.listdir(self.tmp / "stage") if not n.startswith(".")], [])
 
     def test_mbp_config_cannot_hold_the_private_key(self):
         path = self.tmp / "mbp.json"
@@ -461,6 +462,176 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("UPLOAD_TIMEOUT", "unverified"))
         self.assertEqual(os.listdir(self.tmp / "markers"), [])
 
+    # --- round-1 regressions (Sol r1 findings 1-8, 10) ---------------------------------------
+
+    def test_stage_reuse_is_bound_to_the_same_unchanged_source(self):
+        with mock.patch.object(so.LocalBackend, "put", side_effect=so.unverified("UPLOAD_TIMEOUT", "x")):
+            with self.assertRaises(so.OffloadError):
+                self.offload()
+        (self.span / "late.bin").write_bytes(b"arrived after the first attempt")
+        with self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "STAGE_CONFLICT")
+        (self.span / "late.bin").unlink()
+        other = self.tmp / "elsewhere" / SPAN  # same basename, another source
+        self.make_span(other)
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(self.config, PLAN, other, allow_local=True)
+        self.assertEqual(caught.exception.code, "STAGE_CONFLICT")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+        self.assertTrue(self.offload()["stage_reused"])  # the original source, unchanged: reused
+
+    def test_one_offload_per_plan_at_a_time(self):
+        with so.plan_lock(self.tmp / "stage", PLAN):
+            with self.assertRaises(so.OffloadError) as caught:
+                self.offload()
+        self.assertEqual(caught.exception.code, "BUSY")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_a_stage_that_changes_before_or_during_upload_writes_no_marker(self):
+        real_build, real_put = so.build_stage, so.LocalBackend.put
+
+        def tamper_after_build(*args, **kwargs):
+            stage, descriptor, reused = real_build(*args, **kwargs)
+            path = stage / f"{PLAN}.tgz.enc"
+            data = bytearray(path.read_bytes()); data[-1] ^= 1; path.write_bytes(bytes(data))
+            return stage, descriptor, reused
+
+        with mock.patch.object(so, "build_stage", tamper_after_build), self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "STAGE_CHANGED")
+        shutil.rmtree(self.tmp / "stage" / PLAN)
+        shutil.rmtree(self.tmp / "cloud" / PLAN, ignore_errors=True)
+
+        def swap_during_upload(backend, local, plan, name, deadline=None):
+            row = real_put(backend, local, plan, name, deadline)
+            return dict(row, sha256="0" * 64) if name.endswith(".SHA256SUMS") else row
+
+        with mock.patch.object(so.LocalBackend, "put", swap_during_upload), self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "STAGE_CHANGED")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_output_paths_outside_the_span_and_any_repository(self):
+        before = so.hash_tree(self.span)
+        for key in ("stage_root", "marker_dir"):
+            with self.subTest(key=key):
+                with self.assertRaises(so.OffloadError) as caught:
+                    so.offload(dict(self.config, **{key: str(self.span)}), PLAN, self.span, allow_local=True)
+                self.assertEqual(caught.exception.code, "PATH_OVERLAPS_SPAN")
+        backend = {"kind": "local", "root": str(self.span / "runtime")}
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, backend=backend), PLAN, self.span, allow_local=True)
+        self.assertEqual(caught.exception.code, "PATH_OVERLAPS_SPAN")
+        repo = self.tmp / "repo"
+        (repo / "markers").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, marker_dir=str(repo / "markers")), PLAN, self.span, allow_local=True)
+        self.assertEqual(caught.exception.code, "PATH_IN_REPOSITORY")
+        self.assertEqual(so.hash_tree(self.span), before)
+        self.assertEqual([n for n in os.listdir(self.tmp / "stage") if not n.startswith(".")], [])
+
+    def test_a_stalled_encryptor_is_killed_at_the_deadline(self):
+        stall = self.tmp / "openssl-stall"
+        stall.write_text(f'#!/bin/sh\ncase "$1" in enc) exec sleep 60 ;; esac\nexec {OPENSSL} "$@"\n')
+        stall.chmod(0o755)
+        (self.span / "runtime" / "incompressible.bin").write_bytes(os.urandom(4_000_000))
+        start = time.monotonic()
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, openssl=str(stall)), PLAN, self.span, allow_local=True,
+                       deadline_epoch=time.time() + 2)
+        self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("DEADLINE", "unverified"))
+        self.assertLess(time.monotonic() - start, 30)
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_the_recipient_key_is_read_once(self):
+        other = Path(tempfile.mkdtemp(prefix="offload-swap-key-"))
+        self.addCleanup(shutil.rmtree, other)
+        so.keygen(OPENSSL, other, bits=3072)
+        public = self.tmp / "recipient.pub.pem"
+        shutil.copyfile(self.public, public)
+        config = dict(self.config, recipient_public_key=str(public))
+        real = so.check_recipient
+
+        def swap_after_check(*args, **kwargs):
+            result = real(*args, **kwargs)
+            shutil.copyfile(other / "span-offload.pub.pem", public)  # the file changes after the pin check
+            return result
+
+        with mock.patch.object(so, "check_recipient", swap_after_check):
+            so.offload(config, PLAN, self.span, allow_local=True)
+        self.pull()  # still decrypts with the pinned key's private half
+        self.assertTrue((self.tmp / "desk" / "cl-syn-01" / SPAN).is_dir())
+
+    def test_pull_refuses_a_symlinked_kit_dir(self):
+        self.offload()
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        os.symlink(outside, self.tmp / "desk" / "cl-syn-01")
+        with self.assertRaises(so.OffloadError) as caught:
+            self.pull()
+        self.assertEqual(caught.exception.code, "DEST_SYMLINK")
+        self.assertEqual(os.listdir(outside), [])
+
+    def test_an_interrupted_landing_is_refused_not_trusted(self):
+        self.offload()
+        real_chmod = os.chmod
+        final = self.tmp / "desk" / "cl-syn-01" / SPAN
+
+        def interrupt(path, mode, *args, **kwargs):
+            if Path(path) == final:
+                raise KeyboardInterrupt
+            return real_chmod(path, mode, *args, **kwargs)
+
+        with mock.patch.object(so.os, "chmod", interrupt), self.assertRaises(KeyboardInterrupt):
+            self.pull()
+        self.assertTrue(final.is_dir())
+        self.assertFalse((final.parent / f"{SPAN}.pull.ok").exists())
+        with self.assertRaises(so.OffloadError) as caught:
+            self.pull()
+        self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("INCOMPLETE_LANDING", "dest_exists"))
+        final.rename(self.tmp / "aside")  # the lead moves it aside; the next pull lands it completely
+        self.pull()
+        done = json.loads((final.parent / f"{SPAN}.pull.ok").read_bytes())
+        self.assertEqual(done["plan"], PLAN)
+        self.assertEqual(stat.S_IMODE(os.stat(final).st_mode), 0o555)
+
+    def test_pull_refuses_duplicate_members(self):
+        cloud = self.tmp / "cloud" / PLAN
+        cloud.mkdir()
+        raw = io.BytesIO()
+        with gzip.GzipFile(fileobj=raw, mode="wb") as gz, tarfile.open(fileobj=gz, mode="w|") as tar:
+            top = tarfile.TarInfo(SPAN); top.type = tarfile.DIRTYPE; tar.addfile(top)
+            for payload in (b"one", b"two"):
+                info = tarfile.TarInfo(f"{SPAN}/a.txt"); info.size = 3
+                tar.addfile(info, io.BytesIO(payload))
+        expect = self.plant_hostile(cloud, raw.getvalue(), b"%s  ./a.txt\n" % hashlib.sha256(b"two").hexdigest().encode())
+        with self.assertRaises(so.OffloadError) as caught:
+            self.pull(expect)
+        self.assertEqual(caught.exception.code, "ARCHIVE_DUPLICATE")
+
+    def plant_hostile(self, cloud, archive, manifest):
+        passphrase = b"cd" * 32
+        plain = self.tmp / "hostile2.tgz"
+        plain.write_bytes(archive)
+        names = so.names(PLAN)
+        read_end, write_end = os.pipe()
+        os.write(write_end, passphrase + b"\n"); os.close(write_end)
+        subprocess.run([OPENSSL, *so._enc_args(False, read_end), "-in", str(plain), "-out",
+                        str(cloud / names["ciphertext"])], check=True, pass_fds=(read_end,))
+        os.close(read_end)
+        so.wrap_passphrase(OPENSSL, self.public, passphrase, cloud / names["wrapped_key"])
+        (cloud / names["manifest"]).write_bytes(manifest)
+        descriptor = {"schema": so.DESCRIPTOR_SCHEMA, "plan": PLAN, "span_name": SPAN,
+                      "scheme": {"recipient_sha256": self.fingerprint},
+                      "archive": {"sha256": hashlib.sha256(archive).hexdigest(), "size": len(archive)},
+                      "files": {k: {"name": names[k], "sha256": so.sha256_file(cloud / names[k]),
+                                    "size": (cloud / names[k]).stat().st_size}
+                                for k in ("ciphertext", "wrapped_key", "manifest")}}
+        (cloud / names["descriptor"]).write_bytes(so.canonical(descriptor))
+        return so.expectations(None, so.sha256_file(cloud / names["manifest"]), so.sha256_file(cloud / names["ciphertext"]))
+
     # --- CLI ----------------------------------------------------------------------------------
 
     def test_cli_exit_codes_and_one_line_output(self):
@@ -476,7 +647,8 @@ class SpanOffloadTests(unittest.TestCase):
             self.assertEqual(cli.main(argv + ["--allow-local-backend"]), 0)
             self.assertEqual(cli.main(argv + ["--allow-local-backend"]), so.EXIT["marker_exists"])
         self.assertIn("LOCAL_BACKEND_NOT_ALLOWED", err.getvalue())
-        self.assertRegex(out.getvalue(), r"^OFFLOAD_OK plan=cq-syn-01-s01-a1 backend=local provider_confirmed=false ")
+        self.assertRegex(out.getvalue(), r"^OFFLOAD_OK_UNCONFIRMED plan=cq-syn-01-s01-a1 backend=local provider_confirmed=false .* "
+                                       r"marker=\S+/cq-syn-01-s01-a1\.ok\.unconfirmed\n")
         pull = ["pull", "--config", str(air), "--plan", PLAN, "--kit", "cl-syn-01", "--dest-root",
                 str(self.tmp / "desk"), "--marker", str(self.marker()), "--allow-local-backend"]
         out = io.StringIO()
@@ -494,7 +666,7 @@ class SpanOffloadStaticTests(unittest.TestCase):
         self.assertNotRegex(source, r"\[\s*['\"]git['\"]")
         loads = [line.strip() for line in source.splitlines() if "json.loads(" in line]
         allowed = ("descriptor_path.read_bytes()", "listing", "Path(path).read_text()",
-                   'tmp / files["descriptor"]')
+                   'tmp / files["descriptor"]', "stage / SOURCE_RECORD")
         for line in loads:
             self.assertTrue(any(token in line for token in allowed), line)
 

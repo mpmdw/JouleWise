@@ -62,11 +62,13 @@ def run(args):
         config = so.load_mbp_config(args.config)
         record = so.offload(config, args.plan, args.span_dir, require_files=args.require_file,
                             allow_local=args.allow_local_backend, deadline_epoch=args.deadline_epoch)
-        return (f"OFFLOAD_OK plan={record['plan']} backend={record['backend']['kind']} "
+        label = "OFFLOAD_OK" if record["provider_confirmed"] else "OFFLOAD_OK_UNCONFIRMED"
+        marker = so.marker_path(config["marker_dir"], record["plan"], record["provider_confirmed"])
+        return (f"{label} plan={record['plan']} backend={record['backend']['kind']} "
                 f"provider_confirmed={str(record['provider_confirmed']).lower()} files={record['manifest_files']} "
                 f"manifest_sha256={record['manifest_sha256']} ciphertext_sha256={record['ciphertext']['sha256']} "
                 f"ciphertext_size={record['ciphertext']['size']} stage_reused={str(record['stage_reused']).lower()} "
-                f"marker={Path(config['marker_dir']) / (record['plan'] + '.ok')}")
+                f"marker={marker}")
     if args.command == "pull":
         config = so.load_air_config(args.config)
         marker = None
