@@ -1,7 +1,7 @@
 """Twin of the reference-state row builder (``joulewise/align/apple/s_rows.py``).
 
 Written from RL-149 section 1.3 (with RL-151 section 1.1), RL-152 section 1.6,
-RL-153 section 2 and RL-154, with its own arithmetic: energy through
+RL-153 section 2, RL-154 and RL-160, with its own arithmetic: energy through
 ``tests.align.twins.attribution_twin.trace_energy`` (the independent A4 twin),
 its own state scan (one time-ordered sweep over a merged stream of journal
 readings, native powermetrics rows and hazard readings per turn), its own stamp
@@ -30,16 +30,23 @@ T1  Carry-in is the last member-journal reading at or before the turn's start
     themselves, in the journal or in native rows.
 T2  A powermetrics row is read at its end; it only cuts, inside the turn.
 T3  The clock window lies inside the decode: it ends at a PM row end no later
-    than the last stamped token and starts no earlier than first token + 10 s
-    (the first stamped token; the turn record's first token without stamps).
+    than the last stamped token and starts no earlier than first token + 10 s,
+    where the first token is the first stamped decode token (RL-160 D1). The
+    turn record's ``first_token_ns`` is the end of prefill; it stands in only
+    for a turn with no stamp list, whose search decides hot only (T4).
 T4  Snap: D' = number of stamps at or before the row end; the row ends at stamp
     D'. A whole turn (no cut, no deadman) ends at the turn record's own end.
+    A row needs at least one stamped decode token, cut or not (RL-160 D5): a
+    turn with logged decode and no stamp list gives no row, ``cut_in_prefill``
+    when a cut lies before ``first_token_ns`` and ``token_stamps_unavailable``
+    otherwise.
 T5  A deadman-cut turn ends at its last stamped token unless a cut falls earlier.
 T6  Edges: 'all_boundaries' counts both ends of every row; 'cut_only' cut ends.
 T7  Member half-width: sqrt(Q^2 + n_edges * edge_j^2).
 T8  The in-turn search (off readings, gaps, clock windows) runs over
     (start, last stamped token], as the step-3 script does; without stamps, to
-    the turn record's end.
+    the turn record's end, and then it decides only whether the turn is hot
+    (RL-160 D5).
 T9  (Accepted as RL-154 section 2 words it.) A turn is hot when its start read
     out of state, an off reading fired in (start, last stamped token], the
     clock clause fired, or more than 2 s of it went by with no fresh state;
@@ -232,12 +239,12 @@ def rows_for(episode, *, token_stamps, finish_reasons, journal, pm_rows, state, 
         if verdict != 'ok':
             no_row.append({'turn': turn.index, 'reason': verdict})
             continue
-        if cut_at is None and not dead:
-            end, d, reason, is_cut = turn.end_ns, turn.decode_tokens, 'turn_end', False
-        elif stamps is None:
+        if stamps is None:                                               # T4 (RL-160 D5)
             early = cut_at is not None and turn.first_token_ns is not None and cut_at < turn.first_token_ns
             no_row.append({'turn': turn.index, 'reason': 'cut_in_prefill' if early else 'token_stamps_unavailable'})
             continue
+        if cut_at is None and not dead:
+            end, d, reason, is_cut = turn.end_ns, turn.decode_tokens, 'turn_end', False
         else:
             if cut_at is not None:
                 d, reason = bisect_right(stamps, cut_at), cut_name
