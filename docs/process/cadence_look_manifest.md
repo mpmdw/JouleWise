@@ -38,7 +38,7 @@ paths, and that the runner and the leg runtime never import look code.
 |---|---|---|
 | H1 | Freeze 1 lives in a look manifest: a file of its own beside the kits, not in a leg kit. "These are in the kit" becomes "these are in the look manifest". Leg kits keep `looks: []` | RL-150 R4 (amends RL-149 §2.6 item 1) |
 | H2 | Contents: the look id; the blocks it reads; the fit code's paths and hashes; the model family and predictor list (as R1 amends); the code that judges inclusion rules 3 and 4; the output schema; the one decision of §2.6. RL-151 §2.1 withdrew that decision (H9) | RL-150 R4; RL-151 §2.1 |
-| H3 | It is committed before any development energy is read. The block ledger points at it by hash | RL-150 R4; RL-150 §4 item 4; RL-155 §6 "Gate" |
+| H3 | It is committed before any development energy is read. The block ledger points at it by hash | RL-150 R4; RL-150 §4 item 4; RL-155 Gate line ("Development energy waits for the look manifest") |
 | H4 | Adding it changes no leg kit's frozen paths, so the §2.8 authorization does not end and line 8 is not re-run. The runner and the leg runtime must never import it, and the manifest's check states this | RL-150 R4 |
 | H5 | The manifest's check includes that the fit code does not read the `condition` field. Every campaign leg carries the constant `benign` there | RL-150 R6 |
 | H6 | Review: one cold seat that did not write the fit code, against §2.6 and §2.7, then the research lead's cold pass. Paper-bound | RL-150 R4; RL-155 §5.3 |
