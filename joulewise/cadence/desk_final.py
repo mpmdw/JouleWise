@@ -849,6 +849,9 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
         "opened": [Path(p).name for p in reader.opened], "error": error,
         "desk_code": _code_identity(),
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now))}))
+    for name in ("JOURNAL-TABLE.md", "desk_summary.json", "stops.json"):   # no stale table beside a new verdict
+        if text is None and (out / name).exists():
+            (out / name).unlink()
     if text is not None:
         named_lines = [f"- **{s['code']}** ({s['kind']}): {s['detail']}" for s in verdict["named_stops"]]
         tail = (["", "## Named stops", ""] + (named_lines or ["- none (no page)"])

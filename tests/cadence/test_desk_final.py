@@ -485,6 +485,7 @@ class HandTableAndGates(DeskFinalCase):
 class BlindingAndCli(DeskFinalCase):
     def test_a_planted_denied_key_refuses_with_a_verdict_and_no_table(self):
         work, bundle, anchor = self.pack()
+        self.assertTrue(self.judge(work, bundle, anchor)["desk_final"])     # a table now sits in out/
         edit_json(bundle / "legs/L002/leg_summary.json", lambda d: d.update(energy_j=12.5))
         verdict = self.judge(work, bundle, remanifest(bundle))
         self.assertNotFinal(verdict, "DESK_REFUSAL")
