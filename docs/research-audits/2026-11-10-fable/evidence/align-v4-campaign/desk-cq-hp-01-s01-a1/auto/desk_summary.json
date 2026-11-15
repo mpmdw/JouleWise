@@ -1,0 +1,77 @@
+{
+ "adapter": "leg-summary-v1",
+ "feeds_proven_stopped": true,
+ "legs": [
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794744197.6601129,
+   "g0_outcome": "released",
+   "g0_s": 198.655667209,
+   "leg_id": "L001",
+   "os_level_max": 0,
+   "pm_nominal": true,
+   "redo_reasons": [],
+   "seed": 4048693807,
+   "start_band": "q0",
+   "started_epoch_s": 1794742959.2168362,
+   "wall_s": 1238.4428086280823
+  },
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794745450.424456,
+   "g0_outcome": "released",
+   "g0_s": 211.212001083,
+   "leg_id": "L002",
+   "os_level_max": 0,
+   "pm_nominal": true,
+   "redo_reasons": [],
+   "seed": 1251089132,
+   "start_band": "q0",
+   "started_epoch_s": 1794744198.320852,
+   "wall_s": 1252.1031920909882
+  },
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794746699.9642398,
+   "g0_outcome": "released",
+   "g0_s": 204.131255501,
+   "leg_id": "L003",
+   "os_level_max": 0,
+   "pm_nominal": true,
+   "redo_reasons": [],
+   "seed": 3543179003,
+   "start_band": "q0",
+   "started_epoch_s": 1794745451.082077,
+   "wall_s": 1248.8816318511963
+  }
+ ],
+ "meter": {
+  "bad_polls": 0,
+  "elapsed_s": 5844.610897875,
+  "polls": 29223,
+  "present": true,
+  "proven_stopped": true,
+  "usb_errors": 0
+ },
+ "plan_id": "cq-hp-01-s01-a1",
+ "result": {
+  "chain_exit_code": 0,
+  "chain_outcome": "COMPLETE",
+  "fault": false,
+  "outcome": "MEASURED_OK",
+  "restore_proven": true,
+  "verdict": "3/3 legs run"
+ }
+}
