@@ -584,6 +584,44 @@ def feed_proofs(receipt, meter, find):
     return all(p["proven_stopped"] for p in proofs.values()), proofs
 
 
+SOAK_RETRIES = 1     # scripts/cadence_legs_runner.SOAK_RETRIES (RL-171): one retry after a settle or quiet refusal
+
+
+def check_soak(receipt, find):
+    """The soak retry (RL-171; Mythos #794 F3). Attempts are numbered 1..n with n <= 1 + SOAK_RETRIES; a refused
+    attempt that was retried is kept as ``soak.rejected<k>`` and its stage (``soak``, ``soak.a<k>``) has a non-zero
+    rc; the accepted attempt is ``soak`` with rc 0. A refused first soak followed by an accepted retry is a
+    completed soak, never a stopped span. Returns (accepted attempt or None, detail for the print)."""
+    attempts = receipt["soak_attempts"]
+    step_rc = {}
+    for step in receipt["steps"]:
+        step_rc.setdefault(step.get("name"), step.get("rc"))
+    if not attempts:
+        return None, "no soak attempt recorded"
+    if len(attempts) > 1 + SOAK_RETRIES:
+        find.add("DESK_ATTEMPTS", f"{len(attempts)} soak attempts; the runner allows {1 + SOAK_RETRIES}")
+    accepted = None
+    for k, a in enumerate(attempts, start=1):
+        last = k == len(attempts)
+        stage = "soak" if k == 1 else f"soak.a{k}"
+        if a.get("attempt") != k:
+            find.add("DESK_ATTEMPTS", f"soak attempt {k} is numbered {a.get('attempt')!r}")
+        if not last and (a.get("refused") is not True or a.get("output_dir") != f"soak.rejected{k}"):
+            find.add("DESK_ATTEMPTS", f"soak attempt {k} was retried but is not kept as a refused soak.rejected{k}")
+        if stage in step_rc and (step_rc[stage] == 0) == bool(a.get("refused")):
+            find.add("DESK_ATTEMPTS", f"soak attempt {k}: stage {stage} rc {step_rc[stage]} disagrees with "
+                                      f"refused={a.get('refused')}")
+        if last and not a.get("refused"):
+            if a.get("output_dir") != "soak":
+                find.add("DESK_ATTEMPTS", f"the accepted soak is kept as {a.get('output_dir')!r}, not soak")
+            accepted = k
+    refused = sum(1 for a in attempts if a.get("refused"))
+    if accepted is None:
+        return None, f"no soak accepted ({refused} refused)"
+    return accepted, (f"accepted attempt {accepted} after {refused} refused (retry)" if refused
+                      else "accepted attempt 1")
+
+
 # --------------------------------------------------------------------------
 # Hand table and hand gates
 # --------------------------------------------------------------------------
@@ -647,6 +685,13 @@ def compare_hand_table(doc, ordered, operational_stops, plan_id):
     return diffs
 
 
+def _retried_soak(step, receipt):
+    attempts = receipt["soak_attempts"]
+    name = step.get("name") or ""
+    k = 1 if name == "soak" else int(name[6:]) if re.fullmatch(r"soak\.a\d+", name) else None
+    return k is not None and k < len(attempts) and bool(attempts[k - 1].get("refused"))
+
+
 def hand_gates(ordered, receipt, expected, mark):
     """The hand gates RL-172 keeps, with what each hand check needs. The desk never clears one."""
     gates = []
@@ -659,7 +704,9 @@ def hand_gates(ordered, receipt, expected, mark):
             "ruling": "RL-150 R5; RL-149 section 2.9 item 3; RL-172 section (c)",
             "holds": f"kit:{campaign}",
             "why": f"this span runs the kit's first leg {expected['kit_first_leg']} (the new kit's first span)",
-            "print": {"steps": len(steps), "steps_nonzero": [s["name"] for s in steps if s.get("rc") != 0],
+            "print": {"steps": len(steps),
+                      "steps_nonzero": [s["name"] + (" (refused soak, retried)" if _retried_soak(s, receipt) else "")
+                                        for s in steps if s.get("rc") != 0],
                       "soak_attempts": receipt["soak_attempts"],
                       "restore": next(({"rc": s.get("rc"), "action": s.get("action")} for s in steps
                                        if s.get("name") == "restore"), None),
@@ -782,7 +829,16 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
                    "kit_schema": expected["kit_schema"], "leg_keys": leg_keys}
         if mark is not None:
             summary["span_reference"] = mark
+        soak_accepted, soak_note = check_soak(receipt, find)
+        summary["soak"] = {"attempts": len(receipt["soak_attempts"]), "accepted_attempt": soak_accepted,
+                           "note": soak_note}
         operational = [{**s, "kind": "operational"} for s in evaluate_named_stops(kit["stop_rules"], summary, history)]
+        if soak_accepted is None:   # every soak refused: the span stopped before any leg (a REFUSAL)
+            refusal = next((s for s in operational if s["code"] == "REFUSAL"), None)
+            if refusal is None:
+                operational.insert(0, {"code": "REFUSAL", "detail": soak_note, "kind": "operational"})
+            else:
+                refusal["detail"] += f"; {soak_note}"
         hand.update(required=bool(triggers), triggers=triggers)
         if hand_table_path is not None:
             doc, _ = reader.json(hand_table_path)
@@ -803,6 +859,7 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
                   f"{', '.join(expected['roster'])}",
                   f"- kit {kit['campaign_id']} sha256 {kit_sha[:12]}, frozen {kit['frozen']['commit'][:12]}",
                   f"- manifest sha256 {manifest_digest[:12]}; receipt sha256 {identities['receipt_sha256'][:12]}",
+                  f"- soak (RL-171 retry): {soak_note}",
                   "- feeds (each feed's own stop proof): "
                   + ", ".join(f"{n} {'proven' if p['proven_stopped'] else 'NOT proven'}" for n, p in proofs.items()),
                   f"- hand table: {'required (' + '; '.join(triggers) + ')' if triggers else 'not required'}"
@@ -811,8 +868,8 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
         lines += ["", "## Receipt", "",
                   f"- rc {receipt['rc']}{'; error ' + receipt['error_type'] if receipt['error_type'] else ''}; "
                   f"steps {len(receipt['steps'])}, non-zero: "
-                  f"{', '.join(s['name'] for s in receipt['steps'] if s.get('rc') != 0) or 'none'}",
-                  f"- soak attempts: {json.dumps(receipt['soak_attempts'], sort_keys=True)}",
+                  f"{', '.join(s['name'] + (' (refused soak, retried)' if _retried_soak(s, receipt) else '') for s in receipt['steps'] if s.get('rc') != 0) or 'none'}",
+                  f"- soak: {soak_note}; attempts {json.dumps(receipt['soak_attempts'], sort_keys=True)}",
                   f"- result: {json.dumps(result, sort_keys=True)}",
                   f"- KM003C: {json.dumps(meter, sort_keys=True)}"]
         text = "\n".join(lines) + "\n"

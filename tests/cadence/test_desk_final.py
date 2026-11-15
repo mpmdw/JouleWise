@@ -52,12 +52,12 @@ class Fixture:
         return {"path": KIT_PATH, "sha256": self.sha, "campaign_id": self.kit["campaign_id"],
                 "frozen_commit": self.kit["frozen"]["commit"], **kw}
 
-    def span(self, name, legs, **kw):
+    def span(self, name, legs, rc_ok=True, **kw):
         if name not in self.spans:
             out = self.root / "spans" / name
             rc, _, _, _ = runner.run_mock(kit=self.kit, kit_sha256=kw.pop("kit_sha256", self.sha), output=out,
                                           t0_epoch=local("2026-11-17T03:00"), windows=[], leg_ids=legs, **kw)
-            assert rc == 0, name
+            assert (rc == 0) == rc_ok, (name, rc)
             self.spans[name] = out
         return self.spans[name]
 
@@ -379,6 +379,53 @@ class Condition4Feeds(DeskFinalCase):
         work, bundle, anchor = self.pack()
         edit_json(bundle / "span/meter.json", lambda m: m.update(proven_stopped=False))
         self.assertNotFinal(self.judge(work, bundle, remanifest(bundle)), "DESK_SCHEMA")
+
+
+class SoakRetry(DeskFinalCase):
+    """RL-171's one soak retry (Mythos #794 F3): the receipt's soak_attempts, a refused stage then an accepted one."""
+
+    def test_no_retry_prints_one_accepted_soak(self):
+        work, bundle, anchor = self.pack()
+        verdict = self.judge(work, bundle, anchor)
+        self.assertTrue(verdict["desk_final"], verdict["reasons"])
+        self.assertIn("- soak (RL-171 retry): accepted attempt 1", (work / "out/JOURNAL-TABLE.md").read_text())
+        summary = json.loads((work / "out/desk_summary.json").read_text())
+        self.assertEqual(summary["soak"]["accepted_attempt"], 1)
+
+    def test_a_refused_soak_then_an_accepted_retry_is_not_a_stopped_span(self):
+        retried = self.fx.span("soak-retry", self.fx.ids[:6], soak_refusals=1)
+        receipt = json.loads((retried / runner.RECEIPT_NAME).read_text())
+        stages = {s["name"]: s["rc"] for s in receipt["steps"] if s["name"].startswith("soak")}
+        self.assertEqual(stages, {"soak": 2, "soak.a2": 0})
+        self.assertEqual([a["output_dir"] for a in receipt["soak_attempts"]], ["soak.rejected1", "soak"])
+        work, bundle, anchor = self.pack(retried)
+        verdict = self.judge(work, bundle, anchor)
+        self.assertTrue(verdict["desk_final"], verdict["reasons"])
+        self.assertEqual((verdict["named_stops"], verdict["next_arm_hold"]), ([], False))
+        table = (work / "out/JOURNAL-TABLE.md").read_text()
+        self.assertIn("- soak (RL-171 retry): accepted attempt 2 after 1 refused (retry)", table)
+        self.assertIn("non-zero: soak (refused soak, retried)", table)
+        gate = next(g for g in verdict["hand_gates"] if g["gate"] == "class A smoke hand-read")
+        self.assertEqual(gate["print"]["steps_nonzero"], ["soak (refused soak, retried)"])
+        self.assertEqual(len(gate["print"]["soak_attempts"]), 2)
+        q1 = next(g for g in verdict["hand_gates"] if g["gate"] == "RL-158 Q1 reference print")
+        self.assertEqual(q1["print"]["soak_reference"], {"dir": "soak", "attempts": 2})
+        # A receipt whose soak record disagrees with its stages is not final.
+        for change in (lambda r: r["soak_attempts"][0].update(output_dir="soak"),
+                       lambda r: next(s for s in r["steps"] if s["name"] == "soak").update(rc=0)):
+            work, bundle, anchor = self.pack(retried)
+            edit_json(bundle / desk_final.RECEIPT_NAME, change)
+            self.assertNotFinal(self.judge(work, bundle, remanifest(bundle)), "DESK_ATTEMPTS")
+
+    def test_a_second_soak_refusal_is_a_stop(self):
+        refused = self.fx.span("soak-refused", self.fx.ids[:6], rc_ok=False, soak_refusals=2)
+        work, bundle, anchor = self.pack(refused)
+        verdict = self.judge(work, bundle, anchor)
+        self.assertNotFinal(verdict, "DESK_NO_LEG_ROWS")
+        self.assertTrue(verdict["next_arm_hold"])
+        refusal = next(s for s in verdict["named_stops"] if s["code"] == "REFUSAL")
+        self.assertIn("no soak accepted (2 refused)", refusal["detail"])
+        self.assertIn("- soak (RL-171 retry): no soak accepted (2 refused)", (work / "out/JOURNAL-TABLE.md").read_text())
 
 
 class HandTableAndGates(DeskFinalCase):

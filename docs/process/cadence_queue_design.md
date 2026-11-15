@@ -284,7 +284,9 @@ anchor in the controller's per-span record and every file to the manifest; and e
 is present (a feed not proven stopped is INSTRUMENT_FAULT). A mandatory hand table (a redo, an exclusion, a
 schema change, or the lead's seeded draw) must be supplied; a disagreeing one holds the next arm. The class A
 smoke hand-read, the L002 and L005 gates and RL-158 Q1's print are printed and marked `hand gate required`;
-the desk never clears them. `desk_verdict.json` is written for every outcome, a refusal included. It reads
+the desk never clears them. The receipt's `soak_attempts` is printed per span: a refused soak followed by an
+accepted retry (RL-171; Mythos #794 F3) is a completed soak, not a stop; no accepted soak is a REFUSAL.
+`desk_verdict.json` is written for every outcome, a refusal included. It reads
 only `desk_final.ALLOWED_BASENAMES`, each once, and refuses unread anything outside the bundle layout.
 
 ## 7. Probe and watcher (the prerequisite; phase 1)
@@ -372,7 +374,7 @@ only `desk_final.ALLOWED_BASENAMES`, each once, and refuses unread anything outs
 | `test_kit` | 18 | closed schema, condition/slot refusal, seed law, stop bounds, template window and capacity, mandatory checklist, look fit, `verify_frozen` on a git fixture |
 | `test_queue` | 12 | format refusals, the clean walk, GO with exit 3 = REFUSED, fault, named stop, stranded, k+2, drained/halt/expiry, transitions, veto scopes and authority |
 | `test_stops_desk` | 14 | each named stop, desk tables, planted energy/slot/unknown keys refuse, allowlist, the R1 adapter never prints token ids or planted energy, the quiet lock is exclusive and is never stolen when stale |
-| `test_desk_final` | 23 | RL-172 (c) desk-final: Sol's zero-row probe, a missing summary, a duplicate, roster order and count, redo names, a wrong kit hash, frozen commit and plan id, the span reference, a tampered receipt, the anchor, unlisted and out-of-layout files (unread), every feed's stop proof, the hand table (due, agrees, disagrees), the hand gates, a planted energy key, the CLI |
+| `test_desk_final` | 26 | RL-172 (c) desk-final: the soak retry (no retry, a retry accepted, two refusals), Sol's zero-row probe, a missing summary, a duplicate, roster order and count, redo names, a wrong kit hash, frozen commit and plan id, the span reference, a tampered receipt, the anchor, unlisted and out-of-layout files (unread), every feed's stop proof, the hand table (due, agrees, disagrees), the hand gates, a planted energy key, the CLI |
 | `test_probe_watch` | 18 | the forced command's projection, PID reuse, unarmed; the parser refuses raw lines; probe alarms; the enabled probe body (patched on) with spacing, deadline and log; queue alarms; evidence from RUN_STATE; the output guard; the ledger |
 
 ## 11. Cross-check with the Sol design (MEMO-sol.md, 22:18)
