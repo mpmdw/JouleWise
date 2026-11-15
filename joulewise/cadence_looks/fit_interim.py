@@ -59,6 +59,7 @@ SIGMA_MIN_S = 1e-6                 # RL-166b B-1
 ACTIVE_TOL = {"tf08_c": 0.25, "fan_rpm": 25.0, "tv0h_excess_c": 0.25}    # RL-166b B-2
 ACTIVE_MIN_LEGS = 6
 RANK_RTOL = 1e-10                  # RL-166b B-6
+TRACE_COVERAGE_PRINT = 0.99        # the trace_coverage print's count line (no rule reads it)
 ONSET_OFFSETS = (-2, -1, 0, 1, 2, 3, 4, 5)                 # P-3
 ONSET_SUMMARY_OFFSETS = (-2, -1, 0, 1, 2, 3)
 SD_FLOOR_J = 1e-12
@@ -163,8 +164,10 @@ def validate_input(doc):
             raise LookInputError(f"{w}: leg_key is not span_id/leg_id")
         if leg["leg_type"] not in ("A", "T"):
             raise LookInputError(f"{w}: leg_type")
-        if leg["cell_prompt_tokens"] not in CELLS:
+        if leg["cell_prompt_tokens"] not in CELLS and not (leg["cell_prompt_tokens"] is None and leg["turn"] is None):
             raise LookInputError(f"{w}: cell_prompt_tokens")
+        if leg["turn"] is None and leg["leg_type"] == "A" and all(leg["inclusion"].values()):
+            raise LookInputError(f"{w}: a type-A leg with no turn cannot pass all six rules (R-21)")
         if leg["g0_role"] not in (None, "capture", "consume"):
             raise LookInputError(f"{w}: g0_role")
         _keys(leg["inclusion"], set(RULES), w + ".inclusion")
@@ -1267,18 +1270,29 @@ def _channel(legs, E, ch, model, active, include=None):
         "n_legs": len(fit), "n_segments": sum(len(L["segments"]) for L in fit), "n_days": len(days),
         "lodo": err, "prefix_bias": bias,
         "fold_coefficients": fold_coef,
+        "trace_coverage": {                          # Mythos cold seat 9: printed, decides nothing
+            "min": min(float(E[k][ch]["coverage_min"]) for k in keys_all),
+            "n_legs_under_0_99": sum(1 for k in keys_all if E[k][ch]["coverage_min"] < TRACE_COVERAGE_PRINT)},
         "day_detail": day_detail,
         "onset_offset_residuals": onset_blocks,
         "residuals": {"leg": res_leg, "hot_stretch": res_hot},
     }
 
 
+def stage2_preflight(stage1_out):
+    """Checks on the stage-1 file alone, run before any energy is opened. Leave-one-day-out needs at least two
+    fit days (RL-149 §2.3; fewer than 4 already sends stage 1 to the research lead, RL-166b B-7)."""
+    if stage1_out.get("schema") != STAGE1_SCHEMA:
+        raise LookInputError("stage 2: not a stage-1 output")
+    if len(stage1_out["roster"]["fit_days"]) < 2:
+        raise LookInputError("stage 2: fewer than two fit days; no leave-one-day-out fold can be formed")
+
+
 def stage2(stage1_out, stage1_sha256, energy, code_sha256=None):
     """Stage 2 (Q8): the energy fit. `stage1_out` must hash to `stage1_sha256` (canonical bytes, see `dump`)."""
     if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:
         raise LookInputError("stage 2: the stage-1 output does not match the hash it was given")
-    if stage1_out.get("schema") != STAGE1_SCHEMA:
-        raise LookInputError("stage 2: not a stage-1 output")
+    stage2_preflight(stage1_out)
     legs = stage1_out["legs"]
     needed = {L["leg_key"]: L for L in legs if L["in_energy_fit"]}      # RL-167 §3: no hp-01 energy
     _validate_energy(energy, stage1_out, needed)
@@ -1352,8 +1366,9 @@ def output_check(obj, path="$"):
             if _LEG_KEY.search(str(k)):
                 if not (path.endswith(".residuals.leg") or path.endswith(".residuals.hot_stretch")):
                     raise ValueError("a per-leg value outside residuals")
-                if v is not None and not (isinstance(v, float) and abs(v) < 1.0):
-                    raise ValueError("a per-leg residual that is not a relative value")
+                # a ratio by construction ((pred - meas)/meas, R-18 guarantees meas > 0); any size is valid
+                if v is not None and not (isinstance(v, float) and math.isfinite(v)):
+                    raise ValueError("a per-leg residual that is not a finite relative value")
                 continue
             if any(f in kl for f in _OUT_FORBIDDEN) or kl.endswith("_j") or kl.endswith("_w"):
                 raise ValueError("forbidden output key")

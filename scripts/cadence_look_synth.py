@@ -298,9 +298,15 @@ def build(scenario="noisy", seed=20261114, tokens=None):
                "turn": None}
         tl = {"planted": {}}
         if p["type"] == "A":
-            leg["turn"], tl = _turn(p, rng)
+            leg["turn"], tl = _turn(p, rng)          # always drawn, so the other legs' noise does not move
             if tokens is not None:
                 tokens[p["leg_key"]] = p["tok"]
+        if p["excluded_rule"] == "g0_released":
+            # a G0 timeout (cadence_leg.py: a bundle, leg_status g0_unreleased, no turn): it never decodes, and
+            # rules 3 and 4 have no leg interval to judge (inclusion_34 gives both false)
+            leg["turn"] = None
+            leg["inclusion"].update(ran_to_cap=False, sidecar_coverage=False, km003c_clean=False)
+            tl = {"g0_timeout": True}
         legs.append(leg)
         truth_legs[p["leg_key"]] = {**tl, "z": p["z"], "t_p_planted_s": p["t_p"], "tau_planted_s": p["tau_planted"],
                                     "tau_true_s": p["tau_true"], "onset_linear_predictor_s": p["lin"],
@@ -613,6 +619,20 @@ def _write_bundle(bdir, turn, tok, fan_keys=("F0Ac", "F1Ac")):
             fp.write(plistlib.dumps(doc) + b"\0")
 
 
+def _write_g0_timeout_bundle(bdir, g0_start):
+    """A G0 timeout's bundle: config, the G0 gate events, a journal; no tokens and no align_turns.jsonl."""
+    os.makedirs(os.path.join(bdir, "outputs"), exist_ok=True)
+    with open(os.path.join(bdir, "config.json"), "w") as f:
+        json.dump({"sampling": {"power_hz": 1.0}}, f)
+    with open(os.path.join(bdir, "events.jsonl"), "w") as f:
+        f.write(json.dumps({"event_type": "phase_start", "phase": "align_thermal_gate", "timestamp_s": g0_start,
+                            "metadata": {"kind": "G0"}}) + "\n")
+        f.write(json.dumps({"event_type": "phase_end", "phase": "align_thermal_gate", "timestamp_s": g0_start + 1200.0,
+                            "metadata": {"kind": "G0", "outcome": "timeout"}}) + "\n")
+    with open(os.path.join(bdir, "outputs/align_thermal.jsonl"), "w") as f:
+        f.write(json.dumps({"kind": "session_start"}) + "\n")
+
+
 def write_custody(root, look_input, energy, tokens):
     """The synthetic custody copy: one directory per span, in the cadence runner's layout, plus the roster, the
     rules-3/4 verdicts and level E for comparison. Energy files (power_trace.csv, meter streams) are written
@@ -633,7 +653,7 @@ def write_custody(root, look_input, energy, tokens):
         legs = legs_by_span[sid]
         with open(os.path.join(sdir, "runner_receipt.json"), "w") as f:
             json.dump({"schema": "joulewise.cadence_span_receipt.v1", "started": {"epoch_s": span["t0_epoch_s"]},
-                       "roster": [leg["leg_id"] for leg in legs]}, f)
+                       "roster": [leg["leg_id"] for leg in legs], "synthetic": True}, f)
         with open(os.path.join(sdir, "soak/soak_reference.json"), "w") as f:
             json.dump({"schema": "joulewise.align.r1_soak_reference.v1",
                        "sensors_c": {"TV0h": span["soak_reference_tv0h_c"], "TV1h": 55.0}}, f)
@@ -651,10 +671,12 @@ def write_custody(root, look_input, energy, tokens):
             if leg["leg_type"] == "T":
                 spec["leg_type"] = "T"
             turn = leg["turn"]
-            result = {"leg_status": "complete" if inc["ran_to_cap"] else "incomplete",
+            g0_timeout = leg["leg_type"] == "A" and turn is None and not inc["g0_released"]
+            result = {"leg_status": ("complete" if inc["ran_to_cap"] else
+                                     "g0_unreleased" if g0_timeout else "incomplete"),
                       "decode_cap_reached": inc["ran_to_cap"], "g0_released": inc["g0_released"],
                       "ac_powermode": {"value": mode if inc["block_power_mode"] else 1},
-                      "bundle": "runs/cadence-leg" if turn else None,
+                      "bundle": "runs/cadence-leg" if (turn or g0_timeout) else None,
                       "prefill_tokens": turn["prefill_tokens"] if turn else None}
             with open(os.path.join(ldir, "leg_record.json"), "w") as f:
                 json.dump({"spec": spec, "attempts": [{"attempt": 1,
@@ -667,6 +689,10 @@ def write_custody(root, look_input, energy, tokens):
                                           "excluded": "reference from an excluded leg" in span["marks"]}
             with open(os.path.join(ldir, "leg_summary.json"), "w") as f:
                 json.dump(summ, f)
+            if g0_timeout:                           # the bundle exists; it holds the G0 and no turn
+                _write_g0_timeout_bundle(os.path.join(ldir, "runtime", "runs/cadence-leg"),
+                                         span["t0_epoch_s"] + 600.0 + 900.0 * legs.index(leg))
+                continue
             if not turn:
                 continue
             bdir = os.path.join(ldir, "runtime", "runs/cadence-leg")

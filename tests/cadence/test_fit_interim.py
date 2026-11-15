@@ -14,10 +14,30 @@ import tempfile
 import unittest
 import unittest.mock
 
-import numpy as np
+try:  # the fit needs numpy; the dependency-free core shards run without it (CI's look-fit job installs it)
+    import numpy as np
 
-from joulewise.cadence_looks import fit_interim as F
-from scripts import cadence_look_synth as synth
+    from joulewise.cadence_looks import fit_interim as F
+    from scripts import cadence_look_synth as synth
+except ModuleNotFoundError as _exc:  # pragma: no cover
+    if _exc.name != "numpy":
+        raise
+    _NUMPY_MISSING = str(_exc)
+else:
+    _NUMPY_MISSING = None
+
+
+def load_tests(loader, tests, pattern):
+    """Without numpy the module loads and reports one skip, so shard discovery does not error."""
+    if _NUMPY_MISSING is None:
+        return tests
+
+    class NumpyMissing(unittest.TestCase):
+        @unittest.skip("numpy is not installed; this module runs in CI's look-fit job")
+        def test_needs_numpy(self):
+            pass
+    return loader.loadTestsFromTestCase(NumpyMissing)
+
 
 _CACHE = {}
 
@@ -123,7 +143,9 @@ class Exact(unittest.TestCase):
         self.assertEqual(left["state_unobserved"], 3)          # two in-turn gaps and one Unknown start
         self.assertEqual(left["start_reading_missing"], 2)
         self.assertEqual(s1["counts"]["type_T"], 1)
-        self.assertEqual(s1["counts"]["excluded_by_rule"]["km003c_clean"], 1)
+        # one planted km003c failure, plus the G0 timeout (no leg interval for rules 3 and 4)
+        self.assertEqual(s1["counts"]["excluded_by_rule"]["km003c_clean"], 2)
+        self.assertEqual(s1["counts"]["excluded_by_rule"]["ran_to_cap"], 1)
         self.assertFalse(s1["tripwires"]["any"])
 
 
@@ -442,8 +464,11 @@ class Refusals(unittest.TestCase):
             F.output_check({"channels": {"gpu_rail": {"leg_energy": 1.0}}})
         with self.assertRaises(ValueError):
             F.output_check({"x": {"dev-01-s01/L001": 0.01}})
+        # Sol cold seat 3: a relative residual of any finite size is valid (a ratio by construction)
+        F.output_check({"channels": {"gpu_rail": {"residuals": {"leg": {"dev-01-s01/L001": 5.12},
+                                                                "hot_stretch": {"dev-01-s01/L001": -1.5}}}}})
         with self.assertRaises(ValueError):
-            F.output_check({"residuals": {"leg": {"dev-01-s01/L001": 512.0}}})
+            F.output_check({"channels": {"gpu_rail": {"residuals": {"leg": {"dev-01-s01/L001": float("inf")}}}}})
 
 
 if __name__ == "__main__":
@@ -974,6 +999,9 @@ class RL166b(unittest.TestCase):
         self.assertTrue(p4["to_research_lead"])
 
 
+PENDING_O_CHANNEL_FIELDS = ("trace_coverage",)
+
+
 class Schemas(unittest.TestCase):
     """Level D and level O validate against the manifest builder's schemas (#793), on every planted scenario."""
 
@@ -988,8 +1016,12 @@ class Schemas(unittest.TestCase):
             _, en, _, _ = dataset(sc)
             s1 = stage1_of(sc)
             self.assertEqual(V.errors(json.loads(json.dumps(s1)), s1_schema), [], sc)
-            out = F.stage2(s1, rehash(s1), en)
-            self.assertEqual(V.errors(json.loads(json.dumps(out)), fit_schema), [], sc)
+            out = json.loads(json.dumps(F.stage2(s1, rehash(s1), en)))
+            for ch in F.CHANNELS:                  # PENDING in #793's schema (Mythos cold seat 9's print)
+                for k in PENDING_O_CHANNEL_FIELDS:
+                    if k not in out_schema["$defs"]["channel_fit"]["properties"]:
+                        out["channels"][ch].pop(k)
+            self.assertEqual(V.errors(out, fit_schema), [], sc)
 
 
 class RL166c(unittest.TestCase):

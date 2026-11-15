@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import builtins
 import contextlib
+import copy
 import hashlib
 import importlib.util
 import io
@@ -19,9 +20,29 @@ import tempfile
 import unittest
 import unittest.mock
 
-from joulewise.cadence_looks import fit_interim as F
-from scripts import cadence_look_run as R
-from scripts import cadence_look_synth as synth
+try:  # the fit needs numpy; the dependency-free core shards run without it (CI's look-fit job installs it)
+    from joulewise.cadence_looks import fit_interim as F
+    from scripts import cadence_look_run as R
+    from scripts import cadence_look_synth as synth
+except ModuleNotFoundError as _exc:  # pragma: no cover
+    if _exc.name != "numpy":
+        raise
+    _NUMPY_MISSING = str(_exc)
+else:
+    _NUMPY_MISSING = None
+
+
+def load_tests(loader, tests, pattern):
+    """Without numpy the module loads and reports one skip, so shard discovery does not error."""
+    if _NUMPY_MISSING is None:
+        return tests
+
+    class NumpyMissing(unittest.TestCase):
+        @unittest.skip("numpy is not installed; this module runs in CI's look-fit job")
+        def test_needs_numpy(self):
+            pass
+    return loader.loadTestsFromTestCase(NumpyMissing)
+
 
 STEP3_CANDIDATES = [os.environ.get("JW_STEP3_MODULE"), "/Volumes/JW-EXT/scratch/step3/step3_energy_ratios.py"]
 
@@ -344,3 +365,148 @@ class Rules34Agree(unittest.TestCase):
                          {k: v for k, v in planted.items() if k not in t_legs})
         self.assertIn(False, [v["sidecar_coverage"] for v in planted.values()])
         self.assertIn(False, [v["km003c_clean"] for v in planted.values()])
+
+
+class ColdSeatFixes(unittest.TestCase):
+    """The Mythos and Sol cold seats on the combined look head (5ea1bdee9), in this package's files."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.c = _Custody.get()
+        cls.roster = rj(cls.c.paths["roster.json"])
+        cls.rules = rj(cls.c.paths["rules_3_4.json"])
+
+    def span_copy(self, d, span_id):
+        dst = Path(d) / span_id
+        shutil.copytree(self.c.root / span_id, dst, ignore=shutil.ignore_patterns("power_trace.csv"))
+        return dst
+
+    def entry(self, span_id):
+        return next(e for e in self.roster if e["span_id"] == span_id)
+
+    def g0_timeout_leg(self):
+        leg = next(x for x in self.c.li["legs"] if x["leg_type"] == "A" and x["turn"] is None)
+        self.assertFalse(leg["inclusion"]["g0_released"])
+        return leg
+
+    def test_m1_g0_timeout_absent_turns_is_an_exclusion(self):
+        leg = self.g0_timeout_leg()
+        bundle = self.c.root / leg["span_id"] / "legs" / leg["leg_id"] / "runtime/runs/cadence-leg"
+        self.assertTrue((bundle / "events.jsonl").is_file())
+        self.assertFalse((bundle / "outputs/align_turns.jsonl").exists())
+        span, legs = R.read_span(self.c.root / leg["span_id"], self.entry(leg["span_id"]), self.rules, R.FAN_KEYS)
+        got = next(x for x in legs if x["leg_key"] == leg["leg_key"])
+        self.assertIsNone(got["turn"])
+        self.assertFalse(got["inclusion"]["g0_released"])
+
+    def test_m1_g0_timeout_empty_turns_is_an_exclusion(self):
+        leg = self.g0_timeout_leg()
+        with tempfile.TemporaryDirectory() as d:
+            sdir = self.span_copy(d, leg["span_id"])
+            (sdir / "legs" / leg["leg_id"] / "runtime/runs/cadence-leg/outputs/align_turns.jsonl").write_text("")
+            _, legs = R.read_span(sdir, self.entry(leg["span_id"]), self.rules, R.FAN_KEYS)
+        self.assertIsNone(next(x for x in legs if x["leg_key"] == leg["leg_key"])["turn"])
+
+    def test_m1_included_leg_without_a_turn_refuses(self):
+        leg = next(x for x in self.c.li["legs"] if x["turn"] and all(x["inclusion"].values()))
+        with tempfile.TemporaryDirectory() as d:
+            sdir = self.span_copy(d, leg["span_id"])
+            (sdir / "legs" / leg["leg_id"] / "runtime/runs/cadence-leg/outputs/align_turns.jsonl").unlink()
+            with self.assertRaisesRegex(F.LookInputError, "included leg"):
+                R.read_span(sdir, self.entry(leg["span_id"]), self.rules, R.FAN_KEYS)
+
+    def test_m7_capture_excluded_at_the_look_marks_the_span(self):
+        span_id = next(s["span_id"] for s in self.c.li["spans"] if not s["marks"]
+                       and any(x["g0_role"] == "consume" for x in self.c.li["legs"] if x["span_id"] == s["span_id"]))
+        cap = next(x for x in self.c.li["legs"] if x["span_id"] == span_id and x["g0_role"] == "capture")
+        span, _ = R.read_span(self.c.root / span_id, self.entry(span_id), self.rules, R.FAN_KEYS)
+        self.assertEqual(span["marks"], [])
+        rules = dict(self.rules)
+        rules[cap["leg_key"]] = {"sidecar_coverage": True, "km003c_clean": False}      # rule 4 fails at the look
+        span, _ = R.read_span(self.c.root / span_id, self.entry(span_id), rules, R.FAN_KEYS)
+        self.assertEqual(span["marks"], ["reference from an excluded leg"])
+
+    def test_m13_custody_carries_the_synthetic_flag(self):
+        li = R.read_look_input(self.roster, R.span_dirs(self.c.root, None), self.rules)
+        self.assertTrue(li["synthetic"])
+        with tempfile.TemporaryDirectory() as d:
+            sid = self.roster[0]["span_id"]
+            sdir = self.span_copy(d, sid)
+            rec = rj(sdir / "runner_receipt.json")
+            rec.pop("synthetic")
+            wb(sdir / "runner_receipt.json", json.dumps(rec))
+            li = R.read_look_input([self.roster[0]], R.span_dirs(d, None), self.rules)
+        self.assertFalse(li["synthetic"])
+
+    def test_m14_unrun_leg_has_no_cell_and_cannot_be_included(self):
+        with tempfile.TemporaryDirectory() as d:
+            sid = self.roster[0]["span_id"]
+            sdir = self.span_copy(d, sid)
+            lid = rj(sdir / "runner_receipt.json")["roster"][-1]
+            shutil.rmtree(sdir / "legs" / lid)
+            _, legs = R.read_span(sdir, self.roster[0], self.rules, R.FAN_KEYS)
+        leg = next(x for x in legs if x["leg_id"] == lid)
+        self.assertEqual((leg["cell_prompt_tokens"], leg["turn"]), (None, None))
+        self.assertFalse(any(leg["inclusion"].values()))
+        li = copy.deepcopy(self.c.li)
+        t = next(x for x in li["legs"] if x["turn"] and all(x["inclusion"].values()))
+        t["turn"] = None
+        with self.assertRaisesRegex(F.LookInputError, "R-21"):
+            F.validate_input(li)
+
+    def test_sol2_type_t_only_from_leg_type(self):
+        leg = next(x for x in self.c.li["legs"] if x["turn"])
+        with tempfile.TemporaryDirectory() as d:
+            sdir = self.span_copy(d, leg["span_id"])
+            p = sdir / "legs" / leg["leg_id"] / "leg_record.json"
+            rec = rj(p)
+            rec["spec"]["type"] = "T"                    # the legacy key is ignored (R-21)
+            wb(p, json.dumps(rec))
+            _, legs = R.read_span(sdir, self.entry(leg["span_id"]), self.rules, R.FAN_KEYS)
+        self.assertEqual(next(x for x in legs if x["leg_key"] == leg["leg_key"])["leg_type"], "A")
+
+    def test_roster_is_one_shape(self):
+        with self.assertRaises(F.LookInputError):
+            R.read_look_input({"roster": self.roster}, R.span_dirs(self.c.root, None), self.rules)
+
+    def test_m4_meter_stream_without_samples_is_skipped(self):
+        sid = self.roster[0]["span_id"]
+        with tempfile.TemporaryDirectory() as d:
+            sdir = self.span_copy(d, sid)
+            hdr = (sdir / "hazards/meter/stream-0001.jsonl").read_text().splitlines()[0]
+            (sdir / "hazards/meter/stream-0002.jsonl").write_text(hdr + "\n")
+            m = R.MeterSpan(sdir)
+            self.assertGreater(len(m.t), 100)
+            (sdir / "hazards/meter/stream-0001.jsonl").unlink()
+            with self.assertRaises(F.LookInputError):
+                R.MeterSpan(sdir)
+
+    def test_m4_stage1_preflight_refuses_a_missing_power_trace_before_stage_2(self):
+        s1 = F.stage1(self.c.li, "0" * 64)
+        R.stage2_preflight(s1, R.span_dirs(self.c.root, None))
+        L = next(x for x in s1["legs"] if x["in_energy_fit"])
+        with tempfile.TemporaryDirectory() as d:
+            self.span_copy(d, L["span_id"])               # the copy carries no power_trace.csv
+            sdir_of = R.span_dirs(self.c.root, [f"{L['span_id']}={d}/{L['span_id']}"])
+            with self.assertRaisesRegex(F.LookInputError, "power_trace"):
+                R.stage2_preflight(s1, sdir_of)
+
+    def test_sol8_one_day_refuses_before_energy(self):
+        li = copy.deepcopy(self.c.li)
+        days = sorted({s["t0_local_date"] for s in li["spans"] if s["role"] == "fit"})
+        keep = {s["span_id"] for s in li["spans"] if s["t0_local_date"] == days[-1] or s["role"] == "describe"}
+        li["spans"] = [s for s in li["spans"] if s["span_id"] in keep]
+        li["legs"] = [x for x in li["legs"] if x["span_id"] in keep]
+        with tempfile.TemporaryDirectory() as d:
+            ip, ep, s1p = os.path.join(d, "li.json"), os.path.join(d, "en.json"), os.path.join(d, "s1.json")
+            wb(ip, synth.dump(li))
+            wb(ep, synth.dump(self.c.en))
+            rc, out, err = run_cli(["stage1", "--input", ip, "--out", s1p])
+            self.assertEqual(rc, 0, err)
+            h = out.split("sha256=")[1].strip()
+            with spy_opens() as opened:
+                rc, _, err = run_cli(["stage2", "--stage1", s1p, "--stage1-sha256", h, "--energy", ep,
+                                      "--out", os.path.join(d, "fit.json")])
+        self.assertEqual(rc, 2)
+        self.assertIn("two fit days", err)
+        self.assertFalse([p for p in opened if p.endswith("en.json")])

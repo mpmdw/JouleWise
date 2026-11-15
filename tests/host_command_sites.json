@@ -2068,5 +2068,11 @@
     "locator": "<module>:fc9ea9bc8b139d43",
     "command": "python-isolated",
     "seam": "docstring usage line only (step 3's pinned bytes, RL-166 Q6: not edited); the module starts no process"
+  },
+  {
+    "file": "scripts/cadence_look_synth.py",
+    "locator": "<module>:bb037716d1cc3829",
+    "command": "python-isolated",
+    "seam": "docstring usage line only; the generator starts no process"
   }
 ]

@@ -28,6 +28,22 @@ jobs:
       - name: Check history policy and effort ladder
         run: python -B -m unittest tests.align.test_history_rendering
 
+  # The interim look's fit (lm-interim-01) needs numpy, which the dependency-free core shards do not install;
+  # its two modules skip there and run here.
+  look-fit:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install numpy
+        run: python -m pip install 'numpy==2.2.6'
+      - name: Interim look fit and two-stage CLI
+        run: python -B -m unittest tests.cadence.test_fit_interim tests.cadence.test_look_run
+
   quick:
     needs: changes
     if: needs.changes.outputs.code == 'true'

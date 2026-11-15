@@ -274,10 +274,10 @@ def read_span(sdir, entry, rules34, fan_keys):
         v34 = rules34.get(key)
         if v34 is None:
             raise F.LookInputError("rules 3 and 4: no verdict for a roster leg")
-        if not (ldir / "leg_record.json").is_file():          # the span stopped before this leg
+        if not (ldir / "leg_record.json").is_file():          # the span stopped before this leg (R-21)
             legs.append({"leg_key": key, "span_id": entry["span_id"], "leg_id": leg_id, "leg_type": "A",
                          "cell_prompt_tokens": None, "g0_role": None,
-                         "inclusion": {r: False for r in F.RULES}, "turn": None, "_unrun": True})
+                         "inclusion": {r: False for r in F.RULES}, "turn": None})
             continue
         rec = _json(ldir / "leg_record.json")
         spec, attempts, result = rec["spec"], rec["attempts"], rec.get("result") or {}
@@ -288,7 +288,7 @@ def read_span(sdir, entry, rules34, fan_keys):
                 marks.add("reference from a redo")
             if ref.get("excluded"):
                 marks.add("reference from an excluded leg")
-        leg_type = "T" if (spec.get("leg_type") == "T" or spec.get("type") == "T") else "A"
+        leg_type = "T" if spec.get("leg_type") == "T" else "A"          # R-21: spec.leg_type only
         inc = {"ran_to_cap": result.get("leg_status") == "complete" and result.get("decode_cap_reached") is True,
                "g0_released": result.get("g0_released") is True,
                "sidecar_coverage": v34["sidecar_coverage"] is True, "km003c_clean": v34["km003c_clean"] is True,
@@ -296,24 +296,59 @@ def read_span(sdir, entry, rules34, fan_keys):
                "block_power_mode": _mode(result) == MODE_BY_POWER[power]}
         turn = None
         if leg_type == "A" and result.get("bundle"):
-            turn = build_turn(ldir / "runtime" / result["bundle"], result, fan_keys)
+            try:
+                turn = build_turn(ldir / "runtime" / result["bundle"], result, fan_keys)
+            except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
+                # A G0 timeout (cadence_leg.py: a bundle and no turn) is a ruled exclusion (rules 1 and 2), not a
+                # refusal: a leg the six verdicts already exclude carries no turn. An included leg refuses.
+                if all(inc.values()):
+                    raise F.LookInputError(f"an included leg's bundle has no readable turn ({type(exc).__name__})")
+                turn = None
         legs.append({"leg_key": key, "span_id": entry["span_id"], "leg_id": leg_id, "leg_type": leg_type,
                      "cell_prompt_tokens": int(spec["prefill_tokens"]), "g0_role": spec.get("g0_role"),
                      "inclusion": inc, "turn": turn})
+    # RL-161 §4 (Mythos cold seat 7): the reference's capture leg excluded AT THE LOOK (any of the six verdicts,
+    # rules 3 and 4 included) marks the span when a consumer is on its roster
+    capture = [leg for leg in legs if leg["g0_role"] == "capture"]
+    if capture and not all(capture[0]["inclusion"].values()) and any(leg["g0_role"] == "consume" for leg in legs):
+        marks.add("reference from an excluded leg")
     span["marks"] = sorted(marks)
-    for leg in legs:
-        if leg.pop("_unrun", False):
-            leg["cell_prompt_tokens"] = F.CELLS[0]     # a leg that never ran is excluded; its cell is not read
     return span, legs
 
 
 def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS):
-    spans, legs = [], []
+    """Level R from the custody copy. `synthetic` is true only when every span's runner receipt says so
+    (the synthetic generator writes it; a real runner never does)."""
+    if not isinstance(roster, list):                # one shape: validate --roster-out's JSON list
+        raise F.LookInputError("roster: not a list of spans")
+    spans, legs, synth = [], [], []
     for entry in roster:
-        s, ls = read_span(sdir_of(entry["span_id"]), entry, rules34, fan_keys)
+        sdir = sdir_of(entry["span_id"])
+        synth.append(_json(sdir / "runner_receipt.json").get("synthetic") is True)
+        s, ls = read_span(sdir, entry, rules34, fan_keys)
         spans.append(s)
         legs += ls
-    return {"schema": F.INPUT_SCHEMA, "look_id": F.LOOK_ID, "synthetic": False, "spans": spans, "legs": legs}
+    return {"schema": F.INPUT_SCHEMA, "look_id": F.LOOK_ID, "synthetic": bool(synth) and all(synth),
+            "spans": spans, "legs": legs}
+
+
+def stage2_preflight(stage1_out, sdir_of):
+    """Structural checks of every file stage 2 will open, by presence only (stat, never a read): each
+    energy-fit leg's power_trace.csv, and a meter stream in its span. Run by stage 1, so a layout fault refuses
+    before any energy file is opened (Mythos cold seat 4)."""
+    seen = set()
+    for L in stage1_out["legs"]:
+        if not L["in_energy_fit"]:
+            continue
+        sdir = sdir_of(L["span_id"])
+        leg_id = L["leg_key"].split("/", 1)[1]
+        rec = _json(sdir / "legs" / leg_id / "leg_record.json")
+        if not (sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"] / "power_trace.csv").is_file():
+            raise F.LookInputError("stage-2 preflight: an energy-fit leg has no power_trace.csv")
+        if L["span_id"] not in seen:
+            if not glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")):
+                raise F.LookInputError("stage-2 preflight: an energy-fit leg's span has no meter stream")
+            seen.add(L["span_id"])
 
 
 # =============================================================================================== stage-2 reader
@@ -340,12 +375,15 @@ class MeterSpan:
         t, w = [], []
         for p in paths:
             st = kp.parse(p)
-            if not st.present or not st.aligned:
-                raise F.LookInputError("a meter stream without aligned samples")
+            if not st.present or not st.aligned:     # skipped; a segment it would have covered refuses in energy()
+                del st
+                continue
             off = int(st.header["start_real_ns"]) - int(st.header["start_raw_ns"])    # RAW -> REALTIME (R-20)
             t += [(h + off) / 1e9 for h in st.host_ns]
             w += list(st.watts)
             del st
+        if not t:
+            raise F.LookInputError("no meter stream in the span has aligned samples")
         order = sorted(range(len(t)), key=t.__getitem__)
         self.t = [t[i] for i in order]
         self.w = [w[i] for i in order]
@@ -417,6 +455,8 @@ def cmd_stage1(a):
                 f.write(data)
         extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4)}
     out = F.stage1(look_input, input_sha, code_hashes())
+    if not a.input:
+        stage2_preflight(out, span_dirs(a.custody, a.span_dir))
     if extra:
         out["code_sha256"].update({f"input:{k}": v for k, v in extra.items()})
     return out
@@ -430,6 +470,7 @@ def cmd_stage2(a):
     s1 = json.loads(raw)
     if F.dump(s1) != raw:
         raise F.LookInputError("stage 2: the stage-1 file is not in canonical form")
+    F.stage2_preflight(s1)                          # refuses before any energy file is opened
     if a.energy:
         energy = _json(a.energy)
         extra = ()

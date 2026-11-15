@@ -59,7 +59,8 @@ One leg is one turn. Type-T legs appear (they are counted) but carry no `turn` a
   "span_id": str,
   "leg_id": str,                          # "L001".."L012" (or "H001".. on hp-01)
   "leg_type": "A" | "T",                  # T: counted, not read
-  "cell_prompt_tokens": 2000 | 10000 | 19458,   # the nominal prompt-size cell (cell law, RL-158 Q7)
+  "cell_prompt_tokens": 2000 | 10000 | 19458 | null,   # the nominal cell (RL-158 Q7); null only for a roster
+                                          # leg that never ran (no leg_record.json; R-21)
   "g0_role": null | "capture" | "consume",      # null = own-reference G0 (v1.0 legs, own-shaped v1.1 legs)
   "inclusion": {                          # the six rules, RL-149 §2.4 with RL-150 R7; each true = passes
     "ran_to_cap": bool,                   # rule 1 (runner)
@@ -69,7 +70,8 @@ One leg is one turn. Type-T legs appear (they are counted) but carry no `turn` a
     "not_a_contaminated_attempt": bool,   # rule 5 (runner)
     "block_power_mode": bool              # rule 6 (runner)
   },
-  "turn": Turn | null                     # null for type T, and for a leg with no accepted attempt
+  "turn": Turn | null                     # null for type T, a leg that never ran, or a G0 timeout (a bundle and no
+                                          # turn): a type-A leg with no turn must fail at least one rule (R-21)
 }
 ```
 
@@ -354,6 +356,8 @@ contract between the two.
     "1.374": {"prefix_len": 2981, ...}
   },
   "fold_coefficients": {day: {column: float}},   # RL-166b P-1: each LODO fold's heat-model vector (its own columns)
+  "trace_coverage": {"min": float,        # cold seat 9 (PENDING in #793's schema): min over energy-fit legs of the
+                     "n_legs_under_0_99": int},   # channel's per-segment covered fraction; printed, decides nothing
   "day_detail": {                         # RL-166b P-2: counted days only
     "days": {day: {"legs_with_hot_block": int, "hot_blocks": int,
                    "se_with_heat": float | null, "se_no_heat": float | null}},   # s / sqrt(legs_with_hot_block)
@@ -488,5 +492,15 @@ the stage-1 output:
 directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwise.
 
 **Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` (through step 3's
+
+**Cold-seat fixes (5ea1bdee9).** A leg whose bundle has no readable turn is excluded (`turn: null`) when any of
+its six verdicts already fails (a G0 timeout); an included leg with no readable turn refuses. A span whose
+capture leg is excluded at the look (any verdict, rules 3 and 4 included) is marked "reference from an excluded
+leg" when a consumer is on its roster. `synthetic` is true only when every span's `runner_receipt.json` carries
+`"synthetic": true`. Type T is `spec.leg_type == "T"` only. The roster is a JSON list only. Stage 1 checks, by
+presence only, each energy-fit leg's `power_trace.csv` and its span's meter stream. Stage 2 refuses fewer than two
+fit days before opening any energy file. A meter stream with no aligned samples is skipped; a segment it would
+have covered refuses.
+
 `load_gpu_trace`, the module's sha256 checked against `84a1a553…eb173`), and each span's
 `hazards/meter/stream-*.jsonl` (through `joulewise.external.km003c_parse.parse`). Level E stays in memory.
