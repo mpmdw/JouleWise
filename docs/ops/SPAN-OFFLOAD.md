@@ -9,11 +9,15 @@ pull from the cloud, checked against the marker's hashes.
 
 `offload` (MBP, in the close interval, after the span's Check, before the next soak):
 
-1. Refuses at once, doing nothing, if `<marker_dir>/<plan>.ok` exists (exit 3).
+1. Refuses at once, doing nothing, if `<marker_dir>/<plan>.ok` exists (exit 3), if OUT's name is not the
+   plan id or `<plan>-...` (`PLAN_SPAN_MISMATCH`), or if any `forbid_paths` entry exists (the config names
+   the magistrate's desk fence: `FORBIDDEN_PATH_PRESENT`). Without `--deadline-epoch` the whole offload
+   gets `default_budget_s` (90 min, item 347's limit); with no time left it does nothing.
 2. Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
    carriage return, backslash or non-UTF-8 bytes refuses the offload (exit 4). The stage root, the marker
    directory, the recipient key and a local backend root must not overlap OUT and must not be inside a git
-   repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`).
+   repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`). OUT must hold at least one regular file and
+   `runner_receipt.json` (the default `--require-file`; existence only).
 3. Takes an exclusive lock for the plan (`<stage_root>/.<plan>.lock`, held until the marker; a second
    offload of the same plan is refused `BUSY`).
 4. Reads the recipient public key once into a private snapshot, and checks that snapshot against the pinned
@@ -21,11 +25,14 @@ pull from the cloud, checked against the marker's hashes.
 5. Streams OUT through tar and gzip into `openssl enc`, reading each regular file **once, as bytes**. The
    plaintext manifest (`<plan>.SHA256SUMS`, `shasum -a 256` format on `./<path>`, byte order) hashes exactly
    the archived bytes. A file that changes while it is read refuses the offload. **No file under OUT is
-   parsed** (A.4); `--require-file runner_receipt.json` checks existence only. One watchdog bounds the whole
-   stream: at `--deadline-epoch` (or after 4 h) it kills openssl and the offload fails `DEADLINE`.
-6. Wraps the per-span passphrase to the recipient key, writes the descriptor last, and keeps the four
-   files in `<stage_root>/<plan>/` (about 4 % of OUT; the dev-02-s02 archive was 110 MB for 2.9 GB), with a
-   local `.source.json` naming OUT's resolved path.
+   parsed** (A.4). The deadline is checked before each file, and one watchdog bounds the whole stream: at
+   the deadline it kills openssl and the offload fails `DEADLINE`.
+6. Decrypts the staged ciphertext once with the passphrase still in memory and requires the archive's
+   sha256 (`CIPHERTEXT_UNVERIFIED` otherwise; plaintext is hashed, never written). The MBP cannot test the
+   RSA wrap; the first pull is that test (install step 8). Then wraps the passphrase to the recipient key and
+   writes the descriptor last. All of this happens in a private `.<plan>.building-*` directory, removed on
+   any failure and renamed to `<stage_root>/<plan>/` only when complete (about 4 % of OUT; the dev-02-s02
+   archive was 110 MB for 2.9 GB), with a local `.source.json` naming OUT's resolved path.
 7. Uploads the four files synchronously (`rclone copyto --immutable`, which exits), and reads each back from
    the provider (`rclone lsjson --hash`): the size and the provider's hash must equal the local file's (A.3).
    Each confirmation must also equal the hashes and sizes the stage held before the upload began
@@ -37,12 +44,16 @@ pull from the cloud, checked against the marker's hashes.
 Nothing under OUT is changed or deleted (A.5). The tool has no git step, refuses output paths inside a
 repository, and the remote is a private cloud folder, never the repository (A.6). Any failure writes no
 marker and exits non-zero: 4 refused before upload, 5 upload or read-back failed or the deadline passed. A
-failed or unverified offload holds the next arm, and F0 does not run past it either (A.7).
+failed or unverified offload holds the next arm, and F0 does not run past it either (A.7). SIGTERM, SIGHUP
+and SIGINT kill openssl and rclone before the tool exits 5 with one line, so an exited tool leaves no upload
+running. The local backend exits 8 (its `<plan>.ok.unconfirmed` satisfies no gate).
 
 **Re-runs.** A complete stage is reused only for the same OUT (resolved path) and recipient, and only after
 OUT is re-hashed and still equals the staged manifest; the upload of the same bytes is then idempotent.
-Anything else with a complete stage is refused `STAGE_CONFLICT` (the lead decides). An incomplete stage
-(no descriptor, so nothing was uploaded from it) is set aside as `<plan>.partial-<epoch>`.
+Anything else at the stage path, complete or not, is refused `STAGE_CONFLICT`: the tool never moves a
+directory it did not build. The tool never deletes a stage or a remote folder. After the Air's pull of a
+span succeeds, the lead may remove `<stage_root>/<plan>/`; a remote `<plan>/` folder is removed only by the
+lead, and only to retry a plan whose stage was lost (the immutable upload otherwise refuses new bytes).
 
 `--deadline-epoch` is the next soak's start: the offload gives up, without a marker, if it cannot finish
 by then (A.3: the upload ends before the next soak starts).
@@ -91,15 +102,16 @@ Why public-key:
   private key, which is kept.
 
 **The interim archive** `cq-dev-02-s02-a1` (item 350) was encrypted with `offload.key`, which is on the
-MBP only. RL-173 A.1 gives it 24 h from the ruling (until 2026-11-16 11:58 PST): either copy `offload.key`
-to the Air's custody root (and Ed's vault), or re-offload that span with this tool.
+MBP only. RL-173 A.1 gives it 24 h from the ruling (until 2026-11-16 11:58 PST): copy `offload.key` to the
+Air's custody root and Ed's vault. (This tool will not re-offload that span: its marker exists, exit 3.)
 
 ## Backends and the provider
 
 `backend.kind` is pluggable:
 
 - `rclone` (production): `rclone copyto --immutable` then `rclone lsjson --files-only --hash --hash-type
-  <t>`. `hash_type` is `sha256`, `sha1` or `md5` (compared with the local file's digest), `dropbox`
+  <t>`. The remote must be a named rclone remote (`name:path`; a path, a `:backend:` string or a flag is refused).
+  `hash_type` is `sha256`, `sha1` or `md5` (compared with the local file's digest), `dropbox`
   (compared with `rclone hashsum dropbox` of the local file) or `size` (size only). A listing that lags the
   upload, or a hash the provider has not computed yet, is retried `readback_tries` times
   (`readback_wait_s` apart); a differing size or hash is final.
@@ -134,7 +146,9 @@ rclone authorize "drive" "$(printf '%s' '{"scope":"drive.file"}' | base64)"   # 
 ```
 
 Nothing else is a credential: the recipient public key is not secret, and the private key never leaves
-the Air and Ed's vault.
+the Air and Ed's vault. The provider sees the ciphertext, the wrapped key, the descriptor and the
+plaintext manifest (relative paths and per-file sha256, as item 347 uploaded); file contents only
+encrypted.
 
 ## Install (the lead, between spans; no measurement running)
 
@@ -157,20 +171,24 @@ MBP:
 {"schema": "joulewise.span_offload_config.v1",
  "recipient_public_key": "/Users/edr/night-custody/offload/span-offload.pub.pem",
  "recipient_sha256": "<the keygen fingerprint>",
- "stage_root": "/Users/edr/night-custody/offload",
+ "stage_root": "/Users/edr/night-custody/offload/span-offload",
  "marker_dir": "/Users/Shared/JouleWise/desk-copy",
  "openssl": "/usr/bin/openssl",
  "backend": {"kind": "rclone", "rclone": "/opt/homebrew/bin/rclone",
              "rclone_config": "/Users/edr/.config/rclone/rclone.conf",
-             "remote": "jwoffload:JouleWise-offload", "hash_type": "md5", "timeout_s": 5400}}
+             "remote": "jwoffload:JouleWise-offload", "hash_type": "md5", "timeout_s": 5400},
+ "forbid_paths": ["/Users/edr/night-custody/magistrate/desk_fence.json"],
+ "default_budget_s": 5400}
 ```
 
-   The config refuses unknown keys, so a private key (`identity`) cannot be put in it.
+   The config refuses unknown keys, so a private key (`identity`) cannot be put in it. The stage root is a
+   directory of its own (`mkdir -p` it once): item 347's interim stages under `offload/` are not touched.
 8. Probe with synthetic bytes only, never a span: make a scratch directory of random files, run
    `offload` with a copy of the config whose `marker_dir` is a scratch directory and a plan id such as
    `probe-offload-20261116`, then `pull` it on the Air into a scratch `--dest-root` and compare the two
    manifests. Delete the probe's remote folder afterwards. If `rclone lsjson --hash --hash-type sha256`
-   on the probe shows a SHA-256 for every file, `hash_type` may be `sha256`.
+   on the probe shows a SHA-256 for every file, `hash_type` may be `sha256`. No marker from this tool counts
+   for a copy gate until this probe's pull has succeeded once with the production keys.
 
 ## The close step (magistrate or controller)
 
