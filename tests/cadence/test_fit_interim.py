@@ -1015,8 +1015,9 @@ class Schemas(unittest.TestCase):
         for sc in ("exact", "noisy", "onset_not_estimable", "few_hot_days", "inactive_fan", "onsets_one_cell"):
             _, en, _, _ = dataset(sc)
             s1 = stage1_of(sc)
-            self.assertEqual(V.errors(json.loads(json.dumps(s1)), s1_schema), [], sc)
-            out = json.loads(json.dumps(F.stage2(s1, rehash(s1), en)))
+            stamp = {"allow_draft": True, "manifest_sha256": "0" * 64}   # the CLI stamps these (round 2)
+            self.assertEqual(V.errors(dict(json.loads(json.dumps(s1)), **stamp), s1_schema), [], sc)
+            out = dict(json.loads(json.dumps(F.stage2(s1, rehash(s1), en))), **stamp)
             for ch in F.CHANNELS:                  # PENDING in #793's schema (Mythos cold seat 9's print)
                 for k in PENDING_O_CHANNEL_FIELDS:
                     if k not in out_schema["$defs"]["channel_fit"]["properties"]:

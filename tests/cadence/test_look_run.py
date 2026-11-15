@@ -25,6 +25,7 @@ try:  # the fit needs numpy; the dependency-free core shards run without it (CI'
     from joulewise.cadence_looks import fit_interim as F
     from scripts import cadence_look_run as R
     from scripts import cadence_look_synth as synth
+    from joulewise.cadence_looks import manifest as M
 except ModuleNotFoundError as _exc:  # pragma: no cover
     if _exc.name != "numpy":
         raise
@@ -34,6 +35,9 @@ else:
 
 
 def load_tests(loader, tests, pattern):
+    global _REAL_UNPINNED
+    if _NUMPY_MISSING is None and _REAL_UNPINNED is None:
+        _REAL_UNPINNED = M.unpinned_loaded_modules
     """Without numpy the module loads and reports one skip, so shard discovery does not error."""
     if _NUMPY_MISSING is None:
         return tests
@@ -162,9 +166,20 @@ def run_cli(argv):
     if argv[0] == "stage2" and "--looks" not in argv:
         argv += ["--looks", looks_file(argv[argv.index("--stage1-sha256") + 1])]
     out, err = io.StringIO(), io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), \
+            unittest.mock.patch.object(M, "unpinned_loaded_modules", _unpinned_outside_tests):
         rc = R.main(argv)
     return rc, out.getvalue(), err.getvalue()
+
+
+_REAL_UNPINNED = None
+
+
+def _unpinned_outside_tests(doc, repo):
+    """In-process runs load the test modules and the generator, which no manifest pins. Those (and only those)
+    are dropped here; the guard itself runs live in CliSubprocess."""
+    return [x for x in _REAL_UNPINNED(doc, repo)
+            if not x.startswith(("tests/", "scripts/cadence_look_synth.py"))]
 
 
 class Stage1Custody(unittest.TestCase):
@@ -824,3 +839,35 @@ class RoundTwoCli(unittest.TestCase):
         base = F.stage1(self.c.li, "0" * 64)["counts"]["excluded_by_rule"]
         got = F.stage1(li, "0" * 64)["counts"]["excluded_by_rule"]
         self.assertEqual(got, base)
+
+
+class CliSubprocess(unittest.TestCase):
+    """The two stages as real processes (python -I -B), where the unpinned-module guard runs live: both exit 0,
+    and each output's code_sha256 names exactly the repository files that process loaded."""
+
+    def test_both_stages_in_a_fresh_interpreter(self):
+        import subprocess
+        import sys
+        li, en, _ = synth.build("exact")
+        man = pinned_manifest()
+        with tempfile.TemporaryDirectory() as d:
+            ip, ep, s1p, op = (os.path.join(d, n) for n in ("li.json", "en.json", "s1.json", "o.json"))
+            wb(ip, synth.dump(li))
+            wb(ep, synth.dump(en))
+            cli = str(REPO / "scripts/cadence_look_run.py")
+            r = subprocess.run([sys.executable, "-I", "-B", cli, "stage1", "--input", ip, "--out", s1p,
+                                "--manifest", man, "--allow-draft"], capture_output=True, text=True, timeout=600)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            h = R.sha256_file(s1p)
+            r = subprocess.run([sys.executable, "-I", "-B", cli, "stage2", "--stage1", s1p, "--stage1-sha256", h,
+                                "--energy", ep, "--out", op, "--manifest", man, "--allow-draft",
+                                "--looks", looks_file(h)], capture_output=True, text=True, timeout=600)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            d1, o = rj(s1p), rj(op)
+        for doc in (d1, o):
+            files = {k for k in doc["code_sha256"] if not k.startswith("input:")}
+            self.assertIn("joulewise/cadence_looks/fit_interim.py", files)
+            self.assertIn("scripts/cadence_look_run.py", files)
+            self.assertFalse([f for f in files if f.startswith("tests/")])
+            self.assertIs(doc["allow_draft"], True)
+        self.assertEqual(d1["code_sha256"]["input:roster_sha256"], d1["input_sha256"])   # level R stands as roster

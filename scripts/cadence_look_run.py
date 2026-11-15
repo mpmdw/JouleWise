@@ -63,20 +63,10 @@ def sha256_file(path):
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def code_hashes(extra=()):
-    """Every pinned file the stage ran (Sol N2 / Mythos 3; the manifest builder's round-2 contract): the fit and the
-    CLI, `extra` (stage 2: the step 3 file), and fit.dependencies except the runtime sensor config."""
-    out = {}
-    paths = list(CODE_PATHS) + list(extra)
-    if _VERIFIED:
-        doc, _ = _VERIFIED[0]
-        paths += [path for where, path, _ in M.code_refs(doc)
-                  if where.startswith("fit.dependencies") and path != "configs/align/v4/r1_runtime.json"]
-    for rel in dict.fromkeys(paths):
-        p = ROOT / rel
-        if p.is_file():
-            out[rel] = sha256_file(p)
-    return out
+def code_hashes():
+    """Every repository source file this process has loaded, with its sha256 (M.loaded_repo_files; Sol N2 /
+    Mythos 3). Taken when the stage's output is built, after everything it ran has been imported."""
+    return M.loaded_repo_files(ROOT)
 
 
 _VERIFIED = []
@@ -518,7 +508,7 @@ def cmd_stage1(a):
             raw = f.read()
         look_input = json.loads(raw)
         input_sha = hashlib.sha256(raw).hexdigest()
-        extra = {}
+        extra = {"roster_sha256": input_sha}        # a level-R run has no roster: its input file stands in
     else:
         roster = _json(a.roster)
         rules34 = _json(a.rules_3_4)
@@ -563,11 +553,9 @@ def cmd_stage2(a):
     F.stage2_preflight(s1)                          # refuses before any energy file is opened
     if a.energy:
         energy = _json(a.energy)
-        extra = ()
     else:
         energy = read_segment_energy(s1, span_dirs(a.custody, a.span_dir), a.step3_module)
-        extra = ("joulewise/cadence_looks/step3_energy_ratios.py",)
-    return _stamp(F.stage2(s1, a.stage1_sha256, energy, code_hashes(extra)), a)
+    return _stamp(F.stage2(s1, a.stage1_sha256, energy, code_hashes()), a)
 
 
 def main(argv=None):
