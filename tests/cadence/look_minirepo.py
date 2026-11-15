@@ -82,16 +82,17 @@ def git_commit(root, message, *, publish=True):
         git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
 
 
-def run(argv, cwd, check=False):
-    r = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True, timeout=300)
+def run(argv, cwd, check=False, env=None):
+    r = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True, timeout=300, env=env)
     if check and r.returncode != 0:
         raise AssertionError(f"{argv[2:4]} exit {r.returncode}: {r.stdout[-800:]} {r.stderr[-800:]}")
     return r
 
 
-def py(root, rel, *args):
-    """Run a copied entry point as a file under -I, from outside the copy."""
-    return run([sys.executable, "-I", "-B", str(root / rel), *map(str, args)], tempfile.gettempdir())
+def py(root, rel, *args, tmpdir=None):
+    """Run a copied entry point as a file under -I, from outside the copy; ``tmpdir``: the child's private TMPDIR."""
+    env = None if tmpdir is None else {**os.environ, "TMPDIR": str(tmpdir)}
+    return run([sys.executable, "-I", "-B", str(root / rel), *map(str, args)], tmpdir or tempfile.gettempdir(), env=env)
 
 
 def commit(root, *, stage1_sha256=None, roster_sha256=None, verdicts_sha256=None, publish=True, git_commit_it=True):

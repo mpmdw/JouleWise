@@ -1069,13 +1069,17 @@ class StaleBytecode(Base):
                 "assemble": ("scripts/cadence_look_manifest.py", "assemble", "--manifest", mini / mr.MANIFEST,
                              "--stage1", d / "s1.json", "--fit", d / "s1.json", "--step3", d / "s1.json",
                              "--analyst-seat", "t", "--out", d / "o.json")}
-        prefixes = lambda: set(Path(tempfile.gettempdir()).glob("jw-look-pyc-*"))
-        before = prefixes()
+        # Mythos r5 N9: the children get a private temp directory, so no other process's prefix bears on the check
+        private = tmpdir(self, "lm-pyc-private-")
         for name, (rel, *args) in runs.items():
-            r = mr.py(mini, rel, *args)
+            r = mr.py(mini, rel, *args, tmpdir=private)
             self.assertEqual(r.returncode, 1, (name, r.stdout, r.stderr))
             self.assertIn("a final check needs status 'committed'", r.stdout, name)   # the source's verify_pins ran
-        self.assertLessEqual(prefixes(), before)                           # each run removes its own prefix
+            self.assertEqual(sorted(p.name for p in private.iterdir()), [], name)   # each run removes its own prefix
+        control = subprocess.run([sys.executable, "-I", "-B", "-c", "import tempfile; print(tempfile.gettempdir())"],
+                                 capture_output=True, text=True, timeout=60, env={**__import__("os").environ,
+                                                                                    "TMPDIR": str(private)})
+        self.assertEqual(Path(control.stdout.strip()).resolve(), private.resolve())   # the prefix would land there
 
     def test_cached_bytecode_names_a_module_with_a_cache_file(self):
         import sys
