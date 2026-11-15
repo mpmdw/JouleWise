@@ -36,6 +36,7 @@ BLOCK = 256
 START_MAX_AGE_S = 2.0
 UNOBSERVED_GAP_S = 2.0
 OK_PM = ("Nominal", "Unknown", None)
+OFF_KINDS = ("os_level_above_0", "journal_pm_state_off", "native_pm_state_off")   # interface §3.1 order
 PREFIX = {"1.10": 3724, "1.30": 3151, "1.374": 2981}
 CELLS = (2000, 10000, 19458)
 RULES = ("ran_to_cap", "g0_released", "sidecar_coverage", "km003c_clean", "not_a_contaminated_attempt",
@@ -323,7 +324,8 @@ def first_off(turn):
     if not offs:
         return None, None
     t_off = min(x for x, _ in offs)
-    return t_off - ts, "+".join(sorted(k for x, k in offs if x == t_off))
+    # simultaneous kinds join in the interface's listed order (OFF_KINDS), not sorted
+    return t_off - ts, "+".join(k for k in OFF_KINDS if any(x == t_off and w == k for x, w in offs))
 
 
 def unobserved_at(turn):
@@ -561,11 +563,12 @@ def linear_predictor(L, model):
 
 
 def tau_hat(L, model):
-    """RL-166 Q4 (B-1a unchanged): max(0, the linear predictor); 0 for a leg whose start is out of state."""
-    if model is None:
-        return None
+    """RL-166 Q4 (B-1a unchanged): 0 for a leg whose start is out of state, whatever the onset model's status;
+    otherwise max(0, the linear predictor), or None when the onset model is not estimable."""
     if L["start"]["state"] == "start_out_of_state":
         return 0.0
+    if model is None:
+        return None
     return max(0.0, linear_predictor(L, model))
 
 
@@ -766,7 +769,8 @@ def stage1(look_input, input_sha256, code_sha256=None):
         L = legs_d[k]
         turn = L.pop("_turn")
         if turn is not None:
-            L["tau_hat_s"] = tau_hat(L, model) if L["start"]["z"] is not None else None
+            L["tau_hat_s"] = (tau_hat(L, model) if (L["start"]["z"] is not None
+                                                    or L["start"]["state"] == "start_out_of_state") else None)
             off = L["state"]["first_off_s"]
             for s in L["segments"]:
                 s["hot"] = bool(s["kind"] == "decode" and off is not None

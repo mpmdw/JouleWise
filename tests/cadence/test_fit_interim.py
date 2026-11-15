@@ -205,7 +205,8 @@ class Branches(unittest.TestCase):
         for ch in F.CHANNELS:
             self.assertNotIn("delta", out["channels"][ch]["columns"])
             self.assertEqual(len(out["channels"][ch]["covariance"]), 8)
-        self.assertTrue(all(L["tau_hat_s"] is None for L in s1["legs"]))
+        self.assertTrue(all(L["tau_hat_s"] is None for L in s1["legs"]
+                            if not (L.get("start") and L["start"]["state"] == "start_out_of_state")))
 
     def test_few_hot_days_is_not_evaluable(self):
         _, out, _ = self.run2("few_hot_days")
@@ -1043,3 +1044,27 @@ class RL166c(unittest.TestCase):
                 seg[i] = 0.0
         with self.assertRaisesRegex(F.LookInputError, "hot-stretch"):
             F.stage2(s1, rehash(s1), e2)
+
+
+class Agreement(unittest.TestCase):
+    """The two level-D fields the first twin agreement run found (lead's ruling on F1 and F2)."""
+
+    def test_f1_simultaneous_kinds_join_in_interface_order(self):
+        turn = {"turn_start_s": 100.0, "last_token_s": 200.0,
+                "journal": [{"t_s": 150.0, "os_level": 1, "pm_state": "Moderate", "pm_fresh": True}],
+                "native_pm": [{"t_end_s": 150.0, "state": "Heavy"}]}
+        self.assertEqual(F.first_off(turn), (50.0, "os_level_above_0+journal_pm_state_off+native_pm_state_off"))
+        turn["journal"][0]["os_level"] = 0
+        self.assertEqual(F.first_off(turn), (50.0, "journal_pm_state_off+native_pm_state_off"))
+        turn["journal"][0].update(os_level=2, pm_state="Nominal")
+        self.assertEqual(F.first_off(turn), (50.0, "os_level_above_0+native_pm_state_off"))
+
+    def test_f2_out_of_state_tau_is_zero_when_not_estimable(self):
+        s1 = stage1_of("onset_not_estimable")
+        self.assertEqual(s1["onset"]["status"], "not_estimable")
+        oos = [L for L in s1["legs"] if L.get("start") and L["start"]["state"] == "start_out_of_state"]
+        self.assertTrue(oos)
+        for L in oos:
+            self.assertEqual(L["tau_hat_s"], 0.0, L["leg_key"])
+        ins = [L for L in s1["legs"] if L["in_energy_fit"] and L["start"]["state"] == "in_state"]
+        self.assertTrue(all(L["tau_hat_s"] is None for L in ins))
