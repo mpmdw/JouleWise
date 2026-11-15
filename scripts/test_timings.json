@@ -89,6 +89,7 @@
     }
   },
   "seconds_by_module": {
+    "tests.test_ci_reusable": 1.0,
     "tests.align.test_analysis_budget_pilot": 133.61,
     "tests.align.test_analysis_metadata_baseline": 185.989,
     "tests.align.test_apple_campaign": 98.657,

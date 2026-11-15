@@ -13,6 +13,19 @@ import tempfile
 import time
 import unittest
 
+# The scripts imported below rewrite os.environ at import time (PYTHONNOUSERSITE,
+# PATH, git config); restore it when this module finishes so a later module in
+# the same shard worker sees the interpreter's real environment.
+_ENV_BEFORE_IMPORT = dict(os.environ)
+
+
+def _restore_environ():
+    os.environ.clear()
+    os.environ.update(_ENV_BEFORE_IMPORT)
+
+
+unittest.addModuleCleanup(_restore_environ)
+
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 from b6_r12_session_fixture import command, prepare, export_chain_inputs, prepare_interpreters
