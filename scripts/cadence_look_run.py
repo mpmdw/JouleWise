@@ -46,6 +46,7 @@ if str(ROOT) not in sys.path:
 
 from joulewise.cadence_looks import fit_interim as F  # noqa: E402
 from joulewise.cadence_looks import manifest as M  # noqa: E402
+from joulewise.cadence_looks import inclusion_34 as I34  # noqa: E402
 
 STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
 FAN_KEYS = ("F0Ac", "F1Ac")          # configs/align/v4/r1_runtime.json sensors.fan_keys
@@ -522,6 +523,12 @@ def cmd_stage1(a):
     if a.allow_draft and look_input.get("synthetic") is not True:
         raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
     out = F.stage1(look_input, input_sha, code_hashes())
+    # RL-172a's soak-retry print, from the runner receipts (none in a level-R run)
+    if a.input:
+        out["soak_retries"] = I34.soak_retries({})
+    else:
+        sdir_of = span_dirs(a.custody, a.span_dir)
+        out["soak_retries"] = I34.soak_retries({e["span_id"]: Path(sdir_of(e["span_id"])) for e in roster})
     if not a.input:
         stage2_preflight(out, span_dirs(a.custody, a.span_dir))
     if extra:

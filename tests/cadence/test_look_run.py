@@ -913,3 +913,36 @@ class CliSubprocess(unittest.TestCase):
             self.assertFalse([f for f in files if f.startswith("tests/")])
             self.assertIs(doc["allow_draft"], True)
         self.assertEqual(d1["code_sha256"]["input:roster_sha256"], d1["input_sha256"])   # level R stands as roster
+
+
+class CommittedLedger(unittest.TestCase):
+    """Stage 2 without --allow-draft reads the committed ledger (manifest.require_stage1_committed) on a pinned copy
+    of the look's files (look_minirepo): it runs when LOOKS.json at HEAD names this stage-1 hash and roster, and
+    refuses when it names another stage-1 hash."""
+
+    def test_stage2_against_the_committed_ledger(self):
+        from tests.cadence import look_minirepo as mr
+        c = _Custody.get()
+        mini = mr.mini_repo(self)
+        mr.commit(mini)                                     # the manifest committed; no stage-1 hash yet
+        d = tempfile.mkdtemp(prefix="jw-look-committed-")
+        self.addCleanup(lambda: shutil.rmtree(d, ignore_errors=True))
+        man = mini / mr.MANIFEST
+        s1p, op = os.path.join(d, "s1.json"), os.path.join(d, "o.json")
+        r = mr.py(mini, "scripts/cadence_look_run.py", "stage1", "--roster", c.paths["roster.json"],
+                  "--custody", c.root, "--rules-3-4", c.paths["rules_3_4.json"], "--out", s1p, "--manifest", man)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        h = R.sha256_file(s1p)
+        roster = rj(s1p)["code_sha256"]["input:roster_sha256"]
+        mr.commit(mini, stage1_sha256=h, roster_sha256=roster)
+        r = mr.py(mini, "scripts/cadence_look_run.py", "stage2", "--stage1", s1p, "--stage1-sha256", h,
+                  "--custody", c.root, "--out", op, "--manifest", man)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIs(rj(op)["allow_draft"], False)
+        mr.commit(mini, stage1_sha256="9" * 64, roster_sha256=roster)     # the ledger names another stage-1 file
+        os.unlink(op)
+        r = mr.py(mini, "scripts/cadence_look_run.py", "stage2", "--stage1", s1p, "--stage1-sha256", h,
+                  "--custody", c.root, "--out", op, "--manifest", man)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("stage-1 sha256", r.stderr)
+        self.assertFalse(os.path.exists(op))
