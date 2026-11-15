@@ -1,0 +1,601 @@
+{
+ "desk_stops": [],
+ "diffs": [],
+ "legs": [
+  {
+   "ac_powermode": 0,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 201.896139,
+     "hand": 201.896139
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L004",
+     "hand": "L004"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1245.7,
+     "hand": 1245.7
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 201.896139417,
+   "g0_s_record": 201.896139417,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L004",
+   "leg_status": "complete",
+   "load_longest_run_over_0p5_s": 7,
+   "load_max_cores": 1.56,
+   "load_max_gap_s": 1.374329083133489,
+   "load_samples": 1245,
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.087542167,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 3703962298,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1220,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1071601771,
+    "sample_fraction": 0.9991803278688525,
+    "valid_samples": 1219
+   },
+   "wall_s_attempt": 1245.7107949256897,
+   "wall_s_stage": 1245.7106420993805
+  },
+  {
+   "ac_powermode": 0,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 209.014619,
+     "hand": 209.014619
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L005",
+     "hand": "L005"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1253.1,
+     "hand": 1253.1
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 209.014619062,
+   "g0_s_record": 209.014619062,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L005",
+   "leg_status": "complete",
+   "load_longest_run_over_0p5_s": 4,
+   "load_max_cores": 2.571,
+   "load_max_gap_s": 1.2165325838141143,
+   "load_samples": 1252,
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.081431542,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 786901938,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1229,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 0,
+    "max_interval_ns": 1079283041,
+    "sample_fraction": 1.0,
+    "valid_samples": 1229
+   },
+   "wall_s_attempt": 1253.109589099884,
+   "wall_s_stage": 1253.1093859672546
+  },
+  {
+   "ac_powermode": 0,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 210.10458,
+     "hand": 210.10458
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L006",
+     "hand": "L006"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1251.9,
+     "hand": 1251.9
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 210.104579541,
+   "g0_s_record": 210.104579541,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L006",
+   "leg_status": "complete",
+   "load_longest_run_over_0p5_s": 2,
+   "load_max_cores": 1.6640000000000001,
+   "load_max_gap_s": 1.1629106672480702,
+   "load_samples": 1251,
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.070875709,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2578335113,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1228,
+    "gaps_ns": [
+     [
+      2701954462158874,
+      2701955635385333
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1173226459,
+    "sample_fraction": 0.998371335504886,
+    "valid_samples": 1226
+   },
+   "wall_s_attempt": 1251.9158482551575,
+   "wall_s_stage": 1251.9156591892242
+  },
+  {
+   "ac_powermode": 0,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 199.980166,
+     "hand": 199.980166
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L007",
+     "hand": "L007"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1244.3,
+     "hand": 1244.3
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 199.980166334,
+   "g0_s_record": 199.980166334,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L007",
+   "leg_status": "complete",
+   "load_longest_run_over_0p5_s": 2,
+   "load_max_cores": 2.199,
+   "load_max_gap_s": 1.213381249923259,
+   "load_samples": 1243,
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.070714875,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 395415709,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1219,
+    "gaps_ns": [
+     [
+      2703198023522187,
+      2703199284105958
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1260583771,
+    "sample_fraction": 0.9975389663658737,
+    "valid_samples": 1216
+   },
+   "wall_s_attempt": 1244.2795362472534,
+   "wall_s_stage": 1244.279335975647
+  }
+ ],
+ "span": {
+  "agent_census": {
+   "argv": [
+    "/usr/bin/pgrep",
+    "-a",
+    "-lf",
+    "[c]odex|[c]laude"
+   ],
+   "first_after_start_s": 0.066352083,
+   "hits": 0,
+   "last_before_end_s": 44.239187875,
+   "max_gap_s": 30.269548625,
+   "polls": 236
+  },
+  "batch_windows": [
+   "02:00-02:35"
+  ],
+  "close_steps": {
+   "close-volumes": 0,
+   "restore": 0,
+   "stop-agents": 0,
+   "stop-meter": 0,
+   "stop-volumes": 0
+  },
+  "deadlines_files": [],
+  "feeds_proven_stopped": {
+   "agents": true,
+   "meter": true,
+   "volumes": true
+  },
+  "legs_finished": 4,
+  "legs_planned": 4,
+  "load_redos_used": 0,
+  "meter": {
+   "bad_polls": 0,
+   "elapsed_s": 7114.81260675,
+   "polls": 35574,
+   "present": true,
+   "proven_stopped": true,
+   "usb_errors": 0
+  },
+  "mock": false,
+  "n_steps": 27,
+  "rc": 0,
+  "read_power": {
+   "ac_powermode": 0,
+   "automatic": true,
+   "rc": 0
+  },
+  "restore": {
+   "argv": [
+    "sudo",
+    "-n",
+    "/usr/bin/pmset",
+    "-c",
+    "powermode",
+    "0"
+   ],
+   "exit_code": 0,
+   "marker": null,
+   "marker_removed": false,
+   "observed": 0,
+   "ok": true,
+   "rc": 0,
+   "stderr": ""
+  },
+  "soak_rc": 0,
+  "soak_s": 1800.524542093277,
+  "span_result": {
+   "chain_exit_code": 0,
+   "chain_outcome": "COMPLETE",
+   "fault": false,
+   "outcome": "MEASURED_OK",
+   "verdict": "4/4 legs run"
+  },
+  "stages_end_rc_nonzero": [],
+  "stages_unclosed": [],
+  "steps_nonzero": [],
+  "stops_by_hand": [],
+  "volume_census": [
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ]
+  ]
+ }
+}
