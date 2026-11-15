@@ -1,13 +1,13 @@
 {
   "armed": null,
-  "next_observable": "item 344's Check of dev-02-s02; then either the lead's marker (Air copy) or, after 30 min without it, item 347's cloud offload; then F0 under item 346",
+  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as RUN_STATE the next item: the receipt asserts, the per-leg admitted lines with g0_role and span_reference, the desk bundle, the restore lines, measurement_mode verify again, and the RL-150 R1 / RL-158 Q1 print (gates nothing)",
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v1",
-  "source_item": "348",
-  "source_item_heading_date": "2026-11-15",
+  "source_item": "355",
+  "source_item_heading_date": "2026-11-14",
   "wait": {
-    "deadline_epoch_s": 1794859200,
+    "deadline_epoch_s": 1794924120,
     "observable": "none",
-    "on_early_or_refused": "as item 347"
+    "on_early_or_refused": "VOID, so that nothing of this item ever launches (mail the lead; a new item is needed), if `dev-02-s03` closed without a clean receipt (RL-173 D.2) or once 24 h have passed since the issue (RL-173 D.5). Otherwise: any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen inside (dev-02's close + the close interval) to 23:59:59 PST Mon 16 Nov (epoch 1794902399), outside 10:50:00-13:15:00: NOTHING of this item launches (a later t0 needs a new item); mail the lead, and the standing F0 item applies. A span that ran but ends with any named stop or a receipt rc≠0: nothing relaunches, nothing is re-run, nothing else is queued; mail the lead. Do not retry, do not extend, do not reuse OUT. The remainder (L004-L012) is NOT in this item: it arms only by its own item after the lead's hand-read records L002's G0 release (RL-158 §2)"
   }
 }
