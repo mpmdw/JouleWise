@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""LEAD-RULINGS-2 R10-2: the pre-declared, mechanical W1 budget procedure after R1.
+"""The W1 budget procedure after R1: RL-148 section 2, RL-149 section 1.5, RL-152 section 1.2.
 
 Blind by construction: it reads only R1 timing and count fields (whitelisted
 in ``timing_view``; never an energy, U5, beta_T, residual or score) plus the
-WP18 X turn count, and computes ruling 1(f)'s branch with the kit's own
-functions, so it cannot disagree with ``--check``.
+WP18 X turn count, and computes the decision with the kit's own functions,
+so it cannot disagree with ``--check``.
 
-  decide        print the step and, for R10-2 branch (a) or (b), write the
-                receipt draft (lead_signature PENDING) for the lead to sign
-  sign          set the lead's signature line and write the canonical receipt
-                the kit reads (registration/ruling_1f_receipt.json)
+  decide        print the step and the inputs to set; it drafts no receipt
+  sign          set the lead's signature line on a ruling 1(f) receipt draft
+                and write the canonical receipt the kit reads
+                (registration/ruling_1f_receipt.json); ``decide`` no longer
+                drafts one (RL-148 section 2)
   backfill-x-g  copy X-G's admitted turns, deadman flag and phase seconds from
                 r1_result.json into r1_slots.x_g, for an R1 record written
                 before the driver recorded them (R10-4)
@@ -21,20 +22,19 @@ functions, so it cannot disagree with ``--check``.
                 the three gated D deadman_budget rows, binding its sha256; the
                 R1 driver does not record per-turn counts
 
-Steps of ``decide`` (R10-2, recorded before any R1 number exists):
-  0. any inconclusive segment: R1-RERUN (R7-3, the magistrate's call); stop.
-  1. the current rule fits at some B_D >= 6,144: CURRENT-RULE, no receipt.
-  2. G0* = T_dead - holds (projected to 10,240 tokens) - prefill/tool
-     - 10,240/r. If no gated D G0 is censored and ceil(1.25 x the longest
-     released gated D G0 wait) <= G0*:
-     R10-2(a), D arms G0 at floor(G0*) (below 600 s), B_D = 6,144.
-  3. otherwise R10-2(b): 4-bit D next, after its own R1-4bit gated night; the
-     lead rules on it with Ed. (c) (window council) follows if (a) also fails
-     on the 4-bit night.
-R11 (RUN_STATE 212) binds a separate contrast cap/fit on every path.
-Unqualified contrast is predeclared non-veto INCONCLUSIVE; D retains its
-normal/receipt sizing rules. Actual per-turn opportunity is checked at the
-chosen B_D before CURRENT-RULE or branch (a) can be recommended.
+Steps of ``decide`` (RL-148 section 2 withdrew ruling 1(f) for D, with R10-2's
+receipt and 4-bit routes; PR #777 row-2 finding 9):
+  0. any inconclusive segment not released under RL-122 3(a): R1-RERUN (R7-3,
+     the magistrate's call); stop.
+  1. B_D is R1's step-d budget (r1_slots.slots.B_D, at least 6,144); missing or
+     invalid per-turn count evidence at it: R1-RERUN (or a backfill).
+  2. the typical case fits T_dead at the R1 G_turn cap (slots.S7) and the
+     three-turn opportunity at B_D passes: TYPICAL-CASE, with the inputs to set.
+  3. otherwise RESEARCH-LEAD: the research lead rules; there is no automatic
+     route.
+Ruling 1(f)'s worst case is printed (``worst_case_print_only``) and decides
+nothing. R11 (RUN_STATE 212) binds a separate contrast cap/fit; an unqualified
+contrast is a predeclared non-veto INCONCLUSIVE note.
 """
 from __future__ import annotations
 
@@ -51,7 +51,8 @@ if str(ROOT) not in sys.path:
 from scripts import align_v4_kit as kit  # noqa: E402
 
 # The only fields read (R10-2: timing and count fields, never energies).
-SLOT_FIELDS = ('I_D', 'B_D')
+# S7 is the R1 G_turn cap the typical-case bar uses when a G1 timed out (PR #777 row-2 finding 9).
+SLOT_FIELDS = ('I_D', 'B_D', 'S7')
 # phases_s is copied only through _phases, key by key (cold-review LOW-3).
 # RL-148 section 2 / RL-149 section 1.5: gate_waits_s (the run's own G1 waits) and g1_timeouts are the
 # typical-case bar's inputs (align_v4_kit.typical_case_fit); the view keeps them so a kit check on the view
@@ -94,6 +95,9 @@ def timing_view(r1_slots):
 
 
 def _draft(branch, derived, view):
+    """An R10-2 receipt draft from the kit's derivation. ``decide`` no longer calls it (RL-148 section 2,
+    PR #777 row-2 finding 9); the kit still reads a committed ruling 1(f) receipt, and its tests draft one
+    here."""
     d = derived['derivation']
     waits = {run: row['G0_s'] for run, row in derived['inputs']['gated_d'].items()}
     if branch == 'a':
@@ -129,7 +133,15 @@ def _draft(branch, derived, view):
 
 
 def decide(r1_slots, x_max_turns, planning_release=None):
-    """Run R10-2's steps on the timing view. Returns the decision record.
+    """The post-R1 budget decision on the timing view. Returns the decision record.
+
+    RL-148 section 2 (ruling 1(f) withdrawn for D; no R10-2 receipt and no 4-bit path), RL-149 section 1.5
+    and RL-152 section 1.2 (PR #777 row-2 finding 9): B_D is R1's step-d budget (``r1_slots.slots.B_D``;
+    the fit rule no longer lowers it), and W1 needs the typical case to fit (``kit.typical_case_fit`` at the
+    R1 G_turn cap ``slots.S7``) and the three-turn opportunity at that B_D (``kit.turn_opportunity``). Steps:
+    ``R1-RERUN`` (an INCONCLUSIVE segment, or missing count evidence), ``TYPICAL-CASE`` (both pass; the
+    inputs to set), or ``RESEARCH-LEAD`` (either fails: the research lead rules; there is no automatic
+    route). Ruling 1(f)'s worst case is printed for the record and decides nothing.
 
     ``planning_release`` is the lead's RL-122 3(a) record or None: planning-turn
     G0 timeouts it releases do not call for an R1 re-run (kit.check_r1_evidence
@@ -146,61 +158,41 @@ def decide(r1_slots, x_max_turns, planning_release=None):
                            + ': the remedy is an R1 re-run, the magistrate\'s call (R7-3)')}
     slots = view['slots']
     t_dead = kit.l1_t_dead(slots['I_D'], view['max_r1_tail_s'])
-    derived = kit.r10_2_derivation(view, t_dead, x_max_turns)
-    contrast = derived['contrast']
+    b_d = slots.get('B_D')
+    if type(b_d) is not int or b_d < kit.BUDGET_FLOOR:
+        raise ValueError(f'r1_slots.slots.B_D must be the step-d decode budget, an int of at least '
+                         f'{kit.BUDGET_FLOOR} (the kit\'s floor), not {b_d!r}; return to the lead')
+    g_turn = slots.get('S7')
+    contrast = kit.w1_contrast_g0_cap(view, x_max_turns)
     duty = view['duty_bar']
     notes = []
     if not contrast['fits']:
         notes.append('CONTRAST: non-veto ' + contrast['predeclared'])
     if duty.get('pass') is not True:
-        notes.append(f'DUTY BAR: verdict {duty.get("verdict")!r}; --check also needs r1_slots.duty_bar.lead_fallback '
-                     '(ruling 1(e) step) before W1 arms')
-    largest = kit.max_fitting_b_d(view, t_dead)
-    base = {'T_dead_s': t_dead, 'derived': derived, 'notes': notes,
-            'current_rule_largest_fitting_B_D': largest}
-    if largest is not None:
-        opportunity = kit.turn_opportunity(view, largest)
+        notes.append(f'DUTY BAR: verdict {duty.get("verdict")!r}; W1 does not arm on a failed duty bar')
+    typical = kit.typical_case_fit(view, t_dead, g_turn)
+    opportunity = kit.turn_opportunity(view, b_d)
+    worst = kit.ruling_1f_fit(view, b_d, t_dead)
+    base = {'T_dead_s': t_dead, 'B_D': b_d, 'notes': notes, 'typical_case': typical, 'turn_opportunity': opportunity,
+            'worst_case_print_only': worst, 'branch': None, 'receipt_draft': None,
+            'authority': 'RL-148 section 2; RL-149 section 1.5; RL-152 section 1.2'}
+    if opportunity['status'] == 'inconclusive':
+        return {**base, 'step': 'R1-RERUN',
+                'reason': 'R11: missing or invalid per-turn count evidence at B_D: an R1 re-run or a backfill'}
+    if not typical['fits'] or opportunity['status'] != 'pass':
+        why = []
+        if not typical['fits']:
+            why.append('the typical case does not fit T_dead (RL-148 section 2)')
         if opportunity['status'] != 'pass':
-            return {**base, 'step': 'R1-RERUN' if opportunity['status'] == 'inconclusive' else 'R10-2(b)',
-                    'branch': None, 'receipt_draft': None, 'turn_opportunity': opportunity,
-                    'reason': 'R11: missing count evidence or fewer than three turns at chosen B_D'}
-        return {**base, 'step': 'CURRENT-RULE', 'branch': None, 'receipt_draft': None,
-                'turn_opportunity': opportunity, 'contrast_predeclared': contrast['predeclared'],
-                'set_inputs': {'R1.B_D': largest, 'R1.T_dead': t_dead,
-                               'R1.thermal_policy.g0_cap_s': kit.w1_g0_cap(view)['value_s'],
-                               'R1.thermal_policy.contrast_g0_cap_s': contrast['value_s'],
-                               'R1.thermal_policy.contrast_fit': contrast}}
-    branch = derived['branch']
-    if branch == 'rerun':
-        return {**base, 'step': 'R1-RERUN', 'branch': None, 'receipt_draft': None,
-                'reason': 'no gated D run decoded a token: no gated rate or holds evidence (cold-review LOW-4)'}
-    if branch in ('current', 'lead'):   # current: unreachable here (checked above), kept fail closed
-        raise ValueError(f'R10-2: derivation branch {branch!r} (G0* {derived["derivation"]["G0_star_s"]:.1f} s); '
-                         'return to the lead')
-    top = view['slots'].get('B_D')
-    if branch == 'a' and (type(top) is not int or top < kit.BUDGET_FLOOR):
-        raise ValueError(f'R10-2(a) arms B_D {kit.BUDGET_FLOOR}, but r1_slots.slots.B_D {top} is below it; the fit '
-                         'rule only lowers B_D (cold-review LOW-5); return to the lead')
-    opportunity = kit.turn_opportunity(view, kit.BUDGET_FLOOR)
-    if branch == 'a' and opportunity['status'] != 'pass':
-        return {**base, 'step': 'R1-RERUN' if opportunity['status'] == 'inconclusive' else 'R10-2(b)',
-                'branch': None, 'receipt_draft': None, 'turn_opportunity': opportunity,
-                'reason': 'R11: missing count evidence or fewer than three turns at chosen B_D'}
-    out = {**base, 'step': f'R10-2({branch})', 'branch': branch, 'receipt_draft': _draft(branch, derived, view),
-           'turn_opportunity': opportunity, 'contrast_predeclared': contrast['predeclared']}
-    if branch == 'a':
-        out['set_inputs'] = {'R1.B_D': kit.BUDGET_FLOOR, 'R1.T_dead': t_dead,
-                             'R1.thermal_policy.g0_cap_s': derived['derivation']['d_g0_cap_s'],
-                             'R1.thermal_policy.contrast_g0_cap_s': contrast['value_s'],
-                             'R1.thermal_policy.contrast_fit': contrast,
-                             'R1.thermal_policy.g0_cap_receipt': {
-                                 'authority': kit.thermal_gates.R10_G0_CAP_AUTHORITY,
-                                 'receipt_sha256': 'the sha256 that `sign` prints'}}
-    else:
-        out['projection_print_only'] = {
-            'r4_tok_per_s_projection': 1.70 * derived['inputs']['r_decode_tok_per_s'],
-            'note': 'a projection, never admission evidence: the 4-bit branch needs its own R1-4bit gated night'}
-    return out
+            why.append(f'the three-turn opportunity at B_D {b_d} is {opportunity["status"]} (RL-152 section 1.2)')
+        return {**base, 'step': 'RESEARCH-LEAD',
+                'reason': '; '.join(why) + ': no R10-2 receipt and no 4-bit route (RL-148 section 2); '
+                          'the research lead rules'}
+    return {**base, 'step': 'TYPICAL-CASE', 'contrast_predeclared': contrast['predeclared'],
+            'set_inputs': {'R1.B_D': b_d, 'R1.T_dead': t_dead,
+                           'R1.thermal_policy.g0_cap_s': kit.w1_g0_cap(view)['value_s'],
+                           'R1.thermal_policy.contrast_g0_cap_s': contrast['value_s'],
+                           'R1.thermal_policy.contrast_fit': contrast}}
 
 
 def sign(draft, signature):
@@ -294,7 +286,7 @@ def main(argv=None):
     p = sub.add_parser('decide')
     p.add_argument('--r1-slots', type=Path, default=ROOT / kit.R1_SLOTS)
     p.add_argument('--inputs', type=Path, default=ROOT / kit.INPUTS, help='read for WP18.X.max_turns only')
-    p.add_argument('--draft-out', type=Path, help='where to write the receipt draft (branch (a) or (b))')
+    p.add_argument('--draft-out', type=Path, help='where a receipt draft would be written; decide drafts none since RL-148 section 2')
     p.add_argument('--planning-release', type=Path, default=ROOT / kit.R1_PLANNING_RELEASE,
                    help='the lead\'s RL-122 3(a) record; used only if the file exists')
     p = sub.add_parser('sign')

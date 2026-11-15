@@ -32,8 +32,10 @@ amendment):
 RL-152 section 1.1 (RL-149 section 1.7, RL-145 close section 5): the heater key is the
 configured ``s_slow`` (TV1h), an alias of the fast key TV0h, and TV1h has read a multiple of
 5 C on isolated rows. Every G0 interval prints ``fast_slow_unequal_last_300s``: the number of
-readings in its last 300 s whose ``s_fast`` and ``s_slow`` values differ (both valid). Print
-only; the class does not read it. Before signing a planning release the lead reads it: a
+readings in its last 300 s whose ``s_fast`` and ``s_slow`` values differ, beside
+``fast_slow_pairs_last_300s``, the number of readings where both were valid and compared; the
+count is None when no pair was compared (RL-153 section 1.2 finding 1). Print only; the class
+does not read it. Before signing a planning release the lead reads it: a
 non-zero count sends that segment to the research lead.
 
 A released G0 is classified ``released`` (nothing to rule). The output is
@@ -60,7 +62,6 @@ JOURNAL = 'align_thermal.jsonl'
 PLANNING = re.compile(r'^planning_turn_R_plus_(\d+)C(?P<suffix>\.g0_(?:timeout|release)\d+|\.rejected\d+)?$')
 PLANNING_OFFSETS = (0, 2, 4)
 MIN_LAST_SAMPLES = 270    # RL-124 item 2: the gate's own 0.9 coverage of 300 s
-FRESH_NS = 2 * NS         # thermal_gates.py: pm observation <= 2 s old
 CLASS_RELEASED, CLASS_3A, CLASS_LEAD = 'released', 'planning-release-3a', 'to-research-lead'
 KIT_SEGMENTS = tuple(f'planning_turn_R_plus_{n}C' for n in PLANNING_OFFSETS)
 OVERRIDE_SOURCE = '--delta-slow-c'
@@ -214,22 +215,42 @@ def analyse_gate(phase, gate, start, readings, delta_slow, delta_source, precool
     if fast and heater and fast != heater and finite(e_ns):
         fast_by_t = {t: v for t, v, *_ in sample_points(readings, fast)}
         pairs = [(fast_by_t.get(t), v) for t, v in values if t >= e_ns - WINDOW_S * NS]
-        row['fast_slow_unequal_last_300s'] = sum(1 for a, b in pairs if a is not None and b is not None and a != b)
+        compared = [(a, b) for a, b in pairs if a is not None and b is not None]
+        # RL-153 section 1.2 finding 1: 0 means "none unequal" only when some pair was compared.
+        row['fast_slow_pairs_last_300s'] = len(compared)
+        row['fast_slow_unequal_last_300s'] = sum(1 for a, b in compared if a != b) if compared else None
     else:
+        row['fast_slow_pairs_last_300s'] = None
         row['fast_slow_unequal_last_300s'] = None
-    row['stale_power_state_samples'] = sum(1 for t, _, _, _, pm in points
-                                           if type(pm) is not int or t - pm > FRESH_NS)
+    # RL-153 section 1.2 finding 2: the stamp rule of every journal reader, bounded on both sides
+    # (rl145_prints.stamp_fresh: within 2 s of the sample, RL-152 section 1.6), on the same age.
+    stamp_fresh = _stamp_rule()
+    fresh = [type(pm) is int and stamp_fresh((t - pm) / NS) for t, _, _, _, pm in points]
+    row['stale_power_state_samples'] = sum(1 for ok in fresh if not ok)
     levels = sorted({p[2] for p in points if p[2] is not None})
-    states = sorted({p[3] for p in points if isinstance(p[3], str)})
+    # PR #777 row-2 finding 2 (RL-149 section 1.6 item 1): a state on a stamp that is not fresh is not
+    # recorded, never Nominal: it is left out of pm_states and counts as an unobserved sample, so the
+    # interval is not "Nominal throughout" and the class is to-research-lead.
+    states = sorted({p[3] for p, ok in zip(points, fresh) if ok and isinstance(p[3], str)})
     row['os_level_max'] = max(levels) if levels else None
     row['os_levels'] = levels
     row['pm_states'] = states
-    row['status_unobserved_samples'] = sum(1 for p in points if p[2] is None or p[3] is None)
+    row['status_unobserved_samples'] = sum(1 for p, ok in zip(points, fresh)
+                                           if p[2] is None or p[3] is None or not ok)
     row['nominal_throughout'] = bool(points) and states == ['Nominal'] and row['status_unobserved_samples'] == 0
     if planning:
         row['precool'] = precool or precool_record(None, base)
     row['classification'], row['reasons'] = classify(row)
     return row
+
+
+def _stamp_rule():
+    """``rl145_prints.stamp_fresh`` (RL-152 section 1.6), importable when this script runs from scripts/."""
+    root = str(Path(__file__).resolve().parents[1])
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from joulewise.align.apple.rl145_prints import stamp_fresh
+    return stamp_fresh
 
 
 def classify(row):

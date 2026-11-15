@@ -2,7 +2,9 @@
 
 Synthetic facts and fake runtime invocations only; no host, journal or study data.
 """
+import contextlib
 from copy import deepcopy
+import io
 import json
 import os
 from pathlib import Path
@@ -345,7 +347,7 @@ class SidecarJournalTests(unittest.TestCase):
         line = pc.d_bank_start_state(self.facts())
         self.assertFalse(line['pass'])
         self.assertEqual(len(line['reasons']), 4)
-        self.assertTrue(all('not recorded' in r for r in line['reasons']))
+        self.assertTrue(all('not recorded: not within 2 s of the sample, or absent' in r for r in line['reasons']))
         self.assertTrue(pc.stamp_fresh(2.0) and pc.stamp_fresh(-0.02))
         self.assertFalse(pc.stamp_fresh(2.0001) or pc.stamp_fresh(None) or pc.stamp_fresh(True))
         import contextlib
@@ -409,6 +411,17 @@ class KitSequenceTests(unittest.TestCase):
         self.assertEqual(table['evaluation']['printed_not_judged']['desk_verdict']['exclusion_reasons'], ['r'])
         self.assertFalse((self.tmp / 'c' / 'r1_slots.json').exists())
         self.assertIs(result['evaluation']['pass'], True)
+
+    def test_the_verdict_and_the_log_are_printed_to_the_terminal(self):
+        # RL-153 section 1.2 note 6, RL-156 section 3.2: finish prints the evaluation's log, RL-152 section
+        # 1.4's line among them, as well as writing the record.
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            result = self.run_c()
+        printed = out.getvalue()
+        self.assertIn('Part C verdict: pass', printed)
+        self.assertIn('three-turn clause not evaluated: one D run', printed)
+        for line in result['evaluation']['log']:
+            self.assertIn(line, printed)
 
     def test_x_g_that_cannot_run_is_left_out_with_a_log_line(self):
         self.x_g_fails = True

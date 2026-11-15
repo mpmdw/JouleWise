@@ -31,9 +31,9 @@ BASE_WINDOW_NS = 10 * NS
 LAST_TOKENS = 512
 FRESH_STAMP_S = 2.0                 # a PM state stamp older than this counts as not recorded (G0's own bound)
 # RL-149 section 1.6 item 1: every reader of the journal's pm_state applies the 2 s age rule; a stale state
-# is "not recorded", never Heavy and never Nominal. The age is taken at the sample's own stamp and has no
-# lower bound (the sidecar reads the status just after the SMC read bracket, so a fresh stamp may follow
-# the sample's stamp by a few ms), as the RL-145 close's row 7 rule is written.
+# is "not recorded", never Heavy and never Nominal. RL-152 section 1.6: the age is taken at the sample's own
+# stamp and the stamp is fresh within 2 s of the sample on either side (the sidecar reads the status just
+# after the SMC read bracket, so a fresh stamp follows the sample's stamp by a few ms); see stamp_fresh.
 CONSECUTIVE_QUIET = 5
 # Continuous load = prefill + decode seconds of a turn. The close names the bin but not its edges;
 # these are the builder's choice (seconds) and are printed with the result.

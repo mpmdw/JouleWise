@@ -458,7 +458,8 @@ def ready_inputs(i_d=300.0, tail=20.0):
     return inputs, slots
 
 
-GATED_PHASES = {'G0': 120.0, 'G1': 150.0, 'H': 90.0, 'decode': 280.0, 'prefill': 120.0, 'tool': 6.0}
+# PR #777 row-2 finding 5: no hold seconds (N_chunk 4,096); G1 + H stays 240 s as before.
+GATED_PHASES = {'G0': 120.0, 'G1': 240.0, 'H': 0.0, 'decode': 280.0, 'prefill': 120.0, 'tool': 6.0}
 
 
 def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
@@ -480,8 +481,8 @@ def r1_record(i_d, tail, *, source=kit.R1_HARDWARE_SOURCE, ac_powermode=0):
                                 'decode_tokens': 14000, 'turn_decode_counts': [2000]*7,
                                 'turn_completed': [True]*7, 'admitted_turns': 7, 'x7': False,
                                 'turn_counts_source_sha256': 'c'*64, 'duty_bar': {'pass': True, 'verdict': 'pass'},
-                                # RL-148/RL-149 typical-case bar: six G1 waits (150 s of G1), none timed out.
-                                'gate_waits_s': {'G1': [25.0] * 6}, 'g1_timeouts': 0}
+                                # RL-148/RL-149 typical-case bar: six G1 waits (240 s of G1), none timed out.
+                                'gate_waits_s': {'G1': [40.0] * 6}, 'g1_timeouts': 0}
                                for i, name in enumerate(kit.GATED_D_RUN_NAMES)],
             'budget_fit_inputs': {'r_decode_tok_per_s': 50.0, 'r_decode_step_d_tok_per_s': 50.0,
                                   'turn_cap_tokens': 4096},
@@ -1071,6 +1072,7 @@ class Round7KitTests(unittest.TestCase):
         inputs, slots = ready_inputs(i_d=0)
         for row in slots['deadman_budget']:
             row['phases_s'].update(G1=0, H=0)
+            row['gate_waits_s'] = {'G1': []}     # PR #777 row-2 finding 5: the waits add up to phases_s.G1
         set_decode_rate(slots, 80.0)
         slots['x_g'] = {'status': 'inconclusive', 'g0_outcome': 'timeout', 'g0_wait_s': 1200}
         cap = slots['g0_cap_w1'] = kit.w1_g0_cap(slots)

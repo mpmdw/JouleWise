@@ -21,12 +21,13 @@ D_bank line):
   run, so the slot session's set clause (one D run with three turns) is not applied.
 - D_bank, start state: at the release sample of G0 and of every G1, and at the first
   reading after each turn's start, the OS thermal level is 0 and the power-management
-  state is Nominal, and the state's stamp is at most 2 s old (older counts as not recorded;
-  G0's own bound; RL-145 close section 2 and row 7, as written: the age is taken at the
-  sample's own stamp and has no lower bound, because the sidecar reads the status just
-  after the SMC read bracket, so a fresh stamp may follow the sample's stamp by a few ms).
-  A sample that matches no journal row is a reason (``no journal row for sample``),
-  never a silent null (RL-149 section 1.2 item 3).
+  state is Nominal, and the state's stamp lies within 2 s of the sample on either side
+  (RL-145 close section 2 and row 7, RL-152 section 1.6; ``rl145_prints.stamp_fresh``). A
+  slightly negative age is fresh: the sidecar reads the status just after the SMC read
+  bracket. The first reading after a turn's start counts only if it lies within 2 s of the
+  start (PR #777 row-2 finding 8). A sample that matches no journal row, or no such first
+  reading, is a reason (``no journal row for sample``), never a silent null (RL-149
+  section 1.2 item 3).
 - The journal is read through ``thermal_gates.sample_rows``, the projection the gate
   itself uses (RL-149 section 1.2 item 1): the Sidecar writes ``reading`` rows, not
   ``sample`` rows.
@@ -170,7 +171,7 @@ def d_bank_start_state(d_bank):
             reasons.append(f"{what}: no journal row for sample")
         elif not ok:
             reasons.append(f"{what}: level {level!r}, state {state!r}, stamp age {age!r} s"
-                           + ("" if fresh else f" (not recorded: older than {STAMP_MAX_AGE_S:g} s or absent)"))
+                           + ("" if fresh else f" (not recorded: not within {STAMP_MAX_AGE_S:g} s of the sample, or absent)"))
     for r in d_bank.get("intervals", []):
         if r.get("kind") in ("G0", "G1") and r.get("outcome") == "released":
             row(f"{r['kind']} release" + ("" if r["kind"] == "G0" else f" (turn {r.get('turn')})"), r.get("release_status"))
@@ -274,8 +275,12 @@ def facts_from_bundle(bundle, *, role):
                              | {"release_status": None if sample is None else _status_with_age(sample)})
     turns = []
     for t in ep.turns:
+        # PR #777 row-2 finding 8: the first reading after the start counts only within 2 s of it; a later one
+        # (a journal gap at the start) is not the start state, and the sample has no journal row.
         first = next((x for x in rows if x["monotonic_ns"] > t.start_ns and isinstance(x.get("status"), dict)
                       and "os_level" in x["status"]), None)
+        if first is not None and first["monotonic_ns"] - t.start_ns > STAMP_MAX_AGE_S * 1e9:
+            first = None
         turns.append({"index": t.index, "start_ns": t.start_ns, "end_ns": t.end_ns, "decode_tokens": t.decode_tokens,
                       "prefill_tokens": t.prefill_tokens,
                       "first_reading_after_start": None if first is None else _status_with_age(first)})
