@@ -291,3 +291,19 @@ class LevelR(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CliGate(unittest.TestCase):
+
+    def test_cli_refuses_a_wrong_stage1_hash_before_stage2(self):
+        li, en, _ = synth.build("exact")
+        with tempfile.TemporaryDirectory() as d:
+            ip, ep, s1p = os.path.join(d, "li.json"), os.path.join(d, "en.json"), os.path.join(d, "s1.json")
+            wb(ip, synth.dump(li))
+            wb(ep, synth.dump(en))
+            self.assertEqual(run_cli(["stage1", "--input", ip, "--out", s1p])[0], 0)
+            with unittest.mock.patch.object(F, "stage2", return_value={}) as st2:
+                rc, _, err = run_cli(["stage2", "--stage1", s1p, "--stage1-sha256", "0" * 64, "--energy", ep,
+                                      "--out", os.path.join(d, "fit.json")])
+            self.assertEqual(rc, 2)
+            st2.assert_not_called()

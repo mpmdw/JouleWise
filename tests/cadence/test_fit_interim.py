@@ -429,3 +429,106 @@ class Refusals(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Pins(unittest.TestCase):
+    """The ruled constants (RL-166 Q3, Q4, Q8; RL-149 §1.3)."""
+
+    def test_constants(self):
+        self.assertEqual(F.QUALIFIED_THRESHOLD, 0.02)
+        self.assertEqual((F.MIN_COUNTED_DAYS, F.MIN_HOT_LEGS_PER_DAY), (3, 3))
+        self.assertEqual((F.ONSET_MIN_UNCENSORED, F.ONSET_MIN_DAYS, F.COUNT_ONLY_CUT_FIXED_S), (12, 3, 116.0))
+        self.assertEqual((F.START_MAX_AGE_S, F.UNOBSERVED_GAP_S, F.BLOCK), (2.0, 2.0, 256))
+        self.assertEqual(F.PREFIX, {"1.10": 3724, "1.30": 3151, "1.374": 2981})
+        self.assertEqual(F.TRIP, {"dev_included": 45, "days": 3, "cell": 10, "start_invalid_frac": 0.10, "hp01": 9})
+        self.assertEqual(F.OK_PM, ("Nominal", "Unknown", None))
+
+
+class Stage2Internals(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        _, cls.en, cls.tr, _ = dataset("noisy")
+        cls.s1 = stage1_of("noisy")
+
+    def test_stage2_runs_the_output_check(self):
+        with unittest.mock.patch.object(F, "output_check", side_effect=ValueError("checked")):
+            with self.assertRaises(ValueError):
+                F.stage2(self.s1, rehash(self.s1), self.en)
+
+    def test_covariance_is_cr1_clustered_by_leg(self):
+        """An independent sandwich, clustered by leg, on the full-data design."""
+        out = F.stage2(self.s1, rehash(self.s1), self.en)
+        c = out["channels"]["gpu_rail"]
+        beta_on = np.array([self.s1["onset"]["coefficients"][k] for k in F.ONSET_COLS])
+        X, y, g = [], [], []
+        for L in self.s1["legs"]:
+            if not L["in_energy_fit"]:
+                continue
+            tau = F.tau_hat(L, beta_on)
+            for s, e in zip(L["segments"], self.en["legs"][L["leg_key"]]["gpu_rail"]["segments"]):
+                X.append(F._design_row(L, s, s["kind"], c["columns"], tau))
+                y.append(e)
+                g.append(L["leg_key"])
+        X, y = np.array(X), np.array(y)
+        b = np.array([c["coefficients"][k] for k in c["columns"]])
+        with np.errstate(all="ignore"):
+            e = y - X @ b
+            bread = np.linalg.inv(X.T @ X)
+            meat = sum(np.outer(X[[i for i, h in enumerate(g) if h == k]].T @ e[[i for i, h in enumerate(g) if h == k]],
+                                X[[i for i, h in enumerate(g) if h == k]].T @ e[[i for i, h in enumerate(g) if h == k]])
+                       for k in sorted(set(g)))
+            n, p, G = len(y), X.shape[1], len(set(g))
+            V = (G / (G - 1)) * ((n - 1) / (n - p)) * bread @ meat @ bread
+        got = np.array(c["covariance"])
+        for i in range(p):
+            self.assertAlmostEqual(got[i, i] / V[i, i], 1.0, delta=1e-6, msg=c["columns"][i])
+
+    def test_prefix_bias_sign(self):
+        """Measured prefixes made 1 % dearer: short residuals rise, so long minus short falls (R-11)."""
+        base = F.stage2(self.s1, rehash(self.s1), self.en)["channels"]["gpu_rail"]["prefix_bias"]
+        en = copy.deepcopy(self.en)
+        for e in en["legs"].values():
+            for k in e["gpu_rail"]["prefix_tails"]:
+                e["gpu_rail"]["prefix_tails"][k] *= 1.0 + 0.01 * 30
+        bumped = F.stage2(self.s1, rehash(self.s1), en)["channels"]["gpu_rail"]["prefix_bias"]
+        for lab in F.PREFIX:
+            self.assertLess(bumped[lab]["estimate"], base[lab]["estimate"] - 0.05, lab)
+
+    def test_fold_without_estimable_onset_drops_delta(self):
+        """R-12: uncensored onsets on exactly three days; each fold that holds out one of them drops delta."""
+        s1 = copy.deepcopy(self.s1)
+        days = sorted({L["day"] for L in s1["legs"] if L["in_energy_fit"]})
+        keep = days[-3:]
+        for L in s1["legs"]:
+            st = L.get("state")
+            if L["in_energy_fit"] and st["onset_use"] == "uncensored" and L["day"] not in keep:
+                st["onset_use"] = "censored"
+                st["censored_at_s"] = L["load_s"] + 1000.0
+                st["first_off_s"] = None
+        out = F.stage2(s1, rehash(s1), self.en)
+        self.assertEqual(out["delta_column"], "kept")
+        self.assertEqual(sorted(out["channels"]["gpu_rail"]["lodo"]["folds_delta_dropped"]), keep)
+
+
+class Guards(unittest.TestCase):
+
+    def test_start_reading_needs_a_fresh_stamp(self):
+        turn = {"turn_start_s": 100.0, "journal": [{"t_s": 99.5, "os_level": 0, "pm_state": "Nominal",
+                                                     "pm_fresh": False, "tf08_c": 40.0, "fan_rpm": 2000.0,
+                                                     "tv0h_c": 60.0}]}
+        self.assertEqual(F.start_reading(turn, 58.0)[0], "start_reading_missing")
+        turn["journal"][0]["pm_fresh"] = True
+        self.assertEqual(F.start_reading(turn, 58.0)[:2], ("ok", "in_state"))
+        turn["journal"][0]["t_s"] = 97.9
+        self.assertEqual(F.start_reading(turn, 58.0)[0], "start_reading_missing")
+
+    def test_tau_hat_is_floored_at_zero(self):
+        L = {"start": {"state": "in_state", "z": [0.0, 0.0, 0.0]}, "t_p_s": 10.0}
+        self.assertEqual(F.tau_hat(L, np.array([-50.0, 0, 0, 0, 1.0])), 0.0)
+        self.assertEqual(F.tau_hat(L, np.array([50.0, 0, 0, 0, 1.0])), 60.0)
+
+    def test_forbidden_fields_anywhere(self):
+        for k in ("condition", "Slot_ID", "instruction_kind", "start_band"):
+            with self.assertRaises(F.LookInputError):
+                F._no_forbidden({"a": [{"b": {k: 1}}]})

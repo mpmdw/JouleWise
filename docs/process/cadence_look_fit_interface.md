@@ -385,4 +385,36 @@ is NaN or infinite; the level-E `input_sha256` differs from the stage-1 file's `
 | R-16 | "Hit `state_unobserved`" (Q4) | the unobserved time is earlier than the first off-state reading, or there is no off-state reading |
 | R-17 | A counted day (Q3) | at least three legs in the energy fit on that day with at least one hot block; the pooled hot value is over counted days only |
 | R-18 | Signed relative errors | (Σ predicted − Σ measured) / Σ measured |
+| R-20 | DC-in time base | KM003C samples on CLOCK_MONOTONIC_RAW (km003c_parse's clock fit) moved to wall epoch by the stream header's `start_real_ns − start_raw_ns`; power is the meter's Vbus × Ibus only, with no battery term |
+| R-21 | Which roster legs are type T, and a roster leg that never ran | type T when the leg spec carries `leg_type: "T"` (no other marker exists yet); a roster leg with no `leg_record.json` is named with all six rules false |
 | R-19 | Censored-normal fit | Newton's method in Olsen's (β/σ, 1/σ) form, from OLS on the uncensored; ML σ (no degrees-of-freedom correction); converged when the step is under 1e-11 relative and the score under 1e-6 |
+
+---
+
+## 7. Custody mode (scripts/cadence_look_run.py)
+
+**Stage 1 opens, per span:** `runner_receipt.json` (`started.epoch_s`, `roster`), `soak/soak_reference.json`
+(`sensors_c.TV0h`). **Per leg:** `legs/<id>/leg_record.json` (`spec`, `attempts`, `result`) and
+`leg_summary.json` (`span_reference`, for the marks). **Per accepted attempt's bundle**
+(`legs/<id>/runtime/<result.bundle>`): `events.jsonl` (token index and stamp), `outputs/align_turns.jsonl`
+(start stamp, prompt count, length of the output ids), `outputs/align_thermal.jsonl`, and the row-end stamp,
+`elapsed_ns` and `thermal_pressure` of `rich_telemetry.jsonl` and `raw/powermetrics.plist`, extracted by pattern
+(no line or frame of those two is parsed). **Never:** `power_trace.csv`, `hazards/meter/*`.
+
+Rules 1, 2, 5 and 6 come from `leg_record.json`: `result.leg_status == "complete"` and
+`result.decode_cap_reached`; `result.g0_released`; the last attempt not `contaminated`;
+`result.ac_powermode` 0 (automatic) or 2 (hp-01).
+
+**Rules 3 and 4 enter as a verdict file** produced by `inclusion_34.py` (the manifest builder's), hashed into
+the stage-1 output:
+
+```
+{ "<span_id>/<leg_id>": {"sidecar_coverage": bool, "km003c_clean": bool}, ... }   # one entry per roster leg
+```
+
+**The roster** is `manifest.resolve_roster`'s list `[{span_id, block_id, role, t0_local_date}]`; a span's
+directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwise.
+
+**Stage 2 opens** each needed leg's `leg_record.json` and `power_trace.csv` (through step 3's
+`load_gpu_trace`, the module's sha256 checked against `84a1a553…eb173`), and each span's
+`hazards/meter/stream-*.jsonl` (through `joulewise.external.km003c_parse.parse`). Level E stays in memory.
