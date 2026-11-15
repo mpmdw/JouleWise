@@ -46,6 +46,9 @@ sys.dont_write_bytecode = True
 import tempfile  # noqa: E402
 _PYC_PREFIX = tempfile.mkdtemp(prefix="jw-look-pyc-")
 sys.pycache_prefix = _PYC_PREFIX
+import atexit  # noqa: E402
+import shutil  # noqa: E402
+atexit.register(shutil.rmtree, _PYC_PREFIX, True)     # Mythos r4 N4: leave no empty prefix directory behind
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -408,15 +411,14 @@ def load_step3(path=None):
 
 
 class MeterSpan:
-    """KM003C samples of a span on wall-clock epoch seconds; Vbus x Ibus; in memory only. Also the receipt stamps
-    (rt) of the polls that carried samples, which rule 4 judges (inclusion_34.rule4)."""
+    """KM003C samples of a span on wall-clock epoch seconds; Vbus x Ibus; in memory only."""
 
     def __init__(self, sdir):
         from joulewise.external import km003c_parse as kp
         paths = sorted(glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")))
         if not paths:
             raise F.LookInputError("no meter stream in the span")
-        t, w, steps, polls = [], [], [], []
+        t, w, steps = [], [], []
         for p in paths:
             st = kp.parse(p)
             if not st.present or not st.aligned:     # contributes no sample; a fit interval it alone spans refuses
@@ -426,44 +428,35 @@ class MeterSpan:
             off = int(st.header["start_real_ns"]) - int(st.header["start_raw_ns"])    # RAW -> REALTIME (R-20)
             t += [(h + off) / 1e9 for h in st.host_ns]
             w += list(st.watts)
-            polls += [int(b["rt"]) for b in st.batches if b.get("n") and isinstance(b.get("rt"), int)]
             del st
         if not t:
             raise F.LookInputError("no meter stream in the span has aligned samples")
         order = sorted(range(len(t)), key=t.__getitem__)
         self.t = [t[i] for i in order]
         self.w = [w[i] for i in order]
-        self.poll_rt_ns = sorted(polls)
         self.step_s = max(steps)
 
     def _support(self, a, b):
-        """Rule 4's own gap test on the interval [a, b] (inclusion_34.rule4; RL-166 Q7, Mythos r3 N6): the points
-        {a, b} and the receipt stamps of the sample-carrying polls inside, no two consecutive more than 2 s apart.
-        So a segment of a leg rule 4 admitted is supported, and no longer gap is ever bridged. A sample must also
-        lie within 2 s of the interval, for the value held at an edge."""
+        """(i0, i1): the DECODED samples bracketing [a, b] (the last at or before a, the first at or after b), with
+        no two consecutive decoded samples between them more than 2 s apart (RL-166 Q7's gap, on the series that is
+        integrated). Otherwise refuse. A poll that reports samples the decoder dropped (re-sent duplicates, an empty
+        payload) supports nothing here (Sol r4 NEW-1, Mythos r4 N1). Rule 4 and stage 1's meter_bracket preflight
+        judge the poll stamps; stage 2 judges the samples."""
         import bisect
         if b < a:
             raise F.LookInputError("a segment with its end before its start")
-        a_ns, b_ns = round(a * NS), round(b * NS)
-        lo, hi = bisect.bisect_left(self.poll_rt_ns, a_ns), bisect.bisect_right(self.poll_rt_ns, b_ns)
-        points = [a_ns] + self.poll_rt_ns[lo:hi] + [b_ns]
-        if max(y - x for x, y in zip(points, points[1:])) > METER_MAX_GAP_S * NS:
-            raise F.LookInputError("DC-in: a gap over 2 s between meter samples inside an energy-fit interval")
-        i = bisect.bisect_left(self.t, a - METER_MAX_GAP_S)
-        if i >= len(self.t) or self.t[i] > b + METER_MAX_GAP_S:
+        i0 = bisect.bisect_right(self.t, a) - 1
+        i1 = bisect.bisect_left(self.t, b)
+        if i0 < 0 or i1 >= len(self.t):
             raise F.LookInputError("DC-in: an energy-fit interval is not bracketed by meter samples")
+        for i in range(i0, i1):
+            if self.t[i + 1] - self.t[i] > METER_MAX_GAP_S:
+                raise F.LookInputError("DC-in: a gap over 2 s between meter samples inside an energy-fit interval")
+        return i0, i1
 
-    def _value(self, x):
-        """Vbus x Ibus at x: linear between samples, held flat beyond the first and last (the edge stretch rule 4
-        admits, at most 2 s)."""
-        import bisect
-        j = bisect.bisect_right(self.t, x) - 1
-        if j < 0:
-            return self.w[0]
-        if j >= len(self.t) - 1:
-            return self.w[-1]
-        t0, t1 = self.t[j], self.t[j + 1]
-        return self.w[j] + (self.w[j + 1] - self.w[j]) * (x - t0) / (t1 - t0) if t1 > t0 else self.w[j]
+    def _at(self, x, i):
+        t0, t1 = self.t[i], self.t[i + 1]
+        return self.w[i] + (self.w[i + 1] - self.w[i]) * (x - t0) / (t1 - t0) if t1 > t0 else self.w[i]
 
     def coverage(self, a, b):
         """Fraction of [a, b] within half a nominal sample period of a sample (a print; decides nothing)."""
@@ -482,12 +475,16 @@ class MeterSpan:
         return cov / (b - a)
 
     def energy(self, a, b):
-        """Trapezoid between consecutive samples, cut at a and b (linear value at the cuts; held at an edge with no
-        sample beyond it), on supported intervals only (see _support)."""
-        import bisect
-        self._support(a, b)
-        xs = [a] + self.t[bisect.bisect_right(self.t, a):bisect.bisect_left(self.t, b)] + [b]
-        return sum(0.5 * (self._value(x) + self._value(y)) * (y - x) for x, y in zip(xs, xs[1:]))
+        """Trapezoid between consecutive decoded samples, cut at a and b (linear value at the cuts), on supported
+        intervals only (see _support). No value is held past the last sample."""
+        i, _ = self._support(a, b)
+        tot = 0.0
+        while i < len(self.t) - 1 and self.t[i] < b:
+            lo, hi = max(a, self.t[i]), min(b, self.t[i + 1])
+            if hi > lo:
+                tot += 0.5 * (self._at(lo, i) + self._at(hi, i)) * (hi - lo)
+            i += 1
+        return tot
 
 
 def leg_meter_interval_ns(L):
@@ -502,11 +499,42 @@ def span_meter_streams(sdir):
     return [I34.read_meter_stream(p) for p in sorted(glob.glob(str(Path(sdir) / "hazards/meter/stream-*.jsonl")))]
 
 
+def stamp_gap_bound_s(L, streams):
+    """From the poll stamps alone (no sample decoded), an upper bound on the largest gap between consecutive decoded
+    samples over the leg's energy intervals, for a stream whose polls decode: the newest sample of a poll is digitised
+    at most one sample period plus the request's round trip (and BRACKET_MARGIN_NS) before its receipt rt, and the
+    first sample of the next sample-bearing poll is no later than that poll's rt. So consecutive polls i, j bound
+    the gap by rt_j - rt_i + rtt_i + step + margin. The bound runs over the polls from the last one received at or
+    before the leg's start to the first one received after its end."""
+    a, b = leg_meter_interval_ns(L)
+    rows = []
+    for s in streams:
+        sps = (s.get("header") or {}).get("sps")
+        step = NS / sps if isinstance(sps, (int, float)) and not isinstance(sps, bool) and sps > 0 else None
+        if step is None:
+            continue
+        rows += [(rt, rtt, step) for rt, n, rtt in s.get("round_trips") or [] if n > 0]
+    rows.sort()
+    import bisect
+    rts = [r[0] for r in rows]
+    i0 = max(0, bisect.bisect_right(rts, a) - 1)
+    i1 = min(len(rows) - 1, bisect.bisect_left(rts, b))
+    worst = 0
+    for (rt_i, rtt_i, step), (rt_j, _, _) in zip(rows[i0:i1], rows[i0 + 1:i1 + 1]):
+        worst = max(worst, rt_j - rt_i + rtt_i + step + I34.BRACKET_MARGIN_NS)
+    return worst / NS
+
+
 def require_bracketed(L, streams):
-    """Mythos r3 N6: stage 2 integrates DC-in only over a leg bracketed by meter samples, judged by
-    inclusion_34.meter_bracket (one boundary for stage 1's preflight and stage 2)."""
+    """Mythos r3 N6, stage 1's preflight: an energy-fit leg not bracketed by sample-bearing polls
+    (inclusion_34.meter_bracket, conservative from the stamps) refuses before the stage-1 file is written, so stage 2
+    does not meet it after energy opens. Stage 2 then judges its own support on the decoded samples."""
     if not I34.meter_bracket(leg_meter_interval_ns(L), streams)["bracketed"]:
         raise F.LookInputError("DC-in: an energy-fit leg's interval is not bracketed by meter samples")
+    # the same conservative reading for the gaps inside: a leg that passes here, on a stream whose polls decode,
+    # integrates in stage 2 (whose test is on the decoded samples themselves)
+    if stamp_gap_bound_s(L, streams) > METER_MAX_GAP_S:
+        raise F.LookInputError("DC-in: an energy-fit leg's meter samples may be more than 2 s apart (from the stamps)")
 
 
 def gpu_max_uncovered_s(trace, a, b):
@@ -544,9 +572,9 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None
         bundle = sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"]
         trace = s3.Trace(s3.load_gpu_trace(str(bundle)))
         if L["span_id"] not in meters:
-            meters[L["span_id"]] = (MeterSpan(sdir), span_meter_streams(sdir))
-        m, streams = meters[L["span_id"]]
-        require_bracketed(L, streams)
+            meters[L["span_id"]] = MeterSpan(sdir)
+        m = meters[L["span_id"]]          # support on the decoded samples (MeterSpan._support); the poll-stamp
+        #                                   bracket is stage 1's conservative preflight only (Mythos r4 N1)
         entry = {}
         def gpu_energy(a, b, trace=trace):
             if gpu_max_gap_s is not None and gpu_max_uncovered_s(trace, a, b) > gpu_max_gap_s:
@@ -645,6 +673,7 @@ def stage2_energy_preflight(s1, a):
     doc, mpath = _VERIFIED[0]
     if s1.get("manifest_sha256") != sha256_file(mpath):
         raise F.LookInputError("the stage-1 file was made under another manifest")
+    stage1_doc_problems_refuse(s1, doc)          # Sol r4 NEW-3: assemble's stage-1 checks, before energy
     if a.allow_draft and a.custody:
         sdir_of = span_dirs(a.custody, a.span_dir)
         for sp in s1["roster"]["spans"]:
@@ -653,6 +682,42 @@ def stage2_energy_preflight(s1, a):
     importlib.import_module("joulewise.external.km003c_parse")
     importlib.import_module("joulewise.cadence_looks.step3_energy_ratios")
     _guard_loaded(doc)
+
+
+def stage1_code_set():
+    """STAGE1_CODE as scripts/cadence_look_manifest.py (pinned) defines it, read from that file's syntax tree, not
+    imported (importing it would add it to this stage's loaded set): one definition for assemble and stage 2."""
+    import ast
+    tree = ast.parse((ROOT / "scripts/cadence_look_manifest.py").read_text(encoding="utf-8"))
+    env = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) \
+                and node.targets[0].id in ("_SHARED_CODE", "STAGE1_CODE"):
+            expr = node.value
+            if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
+                env[node.targets[0].id] = tuple(env[expr.left.id]) + tuple(ast.literal_eval(expr.right))
+            else:
+                env[node.targets[0].id] = tuple(ast.literal_eval(expr))
+    if "STAGE1_CODE" not in env:
+        raise F.LookInputError("STAGE1_CODE is not readable from scripts/cadence_look_manifest.py")
+    return set(env["STAGE1_CODE"])
+
+
+def stage1_doc_problems_refuse(s1, doc):
+    """The stage-1 file passes its pinned schema, and the code it recorded is the pins, exactly STAGE1_CODE (as
+    assemble checks; Sol r4 NEW-3). Refuses on any problem."""
+    from joulewise.cadence_looks import schema_check as sc
+    schema = json.loads((ROOT / "docs/process/cadence/looks/lm-interim-01.stage1.schema.json").read_text("utf-8"))
+    problems = [f"the stage-1 file does not pass its schema: {e}" for e in sc.errors(s1, schema)[:5]]
+    pins = {path: sha for _, path, sha in M.code_refs(doc)}
+    code = {k: v for k, v in (s1.get("code_sha256") or {}).items() if not k.startswith("input:")}
+    problems += [f"the stage-1 file records {p} at a hash that is not the pin" for p, h in sorted(code.items())
+                 if pins.get(p) != h]
+    exact = stage1_code_set()
+    problems += [f"the stage-1 file does not record {p}" for p in sorted(exact - set(code))]
+    problems += [f"the stage-1 file records {p}, which stage 1 does not run" for p in sorted(set(code) - exact)]
+    if problems:
+        raise F.LookInputError("; ".join(problems))
 
 
 def _guard_loaded(doc):

@@ -393,10 +393,8 @@ class Meter(unittest.TestCase):
         a, b = t0 + 3.33, t0 + 41.07
         want = 10.0 * (b - a) + 0.25 * ((b - t0) ** 2 - (a - t0) ** 2)
         self.assertAlmostEqual(m.energy(a, b), want, delta=1e-3)
-        # 1 s before the first sample: within rule 4's 2 s edge allowance, so the first value is held there
-        self.assertAlmostEqual(m.energy(t0 - 1.0, t0 + 1.0), 10.0 * 1.0 + (10.0 * 1.0 + 0.25 * 1.0), delta=1e-3)
-        with self.assertRaises(F.LookInputError):
-            m.energy(t0 - 3.0, t0 + 1.0)
+        with self.assertRaisesRegex(F.LookInputError, "bracketed"):    # no sample at or before the start
+            m.energy(t0 - 1.0, t0 + 1.0)
 
 
 class LevelR(unittest.TestCase):
@@ -679,22 +677,31 @@ class PinsAndCommit(unittest.TestCase):
         self.assertEqual(rc, 0, err)
 
 
-def _meter_lines(t0, n, step=0.5, per_poll=2, watts=40.0, empty=lambda x: False, off=10**18):
-    """A KM003C stream as the monitor writes it (compact lines). Polls whose time is `empty` carry n:0, p:""."""
+def _meter_lines(t0, n, step=0.5, per_poll=2, watts=40.0, empty=lambda x: False, off=10**18,
+                 resend=lambda x: False, nopayload=lambda x: False):
+    """A KM003C stream as the monitor writes it (compact lines). Polls whose time is `empty` carry n:0, p:"".
+    `resend`: the poll re-sends the previous poll's samples (same sequence numbers; the decoder drops them as
+    duplicates). `nopayload`: the poll reports n samples and carries no payload."""
     sample = struct.Struct("<HHiiHHHH")
     raw0 = int(round(t0 * 1e9)) - off
     lines = [json.dumps({"k": "h", "status": "streaming", "rate_idx": 0, "poll_s": step * per_poll,
                          "sps": 1.0 / step, "start_raw_ns": raw0, "start_real_ns": raw0 + off},
                         separators=(",", ":"))]
+    prev = None
     for j in range(0, n, per_poll):
         x = t0 + j * step
         rx = raw0 + int(round((j + per_poll - 1) * step * 1e9)) + 400_000
+        if (resend(x) and prev is not None) or nopayload(x):
+            lines.append(json.dumps({"k": "b", "tx": rx - 10**6, "rx": rx, "rt": rx + off, "n": per_poll,
+                                     "p": prev.hex() if resend(x) else "", "smc": {}}, separators=(",", ":")))
+            continue
         if empty(x):
             lines.append(json.dumps({"k": "b", "tx": rx - 10**6, "rx": rx, "rt": rx + off, "n": 0, "p": ""},
                                     separators=(",", ":")))
             continue
         raw = b"".join(sample.pack(int(round((j + i) * step * 1000)) % 65536, 0, 28_000_000,
                                    int(round(watts / 28 * 1e6)), 0, 0, 0, 0) for i in range(per_poll))
+        prev = raw
         lines.append(json.dumps({"k": "b", "tx": rx - 10**6, "rx": rx, "rt": rx + off, "n": per_poll,
                                  "p": raw.hex(), "smc": {}}, separators=(",", ":")))
     lines.append(json.dumps({"k": "t", "polls": n // per_poll, "empties": 0, "bad": 0, "usb_errors": 0,
@@ -959,51 +966,84 @@ class CommittedLedger(unittest.TestCase):
         self.assertFalse(os.path.exists(op))
 
 
-class MeterRuleFourAlignment(unittest.TestCase):
-    """Mythos r3 N6: stage 2's DC-in support is rule 4's own gap test, so a leg rule 4 admits integrates and one it
-    refuses never does. Checked against inclusion_34.rule4 on the same stream, interval by interval."""
+class MeterSampleSupport(unittest.TestCase):
+    """Sol r4 NEW-1 and Mythos r4 N1: stage 2 judges support on the DECODED samples. Rule 4 passes on each stream
+    below (its poll stamps are regular); stage 2 refuses the interval that crosses the hole in the samples."""
 
-    def test_stream_ending_1_2_s_before_the_interval_integrates(self):
-        t0 = 1_790_000_000.0
-        with tempfile.TemporaryDirectory() as d:
-            sdir = Path(d)
-            (sdir / "hazards/meter").mkdir(parents=True)
-            (sdir / "hazards/meter/stream-0001.jsonl").write_text(_meter_lines(t0, 200))   # samples to t0 + 99.5
-            m = R.MeterSpan(sdir)
-            last = m.t[-1]
-            e = m.energy(t0 + 50, last + 1.2)                    # ends 1.2 s after the last sample
-            self.assertAlmostEqual(e, 40.0 * (last + 1.2 - t0 - 50), delta=1e-2)
+    T0 = 1_790_000_000.0
 
-    def test_stage2_support_equals_rule_4_on_the_same_stream(self):
+    def stream(self, d, **kw):
+        sdir = Path(d)
+        (sdir / "hazards/meter").mkdir(parents=True, exist_ok=True)
+        path = sdir / "hazards/meter/stream-0001.jsonl"
+        path.write_text(_meter_lines(self.T0, 400, **kw))         # 200 s at 2 samples/s, polls every 1 s
+        return R.MeterSpan(sdir), path
+
+    def rule4_passes(self, path, a, b):
         from joulewise.cadence_looks import inclusion_34 as I34
-        t0 = 1_790_000_000.0
-        holes = [(t0 + 30, t0 + 31.5), (t0 + 60, t0 + 63), (t0 + 90, t0 + 91.9)]
+        r4 = I34.rule4((round(a * 1e9), round(b * 1e9)), [I34.read_meter_stream(path)])
+        return r4["max_gap_s"] is not None and r4["max_gap_s"] <= 2.0
+
+    def check_hole(self, mode, h0, h1, a, b):
         with tempfile.TemporaryDirectory() as d:
-            sdir = Path(d)
-            (sdir / "hazards/meter").mkdir(parents=True)
-            path = sdir / "hazards/meter/stream-0001.jsonl"
-            path.write_text(_meter_lines(t0, 260, empty=lambda x: any(a <= x < b for a, b in holes)))
-            m = R.MeterSpan(sdir)
-            stream = I34.read_meter_stream(path)
-            import random
-            rng = random.Random(5)
-            cases = [(t0 + 20, t0 + 40), (t0 + 55, t0 + 70), (t0 + 85, t0 + 95), (t0 + 100, t0 + 131.2),
-                     (t0 + 110, t0 + 132.5)]
-            cases += [tuple(sorted((t0 + rng.uniform(0, 135), t0 + rng.uniform(0, 135)))) for _ in range(60)]
-            agree = 0
-            for a, b in cases:
-                if b - a < 0.5:
+            m, path = self.stream(d, **{mode: lambda x: self.T0 + h0 <= x < self.T0 + h1})
+            self.assertTrue(self.rule4_passes(path, self.T0 + a, self.T0 + b), mode)
+            gaps = [y - x for x, y in zip(m.t, m.t[1:])]
+            with self.assertRaisesRegex(F.LookInputError, "gap over 2 s|bracketed"):
+                m.energy(self.T0 + a, self.T0 + b)
+            self.assertAlmostEqual(m.energy(self.T0 + 10, self.T0 + 30), 40.0 * 20, delta=1e-2)   # outside it
+            return max(gaps)
+
+    def test_sol_8_5_s_hole_of_resent_samples(self):
+        self.assertAlmostEqual(self.check_hole("resend", 50, 58, 40, 70), 8.5, delta=0.05)
+
+    def test_mythos_6_5_s_hole_of_resent_samples(self):
+        self.assertAlmostEqual(self.check_hole("resend", 50, 56, 45, 65), 6.5, delta=0.05)
+
+    def test_mythos_40_5_s_of_polls_without_payload(self):
+        self.assertAlmostEqual(self.check_hole("nopayload", 60, 100, 70, 90), 40.5, delta=0.05)
+
+    def test_mythos_15_s_flat_end_is_not_held(self):
+        """The last 15 s of the stream carry no payload: an interval reaching into them is not bracketed by a
+        decoded sample, and nothing is held at the last value."""
+        with tempfile.TemporaryDirectory() as d:
+            m, _ = self.stream(d, nopayload=lambda x: x >= self.T0 + 185)
+            self.assertLess(m.t[-1], self.T0 + 185)
+            with self.assertRaisesRegex(F.LookInputError, "bracketed|gap over 2 s"):
+                m.energy(self.T0 + 170, self.T0 + 195)
+
+    def test_an_admitted_bracketed_leg_integrates(self):
+        """A leg that rule 4 admits and stage 1's meter_bracket preflight passes integrates in stage 2: every
+        segment inside it is supported by the decoded samples, on a stream whose polls all decode (the N6
+        consistency the preflight relies on). Legs crossing the short hole at 120 s are refused by rule 4 itself."""
+        from joulewise.cadence_looks import inclusion_34 as I34
+        import random
+        rng = random.Random(11)
+        with tempfile.TemporaryDirectory() as d:
+            m, path = self.stream(d, empty=lambda x: self.T0 + 120 <= x < self.T0 + 121.5)
+            st = I34.read_meter_stream(path)
+            n_legs = n_refused_by_rule4 = n_preflight = 0
+            for _ in range(60):
+                A = self.T0 + rng.uniform(-5, 150)
+                B = A + rng.uniform(10, 60)
+                iv = (round(A * 1e9), round(B * 1e9))
+                r4 = I34.rule4(iv, [st])
+                if not (r4["max_gap_s"] is not None and r4["max_gap_s"] <= 2.0):
+                    n_refused_by_rule4 += 1
                     continue
-                r4 = I34.rule4((round(a * 1e9), round(b * 1e9)), [stream])
-                gap_ok = r4["max_gap_s"] is not None and r4["max_gap_s"] <= 2.0
+                L = {"segments": [{"wall_start_s": A, "wall_end_s": B}], "prefix_tails": []}
                 try:
-                    m.energy(a, b)
-                    ok = True
+                    R.require_bracketed(L, [st])                     # stage 1's preflight, from the stamps
                 except F.LookInputError:
-                    ok = False
-                self.assertEqual(ok, gap_ok, (a - t0, b - t0, r4["max_gap_s"]))
-                agree += 1
-            self.assertGreater(agree, 50)
+                    n_preflight += 1
+                    continue
+                n_legs += 1
+                cuts = sorted([A, B] + [rng.uniform(A, B) for _ in range(6)])
+                for a, b in zip(cuts, cuts[1:]):
+                    m.energy(a, b)                                     # must not refuse
+            self.assertGreater(n_legs, 15)
+            self.assertGreater(n_refused_by_rule4, 0)
+            self.assertGreater(n_preflight, 0)       # legs rule 4 admits whose start sits in the 2.5 s sample gap
 
 
 ENERGY_FILES = ("power_trace.csv", "/hazards/meter/stream-", "en.json", "segment_energy.json")
@@ -1212,3 +1252,101 @@ class LegBracket(unittest.TestCase):
             with self.assertRaisesRegex(F.LookInputError, "bracketed"):
                 R.read_segment_energy(only, sdir_of)
         R.stage2_preflight(s1, R.span_dirs(c.root, None))      # the intact custody passes
+
+
+class RoundFour(unittest.TestCase):
+    """Sol r4 NEW-3 (the stage-1 file's schema and provenance, before energy) and Mythos r4 N7's survivors."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.c = _Custody.get()
+        cls.d = tempfile.mkdtemp(prefix="jw-look-r4-")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.d, ignore_errors=True)
+
+    def stage1(self):
+        p = os.path.join(self.d, f"s1-{len(os.listdir(self.d))}.json")
+        rc, _, err = run_cli(["stage1", "--roster", self.c.paths["roster.json"], "--custody", str(self.c.root),
+                              "--rules-3-4", self.c.paths["rules_3_4.json"], "--out", p])
+        self.assertEqual(rc, 0, err)
+        return p
+
+    def test_new3_defective_stage1_files_refuse_before_energy(self):
+        p = self.stage1()
+        good = rj(p)
+        cases = {"omit": lambda d: d["code_sha256"].pop("joulewise/schemas.py"),
+                 "zero": lambda d: d["code_sha256"].update({"joulewise/schemas.py": "0" * 64}),
+                 "extra_file": lambda d: d["code_sha256"].update({"joulewise/suite.py": "0" * 64}),
+                 "unknown_field": lambda d: d.update(per_leg_joules={"dev-01-s01/L001": 1.0})}
+        for name, mutate in cases.items():
+            doc = copy.deepcopy(good)
+            mutate(doc)
+            q = os.path.join(self.d, f"bad-{name}.json")
+            wb(q, F.dump(doc))
+            with spy_opens() as opened:
+                rc, _, err = run_cli(["stage2", "--stage1", q, "--stage1-sha256", R.sha256_file(q), "--custody",
+                                      str(self.c.root), "--out", os.path.join(self.d, f"o-{name}.json")])
+            self.assertEqual(rc, 2, name)
+            self.assertIn("stage-1 file", err, name)
+            self.assertEqual(energy_opens(opened), [], name)
+        # the unmodified file passes the same check
+        rc, _, err = run_cli(["stage2", "--stage1", p, "--stage1-sha256", R.sha256_file(p), "--custody",
+                              str(self.c.root), "--out", os.path.join(self.d, "o-good.json")])
+        self.assertEqual(rc, 0, err)
+
+    def test_stage1_code_set_is_read_from_the_assembler(self):
+        got = R.stage1_code_set()
+        self.assertIn("scripts/cadence_look_run.py", got)
+        self.assertIn("joulewise/cadence_looks/inclusion_34.py", got)
+        self.assertNotIn("scripts/cadence_look_manifest.py", got)
+
+    def test_n7_stage1_inputs_gate_refuses_an_unnamed_verdict_file(self):
+        """Committed mode on look_minirepo: the ledger names the roster and one verdict file; stage 1 given another
+        verdict file refuses before custody opens."""
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        roster_sha, verdicts_sha = R.sha256_file(self.c.paths["roster.json"]), R.sha256_file(self.c.paths["rules_3_4.json"])
+        mr.commit(mini, roster_sha256=roster_sha, verdicts_sha256=verdicts_sha)
+        other = os.path.join(self.d, "other-verdicts.json")
+        v = rj(self.c.paths["rules_3_4.json"])
+        first = next(iter(v))
+        v[first] = {"sidecar_coverage": False, "km003c_clean": False}
+        wb(other, json.dumps(v))
+        out = os.path.join(self.d, "mini-s1.json")
+        r = mr.py(mini, "scripts/cadence_look_run.py", "stage1", "--roster", self.c.paths["roster.json"],
+                  "--custody", self.c.root, "--rules-3-4", other, "--out", out, "--manifest", mini / mr.MANIFEST)
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("verdict", r.stderr)
+        self.assertFalse(os.path.exists(out))
+        r = mr.py(mini, "scripts/cadence_look_run.py", "stage1", "--roster", self.c.paths["roster.json"],
+                  "--custody", self.c.root, "--rules-3-4", self.c.paths["rules_3_4.json"], "--out", out,
+                  "--manifest", mini / mr.MANIFEST)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_n7_cached_bytecode_refused_through_the_cli(self):
+        """A repository module that was loaded from a cache file before the CLI set its fresh prefix (here: a
+        wrapper outside the repository imports fit_interim from a valid __pycache__ entry, then runs main) makes
+        the stage refuse."""
+        import py_compile
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "tree"
+            for sub in ("joulewise", "scripts", "configs/align/v4", "docs/process/cadence/looks", "docs/research"):
+                if (REPO / sub).is_dir():
+                    shutil.copytree(REPO / sub, root / sub, ignore=shutil.ignore_patterns("__pycache__"))
+            py_compile.compile(str(root / "joulewise/cadence_looks/fit_interim.py"), doraise=True)
+            ip = Path(d) / "li.json"
+            wb(ip, synth.dump(self.c.li))
+            wrapper = Path(d) / "wrap.py"
+            wrapper.write_text("import sys\nsys.path.insert(0, %r)\n"
+                               "import joulewise.cadence_looks.fit_interim\n"      # from __pycache__
+                               "from scripts import cadence_look_run as R\n"
+                               "sys.exit(R.main(sys.argv[1:]))\n" % str(root))
+            r = subprocess.run([sys.executable, "-I", str(wrapper), "stage1", "--input", str(ip), "--out",
+                                str(Path(d) / "s1.json"), "--manifest", pinned_manifest(), "--allow-draft"],
+                               capture_output=True, text=True, cwd=d)
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("cached bytecode", r.stderr)
