@@ -15109,3 +15109,114 @@ One commit, production and twin.
 - RL-153 §2.3 item 5: closed.
 
 **Blind status.** Blind: no v4 outcome exists and nothing sealed was opened. This ruling rests on rulings, code, test code and the comparison report on synthetic members. Every rule fixed here reads no label. Step 3's values remain the recorded energy disclosure on conditionless legs; I did not open them.
+
+# RL-161. The Mythos cold seat on kit v1.1 (PR #788): F1 and F2 are answered by RL-158, with two small additions; F7 is not, and is ruled here (two of the dev-01 findings ride this re-pin, the rest stay on their old schedule). 3 + 9 stands against the seat's 3 + 3 + 6. RL-156a §1 stands
+
+Research lead (Fable 5.2), Sat Nov 14 17:40 PST 2026 (from `date`). Reads the cold seat's F1, F2, F7 and item 5 against RL-158. RL-158 stands except where a section below amends it.
+
+**Naming.** Two reports use the same F numbers. "#788 Fn" is the v1.1 seat's finding. "dev-01 Fn" is the first kit check's finding (RL-150 §2).
+
+**Read.**
+- `/Volumes/JW-EXT/scratch/mythos-kit-v11/REPORT.md`, in full.
+- RL-158 and RL-156a in full; RL-150 R1, R9 and §2; RL-155 §5.1; RL-155a's ladder row P, in the log on `origin/audit/2026-11-10-fable`.
+- dev-01 F5 to F12 in `/Volumes/JW-EXT/scratch/mythos-kit-check/REPORT.md`.
+
+**Checked myself.**
+- **The seat's layout table against RL-158's.** They agree on every layout both list (3 + 9: 5 of 10; 3 + 3 + 6: 5 of 9; 3 + 6 + 3 and 3 + 5 + 4: 4 of 9). The seat adds 3 + 4 + 5: 4 of 9, which follows from RL-158's cell list (L008 is span-shaped).
+- **The seat's latest-t0 table against RL-158 §3:** 16:18:10, 18:33:10 and 14:03:10 are the same values.
+- **Consumers by size under any layout that starts with the smoke,** from RL-158's cell list: 2,000 has two (L008, L010), 19,458 has two (L002, L009), 10,000 has one (L012). L004 always captures.
+
+**Not checked.**
+- Any code. The seat ran no Python either, so no test, mock or validator result stands behind this PR from a cold seat yet.
+- Whether `desk.py` is a frozen path, and whether the validator fixes the text of `stop_rules.notes`.
+- The lead's finding on the ProcessInventory journal (§5). Taken from the brief.
+- The pilot's R9 record. I opened no measurement file; "passed, RUN_STATE 320" is the lead's.
+
+**Not done.** No SSH, no run, no commit. The only file written is this one.
+
+---
+
+## 1. F1 ("at least half" depends on the cut): answered by RL-158, with two additions
+
+**Answered.**
+- RL-158 Q6 judges the rule on the queue's layout as committed at READY, and the lead counts it there.
+- RL-158 §3 already takes 3 + 9 for dev-03 and names it an exception to RL-155a's six-leg limit. The seat did not see that.
+- dev-04's gate already includes the Q6 count on its own layout. So no change to the law and no new `plan` refusal: the READY count is the check.
+
+**Addition 1: a chosen cut lands on an own-shaped leg.**
+- RL-158 Q6 says a later split breaks no rule. That stands for a split nobody chose (a re-run after a stop).
+- Where the cut is a choice, the next span starts on an own-shaped leg if one is in reach. For filler P on dev-03's remainder that means pulling exactly three (L004-L006), so the rest starts at L007.
+- If P cannot do that, P skips the block. The ladder moves to its next row.
+
+**Addition 2: dev-04 and dev-05, if the planned layout fails the count.**
+- The lead takes another layout of spans of at most six that holds half.
+- If none holds, it comes to me before READY.
+
+**The kit title.** "Six of the eleven warm legs" is true of one span of twelve only. The builder rewords it in the re-pin already under way: the law gives six span-shaped legs, and the consumers depend on the queue.
+
+## 2. F2 (the smoke can pass with no consumer turn): answered by RL-158 §2
+
+**Answered, and more strictly than the seat's fix.** If L002 times out at G0, the remainder does not arm and Q1's print comes to me. The seat proposed widening the hand-read to the next span; RL-158 arms nothing.
+
+**Two readings, so the records say the same thing:**
+- **R9 and the class A smoke are separate.** R9 decides whether the pilot's legs count. The span-reference leg's smoke is met only when L002 released its G0 against L001's capture and ran its turn. The lead records both, on separate lines.
+- **The first queue holds the pilot span only** (RL-150 F3, carried to dev-03). "Committed as two spans" in RL-158 §2 line 4 means the layout is committed; the remainder's queue entry is written after the hand-read.
+
+## 3. F7 (dev-01 F6 to F12 deferred): not answered by RL-158. Ruled here
+
+RL-155 §5.1 bundled them into v1.1 for convenience. RL-150 §2 had put them on the first seat's schedule, and that schedule is the bound.
+
+| Finding | Ruling |
+|---|---|
+| dev-01 F5, the campaign-scope stop | **In this re-pin, as kit text:** the stop sentence goes into `stop_rules.notes` of `cl-dev-03` and both later kits. RL-150 set it "before chained spans", and dev-03 chains. Every arm record keeps the `measurement_mode` line. The machine check goes with F6 |
+| dev-01 F6, write roots, queue expiry, watcher stamp | **Deferred, as the first seat scheduled it:** code before phase 5. Until then every arm record names the output root, states it is outside the v4 roots, and carries the watcher stamp |
+| dev-01 F7, freeze 1 | Not a kit item. It is the look manifest (RL-155 §5.3) |
+| dev-01 F8, the `admitted` column | **In this re-pin, or as a plain PR if `desk.py` is not a frozen path.** Consumers make a G0 timeout more likely, so inclusion matters more. It is not a READY gate: RL-150 R9's fallback (the summary's `admitted` field) holds until it lands |
+| dev-01 F9, F10 | Nothing in the kit. F9 is a ledger sentence |
+| dev-01 F11, the model string | **Deferred with F6.** The lead confirms by hand, per kit at READY, that `kit.model` and the frozen template agree |
+| dev-01 F12, the band label | Nothing in the kit. Tables and fit code read `g0_role` and the measured start from the leg record, never the kit's shape (#788 F8) |
+
+- **If the validator fixes the text of `stop_rules.notes`,** the builder says so and the arm-record line carries the stop instead.
+- **RL-158 §2 line 2** ("no open finding") is met for F7 when the F5 text is in the kit and this table is recorded.
+
+## 4. Item 5: the seven choices
+
+| Choice | The seat | RL-158 |
+|---|---|---|
+| First leg's capture, not the soak | Right; asks me to confirm | Q1. Confirmed |
+| Roles by roster position | Correct; leads to F1 | Q6 |
+| Redo's capture as the source | #788 F3; asks whether consumers count | Q2, extended below |
+| Missing reference stops the span | Right | Q3. Agrees |
+| 600 s | A guess, harmless | Q4. Agrees |
+| ceil(m/2) per size, L001 own | Right | Consistent with Q7; see the note |
+| Deferrals | #788 F7 and F4 | Section 3; F4 is the builder's |
+
+**One disagreement: the seat's "fix now" is 3 + 3 + 6. I keep 3 + 9.**
+- Both hold half. 3 + 9 saves a soak and keeps 5 of 10.
+- **3 + 3 + 6 is the named alternate.** The lead may take it without me if the remainder cannot arm by 16:18:10, or if a gap fits six legs and not nine.
+
+**One extension, from #788 F3.** RL-158 Q2 assumed the first leg ends with an accepted attempt. The seat names the other case: the redo quota is spent and the leg is excluded.
+- **Consumers of a redo's capture count toward the half,** in both cases. They are pinned to one reference, and the predictor reads its excess over the soak.
+- **A reference from an excluded first leg** is used if it passes the consumer's own checks. The lead marks the span "reference from an excluded leg", and the fit reports its result with and without marked spans.
+- The builder's receipt fields (attempt number, `record_sha256`) are what the mark is read from.
+
+**One note on shape by size.** With the smoke first, 10,000 has one consumer and the other sizes two. That is this draw, not a defect. The fit reads `g0_role`.
+
+**One caution on #788 F8's seed item.** `cl-dev-03`'s master seed is not changed to fix the shared seed with `cl-hp-01`. A new seed redraws the cells, and RL-158's counts and the 3 + 9 exception rest on this draw. The fix goes on the hp-01 side, or in the ledger's note.
+
+## 5. RL-156a §1
+
+**RL-156a §1 stands:** the cadence-leg kind does not run the R1 ProcessInventory journal, so the code behind the `test_r1_followup` ProcessSampler red is executed by no dev-01 or dev-02 leg, and the pilot passed R9. This replaces §1's "one limit": the R9 record cannot show sampler starvation, because no sampler ran.
+
+---
+
+**Owner.** Builder: the title wording and dev-01 F5's stop text in this re-pin; the `admitted` column; no seed change to `cl-dev-03`. Lead: the two record lines of section 2; the hand confirmations of section 3; P's cut on v1.1 blocks; the redo marks. Research lead: a dev-04 or dev-05 kit with no layout that holds half.
+**Gate.** dev-03's READY is RL-158 §2's four lines, unchanged. Nothing here adds a gate.
+**Amends.**
+- RL-158 Q6: a chosen cut lands on an own-shaped leg.
+- RL-158 Q2: extended to a first leg with no accepted attempt.
+- RL-155 §5.1: "F6 to F12 of the kit check" is replaced by section 3's table.
+- RL-155a §2 row P: on a v1.1 block the pull ends before an own-shaped leg, or P skips the block.
+- RL-156a §1: the "one limit" paragraph.
+
+**Blind status.** Blind: no measurement file was opened and no campaign or v4 energy has been read. This ruling rests on rulings, two seat reports and the facts in the brief.
