@@ -355,6 +355,34 @@ F3) has the look read `soak_attempts` from each receipt and print the retried so
 | Retried soaks by kind; "kind not recorded" unless a receipt field names it | `soak_refusal_kind`, `soak_retries`; the print, the D and output schemas, `assemble` | `test_kind_not_recorded_unless_a_receipt_field_names_it`, `test_a_soak_refused_twice_or_interrupted_stopped_the_span`, `test_soak_retries_print_is_required`, `test_assemble_writes_the_schema_shape` |
 | A retried-then-accepted soak is not a stopped span | No stage-journal read; verdicts unchanged | `test_a_retried_then_accepted_soak_is_not_a_stop` |
 
+## 7c. The cold seats on `553e4cf00` (round 3), manifest side
+
+Both seats: ADMIT WITH FIXES, no new HIGH. The fit-side halves of these items (stage 1 and stage 2 in
+`cadence_look_run.py`) are the analyst seat's.
+
+| Finding | Fix | Test |
+|---|---|---|
+| Sol NEW-1, Mythos N9: nested energy passes the closed outer schemas | `step3.cells[].ii_gamma` and `.vi_slope_lnE_on_lnclock` are closed to the producer's shapes (each fixed-effects slope is `{slope, se, n_obs, n_groups, n_groups_with_2plus}`). Every map in both schemas constrains its keys (`propertyNames`, new in `schema_check.py`): days, columns, cells, roles, rules, span ids, leg keys, code paths. `assemble` and `validate --output` also require each channel's coefficient maps to carry that channel's columns only | `test_no_energy_nests_anywhere_in_the_output` (joules in `ii_gamma` and in its slope, watts in `vi`, a leg key in `coefficients` and in a fold, a dropped column; the producer's shape passes); `test_schema_check` (still equal to `jsonschema`) |
+| Sol NEW-2, Mythos N3: `--ledger-ref` wired unevenly, `HEAD` accepted | `manifest.shared_ref` is the one resolver. It accepts a remote-tracking branch only, and refuses `HEAD`, a local branch, a tag, a commit or an expression. `inclusion_34.py` gains `--ledger-ref`. Every gate passes it. Outputs record what satisfied the gate (`ledger_gate`: HEAD, ref, ref commit; null under `--allow-draft`). **Detached HEAD on a campaign branch not yet on main:** run every tool with `--ledger-ref origin/<campaign-branch>`, for example the PR's base branch | `test_shared_ref_is_a_remote_tracking_branch`; step 3 refuses `HEAD`, `main`, a sha and `origin/main~0`, and runs from a detached HEAD with `--ledger-ref origin/look`; inclusion and `assemble` refuse `--ledger-ref HEAD`; the recorded gate is checked |
+| Mythos N1 (step 3's half) | Under `--allow-draft`, step 3 reads each span's receipt in the stage-1 file and refuses unless every one says synthetic, before any bundle opens | `test_allow_draft_needs_a_synthetic_stage1` |
+| Mythos N2 (step 3's half) | Step 3 refuses a stage-1 file made under another manifest before any energy | same test |
+| Mythos N4: a docs-only change skips CI | The `changes` job counts `docs/process/cadence/looks/*` and `docs/process/cadence/kits/*` as code | `test_ci_runs_the_tests_on_a_change_to_the_look_s_frozen_files` (runs the job's own case block) |
+| Mythos N5: `GIT_DIR` redirects the gate | Every git call the gate makes drops the caller's `GIT_*` variables | `test_the_gate_ignores_the_caller_s_git_environment` |
+| Mythos N6: rule 4 admits a leg that stage 2 refuses | Rule 4 is the ruled rule (RL-166 Q7) and is unchanged. `inclusion_34.meter_bracket` applies stage 2's support test from the poll stamps (`tx`, `rx`, `rt`, `n`; no payload), conservatively. Its result is in inclusion's detail per leg, for stage 1's preflight (the analyst's half). An exact match would need the samples' device times, which sit inside the payload | `Stage2Bracket` (the reproduced stream ending 1 s early: rule 4 passes and is flagged; the margin edge; empty polls) |
+| Mythos N8: stage 1 cannot authenticate its roster or verdict file | LOOKS.json rows carry `verdicts_sha256` beside `roster_sha256`. The lead commits both before stage 1, and they are required from `stage1_committed` on. Stage 1 calls `require_inputs_committed`. `require_stage1_committed` compares both with the stage-1 file's `input:` hashes. Inclusion's detail names both hashes, and its output line prints them | `test_stage1_inputs_are_committed_by_hash`, `test_looks_rows_record_the_hashes`, `test_require_stage1_committed_reads_git`, step 3's wrong-verdict case, inclusion's detail check |
+| Sol NEW-3: exact disclosure for the fit only | `STAGE1_CODE` and `STEP3_CODE` (the measured import closures) are required exactly, at the pins, as the fit's set is | `test_every_stage_records_exactly_its_code` (missing `joulewise/schemas.py`, an extra pinned file, each stage) |
+| Sol NEW-4: a step-3 threshold that contradicts the manifest | `assemble` requires `threshold_applied` to equal the manifest's `drift_tripwire.threshold` | `test_step3_threshold_is_the_manifest_s` |
+
+**The lead's sequence at the look**, with N8:
+1. `validate --span-ledger L --roster-out R`.
+2. `inclusion_34.py`.
+3. Commit `roster_sha256` and `verdicts_sha256` in the row.
+4. Stage 1.
+5. Commit `stage1_sha256` (status `stage1_committed`).
+6. Stage 2, step 3 and `assemble`.
+
+Every tool takes the same `--ledger-ref`.
+
 ## 8. Still owed
 
 | Item | Who | Due |

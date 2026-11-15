@@ -152,6 +152,14 @@ def _flag(stage1, flag):
 STAGE2_CODE = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
                "joulewise/cadence_looks/inclusion_34.py", "joulewise/cadence_looks/step3_energy_ratios.py")
 STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion_34.py, not by the stages
+# Sol round-3 NEW-3: the exact repository files stage 1 and step 3 load (their import closures, measured on the
+# e2e run), as the fit's set above; each must record exactly these, at the pins.
+_SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", "joulewise/cadence_looks/manifest.py",
+                "joulewise/axi_decode_config.py", "joulewise/idle_admission.py", "joulewise/schemas.py",
+                "joulewise/validation.py")
+STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
+                              "scripts/cadence_look_run.py")
+STEP3_CODE = _SHARED_CODE + ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/step3_energy_ratios.py")
 
 
 def _schemas(repo):
@@ -177,6 +185,25 @@ def _provenance(name, rec, doc, manifest_sha, pins, *, exact=None):
             problems.append(f"{name} does not record {path}'s hash")
         for path in sorted(set(code) - exact):
             problems.append(f"{name} records {path}, which the pinned stage does not run")
+    return problems
+
+
+def _coefficient_problems(fit):
+    """Mythos round-3 N9: a channel's coefficient maps carry its own columns and nothing else."""
+    problems = []
+    channels = fit.get("channels") if isinstance(fit.get("channels"), dict) else {}
+    for ch_name, ch in channels.items():
+        if not isinstance(ch, dict):
+            continue
+        cols = set(ch.get("columns") or [])
+        if set(ch.get("coefficients") or {}) != cols:
+            problems.append(f"the fit's {ch_name} coefficients are not exactly its columns")
+        for day, vec in (ch.get("fold_coefficients") or {}).items():
+            if not set(vec or {}) <= cols:
+                problems.append(f"the fit's {ch_name} fold {day} carries a key outside its columns")
+        without = (ch.get("marked_sensitivity") or {}).get("coefficients_without")
+        if isinstance(without, dict) and not set(without) <= cols:
+            problems.append(f"the fit's {ch_name} coefficients_without carries a key outside its columns")
     return problems
 
 
@@ -220,14 +247,16 @@ def assemble(args):
     stage2_set = (set(STAGE2_CODE) | {d["path"] for d in (doc.get("fit") or {}).get("dependencies") or []}) \
         - STAGE_ONLY_DEPENDENCIES
     problems += _provenance("the fit", fit, doc, manifest_sha, pins, exact=stage2_set)
-    problems += _provenance("stage 1", stage1, doc, manifest_sha, pins)
-    problems += _provenance("step 3", step3, doc, manifest_sha, pins)
-    for need in ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py"):
-        if need not in (stage1.get("code_sha256") or {}):
-            problems.append(f"stage 1 does not record {need}'s hash")
-    for need in ("joulewise/cadence_looks/step3_roster.py", lm.STEP3_PATH):
-        if need not in (step3.get("code_sha256") or {}):
-            problems.append(f"step 3 does not record {need}'s hash")
+    problems += _provenance("stage 1", stage1, doc, manifest_sha, pins, exact=set(STAGE1_CODE))
+    problems += _provenance("step 3", step3, doc, manifest_sha, pins, exact=set(STEP3_CODE))
+    if "input:roster_sha256" not in (stage1.get("code_sha256") or {}):
+        problems.append("stage 1 does not record its roster's hash (input:roster_sha256)")
+    # Sol round-3 NEW-4: step 3 applied the manifest's drift threshold, whichever the research lead rules
+    drift = next((d for d in doc.get("decisions") or [] if d.get("id") == "drift_tripwire"), {})
+    applied = (step3.get("tripwire") or {}).get("threshold_applied")
+    if applied != drift.get("threshold"):
+        problems.append(f"step 3 applied the drift threshold {applied}, not the manifest's {drift.get('threshold')}")
+    problems += _coefficient_problems(fit)
     drafted = [name for name, rec in (("stage 1", stage1), ("the fit", fit), ("step 3", step3))
                if rec.get("allow_draft") is True]
     if args.allow_draft:
@@ -250,6 +279,7 @@ def assemble(args):
     code = dict(fit.get("code_sha256") or {})
     code.update({k: v for k, v in (step3.get("code_sha256") or {}).items()})
     code["scripts/cadence_look_manifest.py"] = pins["scripts/cadence_look_manifest.py"]
+    gate = None if args.allow_draft else lm.ledger_gate(repo, args.ledger_ref)
     # RL-158 Q5: legs whose realized prompt count is more than 5 % from nominal, from stage 1's own fields
     realized = [{"leg_key": leg["leg_key"], "nominal": leg["cell_prompt_tokens"], "realized": leg["prefill_tokens"]}
                 for leg in stage1.get("legs") or []
@@ -262,7 +292,8 @@ def assemble(args):
            "decisions": {"drift_tripwire": step3["tripwire"]["decision"], "qualified_interim_half": q,
                          "extension_rule": "none written; any extension needs a ruling"},
            "disclosure": {"date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
-                          "code_sha256": code, "stage1_sha256": s1, "analyst_seat": args.analyst_seat,
+                          "code_sha256": code, "ledger_gate": gate, "stage1_sha256": s1,
+                          "analyst_seat": args.analyst_seat,
                           "numpy_version": fit.get("numpy_version", ""),
                           "holds_cleared": [{"flag": f, "cleared_by": cleared[f]} for f in raised],
                           "statement": "An energy read on conditionless campaign legs only, by frozen code at the "
@@ -290,6 +321,7 @@ def check_output(path, manifest_path, repo):
     out = lm.load_json(path)
     _, out_schema = _schemas(repo)
     problems = [f"output: {e}" for e in sc.errors(out, out_schema)[:20]]
+    problems += [f"output: {p}" for p in _coefficient_problems(out.get("fit") or {})]
     if out.get("manifest_sha256") != lm.sha256_file(manifest_path):
         problems.append("output: made under another manifest")
     if out.get("allow_draft") is True and out.get("synthetic") is not True:
@@ -318,7 +350,8 @@ def main(argv=None):
         a.add_argument(k, required=True)
     a.add_argument("--hold-cleared", action="append", metavar="FLAG=RL-n")
     a.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest, no LOOKS.json stage-1 row")
-    a.add_argument("--ledger-ref", help="the shared ref the committed LOOKS.json must be on (default: upstream, else origin/main)")
+    a.add_argument("--ledger-ref", help="the remote-tracking branch the committed LOOKS.json must be on (default: the "
+                                        "upstream, else origin/main; never HEAD or a local ref: manifest.shared_ref)")
     args = p.parse_args(argv)
     if args.cmd == "validate":
         if args.kit and not args.repo:

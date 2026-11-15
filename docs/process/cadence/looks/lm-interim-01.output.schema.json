@@ -135,6 +135,9 @@
         }
        }
       }
+     },
+     "propertyNames": {
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
      }
     },
     "spans_with_retry": {
@@ -205,6 +208,7 @@
     "code_sha256",
     "date",
     "holds_cleared",
+    "ledger_gate",
     "numpy_version",
     "stage1_sha256",
     "statement"
@@ -218,7 +222,41 @@
      "additionalProperties": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+     },
+     "propertyNames": {
+      "pattern": "^(input:[a-z0-9_]+|(joulewise|scripts)/[A-Za-z0-9_./]+\\.py)$"
      }
+    },
+    "ledger_gate": {
+     "oneOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "commit",
+        "ref",
+        "ref_commit"
+       ],
+       "properties": {
+        "commit": {
+         "type": "string",
+         "pattern": "^[0-9a-f]{40}$"
+        },
+        "ref": {
+         "type": "string",
+         "pattern": "^refs/remotes/[^\\s]+$"
+        },
+        "ref_commit": {
+         "type": "string",
+         "pattern": "^[0-9a-f]{40}$"
+        }
+       }
+      }
+     ],
+     "description": "What satisfied the committed-ledger gate (manifest.ledger_gate): HEAD, the shared remote-tracking ref and its commit; null under --allow-draft (Mythos round-3 N3)"
     },
     "stage1_sha256": {
      "type": "string",
@@ -307,6 +345,9 @@
      "additionalProperties": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+     },
+     "propertyNames": {
+      "pattern": "^(input:[a-z0-9_]+|(joulewise|scripts)/[A-Za-z0-9_./]+\\.py)$"
      }
     },
     "numpy_version": {
@@ -416,6 +457,19 @@
      "type": "object",
      "additionalProperties": {
       "type": "number"
+     },
+     "propertyNames": {
+      "enum": [
+       "p1",
+       "p2",
+       "a0",
+       "a1",
+       "a2",
+       "k_tf08",
+       "k_fan",
+       "k_tv0h",
+       "delta"
+      ]
      }
     },
     "covariance": {
@@ -463,6 +517,9 @@
          "type": "object",
          "additionalProperties": {
           "type": "number"
+         },
+         "propertyNames": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
          }
         },
         "counted_days": {
@@ -476,6 +533,9 @@
          "type": "object",
          "additionalProperties": {
           "type": "integer"
+         },
+         "propertyNames": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
          }
         },
         "max_abs": {
@@ -512,6 +572,9 @@
          "type": "object",
          "additionalProperties": {
           "type": "number"
+         },
+         "propertyNames": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
          }
         },
         "pooled": {
@@ -560,6 +623,9 @@
            "type": "object",
            "additionalProperties": {
             "type": "number"
+           },
+           "propertyNames": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
            }
           },
           "counted_days": {
@@ -573,6 +639,9 @@
            "type": "object",
            "additionalProperties": {
             "type": "integer"
+           },
+           "propertyNames": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
            }
           },
           "max_abs": {
@@ -609,6 +678,9 @@
            "type": "object",
            "additionalProperties": {
             "type": "number"
+           },
+           "propertyNames": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
            }
           },
           "pooled": {
@@ -781,6 +853,9 @@
        "type": "object",
        "additionalProperties": {
         "type": "number"
+       },
+       "propertyNames": {
+        "pattern": "^[a-z0-9-]+/[LH]\\d{3}$"
        }
       },
       "hot_stretch": {
@@ -790,6 +865,9 @@
          "number",
          "null"
         ]
+       },
+       "propertyNames": {
+        "pattern": "^[a-z0-9-]+/[LH]\\d{3}$"
        }
       }
      }
@@ -820,6 +898,19 @@
        ],
        "additionalProperties": {
         "type": "number"
+       },
+       "propertyNames": {
+        "enum": [
+         "p1",
+         "p2",
+         "a0",
+         "a1",
+         "a2",
+         "k_tf08",
+         "k_fan",
+         "k_tv0h",
+         "delta"
+        ]
        }
       },
       "lodo_hot_max_abs_without": {
@@ -864,7 +955,23 @@
       "type": "object",
       "additionalProperties": {
        "type": "number"
+      },
+      "propertyNames": {
+       "enum": [
+        "p1",
+        "p2",
+        "a0",
+        "a1",
+        "a2",
+        "k_tf08",
+        "k_fan",
+        "k_tv0h",
+        "delta"
+       ]
       }
+     },
+     "propertyNames": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
      },
      "description": "RL-166b P-1: each LODO fold's coefficient vector, by held-out day and column name"
     },
@@ -908,6 +1015,9 @@
           ]
          }
         }
+       },
+       "propertyNames": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
        }
       },
       "s_with_heat": {
@@ -1303,6 +1413,7 @@
     "allow_draft",
     "cells",
     "code_sha256",
+    "ledger_gate",
     "manifest_sha256",
     "schema",
     "stage1_sha256",
@@ -1330,6 +1441,9 @@
      "additionalProperties": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+     },
+     "propertyNames": {
+      "pattern": "^(input:[a-z0-9_]+|(joulewise|scripts)/[A-Za-z0-9_./]+\\.py)$"
      }
     },
     "allow_draft": {
@@ -1337,6 +1451,37 @@
     },
     "synthetic": {
      "type": "boolean"
+    },
+    "ledger_gate": {
+     "oneOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "commit",
+        "ref",
+        "ref_commit"
+       ],
+       "properties": {
+        "commit": {
+         "type": "string",
+         "pattern": "^[0-9a-f]{40}$"
+        },
+        "ref": {
+         "type": "string",
+         "pattern": "^refs/remotes/[^\\s]+$"
+        },
+        "ref_commit": {
+         "type": "string",
+         "pattern": "^[0-9a-f]{40}$"
+        }
+       }
+      }
+     ],
+     "description": "What satisfied the committed-ledger gate (manifest.ledger_gate): HEAD, the shared remote-tracking ref and its commit; null under --allow-draft (Mythos round-3 N3)"
     },
     "cells": {
      "type": "array",
@@ -1388,9 +1533,130 @@
         }
        },
        "ii_gamma": {
-        "type": [
-         "object",
-         "null"
+        "oneOf": [
+         {
+          "type": "null"
+         },
+         {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "all_nine_legs",
+           "max_abs_over_reported",
+           "original_eight_legs_record_only",
+           "without_two_high_power_legs"
+          ],
+          "properties": {
+           "all_nine_legs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "n_groups",
+             "n_groups_with_2plus",
+             "n_obs",
+             "se",
+             "slope"
+            ],
+            "properties": {
+             "slope": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "se": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "n_obs": {
+              "type": "integer"
+             },
+             "n_groups": {
+              "type": "integer"
+             },
+             "n_groups_with_2plus": {
+              "type": "integer"
+             }
+            }
+           },
+           "without_two_high_power_legs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "n_groups",
+             "n_groups_with_2plus",
+             "n_obs",
+             "se",
+             "slope"
+            ],
+            "properties": {
+             "slope": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "se": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "n_obs": {
+              "type": "integer"
+             },
+             "n_groups": {
+              "type": "integer"
+             },
+             "n_groups_with_2plus": {
+              "type": "integer"
+             }
+            }
+           },
+           "original_eight_legs_record_only": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "n_groups",
+             "n_groups_with_2plus",
+             "n_obs",
+             "se",
+             "slope"
+            ],
+            "properties": {
+             "slope": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "se": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "n_obs": {
+              "type": "integer"
+             },
+             "n_groups": {
+              "type": "integer"
+             },
+             "n_groups_with_2plus": {
+              "type": "integer"
+             }
+            }
+           },
+           "max_abs_over_reported": {
+            "type": [
+             "number",
+             "null"
+            ]
+           }
+          }
+         }
         ]
        },
        "gamma_estimable": {
@@ -1439,9 +1705,123 @@
         }
        },
        "vi_slope_lnE_on_lnclock": {
-        "type": [
-         "object",
-         "null"
+        "oneOf": [
+         {
+          "type": "null"
+         },
+         {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+           "all_blocks_automatic_legs",
+           "all_blocks_k_ge_1_all_nine_legs",
+           "precut_blocks_all_nine_legs"
+          ],
+          "properties": {
+           "all_blocks_k_ge_1_all_nine_legs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "n_groups",
+             "n_groups_with_2plus",
+             "n_obs",
+             "se",
+             "slope"
+            ],
+            "properties": {
+             "slope": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "se": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "n_obs": {
+              "type": "integer"
+             },
+             "n_groups": {
+              "type": "integer"
+             },
+             "n_groups_with_2plus": {
+              "type": "integer"
+             }
+            }
+           },
+           "all_blocks_automatic_legs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "n_groups",
+             "n_groups_with_2plus",
+             "n_obs",
+             "se",
+             "slope"
+            ],
+            "properties": {
+             "slope": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "se": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "n_obs": {
+              "type": "integer"
+             },
+             "n_groups": {
+              "type": "integer"
+             },
+             "n_groups_with_2plus": {
+              "type": "integer"
+             }
+            }
+           },
+           "precut_blocks_all_nine_legs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+             "n_groups",
+             "n_groups_with_2plus",
+             "n_obs",
+             "se",
+             "slope"
+            ],
+            "properties": {
+             "slope": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "se": {
+              "type": [
+               "number",
+               "null"
+              ]
+             },
+             "n_obs": {
+              "type": "integer"
+             },
+             "n_groups": {
+              "type": "integer"
+             },
+             "n_groups_with_2plus": {
+              "type": "integer"
+             }
+            }
+           }
+          }
+         }
         ]
        }
       }

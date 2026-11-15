@@ -102,6 +102,9 @@ jobs:
             [[ -n "$paths" ]] || return 1
             while IFS= read -r path; do
               case "$path" in
+                # The interim look's frozen files (manifest, schemas, LOOKS.json, evidence) and the kits the
+                # manifest check reads live under docs/; a change to them runs the tests (Mythos round-3 N4).
+                docs/process/cadence/looks/*|docs/process/cadence/kits/*) return 1 ;;
                 docs/*) ;;
                 */*) return 1 ;;
                 *.md) ;;

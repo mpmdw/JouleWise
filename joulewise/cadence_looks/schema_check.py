@@ -4,7 +4,9 @@ The look's schemas (docs/process/cadence/looks/*.schema.json) use a fixed subset
 ``jsonschema``. This module implements exactly that subset:
 
 * ``type`` (one name or a list; ``integer`` and ``number`` exclude booleans), ``const``, ``enum``;
-* ``properties``, ``required``, ``additionalProperties`` (``false`` or a schema), ``minProperties``;
+* ``properties``, ``required``, ``additionalProperties`` (``false`` or a schema), ``minProperties``,
+  ``propertyNames`` (each key checked as a string: a map's keys are constrained, so no leg-keyed value fits where a
+  day or a column is meant; Sol NEW-1, Mythos N9);
 * ``items``, ``minItems``, ``maxItems``, ``uniqueItems``, ``contains``;
 * ``pattern`` (``re.search``), ``minLength``;
 * ``minimum``, ``maximum``, ``exclusiveMinimum``;
@@ -23,7 +25,7 @@ import math
 import re
 
 ANNOTATIONS = {"$schema", "$id", "$comment", "title", "description", "$defs"}
-KEYWORDS = {"type", "const", "enum", "properties", "required", "additionalProperties", "minProperties", "items",
+KEYWORDS = {"type", "const", "enum", "properties", "required", "additionalProperties", "minProperties", "propertyNames", "items",
             "minItems", "maxItems", "uniqueItems", "contains", "pattern", "minLength", "minimum", "maximum",
             "exclusiveMinimum", "oneOf", "anyOf", "allOf", "not", "$ref"}
 
@@ -102,6 +104,9 @@ def errors(instance, schema, root=None, path="$"):
                     out.append(f"{path}.{k}: not allowed")
                 elif isinstance(ap, dict):
                     out += errors(v, ap, root, f"{path}.{k}")
+        if "propertyNames" in schema:
+            for k in instance:
+                out += [f"{path}: key {k!r}: {e.split(': ', 1)[-1]}" for e in errors(k, schema["propertyNames"], root, path)]
         if "minProperties" in schema and len(instance) < schema["minProperties"]:
             out.append(f"{path}: fewer than {schema['minProperties']} properties")
     if isinstance(instance, list):

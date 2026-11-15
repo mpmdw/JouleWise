@@ -67,7 +67,7 @@ def stream(name="stream-0001.jsonl", start_s=-10, end_s=230, poll_s=0.2, sps=50,
             if header else None,
             "trailer": {"k": "t", "polls": len(stamps), "empties": 3, "bad": 1, "usb_errors": 0, "stop_reason": stop}
             if trailer else None,
-            "polls": polls}
+            "polls": polls, "round_trips": [(t, n, 2_000_000) for t, n in polls]}     # a 2 ms request round trip
 
 
 INTERVAL = (T0, T0 + 200 * NS)
@@ -234,6 +234,43 @@ class Rule4(Base):
         del no_sps["header"]["sps"]
         self.assertIn("the header's nominal sample rate (sps) is missing or differs between streams",
                       i34.rule4(INTERVAL, [no_sps])["reasons"])
+
+
+class Stage2Bracket(Base):
+    """Mythos round-3 N6: rule 4 (ruled, unchanged) can admit a leg that stage 2's support rule refuses; the bracket
+    print flags it from the poll stamps, conservatively, for stage 1's preflight."""
+
+    def test_bracketed_when_the_stream_outlives_the_interval(self):
+        out = i34.meter_bracket(INTERVAL, [stream()])
+        self.assertEqual(out, {"start": True, "end": True, "bracketed": True})
+
+    def test_stream_ending_before_the_last_token_admitted_by_rule4_but_not_bracketed(self):
+        s = stream(end_s=199)                       # the stream stops 1 s before the interval's end
+        self.assertTrue(i34.rule4(INTERVAL, [s])["pass"])
+        self.assertEqual(i34.meter_bracket(INTERVAL, [s]), {"start": True, "end": False, "bracketed": False})
+        late = stream(start_s=0)                    # the stream starts at the interval's start
+        self.assertTrue(i34.rule4(INTERVAL, [late])["pass"])
+        self.assertFalse(i34.meter_bracket(INTERVAL, [late])["start"])
+
+    def test_the_end_needs_the_newest_sample_past_the_margin(self):
+        """A poll's newest sample may be one period plus the round trip older than its answer (km003c_parse)."""
+        m = i34.BRACKET_MARGIN_NS
+        step = NS // 50
+        for end_extra, ok in ((m + step + 2_000_000, True), (m + step + 1_000_000, False)):
+            s = stream(end_s=200)
+            s["round_trips"] = [(t, n, r) for t, n, r in s["round_trips"] if t <= INTERVAL[1]] + \
+                [(INTERVAL[1] + end_extra, 10, 2_000_000)]
+            self.assertEqual(i34.meter_bracket(INTERVAL, [s])["end"], ok, end_extra)
+
+    def test_empty_polls_bracket_nothing(self):
+        s = stream(empty=(195, 231))
+        self.assertFalse(i34.meter_bracket(INTERVAL, [s])["end"])
+
+    def test_judge_leg_detail_carries_it_and_the_verdict_is_rule4_alone(self):
+        s = stream(end_s=199)
+        r4 = i34.rule4(INTERVAL, [s])
+        self.assertTrue(r4["pass"])
+        self.assertNotIn("stage2_bracket", r4)
 
 
 class Readers(Base):
@@ -413,6 +450,14 @@ class CustodyVerdictFile(Readers):
                              "dev-03-s01/L003": {"sidecar_coverage": False, "km003c_clean": False}})
         d = json.loads(det.read_text())
         self.assertEqual(d["span_trailers"][0]["stop_reason"], "signal 15")
+        # Mythos round-3 N8: the hashes the lead commits for stage 1; N3: no gate under --allow-draft
+        self.assertEqual((d["roster_sha256"], d["verdicts_sha256"]), (i34_sha(roster), i34_sha(out)))
+        self.assertIsNone(d["ledger_gate"])
+        self.assertIn("stage2_bracket", d["legs"]["dev-03-s01/L001"]["rule4"])
+        r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", root,
+                             "--manifest", mini / look_minirepo.MANIFEST, "--ledger-ref", "HEAD", "--out", out)
+        self.assertEqual(r.returncode, 1)                                       # Sol round-3 NEW-2
+        self.assertIn("the shared ref is a remote-tracking branch", r.stdout)
         self.assertEqual(d["pins"]["runtime_config_sha256"],
                          i34_sha(mini / "configs/align/v4/r1_runtime.json"))
         self.assertNotIn(self.SENTINEL_HEX, out.read_text() + det.read_text())

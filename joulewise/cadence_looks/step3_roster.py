@@ -208,7 +208,8 @@ def main(argv=None):
     p.add_argument("--custody", required=True)
     p.add_argument("--span-dir", action="append", default=[])
     p.add_argument("--manifest", required=True)
-    p.add_argument("--ledger-ref", help="the shared ref the committed LOOKS.json must be on (default: upstream, else origin/main)")
+    p.add_argument("--ledger-ref", help="the remote-tracking branch the committed LOOKS.json must be on (default: the "
+                                        "upstream, else origin/main; never HEAD or a local ref: manifest.shared_ref)")
     p.add_argument("--allow-draft", action="store_true",
                    help="synthetic runs only: a draft manifest and no committed stage-1 row; refused unless stage 1 is synthetic")
     p.add_argument("--out", required=True)
@@ -225,14 +226,29 @@ def main(argv=None):
     try:
         doc = lm.verify_pins(a.manifest, repo, allow_draft=a.allow_draft, running=[Path(__file__).resolve(), STEP3_PATH],
                              ledger_ref=a.ledger_ref)
+        if stage1.get("manifest_sha256") != lm.sha256_file(a.manifest):   # before any energy (Mythos round-3 N2)
+            raise lm.ManifestError(["the stage-1 file was made under another manifest"])
         if a.allow_draft:
             if stage1.get("synthetic") is not True:                      # Mythos N2
                 raise lm.ManifestError(["--allow-draft on a stage-1 file that is not synthetic"])
+            # Mythos round-3 N1: and on custody whose every span's receipt says so, checked before any bundle opens
+            sdir_of = span_dirs(a.custody, a.span_dir)
+            spans = sorted(({leg["leg_key"].split("/", 1)[0] for leg in stage1.get("legs") or []}
+                            | {sp.get("span_id") for sp in (stage1.get("roster") or {}).get("spans") or []}) - {None})
+            real = []
+            for span_id in spans:
+                rec = Path(sdir_of(span_id)) / "runner_receipt.json"
+                if not rec.is_file() or json.loads(rec.read_text(encoding="utf-8")).get("synthetic") is not True:
+                    real.append(span_id)
+            if real:
+                raise lm.ManifestError([f"--allow-draft on custody that is not synthetic: {', '.join(real[:5])}"])
+            gate = None
         else:
             if stage1.get("allow_draft") is True:
                 raise lm.ManifestError(["the stage-1 file was made under --allow-draft"])
             lm.require_stage1_committed(repo, doc["look_id"], a.stage1_sha256, stage1_doc=stage1,
                                         ledger_ref=a.ledger_ref)
+            gate = lm.ledger_gate(repo, a.ledger_ref)                    # what satisfied the gate, recorded
     except lm.ManifestError as error:
         for problem in error.problems:
             print(f"REFUSE {problem}")
@@ -258,7 +274,8 @@ def main(argv=None):
            "manifest_sha256": lm.sha256_file(a.manifest),
            # the step 3 module runs from its verified bytes under a fresh name, outside sys.modules: named here
            "code_sha256": {**lm.loaded_repo_files(repo), lm.STEP3_PATH: STEP3_SHA256},
-           "allow_draft": bool(a.allow_draft), "synthetic": stage1.get("synthetic") is True, **result}
+           "allow_draft": bool(a.allow_draft), "synthetic": stage1.get("synthetic") is True, "ledger_gate": gate,
+           **result}
     text = json.dumps(out, indent=1, allow_nan=False) + "\n"
     Path(a.out).write_text(text, encoding="utf-8")
     print(f"wrote {a.out} sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()}")

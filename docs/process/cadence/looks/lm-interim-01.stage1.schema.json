@@ -56,6 +56,9 @@
    "additionalProperties": {
     "type": "string",
     "pattern": "^[0-9a-f]{64}$"
+   },
+   "propertyNames": {
+    "pattern": "^(input:[a-z0-9_]+|(joulewise|scripts)/[A-Za-z0-9_./]+\\.py)$"
    }
   },
   "numpy_version": {
@@ -418,6 +421,15 @@
      ],
      "additionalProperties": {
       "type": "number"
+     },
+     "propertyNames": {
+      "enum": [
+       "intercept",
+       "tf08_c",
+       "fan_rpm",
+       "tv0h_excess_c",
+       "t_p_s"
+      ]
      }
     },
     "sigma_s": {
@@ -452,6 +464,9 @@
          "type": "object",
          "additionalProperties": {
           "type": "number"
+         },
+         "propertyNames": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
          }
         },
         "rms_s": {
@@ -677,30 +692,60 @@
         "type": "integer"
        }
       }
+     },
+     "propertyNames": {
+      "pattern": "^[a-z0-9]+-\\d{2}$"
      }
     },
     "by_cell": {
      "type": "object",
      "additionalProperties": {
       "type": "integer"
+     },
+     "propertyNames": {
+      "enum": [
+       "2000",
+       "10000",
+       "19458"
+      ]
      }
     },
     "by_g0_role": {
      "type": "object",
      "additionalProperties": {
       "type": "integer"
+     },
+     "propertyNames": {
+      "enum": [
+       "null",
+       "capture",
+       "consume"
+      ]
      }
     },
     "by_day": {
      "type": "object",
      "additionalProperties": {
       "type": "integer"
+     },
+     "propertyNames": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
      }
     },
     "excluded_by_rule": {
      "type": "object",
      "additionalProperties": {
       "type": "integer"
+     },
+     "propertyNames": {
+      "enum": [
+       "ran_to_cap",
+       "g0_released",
+       "sidecar_coverage",
+       "km003c_clean",
+       "not_a_contaminated_attempt",
+       "block_power_mode"
+      ]
      }
     }
    }
@@ -738,6 +783,9 @@
         ]
        }
       }
+     },
+     "propertyNames": {
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
      }
     },
     "max_abs_s": {
@@ -956,6 +1004,9 @@
         }
        }
       }
+     },
+     "propertyNames": {
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
      }
     },
     "spans_with_retry": {

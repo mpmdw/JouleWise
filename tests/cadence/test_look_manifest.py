@@ -656,7 +656,7 @@ class Assemble(Base):
     three inputs are the smallest documents their pinned schemas admit (tests/cadence/look_fixtures.py), carrying
     the provenance a real run records: this manifest's sha256 and the pinned hashes of the code each stage runs."""
 
-    ROSTER = "0" * 64
+    ROSTER, VERDICTS = "0" * 64, "1" * 64
 
     def setUp(self):
         from tests.cadence import look_minirepo as mr
@@ -681,7 +681,8 @@ class Assemble(Base):
         msha, pins, man = self.pins()
         stage1 = self.minimal(self.s1_schema)
         stage1.update(manifest_sha256=msha, synthetic=True, allow_draft=True, legs=self.legs,
-                      code_sha256={FIT: pins[FIT], RUNNER: pins[RUNNER], "input:roster_sha256": self.ROSTER})
+                      code_sha256={**{k: pins[k] for k in cli.STAGE1_CODE}, "input:roster_sha256": self.ROSTER,
+                                   "input:rules_3_4_sha256": self.VERDICTS})
         stage1.update(changes)
         self.stage1 = stage1
         self.s1.write_text(json.dumps(stage1) + "\n")
@@ -691,9 +692,13 @@ class Assemble(Base):
         self.fit = self.minimal(self.sc.sub_schema(self.out_schema, "fit_output"))
         self.fit.update(stage1_sha256=h, manifest_sha256=msha, allow_draft=True, numpy_version="2.5.4",
                         code_sha256={k: pins[k] for k in sorted(stage2)})
+        for ch in self.fit["channels"].values():                    # a channel's coefficients are its columns
+            ch["coefficients"] = {c: 0.0 for c in ch["columns"]}
+        drift = next(d for d in man["decisions"] if d["id"] == "drift_tripwire")
         self.step3 = self.minimal(self.sc.sub_schema(self.out_schema, "step3_output"))
         self.step3.update(stage1_sha256=h, manifest_sha256=msha, allow_draft=True, synthetic=True,
-                          code_sha256={ADAPTER: pins[ADAPTER], lm.STEP3_PATH: pins[lm.STEP3_PATH]})
+                          code_sha256={k: pins[k] for k in cli.STEP3_CODE})
+        self.step3["tripwire"]["threshold_applied"] = drift["threshold"]
         self.dump()
         return h
 
@@ -802,13 +807,97 @@ class Assemble(Base):
         self.mr.git_commit(self.mini, "stage 1", publish=False)
         self.refused_run("is not on")                                   # committed, not on the shared ref
         self.mr.git(self.mini, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.refused_run("the shared ref is a remote-tracking branch", "--ledger-ref", "HEAD")   # Sol NEW-2
         r = self.run_()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         out = json.loads((self.d / "out.json").read_text())
         self.assertEqual((out["allow_draft"], out["synthetic"]), (False, True))
+        head = self.mr.git(self.mini, "rev-parse", "HEAD").stdout.strip()
+        self.assertEqual(out["disclosure"]["ledger_gate"],
+                         {"commit": head, "ref": "refs/remotes/origin/main", "ref_commit": head})
         self.mr.commit(self.mini, stage1_sha256=h, roster_sha256="9" * 64)   # another roster
         (self.d / "out.json").unlink()
         self.refused_run("is not the roster the stage-1 file records")
+
+    def with_cell(self):
+        """A step 3 cell in the producer's shape (step3_roster._project of step3_energy_ratios.analyse)."""
+        fe = {"slope": 0.001, "se": 0.0005, "n_obs": 10, "n_groups": 3, "n_groups_with_2plus": 3}
+        cell = self.minimal(self.sc.sub_schema(self.out_schema, "step3_output")["properties"]["cells"]["items"],
+                            self.out_schema)
+        cell.update(status="ok", n_legs=3, gamma_estimable=True,
+                    ii_gamma={"all_nine_legs": dict(fe), "without_two_high_power_legs": dict(fe),
+                              "original_eight_legs_record_only": dict(fe), "max_abs_over_reported": 0.001},
+                    vi_slope_lnE_on_lnclock={"all_blocks_k_ge_1_all_nine_legs": dict(fe),
+                                             "all_blocks_automatic_legs": dict(fe),
+                                             "precut_blocks_all_nine_legs": dict(fe)})
+        self.step3["cells"] = [cell]
+        self.dump()
+        return cell
+
+    def test_no_energy_nests_anywhere_in_the_output(self):
+        """Sol round-3 NEW-1, Mythos N9: nested joules or watts, and a leg key in a coefficient map, are refused by
+        assemble and by validate --output; the producer's own shapes pass."""
+        cell = self.with_cell()
+        r = self.run_("--allow-draft")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)                     # the control
+        good = json.loads((self.d / "out.json").read_text())
+        (self.d / "out.json").unlink()
+        attacks = [("ii_gamma", lambda c: c["ii_gamma"].update(per_leg_joules={"dev-03-s01/L001": 123.0})),
+                   ("ii_gamma.all_nine_legs", lambda c: c["ii_gamma"]["all_nine_legs"].update(joules=1.0)),
+                   ("vi_slope", lambda c: c["vi_slope_lnE_on_lnclock"].update(per_block_watts={"3": 9.0}))]
+        for name, edit in attacks:
+            self.write_stage1()
+            c = copy.deepcopy(cell)
+            edit(c)
+            self.step3["cells"] = [c]
+            self.dump()
+            self.refused_run("step 3 does not pass its schema", "--allow-draft")
+            bad = copy.deepcopy(good)
+            bad["step3"]["cells"] = [c]
+            (self.d / "bad.json").write_text(json.dumps(bad))
+            with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:
+                rc = cli.main(["validate", str(self.mini / self.mr.MANIFEST), "--output", str(self.d / "bad.json")])
+            self.assertEqual(rc, 1, name)
+            self.assertRegex(so.getvalue(), "not allowed|matches 0 of oneOf")
+        for where in ("coefficients", "fold"):
+            self.write_stage1()
+            ch = self.fit["channels"]["gpu_rail"]
+            if where == "coefficients":
+                ch["coefficients"]["dev-03-s01/L001"] = 123.0
+            else:
+                ch["fold_coefficients"] = {"2026-11-16": {"dev-03-s01/L001": 123.0}}
+            self.dump()
+            r = self.refused_run("the fit does not pass its schema", "--allow-draft")
+            self.assertIn("key 'dev-03-s01/L001'", r.stdout)
+        self.write_stage1()
+        del self.fit["channels"]["gpu_rail"]["coefficients"][self.fit["channels"]["gpu_rail"]["columns"][0]]
+        self.dump()
+        self.refused_run("the fit's gpu_rail coefficients are not exactly its columns", "--allow-draft")
+
+    def test_every_stage_records_exactly_its_code(self):
+        """Sol round-3 NEW-3: stage 1 and step 3, like the fit, record exactly the files their stage loads."""
+        for name, rec, attr in (("step 3", "step3", "step3"), ("stage 1", "stage1", None)):
+            extra = ADAPTER if name == "stage 1" else FIT
+            for edit, fragment in ((lambda d: d.pop("joulewise/schemas.py"),
+                                    f"{name} does not record joulewise/schemas.py"),
+                                   (lambda d: d.update({extra: self.pins()[1][extra]}),
+                                    f"{name} records {extra}, which the pinned stage does not run")):
+                if attr is None:
+                    code = copy.deepcopy(self.stage1["code_sha256"])
+                    edit(code)
+                    self.write_stage1(code_sha256=code)
+                else:
+                    self.write_stage1()
+                    edit(self.step3["code_sha256"])
+                    self.dump()
+                self.refused_run(fragment, "--allow-draft")
+
+    def test_step3_threshold_is_the_manifest_s(self):
+        """Sol round-3 NEW-4."""
+        drift = next(d for d in self.pins()[2]["decisions"] if d["id"] == "drift_tripwire")
+        self.step3["tripwire"]["threshold_applied"] = 0.08 if drift["threshold"] == 0.04 else 0.04
+        self.dump()
+        self.refused_run("step 3 applied the drift threshold", "--allow-draft")
 
     def test_held_flags_need_their_clearing_ruling(self):
         """RL-166c §2 row 7 and RL-166 Q8 (Mythos 8): P-4, R-20 and the five tripwires."""
@@ -959,6 +1048,8 @@ class ColdSeatFixes(Base):
             lm.validate_look_ledger(led)
         self.assertTrue(any("needs stage1_sha256" in p for p in ctx.exception.problems))
         row.update(stage1_sha256="2" * 64, roster_sha256="3" * 64)
+        self.refused(lambda: lm.validate_look_ledger(led), "needs verdicts_sha256")        # Mythos round-3 N8
+        row.update(verdicts_sha256="5" * 64)
         lm.validate_look_ledger(led)
         row["output_sha256"] = "nothex"
         self.refused(lambda: lm.validate_look_ledger(led), "output_sha256: 64 hex or null")
@@ -968,7 +1059,7 @@ class ColdSeatFixes(Base):
         or unpublished ledger, a wrong hash, a wrong roster or a plain 'committed' row is refused."""
         from tests.cadence import look_minirepo as mr
         mini = mr.mini_repo(self)
-        s1doc = {"code_sha256": {"input:roster_sha256": "3" * 64}}
+        s1doc = {"code_sha256": {"input:roster_sha256": "3" * 64, "input:rules_3_4_sha256": "1" * 64}}
         req = lambda sha="2" * 64, doc=s1doc: lm.require_stage1_committed(mini, "lm-interim-01", sha, stage1_doc=doc)
         mr.commit(mini)
         self.refused(req, "stage 1 is not committed")
@@ -979,7 +1070,11 @@ class ColdSeatFixes(Base):
         mr.git(mini, "update-ref", "refs/remotes/origin/main", "HEAD")
         req()
         self.refused(lambda: req("4" * 64), "names stage-1 sha256")
-        self.refused(lambda: req(doc={"code_sha256": {"input:roster_sha256": "5" * 64}}), "is not the roster")
+        self.refused(lambda: req(doc={"code_sha256": {"input:roster_sha256": "5" * 64,
+                                                      "input:rules_3_4_sha256": "1" * 64}}), "is not the roster")
+        self.refused(lambda: req(doc={"code_sha256": {"input:roster_sha256": "3" * 64,
+                                                      "input:rules_3_4_sha256": "6" * 64}}),
+                     "is not the rules-3-4 verdict file")
         led = json.loads((mini / lm.LOOK_LEDGER_PATH).read_text())
         led["looks"].append(dict(led["looks"][0]))                       # a duplicate row contradicts
         (mini / lm.LOOK_LEDGER_PATH).write_text(json.dumps(led, indent=2) + "\n")
@@ -1038,6 +1133,67 @@ class ColdSeatFixes(Base):
         self.assertEqual(lm.unpinned_loaded_modules(doc, mini), ["joulewise/extra_helper.py (not pinned)"])
         doc["fit"]["dependencies"].append({"path": "joulewise/extra_helper.py", "sha256": "0" * 64})
         self.assertEqual(lm.unpinned_loaded_modules(doc, mini), ["joulewise/extra_helper.py (differs from the pin)"])
+
+    def test_the_gate_ignores_the_caller_s_git_environment(self):
+        """Mythos round-3 N5: GIT_DIR (and GIT_WORK_TREE ...) pointing at another repository changes nothing."""
+        import os
+        from tests.cadence import look_minirepo as mr
+        loose, other = mr.mini_repo(self), mr.mini_repo(self)
+        s1doc = {"code_sha256": {"input:roster_sha256": "3" * 64, "input:rules_3_4_sha256": "1" * 64}}
+        mr.commit(other, stage1_sha256="2" * 64, roster_sha256="3" * 64, verdicts_sha256="1" * 64)
+        mr.commit(loose, stage1_sha256="2" * 64, roster_sha256="3" * 64, verdicts_sha256="1" * 64, git_commit_it=False)
+        req = lambda: lm.require_stage1_committed(loose, "lm-interim-01", "2" * 64, stage1_doc=s1doc)
+        self.refused(req, "differs from the one committed at HEAD")
+        with unittest.mock.patch.dict(os.environ, {"GIT_DIR": str(other / ".git"), "GIT_WORK_TREE": str(other),
+                                                   "GIT_INDEX_FILE": str(other / ".git" / "index")}):
+            self.refused(req, "differs from the one committed at HEAD")
+            lm.require_stage1_committed(other, "lm-interim-01", "2" * 64, stage1_doc=s1doc)
+
+    def test_shared_ref_is_a_remote_tracking_branch(self):
+        """Sol round-3 NEW-2, Mythos N3: one resolver; HEAD, a local branch, a tag, a commit or an expression is refused."""
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        head = mr.git(mini, "rev-parse", "HEAD").stdout.strip()
+        mr.git(mini, "tag", "t1")
+        mr.git(mini, "update-ref", "refs/remotes/origin/look", head)
+        for ref in ("HEAD", "main", "t1", head, head[:12], "origin/main~0", "HEAD@{0}", "@", "origin/nope",
+                    "--output=x"):
+            self.refused(lambda: lm.shared_ref(mini, ref), "ledger ref")
+        self.assertEqual(lm.shared_ref(mini), ("refs/remotes/origin/main", head))
+        self.assertEqual(lm.shared_ref(mini, "origin/look"), ("refs/remotes/origin/look", head))
+        self.assertEqual(lm.shared_ref(mini, "refs/remotes/origin/look")[0], "refs/remotes/origin/look")
+
+    def test_stage1_inputs_are_committed_by_hash(self):
+        """Mythos round-3 N8: stage 1's roster and verdict file must be the ones the committed row names."""
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        mr.commit(mini)
+        msha = lm.sha256_file(mini / mr.MANIFEST)
+        req = lambda r="3" * 64, v="4" * 64, m=msha: lm.require_inputs_committed(
+            mini, "lm-interim-01", m, roster_sha256=r, verdicts_sha256=v)
+        self.refused(req, "has no roster_sha256: commit the roster's sha256 before stage 1")
+        mr.commit(mini, roster_sha256="3" * 64, verdicts_sha256="4" * 64)
+        msha = lm.sha256_file(mini / mr.MANIFEST)
+        req(m=msha)
+        self.refused(lambda: req(v="9" * 64, m=msha), "the rules-3-4 verdict file given (999999999999) is not")
+        self.refused(lambda: req(r="9" * 64, m=msha), "the roster given (999999999999) is not")
+        self.refused(lambda: req(m="8" * 64), "does not name this manifest's sha256")
+
+    def test_ci_runs_the_tests_on_a_change_to_the_look_s_frozen_files(self):
+        """Mythos round-3 N4: the changes job's docs-only filter does not cover the look's files under docs/."""
+        import re as _re
+        import subprocess
+        wf = (REPO / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        case = _re.search(r'case "\$path" in\n(.*?)\n\s*esac', wf, _re.S).group(1)
+        script = f'classify() {{ local path="$1"; case "$path" in\n{case}\n esac; return 0; }}\n' + \
+            'for p in "$@"; do if classify "$p"; then echo "$p docs"; else echo "$p code"; fi; done'
+        paths = ["docs/process/cadence/looks/LOOKS.json", "docs/process/cadence/looks/lm-interim-01.json",
+                 "docs/process/cadence/looks/lm-interim-01.output.schema.json", "docs/process/cadence/kits/x.json",
+                 "docs/process/other.md", "README.md", "joulewise/x.py"]
+        r = subprocess.run(["bash", "-c", script, "classify", *paths], capture_output=True, text=True, check=True)
+        got = dict(line.rsplit(" ", 1) for line in r.stdout.splitlines())
+        self.assertEqual(got, {**{p: "code" for p in paths[:4]}, "docs/process/other.md": "docs", "README.md": "docs",
+                               "joulewise/x.py": "code"})
 
     def test_roster_out_writes_one_list(self):
         led = self_ledger = ledger(sha=lm.sha256_file(MANIFEST))

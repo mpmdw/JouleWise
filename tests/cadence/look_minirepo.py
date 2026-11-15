@@ -70,7 +70,7 @@ def py(root, rel, *args):
     return run([sys.executable, "-I", "-B", str(root / rel), *map(str, args)], tempfile.gettempdir())
 
 
-def commit(root, *, stage1_sha256=None, roster_sha256=None, publish=True, git_commit_it=True):
+def commit(root, *, stage1_sha256=None, roster_sha256=None, verdicts_sha256=None, publish=True, git_commit_it=True):
     """Mark the copy's manifest committed (status and LOOKS.json row) and commit it with git, as the lead's commit
     would. ``git_commit_it=False`` leaves the change in the working tree only (a loose ledger)."""
     m = root / MANIFEST
@@ -83,8 +83,11 @@ def commit(root, *, stage1_sha256=None, roster_sha256=None, publish=True, git_co
     looks = json.loads((root / lm.LOOK_LEDGER_PATH).read_text(encoding="utf-8"))
     row = next(r for r in looks["looks"] if r["look_id"] == doc["look_id"])
     row.update(sha256=lm.sha256_file(m), status="committed")
+    if roster_sha256 or verdicts_sha256:          # the inputs stage 1 is given (Mythos round-3 N8)
+        row.update(roster_sha256=roster_sha256 or "0" * 64, verdicts_sha256=verdicts_sha256 or "1" * 64)
     if stage1_sha256:
-        row.update(status="stage1_committed", stage1_sha256=stage1_sha256, roster_sha256=roster_sha256 or "0" * 64)
+        row.update(status="stage1_committed", stage1_sha256=stage1_sha256, roster_sha256=roster_sha256 or "0" * 64,
+                   verdicts_sha256=verdicts_sha256 or "1" * 64)
     (root / lm.LOOK_LEDGER_PATH).write_text(json.dumps(looks, indent=2) + "\n", encoding="utf-8")
     if git_commit_it:
         git_commit(root, "commit the look", publish=publish)

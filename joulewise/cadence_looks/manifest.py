@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
@@ -42,10 +43,13 @@ LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 LOOK_LEDGER_PATH = "docs/process/cadence/looks/LOOKS.json"
 LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded")
 # What each status needs recorded, so that "committed" is checkable (Mythos cold seat 8).
-LOOK_ROW_HASHES = ("roster_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256")
-LOOK_ROW_REQUIRES = {"stage1_committed": ("roster_sha256", "stage1_sha256"),
-                     "run": ("roster_sha256", "stage1_sha256", "output_sha256"),
-                     "frozen": ("roster_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256")}
+# verdicts_sha256: inclusion_34.py's verdict file, committed with the roster's hash before stage 1 runs, so stage 1
+# can authenticate both inputs (Mythos round-3 N8).
+LOOK_ROW_HASHES = ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256")
+LOOK_ROW_REQUIRES = {"stage1_committed": ("roster_sha256", "verdicts_sha256", "stage1_sha256"),
+                     "run": ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256"),
+                     "frozen": ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256",
+                                "coefficients_sha256")}
 
 TOP_KEYS = {"schema", "look_id", "look_kind", "status", "title", "rulings", "when", "stages", "reads", "energy",
             "fit", "inclusion", "outputs", "decisions", "later_looks", "freeze1", "freeze2", "custody", "review",
@@ -1174,8 +1178,45 @@ STAGE1_COMMITTED_STATUSES = ("stage1_committed", "run", "frozen")
 
 
 def _git(repo, *args):
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=60)
+    """git in ``repo`` and nowhere else: every GIT_* variable of the caller's environment (GIT_DIR, GIT_WORK_TREE,
+    GIT_INDEX_FILE, GIT_OBJECT_DIRECTORY, GIT_CEILING_DIRECTORIES, ...) is dropped, so none can point the gate at
+    another repository (Mythos round-3 N5)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=60, env=env)
     return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace").strip()
+
+
+def shared_ref(repo, ledger_ref=None):
+    """The shared ref the committed ledger must be on, as (full ref name, commit) (Sol round-3 NEW-2; Mythos N3).
+    One resolver for every tool. Only a remote-tracking branch is accepted (refs/remotes/<remote>/<branch>): never
+    HEAD, a local branch, a tag, a commit id or a revision expression, each of which can name the commit under test
+    itself and so waive the check. Default: the branch's upstream, else origin/main. From a detached HEAD on a
+    campaign branch that is not yet on main, name that branch's remote-tracking ref (e.g. ``--ledger-ref
+    origin/<campaign-branch>``, the PR's base branch)."""
+    if ledger_ref is None:
+        rc, up, _ = _git(repo, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", "@{upstream}")
+        full = up.decode().strip() if rc == 0 else ""
+        full = full or "refs/remotes/origin/main"
+        shown = full
+    else:
+        shown = str(ledger_ref)
+        rc, out, _ = _git(repo, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", "--end-of-options",
+                          shown)
+        full = out.decode().strip() if rc == 0 else ""
+    if not full.startswith("refs/remotes/") or full.endswith("/HEAD"):
+        raise ManifestError([f"ledger ref {shown!r}: the shared ref is a remote-tracking branch "
+                             "(refs/remotes/<remote>/<branch>), never HEAD, a local branch, a tag, a commit or a "
+                             "revision expression"])
+    rc, sha, _ = _git(repo, "rev-parse", "--verify", "--quiet", f"{full}^{{commit}}")
+    if rc != 0:
+        raise ManifestError([f"ledger ref {shown!r} ({full}) does not resolve to a commit"])
+    return full, sha.decode().strip()
+
+
+def ledger_gate(repo, ledger_ref=None):
+    """What satisfied the committed-ledger gate, for a stage's output: {commit, ref, ref_commit}."""
+    head, ref, _ = committed_ledger(repo, ledger_ref=ledger_ref)
+    return {"commit": head, "ref": ref, "ref_commit": shared_ref(repo, ledger_ref)[1]}
 
 
 def committed_ledger(repo, *, ledger_ref=None):
@@ -1199,10 +1240,7 @@ def committed_ledger(repo, *, ledger_ref=None):
     rc, status, _ = _git(repo, "status", "--porcelain", "--", LOOK_LEDGER_PATH)
     if rc != 0 or status.strip():
         raise ManifestError([f"{LOOK_LEDGER_PATH} is not clean"])
-    ref = ledger_ref
-    if ref is None:
-        rc, up, _ = _git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
-        ref = up.decode().strip() if rc == 0 and up.strip() else "origin/main"
+    ref, _ = shared_ref(repo, ledger_ref)
     rc, _, err = _git(repo, "merge-base", "--is-ancestor", head, ref)
     if rc != 0:
         raise ManifestError([f"HEAD {head[:12]} is not on {ref}: the ledger's commitment is not on the shared history"
@@ -1236,10 +1274,36 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
             problems.append("the committed manifest's sha256 is not the one LOOKS.json names")
         if (Path(repo) / row["manifest_path"]).read_bytes() != man:
             problems.append("the working-tree manifest differs from the committed one")
-    recorded = ((stage1_doc or {}).get("code_sha256") or {}).get("input:roster_sha256")
-    if recorded is None or row.get("roster_sha256") != recorded:
-        problems.append(f"LOOKS.json {look_id} roster_sha256 {str(row.get('roster_sha256'))[:12]} is not the roster "
-                        f"the stage-1 file records ({str(recorded)[:12]})")
+    recorded = ((stage1_doc or {}).get("code_sha256") or {})
+    for field, key, what in (("roster_sha256", "input:roster_sha256", "roster"),
+                             ("verdicts_sha256", "input:rules_3_4_sha256", "rules-3-4 verdict file")):
+        if recorded.get(key) is None or row.get(field) != recorded.get(key):
+            problems.append(f"LOOKS.json {look_id} {field} {str(row.get(field))[:12]} is not the {what} the stage-1 "
+                            f"file records ({str(recorded.get(key))[:12]})")
+    if problems:
+        raise ManifestError(problems)
+    return row
+
+
+def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256, ledger_ref=None):
+    """Stage 1's gate on its two inputs (Mythos round-3 N8): the committed LOOKS.json row for this look names this
+    manifest at status committed or later, and the roster (``validate --roster-out``) and the rules-3-4 verdict file
+    (``inclusion_34.py``) stage 1 was given, by sha256. The lead commits both hashes in the row before stage 1
+    runs. Returns the row."""
+    _, _, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
+    row = _look_row(ledger, look_id)
+    problems = []
+    if row.get("sha256") != manifest_sha256:
+        problems.append("LOOKS.json does not name this manifest's sha256")
+    if row.get("status") not in COMMITTED_STATUSES:
+        problems.append(f"LOOKS.json lists this look as {row.get('status')!r}, not committed")
+    for field, given, what in (("roster_sha256", roster_sha256, "roster"),
+                               ("verdicts_sha256", verdicts_sha256, "rules-3-4 verdict file")):
+        if row.get(field) is None:
+            problems.append(f"LOOKS.json {look_id} has no {field}: commit the {what}'s sha256 before stage 1")
+        elif row.get(field) != given:
+            problems.append(f"the {what} given ({str(given)[:12]}) is not the one LOOKS.json {look_id} names "
+                            f"({row[field][:12]})")
     if problems:
         raise ManifestError(problems)
     return row

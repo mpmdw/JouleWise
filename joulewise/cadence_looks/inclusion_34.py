@@ -71,7 +71,7 @@ NORMAL_STOP_REASONS = ("duration", "stop file")     # and any "signal N" (km003c
 ABNORMAL_STOP_REASONS = ("absent", "exception", "consecutive USB errors")
 
 # km003c_monitor.py writes sample lines compact ('{"k":"b","tx":..,"rx":..,"rt":..,'); spaced JSON is accepted too.
-_SAMPLE_LINE_RE = re.compile(rb'^\{"k":\s*"b",\s*"tx":\s*\d+,\s*"rx":\s*\d+,\s*"rt":\s*(\d+)\s*,\s*"n":\s*(\d+)\s*,')
+_SAMPLE_LINE_RE = re.compile(rb'^\{"k":\s*"b",\s*"tx":\s*(\d+),\s*"rx":\s*(\d+),\s*"rt":\s*(\d+)\s*,\s*"n":\s*(\d+)\s*,')
 _UNREAD_LINE_RE = re.compile(rb'^\{"k":\s*"[be]"')     # sample or error line: never decoded
 
 
@@ -288,11 +288,13 @@ def read_meter_stream(path):
     (RL-150 R8)."""
     path = Path(path)
     header = trailer = None
-    polls, first, last_other = [], True, None
+    polls, round_trips, first, last_other = [], [], True, None
     for raw in _jsonl_lines(path):
         m = _SAMPLE_LINE_RE.match(raw)
         if m:
-            polls.append((int(m.group(1)), int(m.group(2))))
+            tx, rx, rt, n = (int(g) for g in m.groups())
+            polls.append((rt, n))
+            round_trips.append((rt, n, rx - tx))
         elif _UNREAD_LINE_RE.match(raw):
             pass                                  # an error line, or a sample line in an unknown form: unread
         else:
@@ -305,7 +307,39 @@ def read_meter_stream(path):
     if last_other is not None:
         trailer = last_other
     polls.sort()
-    return {"name": path.name, "header": header, "trailer": trailer, "polls": polls}
+    round_trips.sort()
+    return {"name": path.name, "header": header, "trailer": trailer, "polls": polls, "round_trips": round_trips}
+
+
+# Mythos round-3 N6: stage 2 integrates DC-in only over an interval bracketed by meter samples (a sample at or
+# before its start and one at or after its end, on the samples' fitted clock). Rule 4 is the ruled rule (RL-166
+# Q7) and is not changed; this is the same test from the poll stamps, for stage 1's preflight, so a leg rule 4
+# admits that stage 2 would refuse surfaces before the stage-1 hash is committed. From stamps alone it is
+# conservative: a poll's samples were digitised before its answer arrived (rt), and its newest sample at most one
+# sample period plus the request's round trip (rx - tx) before (km003c_parse's clock fit); the margin covers
+# R-20's 0.1 s clock threshold and the fit's jitter.
+BRACKET_MARGIN_NS = 250_000_000
+
+
+def meter_bracket(interval_ns, streams):
+    """{"start", "end", "bracketed"}: a sample-bearing poll received at least the margin before the interval's start,
+    and one whose newest sample was digitised at least the margin after its end."""
+    out = {"start": False, "end": False, "bracketed": False}
+    if interval_ns is None or interval_ns[1] <= interval_ns[0]:
+        return out
+    a, b = interval_ns
+    for s in streams:
+        sps = (s.get("header") or {}).get("sps")
+        step = NS / sps if isinstance(sps, (int, float)) and not isinstance(sps, bool) and sps > 0 else None
+        for rt, n, rtt in s.get("round_trips") or []:
+            if n <= 0:
+                continue
+            if rt <= a - BRACKET_MARGIN_NS:
+                out["start"] = True
+            if step is not None and rt - rtt - step - BRACKET_MARGIN_NS >= b:
+                out["end"] = True
+    out["bracketed"] = out["start"] and out["end"]
+    return out
 
 
 TRAILER_COUNT_KEYS = ("polls", "empties", "bad", "usb_errors")
@@ -414,8 +448,10 @@ def judge_leg(bundle, meter_streams, selected_keys, *, period_s=None):
     outputs/align_thermal.jsonl, rich_telemetry.jsonl (two stamps by pattern) and config.json; no energy value is decoded."""
     interval = read_leg_interval(bundle)
     period = period_s if period_s is not None else pm_period_s(bundle)
+    r4 = rule4(interval, meter_streams)
+    r4["stage2_bracket"] = meter_bracket(interval, meter_streams)       # a print for stage 1's preflight; not rule 4
     return {"rule3": rule3(interval, read_sidecar_rows(bundle), selected_keys, read_pm_supports(bundle), period),
-            "rule4": rule4(interval, meter_streams)}
+            "rule4": r4}
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -570,6 +606,8 @@ def main(argv=None):
     p.add_argument("--span-dir", action="append", default=[])
     p.add_argument("--manifest", required=True, help="the look manifest; every pin is verified before custody is opened")
     p.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest")
+    p.add_argument("--ledger-ref", help="the remote-tracking branch the committed LOOKS.json must be on (default: the "
+                                        "upstream, else origin/main; never HEAD or a local ref: manifest.shared_ref)")
     p.add_argument("--out", required=True)
     p.add_argument("--detail-out")
     a = p.parse_args(argv)
@@ -578,7 +616,8 @@ def main(argv=None):
     from joulewise.cadence_looks import manifest as lm
     try:
         doc = lm.verify_pins(a.manifest, REPO, allow_draft=a.allow_draft,
-                             running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG])
+                             running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG], ledger_ref=a.ledger_ref)
+        gate = None if a.allow_draft else lm.ledger_gate(REPO, a.ledger_ref)
     except lm.ManifestError as error:
         for problem in error.problems:
             print(f"REFUSE {problem}")
@@ -608,12 +647,17 @@ def main(argv=None):
     if unpinned:
         print("REFUSE loaded repository modules the manifest does not pin: " + ", ".join(unpinned[:6]))
         return 1
-    print(f"wrote {a.out} sha256={_write(a.out, verdicts)} legs={len(verdicts)}")
+    verdicts_sha = _write(a.out, verdicts)
+    print(f"wrote {a.out} sha256={verdicts_sha} legs={len(verdicts)} roster_sha256={lm.sha256_file(a.roster)}")
     detail["pins"] = {"manifest_sha256": lm.sha256_file(a.manifest), "look_id": doc["look_id"],
                       "inclusion_34_sha256": lm.sha256_file(Path(__file__).resolve()),
                       "runtime_config_sha256": lm.sha256_file(REPO / RUNTIME_CONFIG),
                       "code_sha256": lm.loaded_repo_files(REPO)}
     detail["allow_draft"] = bool(a.allow_draft)
+    detail["ledger_gate"] = gate
+    # Mythos round-3 N8: the lead commits these two hashes in LOOKS.json before stage 1, which checks them
+    detail["roster_sha256"] = lm.sha256_file(a.roster)
+    detail["verdicts_sha256"] = verdicts_sha
     if a.detail_out:
         print(f"wrote {a.detail_out} sha256={_write(a.detail_out, detail)}")
     return 0
