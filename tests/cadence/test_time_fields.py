@@ -726,6 +726,31 @@ class TraceClausesThroughTheCli(unittest.TestCase):
         self.assertFalse((d / "v.json").exists())
 
 
+@NEEDS_NUMPY
+class ClockFitExcessClause(unittest.TestCase):
+    """RL-173 E.1 item 2 alone: polls answered 3 s late (their samples are all there, so no decoded gap) give the
+    stream a clock-fit excess over 2 s, which excludes every leg its samples reach, and only those."""
+
+    def test_excess_alone_excludes(self):
+        d = tmpdir(self)
+        write_stream(d, stream_lines(seconds=300, fault=lambda x, p: p.update(latency_ns=3_000_000_000)
+                                     if 100 <= x < 110 else None))
+        sm = TF.SpanMeter(d)
+        self.assertGreater(TF.clock_fit_excess_s(sm.times[0]), 2.0)
+        self.assertEqual(sm.summary()[0]["clock_fit_excess_s"], TF.clock_fit_excess_s(sm.times[0]))
+        turn = {"segments": [{"wall_start_s": T0 + 150, "wall_end_s": T0 + 200}], "prefix_tails": []}
+        dc = R.trace_holes(turn, d / "no-bundle", sm, None)["dc_in"]
+        self.assertLessEqual(dc["max_gap_s"], 2.0)
+        self.assertTrue(dc["bracketed"])
+        self.assertEqual((dc["excluded"], dc["reason"]), (True, "a meter clock-fit excess over 2 s"))
+        self.assertEqual(sm.excess_over(T0 + 400, T0 + 500), None)        # the stream does not reach it
+        healthy = tmpdir(self)
+        write_stream(healthy, stream_lines(seconds=300))
+        dc = R.trace_holes(turn, d / "no-bundle", TF.SpanMeter(healthy), None)["dc_in"]
+        self.assertEqual((dc["excluded"], dc["reason"]), (False, None))
+        self.assertLess(dc["clock_fit_excess_s"], 0.01)
+
+
 # ============================================================================================ 4. backstops
 @NEEDS_NUMPY
 class StageTwoBackstops(unittest.TestCase):

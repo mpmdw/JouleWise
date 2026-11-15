@@ -1,25 +1,39 @@
 #!/usr/bin/env python3
 """Mutation check for the interim look's fit and CLI (RL-166 item 5): each mutant must be killed by the tests.
 
-    python3 -B tests/cadence/mutants_fit_interim.py [--only N ...]
+    python3 -B tests/cadence/mutants_fit_interim.py [--only N ...] [--jobs J]
 
 Works on a private copy of joulewise/, scripts/ and tests/ in a temporary directory; the worktree is never
 written. Arithmetic and custody mutants only: no mutant starts, signals or touches any process."""
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import queue
 
 ROOT = Path(__file__).resolve().parents[2]
 FIT = "joulewise/cadence_looks/fit_interim.py"
 RUN = "scripts/cadence_look_run.py"
 T_FIT = "tests.cadence.test_fit_interim"
 T_RUN = "tests.cadence.test_look_run"
+T_TF = "tests.cadence.test_time_fields"
+TF = "joulewise/cadence_looks/time_fields.py"
+MAN = "joulewise/cadence_looks/manifest.py"
+I34 = "joulewise/cadence_looks/inclusion_34.py"
+S3R = "joulewise/cadence_looks/step3_roster.py"
+CLI = "scripts/cadence_look_manifest.py"
+TF_CLAUSES = T_TF + ".TraceClausesThroughTheCli"
+TF_BACKSTOPS = T_TF + ".StageTwoBackstops"
+TF_CUSTODY = T_TF + ".CustodyBinding"
+TF_LEDGER = T_TF + ".SupersededStage1"
+TF_N9 = T_TF + ".N9Survivors"
 
 # (id, file, old, new, test modules)
 MUTANTS = [
@@ -59,7 +73,7 @@ MUTANTS = [
     ("r11_sd_floor_dropped", FIT, 'if len(pairs) < 3 or sd_l <= SD_FLOOR_J or sd_s <= SD_FLOOR_J:', 'if len(pairs) < 3:', [T_FIT]),
     ("r11_ci_with_one_day", FIT, '    if nd >= 2:\n        se = ', '    if nd >= 1:\n        se = ', [T_FIT]),
     ("r20_drift_threshold", FIT, 'METER_DRIFT_MAX_S = 0.1', 'METER_DRIFT_MAX_S = 1.0', [T_FIT]),
-    ("r20_reader_parses_poll_lines", RUN, '            if _B_KIND.search(line):', '            if _B_KIND.search(line) and json.loads(line):', [T_RUN]),
+    ("r20_reader_parses_poll_lines", TF, '        members = scan_line(line)\n', '        members = scan_line(line)\n        json.loads(line)\n', [T_RUN]),
     # RL-166b
     ("b1_overlap_not_expected", FIT, '    return sigma * (_G((v - ell) / sigma) - _G((u - ell) / sigma))', '    return max(0.0, v - max(u, max(0.0, ell)))', [T_FIT]),
     ("b1_clipped_ell", FIT, 'return {L["leg_key"]: (linear_predictor(L, model), model["sigma"],', 'return {L["leg_key"]: (max(0.0, linear_predictor(L, model)), model["sigma"],', [T_FIT]),
@@ -92,7 +106,7 @@ MUTANTS = [
     ('cs_m7_no_look_mark', RUN, '    if consumers and any(not all(leg["inclusion"].values()) for leg in legs if leg["leg_id"] in supplier_ids):', '    if False:', [T_RUN]),
     ('cs_mn3_own_supplier_unmarked', RUN, '    supplier_ids = suppliers | {leg["leg_id"] for leg in legs if leg["g0_role"] == "capture"}', '    supplier_ids = {leg["leg_id"] for leg in legs if leg["g0_role"] == "capture"}', [T_RUN]),
     ('cs_m13_synthetic_false', RUN, '"synthetic": bool(synth) and all(synth),', '"synthetic": False,', [T_RUN]),
-    ('cs_m14_unrun_cell_invented', RUN, '                         "cell_prompt_tokens": None, "g0_role": None,\n                         "inclusion": {r: False for r in F.RULES}, "turn": None})', '                         "cell_prompt_tokens": 2000, "g0_role": None,\n                         "inclusion": {r: False for r in F.RULES}, "turn": None})', [T_RUN]),
+    ('cs_m14_unrun_cell_invented', RUN, '                         "cell_prompt_tokens": None, "g0_role": None,\n                         "inclusion": {r: False for r in F.RULES}, "turn": None, "trace_holes": None,', '                         "cell_prompt_tokens": 2000, "g0_role": None,\n                         "inclusion": {r: False for r in F.RULES}, "turn": None, "trace_holes": None,', [T_RUN]),
     ('cs_m14_validator_r21', FIT, '        if leg["turn"] is None and leg["leg_type"] == "A" and all(leg["inclusion"].values()):', '        if False:', [T_RUN]),
     ('cs_sol2_legacy_type', RUN, 'leg_type = "T" if spec.get("leg_type") == "T" else "A"', 'leg_type = "T" if (spec.get("leg_type") == "T" or spec.get("type") == "T") else "A"', [T_RUN]),
     ('cs_roster_dict', RUN, '    if not isinstance(roster, list):                # one shape', '    if isinstance(roster, dict):\n        roster = roster.get("roster")\n    if not isinstance(roster, list):                # one shape', [T_RUN]),
@@ -108,7 +122,7 @@ MUTANTS = [
     ("no_cr1_factor", FIT, 'corr = (G / (G - 1)) * ((n - 1) / (n - k)) if G > 1 and n > k else 1.0', 'corr = 1.0', [T_FIT]),
     ("bias_sign_flipped", FIT, 'diffs = [(d, rl / sd_l - rs / sd_s) for (_, d, rl, rs) in pairs]', 'diffs = [(d, rs / sd_s - rl / sd_l) for (_, d, rl, rs) in pairs]', [T_FIT]),
     ("fold_keeps_delta", FIT, 'fold_cols = [c for c in cols if c != DELTA_COL]', 'fold_cols = cols', [T_FIT]),
-    ("no_hash_gate", FIT, 'if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:', 'if False:', [T_FIT]),
+    ("no_hash_gate", FIT, '(canonical bytes, see `dump`)."""\n    if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:', '(canonical bytes, see `dump`)."""\n    if False:', [T_FIT]),
     ("no_output_check", FIT, '    output_check(out)\n    return out', '    return out', [T_FIT]),
     ("energy_input_hash_unchecked", FIT, 'if energy["input_sha256"] != stage1_out["input_sha256"]:', 'if False:', [T_FIT]),
     ("forbidden_fields_allowed", FIT, 'FORBIDDEN_FIELDS = ("condition", "slot", "instruction", "start_band")', 'FORBIDDEN_FIELDS = ("start_band",)', [T_FIT]),
@@ -121,68 +135,130 @@ MUTANTS = [
      'if fans and any(x is not None for x in fans) and all(x is not None for x in fans[:1]) else None', [T_RUN]),
     ("cli_stage1_hash_not_checked", RUN, '    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:', '    if False:', [T_RUN]),
     ("meter_left_rectangle", RUN, 'tot += 0.5 * (self._at(lo, i) + self._at(hi, i)) * (hi - lo)', 'tot += self._at(lo, i) * (hi - lo)', [T_RUN]),
+    # RL-173 E.1: the trace clauses' 2 s comparisons (stage 1, its level-R check, and stage 2's backstops)
+    ("e1_gpu_clause_inclusive", RUN, 'gpu["excluded"] = gpu["max_gap_s"] > TF.MAX_GAP_S', 'gpu["excluded"] = gpu["max_gap_s"] >= TF.MAX_GAP_S', [TF_CLAUSES]),
+    ("e1_dc_clause_at_3s", RUN, '        elif dc["max_gap_s"] > TF.MAX_GAP_S:', '        elif dc["max_gap_s"] > 3.0:', [TF_CLAUSES]),
+    ("e1_dc_excess_ignored", RUN, 'elif dc["clock_fit_excess_s"] is not None and dc["clock_fit_excess_s"] > TF.CLOCK_FIT_EXCESS_MAX_S:', 'elif False:', [T_TF + ".ClockFitExcessClause"]),
+    ("e1_dc_bracket_ignored", RUN, '        if not dc["bracketed"]:\n', '        if False:\n', [T_RUN, TF_CLAUSES]),
+    ("e1_validator_gpu_inclusive", FIT, 'over_g = g["max_gap_s"] is None or g["max_gap_s"] > TRACE_MAX_GAP_S', 'over_g = g["max_gap_s"] is None or g["max_gap_s"] >= TRACE_MAX_GAP_S', [TF_CLAUSES]),
+    ("e1_validator_excluded_rule_passes", FIT, '        if (g["excluded"] and leg["inclusion"]["sidecar_coverage"]) or (d["excluded"] and leg["inclusion"]["km003c_clean"]):', '        if False:', [T_TF, T_FIT]),
+    ("e1_clause_not_anded_gpu", RUN, '            inc["sidecar_coverage"] = inc["sidecar_coverage"] and not holes["gpu_rail"]["excluded"]', '            inc["sidecar_coverage"] = inc["sidecar_coverage"]', [TF_CLAUSES]),
+    ("e1_gpu_backstop_inclusive", RUN, '                if gap > gpu_max_gap_s:', '                if gap >= gpu_max_gap_s:', [TF_CLAUSES]),
+    ("e1_dc_backstop_at_3s", RUN, '        if gap > METER_MAX_GAP_S:', '        if gap > 3.0:', [TF_BACKSTOPS]),
+    ("e1_decoder_times_unchecked", RUN, '        if expected_t is not None and self.t != list(expected_t):', '        if False:', [TF_BACKSTOPS]),
+    ("e1_ruled_exclusion_not_applied", RUN, '            inc[rule] = False\n', '', [TF_LEDGER]),
+    ("tf_scan_int_limit", TF, '        if kind == "num" and _over_int_limit(text):', '        if False:', [T_TF + ".ScanLineEqualsJsonLoads"]),
+    ("tf_counter_low_byte_only", TF, 'return tuple(raw[i] | (raw[i + 1] << 8) for i in range(0, len(raw), SAMPLE_BYTES))', 'return tuple(raw[i] for i in range(0, len(raw), SAMPLE_BYTES))', [T_TF + ".MeterTimesEqualTheDecoder"]),
+    ("tf_gpu_rows_any_source", TF, '            if row.get("rail") == "gpu_power" and row.get("source") == "powermetrics":', '            if row.get("rail") == "gpu_power":', [T_TF + ".GpuRowsEqualStep3"]),
+    # Mythos r5 N6: the custody binding
+    ("n6_files_unchecked", RUN, '            if files.get(rel) is None or TF.file_sha256(sdir / rel) != files[rel]:', '            if False:', [TF_CUSTODY]),
+    ("n6_meter_digest_unchecked", RUN, '            if sm.digest() != cust.get("meter_time_sha256"):', '            if False:', [TF_CUSTODY]),
+    ("n6_trace_rows_unchecked", RUN, '        if TF.rows_digest(rows) != ((L.get("trace_holes") or {}).get("gpu_rail") or {}).get("rows_sha256"):', '        if False:', [TF_CUSTODY]),
+    ("n6_step3_leg_record_unchecked", S3R, '        if files.get(rel) != got:', '        if False:', [TF_CUSTODY]),
+    # RL-173 E.1 item 4, Mythos r5 N3/N5: superseded stage-1 commitments
+    ("n3_unlisted_history_accepted", MAN, '        if h != current and h not in superseded:', '        if h != current and False:', [TF_LEDGER]),
+    ("n3_superseded_needs_no_entry", MAN, '        if h != current and h not in superseded:', '        if False:', [TF_LEDGER]),
+    ("n3_ruled_exclusions_not_compared", MAN, '    if got != want:\n', '    if False:\n', [TF_LEDGER]),
+    ("n3_rerun_exclusions_not_compared", MAN, '            if given_rx != want or not earlier <= set(want):', '            if False:', [TF_LEDGER]),
+    ("n3_rerun_with_a_stage1_hash", MAN, '        if row.get("stage1_sha256") is not None:\n            problems.append(f"LOOKS.json {look_id} still names', '        if False:\n            problems.append(f"LOOKS.json {look_id} still names', [TF_LEDGER]),
+    ("n5_history_head_only", MAN, '"--format=%H", head, "--remotes", "--",', '"--format=%H", head, "--",', [TF_LEDGER]),
+    # Sol r5 NEW-3, Mythos r5 N7
+    ("new3_gate_not_checked", MAN, '    problems += gate_problems((("stage 1", stage1),))', '    problems += []', [T_TF + ".LedgerGateAgreesWithTheRunMode"]),
+    ("n7_stage1_no_self_check", RUN, '            if probs:\n                raise F.LookInputError("stage 1\'s own output: "', '            if False:\n                raise F.LookInputError("stage 1\'s own output: "', [T_TF + ".StageOneChecksItsOwnFile"]),
+    # Mythos r5 N9's six survivors
+    ("n9_stage1_problems_draft_accepted", MAN, '    if not allow_draft and stage1.get("allow_draft") is True:', '    if False:', [TF_N9]),
+    ("n9_inclusion_cached_bytecode_not_refused", I34, '        stale = lm.cached_bytecode(REPO)', '        stale = []', [TF_N9]),
+    ("n9_step3_cached_bytecode_not_refused", S3R, '        stale = lm.cached_bytecode(repo)', '        stale = []', [TF_N9]),
+    ("n9_assemble_cached_bytecode_not_refused", CLI, '    problems = [f"a repository module may have run from cached bytecode: {m}" for m in lm.cached_bytecode(repo)]', '    problems = []', [TF_N9]),
+    ("n9_step3_bytes_loaded_through_the_cache", S3R, '    exec(compile(raw, str(path), "exec"), module.__dict__)', '    __import__("importlib.machinery").machinery.SourceFileLoader(spec.name, str(path)).exec_module(module)', [TF_N9]),
+    ("n9_run_prefix_not_removed_at_exit", RUN, 'atexit.register(shutil.rmtree, _PYC_PREFIX, True)     # Mythos r4 N4: leave no empty prefix directory behind\n', '', [TF_N9]),
 ]
+
+
+def _copy_tree(tmp):
+    for d in ("joulewise", "scripts"):
+        shutil.copytree(ROOT / d, tmp / d, ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp / "configs/align/v4").mkdir(parents=True)      # the runtime sensor policy the rules-3/4 test reads
+    shutil.copy(ROOT / "configs/align/v4/r1_runtime.json", tmp / "configs/align/v4/r1_runtime.json")
+    shutil.copytree(ROOT / "docs/process/cadence/looks", tmp / "docs/process/cadence/looks")   # the schemas
+    (tmp / "tests").mkdir()
+    for f in (ROOT / "tests").iterdir():          # tests/__init__.py installs the host-command guard
+        if f.is_file() and f.suffix == ".py":
+            shutil.copy(f, tmp / "tests" / f.name)
+    shutil.copytree(ROOT / "tests/cadence", tmp / "tests/cadence", ignore=shutil.ignore_patterns("__pycache__"))
+
+
+def _unittest(tmp, tests, failfast, timeout):
+    (tmp / "tmp").mkdir(exist_ok=True)             # each copy's own TMPDIR: no test reads another's temp files
+    env = {**os.environ, "PYTHONPATH": str(tmp), "TMPDIR": str(tmp / "tmp")}
+    return subprocess.run([sys.executable, "-B", "-m", "unittest", *(["-f"] if failfast else []), *tests], cwd=tmp,
+                          capture_output=True, text=True, timeout=timeout, env=env)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", nargs="*")
+    ap.add_argument("--jobs", type=int, default=3, help="mutants run at once, each on its own copy of the tree")
     a = ap.parse_args(argv)
-    tmp = Path(tempfile.mkdtemp(prefix="jw-fit-mutants-"))
+    chosen = [m for m in MUTANTS if not a.only or m[0] in a.only]
+    base = Path(tempfile.mkdtemp(prefix="jw-fit-mutants-"))
     try:
-        for d in ("joulewise", "scripts"):
-            shutil.copytree(ROOT / d, tmp / d, ignore=shutil.ignore_patterns("__pycache__"))
-        (tmp / "configs/align/v4").mkdir(parents=True)      # the runtime sensor policy the rules-3/4 test reads
-        shutil.copy(ROOT / "configs/align/v4/r1_runtime.json", tmp / "configs/align/v4/r1_runtime.json")
-        shutil.copytree(ROOT / "docs/process/cadence/looks", tmp / "docs/process/cadence/looks")   # the schemas
-        (tmp / "tests").mkdir()
-        for f in (ROOT / "tests").iterdir():          # tests/__init__.py installs the host-command guard
-            if f.is_file() and f.suffix == ".py":
-                shutil.copy(f, tmp / "tests" / f.name)
-        shutil.copytree(ROOT / "tests/cadence", tmp / "tests/cadence", ignore=shutil.ignore_patterns("__pycache__"))
-        survived, invalid = [], []
-        # control: the unmutated copy must pass, or every "kill" below means nothing
-        r = subprocess.run([sys.executable, "-B", "-m", "unittest", T_FIT, T_RUN], cwd=tmp, capture_output=True,
-                           text=True, timeout=1800, env={**os.environ, "PYTHONPATH": str(tmp)})
+        copies = queue.Queue()
+        for i in range(max(1, a.jobs)):
+            tmp = base / f"copy-{i}"
+            tmp.mkdir()
+            _copy_tree(tmp)
+            copies.put(tmp)
+        # control: the unmutated copy must pass every test module a mutant names, or a "kill" below means nothing
+        modules = sorted({t.split(".")[2] for m in chosen for t in m[4]})
+        control = [f"tests.cadence.{m}" for m in modules]
+        tmp = copies.get()
+        r = _unittest(tmp, control, False, 3600)
+        copies.put(tmp)
         if r.returncode != 0:
             print("CONTROL FAILED: the unmutated copy does not pass\n" + r.stderr[-3000:], flush=True)
             return 2
-        print("control: unmutated copy passes", flush=True)
-        for mid, rel, old, new, tests in MUTANTS:
-            if a.only and mid not in a.only:
-                continue
-            path = tmp / rel
-            orig = path.read_text()
-            if orig.count(old) != 1:
-                print(f"{mid}: STALE (pattern found {orig.count(old)} times)", flush=True)
-                survived.append(mid)
-                continue
-            mutated = orig.replace(old, new)
-            if rel.endswith(".py"):
-                # Sol cold seat N4: a mutant that does not compile is not a behaviour the tests caught. It is
-                # reported as INVALID and fails the run; it is never counted as killed.
-                try:
-                    compile(mutated, str(path), "exec")
-                except SyntaxError as exc:
-                    print(f"{mid}: INVALID (does not compile: line {exc.lineno})", flush=True)
-                    invalid.append(mid)
-                    continue
-            path.write_text(mutated)
+        print(f"control: unmutated copy passes {', '.join(modules)}", flush=True)
+        survived, invalid, lock = [], [], threading.Lock()
+
+        def one(mutant):
+            mid, rel, old, new, tests = mutant
+            tmp = copies.get()
             try:
-                r = subprocess.run([sys.executable, "-B", "-m", "unittest", "-f", *tests], cwd=tmp,
-                                   capture_output=True, text=True, timeout=900,
-                                   env={**os.environ, "PYTHONPATH": str(tmp)})
-                killed = r.returncode != 0
+                path = tmp / rel
+                orig = path.read_text()
+                if orig.count(old) != 1:
+                    return mid, f"STALE (pattern found {orig.count(old)} times)", "survived"
+                mutated = orig.replace(old, new)
+                if rel.endswith(".py"):
+                    # Sol cold seat N4: a mutant that does not compile is not a behaviour the tests caught. It is
+                    # reported as INVALID and fails the run; it is never counted as killed.
+                    try:
+                        compile(mutated, str(path), "exec")
+                    except SyntaxError as exc:
+                        return mid, f"INVALID (does not compile: line {exc.lineno})", "invalid"
+                path.write_text(mutated)
+                try:
+                    killed = _unittest(tmp, tests, True, 1800).returncode != 0
+                finally:
+                    path.write_text(orig)
+                return mid, "killed" if killed else "SURVIVED", None if killed else "survived"
             finally:
-                path.write_text(orig)
-            print(f"{mid}: {'killed' if killed else 'SURVIVED'}", flush=True)
-            if not killed:
-                survived.append(mid)
+                copies.put(tmp)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, a.jobs)) as pool:
+            for mid, verdict, bucket in pool.map(one, chosen):
+                print(f"{mid}: {verdict}", flush=True)
+                with lock:
+                    if bucket == "survived":
+                        survived.append(mid)
+                    elif bucket == "invalid":
+                        invalid.append(mid)
+        print(f"{len(chosen) - len(survived) - len(invalid)} killed of {len(chosen)}")
         print(f"{len(survived)} survived: {survived}")
         print(f"{len(invalid)} invalid (did not compile): {invalid}")
         return 1 if survived or invalid else 0
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(base, ignore_errors=True)
 
 
 if __name__ == "__main__":
