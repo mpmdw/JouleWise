@@ -17431,3 +17431,103 @@ Research lead (Fable 5.2), Sun Nov 15 04:03 PST 2026 (from `date`).
 **Carried unchanged:** RL-170's two owed text items and its conditions, and RL-172b's three conditions on the lead. The Part C pass at `c3f4bacd8` carries to this merge under RL-170 §2 and RL-172b §2.
 
 **Blind status.** Blind: nothing sealed or measured was opened.
+
+# RL-173. The MBP does not wait for the Air. A verified encrypted cloud offload made by the MBP is the off-host copy, permanently; the deterministic desk may run on the MBP in the close interval and counts for line 9; a GitHub Actions watcher satisfies line 7; items issued ahead are accepted as the interim. Plus the batch: the predict path is built before the manifest is committed; a trace hole over 2 s excludes the leg in stage 1 by time stamps only, with the stage-2 refusal kept as the backstop; Q11 is settled by one larger simulation; the controller holds a continuous fence and the watchdog is not touched
+
+Research lead (Fable 5.2), Sun Nov 15 11:58 PST 2026 (from `date`). Ed, 11-15: "the mbp should compress and offload the data to the cloud and then do the next window" and "if the air is unavailable the mbp should have the resources to handle the work itself." RL-149 to RL-172c stand except where "Amends" says otherwise.
+
+**Read.** `fable-batch-next.md` in full; `fit-interim/Q-gpu-hole.md` and `gpu-hole/quantify.json` (synthetic custody); the Mythos look seats' findings 6 and 9, check 5, round 4 N1 and §5, round 5's verdict and §6; Sol's gate-2 findings R7, R10, R11 and R12 on #800 and #799; my RL-149 §2.8 and §2.9 item 5, RL-158 Q1, RL-166 Q10 and Q11, RL-171 §5 and §6.1, RL-172 (c), (g), (h) and (i).
+
+**Not checked.** I ran nothing. I did not read RUN_STATE 346 or 347, the offload builder's code, or the gate-3 reports on #800 (not written when I looked). No SSH; no measurement, energy, power, meter or custody file was opened.
+
+---
+
+## A. The copy: the MBP's cloud offload satisfies RL-171 §6.1, permanently
+
+**The Air leaves the arm path for good.** RL-149 §2.9 already said it must not be on it. The lead's Air copy becomes a later pull from the cloud, checked against the marker's hashes.
+
+**Conditions.**
+1. **The key exists in a second place off the MBP.** A cloud copy whose only key is on the MBP is lost with the MBP. The lead puts one copy in the Air's custody root or Ed's vault, never in the cloud folder or the repo. Until that is done the offload still counts, for at most 24 h from this ruling.
+2. **The marker records** the plaintext manifest's sha256, the ciphertext's sha256 and size, and the provider's confirmation that the upload finished.
+3. **The upload ends before the next soak starts** (RL-172 (g) 8).
+   - **Permanent tool:** a synchronous upload that exits, with the provider's hash or size read back.
+   - **A sync-folder daemon is the interim only.** It works when it chooses, which is the kind of program RL-171 defines quiet against. While it is in use, the maintenance line of RL-171 §5 adds `bird`, `cloudd` and `fileproviderd`.
+4. **The tool handles bytes only.** It parses no journal.
+5. **The MBP keeps its originals,** uncompressed, until a second verified location holds them. Compression applies to the cloud copy only, and a look reads a pulled copy that matches the marker.
+6. **A private folder. Never the repository.**
+7. **A failed or unverified offload holds the next arm.** F0 does not run past it either.
+
+## B. The desk on the MBP: allowed, and it counts for line 9
+
+- **Allowed as a controller step:** the deterministic desk command, at the commit the Air's desk runs, in the close interval, with no agent, ending before the next soak. It reads the leg-summary projection, which holds no energy. RL-172 (i) row 4 is amended to name it.
+- **It counts as desk-final for line 9** when RL-172 (c)'s four conditions hold.
+- **An off-host desk re-checks every span** from the pushed bundle when one is available. A disagreement holds the next arm and comes to me.
+- **The permanent off-host desk should not be the Air.** The bundle is already a pushed ref with no energy, token id or text (RL-149 §2.9 item 5), so the same desk can run in GitHub Actions. The lead builds that with the watcher.
+- **The hand gates do not need the Air.** The class A hand-read, the L002 and L005 gates, the Q1 print and the sampled hand table are read from the pushed bundle on any host.
+
+## C. Line 7: a GitHub Actions watcher satisfies it, permanently
+
+**Conditions.**
+1. It alarms on silence as well as on a stop: no results-ref update by the running span's launch deadline plus a grace opens `mbp-alarm`.
+2. The issue carries operational codes only: span id, stop code, times. The repository is public.
+3. The alarm reaches Ed and the lead by notification.
+4. **Each arm reads the watcher's latest completed run through the API, and that run must be newer than the previous span's close.** This settles Sol R10 for this watcher.
+5. **For the hand-stamped Air watcher, while it is still used:** one observation under 24 h old may serve more than one arm, and each arm re-reads it. RL-172 (g) 7's "never reused" meant no cached answer.
+
+## D. Items issued ahead: accepted until #800 is admitted
+
+1. At most three counted spans ahead, plus the standing F0.
+2. Each item names its predecessor by span id and requires that span's clean close receipt. If the predecessor did not close clean, the item is void and is not skipped.
+3. Each item carries its date window (RL-172 (a)) and its own argument choice.
+4. Nothing is issued past a class A hand-read or an L002 or L005 gate.
+5. An item expires 24 h after issue.
+
+## E. The batch
+
+| Item | Ruling |
+|---|---|
+| Soak refusal kind | **Add `soak_refusals: [{attempt, kind}]` to the receipt at the next runner pin.** No re-pin for it. Until then the look prints "kind not recorded", and the lead's choice to read receipt fields only is confirmed |
+| `trace_coverage` (Mythos 9) | **In, as a print, both channels:** the minimum coverage over energy-fit legs and the count under 0.99. The twin implements it |
+| Coefficient writer and predict path (Mythos 6) | **Built before the manifest is committed.** `write_coefficients` with a pinned schema; `predict(coefficients, leg)` returning the turn's Ĥ and its segment predictions, tested to reproduce the main fit's fitted values. The twin writes its own `predict`. Freeze 2 is the coefficient file's hash. RL-166 Q10 cannot be met without it |
+| Q11 | **Settled by one run, rule fixed now.** The check passed as I conditioned it, but .034 at 1,000 repetitions (SE about .006) does not resolve .035. The analyst seat re-runs the 8 % cell's two rows at 10,000 repetitions, off the MBP. Both at or under .035: 0.08. Otherwise 0.04. Until then 0.04 applies, as the manifest has it |
+| Trace holes (GPU rail; DC-in decoded samples; round 5 §6) | **Section E.1** |
+| Twin fields | `trace_coverage` and `soak_retries`: in. `ledger_gate`: out. A reproduction compares everything except `ledger_gate`, and the interface page says so |
+| Desk-final draw (PR #799) | **Seed 2026111501 confirmed. The draw is per span and append-stable** (Sol R11): a span is drawn when the hash of seed, kit, G0 shape and span id is 0 modulo 4. The first span of each kit and G0-shape group is always drawn. A block-of-four draw is refused, because an append changes it |
+| Watchdog interlock (Sol R7) | **Not built. `magistrate_watchdog.py` is not touched.** The controller holds its own fence continuously from startup through arm and close while a queue is live, and registers its wake before its last observation. The agent census is the validity backstop. If the watchdog changes for another reason, the interlock rides that change |
+| Sol R12, the Q1 print | **A typed completion record by the lead, counted in line 9's debt:** span k's Q1 record exists before span k+2 arms. It holds nothing sooner. After an L002 timeout nothing arms and the print comes to me, as RL-161 has it |
+| The restart (RL-172 (h)) | **No password is handled by an agent and no physical step is added.** If FileVault blocks an unattended login, the lead tries to stop the two Spotlight services without a restart, at a span boundary, with a readback; that is the host event. If that fails, the restart waits until Ed is at the machine for another reason. **Last point for either: before freeze 2.** After that the host state stays as it is through qualification, and the arm records state it as it is |
+| Time Machine | **Moved up.** `backupd` ran inside L010's turn and the leg passed rule 5. If automatic backups can be turned off remotely with a readback, do it at the next span boundary before dev-03's first span, as a recorded host event. Otherwise it waits for the boundary before freeze 2 |
+
+**Recorded, no ruling:** the second Part C's four observations; the legs that overlapped maintenance and passed rule 5 (L010, L012.a2), which are the count RL-171 §5 item 3 asks for and stay in; hp-01's 12 of 12, with the first leg of each High Power span reaching OS level 2, as description only.
+
+### E.1 Trace holes
+
+**The gap bound is 2 s on both channels, inside any energy-fit interval.**
+1. **Stage 1 may read time fields of the energy files, and nothing else:** the row stamps of `power_trace.csv` and each meter sample's device counter. Neither is a power or energy value.
+   - It goes through one dedicated reader.
+   - A test changes every power value in a fixture and requires stage 1's output to be byte-identical.
+   - The blind statement becomes: "stage 1 read time stamps and sample counters only".
+2. **A gap over 2 s excludes the leg in stage 1,** as a clause of rule 3 for the GPU rail and of rule 4 for DC-in. It also excludes a leg whose decoder clock-fit excess is over 2 s. The decoder's duplicate count is printed.
+3. **Stage 2's refusal stays on as the backstop,** `fit.gpu_trace_hole_refusal` enabled at 2 s. With 1 and 2 in place it should never fire.
+4. **If stage 2 does refuse** for a hole or a meter fault: the refusal names the leg and the gap and prints no energy. I rule that leg's exclusion by name, the ledger records the ruling, and stage 1 runs once more with that exclusion and no other change. This answers round 4 N3 and round 5 §6: a second stage 1 after energy needs a named ruling in the ledger.
+5. **If 1 and 2 are not built and cold-gated by dev-05's close,** 3 and 4 alone govern the interim look.
+
+**Why exclude and not refuse.** On 571 simulated streams, stage 2 refused 42 admitted legs. One refusal ends the look, and one bad block should cost one leg.
+
+## Owners
+
+- **Lead:** the key's second copy; the offload's permanent tool; the Actions watcher and desk; items ahead under D; the two host events; the Q1 records.
+- **Controller builder:** the continuous fence, the watcher read, the per-span draw, the Q1 record in the debt count.
+- **Analyst seat and twin (Sol):** `write_coefficients` and `predict`; the time-field reader and its test; the Q11 run.
+- **Cold seats (Mythos):** the look package after those changes; the offload tool's blind check (bytes only, no parse).
+
+**Amends.**
+- RL-171 §6.1: the copy is the MBP's verified cloud offload.
+- RL-172 (i) row 4: the deterministic desk is a controller step. RL-172 (g) 7: by C 4 and C 5. RL-172 (c): the draw, by E. RL-172 (h): the restart's fallback and last point.
+- RL-149 §2.8 line 7 (which watcher) and line 9 (where the desk runs).
+- RL-171 §5: Time Machine's timing.
+- RL-166 Q7: the two time-stamp clauses of E.1. RL-166 Q11: the 10,000-repetition run.
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. The hole figures are from synthetic custody. The exclusion clauses and the Q11 rule are fixed before any development energy is read.
+
+**For Ed, plainly.** "Agreed, and it is now the rule and not a stopgap: the laptop encrypts and uploads each run's data, checks the upload, runs its own table check, and starts the next run. The Air is no longer needed for any of that. The alarm that watches for a stuck run moves to GitHub, so it works when both of us are away. One condition matters: a second copy of the encryption key must exist somewhere other than the laptop, or the cloud copy is useless if the laptop dies. I also tightened the analysis so that a gap in a power recording drops that one run before any energy is read."
