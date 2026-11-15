@@ -18,6 +18,7 @@ import sys
 import tempfile
 
 from joulewise.cadence_looks import manifest as lm
+from tests.git_fixture import init_git_fixture
 
 REPO = Path(__file__).resolve().parents[2]
 LOOKS_DIR = "docs/process/cadence/looks"
@@ -39,7 +40,7 @@ def mini_repo(test):
             dst.write_text(STUB, encoding="utf-8")
     run([sys.executable, "-B", str(root / "scripts/cadence_look_manifest.py"), "pin", str(root / MANIFEST),
          "--repo", str(root), "--write"], root, check=True)
-    git(root, "init", "-q", "-b", "main")
+    init_git_fixture(root, "-q", "-b", "main")          # the shared helper: no detached auto-maintenance
     git_commit(root, "mini repo")
     return root
 
