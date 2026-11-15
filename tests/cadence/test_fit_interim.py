@@ -929,15 +929,18 @@ class RL166b(unittest.TestCase):
             self.assertEqual(v["legs_with_hot_block"], c["lodo"]["hot"]["n_hot_legs_per_day"][D])
         self.assertEqual(sorted(c["day_detail"]["days"]), sorted(c["lodo"]["hot"]["counted_days"]))
         # P-3: offset 0 holds every leg with an observed onset and a hot block
-        n0 = sum(1 for L in s1["legs"] if L["in_energy_fit"] and L["state"]["first_off_s"] is not None
+        n0 = sum(1 for L in s1["legs"] if L["in_energy_fit"] and L["state"]["onset_use"] == "uncensored"
                  and any(s["hot"] for s in L["segments"]))
+        n_any_off = sum(1 for L in s1["legs"] if L["in_energy_fit"] and L["state"]["first_off_s"] is not None
+                        and any(s["hot"] for s in L["segments"]))
+        self.assertLess(n0, n_any_off)            # out-of-state starts and gapped legs are left out (RL-166c row 4)
         oo = c["onset_offset_residuals"]
         self.assertEqual(oo["offsets"]["0"]["n"], n0)
         self.assertEqual(sorted(oo["offsets"], key=int), [str(i) for i in range(-2, 6)])
         self.assertGreater(oo["rms_offsets_m2_to_p3"]["no_heat"], oo["rms_offsets_m2_to_p3"]["with_heat"])
         n_m2 = 0
         for L in s1["legs"]:
-            if L["in_energy_fit"] and L["state"]["first_off_s"] is not None:
+            if L["in_energy_fit"] and L["state"]["onset_use"] == "uncensored":
                 blocks = [s for s in L["segments"] if s["kind"] == "decode"]
                 hot = [i for i, s in enumerate(blocks) if s["hot"]]
                 n_m2 += bool(hot) and hot[0] >= 2
@@ -985,3 +988,57 @@ class Schemas(unittest.TestCase):
             self.assertEqual(V.errors(json.loads(json.dumps(s1)), s1_schema), [], sc)
             out = F.stage2(s1, rehash(s1), en)
             self.assertEqual(V.errors(json.loads(json.dumps(out)), fit_schema), [], sc)
+
+
+class RL166c(unittest.TestCase):
+
+    def test_row5_empty_offsets_have_all_keys(self):
+        """No uncensored onset (few_hot_days has its onset model not estimable but observed onsets on two days;
+        onsets_one_cell has uncensored legs): use a stage-1 copy with every onset censored."""
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        for L in s1["legs"]:
+            if L.get("state") and L["state"]["onset_use"] == "uncensored":
+                L["state"]["onset_use"] = "censored"
+        out = F.stage2(s1, rehash(s1), en)
+        oo = out["channels"]["gpu_rail"]["onset_offset_residuals"]
+        self.assertEqual(sorted(oo["offsets"], key=int), [str(i) for i in range(-2, 6)])
+        for v in oo["offsets"].values():
+            self.assertEqual(v, {"n": 0, "mean_with_heat": None, "rms_with_heat": None, "mean_no_heat": None,
+                                 "rms_no_heat": None})
+        self.assertEqual(oo["rms_offsets_m2_to_p3"], {"with_heat": None, "no_heat": None})
+
+    def _p3_leg_block(self, s1):
+        """(leg_key, segment index) of a decode block that enters P-3 but no other refusal: an uncensored leg's
+        first hot block."""
+        for L in s1["legs"]:
+            hot = [i for i, s in enumerate(L["segments"]) if s["hot"]]
+            if L["in_energy_fit"] and L["state"]["onset_use"] == "uncensored" and len(hot) >= 3:
+                return L["leg_key"], hot[0]
+        raise AssertionError("no P-3 block")
+
+    def test_row5_non_positive_block_refuses(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        k, i = self._p3_leg_block(s1)
+        for bad in (0.0, -5.0):
+            e2 = copy.deepcopy(en)
+            for ch in F.CHANNELS:
+                seg = e2["legs"][k][ch]["segments"]
+                seg[0] += seg[i] - bad            # keep the leg's and the day's sums positive and unchanged
+                seg[i] = bad
+            with self.assertRaisesRegex(F.LookInputError, "P-3"):
+                F.stage2(s1, rehash(s1), e2)
+
+    def test_r18_non_positive_hot_stretch_refuses(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        L = next(L for L in s1["legs"] if L["in_energy_fit"] and any(s["hot"] for s in L["segments"]))
+        e2 = copy.deepcopy(en)
+        seg = e2["legs"][L["leg_key"]]["gpu_rail"]["segments"]
+        for i, s in enumerate(L["segments"]):
+            if s["hot"]:
+                seg[0] += seg[i]
+                seg[i] = 0.0
+        with self.assertRaisesRegex(F.LookInputError, "hot-stretch"):
+            F.stage2(s1, rehash(s1), e2)

@@ -81,6 +81,10 @@ MUTANTS = [
     ("p3_offset_from_first_block", FIT, '            o = blocks.index(hot[0])', '            o = 0', [T_FIT]),
     ("p4_le_116", FIT, 'if L["start"]["state"] == "in_state" and off is not None and off < COUNT_ONLY_CUT_FIXED_S:', 'if off is not None and off < COUNT_ONLY_CUT_FIXED_S:', [T_FIT]),
     ("p4_flag_always_false", FIT, '"to_research_lead": onset["status"] == "not_estimable" and n_early > 0}', '"to_research_lead": False}', [T_FIT]),
+    # RL-166c
+    ("c4_p3_any_off_reading", FIT, '            if L["state"]["onset_use"] != "uncensored":          # RL-166c row 4: the onset sample\'s uncensored legs', '            if L["state"]["first_off_s"] is None:', [T_FIT]),
+    ("c5_p3_no_refusal", FIT, '                    if not y[i] > 0:                             # RL-166c row 5, R-18', '                    if False:', [T_FIT]),
+    ("r18_hot_no_refusal", FIT, '        if any(v is not None and v <= 0 for v in meas_hot.values()):', '        if False:', [T_FIT]),
     ("level_off_requires_fresh", FIT, 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0:', 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0 and r["pm_fresh"]:', [T_FIT]),
     ("cluster_by_day", FIT, '            g += [k] * len(L["segments"])', '            g += [L["day"]] * len(L["segments"])', [T_FIT]),
     ("no_cr1_factor", FIT, 'corr = (G / (G - 1)) * ((n - 1) / (n - k)) if G > 1 and n > k else 1.0', 'corr = 1.0', [T_FIT]),

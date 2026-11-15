@@ -1167,6 +1167,8 @@ def _channel(legs, E, ch, model, active, include=None):
             den_l += mn
         mx = max(abs(hot_day[D]) for D in counted) if counted else None
         # P-2: per counted day, legs with a hot block, hot blocks and s/sqrt(n); s pooled within counted days
+        if any(v is not None and v <= 0 for v in meas_hot.values()):
+            raise LookInputError("stage 2: a leg's measured hot-stretch energy is not positive (R-18)")
         rh = {k: (pred_hot[k] - meas_hot[k]) / meas_hot[k] for k in keys_all if meas_hot[k] is not None}
         ss = dfree = 0.0
         for D in counted:
@@ -1208,7 +1210,7 @@ def _channel(legs, E, ch, model, active, include=None):
         acc = {o: [] for o in ONSET_OFFSETS}
         for k in keys_all:
             L = by_key[k]
-            if L["state"]["first_off_s"] is None:
+            if L["state"]["onset_use"] != "uncensored":          # RL-166c row 4: the onset sample's uncensored legs
                 continue
             blocks = [i for i, s in enumerate(L["segments"]) if s["kind"] == "decode"]
             hot = [i for i in blocks if L["segments"][i]["hot"]]
@@ -1220,6 +1222,8 @@ def _channel(legs, E, ch, model, active, include=None):
                 j = o + off
                 if 0 <= j < len(blocks):
                     i = blocks[j]
+                    if not y[i] > 0:                             # RL-166c row 5, R-18
+                        raise LookInputError("stage 2: a block entering P-3 has measured energy at or below zero")
                     acc[off].append((segs_pred[k][i] - y[i]) / y[i])
         tab = {str(off): {"n": len(v), "mean": (sum(v) / len(v)) if v else None,
                           "rms": math.sqrt(sum(x * x for x in v) / len(v)) if v else None} for off, v in acc.items()}
