@@ -256,7 +256,10 @@ def planning_released_segments(r1_slots, release, root=ROOT):
         problems = []
         if planning[name] != PLANNING_RELEASE_REASON:
             problems.append(f'reason {planning[name]!r} is not a G0 timeout alone')
-        if row.get('os_levels') != [0] or row.get('pm_states') != ['Nominal']:
+        levels = row.get('os_levels')
+        # PR #777 row-2 finding 10: [False] is not [0] (type-exact).
+        if (not isinstance(levels, list) or len(levels) != 1 or type(levels[0]) is not int or levels[0] != 0
+                or row.get('pm_states') != ['Nominal']):
             problems.append('OS level above 0 or a non-Nominal state')
         if row.get('heater_key') != heater:
             problems.append(f'heater key {row.get("heater_key")!r} is not {heater!r}')
@@ -268,6 +271,24 @@ def planning_released_segments(r1_slots, release, root=ROOT):
             raise ValueError(f'R1 planning release {name}: ' + '; '.join(problems)
                              + ': not the RL-122 3(a) pattern; the research lead rules')
     return set(planning)
+
+
+# RL-145 close section 5, RL-152 section 1.6, RL-156 section 2: the ruled alias pair by name (fast, slow); the
+# same constant as the R1 driver's align_r1_rehearsal.RULED_ALIAS_PAIR (PR #777 row-2 finding 4).
+RULED_ALIAS_PAIR = ('TV0h', 'TV1h')
+
+
+def ruled_alias_pair(sensors, aliases, confirmation):
+    """The W1 kit's copy of the driver's ``ruled_alias_pair`` (RL-156 section 2): the policy's picks are exactly
+    RULED_ALIAS_PAIR, TV1h in TV0h's alias group of R1's classification, on an ok RL-145 night confirmation
+    naming both. RL-145 section 3's lexical rule is the selection rule on the saved Part B classification
+    (``align_r1_followup_kit.alias_second_key_selection``), not a condition of this bar."""
+    fast, slow = (sensors or {}).get('s_fast'), (sensors or {}).get('s_slow')
+    confirmation = confirmation if isinstance(confirmation, dict) else {}
+    group = next((g for g in (aliases or ()) if isinstance(g, list) and fast in g), None)
+    return ((fast, slow) == RULED_ALIAS_PAIR and group is not None and slow in group
+            and confirmation.get('ok') is True and confirmation.get('second_key_rule') == 'RL-145'
+            and all(confirmation.get(r) == v for r, v in (('s_fast', fast), ('s_slow', slow))))
 
 
 def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planning_release=None, root=ROOT):
@@ -360,18 +381,14 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planni
     if isinstance(sensors, dict):
         fast, slow = sensors.get('s_fast'), sensors.get('s_slow')
         confirmation = classified.get('night_confirmation') or {}
-        # RL-145 section 3 / addendum row 4: the ruled pair is the fast pick and the lexically first
-        # other member of its alias group, read as one thermometer twice; only that pair, and only
-        # on an ok RL-145 confirmation that names it, passes. Any other aliased pair still refuses.
-        group = next((g for g in aliases if fast in g), None)
-        ruled_alias_pair = (group is not None and slow in group and slow != fast
-                            and slow == min(k for k in group if k != fast)
-                            and confirmation.get('ok') is True and confirmation.get('second_key_rule') == 'RL-145'
-                            and all(confirmation.get(r) == sensors.get(r) for r in ('s_fast', 's_slow')))
-        if fast == slow or (any(fast in g and slow in g for g in aliases) and not ruled_alias_pair):
+        # RL-145 close section 5, RL-152 section 1.6, RL-156 section 2: the ruled pair is TV0h/TV1h by name
+        # (RULED_ALIAS_PAIR), one thermometer read twice; only that pair, and only on an ok RL-145 confirmation
+        # that names it, passes. Any other aliased pair still refuses (PR #777 row-2 finding 4).
+        ruled = ruled_alias_pair(sensors, aliases, confirmation)
+        if fast == slow or (any(fast in g and slow in g for g in aliases) and not ruled):
             raise ValueError('R1.thermal_policy s_fast/s_slow: aliased keys are one thermometer '
-                             '(LEAD-RULINGS-2 R7-13; RL-145 admits only the fast key and its lexically first '
-                             'alias on an ok RL-145 night confirmation)')
+                             '(LEAD-RULINGS-2 R7-13; RL-145, RL-152 section 1.6 and RL-156 section 2 admit only '
+                             'TV0h/TV1h on an ok RL-145 night confirmation)')
         fixed_pair = (confirmation.get('ok') is True and confirmation.get('authority') == 'RL-78'
                       and all(confirmation.get(r) == sensors.get(r) for r in ('s_fast', 's_slow')))
         if sensors.get('s_fast') not in (classified.get('die_candidates') or ()) and not fixed_pair:
@@ -419,7 +436,9 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planni
     opportunity = turn_opportunity(r1_slots, inputs['R1']['B_D'])
     if opportunity['status'] != 'pass':
         raise ValueError('R11 turn opportunity at chosen B_D is ' + opportunity['status'] +
-                         '; qualified per-turn counts and >=3 admitted turns per gated D run required')
+                         '; qualified per-turn counts and >=3 admitted turns per gated D run required, '
+                         'except a run that stopped itself inside B_D (RL-152 section 1.2), and at least one '
+                         'run with three')
 
 
 STEP_D_SEGMENT = 'step_D_prefill_10k_decode_4096'
@@ -510,6 +529,12 @@ def check_duty_bar_consistency(r1_slots):
     if not verdicts or any(v not in ('pass', 'inconclusive', 'fail') for v in verdicts):
         raise ValueError('R1 deadman_budget must carry a duty_bar.verdict for every run')
     verdict = 'fail' if 'fail' in verdicts else 'inconclusive' if 'inconclusive' in verdicts else 'pass'
+    # RL-149 section 1.5: a PASS also needs one passing gated D run with three admitted turns (the driver's
+    # three_turn_run_present; a run that stopped itself at two turns has a not-applicable turn check).
+    if verdict == 'pass' and not any(isinstance(row, dict) and (row.get('duty_bar') or {}).get('verdict') == 'pass'
+                                     and type(row.get('admitted_turns')) is int and row['admitted_turns'] >= 3
+                                     for row in rows):
+        verdict = 'fail'
     duty = r1_slots.get('duty_bar')
     if not isinstance(duty, dict) or duty.get('verdict') != verdict or duty.get('pass') is not (verdict == 'pass'):
         raise ValueError('R1 duty_bar verdict/pass disagrees with the per-run duty verdicts')
@@ -529,6 +554,11 @@ def turn_opportunity(r1_slots, b_d):
     Count exports are lead-owned backfills from explicit bundle bytes; their
     source digest binds the export. Missing/censored completion evidence never
     implies a third turn or qualifies a budget-X7 exception.
+
+    RL-152 section 1.2 (restating RL-148 section 2's "stays" in the duty bar's form, RL-149 section 1.5):
+    a run is not_applicable when its record is valid, every turn it took is admitted at B_D and there
+    are fewer than three, and the driver's row says it returned by its own stop. Status: inconclusive
+    if any run is; fail if any run fails or no run passes; pass otherwise.
     """
     rows = r1_slots.get('deadman_budget', [])
     if (type(b_d) is not int or b_d <= 0 or not isinstance(rows, list)
@@ -544,7 +574,7 @@ def turn_opportunity(r1_slots, b_d):
                  and isinstance(completed, list) and len(completed) == len(counts)
                  and all(type(v) is bool for v in completed)
                  and all(completed[:-1]) and sum(counts) == row.get('decode_tokens')
-                 and row.get('admitted_turns') == len(counts)
+                 and type(row.get('admitted_turns')) is int and row.get('admitted_turns') == len(counts)
                  and valid_digest(row.get('turn_counts_source_sha256')))
         used = admitted = 0
         if valid:
@@ -553,10 +583,32 @@ def turn_opportunity(r1_slots, b_d):
                     break
                 admitted += 1
                 used += n
+        # RL-152 section 1.2: a valid run that took fewer than three turns, every one of them admitted at B_D,
+        # and that returned by its own stop (read from the driver's row, duty_bar.stop.own_stop is true; never
+        # inferred from a missing field) is not_applicable: it says nothing against B_D. A run that B_D would
+        # have cut before a turn it took still fails.
+        stop = ((row.get('duty_bar') or {}).get('stop') or {}) if isinstance(row.get('duty_bar'), dict) else {}
+        own_stop = isinstance(stop, dict) and stop.get('own_stop') is True
+        # RL-156 section 1 (PR #777 row-2 finding 3), RL-152 section 1.2's fourth condition: the row itself
+        # must also show no cut, so a stale or hand-edited own_stop cannot stand alone: x7 false, no G1 timeout
+        # (an int 0) and a released G0. A run that meets the other three conditions and not this one fails.
+        g1_timeouts = row.get('g1_timeouts')
+        uncut = (row.get('x7') is False and type(g1_timeouts) is int and g1_timeouts == 0
+                 and row.get('g0_outcome') == 'released')
+        if not valid:
+            run_status = 'inconclusive'
+        elif admitted >= 3:
+            run_status = 'pass'
+        elif admitted == len(counts) and own_stop and uncut:
+            run_status = 'not_applicable'
+        else:
+            run_status = 'fail'
         results.append({'run': row.get('run'), 'admitted_at_B_D': admitted if valid else None,
-                        'status': ('pass' if admitted >= 3 else 'fail') if valid else 'inconclusive'})
+                        'turns_taken': len(counts) if valid else None, 'own_stop': own_stop, 'uncut': uncut,
+                        'status': run_status})
     status = ('inconclusive' if any(r['status'] == 'inconclusive' for r in results)
-              else 'fail' if any(r['status'] == 'fail' for r in results) else 'pass')
+              else 'fail' if any(r['status'] == 'fail' for r in results)
+              or not any(r['status'] == 'pass' for r in results) else 'pass')
     return {'status': status, 'B_D': b_d, 'runs': results,
             'limitation': 'Observed benign opportunity only; no guarantee before EOS/context/deadman or of sabotage capability.'}
 
@@ -727,6 +779,72 @@ def ruling_1f_fit(r1_slots, b_d, t_dead, *, receipt=None, x_max_turns=None):
     worst = math.fsum(terms.values())
     return {'B_D': b_d, 'T_dead_s': t_dead, 'terms_s': terms, 'r_decode_tok_per_s': rate, 'worst_s': worst,
             'g0_cap_w1': g0_cap, 'd_g0_cap': d_cap, 'rule': rule, 'fits': worst <= t_dead + 1e-6}
+
+
+TYPICAL_CASE_AUTHORITY = 'RL-148 section 2 ("What replaces the fit in the kit"); RL-149 section 1.5'
+
+
+# The gate's poll step: thermal_gates.ThermalSession._wait sleeps at most 1 s between samples
+# (``delay = min(1, limit - elapsed)``), so a recorded wait and its interval agree to within it.
+G1_RECONCILE_TOL_S = 1.0
+
+
+def typical_case_fit(r1_slots, t_dead, g_turn_s):
+    """RL-148 section 2, as RL-149 section 1.5 sets it: the typical case, not the worst case, must fit.
+
+    Each of R1's three gated D runs, with its own recorded prefill, tool and decode seconds, plus the G0
+    seconds and, for each of its own G1s, the largest G1, ends inside T_dead. Evaluated on the slot
+    session's own seconds (RL-149 section 1.5): the G0 term is the largest gated D G0 wait of the session
+    and the G1 term is the session's largest single gated D G1 wait, or ``g_turn_s`` (the armed G_turn cap,
+    thermal_policy.turn_cap_s) if any gated D G1 of the session timed out. A run's G1 count is the number
+    of G1 waits it recorded (``deadman_budget[].gate_waits_s.G1``, written by the RL-149 R1 driver). Holds
+    are not a term: N_chunk 4,096 (no in-turn hold, RL-149 section 1.1). Returns the arithmetic; the duty
+    bar and the three-turn opportunity at B_D are separate checks and stay.
+
+    PR #777 row-2 finding 5: the premises are checked, not trusted. A run with hold seconds (``phases_s.H``
+    above 0) is refused: N_chunk 4,096 implies no hold, and an H record is a defect (RL-149 section 5 item 12).
+    A run's G1 waits must add up to its ``phases_s.G1`` within ``G1_RECONCILE_TOL_S`` (both come from the same
+    G1 intervals). When a G1 timed out, the term is ``max(g_turn_s, largest recorded wait)``: a timed-out wait
+    can overshoot the cap by up to one gate poll."""
+    rows, phases, _rate, _cap = gated_fit_inputs(r1_slots)
+    if not finite(t_dead) or t_dead <= 0 or not finite(g_turn_s) or g_turn_s <= 0:
+        raise ValueError('typical-case fit: T_dead and the G_turn cap must be finite and positive')
+    g1_waits, timeouts = {}, {}
+    for row in rows:
+        waits = (row.get('gate_waits_s') or {}).get('G1') if isinstance(row.get('gate_waits_s'), dict) else None
+        if not isinstance(waits, list) or not all(finite(w) and w >= 0 for w in waits):
+            raise ValueError(f'typical-case fit: {row.get("run")} must record its per-G1 waits '
+                             '(deadman_budget[].gate_waits_s.G1, the RL-149 R1 driver); an older R1 record cannot '
+                             'be judged (RL-148 section 2)')
+        count = row.get('g1_timeouts')
+        if type(count) is not int or count < 0:
+            raise ValueError(f'typical-case fit: {row.get("run")} must record g1_timeouts (an int >= 0; the RL-149 '
+                             'R1 driver reads it from the run\'s episode flags)')
+        g1_waits[row['run']], timeouts[row['run']] = [float(w) for w in waits], count
+    for row, p in zip(rows, phases):
+        if p['H'] > 0:
+            raise ValueError(f'typical-case fit: {row.get("run")} records {p["H"]} s of hold (phases_s.H); N_chunk '
+                             '4,096 implies no hold, and an H record is a defect (RL-149 section 5 item 12)')
+        if abs(math.fsum(g1_waits[row['run']]) - p['G1']) > G1_RECONCILE_TOL_S:
+            raise ValueError(f'typical-case fit: {row.get("run")} G1 waits add up to '
+                             f'{math.fsum(g1_waits[row["run"]]):.3f} s, not its phases_s.G1 {p["G1"]:.3f} s '
+                             f'(within {G1_RECONCILE_TOL_S:g} s)')
+    g0 = max(p['G0'] for p in phases)
+    timed_out = any(timeouts.values())
+    largest = max((w for ws in g1_waits.values() for w in ws), default=0.0)
+    g1_max = max(float(g_turn_s), largest) if timed_out else largest
+    runs = {}
+    for row, p in zip(rows, phases):
+        n_g1 = len(g1_waits[row['run']])
+        own = p['prefill'] + p['tool'] + p['decode']
+        total = math.fsum((g0, n_g1 * g1_max, own))
+        runs[row['run']] = {'prefill_tool_decode_s': own, 'g1_count': n_g1, 'total_s': total,
+                            'margin_s': t_dead - total, 'fits': total <= t_dead + 1e-6}
+    return {'authority': TYPICAL_CASE_AUTHORITY, 'T_dead_s': t_dead, 'G0_s': g0, 'G1_max_s': g1_max,
+            'G1_basis': ('max(G_turn cap, largest recorded gated D G1) (a gated D G1 timed out)' if timed_out
+                         else 'largest recorded gated D G1'),
+            'G_turn_s': g_turn_s, 'runs': runs, 'fits': all(r['fits'] for r in runs.values()),
+            'rule': 'for each gated D run: max G0 + (its G1 count) x max G1 + its prefill + tool + decode <= T_dead'}
 
 
 G0_CAP_FACTOR = 1.25
@@ -1107,14 +1225,19 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
                              '(s6_tuning {authority, from_c = S5, to_c = S6})')
         if slots['S6'] > S6_TUNING_CAP_C + 1e-9:
             raise ValueError(f'a tuned S6 must stay within the {S6_TUNING_CAP_C} C cap (council ruling 1(e))')
+    # RL-148 section 2 ("What replaces the fit in the kit"), RL-149 section 1.5: ruling 1(f)'s worst case
+    # is withdrawn for D and no longer refuses; it is computed and returned for the record. The typical
+    # case must fit, on the slot session's own seconds (typical_case_fit). The duty bar and the
+    # three-turn opportunity at B_D stay (check_r1_evidence).
     fit = ruling_1f_fit(r1_slots, r1_inputs['B_D'], r1_inputs['T_dead'], receipt=receipt, x_max_turns=x_max_turns)
-    if not fit['fits']:
-        raise ValueError(f'ruling 1(f): B_D {fit["B_D"]} does not fit T_dead {fit["T_dead_s"]:.1f} s: worst '
-                         f'{fit["worst_s"]:.1f} s = ' + ' + '.join(f'{k} {v:.1f}' for k, v in fit['terms_s'].items())
-                         + f' ({fit["rule"]}); the largest fitting B_D is '
-                         f'{max_fitting_b_d(r1_slots, r1_inputs["T_dead"])}'
-                         + f'; g0_cap_w1 = {fit["g0_cap_w1"]}; d_g0_cap = {fit["d_g0_cap"]}')
-    return fit
+    typical = typical_case_fit(r1_slots, r1_inputs['T_dead'], policy.get('turn_cap_s'))
+    if not typical['fits']:
+        raise ValueError(f'RL-148 typical-case bar: a gated D run does not fit T_dead {typical["T_dead_s"]:.2f} s '
+                         f'with G0 {typical["G0_s"]:.2f} s and each G1 at {typical["G1_max_s"]:.2f} s '
+                         f'({typical["G1_basis"]}): ' + '; '.join(
+                             f'{run} {r["total_s"]:.2f} s ({r["g1_count"]} G1)' for run, r in typical['runs'].items()
+                             if not r['fits']) + ' (RL-148 section 2; RL-149 section 1.5)')
+    return {**fit, 'worst_case_refuses': False, 'typical_case': typical}
 
 
 def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None, planning_release=None, root=ROOT):

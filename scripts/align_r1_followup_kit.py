@@ -324,8 +324,9 @@ def prepare(output, *, root=ROOT, config_path=None, ruling=None, smoke_table=Non
     if (root / gate).read_bytes() != expected:
         raise ValueError("W1 thermal gate bytes changed")
     bounds = r1.night_worst_case_s(["--config", str(path)])
-    if bounds["window_max_s"] != 126480 or bounds["overhead_s"] != 9000:
-        raise ValueError("follow-up sizing differs from RL-72 E2")
+    # RL-72 E2's construction at the RL-149 section 2.9 item 4 blackout (02:00-02:35): 119,880 s (was 126,480).
+    if bounds["window_max_s"] != 119880 or bounds["overhead_s"] != 9000:
+        raise ValueError("follow-up sizing differs from RL-72 E2 at the RL-149 blackout")
     packet = {"schema": "joulewise.align.r1_followup_prepare.v1", "status": "FOR_LEAD_ARM",
               "executed_commit": commit, "sensors": config["sensors"], "sensor_ruling": ruling,
               **checks, "chain_script": "scripts/night_chains/align_r1_rehearsal.zsh",
@@ -487,6 +488,12 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         result["elapsed_s"] = time.monotonic() - started
         (output / "smoke_part_c.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
         (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        # RL-153 section 1.2 note 6, RL-156 section 3.2: the verdict and the evaluation's log (RL-152 section
+        # 1.4's line among them) go to the terminal as well as the record; the record is unchanged.
+        if verdict_doc is not None:
+            print(f"Part C verdict: {verdict_doc.get('verdict')} (pass: {verdict_doc.get('pass')})")
+            for line in verdict_doc.get("log") or ():
+                print(f"Part C log: {line}")
     try:
         result["members"]["predecessor"] = invoke(runtime, "capture-predecessor-30b", output / "capture_predecessor_30b",
                                                   soak_reference=soak_reference)
@@ -507,13 +514,19 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         # The runtime's own X7 flag and T_dead are the authority where it reports them.
         bank_facts["x7"] = bank.get("x7", bank_facts["x7"])
         bank_facts["t_dead_s"] = (bank.get("deadman") or {}).get("T_dead_s", bank_facts["t_dead_s"])
+        # RL-149 section 1.5: the stop reason is read from the runtime's episode flags where it reports them.
+        if isinstance(bank.get("episode_flags"), list):
+            bank_facts["episode_flags"] = list(bank["episode_flags"])
         printed = prints(bank_dir / bank["bundle"])
         x_g_facts, why = None, None
         try:
             x_g = invoke(runtime, "x-g", output / PART_C_X_G, soak_reference=soak_reference)
             result["members"]["x_g"] = x_g
             x_g_facts = facts(output / PART_C_X_G / x_g["bundle"], role="x-g")
-            x_g_facts["x7"] = any(f.startswith("episode.deadman:") for f in x_g.get("episode_flags", []))
+            # PR #777 row-2 finding 7: the runtime's flags decide only when they are recorded (a list), as on
+            # D_bank's path; otherwise the bundle-derived X7 stands.
+            if isinstance(x_g.get("episode_flags"), list):
+                x_g_facts["x7"] = any(str(f).startswith("episode.deadman:") for f in x_g["episode_flags"])
         except (r1.Refusal, ValueError, KeyError, OSError) as exc:
             why = f"{type(exc).__name__}: {exc}"
             print(f"Part C: X_G left out, the launcher could not run it without more condition-13 code: {why}",
