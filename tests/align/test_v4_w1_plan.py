@@ -183,6 +183,13 @@ class W1PlanTests(unittest.TestCase):
         candidate["align_v4"]["thermal_policy"]["window_reference"] = {"role": "capture"}
         with self.assertRaisesRegex(ValueError, "installed per member"):
             check(candidate)
+        # RL-148 section 2, RL-156 section 3.1: the template has no receipt slot, and a filled plan with one is refused.
+        self.assertNotIn("g0_cap_receipt", template["align_v4"]["thermal_policy"])
+        candidate = filled_template()
+        candidate["align_v4"]["thermal_policy"]["g0_cap_receipt"] = {"authority": "LEAD-RULINGS-2 R10-2(a)",
+                                                                    "receipt_sha256": "e" * 64}
+        with self.assertRaisesRegex(ValueError, "g0_cap_receipt names a ruling 1\\(f\\) receipt"):
+            check(candidate)
 
     def test_t_dead_follows_lead_ruling_l1_and_binds_r1_tail(self):
         good = filled_template()

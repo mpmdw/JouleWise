@@ -11,6 +11,7 @@ import argparse
 from copy import deepcopy
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -291,7 +292,7 @@ def ruled_alias_pair(sensors, aliases, confirmation):
             and all(confirmation.get(r) == v for r, v in (('s_fast', fast), ('s_slow', slow))))
 
 
-def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planning_release=None, root=ROOT):
+def check_r1_evidence(inputs, r1_slots, *, synthetic=False, planning_release=None, root=ROOT):
     """Bind r1_slots to R1 evidence (executing review MEDIUM-3).
 
     The record must be the R1 driver's own (schema and hardware source; the
@@ -300,8 +301,8 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planni
     the A-B-A verdict, max_r1_tail_s must be the largest gated-run tail, U5
     must carry a verdict, every ruling 20 census must have passed, and the
     duty bar must pass or carry a recorded lead fallback step (ruling 1(e)).
-    ``receipt`` is the lead's committed ruling 1(f) receipt or None
-    (LEAD-RULINGS-2 R10-4); R11 binds a non-veto contrast cap/fit on every path.
+    R11 binds a non-veto contrast cap/fit. There is no ruling 1(f) receipt
+    (RL-148 section 2; the R10-2(a) path is retired, RL-156 section 3.1).
     ``planning_release`` is the lead's RL-122 3(a) record or None; ``root``
     supplies the runtime config whose sensors.s_slow the planning heater held.
     """
@@ -417,7 +418,7 @@ def check_r1_evidence(inputs, r1_slots, *, synthetic=False, receipt=None, planni
             (row or {}).get('verdict') != 'PASS' for row in volumes):
         raise ValueError('R1 r1_slots must record passing external-volume censuses (ruling 20)')
     check_r1_fast_band(inputs['R1'], r1_slots)
-    check_r1_budget_and_policy(inputs['R1'], r1_slots, receipt=receipt,
+    check_r1_budget_and_policy(inputs['R1'], r1_slots,
                                x_max_turns=((inputs.get('WP18') or {}).get('X') or {}).get('max_turns'))
     check_duty_bar_consistency(r1_slots)
     duty = r1_slots.get('duty_bar')
@@ -722,39 +723,19 @@ def gated_fit_inputs(r1_slots):
     return rows, phases, rate, cap
 
 
-def projected_holds_s(rows, phases, tokens_target):
-    """Audit-corrected D-f (LEAD-RULINGS-2 R10-4): each gated run's G1 + H
-    projected per decoded token to ``tokens_target`` (symmetric with the decode
-    term), never below what the run recorded; the maximum over the runs. A run
-    that decoded nothing projects nothing, and refuses if it still recorded
-    G1 or hold seconds."""
-    values = []
-    for row, p in zip(rows, phases):
-        held, tokens = p['G1'] + p['H'], row['decode_tokens']
-        if not tokens:
-            if held > 0:
-                raise ValueError(f'ruling 1(f): {row.get("run")} recorded {held} s of G1 + H with no decoded '
-                                 'token, so its holds cannot be projected per token (R10-4)')
-            values.append(0.0)
-        else:
-            values.append(max(held, held / tokens * tokens_target))
-    return max(values)
-
-
-def ruling_1f_fit(r1_slots, b_d, t_dead, *, receipt=None, x_max_turns=None):
+def ruling_1f_fit(r1_slots, b_d, t_dead):
     """Council ruling 1(f) for a B_D (lead ruling R5-4): the worst case R1
     measured must fit T_dead.
 
     worst = G0 term + holds + max (prefill + tool) over the gated D runs
             + (B_D + turn_cap_tokens) / r_decode
 
-    Without a lead receipt (exactly the e901eb2a4 rule; cold-review
-    disposition MEDIUM-2): the G0 term is R7-2's G0_cap_W1 over the three
-    gated D waits and X-G (unreleased waits and an INCONCLUSIVE X-G at the R1
-    timeout, R7-12) and holds is the recorded max (G1 + H).
-    With a verified R10-2(a) receipt (``receipt``): the G0 term is the
-    receipt's sub-600 s D cap, the armed cap, and holds is projected per
-    decoded token to B_D + turn_cap_tokens (R10-4, the audit's corrected D-f).
+    The e901eb2a4 rule (cold-review disposition MEDIUM-2): the G0 term is
+    R7-2's G0_cap_W1 over the three gated D waits and X-G (unreleased waits
+    and an INCONCLUSIVE X-G at the R1 timeout, R7-12) and holds is the
+    recorded max (G1 + H). RL-148 section 2 withdrew 1(f) for D: the result is
+    printed, never a refusal, and the R10-2(a) receipt branch is retired
+    (RL-156 section 3.1).
     A turn is admitted while fewer than B_D decode tokens are spent and then
     keeps its full per-turn cap (FD:263), so B_D + cap bounds the episode
     decode. LEAD-RULINGS-2 R6-3: r_decode = min(step-d's measured rate, every
@@ -766,13 +747,7 @@ def ruling_1f_fit(r1_slots, b_d, t_dead, *, receipt=None, x_max_turns=None):
     rows, phases, rate, cap = gated_fit_inputs(r1_slots)
     g0_cap = w1_g0_cap(r1_slots)
     d_cap = w1_d_g0_cap(r1_slots)
-    if receipt is None:
-        g0_term, holds, rule = g0_cap['value_s'], max(p['G1'] + p['H'] for p in phases), 'R6-3, R7-2 G0_cap_W1'
-    else:
-        verified = verify_ruling_1f_receipt(receipt, r1_slots, t_dead, x_max_turns)
-        g0_term = verified['derivation']['d_g0_cap_s']
-        holds = projected_holds_s(rows, phases, b_d + cap)
-        rule = 'R10-2(a) receipt'
+    g0_term, holds, rule = g0_cap['value_s'], max(p['G1'] + p['H'] for p in phases), 'R6-3, R7-2 G0_cap_W1'
     terms = {'G0_s': g0_term, 'holds_s': holds,
              'prefill_tool_s': max(p['prefill'] + p['tool'] for p in phases),
              'decode_s': (b_d + cap) / rate}
@@ -805,7 +780,14 @@ def typical_case_fit(r1_slots, t_dead, g_turn_s):
     above 0) is refused: N_chunk 4,096 implies no hold, and an H record is a defect (RL-149 section 5 item 12).
     A run's G1 waits must add up to its ``phases_s.G1`` within ``G1_RECONCILE_TOL_S`` (both come from the same
     G1 intervals). When a G1 timed out, the term is ``max(g_turn_s, largest recorded wait)``: a timed-out wait
-    can overshoot the cap by up to one gate poll."""
+    can overshoot the cap by up to one gate poll.
+
+    PR #783 row-1 review LOW (cross-check of ``g1_timeouts`` against the waits): a run that flags more G1
+    timeouts than it recorded G1 waits is refused (each timeout is one recorded wait). A wait at or above the
+    cap beyond the run's flagged timeouts is not refused, because an unobserved G1 that waited the full cap is
+    recorded without a timeout flag and is legitimate; it is counted per run (``g1_waits_at_cap_unflagged``,
+    waits at or above ``g_turn_s`` less the flagged timeouts) and the
+    arithmetic already takes that wait as the G1 term."""
     rows, phases, _rate, _cap = gated_fit_inputs(r1_slots)
     if not finite(t_dead) or t_dead <= 0 or not finite(g_turn_s) or g_turn_s <= 0:
         raise ValueError('typical-case fit: T_dead and the G_turn cap must be finite and positive')
@@ -820,6 +802,9 @@ def typical_case_fit(r1_slots, t_dead, g_turn_s):
         if type(count) is not int or count < 0:
             raise ValueError(f'typical-case fit: {row.get("run")} must record g1_timeouts (an int >= 0; the RL-149 '
                              'R1 driver reads it from the run\'s episode flags)')
+        if count > len(waits):
+            raise ValueError(f'typical-case fit: {row.get("run")} flags {count} G1 timeout(s) but records '
+                             f'{len(waits)} G1 wait(s); each timeout is one recorded wait (PR #783 row-1 review)')
         g1_waits[row['run']], timeouts[row['run']] = [float(w) for w in waits], count
     for row, p in zip(rows, phases):
         if p['H'] > 0:
@@ -838,8 +823,10 @@ def typical_case_fit(r1_slots, t_dead, g_turn_s):
         n_g1 = len(g1_waits[row['run']])
         own = p['prefill'] + p['tool'] + p['decode']
         total = math.fsum((g0, n_g1 * g1_max, own))
+        unflagged = max(0, sum(1 for w in g1_waits[row['run']] if w >= g_turn_s) - timeouts[row['run']])
         runs[row['run']] = {'prefill_tool_decode_s': own, 'g1_count': n_g1, 'total_s': total,
-                            'margin_s': t_dead - total, 'fits': total <= t_dead + 1e-6}
+                            'margin_s': t_dead - total, 'fits': total <= t_dead + 1e-6,
+                            'g1_waits_at_cap_unflagged': unflagged}
     return {'authority': TYPICAL_CASE_AUTHORITY, 'T_dead_s': t_dead, 'G0_s': g0, 'G1_max_s': g1_max,
             'G1_basis': ('max(G_turn cap, largest recorded gated D G1) (a gated D G1 timed out)' if timed_out
                          else 'largest recorded gated D G1'),
@@ -921,15 +908,10 @@ def w1_contrast_g0_cap(r1_slots, x_max_turns, root=ROOT):
             'rule': 'cap_c=max(0,min(nominal,floor(contrast_deadman-X_G_episode-10))); missing timing gives 0; non-veto INCONCLUSIVE'}
 
 
-# LEAD-RULINGS-2 R10-2 / R10-4: the lead's ruling 1(f) receipt.
+# LEAD-RULINGS-2 R10-2 / R10-4 named the lead's ruling 1(f) receipt here. RL-148 section 2 withdrew it and
+# RL-156 section 3.1 retired the path: the path is kept only so that a file there is refused.
 RULING_1F_RECEIPT = KIT / 'registration/ruling_1f_receipt.json'
-RULING_1F_RECEIPT_SCHEMA = 'joulewise.align_v4.ruling_1f_receipt.v1'
-R10_AUTHORITY = 'LEAD-RULINGS-2 R10-2'
-R10_BRANCHES = {'a': 'budget-sized D G0 cap (8-bit)', 'b': '4-bit D, after its own R1-4bit gated night',
-                'c': 'window council'}
 UNSIGNED = 'PENDING_LEAD_SIGNATURE'
-PROCEDURE_SCRIPT = Path('scripts/align_w1_budget_procedure.py')
-DEVIATION_PREFIX = 'DEVIATION R10-2(a)'
 
 
 def valid_lead_signature(signature):
@@ -957,155 +939,27 @@ def r1_record_identity(r1_slots):
             'max_r1_tail_s': r1_slots.get('max_r1_tail_s')}
 
 
-def r10_2_derivation(r1_slots, t_dead, x_max_turns, root=ROOT):
-    """LEAD-RULINGS-2 R10-2(a), mechanical: G0* = T_dead - holds - prefill/tool
-    - 10,240/r with r = min(step-d and gated decode rates) and holds projected
-    per decoded token to the same 10,240 tokens (R10-4). Branch (a) when
-    no gated D G0 is censored (timeout, deadman or unobserved: the lead's
-    ruling on R10 builder decision (i), the audit's section 6), ceil(1.25 x
-    the longest released gated D G0 wait) <= G0*, and the armed cap
-    floor(G0*) is below 600 s
-    ('lead' when it is not). It is 'current' whenever the e901 600 s rule
-    fits at some B_D (MEDIUM-1) and 'rerun' when no gated D run decoded a
-    token (LOW-4); otherwise (b), 4-bit next. Reads only R1 timing and count
-    fields."""
-    rows, phases, rate, cap = gated_fit_inputs(r1_slots)
-    tokens = BUDGET_FLOOR + cap
-    d_cap = w1_d_g0_cap(r1_slots, root)
-    holds = projected_holds_s(rows, phases, tokens)
-    prefill_tool = max(p['prefill'] + p['tool'] for p in phases)
-    decode = tokens / rate
-    g0_star = t_dead - holds - prefill_tool - decode
-    largest_current = max_fitting_b_d(r1_slots, t_dead)
-    decoded = any(row['decode_tokens'] > 0 for row in rows)
-    released = [d_cap['waits_s'][name] for name in GATED_D_RUN_NAMES if name not in d_cap['censored']]
-    w_d = max(released) if released else None
-    bound = math.ceil(G0_CAP_FACTOR * w_d) if released else None
-    armed = math.floor(g0_star) if g0_star >= 1 else None
-    if largest_current is not None:
-        # Cold-review disposition MEDIUM-1: the current 600 s rule fits at some
-        # B_D (protocol v4; R10-2's order), so no R10-2 deviation applies.
-        branch = 'current'
-    elif not decoded:
-        # Disposition LOW-4: no gated D run decoded a token, so neither the
-        # rate nor the holds term has gated evidence: an R1 re-run.
-        branch = 'rerun'
-    elif armed is not None and bound is not None and bound <= g0_star and not d_cap['censored']:
-        # G0* >= 600 s while the e901 rule (X-G included) misses: outside what
-        # R10-2(a) was ruled for (a D cap below 600 s); return to the lead.
-        branch = 'a' if armed < thermal_gates.G0_CAP_DEFAULT_S else 'lead'
-    else:
-        branch = 'b'
-    gated = {row['run']: {'g0_outcome': row.get('g0_outcome'), 'decode_tokens': row['decode_tokens'],
-                          **{f'{k}_s': p[k] for k in ('G0', 'G1', 'H', 'prefill', 'tool', 'decode')}}
-             for row, p in zip(rows, phases)}
-    return {'branch': branch,
-            'inputs': {'T_dead_s': t_dead, 'r1_g0_timeout_s': d_cap['r1_g0_timeout_s'],
-                       'budget_floor_tokens': BUDGET_FLOOR, 'turn_cap_tokens': cap,
-                       'r_decode_tok_per_s': rate, 'gated_d': gated},
-            'derivation': {'tokens': tokens, 'decode_s': decode, 'holds_proj_s': holds,
-                           'prefill_tool_s': prefill_tool, 'G0_star_s': g0_star,
-                           'W_D_s': w_d, 'censored_D': d_cap['censored'], 'admit_bound_s': bound,
-                           'current_rule_largest_fitting_B_D': largest_current, 'gated_decode_evidence': decoded,
-                           'd_g0_cap_s': armed if branch == 'a' else None, 'branch': branch},
-            'contrast': w1_contrast_g0_cap(r1_slots, x_max_turns, root)}
+RULING_1F_RECEIPT_RETIRED = ('RL-148 section 2 withdrew ruling 1(f) for D, with R10-2\'s receipt; the R10-2(a) '
+                             'receipt path is retired (RL-156 section 3.1)')
 
 
-def receipt_bytes(receipt):
-    return raw_json(receipt)
-
-
-def receipt_sha256(receipt):
-    return sha(receipt_bytes(receipt))
-
-
-def read_ruling_1f_receipt(root=ROOT):
-    """The committed lead receipt (a canonical raw_json file), or None."""
-    path = Path(root) / RULING_1F_RECEIPT
-    if not path.is_file():
-        return None
-    raw = path.read_bytes()
-    receipt = json.loads(raw)
-    if not isinstance(receipt, dict) or raw != receipt_bytes(receipt):
-        raise ValueError(f'{RULING_1F_RECEIPT} must be a canonical JSON object (indent 2, sorted keys); '
-                         'write it with scripts/align_w1_budget_procedure.py sign')
-    return receipt
-
-
-def _mismatches(recorded, derived, path):
-    """Paths where a receipt differs from the re-derivation (floats to 1e-9)."""
-    if isinstance(derived, dict):
-        if not isinstance(recorded, dict) or set(recorded) != set(derived):
-            return [path]
-        return [m for key in sorted(derived) for m in _mismatches(recorded[key], derived[key], f'{path}.{key}')]
-    if isinstance(derived, list):
-        if not isinstance(recorded, list) or len(recorded) != len(derived):
-            return [path]
-        return [m for i, (a, b) in enumerate(zip(recorded, derived)) for m in _mismatches(a, b, f'{path}[{i}]')]
-    if type(derived) is float or (type(recorded) is float and type(derived) is int):
-        return [] if finite(recorded) and math.isclose(recorded, derived, rel_tol=1e-9, abs_tol=1e-9) else [path]
-    return [] if type(recorded) is type(derived) and recorded == derived else [path]
-
-
-def verify_ruling_1f_receipt(receipt, r1_slots, t_dead, x_max_turns, root=ROOT):
-    """LEAD-RULINGS-2 R10-2/R10-4: a signed receipt that takes branch (a) and
-    whose inputs and derivation equal the kit's re-derivation from the R1
-    record. Branches (b) and (c) never admit 8-bit W1. Returns the derivation."""
-    if (not isinstance(receipt, dict) or receipt.get('schema') != RULING_1F_RECEIPT_SCHEMA
-            or receipt.get('authority') != R10_AUTHORITY):
-        raise ValueError(f'ruling 1(f) receipt must be a {RULING_1F_RECEIPT_SCHEMA} record with authority '
-                         f'{R10_AUTHORITY!r}')
-    if not valid_lead_signature(receipt.get('lead_signature')):
-        raise ValueError('ruling 1(f) receipt is not signed: lead_signature must be the lead\'s signature line '
-                         "'lead: <name/session> <ISO date>'")
-    branch = receipt.get('branch')
-    if branch not in R10_BRANCHES:
-        raise ValueError(f'ruling 1(f) receipt branch must be one of {sorted(R10_BRANCHES)}; got {branch!r}')
-    if branch != 'a':
-        raise ValueError(f'ruling 1(f): the lead\'s receipt takes R10-2 branch ({branch}), '
-                         f'{R10_BRANCHES[branch]}; 8-bit W1 does not arm on it')
-    derived = r10_2_derivation(r1_slots, t_dead, x_max_turns, root)
-    wrong = (_mismatches(receipt.get('inputs'), derived['inputs'], 'inputs')
-             + _mismatches(receipt.get('derivation'), derived['derivation'], 'derivation')
-             + _mismatches(receipt.get('contrast'), derived['contrast'], 'contrast'))
-    if wrong:
-        raise ValueError('ruling 1(f) receipt does not match the re-derivation from the R1 record at: '
-                         + ', '.join(wrong) + ' (LEAD-RULINGS-2 R10-4)')
-    d = derived['derivation']
-    if derived['branch'] == 'current':
-        raise ValueError('ruling 1(f) receipt (R10-2(a)) refused: the current 600 s rule fits (largest fitting B_D '
-                         f'{d["current_rule_largest_fitting_B_D"]}), so no R10-2 deviation applies (R10-2\'s order; '
-                         'protocol v4)')
-    if derived['branch'] == 'rerun':
-        raise ValueError('ruling 1(f) receipt (R10-2(a)) refused: no gated D run decoded a token; the remedy is an '
-                         'R1 re-run (cold-review disposition LOW-4)')
-    if derived['branch'] == 'lead':
-        raise ValueError('ruling 1(f) receipt (R10-2(a)) refused: G0* is at least 600 s while the current rule does '
-                         'not fit; return to the lead')
-    if derived['branch'] != 'a':
-        raise ValueError(f'ruling 1(f) receipt (R10-2(a)) refused: ceil(1.25 x the longest released gated D G0 '
-                         f'wait) = {d["admit_bound_s"]} s against G0* = {d["G0_star_s"]:.1f} s, censored gated D G0 '
-                         f'{d["censored_D"]} (any one blocks (a)), or G0* is not below '
-                         f'{thermal_gates.G0_CAP_DEFAULT_S} s (then the current rule applies and no receipt is '
-                         'needed)')
-    # Cold-review disposition LOW-2: the receipt's text fields are bound too.
-    deviation = receipt.get('deviation_log')
-    if not isinstance(deviation, str) or not deviation.startswith(DEVIATION_PREFIX):
-        raise ValueError(f'ruling 1(f) receipt deviation_log must be the public deviation entry '
-                         f"('{DEVIATION_PREFIX}: ...'; R10-2(a))")
-    script = Path(root) / PROCEDURE_SCRIPT
-    expected = {'path': PROCEDURE_SCRIPT.as_posix(), 'sha256': sha(script.read_bytes()) if script.is_file() else None}
-    if receipt.get('procedure') != expected:
-        raise ValueError(f'ruling 1(f) receipt procedure must be {expected} (the committed procedure script)')
-    if _mismatches(receipt.get('r1_record'), r1_record_identity(r1_slots), 'r1_record'):
-        raise ValueError(f'ruling 1(f) receipt r1_record {receipt.get("r1_record")!r} is not the bound R1 record '
-                         f'{r1_record_identity(r1_slots)!r}')
-    return derived
+def refuse_ruling_1f_receipt(inputs, root=ROOT):
+    """RL-148 section 2, RL-156 section 3.1: W1 has no ruling 1(f) receipt. A file at RULING_1F_RECEIPT, or a
+    ``g0_cap_receipt`` in inputs.R1.thermal_policy (a D G0 cap below 600 s, the design RL-148 excluded), is
+    refused; nothing is read from either. A dangling symlink at the path counts as a file (``os.path.lexists``;
+    PR #790 row-2 NIT 5)."""
+    if os.path.lexists(Path(root) / RULING_1F_RECEIPT):
+        raise ValueError(f'{RULING_1F_RECEIPT} exists: {RULING_1F_RECEIPT_RETIRED}; remove it')
+    policy = ((inputs or {}).get('R1') or {}).get('thermal_policy')
+    if isinstance(policy, dict) and 'g0_cap_receipt' in policy:
+        raise ValueError(f'inputs.R1.thermal_policy.g0_cap_receipt names a ruling 1(f) receipt: '
+                         f'{RULING_1F_RECEIPT_RETIRED}; remove the key')
 
 
 def max_fitting_b_d(r1_slots, t_dead):
     """The largest admissible B_D (a multiple of 1024 in [6144, r1_slots B_D])
-    that satisfies ruling 1(f), or None: a sizing aid for the lead."""
+    that satisfies ruling 1(f), or None. Print-only since RL-148 section 2: no kit or procedure decision reads
+    it (RL-156 section 3.1 retired the R10-2 route that did); tests use it to state where 1(f) would fit."""
     top = (r1_slots.get('slots') or {}).get('B_D')
     if type(top) is not int:
         return None
@@ -1115,7 +969,7 @@ def max_fitting_b_d(r1_slots, t_dead):
     return None
 
 
-def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns=None):
+def check_r1_budget_and_policy(r1_inputs, r1_slots, *, x_max_turns=None):
     """Lead ruling R5-4 (executing review MEDIUM-2, cold pass MEDIUM-2).
 
     inputs.R1.B_D may only be lowered from R1's step-d budget (A1's fit rule),
@@ -1124,9 +978,8 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
     turn_cap_s = S7), and the frozen B_D must satisfy ruling 1(f) against the
     frozen T_dead. When R1 changes the picks, R6-4 binds S6/S7 to
     thermometry.D.s7_for_r1_picks instead; S6 tuning starts from its slow band.
-    With no receipt, D retains the e901eb2a4 G0 term/cap (X-G included).
-    A verified R10-2(a) receipt binds D's sub-600 s cap and receipt digest.
-    R11 supersedes the contrast-only restriction: both paths bind the
+    D keeps the e901eb2a4 G0 term/cap (X-G included); the R10-2(a) receipt
+    path is retired (RL-148 section 2, RL-156 section 3.1). R11 binds the
     separate deadman-fitted contrast cap and non-veto predeclaration.
     """
     slots = r1_slots.get('slots') or {}
@@ -1153,23 +1006,13 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
             or sorted(map(str, recorded['censored'])) != sorted(derived['censored'])):
         raise ValueError('r1_slots.g0_cap_w1 is missing or stale; must match the re-derivation '
                          f'{derived} (LEAD-RULINGS-2 R7-2, R7-12)')
-    if receipt is None:
-        # Cold-review disposition MEDIUM-2: no receipt is the e901eb2a4 kit.
-        if 'g0_cap_receipt' in policy:
-            raise ValueError('inputs.R1.thermal_policy.g0_cap_receipt names a ruling 1(f) receipt, but no receipt '
-                             f'is committed at {RULING_1F_RECEIPT} (LEAD-RULINGS-2 R10-4)')
-        if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != derived['value_s']:
-            raise ValueError('inputs.R1.thermal_policy.g0_cap_s must equal r1_slots.g0_cap_w1.value_s '
-                             f'{derived["value_s"]} (LEAD-RULINGS-2 R7-2)')
-    else:
-        verified = verify_ruling_1f_receipt(receipt, r1_slots, r1_inputs['T_dead'], x_max_turns)
-        d_cap, source = verified['derivation']['d_g0_cap_s'], 'the R10-2(a) receipt\'s d_g0_cap_s'
-        expected = {'authority': thermal_gates.R10_G0_CAP_AUTHORITY, 'receipt_sha256': receipt_sha256(receipt)}
-        if policy.get('g0_cap_receipt') != expected:
-            raise ValueError(f'inputs.R1.thermal_policy.g0_cap_receipt must be {expected} (the committed '
-                             'receipt\'s digest; LEAD-RULINGS-2 R10-4)')
-        if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != d_cap:
-            raise ValueError(f'inputs.R1.thermal_policy.g0_cap_s must equal {source}, {d_cap}')
+    # Cold-review disposition MEDIUM-2: the e901eb2a4 kit. RL-148 section 2, RL-156 section 3.1: no receipt.
+    if 'g0_cap_receipt' in policy:
+        raise ValueError(f'inputs.R1.thermal_policy.g0_cap_receipt names a ruling 1(f) receipt: '
+                         f'{RULING_1F_RECEIPT_RETIRED}; remove the key')
+    if not finite(policy.get('g0_cap_s')) or policy['g0_cap_s'] != derived['value_s']:
+        raise ValueError('inputs.R1.thermal_policy.g0_cap_s must equal r1_slots.g0_cap_w1.value_s '
+                         f'{derived["value_s"]} (LEAD-RULINGS-2 R7-2)')
     contrast = w1_contrast_g0_cap(r1_slots, x_max_turns)
     if policy.get('contrast_g0_cap_s') != contrast['value_s'] or policy.get('contrast_fit') != contrast:
         raise ValueError('R11 contrast_fit/contrast_g0_cap_s must bind the rederived non-veto contrast on every path')
@@ -1229,7 +1072,7 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
     # is withdrawn for D and no longer refuses; it is computed and returned for the record. The typical
     # case must fit, on the slot session's own seconds (typical_case_fit). The duty bar and the
     # three-turn opportunity at B_D stay (check_r1_evidence).
-    fit = ruling_1f_fit(r1_slots, r1_inputs['B_D'], r1_inputs['T_dead'], receipt=receipt, x_max_turns=x_max_turns)
+    fit = ruling_1f_fit(r1_slots, r1_inputs['B_D'], r1_inputs['T_dead'])
     typical = typical_case_fit(r1_slots, r1_inputs['T_dead'], policy.get('turn_cap_s'))
     if not typical['fits']:
         raise ValueError(f'RL-148 typical-case bar: a gated D run does not fit T_dead {typical["T_dead_s"]:.2f} s '
@@ -1240,11 +1083,12 @@ def check_r1_budget_and_policy(r1_inputs, r1_slots, *, receipt=None, x_max_turns
     return {**fit, 'worst_case_refuses': False, 'typical_case': typical}
 
 
-def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None, planning_release=None, root=ROOT):
-    """W1 readiness. ``receipt`` is the lead's ruling 1(f) receipt (LEAD-RULINGS-2
-    R10-4); None is the R6-3 rule, which refuses whenever 1(f) does not fit.
+def require_ready(inputs, r1_slots=None, *, synthetic=False, planning_release=None, root=ROOT):
+    """W1 readiness. There is no ruling 1(f) receipt: a committed receipt file under ``root`` or a
+    ``g0_cap_receipt`` in the inputs is refused (RL-148 section 2, RL-156 section 3.1).
     ``planning_release`` is the lead's RL-122 3(a) record or None, read
     against ``root``'s runtime config."""
+    refuse_ruling_1f_receipt(inputs, root)
     pending = pending_inputs(inputs)
     if pending:
         raise ValueError(pending_message(pending))
@@ -1277,8 +1121,7 @@ def require_ready(inputs, r1_slots=None, *, synthetic=False, receipt=None, plann
     tail = r1_slots.get('max_r1_tail_s')
     if not finite(tail) or tail < 0:
         raise ValueError('R1 r1_slots must record a finite, non-negative max_r1_tail_s')
-    check_r1_evidence(inputs, r1_slots, synthetic=synthetic, receipt=receipt, planning_release=planning_release,
-                      root=root)
+    check_r1_evidence(inputs, r1_slots, synthetic=synthetic, planning_release=planning_release, root=root)
     expected = l1_t_dead(slots['I_D'], tail)
     if not finite(slots['T_dead']) or not math.isclose(slots['T_dead'], expected, rel_tol=1e-9):
         raise ValueError('R1.T_dead must equal min((1750 - I_D) / 1.13544, '
@@ -1518,7 +1361,7 @@ def require_w1_ready(root=ROOT):
     if not any(p.startswith('WP11.') for p in pending_inputs(inputs)):
         pins_raw = (Path(root) / D_PINS).read_bytes()
         validate_d_identity(inputs['WP11'], json.loads(pins_raw), pins_raw=pins_raw)
-    require_ready(inputs, read_r1_slots(root), receipt=read_ruling_1f_receipt(root),
+    require_ready(inputs, read_r1_slots(root),
                   planning_release=read_r1_planning_release(root), root=root)
     require_sizing(root)
     validate_wp18_fixtures(inputs, root)
@@ -1587,15 +1430,14 @@ def _rewrite(value):
 def gate_policy_fields(policy, role='D'):
     """Copy runtime gate controls, excluding the inputs-only R1 digest (R6-5).
 
-    R11: D carries its normal or receipt-bound G0 cap. Contrast carries its
-    own deadman-fitted cap and contrast_fit on every path, never D's receipt.
+    R11: D carries its G0 cap (no receipt-bound cap: RL-156 section 3.1). Contrast carries its
+    own deadman-fitted cap and contrast_fit.
     """
     if role not in ('D', 'contrast'):
         raise ValueError(f'unknown W1 gate-policy role {role!r}')
     fields = {key: deepcopy(value) for key, value in policy.items()
               if key not in ('classification_sha256', 'contrast_g0_cap_s', 'contrast_fit')}
     if role == 'contrast':
-        fields.pop('g0_cap_receipt', None)
         if 'contrast_g0_cap_s' in policy:
             fields['g0_cap_s'] = deepcopy(policy['contrast_g0_cap_s'])
             fields['contrast_fit'] = deepcopy(policy.get('contrast_fit'))
@@ -1657,6 +1499,8 @@ def thermal_policy(inputs, *, heavy, per_turn, window_reference, role='D', root=
 def build_files(root=ROOT):
     root = Path(root)
     inputs = read_inputs(root)
+    # PR #790 row-2 LOW 3: generation without --check writes no receipt-armed D config either (RL-156 section 3.1).
+    refuse_ruling_1f_receipt(inputs, root)
     files = {INPUTS: (root / INPUTS).read_bytes(), R1_SLOTS: (root / R1_SLOTS).read_bytes()}
     w1_plan_raw = read_w1_plan_bytes(root)
     if w1_plan_raw is not None:
@@ -1960,18 +1804,15 @@ R1 must select B_D, I_D, T_dead, sensors, bands, recovery cap and chunk size.
 W1's g0_cap_s binds r1_slots.g0_cap_w1.value_s (LEAD-RULINGS-2 R7-2, R7-12):
 clamp(ceil(1.25 * max counted gated D and X-G G0 wait), 600 s, R1 g0_timeout_s).
 Unreleased G0s count at the full R1 timeout; an inconclusive X-G records
-x_g_fallback. Ruling 1(f) uses this cap + max(G1 + H) + max(prefill + tool)
-+ (B_D + turn_cap_tokens) / min(step-d and gated decode rates), and refuses
-when that misses T_dead. Only a signed lead receipt
-(registration/ruling_1f_receipt.json, LEAD-RULINGS-2 R10-2(a), drafted by
-scripts/align_w1_budget_procedure.py) changes that, and only when the 600 s
-rule fits at no B_D: D then arms G0* = T_dead - holds projected to 10,240
-tokens - prefill/tool - 10,240 / r, below 600 s, named in
-thermal_policy.g0_cap_receipt; contrast members arm their own
-thermal_policy.contrast_g0_cap_s and contrast_fit on EVERY path (R11, RUN_STATE 212).
-Failed/incomplete proof predeclares non-veto INCONCLUSIVE. Missing/nonpositive
-available cap gives immediate G0 timeout; changed predecessor heat is disclosed.
-D sizing/receipt checks remain unchanged. The kit re-derives every number.
+x_g_fallback. Ruling 1(f) (this cap + max(G1 + H) + max(prefill + tool)
++ (B_D + turn_cap_tokens) / min(step-d and gated decode rates)) is printed
+only: RL-148 section 2 withdrew it for D, and the typical case must fit.
+There is no ruling 1(f) receipt: a file at registration/ruling_1f_receipt.json
+or a thermal_policy.g0_cap_receipt is refused (RL-156 section 3.1). Contrast
+members arm their own thermal_policy.contrast_g0_cap_s and contrast_fit
+(R11, RUN_STATE 212). Failed/incomplete proof predeclares non-veto
+INCONCLUSIVE. Missing/nonpositive available cap gives immediate G0 timeout;
+changed predecessor heat is disclosed. The kit re-derives every number.
 T_dead follows lead ruling L1: min((1750 - I_D), (1800 - I_D - max_r1_tail_s
 - 10)) / 1.13544, with max_r1_tail_s from r1_slots; --check asserts that
 I_D + 1.13544 T_dead + max_r1_tail_s + 10 <= 1800.

@@ -10,6 +10,7 @@ import unittest
 
 from scripts import align_r1_rehearsal as r1
 from scripts import align_v4_kit as kit
+from scripts import align_w1_budget_procedure as proc
 from tests.align.test_v4_kit import ready_inputs, set_decode_rate
 
 # RL-149 section 1.5's table: T_dead 983.10 s, G0 110.78 s, largest D G1 99.82 s.
@@ -78,6 +79,40 @@ class TypicalCaseTests(unittest.TestCase):
                 bad['deadman_budget'][1][field] = value
                 with self.assertRaisesRegex(ValueError, pattern):
                     kit.typical_case_fit(bad, T_DEAD, 300.0)
+
+    def test_g1_timeouts_are_cross_checked_against_the_recorded_waits(self):
+        # PR #783 row-1 review LOW: more flagged G1 timeouts than recorded G1 waits is refused.
+        _inputs, slots = rl149_case()
+        bank = next(r for r in slots['deadman_budget'] if r['run'].startswith('D_bank'))
+        bank['g1_timeouts'] = 2                                   # one wait recorded
+        with self.assertRaisesRegex(ValueError, 'D_bank_benign_s1_gated_held flags 2 G1 timeout.*1 G1 wait'):
+            kit.typical_case_fit(slots, T_DEAD, 300.0)
+        bank['g1_timeouts'], bank['gate_waits_s'], bank['phases_s']['G1'] = 1, {'G1': []}, 0.0
+        with self.assertRaisesRegex(ValueError, 'flags 1 G1 timeout.*0 G1 wait'):
+            kit.typical_case_fit(slots, T_DEAD, 300.0)
+        # As many timeouts as waits is consistent.
+        bank['gate_waits_s'], bank['phases_s']['G1'] = {'G1': [300.4]}, 300.4
+        fit = kit.typical_case_fit(slots, T_DEAD, 300.0)
+        self.assertEqual(fit['runs']['D_bank_benign_s1_gated_held']['g1_waits_at_cap_unflagged'], 0)
+        self.assertEqual(fit['G1_max_s'], 300.4)
+
+    def test_a_wait_at_the_cap_without_a_timeout_is_counted_not_refused(self):
+        # An unobserved G1 that waited the full cap carries no timeout flag; the wait is the G1 term.
+        _inputs, slots = rl149_case()
+        bank = next(r for r in slots['deadman_budget'] if r['run'].startswith('D_bank'))
+        bank['gate_waits_s'], bank['phases_s']['G1'] = {'G1': [300.0]}, 300.0
+        fit = kit.typical_case_fit(slots, T_DEAD, 300.0)
+        self.assertEqual(fit['runs']['D_bank_benign_s1_gated_held']['g1_waits_at_cap_unflagged'], 1)
+        self.assertEqual(fit['runs']['D_spam_benign_s1_gated_held_a']['g1_waits_at_cap_unflagged'], 0)
+        self.assertEqual(fit['G1_max_s'], 300.0)
+        self.assertEqual(fit['G1_basis'], 'largest recorded gated D G1')
+        # PR #790 row-2 LOW 4: the budget procedure names the count in its notes.
+        slots['slots']['S7'] = 300.0
+        notes = ' '.join(proc.decide(slots, 12)['notes'])
+        self.assertIn("G1 AT CAP: {'D_bank_benign_s1_gated_held': 1}", notes)
+        _inputs, clean = rl149_case()
+        clean['slots']['S7'] = 300.0
+        self.assertNotIn('G1 AT CAP', ' '.join(proc.decide(clean, 12)['notes']))
 
     def test_the_driver_records_the_fields_the_bar_reads(self):
         result = {'admitted_turns': 2, 'x7': False, 'episode_flags': ['thermal.gate_timeout:2'],

@@ -1498,8 +1498,9 @@ def check_r1_w1_chain(ctx):
                 failures.append(f'derive-contrast rc={out.returncode}: {tail(out.stderr, 300)}')
             elif contrast != {'contrast_g0_cap_s': policy['contrast_g0_cap_s'], 'contrast_fit': policy['contrast_fit']}:
                 failures.append('derive-contrast output differs from the kit re-derivation on the same record')
-            out = ctx.run(py + [procedure, 'decide', '--r1-slots', work / 'r1_slots.json', '--inputs', syn_inputs,
-                                '--draft-out', work / 'ruling_1f_draft.json'], cwd=clone, timeout=300)
+            # RL-156 section 3.1: decide drafts no ruling 1(f) receipt and takes no --draft-out.
+            out = ctx.run(py + [procedure, 'decide', '--r1-slots', work / 'r1_slots.json', '--inputs', syn_inputs],
+                          cwd=clone, timeout=300)
             steps.append({'step': 'decide', 'rc': out.returncode, 'stdout': tail(out.stdout, 300),
                           'stderr': tail(out.stderr, 300)})
             if out.returncode or 'Traceback' in (out.stderr or ''):

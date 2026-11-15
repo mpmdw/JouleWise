@@ -22,7 +22,6 @@ class RegistrationTests(unittest.TestCase):
              patch.object(kit, 'read_inputs', return_value={}), \
              patch.object(kit, 'pending_inputs', return_value=['WP11.identity_unit']), \
              patch.object(kit, 'read_r1_slots', return_value={}), \
-             patch.object(kit, 'read_ruling_1f_receipt', return_value=None), \
              patch.object(kit, 'require_ready'), patch.object(kit, 'require_sizing'), \
              patch.object(kit, 'check_w1_record_keys'), \
              patch.object(kit, 'validate_wp18_fixtures'):

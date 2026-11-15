@@ -236,7 +236,7 @@ class Finding9BudgetProcedureTests(unittest.TestCase):
         decision = proc.decide(slots, 12)
         self.assertNotIn('R10-2', decision['step'])
         self.assertEqual(decision['step'], 'TYPICAL-CASE')
-        self.assertIsNone(decision.get('receipt_draft'))
+        self.assertNotIn('receipt_draft', decision)              # RL-156 section 3.1: decide drafts nothing
         self.assertTrue(decision['typical_case']['fits'])
         self.assertEqual(decision['set_inputs']['R1.B_D'], slots['slots']['B_D'])
 
