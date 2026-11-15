@@ -17343,3 +17343,30 @@ RL-149 §2.8 already grants it. I admit the controller after its cold gate if it
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This ruling rests on rulings, two seat reports, the items builder's plan and the investigator's summary. The day rule and the span layouts are fixed before any development energy is read.
 
 **For Ed, plainly.** "Mythos and Sol agree the machine is no longer held up by clock rules; it is held up by how fast reviewed work is ready. I ruled one change that slows the calendar by about a day and is worth it: the three blocks that vary prompt size each get their own day, because our error bars are computed by leaving out one day at a time, and the laptop had nothing else to run on those days. The rest removes people from routine steps: the queue advances by itself, the desk check is automatic with the hand checks kept where they catch real faults, and v4 sessions jump the queue when ready. I refused a daily repeat block that added hours but no evidence, and twelve-run spans. The laptop restarts once, about 14:08, to finish turning off Spotlight."
+
+# RL-172a. PR #794 at `6010985a3`: RL-171 §3's test governs the soak segment for this change, so it stays class B; the soak retry is allowed on both refusals. No re-pin
+
+Research lead (Fable 5.2), Sun Nov 15 01:25 PST 2026 (from `date`). Answers F1 and F2 of the Mythos cold seat on the RL-171 code change (`e1b85a59c`).
+
+**Read.** Mythos's report (findings table, sections 1 and 2) and the class and retry lines of Sol's report; the diff of `scripts/cadence_legs_runner.py` in `e1b85a59c`; RL-150 R5, RL-165 §8.1, RL-171 §2 item 3 and §3.
+
+**Not checked.** I ran nothing. That the runner's `soak_child` equals the smoke script's, statement for statement, is Mythos's section 2; I read the diff and did not re-derive it. No SSH; no measurement, energy, power, meter or custody file was opened.
+
+## F1: yes. Class B
+
+**RL-171 §3's test governs the soak segment at this pin, for this change only.** RL-150 R5's wording ("from soak start to leg close") stands for every other change.
+- **Why it is sound here.** RL-150 R5 protects the bytes that read a sensor or write the reference. Those are unchanged: the same five steps run in the same order with the same calls, and both seats found the same reference written in both trees. What changed is a check removed before the soak and a loop placed around it. Neither runs while a soak attempt is measuring.
+- **I ruled the retry in RL-171 knowing it sits in the soak segment.** The class test I wrote there was meant to cover it.
+- **Condition, one line in the arm record of the first qualification span:** this ruling is cited. After that span closes, the lead's hand-read compares its soak record's fields and its reference file's schema with dev-05's (operational fields, no energy) before the second qualification span arms. A difference comes to me.
+- **The new soak child has not run on the MBP.** If it fails natively it refuses before any leg, and no leg is lost.
+
+## F2: both. No change, no re-pin
+
+**The one retry fires on a slope refusal and on a load refusal, as built.**
+- RL-171 §2 item 3 named both refusals as the soak's detector. §3's "after a load refusal" was loose wording, and this replaces it.
+- **It does not change the reference population.** The accepted soak meets the same slope and load criteria on either path. Without the retry, an unsettled soak stops the span and the lead re-runs it as a new attempt with a fresh soak, which gives the same thing later with a person in the loop.
+- **Condition (Mythos F3):** the automatic desk and the look read `soak_attempts` from the receipt, and the look prints the count of retried soaks by refusal kind. A span with a retried soak is on the sampled hand table (RL-172 (c)).
+
+**Mythos F4 to F8** are record lines for the lead and need nothing from me. F5's 40,690 s is the number kit designers use under RL-172 (b).
+
+**Blind status.** Blind: nothing sealed or measured was opened. This rests on two seat reports and one diff.
