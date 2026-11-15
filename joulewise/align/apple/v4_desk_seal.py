@@ -637,7 +637,8 @@ def seal_thermal(thermal, run_ids=None):
         out['model_windows'] = {k: ({**v, 'U1': {'status': (v.get('U1') or {}).get('status'),
                                                  'withheld': withheld(v.get('U1'))}} if isinstance(v, dict) and 'U1' in v else v)
                                 for k, v in (thermal.get('model_windows') or {}).items()}
-    out['members'] = [_seal_thermal_member(r) if (run_ids is None or r.get('id') in run_ids) else r
+    out['members'] = [_seal_thermal_member(r) if (run_ids is None or r.get('id') in run_ids) else
+                      rebased(r, r.get('start_ns') if isinstance(r.get('start_ns'), int) else None)   # F3 (W1 benign)
                       for r in thermal.get('members') or ()]
     out['carve_out_flag_counts'] = (carve_out_counts(r.get('flags') for r in thermal.get('members') or ())
                                     if run_ids is None else _benign_counts(
@@ -855,7 +856,9 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
         return member
     out['members'] = [(seal_member(m, rows.get(m.get('run_id'))) if withhold else minimum(m))
                       if m.get('run_id') in nonbenign else
-                      ({**m, 'harvest_flags': _untimed(m['harvest_flags'])} if isinstance(m.get('harvest_flags'), list) else m)
+                      (rebased if withhold else (lambda x, _o: x))(       # F3: rebased to the member's own start
+                          {**m, 'harvest_flags': _untimed(m['harvest_flags'])} if isinstance(m.get('harvest_flags'), list) else m,
+                          member_origin(m))
                       for m in members]
     if 'session_harvest_flags' in pilot:
         # PR #774 exec seat E1 (RL-163 section 2, the fifth source: code names only): the harvest's window-scoped
@@ -874,7 +877,8 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
             key: ([r if (not withhold and r.get('channel') == GPU) else withheld(r) for r in entries]
                   if _in_cells(key, cells) else entries) for key, entries in spreads.items()}
     if withhold and isinstance(pilot.get('residual_analysis'), list):
-        out['residual_analysis'] = [_seal_residual_rows(c, nonbenign) for c in pilot['residual_analysis']]
+        origins = {m.get('run_id'): member_origin(m) for m in members}
+        out['residual_analysis'] = [_seal_residual_rows(c, nonbenign, origins) for c in pilot['residual_analysis']]
     if withhold and isinstance(pilot.get('I4_prime'), dict):
         # Per-turn accounting and sampler rows give a member's turn count (episode length): status only.
         def row(r):
@@ -917,7 +921,7 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
     return out
 
 
-def _seal_residual_rows(configuration, run_ids):
+def _seal_residual_rows(configuration, run_ids, origins=None):
     scopes = {}
     for scope, block in (configuration.get('scopes') or {}).items():
         block = dict(block)
@@ -938,7 +942,8 @@ def _seal_residual_rows(configuration, run_ids):
             # Mythos N2: one digest for the non-benign rows, not a per-row digest in roster order (whose position
             # names the member); the same for the cross-pair scores. All-member trajectory counts are withheld.
             residuals = convention['residuals']
-            convention['residuals'] = [r for r in residuals if isinstance(r, dict) and r.get('run_id') not in run_ids]
+            convention['residuals'] = [rebased(r, (origins or {}).get(r.get('run_id')))     # F3: own origin
+                                       for r in residuals if isinstance(r, dict) and r.get('run_id') not in run_ids]
             convention['residuals_withheld_non_benign'] = withheld(
                 [r for r in residuals if not (isinstance(r, dict) and r.get('run_id') not in run_ids)])
             convention['cross_pair_transfer'] = [
@@ -963,6 +968,65 @@ def _seal_residual_rows(configuration, run_ids):
 
 
 FLAG_TIMING_KEYS = ('emitted', 'interval')
+# PR #774 final seat F3: absolute stamps on the night's shared clock. In W1's printed benign rows, the start of the
+# next benign member minus the end of the previous one brackets the elapsed time of the sealed member between them.
+# Each is rebased to the member's own origin (its episode start), so durations and offsets inside the member stay;
+# with no origin known the stamp is dropped. Durations (duration_ns, elapsed_ns, used_ns, active_ns, ...) are kept.
+ABS_STAMP_KEYS = frozenset({
+    'episode_start_ns', 'episode_end_ns', 'turn_starts_ns', 'turn_start_ns', 'start_ns', 'end_ns',
+    'meter_start_ns', 'meter_end_ns', 'monotonic_ns', 'monotonic_after_ns', 'sample_ns', 'exit_sample_ns',
+    'epoch_ns', 'first_nonzero_ns', 'first_in_episode_nonzero_ns', 'paired_clock_stamps_ns',
+    'interval_monotonic_ns', 'holes_monotonic_ns', 'registered_span_ns', 'window_ns', 'member_span_ns',
+    'baseline_span_ns'})
+# [stamp, value] pairs (or lists of them): only the stamp is rebased (diagnostics.thermal_onset's bracketing samples).
+PAIR_STAMP_KEYS = frozenset({'at_or_before', 'at_or_after', 'previous_sample', 'first_nonzero_sample',
+                             'readings_monotonic_ns_level'})
+WALL_KEYS = frozenset({'wall_s', 'epoch_s', 'utc', 'wall_time', 'wall_ns', 'emitted', 'interval'})
+
+
+def _shift(value, origin):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value - origin
+    if isinstance(value, list):
+        return [_shift(v, origin) for v in value]
+    return value
+
+
+def _shift_pairs(value, origin):
+    if isinstance(value, list) and len(value) == 2 and isinstance(value[0], int) and not isinstance(value[0], bool):
+        return [value[0] - origin, value[1]]
+    if isinstance(value, list):
+        return [_shift_pairs(v, origin) for v in value]
+    return value
+
+
+def rebased(value, origin):
+    """``value`` with every absolute stamp rebased to ``origin`` (dropped when ``origin`` is None) and wall-clock
+    fields dropped, recursively (PR #774 final seat F3)."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if k in WALL_KEYS:
+                continue
+            if k in ABS_STAMP_KEYS or k in PAIR_STAMP_KEYS:
+                if origin is None or not isinstance(origin, int):
+                    continue
+                out[k] = _shift(v, origin) if k in ABS_STAMP_KEYS else _shift_pairs(v, origin)
+            else:
+                out[k] = rebased(v, origin)
+        return out
+    if isinstance(value, list):
+        return [rebased(v, origin) for v in value]
+    return value
+
+
+def member_origin(member):
+    """A PILOT member's own origin: its episode start on the shared clock (None when unreadable)."""
+    summary = member.get('summary') if isinstance(member, dict) else None
+    origin = summary.get('episode_start_ns') if isinstance(summary, dict) else None
+    return origin if isinstance(origin, int) and not isinstance(origin, bool) else None
 
 
 def _untimed(flags):
@@ -973,12 +1037,12 @@ def _untimed(flags):
     return [{k: v for k, v in f.items() if k not in FLAG_TIMING_KEYS} if isinstance(f, dict) else f for f in flags]
 
 
-def seal_w1_line(run_id, record, nonbenign, withhold):
+def seal_w1_line(run_id, record, nonbenign, withhold, origin=None):
     if run_id not in nonbenign:
         flags = record.get('harvest_flags')
         if isinstance(flags, dict) and isinstance(flags.get('flags'), list):
-            return {**record, 'harvest_flags': {**flags, 'flags': _untimed(flags['flags'])}}
-        return record
+            record = {**record, 'harvest_flags': {**flags, 'flags': _untimed(flags['flags'])}}
+        return rebased(record, origin) if withhold else record          # F3
     if withhold:
         return seal_line(run_id, record)
     flags = dict(record.get('harvest_flags') or {})
@@ -1035,7 +1099,9 @@ class DeskSeal:
         sealed = seal_pilot(pilot, self.plan_members, self.window_id, scope=self.scope, w1_withhold=self.w1_withhold)
         if self.scope == 'W1':
             nonbenign = _nonbenign(self.plan_members, pilot.get('members'))
-            lines = [(rid, seal_w1_line(rid, record, nonbenign, self.w1_withhold)) for rid, record in lines]
+            origins = {m.get('run_id'): member_origin(m) for m in pilot.get('members') or ()}
+            lines = [(rid, seal_w1_line(rid, record, nonbenign, self.w1_withhold, origins.get(rid)))
+                     for rid, record in lines]
         else:
             lines = [(rid, seal_line(rid, record)) for rid, record in lines]
         sealed['release_guard'] = {
@@ -1291,13 +1357,24 @@ def is_v4_session(state):
 DESK_OUTPUTS = ('desk.json', 'PILOT.json', 'exclusions.json', WITHHELD_PILOT, WITHHELD_KEY)
 
 
+RESTORE_STEP = ('restore the window afresh from its offload pack into a new session directory (runbook section 2: '
+                'unpack against the committed finalized-manifest digest) and run the desk there once')
+
+
 def refuse_rerun(output):
-    """PR #774 exec seat E6: a guarded desk never overwrites an earlier run's record (desk.json, PILOT*.json, the
-    committed exclusions source or the key that checks its digests). Refused before anything is written."""
+    """PR #774 exec seat E6 and final seat F2: a guarded harvest desk runs once, on a fresh restore. It never
+    overwrites an earlier run's record (desk.json, PILOT*.json, the committed exclusions source or the key that
+    checks its digests), and it never starts on a session that already has an ``archive/`` (a copied sweep receipt,
+    a sweep or reduce run first, or a killed harvest): the harvest would refuse ``archive_root_exists`` and spend
+    the run on a program_fault record. Refused before anything is written, with the recovery step stated."""
     present = [name for name in DESK_OUTPUTS if (Path(output) / name).exists()]
     if present:
         raise ValueError('ALIGN v4 desk rerun refused: the session already holds ' + ', '.join(present)
-                         + ' (run the desk on a fresh session, or with --no-harvest into inspection/)')
+                         + '. Recovery: ' + RESTORE_STEP + '. (--no-harvest into inspection/ stays available.)')
+    if (Path(output) / 'archive').exists():
+        raise ValueError('ALIGN v4 desk refused: the session already has archive/ before its harvest (a copied sweep '
+                         'receipt, sweep or reduce run first, or a killed harvest). Nothing was written. Recovery: '
+                         + RESTORE_STEP + '.')
 
 
 def committed_exclusions(full, raw):
@@ -1308,8 +1385,13 @@ def committed_exclusions(full, raw):
     binds the full file by its sha256 (the full file is restricted)."""
     out = {k: v for k, v in full.items() if k != 'flag_counts'}
     out.update(flag_counts={'status': WITHHELD, 'path': 'archive/derived/exclusions.json'},
-               committed_from={'path': 'archive/derived/exclusions.json', 'sha256': hashlib.sha256(raw).hexdigest(),
-                               'rule': 'PR #774 E2: flag_counts withheld before release'})
+               # PR #774 final seat F1: a plain sha256 of the full file is a test for any guess of flag_counts (every
+               # other byte is in this file and the harvest writes canonical JSON). The binding is the desk's keyed,
+               # nonced digest of that sha256; it checks at release with the key in the withheld archive.
+               committed_from={'path': 'archive/derived/exclusions.json',
+                               **withheld(hashlib.sha256(raw).hexdigest()),
+                               'binds': 'sha256 of the full file, under the desk key (archive/withheld/desk_seal_key.json)',
+                               'rule': 'PR #774 E2, F1: flag_counts withheld before release'})
     return out
 
 
@@ -1407,9 +1489,9 @@ def guard_thermal_desk(result, prints, records, registration_dir, output, stored
         if scope == 'W1' and not W1_WITHHOLD_SABOTAGE_GPU_AND_OUTCOMES:
             sealed_prints['members'] = rows
         else:
-            visible = [] if scope in ('C', 'T') else [r for r in rows if r.get('id') not in nonbenign]
+            visible = [] if scope in ('C', 'T') else [rebased(r, None) for r in rows if r.get('id') not in nonbenign]
             sealed_prints.update(members=visible, population='benign' if scope == 'W1' else None,
-                                 withheld_members=withheld([r for r in rows if r not in visible]))
+                                 withheld_members=withheld([r for r in rows if scope in ('C', 'T') or r.get('id') in nonbenign]))
         bins = {k: prints.get(k) for k in ('residual_by_decode_bin', 'residual_by_load_bin')}
         sealed_prints['residual_bins'] = withheld(bins)
     trip, lines = tripwires(records, scope, nonbenign)            # RL-152 section 3.4 (roles from the manifest)

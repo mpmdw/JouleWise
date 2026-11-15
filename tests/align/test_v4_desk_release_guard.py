@@ -1099,6 +1099,12 @@ class MythosReattackTests(unittest.TestCase):
         self.assertGreaterEqual(desk['sizing']['workers'], 1)
         # Mythos re-attack 2 M6: with the free memory and reserve beside it, the worker count brackets the peak
         self.assertEqual(set(desk['sizing']) - {'sizes'}, {'workers', 'peak_basis'})
+        # Mythos final seat F5: the postpone message names neither the free memory nor the reserve (they bound the peak)
+        with self.assertRaises(ValueError) as caught:
+            harvest_off.auto_workers(peak_bytes=8 * planted, memory=9 << 30, cores=4)
+        for value in (9 << 30, 4 << 30, (9 << 30) - (4 << 30), 8 * planted):
+            self.assertNotIn(str(value), str(caught.exception))
+        self.assertIn('postpone the desk', str(caught.exception))
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'SWEEP.json'
             path.write_text(json.dumps({'runs': [{'workers': 2, 'exit': 1, 'peak_child_rss_bytes': planted}]}))
@@ -1210,6 +1216,21 @@ class RL162Tests(unittest.TestCase):
                 harvest_off.reduce_target_check(session, v4, session / 'archive/withheld/../reduced')
             harvest_off.reduce_target_check(session, v4, session / 'archive/withheld/reduced')
             harvest_off.reduce_target_check(session, {'session_id': 'align-pilot-p9'}, Path(tmp) / 'reduced')   # v3
+
+    def test_f3_w1_thermal_benign_records_are_rebased_to_their_own_start(self):
+        t0 = 500_000 * NS
+        thermal = {'schema': 'joulewise.align.thermal_desk.v1', 'model_windows': {}, 'members': [
+            {'id': 'b', 'start_ns': t0, 'intervals': [{'kind': 'G1', 'start_ns': t0 + 10, 'end_ns': t0 + 20}],
+             'exclusion_intervals': [{'start_ns': t0 + 30, 'end_ns': t0 + 40, 'entry_stamp': {'monotonic_ns': t0 + 30,
+                                                                                          'wall_s': 1.7e9}}],
+             'flags': []}]}
+        out = seal.seal_thermal(thermal, seal.NotBenign({'b'}))
+        m = out['members'][0]
+        self.assertEqual((m['start_ns'], m['intervals'][0]['start_ns'], m['intervals'][0]['end_ns']), (0, 10, 20))
+        self.assertEqual(m['exclusion_intervals'][0]['entry_stamp'], {'monotonic_ns': 30})
+        self.assertNotIn(str(t0), json.dumps(out))
+        # a [stamp, level] pair keeps its level
+        self.assertEqual(seal.rebased({'at_or_before': [t0 + 5, 2]}, t0), {'at_or_before': [5, 2]})
 
     def test_s6_battery_activity_leaves_the_sealed_dc_row(self):
         row = {**km003c._empty(), 'status': 'available', 'dc_in_energy_j': 12.0,
@@ -1331,7 +1352,8 @@ class EntryPointTests(unittest.TestCase):
             # real-shaped rl145_prints.bundle_prints row: the episode id, no 'id' (rl145_prints.py)
             i = self.fx.index[Path(path).name]
             return {'episode': Path(path).name, 'token_events_source': 'events.jsonl',
-                    'turns': [{'turn': 0, 'decode_tokens': plant(i)['calls'], 'decode_s': plant(i)['seconds'],
+                    'turns': [{'turn': 0, 'start_ns': 600_000 * NS + i, 'decode_tokens': plant(i)['calls'],
+                               'decode_s': plant(i)['seconds'],
                                'prefill_s': plant(i)['latency'], 'load_s': plant(i)['owned']}],
                     'desk_verdict': {'member_excluded': False, 'exclusion_reasons': [],
                                      'flags': [f'episode.end_task:{plant(i)["tool_turn"]}'], 'per_turn': []},
@@ -1391,6 +1413,9 @@ class EntryPointTests(unittest.TestCase):
                 self.assertNotIn(str(int(plant(i)['seconds'])), texts['RL145_PRINTS.json'])
         full = json.loads((output / 'archive/withheld/RL145_PRINTS.full.json').read_text())
         self.assertEqual(len(full['members']), len(self.fx.rows))
+        # final seat F3: printed benign prints rows carry no absolute stamp on the night's clock
+        self.assertNotIn(str(600_000 * NS), texts['RL145_PRINTS.json'])
+        self.assertTrue(all('start_ns' not in t for r in prints['members'] for t in r['turns']))
 
     def test_the_thermal_desk_scope_fails_closed_to_c(self):
         # Mythos N5 and re-attack 2 M5: the bundles' stored pack tags decide the scope. C bundles under an
@@ -1423,11 +1448,15 @@ class EntryPointTests(unittest.TestCase):
         # phase durations) and prints to stdout. The stub plays the harvest: it writes planted values where the
         # desk tells it to and prints them. Nothing outside archive/withheld/ may hold them.
         root = self.fx.session('m1-harvest', {'window_id': 'C3', 'role': 'calibration'})
+        # A fresh restore has no archive/ yet (PR #774 F2): the stub harvest creates it, as the real one does.
+        staged = root.parent / 'm1-harvest-archive'
+        (root / 'archive').rename(staged)
         planted = str(plant(2)['gpu_j'])
         seen = []
 
         def harvest(argv, **_):
             seen.append(argv)
+            staged.rename(Path(argv[argv.index('--archive-root') + 1]))
             export = Path(argv[argv.index('--export-dir') + 1])
             (export / 'align-v4-c3').mkdir(parents=True, exist_ok=True)
             (export / 'align-v4-c3' / 'session.runs.csv').write_text('run_id,gross_j\nx,' + planted + '\n')
@@ -1442,6 +1471,95 @@ class EntryPointTests(unittest.TestCase):
                    and 'archive/withheld' not in path.relative_to(root).as_posix() and planted in path.read_text(errors='ignore')]
         self.assertEqual(outside, [])
         self.assertIn(planted, (root / 'archive/withheld/harvest.stdout').read_text())
+
+    def test_f2_a_guarded_harvest_desk_refuses_a_stray_archive_with_a_restore_step(self):
+        # Mythos final seat F2: a copied sweep receipt (or a sweep, reduce or killed harvest) leaves archive/ before
+        # the desk; the harvest would refuse archive_root_exists and spend the run. The desk refuses first, with
+        # nothing written and the recovery step stated.
+        root = self.fx.session('f2-stray', {'window_id': 'C3', 'role': 'calibration'})
+        before = sorted(p.relative_to(root).as_posix() for p in root.rglob('*'))
+        calls = []
+        with ExitStack() as stack:
+            self.fx.patches(stack)
+            with redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, 'Recovery: restore the window afresh'):
+                session.desk(root, harvest=True, run=lambda argv, **_: calls.append(argv))
+        self.assertEqual(calls, [])
+        self.assertEqual(sorted(p.relative_to(root).as_posix() for p in root.rglob('*')), before)
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'desk.json').write_text('{}')
+            with self.assertRaisesRegex(ValueError, 'rerun refused.*Recovery: restore the window afresh'):
+                seal.refuse_rerun(tmp)
+        with tempfile.TemporaryDirectory() as tmp:
+            seal.refuse_rerun(tmp)                                   # a fresh restore passes
+
+    def test_f3_w1_printed_benign_rows_carry_no_absolute_stamps(self):
+        # Mythos final seat F3 (m_w1_bracket.py): the six bundles on one night's timeline, a planted episode time on
+        # each sabotage member; start(next benign) - end(previous benign) would give it from PILOT.json.
+        import tempfile as _t
+        with _t.TemporaryDirectory(prefix='jw-desk-f3-') as tmp:
+            fx = Fixture(tmp)
+            gap, secret = 45.0, {2: 2371.113, 5: 3823.557}
+            timeline, cursor = {}, 500_000 * NS
+            for i, row in enumerate(fx.rows):
+                native = pilot.episode_summary(fx.runs / row['run_id'])
+                seconds = secret.get(i, (native['episode_end_ns'] - native['episode_start_ns']) / NS)
+                timeline[row['run_id']] = (cursor, cursor + int(seconds * NS))
+                fx.thermals[row['run_id']] = {'readings_monotonic_ns_level': [[cursor - 1, 0],
+                                                                              [cursor + int(seconds * NS) + 1, 0]]}
+                cursor += int((seconds + gap) * NS)
+            original = fx.summary
+
+            def summary(inner):
+                planted_summary = original(inner)
+
+                def f(bundle, **kw):
+                    out = planted_summary(bundle, **kw)
+                    start, end = timeline[Path(bundle).name]
+                    shift = start - out['episode_start_ns']
+                    out['turn_starts_ns'] = [t + shift for t in out['turn_starts_ns']]
+                    out['episode_start_ns'], out['episode_end_ns'] = start, end
+                    return out
+                return f
+            fx.summary = summary
+            root = fx.session('f3-W1', None)
+            printed, report, desk, output = fx.run_desk(root)
+            stamps = {v for pair in timeline.values() for v in pair}
+
+            def values(obj):
+                if isinstance(obj, dict):
+                    for x in obj.values():
+                        yield from values(x)
+                elif isinstance(obj, list):
+                    for x in obj:
+                        yield from values(x)
+                elif isinstance(obj, int) and not isinstance(obj, bool):
+                    yield obj
+            # every integer printed: PILOT.json, and every JSON body on stdout (a stamp within 1 s of a member's
+            # start or end on the shared clock is absolute)
+            seen = list(values(json.loads((output / 'PILOT.json').read_text())))
+            for line in printed.splitlines():
+                body = line.partition(': ')[2]
+                try:
+                    seen.extend(values(json.loads(body)))
+                except ValueError:
+                    continue
+            near = sorted({v for v in seen for t in stamps if abs(v - t) <= NS})
+            self.assertEqual(near, [])
+            members = sorted(report['members'], key=lambda m: m['ordinal'])
+            printed_stamps = {m['ordinal']: (m['summary']['episode_start_ns'], m['summary']['episode_end_ns'])
+                              for m in members if isinstance(m.get('summary'), dict) and 'episode_start_ns' in m['summary']}
+            self.assertTrue(printed_stamps)                             # benign rows still print, rebased
+            for o in (3, 6):                                            # the sealed sabotage members (index 2, 5)
+                before = max((b for b in printed_stamps if b < o), default=None)
+                after = min((a for a in printed_stamps if a > o), default=None)
+                if before is not None and after is not None:
+                    bracket = (printed_stamps[after][0] - printed_stamps[before][1]) / NS
+                    self.assertGreater(abs(bracket - secret[o - 1] - 2 * gap), 1.0)
+            for o, (start, end) in printed_stamps.items():
+                self.assertEqual(start, 0)                              # each benign row on its own origin
+            # the full record keeps the absolute stamps for release
+            full = (output / 'archive/withheld/PILOT.full.json').read_text()
+            self.assertIn(str(timeline[fx.rows[0]['run_id']][0]), full)
 
     def test_the_old_desk_refuses_a_v4_session_without_the_guard(self):
         # Mythos N9: align_pilot_session._desk checks the stored identity itself.

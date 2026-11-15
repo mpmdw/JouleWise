@@ -195,6 +195,7 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
   - The desk harvest's export and stdout/stderr. The guarded desk writes these under `archive/withheld/` (PR #774 M1).
   - `archive/derived/exclusions.json`, which carries all-member `flag_counts`. Commit `$S/exclusions.json` instead (E2).
   - **`archive/sources/`** and its `SHA256SUMS`: the harvest's byte copy of every bundle, with file names that mark a deadman member. Deny it to every seat beside `runs/` (E4).
+  - **`archive/harvest.json`**: the harvest's manifest. It holds the full `exclusions.json` digest, the all-member flag total and per-stage yields (PR #774 F4).
 - **A guarded v4 desk refuses a rerun** on a session that already holds `desk.json`, `PILOT.json`, `exclusions.json`, `archive/withheld/PILOT.full.json` or `archive/withheld/desk_seal_key.json`. It refuses before the harvest or any write. Re-run on a fresh session restore (PR #774 E6).
 - **`archive/derived/`** (RL-163 §2): `flags.jsonl`, `b6-flags.jsonl`, `b6-acceptance.json` and `window_flags.json` are restricted like `archive/withheld/`, where they are. `exclusions.json` is restricted too, because of its all-member `flag_counts` (E2 above). `roster.json` is not restricted.
 - **The finalized manifest** (RL-163 §1): before release its body and entry count are restricted, and the record commits its digest only. The code change is in the desk-seal follow-up PR, and no v4 series record is committed before that PR merges.
@@ -204,7 +205,7 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
 The Air must be otherwise quiet: no Sol seats; renice others. The desk-verdict child has a wall budget; a time-out there is a re-run, not a result.
 
 ```sh
-$RUN desk  --session-root "$S" --workers auto [--sweep "$SWEEP/SWEEP.json"]   # harvest + full v4 desk
+$RUN desk  --session-root "$S" --workers auto [--sweep "$S_SWEPT/archive/withheld/sweep/SWEEP.json"]   # harvest + full v4 desk; first, on a fresh restore
 $RUN final --session-root "$S" --window-id "$K"                               # final eligibility row
 $RUN reduce --session-root "$S" --out "$S/archive/withheld/reduced" --workers 2   # columnar PM + per-turn tables
 ```
@@ -263,11 +264,13 @@ $RUN reduce --session-root "$S" --out "$S/archive/withheld/reduced" --workers 2 
 Run it on the Air with the restored `$S`, during a window, with the Air otherwise quiet. It needs disk for 5 separate archives on top of the restore. The sources are cloned with `cp -c`, so mainly `withheld/` and `derived/`. Check `df` first: there is 49 GB free now, and a window is 18.6-26.4 GB.
 
 ```sh
-$RUN sweep --session-root "$S" --out "$S/archive/withheld/sweep" --workers 2,4,6,8,10   # refused elsewhere before release (E3)
+$RUN sweep --session-root "$S" --out "$S/archive/withheld/sweep" --workers 2,4,6,8,10   # only AFTER this session's own desk and final; refused elsewhere before release (E3)
 # SWEEP.json: per worker count: exit, wall_s, peak_child_rss_bytes (the per-worker peak); profile.jsonl per run
 ```
 
-Then use it for every later desk: `--workers auto --sweep "$S/archive/withheld/sweep/SWEEP.json"` (copy the receipt to each later session's `archive/withheld/`). The whole sweep directory (its `wNN/export/` holds a non-claim per-run export and full archives) is restricted like `archive/withheld/` (PR #774 E3).
+Then use it for every later desk by the **swept session's own path**: `--workers auto --sweep "$S_SWEPT/archive/withheld/sweep/SWEEP.json"`. **Never copy the receipt into a later session.** The guarded desk refuses a session that already has an `archive/` before its harvest, and so does the harvest (`archive_root_exists`). That would spend the window's one desk run (PR #774 F2). The whole sweep directory is restricted like `archive/withheld/` (PR #774 E3): its `wNN/export/` holds a non-claim per-run export and full archives.
+- **Order on any session:** restore → `desk` → `final` → then, if wanted, `reduce` and `sweep`. Neither `reduce` nor `sweep` runs before that session's own desk.
+- **Recovery after a faulted or partial desk** (`program_fault`, a killed harvest, or a refused rerun): restore the window afresh from its offload pack into a new session directory (§2, `unpack` against the committed finalized-manifest digest) and run the desk there once. A guarded desk never runs twice on one restore, and it says so when it refuses.
 - `SWEEP.json` (schema `harvest_sweep.v2`) records the swept window's largest plist and the harvest code identity.
 - After a code change, re-run the sweep. Until then, the desk uses the 8× fallback.
 - Record the knee (the fastest count whose peak fits) in RUN_STATE.

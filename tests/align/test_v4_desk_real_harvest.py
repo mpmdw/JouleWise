@@ -130,8 +130,28 @@ class RealHarvestDeskTests(unittest.TestCase):
             self.assertNotIn('by_code', json.dumps(committed))
             for key in ('members_excluded', 'reasons', 'claim_usable', 'plan_id'):
                 self.assertEqual(committed[key], full[key], (scope, key))
+            # Mythos final seat F1: the full file is bound by the desk's keyed, nonced digest of its sha256, never by
+            # the plain sha256, which would test any guess of flag_counts (m_excl_digest.py). It checks with the key.
             import hashlib
-            self.assertEqual(committed['committed_from']['sha256'], hashlib.sha256(raw).hexdigest())
+            import hmac as _hmac
+            digest = hashlib.sha256(raw).hexdigest()
+            committed_text = (sroot / 'exclusions.json').read_text()
+            self.assertNotIn(digest, committed_text)
+            for name in ('PILOT.json', 'desk.json'):
+                self.assertNotIn(digest, (sroot / name).read_text(), (scope, name))
+            self.assertNotIn(digest, run['printed'])
+            binding = committed['committed_from']
+            key = bytes.fromhex(json.loads((sroot / 'archive/withheld/desk_seal_key.json').read_text())['key_hex'])
+            canonical = json.dumps({'nonce': binding['nonce'], 'value': digest}, sort_keys=True,
+                                   separators=(',', ':')).encode()
+            self.assertEqual(binding['hmac_sha256'], _hmac.new(key, canonical, hashlib.sha256).hexdigest(), scope)
+            # the guessing attack: rebuild the full file from the committed one plus the TRUE flag_counts, in the
+            # harvest's canonical form; its hash matches the full file, and nothing committed can be compared with it
+            guess = {k: v for k, v in committed.items() if k != 'committed_from'}
+            guess['flag_counts'] = full['flag_counts']
+            rebuilt = (json.dumps(guess, indent=2, sort_keys=True) + '\n').encode()
+            if rebuilt == raw:
+                self.assertNotIn(hashlib.sha256(rebuilt).hexdigest(), committed_text)
         # The exec seat's subtraction attack (exec_subtract.py) on the committed source recovers nothing.
         run = self.runs['W1']
         committed = json.loads((run['sroot'] / 'exclusions.json').read_text())

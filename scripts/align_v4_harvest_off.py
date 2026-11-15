@@ -337,8 +337,9 @@ def auto_workers(*, peak_bytes=None, session_root=None, memory=None, cores=None,
     by_memory = (memory - reserve_bytes) // peak_bytes
     workers = int(min(cores, by_memory))
     if workers < 1:
-        raise ValueError(f'postpone the desk: no harvest worker fits (free {memory} B - reserve {reserve_bytes} B '
-                         f'< one worker peak, basis {basis}; the peak is withheld, PR #774 N6)')
+        # PR #774 final seat F5: free memory minus the reserve bounds the withheld peak, so neither prints.
+        raise ValueError(f'postpone the desk: no harvest worker fits (basis {basis}; the byte counts are withheld, '
+                         'PR #774 N6/F5)')
     return {'workers': workers, 'free_cores': cores, 'free_memory_bytes': memory,
             'peak_bytes_per_worker': peak_bytes, 'peak_basis': basis, 'reserve_bytes': reserve_bytes}
 
