@@ -146,7 +146,7 @@ Record k is the index `records/$K/record.json` (schema `joulewise.align_v4.windo
 
 **Full desk DUE** (previous window W1, or code/config changed since the last desk-passed state): **do not arm on the light triage.**
 - Wait for the Air's `desk` and `final` (§5).
-- Commit record k with its own `sources.pilot` (`$S/PILOT.json`), `sources.desk` (`$S/desk.json`) and `sources.exclusions` (`$S/archive/derived/exclusions.json`).
+- Commit record k with its own `sources.pilot` (`$S/PILOT.json`), `sources.desk` (`$S/desk.json`) and `sources.exclusions` (`$S/exclusions.json`, the guarded desk's committed source without the all-member `flag_counts`; PR #774 E2).
 - These count as final only if `desk.harvest_status` is `ok` or `members_excluded`, and the desk's and PILOT's `plan_id` are this window's.
 - A completed desk that did not pass is still final. It just is not a desk pass.
 - `light_triage` is optional in that case.
@@ -179,7 +179,7 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
 }
 ```
 
-- The files are `$S/PILOT.json`, `$S/desk.json` and `$S/archive/derived/exclusions.json` from the Air desk on window k, byte for byte.
+- The files are `$S/PILOT.json`, `$S/desk.json` and `$S/exclusions.json` from the Air desk on window k, byte for byte. Never commit `$S/archive/derived/exclusions.json`: it is restricted (PR #774 E2).
 - If k's desk passed, the series ledger's `last_passed_record` becomes `{commit, path, sha256}` of record k plus `"final_record": {commit, path, sha256}` of record k+1.
 - The same evidence rule as §3 applies: `previous_final` naming a running, faulted or other-plan desk does not make k final.
 - If k's desk is not finished by record k+1, commit k+1 without `previous_final`. The arm of k+1's successor then refuses (§6) until a later record carries it.
@@ -189,10 +189,15 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
 
 - **Bundles of a v4 series window** are read only by the guarded desks (`align_v4_session.py desk`, the common desk on a v4 session, `align_v4_thermal_desk.py`) and the harvest-off pipeline (`align_v4_harvest_off.py`). No bundle-level tool or ad hoc reader is run on one before release. This replaces RL-149 §3 line 4 at the merge of PR #774. `align_v4_u3_export.py` refuses any bundle that is not a pilot or R1 slot-session bundle (RL-162 §3).
 - **File sizes** under a series window's `runs/`, `reduced/` and `archive/withheld/` directories are restricted like their contents. No report, status line or custody summary prints them per member or per file before release. Tools may still read them (RL-162 §4).
-- **Restricted like `archive/withheld/`:** `reduced/` (written only under `archive/withheld/` before release), `SWEEP.json`, and the desk harvest's export and stdout/stderr. The guarded desk writes those under `archive/withheld/` (PR #774 M1).
-- **Open for the lead:**
-  - `archive/derived/flags.jsonl` (per-member harvest flags with observed values) and the all-member `flag_counts` in `derived/b6-acceptance.json` have not yet been ruled restricted (re-attack 2 M1, second part).
-  - Neither has the committed finalized manifest's per-file sizes (M2).
+- **Restricted like `archive/withheld/`:**
+  - `reduced/`, written only under `archive/withheld/` before release.
+  - The sweep directory with its `SWEEP.json`, its `wNN/export/` and its archives. It is written only under `archive/withheld/` before release (E3).
+  - The desk harvest's export and stdout/stderr. The guarded desk writes these under `archive/withheld/` (PR #774 M1).
+  - `archive/derived/exclusions.json`, which carries all-member `flag_counts`. Commit `$S/exclusions.json` instead (E2).
+  - **`archive/sources/`** and its `SHA256SUMS`: the harvest's byte copy of every bundle, with file names that mark a deadman member. Deny it to every seat beside `runs/` (E4).
+- **A guarded v4 desk refuses a rerun** on a session that already holds `desk.json`, `PILOT.json`, `exclusions.json`, `archive/withheld/PILOT.full.json` or `archive/withheld/desk_seal_key.json`. It refuses before the harvest or any write. Re-run on a fresh session restore (PR #774 E6).
+- **`archive/derived/`** (RL-163 §2): `flags.jsonl`, `b6-flags.jsonl`, `b6-acceptance.json` and `window_flags.json` are restricted like `archive/withheld/`, where they are. `exclusions.json` is restricted too, because of its all-member `flag_counts` (E2 above). `roster.json` is not restricted.
+- **The finalized manifest** (RL-163 §1): before release its body and entry count are restricted, and the record commits its digest only. The code change is in the desk-seal follow-up PR, and no v4 series record is committed before that PR merges.
 
 ## 5. Air, during window k+1: restore → harvest → desk → final → reduce
 
@@ -258,11 +263,11 @@ $RUN reduce --session-root "$S" --out "$S/archive/withheld/reduced" --workers 2 
 Run it on the Air with the restored `$S`, during a window, with the Air otherwise quiet. It needs disk for 5 separate archives on top of the restore. The sources are cloned with `cp -c`, so mainly `withheld/` and `derived/`. Check `df` first: there is 49 GB free now, and a window is 18.6-26.4 GB.
 
 ```sh
-$RUN sweep --session-root "$S" --out "$OUT/sweep" --workers 2,4,6,8,10
+$RUN sweep --session-root "$S" --out "$S/archive/withheld/sweep" --workers 2,4,6,8,10   # refused elsewhere before release (E3)
 # SWEEP.json: per worker count: exit, wall_s, peak_child_rss_bytes (the per-worker peak); profile.jsonl per run
 ```
 
-Then use it for every later desk: `--workers auto --sweep "$OUT/sweep/SWEEP.json"`.
+Then use it for every later desk: `--workers auto --sweep "$S/archive/withheld/sweep/SWEEP.json"` (copy the receipt to each later session's `archive/withheld/`). The whole sweep directory (its `wNN/export/` holds a non-claim per-run export and full archives) is restricted like `archive/withheld/` (PR #774 E3).
 - `SWEEP.json` (schema `harvest_sweep.v2`) records the swept window's largest plist and the harvest code identity.
 - After a code change, re-run the sweep. Until then, the desk uses the 8× fallback.
 - Record the knee (the fastest count whose peak fits) in RUN_STATE.

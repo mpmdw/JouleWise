@@ -318,6 +318,8 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
     withheld_streams = v4 and isinstance(print_policy, v4_desk_seal.DeskSeal)
     export_dir = session / ('archive/withheld/export' if withheld_streams else 'export')
     streams_dir = session / ('archive/withheld' if withheld_streams else 'staging')
+    if withheld_streams and harvest:
+        v4_desk_seal.refuse_rerun(session)          # PR #774 E6: before the harvest or any write
     plan = h.read(state['plan_path'])
     custody = Path(plan['custody_root'])
     if not (custody / 'night/result.json').is_file():
@@ -381,6 +383,11 @@ def _desk(session_root, *, run=subprocess.run, harvest=True, compare_session=Non
                                        dir=inspection))
     exclusion_path = session / 'archive/derived/exclusions.json'
     exclusions = h.read(exclusion_path) if exclusion_path.is_file() else None
+    if withheld_streams and harvest and exclusions is not None:
+        # PR #774 E2: the record's exclusions source (runbook: sources.exclusions = $S/exclusions.json) without
+        # the all-member flag_counts; the harvest's full file stays in the restricted archive.
+        h.write(output / 'exclusions.json',
+                v4_desk_seal.committed_exclusions(exclusions, exclusion_path.read_bytes()))
     # ``exclusion_policy(codes) -> (effective, disclosed)``: a pack whose ruling makes some harvest codes
     # disclosure-only (v4 R22-1: contention.*) moves them out of every exclusion decision here; the raw
     # codes stay in ``disclosed_exclusion_codes``. The v3 default leaves every code an exclusion.

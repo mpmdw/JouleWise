@@ -1156,6 +1156,9 @@ class RL162Tests(unittest.TestCase):
         # battery.unmeasured and contention.unmeasured are instrument faults: counted now that the prefixes are gone
         self.assertEqual(seal.unlisted_codes(['battery.unmeasured', 'contention.unmeasured:3']),
                          ['battery.unmeasured', 'contention.unmeasured'])
+        # RL-163 section 3: the clock anchor's status and a join fault on a DC row are counted
+        self.assertEqual(seal.unlisted_codes(['member.anchor_not_bounded', 'multiple_episode_ids']),
+                         ['member.anchor_not_bounded', 'multiple_episode_ids'])
 
     def test_s2_not_counted_groups_and_no_double_count(self):
         nonbenign = seal.NotBenign(set())
@@ -1163,7 +1166,9 @@ class RL162Tests(unittest.TestCase):
                   'end state': 'member.timeout', 'energy value': 'energy.negative',
                   'routine': 'contention.request_overlap', 'behaviour': 'episode.end_task:4',
                   'DC fit (window-level)': 'zero_training_uncertainty', 'DC member-movable': 'nonfinite_prediction',
-                  'runner bookkeeping': 'episode_interval_excludes_scoring_and_serialization_tail'}
+                  'runner bookkeeping': 'episode_interval_excludes_scoring_and_serialization_tail',
+                  'RL-163 token count (early EOS)': 'member.token_count_mismatch',
+                  'RL-163 routine by construction': 'calibration.refit_cache_miss'}
         for name, code in groups.items():
             record = {'id': 's1', 'flags': [code], 'calibration_exclusions': []}
             self.assertEqual(seal.tripwires([record], 'W1', nonbenign)[0]['unlisted_flag_codes']['withheld_codes'], [],

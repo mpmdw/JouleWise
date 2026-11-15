@@ -63,6 +63,9 @@ through unchanged.
 | triage record `member_eligibility.captured_members`, `calibration_row.eligible_benign` | all / benign calibrators | capture count (eligibility; every member's capture is printed) / benign by definition | `light_triage` |
 | triage record `thermal_escalation` | all gated members | verdicts | `light_triage.thermal_escalation` |
 | standalone thermal desk `RL145_PRINTS.json` `residual_by_decode_bin`, `residual_by_load_bin` | all residual rows supplied | withheld | `guard_thermal_desk` |
+| `session_harvest_flags` (stdout `session harvest_flags:`, `PILOT.json`) | window-scoped harvest flags (`stream_sizes` names the longest and shortest member with its raw bytes) | **code names only** plus one digest, as in C/T (PR #774 exec seat E1, RL-163 section 2) | `_seal_pilot_w1` |
+| benign members' printed harvest flags | benign | per member, without `emitted` and `interval` (E5: roster-order stamps bracket a non-benign member's stage time) | `seal_w1_line`, `_seal_pilot_w1` |
+| committed `exclusions.json` (`$S/exclusions.json`) `flag_counts` | all members | **withheld** (E2: all-member counts minus the printed benign lines give the non-benign counts); the harvest's full file is restricted | `committed_exclusions` |
 | standalone thermal desk `RL145_PRINTS.json` `members` | **benign** rows only (`population: benign`), joined on the episode id; an id that fails to join is withheld (Mythos N1, N10) | per member, benign only | `rl145_prints_report`, `guard_thermal_desk` |
 
 Not pooled, and kept per member under the ruled eligibility path (RL-151 C1(a)): `members_excluded`,

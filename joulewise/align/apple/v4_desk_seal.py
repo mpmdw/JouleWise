@@ -854,7 +854,15 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
             member['summary'] = {**summary, 'energy': energy}
         return member
     out['members'] = [(seal_member(m, rows.get(m.get('run_id'))) if withhold else minimum(m))
-                      if m.get('run_id') in nonbenign else m for m in members]
+                      if m.get('run_id') in nonbenign else
+                      ({**m, 'harvest_flags': _untimed(m['harvest_flags'])} if isinstance(m.get('harvest_flags'), list) else m)
+                      for m in members]
+    if 'session_harvest_flags' in pilot:
+        # PR #774 exec seat E1 (RL-163 section 2, the fifth source: code names only): the harvest's window-scoped
+        # flags carry per-member observations (stream_sizes names the longest and shortest member with its raw
+        # bytes; gaps outside members; RESTRICTED window flags). W1 seals them as C/T do.
+        value = pilot['session_harvest_flags']
+        out['session_harvest_flags'] = {'flag_codes': _session_codes(value), 'withheld': withheld(value)}
     raw = pilot.get('raw_within_cell_energy_sd')
     if isinstance(raw, dict):
         out['raw_within_cell_energy_sd'] = {
@@ -954,8 +962,22 @@ def _seal_residual_rows(configuration, run_ids):
     return {**configuration, 'scopes': scopes}
 
 
+FLAG_TIMING_KEYS = ('emitted', 'interval')
+
+
+def _untimed(flags):
+    """PR #774 exec seat E5: a printed harvest flag without its emission stamp or interval. Per-member harvest
+    stages emit in roster order, so two benign stamps bracket the stage time of the member between them."""
+    if not isinstance(flags, list):
+        return flags
+    return [{k: v for k, v in f.items() if k not in FLAG_TIMING_KEYS} if isinstance(f, dict) else f for f in flags]
+
+
 def seal_w1_line(run_id, record, nonbenign, withhold):
     if run_id not in nonbenign:
+        flags = record.get('harvest_flags')
+        if isinstance(flags, dict) and isinstance(flags.get('flags'), list):
+            return {**record, 'harvest_flags': {**flags, 'flags': _untimed(flags['flags'])}}
         return record
     if withhold:
         return seal_line(run_id, record)
@@ -1106,7 +1128,11 @@ NOT_COUNTED_CODES = frozenset({
     'idle.busy_fraction_exceeded',
     'member.timeout', 'member.status_not_succeeded', 'member.admission_aborted', 'member.retried',
     'segment.shorter_than_period',
-    'member.anchor_energy_envelope_exceeded', 'member.anchor_not_bounded', 'energy.negative',
+    'member.anchor_energy_envelope_exceeded', 'energy.negative',
+    # RL-163 section 3: member.anchor_not_bounded is counted (clock-anchor status); member.token_count_mismatch
+    # is not (early end of generation moves the realized counts); calibration.refit_cache_miss is routine by
+    # construction ("a record of time spent", on every member of every B6 span).
+    'member.token_count_mismatch', 'calibration.refit_cache_miss',
     'contention.request_overlap',
     # PR #774 Mythos re-attack 2 M3: the runner stamps every episode with these bookkeeping codes
     # (workload.py: the summary-field and episode-interval notes, and the trace-join note the reader strips);
@@ -1116,7 +1142,8 @@ NOT_COUNTED_CODES = frozenset({
 # RL-162 section 2 check 2 (the builder's placement of the non-``meter.`` DC row flags, km003c.capture_member and
 # _predict via joulewise/align/energy_residual.py; to the research lead):
 #   not counted, member-movable (the member's own tokens and design row): unidentified_column_used,
-#     multiple_episode_ids, variance_roundoff_clamped, negative_prediction_variance, nonfinite_prediction;
+#     variance_roundoff_clamped, negative_prediction_variance, nonfinite_prediction (multiple_episode_ids is a
+#     join fault, counted: RL-163 section 3);
 #   not counted, routine by registration: uncertainty.kind_unknown (km003c always scores with
 #     uncertainty_kind='diagnostic_equal_weights', so every available row carries it), uncertainty.bound_read_as_sd;
 #   not counted, window-level fit flags identical on every row (the benign training fit, carried onto each row by
@@ -1126,7 +1153,7 @@ NOT_COUNTED_CODES = frozenset({
 #   counted (records): invalid_token_count, nonfinite_input, invalid_duration, negative_half_width,
 #     missing_turn_energy. The episode flags a DC row carries are placed as above.
 NOT_COUNTED_DC_CODES = frozenset({
-    'unidentified_column_used', 'multiple_episode_ids', 'variance_roundoff_clamped', 'negative_prediction_variance',
+    'unidentified_column_used', 'variance_roundoff_clamped', 'negative_prediction_variance',   # RL-163 3: multiple_episode_ids counted
     'nonfinite_prediction', 'uncertainty.kind_unknown', 'uncertainty.bound_read_as_sd', 'unidentified_column',
     'zero_training_uncertainty', 'zero_half_width_limit', 'variance_iteration_limit', 'insufficient_turns',
     'rank_deficient_design', 'invalid_model_shape', 'nonfinite_model'})
@@ -1259,6 +1286,31 @@ def is_v4_session(state):
         if isinstance(receipt, dict) and str(receipt.get('schema', '')).startswith('joulewise.align_v4'):
             return True
     return False
+
+
+DESK_OUTPUTS = ('desk.json', 'PILOT.json', 'exclusions.json', WITHHELD_PILOT, WITHHELD_KEY)
+
+
+def refuse_rerun(output):
+    """PR #774 exec seat E6: a guarded desk never overwrites an earlier run's record (desk.json, PILOT*.json, the
+    committed exclusions source or the key that checks its digests). Refused before anything is written."""
+    present = [name for name in DESK_OUTPUTS if (Path(output) / name).exists()]
+    if present:
+        raise ValueError('ALIGN v4 desk rerun refused: the session already holds ' + ', '.join(present)
+                         + ' (run the desk on a fresh session, or with --no-harvest into inspection/)')
+
+
+def committed_exclusions(full, raw):
+    """PR #774 exec seat E2: the v4 record's exclusions source. The harvest's ``exclusions.json`` carries
+    ``flag_counts`` over ALL members; beside W1's printed benign harvest lines that gives the non-benign members'
+    counts by subtraction (RL-151 C2/C3, RL-152 section 3.2). The committed source keeps every other field (the
+    finality readers use ``members_excluded``, ``reasons`` and ``claim_usable``), withholds ``flag_counts`` and
+    binds the full file by its sha256 (the full file is restricted)."""
+    out = {k: v for k, v in full.items() if k != 'flag_counts'}
+    out.update(flag_counts={'status': WITHHELD, 'path': 'archive/derived/exclusions.json'},
+               committed_from={'path': 'archive/derived/exclusions.json', 'sha256': hashlib.sha256(raw).hexdigest(),
+                               'rule': 'PR #774 E2: flag_counts withheld before release'})
+    return out
 
 
 def require_guard(policy):

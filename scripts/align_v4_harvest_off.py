@@ -422,6 +422,9 @@ def cmd_sweep(args, run=subprocess.run):
     """Harvest the restored window at each worker count into separate archives (R17 knee)."""
     session, state, plan = _session(args.session_root)
     out = Path(args.out)
+    # PR #774 exec seat E3: the sweep runs the real harvest with a non-claim export and full archives into --out,
+    # so an unreleased v4 session sweeps only into its withheld archive (the M4 rule, reused).
+    reduce_target_check(session, state, out, command='sweep')
     out.mkdir(parents=True, exist_ok=False)
     measurement = Path(state['measurement_root'])
     largest = largest_plist_bytes(args.session_root)
@@ -477,7 +480,7 @@ def cmd_finalize_manifest(args, run=subprocess.run):
             'entries': len(manifest)}
 
 
-def reduce_target_check(session, state, out):
+def reduce_target_check(session, state, out, *, command='reduce'):
     """PR #774 Mythos re-attack 2 M4 (RL-162 section 3: reduce keeps no identity check, its cover is the restricted
     output): before release, a v4 session's per-member energy tables are written only under the session's
     ``archive/withheld/``, so the cover holds after the merge and whatever ``--out`` an operator names."""
@@ -485,8 +488,8 @@ def reduce_target_check(session, state, out):
     if v4_desk_seal.is_v4_session(state) and not v4_desk_seal.released(state):
         allowed = (Path(session) / 'archive/withheld').resolve()
         if not Path(out).resolve().is_relative_to(allowed):
-            raise ValueError(f'reduce: a v4 session writes its tables only under {allowed} before the series '
-                             'release (PR #774 M4)')
+            raise ValueError(f'{command}: a v4 session writes its outputs only under {allowed} before the series '
+                             'release (PR #774 M4, E3)')
 
 
 def cmd_reduce(args, run=subprocess.run):
