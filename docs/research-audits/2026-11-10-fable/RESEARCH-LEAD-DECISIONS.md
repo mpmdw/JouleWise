@@ -17197,3 +17197,149 @@ Research lead (Fable 5.2), Sat Nov 14 23:43 PST 2026 (from `date`). Answers Ed's
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This ruling rests on rulings, two seat reports, source files at four commits and the operational timings in the brief. The rules it retires are scheduling rules, and they are retired before any development energy is read.
 
 **For Ed, plainly.** "You are right. The fixed quiet hours were my addition, not the design. The design's quiet is the per-leg process and load checks, and those stay. From now the laptop starts the next run whenever its checks pass, at any hour. A system job that lands in a run costs one 21-minute redo. Two leftovers remain in frozen code until Wednesday: a wait of at most 35 minutes around 02:00, and no launches from 10:50 to 13:15 on the older kits; both are removed in the qualification build. That recovers about three to four hours a night. It will not fill the machine by itself: from Monday the limit is how fast reviewed kits are ready, and that is where the effort goes."
+
+# RL-172. Throughput after RL-171: the objective is admitted evidence per independent day, not occupied hours. Each mixed-size development block gets its own calendar date (three dates, not two). Spans stay as queued this campaign; later kits may go to nine legs, never twelve. Desk-final may come from the automatic table on Sol's conditions, with every hand gate kept. Twenty minutes after a filler stays. The sentinel is refused; a dated transfer block after freeze 2 is worth a design page. v4 sessions become typed priority entries. The standing queue is accepted once it enforces what RL-149 §2.8 says. The MBP restarts once, at 14:08, to finish measurement mode
+
+Research lead (Fable 5.2), Sun Nov 15 00:37 PST 2026 (from `date`). Rules on the lead's items (a) to (i) under Ed's sentence of 11-14 23:52: "i want maximum scientifically sound throughput". RL-149 to RL-171 stand except where "Amends" says otherwise.
+
+**Read.**
+- `mythos-throughput/REPORT.md` and `sol-throughput/REPORT.md` in full.
+- `items-rl171/README.md` and `PLAN.md` in full; `os-batch-window/REPORT-summary-by-lead.md`.
+- My RL-149 §2.3, §2.4 and §2.8; RL-150 R3; RL-158 Q1; RL-165 §7; RL-166 Q3 and Q12; RL-171.
+
+**Not checked.**
+- I ran nothing. Sol's three probes (`not_before` is not enforced; a twelve-leg span needs 43,460 s on the qualification launcher; a desk with zero leg rows raises no stop) and the items builder's per-pin scans are taken as reported.
+- Neither seat's scripts. No ruling below rests on Mythos's ledger or simulator numbers; where they differ from Sol's I take Sol's.
+- Whether the MBP comes back from a remote restart with its login session (section h).
+- No SSH. No measurement, energy, power, meter or custody file was opened.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 0. Corrections to RL-171, and the lead's decisions
+
+- **RL-171 §3's row for `b4b6aeb19` was wrong.** `plan` on the v1 pins refuses a t0 whose worst case meets the window it is passed. The rule on every campaign pin is the items builder's: `02:00-02:35` where the pinned `plan` admits the t0, otherwise `13:14-13:15`. RL-171 §7's stop rule applies per pin.
+- **Confirmed as the lead took them:** the 300 s floor after a campaign close and 20 min after F0, F2 or a non-campaign close; the hp-01 smoke in the small hours while the lead is present; dev-03's remainder as nine legs at any t0, with 3 + 3 + 6 withdrawn.
+- **Overruled:** the day-balance default, by (a).
+
+## (a) Day balance: RULED, stronger than both seats
+
+**The unit of independence is the calendar day (RL-149 §2.3). A day is the local date of a span's t0.**
+1. **No t0-date holds more than 12 mixed-size development legs.** dev-03, dev-04 and dev-05 therefore fall on three dates. Two is the least the fit can use; three costs no machine hours, because the machine has nothing else READY on those days.
+2. **No t0-date holds more than 24 development legs** (RL-149 §2.3's two blocks a day).
+3. **Qualification t0-dates are disjoint from every development t0-date,** and the three qualification blocks use at least two dates.
+4. **hp-01, F0, F2 and v4 sessions are outside the count.**
+5. **A span that misses its date is re-dated by the lead. It never doubles up.**
+6. **RL-166 Q3's criteria are unchanged.** Nothing here adds a stop or an extension after a fold is seen.
+
+**As planned today:** Sat 7, Sun 11, Mon 18 (dev-02's second half and dev-03), Tue 12 (dev-04), Wed 12 (dev-05). Five development dates, three of them mixed.
+- **Cost:** development ends about one day later than the lead's default (Wed morning, not Tue 06:21). Monday afternoon is idle or on fillers.
+- **Why I pay it.** With two mixed dates, holding out Monday leaves 12 mixed legs to fit the size terms. With three, every fold keeps 24.
+- **Until the queue enforces dates (g),** each item's window carries the rule, as the drafts already do.
+- **The lead prints the t0-date by cell by G0-role table** at each block's close. It is operational and holds no energy.
+
+## (b) Spans longer than six: REFUSED for this campaign; RULED at nine for later kits
+
+- **No kit that has passed its cold seat changes layout.** dev-03 is 3 + 9, dev-04 and dev-05 are 6 + 6, qualification is 6 + 6.
+  - dev-04's second span waits on L005 (RL-163 §6).
+  - Giving dev-05 one cold start where dev-04 has two would tie layout to date.
+- **Twelve is refused outright.** The qualification launcher needs 43,460 s against a 43,200 s ceiling, and I will not move the ceiling for it.
+- **Kits designed from now on (ctl-01, reserve-01, the next campaign): up to nine legs a span,** where the span crosses no gate, no reference change and no day rule. The layout and its cold-start count are fixed in the kit before any outcome, and the cold seat checks consumer balance on that layout.
+- **No stop ends a running span** (RL-149 §2.4 stands). Mythos's per-leg cut is not built.
+
+## (c) Desk-final from the automatic table: RULED, on Sol's conditions
+
+**For line 9, a span is desk-final when the automatic table builds and all of these hold:**
+1. the leg ids, order, count and attempts equal the queue entry's roster;
+2. the kit, plan and reference identities match by hash;
+3. no record is missing or duplicated, and a table with no leg rows is a stop;
+4. the result is an authenticated receipt, and a negative or error result is also a receipt.
+
+**Hand gates kept, each gating as it does now:**
+- the class A smoke hand-read of every new kit's first span;
+- the L002 and L005 consumer gates;
+- RL-158 Q1's reference print on every v1.1 span. It may become automatic once the leg summary carries those readings and the automatic print has matched the hand print on three spans. That comes to me.
+
+**The sampled hand table:** drawn by its own seed, stratified by kit and G0 shape, and always taken on a span with a redo, an exclusion or a schema change. **A disagreement holds the next arm.**
+
+**It is operational finality only.** Inclusion at a look is still RL-166 Q7's interval checks.
+
+## (d) The gap after a filler: 20 min STAYS; the equivalence test is REFUSED
+
+- Nothing on record tests a 2 min gap, and 0.3 °C has no basis.
+- The most it could save is 3.6 h over twelve fillers. A sound prospective test would cost more machine and design time than that.
+- The 300 s floor after a campaign close also stays. Sol's figure is 1.5 leg-hours a week between 5 and 2 minutes.
+
+## (e) Sentinel: REFUSED as proposed; a dated transfer block is DEFERRED to a design page
+
+- **Refused:** six repeated legs are not six days, the simulation put them on four dates, and legs kept out of the fit cannot improve its error.
+- **RL-166 Q12 stands.** No extension rule is written.
+- **The version worth machine hours** answers one question for the paper: does the frozen fit hold on the dates the v4 windows actually run?
+  - One six-leg block, in qualification's cells, on each date that holds a W1, C or T window t0.
+  - Hard-dated. A missed date is missed and never made up.
+  - Run only after freeze 2. Read only at a registered look, by the frozen code. It tunes nothing and alerts on nothing during collection.
+  - About 2.6 h a date.
+- **Condition:** a one-page design from a Mythos seat, to me before freeze 2, with its leg cap. Nothing is queued before that page is ruled.
+
+## (f) v4 sessions as typed priority entries: RULED
+
+- **RL-165 §7's line is retired:** "Nothing new is armed whose worst case ends after the session's intended t0."
+- **In its place:** from the lead's record that a session is READY, nothing of lower priority arms. The session takes the next clean close (R-A). Before that record, the queue arms as usual.
+- **The entry is typed.** It selects the session's own route: its authorization, notice and veto interval, seal, receipt and restore. A campaign queue entry grants no v4 authority.
+- **Inside the session nothing changes.** The R1 driver keeps its registered 02:00-02:35 hold (RL-171 §4).
+- **The wait is the running span's real remainder,** about 3.3 h at most for six legs as run.
+
+## (g) Standing queue with no per-span lead item: ACCEPTED, once the code enforces these
+
+RL-149 §2.8 already grants it. I admit the controller after its cold gate if it does all of the following, and halts on any missing, stale or contradictory input:
+1. `not_before` and (a)'s date rules are enforced at the arm, not only validated;
+2. line 9's k+2 debt is counted in machine order across queues;
+3. expiry is seven days from the authenticated commit time;
+4. a smoke queue holds the pilot only; the remainder is appended by the lead after the hand gate;
+5. the close and the arm each carry a typed proof: the command result, an independent host readback (power mode, network time, frequency word) and process-group absence;
+6. the trigger is durable and idempotent under the launch lock, with a heartbeat alarm;
+7. veto and watcher evidence is fresh at each arm, never reused;
+8. every transition writes its per-span record, and all network work ends before the next soak starts;
+9. fallback is F0 and F2 only, on their standing rules.
+
+**Gate:** a Mythos executing seat and a Sol attack with no open finding, then one span run with the lead watching. It comes back to me only if a line of §2.8 changes.
+
+## (h) The restart: RULED, once, at 14:08
+
+- **RL-149 §2.9 item 3 already allowed it.** Measurement mode is not fully in effect, so the campaign's host state is not the one its arm records state.
+- **When:** 14:08 local, give or take 15 min, on the first day no span is armed then; Sunday if dev-02's first half has closed. No F0 arms after 12:00 that day until it is done.
+- **Why that hour, under RL-171.** The batch is boot plus 12 h. Keeping it near 02:08 keeps the slot session's registered hold and the default launch argument pointed at it. That is throughput, not validity.
+- **A span boundary is enough.** dev-02's halves are on different dates already. This amends item 3's "block boundary".
+- **Conditions:**
+  - the lead first shows, remotely, that the Mac returns with its login session and agents; if that cannot be shown, the restart waits and comes back to me, with no physical step on the path;
+  - it is recorded as a host event, with a readback that `corespotlightd` and the `spotlightknowledged` tasks are gone and every restore line passes;
+  - no smoke is needed.
+- **One print is added to every arm record:** the batch time computed from the boot time.
+- **Other hygiene** (update checks, Time Machine) rides the same restart if the lead has the settings ready. If not, it waits for the boundary before qualification (RL-171 §5).
+
+## (i) What I add, and the order
+
+**The objective, for every later throughput question: admitted, transferable evidence per independent day.** Occupied hours and attempted legs are not the measure.
+
+| # | Lever | Ruling | Owner |
+|---|---|---|---|
+| 1 | READY work ahead of the machine: the qualification pin, the look package, the slot session's checklist, ctl-01, W1 and the C/T kits | The limit from Monday on. One runner pin per phase with kits as data, from the qualification pin forward. The running development pins are not rebased | Lead |
+| 2 | The day design, (a) | The only change here that adds evidence | Lead applies |
+| 3 | The standing queue, the scripted close and the automatic desk, (g) and (c) | Accepted on their conditions | Lead builds |
+| 4 | The MBP runs measurement only | **Ruled as a quiet rule.** While any queue is live, the MBP runs the measurement, its collectors, the controller and the watchers. Builds, tests, analysis and agents run elsewhere | Lead finds the compute host |
+| 5 | A release candidate passes a full synthetic launch-to-close run, with a consumer span, before any native smoke | Adopted. Four failed smokes cost 3.6 h last week | Lead |
+| 6 | A critical-path ledger: for each span, when each prerequisite became ready, the start, the end and any refusal reason | Adopted. It replaces the causal estimates neither seat could support | Lead |
+| 7 | The full suite's slow path, off-host | Engineering | Lead |
+| 8 | Sharing the per-leg idle baseline (31 % of a leg) | Not this campaign. It changes the start-state population. Banked in the agenda as a study of its own | Me, later |
+| 9 | A shorter soak; any change inside a leg; a higher F0 cap; qualification before freeze 2 | Refused, as Mythos also recommends | - |
+
+**Amends.**
+- RL-171 §3 (the v1 pins' row) and §6.4 ("up to six" becomes "up to nine" for kits designed from now on).
+- RL-165 §7, the worst-case line for a staged session.
+- RL-149 §2.8 line 9 (how desk-final is met); §2.9 item 3 (a span boundary).
+- RL-149 §2.3, by (a)'s rule 1.
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. This ruling rests on rulings, two seat reports, the items builder's plan and the investigator's summary. The day rule and the span layouts are fixed before any development energy is read.
+
+**For Ed, plainly.** "Mythos and Sol agree the machine is no longer held up by clock rules; it is held up by how fast reviewed work is ready. I ruled one change that slows the calendar by about a day and is worth it: the three blocks that vary prompt size each get their own day, because our error bars are computed by leaving out one day at a time, and the laptop had nothing else to run on those days. The rest removes people from routine steps: the queue advances by itself, the desk check is automatic with the hand checks kept where they catch real faults, and v4 sessions jump the queue when ready. I refused a daily repeat block that added hours but no evidence, and twelve-run spans. The laptop restarts once, about 14:08, to finish turning off Spotlight."
