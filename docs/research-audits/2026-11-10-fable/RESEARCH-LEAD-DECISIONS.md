@@ -15968,3 +15968,43 @@ Two numbers, fitted in stage 1 from token stamps on included development legs: r
 **Blind status.** Blind: no development energy exists in any reader's hands, and nothing sealed or measured was opened. The form rests on step 3's disclosed output as RL-150 §3.1 recorded it, on rulings, and on code. Every threshold here is fixed before stage 1 runs.
 
 **For Ed, plainly.** "The file that freezes the heat-model code now has all twenty of its open points decided. The model is simple: a run costs less energy per token once the laptop reports heat, so the correction is a step at the moment heat is predicted to begin, plus a small term for how warm the laptop was at the start. When heat begins is fitted first, from temperature and state logs only, before any energy is opened. Three pieces of code are still to be written. They are dispatched tonight, reviewed Monday, and committed before Tuesday morning, so the look can run as soon as the fifth development block is in."
+
+# RL-166a. The nine open readings of the interim fit's interface (INTERFACE.md §6): seven accepted, two replaced. Block 0 has n = 255, and the block's context is the mean over the tokens its interval produces
+
+Research lead (Fable 5.2), Sat Nov 14 20:49 PST 2026 (from `date`). RL-166 stands; this fixes its arithmetic where it was open.
+
+**Read.** `INTERFACE.md` in scratch (all of it); RL-166; RL-149 §1.3; RL-154 §2 and §3; RL-160 D1.
+
+**Not checked.** The generator's code and the twin's code. Whether the MBP journal carries one fan key or two. No SSH, no data opened, no commit.
+
+---
+
+## 1. The rulings
+
+Both builders implement exactly this column. "Edges" are the interface's `edge_lo` and `edge_hi`.
+
+| # | Ruling | The rule, exact | Reason |
+|---|---|---|---|
+| R-1 | **Accepted** | r_d = Σ (N − 1) / Σ (`last_token_s` − `first_token_s`) over included development legs. r_p = Σ P / Σ (`first_token_s` − `turn_start_s`). A turn's load seconds are T = P / r_p + (N − 1) / r_d | Token 0 is stamped at the end of prefill (RL-160 D1), so N tokens span N − 1 gaps |
+| R-2 | **Replaced** | n = `edge_hi` − `edge_lo` for every decode segment: 255 for block 0, 256 for blocks k ≥ 1, the tail's own count for a prefix tail. The schema's `n_tokens` field keeps its value; the fit does not read it for n | The response is energy between two stamps, and block 0's interval holds 255 gaps. Token 0's work is in the prefill segment. This also makes d = n / r_d hold for every decode segment |
+| R-3 | **Replaced, at block 0 only** | c = P + (`edge_lo` + 1 + `edge_hi`) / 2. Block 0: P + 128. Block k ≥ 1: P + 256k + 127.5. Tail: P + (`tok_first` + `tok_last`) / 2. The last two are the generator's values | The same convention as R-2: the mean context over the tokens the interval produces |
+| R-4 | **Accepted** | An off-state reading is a journal reading with level above 0 (whatever its stamp's age), or a journal reading or native row whose state is present and not Nominal or `Unknown`, at a time in (`turn_start_s`, `last_token_s`]. A `state_unobserved` gap is not one and starts no hot stretch. A block is hot when its `first_token_s` is at or after the first such reading | RL-154 §3: unobserved is not out of state. The leg still leaves the onset fit and is counted, as RL-166 Q4 says |
+| R-5 | **Accepted** | `last_token_s` − `turn_start_s`, in wall seconds | The onset response is wall seconds from the turn's start stamp, and Q4 censors at the last token |
+| R-6 | **Accepted** | The Q1 medians, not refitted per fold. T_p enters uncentred | Q4 says "the three centred start readings", and one centring keeps τ̂ and the κ columns on the same z |
+| R-7 | **Accepted, one addition** | The mean of the host's fan keys at that reading. If any of the host's keys is missing in the reading, `fan_rpm` is null | A mean over a changing set of keys is a different quantity from one reading to the next |
+| R-8 | **Accepted** | One SD per channel and length (whole leg, 3,724, 3,151, 2,981): the sample SD (ddof 1) of the leave-one-day-out residual in joules at that length, over all legs in the energy fit, all folds pooled | No frozen SD_j exists before freeze 2, so this is the only score SD the look can form |
+| R-9 | **Accepted** | Legs with τ̂ = 0 count in the hot-stretch error and toward a day's three legs with a hot stretch. The hot stretch is set by R-4's observed reading, never by τ̂ | RL-166 Q1 keeps start-out-of-state legs in the fit, and they are where the step matters most |
+
+---
+
+## 2. What changes
+
+- **Generator and production fit:** block 0's n (255) and c (P + 128). Nothing else.
+- **Stage-1 reader:** R-7's null rule.
+- **Twin:** takes this table as its readings for these nine points. Any further reading it lists comes to me before item 7's comparison.
+
+**Owner.** The lead hands this to both builders tonight. **Gate.** Item 7's agreement test (Mon 10:00) runs on code that carries this table.
+
+**Amends.** RL-166 Q2: n and c are defined on the segment's edges, as R-2 and R-3 give them.
+
+**Blind status.** Blind. Nothing measured was opened; all nine are conventions on counts, stamps and state.
