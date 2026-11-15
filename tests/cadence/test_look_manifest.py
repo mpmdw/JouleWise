@@ -466,7 +466,12 @@ class LookLedger(Base):
         self.repo = tmpdir(self, "lm-looks-")
         (self.repo / "docs/process/cadence/looks").mkdir(parents=True)
         self.man = self.repo / "docs/process/cadence/looks/lm-interim-01.json"
-        self.man.write_text(json.dumps(draft()), encoding="utf-8")
+        doc = draft()
+        for rule in doc["inclusion"]["rules"]:
+            if "code" in rule:
+                rule["code"]["sha256"] = lm.PENDING_CODE                      # as if inclusion_34.py were unwritten
+        doc["fit"]["code"][1]["sha256"] = lm.PENDING_CODE
+        self.man.write_text(json.dumps(doc), encoding="utf-8")
         self.row = {"look_id": "lm-interim-01", "manifest_path": "docs/process/cadence/looks/lm-interim-01.json",
                     "sha256": lm.sha256_file(self.man), "status": "draft"}
 

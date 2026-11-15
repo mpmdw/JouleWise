@@ -30,6 +30,9 @@ The tests build synthetic inputs only.
 | `docs/process/cadence/looks/look_manifest.schema.json` | JSON Schema copy of the manifest format. The Python validator is authoritative |
 | `joulewise/cadence_looks/manifest.py` | Validator: `validate_manifest`, `check_repo`, `validate_look_ledger`, `resolve_roster` |
 | `joulewise/cadence_looks/step3_energy_ratios.py` | Step 3's script, byte-identical (RL-166 Q6). Any edit needs a ruling |
+| `joulewise/cadence_looks/inclusion_34.py` | Rules 3 and 4, stage 1. The U1 evaluator's definitions are copied verbatim, with cites: `thermal.Coverage`, `valid_value` and `keys`, and `thermal_desk.member_record`'s pm_gap loop. Both source files are v4 strict paths, so they are copied rather than imported. Rule 4 reads only each KM003C sample line's `rt` stamp |
+| `joulewise/cadence_looks/step3_roster.py` | The step 3 adapter. It loads the pinned bytes (and refuses others), rebinds `LEGS` and `ORIGINAL_EIGHT`, and calls `analyse` and `custody_check` once per prompt-size cell, 10k first. It finds a failed leg by its traceback frame. It reads the tripwire. It contains no arithmetic on energy |
+| `tests/cadence/test_inclusion_34.py`, `tests/cadence/test_step3_roster.py` | Equality with the registered U1 source and results; boundary tests at every threshold; spy tests (no sample line decoded, no value key kept, no energy file opened); a stubbed step 3 module for the adapter's behaviour; the real module for the sha gate and failure attribution |
 | `scripts/cadence_look_manifest.py` | CLI: `validate MANIFEST [--final] [--repo R [--kit K]...] [--span-ledger L] [--looks L]`; `pin MANIFEST --repo R [--write]` (drafts only: fills the sha256 of every pinned file that exists, then the manifest's LOOKS.json row) |
 | `tests/cadence/test_look_manifest.py` | Synthetic tests, including a spy test showing that no custody file is opened |
 
@@ -179,11 +182,31 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 
 **What the validator opens:** the manifest, the ledgers, kit JSON and repository source. Never a custody file.
 
-## 4. Still owed
+## 4. Notes on rules 3 and 4, and on the adapter
+
+- **Rule 3's clock.** The leg's interval runs from the G0 `phase_start` to the last token event, read from
+  `events.jsonl`. The powermetrics supports come from `rich_telemetry.jsonl`. Both are on the wall clock,
+  as step 3 has them. Sidecar rows are judged on their `wall_ns` stamps. The registered `thermal.coverage`
+  uses `monotonic_ns`, but `Coverage` counts cells on a grid anchored at the first sample, so a constant
+  offset does not change the result. Network time is off for the campaign.
+- **Rule 4's nominal rate** is the header's `poll_s`: one sample line per poll, empty polls included. The
+  check is "sample lines ≥ 99 % of interval / poll_s". The header's `sps` (samples per second inside a poll)
+  would need each line's `n`, which is not a stamp. This is a reading of "the header's nominal rate", for
+  the cold seat.
+- **Rule 4's normal stop:** a signal (the runner stops the monitor's process group), `duration` or
+  `stop file`. Not normal: `absent`, `exception`, `consecutive USB errors`. Only streams that overlap the
+  leg's interval are judged.
+- **Which legs a failure is charged to.** The adapter finds the failing leg from the module's own
+  `analyse_leg` frame. An exception anywhere else (the cell's arithmetic, `custody_check`) puts the cell at
+  `not_run` with key `(cell)`. Messages are never kept.
+- **Not yet shown:** that `analyse_leg` runs on a campaign leg's real bundle layout. RL-166 left this to
+  the stage-1 dry run, and the planted-truth run waits for the analyst seat's generator.
+
+## 5. Still owed
 
 | Item | Who | Due |
 |---|---|---|
-| `inclusion_34.py` (rules 3 and 4) and `step3_roster.py`, with tests; their hashes pinned | Manifest builder | Sun 18:00 |
-| `fit_interim.py`, `scripts/cadence_look_run.py` and the synthetic generator; their hashes pinned | Analyst seat | Sun 22:00 |
+| `fit_interim.py`, `scripts/cadence_look_run.py` and the synthetic generator. Their two sha256 are the only `PENDING:CODE` left; `pin --write` fills them | Analyst seat | Sun 22:00 |
+| A planted-truth run of `step3_roster.py` on the generator's bundles | Analyst seat / lead | With item 7 |
 | Q11's check of the step 4 note | Cold seat | Mon 14:00 |
 | RL-166a, if the design attack changes the form | Research lead | Sun 13:00 |

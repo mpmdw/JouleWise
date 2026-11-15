@@ -421,7 +421,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "PENDING:CODE"
+        "sha256": "e79c4471c320caacc8f3118fa5b280608e58a01c7741d2991b34b9eb831d86f0"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -429,7 +429,7 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "PENDING:CODE"
+        "sha256": "da0ebff63d8e9409a895fb353fbc8e0ae5792a82b5ef84b966fbb6ad62e7e193"
       },
       {
         "path": "scripts/cadence_look_run.py",
@@ -558,7 +558,7 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "PENDING:CODE"
+        "sha256": "da0ebff63d8e9409a895fb353fbc8e0ae5792a82b5ef84b966fbb6ad62e7e193"
       },
       "statistic": "iii",
       "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling.",
@@ -646,7 +646,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "PENDING:CODE"
+          "sha256": "e79c4471c320caacc8f3118fa5b280608e58a01c7741d2991b34b9eb831d86f0"
         },
         "cite": [
           "RL-149 §2.4",
@@ -662,7 +662,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "PENDING:CODE"
+          "sha256": "e79c4471c320caacc8f3118fa5b280608e58a01c7741d2991b34b9eb831d86f0"
         },
         "cite": [
           "RL-149 §2.4",
@@ -708,7 +708,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "390975cee2a5f466d631368e91aba6a71c1e9583feea2b9d6abda421a7a568aa"
+      "sha256": "fcc8a8f2f585ed05cf717c7b7ab6b3c77f0008eafc2ffd103ee0052ca7f8c464"
     },
     "prints": [
       {

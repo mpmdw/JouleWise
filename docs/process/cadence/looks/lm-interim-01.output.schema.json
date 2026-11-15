@@ -24,9 +24,10 @@
       "properties": {
         "cells": {"type": "array", "items": {"$ref": "#/$defs/step3_cell"}},
         "tripwire": {"type": "object", "additionalProperties": false,
-          "required": ["value", "cell", "threshold", "fallback_threshold", "trips", "decision"],
+          "required": ["value", "cell", "threshold", "fallback_threshold", "threshold_applied", "trips", "decision"],
           "properties": {"value": {"type": ["number", "null"]}, "cell": {"type": ["integer", "null"]},
             "threshold": {"const": 0.08}, "fallback_threshold": {"const": 0.04},
+            "threshold_applied": {"enum": [0.08, 0.04], "description": "0.04 only if the cold seat's RL-166 Q11 check failed"},
             "trips": {"type": ["boolean", "null"]},
             "decision": {"enum": ["within", "to the research lead", "not_evaluable"]}}}
       }
