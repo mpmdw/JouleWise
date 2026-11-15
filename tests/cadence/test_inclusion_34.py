@@ -237,34 +237,36 @@ class Rule4(Base):
 
 
 class Stage2Bracket(Base):
-    """Mythos round-3 N6: rule 4 (ruled, unchanged) can admit a leg that stage 2's support rule refuses; the bracket
-    print flags it from the poll stamps, conservatively, for stage 1's preflight."""
+    """Mythos round-3 N6, as RL-173 E.1 settles it: rule 4 (ruled, unchanged) can admit a leg whose decoded meter
+    samples do not bracket it. The stamp-only bracket print (``meter_bracket``) is gone: stage 1's DC-in trace clause
+    judges support on the decoded samples (``time_fields.support``), the function stage 2's backstop calls."""
 
-    def test_bracketed_when_the_stream_outlives_the_interval(self):
-        out = i34.meter_bracket(INTERVAL, [stream()])
-        self.assertEqual(out, {"start": True, "end": True, "bracketed": True})
+    def test_the_stamp_bracket_print_is_gone(self):
+        for name in ("meter_bracket", "BRACKET_MARGIN_NS", "_SAMPLE_LINE_RE", "_HEADER_TRAILER_RE"):
+            self.assertFalse(hasattr(i34, name), name)
 
     def test_stream_ending_before_the_last_token_admitted_by_rule4_but_not_bracketed(self):
+        from joulewise.cadence_looks import time_fields as TF
         s = stream(end_s=199)                       # the stream stops 1 s before the interval's end
         self.assertTrue(i34.rule4(INTERVAL, [s])["pass"])
-        self.assertEqual(i34.meter_bracket(INTERVAL, [s]), {"start": True, "end": False, "bracketed": False})
+        t = [rt / NS for rt, n in s["polls"] for _ in range(n)]      # the samples, on the poll stamps
+        self.assertIsNone(TF.support(t, INTERVAL[0] / NS, INTERVAL[1] / NS))
         late = stream(start_s=0)                    # the stream starts at the interval's start
         self.assertTrue(i34.rule4(INTERVAL, [late])["pass"])
-        self.assertFalse(i34.meter_bracket(INTERVAL, [late])["start"])
-
-    def test_the_end_needs_the_newest_sample_past_the_margin(self):
-        """A poll's newest sample may be one period plus the round trip older than its answer (km003c_parse)."""
-        m = i34.BRACKET_MARGIN_NS
-        step = NS // 50
-        for end_extra, ok in ((m + step + 2_000_000, True), (m + step + 1_000_000, False)):
-            s = stream(end_s=200)
-            s["round_trips"] = [(t, n, r) for t, n, r in s["round_trips"] if t <= INTERVAL[1]] + \
-                [(INTERVAL[1] + end_extra, 10, 2_000_000)]
-            self.assertEqual(i34.meter_bracket(INTERVAL, [s])["end"], ok, end_extra)
+        t = [rt / NS + 1e-3 for rt, n in late["polls"] for _ in range(n)]   # each sample a little after its poll
+        self.assertIsNone(TF.support(t, INTERVAL[0] / NS, INTERVAL[1] / NS))
+        full = stream()
+        t = [rt / NS for rt, n in full["polls"] if n]
+        i0, i1, gap = TF.support(t, INTERVAL[0] / NS, INTERVAL[1] / NS)
+        self.assertLessEqual(t[i0], INTERVAL[0] / NS)
+        self.assertGreaterEqual(t[i1], INTERVAL[1] / NS)
+        self.assertAlmostEqual(gap, 0.2)
 
     def test_empty_polls_bracket_nothing(self):
+        from joulewise.cadence_looks import time_fields as TF
         s = stream(empty=(195, 231))
-        self.assertFalse(i34.meter_bracket(INTERVAL, [s])["end"])
+        t = [rt / NS for rt, n in s["polls"] if n]                     # an empty poll carries no sample
+        self.assertIsNone(TF.support(t, INTERVAL[0] / NS, INTERVAL[1] / NS))
 
     def test_judge_leg_detail_carries_it_and_the_verdict_is_rule4_alone(self):
         s = stream(end_s=199)
@@ -291,53 +293,70 @@ class Readers(Base):
         p.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return p
 
-    def test_meter_stream_takes_stamps_only(self):
-        p = self.write_stream(self.tmp())
-        decoded = []
-        real = json.loads
+    def spy_readers(self):
+        """(decoded, converted): every json.loads / JSONDecoder call, and every scalar the time reader converts."""
+        from joulewise.cadence_looks import time_fields as TF
+        decoded, converted = [], []
+        real_loads, real_convert, real_decode = json.loads, TF._convert, json.JSONDecoder.decode
 
-        def spy(s, *a, **k):
+        def loads(s, *a, **k):
             decoded.append(s if isinstance(s, str) else s.decode())
-            return real(s, *a, **k)
-        with unittest.mock.patch.object(i34.json, "loads", spy):
+            return real_loads(s, *a, **k)
+
+        def decode(self_, s, *a, **k):
+            decoded.append(s)
+            return real_decode(self_, s, *a, **k)
+
+        def convert(kind, text):
+            converted.append(text)
+            return real_convert(kind, text)
+        return decoded, converted, (unittest.mock.patch.object(json, "loads", loads),
+                                    unittest.mock.patch.object(json.JSONDecoder, "decode", decode),
+                                    unittest.mock.patch.object(TF, "_convert", convert))
+
+    def test_meter_stream_takes_stamps_only(self):
+        """RL-173 E.1: through the time reader, no line of the stream is JSON-decoded (header and trailer included),
+        and no SMC value or sample byte is converted."""
+        p = self.write_stream(self.tmp())
+        decoded, converted, patches = self.spy_readers()
+        with patches[0], patches[1], patches[2]:
             s = i34.read_meter_stream(p)
         self.assertEqual(s["polls"], [(T0 + i * 200_000_000, 1) for i in range(6)])
         self.assertEqual(s["header"]["poll_s"], 0.2)
         self.assertEqual(s["trailer"]["stop_reason"], "signal 15")
-        self.assertEqual(len(decoded), 2)                                     # header and trailer only
-        for text in decoded:
-            self.assertNotIn('"k":"b"', text)
+        self.assertEqual(decoded, [])                                         # no json.loads at all
+        self.assertTrue(converted)
+        for text in converted:
             self.assertNotIn(self.SENTINEL_HEX, text)
-            self.assertNotIn("PDTR", text)
+            self.assertNotIn(text, ("123.45", "67.8"))                        # the SMC values: never converted
         self.assertNotIn(self.SENTINEL_HEX, json.dumps(s))
+        self.assertNotIn("PDTR", json.dumps(s))
         self.assertEqual(i34.span_trailers("dev-01-s01", [s]),
                          [{"span_id": "dev-01-s01", "stream": "stream-0001.jsonl", "polls": 5, "empties": 0, "bad": 1,
                            "usb_errors": 0, "stop_reason": "signal 15"}])
 
     def test_an_unrecognized_sample_prefix_is_never_decoded(self):
-        """Sol round-4 NEW-4: a sample line in another legal JSON spelling ("k" : "b") is taken by pattern or left
-        unread, never JSON-decoded; only a line that starts as a header or a trailer is decoded."""
+        """Sol round-4 NEW-4 and round-5 NEW-2: a poll line in another legal JSON spelling ("k" : "b") gives its
+        stamps; the record kind is the TOP-LEVEL "k" only; no line is JSON-decoded and no value outside the
+        whitelist is converted."""
         d = self.tmp()
         lines = [json.dumps({"k": "h", "status": "streaming", "poll_s": 0.2, "sps": 50, "start_real_ns": T0}),
                  '{"k" : "b", "tx" : 1, "rx" : 2, "rt" : %d, "n" : 10, "p":"%s","smc":{"PDTR":123.456,"B0AC":1}}'
                  % (T0, self.SENTINEL_HEX),
-                 '{ "n": 10, "k": "b", "rt": %d, "smc": {"PDTR": 123.456}}' % (T0 + 1),    # an unknown order: unread
+                 '{ "n": 10, "k": "b", "rt": %d, "smc": {"PDTR": 123.456}}' % (T0 + 1),    # no tx/rx: no stamp
                  '{"PDTR": 123.456}',                                                      # no record kind: unread
-                 '{"PDTR": 1.5, "k": "t", "rt": %d, "n": 3}' % (T0 + 2),                   # "t" with sample keys: unread
+                 '{"PDTR": 1.5, "k": "t", "rt": %d, "n": 3}' % (T0 + 2),                   # "t": its keys only
+                 '{"x": {"k": "b", "tx": 1, "rx": 2, "rt": %d, "n": 9}, "k": "e"}' % (T0 + 3),   # nested k: an error
                  json.dumps({"k": "t", "polls": 2, "empties": 0, "bad": 0, "usb_errors": 0, "stop_reason": "signal 15"})]
         p = d / "stream-0001.jsonl"
         p.write_text("\n".join(lines) + "\n")
-        decoded = []
-        real = json.loads
-
-        def spy(s, *a, **k):
-            decoded.append(s if isinstance(s, str) else s.decode())
-            return real(s, *a, **k)
-        with unittest.mock.patch.object(i34.json, "loads", spy):
+        decoded, converted, patches = self.spy_readers()
+        with patches[0], patches[1], patches[2]:
             s = i34.read_meter_stream(p)
         self.assertEqual(s["polls"], [(T0, 10)])
-        self.assertEqual(len(decoded), 2)
-        self.assertFalse(any("PDTR" in t for t in decoded))
+        self.assertEqual(decoded, [])
+        self.assertFalse([t for t in converted if t in ("123.456", "1.5") or self.SENTINEL_HEX in t])
+        self.assertEqual(s["trailer"]["stop_reason"], "signal 15")
 
     def make_bundle(self):
         b = self.tmp() / "runtime"
@@ -478,7 +497,7 @@ class CustodyVerdictFile(Readers):
         # Mythos round-3 N8: the hashes the lead commits for stage 1; N3: no gate under --allow-draft
         self.assertEqual((d["roster_sha256"], d["verdicts_sha256"]), (i34_sha(roster), i34_sha(out)))
         self.assertIsNone(d["ledger_gate"])
-        self.assertIn("stage2_bracket", d["legs"]["dev-03-s01/L001"]["rule4"])
+        self.assertNotIn("stage2_bracket", d["legs"]["dev-03-s01/L001"]["rule4"])     # RL-173 E.1: gone
         r = look_minirepo.py(mini, "joulewise/cadence_looks/inclusion_34.py", "--roster", roster, "--custody", root,
                              "--manifest", mini / look_minirepo.MANIFEST, "--ledger-ref", "HEAD", "--out", out)
         self.assertEqual(r.returncode, 1)                                       # Sol round-3 NEW-2

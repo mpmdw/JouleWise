@@ -1015,16 +1015,22 @@ class Schemas(unittest.TestCase):
         for sc in ("exact", "noisy", "onset_not_estimable", "few_hot_days", "inactive_fan", "onsets_one_cell"):
             _, en, _, _ = dataset(sc)
             s1 = stage1_of(sc)
-            from joulewise.cadence_looks import inclusion_34 as I34
             stamp = {"allow_draft": True, "manifest_sha256": "0" * 64, "ledger_gate": None}   # the CLI stamps these
-            d1 = dict(json.loads(json.dumps(s1)), **stamp, soak_retries=I34.soak_retries({}))   # CLI: RL-172a
+            d1 = dict(json.loads(json.dumps(s1)), **stamp)        # RL-172a: stage 1 computes soak_retries itself
+            self.assertIn("soak_retries", s1)
             self.assertEqual(V.errors(d1, s1_schema), [], sc)
-            out = dict(json.loads(json.dumps(F.stage2(s1, rehash(s1), en))), **stamp)
+            # the CLI stamps custody: null for a level-E (--energy) run, the record of what it read otherwise
+            out = dict(json.loads(json.dumps(F.stage2(s1, rehash(s1), en))), **stamp, custody=None)
             for ch in F.CHANNELS:                  # PENDING in #793's schema (Mythos cold seat 9's print)
                 for k in PENDING_O_CHANNEL_FIELDS:
                     if k not in out_schema["$defs"]["channel_fit"]["properties"]:
                         out["channels"][ch].pop(k)
             self.assertEqual(V.errors(out, fit_schema), [], sc)
+            out["custody"] = {"root": "/c", "span_dirs": [{"span_id": "dev-01-s01", "path": "/x/dev-01-s01"}],
+                              "files": [{"path": "dev-01-s01/legs/L001/runtime/b/power_trace.csv", "sha256": "a" * 64}]}
+            self.assertEqual(V.errors(out, fit_schema), [], sc)
+            del out["custody"]
+            self.assertTrue(V.errors(out, fit_schema), sc)          # custody is required (null or the record)
 
 
 class RL166c(unittest.TestCase):
