@@ -169,7 +169,9 @@ def planted_segment_energy(par, kind, n, P, c, u, v, z, tau, with_delta=True):
 
 
 # ------------------------------------------------------------------------------------------- build
-def build(scenario="noisy", seed=20261114):
+def build(scenario="noisy", seed=20261114, tokens=None):
+    """(look_input, energy, truth). `tokens`, if a dict, receives every type-A leg's token stamps (for
+    write_custody)."""
     par = params_for(scenario)
     rng = np.random.default_rng(seed)
     plants = par["plants"]
@@ -268,6 +270,8 @@ def build(scenario="noisy", seed=20261114):
         tl = {"planted": {}}
         if p["type"] == "A":
             leg["turn"], tl = _turn(p, rng)
+            if tokens is not None:
+                tokens[p["leg_key"]] = p["tok"]
         legs.append(leg)
         truth_legs[p["leg_key"]] = {**tl, "z": p["z"], "t_p_planted_s": p["t_p"], "tau_planted_s": p["tau_planted"],
                                     "tau_true_s": p["tau_true"], "onset_linear_predictor_s": p["lin"],
@@ -374,7 +378,7 @@ def _turn(p, rng):
             if p["unobserved"] and ts + 40.0 <= x < ts + 40.0 + UNOBSERVED_STALE_S:
                 fresh = False
             tf08, fan, tv0h = traj(x)
-            journal.append({"t_s": x, "os_level": lvl, "pm_state": pm, "pm_fresh": fresh,
+            journal.append({"t_s": int(round(x * 1e9)) / 1e9, "os_level": lvl, "pm_state": pm, "pm_fresh": fresh,
                             "tf08_c": tf08, "fan_rpm": fan, "tv0h_c": tv0h})
         x += 1.0
     y = ts + 0.5
@@ -422,12 +426,215 @@ def _first_off(p, ts, t_last, journal, native):
     return min(c) if c else None
 
 
+# ------------------------------------------------------------------------------------------- custody layout
+METER_STEP_S = 0.5            # KM003C rate_idx 0
+METER_POLL_S = 1.0
+METER_LATENCY_NS = 400_000
+DC_IDLE_W = 5.0
+GPU_IDLE_W = 2.0
+RAW_BASE_NS = 10**12
+
+
+def _pieces(turn, energy_ch, idle_w):
+    """[(a, b, watts)] tiling [turn start, last full block end] so that the energy over every segment AND every
+    prefix tail is the planted one: block nb of each tail is split at the tail's end."""
+    segs = turn["segments"]
+    split = {t["edge_lo"]: t for t in turn["prefix_tails"]}
+    tails = energy_ch["prefix_tails"]
+    out = []
+    for s, e in zip(segs, energy_ch["segments"]):
+        a, b = s["wall_start_s"], s["wall_end_s"]
+        t = split.get(s["edge_lo"]) if s["kind"] == "decode" else None
+        if t is not None and t["edge_hi"] < s["edge_hi"]:
+            m = t["wall_end_s"]
+            et = tails[str(t["prefix_len"])]
+            out.append((a, m, et / (m - a)))
+            out.append((m, b, (e - et) / (b - m)))
+        else:
+            out.append((a, b, e / (b - a)))
+    return out
+
+
+def _write_power_trace(path, pieces, lo, hi):
+    rows = []
+    x = lo
+    for a, b, w in [(lo, pieces[0][0], GPU_IDLE_W)] + pieces + [(pieces[-1][1], hi, GPU_IDLE_W)]:
+        n = max(1, int(math.ceil((b - a) / 1.0)))
+        for i in range(n):
+            u, v = a + (b - a) * i / n, a + (b - a) * (i + 1) / n
+            if v > u:
+                rows.append((u, v, w))
+    with open(path, "w") as f:
+        f.write("timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n")
+        for u, v, w in rows:
+            f.write(f"{v!r},{3.5!r},powermetrics,cpu_power,{u!r},{v!r}\n")
+            f.write(f"{v!r},{w!r},powermetrics,gpu_power,{u!r},{v!r}\n")
+
+
+def _write_meter(path, pieces, t_lo, t_hi, off_ns):
+    """A KM003C stream: 2 samples/s, Vbus 28 V, Ibus = W / 28, on CLOCK_MONOTONIC_RAW = epoch - off."""
+    import bisect
+    import struct
+    sample = struct.Struct("<HHiiHHHH")
+    starts = [p[0] for p in pieces]
+
+    def watts(x):
+        i = bisect.bisect_right(starts, x) - 1
+        if i >= 0 and x < pieces[i][1]:
+            return pieces[i][2]
+        return DC_IDLE_W
+    raw0 = int(round(t_lo * 1e9)) - off_ns
+    n = int((t_hi - t_lo) / METER_STEP_S) + 1
+    per_poll = int(round(METER_POLL_S / METER_STEP_S))
+    with open(path, "w") as f:
+        f.write(json.dumps({"k": "h", "schema": "synthetic", "status": "streaming", "rate_idx": 0,
+                            "start_raw_ns": raw0, "start_real_ns": raw0 + off_ns,
+                            "start_mono_ns": raw0}) + "\n")
+        polls = 0
+        for j in range(0, n, per_poll):
+            raw = b""
+            last = None
+            for i in range(j, min(n, j + per_poll)):
+                x = t_lo + i * METER_STEP_S
+                dev_ms = int(round(i * METER_STEP_S * 1000))
+                w = watts(x)
+                raw += sample.pack(dev_ms % 65536, 0, 28_000_000, int(round(w / 28.0 * 1e6)), 0, 0, 0, 0)
+                last = raw0 + dev_ms * 1_000_000
+            rx = last + METER_LATENCY_NS
+            f.write(json.dumps({"k": "b", "tx": rx - 1_000_000, "rx": rx, "rt": rx + off_ns,
+                                "n": len(raw) // 20, "p": raw.hex(), "smc": {}}) + "\n")
+            polls += 1
+        f.write(json.dumps({"k": "t", "polls": polls, "empty": 0, "bad": 0, "usb_errors": 0,
+                            "elapsed_s": n * METER_STEP_S, "end_raw_ns": raw0 + int(n * METER_STEP_S * 1e9),
+                            "stop_reason": "synthetic"}) + "\n")
+
+
+def _write_bundle(bdir, turn, tok, fan_keys=("F0Ac", "F1Ac")):
+    os.makedirs(os.path.join(bdir, "outputs"), exist_ok=True)
+    os.makedirs(os.path.join(bdir, "raw"), exist_ok=True)
+    ts = turn["turn_start_s"]
+    with open(os.path.join(bdir, "events.jsonl"), "w") as f:
+        f.write(json.dumps({"event_type": "run_started", "timestamp_s": ts - 1}) + "\n")
+        for i, x in enumerate(tok):
+            f.write(json.dumps({"event_type": "token", "timestamp_s": x,
+                                "metadata": {"index": i, "align_turn_index": 0, "text": "SYNTH"}}) + "\n")
+    with open(os.path.join(bdir, "outputs/align_turns.jsonl"), "w") as f:
+        f.write(json.dumps({"turn": 0, "start_stamp": {"epoch_s": ts}, "end_stamp": {"epoch_s": turn["last_token_s"]},
+                            "generation": {"output_token_ids": [7] * turn["decode_tokens"],
+                                           "prefill_tokens": turn["prefill_tokens"]}}) + "\n")
+    with open(os.path.join(bdir, "outputs/align_thermal.jsonl"), "w") as f:
+        f.write(json.dumps({"kind": "session_start"}) + "\n")
+        for r in turn["journal"]:
+            wall = r["t_s"]
+            fin = int(round(wall * 1e9))
+            mono = fin - 7 * 10**15
+            age = 300_000_000 if r["pm_fresh"] else 5_000_000_000
+            sensors = {"TV0h": r["tv0h_c"], "Tf08": r["tf08_c"]}
+            for k in fan_keys:
+                sensors[k] = r["fan_rpm"]
+            f.write(json.dumps({"kind": "reading", "module": "temperature", "error": None,
+                                "started": {"wall_ns": fin - 50_000_000, "monotonic_ns": mono - 50_000_000},
+                                "finished": {"wall_ns": fin, "monotonic_ns": mono},
+                                "values": {"sensors": sensors,
+                                           "status": {"os_level": r["os_level"], "pm_state": r["pm_state"],
+                                                      "pm_observed_ns": mono - 50_000_000 - age}}}) + "\n")
+    import plistlib
+    with open(os.path.join(bdir, "rich_telemetry.jsonl"), "w") as fr, \
+            open(os.path.join(bdir, "raw/powermetrics.plist"), "wb") as fp:
+        for i, r in enumerate(turn["native_pm"]):
+            fr.write(json.dumps({"index": i, "timestamp_s": r["t_end_s"], "elapsed_ns": 1_000_000_000,
+                                 "gpu": {"gpu_energy": 12345, "dvfm_states": []}}) + "\n")
+            doc = {"elapsed_ns": 1_000_000_000, "processor": {"gpu_power": 17.5, "gpu_energy": 17500}}
+            if r["state"] is not None:
+                doc["thermal_pressure"] = r["state"]
+            fp.write(plistlib.dumps(doc) + b"\0")
+
+
+def write_custody(root, look_input, energy, tokens):
+    """The synthetic custody copy: one directory per span, in the cadence runner's layout, plus the roster, the
+    rules-3/4 verdicts and level E for comparison. Energy files (power_trace.csv, meter streams) are written
+    beside everything stage 1 reads: they are the decoys stage 1 must never open."""
+    root = os.path.abspath(root)
+    os.makedirs(root, exist_ok=True)
+    roster, rules34 = [], {}
+    legs_by_span = {}
+    for leg in look_input["legs"]:
+        legs_by_span.setdefault(leg["span_id"], []).append(leg)
+    for span in look_input["spans"]:
+        sid = span["span_id"]
+        sdir = os.path.join(root, sid)
+        os.makedirs(os.path.join(sdir, "soak"), exist_ok=True)
+        os.makedirs(os.path.join(sdir, "hazards/meter"), exist_ok=True)
+        roster.append({"span_id": sid, "block_id": span["block_id"], "role": span["role"],
+                       "t0_local_date": span["t0_local_date"]})
+        legs = legs_by_span[sid]
+        with open(os.path.join(sdir, "runner_receipt.json"), "w") as f:
+            json.dump({"schema": "joulewise.cadence_span_receipt.v1", "started": {"epoch_s": span["t0_epoch_s"]},
+                       "roster": [leg["leg_id"] for leg in legs]}, f)
+        with open(os.path.join(sdir, "soak/soak_reference.json"), "w") as f:
+            json.dump({"schema": "joulewise.align.r1_soak_reference.v1",
+                       "sensors_c": {"TV0h": span["soak_reference_tv0h_c"], "TV1h": 55.0}}, f)
+        dc_pieces = []
+        t_lo, t_hi = span["t0_epoch_s"], span["t0_epoch_s"] + 600.0
+        mode = 2 if span["power_mode"] == "high_power" else 0
+        for leg in legs:
+            ldir = os.path.join(sdir, "legs", leg["leg_id"])
+            os.makedirs(ldir, exist_ok=True)
+            inc = leg["inclusion"]
+            rules34[leg["leg_key"]] = {"sidecar_coverage": inc["sidecar_coverage"], "km003c_clean": inc["km003c_clean"]}
+            spec = {"leg_id": leg["leg_id"], "prefill_tokens": leg["cell_prompt_tokens"]}
+            if leg["g0_role"] is not None:
+                spec["g0_role"] = leg["g0_role"]
+            if leg["leg_type"] == "T":
+                spec["leg_type"] = "T"
+            turn = leg["turn"]
+            result = {"leg_status": "complete" if inc["ran_to_cap"] else "incomplete",
+                      "decode_cap_reached": inc["ran_to_cap"], "g0_released": inc["g0_released"],
+                      "ac_powermode": {"value": mode if inc["block_power_mode"] else 1},
+                      "bundle": "runs/cadence-leg" if turn else None,
+                      "prefill_tokens": turn["prefill_tokens"] if turn else None}
+            with open(os.path.join(ldir, "leg_record.json"), "w") as f:
+                json.dump({"spec": spec, "attempts": [{"attempt": 1,
+                                                        "contaminated": not inc["not_a_contaminated_attempt"]}],
+                           "result": result}, f)
+            summ = {"leg_id": leg["leg_id"]}
+            if leg["g0_role"] == "consume":
+                summ["span_reference"] = {"leg_id": legs[0]["leg_id"], "attempt": 1,
+                                          "redone": "reference from a redo" in span["marks"],
+                                          "excluded": "reference from an excluded leg" in span["marks"]}
+            with open(os.path.join(ldir, "leg_summary.json"), "w") as f:
+                json.dump(summ, f)
+            if not turn:
+                continue
+            bdir = os.path.join(ldir, "runtime", "runs/cadence-leg")
+            _write_bundle(bdir, turn, tokens[leg["leg_key"]])
+            e = energy["legs"].get(leg["leg_key"])
+            if e is not None:
+                gp = _pieces(turn, e["gpu_rail"], GPU_IDLE_W)
+                dc_pieces += _pieces(turn, e["dc_in"], DC_IDLE_W)
+            else:     # not read by the look: idle power only
+                gp = [(turn["turn_start_s"], turn["last_token_s"], 20.0)]
+            _write_power_trace(os.path.join(bdir, "power_trace.csv"), gp, turn["turn_start_s"] - 60.0,
+                               turn["last_token_s"] + 30.0)
+            t_hi = max(t_hi, turn["last_token_s"] + 60.0)
+        dc_pieces.sort()
+        _write_meter(os.path.join(sdir, "hazards/meter/stream-0001.jsonl"), dc_pieces, t_lo, t_hi,
+                     off_ns=int(round(t_lo * 1e9)) - RAW_BASE_NS)
+    paths = {}
+    for name, obj in (("roster.json", roster), ("rules_3_4.json", rules34)):
+        paths[name] = os.path.join(root, name)
+        with open(paths[name], "w") as f:
+            json.dump(obj, f)
+    return paths
+
+
 def dump(obj):
     return (json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
 
 
-def write(out_dir, scenario="noisy", seed=20261114):
-    look_input, energy, truth = build(scenario, seed)
+def write(out_dir, scenario="noisy", seed=20261114, custody=False):
+    tokens = {}
+    look_input, energy, truth = build(scenario, seed, tokens)
     os.makedirs(out_dir, exist_ok=True)
     paths = {}
     for name, obj in (("look_input.json", look_input), ("segment_energy.json", energy), ("truth.json", truth)):
@@ -435,6 +642,8 @@ def write(out_dir, scenario="noisy", seed=20261114):
         with open(path, "wb") as f:
             f.write(dump(obj))
         paths[name] = path
+    if custody:
+        paths.update(write_custody(os.path.join(out_dir, "custody"), look_input, energy, tokens))
     return paths
 
 
@@ -443,8 +652,9 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--scenario", default="noisy", choices=sorted(SCENARIOS))
     ap.add_argument("--seed", type=int, default=20261114)
+    ap.add_argument("--custody", action="store_true", help="also write the custody layout under OUT/custody")
     a = ap.parse_args(argv)
-    paths = write(a.out, a.scenario, a.seed)
+    paths = write(a.out, a.scenario, a.seed, a.custody)
     for name, path in paths.items():
         with open(path, "rb") as f:
             print(f"{name} sha256={hashlib.sha256(f.read()).hexdigest()}")

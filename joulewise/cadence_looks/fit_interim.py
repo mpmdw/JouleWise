@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 
 import numpy as np
 
@@ -1031,6 +1032,7 @@ def stage2(stage1_out, stage1_sha256, energy, code_sha256=None):
 
 
 # =============================================================================================== output custody
+_LEG_KEY = re.compile(r"/[LHT][0-9]{3}$")
 _OUT_FORBIDDEN = ("joule", "watt", "power", "energy", "_mj", "_wh", "measured", "meas_")
 
 
@@ -1039,7 +1041,11 @@ def output_check(obj, path="$"):
     if isinstance(obj, dict):
         for k, v in obj.items():
             kl = str(k).lower()
-            if "/" in kl:
+            if k == "code_sha256" and path == "$":          # paths name code files; the values are hashes only
+                if not all(isinstance(h, str) and re.fullmatch(r"[0-9a-f]{64}", h) for h in v.values()):
+                    raise ValueError("code_sha256 holds a non-hash")
+                continue
+            if _LEG_KEY.search(str(k)):
                 if not (path.endswith(".residuals.leg") or path.endswith(".residuals.hot_stretch")):
                     raise ValueError("a per-leg value outside residuals")
                 if v is not None and not (isinstance(v, float) and abs(v) < 1.0):

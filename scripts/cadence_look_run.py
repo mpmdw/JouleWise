@@ -1,0 +1,447 @@
+#!/usr/bin/env python3
+"""The interim look's two-stage CLI (RL-166 Q1, Q2, Q8; the analyst seat runs it).
+
+    stage1 --out STAGE1.json  (--input LOOK_INPUT.json
+                               | --roster ROSTER.json --custody ROOT --rules-3-4 VERDICTS.json
+                                 [--span-dir SPAN_ID=PATH ...] [--write-input LOOK_INPUT.json])
+    stage2 --stage1 STAGE1.json --stage1-sha256 HEX --out FIT.json
+                              (--energy SEGMENT_ENERGY.json
+                               | --custody ROOT [--span-dir SPAN_ID=PATH ...] [--step3-module PATH])
+
+Stage 1 opens NO energy file. In custody mode it opens, per span: `runner_receipt.json`,
+`soak/soak_reference.json`, and per leg `leg_record.json`; per accepted attempt's bundle: `events.jsonl`
+(token index and stamp), `outputs/align_turns.jsonl` (stamps, prompt count, the LENGTH of the output ids),
+`outputs/align_thermal.jsonl` (journal readings), and, for the native power-management state only,
+`rich_telemetry.jsonl` and `raw/powermetrics.plist`, from which it extracts by pattern the row end stamp,
+`elapsed_ns` and `thermal_pressure` and nothing else: no line or frame of those two files is parsed as a whole,
+so no power or energy value is decoded. It never opens `power_trace.csv` or a meter stream.
+
+Stage 2 takes the stage-1 file by its sha256 as its only roster. In custody mode it computes the level-E object
+in memory (GPU rail through the committed step 3 module's `load_gpu_trace` and `Trace`; DC-in by the trapezoid
+between consecutive KM003C samples, through `joulewise.external.km003c_parse`) and never writes it.
+
+Stdout carries the output path and its sha256 only. A refusal prints its field-only message; any other
+exception prints its type and line number only (step 3's rule: a message could carry a value).
+"""
+from __future__ import annotations
+
+import argparse
+import glob
+import hashlib
+import importlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import sys
+
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from joulewise.cadence_looks import fit_interim as F  # noqa: E402
+
+STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
+FAN_KEYS = ("F0Ac", "F1Ac")          # configs/align/v4/r1_runtime.json sensors.fan_keys
+PM_FRESH_S = 2.0
+MODE_BY_POWER = {"automatic": 0, "high_power": 2}
+JOURNAL_PRE_S, JOURNAL_POST_S = 60.0, 5.0
+CODE_PATHS = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py")
+
+
+# =============================================================================================== helpers
+def sha256_file(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def code_hashes(extra=()):
+    out = {}
+    for rel in (*CODE_PATHS, *extra):
+        p = ROOT / rel
+        if p.is_file():
+            out[rel] = sha256_file(p)
+    return out
+
+
+def _jsonl(path):
+    with open(path) as f:
+        return [json.loads(x) for x in f if x.strip()]
+
+
+def _json(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def write_canonical(path, obj):
+    data = F.dump(obj)
+    with open(path, "wb") as f:
+        f.write(data)
+    return hashlib.sha256(data).hexdigest()
+
+
+def span_dirs(custody, pairs):
+    m = {}
+    for p in pairs or []:
+        sid, _, path = p.partition("=")
+        if not sid or not path:
+            raise F.LookInputError("--span-dir wants SPAN_ID=PATH")
+        m[sid] = Path(path)
+    return lambda sid: m.get(sid, Path(custody) / sid)
+
+
+# =============================================================================================== stage-1 reader
+_RICH_TS = re.compile(rb'"timestamp_s":\s*(-?[0-9][0-9.eE+-]*)')
+_RICH_EL = re.compile(rb'"elapsed_ns":\s*([0-9]+)')
+_PL_TP = re.compile(rb"<key>thermal_pressure</key>\s*<string>([^<]*)</string>")
+_PL_EL = re.compile(rb"<key>elapsed_ns</key>\s*<integer>([0-9]+)</integer>")
+
+
+def native_states(bundle, lo, hi):
+    """[(row end epoch, state)] for rows ending in [lo, hi]. Pattern extraction only (module docstring)."""
+    ends = []
+    with open(bundle / "rich_telemetry.jsonl", "rb") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            m, e = _RICH_TS.search(line), _RICH_EL.search(line)
+            if not m or not e:
+                raise F.LookInputError("rich_telemetry: a row without timestamp_s or elapsed_ns")
+            ends.append((float(m.group(1)), int(e.group(1))))
+            del line
+    with open(bundle / "raw/powermetrics.plist", "rb") as f:
+        frames = [p for p in f.read().split(b"\0") if p.strip()]
+    if not (len(frames) == len(ends) or len(frames) == len(ends) + 1):
+        raise F.LookInputError("plist/rich frame count mismatch")
+    out = []
+    for i, (end, el) in enumerate(ends):
+        if not (lo <= end <= hi):
+            continue
+        fr = frames[i]
+        me = _PL_EL.search(fr)
+        if not me or int(me.group(1)) != el:
+            raise F.LookInputError("plist/rich elapsed mismatch")
+        mt = _PL_TP.search(fr)
+        out.append({"t_end_s": end, "state": mt.group(1).decode() if mt else None})
+    del frames
+    return out
+
+
+def journal_readings(bundle, lo, hi, fan_keys):
+    out = []
+    for r in _jsonl(bundle / "outputs/align_thermal.jsonl"):
+        if r.get("kind") != "reading" or r.get("error"):
+            continue
+        t = r["finished"]["wall_ns"] / 1e9
+        if not (lo <= t <= hi):
+            continue
+        v = r.get("values") or {}
+        st = v.get("status") or {}
+        sen = v.get("sensors") or {}
+        pmo = st.get("pm_observed_ns")
+        fresh = type(pmo) is int and (r["started"]["monotonic_ns"] - pmo) <= PM_FRESH_S * 1e9
+        fans = [sen.get(k) for k in fan_keys]
+        fan = (sum(float(x) for x in fans) / len(fans)) if fans and all(x is not None for x in fans) else None  # R-7
+        lvl = st.get("os_level")
+        out.append({"t_s": t, "os_level": lvl if type(lvl) is int else None,
+                    "pm_state": st.get("pm_state") if isinstance(st.get("pm_state"), str) else None,
+                    "pm_fresh": bool(fresh),
+                    "tf08_c": None if sen.get("Tf08") is None else float(sen["Tf08"]), "fan_rpm": fan,
+                    "tv0h_c": None if sen.get("TV0h") is None else float(sen["TV0h"])})
+    out.sort(key=lambda x: x["t_s"])
+    return out
+
+
+def token_stamps(bundle):
+    toks = []
+    with open(bundle / "events.jsonl") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            e = json.loads(line)
+            if e.get("event_type") == "token":
+                md = e.get("metadata") or {}
+                if md.get("align_turn_index", 0) not in (0, None):
+                    raise F.LookInputError("events: a multi-turn leg")
+                toks.append((int(md["index"]), float(e["timestamp_s"])))
+            del e
+    toks.sort()
+    if [i for i, _ in toks] != list(range(len(toks))):
+        raise F.LookInputError("events: token indices not contiguous")
+    t = [s for _, s in toks]
+    if any(b < a for a, b in zip(t, t[1:])):
+        raise F.LookInputError("events: token stamps not monotone")
+    return t
+
+
+def build_turn(bundle, result, fan_keys):
+    turns = _jsonl(bundle / "outputs/align_turns.jsonl")
+    if len(turns) != 1:
+        raise F.LookInputError("align_turns: not one turn")
+    tr = turns[0]
+    ts = float(tr["start_stamp"]["epoch_s"])
+    n_out = len(tr["generation"]["output_token_ids"])          # LENGTH only
+    P = tr["generation"].get("prefill_tokens", result.get("prefill_tokens"))
+    del turns, tr
+    tok = token_stamps(bundle)
+    if len(tok) != n_out or not tok:
+        raise F.LookInputError("token count differs from the output length")
+    N = len(tok)
+    segs = [{"seg": 0, "kind": "prefill", "n_tokens": int(P), "edge_lo": None, "edge_hi": None, "tok_first": None,
+             "tok_last": None, "wall_start_s": ts, "wall_end_s": tok[0], "first_token_s": None}]
+    for k in range(N // F.BLOCK):
+        lo = 0 if k == 0 else F.BLOCK * k - 1
+        hi = F.BLOCK * k + F.BLOCK - 1
+        segs.append({"seg": k + 1, "kind": "decode", "block": k, "n_tokens": F.BLOCK, "tok_first": F.BLOCK * k,
+                     "tok_last": hi, "edge_lo": lo, "edge_hi": hi, "wall_start_s": tok[lo], "wall_end_s": tok[hi],
+                     "first_token_s": tok[F.BLOCK * k]})
+    tails = []
+    for L in sorted(F.PREFIX.values(), reverse=True):
+        if L >= N:
+            continue
+        nb = L // F.BLOCK
+        a, lo, hi = F.BLOCK * nb, F.BLOCK * nb - 1, L - 1
+        tails.append({"prefix_len": L, "kind": "prefix_tail", "tok_first": a, "tok_last": hi, "n_tokens": L - a,
+                      "edge_lo": lo, "edge_hi": hi, "wall_start_s": tok[lo], "wall_end_s": tok[hi],
+                      "first_token_s": tok[a]})
+    return {"prefill_tokens": int(P), "decode_tokens": N, "turn_start_s": ts, "first_token_s": tok[0],
+            "last_token_s": tok[-1], "segments": segs, "prefix_tails": tails,
+            "journal": journal_readings(bundle, ts - JOURNAL_PRE_S, tok[-1] + JOURNAL_POST_S, fan_keys),
+            "native_pm": native_states(bundle, ts, tok[-1])}
+
+
+def _mode(result):
+    m = result.get("ac_powermode")
+    return m.get("value") if isinstance(m, dict) else m
+
+
+def read_span(sdir, entry, rules34, fan_keys):
+    """(span, legs) of one roster span, in level-R shape. Opens no energy file."""
+    receipt = _json(sdir / "runner_receipt.json")
+    try:
+        soak = float(_json(sdir / "soak/soak_reference.json")["sensors_c"]["TV0h"])
+    except (OSError, KeyError, TypeError, ValueError):
+        soak = None
+    power = "high_power" if entry["block_id"].startswith("hp-") else "automatic"
+    span = {"span_id": entry["span_id"], "block_id": entry["block_id"],
+            "phase": "extension" if entry["role"] == "describe" else "development", "role": entry["role"],
+            "power_mode": power, "t0_epoch_s": float(receipt["started"]["epoch_s"]),
+            "t0_local_date": entry["t0_local_date"], "soak_reference_tv0h_c": soak, "marks": []}
+    legs, marks = [], set()
+    for leg_id in receipt["roster"]:
+        key = f"{entry['span_id']}/{leg_id}"
+        ldir = sdir / "legs" / leg_id
+        v34 = rules34.get(key)
+        if v34 is None:
+            raise F.LookInputError("rules 3 and 4: no verdict for a roster leg")
+        if not (ldir / "leg_record.json").is_file():          # the span stopped before this leg
+            legs.append({"leg_key": key, "span_id": entry["span_id"], "leg_id": leg_id, "leg_type": "A",
+                         "cell_prompt_tokens": None, "g0_role": None,
+                         "inclusion": {r: False for r in F.RULES}, "turn": None, "_unrun": True})
+            continue
+        rec = _json(ldir / "leg_record.json")
+        spec, attempts, result = rec["spec"], rec["attempts"], rec.get("result") or {}
+        summ = _json(ldir / "leg_summary.json") if (ldir / "leg_summary.json").is_file() else {}
+        ref = summ.get("span_reference")
+        if isinstance(ref, dict):
+            if ref.get("redone"):
+                marks.add("reference from a redo")
+            if ref.get("excluded"):
+                marks.add("reference from an excluded leg")
+        leg_type = "T" if (spec.get("leg_type") == "T" or spec.get("type") == "T") else "A"
+        inc = {"ran_to_cap": result.get("leg_status") == "complete" and result.get("decode_cap_reached") is True,
+               "g0_released": result.get("g0_released") is True,
+               "sidecar_coverage": v34["sidecar_coverage"] is True, "km003c_clean": v34["km003c_clean"] is True,
+               "not_a_contaminated_attempt": bool(attempts) and not attempts[-1].get("contaminated"),
+               "block_power_mode": _mode(result) == MODE_BY_POWER[power]}
+        turn = None
+        if leg_type == "A" and result.get("bundle"):
+            turn = build_turn(ldir / "runtime" / result["bundle"], result, fan_keys)
+        legs.append({"leg_key": key, "span_id": entry["span_id"], "leg_id": leg_id, "leg_type": leg_type,
+                     "cell_prompt_tokens": int(spec["prefill_tokens"]), "g0_role": spec.get("g0_role"),
+                     "inclusion": inc, "turn": turn})
+    span["marks"] = sorted(marks)
+    for leg in legs:
+        if leg.pop("_unrun", False):
+            leg["cell_prompt_tokens"] = F.CELLS[0]     # a leg that never ran is excluded; its cell is not read
+    return span, legs
+
+
+def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS):
+    spans, legs = [], []
+    for entry in roster:
+        s, ls = read_span(sdir_of(entry["span_id"]), entry, rules34, fan_keys)
+        spans.append(s)
+        legs += ls
+    return {"schema": F.INPUT_SCHEMA, "look_id": F.LOOK_ID, "synthetic": False, "spans": spans, "legs": legs}
+
+
+# =============================================================================================== stage-2 reader
+def load_step3(path=None):
+    if path is None:
+        mod = importlib.import_module("joulewise.cadence_looks.step3_energy_ratios")
+        path = mod.__file__
+    if sha256_file(path) != STEP3_SHA256:
+        raise F.LookInputError("the step 3 module is not the committed bytes")
+    spec = importlib.util.spec_from_file_location("_step3_pinned", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod, path
+
+
+class MeterSpan:
+    """KM003C samples of a span on wall-clock epoch seconds; Vbus x Ibus; in memory only."""
+
+    def __init__(self, sdir):
+        from joulewise.external import km003c_parse as kp
+        paths = sorted(glob.glob(str(sdir / "hazards/meter/stream-*.jsonl")))
+        if not paths:
+            raise F.LookInputError("no meter stream in the span")
+        t, w = [], []
+        for p in paths:
+            st = kp.parse(p)
+            if not st.present or not st.aligned:
+                raise F.LookInputError("a meter stream without aligned samples")
+            off = int(st.header["start_real_ns"]) - int(st.header["start_raw_ns"])    # RAW -> REALTIME (R-20)
+            t += [(h + off) / 1e9 for h in st.host_ns]
+            w += list(st.watts)
+            del st
+        order = sorted(range(len(t)), key=t.__getitem__)
+        self.t = [t[i] for i in order]
+        self.w = [w[i] for i in order]
+
+    def _at(self, x, i):
+        t0, t1 = self.t[i], self.t[i + 1]
+        return self.w[i] + (self.w[i + 1] - self.w[i]) * (x - t0) / (t1 - t0) if t1 > t0 else self.w[i]
+
+    def energy(self, a, b):
+        """Trapezoid between consecutive samples, cut at a and b (linear value at the cuts)."""
+        import bisect
+        if a < self.t[0] or b > self.t[-1] or b < a:
+            raise F.LookInputError("a segment outside the meter stream")
+        i = max(0, bisect.bisect_right(self.t, a) - 1)
+        tot = 0.0
+        while i < len(self.t) - 1 and self.t[i] < b:
+            lo, hi = max(a, self.t[i]), min(b, self.t[i + 1])
+            if hi > lo:
+                tot += 0.5 * (self._at(lo, i) + self._at(hi, i)) * (hi - lo)
+            i += 1
+        return tot
+
+
+def read_segment_energy(stage1_out, sdir_of, step3_path=None):
+    """The level-E object, in memory (never written in production)."""
+    s3, _ = load_step3(step3_path)
+    meters = {}
+    out = {"schema": F.ENERGY_SCHEMA, "look_id": F.LOOK_ID, "synthetic": False,
+           "input_sha256": stage1_out["input_sha256"], "legs": {}}
+    for L in stage1_out["legs"]:
+        if not (L["in_energy_fit"] or L["hp_describe"]):
+            continue
+        sdir = sdir_of(L["span_id"])
+        leg_id = L["leg_key"].split("/", 1)[1]
+        rec = _json(sdir / "legs" / leg_id / "leg_record.json")
+        bundle = sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"]
+        trace = s3.Trace(s3.load_gpu_trace(str(bundle)))
+        if L["span_id"] not in meters:
+            meters[L["span_id"]] = MeterSpan(sdir)
+        m = meters[L["span_id"]]
+        entry = {}
+        for ch, fn, cov in (("gpu_rail", trace.energy, trace.coverage), ("dc_in", m.energy, None)):
+            segs = [fn(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]]
+            tails = {str(t["prefix_len"]): fn(t["wall_start_s"], t["wall_end_s"]) for t in L["prefix_tails"]}
+            covs = [cov(s["wall_start_s"], s["wall_end_s"]) for s in L["segments"]] if cov else [1.0]
+            entry[ch] = {"segments": segs, "prefix_tails": tails,
+                         "coverage_min": min(c for c in covs if c is not None) if covs else 1.0}
+        out["legs"][L["leg_key"]] = entry
+        del trace
+    return out
+
+
+# =============================================================================================== main
+def cmd_stage1(a):
+    if a.input:
+        with open(a.input, "rb") as f:
+            raw = f.read()
+        look_input = json.loads(raw)
+        input_sha = hashlib.sha256(raw).hexdigest()
+        extra = {}
+    else:
+        roster = _json(a.roster)
+        rules34 = _json(a.rules_3_4)
+        look_input = read_look_input(roster, span_dirs(a.custody, a.span_dir), rules34)
+        data = F.dump(look_input)
+        input_sha = hashlib.sha256(data).hexdigest()
+        if a.write_input:
+            with open(a.write_input, "wb") as f:
+                f.write(data)
+        extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4)}
+    out = F.stage1(look_input, input_sha, code_hashes())
+    if extra:
+        out["code_sha256"].update({f"input:{k}": v for k, v in extra.items()})
+    return out
+
+
+def cmd_stage2(a):
+    with open(a.stage1, "rb") as f:
+        raw = f.read()
+    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
+        raise F.LookInputError("stage 2: the stage-1 file does not match --stage1-sha256")
+    s1 = json.loads(raw)
+    if F.dump(s1) != raw:
+        raise F.LookInputError("stage 2: the stage-1 file is not in canonical form")
+    if a.energy:
+        energy = _json(a.energy)
+        extra = ()
+    else:
+        energy = read_segment_energy(s1, span_dirs(a.custody, a.span_dir), a.step3_module)
+        extra = ("joulewise/cadence_looks/step3_energy_ratios.py",)
+    return F.stage2(s1, a.stage1_sha256, energy, code_hashes(extra))
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="The interim look's two stages (RL-166 Q8).")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p1 = sub.add_parser("stage1")
+    p1.add_argument("--out", required=True)
+    g = p1.add_mutually_exclusive_group(required=True)
+    g.add_argument("--input")
+    g.add_argument("--roster")
+    p1.add_argument("--custody")
+    p1.add_argument("--rules-3-4")
+    p1.add_argument("--span-dir", action="append")
+    p1.add_argument("--write-input")
+    p2 = sub.add_parser("stage2")
+    p2.add_argument("--stage1", required=True)
+    p2.add_argument("--stage1-sha256", required=True)
+    p2.add_argument("--out", required=True)
+    g2 = p2.add_mutually_exclusive_group(required=True)
+    g2.add_argument("--energy")
+    g2.add_argument("--custody")
+    p2.add_argument("--span-dir", action="append")
+    p2.add_argument("--step3-module")
+    a = ap.parse_args(argv)
+    if a.cmd == "stage1" and a.roster and not (a.custody and a.rules_3_4):
+        ap.error("--roster needs --custody and --rules-3-4")
+    try:
+        out = cmd_stage1(a) if a.cmd == "stage1" else cmd_stage2(a)
+        sha = write_canonical(a.out, out)
+    except F.LookInputError as exc:
+        print(f"REFUSED {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:  # noqa: BLE001 - no message: it could carry a value
+        tb = exc.__traceback__
+        while tb.tb_next:
+            tb = tb.tb_next
+        print(f"FAILED {type(exc).__name__} at {os.path.basename(tb.tb_frame.f_code.co_filename)}:{tb.tb_lineno}",
+              file=sys.stderr)
+        return 2
+    print(f"wrote {a.out} sha256={sha}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
