@@ -383,6 +383,21 @@ Both seats: ADMIT WITH FIXES, no new HIGH. The fit-side halves of these items (s
 
 Every tool takes the same `--ledger-ref`.
 
+## 7d. The cold seats on `d7a5202a0` (round 4), manifest side
+
+Sol: REFUSE (its HIGH, NEW-1, is stage 2's support rule, on the fit side). Mythos: ADMIT WITH FIXES.
+
+| Finding | Fix | Test |
+|---|---|---|
+| Mythos N2: the freeze commit turns the look's tests red | The tests no longer depend on the checked-in status. `draft()` and the mini repo work on a draft copy (`look_minirepo.to_draft`), and the Q11 test sets its own form. `look_minirepo.frozen_copy` applies the lead's freeze commit to a copy of the tree: status committed, Q11 disposed, and the row | `FreezeCommit`: the frozen copy passes `validate --final --repo` and runs all six look test modules green |
+| Mythos N3: a second stage 1 after energy | `manifest.stage1_history` reads every commit of LOOKS.json reachable from HEAD. `require_inputs_committed` refuses once any commit names a stage-1 hash, so stage 1 runs once. `require_stage1_committed` refuses when the history names more than one (stage-1, roster, verdict) triple for the look. There is no override | `test_a_committed_stage1_is_never_replaced`: G11's redo, a changed verdict hash, stage 1 run again |
+| Mythos N4, Sol NEW-2: stale bytecode outside the two-stage CLI | `inclusion_34.py`, `step3_roster.py` and `assemble` each run with a fresh, empty pycache prefix, which is removed at exit. Each refuses on `manifest.cached_bytecode`. `load_step3` executes the bytes it hashed | `StaleBytecode`: a planted, same-mtime and same-size cache entry for `manifest.py` runs unguarded (control) and never in the three tools; prefixes are cleaned up; a stale step 3 entry never runs; `cached_bytecode` names a module with a cache file |
+| Sol NEW-3 (step 3's half): stage-1 defects pass the readers | `manifest.stage1_problems` holds schema, manifest, run mode and the exact code set at the pins. Step 3 calls it before any bundle, `assemble` uses it, and stage 2 can call it (the analyst's half). The exact code sets now live in manifest.py, and `schema_check.py` joins every stage's set | `test_a_stage1_defect_refuses_before_energy`: missing hash, wrong hash, unknown field |
+| Sol NEW-4: an unrecognized meter prefix is JSON-decoded | Only a line positively recognized as a header or trailer is decoded: kind "h" or "t", and none of a sample line's keys. The sample pattern accepts any JSON whitespace | `test_an_unrecognized_sample_prefix_is_never_decoded` (the `"k" : "b"` spelling with SMC power, an unknown key order, and a kindless line) |
+| Mythos N5: the GPU-hole switch cannot be set | The validator accepts `fit.gpu_trace_hole_refusal {enabled, max_gap_s, cite?}` and checks it; a cite is needed when enabled. The JSON-schema copy matches | `test_the_gpu_hole_switch_can_be_set` |
+| Mythos N6: `ledger_gate` gaps | A record carries a gate exactly when it is not a draft; `assemble` and `validate --output` refuse either mismatch. The shared ref must belong to a configured remote, and `origin/HEAD` or a bare remote name is refused. A reproduction of a stage-1 file compares everything but `ledger_gate`, which records the run's HEAD | `test_a_ledger_gate_exactly_when_not_a_draft`, the `validate --output` case, `test_shared_ref_is_a_remote_tracking_branch` (`origin/HEAD`, `nowhere/x`) |
+| Mythos N7: `shared_ref_accepts_remote_HEAD` survived | As above | as above |
+
 ## 8. Still owed
 
 | Item | Who | Due |

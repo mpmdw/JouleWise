@@ -860,6 +860,32 @@
           "items": {
             "$ref": "#/$defs/code_ref"
           }
+        },
+        "gpu_trace_hole_refusal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "max_gap_s"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "max_gap_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 60
+            },
+            "cite": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          },
+          "description": "Mythos round-3 N7: the GPU-rail hole refusal; off unless the research lead rules it on (cite then required)"
         }
       }
     },

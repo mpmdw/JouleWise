@@ -71,8 +71,13 @@ NORMAL_STOP_REASONS = ("duration", "stop file")     # and any "signal N" (km003c
 ABNORMAL_STOP_REASONS = ("absent", "exception", "consecutive USB errors")
 
 # km003c_monitor.py writes sample lines compact ('{"k":"b","tx":..,"rx":..,"rt":..,'); spaced JSON is accepted too.
-_SAMPLE_LINE_RE = re.compile(rb'^\{"k":\s*"b",\s*"tx":\s*(\d+),\s*"rx":\s*(\d+),\s*"rt":\s*(\d+)\s*,\s*"n":\s*(\d+)\s*,')
-_UNREAD_LINE_RE = re.compile(rb'^\{"k":\s*"[be]"')     # sample or error line: never decoded
+_SAMPLE_LINE_RE = re.compile(rb'^\{\s*"k"\s*:\s*"b"\s*,\s*"tx"\s*:\s*(\d+)\s*,\s*"rx"\s*:\s*(\d+)\s*,\s*"rt"\s*:\s*(\d+)\s*,'
+                             rb'\s*"n"\s*:\s*(\d+)\s*,')
+# Sol round-4 NEW-4: only a line positively recognized as a header or a trailer is ever JSON-decoded: its record kind
+# is "h" or "t" (the monitor writes both with sorted keys, so "k" need not come first), and it carries none of a
+# sample line's keys. Every other line is taken by the sample pattern above or left unread.
+_HEADER_TRAILER_RE = re.compile(rb'(?:^\{\s*|,\s*)"k"\s*:\s*"[ht]"\s*[,}]')
+_SAMPLE_KEY_RE = re.compile(rb'"(?:smc|p|n|tx|rx|rt|raw|usb_error)"\s*:')
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -295,8 +300,8 @@ def read_meter_stream(path):
             tx, rx, rt, n = (int(g) for g in m.groups())
             polls.append((rt, n))
             round_trips.append((rt, n, rx - tx))
-        elif _UNREAD_LINE_RE.match(raw):
-            pass                                  # an error line, or a sample line in an unknown form: unread
+        elif not _HEADER_TRAILER_RE.search(raw) or _SAMPLE_KEY_RE.search(raw):
+            pass                                  # an error line, or any line in an unknown form: never decoded
         else:
             doc = json.loads(raw)
             if first and doc.get("k") == "h":
@@ -598,6 +603,20 @@ def _write(path, doc):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _fresh_bytecode_cache():
+    """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. A fresh, empty
+    pycache prefix (removed at exit) means no repository module can run from a stale __pycache__ entry beside its
+    pinned source: each compiles from the bytes verify_pins hashes. Called before the first repository import when
+    the file runs as a program; manifest.cached_bytecode() confirms it before custody opens."""
+    import atexit
+    import shutil
+    import tempfile
+    sys.dont_write_bytecode = True
+    prefix = tempfile.mkdtemp(prefix="jw-look-pyc-")
+    sys.pycache_prefix = prefix
+    atexit.register(shutil.rmtree, prefix, True)
+
+
 def main(argv=None):
     import argparse
     p = argparse.ArgumentParser(description="Rules 3 and 4 at the look (RL-166 Q7): the verdict file. No energy.")
@@ -618,6 +637,9 @@ def main(argv=None):
         doc = lm.verify_pins(a.manifest, REPO, allow_draft=a.allow_draft,
                              running=[Path(__file__).resolve(), REPO / RUNTIME_CONFIG], ledger_ref=a.ledger_ref)
         gate = None if a.allow_draft else lm.ledger_gate(REPO, a.ledger_ref)
+        stale = lm.cached_bytecode(REPO)
+        if stale:
+            raise lm.ManifestError([f"a repository module may have run from cached bytecode: {', '.join(stale[:4])}"])
     except lm.ManifestError as error:
         for problem in error.problems:
             print(f"REFUSE {problem}")
@@ -664,4 +686,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    _fresh_bytecode_cache()
     raise SystemExit(main())

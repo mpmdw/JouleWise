@@ -56,9 +56,11 @@ def load_step3(path=STEP3_PATH, sha256=STEP3_SHA256):
     raw = Path(path).read_bytes()
     if hashlib.sha256(raw).hexdigest() != sha256:
         raise Step3Refused(f"{path}: sha256 is not the pinned step 3 code (RL-166 Q6: any edit needs a ruling)")
-    spec = importlib.util.spec_from_file_location(f"_step3_{uuid.uuid4().hex}", path)
+    # Sol round-4 NEW-2: run the bytes just hashed, never a cached compilation of the file
+    spec = importlib.util.spec_from_loader(f"_step3_{uuid.uuid4().hex}", loader=None, origin=str(path))
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module.__file__ = str(path)
+    exec(compile(raw, str(path), "exec"), module.__dict__)
     return module
 
 
@@ -199,6 +201,20 @@ def span_dirs(custody, overrides=()):
     return lambda span_id: Path(extra[span_id]) if span_id in extra else Path(custody) / span_id
 
 
+def _fresh_bytecode_cache():
+    """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. A fresh, empty
+    pycache prefix (removed at exit) means no repository module can run from a stale __pycache__ entry beside its
+    pinned source: each compiles from the bytes verify_pins hashes. Called before the first repository import when
+    the file runs as a program; manifest.cached_bytecode() confirms it before custody opens."""
+    import atexit
+    import shutil
+    import tempfile
+    sys.dont_write_bytecode = True
+    prefix = tempfile.mkdtemp(prefix="jw-look-pyc-")
+    sys.pycache_prefix = prefix
+    atexit.register(shutil.rmtree, prefix, True)
+
+
 def main(argv=None):
     import argparse
     import json
@@ -226,8 +242,14 @@ def main(argv=None):
     try:
         doc = lm.verify_pins(a.manifest, repo, allow_draft=a.allow_draft, running=[Path(__file__).resolve(), STEP3_PATH],
                              ledger_ref=a.ledger_ref)
-        if stage1.get("manifest_sha256") != lm.sha256_file(a.manifest):   # before any energy (Mythos round-3 N2)
-            raise lm.ManifestError(["the stage-1 file was made under another manifest"])
+        stale = lm.cached_bytecode(repo)
+        if stale:
+            raise lm.ManifestError([f"a repository module may have run from cached bytecode: {', '.join(stale[:4])}"])
+        # before any energy: the stage-1 file's schema, manifest, run mode and exact code (Mythos round-3 N2;
+        # Sol round-4 NEW-3), the same checks assemble makes
+        problems = lm.stage1_problems(repo, doc, stage1, lm.sha256_file(a.manifest), allow_draft=a.allow_draft)
+        if problems:
+            raise lm.ManifestError(problems)
         if a.allow_draft:
             if stage1.get("synthetic") is not True:                      # Mythos N2
                 raise lm.ManifestError(["--allow-draft on a stage-1 file that is not synthetic"])
@@ -244,8 +266,6 @@ def main(argv=None):
                 raise lm.ManifestError([f"--allow-draft on custody that is not synthetic: {', '.join(real[:5])}"])
             gate = None
         else:
-            if stage1.get("allow_draft") is True:
-                raise lm.ManifestError(["the stage-1 file was made under --allow-draft"])
             lm.require_stage1_committed(repo, doc["look_id"], a.stage1_sha256, stage1_doc=stage1,
                                         ledger_ref=a.ledger_ref)
             gate = lm.ledger_gate(repo, a.ledger_ref)                    # what satisfied the gate, recorded
@@ -283,4 +303,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    _fresh_bytecode_cache()
     raise SystemExit(main())

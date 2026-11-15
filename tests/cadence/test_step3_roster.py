@@ -232,11 +232,19 @@ class Stage1Custody(unittest.TestCase):
         self.write_stage1()
 
     def write_stage1(self, mini=None, **changes):
-        """The stage-1 file, bound to ``mini``'s manifest as it now stands (any manifest when None)."""
+        """A schema-valid stage-1 file bound to ``mini``'s manifest as it now stands, recording exactly stage 1's
+        code at its pins (another manifest when ``mini`` is None)."""
         from tests.cadence import look_minirepo as mr
-        doc = {"schema": "joulewise.cadence_look_stage1.v1", "legs": self.legs, "synthetic": True,
-               "manifest_sha256": (hashlib.sha256((mini / mr.MANIFEST).read_bytes()).hexdigest() if mini else "0" * 64),
-               "code_sha256": {"input:roster_sha256": self.roster_sha, "input:rules_3_4_sha256": self.verdicts_sha}}
+        from tests.cadence.look_fixtures import minimal
+        schema = json.loads((REPO / "docs/process/cadence/looks/lm-interim-01.stage1.schema.json").read_text())
+        man_path = (mini or REPO) / mr.MANIFEST
+        pins = {p: sha for _, p, sha in lm.code_refs(json.loads(man_path.read_text()))}
+        leg0 = minimal(schema["properties"]["legs"]["items"], schema)
+        doc = minimal(schema)
+        doc.update(legs=[dict(leg0, **leg) for leg in self.legs], synthetic=True, allow_draft=True,
+                   manifest_sha256=(hashlib.sha256(man_path.read_bytes()).hexdigest() if mini else "0" * 64),
+                   code_sha256={**{k: pins[k] for k in lm.STAGE1_CODE}, "input:roster_sha256": self.roster_sha,
+                                "input:rules_3_4_sha256": self.verdicts_sha})
         doc.update(changes)
         self.stage1.write_text(json.dumps(doc))
         self.sha = hashlib.sha256(self.stage1.read_bytes()).hexdigest()
@@ -334,6 +342,27 @@ class Stage1Custody(unittest.TestCase):
             self.assertEqual(r.returncode, 1)
             self.assertIn(fragment, r.stdout)
 
+    def test_a_stage1_defect_refuses_before_energy(self):
+        """Sol round-4 NEW-3: step 3 makes assemble's stage-1 checks (schema, exact code at the pins) before it opens
+        a bundle."""
+        from tests.cadence import look_minirepo as mr
+        mini = mr.mini_repo(self)
+        out = self.root / "step3.json"
+        self.write_stage1(mini)
+        good = json.loads(self.stage1.read_text())
+        missing = {k: v for k, v in good["code_sha256"].items() if k != "joulewise/schemas.py"}
+        cases = [({"code_sha256": missing}, "stage 1 does not record joulewise/schemas.py's hash"),
+                 ({"code_sha256": dict(good["code_sha256"], **{"joulewise/schemas.py": "0" * 64})},
+                  "stage 1 ran joulewise/schemas.py at 000000000000, which is not the manifest's pin"),
+                 ({"per_leg_joules": {"dev-03-s01/L001": 1.0}}, "stage 1 does not pass its schema: $.per_leg_joules")]
+        for change, fragment in cases:
+            sha = self.write_stage1(mini, **change)
+            r = mr.py(mini, "joulewise/cadence_looks/step3_roster.py", "--manifest", mini / mr.MANIFEST, "--stage1",
+                      self.stage1, "--stage1-sha256", sha, "--custody", self.root, "--out", out, "--allow-draft")
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn(fragment, r.stdout)
+            self.assertFalse(out.exists())
+
     def test_allow_draft_needs_a_synthetic_stage1(self):
         """Mythos N2."""
         from tests.cadence import look_minirepo as mr
@@ -358,7 +387,7 @@ class Stage1Custody(unittest.TestCase):
         sha = self.write_stage1(None)
         r = run(sha)
         self.assertEqual(r.returncode, 1)
-        self.assertIn("the stage-1 file was made under another manifest", r.stdout)
+        self.assertIn("stage 1 was made under manifest 000000000000, not this one", r.stdout)
 
 
 if __name__ == "__main__":

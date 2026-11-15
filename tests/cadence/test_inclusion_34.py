@@ -314,6 +314,31 @@ class Readers(Base):
                          [{"span_id": "dev-01-s01", "stream": "stream-0001.jsonl", "polls": 5, "empties": 0, "bad": 1,
                            "usb_errors": 0, "stop_reason": "signal 15"}])
 
+    def test_an_unrecognized_sample_prefix_is_never_decoded(self):
+        """Sol round-4 NEW-4: a sample line in another legal JSON spelling ("k" : "b") is taken by pattern or left
+        unread, never JSON-decoded; only a line that starts as a header or a trailer is decoded."""
+        d = self.tmp()
+        lines = [json.dumps({"k": "h", "status": "streaming", "poll_s": 0.2, "sps": 50, "start_real_ns": T0}),
+                 '{"k" : "b", "tx" : 1, "rx" : 2, "rt" : %d, "n" : 10, "p":"%s","smc":{"PDTR":123.456,"B0AC":1}}'
+                 % (T0, self.SENTINEL_HEX),
+                 '{ "n": 10, "k": "b", "rt": %d, "smc": {"PDTR": 123.456}}' % (T0 + 1),    # an unknown order: unread
+                 '{"PDTR": 123.456}',                                                      # no record kind: unread
+                 '{"PDTR": 1.5, "k": "t", "rt": %d, "n": 3}' % (T0 + 2),                   # "t" with sample keys: unread
+                 json.dumps({"k": "t", "polls": 2, "empties": 0, "bad": 0, "usb_errors": 0, "stop_reason": "signal 15"})]
+        p = d / "stream-0001.jsonl"
+        p.write_text("\n".join(lines) + "\n")
+        decoded = []
+        real = json.loads
+
+        def spy(s, *a, **k):
+            decoded.append(s if isinstance(s, str) else s.decode())
+            return real(s, *a, **k)
+        with unittest.mock.patch.object(i34.json, "loads", spy):
+            s = i34.read_meter_stream(p)
+        self.assertEqual(s["polls"], [(T0, 10)])
+        self.assertEqual(len(decoded), 2)
+        self.assertFalse(any("PDTR" in t for t in decoded))
+
     def make_bundle(self):
         b = self.tmp() / "runtime"
         (b / "outputs").mkdir(parents=True)

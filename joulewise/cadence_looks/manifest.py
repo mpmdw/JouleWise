@@ -37,6 +37,8 @@ import re
 import subprocess
 import sys
 
+from joulewise.cadence_looks import schema_check
+
 SCHEMA = "joulewise.cadence_look_manifest.v1"
 LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
 LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
@@ -679,8 +681,22 @@ def _energy(e, kind, problems):
 def _fit(f, kind, problems, final):
     keys = {"code", "dependencies", "runtime", "authors", "heat_term", "rates", "onset", "validation", "prefix_bias",
             "step3", "sensitivity", "reads_from_leg_record", "reads_never", "stated_limits", "cite"}
-    if not _closed(f, keys, "fit", problems):
+    if not _closed(f, keys, "fit", problems, optional={"gpu_trace_hole_refusal"}):
         return
+    # Mythos round-3 N7 / round-4 N5: the GPU-rail hole refusal, off unless the research lead rules it on. The
+    # stage-2 CLI reads it (cadence_look_run.gpu_gap_rule); its shape is checked here so the switch can be set.
+    sw = f.get("gpu_trace_hole_refusal")
+    if sw is not None:
+        if not _closed(sw, {"enabled", "max_gap_s"}, "fit.gpu_trace_hole_refusal", problems, optional={"cite"}):
+            pass
+        else:
+            if not isinstance(sw.get("enabled"), bool):
+                problems.append("fit.gpu_trace_hole_refusal.enabled: true or false")
+            g = sw.get("max_gap_s")
+            if isinstance(g, bool) or not isinstance(g, (int, float)) or not (0 < g <= 60):
+                problems.append("fit.gpu_trace_hole_refusal.max_gap_s: seconds, above 0 and at most 60")
+            if sw.get("enabled") is True:
+                _need_cite(sw, "fit.gpu_trace_hole_refusal", problems)
     deps = f.get("dependencies")
     if not isinstance(deps, list):
         problems.append("fit.dependencies: list of {path, sha256}")
@@ -1203,10 +1219,20 @@ def shared_ref(repo, ledger_ref=None):
         rc, out, _ = _git(repo, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", "--end-of-options",
                           shown)
         full = out.decode().strip() if rc == 0 else ""
+        # a symbolic ref (origin/HEAD) or a bare remote name resolves to some branch; name the branch itself
+        rc, remotes, _ = _git(repo, "remote")
+        names = [shown, f"refs/remotes/{shown}"]
+        if shown in remotes.decode().split() or shown.split("/")[-1] == "HEAD" or any(
+                _git(repo, "symbolic-ref", "-q", n)[0] == 0 for n in names if n.startswith("refs/")):
+            full = ""
     if not full.startswith("refs/remotes/") or full.endswith("/HEAD"):
         raise ManifestError([f"ledger ref {shown!r}: the shared ref is a remote-tracking branch "
                              "(refs/remotes/<remote>/<branch>), never HEAD, a local branch, a tag, a commit or a "
                              "revision expression"])
+    rc, remotes, _ = _git(repo, "remote")
+    if not any(full.startswith(f"refs/remotes/{r}/") for r in remotes.decode().split()):
+        # Mythos round-4 N6: a ref under refs/remotes/ that no configured remote serves is a local name
+        raise ManifestError([f"ledger ref {shown!r} ({full}) belongs to no configured remote"])
     rc, sha, _ = _git(repo, "rev-parse", "--verify", "--quiet", f"{full}^{{commit}}")
     if rc != 0:
         raise ManifestError([f"ledger ref {shown!r} ({full}) does not resolve to a commit"])
@@ -1253,6 +1279,27 @@ def committed_ledger(repo, *, ledger_ref=None):
     return head, ref, ledger
 
 
+def stage1_history(repo, look_id, head):
+    """The distinct (stage1_sha256, roster_sha256, verdicts_sha256) the look's LOOKS.json row has named, in every
+    commit reachable from ``head`` that touched the ledger, newest first (Mythos round-4 N3)."""
+    rc, out, err = _git(repo, "log", "--full-history", "--format=%H", head, "--", LOOK_LEDGER_PATH)
+    if rc != 0:
+        raise ManifestError([f"the history of {LOOK_LEDGER_PATH} cannot be read ({err[:120]})"])
+    seen = []
+    for commit in out.decode().split():
+        rc, raw, _ = _git(repo, "show", f"{commit}:{LOOK_LEDGER_PATH}")
+        try:
+            rows = json.loads(raw).get("looks") if rc == 0 else None
+        except ValueError:
+            rows = None
+        for row in rows if isinstance(rows, list) else []:
+            if isinstance(row, dict) and row.get("look_id") == look_id and row.get("stage1_sha256"):
+                key = (row.get("stage1_sha256"), row.get("roster_sha256"), row.get("verdicts_sha256"))
+                if key not in seen:
+                    seen.append(key)
+    return seen
+
+
 def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger_ref=None):
     """Refuse unless the committed LOOKS.json (``committed_ledger``) names, for this look: the manifest as committed
     at HEAD, at status stage1_committed or later; this stage-1 file's sha256; and as roster_sha256 the roster hash
@@ -1261,6 +1308,11 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
     head, ref, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
     row = _look_row(ledger, look_id)
     problems = []
+    history = stage1_history(repo, look_id, head)
+    if len(history) > 1:                              # Mythos round-4 N3: stage 1 is fixed once, before energy
+        problems.append(f"LOOKS.json's history names {len(history)} different stage-1 commitments for {look_id} "
+                        f"({', '.join(h[0][:12] for h in history)}): a committed stage 1 is never replaced "
+                        "(RL-166 Q8)")
     if row.get("status") not in STAGE1_COMMITTED_STATUSES:
         problems.append(f"LOOKS.json {look_id} is {row.get('status')!r}: stage 1 is not committed")
     if row.get("stage1_sha256") != stage1_sha256:
@@ -1290,9 +1342,13 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
     manifest at status committed or later, and the roster (``validate --roster-out``) and the rules-3-4 verdict file
     (``inclusion_34.py``) stage 1 was given, by sha256. The lead commits both hashes in the row before stage 1
     runs. Returns the row."""
-    _, _, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
+    head, _, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
     row = _look_row(ledger, look_id)
     problems = []
+    history = stage1_history(repo, look_id, head)
+    if history:                                       # Mythos round-4 N3: stage 1 runs once
+        problems.append(f"LOOKS.json's history already commits a stage 1 for {look_id} ({history[-1][0][:12]}): "
+                        "stage 1 is never run again (RL-166 Q8)")
     if row.get("sha256") != manifest_sha256:
         problems.append("LOOKS.json does not name this manifest's sha256")
     if row.get("status") not in COMMITTED_STATUSES:
@@ -1324,6 +1380,84 @@ def loaded_repo_files(repo):
         if rel.endswith(".py"):
             out[rel] = sha256_file(repo / rel)
     return out
+
+
+# The exact repository files each stage's process loads (their import closures, measured on the e2e run); each
+# stage records exactly its set, at the pins (Sol round-2 N2, round-3 NEW-3). The stage-2 set also takes every
+# fit.dependencies file but the stage-1-only sensor policy.
+_SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", "joulewise/cadence_looks/manifest.py",
+                "joulewise/cadence_looks/schema_check.py", "joulewise/axi_decode_config.py",
+                "joulewise/idle_admission.py", "joulewise/schemas.py", "joulewise/validation.py")
+STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
+                              "scripts/cadence_look_run.py")
+STEP3_CODE = _SHARED_CODE + ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/step3_energy_ratios.py")
+STAGE2_CODE = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
+               "joulewise/cadence_looks/inclusion_34.py", "joulewise/cadence_looks/step3_energy_ratios.py",
+               "joulewise/cadence_looks/schema_check.py")
+STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion_34.py, not by the stages
+
+
+def look_schemas(repo):
+    """(stage-1 schema, output schema) as they stand in ``repo`` (verify_pins has checked their pins)."""
+    looks = Path(repo) / "docs/process/cadence/looks"
+    return (json.loads((looks / "lm-interim-01.stage1.schema.json").read_text(encoding="utf-8")),
+            json.loads((looks / "lm-interim-01.output.schema.json").read_text(encoding="utf-8")))
+
+
+def provenance_problems(name, rec, manifest_sha, pins, *, exact=None):
+    """Sol N2: the hashes a stage recorded are the pins, exactly: each recorded repository file is pinned with
+    that hash; ``exact`` (when given) is the set the stage must have recorded, no more and no less; and the
+    stage names the manifest. Keys starting 'input:' record inputs, not code."""
+    problems = []
+    if rec.get("manifest_sha256") != manifest_sha:
+        problems.append(f"{name} was made under manifest {str(rec.get('manifest_sha256'))[:12]}, not this one "
+                        f"({manifest_sha[:12]})")
+    code = {k: v for k, v in (rec.get("code_sha256") or {}).items() if not k.startswith("input:")}
+    for path, sha in sorted(code.items()):
+        if pins.get(path) != sha:
+            problems.append(f"{name} ran {path} at {str(sha)[:12]}, which is not the manifest's pin")
+    if exact is not None:
+        for path in sorted(exact - set(code)):
+            problems.append(f"{name} does not record {path}'s hash")
+        for path in sorted(set(code) - exact):
+            problems.append(f"{name} records {path}, which the pinned stage does not run")
+    return problems
+
+
+def stage1_problems(repo, doc, stage1, manifest_sha, *, allow_draft):
+    """Everything about a stage-1 file that can be checked without energy (Sol round-4 NEW-3): it passes the pinned
+    stage-1 schema; it was made under this manifest; it records exactly stage 1's code at the pins and its roster's
+    hash; and it was made under --allow-draft only if this run is one. ``assemble``, step3_roster.py and stage 2
+    call it before anything else. Returns problems."""
+    s1_schema, _ = look_schemas(repo)
+    problems = [f"stage 1 does not pass its schema: {e}" for e in schema_check.errors(stage1, s1_schema)[:20]]
+    pins = {path: sha for _, path, sha in code_refs(doc)}
+    problems += provenance_problems("stage 1", stage1, manifest_sha, pins, exact=set(STAGE1_CODE))
+    if "input:roster_sha256" not in (stage1.get("code_sha256") or {}):
+        problems.append("stage 1 does not record its roster's hash (input:roster_sha256)")
+    if not allow_draft and stage1.get("allow_draft") is True:
+        problems.append("the stage-1 file was made under --allow-draft")
+    return problems
+
+
+def cached_bytecode(repo):
+    """Loaded repository modules that may have run from cached bytecode: a .pyc loaded as the module, or a cache file
+    present where Python would read one (Mythos round-4 N4). The entry points run with a fresh, empty
+    pycache prefix, so the list is empty unless something planted a file there."""
+    repo = Path(repo).resolve()
+    out = []
+    for mod in list(sys.modules.values()):
+        f = getattr(mod, "__file__", None)
+        if not f:
+            continue
+        try:
+            rel = Path(f).resolve().relative_to(repo).as_posix()
+        except ValueError:
+            continue
+        cached = getattr(mod, "__cached__", None)
+        if f.endswith((".pyc", ".pyo")) or (cached and os.path.exists(cached)):
+            out.append(rel)
+    return sorted(out)
 
 
 def unpinned_loaded_modules(doc, repo):

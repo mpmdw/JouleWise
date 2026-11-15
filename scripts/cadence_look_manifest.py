@@ -35,6 +35,22 @@ import json
 from pathlib import Path
 import sys
 
+def _fresh_bytecode_cache():
+    """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. A fresh, empty
+    pycache prefix (removed at exit) means no repository module can run from a stale __pycache__ entry beside its
+    pinned source: each compiles from the bytes verify_pins hashes. Called below, before the first repository import, when
+    this file runs as a program; manifest.cached_bytecode() confirms it before custody opens."""
+    import atexit
+    import shutil
+    import tempfile
+    sys.dont_write_bytecode = True
+    prefix = tempfile.mkdtemp(prefix="jw-look-pyc-")
+    sys.pycache_prefix = prefix
+    atexit.register(shutil.rmtree, prefix, True)
+
+
+if __name__ == "__main__":
+    _fresh_bytecode_cache()
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -147,45 +163,29 @@ def _flag(stage1, flag):
     return isinstance(node, dict) and node.get("to_research_lead") is True
 
 
-# What the stage-2 process loads of fit.code: the CLI imports inclusion_34 at module level (for stage 1's
-# soak_retries, RL-172a), so stage 2 loads it too, without calling it.
-STAGE2_CODE = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
-               "joulewise/cadence_looks/inclusion_34.py", "joulewise/cadence_looks/step3_energy_ratios.py")
-STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion_34.py, not by the stages
-# Sol round-3 NEW-3: the exact repository files stage 1 and step 3 load (their import closures, measured on the
-# e2e run), as the fit's set above; each must record exactly these, at the pins.
-_SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", "joulewise/cadence_looks/manifest.py",
-                "joulewise/axi_decode_config.py", "joulewise/idle_admission.py", "joulewise/schemas.py",
-                "joulewise/validation.py")
-STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
-                              "scripts/cadence_look_run.py")
-STEP3_CODE = _SHARED_CODE + ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/step3_energy_ratios.py")
+# The stages' exact code sets live in manifest.py (shared with the energy readers' pre-energy check).
+STAGE2_CODE, STAGE1_CODE, STEP3_CODE = lm.STAGE2_CODE, lm.STAGE1_CODE, lm.STEP3_CODE
+STAGE_ONLY_DEPENDENCIES = lm.STAGE_ONLY_DEPENDENCIES
 
 
 def _schemas(repo):
-    looks = Path(repo) / "docs/process/cadence/looks"
-    return (json.loads((looks / "lm-interim-01.stage1.schema.json").read_text(encoding="utf-8")),
-            json.loads((looks / "lm-interim-01.output.schema.json").read_text(encoding="utf-8")))
+    return lm.look_schemas(repo)
 
 
 def _provenance(name, rec, doc, manifest_sha, pins, *, exact=None):
-    """Sol N2: the hashes a stage recorded are the pins, exactly: each recorded repository file is pinned with
-    that hash; ``exact`` (when given) is the set the stage must have recorded, no more and no less; and the
-    stage names the manifest being assembled. Keys starting 'input:' record inputs, not code."""
-    problems = []
-    if rec.get("manifest_sha256") != manifest_sha:
-        problems.append(f"{name} was made under manifest {str(rec.get('manifest_sha256'))[:12]}, not this one "
-                        f"({manifest_sha[:12]})")
-    code = {k: v for k, v in (rec.get("code_sha256") or {}).items() if not k.startswith("input:")}
-    for path, sha in sorted(code.items()):
-        if pins.get(path) != sha:
-            problems.append(f"{name} ran {path} at {str(sha)[:12]}, which is not the manifest's pin")
-    if exact is not None:
-        for path in sorted(exact - set(code)):
-            problems.append(f"{name} does not record {path}'s hash")
-        for path in sorted(set(code) - exact):
-            problems.append(f"{name} records {path}, which the pinned stage does not run")
-    return problems
+    return lm.provenance_problems(name, rec, manifest_sha, pins, exact=exact)
+
+
+def _gate_problems(named):
+    """Mythos round-4 N6: a record carries a ledger gate exactly when it was not made under --allow-draft."""
+    out = []
+    for name, rec in named:
+        gate, draft = rec.get("ledger_gate"), rec.get("allow_draft") is True
+        if draft and gate is not None:
+            out.append(f"{name} was made under --allow-draft but records a ledger gate")
+        if not draft and not isinstance(gate, dict):
+            out.append(f"{name} was not made under --allow-draft but records no ledger gate")
+    return out
 
 
 def _coefficient_problems(fit):
@@ -227,7 +227,7 @@ def assemble(args):
     manifest_sha = lm.sha256_file(args.manifest)
     stage1 = json.loads(raw)
     fit, step3 = lm.load_json(args.fit), lm.load_json(args.step3)
-    problems = []
+    problems = [f"a repository module may have run from cached bytecode: {m}" for m in lm.cached_bytecode(repo)]
     try:
         doc = lm.verify_pins(args.manifest, repo, allow_draft=args.allow_draft, running=[Path(__file__).resolve()],
                              ledger_ref=args.ledger_ref)
@@ -237,8 +237,8 @@ def assemble(args):
         problems += error.problems
         doc = lm.load_json(args.manifest)
     s1_schema, out_schema = _schemas(repo)
-    for name, inst, schema in (("stage 1", stage1, s1_schema),
-                               ("the fit", fit, sc.sub_schema(out_schema, "fit_output")),
+    problems += lm.stage1_problems(repo, doc, stage1, manifest_sha, allow_draft=args.allow_draft)   # as the readers
+    for name, inst, schema in (("the fit", fit, sc.sub_schema(out_schema, "fit_output")),
                                ("step 3", step3, sc.sub_schema(out_schema, "step3_output"))):
         problems += [f"{name} does not pass its schema: {e}" for e in sc.errors(inst, schema)[:20]]
     problems += [f"{name} names stage-1 sha256 {str(rec.get('stage1_sha256'))[:12]}, not {s1[:12]}"
@@ -247,10 +247,7 @@ def assemble(args):
     stage2_set = (set(STAGE2_CODE) | {d["path"] for d in (doc.get("fit") or {}).get("dependencies") or []}) \
         - STAGE_ONLY_DEPENDENCIES
     problems += _provenance("the fit", fit, doc, manifest_sha, pins, exact=stage2_set)
-    problems += _provenance("stage 1", stage1, doc, manifest_sha, pins, exact=set(STAGE1_CODE))
     problems += _provenance("step 3", step3, doc, manifest_sha, pins, exact=set(STEP3_CODE))
-    if "input:roster_sha256" not in (stage1.get("code_sha256") or {}):
-        problems.append("stage 1 does not record its roster's hash (input:roster_sha256)")
     # Sol round-3 NEW-4: step 3 applied the manifest's drift threshold, whichever the research lead rules
     drift = next((d for d in doc.get("decisions") or [] if d.get("id") == "drift_tripwire"), {})
     applied = (step3.get("tripwire") or {}).get("threshold_applied")
@@ -259,6 +256,7 @@ def assemble(args):
     problems += _coefficient_problems(fit)
     drafted = [name for name, rec in (("stage 1", stage1), ("the fit", fit), ("step 3", step3))
                if rec.get("allow_draft") is True]
+    problems += _gate_problems((("stage 1", stage1), ("the fit", fit), ("step 3", step3)))
     if args.allow_draft:
         if stage1.get("synthetic") is not True:
             problems.append("--allow-draft on a stage-1 file that is not synthetic (Mythos N2)")
@@ -322,6 +320,10 @@ def check_output(path, manifest_path, repo):
     _, out_schema = _schemas(repo)
     problems = [f"output: {e}" for e in sc.errors(out, out_schema)[:20]]
     problems += [f"output: {p}" for p in _coefficient_problems(out.get("fit") or {})]
+    problems += [f"output: {p}" for p in _gate_problems((("the fit", out.get("fit") or {}),
+                                                         ("step 3", out.get("step3") or {})))]
+    if out.get("allow_draft") is not True and not isinstance((out.get("disclosure") or {}).get("ledger_gate"), dict):
+        problems.append("output: assembled without --allow-draft but records no ledger gate")
     if out.get("manifest_sha256") != lm.sha256_file(manifest_path):
         problems.append("output: made under another manifest")
     if out.get("allow_draft") is True and out.get("synthetic") is not True:

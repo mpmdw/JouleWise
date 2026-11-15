@@ -11,6 +11,7 @@ copy's own bytes. Synthetic only.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -26,6 +27,23 @@ MANIFEST = f"{LOOKS_DIR}/lm-interim-01.json"
 STUB = "# stub: the pinned file lives on another branch (PR #795)\n"
 
 
+def to_draft(doc):
+    """The manifest as a draft, whatever the checked-in status (Mythos round-4 N2: after the lead's freeze commit the
+    checked-in manifest is committed; the draft-mode tests and the mini repo work on a draft of it)."""
+    doc = json.loads(json.dumps(doc))
+    doc["status"] = "draft"
+    return doc
+
+
+def _draft_ledger(ledger, doc_sha):
+    for row in ledger["looks"]:
+        if row["look_id"] == "lm-interim-01":
+            for k in lm.LOOK_ROW_HASHES:
+                row.pop(k, None)
+            row.update(status="draft", sha256=doc_sha)
+    return ledger
+
+
 def mini_repo(test):
     root = Path(tempfile.mkdtemp(prefix="lm-mini-"))
     test.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
@@ -38,9 +56,15 @@ def mini_repo(test):
             shutil.copyfile(REPO / rel, dst)
         else:
             dst.write_text(STUB, encoding="utf-8")
+    draft = to_draft(doc)                         # the copy starts as a draft, whatever the checked-in status
+    (root / MANIFEST).write_text(json.dumps(draft, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    ledger = json.loads((root / lm.LOOK_LEDGER_PATH).read_text(encoding="utf-8"))
+    (root / lm.LOOK_LEDGER_PATH).write_text(json.dumps(_draft_ledger(ledger, lm.sha256_file(root / MANIFEST)),
+                                                       indent=2) + "\n", encoding="utf-8")
     run([sys.executable, "-B", str(root / "scripts/cadence_look_manifest.py"), "pin", str(root / MANIFEST),
          "--repo", str(root), "--write"], root, check=True)
     init_git_fixture(root, "-q", "-b", "main")          # the shared helper: no detached auto-maintenance
+    git(root, "remote", "add", "origin", str(root / ".no-such-remote"))   # the shared ref's remote (never fetched)
     git_commit(root, "mini repo")
     return root
 
@@ -91,3 +115,31 @@ def commit(root, *, stage1_sha256=None, roster_sha256=None, verdicts_sha256=None
     (root / lm.LOOK_LEDGER_PATH).write_text(json.dumps(looks, indent=2) + "\n", encoding="utf-8")
     if git_commit_it:
         git_commit(root, "commit the look", publish=publish)
+
+
+def _link_or_copy(src, dst):
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
+FROZEN_COPY_ENV = "JW_LOOK_FROZEN_COPY"
+FROZEN_TREES = ("joulewise", "scripts", "tests", ".github", "docs/process/cadence", "configs/align/v4")
+
+
+def frozen_copy(test):
+    """The repository's look-relevant trees (hard links where the filesystem allows) with the lead's freeze commit
+    applied to the copy's manifest and LOOKS.json (status committed, Q11's note disposed, the row's hash), so the
+    look's tests can be run on the frozen state (Mythos round-4 N2). The two edited files are real copies, so the
+    edit never reaches the checkout."""
+    root = Path(tempfile.mkdtemp(prefix="lm-frozen-"))
+    test.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+    for tree in FROZEN_TREES:
+        shutil.copytree(REPO / tree, root / tree, copy_function=_link_or_copy,
+                        ignore=shutil.ignore_patterns("__pycache__"))
+    for rel in (MANIFEST, lm.LOOK_LEDGER_PATH):
+        (root / rel).unlink()
+        shutil.copy2(REPO / rel, root / rel)
+    commit(root, git_commit_it=False)
+    return root

@@ -491,7 +491,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "efd933997405d502ca22730e2aa08ac8618ab4acbe91c3542f4980e8221391cc"
+        "sha256": "f8eb5986ce40ca5761b73cf904b4e9430e3f421142e5069c1a23181d5df71414"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -499,7 +499,7 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "a729493934866c46483fb845a173ef9305836e08cfbdc3d9a486e25da117eca7"
+        "sha256": "f6d975cb27ff553b6bd687666afacea6615d377e449ac5354e58b327bc00facc"
       },
       {
         "path": "scripts/cadence_look_run.py",
@@ -507,7 +507,7 @@
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "8035e31ee464d769ec7c3cbbb7875fb333c5e99fe5a0a581e13b03ed4eec0c8e"
+        "sha256": "312d95bdd4cc60dfa6e3ea1ab814977939165ef8a4832992d7c467737b2926be"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -641,7 +641,7 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "a729493934866c46483fb845a173ef9305836e08cfbdc3d9a486e25da117eca7"
+        "sha256": "f6d975cb27ff553b6bd687666afacea6615d377e449ac5354e58b327bc00facc"
       },
       "statistic": "iii",
       "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
@@ -797,7 +797,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "8b2f32f96a9141847f0c870281e555e21ddd00edc94591414c3ea4d215473755"
+        "sha256": "c07d52d7022ac1c897c89e1da0d6219fb8ad8057311889c487573f1a71c3403d"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -868,7 +868,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "efd933997405d502ca22730e2aa08ac8618ab4acbe91c3542f4980e8221391cc"
+          "sha256": "f8eb5986ce40ca5761b73cf904b4e9430e3f421142e5069c1a23181d5df71414"
         },
         "cite": [
           "RL-149 §2.4",
@@ -884,7 +884,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "efd933997405d502ca22730e2aa08ac8618ab4acbe91c3542f4980e8221391cc"
+          "sha256": "f8eb5986ce40ca5761b73cf904b4e9430e3f421142e5069c1a23181d5df71414"
         },
         "cite": [
           "RL-149 §2.4",
@@ -1425,7 +1425,7 @@
       "RL-166 Q8",
       "RL-166 §2"
     ],
-    "pin_check": "Every entry point (cadence_look_run.py stage 1 and stage 2, inclusion_34.py, step3_roster.py and assemble) calls joulewise.cadence_looks.manifest.verify_pins before it opens any custody file: the manifest validates as committed, the committed LOOKS.json (read with git at HEAD, clean, with HEAD on the shared ref) names its sha256 at status committed or later, and every file in fit.code, fit.dependencies and the schema pins hashes to its pin. The shared ref is resolved by one function for every tool (manifest.shared_ref, --ledger-ref): a remote-tracking branch only, by default the branch's upstream, else origin/main, never HEAD, a local branch, a tag, a commit or a revision expression. From a detached HEAD on a campaign branch not yet on main, the lead names that branch's remote-tracking ref (the PR's base branch). Every git call the gate makes drops the caller's GIT_* environment. Before stage 1, the lead commits in the look's LOOKS.json row the sha256 of the roster (validate --roster-out) and of inclusion_34.py's verdict file; stage 1 refuses inputs that are not those (require_inputs_committed). Stage 2, step3_roster.py and assemble also refuse unless that committed LOOKS.json names the stage-1 file's sha256 and the roster and verdict hashes it records (require_stage1_committed). Before writing, each entry point refuses if any repository module it loaded is unpinned (unpinned_loaded_modules), and records manifest_sha256, the code hashes of every loaded repository file, allow_draft and what satisfied the ledger gate in its output; assemble requires each stage's recorded code to be exactly that stage's pinned set, the step-3 applied threshold to be the manifest's, each coefficient map to carry its channel's columns only, and every input and its own output to pass the pinned, closed schemas (schema_check.py; every map's keys are constrained, so no per-leg or per-block energy can nest anywhere). --allow-draft is for synthetic runs only: with it, stage 1, inclusion_34.py, stage 2 and step3_roster.py refuse unless every span's runner_receipt.json they open says synthetic, and assemble unless the stage-1 file says synthetic; without it, every step refuses an input made under --allow-draft."
+    "pin_check": "Every entry point (cadence_look_run.py stage 1 and stage 2, inclusion_34.py, step3_roster.py and assemble) calls joulewise.cadence_looks.manifest.verify_pins before it opens any custody file: the manifest validates as committed, the committed LOOKS.json (read with git at HEAD, clean, with HEAD on the shared ref) names its sha256 at status committed or later, and every file in fit.code, fit.dependencies and the schema pins hashes to its pin. The shared ref is resolved by one function for every tool (manifest.shared_ref, --ledger-ref): a remote-tracking branch only, by default the branch's upstream, else origin/main, never HEAD, a local branch, a tag, a commit or a revision expression. From a detached HEAD on a campaign branch not yet on main, the lead names that branch's remote-tracking ref (the PR's base branch). Every git call the gate makes drops the caller's GIT_* environment. Before stage 1, the lead commits in the look's LOOKS.json row the sha256 of the roster (validate --roster-out) and of inclusion_34.py's verdict file; stage 1 refuses inputs that are not those (require_inputs_committed). Stage 2, step3_roster.py and assemble also refuse unless that committed LOOKS.json names the stage-1 file's sha256 and the roster and verdict hashes it records (require_stage1_committed). Stage 1 is fixed once: the gates read LOOKS.json's history, and refuse a stage 1 run again after a stage-1 hash was committed, or a row that ever names a different stage-1 hash, roster or verdict file for the look (manifest.stage1_history). Every entry point runs with a fresh, empty pycache prefix and refuses if a loaded repository module may have run from cached bytecode; step 3's byte-pinned file runs from the bytes it hashed. Before writing, each entry point refuses if any repository module it loaded is unpinned (unpinned_loaded_modules), and records manifest_sha256, the code hashes of every loaded repository file, allow_draft and what satisfied the ledger gate in its output; assemble requires each stage's recorded code to be exactly that stage's pinned set, the step-3 applied threshold to be the manifest's, each coefficient map to carry its channel's columns only, and every input and its own output to pass the pinned, closed schemas (schema_check.py; every map's keys are constrained, so no per-leg or per-block energy can nest anywhere). --allow-draft is for synthetic runs only: with it, stage 1, inclusion_34.py, stage 2 and step3_roster.py refuse unless every span's runner_receipt.json they open says synthetic, and assemble unless the stage-1 file says synthetic; without it, every step refuses an input made under --allow-draft."
   },
   "review": {
     "cold_seat": "Mythos 5.2: the design attack on RL-166 Q1 to Q4 (Sun 10:00), then a fresh Mythos seat's cold review of the manifest, rules 3 and 4, the step 3 adapter and the fit code against RL-149 §2.6 and §2.7 as amended, with Q6's and Q11's checks (Mon 14:00). Neither wrote any of the code.",
