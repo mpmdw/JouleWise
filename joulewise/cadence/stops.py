@@ -10,7 +10,7 @@ is recorded by its predeclared disposition and does not page anyone.
 | INSTRUMENT_FAULT | ``fault`` true, the KM003C capture missing, a feed not proven stopped, meter bad polls or USB errors above zero |
 | CONTAMINATED_REDOS | contaminated redos (scope span or campaign) reach ``contaminated_redos_max`` |
 | LEG_OVERTIME | two legs of the span exceed ``leg_time_factor`` x their budget (a leg with no wall or budget recorded counts) |
-| RESTORE_UNPROVEN | the span's result says its close did not prove AC powermode 0 and no host High Power marker (``restore_proven`` false; a High Power span, RL-149 sections 2.4 and 2.5). An Automatic span's result carries no such key and never fires it |
+| RESTORE_UNPROVEN | a High Power span (``block_mode`` 2, the kit's ``power_mode``) whose result does not say ``restore_proven: true``: false, absent, or no result at all (SIGKILL, power loss, a lost receipt). For any span, an explicit ``restore_proven: false``. RL-149 sections 2.4 and 2.5; it holds everything |
 
 RL-149 section 2.4 (it governs this table): LEG_OVERTIME needs two legs in a span, and
 BAND_UNREACHABLE is dropped ("bands are by history; nothing is reached for"). The kit's
@@ -22,6 +22,7 @@ Span summary shape (all operational): ``{"result": {chain_exit_code, chain_outco
 """
 from __future__ import annotations
 
+from joulewise.cadence import kit as kitmod
 from joulewise.cadence.queue import result_ok
 
 CODES = ("REFUSAL", "INSTRUMENT_FAULT", "CONTAMINATED_REDOS", "LEG_OVERTIME", "RESTORE_UNPROVEN")
@@ -32,8 +33,10 @@ def _num(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
-def evaluate_named_stops(rules, span, history=()):
-    """Return [{code, detail}] for one span. ``history`` holds earlier span summaries of the campaign."""
+def evaluate_named_stops(rules, span, history=(), block_mode=kitmod.AUTOMATIC):
+    """Return [{code, detail}] for one span. ``history`` holds earlier span summaries of the campaign.
+    ``block_mode`` is the kit's power mode: for a High Power block only ``restore_proven: true`` proves the
+    close (cold seat F1: an absent proof is a stop)."""
     stops = []
     result = span.get("result")
     if result is None:
@@ -42,10 +45,12 @@ def evaluate_named_stops(rules, span, history=()):
         stops.append({"code": "REFUSAL", "detail": (
             f"chain_exit_code={result.get('chain_exit_code')} chain_outcome={result.get('chain_outcome')} "
             f"outcome={result.get('outcome')}")})
-    if result is not None and result.get("restore_proven") is False:
+    proven = None if result is None else result.get("restore_proven")
+    if proven is False or (block_mode == kitmod.HIGH_POWER and proven is not True):
+        why = ("the close did not prove AC powermode 0 and no High Power marker" if proven is False else
+               "a High Power span left no proof of its restore (no result, or no restore_proven)")
         stops.append({"code": "RESTORE_UNPROVEN",
-                      "detail": "the close did not prove AC powermode 0 and no High Power marker; nothing arms "
-                                "until the lead restores and records it"})
+                      "detail": f"{why}; it holds everything until the lead restores and records it"})
     meter = span.get("meter") or {}
     faults = []
     if result is not None and result.get("fault") is True:

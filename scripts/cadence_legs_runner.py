@@ -7,6 +7,7 @@
     python3.13 -B scripts/cadence_legs_runner.py mock --kit KIT.json --output DIR [--legs ...] \\
         [--t0-local 2026-11-15T13:20] [--contaminate L002] [--g0-timeout L005] [--fail-close-restore]
     python3.13 -B scripts/cadence_legs_runner.py pin-kit KIT.json --commit SHA [--write]
+    python3.13 -B scripts/cadence_legs_runner.py restore-owed
 
 ``run`` is launched ONLY by ``launch_cadence_span.py launch`` (the R0/R1 desk launcher's procedure:
 LaunchAgent, the desk fence, Spotlight paused). One span, agent-free:
@@ -92,6 +93,16 @@ PLAN_NAME = "span_plan.json"
 DESK_BUNDLE = "desk-bundle"
 SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 POLL_S = 0.25
+# The High Power close (cold seat F4): a restore that fails without a deferral is retried, bounded so the
+# close stays inside the launcher's 180 s cleanup grace (each attempt: one sudo pmset and one read, 15 s caps).
+CLOSE_RESTORE_ATTEMPTS = 3
+CLOSE_RESTORE_RETRY_S = 2.0
+# Cold seat F2: what the marker and the arm checklist tell a human after a SIGKILL or power loss.
+RESTORE_OWED_COMMAND = "python3.13 -B scripts/cadence_legs_runner.py restore-owed"
+RESTORE_OWED_SAFE_WHEN = ("no cadence span is running: its LaunchAgent job has exited and the desk fence is gone "
+                          "or stale. A leg child left behind may still run; restoring under it is ruled safe "
+                          "(RL-157 section 2). Never while a W1 or R1 night is measuring: the command defers if "
+                          "anything holds the host night lock, and it refuses a W1 session's marker")
 # The parent launcher's reserves (run_align_r1_smoke.WORK_RESERVE_S; launch_align_r0's cleanup grace).
 WORK_RESERVE_S = 2 * 180 + 10
 LAUNCH_RESERVE_S = WORK_RESERVE_S + 180 + 10
@@ -311,9 +322,13 @@ def power_guard_class():
             return super().restore()
 
         def high(self):
-            """Marker first, then powermode 2, then the read-back (the R1 guard's order, this span's owner)."""
+            """Marker first, then powermode 2, then the read-back (the R1 guard's order, this span's owner).
+            The mode must still read 0 just before (cold seat F6: nothing changed it during the soak)."""
             self.touched = True
             self.query("before_high")
+            before = powermode.parse_ac_powermode(self.records[-1].get("stdout"))
+            if before != kitmod.AUTOMATIC:
+                raise SpanRefusal(f"powermode.not_automatic_before_high: AC powermode reads {before!r} after the soak")
             powermode.write_host_marker(self.host_marker, tag=powermode.R1_MARKER_TEXT, owner=self.owner)
             self._must(self.HIGH, "high_failed")
             self.query("after_high")
@@ -324,7 +339,19 @@ def power_guard_class():
             return observed
 
         def observe(self):
-            return observe_power(self.runner, self.host_marker)
+            seen = observe_power(self.runner, self.host_marker)
+            seen["marker_is_this_spans"] = self.owns_marker()
+            return seen
+
+        def owns_marker(self):
+            """The host marker is this span's: the R1 crash tag and this span's owner record (cold seat F6)."""
+            try:
+                with open(self.host_marker, encoding="utf-8") as handle:
+                    tag = handle.readline().rstrip("\n")
+            except (OSError, UnicodeError):
+                return False
+            owner = powermode.marker_owner(self.host_marker)
+            return tag == powermode.R1_MARKER_TEXT and all(owner.get(k) == v for k, v in self.owner.items())
 
     _GUARD_CLASS = CadencePowerModeGuard
     return _GUARD_CLASS
@@ -411,7 +438,8 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
               "batch_windows": [legsmod.format_window(w) for w in windows], "steps": [], "legs": [],
               "feeds": {}, "rc": 0}
     state = {"power_read": False, "plan": None, "summaries": [], "finished": 0, "fault": False, "redos": 0,
-             "mode": kitmod.power_mode(kit), "lock": None, "guard": None, "restore_proven": False}
+             "mode": kitmod.power_mode(kit), "lock": None, "guard": None, "restore_proven": False,
+             "hp_set": False, "checked_finished": 0}
     high_power = state["mode"] == kitmod.HIGH_POWER
     if high_power:
         record["high_power"] = {"block_power_mode": state["mode"], "host_marker": str(deps.host.host_marker_path())}
@@ -531,18 +559,23 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
     def enter_guard():
         guard = power_guard_class()(deps.host.power_runner(), deps.host.host_marker_path(), lock=state["lock"],
                                     owner={"writer": "cadence span", "campaign_id": kit["campaign_id"],
-                                           "kit_sha256": kit_sha256, "output": str(output)})
+                                           "kit_sha256": kit_sha256, "output": str(output),
+                                           "restore_with": RESTORE_OWED_COMMAND, "safe_when": RESTORE_OWED_SAFE_WHEN})
         state["guard"] = guard
         guard.__enter__()     # the sudo rule's two commands listed; Automatic restored and read back
         return {"rc": 0, "sudo_rule": "listed", "automatic_proved": True}
 
     def set_high():
-        return {"rc": 0, "ac_powermode": state["guard"].high()}
+        value = state["guard"].high()
+        state["hp_set"], state["checked_finished"] = True, state["finished"]
+        return {"rc": 0, "ac_powermode": value}
 
     def hold_check():
         seen = state["guard"].observe()
-        if seen["ac_powermode"] != kitmod.HIGH_POWER or not seen["host_marker_present"]:
+        if not _held(seen):
+            _revoke_since_last_check(record, state, output, f"High Power not held at the check after the leg: {seen}")
             raise SpanRefusal(f"High Power not held before the leg: {seen}")
+        state["checked_finished"] = state["finished"]
         return {"rc": 0, **seen}
 
     handlers = {s: signal.signal(s, interrupted) for s in SIGNALS}
@@ -602,14 +635,48 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
         record.update(rc=exc.code if isinstance(exc, (SpanRefusal, SystemExit)) and isinstance(exc.code, int) else 2,
                       error=f"{type(exc).__name__}: {exc}")
     finally:
-        for s in SIGNALS:
-            signal.signal(s, signal.SIG_IGN)
         try:
-            _close(record, state, deps, output, step, kit)
+            _ignore_signals(record)
         finally:
-            for s, handler in handlers.items():
-                signal.signal(s, handler)
+            try:
+                _close(record, state, deps, output, step, kit)
+            finally:
+                for s, handler in handlers.items():
+                    signal.signal(s, handler)
     return record["rc"]
+
+
+def _ignore_signals(record):
+    """Ignore SIGTERM, SIGINT and SIGHUP for the close. A signal handled while the loop runs (its handler
+    raises) is recorded and the loop runs again, so a second signal can never skip the close (cold seat F5);
+    each pass leaves one more signal ignored, so it ends."""
+    for _ in range(len(SIGNALS) + 1):
+        try:
+            for s in SIGNALS:
+                signal.signal(s, signal.SIG_IGN)
+            return
+        except BaseException as exc:  # noqa: BLE001 - the close must still run
+            record.setdefault("late_signals", []).append(f"{type(exc).__name__}: {exc}")
+            code = exc.code if isinstance(exc, SystemExit) and isinstance(exc.code, int) else 2
+            record["rc"] = record["rc"] or code
+
+
+def _held(seen):
+    """High Power is held: AC powermode 2 and this span's own marker."""
+    return (seen.get("ac_powermode") == kitmod.HIGH_POWER and seen.get("host_marker_present") is True
+            and seen.get("marker_is_this_spans") is True)
+
+
+def _revoke_since_last_check(record, state, output, reason):
+    """Cold seat F3 (rule 6): a leg finished since the last observation that held High Power ran with the mode
+    possibly changed under it. Its admission is withdrawn in its leg summary (the desk's file) and recorded."""
+    for summary in state["summaries"][state["checked_finished"]:]:
+        if summary.get("admitted"):
+            summary["admitted"] = False
+            path = Path(output) / "legs" / summary["leg_id"] / "leg_summary.json"
+            path.write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
+        record["high_power"].setdefault("revoked", []).append({"leg_id": summary["leg_id"], "reason": reason})
+    state["checked_finished"] = state["finished"]
 
 
 # Leg-record fields copied from the runtime result (operational; never energy).
@@ -619,20 +686,42 @@ _RESULT_KEEP = ("leg_id", "leg_status", "bundle", "member_status", "g0_outcome",
                 "turn_start_ns", "turn_end_ns", "first_token_ns", "quiet_spans_ns", "config_sha256")
 
 
-def _high_power_close(record, state, deps):
+def _high_power_close(record, state, deps, output):
     """The High Power close: (name, operation) pairs that run before the feeds stop, on every exit path."""
     hp = record["high_power"]
+
+    def last_look():
+        # Cold seat F3: the last leg has no later check, so the mode is read once more before the restore.
+        if not state["hp_set"]:
+            return {"rc": 0, "skipped": "High Power was never set"}
+        seen = state["guard"].observe()
+        hp["before_restore"] = seen
+        if not _held(seen):
+            _revoke_since_last_check(record, state, output, f"High Power not held at the close: {seen}")
+        return {"rc": 0, **seen}
 
     def restore():
         guard = state["guard"]
         if guard is None or not guard.touched:
             hp["restore"] = {"action": "none", "reason": "no mode command was issued by this span"}
             return {"rc": 0, **hp["restore"]}
+        attempts = []
         try:
-            ok = guard.restore()
+            for attempt in range(CLOSE_RESTORE_ATTEMPTS):
+                if attempt:
+                    deps.clock.sleep(CLOSE_RESTORE_RETRY_S)
+                try:
+                    ok = guard.restore()
+                except Exception as exc:  # noqa: BLE001 - a raised attempt is a failed attempt (F4)
+                    ok = False
+                    guard.records.append({"point": "restore_raised", "error": f"{type(exc).__name__}: {exc}"})
+                attempts.append(ok)
+                if ok or guard.deferred:
+                    break
         finally:
             hp["guard"] = guard.records
-        hp["restore"] = {"action": "restore_automatic", "ok": ok, "deferred": guard.deferred}
+        ok = bool(attempts and attempts[-1])
+        hp["restore"] = {"action": "restore_automatic", "ok": ok, "deferred": guard.deferred, "attempts": len(attempts)}
         return {"rc": 0 if ok else 2, **hp["restore"]}
 
     def proof():
@@ -648,12 +737,13 @@ def _high_power_close(record, state, deps):
             lock.release()
         return {"rc": 0, "released": lock is not None}
 
-    return [("restore", restore), ("power_proof", proof), ("host_lock_release", release)]
+    return [("power_last_look", last_look), ("restore", restore), ("power_proof", proof),
+            ("host_lock_release", release)]
 
 
 def _close(record, state, deps, output, step, kit):
     high_power = state["mode"] == kitmod.HIGH_POWER
-    power = (_high_power_close(record, state, deps) if high_power
+    power = (_high_power_close(record, state, deps, output) if high_power
              else [("restore", lambda: deps.host.restore_power(state["power_read"]))])
     cleanup = [*power, *(("stop-" + f.name, f.stop) for f in reversed(deps.feeds))]
     for name, operation in cleanup:
@@ -746,7 +836,8 @@ class FakeHost:
 
     ``power_faults`` makes the fake misbehave: ``sudo_rule_missing``; ``high_fails`` (``powermode 2`` exits
     1); ``high_ignored`` (exits 0, the mode stays 0); ``close_restore_fails`` (``powermode 0`` exits 1 once
-    the mode is 2); ``close_restore_ignored`` (exits 0 once the mode is 2, the mode stays 2)."""
+    the mode is 2); ``close_restore_fails_once`` (the first such restore exits 1, later ones work);
+    ``close_restore_ignored`` (exits 0 once the mode is 2, the mode stays 2)."""
 
     SUDO_LIST = ("User may run the following commands on this host:\n"
                  "    (root) NOPASSWD: /usr/bin/pmset -c powermode 0, /usr/bin/pmset -c powermode 2, /bin/kill\n")
@@ -817,6 +908,9 @@ class FakeHost:
         if argv == r1.PowerModeGuard.AUTO:
             if self.mode == 2 and "close_restore_fails" in self.power_faults:
                 return done(1, err="sudo: a password is required")
+            if self.mode == 2 and "close_restore_fails_once" in self.power_faults:
+                self.power_faults.discard("close_restore_fails_once")
+                return done(1, err="sudo: unable to resolve host (transient)")
             if not (self.mode == 2 and "close_restore_ignored" in self.power_faults):
                 self.mode = 0
             return done(0)
@@ -941,7 +1035,7 @@ def run_mock(*, kit, kit_sha256, output, t0_epoch, windows, leg_ids=None, contam
                   deps=deps, leg_ids=leg_ids)
     summary, stops = desk.build_desk(plan_id=f"mock-{kit['campaign_id']}", input_dir=output / DESK_BUNDLE,
                                      out_dir=output / "desk", adapter=kit["desk"]["adapter"],
-                                     stop_rules=kit["stop_rules"], now=clock.time())
+                                     stop_rules=kit["stop_rules"], now=clock.time(), block_mode=kitmod.power_mode(kit))
     return rc, summary, stops, deps
 
 
@@ -968,6 +1062,23 @@ def _load(path):
 def soak_child(output, inputs):
     from scripts import run_align_r1_smoke as smoke
     return smoke.soak_child(output, inputs)
+
+
+def restore_owed(runner=None):
+    """Cold seat F2: a human's restore of an owed High Power marker after a span died without its close.
+
+    ``powermode.restore_owed`` takes the host night lock without waiting (a measuring night defers it), runs
+    the narrow rule's ``pmset -c powermode 0``, reads it back and removes the marker only on 0. A W1 session's
+    marker is refused: it is that session's own obligation. Returns (record, proven)."""
+    from joulewise.align.apple import powermode
+    marker = powermode.host_marker_path()
+    if os.path.lexists(marker) and powermode.w1_marker(marker):
+        return {"action": "refused", "reason": "a W1 session's marker; not a campaign span's restore"}, False
+    record = powermode.restore_owed([marker], runner=runner, reason="cadence_restore_owed")
+    seen = observe_power(runner or powermode._run, marker)
+    proven = seen["ac_powermode"] == kitmod.AUTOMATIC and not seen["host_marker_present"]
+    record["after"] = {**seen, "proven": proven}
+    return record, proven
 
 
 def pin_kit(path, commit, write=False):
@@ -1015,6 +1126,7 @@ def main(argv=None):
     p = sub.add_parser("soak-child")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--inputs", type=Path, default=ROOT / "configs/campaigns/align_v4/registration/inputs.json")
+    sub.add_parser("restore-owed", help="restore an owed High Power marker (" + RESTORE_OWED_SAFE_WHEN + ")")
     p = sub.add_parser("pin-kit")
     p.add_argument("kit", type=Path)
     p.add_argument("--commit", required=True)
@@ -1024,6 +1136,10 @@ def main(argv=None):
     if args.command == "soak-child":
         soak_child(args.output.resolve(), args.inputs)
         return 0
+    if args.command == "restore-owed":
+        record, proven = restore_owed()
+        print(json.dumps(record, indent=1, sort_keys=True, default=str))
+        return 0 if proven else 1
     if args.command == "pin-kit":
         _, text = pin_kit(args.kit, args.commit, write=args.write)
         if not args.write:

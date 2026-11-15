@@ -218,8 +218,8 @@ class HighPowerSpanTests(HostStateSandbox):
             self.assertEqual(names[names.index(f"L{i:03d}.a1") - 1], f"L{i:03d}.a1-powermode")
         # The close: guard restore, proof, lock release, then the feeds.
         last = names.index("L012.a1")
-        self.assertEqual(names[last + 1:last + 7], ["restore", "power_proof", "host_lock_release", "stop-volumes",
-                                                    "stop-meter", "stop-agents"])
+        self.assertEqual(names[last + 1:last + 8], ["power_last_look", "restore", "power_proof", "host_lock_release",
+                                                    "stop-volumes", "stop-meter", "stop-agents"])
         # The soak ran in Automatic and every leg recorded High Power; every leg is admitted under rule 6.
         self.assertEqual(deps.fake.soak_modes, [0])
         self.assertTrue(all(leg["admitted"] for leg in summary["legs"]))
@@ -232,11 +232,13 @@ class HighPowerSpanTests(HostStateSandbox):
         self.assertTrue(deps.host.power_calls[high]["marker_present"], "the marker predates powermode 2")
         self.assertEqual(deps.host.power_calls[high]["mode"], 0)
         self.assertEqual(cmds.count(HIGH), 1)
-        self.assertEqual(cmds[-3:], [AUTO, QUERY, QUERY])   # the restore, its read-back, the close proof
+        self.assertEqual(cmds[-4:], [QUERY, AUTO, QUERY, QUERY])   # the last look, restore, read-back, proof
+        self.assertEqual(receipt["high_power"]["before_restore"]["marker_is_this_spans"], True)
+        self.assertNotIn("revoked", receipt["high_power"])
         self.assert_proven_automatic(receipt, deps)
         hp = receipt["high_power"]
         self.assertEqual(hp["block_power_mode"], 2)
-        self.assertEqual(hp["restore"], {"action": "restore_automatic", "ok": True, "deferred": False})
+        self.assertEqual(hp["restore"], {"action": "restore_automatic", "ok": True, "deferred": False, "attempts": 1})
         self.assertEqual([r["point"] for r in hp["guard"]][-2:], ["restore_automatic", "after_restore_automatic"])
 
     def test_the_marker_names_this_span_and_is_an_owed_restore_for_every_later_session(self):
@@ -356,6 +358,12 @@ class HighPowerSpanTests(HostStateSandbox):
         self.assertEqual(rc, 2)
         self.assertIn("High Power not held", receipt["error"])
         self.assertEqual(deps.fake.calls, ["L001", "L002"])
+        # F3: L002 ran with the mode changed under it, so it is not admitted; L001 (checked after it) stands.
+        admitted = {leg["leg_id"]: leg["admitted"] for leg in summary["legs"]}
+        self.assertEqual(admitted, {"L001": True, "L002": False})
+        self.assertFalse(json.loads((out / "legs/L002/leg_summary.json").read_text())["admitted"])
+        self.assertEqual([r["leg_id"] for r in receipt["high_power"]["revoked"]], ["L002"])
+        self.assertIn("at the check after the leg", receipt["high_power"]["revoked"][0]["reason"])
         self.assert_proven_automatic(receipt, deps)
 
     def test_a_missing_marker_mid_span_stops_before_the_next_leg(self):
@@ -367,9 +375,10 @@ class HighPowerSpanTests(HostStateSandbox):
                 deps.host.host_marker_path().unlink()
                 return value
             deps.run_leg = leg
-        out, rc, receipt, deps, *_ = self.span(mutate=mutate)
+        out, rc, receipt, deps, summary, stops = self.span(mutate=mutate)
         self.assertEqual(rc, 2)
         self.assertEqual(deps.fake.calls, ["L001"])
+        self.assertEqual([(leg["leg_id"], leg["admitted"]) for leg in summary["legs"]], [("L001", False)])
         self.assert_proven_automatic(receipt, deps)
 
     def test_a_held_host_lock_refuses_and_issues_no_mode_command(self):
@@ -432,7 +441,11 @@ class HighPowerSpanTests(HostStateSandbox):
             deps.run_leg = leg
         out, rc, receipt, deps, summary, stops = self.span(leg_ids=["L001"], mutate=mutate)
         self.assertEqual(rc, 2)
-        self.assertEqual(receipt["high_power"]["restore"], {"action": "restore_automatic", "ok": False, "deferred": True})
+        self.assertEqual(receipt["high_power"]["restore"],
+                         {"action": "restore_automatic", "ok": False, "deferred": True, "attempts": 1})
+        # The marker after L001 is not this span's, so L001 loses its admission at the close's last look.
+        self.assertEqual([r["leg_id"] for r in receipt["high_power"]["revoked"]], ["L001"])
+        self.assertFalse(summary["legs"][0]["admitted"])
         self.assertEqual(receipt["high_power"]["guard"][-1]["point"], "restore_deferred")
         self.assertEqual(self.commands(deps).count(AUTO), 1)         # only the entry's proof; never the W1 mode
         self.assertTrue(powermode.w1_marker(deps.host.host_marker_path()))
@@ -459,6 +472,163 @@ class HighPowerSpanTests(HostStateSandbox):
         out, rc, receipt, deps, *_ = self.span(leg_ids=["L001"], mutate=mutate)
         self.assertEqual(rc, 2)
         self.assert_proven_automatic(receipt, deps)
+
+    # --- cold seat fixes F1 to F6 -------------------------------------------------------------------
+    def test_f3_a_mode_change_after_the_last_leg_revokes_it_at_the_close(self):
+        def mutate(deps, out):
+            real = deps.run_leg
+
+            def leg(attempt_dir, *a):
+                value = real(attempt_dir, *a)
+                if Path(attempt_dir).parent.name == "L003":
+                    deps.host.mode = 0
+                return value
+            deps.run_leg = leg
+        out, rc, receipt, deps, summary, stops = self.span(leg_ids=["L001", "L002", "L003"], mutate=mutate)
+        self.assertEqual(rc, 0, receipt.get("error"))
+        self.assertEqual([(leg["leg_id"], leg["admitted"]) for leg in summary["legs"]],
+                         [("L001", True), ("L002", True), ("L003", False)])
+        self.assertEqual(receipt["high_power"]["before_restore"]["ac_powermode"], 0)
+        self.assertEqual([r["leg_id"] for r in receipt["high_power"]["revoked"]], ["L003"])
+        self.assert_proven_automatic(receipt, deps)
+
+    def test_f4_a_transient_close_restore_failure_is_retried(self):
+        out, rc, receipt, deps, summary, stops = self.span(faults=("close_restore_fails_once",), leg_ids=["L001"])
+        self.assertEqual(rc, 0, receipt.get("error"))
+        self.assertEqual(receipt["high_power"]["restore"],
+                         {"action": "restore_automatic", "ok": True, "deferred": False, "attempts": 2})
+        self.assertEqual(stops, [])
+        self.assert_proven_automatic(receipt, deps)
+
+    def test_f4_the_retry_is_bounded(self):
+        out, rc, receipt, deps, summary, stops = self.span(faults=("close_restore_fails",), leg_ids=["L001"])
+        self.assertEqual(receipt["high_power"]["restore"]["attempts"], 3)
+        cmds = self.commands(deps)
+        self.assertEqual(cmds[cmds.index(HIGH):].count(AUTO), 3)
+        self.assertIn("RESTORE_UNPROVEN", [s["code"] for s in stops])
+
+    def test_f4_a_restore_that_raises_is_retried(self):
+        def mutate(deps, out):
+            real, raised = deps.host.pmset, []
+
+            def pmset(argv):
+                if list(argv) == AUTO and deps.host.mode == 2 and not raised:
+                    raised.append(True)
+                    raise subprocess.TimeoutExpired(argv, 15)
+                return real(argv)
+            deps.host.pmset = pmset
+        out, rc, receipt, deps, *_ = self.span(leg_ids=["L001"], mutate=mutate)
+        self.assertEqual(rc, 0, receipt.get("error"))
+        self.assertEqual(receipt["high_power"]["restore"]["attempts"], 2)
+        self.assertIn("restore_raised", [r["point"] for r in receipt["high_power"]["guard"]])
+        self.assert_proven_automatic(receipt, deps)
+
+    def test_f5_a_second_signal_while_the_close_starts_cannot_skip_it(self):
+        real_signal, fired, at_close = signal.signal, [], []
+
+        def signal_once(signum, handler):
+            if signum == signal.SIGINT and handler == signal.SIG_IGN and not fired:
+                fired.append(True)
+                signal.getsignal(signal.SIGINT)(signal.SIGINT, None)   # a second signal arriving now
+            return real_signal(signum, handler)
+
+        def mutate(deps, out):
+            real = deps.run_leg
+
+            def leg(attempt_dir, *a):
+                if Path(attempt_dir).parent.name == "L002":
+                    signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+                return real(attempt_dir, *a)
+            deps.run_leg = leg
+            real_pmset = deps.host.pmset
+
+            def pmset(argv):
+                if list(argv) == AUTO and deps.host.mode == 2:      # the close's restore
+                    at_close.append({s: signal.getsignal(s) for s in runner.SIGNALS})
+                return real_pmset(argv)
+            deps.host.pmset = pmset
+            patcher = patch.object(runner.signal, "signal", signal_once)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        out, rc, receipt, deps, summary, stops = self.span(mutate=mutate)
+        self.assertEqual(fired, [True])
+        self.assertEqual(rc, 128 + signal.SIGTERM)
+        self.assertEqual(receipt["late_signals"], [f"SystemExit: {128 + signal.SIGINT}"])
+        self.assertEqual(at_close, [{s: signal.SIG_IGN for s in runner.SIGNALS}])   # every signal ignored
+        self.assert_proven_automatic(receipt, deps)
+
+    def test_f6_a_mode_change_during_the_soak_refuses_before_the_marker(self):
+        def mutate(deps, out):
+            real = deps.run_soak
+
+            def soak(*a):
+                value = real(*a)
+                deps.host.mode = 2
+                return value
+            deps.run_soak = soak
+        out, rc, receipt, deps, *_ = self.span(mutate=mutate)
+        self.assertEqual(rc, 2)
+        self.assertIn("not_automatic_before_high", receipt["error"])
+        self.assertNotIn(HIGH, self.commands(deps))
+        self.assertEqual(deps.fake.calls, [])
+        self.assert_proven_automatic(receipt, deps)
+
+    def test_f6_a_marker_that_is_not_this_spans_stops_the_span(self):
+        def mutate(deps, out):
+            real = deps.run_leg
+
+            def leg(attempt_dir, *a):
+                value = real(attempt_dir, *a)
+                powermode.write_host_marker(deps.host.host_marker_path(), tag=powermode.R1_MARKER_TEXT,
+                                            owner={"writer": "R1 driver"})
+                return value
+            deps.run_leg = leg
+        out, rc, receipt, deps, summary, stops = self.span(mutate=mutate)
+        self.assertEqual(rc, 2)
+        self.assertIn("'marker_is_this_spans': False", receipt["error"])
+        self.assertEqual(deps.fake.calls, ["L001"])
+        self.assertEqual([(leg["leg_id"], leg["admitted"]) for leg in summary["legs"]], [("L001", False)])
+
+    def test_f1_an_absent_proof_on_a_high_power_span_is_a_stop(self):
+        out, rc, receipt, deps, summary, stops = self.span(leg_ids=["L001"])
+        self.assertEqual(stops, [])
+        (out / runner.DESK_BUNDLE / "span/result.json").unlink()        # a receipt lost with the result
+        for mode, expect in ((2, ["REFUSAL", "RESTORE_UNPROVEN"]), (0, ["REFUSAL"])):
+            _, fired = desk.build_desk(plan_id="t", input_dir=out / runner.DESK_BUNDLE, out_dir=out / f"desk{mode}",
+                                       adapter="leg-summary-v1", stop_rules=hp_kit()["stop_rules"], block_mode=mode)
+            self.assertEqual(sorted(s["code"] for s in fired), expect)
+
+    def test_f1_the_air_desk_reads_the_blocks_mode_from_the_kit(self):
+        from scripts.air import cadence_desk
+        out, rc, receipt, deps, summary, stops = self.span(leg_ids=["L001"])
+        (out / runner.DESK_BUNDLE / "span/result.json").unlink()
+        kit_path = self.root / "hp-kit.json"
+        kit_path.write_text(json.dumps(hp_kit(), indent=1))
+        with patch("sys.stdout", io.StringIO()) as stdout:
+            code = cadence_desk.main(["build", "--plan-id", "t", "--input", str(out / runner.DESK_BUNDLE),
+                                      "--out", str(self.root / "air-desk"), "--kit", str(kit_path),
+                                      "--lock", str(self.root / "AIR-QUIET.lock")])
+        self.assertEqual(code, 3)
+        self.assertIn("STOP RESTORE_UNPROVEN", stdout.getvalue())
+
+    def test_f2_the_marker_names_the_restore_and_when_it_is_safe(self):
+        seen = {}
+
+        def mutate(deps, out):
+            real = deps.run_leg
+
+            def leg(attempt_dir, *a):
+                seen["owner"] = powermode.marker_owner(deps.host.host_marker_path())
+                return real(attempt_dir, *a)
+            deps.run_leg = leg
+        self.span(leg_ids=["L001"], mutate=mutate)
+        self.assertEqual(seen["owner"]["restore_with"], runner.RESTORE_OWED_COMMAND)
+        self.assertEqual(seen["owner"]["safe_when"], runner.RESTORE_OWED_SAFE_WHEN)
+        line = next(x for x in kitmod.evaluate_checklist(hp_kit(), {"high_power_marker": True}, expected_kit_sha256="")
+                    if x["kind"] == "no_high_power_marker")
+        self.assertFalse(line["ok"])
+        self.assertIn("scripts/cadence_legs_runner.py restore-owed", line["detail"])
+        self.assertIn("LaunchAgent job has exited", line["detail"])
 
     # --- RL-155 section 5.2's extra line: a failing restore at the close, and the stop fires -----
     def test_a_failing_close_restore_keeps_the_marker_and_fires_restore_unproven(self):
@@ -621,13 +791,14 @@ class UnprovenChildStopTests(HostStateSandbox):
         out, rc, receipt, deps, summary, stops, terminated = self.span(hp_kit())
         self.check_refusal(out, rc, receipt, summary, stops, terminated)
         # (c) the close still restores Automatic and proves powermode 0 and no marker
-        self.assertEqual(receipt["high_power"]["restore"], {"action": "restore_automatic", "ok": True, "deferred": False})
+        self.assertEqual(receipt["high_power"]["restore"],
+                         {"action": "restore_automatic", "ok": True, "deferred": False, "attempts": 1})
         proof = receipt["high_power"]["close_proof"]
         self.assertEqual((proof["ac_powermode"], proof["host_marker_present"], proof["proven"]), (0, False, True))
         self.assertIs(receipt["span_result"]["restore_proven"], True)
         self.assertNotIn("RESTORE_UNPROVEN", [s["code"] for s in stops])
         self.assertEqual((deps.host.mode, deps.host.host_marker_path().exists()), (0, False))
-        self.assertEqual([c["argv"] for c in deps.host.power_calls][-3:], [AUTO, QUERY, QUERY])
+        self.assertEqual([c["argv"] for c in deps.host.power_calls][-4:], [QUERY, AUTO, QUERY, QUERY])
 
 
     def test_a_fired_deadline_that_cannot_prove_the_group_stopped_refuses_and_still_proves_automatic(self):
@@ -639,6 +810,49 @@ class UnprovenChildStopTests(HostStateSandbox):
         self.assertIn("'fired': True", receipt["error"])
         self.assertIs(receipt["span_result"]["restore_proven"], True)
         self.assertEqual((deps.host.mode, deps.host.host_marker_path().exists()), (0, False))
+
+
+class RestoreOwedTests(HostStateSandbox):
+    """Cold seat F2: ``cadence_legs_runner.py restore-owed``, the human's restore after a span died without its
+    close. The host-state directory is the test seam; the pmset world is the fake host's."""
+
+    def setUp(self):
+        super().setUp()
+        self.host = runner.FakeHost(self.root / "host-state-seam")
+        patcher = patch.object(powermode, "_run", self.host.pmset)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.marker = Path(powermode.host_marker_path())
+        self.assertEqual(self.marker, self.host.host_marker_path())
+
+    def test_a_dead_spans_marker_is_restored_and_proven(self):
+        powermode.write_host_marker(self.marker, tag=powermode.R1_MARKER_TEXT, owner={"writer": "cadence span"})
+        self.host.mode = 2
+        with patch("sys.stdout", io.StringIO()) as stdout:
+            rc = runner.main(["restore-owed"])
+        record = json.loads(stdout.getvalue())
+        self.assertEqual((rc, record["action"], record["after"]["proven"]), (0, "restored", True))
+        self.assertEqual((self.host.mode, self.marker.exists()), (0, False))
+
+    def test_it_defers_while_a_night_holds_the_lock_and_refuses_a_w1_marker(self):
+        powermode.write_host_marker(self.marker, tag=powermode.R1_MARKER_TEXT, owner={"writer": "cadence span"})
+        self.host.mode = 2
+        other = powermode.HostLock(role="a measuring night")
+        self.assertTrue(other.acquire())
+        record, proven = runner.restore_owed()
+        other.release()
+        self.assertEqual((record["action"], proven, self.host.mode), ("deferred_measuring_night", False, 2))
+        powermode.write_host_marker(self.marker, tag=powermode.W1_MARKER_TAG, owner={"custody_root": "/w1"})
+        record, proven = runner.restore_owed()
+        self.assertEqual((record["action"], proven, self.host.mode), ("refused", False, 2))
+        # A deferred restore with the host already at 0 still leaves the marker: not proven.
+        powermode.write_host_marker(self.marker, tag=powermode.R1_MARKER_TEXT, owner={"writer": "cadence span"})
+        self.host.mode = 0
+        self.assertTrue(other.acquire())
+        record, proven = runner.restore_owed()
+        other.release()
+        self.assertEqual((record["action"], record["after"]["ac_powermode"], proven), ("deferred_measuring_night", 0, False))
+        self.assertNotIn(AUTO, [c["argv"] for c in self.host.power_calls])
 
 
 class ProductionSeamTests(HostStateSandbox):

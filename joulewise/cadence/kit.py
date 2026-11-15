@@ -510,7 +510,17 @@ def evaluate_checklist(kit, obs, *, expected_kit_sha256):
         elif kind == "no_night_agent_loaded":
             ok = get("night_labels_loaded") == []
         elif kind == "no_high_power_marker":
-            ok = get("high_power_marker") is False
+            v = get("high_power_marker")
+            ok = v is False
+            if v is True:
+                # Cold seat F2: after a SIGKILL or power loss nothing restores a campaign span's marker by itself.
+                detail = ("a High Power marker is present: an Automatic restore is owed. Read the marker's owner line "
+                          "(/Users/Shared/JouleWise/host-power/high-power.marker). If it is a campaign span's (writer "
+                          "'cadence span'), restore it from the measurement checkout with: python3.13 -B "
+                          "scripts/cadence_legs_runner.py restore-owed (exit 0 only when powermode 0 reads back and "
+                          "the marker is gone). Safe only when no cadence span is running (its LaunchAgent job has "
+                          "exited and the desk fence is gone or stale); it defers if any night holds the host lock "
+                          "and refuses a W1 session's marker. Then observe again; nothing arms before")
         elif kind == "sudo_kill":
             ok = get("sudo_kill_rc") == 0
         elif kind == "km003c_ready":
