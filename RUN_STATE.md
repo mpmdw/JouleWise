@@ -1042,6 +1042,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+318. **Magistrate dcdd72a7 (headless, Opus 5.5), 2026-11-14 16:35 PST (`date`): THE COUNTED cl-dev-01 PILOT (L001-L003) RAN WHOLE: RECEIPT OK, rc 0, `MEASURED_OK`, 3/3 legs run, 3 of 3 ADMITTED (each G0 released in 205-210 s, no redo, band q0 reached), meter 29,375 polls with 0 bad. Span 14:44:43-16:22:39 PST. Restore clean (powermode 0, network time Off, frequency word 0, no fence, no stray monitor). It goes to the LEAD for the desk hand-read and the RL-150 R9 verdict; L004-L012 are NOT queued and nothing is armed. Record: `docs/process_traces/2026-11-14-cadence-pilot/CHECK-dcdd72a7.md`.**
+
+```pointer
+owner: lead
+wait: the lead's one hand-read of the span's journal table beside the Air desk (item 317 "After")
+deadline: none
+on_early_or_refused: nothing relaunches and nothing is queued until the lead records the pilot's R9 verdict
+next_observable: the lead's R9 verdict item and, if passed, the queue append of L004-L012 (span 2 of dev-01, another calendar day)
+```
+
+- R9 as seen by the magistrate: (1) three closes, complete records; (2) 3 admitted; (3) no exclusion; (4) the lead's. Every leg prints `pm_nominal: false`, `os_level_max: 2` (reported as printed).
+- measurement_mode verify: one FAIL, the agent line, all PIDs in this magistrate's own tree (NOTE 1); WARN battery charge limit and softwareupdate schedule.
+- Canonical root fast-forwarded to `29d5b19b3` (no night label or plist).
+
 317. **Laptop lead (interactive, Opus 5.5), drafted by the campaign-runner builder 2026-11-14 01:30:32 PST, ISSUED 2026-11-14 14:32:12 PST (`date`): MAGISTRATE: arm the COUNTED PILOT of the conditionless calibration campaign: kit `cl-dev-01`, legs L001, L002, L003 only, runner kind `cadence-legs-v1`, on `b4b6aeb192da60d895a7529311b06599efff5be4` checked out detached in a fresh scratch worktree. One span: a fresh soak, then three type-A legs (19,458-token step prompt, decode cap 4,096, Automatic, band q0). It is counted (RL-149 §2.9 item 3, §2.3). No other span, no queue extension, no session, no W1. The launch is your LAST action and you exit at once. LAUNCH no earlier than 13:20 PST and no later than 20:45 PST Sat 14 Nov. If you cannot, do not launch; mail the lead.**
 
 ```pointer
