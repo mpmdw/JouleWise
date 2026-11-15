@@ -26,6 +26,7 @@ rclone backend, ``rclone``. Exit codes are in ``EXIT``.
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import gzip
 import hashlib
 import io
@@ -39,6 +40,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+import threading
 import time
 import zlib
 
@@ -286,20 +288,21 @@ def _openssl_run(openssl, args, *, input=None, deadline=None, cap=600):
     return proc.stdout
 
 
-def public_key_fingerprint(openssl, public_key):
+def public_key_fingerprint(openssl, public_key, deadline=None):
     """sha256 of the DER SubjectPublicKeyInfo, and the key size in bits."""
-    der = _openssl_run(openssl, ["pkey", "-pubin", "-in", str(public_key), "-outform", "DER"])
-    text = _openssl_run(openssl, ["pkey", "-pubin", "-in", str(public_key), "-noout", "-text"]).decode("ascii", "replace")
+    der = _openssl_run(openssl, ["pkey", "-pubin", "-in", str(public_key), "-outform", "DER"], deadline=deadline)
+    text = _openssl_run(openssl, ["pkey", "-pubin", "-in", str(public_key), "-noout", "-text"],
+                        deadline=deadline).decode("ascii", "replace")
     match = re.search(r"\((\d+) bit\)", text)
     if "RSA" not in text.upper() and not match:
         raise refused("RECIPIENT_NOT_RSA", "the recipient key is not an RSA public key")
     return sha256_bytes(der), int(match.group(1)) if match else 0
 
 
-def check_recipient(openssl, public_key, pinned_sha256):
+def check_recipient(openssl, public_key, pinned_sha256, deadline=None):
     if not HEX64.fullmatch(pinned_sha256 or ""):
         raise refused("CONFIG", "recipient_sha256 must be 64 lower-case hex digits")
-    fingerprint, bits = public_key_fingerprint(openssl, public_key)
+    fingerprint, bits = public_key_fingerprint(openssl, public_key, deadline)
     if fingerprint != pinned_sha256:
         raise refused("RECIPIENT_MISMATCH", "the recipient public key is not the pinned one")
     if bits < MIN_RSA_BITS:
@@ -312,8 +315,16 @@ def _enc_args(decrypt, fd):
             "-salt", "-pass", f"fd:{fd}"]
 
 
+ENCRYPT_CAP_S = 4 * 3600
+
+
 def encrypt_span(openssl, span_dir, passphrase, out_path, deadline=None):
-    """Archive and encrypt in one pass. Returns (manifest, archive sha256, archive size, file count)."""
+    """Archive and encrypt in one pass. Returns (manifest, archive sha256, archive size, file count).
+
+    One watchdog bounds the whole stream: at the deadline (or ``ENCRYPT_CAP_S``) it kills openssl, which
+    unblocks a write into a pipe nobody drains; the offload then fails with ``DEADLINE`` and no marker.
+    """
+    budget = deadline.remaining(ENCRYPT_CAP_S) if deadline else ENCRYPT_CAP_S
     read_end, write_end = os.pipe()
     try:
         os.write(write_end, passphrase + b"\n")
@@ -328,27 +339,46 @@ def encrypt_span(openssl, span_dir, passphrase, out_path, deadline=None):
         os.close(read_end)
         raise refused("OPENSSL_UNAVAILABLE", "the openssl binary could not run") from None
     os.close(read_end)
+    expired = threading.Event()
+
+    def expire():
+        expired.set()
+        with contextlib.suppress(OSError):
+            proc.kill()
+
+    timer = threading.Timer(budget, expire)
+    timer.daemon = True
+    timer.start()
     try:
         try:
             result = write_archive(span_dir, proc.stdin)
             proc.stdin.close()
-        except BrokenPipeError:
+        except (BrokenPipeError, ValueError):  # a write into a killed or closed pipe
+            if expired.is_set():
+                raise unverified("DEADLINE", "the archive and encryption did not finish in time") from None
             raise refused("OPENSSL_FAILED", "openssl enc exited while the archive was written") from None
-        rc = proc.wait(timeout=deadline.remaining(600) if deadline else 600)
+        try:
+            rc = proc.wait(timeout=max(1.0, budget))
+        except subprocess.TimeoutExpired:
+            raise unverified("DEADLINE", "openssl enc did not finish in time") from None
+        if expired.is_set():
+            raise unverified("DEADLINE", "the archive and encryption did not finish in time")
     except BaseException:
         proc.kill()
         proc.wait()
         with contextlib.suppress(OSError):
             proc.stdin.close()
         raise
+    finally:
+        timer.cancel()
     if rc:
         raise refused("OPENSSL_FAILED", f"openssl enc rc={rc}")
     return result
 
 
-def wrap_passphrase(openssl, public_key, passphrase, out_path):
+def wrap_passphrase(openssl, public_key, passphrase, out_path, deadline=None):
     wrapped = _openssl_run(openssl, ["pkeyutl", "-encrypt", "-pubin", "-inkey", str(public_key),
-                                     "-pkeyopt", "rsa_padding_mode:oaep"], input=passphrase)
+                                     "-pkeyopt", "rsa_padding_mode:oaep"], input=passphrase, deadline=deadline)
     with open(out_path, "xb") as out:
         out.write(wrapped)
 
@@ -566,10 +596,44 @@ def load_air_config(path):
     return _absolute(doc, ("identity", "work_root"))
 
 
+# --- paths ----------------------------------------------------------------------------------------
+
+def _real(path):
+    return os.path.realpath(path)
+
+
+def _overlaps(a, b):
+    a, b = _real(a), _real(b)
+    return a == b or a.startswith(b.rstrip("/") + "/") or b.startswith(a.rstrip("/") + "/")
+
+
+def inside_git(path):
+    """True when ``path`` (resolved) is inside a git working tree, a ``.git`` directory or a bare repository."""
+    current = Path(_real(path))
+    for candidate in (current, *current.parents):
+        if os.path.lexists(candidate / ".git") or candidate.name == ".git":
+            return True
+        if (candidate / "HEAD").is_file() and (candidate / "objects").is_dir() and (candidate / "refs").is_dir():
+            return True
+    return False
+
+
+def check_output_paths(span_dir, outputs):
+    """Every place the tool writes or reads its own records stays outside OUT and outside any repository (A.5, A.6)."""
+    for what, path in outputs.items():
+        if span_dir is not None and _overlaps(path, span_dir):
+            raise refused("PATH_OVERLAPS_SPAN", f"{what} overlaps the span directory")
+        if inside_git(path):
+            raise refused("PATH_IN_REPOSITORY", f"{what} is inside a git repository")
+
+
 # --- offload (MBP) -----------------------------------------------------------------------------------
 
+SOURCE_RECORD = ".source.json"
+
+
 def _stage_complete(stage, plan):
-    """A stage is reusable only when its descriptor (written last) exists and every file matches it."""
+    """A stage is complete only when its descriptor (written last) exists and every file matches it."""
     descriptor_path = stage / names(plan)["descriptor"]
     if not descriptor_path.is_file():
         return None
@@ -586,23 +650,39 @@ def _stage_complete(stage, plan):
     return descriptor
 
 
-def build_stage(config, plan, span_dir, openssl, deadline, clock=time.time):
+def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=time.time):
+    """Build the four files, or reuse a complete stage of the SAME source whose bytes have not changed.
+
+    A complete stage of another source, of another recipient, or of a source whose bytes moved since is
+    refused (``STAGE_CONFLICT``); an incomplete stage (no descriptor: nothing was uploaded from it) is set
+    aside as ``<plan>.partial-<epoch>``.
+    """
     stage_root = Path(config["stage_root"])
-    if not stage_root.is_dir():
-        raise refused("STAGE_ROOT", "the stage root is not a directory")
     stage = stage_root / plan
+    files = names(plan)
+    source = _real(span_dir)
     if stage.exists():
         descriptor = _stage_complete(stage, plan)
-        if descriptor is not None and descriptor.get("span_name") == Path(span_dir).name \
-                and descriptor.get("scheme", {}).get("recipient_sha256") == config["recipient_sha256"]:
+        if descriptor is None:
+            stage.rename(stage_root / f"{plan}.partial-{int(clock())}")
+        else:
+            try:
+                recorded = json.loads((stage / SOURCE_RECORD).read_bytes())
+            except (OSError, ValueError):
+                recorded = None
+            if not isinstance(recorded, dict) or recorded.get("source") != source \
+                    or descriptor.get("span_name") != Path(span_dir).name \
+                    or descriptor.get("scheme", {}).get("recipient_sha256") != config["recipient_sha256"]:
+                raise refused("STAGE_CONFLICT", "a complete stage of another source or recipient exists for this plan")
+            if hash_tree(span_dir) != (stage / files["manifest"]).read_bytes():
+                raise refused("STAGE_CONFLICT", "the span's bytes changed since the stage was built")
             return stage, descriptor, True
-        stage.rename(stage_root / f"{plan}.partial-{int(clock())}")
     stage.mkdir(mode=0o700)
-    files = names(plan)
+    (stage / SOURCE_RECORD).write_bytes(canonical({"source": source}))
     passphrase = secrets.token_hex(32).encode("ascii")
     manifest, archive_sha, archive_size, count = encrypt_span(openssl, span_dir, passphrase,
                                                               stage / files["ciphertext"], deadline)
-    wrap_passphrase(openssl, config["recipient_public_key"], passphrase, stage / files["wrapped_key"])
+    wrap_passphrase(openssl, recipient_pem, passphrase, stage / files["wrapped_key"], deadline)
     del passphrase
     (stage / files["manifest"]).write_bytes(manifest)
     descriptor = {
@@ -638,6 +718,21 @@ def write_marker(marker_path, record):
         tmp.unlink()
 
 
+@contextlib.contextmanager
+def plan_lock(stage_root, plan):
+    """One offload per plan at a time, from the first stage read to the marker."""
+    path = Path(stage_root) / f".{plan}.lock"
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise refused("BUSY", "another offload of this plan is running") from None
+        yield
+    finally:
+        os.close(fd)
+
+
 def offload(config, plan, span_dir, *, require_files=(), allow_local=False, deadline_epoch=None,
             clock=time.time):
     """Run the whole MBP side. Returns the marker record. Raises ``OffloadError``."""
@@ -645,39 +740,59 @@ def offload(config, plan, span_dir, *, require_files=(), allow_local=False, dead
     span_dir = Path(span_dir)
     check_id(span_dir.name, "span directory name")
     marker_dir = Path(config["marker_dir"])
-    if not marker_dir.is_dir():
-        raise refused("MARKER_DIR", "the marker directory does not exist")
+    stage_root = Path(config["stage_root"])
+    if not marker_dir.is_dir() or not stage_root.is_dir():
+        raise refused("CONFIG", "the marker directory or the stage root does not exist")
     if os.path.lexists(marker_path(marker_dir, plan, True)):
         raise OffloadError("MARKER_EXISTS", "the marker already exists; nothing done", "marker_exists")
     backend = make_backend(config["backend"], allow_local)
+    walk_span(span_dir)  # refuse links/special files, and a missing or symlinked span, before anything else
+    outputs = {"stage_root": stage_root, "marker_dir": marker_dir,
+               "recipient_public_key": config["recipient_public_key"]}
+    if isinstance(backend, LocalBackend):
+        outputs["backend root"] = backend.root
+    check_output_paths(span_dir, outputs)
     openssl = config.get("openssl", "openssl")
     deadline = Deadline(deadline_epoch, clock)
     for name in require_files:
         _check_name(name, "--require-file")
         if "/" in name or not os.path.isfile(span_dir / name) or os.path.islink(span_dir / name):
             raise refused("SPAN_NOT_CLOSED", f"required file {name} is absent")
-    recipient = check_recipient(openssl, config["recipient_public_key"], config["recipient_sha256"])
-    walk_span(span_dir)  # refuse links/special files before any byte is staged
-    stage, descriptor, reused = build_stage(config, plan, span_dir, openssl, deadline, clock)
-    files = names(plan)
-    deadline.remaining()
-    confirmations = [backend.put(stage / files[kind], plan, files[kind], deadline) for kind in UPLOAD_ORDER]
-    deadline.remaining()
-    record = {
-        "schema": MARKER_SCHEMA, "plan": plan, "path": "cloud-offload", "span_name": descriptor["span_name"],
-        "written_at": time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(clock())),
-        "written_epoch_s": round(clock(), 3), "stage_reused": reused,
-        "backend": backend.describe(), "provider_confirmed": backend.provider_confirmed,
-        "recipient_sha256": recipient,
-        "manifest_sha256": descriptor["files"]["manifest"]["sha256"], "manifest_files": descriptor["manifest"]["files"],
-        "ciphertext": {"sha256": descriptor["files"]["ciphertext"]["sha256"],
-                       "size": descriptor["files"]["ciphertext"]["size"]},
-        "wrapped_key_sha256": descriptor["files"]["wrapped_key"]["sha256"],
-        "descriptor_sha256": sha256_file(stage / files["descriptor"]),
-        "archive_sha256": descriptor["archive"]["sha256"],
-        "provider_confirmation": confirmations,
-    }
-    write_marker(marker_path(marker_dir, plan, backend.provider_confirmed), record)
+    with plan_lock(stage_root, plan), tempfile.TemporaryDirectory(prefix=f".{plan}.key-", dir=stage_root) as keydir:
+        # One snapshot of the public key: the fingerprint, the size check and the wrap all use these bytes.
+        recipient_pem = Path(keydir) / "recipient.pem"
+        try:
+            recipient_pem.write_bytes(Path(config["recipient_public_key"]).read_bytes())
+        except OSError:
+            raise refused("RECIPIENT_UNREADABLE", "the recipient public key cannot be read") from None
+        recipient = check_recipient(openssl, recipient_pem, config["recipient_sha256"], deadline)
+        stage, descriptor, reused = build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock)
+        files = names(plan)
+        expected = {kind: (sha256_file(stage / files[kind]), os.stat(stage / files[kind]).st_size)
+                    for kind in UPLOAD_ORDER}
+        for kind in ("ciphertext", "wrapped_key", "manifest"):
+            if expected[kind] != (descriptor["files"][kind]["sha256"], descriptor["files"][kind]["size"]):
+                raise unverified("STAGE_CHANGED", f"{files[kind]} differs from the descriptor")
+        deadline.remaining()
+        confirmations = [backend.put(stage / files[kind], plan, files[kind], deadline) for kind in UPLOAD_ORDER]
+        for kind, row in zip(UPLOAD_ORDER, confirmations):
+            if (row["sha256"], row["size"]) != expected[kind] or row["provider_size"] != expected[kind][1]:
+                raise unverified("STAGE_CHANGED", f"{files[kind]} changed during the upload")
+        record = {
+            "schema": MARKER_SCHEMA, "plan": plan, "path": "cloud-offload", "span_name": descriptor["span_name"],
+            "written_at": time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(clock())),
+            "written_epoch_s": round(clock(), 3), "stage_reused": reused,
+            "backend": backend.describe(), "provider_confirmed": backend.provider_confirmed,
+            "recipient_sha256": recipient,
+            "manifest_sha256": expected["manifest"][0], "manifest_files": descriptor["manifest"]["files"],
+            "ciphertext": {"sha256": expected["ciphertext"][0], "size": expected["ciphertext"][1]},
+            "wrapped_key_sha256": expected["wrapped_key"][0],
+            "descriptor_sha256": expected["descriptor"][0],
+            "archive_sha256": descriptor["archive"]["sha256"],
+            "provider_confirmation": confirmations,
+        }
+        deadline.remaining()  # the last check before the marker
+        write_marker(marker_path(marker_dir, plan, backend.provider_confirmed), record)
     return record
 
 
@@ -716,7 +831,7 @@ def expectations(marker=None, manifest_sha256=None, ciphertext_sha256=None):
 
 
 def _safe_members(tar, top):
-    members = []
+    members, seen = [], set()
     for member in tar:
         name = member.name
         parts = name.split("/")
@@ -724,19 +839,33 @@ def _safe_members(tar, top):
             raise integrity("ARCHIVE_PATH", "a member is outside the span's top directory")
         if not (member.isreg() or member.isdir()):
             raise integrity("ARCHIVE_MEMBER_TYPE", "a member is not a regular file or directory")
+        if name.rstrip("/") in seen:
+            raise integrity("ARCHIVE_DUPLICATE", "a member name appears twice")
+        seen.add(name.rstrip("/"))
         members.append(member)
     return members
 
 
-def _read_only(tree):
+def _read_only_below(tree):
+    """Files 0444 and every directory 0555 except ``tree`` itself (which must stay writable to be moved)."""
     for root, dirnames, filenames in os.walk(tree, topdown=False):
         for name in filenames:
             os.chmod(Path(root) / name, 0o444)
-        os.chmod(root, 0o555)
+        if Path(root) != Path(tree):
+            os.chmod(root, 0o555)
+
+
+def landing_names(span_name):
+    return {"mbp": span_name + ".mbp.SHA256SUMS", "air": span_name + ".air.SHA256SUMS",
+            "done": span_name + ".pull.ok"}
 
 
 def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_epoch=None, clock=time.time):
-    """Fetch, verify and decrypt one span into ``<dest_root>/<kit>/<span_name>/``, read-only."""
+    """Fetch, verify and decrypt one span into ``<dest_root>/<kit>/<span_name>/``, read-only.
+
+    The landing is complete only when ``<span_name>.pull.ok`` exists (written last). A tree without it is
+    an interrupted landing: the pull refuses it (``INCOMPLETE_LANDING``) and the lead moves it aside.
+    """
     check_id(plan, "plan")
     check_id(kit, "kit")
     if expect.get("plan") not in (None, plan):
@@ -749,6 +878,9 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
     work_root = Path(config["work_root"])
     if not dest_root.is_dir() or not work_root.is_dir():
         raise refused("DEST_ROOT", "the destination root or work root is not a directory")
+    check_output_paths(None, {"dest_root": dest_root, "work_root": work_root})
+    if os.path.islink(kit_dir) or (os.path.lexists(kit_dir) and not kit_dir.is_dir()):
+        raise refused("DEST_SYMLINK", "the kit directory is a symlink or not a directory")
     files = names(plan)
     with tempfile.TemporaryDirectory(prefix=f".pull-{plan}-", dir=work_root) as tmp:
         tmp = Path(tmp)
@@ -775,7 +907,10 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
             raise integrity("DESCRIPTOR_INVALID", "the descriptor is not a span_offload descriptor") from None
         check_id(span_name, "span_name")
         final = kit_dir / span_name
-        if os.path.lexists(final):
+        side = {k: kit_dir / v for k, v in landing_names(span_name).items()}
+        if os.path.lexists(final) and not os.path.lexists(side["done"]):
+            raise OffloadError("INCOMPLETE_LANDING", "an interrupted landing exists; move it aside", "dest_exists")
+        if os.path.lexists(final) or any(os.path.lexists(p) for p in side.values()):
             raise OffloadError("DEST_EXISTS", "the destination already exists; nothing changed", "dest_exists")
         passphrase = unwrap_passphrase(openssl, config["identity"], tmp / files["wrapped_key"])
         archive = tmp / "archive.tgz"
@@ -800,20 +935,22 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
         air_manifest = hash_tree(tree)
         if air_manifest != manifest:
             raise integrity("MANIFEST_MISMATCH", "the extracted files differ from the plaintext manifest")
+        _read_only_below(tree)
         kit_dir.mkdir(exist_ok=True)
-        for suffix, data in ((".mbp.SHA256SUMS", manifest), (".air.SHA256SUMS", air_manifest)):
-            side = kit_dir / (span_name + suffix)
-            if os.path.lexists(side):
-                raise OffloadError("DEST_EXISTS", f"{side.name} already exists", "dest_exists")
+        if os.path.islink(kit_dir):
+            raise refused("DEST_SYMLINK", "the kit directory became a symlink")
         if os.path.lexists(final):
             raise OffloadError("DEST_EXISTS", "the destination appeared during the pull", "dest_exists")
-        os.rename(tree, final)  # a directory must be writable to move; it is made read-only once in place
-        _read_only(final)
-        for suffix, data in ((".mbp.SHA256SUMS", manifest), (".air.SHA256SUMS", air_manifest)):
-            side = kit_dir / (span_name + suffix)
-            with open(side, "xb") as handle:
+        os.rename(tree, final)
+        os.chmod(final, 0o555)
+        for which, data in (("mbp", manifest), ("air", air_manifest),
+                            ("done", canonical({"schema": "joulewise.span_offload_pull.v1", "plan": plan,
+                                                "span_name": span_name, "manifest_sha256": got["manifest"],
+                                                "ciphertext_sha256": got["ciphertext"],
+                                                "pulled_epoch_s": round(clock(), 3)}))):
+            with open(side[which], "xb") as handle:
                 handle.write(data)
-            os.chmod(side, 0o444)
+            os.chmod(side[which], 0o444)
     return {"plan": plan, "kit": kit, "span_name": span_name, "dest": str(final),
             "manifest_sha256": got["manifest"], "ciphertext_sha256": got["ciphertext"],
             "files": manifest.count(b"\n")}

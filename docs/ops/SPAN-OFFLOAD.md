@@ -10,39 +10,58 @@ pull from the cloud, checked against the marker's hashes.
 `offload` (MBP, in the close interval, after the span's Check, before the next soak):
 
 1. Refuses at once, doing nothing, if `<marker_dir>/<plan>.ok` exists (exit 3).
-2. Checks the recipient public key against the pinned fingerprint (sha256 of its DER encoding) and size
-   (RSA, at least 3072 bits).
-3. Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
-   carriage return, backslash or non-UTF-8 bytes refuses the offload (exit 4).
-4. Streams OUT through tar and gzip into `openssl enc`, reading each regular file **once, as bytes**. The
+2. Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
+   carriage return, backslash or non-UTF-8 bytes refuses the offload (exit 4). The stage root, the marker
+   directory, the recipient key and a local backend root must not overlap OUT and must not be inside a git
+   repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`).
+3. Takes an exclusive lock for the plan (`<stage_root>/.<plan>.lock`, held until the marker; a second
+   offload of the same plan is refused `BUSY`).
+4. Reads the recipient public key once into a private snapshot, and checks that snapshot against the pinned
+   fingerprint (sha256 of its DER encoding) and size (RSA, at least 3072 bits); the wrap uses the same bytes.
+5. Streams OUT through tar and gzip into `openssl enc`, reading each regular file **once, as bytes**. The
    plaintext manifest (`<plan>.SHA256SUMS`, `shasum -a 256` format on `./<path>`, byte order) hashes exactly
    the archived bytes. A file that changes while it is read refuses the offload. **No file under OUT is
-   parsed** (A.4); `--require-file runner_receipt.json` checks existence only.
-5. Wraps the per-span passphrase to the recipient key, writes the descriptor last, and keeps the four
-   files in `<stage_root>/<plan>/` (about 4 % of OUT; the dev-02-s02 archive was 110 MB for 2.9 GB).
-6. Uploads the four files synchronously (`rclone copyto --immutable`, which exits), and reads each back from
+   parsed** (A.4); `--require-file runner_receipt.json` checks existence only. One watchdog bounds the whole
+   stream: at `--deadline-epoch` (or after 4 h) it kills openssl and the offload fails `DEADLINE`.
+6. Wraps the per-span passphrase to the recipient key, writes the descriptor last, and keeps the four
+   files in `<stage_root>/<plan>/` (about 4 % of OUT; the dev-02-s02 archive was 110 MB for 2.9 GB), with a
+   local `.source.json` naming OUT's resolved path.
+7. Uploads the four files synchronously (`rclone copyto --immutable`, which exits), and reads each back from
    the provider (`rclone lsjson --hash`): the size and the provider's hash must equal the local file's (A.3).
-7. Writes the marker `<marker_dir>/<plan>.ok` only if it does not exist (`link(2)` of a complete temporary
-   file: the `test ! -e` rule, atomic). It records the plaintext manifest's sha256, the ciphertext's sha256
-   and size, and the provider's confirmation for each file (A.2).
+   Each confirmation must also equal the hashes and sizes the stage held before the upload began
+   (`STAGE_CHANGED` otherwise).
+8. Checks the deadline once more, then writes the marker `<marker_dir>/<plan>.ok` only if it does not exist
+   (`link(2)` of a complete temporary file: the `test ! -e` rule, atomic). It records the plaintext
+   manifest's sha256, the ciphertext's sha256 and size, and the provider's confirmation for each file (A.2).
 
-Nothing under OUT is changed or deleted (A.5). The tool has no git step, and the remote is a private
-cloud folder, never the repository (A.6). Any failure writes no marker and exits non-zero: 4 refused
-before upload, 5 upload or read-back failed or the deadline passed. A failed or unverified offload holds
-the next arm, and F0 does not run past it either (A.7). A re-run reuses a complete stage (same bytes, so
-the immutable upload is idempotent) and sets a partial one aside as `<plan>.partial-<epoch>`.
+Nothing under OUT is changed or deleted (A.5). The tool has no git step, refuses output paths inside a
+repository, and the remote is a private cloud folder, never the repository (A.6). Any failure writes no
+marker and exits non-zero: 4 refused before upload, 5 upload or read-back failed or the deadline passed. A
+failed or unverified offload holds the next arm, and F0 does not run past it either (A.7).
+
+**Re-runs.** A complete stage is reused only for the same OUT (resolved path) and recipient, and only after
+OUT is re-hashed and still equals the staged manifest; the upload of the same bytes is then idempotent.
+Anything else with a complete stage is refused `STAGE_CONFLICT` (the lead decides). An incomplete stage
+(no descriptor, so nothing was uploaded from it) is set aside as `<plan>.partial-<epoch>`.
 
 `--deadline-epoch` is the next soak's start: the offload gives up, without a marker, if it cannot finish
 by then (A.3: the upload ends before the next soak starts).
 
+**What `hash_type: size` proves.** RL-173 A.3 accepts the provider's hash or size. A size read-back proves
+the upload finished with the right length, not byte equality; the pull still checks the ciphertext against
+the marker. Prefer a hash type for production.
+
 `pull` (Air, any time later): downloads the four files, checks the ciphertext and manifest against the
 marker's hashes (or the two A.2 hashes given by hand from RUN_STATE), checks the descriptor, decrypts with
 the private key, checks the archive hash, extracts only regular files and directories under the span's
-top directory, re-hashes every file against the manifest (exact set), and moves the tree read-only
+top directory (no duplicate names), re-hashes every regular file against the manifest (the exact set of
+regular files; directories, including empty ones, are not in the manifest), and moves the tree read-only
 (files 0444, directories 0555) to `/Volumes/JW-EXT/cadence-desk/<kit>/<span name>/`, beside
-`<span name>.mbp.SHA256SUMS` and `<span name>.air.SHA256SUMS`, the layout the Air copies already use.
-Exit 6 on any integrity failure (nothing lands), 7 if the destination exists. A look reads a pulled copy
-that matches the marker (A.5).
+`<span name>.mbp.SHA256SUMS` and `<span name>.air.SHA256SUMS`, the layout the Air copies already use. A
+symlinked kit directory is refused. `<span name>.pull.ok` is written last and marks a complete landing; a
+tree without it is an interrupted landing, which the pull refuses (`INCOMPLETE_LANDING`) until the lead
+moves the tree and any sidecars aside. Exit 6 on any integrity failure (nothing lands), 7 if the
+destination exists. A look reads a pulled copy that matches the marker (A.5).
 
 `keygen` (Air): makes the recipient key pair and prints the fingerprint to pin.
 
@@ -57,7 +76,9 @@ that matches the marker (A.5).
 
 Why public-key:
 - **The MBP needs only to encrypt.** It never decrypts its own copies (the round trip moves to the Air's
-  pull), so it holds nothing secret about the cloud copies. A compromised or lost MBP exposes none of them.
+  pull), so it holds no persistent key that decrypts them: a stolen MBP disk does not open past cloud copies.
+  (The MBP still holds the plaintext originals, each span's passphrase in memory while it encrypts, and the
+  upload credential; a live compromise of the MBP is out of scope.)
 - **A.1 holds by construction.** The cloud copy is useless only if the private key is lost. The private key
   is generated on the Air, kept in its custody root, and a second copy goes to Ed's vault. It is never
   in the cloud folder, the repository or on the MBP.
