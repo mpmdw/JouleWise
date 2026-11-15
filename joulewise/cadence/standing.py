@@ -1,0 +1,939 @@
+"""The standing queue's law (RL-172 section (g), with (a), (c) and (f); RL-149 section 2.8). Pure functions.
+
+The controller (``scripts/cadence_controller.py``) gathers every input fresh at each arm (git, the
+owner's issues, the host) and hands it here. Nothing in this module opens a file, reads a clock, runs a
+command or touches the network: each function takes what it judges and returns named reasons. A
+missing, stale or contradictory input is itself a named reason, never a pass.
+
+Reason categories (``REASONS``):
+
+* ``halt``: nothing arms; the controller pages the magistrate at once and waits for an acknowledgement.
+* ``wait``: this candidate cannot arm yet; ``eta`` says when it could (None: not known). A wait that
+  lasts ``STALL_S`` past the last close pages (``WAIT_STALL``).
+* ``retry``: a transient read failed (network); treated as a wait, never as a pass.
+* ``cede``: a READY v4 session holds everything below it; the controller pages and never launches it.
+* ``page``: an empty queue or a due F0; the magistrate's standing item decides.
+
+This module adds no rule. Each check cites the ruling it enforces; where a ruling leaves a choice the
+docstring says which way it is taken (always the stricter one).
+"""
+from __future__ import annotations
+
+import contextlib
+from dataclasses import dataclass, field
+from datetime import date, datetime, time as dtime, timedelta
+import hashlib
+import json
+import re
+from zoneinfo import ZoneInfo
+
+from joulewise.cadence import kit as kitmod, queue as q
+
+STANDING_SCHEMA = "joulewise.cadence_standing.v1"
+DESK_FINAL_SCHEMA = "joulewise.cadence_desk_final.v1"
+SESSION_READY_SCHEMA = "joulewise.cadence_session_ready.v1"
+SESSION_DONE_SCHEMA = "joulewise.cadence_session_done.v1"
+WATCHER_STAMP_SCHEMA = "joulewise.cadence_watcher_stamp.v1"
+BUNDLE_SCHEMA = "joulewise.cadence_close_bundle.v1"
+ZONE = ZoneInfo(kitmod.LOCAL_ZONE_NAME)
+
+QUEUE_TTL_S = 7 * 86400            # RL-149 section 2.8 line 3; RL-172 (g) 3
+WATCHER_TTL_S = 24 * 3600          # RL-149 section 2.8 line 7
+CLOCK_SKEW_S = 300                 # a commit or stamp further ahead of the host clock is a contradiction
+DEV_MIXED_MAX = 12                 # RL-172 (a) 1
+DEV_MAX = 24                       # RL-172 (a) 2
+GAP_AFTER_CAMPAIGN_S = 300         # RL-171 section 6.1, confirmed RL-172 section 0
+GAP_AFTER_OTHER_S = 1200           # after F0, F2 or any non-campaign close (RL-172 section 0)
+F0_SPACING_S = 4 * 3600            # RL-165 section 3 line 5
+F0_MAX_PER_DATE = 3
+F0_WORST_S = 12180                 # RL-165 section 3 lines 6 and 7
+FALLBACK_HORIZON_S = 2.5 * 3600    # RL-165 section 3 line 3: no staged item can hold within 2 h 30 min
+STALL_S = 2.5 * 3600
+
+PHASES = {"cl-dev-": "development", "cl-qual-": "qualification", "cl-hp-": "extension", "hp-": "extension",
+          "cl-f2-": "filler", "f2-": "filler"}
+SESSION_KINDS = ("r1-slot", "w1", "c", "t")
+FALLBACK_KINDS = ("F0", "F2")      # RL-172 (g) 9: nothing else
+QUEUE_ROLES = ("standing", "smoke")
+BATCH_RULES = ("none", "rl172")
+HHMM = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):[0-5]\d")
+HEX40 = re.compile(r"[0-9a-f]{40}")
+HEX64 = re.compile(r"[0-9a-f]{64}")
+VETO_WORD = re.compile(r"^\s*(?:VETO|NO|STOP|HALT)\b", re.I)
+
+# code -> (category, plain text). Every reason the controller can give is here.
+REASONS = {
+    # halts: missing, stale or contradictory inputs, and the ruling's hard lines
+    "STANDING_MISSING": ("halt", "the standing index is not on the audit branch"),
+    "STANDING_INVALID": ("halt", "the standing index does not validate"),
+    "QUEUE_MISSING": ("halt", "a listed queue is not on the audit branch"),
+    "QUEUE_INVALID": ("halt", "a queue does not validate (validate-queue)"),
+    "QUEUE_NOT_APPEND_ONLY": ("halt", "a queue's history is not append-only (RL-149 section 2.8 line 3)"),
+    "QUEUE_EXPIRED": ("halt", "a queue is past seven days from its commit or its expires_at (line 3)"),
+    "QUEUE_COMMIT_IN_FUTURE": ("halt", "a queue's commit time is ahead of the host clock"),
+    "QUEUE_HALT": ("halt", "a queue carries a lead halt"),
+    "KIT_UNKNOWN": ("halt", "a queued kit sha is not in the standing index"),
+    "KIT_UNREADABLE": ("halt", "a queued kit could not be read or does not hash to its pin"),
+    "KIT_EVIDENCE_MISSING": ("halt", "a kit has no line 1 or line 2 record (RL-149 section 2.8)"),
+    "KIT_UNCLASSIFIED": ("halt", "a kit's campaign id names no phase the controller knows"),
+    "KIT_ROLE_MISMATCH": ("halt", "a filler kit in a counted queue, or a counted kit in a fallback queue"),
+    "DATE_MISSED": ("halt", "a counted span's t0-date is past its not_before: the lead re-dates it (RL-172 (a) 5)"),
+    "DATE_DEV_MIXED_CAP": ("halt", "the t0-date would hold more than 12 mixed-size development legs (RL-172 (a) 1)"),
+    "DATE_DEV_CAP": ("halt", "the t0-date would hold more than 24 development legs (RL-172 (a) 2)"),
+    "DATE_QUAL_DEV_OVERLAP": ("halt", "qualification and development t0-dates would meet (RL-172 (a) 3)"),
+    "DATE_QUAL_SINGLE": ("halt", "the qualification blocks would all fall on one date (RL-172 (a) 3)"),
+    "SMOKE_QUEUE_NOT_PILOT_ONLY": ("halt", "a smoke queue holds more than its pilot (RL-172 (g) 4)"),
+    "SMOKE_REMAINDER_STAGED": ("halt", "a kit's remainder is queued before its hand gate passed (RL-172 (g) 4)"),
+    "VETO_OPEN": ("halt", "an open owner directive starts STOP, NO, HALT or VETO (line 6)"),
+    "CADENCE_STOP_OPEN": ("halt", "an open cadence-stop issue (line 6)"),
+    "WATCHER_STAMP_MISSING": ("halt", "no results-watcher stamp on the audit branch (line 7)"),
+    "WATCHER_STALE": ("halt", "the results-watcher stamp is older than 24 h (line 7)"),
+    "WATCHER_STAMP_INVALID": ("halt", "the watcher stamp is malformed or ahead of its commit"),
+    "SPAN_BAD_TERMINAL": ("halt", "a span closed refused, stopped, faulted, stranded or unproven"),
+    "ARM_INDETERMINATE": ("halt", "an arm intent has no launch result and no live span (restart after a crash)"),
+    "DESK_DISAGREEMENT": ("halt", "a desk-final record reports a hand-table disagreement (RL-172 (c))"),
+    "DESK_FINAL_CONTRADICTS": ("halt", "a desk-final record names another bundle than the one pushed"),
+    "DESK_FINAL_INVALID": ("halt", "a desk-final record is malformed"),
+    "SESSION_INVALID": ("halt", "a v4 session READY record is malformed or names an unknown session"),
+    "FALLBACK_INVALID": ("halt", "a fallback entry is not F0 or F2 on its standing rules (RL-172 (g) 9)"),
+    "HOST_PROOF_FAILED": ("halt", "the arm's host readback or process-group absence failed (RL-172 (g) 5)"),
+    "CLOSE_UNPROVEN": ("halt", "the close proof failed: restore, readback or process absence (RL-172 (g) 5)"),
+    "RECEIPT_NOT_CLEAN": ("halt", "the span's receipt is a refusal or an error (a receipt all the same)"),
+    "RECEIPT_MISSING": ("halt", "the span exited with no receipt"),
+    "ROSTER_MISMATCH": ("halt", "the desk inputs do not match the queue entry (RL-172 (c) 1 to 3)"),
+    "NO_LEG_ROWS": ("halt", "the desk bundle has no leg rows: a stop (RL-172 (c) 3; Sol probe)"),
+    "NAMED_STOP": ("halt", "a named stop fired on the span's operational summary"),
+    "LAUNCH_REFUSED": ("halt", "the launcher refused or did not hand the fence to its LaunchAgent"),
+    "BUNDLE_UNAUTHENTICATED": ("halt", "the close bundle could not be signed and pushed"),
+    "PREPARE_FAILED": ("halt", "the measurement checkout, kit copy, validate-kit or plan failed"),
+    "CONFIG_INVALID": ("halt", "the controller's config does not validate"),
+    "STATE_CORRUPT": ("halt", "a controller record does not parse"),
+    # waits
+    "NOT_BEFORE": ("wait", "today is before the span's not_before (RL-172 (g) 1)"),
+    "K2_DESK_DEBT": ("wait", "span k's desk is not final before span k+2, in machine order (line 9)"),
+    "GAP": ("wait", "the floor after the last close has not run (300 s campaign, 1,200 s otherwise)"),
+    "HAND_GATE": ("wait", "a hand gate holds this span (class A smoke, L002/L005, or a named gate)"),
+    "FREEZE2": ("wait", "qualification arms only after freeze 2 is committed (RL-149 section 2.8)"),
+    "AGENT_PRESENT": ("wait", "an agent process is alive on the host"),
+    "PLAN_REFUSED_AT_T0": ("wait", "the pinned plan refuses this t0"),
+    "SPAN_LIVE": ("wait", "a span or another run holds the host"),
+    "FALLBACK_SPACING": ("wait", "F0 spacing: 4 h between t0s and at most three a date"),
+    "FALLBACK_DAY_COST": ("wait", "a filler here would cost a counted span its date (RL-165 section 3 line 7)"),
+    # transient
+    "FETCH_FAILED": ("retry", "the audit branch could not be fetched"),
+    "ISSUES_UNREADABLE": ("retry", "the owner's open issues could not be read; no veto is assumed absent"),
+    # cede and pages
+    "V4_SESSION_READY": ("cede", "a v4 session is READY: it takes the next clean close (RL-172 (f))"),
+    "QUEUE_EMPTY": ("page", "nothing is queued, waiting or due"),
+    "FALLBACK_F0_DUE": ("page", "no counted span can hold within 2 h 30 min; F0 is due on its standing item"),
+    "WAIT_STALL": ("page", "a wait has outlasted 2 h 30 min since the last close"),
+}
+
+
+class StandingError(ValueError):
+    def __init__(self, problems):
+        self.problems = list(problems)
+        super().__init__("; ".join(self.problems) if self.problems else "invalid")
+
+
+def reason(code, detail="", *, eta=None, span=None):
+    if code not in REASONS:
+        raise KeyError(code)
+    return {"code": code, "category": REASONS[code][0], "detail": detail or REASONS[code][1],
+            "eta": eta, "span": span}
+
+
+def category(reasons):
+    """The strongest category among ``reasons``: halt > cede > page > retry > wait."""
+    order = ("halt", "cede", "page", "retry", "wait")
+    cats = {r["category"] for r in reasons}
+    return next((c for c in order if c in cats), None)
+
+
+def digest(obj):
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+# --------------------------------------------------------------------------
+# Dates (RL-172 (a): a day is the local date of a span's t0)
+# --------------------------------------------------------------------------
+def local_date(epoch):
+    return datetime.fromtimestamp(epoch, ZONE).date().isoformat()
+
+
+def date_start(text):
+    return datetime.combine(date.fromisoformat(text), dtime(0, 0), ZONE).timestamp()
+
+
+def date_end(text):
+    """The first instant of the next local date (DST-safe)."""
+    return datetime.combine(date.fromisoformat(text) + timedelta(days=1), dtime(0, 0), ZONE).timestamp()
+
+
+def parse_time(text):
+    return q.parse_time(text)
+
+
+# --------------------------------------------------------------------------
+# Kits: which law applies to a span is derived from its kit, never declared
+# --------------------------------------------------------------------------
+def kit_class(kit):
+    """``{phase, mixed, k2, dated}`` from the kit itself. ``k2``: a campaign span for line 9 (RL-165
+    section 6: development, qualification and hp-01; Part C, sessions and fillers are not). ``dated``:
+    in RL-172 (a)'s date counts (hp-01, F0, F2 and v4 sessions are outside, (a) 4)."""
+    cid = kit.get("campaign_id", "")
+    phase = next((p for prefix, p in PHASES.items() if cid.startswith(prefix)), None)
+    if phase is None:
+        raise StandingError([f"KIT_UNCLASSIFIED: campaign id {cid!r}"])
+    defaults = kit.get("leg_defaults") or {}
+    sizes = {leg.get("prefill_tokens", defaults.get("prefill_tokens")) for leg in kit.get("legs", [])}
+    sizes.discard(None)
+    return {"phase": phase, "mixed": len(sizes) > 1, "k2": phase in ("development", "qualification", "extension"),
+            "dated": phase in ("development", "qualification")}
+
+
+# --------------------------------------------------------------------------
+# The standing index (lead data on the audit branch)
+# --------------------------------------------------------------------------
+STANDING_KEYS = {"schema", "standing_id", "queues", "kits", "hand_gates", "prior_spans", "withdrawn", "dispositions",
+                 "sessions", "fallback", "freeze2"}
+KIT_ENTRY_KEYS = {"source", "line1", "line2", "batch_window", "hand_gate"}
+PRIOR_KEYS = {"plan_id", "campaign_id", "block_id", "legs", "mixed", "t0", "closed", "desk_final"}
+
+
+def _text(v):
+    return isinstance(v, str) and v.strip() != ""
+
+
+def validate_standing(doc):
+    """The standing index. Closed schema; every problem is named."""
+    p = []
+    if not isinstance(doc, dict):
+        raise StandingError(["standing: an object"])
+    for k in sorted(set(doc) ^ STANDING_KEYS):
+        p.append(f"standing: {'unknown' if k in doc else 'missing'} key {k!r}")
+    if doc.get("schema") != STANDING_SCHEMA:
+        p.append(f"schema: {STANDING_SCHEMA}")
+    if not (_text(doc.get("standing_id")) and re.fullmatch(r"cs-[a-z0-9-]{3,40}", doc["standing_id"])):
+        p.append("standing_id: cs-<lowercase id>")
+    queues = doc.get("queues")
+    if not isinstance(queues, list):
+        p.append("queues: a list")
+        queues = []
+    paths = set()
+    for i, entry in enumerate(queues):
+        if not (isinstance(entry, dict) and set(entry) == {"path", "role"} and _text(entry["path"])
+                and entry["role"] in QUEUE_ROLES):
+            p.append(f"queues[{i}]: {{path, role in {QUEUE_ROLES}}}")
+            continue
+        if entry["path"] in paths:
+            p.append(f"queues[{i}]: {entry['path']} listed twice")
+        paths.add(entry["path"])
+    kits = doc.get("kits")
+    if not isinstance(kits, dict):
+        p.append("kits: an object keyed by kit sha256")
+        kits = {}
+    for sha, e in kits.items():
+        where = f"kits[{sha[:12]}]"
+        if not HEX64.fullmatch(sha):
+            p.append(f"{where}: key is a sha256")
+        if not (isinstance(e, dict) and set(e) == KIT_ENTRY_KEYS):
+            p.append(f"{where}: keys {sorted(KIT_ENTRY_KEYS)}")
+            continue
+        src = e["source"]
+        if not (isinstance(src, dict) and set(src) == {"commit", "path"} and isinstance(src["commit"], str)
+                and HEX40.fullmatch(src["commit"]) and _text(src["path"])):
+            p.append(f"{where}.source: {{commit: 40 hex, path}}")
+        for line in ("line1", "line2"):
+            if not _text(e[line]):
+                p.append(f"KIT_EVIDENCE_MISSING: {where}.{line} is empty")
+        bw = e["batch_window"]
+        if not (bw in BATCH_RULES or (isinstance(bw, str) and HHMM.fullmatch(bw))):
+            p.append(f"{where}.batch_window: one of {BATCH_RULES} or HH:MM-HH:MM")
+        hg = e["hand_gate"]
+        if not (isinstance(hg, dict) and set(hg) == {"passed", "record"} and type(hg["passed"]) is bool
+                and isinstance(hg["record"], str) and (not hg["passed"] or hg["record"].strip())):
+            p.append(f"{where}.hand_gate: {{passed: bool, record: text (required when passed)}}")
+    gates = doc.get("hand_gates")
+    if not isinstance(gates, list):
+        p.append("hand_gates: a list")
+        gates = []
+    for i, g in enumerate(gates):
+        if not (isinstance(g, dict) and set(g) == {"id", "holds", "passed", "record"} and _text(g["id"])
+                and isinstance(g["holds"], list) and g["holds"] and all(_text(x) for x in g["holds"])
+                and type(g["passed"]) is bool and isinstance(g["record"], str)
+                and (not g["passed"] or g["record"].strip())):
+            p.append(f"hand_gates[{i}]: {{id, holds: [span_id], passed, record}}")
+    prior = doc.get("prior_spans")
+    if not isinstance(prior, list):
+        p.append("prior_spans: a list")
+        prior = []
+    seen = set()
+    for i, s in enumerate(prior):
+        if not (isinstance(s, dict) and set(s) == PRIOR_KEYS):
+            p.append(f"prior_spans[{i}]: keys {sorted(PRIOR_KEYS)}")
+            continue
+        if not (_text(s["plan_id"]) and _text(s["campaign_id"]) and _text(s["block_id"])
+                and type(s["legs"]) is int and s["legs"] >= 0 and type(s["mixed"]) is bool
+                and parse_time(s["t0"]) is not None and parse_time(s["closed"]) is not None
+                and parse_time(s["closed"]) >= parse_time(s["t0"])
+                and (s["desk_final"] is None or _text(s["desk_final"]))):
+            p.append(f"prior_spans[{i}]: plan_id, campaign_id, block_id, legs >= 0, mixed, t0 <= closed "
+                     "(ISO with offset), desk_final null or evidence")
+        if s.get("plan_id") in seen:
+            p.append(f"prior_spans[{i}]: {s.get('plan_id')} twice")
+        seen.add(s.get("plan_id"))
+        try:
+            kit_class({"campaign_id": s.get("campaign_id", "")})
+        except StandingError as error:
+            p.extend(f"prior_spans[{i}]: {x}" for x in error.problems)
+    wd = doc.get("withdrawn")
+    if not (isinstance(wd, list) and all(_text(x) for x in wd)):
+        p.append("withdrawn: a list of plan ids")
+    disp = doc.get("dispositions")
+    if not (isinstance(disp, list) and all(isinstance(d, dict) and set(d) == {"plan_id", "record"}
+                                           and _text(d["plan_id"]) and _text(d["record"]) for d in disp)):
+        p.append("dispositions: a list of {plan_id, record}: the lead's disposal of a bad-terminal span")
+    sessions = doc.get("sessions")
+    if not isinstance(sessions, list):
+        p.append("sessions: a list")
+        sessions = []
+    for i, s in enumerate(sessions):
+        if not (isinstance(s, dict) and set(s) == {"session_id", "kind", "route"} and _text(s["session_id"])
+                and s["kind"] in SESSION_KINDS and _text(s["route"])):
+            p.append(f"sessions[{i}]: {{session_id, kind in {SESSION_KINDS}, route}}")
+    fb = doc.get("fallback")
+    if not isinstance(fb, list):
+        p.append("fallback: a list")
+        fb = []
+    for i, f in enumerate(fb):
+        kind = f.get("kind") if isinstance(f, dict) else None
+        if kind == "F2":
+            ok = (set(f) == {"kind", "queues"} and isinstance(f["queues"], list) and f["queues"]
+                  and all(isinstance(x, dict) and set(x) == {"path", "role"} and _text(x["path"])
+                          and x["role"] in QUEUE_ROLES for x in f["queues"]))
+        elif kind == "F0":
+            ok = (set(f) == {"kind", "standing_item", "worst_case_s"} and _text(f["standing_item"])
+                  and type(f["worst_case_s"]) is int and f["worst_case_s"] > 0)
+        else:
+            ok = False
+        if not ok:
+            p.append(f"FALLBACK_INVALID: fallback[{i}] is {{kind: F2, queues}} or {{kind: F0, standing_item, "
+                     "worst_case_s}} and nothing else (RL-172 (g) 9)")
+    f2 = [x.get("path") for f in fb if isinstance(f, dict) and f.get("kind") == "F2"
+          for x in f.get("queues") or [] if isinstance(x, dict)]
+    if set(f2) & paths:
+        p.append("fallback: an F2 queue is also a counted queue")
+    if doc.get("freeze2") is not None and not _text(doc.get("freeze2")):
+        p.append("freeze2: null or the commit record of freeze 2")
+    if p:
+        raise StandingError(p)
+    return doc
+
+
+# --------------------------------------------------------------------------
+# Queues: expiry from the authenticated commit, append-only history
+# --------------------------------------------------------------------------
+def queue_expiry(doc, commit_epoch):
+    """RL-172 (g) 3: seven days from the authenticated commit time of the queue file (the latest commit
+    on the audit branch that touched it), or the file's own ``expires_at`` if that is sooner."""
+    return min(commit_epoch + QUEUE_TTL_S, parse_time(doc["expires_at"]))
+
+
+def append_only_problems(versions):
+    """``versions``: the queue documents in commit order, oldest first. Each must keep every earlier span
+    byte-for-byte, in order, and keep the queue id (RL-149 section 2.8 line 3)."""
+    problems = []
+    for older, newer in zip(versions, versions[1:]):
+        if not (isinstance(older, dict) and isinstance(newer, dict)):
+            problems.append("a historical version does not parse")
+            continue
+        if older.get("queue_id") != newer.get("queue_id"):
+            problems.append(f"queue_id changed {older.get('queue_id')} -> {newer.get('queue_id')}")
+        old, new = older.get("spans") or [], newer.get("spans") or []
+        if new[:len(old)] != old:
+            problems.append(f"spans of {older.get('queue_id')} were edited or removed, not appended")
+    return problems
+
+
+# --------------------------------------------------------------------------
+# Evidence: vetoes, the watcher stamp, desk-final records, sessions
+# --------------------------------------------------------------------------
+def veto_reasons(issues, owner):
+    """RL-149 section 2.8 line 6, read strictly: any open issue by the owner labelled ``cadence-stop``, or
+    labelled ``directive`` whose title or first body line starts STOP/NO/HALT/VETO, halts every arm,
+    whatever it names (a span-scoped veto also halts: the magistrate reads it). Comments are never read.
+    ``issues`` None means the read failed: that is a retry, never "no veto"."""
+    if issues is None:
+        return [reason("ISSUES_UNREADABLE")]
+    out = []
+    for issue in issues:
+        if (issue.get("author") or {}).get("login") != owner or str(issue.get("state", "OPEN")).upper() != "OPEN":
+            continue
+        labels = {(x.get("name") if isinstance(x, dict) else x) for x in issue.get("labels") or []}
+        if "cadence-stop" in labels:
+            out.append(reason("CADENCE_STOP_OPEN", f"#{issue.get('number')}: {issue.get('title', '')[:80]}"))
+            continue
+        if "directive" not in labels:
+            continue
+        first = (issue.get("body") or "").strip().splitlines()[:1]
+        if VETO_WORD.match(issue.get("title") or "") or (first and VETO_WORD.match(first[0])):
+            out.append(reason("VETO_OPEN", f"#{issue.get('number')}: {issue.get('title', '')[:80]}"))
+    return out
+
+
+def watcher_reasons(stamp, commit_epoch, now):
+    """RL-149 section 2.8 line 7: the results-ref watcher was live within 24 h, by the lead's stamp. The
+    stamp is a committed file on the audit branch; its time may not be after its own commit."""
+    if stamp is None or commit_epoch is None:
+        return [reason("WATCHER_STAMP_MISSING")]
+    if not (isinstance(stamp, dict) and stamp.get("schema") == WATCHER_STAMP_SCHEMA
+            and _text(stamp.get("watcher")) and parse_time(stamp.get("observed_live_at")) is not None
+            and _text(stamp.get("by"))):
+        return [reason("WATCHER_STAMP_INVALID", "schema, watcher, observed_live_at, by")]
+    seen = parse_time(stamp["observed_live_at"])
+    if seen > commit_epoch + CLOCK_SKEW_S or commit_epoch > now + CLOCK_SKEW_S:
+        return [reason("WATCHER_STAMP_INVALID", "observed after its commit, or committed in the future")]
+    if now - seen > WATCHER_TTL_S:
+        return [reason("WATCHER_STALE", f"observed {stamp['observed_live_at']}, {(now - seen) / 3600:.1f} h ago")]
+    return []
+
+
+DESK_FINAL_KEYS = {"schema", "plan_id", "bundle_sha256", "verdict", "hand_table", "reference_print", "by", "at"}
+
+
+def desk_final_state(record, expected_bundle_sha, needs_print):
+    """One controller span's desk finality (RL-172 (c)). Returns ``("final"|"pending", None)`` or
+    ``("halt", reason)``. The Air desk writes ``verdict`` FINAL only when its automatic table built on
+    exactly this bundle; ``hand_table`` is ``agree``, ``not-sampled`` or ``disagree``; a v1.1 span also
+    needs RL-158 Q1's ``reference_print`` (a hand gate kept by RL-172 (c))."""
+    if record is None:
+        return "pending", None
+    if not (isinstance(record, dict) and set(record) == DESK_FINAL_KEYS and record["schema"] == DESK_FINAL_SCHEMA
+            and record["verdict"] in ("FINAL", "HOLD") and record["hand_table"] in ("agree", "not-sampled", "disagree")
+            and type(record["reference_print"]) is bool and isinstance(record["bundle_sha256"], str)):
+        return "halt", reason("DESK_FINAL_INVALID", f"{record.get('plan_id') if isinstance(record, dict) else '?'}")
+    if record["hand_table"] == "disagree":
+        return "halt", reason("DESK_DISAGREEMENT", record["plan_id"], span=record["plan_id"])
+    if record["bundle_sha256"] != expected_bundle_sha:
+        return "halt", reason("DESK_FINAL_CONTRADICTS", f"{record['plan_id']}: {record['bundle_sha256'][:12]} "
+                                                      f"!= pushed {str(expected_bundle_sha)[:12]}")
+    if record["verdict"] != "FINAL" or (needs_print and not record["reference_print"]):
+        return "pending", None
+    return "final", None
+
+
+def session_reasons(standing, ready_records, done_ids):
+    """RL-172 (f): a READY record from the lead holds everything of lower priority. It names a session of
+    the standing index, whose own route (authorization, notice and veto interval, seal, receipt, restore)
+    the magistrate runs. The controller never launches it."""
+    known = {s["session_id"]: s for s in standing["sessions"]}
+    out = []
+    for rec in ready_records:
+        if not (isinstance(rec, dict) and rec.get("schema") == SESSION_READY_SCHEMA
+                and rec.get("session_id") in known and _text(rec.get("by"))
+                and parse_time(rec.get("ready_at")) is not None):
+            out.append(reason("SESSION_INVALID", str(rec.get("session_id") if isinstance(rec, dict) else rec)))
+            continue
+        if rec["session_id"] in done_ids:
+            continue
+        s = known[rec["session_id"]]
+        out.append(reason("V4_SESSION_READY", f"{s['session_id']} ({s['kind']}): route {s['route']}"))
+    return out
+
+
+# --------------------------------------------------------------------------
+# The ledger: every span in machine order, across queues
+# --------------------------------------------------------------------------
+@dataclass
+class Run:
+    plan_id: str
+    kind: str              # campaign | f2 | F0 | v4 | other
+    phase: str | None
+    block_id: str | None
+    legs: int
+    mixed: bool
+    t0: float
+    closed: float | None
+    status: str            # LIVE | CLOSED_OK | STOPPED | REFUSED | ...
+    source: str            # prior | controller | external
+    desk: str = "pending"  # final | pending
+    bundle_sha256: str | None = None
+    needs_print: bool = False
+    extra: dict = field(default_factory=dict)
+
+
+BAD = ("STOPPED", "REFUSED", "FAULT", "STRANDED", "CLOSE_UNPROVEN", "LAUNCH_REFUSED", "INDETERMINATE",
+       "RECEIPT_MISSING")
+
+
+def build_runs(standing, controller_records, external_runs):
+    runs = []
+    for s in standing["prior_spans"]:
+        cls = kit_class({"campaign_id": s["campaign_id"]})
+        runs.append(Run(s["plan_id"], "campaign" if cls["k2"] else "f2", cls["phase"], s["block_id"], s["legs"],
+                        s["mixed"], parse_time(s["t0"]), parse_time(s["closed"]), "CLOSED_OK", "prior",
+                        "final" if s["desk_final"] else "pending"))
+    for r in controller_records:
+        runs.append(Run(r["plan_id"], r["kind"], r["phase"], r["block_id"], len(r["legs"]), r["mixed"],
+                        r["t0_epoch"], r.get("closed_epoch"), r["status"], "controller",
+                        bundle_sha256=r.get("bundle_sha256"), needs_print=r.get("needs_print", False),
+                        extra={"kit_sha256": r.get("kit_sha256")}))
+    for e in external_runs:
+        runs.append(Run(e["run_id"], e["kind"], None, None, 0, False, e["t0_epoch"], e.get("closed_epoch"),
+                        "CLOSED_OK" if e.get("restore_ok") else "CLOSE_UNPROVEN", "external"))
+    runs.sort(key=lambda r: (r.t0, r.plan_id))
+    return runs
+
+
+def apply_desk_finals(runs, records):
+    """Mark controller spans final from the Air desk's records; return halts (disagreement, contradiction)."""
+    halts = []
+    for run in runs:
+        if run.source != "controller" or run.kind != "campaign":
+            continue
+        state, why = desk_final_state(records.get(run.plan_id), run.bundle_sha256, run.needs_print)
+        if state == "halt":
+            halts.append(why)
+        else:
+            run.desk = state
+    # A disagreement on any record holds the next arm, whatever span it is on (RL-172 (c)).
+    for plan_id, rec in records.items():
+        if isinstance(rec, dict) and rec.get("hand_table") == "disagree" and not any(
+                h["code"] == "DESK_DISAGREEMENT" and h["span"] == plan_id for h in halts):
+            halts.append(reason("DESK_DISAGREEMENT", plan_id, span=plan_id))
+    return halts
+
+
+def k2_reasons(runs, span_id=None):
+    """Line 9 in machine order across every queue (RL-165 section 6; RL-172 (g) 2): the new span is campaign
+    span n; every campaign span up to n-2 must be desk-final. Stricter than "span n-2 only"."""
+    campaign = [r for r in runs if r.kind == "campaign"]
+    n = len(campaign) + 1
+    owed = [r.plan_id for r in campaign[:max(0, n - 2)] if r.desk != "final"]
+    if owed:
+        return [reason("K2_DESK_DEBT", f"campaign span {n}: desk not final for {', '.join(owed)}", span=span_id)]
+    return []
+
+
+def last_close(runs):
+    closed = [r for r in runs if r.closed is not None]
+    return max(closed, key=lambda r: r.closed) if closed else None
+
+
+def gap_reasons(runs, now, census_epoch=None, span_id=None):
+    """The floor after the latest close of anything on the host: 300 s after a campaign span, 1,200 s after
+    F0, F2 or any other close. ``census_epoch``: the newest receipt the host census found (rounded up); a
+    close the ledger does not know is treated as non-campaign."""
+    last = last_close(runs)
+    ends = []
+    if last is not None:
+        ends.append(last.closed + (GAP_AFTER_CAMPAIGN_S if last.kind == "campaign" else GAP_AFTER_OTHER_S))
+    if census_epoch is not None and (last is None or census_epoch > last.closed + 1):
+        ends.append(census_epoch + GAP_AFTER_OTHER_S)
+    until = max(ends) if ends else None
+    if until is not None and now < until:
+        return [reason("GAP", f"{until - now:.0f} s to go", eta=until, span=span_id)]
+    return []
+
+
+def date_reasons(span, cls, t0, runs, queued, standing):
+    """RL-172 (a), enforced at the arm. ``queued``: (span, cls) of every unrun counted span in every queue,
+    for the qualification/development date separation."""
+    sid = span["span_id"]
+    day = local_date(t0)
+    out = []
+    if day < span["not_before"]:
+        return [reason("NOT_BEFORE", f"{sid}: not before {span['not_before']}", eta=date_start(span["not_before"]),
+                       span=sid)]
+    if not cls["dated"]:
+        return []
+    if day > span["not_before"]:
+        out.append(reason("DATE_MISSED", f"{sid}: t0-date {day} is after its date {span['not_before']}", span=sid))
+    same = [r for r in runs if r.kind == "campaign" and local_date(r.t0) == day]
+    if cls["phase"] == "development":
+        dev = sum(r.legs for r in same if r.phase == "development") + len(span["legs"])
+        mixed = sum(r.legs for r in same if r.phase == "development" and r.mixed) + (
+            len(span["legs"]) if cls["mixed"] else 0)
+        if mixed > DEV_MIXED_MAX:
+            out.append(reason("DATE_DEV_MIXED_CAP", f"{day}: {mixed} mixed-size development legs", span=sid))
+        if dev > DEV_MAX:
+            out.append(reason("DATE_DEV_CAP", f"{day}: {dev} development legs", span=sid))
+        if any(r.phase == "qualification" for r in same):
+            out.append(reason("DATE_QUAL_DEV_OVERLAP", f"{day} holds qualification", span=sid))
+    if cls["phase"] == "qualification":
+        if standing.get("freeze2") is None:
+            return [reason("FREEZE2", sid, span=sid)]
+        if any(r.phase == "development" for r in same) or any(
+                c["phase"] == "development" and s["not_before"] == day for s, c in queued):
+            out.append(reason("DATE_QUAL_DEV_OVERLAP", f"{day} holds or is planned for development", span=sid))
+        blocks = {r.block_id for r in runs if r.phase == "qualification"} | {
+            s["block_id"] for s, c in queued if c["phase"] == "qualification"} | {span["block_id"]}
+        on_day = {r.block_id for r in same if r.phase == "qualification"} | {span["block_id"]}
+        if len(blocks) >= 2 and on_day >= blocks:
+            out.append(reason("DATE_QUAL_SINGLE", f"every qualification block would be on {day}", span=sid))
+    return out
+
+
+def hand_gate_reasons(span, kit_sha, kit_entry, standing, kit_runs_closed, queue_role, queue_len):
+    """RL-172 (g) 4 and (c)'s kept hand gates. A kit whose hand gate has not passed runs its first span
+    only, alone in a smoke queue; its remainder is appended after the gate. A named hand gate (L002, L005,
+    or any the lead lists) holds the spans it names until it passes."""
+    sid = span["span_id"]
+    out = []
+    if queue_role == "smoke" and queue_len != 1:
+        out.append(reason("SMOKE_QUEUE_NOT_PILOT_ONLY", f"{queue_len} spans", span=sid))
+    if not kit_entry["hand_gate"]["passed"]:
+        if queue_role != "smoke":
+            out.append(reason("SMOKE_REMAINDER_STAGED", f"kit {kit_sha[:12]}'s hand gate has not passed and "
+                                                        f"{sid} is in a standing queue", span=sid))
+        elif kit_runs_closed:
+            out.append(reason("HAND_GATE", f"kit {kit_sha[:12]}: the pilot ran; its hand gate is open", span=sid))
+    for gate in standing["hand_gates"]:
+        if sid in gate["holds"] and not gate["passed"]:
+            out.append(reason("HAND_GATE", f"{gate['id']} holds {sid}", span=sid))
+    return out
+
+
+# --------------------------------------------------------------------------
+# The desk-final inputs on the MBP side (RL-172 (c) 1 to 4)
+# --------------------------------------------------------------------------
+def bundle_file_list(roster):
+    return sorted([f"legs/{leg}/leg_summary.json" for leg in roster] + ["span/meter.json", "span/result.json"])
+
+
+def desk_input_reasons(*, span, kit_sha, kit, receipt, bundle_files, summaries, plan):
+    """The roster, identity and completeness checks a desk-final needs, done at the close on the MBP.
+    ``bundle_files``: the desk bundle's relative paths; ``summaries``: leg_id -> leg_summary dict (in
+    bundle order); ``plan``: the runner's span_plan.json (or None). Zero leg rows is a stop."""
+    sid, roster = span["span_id"], list(span["legs"])
+    out = []
+
+    def bad(detail):
+        out.append(reason("ROSTER_MISMATCH", f"{sid}: {detail}", span=sid))
+
+    if not summaries:
+        out.append(reason("NO_LEG_ROWS", f"{sid}: 0 leg rows of {len(roster)}", span=sid))
+    if receipt.get("roster") != roster:
+        bad(f"receipt roster {receipt.get('roster')} != queue {roster}")
+    if (receipt.get("kit") or {}).get("sha256") != kit_sha:
+        bad("receipt kit sha is not the queue's pin")
+    if (receipt.get("kit") or {}).get("frozen_commit") != kit["frozen"]["commit"]:
+        bad("receipt frozen commit is not the kit's")
+    if receipt.get("legs_planned") != len(roster):
+        bad(f"legs_planned {receipt.get('legs_planned')} != {len(roster)}")
+    rows = [leg.get("leg_id") for leg in receipt.get("legs") or []]
+    if len(rows) != len(set(rows)):
+        bad(f"duplicate leg rows in the receipt {rows}")
+    if rows != roster[:len(rows)]:
+        bad(f"receipt legs {rows} are not the roster's order")
+    if plan is not None and [leg.get("leg_id") for leg in plan.get("legs", [])] != roster:
+        bad("span_plan legs are not the roster")
+    if plan is None and summaries:
+        bad("span_plan.json missing")
+    expected = bundle_file_list(list(summaries))
+    if sorted(bundle_files) != expected:
+        bad(f"bundle files {sorted(bundle_files)} != expected {expected}")
+    if list(summaries) != rows[:len(summaries)]:
+        bad(f"bundle legs {list(summaries)} are not the receipt's {rows}")
+    for leg_row in receipt.get("legs") or []:
+        lid = leg_row.get("leg_id")
+        summary = summaries.get(lid)
+        if summary is None:
+            if receipt.get("rc") == 0:
+                bad(f"{lid}: no leg_summary in the bundle")
+            continue
+        if summary.get("leg_id") != lid:
+            bad(f"{lid}: summary names {summary.get('leg_id')}")
+        if summary.get("attempts") != len(leg_row.get("attempts") or []):
+            bad(f"{lid}: attempts {summary.get('attempts')} != receipt {len(leg_row.get('attempts') or [])}")
+        ref = summary.get("span_reference")
+        if isinstance(ref, dict):   # kit v1.1 consumer: the reference is the first leg's accepted attempt
+            first = (receipt.get("legs") or [{}])[0]
+            if ref.get("leg_id") != first.get("leg_id") or ref.get("attempt") != len(first.get("attempts") or []):
+                bad(f"{lid}: span reference {ref.get('leg_id')} a{ref.get('attempt')} is not the first leg's "
+                    f"accepted attempt")
+    return out
+
+
+def receipt_command_reasons(receipt, expected_windows):
+    """The close's command result: the runner's own restore and feed stops, read from its receipt."""
+    out = []
+    result = receipt.get("span_result") or {}
+    clean = (receipt.get("rc") == 0 and result.get("chain_exit_code") == 0 and result.get("chain_outcome") == "COMPLETE"
+             and result.get("fault") is False and result.get("outcome") == "MEASURED_OK"
+             and receipt.get("legs_finished") == receipt.get("legs_planned"))
+    if not clean:
+        out.append(reason("RECEIPT_NOT_CLEAN", f"rc {receipt.get('rc')}, {result.get('verdict')}, "
+                                               f"{receipt.get('error', '')}"[:200]))
+    steps = {s.get("name"): s for s in receipt.get("steps") or []}
+    close = [n for n in steps if n == "restore" or n.startswith(("stop-", "close-"))]
+    if "restore" not in steps or any(steps[n].get("rc") != 0 for n in close):
+        out.append(reason("CLOSE_UNPROVEN", "the receipt's restore or a feed stop is missing or failed: "
+                                            + ", ".join(f"{n}={steps[n].get('rc')}" for n in close)))
+    for name, feed in (receipt.get("feeds") or {}).items():
+        if not (feed.get("stop") or {}).get("proven_stopped"):
+            out.append(reason("CLOSE_UNPROVEN", f"feed {name} not proven stopped"))
+    out += soak_attempt_reasons(receipt, clean)
+    if receipt.get("batch_windows") != expected_windows:
+        out.append(reason("ROSTER_MISMATCH", f"batch_windows {receipt.get('batch_windows')} != {expected_windows}"))
+    return out
+
+
+SOAK_RETRIES = 1   # RL-171 at the qualification pin: one retry of a soak refused for settle or quiet
+
+
+def soak_attempt_reasons(receipt, clean):
+    """The receipt's ``soak_attempts`` (RL-171, pin e1b85a59c on). A retried soak is normal, not a stop:
+    every attempt but the last was refused (exit 5, renamed ``soak.rejected<N>``), there are at most
+    ``SOAK_RETRIES`` + 1, and a clean span's last soak was accepted. A receipt from a pin before RL-171
+    has no such field; it is accepted only with exactly one ``soak`` step and no ``soak.a<N>`` step."""
+    steps = [s.get("name") for s in receipt.get("steps") or []]
+    retries = [n for n in steps if isinstance(n, str) and re.fullmatch(r"soak\.a\d+", n)]
+    attempts = receipt.get("soak_attempts")
+    if attempts is None:
+        if retries or (clean and steps.count("soak") != 1):
+            return [reason("ROSTER_MISMATCH", f"no soak_attempts but soak steps {steps.count('soak')} + {retries}")]
+        return []
+    if not isinstance(attempts, list) or (clean and not attempts) or len(attempts) > SOAK_RETRIES + 1:
+        return [reason("ROSTER_MISMATCH", f"soak_attempts {attempts!r:.120}: 1 to {SOAK_RETRIES + 1} expected")]
+    out = []
+    if any(not isinstance(a, dict) or a.get("attempt") != i + 1 for i, a in enumerate(attempts)):
+        out.append(reason("ROSTER_MISMATCH", "soak_attempts are not numbered 1..n"))
+    elif any(not a.get("refused") for a in attempts[:-1]):
+        out.append(reason("ROSTER_MISMATCH", "a soak was retried after an attempt that was not refused"))
+    elif clean and attempts[-1].get("refused"):
+        out.append(reason("ROSTER_MISMATCH", "a clean receipt whose last soak was refused"))
+    elif len(retries) != len(attempts) - 1:
+        out.append(reason("ROSTER_MISMATCH", f"{len(attempts)} soak attempts but retry steps {retries}"))
+    return out
+
+
+# --------------------------------------------------------------------------
+# Host proofs (typed; the controller fills them, this judges them)
+# --------------------------------------------------------------------------
+PROOF_LINES = {
+    # name -> which proof needs it
+    "powermode": ("arm", "close"), "ac_power": ("arm", "close"), "network_time": ("arm", "close"),
+    "kernel_frequency": ("arm", "close"), "high_power_marker": ("arm", "close"), "launchd_labels": ("arm", "close"),
+    "sudo_kill": ("arm",), "measurement_mode": ("arm", "close"),
+    "monitors": ("arm", "close"), "root_powermetrics": ("arm", "close"), "span_processes": ("arm", "close"),
+    "launch_fence": ("arm", "close"), "agents": ("arm",),
+}
+
+
+def proof_reasons(proof, kind):
+    """``proof``: {line: {ok: bool|None, detail, agent_only?: bool}}. A missing line or ``ok`` None (not
+    observed) fails: missing evidence never passes. Agents present at the arm is a wait, not a halt;
+    a measurement_mode verify whose only failures are the agent line is the same wait."""
+    code = "HOST_PROOF_FAILED" if kind == "arm" else "CLOSE_UNPROVEN"
+    out, waits = [], []
+    for line, kinds in PROOF_LINES.items():
+        if kind not in kinds:
+            continue
+        row = proof.get(line)
+        if row is None or row.get("ok") is None:
+            out.append(reason(code, f"{line}: not observed"))
+        elif row["ok"] is False:
+            if kind == "arm" and (line == "agents" or (line == "measurement_mode" and row.get("agent_only"))):
+                waits.append(reason("AGENT_PRESENT", f"{line}: {row.get('detail', '')}"[:200]))
+            else:
+                out.append(reason(code, f"{line}: {row.get('detail', '')}"[:200]))
+    return out + waits
+
+
+# --------------------------------------------------------------------------
+# Selection: what the controller does next, from one fresh snapshot
+# --------------------------------------------------------------------------
+@dataclass
+class Decision:
+    action: str                       # arm | arm-fallback | wait | halt | cede | page
+    reasons: list
+    candidate: dict | None = None     # {queue_path, span, kit_sha, cls, role}
+    gates: dict = field(default_factory=dict)   # span_id -> [reason codes] (the critical-path ledger)
+
+    def as_dict(self):
+        c = self.candidate
+        return {"action": self.action, "reasons": self.reasons, "gates": self.gates,
+                "candidate": None if c is None else {"queue_path": c["queue_path"], "span_id": c["span"]["span_id"],
+                                                    "plan_id": q.plan_id(c["span"]), "kit_sha256": c["kit_sha"],
+                                                    "class": c["cls"], "role": c["role"]}}
+
+
+def select(snap):
+    """``snap`` keys:
+
+    now, standing, input_reasons (list, from reading), queues: [{path, role, doc, commit_epoch, kits:
+    {sha: kit}, closed_ids, withdrawn_ids}], runs (``build_runs`` with desk finals applied), desk_halts,
+    vetoes, watcher, sessions, census_epoch, fallback: [{kind, queues | standing_item, worst_case_s}],
+    fallback_queues: like ``queues``, plan_worst: callable(candidate) -> seconds or None.
+    """
+    now, standing = snap["now"], snap["standing"]
+    gates = {}
+    globals_ = list(snap["input_reasons"]) + list(snap["desk_halts"]) + list(snap["vetoes"]) + list(snap["watcher"])
+    if standing is None:      # the index could not be read: never a pass
+        rs = globals_ or [reason("STANDING_MISSING")]
+        return Decision("halt" if category(rs) == "halt" else "wait", rs, gates=gates)
+    disposed = {d["plan_id"] for d in standing["dispositions"]}
+    bad = [r for r in snap["runs"] if r.status in BAD and r.plan_id not in disposed]
+    globals_ += [reason("SPAN_BAD_TERMINAL", f"{r.plan_id} is {r.status}", span=r.plan_id) for r in bad]
+    live = [r for r in snap["runs"] if r.status == "LIVE"]
+    if live:
+        globals_.append(reason("SPAN_LIVE", ", ".join(r.plan_id for r in live)))
+    if category(globals_) == "halt":
+        return Decision("halt", globals_, gates=gates)
+    if category(globals_) in ("retry", "wait"):
+        return Decision("wait", globals_, gates=gates)
+    if snap["sessions"]:
+        cat = category(snap["sessions"])
+        return Decision("halt" if cat == "halt" else "cede", snap["sessions"], gates=gates)
+
+    counted = _heads(snap["queues"], snap)
+    queued = [(c["span"], c["cls"]) for c in counted] + [
+        (s, c) for c2 in counted for s, c in c2.get("later", [])]
+    found_halt, waits, empty = [], [], not counted
+    for cand in counted:
+        sid = cand["span"]["span_id"]
+        rs = list(cand["static"])
+        if cand["cls"] is not None:
+            rs += date_reasons(cand["span"], cand["cls"], now, snap["runs"], queued, standing)
+            rs += k2_reasons(snap["runs"], sid) if cand["cls"]["k2"] else []
+        rs += gap_reasons(snap["runs"], now, snap.get("census_epoch"), sid)
+        gates[sid] = [r["code"] for r in rs]
+        cand["reasons"] = rs
+        cat = category(rs)
+        if cat is None:
+            return Decision("arm", [], candidate=cand, gates=gates)
+        if cat == "halt":
+            found_halt += [r for r in rs if r["category"] == "halt"]
+        else:
+            waits += rs
+    if found_halt:
+        return Decision("halt", found_halt, gates=gates)
+
+    fallback = fallback_select(snap, counted, gates)
+    if fallback is not None:
+        return fallback
+    if empty:
+        return Decision("page", [reason("QUEUE_EMPTY")], gates=gates)
+    return Decision("wait", waits, gates=gates)
+
+
+def _heads(queues, snap):
+    """Each queue's next span (seq order, skipping spans the ledger has or the lead withdrew), with the
+    static gates that need no clock: queue validity, expiry, kit evidence and class, hand gates."""
+    out = []
+    standing = snap["standing"]
+    for view in queues:
+        doc = view["doc"]
+        pending = [s for s in doc["spans"] if q.plan_id(s) not in view["closed_ids"]
+                   and q.plan_id(s) not in view["withdrawn_ids"]]
+        if not pending:
+            continue
+        span = pending[0]
+        sha = span["kit"]["sha256"]
+        static = list(view["reasons"])
+        if doc.get("halt"):
+            static.append(reason("QUEUE_HALT", f"{doc['queue_id']}: {doc['halt'].get('reason')}"))
+        expiry = queue_expiry(doc, view["commit_epoch"])
+        if view["commit_epoch"] > snap["now"] + CLOCK_SKEW_S:
+            static.append(reason("QUEUE_COMMIT_IN_FUTURE", doc["queue_id"]))
+        if snap["now"] > expiry:
+            static.append(reason("QUEUE_EXPIRED", f"{doc['queue_id']} expired at "
+                                                  f"{datetime.fromtimestamp(expiry, ZONE).isoformat()}"))
+        entry = standing["kits"].get(sha)
+        kit = view["kits"].get(sha)
+        cls = None
+        if entry is None:
+            static.append(reason("KIT_UNKNOWN", sha[:12]))
+        elif kit is None:
+            static.append(reason("KIT_UNREADABLE", sha[:12]))
+        else:
+            try:
+                cls = kit_class(kit)
+            except StandingError as error:
+                static.append(reason("KIT_UNCLASSIFIED", "; ".join(error.problems)))
+        if cls is not None:
+            if (cls["phase"] == "filler") != view["fallback"]:
+                static.append(reason("KIT_ROLE_MISMATCH", f"{span['span_id']} ({cls['phase']}) in a "
+                                                          f"{'fallback' if view['fallback'] else 'counted'} queue"))
+            ran = any(r.source == "controller" and r.extra.get("kit_sha256") == sha for r in snap["runs"])
+            static += hand_gate_reasons(span, sha, entry, standing, ran, view["role"], len(doc["spans"]))
+            # A kit without a passed hand gate must not have any other span queued anywhere.
+            if not entry["hand_gate"]["passed"]:
+                others = [s for v in queues for s in v["doc"]["spans"]
+                          if s["kit"]["sha256"] == sha and s is not span and q.plan_id(s) not in v["withdrawn_ids"]]
+                if others:
+                    static.append(reason("SMOKE_REMAINDER_STAGED", f"{len(others)} other span(s) of kit {sha[:12]} "
+                                                                   "queued before its hand gate"))
+        later = []
+        for s in pending[1:]:
+            k = view["kits"].get(s["kit"]["sha256"])
+            if k is not None:
+                with contextlib.suppress(StandingError):
+                    later.append((s, kit_class(k)))
+        out.append({"queue_path": view["path"], "role": view["role"], "span": span, "kit_sha": sha, "cls": cls,
+                    "static": static, "later": later, "fallback": view["fallback"]})
+    return out
+
+
+def fallback_select(snap, counted, gates):
+    """RL-172 (g) 9: F2 (a cadence-legs span the controller arms) or F0 (paged to the magistrate's standing
+    item), and only when no counted span can arm within 2 h 30 min (RL-165 section 3 line 3) and the filler
+    cannot cost a counted span due today its date (line 7)."""
+    now = snap["now"]
+    if not snap["fallback"]:
+        return None
+    soon = []
+    for cand in counted:
+        rs = cand.get("reasons") or []
+        if category(rs) == "halt":
+            return None
+        etas = [r["eta"] for r in rs if r["category"] in ("wait", "retry")]
+        unknown = any(e is None for e in etas)
+        eta = max((e for e in etas if e is not None), default=now)
+        if not unknown and eta <= now + FALLBACK_HORIZON_S:
+            soon.append(cand["span"]["span_id"])
+        if any(r["code"] == "AGENT_PRESENT" for r in rs):
+            soon.append(cand["span"]["span_id"])
+    if soon:
+        return None
+    today = local_date(now)
+    due_today = [c for c in counted if c["cls"] and c["cls"]["dated"] and c["span"]["not_before"] == today]
+
+    def costs_day(worst):
+        return bool(due_today) and now + worst + GAP_AFTER_OTHER_S > date_end(today)
+
+    for entry in snap["fallback"]:
+        if entry["kind"] == "F2":
+            paths = [x["path"] for x in entry["queues"]]
+            for cand in _heads([v for v in snap["fallback_queues"] if v["path"] in paths], snap):
+                sid = cand["span"]["span_id"]
+                rs = list(cand["static"])
+                if cand["cls"] is not None:
+                    rs += date_reasons(cand["span"], cand["cls"], now, snap["runs"], [], snap["standing"])
+                rs += gap_reasons(snap["runs"], now, snap.get("census_epoch"), sid)
+                worst = snap["plan_worst"](cand) if category(rs) is None else None
+                if category(rs) is None and worst is None:
+                    rs.append(reason("PLAN_REFUSED_AT_T0", sid, span=sid))
+                if worst is not None and costs_day(worst):
+                    rs.append(reason("FALLBACK_DAY_COST", sid, span=sid))
+                gates[sid] = [r["code"] for r in rs]
+                if category(rs) is None:
+                    return Decision("arm-fallback", [], candidate=cand, gates=gates)
+                if category(rs) == "halt":
+                    return Decision("halt", [r for r in rs if r["category"] == "halt"], gates=gates)
+        elif entry["kind"] == "F0":
+            f0 = [r for r in snap["runs"] if r.kind == "F0"]
+            rs = []
+            if f0 and now < max(r.t0 for r in f0) + F0_SPACING_S:
+                rs.append(reason("FALLBACK_SPACING", "4 h since the last F0", eta=max(r.t0 for r in f0) + F0_SPACING_S))
+            if sum(1 for r in f0 if local_date(r.t0) == today) >= F0_MAX_PER_DATE:
+                rs.append(reason("FALLBACK_SPACING", f"three F0 on {today}", eta=date_end(today)))
+            if costs_day(entry["worst_case_s"]):
+                rs.append(reason("FALLBACK_DAY_COST", "F0"))
+            rs += gap_reasons(snap["runs"], now, snap.get("census_epoch"))
+            gates["F0"] = [r["code"] for r in rs]
+            if category(rs) is None:
+                return Decision("page", [reason("FALLBACK_F0_DUE", f"{entry['standing_item']}")], gates=gates)
+    return None

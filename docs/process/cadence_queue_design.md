@@ -28,6 +28,10 @@ them (phase 3 below). An independent Sol xhigh design (`/Volumes/JW-EXT/scratch/
 | RL-128 probe | `joulewise/pipeline_time/sources.py` `rl128_probe` | A disabled hook. It had no body and no forced command until this branch |
 | Desk | `/Volumes/JW-EXT/scratch/mythos-keep-s/mbp/r1fu-1113-desk/scripts/` (`fetch*.sh` rsync allowlisted journals from the MBP; `build_table.py` gate/hold table; `p1.py`..`p6p8.py` prints) | Run by hand, per span |
 
+> **11-15 (RL-172 (g)):** for standing queues the per-span magistrate activation of §3 is replaced by the
+> controller of §15. `next_action` (§3) stays the library's per-queue view; it does not enforce `not_before`
+> or cross-queue debt, and the controller does not call it.
+
 ## 1. Shape of the change
 
 ```
@@ -624,3 +628,121 @@ they pin differ). The lead picks one at the cut-off, enters it in the ledger and
 |---|---|---|---|---|
 | `kits/cl-dev-03.v1.1.json` | cell law and six span-shaped legs (5 of 10 warm legs consume on 3 + 9) | the span-leg commit (re-pinned) | A | L001-L003 as their own span (the counted smoke, one leg per size), then L004-L012 after the hand-read |
 | `kits/cl-dev-03.v1.1a.json` | cell law only | the cell-law line (re-pinned on its class B side branch) | B | the whole block, one span |
+
+## 15. The standing-queue controller (RL-172 (g), (f), (c) MBP side, (i) rows 5 and 6)
+
+Opus builder, Sun 15 Nov 2026. Code: `joulewise/cadence/standing.py` (the law: pure functions, named reasons) and
+`scripts/cadence_controller.py` (the I/O: git, `gh`, host readbacks, the launch). Synthetic run:
+`scripts/cadence_controller_synthetic.py`. Install: `configs/launchd/com.joulewise.cadence-controller.plist.template`
+(KeepAlive, `ProcessType Standard`, Aqua) and `configs/launchd/cadence-controller.config.json.template`. It replaces
+the per-span work order (the "Start and check", "Run" and "Check" blocks of an item like 331) for campaign spans.
+It changes no frozen path: no kit pins `standing.py`, the controller scripts or the templates, and nothing it adds
+is imported inside a leg (it imports `queue`, `stops`, `desk`, `kit`, `kit_v11` and `legs` read-only; the arm
+child imports the measurement checkout's own `launch_cadence_span` and `launch_align_r0`).
+
+### 15.1 What it reads, and where (lead data on the audit branch, under `records_dir`)
+
+| File | Writer | Content |
+|---|---|---|
+| `STANDING.json` | lead | `joulewise.cadence_standing.v1`: the counted queues in priority order with their role (`standing` or `smoke`); per kit sha256 its source (`commit`, `path`), line 1 and line 2 records, batch-window rule (`none`, `rl172` = RL-172 §0's items-builder rule, or `HH:MM-HH:MM`) and class A hand gate; named hand gates (`holds` span ids: L002, L005); `prior_spans` (campaign spans run before the controller, with t0, close and desk-final evidence); `withdrawn` plan ids; `dispositions` (the lead's disposal of a bad-terminal span); v4 `sessions` (id, kind, route); `fallback` (F2 queues, F0 standing item); `freeze2` |
+| queue files | lead | `joulewise.cadence_queue.v1`, unchanged schema, validated with the kits by hash and `qual_roster_problems` |
+| `watcher-stamp.json` | lead | `joulewise.cadence_watcher_stamp.v1`: the results watcher observed live at a time (line 7) |
+| `desk-final/<plan_id>.json` | Air desk (separate builder) | `joulewise.cadence_desk_final.v1`: `bundle_sha256` (sha256 of the pushed `manifest.json`), `verdict` FINAL or HOLD, `hand_table` agree, not-sampled or disagree, `reference_print` (RL-158 Q1, v1.1), `by`, `at` |
+| `sessions/READY-<id>.json`, `sessions/DONE-<id>.json` | lead | a v4 session READY, and its end |
+
+The owner's open issues are read with `gh issue list --author mpmdw` (title and first body line only).
+
+### 15.2 The nine conditions of RL-172 (g), as enforced
+
+1. **Dates at the arm.** t0 is the arm instant; its local date must be at or after `not_before` (else wait, with
+   the date's midnight as the eta). For development and qualification spans the date must equal `not_before`: a
+   later date is `DATE_MISSED` and the lead re-dates (RL-172 (a) 5). Per t0-date: at most 12 mixed-size
+   development legs, at most 24 development legs (ledger of prior and controller spans); qualification only with
+   `freeze2` set, never on a date that holds or plans development, and never all qualification blocks on one date.
+   Mixed size and phase are derived from the kit (prompt sizes; campaign-id prefix), never declared.
+2. **Line 9 in machine order.** All campaign spans (development, qualification, hp; not F0, F2, Part C or v4) from
+   every queue and `prior_spans`, ordered by t0. A new span n arms only if every span up to n-2 is desk-final:
+   a prior span by its evidence, a controller span by an Air record naming the bundle the controller pushed (a
+   v1.1 span also needs `reference_print`). A `disagree` on any record halts.
+3. **Expiry** = min(`expires_at`, commit time + 7 days), the commit time being that of the latest audit-branch
+   commit touching the queue file; a commit ahead of the host clock is a contradiction. Every historical version
+   must be a prefix of the next (append-only).
+4. **Smoke.** A `smoke` queue holds one span. A kit whose hand gate has not passed may be queued only in a smoke
+   queue and only once; after its pilot closes it waits for the gate (`HAND_GATE`). Named hand gates hold their
+   spans.
+5. **Typed proofs.** Arm: the launch's own result (rc, the claimed fence, the plan's batch windows) plus readback
+   (`pmset -g` powermode 0, AC, `systemsetup -getusingnetworktime` Off, `ntp_adjtime` frequency word 0, no High
+   Power marker, no night or align-r0 label, `sudo -n -l /bin/kill`, `measurement_mode.zsh verify`) and absence
+   (`km003c_monitor`, `hazard_monitor`, root `powermetrics`, runner, leg runtime and LaunchAgent wrapper, any
+   fence but the controller's, and no agent: an agent is a wait). Close: the receipt's `restore`, `stop-*` and
+   `close-*` steps and feeds proven stopped, plus the same readback and absence. A line not observed fails.
+6. **Trigger.** State is derived every tick from durable files (intent, arm, close records; the fence; the
+   receipt), so a restart repeats nothing. The arm intent is created once (O_EXCL) before the launch; after a
+   crash an intent with an output or a launch fence is adopted, and one with neither halts `ARM_INDETERMINATE`;
+   nothing is ever relaunched. The launch runs under the existing desk-fence lock. `heartbeat.json` is written
+   every tick; the controller's standing fence expires 15 min after its last refresh, so a dead controller
+   becomes the watchdog's `desk_fence_stale` notice (the alarm), and `check-heartbeat` serves any watcher.
+7. **Fresh evidence.** Each tick that can arm fetches the audit branch and reads the issues anew. Any open owner
+   `directive` starting STOP, NO, HALT or VETO, whatever it names, and any `cadence-stop` issue halt; a failed read
+   is a wait, never "no veto". The watcher stamp must be under 24 h old and not after its own commit.
+8. **Records.** `transitions.jsonl` (global and per span) for every arm intent, arm, adoption, close, push and
+   page, with the queue digest, plan id and plan digest, arm-proof, arm-command and close-proof digests and the
+   decision. Network work is guarded: it is refused once the arm's network phase ends and while a span is live;
+   the arm records `network_end_epoch`, which precedes the launch (and so the soak).
+9. **Fallback** entries are `F2` (queues the controller arms like any span, outside the date counts and line 9)
+   or `F0` (paged to the magistrate's standing item; spacing 4 h, three a date), nothing else. Either only when
+   no counted span can arm within 2 h 30 min, and only if it ends 20 min before the end of a date on which a
+   counted span is due.
+
+**Gaps.** 300 s after a controller campaign close, 1,200 s after anything else, the latest close being the
+newest of the ledger, the host receipt census (item 331's census: depth 4, rounded up, an empty or failed census
+stops) and any foreign fence the controller saw end. A soak retry (RL-171, `soak_attempts`) is normal: at most
+one, every attempt but the last refused, the last accepted on a clean receipt.
+
+### 15.3 RL-172 (f): v4 sessions
+
+A READY record for a session in `sessions` makes `select` return `cede`: nothing lower arms, the controller pages
+`V4_SESSION_READY` with the session's route and releases its fence at the next clean close (it never acts while
+a span is live). It never launches the session; the magistrate runs the session's own authorization, notice and
+veto interval, seal, receipt and restore. A DONE record ends the hold.
+
+### 15.4 RL-172 (c), the MBP side
+
+At the close, before anything is pushed: the receipt's roster equals the queue entry's legs, in order; the kit
+sha and frozen commit match the pin; `legs_planned` equals the roster; receipt rows are unique and in roster
+order; `span_plan.json`'s legs equal the roster; the bundle holds exactly one `leg_summary.json` per receipt leg
+plus `span/meter.json` and `span/result.json`; each summary's attempts equal the receipt's; each consumer's
+`span_reference` names the first leg's accepted attempt. **Zero leg rows is a stop** (`NO_LEG_ROWS`, Sol's probe).
+Named stops are evaluated on the projected summary (campaign-scope redos are the Air desk's). The bundle
+(`manifest.json`, `runner_receipt.json`, `span_plan.json`, `desk-bundle/`) is scanned for denied keys and committed
+with an SSH signature (`signing_key`) and pushed to `refs/heads/cadence-desk/<plan_id>`; a refused or faulted span
+is pushed too (a negative receipt is a receipt). The manifest carries the roster, attempts, soak attempts, every
+file's sha256, the receipt, plan and soak-reference hashes (the soak reference is hashed, never parsed), the
+arm and close proof digests and the status. The Air desk verifies the signature against the controller's public
+key and writes its `desk-final` record naming `sha256(manifest.json)`.
+
+### 15.5 Who wakes whom
+
+While waiting with nothing to report, the controller holds its own desk fence (`cadence-controller:<token>`,
+deadline +15 min, refreshed each tick), which the watchdog honours, so no magistrate activation starts. Any page
+releases it. Halts block arming until `ack`; informational pages (QUEUE_EMPTY, FALLBACK_F0_DUE, WAIT_STALL,
+V4_SESSION_READY) keep the fence released until acknowledged. Pages are keyed by kind, codes, spans and the last
+close, so a persisting situation pages once. The arm child (a short process under the measurement interpreter)
+clears the standing fence under the fence lock, then calls the frozen `launch_cadence_span.main` in-process with
+its own PID as the handoff PID, and exits; the LaunchAgent's handoff then proceeds.
+
+**Residual.** Between the arm child clearing the standing fence and the launcher writing its own (milliseconds:
+the launcher is imported and its plan computed before the fence moves), and between the LaunchAgent clearing its
+fence and the controller's next tick (`poll_live_s`, 2 s), the watchdog could start an activation. The prompt
+line makes such an activation exit at once, and the runner's agent census refuses a span that an agent overlaps.
+
+### 15.6 Critical-path ledger (RL-172 (i) row 6)
+
+`critical-path/<span_id>.json`: for each blocking reason its first and last tick and the tick it cleared (when that
+prerequisite became ready), the start (launch), the end (receipt close) and any refusal. `ledger` prints it as CSV.
+
+### 15.7 What it does not do
+
+It runs no unit tests on the MBP (RL-172 (i) row 4: tests run elsewhere; line 2 is CI's). It does not read any
+leg's thermal journal (the RL-150 R1 and RL-158 Q1 prints stay hand work at the desk). It does not decide a
+re-run, a re-date, a disposition or an F0 launch.
