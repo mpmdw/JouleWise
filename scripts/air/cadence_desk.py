@@ -31,6 +31,7 @@ lock is held or stale (nothing run), 1 refused (a guard fired; nothing written),
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
 from pathlib import Path
 import shutil
@@ -89,15 +90,22 @@ def final(args):
         print("USAGE --history-prefix needs --history-signers (the allowed-signers file naming the desk's key, "
               "cadence-desk; the verdict records are signed by it, not by the controller)")
         return 2
+    if args.history_empty and not args.history_prefix:
+        print("USAGE --history-empty needs --history-prefix")
+        return 2
     if not signed and not args.queue:
         print("USAGE an unsigned --bundle directory needs --queue")
         return 2
-    try:
-        with desk.air_quiet_lock(f"cadence-desk-final:{args.plan_id}", Path(args.lock)):
-            return _final_locked(args, signed)
-    except desk.LockBusy as error:
-        print(f"LOCK {error}")
-        return 4
+    with ExitStack() as held:
+        try:
+            held.enter_context(desk.air_quiet_lock(f"cadence-desk-final:{args.plan_id}", Path(args.lock)))
+        except desk.LockBusy as error:
+            print(f"LOCK {error}")
+            return 4
+        except OSError as error:
+            print(f"LOCK unavailable ({type(error).__name__}): {error.strerror}; create the --lock parent directory")
+            return 4
+        return _final_locked(args, signed)
 
 
 def _final_locked(args, signed):
@@ -108,6 +116,13 @@ def _final_locked(args, signed):
     history, history_source = [], "none"
     queue = args.queue
     try:
+        if signed:
+            tmp, transport = desk_transport.extract_to_temp(args.repo, args.bundle_ref, out,
+                                                            allowed_signers=args.allowed_signers,
+                                                            plan_id=args.plan_id, principal=args.signer)
+            bundle, anchor = tmp / "bundle", transport["manifest_sha256"]
+            if queue is None:   # the queue bytes the span armed from, as the signed transition record names them
+                queue = desk_transport.queue_from_transition(args.repo, transport["transition"], tmp / "QUEUE.json")
         if args.history:
             history, history_source = json.loads(Path(args.history).read_text()), "file"
         elif args.history_prefix:
@@ -125,13 +140,7 @@ def _final_locked(args, signed):
                 allowed_signers=args.history_signers, principal=args.history_principal,
                 campaign_id=kit["campaign_id"], exclude_plan_id=args.plan_id)
             history_source = "signed-records"
-        if signed:
-            tmp, transport = desk_transport.extract_to_temp(args.repo, args.bundle_ref, out,
-                                                            allowed_signers=args.allowed_signers,
-                                                            plan_id=args.plan_id, principal=args.signer)
-            bundle, anchor = tmp / "bundle", transport["manifest_sha256"]
-            if queue is None:   # the queue bytes the span armed from, as the signed transition record names them
-                queue = desk_transport.queue_from_transition(args.repo, transport["transition"], tmp / "QUEUE.json")
+
     except desk_final.DeniedContent as error:
         refusal, refusal_code = f"{type(error).__name__}: {error}", "DESK_DENIED_CONTENT"
     except (desk_transport.TransportRefusal, kitmod.KitError, OSError, ValueError) as error:
@@ -143,7 +152,8 @@ def _final_locked(args, signed):
             kit_path=args.kit,
             out_dir=out, history=history, hand_table_path=args.hand_table, hand_sample=args.hand_sample,
             allow_mock=args.allow_mock, transport=transport, allow_unsigned=args.allow_unsigned and not signed,
-            history_source=history_source, refusal=refusal, refusal_code=refusal_code)
+            history_source=history_source, history_empty_asserted=args.history_empty,
+            refusal=refusal, refusal_code=refusal_code)
     finally:
         if tmp is not None:
             shutil.rmtree(tmp, ignore_errors=True)
@@ -215,7 +225,8 @@ def main(argv=None):
     f.add_argument("--history-signers", help="allowed-signers file naming the desk's key (cadence-desk); "
                                              "required with --history-prefix")
     f.add_argument("--history-empty", action="store_true",
-                   help="the history prefix holds no record because this desk has published none yet (the first span)")
+                   help="assert this desk has published no history record yet (recorded as history_empty_asserted; "
+                        "use only after fetching its full verdict prefix)")
     f.add_argument("--history-principal", default=desk_transport.DESK_PRINCIPAL,
                    help="the principal that signed the history records: cadence-desk (the Air or Actions desk), or "
                         "cadence-controller for the MBP desk's own records (RL-173 B; FORMAT section 6)")

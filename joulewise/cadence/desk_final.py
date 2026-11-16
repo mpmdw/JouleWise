@@ -227,10 +227,21 @@ def _loads(raw, where):
 
 
 class _Findings:
-    def __init__(self):
+    def __init__(self, local_paths=()):
         self.items = {}
+        # These paths describe this desk's filesystem, rather than the signed input. Keep every semantic
+        # detail (codes, errno, relative bundle paths, hashes and counts) but give local roots stable names.
+        self.local_paths = sorted(((str(Path(path)), role) for path, role in local_paths if path is not None),
+                                  key=lambda item: len(item[0]), reverse=True)
+
+    def portable(self, detail):
+        detail = str(detail)
+        for path, role in self.local_paths:
+            detail = detail.replace(path, role)
+        return detail
 
     def add(self, code, detail):
+        detail = self.portable(detail)
         self.items.setdefault(code, [])
         if detail not in self.items[code]:
             self.items[code].append(detail)
@@ -1210,19 +1221,22 @@ def _finish(verdict):
     return verdict
 
 
+# The complete repository import closure of the v1/v1.1 desk CLI. Keep this explicit so unrelated modules
+# imported by a controller or test process cannot alter the identity. The package initializers execute too.
+DESK_CODE_PATHS = (
+    "joulewise/__init__.py", "joulewise/schemas.py", "joulewise/validation.py",
+    "joulewise/axi_decode_config.py", "joulewise/idle_admission.py",
+    "joulewise/cadence/__init__.py", "joulewise/cadence/desk.py", "joulewise/cadence/desk_final.py",
+    "joulewise/cadence/desk_transport.py", "joulewise/cadence/kit.py", "joulewise/cadence/kit_v11.py",
+    "joulewise/cadence/queue.py", "joulewise/cadence/stops.py", "scripts/air/cadence_desk.py",
+)
+
+
 def _code_identity():
-    """The desk's code by hash: every module the judgment runs, the transport, the kit loader and the CLI (gate 3,
-    Mythos T16). The MBP pins its checkout to the off-host desk's commit separately (the controller's arm proof)."""
-    from joulewise.cadence import desk_transport, kit as kitmod
-    out = {}
-    for mod in (desk, queuemod, stopsmod, desk_transport, kitmod):
-        path = Path(mod.__file__)
-        out[f"joulewise/cadence/{path.name}"] = sha256_bytes(path.read_bytes())
-    out["joulewise/cadence/desk_final.py"] = sha256_bytes(Path(__file__).read_bytes())
-    cli = Path(__file__).resolve().parents[2] / "scripts" / "air" / "cadence_desk.py"
-    if cli.is_file():
-        out["scripts/air/cadence_desk.py"] = sha256_bytes(cli.read_bytes())
-    return out
+    """Hash the complete desk import closure, including the CLI and package initializers (gate 4 F12/11).
+    The controller independently checks that this code is clean at the shared pinned desk commit."""
+    root = Path(__file__).resolve().parents[2]
+    return {rel: sha256_bytes((root / rel).read_bytes()) for rel in DESK_CODE_PATHS}
 
 
 def _write(path, text):
@@ -1233,7 +1247,7 @@ def _write(path, text):
 
 def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, out_dir, history=(),
                hand_table_path=None, hand_sample=False, allow_mock=False, transport=None, allow_unsigned=False,
-               history_source="file", refusal=None, refusal_code="DESK_UNAUTHENTICATED", now=None):
+               history_source="file", history_empty_asserted=False, refusal=None, refusal_code="DESK_UNAUTHENTICATED", now=None):
     """Judge one span's bundle. Always writes ``desk_verdict.json`` to ``out_dir`` (a negative or error
     result is also a receipt); writes ``JOURNAL-TABLE.md``, ``desk_summary.json`` and ``stops.json`` when the
     bundle could be read. ``transport`` is ``desk_transport.extract_bundle``'s record of the signed commit;
@@ -1242,7 +1256,9 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
     from joulewise.cadence import kit as kitmod
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    find, reader = _Findings(), _Reader()
+    find = _Findings(((bundle_dir, "<bundle>"), (out_dir, "<desk-output>"),
+                      (queue_path, "<queue>"), (kit_path, "<kit>"), (hand_table_path, "<hand-table>")))
+    reader = _Reader()
     expected, operational, gates, hand = None, [], [], {"required": False, "triggers": [], "supplied": False,
                                                          "agrees": None, "problems": [], "differences": [],
                                                          "sample": None}
@@ -1395,9 +1411,9 @@ def judge_span(*, plan_id, bundle_dir, manifest_sha256, queue_path, kit_path, ou
         "hand_gates": gates, "hand_table": hand, "identities": identities, "mock": mock,
         "transport": {**{k: transport.get(k) for k in ("signed", "bundle_commit", "signer")},
                       "queue_commit": ((transport.get("transition") or {}).get("queue") or {}).get("commit")},
-        "history_source": history_source,
+        "history_source": history_source, "history_empty_asserted": bool(history_empty_asserted),
         "summary_sha256": canonical_sha256(summary) if summary is not None else None,
-        "opened": [Path(p).name for p in reader.opened], "error": error,
+        "opened": [Path(p).name for p in reader.opened], "error": find.portable(error) if error is not None else None,
         "desk_code": _code_identity(),
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now))}))
     for name in ("JOURNAL-TABLE.md", SUMMARY_NAME, "stops.json"):   # no stale table beside a new verdict

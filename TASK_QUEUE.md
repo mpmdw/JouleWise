@@ -1,5 +1,7 @@
 # JouleWise Task Queue
 
+**2026-11-15 explicit user intake:** PR #799/#800 gate-4 repairs take priority over ordinary queue work. Desk fixes are applied; research-lead questions and fresh gate admission remain. No phase exit-checklist matrix row exists for this fix round. Evidence: [docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md](docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md).
+
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 

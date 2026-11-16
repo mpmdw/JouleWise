@@ -579,6 +579,19 @@ class BlindingAndCli(DeskFinalCase):
         self.assertNotRegex(text, r"(?i)\b(\w*energy\w*|joules?|watts?|\w*power_w\w*|slots?|\w*transcripts?)\b")
         self.assertTrue(desk_final.verify_verdict(json.loads(text)))
 
+    def test_cli_missing_lock_parent_returns_lock_refusal_without_traceback(self):
+        work, bundle, anchor = self.pack()
+        queue_path = work / "queue.json"
+        queue_path.write_text(json.dumps(self.fx.queue()))
+        with redirect_stdout(io.StringIO()) as output:
+            rc = cli.main(["final", "--plan-id", "cq-dg-s01-a1", "--bundle", str(bundle),
+                           "--manifest-sha256", anchor, "--queue", str(queue_path),
+                           "--kit", str(self.fx.kit_path), "--out", str(work / "out"),
+                           "--lock", str(work / "absent" / "AIR-QUIET.lock"), "--allow-unsigned", "--allow-mock"])
+        self.assertEqual(rc, 4)
+        self.assertIn("LOCK unavailable", output.getvalue())
+        self.assertFalse((work / "out").exists())
+
     def test_cli_final_exit_codes_lock_and_the_legacy_build(self):
         work, bundle, anchor = self.pack()
         qp = work / "QUEUE.json"
@@ -1403,6 +1416,39 @@ class VerdictAgreement(DeskFinalCase):
         self.assertEqual(desk_final.compare_verdicts(a, {**b, "desk_final": not b["desk_final"]}),
                          ["verdict_sha256 (a verdict does not verify)"])
 
+    def test_same_local_read_failure_agrees_but_different_failure_does_not(self):
+        verdicts = []
+        for _ in range(2):
+            work = self.work()
+            verdicts.append(desk_final.judge_span(
+                plan_id="cq-dg-s01-a1", bundle_dir=work / "bundle", manifest_sha256=None,
+                queue_path=work / "missing-queue.json", kit_path=self.fx.kit_path,
+                out_dir=work / "out", allow_unsigned=True, allow_mock=True))
+        self.assertEqual(desk_final.compare_verdicts(*verdicts), [])
+        self.assertIn("<queue>", str(verdicts[0]["named_stops"]))
+        changed = json.loads(json.dumps(verdicts[1]))
+        changed["named_stops"][0]["detail"] += "; another input is absent"
+        desk_final._finish(changed)
+        self.assertIn("named_stops", desk_final.compare_verdicts(verdicts[0], changed))
+
+    def test_code_identity_covers_package_initializers_and_transitive_imports(self):
+        root = Path(desk_final.__file__).resolve().parents[2]
+        escaped = ("joulewise/__init__.py", "joulewise/schemas.py", "joulewise/validation.py",
+                   "joulewise/axi_decode_config.py", "joulewise/idle_admission.py",
+                   "joulewise/cadence/__init__.py", "joulewise/cadence/kit_v11.py")
+        original = desk_final._code_identity()
+        read_bytes = Path.read_bytes
+        for rel in escaped:
+            with self.subTest(path=rel):
+                self.assertEqual(original[rel], desk_final.sha256_bytes((root / rel).read_bytes()))
+                def changed_bytes(path):
+                    raw = read_bytes(path)
+                    return raw + b"\n# synthetic code change\n" if path == root / rel else raw
+                with mock.patch.object(Path, "read_bytes", changed_bytes):
+                    changed = desk_final._code_identity()
+                self.assertNotEqual(original[rel], changed[rel])
+                self.assertEqual({key for key in original if original[key] != changed[key]}, {rel})
+
 
 class MbpDeskRecords:
     """RL-173 B: the MBP's desk signs its verdicts with the controller's key under its own ref prefix (local only)
@@ -1482,10 +1528,16 @@ class Gate3DeskMythos:
         v = json.loads((work / "out" / desk_final.VERDICT_NAME).read_text())
         self.assertNotFinal(v, "DESK_UNAUTHENTICATED")
         self.assertIn("history-empty", " ".join(v["reasons"]))
+        self.assertTrue(v["transport"]["signed"])
+        self.assertNotIn("the bundle is not a verified signed commit", " ".join(v["reasons"]))
+        self.assertFalse(v["history_empty_asserted"])
         with redirect_stdout(io.StringIO()):
             cli.main(argv + ["--history-empty"])
         v = json.loads((work / "out" / desk_final.VERDICT_NAME).read_text())
         self.assertNotIn("DESK_UNAUTHENTICATED", codes(v))
+        self.assertTrue(v["history_empty_asserted"])
+        changed = {**v, "history_empty_asserted": False}
+        self.assertFalse(desk_final.verify_verdict(changed))
 
     def test_an_earlier_attempt_of_the_same_span_keeps_its_rerun_first(self):
         kit = span_kit(legs_per_span=6)

@@ -115,25 +115,33 @@ also a receipt.
 
 ## 2. What the Air runs
 
+For the first record this desk publishes, fetch all three ref families and use the command below with
+`--history-empty`. After it has published a record, omit that flag. It is an operator assertion, recorded in
+`history_empty_asserted`; it does not prove that an unfetched remote prefix is empty. The operator must check
+that the fetch succeeded and that this desk has published no earlier verdict before asserting it.
+
 ```
+mkdir -p LOCK_DIR
 git fetch origin '+refs/heads/desk-bundles/*:refs/remotes/origin/desk-bundles/*' \
                  '+refs/heads/cadence-desk-final/*:refs/remotes/origin/cadence-desk-final/*' \
                  '+refs/heads/<audit branch>:refs/remotes/origin/<audit branch>'
 python3.13 -B scripts/air/cadence_desk.py final --plan-id PLAN --repo CLONE \
     --bundle-ref refs/remotes/origin/desk-bundles/PLAN --allowed-signers SIGNERS --kit KIT.json --out DIR \
     --history-prefix refs/remotes/origin/cadence-desk-final/ --history-signers DESK_SIGNERS \
-    [--hand-table hand_table.json] [--hand-sample]
+    --history-empty --lock LOCK_DIR/AIR-QUIET.lock [--hand-table hand_table.json] [--hand-sample]
 python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --repo CLONE --signing-key AIR_KEY \
     [--principal cadence-desk] [--ref-prefix refs/heads/cadence-desk-final/] [--no-push]
 ```
 
-- **Lock.** `final` runs under `AIR-QUIET.lock` and always writes `DIR/desk_verdict.json`. When the bundle
+- **Lock.** Give a host-local `--lock` path shared by this desk's invocations and create its parent first.
+  The Air default is `/Volumes/JW-EXT/scratch/AIR-QUIET.lock`; other hosts must give their own path. Once
+  `final` holds the lock, it writes `DIR/desk_verdict.json`. When the bundle
   can be read it also writes `JOURNAL-TABLE.md`, `desk_summary.json` and `stops.json`.
 - **Exit codes:**
   - 0: final and nothing held;
   - 3: not final, or a hold;
   - 1: the desk refused or erred (a verdict is still written);
-  - 4: the lock is busy (no verdict, retry);
+  - 4: the lock is busy, stale or unavailable (no verdict, retry after correcting it);
   - 2: usage.
 - **History.** `--history-prefix`, with `--history-signers`, rebuilds the campaign's earlier summaries from
   the signed verdict records. This is the only history a production verdict may use (Mythos N11, Sol R8).
@@ -142,7 +150,9 @@ python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --rep
   desk has published none yet (gate 3, Mythos T5).
   - `--history FILE`, or no history at all, makes a signed-bundle verdict not final (`DESK_UNAUTHENTICATED`,
     "receipt replay cannot be checked").
-  - The verdict records `history_source`.
+  - The verdict records `history_source` and the boolean `history_empty_asserted`. The assertion is
+    covered by `verdict_sha256`; the signed history remains `history_source: signed-records`. A valid
+    bundle retains `transport.signed: true` when a history refusal prevents judgment.
   - `--history-principal` names who signed the records: `cadence-desk` (the default; the Air or Actions desk)
     or `cadence-controller` (the MBP desk's own records, section 6). A record signed by another principal is a
     refusal, so one prefix never mixes the two desks.
@@ -261,13 +271,16 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
   fixed in code before any span it selects has run.
   - The group is the kit sha256 and the span's G0 shape (`span` if a leg after the first consumes, else `own`).
   - A span is drawn when sha256(`seed|kit_sha256|shape|span_id`) mod 4 is 0: one in four in expectation, per
-    group. The attempt is not in the hash, so a re-run of a span draws as the span did.
+    group. The attempt is not in the hash, so another attempt with the same span id has the same hash.
+    A queue-valid `rerun_of` entry uses a new span id and therefore hashes independently. Whether a disposed
+    first attempt consumes the group's always-drawn place remains a research-lead question (gate 4 F10/Opus 6).
   - **The first span of each group is always drawn.** At the desk a span is first when the signed history holds
     no span of its group whose first leg started before this span's first leg (machine order). A group split
     across queues (a pilot in its smoke queue, the remainder in another), or an earlier entry that never ran, is
     decided by what ran; a history that misses a record can only add a draw.
-  - It reads only the span's own queue entry and spans before it. An append to its queue, a later span's
-    verdict, or a re-judgment (a hand table supplied later) never changes it (Sol R11). A block-of-four draw is
+  - It reads only the span's own queue entry and spans before it. An append to its queue or a later span's
+    verdict never changes it (Sol R11). A re-judgment can change the first-of-group clause if an earlier
+    span's previously missing verdict has arrived; the hash part stays the same. A block-of-four draw is
     refused (RL-173 E).
   - The verdict's `hand_table.sample` records `value`, `first_in_queue`, `first_in_history`, `first_of_group`
     and `selected`; each span's `desk_summary.json` records its `sample_stratum`, which later spans' history
@@ -297,9 +310,12 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
   bundle when one is available and publishes to `refs/heads/cadence-desk-final/<plan_id>` signed by
   `cadence-desk`, as in section 2. When both verdicts exist, `desk_final.compare_verdicts(mbp, offhost)` must
   return nothing. It compares the automatic part (`agreement_view`): identities, summary hash, every
-  non-hand named stop with its detail, the hand gates, the hand-table triggers (less the lead's own
+  non-hand named stop with its detail (declared local filesystem roots are replaced by role names, while
+  relative paths, hashes, counts and error classes remain), the hand gates, the hand-table triggers (less the lead's own
   `--hand-sample` and the history-dependent ones), the draw's hash part, the transport, the history source, any
-  error and `desk_code`. It leaves out what the lead's later hand table changes and what depends on each desk's
+  error and `desk_code`. `desk_code` hashes the CLI's complete repository import closure, including package
+  initializers, `kit_v11.py` and the core schema/validation imports. The history-empty assertion is local to
+  each desk's prefix and is recorded but not compared. It leaves out what the lead's later hand table changes and what depends on each desk's
   own history (the schema-change trigger, the draw's first-of-group clause): the two desks' histories are their
   own records and may differ. A difference holds the next arm and goes to the research lead.
 - **The hand table** is the lead's input to the off-host desk (any host, from the pushed bundle). A span whose
