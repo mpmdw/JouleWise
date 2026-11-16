@@ -34,9 +34,12 @@ class FakeApi:
         self.calls.append((method, path, params, body))
         if method == "GET" and path == "/issues":
             rows = [i for i in self.issues if params.get("state") == "all" or i.get("state") == params.get("state")]
-            return rows if params.get("page", 1) == 1 else []
+            page = params.get("page", 1)
+            return rows[(page - 1) * 100: page * 100]
         if method == "GET" and path.startswith("/actions/workflows/"):
-            return {"workflow_runs": self.runs}
+            page = params.get("page", 1)
+            chunk = self.runs[(page - 1) * 100: page * 100]
+            return {"workflow_runs": chunk, "total_count": len(self.runs)}
         if method == "GET" and path == "/labels/mbp-alarm":
             return {"name": "mbp-alarm"}
         if method == "GET" and path.startswith("/rules/branches/"):
@@ -67,6 +70,8 @@ class MbpWatchTests(unittest.TestCase):
         self.work.mkdir()
         init_git_fixture(self.work, "-q")
         subprocess.run(["git", "-C", str(self.work), "remote", "add", "origin", str(self.origin)], check=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            w.init_log(self.ns())
 
     # --- helpers ------------------------------------------------------------------------------
 
@@ -145,8 +150,9 @@ class MbpWatchTests(unittest.TestCase):
 
     def test_arm_is_create_only_and_close_happens_once(self):
         self.arm()
+        self.arm()  # the identical record again (a retry after a lost acknowledgement) is a no-op
         with self.assertRaises(w.WatchError):
-            self.arm(deadline=NOW - 100)  # a different arm for the same plan id (an identical one is a no-op)
+            self.arm(deadline=NOW - 100)  # a different arm for the same plan id
         self.close("CLOSED_OK")
         with self.assertRaises(w.WatchError):
             self.close("STOPPED")
@@ -337,15 +343,78 @@ class MbpWatchTests(unittest.TestCase):
         self.assertEqual(self.read([newer_failure, self.wrun(2, NOW - 200)])[0], w.EXIT["failed_run"])
         self.assertEqual(self.read([self.wrun(1, NOW + 200)])[0], w.EXIT["ok"])  # within the 300 s clock slack
 
-    def test_alarm_poll_notifies_once_per_open_issue(self):
+    def test_alarm_poll_acknowledges_only_confirmed_notifications(self):
         self.arm(deadline=NOW - 5000)
         api = FakeApi()
         self.watch(api)
-        lines = []
         state = self.tmp / "poll.json"
-        self.assertEqual(len(w.alarm_poll(state, lines.append, api)), 1)
-        self.assertEqual(w.alarm_poll(state, lines.append, api), [])
-        self.assertRegex(lines[0], rf"ALARM MBP_ALARM SPAN_SILENT {PLAN} issue=1$")
+        failed = []
+        w.alarm_poll(state, lambda line: failed.append(line) and False, api)  # the banner failed
+        sent = []
+        w.alarm_poll(state, lambda line: sent.append(line) or True, api)  # retried, and confirmed
+        w.alarm_poll(state, lambda line: sent.append(line) or True, api)  # then quiet
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(len(sent), 1)
+        self.assertTrue(sent[0].endswith(f"ALARM MBP_ALARM {PLAN}/issue-1/SPAN_SILENT"))
+
+    def test_alarm_poll_reads_every_page(self):
+        issues = [{"number": n, "state": "open", "body": ""} for n in range(1, 102)]
+        sent = []
+        w.alarm_poll(self.tmp / "poll.json", lambda line: sent.append(line) or True, FakeApi(issues=issues))
+        self.assertEqual(len(sent), 101)
+
+    # --- round-3 regressions (Sol r3 findings 1-7) -----------------------------------------------
+
+    def log_commit(self, path, data, date=None):
+        """A fast-forward commit on the log by hand (a mistaken edit, not via arm/close)."""
+        git = w.Git(self.origin)
+        tip = git.run("rev-parse", w.LOG_REF).decode().strip()
+        index = self.tmp / "idx"
+        env = {"GIT_INDEX_FILE": str(index)}
+        git.run("read-tree", tip, env=env)
+        blob = git.run("hash-object", "-w", "--stdin", input=data).decode().strip()
+        git.run("update-index", "--add", "--cacheinfo", "100644", blob, path, env=env)
+        tree = git.run("write-tree", env=env).decode().strip()
+        index.unlink()
+        stamp = {} if date is None else {"GIT_COMMITTER_DATE": f"{int(date)} +0000", "GIT_AUTHOR_DATE": f"{int(date)} +0000"}
+        commit = git.run("commit-tree", tree, "-p", tip, input=b"edit\n", env={**w.IDENT, **stamp}).decode().strip()
+        git.run("update-ref", w.LOG_REF, commit)
+
+    def test_a_fast_forward_rewrite_of_the_log_alarms(self):
+        self.arm(deadline=NOW - 5000)
+        later = json.dumps({"schema": w.ARM_SCHEMA, "plan_id": PLAN, "attempt": 1, "t0_epoch_s": NOW,
+                            "deadline_epoch_s": NOW + 3600}).encode()
+        self.log_commit(f"arms/{PLAN}.json", later)  # postpones the deadline by editing the arm in place
+        api = FakeApi()
+        self.watch(api)
+        titles = self.titles(api)
+        self.assertIn("mbp-alarm RESULT_UNREADABLE span-watch-log LOG_REWRITTEN", titles)
+        self.assertIn(f"mbp-alarm SPAN_SILENT {PLAN} NO_RESULTS_REF", titles)  # the original arm still counts
+
+    def test_a_result_published_after_the_limit_is_a_silence(self):
+        self.arm(deadline=NOW - 3600)
+        record = json.dumps({"schema": w.CLOSE_SCHEMA, "plan_id": PLAN, "status": "CLOSED_OK",
+                             "close_epoch_s": NOW - 3600}).encode() + b"\n"
+        self.log_commit(f"closes/{PLAN}.json", record, date=NOW)  # finished on time, visible only now
+        api = FakeApi()
+        self.watch(api)
+        self.assertEqual(self.titles(api), [f"mbp-alarm SPAN_SILENT {PLAN} NO_RESULTS_REF"])
+
+    def test_a_missing_log_fails_the_run(self):
+        w.Git(self.origin).run("update-ref", "-d", w.LOG_REF)
+        with self.assertRaises(w.WatchError) as caught:
+            self.watch(FakeApi())
+        self.assertIn("LOG_MISSING", str(caught.exception))
+
+    def test_read_enumerates_every_page_of_the_window(self):
+        runs = [self.wrun(n, NOW - 400 - n) for n in range(2, 140)]
+        runs.append(self.wrun(1, NOW - 100, "failure", attempt=2))  # an old run's newer failed re-run, page two
+        self.assertEqual(self.read(runs)[0], w.EXIT["failed_run"])
+
+    def test_the_lead_banner_keeps_span_and_issue(self):
+        from scripts.air import air_watch_agent as agent
+        line = f"2026-11-15 00:00:00 ALARM MBP_ALARM {PLAN}/issue-7/SPAN_SILENT"
+        self.assertEqual(agent.structural_text(line)[1], f"ALARM MBP_ALARM {PLAN}/issue-7/SPAN_SILENT")
 
     def test_workflow_shape(self):
         text = WORKFLOW.read_text()

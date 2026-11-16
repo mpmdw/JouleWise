@@ -1,13 +1,14 @@
 name: mbp-watch
 
 # RL-173 C (RL-149 §2.8 line 7): the MBP span watcher runs here, so it works when the Air and the lead are
-# both away. Every 10 minutes it reads, live, the span-watch/* refs (each span's arm record, pushed before
-# its launch, and its close record, pushed by its Check), and the desk-bundles/* and cadence-desk-final/*
-# refs (which a repository ruleset must protect; the run fails without it). It opens one `mbp-alarm` issue per new event, assigned to the repository owner: SPAN_SILENT (no
-# close or bound bundle by the armed deadline + 20 min), SPAN_STOP, DESK_HOLD, RESULT_UNREADABLE. Issues
-# carry closed-vocabulary codes only; the repository is public. A run that detects an alarm succeeds once
-# the issue is confirmed; a failed git or API read, or an unconfirmed issue, fails the run. Each arm checks
-# the latest completed run with `python3 scripts/mbp_watch.py read` (C.4). Runbook: docs/ops/MBP-WATCH.md.
+# both away. Every 10 minutes it re-reads the append-only span log (refs/heads/span-watch/log: each span's
+# arm, pushed before its launch, and its close, pushed by its Check; a ruleset must protect it or the run
+# fails) and the desk-bundles/* and cadence-desk-final/* refs, and opens one `mbp-alarm` issue per new
+# event, assigned to the repository owner: SPAN_SILENT (no visible close or bound bundle by the armed
+# deadline + 20 min), SPAN_STOP, DESK_HOLD, RESULT_UNREADABLE. Issues carry closed-vocabulary codes only;
+# the repository is public. A failed git or API read, or an unconfirmed issue, fails the run. Each arm
+# checks the latest completed run with `python3 scripts/mbp_watch.py read` (C.4). Runbook:
+# docs/ops/MBP-WATCH.md.
 
 on:
   schedule:

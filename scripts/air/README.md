@@ -129,9 +129,10 @@ If the checkout (on JW-EXT) is missing, the wrapper posts
   on `main` alarms `MAIN_CI_RED` once per run id if `fences`, `quick` or any
   `test (...)` shard failed or was cancelled (state `.../air-watch/main-ci-state.json`).
   If `gh` is missing or unauthenticated, one `INFO GH_UNAVAILABLE` and no alarm;
-- on the same 900 s tick runs `mbp_watch.alarm_poll` (RL-173 C.3): one `ALARM MBP_ALARM <code> <span>
-  issue=<n>` notification per newly seen open `mbp-alarm` issue, over the public REST API without a token
-  (state `.../air-watch/mbp-alarm-state.json`; a failed read logs `INFO MBP_ALARM_POLL_ERROR api`);
+- on the same 900 s tick runs `mbp_watch.alarm_poll` (RL-173 C.3): one `ALARM MBP_ALARM
+  <span>/issue-<n>/<code>` notification per open `mbp-alarm` issue (all pages), over the public REST API
+  without a token; an issue is acknowledged only after the notification succeeded, so a failed banner is
+  retried (state `.../air-watch/mbp-alarm-state.json`; a failed read logs `INFO MBP_ALARM_POLL_ERROR api`);
 - delivers each NOTICE/ALARM as a macOS notification (`/usr/bin/osascript
   display notification`) carrying only level, code and subject, and appends
   `NOTIFY ok|failed ...` to the log. Notification failure is logged, not fatal.
