@@ -6,6 +6,9 @@
 
 **2026-11-16 explicit user-priority [AGENT] intake:** repair the cold Sol refusal of PR #799/#800 before ordinary queue work. #799 F4 reproduced and fixed with regressions; #800 repairs continue on its branch. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md).
 
+**2026-11-16 user-priority [AGENT] continuation:** PR #800 gate-5 repairs and exact-head regressions precede ordinary queue work. F1–F4 fixed; valid-rerun coverage is in #799, policy questions remain with the research lead. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-queue-controller-gate5-sol-r6.md).
+
+
 **2026-11-16 explicit intake, [AGENT]:** PR #799/#800 gate-5 repair outranks ordinary queue work. #799 coverage gap addressed; rerun policy and fresh stack admission remain open. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md).
 
 **2026-11-15 user-priority continuation:** PR #800 gate-4 fixes cover global L002 chronology, later verdict clearance, retained copy debt, retry clocks/floors and fence budgets; full dispositions in design §15.15. Research-lead questions and external offload guarantees remain gated. No phase exit-checklist matrix row exists. Evidence: [docs/run_reports/2026-11-15-queue-controller-gate4-sol-r5.md](docs/run_reports/2026-11-15-queue-controller-gate4-sol-r5.md).

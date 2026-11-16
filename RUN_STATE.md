@@ -6,6 +6,9 @@
 
 **2026-11-16 PR #799 gate 6 repair:** declared summaries are required by signed publication/read, so a missing record cannot disappear from replay history. 76 desk tests, 246 safe cadence tests, 48 host/docs checks pass. [Run report](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md). No MBP contact, custody access or merge; stack admission remains with the lead.
 
+**2026-11-16 PR #800 gate 5:** four reproduced admission/fence defects repaired with failing-before regressions; current design dispositions are in §15.16. Rebased linearly on #799 `585bfa8cd`. [Run report](docs/run_reports/2026-11-16-queue-controller-gate5-sol-r6.md). Fresh cold admission and listed research-lead questions remain open. No MBP or real custody access; no merge.
+
+
 **2026-11-16 PR #799 gate 5:** valid new-id rerun_of coverage added; hash and append stability verified. First-of-group treatment of disposed ancestors remains NEEDS_RULING; no policy change. [Run report](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md). No MBP contact; no merge.
 
 **2026-11-15 Sol round 5, PR #800:** gate-4 controller corrections and dispositions are applied on #799 `6b4e32b20`. Independent delta findings were corrected. Local verification: 421 cadence tests OK with 12 explicit /bin/ps environment skips; 48 host/docs checks and 15 synthetic scenarios pass. Fresh admission, research questions and lead gates remain open. Isolated build tree `/Volumes/JW-EXT/scratch/sol-ctl-r5/wt800`; original metadata inaccessible. See [docs/run_reports/2026-11-15-queue-controller-gate4-sol-r5.md](docs/run_reports/2026-11-15-queue-controller-gate4-sol-r5.md). No MBP or custody access; no merge.

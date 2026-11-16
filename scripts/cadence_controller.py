@@ -131,6 +131,10 @@ class NetworkClosed(RuntimeError):
     """Network work was attempted while a span is armed or after the arm's network phase ended."""
 
 
+class FenceLapsed(RuntimeError):
+    """A continuous standing-fence deadline passed before this operation."""
+
+
 def load_config(path):
     cfg = json.loads(Path(path).read_text(encoding="utf-8"))
     problems = []
@@ -512,7 +516,7 @@ class Git:
     def local_refs(self, prefix):
         """Names under a local ref prefix (no network)."""
         res = self.git("for-each-ref", "--format=%(refname)", prefix)
-        return [line[len(prefix):] for line in res.stdout.splitlines() if line.startswith(prefix)] if res.rc == 0 else []
+        return [line[len(prefix):] for line in res.stdout.splitlines() if line.startswith(prefix)] if res.rc == 0 else None
 
     def push_commit(self, sha, ref):
         """Push a local signed commit to ``ref`` once. An existing remote ref with the same tree is success (a
@@ -562,7 +566,7 @@ class Git:
 
     def list_dir(self, path):
         res = self.git("ls-tree", "--name-only", self.ref, path.rstrip("/") + "/")
-        return [Path(x).name for x in res.stdout.split()] if res.rc == 0 else []
+        return [Path(x).name for x in res.stdout.split()] if res.rc == 0 else None
 
     def worktree_add(self, path, sha):
         return self.git("worktree", "add", "--detach", str(path), sha, timeout=300)
@@ -656,7 +660,10 @@ def read_audit(cfg, git, state):
             out["verdicts"][pid] = {"doc": doc}
         except (desk_transport.TransportRefusal, ValueError, OSError) as error:
             out["verdicts"][pid] = {"error": f"{type(error).__name__}: {error}"}
-    for pid in git.local_refs(MBP_VERDICT_PREFIX):   # the MBP desk's own signed records (RL-173 B; FORMAT section 6)
+    local_plans = git.local_refs(MBP_VERDICT_PREFIX)
+    if local_plans is None:
+        reasons.append(law.reason("FETCH_FAILED", "the MBP desk verdict refs could not be listed"))
+    for pid in local_plans or []:   # the MBP desk's own signed records (RL-173 B; FORMAT section 6)
         ref = f"{MBP_VERDICT_PREFIX}{pid}"
         tip = git.git("rev-parse", ref).stdout.strip()
         key = f"mbp:{pid}"
@@ -670,7 +677,10 @@ def read_audit(cfg, git, state):
             out["mbp_verdicts"][pid] = {"doc": doc}
         except (desk_transport.TransportRefusal, ValueError, OSError) as error:
             out["mbp_verdicts"][pid] = {"error": f"{type(error).__name__}: {error}"}
-    for name in git.list_dir(f"{rd}/q1"):        # the lead's Q1 completion records (RL-173 E)
+    q1_names = git.list_dir(f"{rd}/q1")
+    if q1_names is None:
+        reasons.append(law.reason("FETCH_FAILED", "the Q1 record directory could not be listed"))
+    for name in q1_names or []:        # the lead's Q1 completion records (RL-173 E)
         if not name.endswith(".json"):
             reasons.append(law.reason("Q1_RECORD_INVALID", f"q1/{name}: not <plan_id>.json"))
             continue
@@ -689,7 +699,10 @@ def read_audit(cfg, git, state):
         history = git.commits(f"{rd}/q1/{name}")
         if history:
             out["q1_epochs"][pid] = history[-1][1]   # its latest commit: a premature record is recovered by re-committing it
-    for name in git.list_dir(f"{rd}/sessions"):
+    session_names = git.list_dir(f"{rd}/sessions")
+    if session_names is None:
+        reasons.append(law.reason("FETCH_FAILED", "the READY/DONE session directory could not be listed"))
+    for name in session_names or []:
         rec = git.show_bytes(git.ref, f"{rd}/sessions/{name}")
         try:
             doc = json.loads(rec)
@@ -1059,10 +1072,11 @@ class Controller:
     def guard(self, what):
         if not self.network_open:
             raise NetworkClosed(f"{what}: network is closed (a span is armed or the arm's network phase ended)")
-        self.network_log.append({"what": what, "epoch": self.env.now()})
         # Every network call is bounded well under STANDING_FENCE_S; renewing before each keeps a slow tick from
         # letting the fence lapse into the watchdog's stale removal (RL-173 E: held continuously).
-        self.refresh_fence()
+        if self.refresh_fence() == "lapsed":
+            raise FenceLapsed(what)
+        self.network_log.append({"what": what, "epoch": self.env.now()})
 
     # -- records ------------------------------------------------------------------------------------
     def span_dir(self, plan_id):
@@ -1131,8 +1145,11 @@ class Controller:
             if cur is not None and not (cur["purpose"] == self.standing_purpose() and cur["pid"] == self.pid):
                 if not (cur["purpose"].startswith(STANDING_FENCE_PREFIX) and not self.env.pid_alive(cur["pid"])):
                     return "foreign"
-            elif cur is not None and cur["deadline"] - self.env.now() >= (seconds / 2 if minimum_s is None else minimum_s):
-                return "held"    # ours with time to spare: no rewrite, so a watched custody directory stays quiet (T4)
+            elif cur is not None:
+                if cur["deadline"] <= self.env.now():
+                    raise FenceLapsed("taking the standing fence")
+                if cur["deadline"] - self.env.now() >= (seconds / 2 if minimum_s is None else minimum_s):
+                    return "held"    # ours with time to spare: no rewrite, so a watched custody directory stays quiet (T4)
             fence.write_fence(self.custody, {"purpose": self.standing_purpose(), "pid": self.pid,
                                              "deadline": self.env.now() + seconds})
         return "held"
@@ -1148,12 +1165,13 @@ class Controller:
                 cur = fence.read_fence(self.custody)
                 if cur is not None and cur["purpose"] == self.standing_purpose() and cur["pid"] == self.pid:
                     left = cur["deadline"] - self.env.now()
+                    if left <= 0:
+                        return "lapsed"  # leave the expired deadline intact until the caller records the halt
                     if left >= STANDING_FENCE_S / 2:
                         return "held"
                     fence.write_fence(self.custody, {"purpose": self.standing_purpose(), "pid": self.pid,
                                                      "deadline": self.env.now() + STANDING_FENCE_S})
-                    # A deadline already passed: the watchdog may have seen no fence (gate 3, Mythos T12)
-                    return "held" if left > 0 else "lapsed"
+                    return "held"
         return "not held"
 
     def startup_fence(self):
@@ -1166,13 +1184,15 @@ class Controller:
         records, _ = self.records()
         if any(r["status"] == "LIVE" for r in records):
             return "live"
-        if self.unacked_pages():
+        if any(p["kind"] != "WAIT_STALL" for p in self.unacked_pages()):
             return "paged"
         if read_json(self.state / "night.json"):
             return "night"
         labels, ok = self.night_agents()
         if not ok or labels:
             return "night"
+        if self.refresh_fence() == "lapsed":
+            return "lapsed"  # the first tick records the blocking page; startup must not erase the deadline
         return self.hold_fence()
 
     def release_fence(self):
@@ -1211,7 +1231,8 @@ class Controller:
         page_id = f"{base}-e{(episodes[-1] + 1) if episodes else 1}"
         exclusive_json(pages / f"{page_id}.json", {"page_id": page_id, "epoch": self.env.now(), "at": iso(self.env.now()),
                                                    **body})
-        self.release_fence()
+        if kind != "WAIT_STALL":
+            self.release_fence()
         self.transition(None, "page", {"page_id": page_id, "kind": kind, "codes": [r["code"] for r in reasons]})
         for r in reasons:
             if r.get("span"):
@@ -1241,7 +1262,7 @@ class Controller:
 
     def wait(self, codes, detail, *, quiet=False):
         """Every wait is bounded (Mythos F7): a wait whose codes persist past ``stall_bound`` pages WAIT_STALL once
-        per episode. An unread informational page keeps the fence released so the magistrate can run. A ``quiet``
+        per episode. An informational page retains the live queue's continuous fence (RL-173 E). A ``quiet``
         wait (a v4 window, an unreadable night-agent census) writes nothing synced and holds no fence (Mythos N15)."""
         now = self.env.now()
         sig = sorted(set(codes))
@@ -1253,23 +1274,32 @@ class Controller:
             self.page("WAIT_STALL", [law.reason("WAIT_STALL", f"{', '.join(sig)} since {iso(episode['since'])}: "
                                                               f"{detail}"[:400])],
                       {"sig": sig, "since": episode["since"]})
-        if quiet or self.unacked_pages():
+        pages = self.unacked_pages()
+        if quiet or any(p["kind"] != "WAIT_STALL" for p in pages):
             self.release_fence()
             return self.write_status("PAGED" if self.unacked_pages() else "WAIT",
                                      {"codes": sig, "detail": detail, "quiet": quiet,
                                       "pages": [p["page_id"] for p in self.unacked_pages()]}, sync=not quiet)
         held = self.hold_fence()
-        return self.write_status("WAIT", {"codes": sig, "detail": detail, "fence": held})
+        return self.write_status("PAGED" if pages else "WAIT", {"codes": sig, "detail": detail, "fence": held})
 
     # -- the tick ------------------------------------------------------------------------------------
     def tick(self):
+        try:
+            return self._tick()
+        except FenceLapsed as error:
+            self.page("HALT", [law.reason("ARM_INDETERMINATE", f"standing fence lapsed before {error}")])
+            return self.write_status("HALTED", {"codes": ["ARM_INDETERMINATE"], "fence": "lapsed"})
+
+    def _tick(self):
         now = self.env.now()
         self.raised = set()
         records, orphans = self.records()
         live = [r for r in records if r["status"] == "LIVE"]
         if live:
             return self.monitor(live[0])
-        self.refresh_fence()      # held continuously while the queue is live (RL-173 E)
+        if self.refresh_fence() == "lapsed":
+            raise FenceLapsed("tick admission")
         for intent in orphans:
             status = self.adopt_or_halt(intent)
             if status is not None:
@@ -1305,7 +1335,7 @@ class Controller:
             # until note-run records its Check; the 1,200 s floor counts from here.
             self.record_external("night:" + ",".join(night["labels"]), "v4-window", night["first_seen"], now)
             (self.state / "night.json").unlink()
-        if not self.unacked_pages():
+        if not any(p["kind"] != "WAIT_STALL" for p in self.unacked_pages()):
             self.hold_fence()     # gate 3 (Opus 9): taken before this tick's network, also after an acknowledgement
         self.network_open = True
         self.network_log = []
@@ -1672,7 +1702,14 @@ class Controller:
                               else law.watcher_lease(audit2["watcher"]))}
         if cand["cls"]["dated"]:
             leases["date"] = law.date_end(span["not_before"]) - law.MIDNIGHT_MARGIN_S
+        if snap2["now"] < law.KEY_SECOND_COPY_DEADLINE and any(
+                isinstance(doc := marker.get("doc"), dict) and doc.get("schema") == law.OFFLOAD_MARKER_SCHEMA
+                and doc.get("key_second_copy") is None for marker in extra2.get("markers", {}).values()):
+            # A slow notice or launch cannot carry a temporary key-copy exception past its absolute deadline.
+            leases["key_copy_exception"] = law.KEY_SECOND_COPY_DEADLINE
         lease = min(leases.values())
+        if now >= lease:
+            return self.wait(["LEASE_EXPIRED"], "an admission prerequisite expired before the launch intent")
         last = law.last_close(snap2["runs"])
         intent = {
             "schema": RECORD_SCHEMA, "plan_id": plan_id, "span": span, "queue": {
@@ -2077,16 +2114,21 @@ class Controller:
             shutil.rmtree(out)
         signers = self.cfg["controller_signers"]
         self.hold_fence(DESK_TIMEOUT_S + STANDING_FENCE_S, minimum_s=DESK_TIMEOUT_S + 300)     # the fence outlasts the step (RL-173 E)
+        history_refs = self.git.local_refs(MBP_VERDICT_PREFIX)
         argv = [sys.executable, "-I", "-B", "-X", f"pycache_prefix={out / 'empty-pycache'}", str(DESK_CLI), "final", "--plan-id", plan_id, "--repo", self.git.dir,
                 "--bundle-ref", close["bundle_commit"], "--allowed-signers", signers, "--kit", intent["kit"]["path"],
                 "--out", str(out), "--lock", str(self.state / "desk.lock"), "--history-prefix", MBP_VERDICT_PREFIX,
                 "--history-signers", signers, "--history-principal", desk_transport.CONTROLLER_PRINCIPAL,
                 *(["--allow-mock"] if self.cfg["accept_mock_verdicts"] else []),
                 # the controller writes these records itself: none at all means none published yet (#799 T5)
-                *(["--history-empty"] if not self.git.local_refs(MBP_VERDICT_PREFIX) else [])]
+                *(["--history-empty"] if history_refs == [] else [])]
         pin = self.desk_commit()  # code can have changed since the arm
-        res = (self.host_run(argv, timeout=DESK_TIMEOUT_S, cwd=str(ROOT)) if pin.get("ok") is True else
-               Result(2, "", f"desk checkout: {pin.get('detail')}"))
+        if history_refs is None:
+            res = Result(2, "", "desk history refs could not be listed")
+        elif pin.get("ok") is True:
+            res = self.host_run(argv, timeout=DESK_TIMEOUT_S, cwd=str(ROOT))
+        else:
+            res = Result(2, "", f"desk checkout: {pin.get('detail')}")
         verdict = read_json(out / desk_final.VERDICT_NAME) if (out / desk_final.VERDICT_NAME).is_file() else None
         attempts = ((close.get("mbp_desk") or {}).get("attempts") or 0) + 1
         record = {"rc": res.rc, "epoch": self.env.now(), "published": None, "problem": None, "attempts": attempts,

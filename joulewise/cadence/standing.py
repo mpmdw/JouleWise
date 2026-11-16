@@ -1246,8 +1246,8 @@ def offload_marker_problems(doc, plan_id, now, source=None, after=None):
     key = doc.get("key_second_copy")
     if not (key is None or _text(key)):
         p.append("key_second_copy: null or where the key's second copy is")
-    elif key is None and (written is None or written > KEY_SECOND_COPY_DEADLINE):
-        p.append("key_second_copy: required on a marker written 24 h after RL-173 (A.1)")
+    elif key is None and now >= KEY_SECOND_COPY_DEADLINE:
+        p.append("key_second_copy: required at admission after RL-173's 24 h exception (A.1)")
     if written is None:
         p.append("written_at: ISO 8601 with an offset")
     else:

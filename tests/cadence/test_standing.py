@@ -835,7 +835,7 @@ class RL173(unittest.TestCase):
         self.assertTrue(law.offload_marker_problems(marker(pid, key_second_copy=None), pid, NOW))   # A.1: after 24 h
         early = datetime.fromtimestamp(law.KEY_SECOND_COPY_DEADLINE - 60, law.ZONE).isoformat()
         self.assertEqual(law.offload_marker_problems(marker(pid, key_second_copy=None, written_at=early), pid,
-                                                     law.KEY_SECOND_COPY_DEADLINE), [])
+                                                     law.KEY_SECOND_COPY_DEADLINE - 1), [])
         # gate 3 (Opus 3): bound to the span's own output and written after its receipt, not after the host clock
         src, after = f"/o/cl-dev-05/{pid}-20261117T160000Z", NOW - 600
         self.assertEqual(law.offload_marker_problems(marker(pid), pid, NOW, source=src, after=after), [])
@@ -1014,3 +1014,16 @@ class Gate4DispositionUniqueness(unittest.TestCase):
         with self.assertRaisesRegex(law.StandingError, 'duplicate plan_id'):
             standing(dispositions=[{'plan_id': 'cq-x-a1', 'resolution': 'withdrawn', 'record': 'new'},
                                    {'plan_id': 'cq-x-a1', 'resolution': 'cleared', 'record': 'old'}])
+
+
+class Gate5KeyDeadline(unittest.TestCase):
+    def test_the_same_early_marker_expires_by_admission_time(self):
+        pid = 'cq-dev-05-s01-a1'
+        deadline = law.KEY_SECOND_COPY_DEADLINE
+        early = datetime.fromtimestamp(deadline - 3600, law.ZONE).isoformat()
+        doc = marker(pid, written_at=early, key_second_copy=None)
+        self.assertEqual(law.offload_marker_problems(doc, pid, deadline - 1), [])
+        for now in (deadline, deadline + 1, deadline + 86400):
+            with self.subTest(now=now):
+                self.assertTrue(law.offload_marker_problems(doc, pid, now))
+        self.assertEqual(law.offload_marker_problems(dict(doc, key_second_copy='Ed vault'), pid, deadline + 86400), [])

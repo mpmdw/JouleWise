@@ -808,9 +808,9 @@ halts (`GATE_DISAGREEMENT`).
   - **the close:** the tick that sees the launch fence gone takes it before anything else, and holds it through
     the push, the MBP desk and the offload.
 
-  A page releases it: that is the deliberate handoff to the magistrate, which wakes only on a page. Halts and v4
-  pages block until acknowledged. Informational pages (`QUEUE_EMPTY`, `FALLBACK_F0_DUE`, `WAIT_STALL`) keep it
-  released until acknowledged. `magistrate_watchdog.py` is not touched; the agent census in the arm proof is the
+  Halts, v4 cedes and fallback handoffs release it deliberately. Halts and v4
+  pages block until acknowledged. A `WAIT_STALL` notification keeps the live queue's fence held and renewed,
+  including subsequent unacknowledged ticks and controller restarts (15.16). `magistrate_watchdog.py` is not touched; the agent census in the arm proof is the
   validity backstop.
 - **The arm handoff is atomic.** The arm child hides only the controller's own fence from the launcher's busy
   check, so the launcher's `write_fence` (an `os.replace` under the fence lock) replaces it. The fence file names
@@ -937,8 +937,8 @@ Research lead RL-173 (Sun 15 Nov 11:58). Each item, and where it is enforced:
   ```
 
   `source` is exactly the `{output}` the controller passed; `written_at` falls after the span's receipt and not
-  after the host clock (300 s skew). `key_second_copy` may be null only on a marker written before
-  2026-11-16 11:58 PST (A.1's 24 h). A failed offload may leave
+  after the host clock (300 s skew). `key_second_copy` may be null only while the current admission time is before
+  2026-11-16 11:58 PST (A.1's absolute 24 h deadline), including for older markers. A failed offload may leave
   `<plan_id>.failed` (any content), which holds like a bad marker. The offload tool owns this status file and must remove it before publishing a successful retry's `.ok`; the controller never deletes the failed attempt's evidence. The controller opens nothing else the tool
   writes; the marker carries no denied key.
 - **The Actions watcher.** The controller reads the workflow named by `watcher_name` (a file name, e.g.
@@ -962,7 +962,7 @@ only; the frozen pins record no hash).
 |---|---|
 | Opus 1 (HIGH): a ceded session or a newer receipt dissolved the copy gate | The copy gate is per span: every controller span that left a receipt, plus the host's newest campaign receipt, needs its own verified marker before any arm, cede or F0 page. `JOURNAL_COPY` also holds a READY session's cede (A.3) |
 | Opus 2 (MED): two correct verdicts disagreed | (#799) "schema change" compares with the latest earlier summary; the agreement check leaves out each desk's history-dependent parts |
-| Opus 3 (MED): marker not bound to its span | `source` must be the span's output directory; `written_at` after the span's receipt and not after the host clock (300 s skew); A.1's key rule by the marker's own `written_at` |
+| Opus 3 (MED): marker not bound to its span | `source` must be the span's output directory; `written_at` after the span's receipt and not after the host clock (300 s skew). Gate 5 corrected A.1's key rule to the current admission clock (15.16) |
 | Opus 4 (LOW): a stale desk lock was silent | `MBP_DESK_FAILED` (halt) on a stale lock or three failed runs; the step keeps retrying and the halt lifts when it publishes |
 | Opus 5 (LOW): L002 lifted by a disposition; a missing L002 summary read as released | Only the L002 release record lifts `L002_TIMEOUT`; a consumer-gate leg whose summary was not read is "not known" (holds) |
 | Opus 6 (LOW): any Actions run counted | The run must be `schedule` on `main` in this repository |
@@ -981,7 +981,7 @@ only; the frozen pins record no hash).
 | T10 | = Opus 2 |
 | T11 (#799) | The draw's history clause skips earlier attempts of the same span |
 | T12 | Every arm stage renews the fence; a passed deadline is reported `lapsed`, and an arm whose fence is not `held` before the intent halts |
-| T13 | For the research lead: an informational page (a `PLAN_REFUSED_AT_T0` stall) releases the fence until acknowledged |
+| T13 | Gate 5 corrects informational `WAIT_STALL` pages to retain the continuous fence under RL-173 E (15.16) |
 | T14 | A failed offload is retried up to three times in the close interval before `OFFLOAD_FAILED` |
 | T15 | = Opus 3; switch-over: the newest hand-armed campaign close needs a typed marker before the first tick (install list) |
 | T16 | `desk_code` names the transport, the kit loader and the CLI; the MBP's checkout is pinned (Opus 8) |
@@ -1014,9 +1014,8 @@ No fresh admission is claimed. This table supersedes earlier descriptions where 
 | — / 10: upload attempts too close together | FIXED with F4/F5: delays are 5 then 15 minutes after the previous attempt's end, independent of the 60 s poll. Gate4Controller retry-spacing regression. |
 
 **Research-lead questions (not rulings).** In addition to the draw and unknown L002 recovery above:
-A.1's 24 h may mean current judgment time or marker written_at (current behavior); which is intended?
-Does an informational WAIT_STALL page release the continuous fence (gate-3 T13)? N12's reference hash
-is still bound by capture-run name only. Confirm Q1 records for hand-armed v1.1 spans counted in line 9,
+Gate 5 resolves the key deadline and informational-stall implementation defects directly under RL-173 A.1/E (15.16).
+N12's reference hash is still bound by capture-run name only. Confirm Q1 records for hand-armed v1.1 spans counted in line 9,
 and the typed-marker switch-over requirement. A rerun/withdrawn span with desk disagreement currently
 needs a cleared record with updated bindings; should there be a non-counting clearance? Free-text custody assertions,
 arbitrary offload descendants, and campaign-history support stay with their named owners. The deny scan
@@ -1030,3 +1029,20 @@ named-stop hold is being resolved. A disagreement requires both exact hashes and
 A missing binding never clears a hold; legacy three-field records still disposition a bad close (rerun/withdrawn remove its
 line-9 count; cleared retains it) but must be extended before they lift a desk hold. A later verdict requires an updated binding.
 The producer preserves deterministic fixed Git commit dates; no clearance chronology is inferred from them.
+
+
+### 15.16 Gate 5 (cold Sol, REFUSE at #799 6b4e32b20 / #800 eb2a2a608)
+
+The four reproduced defects are corrected under RL-173 and RL-172; no new policy ruling is inferred.
+
+| Finding | Disposition and regression |
+|---|---|
+| F1 HIGH: early keyless marker counted forever | FIXED. A.1's absolute deadline is checked against current admission time, including old markers; an admitted temporary exception also bounds the launch lease, so a slow notice cannot cross the deadline. `Gate5KeyDeadline` advances only now across the boundary; `Gate5Controller` proves an early predecessor marker blocks the next arm. |
+| F2 MED: a tick/guard erased a fence lapse by renewing | FIXED. An expired owned deadline is never renewed by refresh or take. Startup preserves it; tick/guard route the lapse to a durable HALT/ARM_INDETERMINATE page before more network or admission. Acknowledgement and a fresh boundary evaluation are required before another arm. Tick, guarded-read and controller-restart regressions exercise callers. |
+| F3 MED: WAIT_STALL dropped the live queue fence | FIXED under E's continuous-fence requirement. WAIT_STALL pages retain and renew the fence through unacknowledged polls and restart. Actual halt, cede and fallback handoffs retain their existing release behavior. Regression runs a NOT_BEFORE wait past its stall bound and checks every poll's fence. |
+| F4 MED: failed session-directory listing looked empty | FIXED. Failed ls-tree/for-each-ref returns None, distinct from a successful empty listing. Session, Q1 and local desk-ref failures become FETCH_FAILED input reasons and hold selection on either authority read. A failed history listing at desk close cannot assert --history-empty or launch the desk. Regressions include a committed READY entry and faults on both admission reads. |
+| Valid rerun draw coverage (LOW, #799) | COVERED for the ruled hash and append stability with a schema-valid three-span rerun_of chain. No hash nondeterminism reproduced. First-of-group treatment of an executed disposed ancestor remains NEEDS_RULING; existing options and recommendation in 15.15 remain, without an implementation decision. |
+
+A failed authority listing is retried as FETCH_FAILED; no work arms or cedes from incomplete authority.
+Old keyless markers require second-copy evidence from the offload owner after the absolute deadline; this change authors no custody assertion.
+All prior unresolved research questions in 15.15 remain except the deadline and informational-stall implementation defects corrected here. Fresh cold admission, installation and the watched native span remain separate lead gates.

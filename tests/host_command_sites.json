@@ -2161,7 +2161,7 @@
   },
   {
     "file": "scripts/cadence_controller.py",
-    "locator": "Controller.desk_close:705b4693b4eb1846",
+    "locator": "Controller.desk_close:abc4ebeb3ccd7fe6",
     "command": "python-isolated",
     "seam": "RL-173 B: the deterministic desk (python -I -B scripts/air/cadence_desk.py final) in the close interval, through Controller.host_run; it reads only the signed bundle commit in the controller's clone and runs no host command; the synthetic run and RL173EndToEnd run the real desk on synthetic bundles, and a test replaces host_run to fail it"
   },

@@ -52,6 +52,152 @@ class WorldCase(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
+class Gate5Controller(WorldCase):
+    def keyless_world(self):
+        w = self.pilot_world()
+        prior = w.standing['prior_spans'][-1]
+        prior.update(t0='2026-11-16T07:00:00-08:00', closed='2026-11-16T10:00:00-08:00')
+        w.commit({f'{synth.RD}/STANDING.json': w.standing}, 'early prior close', w.env.now() - 100)
+        source = Path(w.cfg['output_root']) / prior['campaign_id'] / (prior['plan_id'] + '-20261116T150000Z')
+        source.mkdir(parents=True)
+        receipt = source / cc.RECEIPT
+        receipt.write_text(json.dumps({'roster': prior['roster'], 'kit': {'sha256': prior['kit_sha256']},
+                                      'legs': [{'leg_id': x, 'summary': {'g0_outcome': 'released'}}
+                                               for x in prior['roster']], 'legs_finished': len(prior['roster'])}))
+        closed = law.parse_time(prior['closed'])
+        os.utime(receipt, (closed, closed))
+        marker = synth.offload_marker(prior['plan_id'], law.KEY_SECOND_COPY_DEADLINE - 3600, str(source))
+        marker['key_second_copy'] = None
+        path = Path(w.cfg['copy_marker_dir']) / (prior['plan_id'] + '.ok')
+        path.write_text(json.dumps(marker))
+        return w
+
+    def test_an_early_keyless_copy_blocks_admission_after_the_deadline(self):
+        w = self.keyless_world()
+        self.assertEqual(w.tick()['state'], 'PAGED')
+        self.assertIn('OFFLOAD_FAILED', self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_a_key_deadline_crossed_after_the_final_authority_read_blocks_launch(self):
+        from unittest import mock
+        w = self.keyless_world()
+        original = w.ctl.notice
+
+        def slow_notice(issue, text):
+            w.env.t += 20
+            return original(issue, text)
+
+        w.ctl.notice = slow_notice
+        with mock.patch.object(law, 'KEY_SECOND_COPY_DEADLINE', w.env.now() + 10):
+            status = w.tick()
+        self.assertEqual(status['state'], 'WAIT')
+        self.assertIn('LEASE_EXPIRED', status['detail']['codes'])
+        self.assertEqual(w.launcher.launched, [])
+        self.assertFalse((w.ctl.span_dir('cq-dev-05-s01-a1') / 'intent.json').exists())
+
+    def test_a_tick_cannot_renew_away_an_expired_fence(self):
+        w = self.pilot_world(prior=False)
+        w.ctl.startup_fence()
+        w.env.t = cc.fence.read_fence(w.ctl.custody)['deadline'] + 1
+        self.assertEqual(w.ctl.startup_fence(), 'lapsed')
+        self.assertEqual(w.tick()['state'], 'HALTED')
+        self.assertIn('ARM_INDETERMINATE', self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+        w.controller()  # the unacknowledged lapse survives a controller restart
+        self.assertEqual(w.ctl.startup_fence(), 'paged')
+        self.assertTrue(w.tick()['detail']['silent'])
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_an_unreadable_local_history_is_never_asserted_empty_at_close(self):
+        w = self.world(prior=False)
+        pid = 'cq-dev-05-s01-a1'
+        directory = w.ctl.span_dir(pid)
+        cc.atomic_json(directory / 'intent.json', {'kit': {'path': '/synthetic/kit.json'}})
+        cc.atomic_json(directory / 'close.json', {'pushed': True, 'bundle_commit': 'a' * 40})
+        w.ctl.git.local_refs = lambda _prefix: None
+        w.ctl.host_run = lambda *_a, **_kw: self.fail('desk launched with unreadable history')
+        w.ctl.desk_close(pid)
+        close = cc.read_json(directory / 'close.json')
+        self.assertIn('history refs could not be listed', close['mbp_desk']['problem'])
+        self.assertIsNone(close['mbp_desk']['published'])
+
+    def test_a_guard_lapse_during_the_authority_read_halts_before_network(self):
+        w = self.pilot_world(prior=False)
+        original = w.ctl.git.fetch_audit
+
+        def delayed_fetch():
+            w.env.t = cc.fence.read_fence(w.ctl.custody)['deadline'] + 1
+            return original()
+
+        w.ctl.git.fetch_audit = delayed_fetch
+        self.assertEqual(w.tick()['state'], 'HALTED')
+        self.assertIn('ARM_INDETERMINATE', self.pages(w))
+        self.assertEqual(w.ctl.network_log, [])
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_an_informational_stall_keeps_the_fence_until_and_after_restart(self):
+        w = self.world(prior=False)
+        w.queue('pilot', [dict(w.span(1, 'dev-05-s01', 'cl-dev-05', L[:6]), not_before='2026-11-18')], role='smoke')
+        for _ in range(int(law.stall_bound(['NOT_BEFORE']) / 60) + 3):
+            status = w.tick()
+            self.assertEqual(status['detail']['codes'], ['NOT_BEFORE'])
+            cur = cc.fence.read_fence(w.ctl.custody)
+            self.assertIsNotNone(cur)
+            self.assertGreater(cur['deadline'], w.env.now())
+            w.env.t += 60
+        self.assertIn('WAIT_STALL', self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+        w.controller()
+        self.assertEqual(w.ctl.startup_fence(), 'held')
+        w.tick()
+        self.assertIsNotNone(cc.fence.read_fence(w.ctl.custody))
+
+    def test_failed_authority_listings_hold_both_reads(self):
+        for target in ('sessions', 'q1', 'local_refs'):
+            for fail_on in (1, 2):
+                with self.subTest(target=target, fail_on=fail_on):
+                    w = synth.World(Path(self.tmp.name) / f'{target}-{fail_on}', prior=False)
+                    w.controller()
+                    w.queue('pilot', [w.span(1, 'dev-05-s01', 'cl-dev-05', L[:6])], role='smoke')
+                    original = w.ctl.git.git
+                    reads = []
+
+                    def git(*args, **kw):
+                        matched = ((target != 'local_refs' and args[0] == 'ls-tree'
+                                    and args[-1] == f'{synth.RD}/{target}/')
+                                   or (target == 'local_refs' and args[0] == 'for-each-ref'
+                                       and args[-1] == cc.MBP_VERDICT_PREFIX))
+                        if matched:
+                            reads.append(args)
+                            if len(reads) == fail_on:
+                                return cc.Result(128, '', 'synthetic authority listing failure')
+                        return original(*args, **kw)
+
+                    w.ctl.git.git = git
+                    status = w.tick()
+                    self.assertEqual(status['state'], 'WAIT')
+                    self.assertEqual(len(reads), fail_on)
+                    self.assertIn('FETCH_FAILED', status['detail']['codes'])
+                    self.assertEqual(w.launcher.launched, [])
+
+    def test_an_unreadable_ready_directory_cannot_cede_or_arm(self):
+        w = self.pilot_world(prior=False)
+        w.commit({f'{synth.RD}/sessions/READY-r1-slot-1.json': {
+            'schema': law.SESSION_READY_SCHEMA, 'session_id': 'r1-slot-1', 'by': 'lead',
+            'ready_at': cc.iso(w.env.now() - 30)}}, 'ready session', w.env.now() - 20)
+        snap, _ = w.ctl.snapshot(w.env.now(), [])
+        self.assertEqual(law.select(snap).action, 'cede')
+        original = w.ctl.git.git
+        w.ctl.git.git = lambda *a, **kw: cc.Result(128, '', 'synthetic listing failure') if (
+            a[0] == 'ls-tree' and a[-1] == f'{synth.RD}/sessions/') else original(*a, **kw)
+        status = w.tick()
+        self.assertEqual(status['state'], 'WAIT')
+        self.assertIn('FETCH_FAILED', status['detail']['codes'])
+        self.assertNotIn('V4_SESSION_READY', self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+
+
+@unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
 class EndToEnd(WorldCase):
     """RL-172 (i) row 5: the controller, the pinned runner, the signed bundle, the real Air desk, the signed verdict."""
 
@@ -158,7 +304,7 @@ class LiveInterlock(WorldCase):
                                                   "evidence": "RUN_STATE 999 Check: every restore line OK"}))
         w.ack_all()
         self.assertIn("GAP", w.tick()["detail"]["codes"])   # the floor counts from the observed close, never earlier
-        w.env.t += law.GAP_AFTER_OTHER_S
+        w.advance_wait(law.GAP_AFTER_OTHER_S)
         self.assertEqual(w.tick()["state"], "LIVE")
 
     def test_an_expired_foreign_fence_with_a_live_pid_still_holds_the_host(self):   # Sol R2
@@ -415,7 +561,7 @@ class BoundsAndLedger(WorldCase):
             return p
         w.ctl.proof = agent
         self.assertEqual(w.tick()["detail"]["codes"], ["AGENT_PRESENT"])
-        w.env.t += law.STALL_SHORT_S + 60
+        w.advance_wait(law.STALL_SHORT_S + 60)
         self.assertEqual(w.tick()["state"], "PAGED")
         self.assertIn("WAIT_STALL", self.pages(w))
 

@@ -311,6 +311,17 @@ class World:
     def tick(self):
         return self.ctl.tick()
 
+    def advance_wait(self, seconds):
+        """Advance a parked scenario while simulating its intervening fence-renewal polls.
+
+        Authority and host changes are evaluated by the caller's next real tick. Tests of a stopped controller
+        deliberately advance env.t directly instead, so they still expose a genuine lease lapse.
+        """
+        end = self.env.now() + seconds
+        while self.env.now() < end:
+            self.env.t = min(end, self.env.now() + 60)
+            assert self.ctl.refresh_fence() != "lapsed", "scenario skipped a fence-renewal poll"
+
     def ack_all(self, note="synthetic magistrate"):
         for p in self.ctl.unacked_pages():
             with contextlib.redirect_stdout(io.StringIO()):
@@ -775,11 +786,13 @@ def scenario_repage(workdir, log=print):
     w.issues.clear()
     w.env.t += 300
     w.tick()                      # the veto is gone: the acknowledged page clears
-    w.env.t += 3600
+    w.advance_wait(3600)
     w.issues.append(dict(veto, number=907, title="STOP again"))
     w.tick()
     second = [p["page_id"] for p in ctl.unacked_pages()]
     assert second and second[0] != first[0], (first, second)
+    assert any(r['code'] == 'VETO_OPEN' and '907' in r['detail']
+               for p in ctl.unacked_pages() for r in p['reasons']), ctl.unacked_pages()
     log(f"repage: veto paged {first[0]}; acknowledged and cleared; a new veto paged {second[0]}")
     return w
 
@@ -814,7 +827,7 @@ def scenario_night_window(workdir, log=print):
     w.env.t += 60
     s = w.tick()
     assert "GAP" in _codes(s), s
-    w.env.t += law.GAP_AFTER_OTHER_S
+    w.advance_wait(law.GAP_AFTER_OTHER_S)
     s = w.tick()
     assert _state(s) == "LIVE", s
     log(f"night_window: quiet while loaded (no network); NIGHT_UNKNOWN on a failed read; after it: unproven until "
@@ -991,8 +1004,8 @@ def scenario_fence(workdir, log=print):
     for _ in range(3):
         s = w.tick()
         assert _state(s) == "WAIT" and held(), s
-        w.env.t += 3600
-    w.env.t = law.date_start("2026-11-18") + 600
+        w.advance_wait(3600)
+    w.advance_wait(law.date_start("2026-11-18") + 600 - w.env.now())
     s = w.tick()
     assert _state(s) == "LIVE" and w.launcher.fences_at_launch[-1]["purpose"] == mine, w.launcher.fences_at_launch
     w.launcher.finish()                      # the wrapper unlinks the launch fence
@@ -1031,7 +1044,7 @@ def scenario_copy_gate(workdir, log=print):
     newer.parent.mkdir(parents=True)
     newer.write_text("{}\n")
     os.utime(newer, (w.env.now(), w.env.now()))
-    w.env.t += 1300
+    w.advance_wait(1300)
     s = w.tick()
     assert _state(s) == "WAIT" and "JOURNAL_COPY" in _codes(s), s             # span 1's gate is not forgotten
     w.copy_journals("cq-dev-05-s01-a1")
