@@ -1,7 +1,8 @@
 """LaunchAgent entry point for the Air: results watcher plus main-CI check.
 
 `run` starts `night_results_watch.py --loop --keep-going` as a child and runs
-`main_ci_watch` every `--ci-interval` seconds while the child lives. When the
+`main_ci_watch` every `--ci-interval` seconds while the child lives, together with
+`mbp_watch.alarm_poll`: one notification per open `mbp-alarm` issue (RL-173 C.3, the lead's route). When the
 child exits, `run` exits with its status and launchd (KeepAlive) restarts it.
 `notify <event line>` is the watcher's --notify-cmd: NOTICE and ALARM lines
 become a macOS notification with structural fields only (level, code, subject)
@@ -21,6 +22,7 @@ import time
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.air import main_ci_watch  # noqa: E402
+from scripts import mbp_watch  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_LOG = Path.home() / "Library/Logs/JouleWise/air-watch.log"
@@ -114,6 +116,13 @@ def run(args, popen=subprocess.Popen, sleep=time.sleep, clock=time.monotonic):
                                        gh=args.gh, repo=args.repo, cwd=str(REPO))
             except Exception:  # never let an odd gh reply kill the supervisor
                 append_log(args.log, "INFO MAIN_CI_WATCH_ERROR main")
+            if getattr(args, "mbp_alarm_state", None):
+                # RL-173 C.3: an open mbp-alarm issue (filed by the Actions watcher) reaches the lead here.
+                try:
+                    mbp_watch.alarm_poll(args.mbp_alarm_state, lambda l: notify(l, args.log),
+                                         mbp_watch.Api(args.mbp_repo))
+                except Exception:  # never let an odd API reply kill the supervisor
+                    append_log(args.log, "INFO MBP_ALARM_POLL_ERROR api")
             next_ci = clock() + args.ci_interval
         sleep(5)
 
@@ -128,6 +137,8 @@ def main(argv=None):
     r.add_argument("--hours", type=float, default=24)
     r.add_argument("--ci-interval", type=float, default=900)
     r.add_argument("--ci-state", type=Path, default=main_ci_watch.DEFAULT_STATE)
+    r.add_argument("--mbp-alarm-state", type=Path, default=mbp_watch.DEFAULT_POLL_STATE)
+    r.add_argument("--mbp-repo", default="mpmdw/JouleWise")
     r.add_argument("--exit-state", type=Path, default=main_ci_watch.DEFAULT_STATE.with_name("agent-exit.json"))
     r.add_argument("--gh", default="gh")
     r.add_argument("--repo", default=None)

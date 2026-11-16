@@ -14,17 +14,20 @@ import unittest
 from scripts import mbp_watch as w
 from tests.git_fixture import init_git_fixture
 
-NOW = 1_900_000_000.0
+NOW = 1_800_000_000.0
 PLAN = "cq-syn-02-s01-a1"
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "mbp-watch.yml"
 PRIVATE = "ENERGY_J_123456_TOKEN_IDS_101_202_PRIVATE_TEXT"
 
 
 class FakeApi:
-    def __init__(self, issues=(), runs=(), drop_label=False):
+    def __init__(self, issues=(), runs=(), drop_label=False, rules=("deletion", "non_fast_forward"),
+                 drop_assignee=False):
         self.issues = list(issues)
         self.runs = list(runs)
         self.drop_label = drop_label
+        self.drop_assignee = drop_assignee
+        self.rules = rules
         self.calls = []
 
     def call(self, method, path, params=None, body=None, allow_422=False):
@@ -36,11 +39,20 @@ class FakeApi:
             return {"workflow_runs": self.runs}
         if method == "GET" and path == "/labels/mbp-alarm":
             return {"name": "mbp-alarm"}
+        if method == "GET" and path.startswith("/rules/branches/"):
+            return [{"type": t} for t in self.rules]
         if method == "POST" and path == "/issues":
             number = len(self.issues) + 1
-            self.issues.append({"title": body["title"], "body": body["body"], "state": "open", "number": number})
-            labels = [] if self.drop_label else [{"name": n} for n in body["labels"]]
-            return {"number": number, "labels": labels, "assignees": [{"login": a} for a in body["assignees"]]}
+            issue = {"title": body["title"], "body": body["body"], "state": "open", "number": number,
+                     "labels": [] if self.drop_label else [{"name": n} for n in body["labels"]],
+                     "assignees": [] if self.drop_assignee else [{"login": a} for a in body["assignees"]]}
+            self.issues.append(issue)
+            return dict(issue)
+        if method == "PATCH" and path.startswith("/issues/"):
+            issue = self.issues[int(path.rsplit("/", 1)[1]) - 1]
+            issue["labels"] = [{"name": n} for n in body["labels"]]
+            issue["assignees"] = [{"login": a} for a in body["assignees"]]
+            return dict(issue)
         return None
 
 
@@ -71,7 +83,7 @@ class MbpWatchTests(unittest.TestCase):
 
     def close(self, status="CLOSED_OK", plan=PLAN, epoch=NOW - 3000):
         with contextlib.redirect_stdout(io.StringIO()):
-            return w.close(self.ns(plan=plan, status=status, close_epoch=epoch))
+            return w.close(self.ns(plan=plan, status=status, close_epoch=epoch), now=NOW)
 
     def push(self, ref, files):
         """A parentless commit straight into the bare origin (the controller's and the desk's refs)."""
@@ -98,9 +110,9 @@ class MbpWatchTests(unittest.TestCase):
         return sorted(i["title"].rsplit(" ", 1)[0] for i in self.opened(api))
 
     @staticmethod
-    def transition(plan, status, t0):
-        return json.dumps({"schema": w.TRANSITION_SCHEMA, "plan_id": plan, "status": status, "t0_epoch": t0,
-                           "receipt_epoch": t0 + 10}).encode()
+    def transition(plan, status, t0, receipt=None, attempt=1):
+        return json.dumps({"schema": w.TRANSITION_SCHEMA, "plan_id": plan, "attempt": attempt, "status": status,
+                           "t0_epoch": t0, "receipt_epoch": t0 + 600 if receipt is None else receipt}).encode()
 
     # --- C.1 ----------------------------------------------------------------------------------
 
@@ -214,7 +226,7 @@ class MbpWatchTests(unittest.TestCase):
             w.watch(self.ns(), git=w.Git(self.tmp / "missing"), api=FakeApi(), now=NOW)
         err = io.StringIO()
         with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(w.main(["arm", "--plan", PLAN, "--t0", "1", "--deadline", "2",
+            self.assertEqual(w.main(["arm", "--plan", PLAN, "--t0", str(NOW), "--deadline", str(NOW + 60),
                                      "--remote", str(self.tmp / "nowhere.git")]), w.EXIT["usage"])
         self.assertIn("MBP_WATCH_ERROR", err.getvalue())
 
@@ -228,9 +240,9 @@ class MbpWatchTests(unittest.TestCase):
         return code, out.getvalue(), api
 
     @staticmethod
-    def wrun(number, started, conclusion="success"):
+    def wrun(number, started, conclusion="success", attempt=1):
         stamp = w.dt.datetime.fromtimestamp(started, w.dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        return {"id": 1000 + number, "run_number": number, "run_attempt": 1, "status": "completed",
+        return {"id": 1000 + number, "run_number": number, "run_attempt": attempt, "status": "completed",
                 "conclusion": conclusion, "run_started_at": stamp}
 
     def test_read_exits(self):
@@ -260,6 +272,80 @@ class MbpWatchTests(unittest.TestCase):
             {"workflow_runs": [ok]} if path.startswith("/actions") else {})
         with self.assertRaises(w.WatchError), contextlib.redirect_stdout(io.StringIO()):
             w.read(self.ns(), api=api, now=NOW)
+
+    # --- round-2 regressions (Sol r2 findings 1-7, 10) -----------------------------------------
+
+    def test_a_result_must_come_from_this_launch_and_attempt(self):
+        cases = {"before_this_launch": dict(t0=NOW - 7800, receipt=NOW - 7300),
+                 "other_attempt": dict(t0=NOW - 7100, attempt=2),
+                 "receipt_before_launch": dict(t0=NOW - 7100, receipt=NOW - 7150)}
+        for index, (name, fields) in enumerate(cases.items()):
+            with self.subTest(name=name):
+                plan = f"cq-syn-06-s0{index}-a1"
+                self.push(f"refs/heads/desk-bundles/{plan}", {"transition.json": self.transition(plan, "CLOSED_OK", **fields)})
+                self.arm(plan=plan)
+        api = FakeApi()
+        self.watch(api)
+        titles = self.titles(api)
+        for index in range(3):
+            plan = f"cq-syn-06-s0{index}-a1"
+            self.assertIn(f"mbp-alarm SPAN_SILENT {plan} NO_RESULTS_REF", titles)
+        incomplete = json.dumps({"schema": w.TRANSITION_SCHEMA, "plan_id": "cq-syn-06-s09-a1", "status": "CLOSED_OK",
+                                 "t0_epoch": NOW - 7100}).encode()
+        self.push("refs/heads/desk-bundles/cq-syn-06-s09-a1", {"transition.json": incomplete})
+        self.arm(plan="cq-syn-06-s09-a1")
+        self.watch(api)
+        self.assertIn("mbp-alarm SPAN_SILENT cq-syn-06-s09-a1 NO_RESULTS_REF", self.titles(api))
+
+    def test_unprotected_refs_fail_the_run(self):
+        with self.assertRaises(w.WatchError) as caught:
+            self.watch(FakeApi(rules=("deletion",)))
+        self.assertIn("RULESET_MISSING", str(caught.exception))
+
+    def test_a_silence_that_ended_between_polls_is_still_filed(self):
+        self.arm(deadline=NOW - 3600)
+        self.close("CLOSED_OK", epoch=NOW - 300)  # after deadline + grace: a silence nobody saw
+        api = FakeApi()
+        self.watch(api)
+        self.assertEqual(self.titles(api), [f"mbp-alarm SPAN_SILENT {PLAN} NO_RESULTS_REF"])
+
+    def test_an_unconfirmed_delivery_is_repaired_on_the_next_run(self):
+        self.arm(deadline=NOW - 5000)
+        api = FakeApi(drop_assignee=True)
+        with self.assertRaises(w.WatchError):
+            self.watch(api)
+        api.drop_assignee = False
+        self.watch(api)
+        (issue,) = api.issues
+        self.assertEqual(issue["assignees"], [{"login": "mpmdw"}])
+        self.assertTrue(any(c[0] == "PATCH" for c in api.calls))
+
+    def test_close_chronology_is_checked_before_publishing(self):
+        self.arm()
+        with self.assertRaises(w.WatchError):
+            self.close("CLOSED_OK", epoch=NOW - 9000)  # before the arm
+        with self.assertRaises(w.WatchError):
+            self.close("CLOSED_OK", epoch=NOW + 86400)  # in the future
+        self.close("CLOSED_OK")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            w.parser().parse_args(["read", "--repo", "a/b", "--after-epoch", str(NOW), "--max-age-s", "nan"])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            w.parser().parse_args(["watch", "--repo", "a/b", "--owner", "o", "--grace-s", "-1"])
+
+    def test_read_counts_a_later_failed_rerun(self):
+        newer_failure = self.wrun(1, NOW - 100, "failure", attempt=2)
+        self.assertEqual(self.read([newer_failure, self.wrun(2, NOW - 200)])[0], w.EXIT["failed_run"])
+        self.assertEqual(self.read([self.wrun(1, NOW + 200)])[0], w.EXIT["ok"])  # within the 300 s clock slack
+
+    def test_alarm_poll_notifies_once_per_open_issue(self):
+        self.arm(deadline=NOW - 5000)
+        api = FakeApi()
+        self.watch(api)
+        lines = []
+        state = self.tmp / "poll.json"
+        self.assertEqual(len(w.alarm_poll(state, lines.append, api)), 1)
+        self.assertEqual(w.alarm_poll(state, lines.append, api), [])
+        self.assertRegex(lines[0], rf"ALARM MBP_ALARM SPAN_SILENT {PLAN} issue=1$")
 
     def test_workflow_shape(self):
         text = WORKFLOW.read_text()

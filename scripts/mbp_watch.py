@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import math
 import os
@@ -75,7 +76,20 @@ EVENT_CODES = ("SPAN_SILENT", "SPAN_STOP", "DESK_HOLD", "RESULT_UNREADABLE")
 DETAILS = set(CLOSE_STATUSES) | set(HOLD_CODES) | {
     "NO_RESULTS_REF", "UNKNOWN_HOLD", "MULTIPLE", "UNNAMED", "ARM_RECORD", "CLOSE_RECORD", "TRANSITION",
     "TRANSITION_MISBOUND", "DESK_VERDICT"}
-BUNDLE_T0_SLACK_S = 900
+
+
+def epoch_ok(value):
+    return number(value) and MIN_EPOCH <= value <= MAX_EPOCH
+
+
+def attempt_of(plan):
+    match = ATTEMPT_RE.fullmatch(plan)
+    return int(match.group(1)) if match else None
+CLOCK_SLACK_S = 300
+PROTECTED = ("span-watch", "desk-bundles")  # each needs a ruleset blocking deletion and non-fast-forward
+REQUIRED_RULES = {"deletion", "non_fast_forward"}
+ATTEMPT_RE = re.compile(r".*-a([1-9][0-9]{0,3})")
+MIN_EPOCH, MAX_EPOCH = 1_767_225_600, 1_893_456_000  # 2026-01-01 .. 2030-01-01 UTC
 EXIT = {"ok": 0, "usage": 2, "stale": 20, "open_alarm": 21, "failed_run": 22}
 MAX_RECORD = 1 << 20
 MAX_ISSUE_PAGES = 100
@@ -216,6 +230,10 @@ def _publish(remote, plan, files, child=False, timeout=60):
             existing = git.blob(parent, "arm.json")
             if existing is None or git.blob(parent, "close.json") is not None:
                 raise WatchError("NOT_ARMED_OR_ALREADY_CLOSED")
+            arm_times = _arm_times(_json(existing), plan)
+            close_doc = _json(files.get("close.json"))
+            if arm_times is None or close_doc is None or close_doc["close_epoch_s"] < arm_times[0]:
+                raise WatchError("CLOSE_BEFORE_ARM")
             files = {"arm.json": existing, **files}
             parents = ["-p", parent]
         entries = b""
@@ -231,16 +249,22 @@ def _publish(remote, plan, files, child=False, timeout=60):
 
 
 def arm(args):
-    if not plan_ok(args.plan) or not (number(args.t0) and number(args.deadline) and args.t0 < args.deadline):
+    """Create-only. Re-publishing byte-identical content is an idempotent no-op; any other arm of the plan id
+    is refused by the remote (no force), and the ruleset forbids deleting or rewriting the ref."""
+    if not plan_ok(args.plan) or attempt_of(args.plan) is None \
+            or not (epoch_ok(args.t0) and epoch_ok(args.deadline) and args.t0 < args.deadline):
         raise WatchError("BAD_ARM")
-    record = {"schema": ARM_SCHEMA, "plan_id": args.plan, "t0_epoch_s": args.t0, "deadline_epoch_s": args.deadline}
+    record = {"schema": ARM_SCHEMA, "plan_id": args.plan, "attempt": attempt_of(args.plan), "t0_epoch_s": args.t0,
+              "deadline_epoch_s": args.deadline}
     commit = _publish(_remote_url(args.repo_dir, args.remote), args.plan, {"arm.json": canonical(record)})
     print(f"MBP_WATCH_ARM plan={args.plan} t0={iso(args.t0)} deadline={iso(args.deadline)} commit={commit}")
     return EXIT["ok"]
 
 
-def close(args):
-    if not plan_ok(args.plan) or args.status not in CLOSE_STATUSES or not number(args.close_epoch):
+def close(args, now=None):
+    now = time.time() if now is None else now
+    if not plan_ok(args.plan) or args.status not in CLOSE_STATUSES or not epoch_ok(args.close_epoch) \
+            or args.close_epoch > now + CLOCK_SLACK_S:
         raise WatchError("BAD_CLOSE")
     record = {"schema": CLOSE_SCHEMA, "plan_id": args.plan, "status": args.status, "close_epoch_s": args.close_epoch}
     commit = _publish(_remote_url(args.repo_dir, args.remote), args.plan, {"close.json": canonical(record)},
@@ -259,36 +283,55 @@ def _json(raw):
     return doc if isinstance(doc, dict) else None
 
 
-def read_arm(git, plan, sha):
-    doc = _json(git.blob(sha, "arm.json"))
-    if not doc or doc.get("schema") != ARM_SCHEMA or doc.get("plan_id") != plan:
+def _arm_times(doc, plan):
+    """(t0, deadline, attempt) of a valid arm record, else None."""
+    if not doc or doc.get("schema") != ARM_SCHEMA or doc.get("plan_id") != plan \
+            or doc.get("attempt") != attempt_of(plan) or attempt_of(plan) is None:
         return None
     t0, deadline = doc.get("t0_epoch_s"), doc.get("deadline_epoch_s")
-    return (float(t0), float(deadline)) if number(t0) and number(deadline) and t0 < deadline else None
+    if not (epoch_ok(t0) and epoch_ok(deadline) and t0 < deadline):
+        return None
+    return float(t0), float(deadline), doc["attempt"]
 
 
-def read_close(git, plan, sha, t0):
-    """'absent', 'invalid', or a status word."""
+def read_arm(git, plan, sha):
+    """(t0, deadline, attempt, sha256 of the arm record) or None. The digest names the silence episode:
+    it does not change when a close record is appended to the ref."""
+    raw = git.blob(sha, "arm.json")
+    times = _arm_times(_json(raw), plan)
+    return (*times, hashlib.sha256(raw).hexdigest()) if times else None
+
+
+def read_close(git, plan, sha, t0, now):
+    """('absent', None), ('invalid', None) or (status word, close epoch)."""
     raw = git.blob(sha, "close.json")
     if raw is None:
-        return "absent"
+        return "absent", None
     doc = _json(raw)
     if not doc or doc.get("schema") != CLOSE_SCHEMA or doc.get("plan_id") != plan \
-            or doc.get("status") not in CLOSE_STATUSES or not number(doc.get("close_epoch_s")) \
-            or doc["close_epoch_s"] < t0:
-        return "invalid"
-    return doc["status"]
+            or doc.get("status") not in CLOSE_STATUSES or not epoch_ok(doc.get("close_epoch_s")) \
+            or doc["close_epoch_s"] < t0 or doc["close_epoch_s"] > now + CLOCK_SLACK_S:
+        return "invalid", None
+    return doc["status"], doc["close_epoch_s"]
 
 
-def read_transition(git, plan, sha, arm_times):
-    """'invalid', 'misbound' (not this arm's launch), or a status word."""
+def read_transition(git, plan, sha, arm_times, now):
+    """('invalid' | 'misbound' | status word, receipt epoch or None).
+
+    Bound to the arm: the same attempt, launched no earlier than the arm (less clock slack) and by its
+    deadline, with a receipt after both the launch and the arm and not in the future.
+    """
     doc = _json(git.blob(sha, "transition.json"))
     if not doc or doc.get("schema") != TRANSITION_SCHEMA or doc.get("plan_id") != plan \
-            or doc.get("status") not in TRANSITION_STATUSES or not number(doc.get("t0_epoch")):
-        return "invalid"
-    if arm_times and not (arm_times[0] - BUNDLE_T0_SLACK_S <= doc["t0_epoch"] <= arm_times[1]):
-        return "misbound"
-    return doc["status"]
+            or doc.get("status") not in TRANSITION_STATUSES or type(doc.get("attempt")) is not int \
+            or doc["attempt"] != attempt_of(plan) or not epoch_ok(doc.get("t0_epoch")) \
+            or not epoch_ok(doc.get("receipt_epoch")) or doc["receipt_epoch"] < doc["t0_epoch"] \
+            or doc["receipt_epoch"] > now + CLOCK_SLACK_S:
+        return "invalid", None
+    if arm_times and not (arm_times[0] - CLOCK_SLACK_S <= doc["t0_epoch"] <= arm_times[1]
+                          and doc["receipt_epoch"] >= arm_times[0]):
+        return "misbound", None
+    return doc["status"], doc["receipt_epoch"]
 
 
 def read_verdict(git, plan, sha):
@@ -318,34 +361,38 @@ def events(git, now, grace_s):
     git.fetch([sha for entries in by_plan.values() for _, sha in entries.values()])
     found = []
     for plan, entries in sorted(by_plan.items()):
-        arm_times, resolved = None, False
+        arm_times, resolved_at = None, []
         if ARMS in entries:
             ref, sha = entries[ARMS]
             arm_times = read_arm(git, plan, sha)
             if arm_times is None:
                 found.append(event("RESULT_UNREADABLE", "ARM_RECORD", plan, ref, sha, observed=now))
             else:
-                status = read_close(git, plan, sha, arm_times[0])
+                status, when = read_close(git, plan, sha, arm_times[0], now)
                 if status == "invalid":
                     found.append(event("RESULT_UNREADABLE", "CLOSE_RECORD", plan, ref, sha, observed=now))
                 elif status != "absent":
-                    resolved = True
+                    resolved_at.append(when)
                     if status != "CLOSED_OK":
                         found.append(event("SPAN_STOP", status, plan, ref, sha, t0=arm_times[0], observed=now))
         if BUNDLE in entries:
             ref, sha = entries[BUNDLE]
-            status = read_transition(git, plan, sha, arm_times)
+            status, when = read_transition(git, plan, sha, arm_times, now)
             if status in ("invalid", "misbound"):
                 detail = "TRANSITION" if status == "invalid" else "TRANSITION_MISBOUND"
                 found.append(event("RESULT_UNREADABLE", detail, plan, ref, sha, observed=now))
             else:
-                resolved = True
+                resolved_at.append(when)
                 if status != "CLOSED_OK":
                     found.append(event("SPAN_STOP", status, plan, ref, sha, observed=now))
-        if arm_times and not resolved and now > arm_times[1] + grace_s:
-            ref, sha = entries[ARMS]
-            found.append(event("SPAN_SILENT", "NO_RESULTS_REF", plan, ref, sha, t0=arm_times[0],
-                               deadline=arm_times[1], grace_s=grace_s, observed=now))
+        if arm_times:
+            limit = arm_times[1] + grace_s
+            first = min(resolved_at) if resolved_at else None
+            # Silence now, or a silence that ended between two polls (the result came after the limit).
+            if (first is None and now > limit) or (first is not None and first > limit):
+                ref, _ = entries[ARMS]
+                found.append(event("SPAN_SILENT", "NO_RESULTS_REF", plan, ref, arm_times[3], t0=arm_times[0],
+                                   deadline=arm_times[1], grace_s=grace_s, observed=now))
         if VERDICT in entries:
             ref, sha = entries[VERDICT]
             hold = read_verdict(git, plan, sha)
@@ -373,7 +420,7 @@ def body(event_, owner, run_url):
         raise WatchError("UNSAFE_FIELD")
     lines = [f"@{owner} MBP span alarm (RL-173 C). Operational codes only.", "",
              f"- span: `{event_['plan']}`", f"- code: `{event_['code']}`", f"- detail: `{event_['detail']}`",
-             f"- ref: `{event_['ref']}` at `{event_['sha'][:12]}`"]
+             f"- ref: `{event_['ref']}`, record `{event_['sha'][:12]}`"]
     for name, value in sorted(event_["times"].items()):
         if name not in ("t0", "deadline", "grace_s", "observed") or not number(value):
             raise WatchError("UNSAFE_FIELD")
@@ -392,7 +439,8 @@ KEY_RE = re.compile(r"<!-- mbp-watch-key: ([A-Za-z0-9_.:-]+) -->")
 
 
 def existing_keys(api):
-    keys = set()
+    """Every filed event key -> its issue (open or closed)."""
+    keys = {}
     for page in range(1, MAX_ISSUE_PAGES + 1):
         rows = api.call("GET", "/issues", {"labels": LABEL, "state": "all", "per_page": 100, "page": page})
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
@@ -400,10 +448,26 @@ def existing_keys(api):
         for row in rows:
             match = KEY_RE.search(row.get("body") or "")
             if match:
-                keys.add(match.group(1))
+                keys.setdefault(match.group(1), row)
         if len(rows) < 100:
             return keys
     raise WatchError("ISSUE_LIST_TOO_LONG")
+
+
+def delivered(issue, owner):
+    labels = [row.get("name") for row in issue.get("labels") or [] if isinstance(row, dict)]
+    assignees = [row.get("login") for row in issue.get("assignees") or [] if isinstance(row, dict)]
+    return type(issue.get("number")) is int and LABEL in labels and owner in assignees
+
+
+def check_rulesets(api):
+    """span-watch/* and desk-bundles/* must be protected against deletion and rewrite (C.1 obligations)."""
+    for prefix in PROTECTED:
+        rules = api.call("GET", f"/rules/branches/{prefix}/rules-probe")
+        if not isinstance(rules, list) or not all(isinstance(rule, dict) for rule in rules):
+            raise WatchError("API_SHAPE_RULES")
+        if not REQUIRED_RULES <= {rule.get("type") for rule in rules}:
+            raise WatchError(f"RULESET_MISSING_{prefix.upper().replace('-', '_')}")
 
 
 def ensure_label(api):
@@ -422,19 +486,24 @@ def deliver(api, found, owner, run_url, dry_run=False):
     seen = existing_keys(api)
     opened = []
     for event_ in found:
-        if key(event_) in seen:
+        issue = seen.get(key(event_))
+        if issue is not None:
+            # Filed before. An open issue whose delivery was never confirmed is repaired and re-checked.
+            if issue.get("state") == "open" and not delivered(issue, owner) and not dry_run:
+                ensure_label(api)
+                fixed = api.call("PATCH", f"/issues/{issue['number']}", body={"labels": [LABEL],
+                                                                            "assignees": [owner]})
+                if not isinstance(fixed, dict) or not delivered(fixed, owner):
+                    raise WatchError("DELIVERY_UNVERIFIED")
             continue
         text = body(event_, owner, run_url)
         if not dry_run:
             ensure_label(api)
             made = api.call("POST", "/issues", body={"title": title(event_), "body": text, "labels": [LABEL],
                                                      "assignees": [owner]})
-            labels = [row.get("name") for row in (made or {}).get("labels") or [] if isinstance(row, dict)]
-            assignees = [row.get("login") for row in (made or {}).get("assignees") or [] if isinstance(row, dict)]
-            if not isinstance(made, dict) or type(made.get("number")) is not int or LABEL not in labels \
-                    or owner not in assignees:
+            if not isinstance(made, dict) or not delivered(made, owner):
                 raise WatchError("DELIVERY_UNVERIFIED")
-        seen.add(key(event_))
+            seen[key(event_)] = made
         opened.append(title(event_))
     return opened
 
@@ -443,6 +512,7 @@ def watch(args, git=None, api=None, now=None):
     now = time.time() if now is None else now
     git = git or Git()
     api = api or Api(args.repo, os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
+    check_rulesets(api)
     found = events(git, now, args.grace_s)
     opened = deliver(api, found, args.owner, args.run_url, args.dry_run)
     print(f"MBP_WATCH observed={iso(now)} events={len(found)} opened={len(opened)}")
@@ -461,9 +531,9 @@ def parse_time(value):
 
 
 def read(args, api=None, now=None):
-    """The latest completed run is the one with the highest ``run_number`` (then ``run_attempt``).
-
-    Every returned run must be well formed; a malformed answer is an error, never a pass.
+    """The latest completed run is the most recently started execution (a re-run attempt counts with its
+    own start), ties broken by ``run_number`` and ``run_attempt``. A start up to 300 s in the future is
+    clock skew; more is an error. Every returned run must be well formed: a malformed answer is an error.
     """
     now = time.time() if now is None else now
     api = api or Api(args.repo, os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
@@ -475,14 +545,15 @@ def read(args, api=None, now=None):
     for run in runs:
         if not isinstance(run, dict) or type(run.get("run_number")) is not int or type(run.get("id")) is not int \
                 or parse_time(run.get("run_started_at")) is None or run.get("status") != "completed" \
-                or not isinstance(run.get("conclusion"), str):
+                or not isinstance(run.get("conclusion"), str) or type(run.get("run_attempt")) is not int \
+                or run["run_attempt"] < 1:
             raise WatchError("API_SHAPE_RUNS")
     if not runs:
         print("MBP_WATCH_READ STALE no completed run")
         return EXIT["stale"]
-    latest = max(runs, key=lambda run: (run["run_number"], run.get("run_attempt") or 0))
+    latest = max(runs, key=lambda run: (parse_time(run["run_started_at"]), run["run_number"], run["run_attempt"]))
     started = parse_time(latest["run_started_at"])
-    if started > now + 300:
+    if started > now + CLOCK_SLACK_S:
         raise WatchError("RUN_IN_FUTURE")
     if latest["conclusion"] != "success":
         conclusion = latest["conclusion"] if re.fullmatch(r"[a-z_]{1,20}", latest["conclusion"]) else "other"
@@ -502,30 +573,76 @@ def read(args, api=None, now=None):
     return EXIT["ok"]
 
 
+# --- the lead's notification on the Air (C.3) -------------------------------------------------------
+
+DEFAULT_POLL_STATE = Path.home() / "Library/Application Support/JouleWise/air-watch/mbp-alarm-state.json"
+
+
+def alarm_poll(state_path, notify, api):
+    """Notify once per open ``mbp-alarm`` issue number. Lines carry the number, code and span only."""
+    rows = api.call("GET", "/issues", {"labels": LABEL, "state": "open", "per_page": 100})
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise WatchError("API_SHAPE_ISSUES")
+    try:
+        seen = set(json.loads(Path(state_path).read_text()).get("notified", []))
+    except (OSError, ValueError, AttributeError):
+        seen = set()
+    lines = []
+    for row in rows:
+        number_ = row.get("number")
+        if type(number_) is not int or number_ in seen:
+            continue
+        match = KEY_RE.search(row.get("body") or "")
+        parts = match.group(1).split(":") if match else []
+        code = parts[0] if parts and parts[0] in EVENT_CODES else "UNKNOWN"
+        plan = parts[1] if len(parts) > 1 and plan_ok(parts[1]) else "unknown"
+        line = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M:%S} ALARM MBP_ALARM {code} {plan} issue={number_}"
+        notify(line)
+        lines.append(line)
+        seen.add(number_)
+    Path(state_path).parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(str(state_path) + ".tmp")
+    tmp.write_text(json.dumps({"notified": sorted(seen)}))
+    os.replace(tmp, state_path)
+    return lines
+
+
+def _finite(minimum):
+    def parse(text):
+        try:
+            value = float(text)
+        except ValueError:
+            raise argparse.ArgumentTypeError("not a number") from None
+        if not math.isfinite(value) or value < minimum:
+            raise argparse.ArgumentTypeError(f"must be finite and at least {minimum}")
+        return value
+    return parse
+
+
 def parser():
     top = argparse.ArgumentParser(prog="mbp_watch.py")
     sub = top.add_subparsers(dest="command", required=True)
     a = sub.add_parser("arm")
     a.add_argument("--plan", required=True)
-    a.add_argument("--t0", type=float, required=True)
-    a.add_argument("--deadline", type=float, required=True, help="the runner's deadline (epoch)")
+    a.add_argument("--t0", type=_finite(MIN_EPOCH), required=True)
+    a.add_argument("--deadline", type=_finite(MIN_EPOCH), required=True, help="the runner's deadline (epoch)")
     c = sub.add_parser("close")
     c.add_argument("--plan", required=True)
     c.add_argument("--status", required=True, choices=CLOSE_STATUSES)
-    c.add_argument("--close-epoch", type=float, required=True)
+    c.add_argument("--close-epoch", type=_finite(MIN_EPOCH), required=True)
     for p in (a, c):
         p.add_argument("--remote", help="push URL (default: origin of --repo-dir)")
         p.add_argument("--repo-dir", default=".")
     w = sub.add_parser("watch")
     w.add_argument("--repo", required=True)
     w.add_argument("--owner", required=True)
-    w.add_argument("--grace-s", type=float, default=1200.0)
+    w.add_argument("--grace-s", type=_finite(0), default=1200.0)
     w.add_argument("--run-url")
     w.add_argument("--dry-run", action="store_true")
     r = sub.add_parser("read")
     r.add_argument("--repo", required=True)
-    r.add_argument("--after-epoch", type=float, required=True)
-    r.add_argument("--max-age-s", type=float, default=7200.0)
+    r.add_argument("--after-epoch", type=_finite(MIN_EPOCH), required=True)
+    r.add_argument("--max-age-s", type=_finite(1), default=7200.0)
     return top
 
 

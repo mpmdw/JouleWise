@@ -136,6 +136,23 @@ class NotifyTest(unittest.TestCase):
         self.assertIn("--current-from-origin", argv)
         self.assertFalse((self.tmp / "exit.json").exists())
 
+    def test_run_polls_mbp_alarms_with_the_ci_tick(self):
+        child = mock.Mock()
+        child.poll.side_effect = [None, 20]
+        args = types.SimpleNamespace(python="/py", log=self.log, interval=120, hours=24, watch_arg=[],
+                                     ci_interval=900, ci_state=self.tmp / "ci.json", gh="gh", repo=None,
+                                     exit_state=self.tmp / "exit.json", mbp_alarm_state=self.tmp / "mbp.json",
+                                     mbp_repo="mpmdw/JouleWise")
+        ticks = iter(range(0, 10000, 1000))
+        with mock.patch.object(agent.main_ci_watch, "run_once", return_value=0), \
+                mock.patch.object(agent.mbp_watch, "alarm_poll", side_effect=RuntimeError("api")) as poll:
+            status = agent.run(args, popen=mock.Mock(return_value=child), sleep=lambda _: None,
+                               clock=lambda: next(ticks))
+        self.assertEqual(status, 20)
+        self.assertEqual(poll.call_count, 1)
+        self.assertEqual(poll.call_args.args[0], self.tmp / "mbp.json")
+        self.assertIn("INFO MBP_ALARM_POLL_ERROR api", self.log.read_text())
+
     def test_watcher_failure_posts_rate_limited_watcher_exit(self):
         args = types.SimpleNamespace(python="/py", log=self.log, interval=120, hours=24, watch_arg=[],
                                      ci_interval=0, ci_state=self.tmp / "ci.json", gh="gh", repo=None,

@@ -15,17 +15,38 @@ python3.13 -B scripts/mbp_watch.py arm --plan "$PLAN" --t0 "$LAUNCH_EPOCH" --dea
 python3.13 -B scripts/mbp_watch.py close --plan "$PLAN" --status CLOSED_OK --close-epoch "$RECEIPT_ENDED"
 ```
 
-- `arm` pushes a parentless commit to `refs/heads/span-watch/<plan>` with `arm.json`: plan id, t0 and the
-  **runner's deadline** (the `--deadline` the runner is given). It is create-only: a second arm for the same
-  plan id is rejected by the remote, because the push never forces.
+- `arm` pushes a parentless commit to `refs/heads/span-watch/<plan>` with `arm.json`: plan id, the attempt
+  (from the plan id's `-a<N>` suffix, which is required), t0 and the **runner's deadline** (the
+  `--deadline` the runner is given). It is create-only: any other arm for the same plan id is rejected by
+  the remote because the push never forces; re-publishing byte-identical content is a no-op.
 - `close` adds `close.json` (plan id, one of `CLOSED_OK`, `STOPPED`, `REFUSED`, `FAULT`, `STRANDED`,
-  `CLOSE_UNPROVEN`, close time) as a fast-forward child. A second close is refused.
+  `CLOSE_UNPROVEN`, close time) as a fast-forward child. It refuses a close time before the arm's t0 or
+  more than 300 s in the future, and a second close. Epoch arguments must be 2026-2029 and finite.
 - Both records hold operational fields only. They run from the same checkout the magistrate already pushes
   RUN_STATE from (`--remote` overrides the origin URL). Run them at the arm boundary and in the Check, never
   during a measurement.
-- When the PR #800 controller pushes `desk-bundles/<plan>`, a bundle whose `transition.json` is bound to the
-  arm (same plan id, `t0_epoch` within [arm t0 - 900 s, arm deadline]) also resolves the span; `close` stays
-  the magistrate's own record either way.
+- When the PR #800 controller pushes `desk-bundles/<plan>`, a bundle resolves the span only when its
+  `transition.json` is bound to this launch: same plan id and attempt, `t0_epoch` within [arm t0 - 300 s,
+  arm deadline], and a `receipt_epoch` no earlier than the launch or the arm and not in the future. Anything
+  else is `TRANSITION` or `TRANSITION_MISBOUND` and the silence obligation stays. `close` stays the
+  magistrate's own record either way.
+
+**The refs must be protected (a one-time repository rule; the watcher checks it every run).** Without it a
+deleted or rewritten `span-watch` or `desk-bundles` ref would silently remove an obligation. The watcher
+reads `GET /repos/mpmdw/JouleWise/rules/branches/<prefix>/rules-probe` and fails the run (so every arm's
+read refuses) unless both prefixes carry `deletion` and `non_fast_forward` rules. The lead creates it once:
+
+```sh
+gh api -X POST repos/mpmdw/JouleWise/rulesets --input - <<'EOF'
+{"name": "span records: no deletion, no rewrite", "target": "branch", "enforcement": "active",
+ "conditions": {"ref_name": {"include": ["refs/heads/span-watch/**", "refs/heads/desk-bundles/**",
+                                         "refs/heads/cadence-desk-final/**"], "exclude": []}},
+ "rules": [{"type": "deletion"}, {"type": "non_fast_forward"}]}
+EOF
+```
+
+Creation and fast-forward pushes stay allowed, so `arm`, `close`, the controller's bundle push and the
+desk's verdict children are unaffected.
 
 ## What the watcher does
 
@@ -35,30 +56,39 @@ tips in one round trip and reads only `arm.json`, `close.json`, `transition.json
 
 | Code | When | Detail |
 |---|---|---|
-| `SPAN_SILENT` | an arm record with no close record and no bound bundle after its deadline + 1,200 s (C.1) | `NO_RESULTS_REF` |
+| `SPAN_SILENT` | an arm record with no close record and no bound bundle after its deadline + 1,200 s, or whose first result came after that limit (a silence that ended between two polls) (C.1) | `NO_RESULTS_REF` |
 | `SPAN_STOP` | a close record or bound bundle with a status other than `CLOSED_OK` | the status |
 | `DESK_HOLD` | a verdict with `next_arm_hold: true` | the hold code from the FORMAT's code list, `UNKNOWN_HOLD`, `MULTIPLE` or `UNNAMED` |
 | `RESULT_UNREADABLE` | a malformed arm, close, transition or verdict record, or a bundle not bound to the arm | `ARM_RECORD`, `CLOSE_RECORD`, `TRANSITION`, `TRANSITION_MISBOUND`, `DESK_VERDICT` |
 
-- **No age limit.** An obligation lasts as long as its ref; there is no lookback that can drop a stop the
-  watcher has not seen. Deleting a `span-watch` ref deletes its obligation: only the lead deletes refs.
+- **No age limit.** An obligation lasts as long as its ref, and the ruleset keeps the ref; there is no
+  lookback that can drop a stop the watcher has not seen. Legacy `night-results/*` refs are not read here:
+  the Air's `night_results_watch.py` keeps covering them.
 - **Issues (C.2, C.3).** One `mbp-alarm` issue per event, titled `mbp-alarm <CODE> <span> <detail> <sha12>`,
   assigned to the repository owner and opening with an `@owner` mention. Every word comes from the closed
   vocabularies in `scripts/mbp_watch.py`; a record's own strings are never copied (an unknown hold code
   prints as `UNKNOWN_HOLD`). The body holds the span id, code, detail, ref, short sha, times and run link,
   and a hidden key `CODE:span:detail:sha`.
-- **Episodes.** The key includes the ref's commit, so a later commit on the same span (for example a close
-  after a silence) is a new event, and the same commit is never filed twice. Closing an issue is the lead's
-  acknowledgement that the event is handled.
+- **Episodes.** A stop, hold or unreadable record is keyed by the ref's commit, so a later commit on the same
+  span is a new event and the same commit is never filed twice. A silence is keyed by the arm record's
+  sha256, so it is filed once per launch whether or not a close follows. Closing an issue is the lead's
+  acknowledgement that the event is handled. An open issue that was created without the label or the
+  assignee is repaired on the next run, and the run fails until GitHub confirms both.
 - **Fail loud.** A failed listing, fetch or issue read, or an issue that GitHub does not return with the
   label and the assignee, fails the run. A run that files an alarm succeeds; the arm's read then refuses on
   the open issue.
-- **Who is notified.** GitHub notifies the owner of the assignment and the mention (mail and the app, per the
-  owner's notification settings). The lead is not notified by GitHub as a separate person: the lead sees open
-  alarms at each arm through `read`, and should add `gh issue list --label mbp-alarm --state open` to its own
-  Air watcher (not built here). A failed scheduled run is reported by GitHub to the user who last changed the
-  schedule, subject to that user's settings; it is not a guaranteed channel, which is why the arm's read
-  refuses on a failed or missing run.
+- **Who is notified (C.3).** Ed: GitHub notifies the owner of the assignment and the mention (mail and the
+  app, per the owner's notification settings). The lead: the Air watcher agent
+  (`scripts/air/air_watch_agent.py`, the installed `com.joulewise.air-watch`) now polls open `mbp-alarm`
+  issues on its 900 s CI tick (`mbp_watch.alarm_poll`, public API, no token) and posts one macOS
+  notification per new issue number, logged to `~/Library/Logs/JouleWise/air-watch.log`; it takes effect
+  when the lead updates the agent's checkout to this merge. When the Air is off, the lead sees the alarm at
+  its next session and at every arm through `read`. A failed scheduled run is reported by GitHub to the
+  user who last changed the schedule, subject to settings; it is not a guaranteed channel, which is why
+  the arm's read refuses on a failed or missing run.
+- **Schedules are not punctual.** GitHub can delay or drop scheduled runs. A silence is filed at the first
+  run after the limit, or later reconstructed from a late result; a watcher that stops running cannot
+  alarm, and the arm's `read` refuses stale evidence instead.
 
 ## The arm's read (C.4)
 
@@ -67,13 +97,20 @@ python3 scripts/mbp_watch.py read --repo mpmdw/JouleWise --after-epoch "$PREVIOU
 ```
 
 It reads `GET /repos/mpmdw/JouleWise/actions/workflows/mbp-watch.yml/runs?branch=main&status=completed`. The
-latest completed run is the one with the highest `run_number` (then `run_attempt`). Exit 0 only if it
-succeeded, started after the previous span's close and within `--max-age-s` (default 7,200 s), and no
-`mbp-alarm` issue is open. 20: no such run yet (wait; schedules can be late); 21: an alarm is open; 22: the
-latest run failed; 2: API or usage error, including any malformed answer and a start time in the future.
+latest completed run is the most recently started execution (a re-run attempt counts with its own start;
+ties by `run_number`, then `run_attempt`). Exit 0 only if it succeeded, started after the previous span's
+close and within `--max-age-s` (default 7,200 s), and no `mbp-alarm` issue is open. 20: no such run yet
+(wait; schedules can be late); 21: an alarm is open; 22: the latest run failed; 2: API or usage error,
+including any malformed answer and a start more than 300 s in the future (clock skew up to 300 s is
+accepted). A success stays usable for at most `--max-age-s`; it is bounded evidence, not proof that the
+watcher is still running.
 No token is needed for this public repository (60 requests an hour per address); `GH_TOKEN` is used when
-set. The PR #800 controller must call it at every arm (RL-173 Owners: the controller builder owns "the
-watcher read"); until then the magistrate runs it as an arm line.
+set. **The remaining caller work (RL-173 Owners: the controller builder owns "the watcher read").** PR #800
+already reads the Actions API at each arm (`read_watcher_run`), but it checks only the run, not open
+`mbp-alarm` issues, and it does not publish `arm`/`close`. Before this watcher replaces the hand-stamped one
+for a span, the arm path must (1) push `arm` before launch, (2) push `close` in the Check, and (3) run
+`scripts/mbp_watch.py read` (or the same three checks, open alarms included). Until the controller does,
+the magistrate runs the three lines by hand.
 
 ## Install
 
@@ -81,12 +118,16 @@ Nothing to install on either Mac beyond the checkout the magistrate already uses
 workflow is on `main`. Then:
 1. `gh workflow run mbp-watch.yml --repo mpmdw/JouleWise` once, and `gh run list --workflow mbp-watch.yml`
    to see the first completed run.
-2. A delivery check, synthetic only: `scripts/mbp_watch.py arm --plan cq-notify-test-a1 --t0 <now-7200>
+2. Create the ruleset above, then dispatch once more: the run must succeed (it fails while the ruleset is
+   missing).
+3. A delivery check, synthetic only: `scripts/mbp_watch.py arm --plan cq-notify-test-a1 --t0 <now-7200>
    --deadline <now-3600>` from the Air, dispatch the workflow, confirm the owner received the
-   `mbp-alarm SPAN_SILENT cq-notify-test-a1` notification, then `close --plan cq-notify-test-a1 --status
-   CLOSED_OK --close-epoch <now>`, close the issue and delete the `span-watch/cq-notify-test-a1` ref.
-3. Add the `arm` and `close` lines to the magistrate's launch and Check procedures, and the `read` line to
-   the arm checklist (a lead item).
+   `mbp-alarm SPAN_SILENT cq-notify-test-a1` notification and the Air agent posted its banner, then
+   `close --plan cq-notify-test-a1 --status CLOSED_OK --close-epoch <now>` and close the issue. The ref stays
+   (the ruleset keeps it); its silence is already filed, so it never alarms again.
+4. Update the Air agent's checkout to this merge (it then polls `mbp-alarm`).
+5. Add the `arm` and `close` lines to the magistrate's launch and Check procedures, and the `read` line to
+   the arm checklist (a lead item), until the controller carries them.
 
 ## The off-host desk in Actions (RL-173 B): not built here
 
@@ -115,9 +156,15 @@ What is missing, in order:
    example a `desk-recheck/<plan>` ref holding the agreement result), so a missed schedule never skips a
    span; no time lookback.
 6. **Routing to the research lead.** RL-173 B says a disagreement "comes to me". An owner issue alone does
-   not reach the research lead; the lead relays it as a ruling request.
-7. **A question for the research lead.** RL-173 B lets the MBP run the desk in the close interval and count
-   it for line 9. PR #799's CLI already has `publish --principal` (naming `cadence-controller` for an MBP desk),
-   `--no-push` and `--history-principal`, while FORMAT section 3 says verdicts are signed by `cadence-desk` on
-   the Air. Which principal the MBP desk signs with, and which verdict the Actions re-check compares against
-   when both exist, is not settled by the ruling text.
+   not reach the research lead; the lead relays it as a ruling request. The hold must also reach the arm:
+   `read` refuses on an open `mbp-alarm`, but PR #800's own API gate does not read issues (see above).
+7. **The MBP verdict's transport.** FORMAT section 6 (PR #800 and PR #799) already settles the MBP desk: it
+   signs as `cadence-controller` into the local-only `refs/heads/cadence-desk-mbp/<plan>`, and the
+   comparison is `compare_verdicts(mbp, offhost)`. Because that ref is local, the Actions job cannot see the
+   MBP verdict or the MBP's history. Missing: an authenticated, public-safe push of the exact MBP verdict
+   (and the history snapshot it used), or an explicit rule that Actions compares against the Air's
+   `cadence-desk-final` verdict instead.
+8. **Who publishes.** The Actions job reads with public keys only; it has no signing key, so it can report
+   agreement (an issue, a `desk-recheck` ref) but cannot publish a signed `cadence-desk-final` verdict. The
+   final-verdict producer stays the Air (or the MBP under section 6); that is a deliberate role, not a gap
+   to close with a secret.
