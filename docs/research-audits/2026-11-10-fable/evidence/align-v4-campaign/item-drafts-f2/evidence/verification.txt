@@ -1,0 +1,27 @@
+Verification started 2026-11-16T01:51:03Z
+PASS f2-p01 bash gate cases complete
+PASS f2-p02 bash gate cases complete
+PASS f2-p03 bash gate cases complete
+PASS f2-p04 bash gate cases complete
+PASS f2-p01 zsh gate cases complete
+PASS f2-p02 zsh gate cases complete
+PASS f2-p03 zsh gate cases complete
+PASS f2-p04 zsh gate cases complete
+824 synthetic gate checks; 0 failures; both bash and zsh; no MBP/custody
+/private/tmp/joulewise-f2-pin-20261115/scripts/align_r1_rehearsal.py:1986: SyntaxWarning: 'return' in a 'finally' block
+  return 4
+PASS pinned kit, generated layout, queue a, temporary queue b, eight mock spans, q600 synthetic runtime
+PASS bash local staging: dry, create, reuse, all pieces, hand/commit/fence/dirty/hash refusals
+PASS zsh local staging: dry, create, reuse, all pieces, hand/commit/fence/dirty/hash refusals
+22 local staging checks; no network or MBP
+
+Additional final artifact checks:
+/private/tmp/joulewise-f2-pin-20261115/scripts/align_r1_rehearsal.py:1986: SyntaxWarning: 'return' in a 'finally' block
+  return 4
+PASS pinned kit, generated layout, queue a, temporary queue b, eight mock spans, q600 synthetic runtime
+All eight item Check programs executed on disposable synthetic receipts: rc 0.
+All four complete item shell scripts parse under bash/zsh after the two lead placeholders are filled.
+All twelve embedded Python programs and all Python tooling parse.
+Tooling/docs only: no canonical full suite; no frozen source change, no hardware validation.
+Completed 2026-11-16T01:55:53Z (from date).
+Final Check feed/restore assertions, kit recheck and item syntax revalidated 2026-11-16T02:00:21Z (from date).
