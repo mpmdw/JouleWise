@@ -1045,7 +1045,8 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 351. **Magistrate a187f945 (headless, Opus 5.5), 2026-11-15 ~13:20 PST (`date`): STANDING-F0 (item 346) IS LAUNCHING, the first run under that item: a fresh soak, then Part C only, on `b2e01464d` in `/Users/edr/code/jw-wt/partc-b2e01464d`. F0 standing notice: trigger (c) NO_STAGED after the `dev-02-s02` close (12:42:45; `dev-02-s03` not issued). Every Start-and-check line passed at 13:14:42 PST: F0 ELIGIBLE (W1-line head `b2e01464d`, not expired, 17 hashes equal to the table, tree `c904864e4`, RL-89 MAC CHECK OK, `verify_r1_executed_sources` full sha, plist test OK, sudo kill rc 0, no r12, no campaign span, no stray monitor or root powermetrics, Network Time Off, powermode 0, frequency word 0, no night/smoke agent, AC, not charging). OUTSTANDING_REFUSAL none; HOST_RESTORE_OK 1, UNPROVEN_GROUP 0, HOLDING_STOP none; OTHER_CLOSE_EPOCH 0; LAST_CLOSE_KIND campaign, GAP 300 s after host last close 1794775366; SESSION_READY no; RESTART_PENDING no (item 347 step 4); COUNTED_LATEST none; journal copy = the cloud-offload marker (item 350). Six dry-check modules at `b2e01464d` OK on this host (`tests-ok-b2e01464d` written); ledger seeded with items 319 and 325. Batch print: next OS batch Mon 02:08:39 PST. The Run re-checks eligibility on fresh state first. Expected ~2 h, worst case 12,180 s, fence launch + 14,400 s. Record: `docs/process_traces/2026-11-15-standing-f0/MAGISTRATE-LAUNCH-a187f945.md`; t0, OUT, DEADLINE, rc and launcher JSON in custody `r1-partc-f0-out-a187f945.txt` (a "STOP", "WAIT", "HOLD" or LAUNCH_RC other than 0 there means nothing ran). Next: the first activation after the fence is gone runs item 346's Check and reports it as the next item, by email to Ed and the lead, compared line by line with item 325's Part C verdict (rule 10). Do NOT arm `dev-02-s03` or any campaign span: their items are not issued.**
 
 **PR #804 builder checkpoint, 2026-11-15:** owner-selected iCloud backend built on the
-Air-independence branch; synthetic verification only, no host operation. Cold Sol/CI pending.
+Air-independence branch; synthetic verification only, no host operation. Cold Sol ADMIT at da02b7fde;
+its retry note is repaired. Final review/CI evidence is in the report and PR #804 gate ledger.
 Report: `docs/run_reports/2026-11-15-span-offload-icloud.md`. This note changes no measurement pointer.
 
 
@@ -15383,7 +15384,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-15). Latest report: [PR #804 iCloud backend: software review and synthetic verification; macOS 26 installation remains external](docs/run_reports/2026-11-15-span-offload-icloud.md).
 
 ### [ED-EXTERNAL]
 

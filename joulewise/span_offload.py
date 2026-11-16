@@ -1332,7 +1332,18 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
             "provider_confirmation": confirmations,
         }
         deadline.remaining()  # the last check before the marker
-        write_marker(marker_path(marker_dir, plan, backend.provider_confirmed), record)
+        marker = marker_path(marker_dir, plan, backend.provider_confirmed)
+        try:
+            write_marker(marker, record)
+        except OffloadError as error:
+            if (isinstance(backend, ICloudBackend) and not backend.provider_confirmed
+                    and error.exit_kind == "marker_exists"):
+                with open_regular(marker, "the existing unconfirmed marker", single_link=True):
+                    pass  # preserve it; never confuse this with a completed copy-gate marker
+                raise OffloadError("ICLOUD_UNCONFIRMED",
+                                   "readback is still unconfirmed; existing .ok.unconfirmed preserved",
+                                   "unconfirmed") from None
+            raise
     return record
 
 

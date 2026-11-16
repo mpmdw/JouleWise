@@ -42,11 +42,22 @@ metadata. Source changes stay in the requested worktree/branch.
 - Quick tier: 282 modules, 20 module failures in 148.334 s; this OS-blinded seat denies every
   `/restricted/` path, including those in synthetic fixtures (PermissionError / tooling_refusal).
   Log: `/Volumes/JW-EXT/scratch/sol-offload-icloud/quick.log`. This is not claimed green.
-  Final CI remains pending. Full suite belongs in GitHub Actions on this analysis Mac per
+  Some legacy modules also attempt OS-denied canonical custody paths; none was opened.
+  The final-head PR gate ledger records GitHub CI evidence when complete. Full suite belongs in GitHub Actions on this analysis Mac per
   CANONICAL; no sequential discover run is used. The CI workflow runs the sharded canonical suite.
-- Cold executing Sol seat: pending; brief/report will be under
-  `/Volumes/JW-EXT/scratch/sol-offload-icloud/review/`. Review evidence is synthetic, not live
-  qualification. No number-bearing defect has been claimed or fixed by these checks.
+- Cold executing Sol seat: **ADMIT at da02b7fde**, 104 focused tests and 21 independent probes
+  passed; zero BLOCKING, one SHOULD-FIX, two NOTEs. Immutable report:
+  `docs/run_reports/2026-11-15-span-offload-icloud-sol.md`. The retry SHOULD-FIX is repaired:
+  an existing unconfirmed iCloud record now remains exit 8, unchanged, instead of exit 3.
+  A new actual-CLI regression covers this; the repaired focused run passed 105 tests.
+  See the PR gate ledger for the final-head delta review.
+- The exact requested `sol_seat.sh` launcher was run; nested `sandbox-exec` failed before Sol started
+  (`sandbox_apply: Operation not permitted`). A fresh `gpt-6.1-sol`, xhigh, no-history agent inherited
+  the existing OS blinding and executed the cold review. No sandbox was removed or bypassed.
+  Two launch attempts produced one executing seat. Per-invocation receipts/dispositions:
+  `docs/process_traces/2026-11-15-span-offload-icloud/review-invocations.jsonl`; archived brief beside it.
+  Review evidence is synthetic, not live qualification. No number-bearing defect has been claimed
+  or fixed by these checks.
 
 ## Handoff
 
