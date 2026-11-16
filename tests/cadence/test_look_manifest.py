@@ -1037,7 +1037,8 @@ class FreezeCommit(Base):
     MODULES = ("tests.cadence.test_look_manifest", "tests.cadence.test_step3_roster", "tests.cadence.test_inclusion_34",
                "tests.cadence.test_schema_check", "tests.cadence.test_fit_interim", "tests.cadence.test_look_run",
                "tests.cadence.test_time_fields", "tests.cadence.test_predict",
-               "tests.cadence.test_round6_guards", "tests.cadence.test_round6_diagnostics")
+               "tests.cadence.test_round6_guards", "tests.cadence.test_round6_diagnostics",
+               "tests.cadence.test_round7_admission")
 
     def test_the_look_s_tests_pass_on_the_frozen_tree(self):
         import os

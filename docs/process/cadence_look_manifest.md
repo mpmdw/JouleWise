@@ -440,6 +440,21 @@ Mythos: ADMIT WITH FIXES (five MED, six LOW). Sol: REFUSE (five MED, two LOW). N
 The detailed code map and non-admitting reproduction procedure are in the fit interface §7, “Round 6 fixes”.
 Fresh validation results and gate limitations are recorded in the builder run report and PR #795 findings table.
 
+## 7g. The cold Sol review on `ac2e1ce33` (round 7), builder round 8
+
+Verdict REFUSE: three HIGH, no MED or LOW. Source report and before/after evidence:
+[round-8 builder report](../run_reports/2026-11-16-pr795-round8-builder.md).
+
+| Finding | Disposition |
+|---|---|
+| R7-H1, GPU holes shortened at segment cuts | Repaired in both stages: merge touching/overlapping fitted intervals before the gap check; disjoint fitted support is preserved. Bound stays 2 s. |
+| R7-H2, Step 3 timing unbound outside the energy fit | Repaired: check every selected GPU trace's row-time digest before Step 3 value loaders; include time_fields in its exact code set. |
+| R7-H3, committed rule booleans on changed custody | Repaired: replay the same blind rule 3/4 evaluator on stage 1's copy and conjoin with committed type-A decisions before admission. Existing exclusions remain; unused T fields are preserved. |
+
+Every repair has a failing-before/passing-after synthetic regression. Required NumPy CI and FreezeCommit
+include the new module; the mutant harness adds a guard deletion per repaired boundary. All prior research
+questions in §7f and the round-7 builder report remain open; these repairs issue no ruling or live admission.
+
 ## 8. Still owed
 
 | Item | Who | Due |

@@ -481,6 +481,20 @@ def gpu_max_uncovered(s, e, a, b):
     return max(worst, b - edge)
 
 
+def connected_intervals(intervals):
+    """Union of fitted intervals, merging touching segments so their boundary cannot split a trace hole.
+
+    Disjoint intervals stay disjoint: time outside the fit does not enter its gap check.
+    """
+    out = []
+    for a, b in sorted(intervals):
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
+
+
 def file_sha256(path):
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()

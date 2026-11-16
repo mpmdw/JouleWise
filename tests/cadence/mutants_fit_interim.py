@@ -155,7 +155,11 @@ MUTANTS = [
     ("n6_files_unchecked", MAN, '            if files.get(rel) != got.get(rel):', '            if False:', [TF_CUSTODY]),
     ("n6_meter_digest_unchecked", RUN, '            if sm.digest() != cust.get("meter_time_sha256"):', '            if False:', [TF_CUSTODY]),
     ("n6_trace_rows_unchecked", RUN, '        if TF.rows_digest(rows) != ((L.get("trace_holes") or {}).get("gpu_rail") or {}).get("rows_sha256"):', '        if False:', [TF_CUSTODY]),
-    ("n6_step3_leg_record_unchecked", S3R, '    return lm.nonenergy_problems(stage1, sdir_of, ids)', '    return []', [TF_CUSTODY, T_R6]),
+    ("n6_step3_leg_record_unchecked", S3R, '    problems = lm.nonenergy_problems(stage1, sdir_of, ids)', '    problems = []', [TF_CUSTODY, T_R6]),
+    ("r7_gpu_boundary_gap_split", TF, '        if out and a <= out[-1][1]:', '        if False:', ["tests.cadence.test_round7_admission.Admission.test_boundary_hole_is_one_gap_in_stage1"]),
+    ("r7_gpu_connected_backstop_removed", RUN, '\n            if gap > gpu_max_gap_s:', '\n            if False:', ["tests.cadence.test_round7_admission.Admission.test_boundary_hole_is_refused_by_stage2_backstop"]),
+    ("r7_step3_time_projection_unchecked", S3R, '            if expected is None or tf.rows_digest(rows) != expected:', '            if False:', ["tests.cadence.test_round7_admission.Admission.test_step3_checks_timing_of_included_leg_outside_energy_fit"]),
+    ("r7_committed_verdict_replay_removed", RUN, '                inc[rule] = inc[rule] and replayed[key][rule]', '                inc[rule] = inc[rule]', ["tests.cadence.test_round7_admission.Admission.test_committed_verdicts_cannot_admit_changed_meter_or_journal"]),
     # RL-173 E.1 item 4, Mythos r5 N3/N5: superseded stage-1 commitments
     ("n3_unlisted_history_accepted", MAN, '        if h != current and h not in superseded:', '        if h != current and False:', [TF_LEDGER]),
     ("n3_superseded_needs_no_entry", MAN, '        if h != current and h not in superseded:', '        if False:', [TF_LEDGER]),

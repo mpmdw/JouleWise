@@ -1,5 +1,14 @@
 # JouleWise Task Queue
 
+PR #795 round-8 intake/disposition (2026-11-16): direct user priority on this worktree
+from `ac2e1ce33`; supersedes the round-7 lane pointer below without changing generated
+rankings. All three cold HIGH findings repaired; 397 focused tests (2 skips), 137/137
+mutants killed (0 survivors/invalid), and 10/10 twin sets pass on stable source. Root
+review complete. Push after pull --rebase, hosted quick and exact PR-body readback are
+the builder's final actions; receipts live in PR #795. Retain the listed research
+questions and draft status for the lead. No merge, real custody, recordings or MBP
+contact. Evidence/next lead step: [round-8 report](docs/run_reports/2026-11-16-pr795-round8-builder.md).
+
 PR #795 round-7 intake (2026-11-15): direct research-lead-requested code repair on the
 existing interim-look lane takes priority within this worktree; it does not select any
 quiet-machine task or alter generated project queue rankings. Complete the two round-6

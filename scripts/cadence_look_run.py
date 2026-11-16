@@ -12,7 +12,9 @@
 Stage 1 reads time fields and sample counters only from energy-bearing files. In custody mode it opens, per span: `runner_receipt.json`,
 `soak/soak_reference.json`, and per leg `leg_record.json`; per accepted attempt's bundle: `events.jsonl`
 (token index and stamp), `outputs/align_turns.jsonl` (stamps, prompt count, the LENGTH of the output ids),
-`outputs/align_thermal.jsonl` (journal readings), and, for the native power-management state only,
+`outputs/align_thermal.jsonl` (journal readings), `config.json` (sampling period), and the optional G0 event
+fallbacks `outputs/align_runtime_events.jsonl` and `align_runtime_events.jsonl` when replaying rules 3 and 4.
+For the native power-management state only it reads
 `rich_telemetry.jsonl` and `raw/powermetrics.plist`, from which it extracts by pattern the row end stamp,
 `elapsed_ns` and `thermal_pressure` and nothing else: no line or frame of those two files is parsed as a whole,
 so no power or energy value is decoded. Of the energy files it reads TIME FIELDS only, through
@@ -302,7 +304,8 @@ def trace_holes(L_turn, bundle, sm, sm_why, leg_key="(leg)"):
     * DC-in: an interval not bracketed by decoded meter samples, a gap over 2 s between consecutive decoded samples
       in one, or a clock-fit excess over 2 s on a stream whose samples reach the leg, excludes the leg.
     The numbers are the ones stage 2 would compute (its backstop calls the same functions)."""
-    ivs = [(x["wall_start_s"], x["wall_end_s"]) for x in L_turn["segments"] + L_turn["prefix_tails"]]
+    ivs = TF.connected_intervals([(x["wall_start_s"], x["wall_end_s"])
+                                  for x in L_turn["segments"] + L_turn["prefix_tails"]])
     gpu = {"max_gap_s": None, "rows_sha256": None, "excluded": True, "reason": None}
     try:
         rows = TF.gpu_rows(bundle)
@@ -346,7 +349,12 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
     ruled = ruled or {}
     receipt = _json(sdir / "runner_receipt.json")
     files = {"runner_receipt.json": TF.file_sha256(sdir / "runner_receipt.json")}
-    sm, sm_why = span_meter(sdir)
+    sm, sm_why = span_meter(sdir)                 # preserves the field-only compressed-custody refusal
+    # A committed verdict hashes the decision file, not the source copy. Replay the same blind rules on
+    # this custody before admission; a stale true can never override a current failure. Committed false
+    # decisions remain exclusions. The later trace clauses can only exclude further.
+    selected = I34.keys(_json(ROOT / I34.RUNTIME_CONFIG)["sensors"])
+    replayed, _, _ = I34.judge_span(sdir, entry["span_id"], selected)
     try:
         soak = float(_json(sdir / "soak/soak_reference.json")["sensors_c"]["TV0h"])
     except (OSError, KeyError, TypeError, ValueError):
@@ -391,6 +399,9 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
                "sidecar_coverage": v34["sidecar_coverage"] is True, "km003c_clean": v34["km003c_clean"] is True,
                "not_a_contaminated_attempt": bool(attempts) and not attempts[-1].get("contaminated"),
                "block_power_mode": _mode(result) == MODE_BY_POWER[power]}
+        if leg_type == "A":                     # type-T runtime is never read or rejudged at this look
+            for rule in I34.VERDICT_KEYS:
+                inc[rule] = inc[rule] and replayed[key][rule]
         turn = None
         if leg_type == "A" and result.get("bundle"):
             try:
@@ -650,6 +661,15 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None
         except (ValueError, TypeError, KeyError, IndexError, OverflowError, OSError):
             raise F.LookInputError(f"GPU rail: {key}: power_trace.csv: trace reader fault; "
                                    "row support and gap unavailable") from None
+        # Check the connected fitted support before integrating any segment: a single hole may straddle
+        # arbitrarily many block cuts, each of which would otherwise shorten the reported gap.
+        if gpu_max_gap_s is not None:
+            ivs = TF.connected_intervals([(x["wall_start_s"], x["wall_end_s"])
+                                          for x in L["segments"] + L["prefix_tails"]])
+            gap = max(gpu_max_uncovered_s(trace, a, b) for a, b in ivs)
+            if gap > gpu_max_gap_s:
+                raise F.LookInputError(f"GPU rail: {key}: {gap:.3f} s with no power_trace row inside an "
+                                       "energy-fit interval")
         if L["span_id"] not in meters:
             sm = (span_times or {}).get(L["span_id"])
             meters[L["span_id"]] = MeterSpan(sdir, expected_t=sm.t if sm is not None else None, leg_key=key)

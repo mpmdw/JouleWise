@@ -195,11 +195,36 @@ def entries_from_stage1(stage1, sdir_of):
 
 
 def custody_problems(stage1, entries, sdir_of):
-    """Verify every operational source before any later reader parses a bundle or leg record."""
+    """Bind operational sources and every selected trace's time projection before any value reader runs.
+
+    Step 3 includes legs with missing start readings, which are outside the energy fit. Their trace timing
+    still must be the timing stage 1 judged. Synthetic level-R fixtures without custody retain their test path.
+    """
     from joulewise.cadence_looks import manifest as lm
+    from joulewise.cadence_looks import time_fields as tf
     ids = [leg["span_id"] for leg in stage1["legs"]
            if leg.get("included") is True and leg.get("role") == "fit" and leg.get("leg_type") == "A"]
-    return lm.nonenergy_problems(stage1, sdir_of, ids)
+    problems = lm.nonenergy_problems(stage1, sdir_of, ids)
+    if problems:
+        return problems
+    spans = {sp["span_id"]: sp for sp in stage1["roster"]["spans"]}
+    for leg in stage1["legs"]:
+        if not (leg.get("included") is True and leg.get("role") == "fit" and leg.get("leg_type") == "A"):
+            continue
+        if stage1.get("synthetic") is True and (spans.get(leg["span_id"]) or {}).get("custody") is None:
+            continue
+        expected = ((leg.get("trace_holes") or {}).get("gpu_rail") or {}).get("rows_sha256")
+        try:
+            # Operational hashes above authenticate this bundle locator before it is used.
+            import json
+            ldir = Path(sdir_of(leg["span_id"])) / "legs" / leg["leg_key"].split("/", 1)[1]
+            record = json.loads((ldir / "leg_record.json").read_text(encoding="utf-8"))
+            rows = tf.gpu_rows(ldir / "runtime" / record["result"]["bundle"])
+            if expected is None or tf.rows_digest(rows) != expected:
+                problems.append(f"custody: {leg['leg_key']}'s power_trace.csv is not the one stage 1 read (row stamps)")
+        except (OSError, ValueError, TypeError, KeyError, tf.TimeFieldError):
+            problems.append(f"custody: {leg['leg_key']}'s power_trace.csv: time projection unreadable")
+    return problems
 
 
 def custody_record(custody, overrides, entries, sdir_of, stage1=None):

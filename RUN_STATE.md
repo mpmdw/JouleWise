@@ -1,12 +1,13 @@
 # JouleWise Run State
 
-PR #795 builder round 7 (2026-11-15, this lane): resumed the restored Git worktree on
-`align/2026-11-14-fit-interim` from `66fa7c452`, with no incoming rebase changes. Round-6
-findings are repaired or explicitly dispositioned; 389 focused tests and 10 twin sets
-pass; 133/133 mutants are killed (0 survivors, 0 invalid). N3's clock-fit constant and the
-reader/provenance questions remain research-lead decisions. No real custody was opened,
-no MBP was contacted, and no merge is authorized. Evidence and exact next step: [run report](docs/run_reports/2026-11-15-pr795-round7-builder.md).
-
+PR #795 builder round 8 (2026-11-16): cold Sol's three HIGH findings on `ac2e1ce33`
+are repaired with failing-before/passing-after synthetic regressions. Stable verification:
+397 focused tests (2 skips), 137/137 mutants killed (0 survivors/invalid), 10/10 twin
+sets agree. Code pins and source fingerprints agree; package remains draft. This
+supersedes the prior round-7 handoff for this lane. No real recordings/custody or MBP
+access; no merge. Research-lead questions remain explicitly open. Hosted quick and
+final pushed head/PR-body readback receipts are recorded in PR #795 after this local
+record. Evidence and next lead step: [round-8 report](docs/run_reports/2026-11-16-pr795-round8-builder.md).
 
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and

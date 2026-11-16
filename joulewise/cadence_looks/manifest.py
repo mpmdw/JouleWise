@@ -1499,7 +1499,8 @@ def nonenergy_files(sdir):
             if bundle and (rec.get("spec") or {}).get("leg_type") != "T":
                 b = f"{base}/runtime/{bundle}"
                 paths.update(f"{b}/{n}" for n in ("events.jsonl", "outputs/align_turns.jsonl",
-                                                  "outputs/align_thermal.jsonl"))
+                                                  "outputs/align_thermal.jsonl", "config.json",
+                                                  "outputs/align_runtime_events.jsonl", "align_runtime_events.jsonl"))
     return {rel: sha256_file(sdir / rel) for rel in sorted(paths) if (sdir / rel).is_file()}
 
 
@@ -1606,11 +1607,12 @@ _DECODER_CODE = ("joulewise/aggregate.py", "joulewise/authentication_io.py", "jo
                  "joulewise/external/km003c_parse.py", "joulewise/provenance.py", "joulewise/suite.py")
 STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
                               "joulewise/cadence_looks/time_fields.py", "scripts/cadence_look_run.py") + _DECODER_CODE
-STEP3_CODE = _SHARED_CODE + ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/step3_energy_ratios.py")
+STEP3_CODE = _SHARED_CODE + ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/step3_energy_ratios.py",
+                            "joulewise/cadence_looks/time_fields.py")
 STAGE2_CODE = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
                "joulewise/cadence_looks/inclusion_34.py", "joulewise/cadence_looks/step3_energy_ratios.py",
                "joulewise/cadence_looks/schema_check.py", "joulewise/cadence_looks/time_fields.py")
-STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion_34.py, not by the stages
+STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion and the stage-1 rule replay
 
 
 def coefficients_schema(repo):

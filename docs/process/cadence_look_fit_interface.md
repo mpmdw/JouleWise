@@ -570,7 +570,11 @@ Rules 1, 2, 5 and 6 come from `leg_record.json`: `result.leg_status == "complete
 `result.ac_powermode` 0 (automatic) or 2 (hp-01).
 
 **Rules 3 and 4 enter as a verdict file** produced by `inclusion_34.py` (the manifest builder's), hashed into
-the stage-1 output:
+the stage-1 output. Stage 1 replays the same blind rules on its current custody copy and conjoins each type-A
+committed verdict with the replay before admission: a current failure excludes; a committed false stays false.
+The replay also reads the bundle's `config.json` sampling period and G0-to-last-token interval, with optional
+G0 fallbacks `outputs/align_runtime_events.jsonl` and `align_runtime_events.jsonl`. These operational files,
+including optional presence, join the source hash map checked by both later readers:
 
 ```
 { "<span_id>/<leg_id>": {"sidecar_coverage": bool, "km003c_clean": bool}, ... }   # one entry per roster leg
@@ -585,6 +589,20 @@ directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwi
 `manifest.verify_pins(manifest, repo, allow_draft=..., running=(fit_interim.py, cadence_look_run.py))` before any
 input is opened. In committed mode stage 2 calls `manifest.require_stage1_committed(repo, "lm-interim-01",
 stage1_sha256, stage1_doc=...)` against committed `LOOKS.json`; `--looks` is a synthetic draft override only. The gate runs after the stage-1 hash check and before any energy is opened.
+
+**Round 7 fixes (cold Sol on ac2e1ce33; builder round 8).**
+- R7-H1: GPU gap checks use the union of touching/overlapping fitted intervals in stage 1 and the independent
+  stage-2 backstop. Block cuts cannot split a long hole into accepted fragments. Disjoint intervals remain
+  disjoint; no time outside the existing fitted union is added, and exactly 2 s remains accepted.
+- R7-H2: before Step 3's value loaders, every included type-A fit leg's GPU row-time digest must match D,
+  including legs outside `in_energy_fit` for missing start readings. Operational hashes authenticate the
+  bundle locator first. Synthetic level-R fixtures without custody retain their non-admitting test path.
+- R7-H3: stage 1 replays rules 3/4 on the source copy before admission. A committed decision file cannot make
+  an abnormal meter trailer or missing journal coverage pass. Type-A exclusions already committed remain
+  exclusions; unused type-T fields are preserved and its runtime is never read.
+- Required NumPy CI, FreezeCommit and the mutation harness include `test_round7_admission`. Tests first
+  reproduced all three failures, then passed with these changes. Step 3 arithmetic and estimator constants
+  are unchanged. Broader fitted-interval scope and the prior research questions remain with the research lead.
 
 **Round 6 fixes (cold seats on 413697d4b; builder round 7).**
 - The required NumPy job and FreezeCommit run `test_predict` and the new guard/diagnostic regressions. The
