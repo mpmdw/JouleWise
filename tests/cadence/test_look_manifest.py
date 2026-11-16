@@ -1011,7 +1011,8 @@ class FreezeCommit(Base):
     look's own tests green. A copy of the tree with that commit applied runs the look's test modules."""
 
     MODULES = ("tests.cadence.test_look_manifest", "tests.cadence.test_step3_roster", "tests.cadence.test_inclusion_34",
-               "tests.cadence.test_schema_check", "tests.cadence.test_fit_interim", "tests.cadence.test_look_run")
+               "tests.cadence.test_schema_check", "tests.cadence.test_fit_interim", "tests.cadence.test_look_run",
+               "tests.cadence.test_time_fields")
 
     def test_the_look_s_tests_pass_on_the_frozen_tree(self):
         import os
