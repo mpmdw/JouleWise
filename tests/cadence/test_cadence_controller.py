@@ -693,7 +693,8 @@ class HostProofParsing(unittest.TestCase):
     def proof(self, table, kind, freq=0):
         with tempfile.TemporaryDirectory() as tmp:
             p = cc.host_proof(self.cfg(tmp), FakeRunEnv(table, freq), kind)
-        p["lines"]["signing"] = p["lines"]["verdict_signers"] = {"ok": True}
+        p["lines"]["signing"] = p["lines"]["verdict_signers"] = p["lines"]["desk_commit"] = {"ok": True}
+        p["lines"]["controller_signers"] = {"ok": True}
         return p
 
     def test_clean_host(self):
@@ -730,7 +731,8 @@ class HostProofParsing(unittest.TestCase):
 class ConfigAndInstall(unittest.TestCase):
     def cfg(self):
         return json.loads((ROOT / "configs/launchd/cadence-controller.config.json.template").read_text()
-                          .replace("@@MEASUREMENT_PYTHON@@", "/opt/venv/bin/python3.13"))
+                          .replace("@@MEASUREMENT_PYTHON@@", "/opt/venv/bin/python3.13")
+                          .replace("@@DESK_COMMIT@@", "e" * 40))
 
     def test_config_template_loads_and_refusals(self):
         base = self.cfg()
@@ -789,6 +791,9 @@ class RL173EndToEnd(WorldCase):
 
     def test_the_fence_is_continuous(self):                  # E
         synth.scenario_fence(Path(self.tmp.name) / "fence", log=quiet)
+
+    def test_the_copy_gate_is_per_span(self):                # gate 3, Opus 1
+        synth.scenario_copy_gate(Path(self.tmp.name) / "copy", log=quiet)
 
     def test_the_mbp_desk_runs_in_the_close_interval_and_counts(self):        # B
         w = self.pilot_world()
@@ -852,7 +857,7 @@ class RL173Units(unittest.TestCase):
         cfg = {"gh_argv": ["gh"], "repo_slug": "o/r", "watcher_name": "mbp-watcher.yml"}
         run = {"id": 5, "path": ".github/workflows/mbp-watcher.yml", "status": "completed", "conclusion": "success",
                "run_started_at": "2026-11-17T08:00:00Z", "updated_at": "2026-11-17T08:01:00Z", "secret": "x"}
-        env = FakeRunEnv({"gh api repos/o/r/actions/workflows/mbp-watcher.yml/runs?status=completed&per_page=1":
+        env = FakeRunEnv({"gh api repos/o/r/actions/workflows/mbp-watcher.yml/runs?status=completed&per_page=1&branch=main&event=schedule":
                           cc.Result(0, json.dumps({"workflow_runs": [run]}), "")})
         got = cc.read_watcher_run(cfg, env, lambda w: None)
         self.assertEqual(got["id"], 5)
@@ -896,6 +901,144 @@ class RL173Units(unittest.TestCase):
             ctl.release_fence()
             self.assertEqual(ctl.startup_fence(), "night")      # a loaded v4 window: the queue is ceded
             self.assertIsNone(cc.fence.read_fence(root))
+
+
+class Gate3Controller(unittest.TestCase):
+    """Gate 3 (Opus 4, 8, 9) on the controller's side."""
+
+    def test_a_failing_desk_step_is_named_not_silent(self):
+        recs = [{"plan_id": "p1", "mbp_desk": {"published": None, "problem": "desk rc 4: LOCK stale (pid gone; not stolen)",
+                                               "attempts": 1}},
+                {"plan_id": "p2", "mbp_desk": {"published": None, "problem": "desk rc 1: x", "attempts": 3}},
+                {"plan_id": "p3", "mbp_desk": {"published": None, "problem": "desk rc 1: x", "attempts": 1}},
+                {"plan_id": "p4", "mbp_desk": {"published": "c" * 40, "problem": None, "attempts": 1}}]
+        self.assertEqual([r["span"] for r in cc.Controller.desk_step_reasons(recs)], ["p1", "p2"])
+        self.assertEqual(law.category(cc.Controller.desk_step_reasons(recs)), "halt")
+
+    def test_the_desk_commit_is_pinned(self):
+        head = "a" * 40
+        env = FakeRunEnv({f"git -C {cc.ROOT} rev-parse HEAD": cc.Result(0, head + "\n", ""),
+                          f"git -C {cc.ROOT} status": cc.Result(0, "", "")})
+        self.assertTrue(cc.desk_commit_check({"desk_commit": head}, env)["ok"])
+        self.assertFalse(cc.desk_commit_check({"desk_commit": "b" * 40}, env)["ok"])
+        env = FakeRunEnv({f"git -C {cc.ROOT} rev-parse HEAD": cc.Result(0, head + "\n", ""),
+                          f"git -C {cc.ROOT} status": cc.Result(0, " M joulewise/cadence/desk_final.py\n", "")})
+        self.assertFalse(cc.desk_commit_check({"desk_commit": head}, env)["ok"])
+        lines = {name: {"ok": True} for name, kinds in law.PROOF_LINES.items() if "arm" in kinds}
+        lines["desk_commit"] = {"ok": False, "detail": "pinned elsewhere"}
+        self.assertEqual(law.category(law.proof_reasons(lines, "arm")), "halt")
+
+    @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
+    def test_the_fence_is_taken_before_the_network_after_an_acknowledged_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = synth.World(Path(tmp) / "w", prior=False)
+            ctl = w.controller()
+            w.queue("pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6], nb="2026-11-18")], role="smoke")
+            w.issues.append({"number": 9, "title": "STOP", "labels": [{"name": "directive"}],
+                             "author": {"login": "mpmdw"}, "state": "OPEN"})
+            w.tick()
+            self.assertIsNone(cc.fence.read_fence(Path(w.cfg["custody_root"])))     # the page released it
+            w.ack_all()
+            w.issues.clear()
+            seen = []
+            fetch = ctl.git.fetch_audit
+
+            def watched():
+                cur = cc.fence.read_fence(Path(w.cfg["custody_root"]))
+                seen.append(cur is not None and cur["purpose"] == ctl.standing_purpose())
+                return fetch()
+            ctl.git.fetch_audit = watched
+            w.env.t += 300
+            w.tick()
+            self.assertTrue(seen and all(seen), seen)
+
+
+class Gate3ControllerMythos(unittest.TestCase):
+    """Gate 3 (Mythos T4, T8, T12, T14, T17) on the controller's side."""
+
+    def world(self, tmp):
+        w = synth.World(Path(tmp) / "w", prior=False)
+        w.controller()
+        return w
+
+    def test_an_own_fence_with_time_to_spare_is_not_rewritten_and_a_lapse_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = self.world(tmp)
+            root = Path(w.cfg["custody_root"])
+            w.ctl.hold_fence()
+            before = (root / cc.fence.FENCE_NAME).stat().st_mtime_ns
+            w.env.t += 100
+            self.assertEqual(w.ctl.hold_fence(), "held")
+            self.assertEqual(w.ctl.refresh_fence(), "held")
+            self.assertEqual((root / cc.fence.FENCE_NAME).stat().st_mtime_ns, before)   # no write: no self-wake
+            w.env.t += 2000
+            self.assertEqual(w.ctl.refresh_fence(), "lapsed")
+
+    @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
+    def test_a_stranded_page_leaves_the_fence_released_until_acknowledged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = self.world(tmp)
+            w.queue("pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
+            w.tick()
+            live = w.launcher.finish()
+            root = Path(w.cfg["custody_root"])
+            busy = [cc.Result(0, "123 cadence_legs_runner.py", "")]
+            real_run = w.env.run
+            w.env.run = lambda argv, **kw: busy[0] if "pgrep" in str(argv[0]) else real_run(argv, **kw)
+            w.tick()
+            w.env.t += cc.STRANDED_GRACE_S + 60
+            w.tick()
+            self.assertIn("STRANDED_ALARM", json.dumps([p["reasons"] for p in w.ctl.unacked_pages()]))
+            self.assertIsNone(cc.fence.read_fence(root))
+            w.env.t += 60
+            w.tick()
+            self.assertIsNone(cc.fence.read_fence(root))               # still released: the page is delivered
+            w.ack_all()
+            w.tick()
+            self.assertIsNotNone(cc.fence.read_fence(root))
+            self.assertTrue(live)
+
+    def test_the_controller_signers_are_probed_at_the_arm(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = self.world(tmp)
+            self.assertTrue(cc.controller_signers_check(w.cfg)["ok"])
+            self.assertFalse(cc.controller_signers_check(dict(w.cfg, controller_signers=str(Path(tmp) / "none")))["ok"])
+            self.assertFalse(cc.controller_signers_check(dict(w.cfg, controller_signers=w.cfg["verdict_signers"]))["ok"])
+
+    @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
+    def test_a_failed_offload_is_retried_in_the_close_interval_then_held(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = self.world(tmp)
+            w.cfg["offload_argv"] = ["/bin/false", "{plan_id}"]
+            w.controller()
+            calls = []
+            real = w.ctl.host_run
+            w.ctl.host_run = lambda argv, **kw: (calls.append(argv), real(argv, **kw))[1]
+            w.queue("pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
+            w.tick()
+            w.launcher.finish()
+            w.tick()
+            for _ in range(4):
+                w.env.t += 300
+                w.tick()
+            offloads = [a for a in calls if a[0] == "/bin/false"]
+            self.assertEqual(len(offloads), cc.OFFLOAD_ATTEMPTS)
+            self.assertIn("OFFLOAD_FAILED", json.dumps([p["reasons"] for p in w.ctl.unacked_pages()]))
+
+    @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
+    def test_a_second_veto_pages_while_an_acknowledged_one_is_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = self.world(tmp)
+            w.queue("pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6], nb="2026-11-18")], role="smoke")
+            veto = {"number": 901, "title": "STOP one", "labels": [{"name": "directive"}],
+                    "author": {"login": "mpmdw"}, "state": "OPEN"}
+            w.issues.append(veto)
+            w.tick()
+            w.ack_all()
+            w.issues.append(dict(veto, number=907, title="STOP two"))
+            w.env.t += 300
+            w.tick()
+            self.assertTrue(w.ctl.unacked_pages())
 
 
 if __name__ == "__main__":

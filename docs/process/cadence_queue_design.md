@@ -908,7 +908,7 @@ Research lead RL-173 (Sun 15 Nov 11:58). Each item, and where it is enforced:
 | C.5 | `watcher_kind: stamp`: the Air's stamp, re-read at every arm; one observation under 24 h may serve several arms | `law.watcher_reasons` |
 | E, the draw (Sol R11) | The desk's v3 draw (FORMAT section 5): per span, append-stable, first of each group always | #799 |
 | E, Q1 (Sol R12) | The lead's typed record `<records_dir>/q1/<plan_id>.json` on the audit branch, validated by `desk_final.validate_q1_record`; span k's record before span k+2 arms (`K2_Q1_DEBT`), nothing sooner. Invalid, or committed before its span closed: `Q1_RECORD_INVALID` (halt). A kit that cannot be read owes one | `read_audit`, `law.apply_q1`, `law.k2_reasons` |
-| E, L002 timeout | A span that raised the L002 gate and whose L002 timed out at G0 (from the packed summaries; for a prior span, its receipt; unknown counts as timed out) halts every arm, fallback included (`L002_TIMEOUT`), until the lead's `release` record for that span's L002 gate | `close` (`g0_timeouts`), `law.l002_reasons` |
+| E, L002 timeout | A span that raised the L002 gate and whose L002 timed out at G0 (from the packed summaries; for a prior span, its receipt; unknown counts as timed out) halts every arm, fallback included (`L002_TIMEOUT`), until the lead's `release` record for that span's L002 gate | `close` (`g0_unreleased`), `law.l002_reasons` |
 | B, the desk | In the close interval, after the push, the controller runs `cadence_desk.py final` from its own checkout on the signed bundle commit, with its own records as history, and signs the verdict with its key under `refs/heads/cadence-desk-mbp/<plan_id>` (local). Either desk's final verdict counts for line 9; either's hold holds; a difference on the automatic part (`desk_final.compare_verdicts`) is `DESK_DISAGREEMENT` (halt, to the research lead) unless the lead records `cleared`. A desk run that left no verdict is retried on the next tick | `desk_close`, `law.apply_verdicts` |
 | A.2, A.7 | The offload marker contract below; absent is a wait, unverified or failed a halt; F0 held too | `read_marker`, `law.offload_marker_problems`, `law.census_reasons` |
 | A.3 | The maintenance line always lists `bird`, `cloudd`, `fileproviderd` | `MAINTENANCE` |
@@ -936,18 +936,54 @@ Research lead RL-173 (Sun 15 Nov 11:58). Each item, and where it is enforced:
    "written_at": "<ISO 8601 with offset>"}
   ```
 
-  `key_second_copy` may be null only until 2026-11-16 11:58 PST (A.1's 24 h). A failed offload may leave
+  `source` is exactly the `{output}` the controller passed; `written_at` falls after the span's receipt and not
+  after the host clock (300 s skew). `key_second_copy` may be null only on a marker written before
+  2026-11-16 11:58 PST (A.1's 24 h). A failed offload may leave
   `<plan_id>.failed` (any content), which holds like a bad marker. The controller opens nothing else the tool
   writes; the marker carries no denied key.
 - **The Actions watcher.** The controller reads the workflow named by `watcher_name` (a file name, e.g.
   `mbp-watcher.yml`) through the runs API. A run concludes `success` when it checked the host's results ref
-  (alarm or not); the alarm itself is the watcher's own issue (C.1-C.3).
+  (alarm or not); the alarm itself is the watcher's own issue (C.1-C.3). It counts only as a `schedule` or
+  `workflow_dispatch` run on `main`.
 
 **Install additions:** `controller_signers` (an allowed-signers file naming `cadence-controller` with the
-controller's public key), `watcher_kind`, `offload_argv`. The deterministic desk needs no new key.
+controller's public key), `watcher_kind`, `offload_argv`, `desk_commit` (the commit the off-host desk runs; the
+controller's checkout must be at it). The deterministic desk needs no new key. On switch-over day the newest
+hand-armed campaign close needs a typed offload marker (a legacy one-line marker is `OFFLOAD_FAILED`).
 
 **Synthetic runs (RL-172 (i) row 5)** add `actions_watcher`, `offload`, `l002_timeout` and `fence`; every
 scenario's close runs the MBP desk, and the Air's verdict is its off-host re-check.
 
 **Left open, for the research lead:** Mythos N12 (the reference record hash is bound by the capture run's name
 only; the frozen pins record no hash).
+
+### 15.14 Gate 3 (cold Opus seat, REFUSE: 1 HIGH, 2 MED, 6 LOW; Mythos seat, REFUSE: 1 HIGH, 4 MED, 12 LOW)
+
+| Finding | What changed |
+|---|---|
+| Opus 1 (HIGH): a ceded session or a newer receipt dissolved the copy gate | The copy gate is per span: every controller span that left a receipt, plus the host's newest campaign receipt, needs its own verified marker before any arm, cede or F0 page. `JOURNAL_COPY` also holds a READY session's cede (A.3) |
+| Opus 2 (MED): two correct verdicts disagreed | (#799) "schema change" compares with the latest earlier summary; the agreement check leaves out each desk's history-dependent parts |
+| Opus 3 (MED): marker not bound to its span | `source` must be the span's output directory; `written_at` after the span's receipt and not after the host clock (300 s skew); A.1's key rule by the marker's own `written_at` |
+| Opus 4 (LOW): a stale desk lock was silent | `MBP_DESK_FAILED` (halt) on a stale lock or three failed runs; the step keeps retrying and the halt lifts when it publishes |
+| Opus 5 (LOW): L002 lifted by a disposition; a missing L002 summary read as released | Only the L002 release record lifts `L002_TIMEOUT`; a consumer-gate leg whose summary was not read is "not known" (holds) |
+| Opus 6 (LOW): any Actions run counted | The run must be `schedule` or `workflow_dispatch` on `main` |
+| Opus 7 (LOW): the draw over-selected | (#799) at the desk the history decides first-of-group |
+| Opus 8 (LOW): the MBP desk's commit not pinned | Config `desk_commit`; the arm proof's `desk_commit` line checks the controller checkout's HEAD and its clean desk files |
+| Opus 9 (LOW): unfenced first tick after an acknowledgement | The tick takes the fence before its network work whenever no page is unacknowledged |
+| Mythos T1 (HIGH): only the literal `timeout` counted | Every L002 outcome but `released` counts (`deadman`, `unobserved`, a missing outcome), and a leg with no record though a later leg has one (`law.unreleased`); the prior-span path the same |
+| Mythos T2 (MED): a record committed during the offload was premature for ever | Gate releases and Q1 records are judged against the span's receipt time; a release is dated by its latest unbroken presence and a Q1 record by its latest commit, so re-committing recovers |
+| Mythos T3 (MED): the Actions read was not bound | The query asks `branch=main&event=schedule`; the law requires `schedule`, `main` and this repository (`head_repository`) |
+| Mythos T4 (MED): a stranded page was not delivered; the closing loop spun | While a HALT page is unacknowledged the closing tick does not take the fence; an own fence with time to spare is not rewritten, so the watched directory stays quiet |
+| Mythos T5 (MED, #799) | FORMAT section 2 fetches the verdict refs; a history prefix with no record is refused unless `--history-empty` (the controller passes it while it has no MBP record) |
+| T6 | = Opus 1 |
+| T7 | Gates come from the kit and the queue entry's roster; G0 outcomes and the leg count fall back to the host's receipt when nothing was packed |
+| T8 | `controller_signers` is a line of the arm proof (names only `cadence-controller`, carries the signing key) |
+| T9 | = Opus 4 |
+| T10 | = Opus 2 |
+| T11 (#799) | The draw's history clause skips earlier attempts of the same span |
+| T12 | Every arm stage renews the fence; a passed deadline is reported `lapsed`, and an arm whose fence is not `held` before the intent halts |
+| T13 | For the research lead: an informational page (a `PLAN_REFUSED_AT_T0` stall) releases the fence until acknowledged |
+| T14 | A failed offload is retried up to three times in the close interval before `OFFLOAD_FAILED` |
+| T15 | = Opus 3; switch-over: the newest hand-armed campaign close needs a typed marker before the first tick (install list) |
+| T16 | `desk_code` names the transport, the kit loader and the CLI; the MBP's checkout is pinned (Opus 8) |
+| T17 | A second veto issue pages; a foreign-run wait is quiet (nothing synced) with the 36 h bound |

@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time as dtime, timedelta
 import hashlib
 import json
+import os
 import re
 from zoneinfo import ZoneInfo
 
@@ -39,7 +40,9 @@ SESSION_READY_SCHEMA = "joulewise.cadence_session_ready.v1"
 SESSION_DONE_SCHEMA = "joulewise.cadence_session_done.v1"
 WATCHER_STAMP_SCHEMA = "joulewise.cadence_watcher_stamp.v1"
 OFFLOAD_MARKER_SCHEMA = "joulewise.offload_marker.v1"     # the offload tool's marker (RL-173 A.2; design 15.13)
-WATCHER_KINDS = ("actions", "stamp")                        # RL-173 C.4 (GitHub Actions) and C.5 (the Air's stamp)
+WATCHER_KINDS = ("actions", "stamp")
+WATCHER_EVENTS = ("schedule",)          # the watcher's own trigger, on the default branch (gate 3: Opus 6, Mythos T3)
+WATCHER_BRANCH = "main"                        # RL-173 C.4 (GitHub Actions) and C.5 (the Air's stamp)
 TRANSITION_SCHEMA = "joulewise.cadence_controller_transition.v1"
 VERDICT_SCHEMA = desk_final.VERDICT_SCHEMA
 ZONE = ZoneInfo(kitmod.LOCAL_ZONE_NAME)
@@ -56,11 +59,11 @@ F0_MAX_PER_DATE = 3
 FALLBACK_HORIZON_S = 2.5 * 3600    # RL-165 section 3 line 3: no staged item can hold within 2 h 30 min
 STALL_S = 2.5 * 3600               # the default bound on any wait
 STALL_SHORT_S = 30 * 60            # waits the host or the lead clears in minutes, or never by themselves
-SHORT_STALL_CODES = frozenset({"AGENT_PRESENT", "PLAN_REFUSED_AT_T0", "JOURNAL_COPY", "SPAN_LIVE", "CLOSING",
+SHORT_STALL_CODES = frozenset({"AGENT_PRESENT", "PLAN_REFUSED_AT_T0", "JOURNAL_COPY", "CLOSING",
                                "ISSUES_UNREADABLE", "FETCH_FAILED", "NIGHT_UNKNOWN", "LEASE_EXPIRED",
                                "WATCHER_UNREADABLE"})
 STALL_LONG_S = 36 * 3600           # a loaded night agent is a v4 window (28 to 33 h); it pages only past that
-LONG_STALL_CODES = frozenset({"NIGHT_AGENT"})
+LONG_STALL_CODES = frozenset({"NIGHT_AGENT", "SPAN_LIVE"})   # a foreign run (F0, a session) may last a day
 MIDNIGHT_MARGIN_S = 120            # a dated arm is refused this close to the end of its date (F19)
 # RL-173 A.1: until the offload key has a second copy off the MBP, the offload counts for at most 24 h from the
 # ruling (Sun 15 Nov 2026 11:58 PST). After this instant a marker must name the key's second copy.
@@ -125,6 +128,8 @@ REASONS = {
                                   "(RL-173 E)"),
     "L002_TIMEOUT": ("halt", "L002 timed out at G0: nothing arms until the lead's release record after the research "
                              "lead's ruling (RL-161; RL-173 E)"),
+    "MBP_DESK_FAILED": ("halt", "the MBP desk step cannot run (a stale lock, or three failed runs): the span cannot "
+                                "become final on the MBP (RL-173 B)"),
     "DESK_DISAGREEMENT": ("halt", "the MBP desk and the off-host desk disagree on a span: to the research lead "
                                   "(RL-173 B)"),
     "SPAN_BAD_TERMINAL": ("halt", "a span closed refused, stopped, faulted, stranded or unproven, with no disposition"),
@@ -552,11 +557,14 @@ def actions_run_view(run):
     """The fields of one GitHub Actions workflow run (the REST API's ``workflow_runs[]`` item) the arm binds."""
     if not isinstance(run, dict):
         return None
-    return {k: run.get(k) for k in ("id", "name", "path", "status", "conclusion", "run_started_at", "updated_at",
+    view = {k: run.get(k) for k in ("id", "name", "path", "status", "conclusion", "run_started_at", "updated_at",
                                     "event", "head_branch", "head_sha", "html_url")}
+    view["head_repository"] = (run.get("head_repository") or {}).get("full_name") if isinstance(
+        run.get("head_repository"), dict) else run.get("head_repository")
+    return view
 
 
-def actions_watcher_reasons(run, now, last_close_epoch, workflow):
+def actions_watcher_reasons(run, now, last_close_epoch, workflow, repo=None):
     """RL-173 C.4: line 7 by the GitHub Actions watcher. Each arm reads the watcher's latest completed run through
     the API (``run`` is ``actions_run_view`` of it; None when no completed run exists; the string ``"unreadable"``
     when the read failed), and that run must be newer than the previous span's close: it STARTED after the latest
@@ -575,6 +583,11 @@ def actions_watcher_reasons(run, now, last_close_epoch, workflow):
                                          f"started {run.get('run_started_at')}, updated {run.get('updated_at')}")]
     if run.get("conclusion") != "success":
         return [reason("WATCHER_FAILED", f"run {run.get('id')} concluded {run.get('conclusion')}")]
+    if (run.get("event") not in WATCHER_EVENTS or run.get("head_branch") != WATCHER_BRANCH
+            or (repo is not None and run.get("head_repository") != repo)):
+        return [reason("WATCHER_FAILED", f"run {run.get('id')}: event {run.get('event')!r} on {run.get('head_branch')!r}, "
+                                         f"from {run.get('head_repository')!r}: not {'/'.join(WATCHER_EVENTS)} on "
+                                         f"{repo}:{WATCHER_BRANCH} (gate 3, Opus 6, Mythos T3)")]
     if started > now + CLOCK_SKEW_S:
         return [reason("WATCHER_FAILED", f"run {run.get('id')} started after the host clock")]
     if now - started > WATCHER_TTL_S:
@@ -670,7 +683,7 @@ BAD = ("STOPPED", "REFUSED", "FAULT", "STRANDED", "CLOSE_UNPROVEN", "LAUNCH_REFU
 def build_runs(standing, controller_records, external_runs, kits=None, prior_receipts=None):
     """Every run in machine order. A prior (hand-armed) span's gates are derived from its kit and roster like a
     controller span's (Mythos N2); ``kits`` maps sha256 -> kit, and a prior span whose kit is not in it carries
-    ``gates_unknown``. ``g0_timeouts`` (the legs whose G0 timed out; None when not known) comes from the controller's
+    ``gates_unknown``. ``g0_unreleased`` (the legs whose G0 did not release; None when not known) comes from the controller's
     close for its spans and from the host receipt (``prior_receipts``) for a prior span."""
     disp = {d["plan_id"]: d["resolution"] for d in standing["dispositions"]}
     runs = []
@@ -684,7 +697,7 @@ def build_runs(standing, controller_records, external_runs, kits=None, prior_rec
                         resolution=disp.get(s["plan_id"]),
                         extra={"kit_sha256": s["kit_sha256"], "roster": list(s["roster"]),
                                "gates_unknown": kits is not None and kit is None,
-                               "g0_timeouts": ((prior_receipts or {}).get(s["plan_id"]) or {}).get("g0_timeouts")}))
+                               "g0_unreleased": ((prior_receipts or {}).get(s["plan_id"]) or {}).get("g0_unreleased")}))
     for r in controller_records:
         closed = r.get("closed_epoch")
         if closed is not None and r.get("legs_finished") is not None:
@@ -698,7 +711,8 @@ def build_runs(standing, controller_records, external_runs, kits=None, prior_rec
                         campaign=r.get("campaign_id"), bundle_sha256=r.get("bundle_sha256"),
                         gates=list(r.get("gates") or []), resolution=disp.get(r["plan_id"]),
                         extra={"kit_sha256": r.get("kit_sha256"), "armed": r.get("armed") or {},
-                               "roster": r["legs"], "g0_timeouts": r.get("g0_timeouts")}))
+                               "roster": r["legs"], "g0_unreleased": r.get("g0_unreleased"),
+                               "receipt_epoch": r.get("receipt_epoch")}))
     for e in external_runs:
         runs.append(Run(e["run_id"], e["kind"], None, None, 0, False, e["t0_epoch"], e.get("closed_epoch"),
                         "CLOSED_OK" if e.get("restore") == "proven" else "CLOSE_UNPROVEN", "external",
@@ -759,6 +773,11 @@ def k2_reasons(runs, span_id=None):
     return out
 
 
+def _ended(run):
+    """When a span's record became readable to the lead: its receipt (a controller span), else its close."""
+    return run.extra.get("receipt_epoch") or run.closed
+
+
 PLAN_RE = re.compile(r"cq-(?P<span>[a-z0-9][a-z0-9-]*?)-a(?P<attempt>[0-9]+)")
 
 
@@ -789,9 +808,9 @@ def apply_q1(runs, records, kits, record_epochs=None):
         problems = ([rec["error"]] if rec.get("error") else
                     desk_final.validate_q1_record(rec.get("doc"), plan_id=run.plan_id, span_id=span_id,
                                                   attempt=attempt))
-        epoch = (record_epochs or {}).get(run.plan_id)
-        if not problems and (epoch is None or run.closed is None or epoch < run.closed):
-            problems = [f"committed at {epoch}, span closed at {run.closed}"]
+        epoch, ended = (record_epochs or {}).get(run.plan_id), _ended(run)
+        if not problems and (epoch is None or ended is None or epoch < ended):
+            problems = [f"committed at {epoch}, span ended at {ended}"]
         if problems:
             run.extra["q1"] = "missing"
             halts.append(reason("Q1_RECORD_INVALID", f"{run.plan_id}: {'; '.join(problems)}"[:300], span=run.plan_id))
@@ -800,24 +819,41 @@ def apply_q1(runs, records, kits, record_epochs=None):
     return halts
 
 
+def unreleased(outcomes, roster):
+    """The rostered legs whose G0 did not release (gate 3, Mythos T1; Opus 5). ``outcomes`` maps each leg that has a
+    row (a packed summary, or a receipt leg row) to its ``g0_outcome``. A leg counts when its outcome is anything but
+    ``released`` (``timeout``, ``deadman`` and ``unobserved`` all end an unreleased G0; a missing outcome counts), or
+    when it has no row although a later rostered leg has one (it ran, and its record is missing). A leg with no row and
+    no later leg with one never started, and did not time out."""
+    outcomes = outcomes or {}
+    out = []
+    for i, x in enumerate(roster):
+        if x in outcomes:
+            if outcomes[x] != "released":
+                out.append(x)
+        elif any(y in outcomes for y in roster[i + 1:]):
+            out.append(x)
+    return sorted(out)
+
+
 def l002_reasons(runs, standing):
     """RL-161 and RL-173 E: after an L002 G0 timeout nothing arms and the Q1 print goes to the research lead. A span
     that raised the L002 consumer gate and whose L002 timed out at G0 (or whose G0 outcome is not known: missing
     evidence never passes) halts every arm, every queue and the fallback included, until the lead's ``release``
     record for that span's L002 gate (written after the research lead's ruling). A span the lead disposed of as
-    ``rerun`` or ``withdrawn`` leaves the rule; so does an L002 that released."""
+    ``rerun`` or ``withdrawn`` does NOT lift it (gate 3, Opus 5): only the release record does; an L002 that released
+    leaves the rule."""
     decisions = {(r["plan_id"], r["gate"]): r["decision"] for r in standing["gate_records"]}
-    disposed = _disposed(standing)
     out = []
     for run in runs:
-        if run.source not in ("controller", "prior") or run.plan_id in disposed or "L002" not in run.gates:
+        if run.source not in ("controller", "prior") or "L002" not in run.gates:
             continue
-        timeouts = run.extra.get("g0_timeouts")
-        if timeouts is not None and "L002" not in timeouts:
+        unrel = run.extra.get("g0_unreleased")
+        if unrel is not None and "L002" not in unrel:
             continue
         if decisions.get((run.plan_id, "L002")) != "release":
             out.append(reason("L002_TIMEOUT", f"{run.plan_id}: L002 "
-                                              f"{'timed out' if timeouts is not None else 'G0 outcome not known'}",
+                                              f"{'did not release its G0' if unrel is not None else 'G0 outcome not known'}",
                               span=run.plan_id))
     return out
 
@@ -940,10 +976,12 @@ def gate_reasons(span, campaign, runs, standing, record_epochs=None):
                 out.append(reason("HAND_GATE", f"{gate} of {run.plan_id} holds {campaign}", span=sid))
                 continue
             if record_epochs is not None:
-                epoch = record_epochs.get((run.plan_id, gate))
-                if epoch is None or run.closed is None or epoch < run.closed:
+                # A record must postdate the span's receipt (the lead reads the pushed bundle as soon as it is up), not
+                # the end of the close work, which includes the offload (gate 3, Mythos T2).
+                epoch, ended = record_epochs.get((run.plan_id, gate)), _ended(run)
+                if epoch is None or ended is None or epoch < ended:
                     out.append(reason("GATE_RECORD_PREMATURE", f"{gate} of {run.plan_id}: released at "
-                                                               f"{epoch}, closed at {run.closed}", span=sid))
+                                                               f"{epoch}, span ended at {ended}", span=sid))
     for gate in standing["hand_gates"]:
         if sid in gate["holds"] and not gate["passed"]:
             out.append(reason("HAND_GATE", f"{gate['id']} holds {sid}", span=sid))
@@ -1092,7 +1130,11 @@ PROOF_LINES = {
     "sudo_kill": ("arm",), "measurement_mode": ("arm", "close"),
     "monitors": ("arm", "close"), "root_powermetrics": ("arm", "close"), "span_processes": ("arm", "close"),
     "launch_fence": ("arm", "close"), "agents": ("arm",), "signing": ("arm",), "verdict_signers": ("arm",),
+    "desk_commit": ("arm",), "controller_signers": ("arm",),
 }
+
+
+SIGNING_LINES = ("signing", "verdict_signers", "controller_signers")
 
 
 def proof_reasons(proof, kind):
@@ -1107,12 +1149,12 @@ def proof_reasons(proof, kind):
             continue
         row = proof.get(line)
         if row is None or row.get("ok") is None:
-            out.append(reason("SIGNING_UNAVAILABLE" if line in ("signing", "verdict_signers") else code,
+            out.append(reason("SIGNING_UNAVAILABLE" if line in SIGNING_LINES else code,
                               f"{line}: not observed"))
         elif row["ok"] is False:
             if kind == "arm" and (line == "agents" or (line == "measurement_mode" and row.get("agent_only"))):
                 waits.append(reason("AGENT_PRESENT", f"{line}: {row.get('detail', '')}"[:200]))
-            elif line in ("signing", "verdict_signers"):
+            elif line in SIGNING_LINES:
                 out.append(reason("SIGNING_UNAVAILABLE", str(row.get("detail", ""))[:200]))
             else:
                 out.append(reason(code, f"{line}: {row.get('detail', '')}"[:200]))
@@ -1132,12 +1174,14 @@ OFFLOAD_MARKER_KEYS = {"schema", "plan_id", "source", "manifest_sha256", "manife
 UPLOAD_KEYS = {"confirmed", "readback", "value", "evidence"}
 
 
-def offload_marker_problems(doc, plan_id, now):
+def offload_marker_problems(doc, plan_id, now, source=None, after=None):
     """RL-173 A: the MBP's verified encrypted cloud offload is the off-host copy. Its marker
     (``<copy_marker_dir>/<plan_id>.ok``, written by the offload tool once the upload is verified; design 15.13)
     must record the plaintext manifest's sha256, the ciphertext's sha256 and size, and the provider's confirmation
     that the upload finished, read back as the ciphertext's sha256 or size (A.2). After RL-173 A.1's 24 h it must
-    also name where the key's second copy is (never the cloud folder or the repo). Returns problems."""
+    also name where the key's second copy is (never the cloud folder or the repo). The marker is bound to its span
+    (gate 3, Opus 3): ``source`` must be the span's own output directory and ``written_at`` must fall after the
+    span's receipt and not after the host clock (each within the 300 s skew). Returns problems."""
     if not isinstance(doc, dict):
         return ["the marker is not a JSON object (a typed offload marker; RL-173 A.2)"]
     p = []
@@ -1163,27 +1207,38 @@ def offload_marker_problems(doc, plan_id, now):
         p.append("upload: {confirmed: true, readback: sha256|size, value: the ciphertext's, evidence} (A.2)")
     if doc.get("verified") is not True:
         p.append("verified: true")
+    written = parse_time(doc.get("written_at"))
     key = doc.get("key_second_copy")
     if not (key is None or _text(key)):
         p.append("key_second_copy: null or where the key's second copy is")
-    elif key is None and now > KEY_SECOND_COPY_DEADLINE:
-        p.append("key_second_copy: required 24 h after RL-173 (A.1)")
-    if parse_time(doc.get("written_at")) is None:
+    elif key is None and (written is None or written > KEY_SECOND_COPY_DEADLINE):
+        p.append("key_second_copy: required on a marker written 24 h after RL-173 (A.1)")
+    if written is None:
         p.append("written_at: ISO 8601 with an offset")
+    else:
+        if written > now + CLOCK_SKEW_S:
+            p.append("written_at: after the host clock")
+        if after is not None and written < after - CLOCK_SKEW_S:
+            p.append("written_at: before the span's receipt (not this span's offload)")
+    if source is not None and (not isinstance(doc.get("source"), str)
+                               or os.path.normpath(doc["source"]) != os.path.normpath(source)):
+        p.append(f"source {doc.get('source')!r} is not this span's output {source!r}")
     return p
 
 
-def census_reasons(census, runs, output_root, copy_markers, now=None, offload_failures=()):
+def census_reasons(census, runs, output_root, copy_markers, now=None, offload_failures=(), copy_due=None):
     """``census``: {"newest": (epoch, path), "campaign": [paths under the output root]} or an error string.
 
     * Every campaign receipt under the output root belongs to a span the ledger knows (prior or controller);
       an unknown one is a halt (Mythos F18: a hand-armed span missing from ``prior_spans``).
-    * The copy gate, bound to the ONE newest close (RL-173 A): if the newest receipt is a campaign span's, its
-      offload marker must be there and verify (``offload_marker_problems``) before another arm. ``copy_markers``
-      maps plan_id -> {"doc": parsed JSON or None, "error": text or None, "failed": bool (a ``<plan_id>.failed``
+    * The copy gate (RL-173 A), bound to SPANS, not to the newest file (gate 3, Opus 1): every span in
+      ``copy_due`` (plan_id -> {"source": its output directory, "after": its receipt time}: every controller span
+      that left a receipt) and the host's newest receipt when it is a campaign span's must each have a verified
+      offload marker (``offload_marker_problems``) before another arm, cede or F0 page. ``copy_markers`` maps
+      plan_id -> {"doc": parsed JSON or None, "error": text or None, "failed": bool (a ``<plan_id>.failed``
       file)}. Not there yet: a wait (JOURNAL_COPY). There but unverified, a ``.failed`` file, or the controller's
       own offload step failed (``offload_failures``): OFFLOAD_FAILED, a halt. Either holds F0 too (A.7): the copy
-      gate is a global reason, read before the fallback. After a non-campaign close the Check covers the copy."""
+      gate is a global reason, read before the fallback; ``select`` also holds a READY session on JOURNAL_COPY."""
     if isinstance(census, str) or census is None:
         return [reason("CENSUS_FAILED", str(census))]
     out = []
@@ -1192,21 +1247,25 @@ def census_reasons(census, runs, output_root, copy_markers, now=None, offload_fa
         m = CAMPAIGN_RECEIPT.search(path)
         if m is None or m.group("plan") not in known:
             out.append(reason("UNKNOWN_CAMPAIGN_RECEIPT", path))
-    _epoch, newest = census["newest"]
+    due = dict(copy_due or {})
+    newest_epoch, newest = census["newest"]
     m = CAMPAIGN_RECEIPT.search(newest) if newest.startswith(output_root.rstrip("/") + "/") else None
-    if m is not None:
-        plan_id = m.group("plan")
+    if m is not None and m.group("plan") not in due:
+        due[m.group("plan")] = {"source": os.path.dirname(newest), "after": newest_epoch}
+    failures = set(offload_failures or ())
+    for plan_id, expect in sorted(due.items()):
         marker = copy_markers.get(plan_id) or {}
         if marker.get("failed"):
             out.append(reason("OFFLOAD_FAILED", f"{plan_id}: the offload left {plan_id}.failed"))
         elif marker.get("doc") is None and marker.get("error") is None:
-            if plan_id in set(offload_failures or ()):
+            if plan_id in failures:
                 out.append(reason("OFFLOAD_FAILED", f"{plan_id}: the controller's offload step failed, no marker"))
             else:
-                out.append(reason("JOURNAL_COPY", f"no offload marker for {plan_id}, the newest close ({newest})"))
+                out.append(reason("JOURNAL_COPY", f"no offload marker for {plan_id} ({expect.get('source')})"))
         else:
             problems = ([marker["error"]] if marker.get("error") else
-                        offload_marker_problems(marker["doc"], plan_id, now if now is not None else 0))
+                        offload_marker_problems(marker["doc"], plan_id, now if now is not None else 0,
+                                                source=expect.get("source"), after=expect.get("after")))
             if problems:
                 out.append(reason("OFFLOAD_FAILED", f"{plan_id}: {'; '.join(problems)}"[:400]))
     return out
@@ -1274,6 +1333,9 @@ def select(snap):
 
     if category(globals_) == "halt":
         return held("halt", [r for r in globals_ if r["category"] == "halt"])
+    copying = [r for r in globals_ if r["code"] == "JOURNAL_COPY"]
+    if snap["sessions"] and copying:   # A.3: the copy ends before the session's soak starts (gate 3, Opus 1)
+        return held("wait", copying)
     if snap["sessions"]:
         cat = category(snap["sessions"])
         return held("halt" if cat == "halt" else "cede", snap["sessions"])

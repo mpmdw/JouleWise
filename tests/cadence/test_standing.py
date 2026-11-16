@@ -658,11 +658,11 @@ class QueueIntegrity(unittest.TestCase):
 
 
 def marker(plan_id, **over):
-    doc = {"schema": law.OFFLOAD_MARKER_SCHEMA, "plan_id": plan_id, "source": f"/o/{plan_id}",
+    doc = {"schema": law.OFFLOAD_MARKER_SCHEMA, "plan_id": plan_id, "source": f"/o/cl-dev-05/{plan_id}-20261117T160000Z",
            "manifest_sha256": "a" * 64, "manifest_files": 10, "ciphertext_sha256": "b" * 64, "ciphertext_bytes": 4096,
            "provider": "cloud", "remote_path": f"offload/{plan_id}.enc",
            "upload": {"confirmed": True, "readback": "size", "value": 4096, "evidence": "provider size readback"},
-           "verified": True, "key_second_copy": "the Air's custody root", "written_at": "2026-11-17T08:30:00-08:00"}
+           "verified": True, "key_second_copy": "the Air's custody root", "written_at": "2026-11-17T09:02:00-08:00"}
     doc.update(over)
     return doc
 
@@ -752,7 +752,7 @@ class RL173(unittest.TestCase):
         kits = dict(KITS, **{"3" * 64: dev03})
         rec = record("cq-dev-03-s01-a1", "05", L[:3], NOW - 5 * 3600, closed=NOW - 4 * 3600)
         rec.update(kit_sha256="3" * 64, campaign_id="cl-dev-03", gates=law.derived_gates(dev03, L[:3]),
-                   g0_timeouts=["L002"])
+                   g0_unreleased=["L002"])
         self.assertEqual(rec["gates"], [law.CLASS_A, "L002"])
         other = pilot("04")
         st = standing(prior_spans=[], kits={**{sha: entry() for sha in kits}})
@@ -760,9 +760,9 @@ class RL173(unittest.TestCase):
         d = law.select(snap([other], st, runs=runs))
         self.assertEqual(d.action, "halt")
         self.assertIn("L002_TIMEOUT", codes(d))
-        runs = law.build_runs(st, [dict(rec, g0_timeouts=None)], [], kits=kits)      # not known: never a pass
+        runs = law.build_runs(st, [dict(rec, g0_unreleased=None)], [], kits=kits)      # not known: never a pass
         self.assertIn("L002_TIMEOUT", codes(law.select(snap([other], st, runs=runs))))
-        runs = law.build_runs(st, [dict(rec, g0_timeouts=[])], [], kits=kits)        # L002 released its G0
+        runs = law.build_runs(st, [dict(rec, g0_unreleased=[])], [], kits=kits)        # L002 released its G0
         self.assertNotIn("L002_TIMEOUT", codes(law.select(snap([other], st, runs=runs))))
         st2 = standing(prior_spans=[], kits={**{sha: entry() for sha in kits}},
                        gate_records=released(("cq-dev-03-s01-a1", "L002")))
@@ -796,7 +796,7 @@ class RL173(unittest.TestCase):
 
         def run(started, conclusion="success", **over):
             return law.actions_run_view({"id": 1, "path": f".github/workflows/{wf}", "status": "completed",
-                                         "conclusion": conclusion,
+                                         "conclusion": conclusion, "event": "schedule", "head_branch": "main",
                                          "run_started_at": datetime.fromtimestamp(started, law.ZONE).isoformat(),
                                          "updated_at": datetime.fromtimestamp(started + 30, law.ZONE).isoformat(),
                                          **over})
@@ -808,6 +808,8 @@ class RL173(unittest.TestCase):
                         (run(NOW - 300, status="in_progress"), "WATCHER_FAILED"),
                         (run(NOW - 300, path=".github/workflows/other.yml"), "WATCHER_FAILED"),
                         (run(NOW + 3600), "WATCHER_FAILED"), (run(NOW - 25 * 3600), "WATCHER_STALE"),
+                        (run(NOW - 300, event="pull_request"), "WATCHER_FAILED"),        # gate 3, Opus 6
+                        (run(NOW - 300, head_branch="feature"), "WATCHER_FAILED"),
                         (None, "WATCHER_RUN_MISSING"), ("unreadable", "WATCHER_UNREADABLE")):
             self.assertEqual([x["code"] for x in law.actions_watcher_reasons(r, NOW, close, wf)], [code], r)
         self.assertEqual(law.category(law.actions_watcher_reasons("unreadable", NOW, close, wf)), "retry")
@@ -821,10 +823,17 @@ class RL173(unittest.TestCase):
                     marker(pid, upload={"confirmed": False, "readback": "size", "value": 4096, "evidence": "e"}),
                     marker(pid, manifest_sha256="x"), dict(marker(pid), extra=1), "legacy text line"):
             self.assertTrue(law.offload_marker_problems(bad, pid, NOW), bad)
-        late = law.KEY_SECOND_COPY_DEADLINE + 1
-        self.assertTrue(law.offload_marker_problems(marker(pid, key_second_copy=None), pid, late))   # A.1
-        self.assertEqual(law.offload_marker_problems(marker(pid, key_second_copy=None), pid,
-                                                     law.KEY_SECOND_COPY_DEADLINE - 1), [])
+        self.assertTrue(law.offload_marker_problems(marker(pid, key_second_copy=None), pid, NOW))   # A.1: after 24 h
+        early = datetime.fromtimestamp(law.KEY_SECOND_COPY_DEADLINE - 60, law.ZONE).isoformat()
+        self.assertEqual(law.offload_marker_problems(marker(pid, key_second_copy=None, written_at=early), pid,
+                                                     law.KEY_SECOND_COPY_DEADLINE), [])
+        # gate 3 (Opus 3): bound to the span's own output and written after its receipt, not after the host clock
+        src, after = f"/o/cl-dev-05/{pid}-20261117T160000Z", NOW - 600
+        self.assertEqual(law.offload_marker_problems(marker(pid), pid, NOW, source=src, after=after), [])
+        for bad in (marker(pid, source="/o/cl-dev-05/cq-dev-05-s00-a1-20261116T160000Z"),
+                    marker(pid, written_at="2026-11-15T09:00:00-08:00"),
+                    marker(pid, written_at="2027-11-17T09:00:00-08:00")):
+            self.assertTrue(law.offload_marker_problems(bad, pid, NOW, source=src, after=after), bad)
         runs = law.build_runs(standing(), [record(pid, "05", L[:6], NOW - 9000)], [], kits=KITS)
         newest = f"/o/cl-dev-05/{pid}-20261117T160000Z/runner_receipt.json"
         census = {"newest": (int(NOW), newest), "campaign": [newest]}
@@ -848,6 +857,81 @@ class RL173(unittest.TestCase):
         self.assertNotIn("FALLBACK_F0_DUE", codes(d))
         sn["census_reasons"] = law.census_reasons(census, runs, "/o", {}, now=NOW)
         self.assertEqual(law.select(sn).action, "wait")                                 # an offload under way
+
+
+class Gate3Law(unittest.TestCase):
+    """Gate 3 (Opus 1, 5) on the law's side."""
+
+    def test_the_copy_gate_is_per_span_and_holds_the_cede(self):
+        pid = "cq-dev-05-s01-a1"
+        runs = law.build_runs(standing(), [record(pid, "05", L[:6], NOW - 9000)], [], kits=KITS)
+        newer = {"newest": (int(NOW), "/w/f0/runner_receipt.json"), "campaign": []}
+        due = {pid: {"source": f"/o/cl-dev-05/{pid}-20261117T160000Z", "after": NOW - 600}}
+        self.assertEqual([r["code"] for r in law.census_reasons(newer, runs, "/o", {}, now=NOW, copy_due=due)],
+                         ["JOURNAL_COPY"])                      # a newer non-campaign receipt does not dissolve it
+        good = {pid: {"doc": marker(pid), "error": None, "failed": False}}
+        self.assertEqual(law.census_reasons(newer, runs, "/o", good, now=NOW, copy_due=due), [])
+        st = standing()
+        sn = snap([], st, sessions=[{"schema": law.SESSION_READY_SCHEMA, "session_id": "slot-1", "by": "lead",
+                                     "ready_at": "2026-11-17T08:00:00-08:00"}])
+        self.assertEqual(law.select(sn).action, "cede")
+        sn["census_reasons"] = law.census_reasons(newer, runs, "/o", {}, now=NOW, copy_due=due)
+        d = law.select(sn)
+        self.assertEqual(d.action, "wait")
+        self.assertIn("JOURNAL_COPY", codes(d))
+
+    def test_a_disposition_does_not_lift_an_l002_timeout_and_a_missing_l002_summary_is_unknown(self):
+        dev03 = kit("cl-dev-03.v1.1")
+        kits = dict(KITS, **{"3" * 64: dev03})
+        rec = record("cq-dev-03-s01-a1", "05", L[:3], NOW - 5 * 3600, closed=NOW - 4 * 3600)
+        rec.update(kit_sha256="3" * 64, campaign_id="cl-dev-03", gates=law.derived_gates(dev03, L[:3]),
+                   g0_unreleased=["L002"])
+        for resolution in ("rerun", "withdrawn", "cleared"):
+            st = standing(prior_spans=[], kits={sha: entry() for sha in kits},
+                          dispositions=[{"plan_id": rec["plan_id"], "resolution": resolution, "record": "x"}])
+            runs = law.build_runs(st, [rec], [], kits=kits)
+            self.assertIn("L002_TIMEOUT", {r["code"] for r in law.l002_reasons(runs, st)}, resolution)
+
+
+class Gate3LawMythos(unittest.TestCase):
+    """Gate 3 (Mythos T1, T2, T3, T17) on the law's side."""
+
+    def test_every_unreleased_outcome_counts_and_a_missing_record_of_a_leg_that_ran(self):
+        roster = ["L001", "L002", "L003"]
+        for outcome in ("timeout", "deadman", "unobserved", None, ""):
+            self.assertIn("L002", law.unreleased({"L001": "released", "L002": outcome, "L003": "released"}, roster))
+        self.assertEqual(law.unreleased({"L001": "released", "L002": "released", "L003": "released"}, roster), [])
+        self.assertEqual(law.unreleased({"L001": "released", "L003": "released"}, roster), ["L002"])  # ran, no record
+        self.assertEqual(law.unreleased({"L001": "released"}, roster), [])                           # never started
+
+    def test_a_lead_record_is_judged_against_the_receipt_not_the_end_of_the_close_work(self):
+        p1, rel = pilot_done("05")
+        p1 = dict(p1, receipt_epoch=p1["closed_epoch"] - 900)     # the offload ran 15 min after the receipt
+        st = standing(prior_spans=[], gate_records=rel)
+        v3 = view([span(1, "dev-05-s03", "05", L[9:])], path="Q3.json")
+        epochs = {(p1["plan_id"], g): p1["receipt_epoch"] + 60 for g in p1["gates"]}
+        runs = law.build_runs(st, [p1], [], kits=KITS)
+        sn = snap([v3], st, runs=runs)
+        sn["record_epochs"] = epochs
+        self.assertNotIn("GATE_RECORD_PREMATURE", codes(law.select(sn)))
+        sn["record_epochs"] = {k: p1["receipt_epoch"] - 60 for k in epochs}
+        self.assertIn("GATE_RECORD_PREMATURE", codes(law.select(sn)))
+
+    def test_the_actions_run_must_be_this_repositorys(self):
+        def run(**over):
+            return law.actions_run_view({"id": 1, "path": ".github/workflows/w.yml", "status": "completed",
+                                         "conclusion": "success", "event": "schedule", "head_branch": "main",
+                                         "run_started_at": "2026-11-17T08:55:00-08:00",
+                                         "updated_at": "2026-11-17T08:56:00-08:00",
+                                         "head_repository": {"full_name": "o/r"}, **over})
+        self.assertEqual(law.actions_watcher_reasons(run(), NOW, None, "w.yml", repo="o/r"), [])
+        for bad in (run(head_repository={"full_name": "fork/r"}), run(event="workflow_dispatch"),
+                    run(head_branch="patch-1")):
+            self.assertEqual([r["code"] for r in law.actions_watcher_reasons(bad, NOW, None, "w.yml", repo="o/r")],
+                             ["WATCHER_FAILED"])
+
+    def test_a_foreign_run_waits_long_before_paging(self):
+        self.assertEqual(law.stall_bound(["SPAN_LIVE"]), law.STALL_LONG_S)
 
 
 if __name__ == "__main__":

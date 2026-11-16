@@ -38,6 +38,7 @@ Scenarios:
 - ``tampered``: an unsigned bundle the Air refuses, and an unsigned verdict the controller refuses.
 - ``denied_key``, ``prior_gate``, ``recovery``, ``repage``, ``night_window``: the second gate's findings.
 - ``actions_watcher`` (RL-173 C.4), ``offload`` (A.2, A.7), ``l002_timeout`` (E), ``fence`` (E): RL-173's owner list.
+- ``copy_gate``: the copy gate is per span (gate 3).
 
 Every close also runs the MBP desk (RL-173 B: the real ``cadence_desk.py final`` from this checkout on the signed
 bundle commit, its records signed with the controller's key); the Air's verdict is the off-host re-check, and the
@@ -202,7 +203,8 @@ class World:
             "watcher_name": WATCHER, "owner_login": "mpmdw", "repo_slug": "mpmdw/JouleWise", "gh_argv": ["/bin/false"],
             "measurement_mode_script": "/nonexistent", "high_power_marker": str(self.w / "high-power.marker"),
             "poll_idle_s": 60, "poll_live_s": 60, "hold_standing_fence": True, "accept_mock_verdicts": True,
-            "watcher_kind": "stamp", "controller_signers": str(self.keys["ctl"]["allowed"]), "offload_argv": None}
+            "watcher_kind": "stamp", "controller_signers": str(self.keys["ctl"]["allowed"]), "offload_argv": None,
+            "desk_commit": "0" * 40}
         (self.w / "custody").mkdir()
         (self.w / "desk-copy").mkdir()
         self.issues, self.notices, self.history, self.watcher_runs = [], [], {}, []
@@ -261,7 +263,9 @@ class World:
 
     def copy_journals(self, plan_id):
         """The offload tool's verified marker (RL-173 A.2; design 15.13), standing in for its encrypted upload."""
-        (Path(self.cfg["copy_marker_dir"]) / f"{plan_id}.ok").write_text(json.dumps(offload_marker(plan_id, self.env.now())))
+        intent = json.loads((Path(self.cfg["state_dir"]) / "spans" / plan_id / "intent.json").read_text())
+        (Path(self.cfg["copy_marker_dir"]) / f"{plan_id}.ok").write_text(
+            json.dumps(offload_marker(plan_id, self.env.now(), intent["output"])))
 
     def q1_record(self, plan_id):
         """The lead's typed RL-158 Q1 completion record (RL-173 E), committed on the audit branch after the print."""
@@ -277,7 +281,8 @@ class World:
         ctl = cc.Controller(self.cfg, env=self.env, launcher=self.launcher, issues=lambda: self.issues,
                             proof=clean_proof, signing=lambda: cc.signing_check(self.cfg, cc.Env()),
                             clock=lambda: self.env.now(), notice=self._notice, pid=os.getpid(),
-                            watcher_run=self._watcher_run)
+                            watcher_run=self._watcher_run,
+                            desk_commit=lambda: {"ok": True, "detail": "synthetic: the checkout under test"})
         ctl.preparer = MockPreparer(self, ctl.guard)
         self.ctl = ctl
         return ctl
@@ -295,7 +300,8 @@ class World:
             "id": 7000 + len(self.watcher_runs), "name": "mbp-watcher", "path": ".github/workflows/mbp-watcher.yml",
             "status": "completed", "conclusion": conclusion, "run_started_at": iso,
             "updated_at": datetime.fromtimestamp(started + 20, law.ZONE).isoformat(), "event": "schedule",
-            "head_branch": "main", "head_sha": "d" * 40, "html_url": "https://example.invalid/run"}))
+            "head_branch": "main", "head_sha": "d" * 40, "html_url": "https://example.invalid/run",
+            "head_repository": {"full_name": self.cfg["repo_slug"]}}))
 
     def _notice(self, issue, text):
         self.ctl.guard("synthetic: standing notice")
@@ -343,6 +349,8 @@ class World:
                 "--history-prefix", "refs/remotes/origin/cadence-desk-final/",
                 "--history-signers", str(self.keys["air"]["allowed"]), "--allow-mock",
                 "--lock", str(work / "AIR-QUIET.lock")]
+        if not git(self.seed, "for-each-ref", "refs/remotes/origin/cadence-desk-final/").strip():
+            argv.append("--history-empty")      # this Air has published nothing yet (#799 gate 3, Mythos T5)
         if hand_table:
             argv += ["--hand-table", str(self.hand_table(plan_id, work))]
         done = subprocess.run(argv, capture_output=True, text=True, cwd=str(ROOT),
@@ -384,9 +392,9 @@ class World:
         return path
 
 
-def offload_marker(plan_id, now):
+def offload_marker(plan_id, now, source):
     """A marker the offload tool writes (design 15.13), synthetic values."""
-    return {"schema": law.OFFLOAD_MARKER_SCHEMA, "plan_id": plan_id, "source": f"campaign-out/{plan_id}",
+    return {"schema": law.OFFLOAD_MARKER_SCHEMA, "plan_id": plan_id, "source": source,
             "manifest_sha256": "a" * 64, "manifest_files": 12, "ciphertext_sha256": "b" * 64,
             "ciphertext_bytes": 1048576, "provider": "synthetic cloud", "remote_path": f"offload/{plan_id}.enc",
             "upload": {"confirmed": True, "readback": "sha256", "value": "b" * 64, "evidence": "synthetic readback"},
@@ -864,7 +872,9 @@ doc = {"schema": "joulewise.offload_marker.v1", "plan_id": plan_id, "source": ou
        "remote_path": "offload/" + plan_id + ".enc",
        "upload": {"confirmed": True, "readback": "sha256", "value": "b" * 64, "evidence": "synthetic readback"},
        "verified": True, "key_second_copy": "synthetic vault",
-       "written_at": datetime.now(timezone.utc).isoformat()}
+       # the synthetic clock: just after the span's receipt (the real tool writes its own time)
+       "written_at": datetime.fromtimestamp(os.stat(os.path.join(output, "runner_receipt.json")).st_mtime + 1,
+                                            timezone.utc).isoformat()}
 with open(marker, "x") as handle:
     json.dump(doc, handle)
 '''
@@ -888,24 +898,29 @@ def scenario_offload(workdir, log=print):
     s = w.tick()
     assert _state(s) == "CLOSED" and _close(w, "cq-dev-05-s01-a1")["offload"]["rc"] == 7, s
     w.queue("dev05-rest", [w.span(1, "dev-05-s02", "cl-dev-05", L[6:], nb="2026-11-19")])
-    w.env.t += 400
-    s = w.tick()
-    pages = json.dumps([p["reasons"] for p in ctl.unacked_pages()])
+    for _ in range(cc.OFFLOAD_ATTEMPTS + 1):    # retried in the close interval, then held (gate 3, Mythos T14)
+        w.env.t += 400
+        s = w.tick()
+        pages = json.dumps([p["reasons"] for p in ctl.unacked_pages()])
+        if "OFFLOAD_FAILED" in pages:
+            break
     assert "OFFLOAD_FAILED" in pages and "FALLBACK_F0_DUE" not in pages, pages
+    assert _close(w, "cq-dev-05-s01-a1")["offload"]["attempts"] == cc.OFFLOAD_ATTEMPTS
     w.ack_all()
     marker = Path(w.cfg["copy_marker_dir"]) / "cq-dev-05-s01-a1.ok"
-    bad = offload_marker("cq-dev-05-s01-a1", w.env.now())
+    out1 = json.loads((Path(w.cfg["state_dir"]) / "spans/cq-dev-05-s01-a1/intent.json").read_text())["output"]
+    bad = offload_marker("cq-dev-05-s01-a1", w.env.now(), out1)
     bad["upload"] = {**bad["upload"], "value": "f" * 64}              # a readback that is not the ciphertext's
     marker.write_text(json.dumps(bad))
     w.env.t += 300
     s = w.tick()
     assert _state(s) in ("HALTED", "PAGED") and "OFFLOAD_FAILED" in json.dumps(s), s   # the same episode: no re-page
-    assert "readback" in json.dumps(law.offload_marker_problems(bad, "cq-dev-05-s01-a1", w.env.now()))
+    assert "readback" in json.dumps(law.offload_marker_problems(bad, "cq-dev-05-s01-a1", w.env.now(), source=out1))
     assert not any(p["kind"] == "FALLBACK_F0_DUE" for p in ctl.unacked_pages())
     w.ack_all()
     marker.unlink()
     flag.unlink()
-    subprocess.run(w.cfg["offload_argv"][:3] + ["cq-dev-05-s01-a1", "out", str(marker), str(flag)], check=True)
+    subprocess.run(w.cfg["offload_argv"][:3] + ["cq-dev-05-s01-a1", out1, str(marker), str(flag)], check=True)
     w.env.t += 300
     s = w.tick()
     assert "OFFLOAD_FAILED" not in json.dumps(s) and "OFFLOAD_FAILED" not in json.dumps(
@@ -928,7 +943,7 @@ def scenario_l002_timeout(workdir, log=print):
     w.launcher.finish()
     s = w.tick()
     close = _close(w, "cq-dev-03-s01-a1")
-    assert _state(s) == "CLOSED" and close["gates"] == ["class-a", "L002"] and close["g0_timeouts"] == ["L002"], close
+    assert _state(s) == "CLOSED" and close["gates"] == ["class-a", "L002"] and close["g0_unreleased"] == ["L002"], close
     w.copy_journals("cq-dev-03-s01-a1")
     w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
     w.env.t += 400
@@ -981,11 +996,50 @@ def scenario_fence(workdir, log=print):
     return w
 
 
+def scenario_copy_gate(workdir, log=print):
+    """Gate 3 (Opus 1): the copy gate is per span. With span 1's offload marker not yet written, a READY v4 session is
+    not ceded to (A.3: the copy ends before its soak), and a newer receipt on the host (the session's, an F0's) does
+    not dissolve span 1's gate: nothing arms until span 1's own verified marker exists."""
+    w = World(workdir, prior=False)
+    ctl = w.controller()
+    w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
+    w.tick()
+    w.launcher.finish()
+    s = w.tick()
+    assert _state(s) == "CLOSED", s
+    w.queue("dev05-rest", [w.span(1, "dev-05-s02", "cl-dev-05", L[6:])])
+    w.air_final("cq-dev-05-s01-a1", hand_table=True)
+    w.lead_release("cq-dev-05-s01-a1", "class-a")
+    ready = {"schema": law.SESSION_READY_SCHEMA, "session_id": "r1-slot-1", "by": "lead (synthetic)",
+             "ready_at": datetime.fromtimestamp(w.env.now(), law.ZONE).isoformat()}
+    w.commit({f"{RD}/sessions/READY-r1-slot-1.json": ready}, "session READY", w.env.now() - 30)
+    w.env.t += 400
+    s = w.tick()
+    assert _state(s) == "WAIT" and _codes(s) == {"JOURNAL_COPY"}, s           # not ceded while span 1 copies
+    assert not any(p["kind"] == "V4_SESSION" for p in ctl.unacked_pages())
+    w.commit({f"{RD}/sessions/DONE-r1-slot-1.json": {"schema": law.SESSION_DONE_SCHEMA, "session_id": "r1-slot-1"}},
+             "session done (synthetic: withdrawn)", w.env.now() - 30)
+    newer = w.w / "jw-wt" / "f0-run" / cc.RECEIPT          # a newer receipt on the host (an F0, say)
+    newer.parent.mkdir(parents=True)
+    newer.write_text("{}\n")
+    os.utime(newer, (w.env.now(), w.env.now()))
+    w.env.t += 1300
+    s = w.tick()
+    assert _state(s) == "WAIT" and "JOURNAL_COPY" in _codes(s), s             # span 1's gate is not forgotten
+    w.copy_journals("cq-dev-05-s01-a1")
+    s = w.drive(lambda s: _state(s) == "LIVE")
+    assert s["detail"]["plan_id"] == "cq-dev-05-s02-a1", s
+    log(f"copy_gate: span 1's missing marker held the READY session's cede and survived a newer receipt; with its "
+        f"marker dev-05-s02 armed {s['at']}")
+    return w
+
+
 SCENARIOS = {"clean": scenario_clean, "soak_retry": scenario_soak_retry, "l005_timeout": scenario_l005_timeout,
              "redo": scenario_redo, "tampered": scenario_tampered, "denied_key": scenario_denied_key,
              "prior_gate": scenario_prior_gate, "recovery": scenario_recovery, "repage": scenario_repage,
              "night_window": scenario_night_window, "actions_watcher": scenario_actions_watcher,
-             "offload": scenario_offload, "l002_timeout": scenario_l002_timeout, "fence": scenario_fence}
+             "offload": scenario_offload, "l002_timeout": scenario_l002_timeout, "fence": scenario_fence,
+             "copy_gate": scenario_copy_gate}
 
 
 def run(workdir, log=print):

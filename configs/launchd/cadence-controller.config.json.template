@@ -31,5 +31,6 @@
  "accept_mock_verdicts": false,
  "watcher_kind": "actions",
  "controller_signers": "/Users/edr/cadence-controller/controller_allowed_signers",
- "offload_argv": null
+ "offload_argv": null,
+ "desk_commit": "@@DESK_COMMIT@@"
 }
