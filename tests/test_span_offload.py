@@ -54,7 +54,8 @@ FAKE_RCLONE = textwrap.dedent('''\
             return os.path.join(root, path[len("fake:"):].lstrip("/"))
         return path
     def dbx(data):
-        return hashlib.sha256(b"dbx" + data).hexdigest()
+        blocks = b"".join(hashlib.sha256(data[i:i + 4194304]).digest() for i in range(0, len(data), 4194304))
+        return hashlib.sha256(blocks).hexdigest()
     cmd = positional[0]
     if os.environ.get("FAKE_RCLONE_FAIL") == cmd:
         sys.exit(1)
@@ -733,11 +734,15 @@ class SpanOffloadTests(unittest.TestCase):
                     so.RcloneBackend({"remote": remote})
         so.RcloneBackend({"remote": "jwoffload:JouleWise-offload"})
 
-    def test_dropbox_read_back_needs_a_real_hash(self):
-        backend = so.RcloneBackend({"remote": "x:y", "hash_type": "dropbox"})
-        with mock.patch.object(backend, "_run", return_value=b"\n"), self.assertRaises(so.OffloadError) as caught:
-            backend._local_hash(self.span / "empty.txt", None)
-        self.assertEqual(caught.exception.code, "LOCAL_HASH_INVALID")
+    def test_dropbox_digest_is_the_content_hash_of_one_read(self):
+        blob = self.tmp / "blob"
+        data = os.urandom(9 * 1024 * 1024 + 5)
+        blob.write_bytes(data)
+        blocks = b"".join(hashlib.sha256(data[i:i + 4194304]).digest() for i in range(0, len(data), 4194304))
+        snap = so.snapshot_digests(blob, ("dropbox", "md5"))
+        self.assertEqual(snap["dropbox"], hashlib.sha256(blocks).hexdigest())
+        self.assertEqual(snap["md5"], hashlib.md5(data).hexdigest())
+        self.assertEqual((snap["sha256"], snap["size"]), (hashlib.sha256(data).hexdigest(), len(data)))
 
     def test_sigterm_kills_the_upload_and_exits_5(self):
         backend = self.fake_rclone(FAKE_RCLONE_SLEEP="30", FAKE_RCLONE_PIDFILE=str(self.tmp / "rclone.pids"))
@@ -926,6 +931,80 @@ class SpanOffloadTests(unittest.TestCase):
             self.assertIn(caught.exception.code, ("ARCHIVE_PATH", "ARCHIVE_DUPLICATE"))
             self.assertEqual(caught.exception.exit_kind, "integrity")
 
+    # --- Sol round-3 regressions (findings 1-5) ------------------------------------------------
+
+    def test_an_edit_restored_after_the_upload_is_caught_in_every_hash_mode(self):
+        for mode in ("md5", "sha1", "dropbox", "sha256"):
+            with self.subTest(mode=mode):
+                plan = f"cq-syn-0{('md5', 'sha1', 'dropbox', 'sha256').index(mode) + 2}-s01-a1"
+                backend = self.fake_rclone(mode)
+                real_run = so.RcloneBackend._run
+                saved = {}
+
+                def edit_then_restore(rclone, args, deadline, cap=None):
+                    if args[:2] == ["copyto", "--immutable"] and args[2].endswith(".tgz.enc"):
+                        path = Path(args[2])
+                        os.chmod(path, 0o600)
+                        saved["bytes"] = path.read_bytes()
+                        path.write_bytes(saved["bytes"][:-1] + bytes([saved["bytes"][-1] ^ 1]))
+                        try:
+                            return real_run(rclone, args, deadline, cap)
+                        finally:
+                            path.write_bytes(saved["bytes"])  # restored before the post-upload check
+                    return real_run(rclone, args, deadline, cap)
+
+                with mock.patch.object(so.RcloneBackend, "_run", edit_then_restore), \
+                        self.assertRaises(so.OffloadError) as caught:
+                    so.offload(dict(self.config, backend=backend), plan, self.span_for(plan))
+                self.assertEqual(caught.exception.code, "READBACK_HASH")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_the_local_backend_never_follows_a_planted_temp_name_or_writes_into_a_repository(self):
+        before = so.hash_tree(self.span)
+        plan_dir = self.tmp / "cloud" / PLAN
+        plan_dir.mkdir()
+        for pid in range(os.getpid() - 2, os.getpid() + 3):
+            os.symlink(self.span / "runner_receipt.json", plan_dir / f".{PLAN}.tgz.enc.part-{pid}")
+        self.offload()
+        self.assertEqual(so.hash_tree(self.span), before)
+        self.assertFalse(os.path.islink(plan_dir / f"{PLAN}.tgz.enc"))
+        other = "cq-syn-01-s02-a1"
+        nested = self.tmp / "cloud" / other
+        nested.mkdir()
+        subprocess.run(["git", "init", "-q", str(nested)], check=True)
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(self.config, other, self.span_for(other), allow_local=True)
+        self.assertEqual(caught.exception.code, "BACKEND_PATH")
+        self.assertEqual(sorted(os.listdir(nested)), [".git"])
+
+    def test_control_files_that_are_fifos_never_block(self):
+        fifo = self.tmp / "config.fifo"
+        os.mkfifo(fifo)
+        start = time.monotonic()
+        with self.assertRaises(so.OffloadError) as caught:
+            so.load_mbp_config(fifo)
+        self.assertEqual(caught.exception.code, "CONFIG")
+        with mock.patch.object(so.LocalBackend, "put", side_effect=so.unverified("UPLOAD_TIMEOUT", "x")):
+            with self.assertRaises(so.OffloadError):
+                self.offload()
+        source = self.tmp / "stage" / PLAN / so.SOURCE_RECORD
+        os.chmod(source.parent, 0o700)
+        source.unlink()
+        os.mkfifo(source)
+        with self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "STAGE_CONFLICT")
+        self.assertLess(time.monotonic() - start, 10)
+
+    def test_malformed_provider_hashes_are_unverified(self):
+        backend = so.RcloneBackend({"remote": "x:y", "hash_type": "md5"})
+        for hashes in (1, "wrong", {"md5": 5}):
+            listing = json.dumps([{"Name": "n", "Size": 1, "Hashes": hashes}]).encode()
+            with self.subTest(hashes=hashes), mock.patch.object(backend, "_run", return_value=listing), \
+                    self.assertRaises(so.OffloadError) as caught:
+                backend._readback("p", "n", 1, "a" * 64, "b" * 32, None)
+            self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("READBACK_UNPARSEABLE", "unverified"))
+
     # --- CLI ----------------------------------------------------------------------------------
 
     def test_cli_exit_codes_and_one_line_output(self):
@@ -960,7 +1039,7 @@ class SpanOffloadStaticTests(unittest.TestCase):
         self.assertNotRegex(source, r"\[\s*['\"]git['\"]")
         loads = [line.strip() for line in source.splitlines() if "json.loads(" in line]
         allowed = ("descriptor_path.read_bytes()", "listing", "Path(path).read_text()",
-                   'tmp / files["descriptor"]', "stage / SOURCE_RECORD", "handle.read(65536)")
+                   'tmp / files["descriptor"]', "_read_in(dfd", "handle.read(65536)", "handle.read(1 << 20)")
         for line in loads:
             self.assertTrue(any(token in line for token in allowed), line)
 

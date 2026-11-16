@@ -42,7 +42,8 @@ pull from the cloud, checked against the marker's hashes.
    archive was 110 MB for 2.9 GB), with a local `.source.json` naming OUT's resolved path.
 7. Uploads the four files synchronously (`rclone copyto --immutable`, which exits), and reads each back from
    the provider (`rclone lsjson --hash`): the size and the provider's hash must equal the local file's (A.3).
-   The comparison digest is taken before the upload and the file is re-hashed after it; each confirmation
+   The comparison digest and the sha256 come from one read before the upload, and the file is re-hashed
+   after it; each confirmation
    must equal the hashes and sizes the stage held before the upload began (`STAGE_CHANGED` otherwise). The
    staged files are read-only (0400) from the end of the build.
 8. Checks the deadline once more, then writes the marker `<marker_dir>/<plan>.ok` only if it does not exist
@@ -123,8 +124,10 @@ Air's custody root and Ed's vault. (This tool will not re-offload that span: its
 
 - `rclone` (production): `rclone copyto --immutable` then `rclone lsjson --files-only --hash --hash-type
   <t>`. The remote must be a named rclone remote (`name:path`; a path, a `:backend:` string or a flag is refused).
-  `hash_type` is `sha256`, `sha1` or `md5` (compared with the local file's digest), `dropbox`
-  (compared with `rclone hashsum dropbox` of the local file) or `size` (size only). A listing that lags the
+  `hash_type` is `sha256`, `sha1`, `md5` or `dropbox` (Dropbox's content hash, computed locally), or
+  `size` (size only). The sha256 the marker records and the provider digest are computed from one read of
+  the staged file before the upload, so the provider's digest must describe the same bytes the marker
+  names. A listing that lags the
   upload, or a hash the provider has not computed yet, is retried `readback_tries` times
   (`readback_wait_s` apart); a differing size or hash is final.
 - `local` (tests; a sync folder): a copy with a local read-back. It cannot see a provider, so it is allowed
