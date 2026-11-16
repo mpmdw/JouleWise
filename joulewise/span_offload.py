@@ -31,6 +31,7 @@ import gzip
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -96,6 +97,10 @@ def integrity(code, detail=""):
     return OffloadError(code, detail, "integrity")
 
 
+def number(value):
+    return type(value) in (int, float) and math.isfinite(value)
+
+
 def check_id(value, what):
     if not isinstance(value, str) or not ID_RE.fullmatch(value) or ".." in value or value.endswith((".", ".lock")):
         raise refused("BAD_ID", what)
@@ -117,6 +122,17 @@ def sha256_bytes(data):
 
 def canonical(doc):
     return json.dumps(doc, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+
+
+_CHILDREN = set()
+
+
+def kill_children():
+    """Kill every openssl stream this process started. A signal handler calls it before unwinding, so no
+    unwinding step can wait on a stalled child."""
+    for proc in list(_CHILDREN):
+        with contextlib.suppress(OSError):
+            proc.kill()
 
 
 class Deadline:
@@ -187,23 +203,52 @@ def manifest_bytes(digests):
     return "".join(f"{digests[rel]}  ./{rel}\n" for rel in sorted(digests, key=lambda r: r.encode("utf-8"))).encode()
 
 
-def hash_tree(span_dir):
-    """The manifest of a tree on disk (used by the pull and by tests)."""
+def open_regular(path, what="a file"):
+    """Open a regular file without following a link and without blocking on a fifo; refuse anything else."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        raise refused("UNREADABLE", f"{what}: {type(error).__name__}") from None
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise refused("NOT_A_REGULAR_FILE", f"{what} is not a regular file")
+    return os.fdopen(fd, "rb")
+
+
+def hash_regular(path, check=None, what="a file"):
+    """sha256 of a regular file, read in chunks through ``open_regular``; ``check`` runs between chunks."""
+    digest = hashlib.sha256()
+    with open_regular(path, what) as handle:
+        for chunk in iter(lambda: handle.read(CHUNK), b""):
+            digest.update(chunk)
+            if check:
+                check()
+    return digest.hexdigest()
+
+
+def hash_tree(span_dir, check=None):
+    """The manifest of a tree on disk (a re-run's comparison, and the pull's check)."""
     _, files = walk_span(span_dir)
-    return manifest_bytes({rel: sha256_file(Path(span_dir) / rel) for rel in files})
+    return manifest_bytes({rel: hash_regular(Path(span_dir) / rel, check, "a span file") for rel in files})
 
 
 class _HashingWriter(io.RawIOBase):
+    """Hashes what it passes on. Once ``aborted``, writes are discarded so a failed archive never blocks or
+    raises again while its gzip/tar layers are closed."""
+
     def __init__(self, sink):
         self.sink = sink
         self.hash = hashlib.sha256()
         self.size = 0
+        self.aborted = False
 
     def writable(self):
         return True
 
     def write(self, data):
         view = memoryview(data)
+        if self.aborted:
+            return len(view)
         self.sink.write(view)
         self.hash.update(view)
         self.size += len(view)
@@ -233,20 +278,30 @@ def write_archive(span_dir, sink, check=None):
     dirs, files = walk_span(span_dir)
     writer = _HashingWriter(sink)
     digests = {}
-    with gzip.GzipFile(filename="", mode="wb", fileobj=writer, compresslevel=GZIP_LEVEL, mtime=0) as gz:
-        with tarfile.open(fileobj=gz, mode="w|", format=tarfile.PAX_FORMAT) as tar:
-            info = tarfile.TarInfo(top)
-            info.type, info.mode, info.mtime = tarfile.DIRTYPE, 0o755, int(os.lstat(span_dir).st_mtime)
+    gz = gzip.GzipFile(filename="", mode="wb", fileobj=writer, compresslevel=GZIP_LEVEL, mtime=0)
+    tar = tarfile.open(fileobj=gz, mode="w|", format=tarfile.PAX_FORMAT)
+    try:
+        info = tarfile.TarInfo(top)
+        info.type, info.mode, info.mtime = tarfile.DIRTYPE, 0o755, int(os.lstat(span_dir).st_mtime)
+        tar.addfile(info)
+        for rel in dirs:
+            info = tarfile.TarInfo(f"{top}/{rel}")
+            info.type, info.mode = tarfile.DIRTYPE, 0o755
+            info.mtime = int(os.lstat(span_dir / rel).st_mtime)
             tar.addfile(info)
-            for rel in dirs:
-                info = tarfile.TarInfo(f"{top}/{rel}")
-                info.type, info.mode = tarfile.DIRTYPE, 0o755
-                info.mtime = int(os.lstat(span_dir / rel).st_mtime)
-                tar.addfile(info)
-            for rel in files:
-                if check:
-                    check()
-                digests[rel] = _add_file(tar, span_dir / rel, f"{top}/{rel}")
+        for rel in files:
+            if check:
+                check()
+            digests[rel] = _add_file(tar, span_dir / rel, f"{top}/{rel}")
+        tar.close()
+        gz.close()
+    except BaseException:
+        writer.aborted = True  # closing the layers below writes nothing into a stalled or dead pipe
+        with contextlib.suppress(Exception):
+            tar.close()
+        with contextlib.suppress(Exception):
+            gz.close()
+        raise
     return manifest_bytes(digests), writer.hash.hexdigest(), writer.size, len(files)
 
 
@@ -338,6 +393,7 @@ def encrypt_span(openssl, span_dir, passphrase, out_path, deadline=None):
             proc = subprocess.Popen([openssl, *_enc_args(False, read_end)],
                                     stdin=subprocess.PIPE, stdout=out, stderr=subprocess.DEVNULL,
                                     pass_fds=(read_end,))
+            _CHILDREN.add(proc)
     except OSError:
         os.close(read_end)
         raise refused("OPENSSL_UNAVAILABLE", "the openssl binary could not run") from None
@@ -374,6 +430,7 @@ def encrypt_span(openssl, span_dir, passphrase, out_path, deadline=None):
         raise
     finally:
         timer.cancel()
+        _CHILDREN.discard(proc)
     if rc:
         raise refused("OPENSSL_FAILED", f"openssl enc rc={rc}")
     return result
@@ -394,6 +451,7 @@ def verify_ciphertext(openssl, passphrase, in_path, archive_sha256, deadline=Non
     try:
         proc = subprocess.Popen([openssl, *_enc_args(True, read_end), "-in", str(in_path)], stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL, pass_fds=(read_end,))
+        _CHILDREN.add(proc)
     except OSError:
         raise refused("OPENSSL_UNAVAILABLE", "the openssl binary could not run") from None
     finally:
@@ -412,6 +470,7 @@ def verify_ciphertext(openssl, passphrase, in_path, archive_sha256, deadline=Non
             proc.kill()
             proc.wait()
         proc.stdout.close()
+        _CHILDREN.discard(proc)
     if deadline:
         deadline.remaining()
     if rc or digest.hexdigest() != archive_sha256:
@@ -465,9 +524,17 @@ class LocalBackend:
     def describe(self):
         return {"kind": self.kind, "root": str(self.root)}
 
-    def put(self, local, plan, name, deadline=None):
+    def _plan_dir(self, plan):
         dest_dir = self.root / plan
+        if os.path.islink(dest_dir) or (os.path.lexists(dest_dir) and not dest_dir.is_dir()):
+            raise unverified("BACKEND_PATH", "the backend's plan directory is a symlink or not a directory")
+        return dest_dir
+
+    def put(self, local, plan, name, deadline=None):
+        dest_dir = self._plan_dir(plan)
         dest_dir.mkdir(exist_ok=True)
+        if os.path.islink(dest_dir / name):
+            raise unverified("BACKEND_PATH", "the backend's file is a symlink")
         dest = dest_dir / name
         local_sha = sha256_file(local)
         if dest.exists():
@@ -487,8 +554,8 @@ class LocalBackend:
                 "provider_hash": remote_sha, "provider_size": remote_size, "kind": "local-readback"}
 
     def get(self, plan, name, dest, deadline=None):
-        src = self.root / plan / name
-        if not src.is_file():
+        src = self._plan_dir(plan) / name
+        if os.path.islink(src) or not src.is_file():
             raise integrity("REMOTE_MISSING", name)
         shutil.copyfile(src, dest)
 
@@ -550,8 +617,10 @@ class RcloneBackend:
     def put(self, local, plan, name, deadline=None):
         size = os.stat(local).st_size
         local_sha = sha256_file(local)
+        expected = local_sha if self.hash_type == "sha256" else self._local_hash(local, deadline)  # before upload
         self._run(["copyto", "--immutable", str(local), self._path(plan, name)], deadline)
-        expected = self._local_hash(local, deadline)
+        if sha256_file(local) != local_sha or os.stat(local).st_size != size:
+            raise unverified("STAGE_CHANGED", f"{name} changed during its upload")
         for attempt in range(1, self.readback_tries + 1):
             try:
                 return self._readback(plan, name, size, local_sha, expected, deadline)
@@ -567,8 +636,11 @@ class RcloneBackend:
         hash_args = [] if self.hash_type == "size" else ["--hash", "--hash-type", self.hash_type]
         listing = self._run(["lsjson", "--files-only", *hash_args, self._path(plan)], deadline, cap=600)
         try:
-            rows = [row for row in json.loads(listing) if isinstance(row, dict) and row.get("Name") == name]
-        except ValueError:
+            parsed = json.loads(listing)
+            if not isinstance(parsed, list):
+                raise ValueError("not a list")
+            rows = [row for row in parsed if isinstance(row, dict) and row.get("Name") == name]
+        except (ValueError, RecursionError):
             raise unverified("READBACK_UNPARSEABLE", name) from None
         if len(rows) != 1:
             raise unverified("READBACK_MISSING", name)
@@ -680,7 +752,15 @@ SOURCE_RECORD = ".source.json"
 
 
 def _stage_complete(stage, plan):
-    """A stage is complete only when its descriptor (written last) exists and every file matches it."""
+    """A stage is complete only when its descriptor (written last) exists and every file matches it.
+
+    The stage must be a real directory of regular files: nothing behind a link is opened or parsed.
+    """
+    if os.path.islink(stage) or not stage.is_dir():
+        raise refused("STAGE_CONFLICT", "the stage path is a symlink or not a directory")
+    for entry in os.scandir(stage):
+        if entry.is_symlink() or not entry.is_file(follow_symlinks=False):
+            raise refused("STAGE_CONFLICT", "the stage holds a symlink or a non-regular entry")
     descriptor_path = stage / names(plan)["descriptor"]
     if not descriptor_path.is_file():
         return None
@@ -709,7 +789,7 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
     stage = stage_root / plan
     files = names(plan)
     source = _real(span_dir)
-    if stage.exists():
+    if os.path.lexists(stage):
         descriptor = _stage_complete(stage, plan)
         if descriptor is None:
             raise refused("STAGE_CONFLICT", "an incomplete or foreign directory holds this plan's stage path")
@@ -722,7 +802,7 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
                     or descriptor.get("span_name") != Path(span_dir).name \
                     or descriptor.get("scheme", {}).get("recipient_sha256") != config["recipient_sha256"]:
                 raise refused("STAGE_CONFLICT", "a complete stage of another source or recipient exists for this plan")
-            if hash_tree(span_dir) != (stage / files["manifest"]).read_bytes():
+            if hash_tree(span_dir, deadline.remaining if deadline else None) != (stage / files["manifest"]).read_bytes():
                 raise refused("STAGE_CONFLICT", "the span's bytes changed since the stage was built")
             return stage, descriptor, True
     building = Path(tempfile.mkdtemp(prefix=f".{plan}.building-", dir=stage_root))
@@ -748,6 +828,8 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
                       for kind in ("ciphertext", "wrapped_key", "manifest")},
         }
         (building / files["descriptor"]).write_bytes(canonical(descriptor))
+        for entry in building.iterdir():
+            os.chmod(entry, 0o400)  # the staged bytes are read-only from here to the upload
         os.chmod(building, 0o700)
         os.rename(building, stage)  # the stage path only ever names a complete stage
     except BaseException:
@@ -807,7 +889,10 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
         if os.path.lexists(forbidden):
             raise refused("FORBIDDEN_PATH_PRESENT", "a forbid_paths entry exists (a fence is up)")
     if deadline_epoch is None:
-        deadline_epoch = clock() + float(config.get("default_budget_s", DEFAULT_BUDGET_S))
+        budget = config.get("default_budget_s", DEFAULT_BUDGET_S)
+        if not number(budget) or budget <= 0:
+            raise refused("CONFIG", "default_budget_s must be a positive number of seconds")
+        deadline_epoch = clock() + budget
     marker_dir = Path(config["marker_dir"])
     stage_root = Path(config["stage_root"])
     if not marker_dir.is_dir() or not stage_root.is_dir():
@@ -833,9 +918,13 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
         # One snapshot of the public key: the fingerprint, the size check and the wrap all use these bytes.
         recipient_pem = Path(keydir) / "recipient.pem"
         try:
-            recipient_pem.write_bytes(Path(config["recipient_public_key"]).read_bytes())
-        except OSError:
-            raise refused("RECIPIENT_UNREADABLE", "the recipient public key cannot be read") from None
+            with open_regular(config["recipient_public_key"], "the recipient public key") as handle:
+                key_bytes = handle.read(65537)
+        except OffloadError:
+            raise refused("RECIPIENT_UNREADABLE", "the recipient public key is not a readable regular file") from None
+        if len(key_bytes) > 65536:
+            raise refused("RECIPIENT_UNREADABLE", "the recipient public key file is too large")
+        recipient_pem.write_bytes(key_bytes)
         recipient = check_recipient(openssl, recipient_pem, config["recipient_sha256"], deadline)
         stage, descriptor, reused = build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock)
         files = names(plan)
@@ -910,6 +999,12 @@ def _safe_members(tar, top):
             raise integrity("ARCHIVE_PATH", "a member is outside the span's top directory")
         if not (member.isreg() or member.isdir()):
             raise integrity("ARCHIVE_MEMBER_TYPE", "a member is not a regular file or directory")
+        try:
+            for part in parts:
+                if part:
+                    _check_name(part, "the archive")
+        except OffloadError:
+            raise integrity("ARCHIVE_PATH", "a member name has a newline, backslash or bad encoding") from None
         if name.rstrip("/") in seen:
             raise integrity("ARCHIVE_DUPLICATE", "a member name appears twice")
         seen.add(name.rstrip("/"))
@@ -924,6 +1019,20 @@ def _read_only_below(tree):
             os.chmod(Path(root) / name, 0o444)
         if Path(root) != Path(tree):
             os.chmod(root, 0o555)
+
+
+PULL_SCHEMA = "joulewise.span_offload_pull.v1"
+
+
+def landing_complete(done_path, plan, span_name):
+    """A landing is complete only with a valid completion record naming this plan and span."""
+    try:
+        with open_regular(done_path, "the completion record") as handle:
+            doc = json.loads(handle.read(65536))
+    except (OffloadError, ValueError, OSError):
+        return False
+    return isinstance(doc, dict) and doc.get("schema") == PULL_SCHEMA and doc.get("plan") == plan \
+        and doc.get("span_name") == span_name and HEX64.fullmatch(str(doc.get("manifest_sha256"))) is not None
 
 
 def landing_names(span_name):
@@ -954,6 +1063,8 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
         raise refused("CONFIG", "work_root must be on the same filesystem as the destination root")
     if os.path.islink(kit_dir) or (os.path.lexists(kit_dir) and not kit_dir.is_dir()):
         raise refused("DEST_SYMLINK", "the kit directory is a symlink or not a directory")
+    if os.path.lexists(kit_dir) and inside_git(kit_dir):
+        raise refused("PATH_IN_REPOSITORY", "the kit directory is inside a git repository")
     files = names(plan)
     with tempfile.TemporaryDirectory(prefix=f".pull-{plan}-", dir=work_root) as tmp:
         tmp = Path(tmp)
@@ -985,7 +1096,7 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
             raise integrity("DESCRIPTOR_INVALID", "the descriptor's span name is not a plain name") from None
         final = kit_dir / span_name
         side = {k: kit_dir / v for k, v in landing_names(span_name).items()}
-        if os.path.lexists(final) and not os.path.lexists(side["done"]):
+        if os.path.lexists(final) and not landing_complete(side["done"], plan, span_name):
             raise OffloadError("INCOMPLETE_LANDING", "an interrupted landing exists; move it aside", "dest_exists")
         if os.path.lexists(final) or any(os.path.lexists(p) for p in side.values()):
             raise OffloadError("DEST_EXISTS", "the destination already exists; nothing changed", "dest_exists")
@@ -1009,7 +1120,12 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
         if sorted(os.listdir(extract)) != [span_name] or not tree.is_dir():
             raise integrity("ARCHIVE_PATH", "the archive does not hold exactly the span's top directory")
         manifest = (tmp / files["manifest"]).read_bytes()
-        air_manifest = hash_tree(tree)
+        try:
+            air_manifest = hash_tree(tree, deadline.remaining if deadline else None)
+        except OffloadError as error:
+            if error.exit_kind != "refused":
+                raise
+            raise integrity("ARCHIVE_INVALID", f"the extracted tree: {error.code}") from None
         if air_manifest != manifest:
             raise integrity("MANIFEST_MISMATCH", "the extracted files differ from the plaintext manifest")
         _read_only_below(tree)
@@ -1020,14 +1136,17 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
             raise OffloadError("DEST_EXISTS", "the destination appeared during the pull", "dest_exists")
         os.rename(tree, final)
         os.chmod(final, 0o555)
-        for which, data in (("mbp", manifest), ("air", air_manifest),
-                            ("done", canonical({"schema": "joulewise.span_offload_pull.v1", "plan": plan,
-                                                "span_name": span_name, "manifest_sha256": got["manifest"],
-                                                "ciphertext_sha256": got["ciphertext"],
-                                                "pulled_epoch_s": round(clock(), 3)}))):
+        for which, data in (("mbp", manifest), ("air", air_manifest)):
             with open(side[which], "xb") as handle:
                 handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
             os.chmod(side[which], 0o444)
+        # The completion record last, complete and atomic (link of a synced temporary file, as the marker).
+        write_marker(side["done"], {"schema": PULL_SCHEMA, "plan": plan, "span_name": span_name,
+                                    "manifest_sha256": got["manifest"], "ciphertext_sha256": got["ciphertext"],
+                                    "pulled_epoch_s": round(clock(), 3)})
+        os.chmod(side["done"], 0o444)
     return {"plan": plan, "kit": kit, "span_name": span_name, "dest": str(final),
             "manifest_sha256": got["manifest"], "ciphertext_sha256": got["ciphertext"],
             "files": manifest.count(b"\n")}
@@ -1038,6 +1157,8 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
 def keygen(openssl, out_dir, bits=4096):
     """Write ``span-offload.key.pem`` (0600) and ``span-offload.pub.pem``; return the pinned fingerprint."""
     out_dir = Path(out_dir)
+    if inside_git(out_dir):
+        raise refused("PATH_IN_REPOSITORY", "the key directory is inside a git repository")
     private, public = out_dir / "span-offload.key.pem", out_dir / "span-offload.pub.pem"
     if os.path.lexists(private) or os.path.lexists(public):
         raise refused("KEY_EXISTS", "a key file already exists; nothing written")

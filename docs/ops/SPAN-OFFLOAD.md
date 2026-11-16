@@ -13,7 +13,9 @@ pull from the cloud, checked against the marker's hashes.
    plan id or `<plan>-...` (`PLAN_SPAN_MISMATCH`), or if any `forbid_paths` entry exists (the config names
    the magistrate's desk fence: `FORBIDDEN_PATH_PRESENT`). Without `--deadline-epoch` the whole offload
    gets `default_budget_s` (90 min, item 347's limit); with no time left it does nothing.
-2. Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
+2. Reads no control file from inside OUT: the config path is checked against OUT before it is read, and
+   the recipient key, stage files and completion records are opened only as regular files (no link
+   followed, no fifo waited on). Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
    carriage return, backslash or non-UTF-8 bytes refuses the offload (exit 4). The stage root, the marker
    directory, the recipient key and a local backend root must not overlap OUT and must not be inside a git
    repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`). OUT must hold at least one regular file and
@@ -35,10 +37,11 @@ pull from the cloud, checked against the marker's hashes.
    archive was 110 MB for 2.9 GB), with a local `.source.json` naming OUT's resolved path.
 7. Uploads the four files synchronously (`rclone copyto --immutable`, which exits), and reads each back from
    the provider (`rclone lsjson --hash`): the size and the provider's hash must equal the local file's (A.3).
-   Each confirmation must also equal the hashes and sizes the stage held before the upload began
-   (`STAGE_CHANGED` otherwise).
+   The comparison digest is taken before the upload and the file is re-hashed after it; each confirmation
+   must equal the hashes and sizes the stage held before the upload began (`STAGE_CHANGED` otherwise). The
+   staged files are read-only (0400) from the end of the build.
 8. Checks the deadline once more, then writes the marker `<marker_dir>/<plan>.ok` only if it does not exist
-   (`link(2)` of a complete temporary file: the `test ! -e` rule, atomic). It records the plaintext
+   (`link(2)` of a complete, synced temporary file: the `test ! -e` rule, atomic). It records the plaintext
    manifest's sha256, the ciphertext's sha256 and size, and the provider's confirmation for each file (A.2).
 
 Nothing under OUT is changed or deleted (A.5). The tool has no git step, refuses output paths inside a
@@ -69,8 +72,9 @@ top directory (no duplicate names), re-hashes every regular file against the man
 regular files; directories, including empty ones, are not in the manifest), and moves the tree read-only
 (files 0444, directories 0555) to `/Volumes/JW-EXT/cadence-desk/<kit>/<span name>/`, beside
 `<span name>.mbp.SHA256SUMS` and `<span name>.air.SHA256SUMS`, the layout the Air copies already use. A
-symlinked kit directory is refused. `<span name>.pull.ok` is written last and marks a complete landing; a
-tree without it is an interrupted landing, which the pull refuses (`INCOMPLETE_LANDING`) until the lead
+symlinked kit directory, a symlinked backend plan directory and a kit directory inside a git repository are
+refused. `<span name>.pull.ok` is written last, synced and linked atomically, and marks a complete landing; a
+tree without a valid one is an interrupted landing, which the pull refuses (`INCOMPLETE_LANDING`) until the lead
 moves the tree and any sidecars aside. Exit 6 on any integrity failure (nothing lands), 7 if the
 destination exists. A look reads a pulled copy that matches the marker (A.5).
 
@@ -86,8 +90,9 @@ destination exists. A look reads a pulled copy that matches the marker (A.5).
 | A.1 (second key copy off the MBP) | must be copied off the MBP by hand, within 24 h | met at creation: the private key is made on the Air and never exists on the MBP |
 
 Why public-key:
-- **The MBP needs only to encrypt.** It never decrypts its own copies (the round trip moves to the Air's
-  pull), so it holds no persistent key that decrypts them: a stolen MBP disk does not open past cloud copies.
+- **The MBP needs only to encrypt.** It holds no persistent archive-decryption key (it decrypts each new
+  ciphertext once, with the in-memory passphrase, only to self-check it), so a stolen MBP disk does not open
+  past cloud copies.
   (The MBP still holds the plaintext originals, each span's passphrase in memory while it encrypts, and the
   upload credential; a live compromise of the MBP is out of scope.)
 - **A.1 holds by construction.** The cloud copy is useless only if the private key is lost. The private key
