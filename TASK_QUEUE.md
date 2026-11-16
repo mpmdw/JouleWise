@@ -1353,3 +1353,9 @@ required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
 defect) cold gate. The registered deadline was discharged when #149 landed
 the author and integration repairs; later council work orders remain separate.
+
+## PR #804 iCloud builder checkpoint (2026-11-15; explicit owner task)
+
+Software implemented; final cold Sol admission and CI pending. Lead installation on macOS 26 and
+the research-lead A.3 permanence ruling remain external. This historical checkpoint does not select
+work from the generated queue. Evidence: `docs/run_reports/2026-11-15-span-offload-icloud.md`.

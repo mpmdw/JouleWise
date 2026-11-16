@@ -21,7 +21,8 @@ Uploaded per span, under ``<remote>/<plan>/``:
     <plan>.offload.json  the descriptor: scheme, recipient fingerprint, and the other three files' hashes
 
 Standard library only, plus ``openssl`` (LibreSSL 3.3 on macOS and OpenSSL 3 both work) and, for the
-rclone backend, ``rclone``. Exit codes are in ``EXIT``.
+default iCloud backend, macOS ``brctl``. The optional rclone backend uses ``rclone``.
+Exit codes are in ``EXIT``.
 """
 from __future__ import annotations
 
@@ -60,7 +61,7 @@ EXIT = {
     "unverified": 5,  # upload or provider read-back failed: no marker (RL-173 A.7 holds the next arm)
     "integrity": 6,  # pull: a hash or archive check failed; nothing lands in the desk tree
     "dest_exists": 7,  # pull: the destination already exists; nothing changed
-    "unconfirmed": 8,  # offload through a backend without provider confirmation (local): no <plan>.ok
+    "unconfirmed": 8,  # local or iCloud without observed provider readback: no <plan>.ok
 }
 
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -751,16 +752,250 @@ class RcloneBackend:
             raise integrity("DOWNLOAD_FAILED", f"{name}: {error.code}") from None
 
 
-BACKENDS = {"local": LocalBackend, "rclone": RcloneBackend}
+ICLOUD_ROOT = "~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-offload"
+ICLOUD_CONFIRMATION = "icloud evict+redownload sha256 match"
+
+
+def _is_dataless(info):
+    """Apple TN3150 / sys/stat.h: SF_DATALESS is metadata, not a local-byte hash.
+
+    None means this platform cannot observe eviction; command success alone is never confirmation.
+    """
+    flags = getattr(info, "st_flags", None)
+    return None if flags is None else bool(flags & getattr(stat, "SF_DATALESS", 0x40000000))
+
+
+@contextlib.contextmanager
+def _directory_no_links(path):
+    """Walk an absolute directory using openat and O_NOFOLLOW for EVERY component."""
+    path = Path(path)
+    fd = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in path.parts[1:]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd)
+            fd = child
+        yield fd
+    except OSError:
+        raise unverified("BACKEND_PATH", "an iCloud directory is missing, linked or inaccessible") from None
+    finally:
+        os.close(fd)
+
+
+class ICloudBackend:
+    """Wait for CloudDocs, then require observed eviction and hash the downloaded bytes.
+
+    brctl's undocumented status format is treated conservatively. Only its status text is parsed;
+    neither journals nor CloudDocs databases are opened. Unsupported eviction/download writes only
+    an unconfirmed marker. Upload/status failures and wrong bytes write no marker.
+    """
+
+    kind = "icloud"
+
+    def __init__(self, spec):
+        self.root = Path(spec.get("root", ICLOUD_ROOT)).expanduser()
+        if not self.root.is_absolute() or ".." in self.root.parts:
+            raise refused("CONFIG", "the iCloud root must be an absolute directory")
+        self.brctl = spec.get("brctl", "brctl")
+        self.timeout_s = spec.get("timeout_s", 5400)
+        self.poll_interval_s = spec.get("poll_interval_s", 2)
+        self.evict_timeout_s = spec.get("evict_timeout_s", 30)
+        self.download_timeout_s = spec.get("download_timeout_s", 600)
+        for value in (self.timeout_s, self.poll_interval_s, self.evict_timeout_s, self.download_timeout_s):
+            if not number(value) or value <= 0:
+                raise refused("CONFIG", "iCloud timeouts and poll_interval_s must be finite positive seconds")
+        self.provider_confirmed = True  # downgraded permanently for this run if ANY readback is unavailable
+
+    def describe(self):
+        return {"kind": self.kind, "root": str(self.root), "readback": ICLOUD_CONFIRMATION}
+
+    def _bounded(self, deadline, seconds):
+        clock = deadline.clock if deadline else time.time
+        end = clock() + seconds
+        return Deadline(min(end, deadline.epoch) if deadline and deadline.epoch is not None else end, clock)
+
+    def _run(self, args, deadline):
+        timeout = deadline.remaining()
+        try:
+            proc = subprocess.Popen([self.brctl, *args], stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError:
+            raise unverified("BRCTL_UNAVAILABLE", "brctl could not run") from None
+        _CHILDREN.add(proc)
+        try:
+            out, _ = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise unverified("BRCTL_TIMEOUT", args[0]) from None
+        except BaseException:
+            proc.kill()
+            proc.wait()
+            raise
+        finally:
+            _CHILDREN.discard(proc)
+        if proc.returncode:
+            raise unverified("BRCTL_FAILED", f"brctl {args[0]} rc={proc.returncode}")
+        deadline.remaining()
+        return out
+
+    @staticmethod
+    def _uploaded(status):
+        # Item 350's observable: com.apple.CloudDocs, client:idle, caught-up. Empty output,
+        # an unknown format or ANY pending/error state is not positive upload evidence.
+        text = status.decode("utf-8", "replace")
+        return (re.search(r"\bcom\.apple\.CloudDocs\b", text) is not None
+                and re.search(r"\bclient\s*:\s*idle\b", text) is not None
+                and re.search(r"(?<![\w-])caught-up(?![\w-])", text) is not None
+                and re.search(r"needs-|uploading|downloading|\berror\b|\boffline\b|not[- ](?:caught|idle)",
+                              text, re.I) is None)
+
+    def _wait_uploaded(self, deadline):
+        while True:
+            if self._uploaded(self._run(["status", "com.apple.CloudDocs"], deadline)):
+                return deadline.clock()
+            time.sleep(deadline.remaining(self.poll_interval_s))
+
+    @contextlib.contextmanager
+    def _plan(self, plan, create=False):
+        check_id(plan, "plan")
+        if inside_git(self.root / plan):
+            raise unverified("BACKEND_PATH", "the iCloud destination is inside a repository")
+        with _directory_no_links(self.root) as root_fd:
+            if create:
+                try:
+                    os.mkdir(plan, mode=0o700, dir_fd=root_fd)
+                except FileExistsError:
+                    pass
+            try:
+                fd = os.open(plan, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=root_fd)
+            except OSError:
+                raise unverified("BACKEND_PATH", "the iCloud plan directory is linked or unavailable") from None
+            try:
+                yield fd, self.root / plan
+            finally:
+                os.close(fd)
+
+    @staticmethod
+    def _info(fd, name):
+        try:
+            info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        except OSError:
+            raise unverified("BACKEND_PATH", "an iCloud file is unavailable") from None
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise unverified("BACKEND_PATH", "an iCloud file is not a single-name regular file")
+        return info
+
+    def _digest(self, fd, name, deadline, dest=None):
+        self._info(fd, name)
+        digest, size = hashlib.sha256(), 0
+        with open_regular(name, "an iCloud file", dir_fd=fd, single_link=True) as source:
+            for chunk in iter(lambda: source.read(CHUNK), b""):
+                deadline.remaining()
+                digest.update(chunk)
+                size += len(chunk)
+                if dest is not None:
+                    dest.write(chunk)
+        deadline.remaining()
+        return digest.hexdigest(), size
+
+    def _wait_flag(self, fd, name, wanted, deadline):
+        while True:
+            observed = _is_dataless(self._info(fd, name))
+            if observed is None:
+                raise unverified("DATALESS_UNAVAILABLE", "this platform cannot observe SF_DATALESS")
+            if observed == wanted:
+                return deadline.clock()
+            time.sleep(deadline.remaining(self.poll_interval_s))
+
+    def _download(self, fd, path, deadline):
+        self._info(fd, path.name)
+        self._run(["download", str(path)], deadline)
+        self._wait_flag(fd, path.name, False, deadline)
+
+    def put(self, local, plan, name, deadline=None):
+        if name not in names(plan).values():
+            raise refused("BAD_NAME", "an iCloud object must have its plan's fixed name")
+        deadline = self._bounded(deadline, self.timeout_s)
+        snap = snapshot_digests(local, ())
+        expected = snap["sha256"], snap["size"]
+        with self._plan(plan, create=True) as (fd, directory):
+            path = directory / name
+            try:
+                os.stat(name, dir_fd=fd, follow_symlinks=False)
+                exists = True
+            except FileNotFoundError:
+                exists = False
+            if exists:
+                if _is_dataless(self._info(fd, name)):
+                    self._download(fd, path, self._bounded(deadline, self.download_timeout_s))
+                if self._digest(fd, name, deadline) != expected:
+                    raise unverified("REMOTE_CONFLICT", f"{name} exists with other bytes")
+            else:
+                tmp = f".{name}.part-{secrets.token_hex(12)}"
+                out_fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+                try:
+                    with os.fdopen(out_fd, "wb") as out, open_regular(local, "a staged file", single_link=True) as src:
+                        for chunk in iter(lambda: src.read(CHUNK), b""):
+                            deadline.remaining()
+                            out.write(chunk)
+                        out.flush()
+                        os.fsync(out.fileno())
+                    os.rename(tmp, name, src_dir_fd=fd, dst_dir_fd=fd)
+                finally:
+                    with contextlib.suppress(FileNotFoundError):
+                        os.unlink(tmp, dir_fd=fd)
+                if self._digest(fd, name, deadline) != expected:
+                    raise unverified("READBACK_HASH", name)
+            row = {"name": name, "sha256": expected[0], "size": expected[1], "provider_hash_type": "sha256",
+                   "provider_hash": None, "provider_size": None, "provider_confirmed": False}
+            row["uploaded_epoch_s"] = self._wait_uploaded(deadline)
+            try:
+                self._info(fd, name)
+                eviction = self._bounded(deadline, self.evict_timeout_s)
+                self._run(["evict", str(path)], eviction)
+                row["evicted_epoch_s"] = self._wait_flag(fd, name, True, eviction)
+                self._download(fd, path, self._bounded(deadline, self.download_timeout_s))
+            except OffloadError as error:
+                deadline.remaining()  # an exhausted overall budget is UNVERIFIED, never a completion
+                if error.code not in ("BRCTL_FAILED", "BRCTL_UNAVAILABLE", "BRCTL_TIMEOUT", "DEADLINE",
+                                      "DATALESS_UNAVAILABLE"):
+                    raise
+                self.provider_confirmed = False
+                return dict(row, kind="icloud-unconfirmed", reason=error.code)
+            got = self._digest(fd, name, deadline)
+            if got != expected:
+                raise unverified("READBACK_HASH", name)
+            after = snapshot_digests(local, ())
+            if (after["sha256"], after["size"]) != expected:
+                raise unverified("STAGE_CHANGED", name)
+            return dict(row, kind=ICLOUD_CONFIRMATION, provider_confirmed=True,
+                        provider_hash=got[0], provider_size=got[1], verified_epoch_s=deadline.clock())
+
+    def get(self, plan, name, dest, deadline=None):
+        if name not in names(plan).values():
+            raise refused("BAD_NAME", "an iCloud object must have its plan's fixed name")
+        deadline = self._bounded(deadline, self.download_timeout_s)
+        try:
+            with self._plan(plan) as (fd, directory):
+                self._download(fd, directory / name, deadline)
+                with open(dest, "xb") as out:
+                    self._digest(fd, name, deadline, out)
+        except OffloadError as error:
+            raise integrity("DOWNLOAD_FAILED", f"{name}: {error.code}") from None
+
+
+BACKENDS = {"icloud": ICloudBackend, "local": LocalBackend, "rclone": RcloneBackend}
 
 
 def make_backend(spec, allow_local=False):
-    if not isinstance(spec, dict) or spec.get("kind") not in BACKENDS:
-        raise refused("CONFIG", "backend.kind must be local or rclone")
-    if spec["kind"] == "local" and not allow_local:
+    if not isinstance(spec, dict) or spec.get("kind", "icloud") not in BACKENDS:
+        raise refused("CONFIG", "backend.kind must be icloud, local or rclone")
+    kind = spec.get("kind", "icloud")
+    if kind == "local" and not allow_local:
         raise refused("LOCAL_BACKEND_NOT_ALLOWED",
                       "the local backend has no provider confirmation; pass --allow-local-backend (tests/interim)")
-    return BACKENDS[spec["kind"]](spec)
+    return BACKENDS[kind](spec)
 
 
 # --- configs ---------------------------------------------------------------------------------------
@@ -797,12 +1032,12 @@ def _absolute(doc, keys):
 
 def load_mbp_config(path):
     doc = load_config(path, MBP_CONFIG_SCHEMA, MBP_KEYS,
-                      ("recipient_public_key", "recipient_sha256", "stage_root", "marker_dir", "backend"))
+                      ("recipient_public_key", "recipient_sha256", "stage_root", "marker_dir"))
     return _absolute(doc, ("recipient_public_key", "stage_root", "marker_dir"))
 
 
 def load_air_config(path):
-    doc = load_config(path, AIR_CONFIG_SCHEMA, AIR_KEYS, ("identity", "recipient_sha256", "work_root", "backend"))
+    doc = load_config(path, AIR_CONFIG_SCHEMA, AIR_KEYS, ("identity", "recipient_sha256", "work_root"))
     return _absolute(doc, ("identity", "work_root"))
 
 
@@ -1033,12 +1268,12 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
         raise refused("CONFIG", "the marker directory or the stage root does not exist")
     if os.path.lexists(marker_path(marker_dir, plan, True)):
         raise OffloadError("MARKER_EXISTS", "the marker already exists; nothing done", "marker_exists")
-    backend = make_backend(config["backend"], allow_local)
+    backend = make_backend(config.get("backend", {}), allow_local)
     if not walk_span(span_dir)[1]:  # refuses links/special files and a missing or symlinked span, too
         raise refused("SPAN_EMPTY", "the span holds no regular file")
     outputs = {"stage_root": stage_root, "marker_dir": marker_dir,
                "recipient_public_key": config["recipient_public_key"]}
-    if isinstance(backend, LocalBackend):
+    if isinstance(backend, (LocalBackend, ICloudBackend)):
         outputs["backend root"] = backend.root
     if isinstance(backend, RcloneBackend):
         outputs["rclone_config"] = backend.config  # rclone rewrites it when a token refreshes
@@ -1080,7 +1315,8 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
         deadline.remaining()
         confirmations = [backend.put(stage / files[kind], plan, files[kind], deadline) for kind in UPLOAD_ORDER]
         for kind, row in zip(UPLOAD_ORDER, confirmations):
-            if (row["sha256"], row["size"]) != expected[kind] or row["provider_size"] != expected[kind][1]:
+            if (row["sha256"], row["size"]) != expected[kind] or (
+                    row.get("provider_confirmed", True) and row["provider_size"] != expected[kind][1]):
                 raise unverified("STAGE_CHANGED", f"{files[kind]} changed during the upload")
         record = {
             "schema": MARKER_SCHEMA, "plan": plan, "path": "cloud-offload", "span_name": descriptor["span_name"],
@@ -1103,7 +1339,7 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
 def marker_path(marker_dir, plan, provider_confirmed):
     """The copy gate's ``<plan>.ok`` exists only after a provider-confirmed upload (RL-173 A.7).
 
-    A backend without a provider read-back (``local``: tests, a sync folder) writes ``<plan>.ok.unconfirmed``,
+    A backend without a provider read-back (local, or iCloud without observed eviction/download) writes ``<plan>.ok.unconfirmed``,
     which no copy gate accepts.
     """
     return Path(marker_dir) / (f"{plan}.ok" if provider_confirmed else f"{plan}.ok.unconfirmed")
@@ -1197,7 +1433,7 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
     check_id(kit, "kit")
     if expect.get("plan") not in (None, plan):
         raise refused("EXPECT_CONFLICT", "the marker names another plan")
-    backend = make_backend(config["backend"], allow_local)
+    backend = make_backend(config.get("backend", {}), allow_local)
     openssl = config.get("openssl", "openssl")
     if deadline_epoch is not None and (not number(deadline_epoch) or deadline_epoch > clock() + MAX_DEADLINE_AHEAD_S):
         raise refused("BAD_DEADLINE", "the deadline is not a finite epoch within 24 h")
@@ -1208,6 +1444,8 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
     if not dest_root.is_dir() or not work_root.is_dir():
         raise refused("DEST_ROOT", "the destination root or work root is not a directory")
     controls = {"dest_root": dest_root, "work_root": work_root, "identity": config["identity"]}
+    if isinstance(backend, ICloudBackend):
+        controls["backend root"] = backend.root
     if isinstance(backend, RcloneBackend):
         controls["rclone_config"] = backend.config
     check_output_paths(None, controls)
