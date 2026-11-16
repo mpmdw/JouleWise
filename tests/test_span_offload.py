@@ -491,11 +491,14 @@ class SpanOffloadTests(unittest.TestCase):
         with mock.patch.object(so.LocalBackend, "put", side_effect=so.unverified("UPLOAD_TIMEOUT", "x")):
             with self.assertRaises(so.OffloadError):
                 self.offload()
-        (self.span / "late.bin").write_bytes(b"arrived after the first attempt")
+        receipt = self.span / "runner_receipt.json"
+        original, stamp = receipt.read_bytes(), os.stat(receipt)
+        receipt.write_bytes(b"changed after the first attempt")
         with self.assertRaises(so.OffloadError) as caught:
             self.offload()
         self.assertEqual(caught.exception.code, "STAGE_CONFLICT")
-        (self.span / "late.bin").unlink()
+        receipt.write_bytes(original)
+        os.utime(receipt, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
         other = self.tmp / "elsewhere" / SPAN  # same basename, another source
         self.make_span(other)
         with self.assertRaises(so.OffloadError) as caught:
@@ -734,8 +737,8 @@ class SpanOffloadTests(unittest.TestCase):
         for remote in (":local:/x", "/path/with:colon", "--flag:x", "noremote"):
             with self.subTest(remote=remote):
                 with self.assertRaises(so.OffloadError):
-                    so.RcloneBackend({"remote": remote})
-        so.RcloneBackend({"remote": "jwoffload:JouleWise-offload"})
+                    so.RcloneBackend({"remote": remote, "rclone_config": "/nonexistent/rclone.conf"})
+        so.RcloneBackend({"remote": "jwoffload:JouleWise-offload", "rclone_config": "/x/rclone.conf"})
 
     def test_dropbox_digest_is_the_content_hash_of_one_read(self):
         blob = self.tmp / "blob"
@@ -866,7 +869,7 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertIs(so.write_marker, real)
 
     def test_odd_provider_listings_and_member_names_are_classified(self):
-        backend = so.RcloneBackend({"remote": "x:y", "hash_type": "size"})
+        backend = so.RcloneBackend({"remote": "x:y", "hash_type": "size", "rclone_config": "/x/rclone.conf"})
         with mock.patch.object(backend, "_run", return_value=b"null"), self.assertRaises(so.OffloadError) as caught:
             backend._readback("p", "n", 1, "a" * 64, None, None)
         self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("READBACK_UNPARSEABLE", "unverified"))
@@ -1059,7 +1062,7 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 10)
 
     def test_malformed_provider_hashes_are_unverified(self):
-        backend = so.RcloneBackend({"remote": "x:y", "hash_type": "md5"})
+        backend = so.RcloneBackend({"remote": "x:y", "hash_type": "md5", "rclone_config": "/x/rclone.conf"})
         for hashes in (1, "wrong", {"md5": 5}):
             listing = json.dumps([{"Name": "n", "Size": 1, "Hashes": hashes}]).encode()
             with self.subTest(hashes=hashes), mock.patch.object(backend, "_run", return_value=listing), \
@@ -1081,6 +1084,33 @@ class SpanOffloadTests(unittest.TestCase):
             with self.assertRaises(so.OffloadError) as caught:
                 so.pull(self.air, PLAN, "cl-syn-01", self.tmp / "desk", expect, allow_local=True, deadline_epoch=bad)
             self.assertEqual(caught.exception.code, "BAD_DEADLINE")
+
+    def test_round_5_rclone_config_and_reused_descriptor(self):
+        with self.assertRaises(so.OffloadError) as caught:
+            so.RcloneBackend({"remote": "x:y"})  # rclone's own config discovery is never used
+        self.assertEqual(caught.exception.code, "CONFIG")
+        with mock.patch.object(so.LocalBackend, "put", side_effect=so.unverified("UPLOAD_TIMEOUT", "x")):
+            with self.assertRaises(so.OffloadError):
+                self.offload()
+        path = self.tmp / "stage" / PLAN / f"{PLAN}.offload.json"
+        os.chmod(path, 0o600)
+        doc = json.loads(path.read_bytes()); doc["archive"]["sha256"] = "0" * 64
+        path.write_bytes(so.canonical(doc)); os.chmod(path, 0o400)
+        with self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "STAGE_CONFLICT")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_the_pull_checks_its_rclone_config(self):
+        self.offload()
+        repo = self.tmp / "conf-repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        (repo / "rclone.conf").write_text("[x]\n")
+        air = dict(self.air, backend={"kind": "rclone", "remote": "x:y", "rclone_config": str(repo / "rclone.conf")})
+        with self.assertRaises(so.OffloadError) as caught:
+            self.pull(config=air)
+        self.assertEqual(caught.exception.code, "PATH_IN_REPOSITORY")
 
     # --- CLI ----------------------------------------------------------------------------------
 

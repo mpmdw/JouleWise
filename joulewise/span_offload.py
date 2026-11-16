@@ -264,6 +264,16 @@ def snapshot_digests(path, kinds):
     return out
 
 
+class _NullSink:
+    def write(self, data):
+        return len(data)
+
+
+def _sha_size(path):
+    snap = snapshot_digests(path, ())
+    return {"sha256": snap["sha256"], "size": snap["size"]}
+
+
 def hash_regular(path, check=None, what="a file"):
     """sha256 of a regular file, read in chunks through ``open_regular``; ``check`` runs between chunks."""
     digest = hashlib.sha256()
@@ -629,6 +639,9 @@ class RcloneBackend:
     def __init__(self, spec):
         self.rclone = spec.get("rclone", "rclone")
         self.config = spec.get("rclone_config")
+        if not isinstance(self.config, str) or not os.path.isabs(self.config):
+            raise refused("CONFIG", "the rclone backend needs rclone_config, an absolute path (rclone's own "
+                                    "discovery of a config is never used)")
         self.remote = spec["remote"]
         self.hash_type = spec.get("hash_type", "sha256")
         self.timeout_s = float(spec.get("timeout_s", 5400))
@@ -648,13 +661,14 @@ class RcloneBackend:
 
     def _run(self, args, deadline, cap=None):
         argv = [self.rclone]
-        if self.config:
-            argv += ["--config", self.config]
+        argv += ["--config", self.config]
         argv += ["--retries", "3", "--low-level-retries", "10", "--contimeout", "60s", "--timeout", "300s",
                  "--stats", "0", "-q", *args]
         timeout = deadline.remaining(cap or self.timeout_s) if deadline else (cap or self.timeout_s)
         try:
-            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+            env = {k: v for k, v in os.environ.items() if not k.startswith("RCLONE_")}  # no option from the environment
+            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
+                                    env=env)
         except OSError:
             raise unverified("RCLONE_UNAVAILABLE", "the rclone binary could not run") from None
         _CHILDREN.add(proc)  # a signal handler kills it too (kill_children)
@@ -904,8 +918,16 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
                 or not isinstance(descriptor.get("scheme"), dict) \
                 or descriptor["scheme"].get("recipient_sha256") != config["recipient_sha256"]:
             raise refused("STAGE_CONFLICT", "a complete stage of another source or recipient exists for this plan")
-        if hash_tree(span_dir, deadline.remaining if deadline else None) != found["manifest"]:
+        # Re-derive the archive from OUT (deterministic: fixed gzip header and level, tar metadata from the files)
+        # and require the stored manifest, archive digest and size: a corrupted or edited descriptor is refused.
+        sink = _NullSink()
+        manifest, archive_sha, archive_size, _ = write_archive(span_dir, sink, deadline.remaining if deadline else None)
+        if manifest != found["manifest"]:
             raise refused("STAGE_CONFLICT", "the span's bytes changed since the stage was built")
+        if not isinstance(descriptor.get("archive"), dict) \
+                or (descriptor["archive"].get("sha256"), descriptor["archive"].get("size")) != (archive_sha, archive_size) \
+                or descriptor.get("schema") != DESCRIPTOR_SCHEMA or descriptor.get("plan") != plan:
+            raise refused("STAGE_CONFLICT", "the stored descriptor does not describe this span's archive")
         return stage, descriptor, True, found["descriptor_sha256"]
     building = Path(tempfile.mkdtemp(prefix=f".{plan}.building-", dir=stage_root))
     try:
@@ -925,8 +947,7 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
                        "recipient_sha256": config["recipient_sha256"]},
             "archive": {"sha256": archive_sha, "size": archive_size},
             "manifest": {"files": count},
-            "files": {kind: {"name": files[kind], "sha256": sha256_file(building / files[kind]),
-                             "size": os.stat(building / files[kind]).st_size}
+            "files": {kind: {"name": files[kind], **_sha_size(building / files[kind])}
                       for kind in ("ciphertext", "wrapped_key", "manifest")},
         }
         descriptor_bytes = canonical(descriptor)
@@ -1011,10 +1032,10 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
                "recipient_public_key": config["recipient_public_key"]}
     if isinstance(backend, LocalBackend):
         outputs["backend root"] = backend.root
-    if isinstance(backend, RcloneBackend) and backend.config:
+    if isinstance(backend, RcloneBackend):
         outputs["rclone_config"] = backend.config  # rclone rewrites it when a token refreshes
     check_output_paths(span_dir, outputs)
-    if isinstance(backend, RcloneBackend) and backend.config:
+    if isinstance(backend, RcloneBackend):
         with open_regular(backend.config, "the rclone config", single_link=True):
             pass  # a regular file with one name: not an alias of a file under OUT
     openssl = config.get("openssl", "openssl")
@@ -1178,7 +1199,13 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
     work_root = Path(config["work_root"])
     if not dest_root.is_dir() or not work_root.is_dir():
         raise refused("DEST_ROOT", "the destination root or work root is not a directory")
-    check_output_paths(None, {"dest_root": dest_root, "work_root": work_root, "identity": config["identity"]})
+    controls = {"dest_root": dest_root, "work_root": work_root, "identity": config["identity"]}
+    if isinstance(backend, RcloneBackend):
+        controls["rclone_config"] = backend.config
+    check_output_paths(None, controls)
+    if isinstance(backend, RcloneBackend):
+        with open_regular(backend.config, "the rclone config", single_link=True):
+            pass
     if os.stat(dest_root).st_dev != os.stat(work_root).st_dev:
         raise refused("CONFIG", "work_root must be on the same filesystem as the destination root")
     if os.path.islink(kit_dir) or (os.path.lexists(kit_dir) and not kit_dir.is_dir()):
