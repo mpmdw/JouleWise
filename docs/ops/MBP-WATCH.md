@@ -32,8 +32,8 @@ python3.13 -B scripts/mbp_watch.py close --plan "$PLAN" --status CLOSED_OK --clo
 
 **Why one log, and the rule that protects it.** Every run re-reads the log's whole history: the root commit
 must hold only `README`, and every later commit must have one parent and add exactly one new
-`arms/` or `closes/` file. Anything else, a modified or removed record included, is
-`RESULT_UNREADABLE LOG_REWRITTEN`, and the original records still count. Deleting or force-moving the branch
+`arms/` or `closes/` file. Anything else, a modified or removed record, or a path removed and added again,
+is `RESULT_UNREADABLE LOG_REWRITTEN`, and the first addition of every record still counts. Deleting or force-moving the branch
 is blocked by a repository ruleset, and the watcher fails its run (so every arm's read refuses) unless
 `GET /repos/mpmdw/JouleWise/rules/branches/span-watch/log` shows active `deletion` and `non_fast_forward`
 rules on that exact branch, or if the branch is missing. The lead, once:
@@ -57,7 +57,7 @@ Every 10 minutes (cron `3-59/10`, off the hour's peak; GitHub does not guarantee
 
 | Code | When | Detail |
 |---|---|---|
-| `SPAN_SILENT` | an arm with no close visible by its deadline + 1,200 s (C.1). "Visible" is the later of the close's own time and its **server-side push time**, read from GitHub's repository activity API (`GET /repos/mpmdw/JouleWise/activity?ref=refs/heads/span-watch/log&activity_type=push&time_period=quarter`, all pages): the earliest push of the log whose new tip is that commit or a later one. So a close that finished late, was pushed late, or arrived between two delayed polls is still filed. A close the API does not show yet counts as visible only at this observation (conservative); for an arm whose limit is more than 80 days old (outside the API's quarter) the commit time is used | `NO_RESULTS_REF` |
+| `SPAN_SILENT` | an arm with no close visible by its deadline + 1,200 s (C.1). "Visible" is the later of the close's own time and its **server-side push time**, read from GitHub's repository activity API (`GET /repos/mpmdw/JouleWise/activity?ref=refs/heads/span-watch/log&activity_type=push&time_period=quarter`, all pages): each record is pushed alone, so its own push row is its publication time (fractional seconds kept); without one, a later record's push is only an upper bound. So a close that finished late, was pushed late, or arrived between two delayed polls is still filed. A close the API does not show yet counts as visible only at this observation (conservative). A close whose arm limit is more than 80 days old has been adjudicated: it sat inside the activity window for 80 days of watcher runs, and no arm passes the C.4 read while the watcher is not running, so its own time decides | `NO_RESULTS_REF` |
 | `SPAN_STOP` | a close with a status other than `CLOSED_OK` | the status |
 | `RESULT_UNREADABLE` | a malformed arm or close, a close without an arm, or a log commit that is not one addition | `ARM_RECORD`, `CLOSE_RECORD`, `LOG_REWRITTEN` |
 
@@ -97,20 +97,20 @@ Every 10 minutes (cron `3-59/10`, off the hour's peak; GitHub does not guarantee
 python3 scripts/mbp_watch.py read --repo mpmdw/JouleWise --after-epoch "$PREVIOUS_CLOSE_EPOCH"
 ```
 
-It enumerates every completed run of the workflow on `main` created since one day before the later of the
-previous close and now minus `--max-age-s` (`GET /repos/mpmdw/JouleWise/actions/workflows/mbp-watch.yml/runs?branch=main&status=completed&created=>=...`,
-all pages, checked against `total_count`). The latest is the most recently started execution among them (a
-re-run attempt counts with its own start; ties by `run_number`, then `run_attempt`). **A re-run of a run
-created before that window is outside the rule** (the workflow refuses every re-run: its first step fails when
-`run_attempt` is not 1, so a re-run never carries a health signal, and a re-run of a recent run makes the
-latest execution a failure, which refuses the arm until the next scheduled run). Exit 0 only if it succeeded, started after the previous span's close
-and within `--max-age-s` (default 7,200 s), and no `mbp-alarm` issue is open. 20: no such run yet (wait;
-schedules can be late); 21: an alarm is open; 22: the latest run failed; 2: API or usage error, including
-any malformed answer and a start more than 300 s in the future (clock skew up to 300 s is accepted). A
-success stays usable for at most `--max-age-s`; it is bounded evidence, not proof that the watcher is still
-running.
-No token is needed for this public repository (60 requests an hour per address); `GH_TOKEN` is used when
-set. **The remaining caller work (RL-173 Owners: the controller builder owns "the watcher read").** PR #800
+It enumerates every completed run of the workflow on `main` created in the last 31 days, GitHub's re-run
+horizon (`GET /repos/mpmdw/JouleWise/actions/workflows/mbp-watch.yml/runs?branch=main&status=completed&created=<day>..<day+1>`,
+one window per day, each paginated and checked against its `total_count`). The latest is the most recently
+started execution among them (a re-run counts with its own start; ties by `run_number`, then `run_attempt`),
+so a newer failed re-run of an old run is the latest and refuses. The workflow also fails every re-run on
+purpose (its first step), so a re-run can only ever refuse an arm, never pass one. Exit 0 only if the latest
+succeeded, started after the previous span's close and within `--max-age-s` (default 7,200 s), and no
+`mbp-alarm` issue is open. 20: no such run yet (wait; schedules can be late); 21: an alarm is open; 22: the
+latest run failed; 2: API or usage error, including any malformed answer and a start more than 300 s in the
+future (clock skew up to 300 s is accepted). A success stays usable for at most `--max-age-s`; it is bounded
+evidence, not proof that the watcher is still running.
+The read makes about 33 API calls, so it needs `GH_TOKEN` (any token that can read this public repository;
+on the MBP, `gh auth token` in the GUI context); unauthenticated, GitHub allows 60 an hour per address and
+the read then fails closed. **The remaining caller work (RL-173 Owners: the controller builder owns "the watcher read").** PR #800
 already reads the Actions API at each arm (`read_watcher_run`), but it checks only the run, not open
 `mbp-alarm` issues, and it does not publish `arm`/`close`. Before this watcher replaces the hand-stamped one
 for a span, the arm path must (1) push `arm` before launch, (2) push `close` in the Check, and (3) run

@@ -381,6 +381,9 @@ def read_log(git):
             problems.append(("LOG_REWRITTEN", sha))
             continue
         kind = "arm" if match.group(1) == "arms" else "close"
+        if (kind, match.group(2)) in records:  # a path deleted and added again: the first addition stands
+            problems.append(("LOG_REWRITTEN", sha))
+            continue
         records[(kind, match.group(2))] = (git.blob(sha, changes[0][1]), sha, when)
     return records, problems, tip
 
@@ -388,26 +391,44 @@ def read_log(git):
 ACTIVITY_WINDOW_S = 80 * 86400  # inside GitHub's "quarter" activity period
 
 
+def parse_iso(value):
+    """A UTC ISO 8601 time with optional fractional seconds, to epoch seconds (fraction kept), else None."""
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,9})?(Z|\+00:00)", value):
+        return None
+    head, _, frac = value.rstrip("Z").replace("+00:00", "").partition(".")
+    try:
+        whole = dt.datetime.strptime(head, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=dt.timezone.utc).timestamp()
+    except ValueError:
+        return None
+    return whole + (float("0." + frac) if frac else 0.0)
+
+
 def push_times(api, order):
-    """Server-side publication time of each log commit, from the repository activity API: the earliest
-    push of the log whose new tip is that commit or a later one (the log is linear)."""
+    """Server-side publication of each log commit, from the repository activity API.
+
+    Each record is pushed alone, so a commit's own push row (``after`` == the commit) is its publication
+    time. Without one, the earliest push of a later commit is only an upper bound: (time, False)."""
     index = {sha: i for i, sha in enumerate(order)}
-    pushes = []
+    exact, pushes = {}, []
     for page in api.pages("/activity", {"ref": LOG_REF, "activity_type": "push", "time_period": "quarter",
                                         "per_page": 100}):
         if not isinstance(page, list) or not all(isinstance(row, dict) for row in page):
             raise WatchError("API_SHAPE_ACTIVITY")
         for row in page:
-            when = parse_time(str(row.get("timestamp", "")).split(".")[0].replace("+00:00", "Z").rstrip("Z") + "Z")
+            when = parse_iso(row.get("timestamp"))
             if when is None:
                 raise WatchError("API_SHAPE_ACTIVITY")
             if row.get("after") in index:
+                exact[row["after"]] = min(when, exact.get(row["after"], when))
                 pushes.append((index[row["after"]], when))
     published = {}
     for sha, i in index.items():
-        times = [when for j, when in pushes if j >= i]
-        if times:
-            published[sha] = min(times)
+        if sha in exact:
+            published[sha] = (exact[sha], True)
+        else:
+            later = [when for j, when in pushes if j > i]
+            if later:
+                published[sha] = (min(later), False)
     return published
 
 
@@ -454,12 +475,14 @@ def events(git, now, grace_s, api=None):
             if closed == "invalid":
                 found.append(event("RESULT_UNREADABLE", "CLOSE_RECORD", plan, LOG_REF, sha, observed=now))
             else:
-                if sha in published:
-                    pushed = published[sha]
-                elif api is not None and now - (arm_times[1] + grace_s) < ACTIVITY_WINDOW_S:
-                    pushed = now  # no server evidence yet: not visible before this observation
+                if api is None or now - (arm_times[1] + grace_s) >= ACTIVITY_WINDOW_S:
+                    # Adjudicated: this close was inside the activity window for 80 days of watcher runs
+                    # (and no arm passes C.4's read while the watcher does not run). Its own time decides.
+                    pushed = closed[1]
+                elif sha in published:
+                    pushed = published[sha][0]  # exact, or a later push as an upper bound
                 else:
-                    pushed = published_commit  # older than the activity window: the commit time
+                    pushed = now  # no server evidence yet: not visible before this observation
                 visible = max(closed[1], pushed)
                 if closed[0] != "CLOSED_OK":
                     found.append(event("SPAN_STOP", closed[0], plan, LOG_REF, sha, t0=arm_times[0], observed=now))
@@ -599,38 +622,42 @@ def parse_time(value):
         return None
 
 
-RUN_WINDOW_S = 86400
+RERUN_HORIZON_DAYS = 31  # GitHub allows a re-run up to 30 days after the run
 MAX_RUN_PAGES = 10
 
 
 def read(args, api=None, now=None):
-    """Every completed run on ``main`` created since a day before the later of ``--after-epoch`` and now minus
-    ``--max-age-s`` is enumerated (all pages,
-    checked against ``total_count``); the latest is the most recently started execution among them (a re-run
-    attempt counts with its own start; ties by ``run_number`` then ``run_attempt``). A re-run of a run created
-    earlier than that window is outside the rule (the workflow fails every re-run, so a re-run never carries
-    a health signal). A start up to 300 s in the future is clock skew; more is an
-    error. Every run must be well formed: a malformed answer is an error, never a pass.
+    """Every completed run on ``main`` created in the last 31 days (GitHub's re-run horizon), enumerated by
+    one-day windows, each paginated and checked against its ``total_count``. The latest is the most recently
+    started execution among them (a re-run counts with its own start; ties by ``run_number`` then
+    ``run_attempt``), so a newer failed re-run of an old run is the latest and refuses. A start up to 300 s in
+    the future is clock skew; more is an error. A malformed answer is an error, never a pass. About 32 API
+    calls: set ``GH_TOKEN`` (the unauthenticated limit is 60 an hour).
     """
     now = time.time() if now is None else now
     api = api or Api(args.repo, os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
-    floor = max(args.after_epoch, now - args.max_age_s) if args.max_age_s is not None else args.after_epoch
-    since = dt.datetime.fromtimestamp(floor - RUN_WINDOW_S, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    runs = []
-    for page in range(1, MAX_RUN_PAGES + 1):
-        answer = api.call("GET", f"/actions/workflows/{WORKFLOW}/runs",
-                          {"branch": "main", "status": "completed", "created": f">={since}", "per_page": 100,
-                           "page": page})
-        if not isinstance(answer, dict) or not isinstance(answer.get("workflow_runs"), list) \
-                or type(answer.get("total_count")) is not int:
+    runs = {}
+    for day in range(RERUN_HORIZON_DAYS + 1):  # every run GitHub still lets someone re-run
+        start, end = now - (day + 1) * 86400, now - day * 86400 + (CLOCK_SLACK_S if day == 0 else 0)
+        window = f"{iso(start)}..{iso(end)}"
+        seen = []
+        for page in range(1, MAX_RUN_PAGES + 1):
+            answer = api.call("GET", f"/actions/workflows/{WORKFLOW}/runs",
+                              {"branch": "main", "status": "completed", "created": window, "per_page": 100,
+                               "page": page})
+            if not isinstance(answer, dict) or not isinstance(answer.get("workflow_runs"), list) \
+                    or type(answer.get("total_count")) is not int or answer["total_count"] >= 1000:
+                raise WatchError("API_SHAPE_RUNS")
+            seen += answer["workflow_runs"]
+            if len(answer["workflow_runs"]) < 100 or len(seen) >= answer["total_count"]:
+                break
+        if len(seen) != answer["total_count"]:
             raise WatchError("API_SHAPE_RUNS")
-        runs += answer["workflow_runs"]
-        if len(answer["workflow_runs"]) < 100 or len(runs) >= answer["total_count"]:
-            break
-    else:
-        raise WatchError("TOO_MANY_RUNS")
-    if len(runs) != answer["total_count"]:
-        raise WatchError("API_SHAPE_RUNS")
+        for run in seen:
+            if not isinstance(run, dict) or type(run.get("id")) is not int:
+                raise WatchError("API_SHAPE_RUNS")
+            runs[run["id"]] = run
+    runs = list(runs.values())
     for run in runs:
         if not isinstance(run, dict) or type(run.get("run_number")) is not int or type(run.get("id")) is not int \
                 or parse_time(run.get("run_started_at")) is None or run.get("status") != "completed" \

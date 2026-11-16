@@ -48,9 +48,10 @@ class FakeApi:
             page = params.get("page", 1)
             return rows[(page - 1) * 100: page * 100]
         if method == "GET" and path.startswith("/actions/workflows/"):
+            low, high = (w.parse_iso(t) for t in params["created"].split(".."))
+            rows = [r for r in self.runs if low <= w.parse_iso(r.get("created_at", r["run_started_at"])) <= high]
             page = params.get("page", 1)
-            chunk = self.runs[(page - 1) * 100: page * 100]
-            return {"workflow_runs": chunk, "total_count": len(self.runs)}
+            return {"workflow_runs": rows[(page - 1) * 100: page * 100], "total_count": len(rows)}
         if method == "GET" and path == "/labels/mbp-alarm":
             return {"name": "mbp-alarm"}
         if method == "GET" and path.startswith("/rules/branches/"):
@@ -236,10 +237,10 @@ class MbpWatchTests(unittest.TestCase):
         return code, out.getvalue(), api
 
     @staticmethod
-    def wrun(number, started, conclusion="success", attempt=1):
-        stamp = w.dt.datetime.fromtimestamp(started, w.dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    def wrun(number, started, conclusion="success", attempt=1, created=None):
+        stamp = w.iso(started)
         return {"id": 1000 + number, "run_number": number, "run_attempt": attempt, "status": "completed",
-                "conclusion": conclusion, "run_started_at": stamp}
+                "conclusion": conclusion, "run_started_at": stamp, "created_at": w.iso(created or started)}
 
     def test_read_exits(self):
         ok, older = self.wrun(2, NOW - 300), self.wrun(1, NOW - 900)
@@ -252,9 +253,12 @@ class MbpWatchTests(unittest.TestCase):
         self.assertEqual(code, w.EXIT["open_alarm"])
         self.assertIn("first=#7", out)
         _, _, api = self.read([ok])
-        ((_, path, params, _),) = [c for c in api.calls if c[1].startswith("/actions")]
-        self.assertEqual(path, "/actions/workflows/mbp-watch.yml/runs")
-        self.assertEqual((params["branch"], params["status"]), ("main", "completed"))
+        calls = [c for c in api.calls if c[1].startswith("/actions")]
+        self.assertEqual(len(calls), w.RERUN_HORIZON_DAYS + 1)  # one window per day of the re-run horizon
+        for _, path, params, _ in calls:
+            self.assertEqual(path, "/actions/workflows/mbp-watch.yml/runs")
+            self.assertEqual((params["branch"], params["status"]), ("main", "completed"))
+            self.assertIn("..", params["created"])
 
     def test_read_refuses_malformed_answers(self):
         ok = self.wrun(1, NOW - 300)
@@ -262,7 +266,7 @@ class MbpWatchTests(unittest.TestCase):
         with self.assertRaises(w.WatchError):
             self.read([ok, broken])  # a malformed newer run is never skipped in favour of an older success
         with self.assertRaises(w.WatchError):
-            self.read([self.wrun(1, NOW + 3600)])
+            self.read([self.wrun(1, NOW + 3600, created=NOW - 100)])
         api = FakeApi(runs=[ok])
         api.call = lambda method, path, params=None, body=None, allow_422=False: (
             {"workflow_runs": [ok]} if path.startswith("/actions") else {})
@@ -414,8 +418,55 @@ class MbpWatchTests(unittest.TestCase):
         self.assertEqual(api.issues[0]["labels"], [{"name": "mbp-alarm"}])
 
     def test_a_full_window_of_healthy_runs_is_read_to_its_total(self):
-        runs = [self.wrun(n, NOW - 5 * n) for n in range(1, 1001)]
+        runs = [self.wrun(n, NOW - 90 * n) for n in range(1, 1001)]  # 1,000 runs over a day and more
         self.assertEqual(self.read(runs, after=NOW - 600)[0], w.EXIT["ok"])
+
+    # --- round-5 regressions (Sol r5 findings 1-4) -----------------------------------------------
+
+    def test_a_newer_failed_rerun_of_an_old_run_refuses(self):
+        old_rerun = self.wrun(1, NOW - 100, "failure", attempt=2, created=NOW - 172800)
+        self.assertEqual(self.read([old_rerun, self.wrun(2, NOW - 300)])[0], w.EXIT["failed_run"])
+
+    def test_old_closes_are_adjudicated_and_a_descendant_push_is_only_an_upper_bound(self):
+        base = NOW - 100 * 86400
+        self.arm(plan="cq-syn-07-s01-a1", t0=base - 7200, deadline=base - 3600)
+        self.close("CLOSED_OK", plan="cq-syn-07-s01-a1", epoch=base - 3600)  # 100 days old, activity gone
+        self.arm()  # a new arm today
+        api = FakeApi()
+        self.pushes_at_commit_times(api)
+        tip = w.Git(self.origin).run("rev-parse", w.LOG_REF).decode().strip()
+        api.activity = [row for row in api.activity if row["after"] == tip]  # only today's push remains
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            w.watch(self.ns(), git=w.Git(self.work), api=api, now=NOW)
+        self.assertNotIn("mbp-alarm SPAN_SILENT cq-syn-07-s01-a1 NO_RESULTS_REF", self.titles(api))
+
+    def test_fractional_push_times_keep_their_fraction(self):
+        self.assertEqual(w.parse_iso("2027-01-15T07:20:00.500000Z") - w.parse_iso("2027-01-15T07:20:00Z"), 0.5)
+        self.assertIsNone(w.parse_iso("2027-01-15T07:20:00+02:00"))
+
+    def test_a_deleted_and_re_added_stop_still_counts(self):
+        self.arm(deadline=NOW - 5000)
+        self.close("STOPPED")
+        git = w.Git(self.origin)
+        tip = git.run("rev-parse", w.LOG_REF).decode().strip()
+        index = self.tmp / "idx2"
+        env = {"GIT_INDEX_FILE": str(index)}
+        git.run("read-tree", tip, env=env)
+        git.run("update-index", "--index-info", env=env,
+                input=f"0 {'0' * 40}\tcloses/{PLAN}.json\n".encode())
+        tree = git.run("write-tree", env=env).decode().strip()
+        index.unlink()
+        commit = git.run("commit-tree", tree, "-p", tip, input=b"delete\n", env=w.IDENT).decode().strip()
+        git.run("update-ref", w.LOG_REF, commit)
+        clean = json.dumps({"schema": w.CLOSE_SCHEMA, "plan_id": PLAN, "status": "CLOSED_OK",
+                            "close_epoch_s": NOW - 3000}).encode()
+        self.log_commit(f"closes/{PLAN}.json", clean)
+        api = FakeApi()
+        self.watch(api)
+        titles = self.titles(api)
+        self.assertIn(f"mbp-alarm SPAN_STOP {PLAN} STOPPED", titles)
+        self.assertIn("mbp-alarm RESULT_UNREADABLE span-watch-log LOG_REWRITTEN", titles)
 
     def test_workflow_shape(self):
         text = WORKFLOW.read_text()
