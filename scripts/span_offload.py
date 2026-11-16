@@ -81,9 +81,10 @@ def run(args):
         marker = None
         if args.marker:
             try:
-                marker = json.loads(Path(args.marker).read_bytes())
-            except (OSError, ValueError):
-                raise so.refused("MARKER_SCHEMA", "the marker file is missing or not JSON") from None
+                with so.open_regular(args.marker, "the marker", single_link=True) as handle:
+                    marker = json.loads(handle.read(1 << 20))
+            except (so.OffloadError, OSError, ValueError, RecursionError):
+                raise so.refused("MARKER_SCHEMA", "the marker file is missing, not a regular file or not JSON") from None
         expect = so.expectations(marker, args.expect_manifest_sha256, args.expect_ciphertext_sha256)
         result = so.pull(config, args.plan, args.kit, args.dest_root, expect,
                          allow_local=args.allow_local_backend, deadline_epoch=args.deadline_epoch)

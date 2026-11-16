@@ -1067,6 +1067,21 @@ class SpanOffloadTests(unittest.TestCase):
                 backend._readback("p", "n", 1, "a" * 64, "b" * 32, None)
             self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("READBACK_UNPARSEABLE", "unverified"))
 
+    def test_pull_refuses_a_key_in_a_repository_and_a_bad_deadline(self):
+        self.offload()
+        repo = self.tmp / "keyrepo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        shutil.copyfile(self.private, repo / "k.pem")
+        with self.assertRaises(so.OffloadError) as caught:
+            self.pull(config=dict(self.air, identity=str(repo / "k.pem")))
+        self.assertEqual(caught.exception.code, "PATH_IN_REPOSITORY")
+        expect = so.expectations(json.loads(self.marker().read_bytes()))
+        for bad in (float("nan"), float("inf"), time.time() * 1000):
+            with self.assertRaises(so.OffloadError) as caught:
+                so.pull(self.air, PLAN, "cl-syn-01", self.tmp / "desk", expect, allow_local=True, deadline_epoch=bad)
+            self.assertEqual(caught.exception.code, "BAD_DEADLINE")
+
     # --- CLI ----------------------------------------------------------------------------------
 
     def test_cli_exit_codes_and_one_line_output(self):
