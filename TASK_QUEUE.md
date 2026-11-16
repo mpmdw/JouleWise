@@ -1356,7 +1356,7 @@ the author and integration repairs; later council work orders remain separate.
 
 ## PR #804 iCloud builder checkpoint (2026-11-15; explicit owner task)
 
-Software built and cold-reviewed (ADMIT at da02b7fde); retry note repaired. Final review/CI evidence
+Software built and cold-reviewed (delta ADMIT at 27e4070c4); retry finding resolved. Final review/CI evidence
 is in the report and PR #804 gate ledger. Lead installation on macOS 26 and
 the research-lead A.3 permanence ruling remain external. This historical checkpoint does not select
 work from the generated queue. Evidence: `docs/run_reports/2026-11-15-span-offload-icloud.md`.
