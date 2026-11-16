@@ -391,9 +391,17 @@ def _add_file(tar, path, arcname):
 
 # --- openssl ---------------------------------------------------------------------------------------
 
+def openssl_env():
+    """The environment for every openssl child: no OPENSSL_*/SSL_*/RANDFILE variable is inherited, and the
+    configuration file is /dev/null, so openssl reads no configuration from anywhere (A.4)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("OPENSSL_", "SSL_", "RANDFILE", "LIBRESSL_"))}
+    env["OPENSSL_CONF"] = os.devnull
+    return env
+
+
 def _openssl_run(openssl, args, *, input=None, deadline=None, cap=600):
     try:
-        proc = subprocess.run([openssl, *args], input=input, capture_output=True,
+        proc = subprocess.run([openssl, *args], input=input, capture_output=True, env=openssl_env(),
                               timeout=deadline.remaining(cap) if deadline else cap)
     except subprocess.TimeoutExpired:
         raise unverified("OPENSSL_TIMEOUT", args[0]) from None
@@ -451,7 +459,7 @@ def encrypt_span(openssl, span_dir, passphrase, out_path, deadline=None):
         with open(out_path, "xb") as out:
             proc = subprocess.Popen([openssl, *_enc_args(False, read_end)],
                                     stdin=subprocess.PIPE, stdout=out, stderr=subprocess.DEVNULL,
-                                    pass_fds=(read_end,))
+                                    pass_fds=(read_end,), env=openssl_env())
             _CHILDREN.add(proc)
     except OSError:
         os.close(read_end)
@@ -509,7 +517,7 @@ def verify_ciphertext(openssl, passphrase, in_path, archive_sha256, deadline=Non
         os.close(write_end)
     try:
         proc = subprocess.Popen([openssl, *_enc_args(True, read_end), "-in", str(in_path)], stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, pass_fds=(read_end,))
+                                stderr=subprocess.DEVNULL, pass_fds=(read_end,), env=openssl_env())
         _CHILDREN.add(proc)
     except OSError:
         raise refused("OPENSSL_UNAVAILABLE", "the openssl binary could not run") from None
@@ -559,7 +567,7 @@ def decrypt_file(openssl, passphrase, in_path, out_path, deadline=None):
     try:
         with open(out_path, "xb") as out:
             proc = subprocess.run([openssl, *_enc_args(True, read_end), "-in", str(in_path)], stdout=out,
-                                  stderr=subprocess.DEVNULL, pass_fds=(read_end,),
+                                  stderr=subprocess.DEVNULL, pass_fds=(read_end,), env=openssl_env(),
                                   timeout=deadline.remaining(3600) if deadline else 3600)
     except subprocess.TimeoutExpired:
         raise integrity("OPENSSL_TIMEOUT", "decrypt") from None
