@@ -15,8 +15,8 @@ pull from the cloud, checked against the marker's hashes.
    the magistrate's desk fence: `FORBIDDEN_PATH_PRESENT`). Without `--deadline-epoch` the whole offload
    gets `default_budget_s` (90 min, item 347's limit); with no time left it does nothing.
 2. Reads no control file from inside OUT: the config path is checked against OUT before it is read, and
-   the recipient key, stage files and completion records are opened only as regular files (no link
-   followed, no fifo waited on). Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
+   the config, the recipient key, the rclone config, the stage files and the completion records are opened
+   only as single-name regular files (no symlink followed, no hard link accepted, no fifo waited on). Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
    carriage return, backslash or non-UTF-8 bytes refuses the offload (exit 4). The stage root, the marker
    directory, the recipient key and a local backend root must not overlap OUT and must not be inside a git
    repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`); so must the rclone config file, which rclone
@@ -25,8 +25,8 @@ pull from the cloud, checked against the marker's hashes.
    `/Users/Shared/JouleWise` at install). OUT must hold at least one regular file and
    `runner_receipt.json` (the default `--require-file`; existence only).
 3. Takes an exclusive lock for the plan (`<stage_root>/.<plan>.lock`, held until the marker; a second
-   offload of the same plan is refused `BUSY`), and removes this plan's private `.building-*` and `.key-*`
-   directories left by a killed earlier run.
+   offload of the same plan is refused `BUSY`). It never deletes a directory it did not make in this run: a
+   killed run's `.<plan>.building-*` and `.<plan>.key-*` directories stay for the lead to remove.
 4. Reads the recipient public key once into a private snapshot, and checks that snapshot against the pinned
    fingerprint (sha256 of its DER encoding) and size (RSA, at least 3072 bits); the wrap uses the same bytes.
 5. Streams OUT through tar and gzip into `openssl enc`, reading each regular file **once, as bytes**. The

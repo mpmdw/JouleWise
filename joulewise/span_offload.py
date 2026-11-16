@@ -111,14 +111,6 @@ def span_name_ok(name, plan):
     return name == plan or (name.startswith(plan + "-") and SPAN_STAMP_RE.fullmatch(name[len(plan) + 1:]) is not None)
 
 
-def _remove_stale_scratch(stage_root, plan, keep):
-    """Under the plan lock: a killed earlier run's private build and key directories are ours to remove."""
-    for entry in os.scandir(stage_root):
-        if entry.name.startswith((f".{plan}.building-", f".{plan}.key-")) and entry.path != str(keep) \
-                and entry.is_dir(follow_symlinks=False):
-            shutil.rmtree(entry.path, ignore_errors=True)
-
-
 def check_id(value, what):
     if not isinstance(value, str) or not ID_RE.fullmatch(value) or ".." in value or value.endswith((".", ".lock")):
         raise refused("BAD_ID", what)
@@ -221,16 +213,22 @@ def manifest_bytes(digests):
     return "".join(f"{digests[rel]}  ./{rel}\n" for rel in sorted(digests, key=lambda r: r.encode("utf-8"))).encode()
 
 
-def open_regular(path, what="a file", dir_fd=None):
+def open_regular(path, what="a file", dir_fd=None, single_link=False):
     """Open a regular file without following a link and without blocking on a fifo; refuse anything else.
-    With ``dir_fd`` the name is resolved inside that already-open directory (no parent can be swapped)."""
+    With ``dir_fd`` the name is resolved inside that already-open directory (no parent can be swapped).
+    ``single_link`` (every control and stage file) also refuses a hard link: a file with one name cannot be
+    an alias of a file under OUT."""
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), dir_fd=dir_fd)
     except OSError as error:
         raise refused("UNREADABLE", f"{what}: {type(error).__name__}") from None
-    if not stat.S_ISREG(os.fstat(fd).st_mode):
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode):
         os.close(fd)
         raise refused("NOT_A_REGULAR_FILE", f"{what} is not a regular file")
+    if single_link and info.st_nlink != 1:
+        os.close(fd)
+        raise refused("HARD_LINKED", f"{what} has more than one name")
     return os.fdopen(fd, "rb")
 
 
@@ -242,7 +240,7 @@ def snapshot_digests(path, kinds):
     ``dropbox`` is Dropbox's content hash: sha256 over the sha256 of each 4 MiB block."""
     hashers = {kind: hashlib.new(kind) for kind in {"sha256", *kinds} if kind in SIMPLE_HASHES}
     blocks, block, block_len, size = hashlib.sha256(), hashlib.sha256(), 0, 0
-    with open_regular(path, "a staged file") as handle:
+    with open_regular(path, "a staged file", single_link=True) as handle:
         for chunk in iter(lambda: handle.read(CHUNK), b""):
             size += len(chunk)
             for hasher in hashers.values():
@@ -742,7 +740,7 @@ AIR_KEYS = {"schema", "identity", "recipient_sha256", "work_root", "backend", "o
 
 def load_config(path, schema, keys, required):
     try:
-        with open_regular(path, "the config file") as handle:
+        with open_regular(path, "the config file", single_link=True) as handle:
             doc = json.loads(handle.read(1 << 20))
     except (OffloadError, OSError, ValueError, RecursionError):
         raise refused("CONFIG", "the config file is missing, not a regular file or not JSON") from None
@@ -828,7 +826,7 @@ def _stage_complete(stage, plan):
 
 def _read_in(dfd, name, limit=1 << 20):
     """A small control file inside the open stage directory: regular, not followed, not waited on."""
-    with open_regular(name, "a stage record", dir_fd=dfd) as handle:
+    with open_regular(name, "a stage record", dir_fd=dfd, single_link=True) as handle:
         data = handle.read(limit + 1)
     if len(data) > limit:
         raise refused("STAGE_CONFLICT", "a stage record is too large")
@@ -836,12 +834,14 @@ def _read_in(dfd, name, limit=1 << 20):
 
 
 def _stage_records(dfd, plan):
-    for entry in os.scandir(dfd):
-        if entry.is_symlink() or not entry.is_file(follow_symlinks=False):
-            raise refused("STAGE_CONFLICT", "the stage holds a symlink or a non-regular entry")
+    with os.scandir(dfd) as entries:
+        for entry in entries:
+            if entry.is_symlink() or not entry.is_file(follow_symlinks=False):
+                raise refused("STAGE_CONFLICT", "the stage holds a symlink or a non-regular entry")
     files = names(plan)
     try:
-        descriptor = json.loads(_read_in(dfd, files["descriptor"]))
+        descriptor_bytes = _read_in(dfd, files["descriptor"])
+        descriptor = json.loads(descriptor_bytes)
     except OffloadError as error:
         if error.code == "UNREADABLE":
             return None  # no descriptor: an incomplete or foreign stage
@@ -855,8 +855,8 @@ def _stage_records(dfd, plan):
                 return None
             fd = os.open(entry["name"], os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), dir_fd=dfd)
             with os.fdopen(fd, "rb") as handle:
-                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-                    raise refused("STAGE_CONFLICT", "a stage file is not a regular file")
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode) or os.fstat(handle.fileno()).st_nlink != 1:
+                    raise refused("STAGE_CONFLICT", "a stage file is not a single-link regular file")
                 digest = hashlib.file_digest(handle, "sha256").hexdigest()
                 size = os.fstat(handle.fileno()).st_size
             if digest != entry["sha256"] or size != entry["size"]:
@@ -867,7 +867,8 @@ def _stage_records(dfd, plan):
         raise refused("STAGE_CONFLICT", "a stage record is not a regular file") from None
     except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return None
-    return {"descriptor": descriptor, "source": recorded, "manifest": manifest}
+    return {"descriptor": descriptor, "source": recorded, "manifest": manifest,
+            "descriptor_sha256": sha256_bytes(descriptor_bytes)}
 
 
 def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=time.time, bits=None):
@@ -894,7 +895,7 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
             raise refused("STAGE_CONFLICT", "a complete stage of another source or recipient exists for this plan")
         if hash_tree(span_dir, deadline.remaining if deadline else None) != found["manifest"]:
             raise refused("STAGE_CONFLICT", "the span's bytes changed since the stage was built")
-        return stage, descriptor, True
+        return stage, descriptor, True, found["descriptor_sha256"]
     building = Path(tempfile.mkdtemp(prefix=f".{plan}.building-", dir=stage_root))
     try:
         (building / SOURCE_RECORD).write_bytes(canonical({"source": source}))
@@ -917,7 +918,8 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
                              "size": os.stat(building / files[kind]).st_size}
                       for kind in ("ciphertext", "wrapped_key", "manifest")},
         }
-        (building / files["descriptor"]).write_bytes(canonical(descriptor))
+        descriptor_bytes = canonical(descriptor)
+        (building / files["descriptor"]).write_bytes(descriptor_bytes)
         for entry in building.iterdir():
             os.chmod(entry, 0o400)  # the staged bytes are read-only from here to the upload
         os.chmod(building, 0o700)
@@ -925,7 +927,7 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
     except BaseException:
         shutil.rmtree(building, ignore_errors=True)  # our own private directory: a failed build leaves nothing
         raise
-    return stage, descriptor, False
+    return stage, descriptor, False, sha256_bytes(descriptor_bytes)
 
 
 def write_marker(marker_path, record):
@@ -1001,6 +1003,9 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
     if isinstance(backend, RcloneBackend) and backend.config:
         outputs["rclone_config"] = backend.config  # rclone rewrites it when a token refreshes
     check_output_paths(span_dir, outputs)
+    if isinstance(backend, RcloneBackend) and backend.config:
+        with open_regular(backend.config, "the rclone config", single_link=True):
+            pass  # a regular file with one name: not an alias of a file under OUT
     openssl = config.get("openssl", "openssl")
     deadline = Deadline(deadline_epoch, clock)
     for name in require_files:
@@ -1009,11 +1014,10 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
             raise refused("SPAN_NOT_CLOSED", f"required file {name} is absent")
     deadline.remaining()
     with plan_lock(stage_root, plan), tempfile.TemporaryDirectory(prefix=f".{plan}.key-", dir=stage_root) as keydir:
-        _remove_stale_scratch(stage_root, plan, keydir)
         # One snapshot of the public key: the fingerprint, the size check and the wrap all use these bytes.
         recipient_pem = Path(keydir) / "recipient.pem"
         try:
-            with open_regular(config["recipient_public_key"], "the recipient public key") as handle:
+            with open_regular(config["recipient_public_key"], "the recipient public key", single_link=True) as handle:
                 key_bytes = handle.read(65537)
         except OffloadError:
             raise refused("RECIPIENT_UNREADABLE", "the recipient public key is not a readable regular file") from None
@@ -1021,13 +1025,18 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
             raise refused("RECIPIENT_UNREADABLE", "the recipient public key file is too large")
         recipient_pem.write_bytes(key_bytes)
         recipient, bits = check_recipient(openssl, recipient_pem, config["recipient_sha256"], deadline)
-        stage, descriptor, reused = build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock, bits)
+        stage, descriptor, reused, descriptor_sha = build_stage(config, plan, span_dir, openssl, recipient_pem,
+                                                                deadline, clock, bits)
         files = names(plan)
-        expected = {kind: (sha256_file(stage / files[kind]), os.stat(stage / files[kind]).st_size)
-                    for kind in UPLOAD_ORDER}
+        expected = {}
+        for kind in UPLOAD_ORDER:  # single-link regular files, never followed, never waited on
+            snap = snapshot_digests(stage / files[kind], ())
+            expected[kind] = (snap["sha256"], snap["size"])
         for kind in ("ciphertext", "wrapped_key", "manifest"):
             if expected[kind] != (descriptor["files"][kind]["sha256"], descriptor["files"][kind]["size"]):
                 raise unverified("STAGE_CHANGED", f"{files[kind]} differs from the descriptor")
+        if expected["descriptor"][0] != descriptor_sha:
+            raise unverified("STAGE_CHANGED", "the descriptor differs from the one validated")
         deadline.remaining()
         confirmations = [backend.put(stage / files[kind], plan, files[kind], deadline) for kind in UPLOAD_ORDER]
         for kind, row in zip(UPLOAD_ORDER, confirmations):
@@ -1125,7 +1134,7 @@ PULL_SCHEMA = "joulewise.span_offload_pull.v1"
 def landing_complete(done_path, plan, span_name):
     """A landing is complete only with a valid completion record naming this plan and span."""
     try:
-        with open_regular(done_path, "the completion record") as handle:
+        with open_regular(done_path, "the completion record", single_link=True) as handle:
             doc = json.loads(handle.read(65536))
     except (OffloadError, ValueError, OSError):
         return False
