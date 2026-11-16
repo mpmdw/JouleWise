@@ -136,8 +136,9 @@ SECONDS_TOLERANCE = 1.0
 # The seeded stratified hand-sample draw (RL-172 section (c); RL-173 E, which confirms the seed and the law). A
 # span is drawn when sha256 of "<seed>|<kit sha256>|<G0 shape>|<span id>" is 0 modulo 4, and the first span of
 # each kit and G0-shape group is always drawn. Each span's draw depends on its own queue entry and on spans that
-# came before it, never on later ones, so an append never changes an earlier draw (Sol R11) and a re-judgment
-# (a hand table supplied later) draws the same. A block-of-four draw is refused by RL-173 E.
+# came before it, never on later ones, so an append never changes an earlier draw (Sol R11). A re-judgment
+# keeps the hash draw; previously missing earlier history can change the first-of-group clause. A block-of-four
+# draw is refused by RL-173 E.
 HAND_SAMPLE_LAW = "sha256-hand-sample-v3"
 HAND_SAMPLE_SEED = 2026111501
 HAND_SAMPLE_RATE = 4       # one span in four per stratum, in expectation
