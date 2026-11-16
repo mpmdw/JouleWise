@@ -221,16 +221,49 @@ def manifest_bytes(digests):
     return "".join(f"{digests[rel]}  ./{rel}\n" for rel in sorted(digests, key=lambda r: r.encode("utf-8"))).encode()
 
 
-def open_regular(path, what="a file"):
-    """Open a regular file without following a link and without blocking on a fifo; refuse anything else."""
+def open_regular(path, what="a file", dir_fd=None):
+    """Open a regular file without following a link and without blocking on a fifo; refuse anything else.
+    With ``dir_fd`` the name is resolved inside that already-open directory (no parent can be swapped)."""
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), dir_fd=dir_fd)
     except OSError as error:
         raise refused("UNREADABLE", f"{what}: {type(error).__name__}") from None
     if not stat.S_ISREG(os.fstat(fd).st_mode):
         os.close(fd)
         raise refused("NOT_A_REGULAR_FILE", f"{what} is not a regular file")
     return os.fdopen(fd, "rb")
+
+
+DROPBOX_BLOCK = 4 * 1024 * 1024
+
+
+def snapshot_digests(path, kinds):
+    """One read of ``path`` (as a regular file) giving sha256 and each requested digest of the SAME bytes.
+    ``dropbox`` is Dropbox's content hash: sha256 over the sha256 of each 4 MiB block."""
+    hashers = {kind: hashlib.new(kind) for kind in {"sha256", *kinds} if kind in SIMPLE_HASHES}
+    blocks, block, block_len, size = hashlib.sha256(), hashlib.sha256(), 0, 0
+    with open_regular(path, "a staged file") as handle:
+        for chunk in iter(lambda: handle.read(CHUNK), b""):
+            size += len(chunk)
+            for hasher in hashers.values():
+                hasher.update(chunk)
+            if "dropbox" in kinds:
+                view = memoryview(chunk)
+                while view:
+                    take = min(len(view), DROPBOX_BLOCK - block_len)
+                    block.update(view[:take])
+                    block_len += take
+                    view = view[take:]
+                    if block_len == DROPBOX_BLOCK:
+                        blocks.update(block.digest())
+                        block, block_len = hashlib.sha256(), 0
+    out = {kind: hasher.hexdigest() for kind, hasher in hashers.items()}
+    if "dropbox" in kinds:
+        if block_len:
+            blocks.update(block.digest())
+        out["dropbox"] = blocks.hexdigest()
+    out["size"] = size
+    return out
 
 
 def hash_regular(path, check=None, what="a file"):
@@ -553,21 +586,30 @@ class LocalBackend:
     def put(self, local, plan, name, deadline=None):
         dest_dir = self._plan_dir(plan)
         dest_dir.mkdir(exist_ok=True)
+        if inside_git(dest_dir):
+            raise unverified("BACKEND_PATH", "the backend's plan directory is inside a git repository")
         if os.path.islink(dest_dir / name):
             raise unverified("BACKEND_PATH", "the backend's file is a symlink")
         dest = dest_dir / name
-        local_sha = sha256_file(local)
-        if dest.exists():
-            if sha256_file(dest) != local_sha:
+        snap = snapshot_digests(local, ())
+        local_sha, size = snap["sha256"], snap["size"]
+        if os.path.lexists(dest):
+            if hash_regular(dest, what="the backend copy") != local_sha:
                 raise unverified("REMOTE_CONFLICT", f"{name} exists with other bytes")
         else:
-            tmp = dest_dir / f".{name}.part-{os.getpid()}"
-            shutil.copyfile(local, tmp)
-            with open(tmp, "rb") as handle:
-                os.fsync(handle.fileno())
-            os.replace(tmp, dest)
-        size = os.stat(local).st_size
-        remote_sha, remote_size = sha256_file(dest), os.stat(dest).st_size
+            # A fresh, unpredictable, exclusively created temporary file: nothing foreign is followed.
+            fd, tmp = tempfile.mkstemp(prefix=f".{name}.part-", dir=dest_dir)
+            try:
+                with os.fdopen(fd, "wb") as out, open_regular(local, "a staged file") as source:
+                    shutil.copyfileobj(source, out, CHUNK)
+                    out.flush()
+                    os.fsync(out.fileno())
+                os.replace(tmp, dest)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp)
+                raise
+        remote_sha, remote_size = hash_regular(dest, what="the backend copy"), os.lstat(dest).st_size
         if (remote_sha, remote_size) != (local_sha, size):
             raise unverified("READBACK_MISMATCH", name)
         return {"name": name, "size": size, "sha256": local_sha, "provider_hash_type": "sha256",
@@ -623,23 +665,15 @@ class RcloneBackend:
             raise unverified("RCLONE_FAILED", f"rclone {args[0]} rc={proc.returncode}")
         return proc.stdout
 
-    def _local_hash(self, local, deadline):
-        if self.hash_type in SIMPLE_HASHES:
-            return sha256_file(local, self.hash_type)
-        if self.hash_type == "dropbox":
-            out = self._run(["hashsum", "dropbox", str(local)], deadline, cap=600).decode("ascii", "replace")
-            value = out.split()[0] if out.split() else ""
-            if not re.fullmatch(r"[0-9a-f]{32,128}", value):
-                raise unverified("LOCAL_HASH_INVALID", "rclone hashsum printed no usable hash")
-            return value
-        return None
-
     def put(self, local, plan, name, deadline=None):
-        size = os.stat(local).st_size
-        local_sha = sha256_file(local)
-        expected = local_sha if self.hash_type == "sha256" else self._local_hash(local, deadline)  # before upload
+        # sha256 and the provider's digest come from ONE read of the staged bytes, before the upload; after
+        # it the file must still be those bytes, and the provider must report that same digest.
+        snap = snapshot_digests(local, () if self.hash_type == "size" else (self.hash_type,))
+        local_sha, size = snap["sha256"], snap["size"]
+        expected = None if self.hash_type == "size" else snap[self.hash_type]
         self._run(["copyto", "--immutable", str(local), self._path(plan, name)], deadline)
-        if sha256_file(local) != local_sha or os.stat(local).st_size != size:
+        after = snapshot_digests(local, ())
+        if (after["sha256"], after["size"]) != (local_sha, size):
             raise unverified("STAGE_CHANGED", f"{name} changed during its upload")
         for attempt in range(1, self.readback_tries + 1):
             try:
@@ -668,7 +702,12 @@ class RcloneBackend:
         provider_size = row.get("Size")
         if provider_size != size:
             raise unverified("READBACK_SIZE", name)
-        provider_hash = (row.get("Hashes") or {}).get(self.hash_type) if expected is not None else None
+        hashes = row.get("Hashes") or {}
+        if not isinstance(hashes, dict):
+            raise unverified("READBACK_UNPARSEABLE", name)
+        provider_hash = hashes.get(self.hash_type) if expected is not None else None
+        if provider_hash is not None and not isinstance(provider_hash, str):
+            raise unverified("READBACK_UNPARSEABLE", name)
         if expected is not None and (provider_hash != expected or not re.fullmatch(r"[0-9a-f]{32,128}", expected)):
             raise unverified("READBACK_HASH" if provider_hash else "READBACK_NO_HASH", name)
         return {"name": name, "size": size, "sha256": local_sha, "provider_hash_type": self.hash_type,
@@ -703,9 +742,10 @@ AIR_KEYS = {"schema", "identity", "recipient_sha256", "work_root", "backend", "o
 
 def load_config(path, schema, keys, required):
     try:
-        doc = json.loads(Path(path).read_text())
-    except (OSError, ValueError):
-        raise refused("CONFIG", "the config file is missing or not JSON") from None
+        with open_regular(path, "the config file") as handle:
+            doc = json.loads(handle.read(1 << 20))
+    except (OffloadError, OSError, ValueError, RecursionError):
+        raise refused("CONFIG", "the config file is missing, not a regular file or not JSON") from None
     if not isinstance(doc, dict) or doc.get("schema") != schema:
         raise refused("CONFIG", f"schema must be {schema}")
     unknown = set(doc) - keys
@@ -776,25 +816,58 @@ def _stage_complete(stage, plan):
 
     The stage must be a real directory of regular files: nothing behind a link is opened or parsed.
     """
-    if os.path.islink(stage) or not stage.is_dir():
-        raise refused("STAGE_CONFLICT", "the stage path is a symlink or not a directory")
-    for entry in os.scandir(stage):
+    try:
+        dfd = os.open(stage, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        raise refused("STAGE_CONFLICT", "the stage path is a symlink or not a directory") from None
+    try:
+        return _stage_records(dfd, plan)
+    finally:
+        os.close(dfd)
+
+
+def _read_in(dfd, name, limit=1 << 20):
+    """A small control file inside the open stage directory: regular, not followed, not waited on."""
+    with open_regular(name, "a stage record", dir_fd=dfd) as handle:
+        data = handle.read(limit + 1)
+    if len(data) > limit:
+        raise refused("STAGE_CONFLICT", "a stage record is too large")
+    return data
+
+
+def _stage_records(dfd, plan):
+    for entry in os.scandir(dfd):
         if entry.is_symlink() or not entry.is_file(follow_symlinks=False):
             raise refused("STAGE_CONFLICT", "the stage holds a symlink or a non-regular entry")
-    descriptor_path = stage / names(plan)["descriptor"]
-    if not descriptor_path.is_file():
+    files = names(plan)
+    try:
+        descriptor = json.loads(_read_in(dfd, files["descriptor"]))
+    except OffloadError as error:
+        if error.code == "UNREADABLE":
+            return None  # no descriptor: an incomplete or foreign stage
+        raise refused("STAGE_CONFLICT", "a stage record is not a regular file") from None
+    except (ValueError, RecursionError):
         return None
     try:
-        descriptor = json.loads(descriptor_path.read_bytes())
         for kind in ("ciphertext", "wrapped_key", "manifest"):
             entry = descriptor["files"][kind]
-            path = stage / entry["name"]
-            if entry["name"] != names(plan)[kind] or sha256_file(path) != entry["sha256"] \
-                    or os.stat(path).st_size != entry["size"]:
+            if entry["name"] != files[kind]:
                 return None
-    except (OSError, ValueError, KeyError, TypeError):
+            fd = os.open(entry["name"], os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0), dir_fd=dfd)
+            with os.fdopen(fd, "rb") as handle:
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    raise refused("STAGE_CONFLICT", "a stage file is not a regular file")
+                digest = hashlib.file_digest(handle, "sha256").hexdigest()
+                size = os.fstat(handle.fileno()).st_size
+            if digest != entry["sha256"] or size != entry["size"]:
+                return None
+        recorded = json.loads(_read_in(dfd, SOURCE_RECORD))
+        manifest = _read_in(dfd, files["manifest"], 1 << 30)
+    except OffloadError:
+        raise refused("STAGE_CONFLICT", "a stage record is not a regular file") from None
+    except (OSError, ValueError, KeyError, TypeError, RecursionError):
         return None
-    return descriptor
+    return {"descriptor": descriptor, "source": recorded, "manifest": manifest}
 
 
 def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=time.time, bits=None):
@@ -810,21 +883,18 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
     files = names(plan)
     source = _real(span_dir)
     if os.path.lexists(stage):
-        descriptor = _stage_complete(stage, plan)
-        if descriptor is None:
+        found = _stage_complete(stage, plan)
+        if found is None:
             raise refused("STAGE_CONFLICT", "an incomplete or foreign directory holds this plan's stage path")
-        else:
-            try:
-                recorded = json.loads((stage / SOURCE_RECORD).read_bytes())
-            except (OSError, ValueError):
-                recorded = None
-            if not isinstance(recorded, dict) or recorded.get("source") != source \
-                    or descriptor.get("span_name") != Path(span_dir).name \
-                    or descriptor.get("scheme", {}).get("recipient_sha256") != config["recipient_sha256"]:
-                raise refused("STAGE_CONFLICT", "a complete stage of another source or recipient exists for this plan")
-            if hash_tree(span_dir, deadline.remaining if deadline else None) != (stage / files["manifest"]).read_bytes():
-                raise refused("STAGE_CONFLICT", "the span's bytes changed since the stage was built")
-            return stage, descriptor, True
+        descriptor, recorded = found["descriptor"], found["source"]
+        if not isinstance(recorded, dict) or recorded.get("source") != source \
+                or not isinstance(descriptor, dict) or descriptor.get("span_name") != Path(span_dir).name \
+                or not isinstance(descriptor.get("scheme"), dict) \
+                or descriptor["scheme"].get("recipient_sha256") != config["recipient_sha256"]:
+            raise refused("STAGE_CONFLICT", "a complete stage of another source or recipient exists for this plan")
+        if hash_tree(span_dir, deadline.remaining if deadline else None) != found["manifest"]:
+            raise refused("STAGE_CONFLICT", "the span's bytes changed since the stage was built")
+        return stage, descriptor, True
     building = Path(tempfile.mkdtemp(prefix=f".{plan}.building-", dir=stage_root))
     try:
         (building / SOURCE_RECORD).write_bytes(canonical({"source": source}))
