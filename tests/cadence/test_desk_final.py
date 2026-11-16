@@ -1149,6 +1149,67 @@ class SignedTransport(DeskFinalCase):
                                                    allowed_signers=self.signers, campaign_id=self.fx.kit["campaign_id"])
         self.assertEqual([h["plan_id"] for h in hist], ["cq-dg-s01-a1"])
 
+    def test_publication_requires_the_declared_summary(self):
+        work, bundle, _ = self.pack()
+        ref, _ = self.ship(bundle)
+        self.assertEqual(self.final(work, ref)[0], 0)
+        summary = work / "out" / desk_final.SUMMARY_NAME
+        summary.unlink()
+        with self.assertRaises(desk_transport.TransportRefusal):
+            desk_transport.publish_verdict(self.air, work / "out", plan_id="cq-dg-s01-a1",
+                                           signing_key=self.keys["cadence-desk"], push=False)
+
+    def test_missing_signed_summary_refuses_read_and_history(self):
+        work, bundle, _ = self.pack()
+        ref, _ = self.ship(bundle)
+        _, doc = self.final(work, ref)
+        pid = doc["plan_id"]
+        prefix = "refs/heads/missing-summary/"
+        message = (f"cadence desk verdict {pid}\n\nVerdict-SHA256: {doc['verdict_sha256']}\n"
+                   f"Desk-Final: {str(doc['desk_final']).lower()}")
+        sha = desk_transport._signed_commit(
+            self.air, {desk_final.VERDICT_NAME: (work / "out" / desk_final.VERDICT_NAME).read_bytes()},
+            message=message, signing_key=self.keys["cadence-desk"], principal="cadence-desk")
+        self.git(self.air, "update-ref", prefix + pid, sha)
+        with self.assertRaises(desk_transport.TransportRefusal):
+            desk_transport.read_verdict(self.air, prefix + pid, allowed_signers=self.signers, plan_id=pid)
+        with self.assertRaises(desk_transport.TransportRefusal):
+            desk_transport.history_from_records(self.air, prefix, allowed_signers=self.signers,
+                                                campaign_id=self.fx.kit["campaign_id"])
+
+    def test_summary_read_error_refuses_read_and_history(self):
+        work, bundle, _ = self.pack()
+        ref, _ = self.ship(bundle)
+        _, doc = self.final(work, ref)
+        pid, prefix = doc["plan_id"], "refs/heads/unreadable-summary/"
+        desk_transport.publish_verdict(self.air, work / "out", plan_id=pid,
+                                       signing_key=self.keys["cadence-desk"], ref_prefix=prefix, push=False)
+        original = desk_transport._git
+
+        def unreadable(repo, *args, **kw):
+            if args[0] == "show" and args[1].endswith(":" + desk_final.SUMMARY_NAME):
+                return self.sp.CompletedProcess(args, 128, b"", b"synthetic read error")
+            return original(repo, *args, **kw)
+
+        with mock.patch.object(desk_transport, "_git", unreadable):
+            with self.assertRaises(desk_transport.TransportRefusal):
+                desk_transport.read_verdict(self.air, prefix + pid, allowed_signers=self.signers, plan_id=pid)
+            with self.assertRaises(desk_transport.TransportRefusal):
+                desk_transport.history_from_records(self.air, prefix, allowed_signers=self.signers,
+                                                    campaign_id=self.fx.kit["campaign_id"])
+
+    def test_error_verdict_without_a_declared_summary_still_roundtrips(self):
+        work, bundle, _ = self.pack()
+        ref, _ = self.ship(bundle, key="rogue")
+        _, doc = self.final(work, ref)
+        self.assertIsNone(doc["summary_sha256"])
+        pid, prefix = doc["plan_id"], "refs/heads/error-without-summary/"
+        desk_transport.publish_verdict(self.air, work / "out", plan_id=pid,
+                                       signing_key=self.keys["cadence-desk"], ref_prefix=prefix, push=False)
+        actual, summary = desk_transport.read_verdict(self.air, prefix + pid, allowed_signers=self.signers, plan_id=pid)
+        self.assertEqual(actual, doc)
+        self.assertIsNone(summary)
+
     def test_a_bundle_signed_by_another_key_or_unsigned_is_refused(self):
         work, bundle, anchor = self.pack()
         ref, _ = self.ship(bundle, key="rogue")

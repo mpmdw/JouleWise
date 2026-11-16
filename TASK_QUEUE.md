@@ -1,5 +1,7 @@
 # JouleWise Task Queue
 
+**2026-11-16 explicit user-priority [AGENT] intake:** repair the cold Sol refusal of PR #799/#800 before ordinary queue work. #799 F4 reproduced and fixed with regressions; #800 repairs continue on its branch. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md).
+
 **2026-11-16 explicit intake, [AGENT]:** PR #799/#800 gate-5 repair outranks ordinary queue work. #799 coverage gap addressed; rerun policy and fresh stack admission remain open. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md).
 
 **2026-11-15 explicit user intake:** PR #799/#800 gate-4 repairs take priority over ordinary queue work. Desk fixes are applied; research-lead questions and fresh gate admission remain. No phase exit-checklist matrix row exists for this fix round. Evidence: [docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md](docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md).
@@ -681,7 +683,7 @@ Superseded (2026-07-15, WO-017; D-043): P2-027 publication and uninvolved-party 
 <!-- BEGIN GENERATED: state-kernel current-queue -->
 <!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. -->
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16).
 
 Generated compatibility table for repository consumers; the lane tables below are the detailed view of the same kernel state.
 

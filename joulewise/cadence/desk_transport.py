@@ -267,8 +267,16 @@ def publish_verdict(repo, out_dir, *, plan_id, signing_key, remote="origin", ref
     if not desk_final.verify_verdict(doc) or doc.get("plan_id") != plan_id:
         raise TransportRefusal("the verdict does not verify or names another plan id")
     files = {desk_final.VERDICT_NAME: raw}
-    if (out_dir / desk_final.SUMMARY_NAME).is_file():
-        files[desk_final.SUMMARY_NAME] = (out_dir / desk_final.SUMMARY_NAME).read_bytes()
+    summary_path = out_dir / desk_final.SUMMARY_NAME
+    if doc.get("summary_sha256") is not None or summary_path.exists():
+        try:
+            summary_raw = summary_path.read_bytes()
+            summary = json.loads(summary_raw)
+        except (OSError, ValueError) as error:
+            raise TransportRefusal("the declared summary is missing or unreadable") from error
+        if desk_final.canonical_sha256(summary) != doc.get("summary_sha256"):
+            raise TransportRefusal("the summary is not the verdict's")
+        files[desk_final.SUMMARY_NAME] = summary_raw
     ref = f"{ref_prefix}{plan_id}"
     parents = []
     if push:
@@ -314,6 +322,8 @@ def read_verdict(repo, ref, *, allowed_signers, plan_id, principal=DESK_PRINCIPA
         raise TransportRefusal(f"{sha[:12]}: the verdict does not verify against its commit")
     summary = None
     s = _git(repo, "show", f"{sha}:{desk_final.SUMMARY_NAME}")
+    if s.returncode != 0 and doc.get("summary_sha256") is not None:
+        raise TransportRefusal(f"{sha[:12]}: declared {desk_final.SUMMARY_NAME} missing or unreadable")
     if s.returncode == 0:
         summary = json.loads(s.stdout)
         if desk_final.canonical_sha256(summary) != doc.get("summary_sha256"):

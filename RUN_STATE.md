@@ -1,5 +1,7 @@
 # JouleWise Run State
 
+**2026-11-16 PR #799 gate 6 repair:** declared summaries are required by signed publication/read, so a missing record cannot disappear from replay history. 76 desk tests, 246 safe cadence tests, 48 host/docs checks pass. [Run report](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md). No MBP contact, custody access or merge; stack admission remains with the lead.
+
 **2026-11-16 PR #799 gate 5:** valid new-id rerun_of coverage added; hash and append stability verified. First-of-group treatment of disposed ancestors remains NEEDS_RULING; no policy change. [Run report](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md). No MBP contact; no merge.
 
 **2026-11-15 Sol round 5, PR #799:** gate-4 desk fixes applied and reviewed; 71 desk tests pass. Rerun draw and latent campaign-scope history await research-lead policy; history-empty remains a recorded operator assertion. Isolated build tree: `/Volumes/JW-EXT/scratch/sol-ctl-r5/wt799`; original Git metadata is inaccessible. See [docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md](docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md). No MBP or custody access; no merge.
@@ -6419,7 +6421,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25). Latest report: [Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review](docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #799 gate 6 summary transport repair; PR #800 continues separately](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md).
 
 ### [ED-EXTERNAL]
 
