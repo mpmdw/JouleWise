@@ -1,5 +1,7 @@
 # JouleWise Task Queue
 
+**2026-11-16 explicit intake, [AGENT]:** PR #799/#800 gate-5 repair outranks ordinary queue work. #799 coverage gap addressed; rerun policy and fresh stack admission remain open. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md).
+
 **2026-11-15 explicit user intake:** PR #799/#800 gate-4 repairs take priority over ordinary queue work. Desk fixes are applied; research-lead questions and fresh gate admission remain. No phase exit-checklist matrix row exists for this fix round. Evidence: [docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md](docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md).
 
 This is the live queue for JouleWise work. When the user gives a new task, first

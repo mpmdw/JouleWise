@@ -13,7 +13,7 @@ import unittest
 from contextlib import redirect_stdout
 from unittest import mock
 
-from joulewise.cadence import desk, desk_final, desk_transport, kit as kitmod
+from joulewise.cadence import desk, desk_final, desk_transport, kit as kitmod, queue as queuemod
 from joulewise.cadence.stops import evaluate_named_stops
 from scripts import cadence_legs_runner as runner
 from scripts.air import cadence_desk as cli
@@ -1326,10 +1326,28 @@ class DrawV3(unittest.TestCase):
             want = int(hashlib.sha256(f"2026111501|{self.sha}|span|{sid}".encode()).hexdigest(), 16) % 4
             self.assertEqual(draw["value"], want, sid)
             self.assertEqual(draw["selected"], want == 0, sid)
-            # the attempt is not in the hash: a re-run of the span draws as the span did
-            rerun = {**queue, "spans": [*queue["spans"], {**queue["spans"][sids.index(sid)], "seq": 99,
-                                                          "span_id": sid, "attempt": 2}]}
-            self.assertEqual(desk_final.hand_sample(rerun, f"cq-{sid}-a2", self.kit, self.sha)["value"], want)
+
+    def test_valid_new_id_rerun_chain_uses_each_span_id_and_is_append_stable(self):
+        import hashlib
+        sids = ['v3-original', 'v3-rerun', 'v3-rerun-again']
+        spans = [{"seq": n + 1, "span_id": sid, "block_id": "v3-block", "not_before": "2026-11-17",
+                  "kit": {"path": "k", "sha256": self.sha}, "legs": self.ids[:6], "attempt": n + 1,
+                  **({"rerun_of": sids[n - 1]} if n else {})} for n, sid in enumerate(sids)]
+        queue = {"schema": queuemod.SCHEMA, "queue_id": "cq-v3-reruns", "expires_at": "2026-11-24T00:00:00-08:00",
+                 "halt": None, "standing_notice": None, "spans": spans}
+        queuemod.validate_queue(queue, {"k": (self.kit, self.sha)})
+        for n, sid in enumerate(sids):
+            plan = queuemod.plan_id(spans[n])
+            want = int(hashlib.sha256(f"2026111501|{self.sha}|span|{sid}".encode()).hexdigest(), 16) % 4
+            # Both possible first-of-group rulings preserve the ruled per-span hash and append stability.
+            # Whether an executed ancestor consumes first place remains with the research lead.
+            for history in ([], [{"plan_id": queuemod.plan_id(spans[0]),
+                                  "sample_stratum": {"kit_sha256": self.sha, "shape": "span"},
+                                  "first_leg_start_epoch_s": 1.0}]):
+                draw = desk_final.hand_sample(queue, plan, self.kit, self.sha, history, 50.0)
+                self.assertEqual(draw['value'], want)
+                self.assertEqual(draw, desk_final.hand_sample(dict(queue, spans=spans[:n + 1]), plan,
+                                                              self.kit, self.sha, history, 50.0))
 
     def test_the_first_span_of_each_group_is_drawn_by_the_history_at_the_desk_and_by_the_queue_at_ready(self):
         own = [x for x in self.ids if next(leg for leg in self.kit["legs"] if leg["leg_id"] == x)["g0_shape"] == "own"]
