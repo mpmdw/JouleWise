@@ -7,7 +7,7 @@
            --manifest MANIFEST.json [--allow-draft]   (both stages; checked first, before any input opens)
     stage2 --stage1 STAGE1.json --stage1-sha256 HEX --looks LOOKS.json --out FIT.json
                               (--energy SEGMENT_ENERGY.json
-                               | --custody ROOT [--span-dir SPAN_ID=PATH ...] [--step3-module PATH])
+                               | --custody ROOT [--span-dir SPAN_ID=PATH ...]) [--coefficients-out COEF.json]
 
 Stage 1 opens NO energy file. In custody mode it opens, per span: `runner_receipt.json`,
 `soak/soak_reference.json`, and per leg `leg_record.json`; per accepted attempt's bundle: `events.jsonl`
@@ -15,9 +15,11 @@ Stage 1 opens NO energy file. In custody mode it opens, per span: `runner_receip
 `outputs/align_thermal.jsonl` (journal readings), and, for the native power-management state only,
 `rich_telemetry.jsonl` and `raw/powermetrics.plist`, from which it extracts by pattern the row end stamp,
 `elapsed_ns` and `thermal_pressure` and nothing else: no line or frame of those two files is parsed as a whole,
-so no power or energy value is decoded. It never opens `power_trace.csv`. Of each span's meter stream it decodes
-the header line (no sample) and reads the last poll line's `rx` and `rt` stamps by pattern, for RL-167 R-20's clock
-print; no sample payload is decoded.
+so no power or energy value is decoded. Of the energy files it reads TIME FIELDS only, through
+`joulewise/cadence_looks/time_fields.py` (RL-173 E.1): each development leg's `power_trace.csv` gpu_power row stamps,
+and each span's meter streams' header and trailer keys, poll stamps and counts and each sample's 16-bit device
+counter. From them come the two trace clauses (rules 3 and 4 at the look), R-20's clock print and the custody digests
+stage 2 checks before energy. No power, voltage, current or SMC value is converted.
 
 Stage 2 takes the stage-1 file by its sha256 as its only roster. In custody mode it computes the level-E object
 in memory (GPU rail through the committed step 3 module's `load_gpu_trace` and `Trace`; DC-in by the trapezoid
@@ -311,6 +313,8 @@ def trace_holes(L_turn, bundle, sm, sm_why):
         gpu["reason"] = "a stretch over 2 s with no power_trace row" if gpu["excluded"] else None
     except FileNotFoundError:
         gpu["reason"] = "no power_trace.csv"
+    except TF.CompressedCustody as exc:               # Mythos r5 N8: as a compressed stream, the look refuses
+        raise F.LookInputError(f"custody: {exc}") from None
     except TF.TimeFieldError as exc:
         gpu["reason"] = str(exc)
     dc = {"max_gap_s": None, "bracketed": False, "clock_fit_excess_s": None, "excluded": True, "reason": None}

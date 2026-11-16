@@ -57,6 +57,11 @@ class TimeFieldError(ValueError):
     field, never a value."""
 
 
+class CompressedCustody(TimeFieldError):
+    """A ``.zst`` sibling of a file the look reads (Mythos round-5 N8): the custody copy is not decompressed. It
+    refuses the look, whichever channel meets it."""
+
+
 # ============================================================================================ the JSON line lexer
 _TOKEN = re.compile(r"""[ \t\n\r]*(?:
      (?P<str>"(?:[^"\\\x00-\x1f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*")
@@ -247,7 +252,7 @@ def span_streams(sdir):
     sdir = Path(sdir)
     zst = sorted(glob.glob(str(sdir / (STREAM_GLOB + ".zst"))))
     if zst:
-        raise TimeFieldError(f"{sdir.name}: {Path(zst[0]).name} is desk-compressed; the look reads a decompressed "
+        raise CompressedCustody(f"{sdir.name}: {Path(zst[0]).name} is desk-compressed; the look reads a decompressed "
                              "custody copy that matches its marker")
     return sorted(glob.glob(str(sdir / STREAM_GLOB)))
 
@@ -430,7 +435,7 @@ def gpu_rows(bundle):
     ``load_gpu_trace`` selects them; ``power_w`` is never converted. Raises TimeFieldError where step 3 would fail."""
     path = Path(bundle) / "power_trace.csv"
     if Path(str(path) + ".zst").exists():
-        raise TimeFieldError(f"{path.name}.zst is desk-compressed; the look reads a decompressed custody copy")
+        raise CompressedCustody(f"{path.name}.zst is desk-compressed; the look reads a decompressed custody copy")
     rows = []
     with open(path, newline="") as f:
         reader = csv.DictReader(f)

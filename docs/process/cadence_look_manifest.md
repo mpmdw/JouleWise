@@ -398,10 +398,29 @@ Sol: REFUSE (its HIGH, NEW-1, is stage 2's support rule, on the fit side). Mytho
 | Mythos N6: `ledger_gate` gaps | A record carries a gate exactly when it is not a draft; `assemble` and `validate --output` refuse either mismatch. The shared ref must belong to a configured remote, and `origin/HEAD` or a bare remote name is refused. A reproduction of a stage-1 file compares everything but `ledger_gate`, which records the run's HEAD | `test_a_ledger_gate_exactly_when_not_a_draft`, the `validate --output` case, `test_shared_ref_is_a_remote_tracking_branch` (`origin/HEAD`, `nowhere/x`) |
 | Mythos N7: `shared_ref_accepts_remote_HEAD` survived | As above | as above |
 
+## 7e. The cold seats on `246a41db6` (round 5) and RL-173, manifest side
+
+Mythos: REFUSE (N1 HIGH). Sol: ADMIT WITH FIXES. RL-173 §E and §E.1 (research lead, Sun 15 Nov 11:58) ruled the open
+items. The fit side's map is `docs/process/cadence_look_fit_interface.md` §7 "Round 5 and RL-173".
+
+| Finding or ruling | Fix | Test |
+|---|---|---|
+| RL-173 E.1 items 1-2: trace holes exclude the leg in stage 1, from time fields through one reader | `joulewise/cadence_looks/time_fields.py` is the one reader (pinned in `fit.code`, required by the validator). Stage 1 excludes a development leg by rule 3 (a power_trace stretch over 2 s with no gpu_power row) or rule 4 (an interval not bracketed by decoded samples, a decoded gap over 2 s, a clock-fit excess over 2 s). The manifest's custody files, stage 1's writes and the blind statement say so: "Of the energy files, stage 1 read time stamps and sample counters only" | `test_time_fields`: the perturbation test (every power value changed, verdict file and stage-1 output byte-identical), reader equivalence with the decoder and step 3, the clauses through the CLI |
+| RL-173 E.1 item 3: the backstop | `fit.gpu_trace_hole_refusal` is on at 2 s; the validator requires it for an interim look and refuses a null switch; the JSON-schema copy now needs a cite when it is on (Mythos r5 N10) | `test_the_gpu_hole_switch_can_be_set`, the schema/validator agreement test |
+| RL-173 E.1 item 4; Mythos r5 N3, N5: a second stage 1 | The LOOKS.json row may carry `stage1_superseded` [{stage1_sha256, roster_sha256, verdicts_sha256, ruling, ruled_exclusions}]. A replaced commitment stands only when an entry names it with the research lead's ruling. Stage 1 runs once more only with exactly the last entry's ruled exclusions (`--ruled-exclusion`), on the replaced roster and verdict file, from a row without a stage-1 hash. A typo'd hash is corrected by an entry with no exclusions; stage 1 does not run again. The history is read over HEAD and every remote-tracking ref. `cadence_look_manifest.py row` writes the row's hashes from the files after checking them; messages print full hashes | the ledger tests in `test_look_manifest` (typo correction, ruled rerun, mismatched exclusions, a second remote branch, `row`) |
+| RL-173 E: Q11 | The 8 % cell's two rows at 10,000 repetitions: 0.0280 (SE 0.0017) and 0.0231 (SE 0.0015), both at or under .035. `drift_tripwire.threshold` is 0.08, `disposed_by` RL-173, `evidence` the pinned report `evidence/2026-11-15-q11-drift-10k-REPORT.md` | the validator's Q11 cases |
+| RL-173 E: the coefficient writer | `freeze2.schema` pins `lm-interim-01.coefficients.schema.json`; stage 2's `--coefficients-out` writes the file through `fit_interim.write_coefficients` and checks it against that schema | `test_predict` |
+| Mythos r5 N6: the custody stage 2 reads is not bound to stage 1's | Level R carries per span the sha256 of the receipt and each leg record and a digest of the meter time fields, and per leg the digest of the trace's row stamps; stage 2 checks them before any energy opens, and records the files it read by sha256. Step 3 checks the leg records and records its files; `assemble` refuses unless the fit and step 3 read one root and the same GPU traces | the custody-binding tests in `test_look_run` and `test_look_manifest` |
+| Mythos r5 N7: stage 1 never checks its own file | Stage 1 runs `manifest.stage1_problems` on its output before writing it; the stage-1 schema's block-id pattern is the validator's | `test_look_run` self-check test |
+| Mythos r5 N8: a `.zst` custody file | The reader refuses a `.zst` sibling of a stream or trace: the look reads a decompressed custody copy that matches its marker | `test_time_fields` |
+| Sol r5 NEW-2: a nested `k` decides a line's kind | The reader's lexer takes the TOP-LEVEL `k` and converts only whitelisted members; no line of a stream is given to `json.loads` | `test_time_fields`, inclusion's spy tests |
+| Sol r5 NEW-3: the ledger gate checked after energy | `manifest.stage1_problems` checks the gate against the run mode, so stage 2 and step 3 refuse before energy | `test_look_manifest` gate case |
+| Mythos r5 N9, N10 | Tests on private temp directories; the six surviving mutants killed; the interface page and this page corrected | the mutant harness |
+
 ## 8. Still owed
 
 | Item | Who | Due |
 |---|---|---|
 | Final pins. `fit_interim.py` and `scripts/cadence_look_run.py` are pinned **on a draft basis** at #795's latest head; on this branch `validate --repo` warns that they are absent, and with #795 merged every check passes. `pin --write` re-pins after the fit-side fixes and again after the cold reviews; a change on main to any pinned dependency needs a re-pin too | Lead, after the cold reviews | Mon 18:00 |
-| The research lead's disposition of Q11 (0.04 stands until then) | Research lead | Before item 11 |
+| Q11: disposed by RL-173 (0.08, from the 10,000-repetition run); the research lead's cold pass confirms the applied threshold | Research lead | With the cold pass |
 | A planted-truth run of `step3_roster.py` on the generator's bundles | Analyst seat / lead | With item 7 |

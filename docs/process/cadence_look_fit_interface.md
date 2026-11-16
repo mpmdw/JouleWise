@@ -267,13 +267,14 @@ level R.
 ```
 { "spans": {span_id: {"attempts": int, "field_present": bool, "accepted": bool,
                       "retried": [{"attempt": int, "kind": "slope" | "load" | "kind not recorded",
-                                   "read_from": str | null}]}},
+                                   "read_from": "receipt soak_attempts[].refusal_kind" | null}]}},
   "spans_with_retry": int, "retried_by_kind": {"slope": int, "load": int, "kind not recorded": int},
   "accepted_after_retry": int, "stopped_by_soak": int }
 ```
 
 With `field_present` false a span has one attempt, accepted. Otherwise `soak_attempts` must be a list numbered from 1,
-with one soak step per attempt (`soak`, `soak.a2`, ...), every attempt but the last refused (a string) with a nonzero
+with one soak step per attempt (`soak`, `soak.a2`, ...), each attempt an object {"attempt": i (from 1), "refused": str |
+null, optionally "refusal_kind"}, every attempt but the last refused (a string) with a nonzero
 step rc, the last not refused; else stage 1 refuses. `accepted` is the last attempt unrefused and its step rc 0. The kind
 is a receipt field `refusal_kind` in ("slope", "load") when present, else "kind not recorded".
 
@@ -561,7 +562,7 @@ converted: the lexer tokenises the other members to skip them, the csv module sp
 times are the pinned decoder's own (`km003c_parse.samples` and `clock_fit` run on the counters with zero value bytes),
 so stage 1 judges DC-in support on exactly the series stage 2 integrates. A test changes every power value of a
 synthetic custody copy and requires inclusion's verdict file and stage 1's output to be byte-identical. A `.zst`
-sibling of a stream or trace refuses (decompress the custody copy).
+sibling of a stream or of a development leg's trace refuses the look (decompress the custody copy).
 
 Rules 1, 2, 5 and 6 come from `leg_record.json`: `result.leg_status == "complete"` and
 `result.decode_cap_reached`; `result.g0_released`; the last attempt not `contaminated`;

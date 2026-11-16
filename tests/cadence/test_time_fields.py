@@ -723,6 +723,12 @@ class TraceClausesThroughTheCli(unittest.TestCase):
         self.assertEqual(inc.returncode, 1, inc.stdout + inc.stderr)
         self.assertIn("REFUSE", inc.stdout)
         self.assertIn("desk-compressed", inc.stdout)
+        # a development leg's power_trace.csv.zst refuses the look the same way (not a rule-3 exclusion)
+        (sdir / "hazards/meter/stream-0001.jsonl.zst").unlink()
+        trace = next(p for p in sorted(sdir.glob("legs/*/runtime/*/*/power_trace.csv")))
+        Path(str(trace) + ".zst").write_bytes(b"(\xb5/\xfd")
+        err, _ = self.stage1(span_dirs=[f"{sid}={sdir}"], expect=2)
+        self.assertIn("power_trace.csv.zst is desk-compressed", err)
         self.assertFalse((d / "v.json").exists())
 
 

@@ -622,7 +622,7 @@ def main(argv=None):
     try:
         verdicts, detail = judge_custody(roster, sdir_of, selected)
     except Exception as exc:                      # type and line only: a message could carry a value
-        if type(exc).__name__ == "TimeFieldError":    # time_fields' refusal names a file and a field, never a value
+        if any(c.__name__ == "TimeFieldError" for c in type(exc).__mro__):    # time_fields' refusal names a file and a field, never a value
             print(f"REFUSE {exc}")
             return 1
         tb = exc.__traceback__
