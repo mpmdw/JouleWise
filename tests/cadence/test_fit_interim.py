@@ -723,8 +723,10 @@ class RL167(unittest.TestCase):
         cold = next(L for L in s1["legs"] if L["in_energy_fit"] and not any(s["hot"] for s in L["segments"]))
         e = e2["legs"][cold["leg_key"]]["gpu_rail"]           # no hot block: only the leg rule can see it
         e["segments"] = [-abs(x) for x in e["segments"]]
-        with self.assertRaisesRegex(F.LookInputError, "leg's measured energy"):
+        with self.assertRaises(F.LookInputError) as raised:
             F.stage2(s1, rehash(s1), e2)
+        self.assertIn(cold["leg_key"], str(raised.exception))
+        self.assertIn("gpu_rail: measured energy is not positive (R-18)", str(raised.exception))
 
     def test_r11_prefix_n_days_and_floor(self):
         out = F.stage2(stage1_of("noisy"), rehash(stage1_of("noisy")), dataset("noisy")[1])

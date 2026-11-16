@@ -210,7 +210,8 @@
            "files_sha256",
            "meter_streams",
            "meter_time_sha256",
-           "meter_unreadable"
+           "meter_unreadable",
+           "native_pm_sha256"
           ],
           "properties": {
            "files_sha256": {
@@ -287,6 +288,13 @@
              "string",
              "null"
             ]
+           },
+           "native_pm_sha256": {
+            "type": "object",
+            "additionalProperties": {
+             "type": "string",
+             "pattern": "^[0-9a-f]{64}$"
+            }
            }
           }
          }

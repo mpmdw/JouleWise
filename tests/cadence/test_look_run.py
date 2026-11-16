@@ -321,10 +321,16 @@ class Stage1Custody(unittest.TestCase):
         spans = {s["span_id"]: s for s in self.c.li["spans"]}
         for sp in got["spans"]:
             cust = sp["custody"]
-            self.assertEqual(set(cust["files_sha256"]), {"runner_receipt.json"} | {
-                f"legs/{x['leg_id']}/leg_record.json" for x in self.c.li["legs"]
-                if x["span_id"] == sp["span_id"] and (self.c.root / sp["span_id"] / "legs" / x["leg_id"] /
-                                                      "leg_record.json").is_file()})
+            files = set(cust["files_sha256"])
+            self.assertIn("runner_receipt.json", files)
+            self.assertIn("soak/soak_reference.json", files)
+            self.assertTrue(any(p.endswith("/outputs/align_thermal.jsonl") for p in files))
+            for path, sha in cust["files_sha256"].items():
+                self.assertEqual(sha, R.sha256_file(self.c.root / sp["span_id"] / path))
+            for leg in self.c.li["legs"]:
+                if leg["span_id"] == sp["span_id"] and leg["leg_type"] == "T":
+                    self.assertFalse(any(p.startswith(f"legs/{leg['leg_id']}/runtime/") for p in files))
+            self.assertTrue(cust["native_pm_sha256"])
             self.assertRegex(cust["meter_time_sha256"], "^[0-9a-f]{64}$")
             self.assertIsNone(cust["meter_unreadable"])
             self.assertEqual([m["name"] for m in cust["meter_streams"]], ["stream-0001.jsonl"])

@@ -180,7 +180,7 @@ class Document(unittest.TestCase):
             self.assertEqual(F.dump(co), F.dump(again), sc)
             self.assertEqual(co["schema"], F.COEFFICIENTS_SCHEMA)
             self.assertEqual(co["stage1_sha256"], s1_sha)
-            self.assertEqual(co["fit_sha256"], hashlib.sha256(F.dump(fit)).hexdigest())
+            self.assertEqual(co["fit_sha256"], hashlib.sha256(F.dump(F.fit_reproduction(fit))).hexdigest())
             self.assertEqual(co["manifest_sha256"], MANIFEST_SHA)
             for ch in F.CHANNELS:
                 c = fit["channels"][ch]
@@ -192,6 +192,37 @@ class Document(unittest.TestCase):
             text = json.dumps(co).lower().replace("joulewise", "")
             for word in ("joule", "watt", "power", "energy"):
                 self.assertNotIn(word, text)
+
+    def test_canonical_fit_round_trip_preserves_coefficients(self):
+        _, s1, s1_sha, fit, co = run("noisy")
+        restored = json.loads(F.dump(fit))
+        self.assertEqual(F.dump(F.write_coefficients(s1, s1_sha, restored, MANIFEST_SHA)), F.dump(co))
+
+    def test_freeze2_reproduces_across_ledger_positions_and_custody_locations(self):
+        _, s1, s1_sha, fit, _ = run("noisy")
+        fit["custody"] = {"root": "/original", "span_dirs": [],
+                          "files": [{"path": "span/source", "sha256": "cd" * 32}]}
+        fit["ledger_gate"] = {"commit": "first"}
+        co = F.write_coefficients(s1, s1_sha, fit, MANIFEST_SHA)
+        fit["custody"]["root"] = "/relocated"
+        fit["custody"]["span_dirs"] = [{"span_id": "span", "path": "/copy"}]
+        fit["ledger_gate"] = {"commit": "later"}
+        self.assertEqual(F.dump(co), F.dump(F.write_coefficients(s1, s1_sha, fit, MANIFEST_SHA)))
+        fit["custody"]["files"][0]["sha256"] = "de" * 32
+        self.assertNotEqual(co["fit_sha256"],
+                            F.write_coefficients(s1, s1_sha, fit, MANIFEST_SHA)["fit_sha256"])
+
+    def test_duplicate_or_missing_columns_refuse(self):
+        _, s1, s1_sha, fit, _ = run("noisy")
+        for ch in F.CHANNELS:
+            for duplicate in (True, False):
+                bad = copy.deepcopy(fit)
+                if duplicate:
+                    bad["channels"][ch]["columns"].append(bad["channels"][ch]["columns"][0])
+                else:
+                    bad["channels"][ch]["coefficients"].pop(bad["channels"][ch]["columns"][0])
+                with self.assertRaisesRegex(F.LookInputError, "unique columns"):
+                    F.write_coefficients(s1, s1_sha, bad, MANIFEST_SHA)
 
     def test_schema_refuses_an_inconsistent_onset(self):
         schema = json.loads(SCHEMA.read_text())

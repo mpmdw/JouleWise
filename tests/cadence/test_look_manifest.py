@@ -648,6 +648,30 @@ class SchemaCopy(Base):
         for p in LOOKS.glob("*.json"):
             json.loads(p.read_text(encoding="utf-8"))
 
+    def test_the_manifest_passes_its_schema_without_optional_dependencies(self):
+        from joulewise.cadence_looks import schema_check as sc
+        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+        for doc in (draft(), finalize(draft())):
+            self.assertEqual(sc.errors(doc, schema), [])
+        bad = draft()
+        bad["freeze2"]["schema"]["extra"] = True
+        self.assertNotEqual(sc.errors(bad, schema), [])
+        bad = draft()
+        bad["decisions"][0]["evidence"]["sha256"] = "not-a-hash"
+        self.assertNotEqual(sc.errors(bad, schema), [])
+
+    def test_interim_schema_requires_the_ruled_gpu_backstop_and_freeze2_schema(self):
+        from joulewise.cadence_looks import schema_check as sc
+        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+        for field, value in (("enabled", False), ("max_gap_s", 3)):
+            bad = draft()
+            bad["fit"]["gpu_trace_hole_refusal"][field] = value
+            self.assertNotEqual(sc.errors(bad, schema), [])
+        for parent, key in (("fit", "gpu_trace_hole_refusal"), ("freeze2", "schema")):
+            bad = draft()
+            bad[parent].pop(key)
+            self.assertNotEqual(sc.errors(bad, schema), [])
+
     def test_the_manifest_validates_against_the_json_schema_when_available(self):
         try:
             import jsonschema
@@ -1012,7 +1036,8 @@ class FreezeCommit(Base):
 
     MODULES = ("tests.cadence.test_look_manifest", "tests.cadence.test_step3_roster", "tests.cadence.test_inclusion_34",
                "tests.cadence.test_schema_check", "tests.cadence.test_fit_interim", "tests.cadence.test_look_run",
-               "tests.cadence.test_time_fields")
+               "tests.cadence.test_time_fields", "tests.cadence.test_predict",
+               "tests.cadence.test_round6_guards", "tests.cadence.test_round6_diagnostics")
 
     def test_the_look_s_tests_pass_on_the_frozen_tree(self):
         import os

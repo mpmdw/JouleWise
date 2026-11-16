@@ -482,11 +482,28 @@ SOAK_KIND_FIELDS = ("refusal_kind",)
 def soak_fields(receipt):
     """The receipt fields the soak-retry print reads, as level R carries them (fit_interim stage 1 computes the print
     from level R, so the twin can): whether ``soak_attempts`` is present, its value, and the receipt's soak steps
-    ({"name", "rc"} of each step named "soak" or "soak.a<n>")."""
+    ({"name", "rc"} of each step named "soak" or "soak.a<n>"). The ruled soak_refusals array is normalized into
+    the matching attempt's soak_refusals_kind field; old receipts keep the same projection."""
     steps = [{"name": st.get("name"), "rc": st.get("rc")} for st in receipt.get("steps") or []
              if isinstance(st, dict) and re.fullmatch(r"soak(\.a\d+)?", str(st.get("name")))]
-    return {"field_present": "soak_attempts" in receipt, "soak_attempts": receipt.get("soak_attempts"),
-            "soak_steps": steps}
+    attempts = receipt.get("soak_attempts")
+    refusals = receipt.get("soak_refusals")
+    if refusals is not None:
+        if (not isinstance(refusals, list) or any(
+                not isinstance(r, dict) or set(r) != {"attempt", "kind"}
+                or not isinstance(r["attempt"], int) or isinstance(r["attempt"], bool)
+                or r["attempt"] < 1 or r["kind"] not in ("slope", "load") for r in refusals)
+                or len({r["attempt"] for r in refusals}) != len(refusals)):
+            raise ValueError("runner_receipt.json soak_refusals: unique {attempt, kind}, kind slope or load")
+        if refusals and (not isinstance(attempts, list) or any(not isinstance(a, dict) for a in attempts)):
+            raise ValueError("runner_receipt.json soak_refusals: soak_attempts must be recorded objects")
+        attempts = [dict(a) for a in attempts] if isinstance(attempts, list) else attempts
+        for r in refusals:
+            a = next((a for a in attempts or [] if isinstance(a, dict) and a.get("attempt") == r["attempt"]), None)
+            if a is None or a.get("refused") is None:
+                raise ValueError("runner_receipt.json soak_refusals: each entry names a refused soak attempt")
+            a["soak_refusals_kind"] = r["kind"]
+    return {"field_present": "soak_attempts" in receipt, "soak_attempts": attempts, "soak_steps": steps}
 
 
 def soak_attempts_of(span_id, fields):
@@ -514,6 +531,8 @@ def soak_attempts(sdir):
 
 def soak_refusal_kind(attempt):
     """("slope" | "load" | "kind not recorded", the receipt field it was read from or None)."""
+    if attempt.get("soak_refusals_kind") in ("slope", "load"):
+        return attempt["soak_refusals_kind"], "receipt soak_refusals[].kind"
     for field in SOAK_KIND_FIELDS:
         if attempt.get(field) in ("slope", "load"):
             return attempt[field], f"receipt soak_attempts[].{field}"

@@ -1117,6 +1117,24 @@
           "disposed_by": {
             "type": "string",
             "pattern": "^RL-\\d+[a-z]?"
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*\\.\\.).+\\.md$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
           }
         }
       }
@@ -1279,6 +1297,9 @@
               }
             }
           }
+        },
+        "schema": {
+          "$ref": "#/$defs/code_ref"
         }
       }
     },
@@ -1501,5 +1522,49 @@
         "expected_hot_seconds"
       ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "look_kind": {
+              "not": {
+                "const": "interim"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "fit": {
+              "required": [
+                "gpu_trace_hole_refusal"
+              ],
+              "properties": {
+                "gpu_trace_hole_refusal": {
+                  "required": [
+                    "cite"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "const": true
+                    },
+                    "max_gap_s": {
+                      "const": 2
+                    }
+                  }
+                }
+              }
+            },
+            "freeze2": {
+              "required": [
+                "schema"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
 }

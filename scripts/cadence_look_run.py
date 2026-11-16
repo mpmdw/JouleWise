@@ -9,7 +9,7 @@
                               (--energy SEGMENT_ENERGY.json
                                | --custody ROOT [--span-dir SPAN_ID=PATH ...]) [--coefficients-out COEF.json]
 
-Stage 1 opens NO energy file. In custody mode it opens, per span: `runner_receipt.json`,
+Stage 1 reads time fields and sample counters only from energy-bearing files. In custody mode it opens, per span: `runner_receipt.json`,
 `soak/soak_reference.json`, and per leg `leg_record.json`; per accepted attempt's bundle: `events.jsonl`
 (token index and stamp), `outputs/align_turns.jsonl` (stamps, prompt count, the LENGTH of the output ids),
 `outputs/align_thermal.jsonl` (journal readings), and, for the native power-management state only,
@@ -295,7 +295,7 @@ def span_meter(sdir):
         return None, str(exc)
 
 
-def trace_holes(L_turn, bundle, sm, sm_why):
+def trace_holes(L_turn, bundle, sm, sm_why, leg_key="(leg)"):
     """RL-173 E.1 items 1 and 2, the two time-stamp clauses (rule 3 for the GPU rail, rule 4 for DC-in), on the
     leg's energy-fit intervals (its segments and prefix tails), from time fields only (``time_fields``):
     * GPU rail: the longest stretch of an interval with no power_trace.csv gpu_power row over 2 s excludes the leg;
@@ -314,7 +314,7 @@ def trace_holes(L_turn, bundle, sm, sm_why):
     except FileNotFoundError:
         gpu["reason"] = "no power_trace.csv"
     except TF.CompressedCustody as exc:               # Mythos r5 N8: as a compressed stream, the look refuses
-        raise F.LookInputError(f"custody: {exc}") from None
+        raise F.LookInputError(f"GPU rail: {leg_key}: {exc}") from None
     except TF.TimeFieldError as exc:
         gpu["reason"] = str(exc)
     dc = {"max_gap_s": None, "bracketed": False, "clock_fit_excess_s": None, "excluded": True, "reason": None}
@@ -404,7 +404,7 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
         holes = None
         if turn is not None and entry["role"] != "describe":
             # RL-173 E.1: the two time-stamp clauses, on every development leg with a turn (hp-01's are never read)
-            holes = trace_holes(turn, ldir / "runtime" / result["bundle"], sm, sm_why)
+            holes = trace_holes(turn, ldir / "runtime" / result["bundle"], sm, sm_why, key)
             inc["sidecar_coverage"] = inc["sidecar_coverage"] and not holes["gpu_rail"]["excluded"]
             inc["km003c_clean"] = inc["km003c_clean"] and not holes["dc_in"]["excluded"]
         ruled_x = None
@@ -424,6 +424,8 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
     if consumers and any(not all(leg["inclusion"].values()) for leg in legs if leg["leg_id"] in supplier_ids):
         marks.add("reference from an excluded leg")
     span["marks"] = sorted(marks)
+    span["custody"]["files_sha256"] = M.nonenergy_files(sdir)
+    span["custody"]["native_pm_sha256"] = M.native_pm_files(sdir)
     return span, legs
 
 
@@ -484,14 +486,19 @@ class MeterSpan:
     reader's decoded sample times for the span (stage 1 judged the trace clauses on them); the decoder's times must
     be exactly these, or the span refuses (a backstop on the reader: no energy is printed)."""
 
-    def __init__(self, sdir, expected_t=None):
+    def __init__(self, sdir, expected_t=None, leg_key=None):
         from joulewise.external import km003c_parse as kp
+        identity = leg_key or Path(sdir).name
         paths = TF.span_streams(sdir)
         if not paths:
-            raise F.LookInputError(f"DC-in: {Path(sdir).name}: no meter stream in the span")
+            raise F.LookInputError(f"DC-in: {identity}: no meter stream in the span")
         t, w, steps = [], [], []
         for p in paths:
-            st = kp.parse(p)
+            try:
+                st = kp.parse(p)
+            except (ValueError, TypeError, KeyError, IndexError, OverflowError, OSError):
+                raise F.LookInputError(f"DC-in: {identity}: meter stream {Path(p).name}: decoder fault; "
+                                       "sample support and gap unavailable") from None
             if not st.present or not st.aligned:     # contributes no sample; a fit interval it alone spans refuses
                 del st
                 continue
@@ -501,13 +508,13 @@ class MeterSpan:
             w += list(st.watts)
             del st
         if not t:
-            raise F.LookInputError(f"DC-in: {Path(sdir).name}: no meter stream in the span has aligned samples")
+            raise F.LookInputError(f"DC-in: {identity}: no meter stream in the span has aligned samples")
         order = sorted(range(len(t)), key=t.__getitem__)
         self.t = [t[i] for i in order]
         self.w = [w[i] for i in order]
         self.step_s = max(steps)
         if expected_t is not None and self.t != list(expected_t):
-            raise F.LookInputError(f"DC-in: {Path(sdir).name}: the decoder's sample times differ from the time "
+            raise F.LookInputError(f"DC-in: {identity}: the decoder's sample times differ from the time "
                                    "reader's, on which stage 1 judged the trace clauses")
 
     def _support(self, a, b, leg_key):
@@ -579,6 +586,10 @@ def custody_check(stage1_out, sdir_of):
     and the digest of every meter time field (``time_fields.SpanMeter.digest``); per energy-fit leg, the digest of
     its power_trace.csv gpu rows' stamps. All from the time reader and operational files: no energy value. Returns
     {span_id: SpanMeter} for the decoder backstop."""
+    problems = M.nonenergy_problems(stage1_out, sdir_of,
+                                   [L["span_id"] for L in stage1_out["legs"] if L["in_energy_fit"]])
+    if problems:
+        raise F.LookInputError("; ".join(problems))
     meters = {}
     spans = {sp["span_id"]: sp for sp in stage1_out["roster"]["spans"]}
     for L in stage1_out["legs"]:
@@ -618,7 +629,10 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None
     custody record names every energy file opened by sha256 (a hash of bytes, not a value)."""
     s3, _ = load_step3(step3_path)
     meters = {}
-    opened = {}
+    fit_spans = {L["span_id"] for L in stage1_out["legs"] if L["in_energy_fit"]}
+    opened = {f"{sp['span_id']}/{rel}": sha
+              for sp in (stage1_out.get("roster") or {}).get("spans") or [] if sp["span_id"] in fit_spans
+              for rel, sha in ((sp.get("custody") or {}).get("files_sha256") or {}).items()}
     out = {"schema": F.ENERGY_SCHEMA, "look_id": F.LOOK_ID, "synthetic": False,
            "input_sha256": stage1_out["input_sha256"], "legs": {}}
     for L in stage1_out["legs"]:
@@ -631,10 +645,14 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None
         bundle = sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"]
         opened[f"{L['span_id']}/legs/{leg_id}/runtime/{rec['result']['bundle']}/power_trace.csv"] = \
             TF.file_sha256(bundle / "power_trace.csv")
-        trace = s3.Trace(s3.load_gpu_trace(str(bundle)))
+        try:
+            trace = s3.Trace(s3.load_gpu_trace(str(bundle)))
+        except (ValueError, TypeError, KeyError, IndexError, OverflowError, OSError):
+            raise F.LookInputError(f"GPU rail: {key}: power_trace.csv: trace reader fault; "
+                                   "row support and gap unavailable") from None
         if L["span_id"] not in meters:
             sm = (span_times or {}).get(L["span_id"])
-            meters[L["span_id"]] = MeterSpan(sdir, expected_t=sm.t if sm is not None else None)
+            meters[L["span_id"]] = MeterSpan(sdir, expected_t=sm.t if sm is not None else None, leg_key=key)
             for p in TF.span_streams(sdir):
                 opened[f"{L['span_id']}/hazards/meter/{Path(p).name}"] = TF.file_sha256(p)
         m = meters[L["span_id"]]
@@ -674,6 +692,26 @@ def ruled_exclusions(pairs):
     return out
 
 
+def superseded_source(a, row):
+    """Authenticate the kept stage-1 and level-R files before a ruled rerun reads custody."""
+    if not (getattr(a, "superseded_stage1", None) and getattr(a, "superseded_input", None)):
+        raise F.LookInputError("a ruled rerun needs --superseded-stage1 and --superseded-input (the kept level R)")
+    last = row["stage1_superseded"][-1]
+    raw = Path(a.superseded_stage1).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != last["stage1_sha256"]:
+        raise F.LookInputError("the kept stage-1 file is not the superseded commitment")
+    previous = json.loads(raw)
+    if previous.get("manifest_sha256") != sha256_file(a.manifest):
+        raise F.LookInputError("a stage 1 run once more takes the replaced commitment's manifest unchanged")
+    raw = Path(a.superseded_input).read_bytes()
+    if hashlib.sha256(raw).hexdigest() != previous.get("input_sha256"):
+        raise F.LookInputError("the kept level-R file is not the superseded stage-1 input")
+    old_input = json.loads(raw)
+    old_ruled = {leg["leg_key"]: (leg["ruled_exclusion"]["rule"], leg["ruled_exclusion"]["ruling"])
+                 for leg in old_input.get("legs", []) if leg.get("ruled_exclusion")}
+    return old_input, old_ruled
+
+
 def cmd_stage1(a):
     if a.input and not a.allow_draft:
         raise F.LookInputError("--input (level R) runs only with --allow-draft; a committed look reads custody")
@@ -688,12 +726,34 @@ def cmd_stage1(a):
         if not a.allow_draft:
             # Mythos r3 N8: the committed ledger names this manifest, roster and verdict file before custody opens;
             # RL-173 E.1 item 4: a stage 1 run once more names the research lead's ruled exclusions, nothing else
-            M.require_inputs_committed(ROOT, F.LOOK_ID, sha256_file(a.manifest), roster_sha256=sha256_file(a.roster),
+            row = M.require_inputs_committed(ROOT, F.LOOK_ID, sha256_file(a.manifest), roster_sha256=sha256_file(a.roster),
                                        verdicts_sha256=sha256_file(a.rules_3_4), ledger_ref=a.ledger_ref,
                                        ruled_exclusions={k: list(v) for k, v in ruled.items()})
         roster = _json(a.roster)
         rules34 = _json(a.rules_3_4)
+        if ruled and not a.allow_draft:
+            old_input, old_ruled = superseded_source(a, row)
+            before = read_look_input(roster, span_dirs(a.custody, a.span_dir), rules34, ruled=old_ruled)
+            if F.dump(before) != F.dump(old_input):
+                raise F.LookInputError("a ruled rerun changes the superseded level-R source; only the named exclusions may change")
         look_input = read_look_input(roster, span_dirs(a.custody, a.span_dir), rules34, ruled=ruled)
+        if ruled and not a.allow_draft:
+            # The exclusion-aware read may change only named flags and their derived span marks. Verify the
+            # second read too, so a changed source between reads cannot enter the new fit.
+            projection = json.loads(F.dump(look_input))
+            old_legs = {leg["leg_key"]: leg for leg in before["legs"]}
+            for leg in projection["legs"]:
+                if leg["leg_key"] in ruled:
+                    rule = ruled[leg["leg_key"]][0]
+                    leg["inclusion"][rule] = old_legs[leg["leg_key"]]["inclusion"][rule]
+                    leg["ruled_exclusion"] = old_legs[leg["leg_key"]]["ruled_exclusion"]
+            old_spans = {span["span_id"]: span for span in before["spans"]}
+            changed_spans = {key.rsplit("/", 1)[0] for key in ruled}
+            for span in projection["spans"]:
+                if span["span_id"] in changed_spans:
+                    span["marks"] = old_spans[span["span_id"]]["marks"]
+            if F.dump(projection) != F.dump(before):
+                raise F.LookInputError("a ruled rerun changes sources beyond the named exclusions")
         data = F.dump(look_input)
         input_sha = hashlib.sha256(data).hexdigest()
         if a.write_input:
@@ -811,9 +871,11 @@ def main(argv=None):
     p1.add_argument("--rules-3-4")
     p1.add_argument("--span-dir", action="append")
     p1.add_argument("--write-input")
+    p1.add_argument("--superseded-stage1", help="kept stage-1 file authenticated to the replaced ledger commitment")
+    p1.add_argument("--superseded-input", help="kept level-R input authenticated to the superseded stage-1 file")
     p1.add_argument("--ruled-exclusion", action="append", metavar="LEG_KEY=RULE=RL-n",
                     help="RL-173 E.1 item 4: a leg the research lead excluded by name after a stage-2 refusal; the "
-                         "committed LOOKS.json row's stage1_reruns must name it")
+                         "committed LOOKS.json row's stage1_superseded must name it")
     p1.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     p2 = sub.add_parser("stage2")
     p2.add_argument("--stage1", required=True)

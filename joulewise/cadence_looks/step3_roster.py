@@ -195,28 +195,24 @@ def entries_from_stage1(stage1, sdir_of):
 
 
 def custody_problems(stage1, entries, sdir_of):
-    """Mythos round-5 N6, before any bundle opens: each leg's leg_record.json is the one stage 1 read (its sha256 in
-    the stage-1 file's span custody record). A synthetic level-R stage 1 carries no custody record."""
-    spans = {sp["span_id"]: sp for sp in (stage1.get("roster") or {}).get("spans") or []}
-    out = []
-    for e in entries:
-        span_id, leg_id = e["key"].split("/", 1)
-        files = ((spans.get(span_id) or {}).get("custody") or {}).get("files_sha256")
-        if files is None:
-            if stage1.get("synthetic") is not True:
-                out.append(f"{span_id}: the stage-1 file carries no custody record")
-            continue
-        rel = f"legs/{leg_id}/leg_record.json"
-        got = hashlib.sha256((Path(sdir_of(span_id)) / rel).read_bytes()).hexdigest()
-        if files.get(rel) != got:
-            out.append(f"custody: {span_id}/{rel} is not the file stage 1 read")
-    return out
+    """Verify every operational source before any later reader parses a bundle or leg record."""
+    from joulewise.cadence_looks import manifest as lm
+    ids = [leg["span_id"] for leg in stage1["legs"]
+           if leg.get("included") is True and leg.get("role") == "fit" and leg.get("leg_type") == "A"]
+    return lm.nonenergy_problems(stage1, sdir_of, ids)
 
 
-def custody_record(custody, overrides, entries, sdir_of):
+def custody_record(custody, overrides, entries, sdir_of, stage1=None):
     """What step 3 read, by path and sha256 (a hash of bytes, not a value): assemble requires the fit's GPU traces to
     be these (Mythos round-5 N6)."""
-    files = []
+    from joulewise.cadence_looks import manifest as lm
+    # A synthetic level-R fixture may carry no custody map or runner roster. Record operational
+    # sources only where D bound them; real stage-1 files are required to carry that map.
+    bound = {sp["span_id"] for sp in ((stage1 or {}).get("roster") or {}).get("spans") or []
+             if sp.get("custody") is not None}
+    files = [{"path": f"{sid}/{rel}", "sha256": sha}
+             for sid in sorted({e["key"].split("/", 1)[0] for e in entries} & bound)
+             for rel, sha in lm.nonenergy_files(sdir_of(sid)).items()]
     for e in entries:
         span_id = e["key"].split("/", 1)[0]
         b = Path(e["bundle"])
@@ -313,12 +309,12 @@ def main(argv=None):
     threshold = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")["threshold"]
     try:
         sdir_of = span_dirs(a.custody, a.span_dir)
-        entries = entries_from_stage1(stage1, sdir_of)
-        problems = custody_problems(stage1, entries, sdir_of)
+        problems = custody_problems(stage1, None, sdir_of)
         if problems:
             raise Step3Refused("; ".join(problems))
+        entries = entries_from_stage1(stage1, sdir_of)
         result = run_roster(entries, threshold=threshold)
-        custody = custody_record(a.custody, a.span_dir, entries, sdir_of)
+        custody = custody_record(a.custody, a.span_dir, entries, sdir_of, stage1)
     except Step3Refused as error:
         print(f"REFUSE {error}")
         return 1

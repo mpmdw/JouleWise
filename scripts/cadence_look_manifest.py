@@ -262,7 +262,7 @@ def _custody_problems(fit, step3, allow_draft):
         out.append("the fit and step 3 read different custody roots or span directories")
     s3 = {f["path"]: f["sha256"] for f in sc_.get("files") or []}
     for f in fc.get("files") or []:
-        if f["path"].endswith("/power_trace.csv") and s3.get(f["path"]) != f["sha256"]:
+        if "/hazards/meter/" not in f["path"] and s3.get(f["path"]) != f["sha256"]:
             out.append(f"the fit's {f['path']} is not the file step 3 read")
     return out
 

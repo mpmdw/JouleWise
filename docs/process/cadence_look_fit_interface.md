@@ -48,11 +48,12 @@ Units: tokens are integers; temperatures °C; fan speed rpm; energy J. "Epoch" i
                         "end": int | null },     # the span's last poll line: rt − rx (RL-167 R-20); null if none
   "soak_receipt": {                       # RL-172a: the receipt fields the soak-retry print reads (§3, soak_retries)
     "field_present": bool,                # runner_receipt.json carries soak_attempts (absent: one attempt)
-    "soak_attempts": any,                 # its value as written (validated by the print's rule), null when absent
+    "soak_attempts": any,                 # copied receipt attempts; optional soak_refusals_kind below; null when absent
     "soak_steps": [ {"name": "soak" | "soak.a<n>", "rc": int | null}, ... ] },   # the receipt's soak steps, in order
   "custody": null | {                     # Mythos r5 N6: what stage 1 read, checked again by stage 2 before energy;
                                           # null only in a synthetic level-R file (a real look always carries it)
-    "files_sha256": {"runner_receipt.json" | "legs/<id>/leg_record.json": hex64},
+    "files_sha256": {relative_operational_path: hex64}, # receipt, soak, records, summaries, events, turns, journals
+    "native_pm_sha256": {relative_bundle_path: hex64}, # rich/plist timing and native state only
     "meter_time_sha256": hex64 | null,    # time_fields.SpanMeter.digest: every time field read from the streams
     "meter_streams": [ {"name": str, "present": bool, "aligned": bool, "samples": int,
                         "duplicates": int | null,          # the decoder's dropped re-sent samples (RL-173 E.1 item 2)
@@ -441,7 +442,7 @@ contract between the two.
 
 ```
 { "schema": "joulewise.cadence_look_coefficients.v1", "look_id": "lm-interim-01", "synthetic": bool,
-  "manifest_sha256": hex64, "stage1_sha256": hex64, "fit_sha256": hex64,   # fit_sha256 = sha256(dump(fit_out))
+  "manifest_sha256": hex64, "stage1_sha256": hex64, "fit_sha256": hex64,   # fit_sha256 = sha256(dump(fit_reproduction(fit_out)))
   "code_sha256": {...}, "numpy_version": str,                              # the fit's
   "block_tokens": 256, "prefix": {"1.10": 3724, "1.30": 3151, "1.374": 2981},
   "rates": {"r_p", "r_d"}, "centring": {...}, "calibrated_range": {...},   # stage 1's
@@ -514,7 +515,7 @@ is NaN or infinite; the level-E `input_sha256` differs from the stage-1 file's `
 RL-167 §1 (R-10 to R-21) and §2 (rows 1 to 23, and §2.1) are the readings both implementations carry; read them
 there. **The twin comparison (RL-173 E):** a reproduction compares every field of level D, level O and the coefficient
 file except `ledger_gate` (and the provenance hashes and the numpy version); `trace_coverage` and `soak_retries` are
-compared. The custody record of level O (`custody`) is set aside with `ledger_gate`: a level-E run has none. The rows that changed this code: 4 and 5 (the gap rule: only fresh-state journal readings count; first
+compared. The cross-implementation, synthetic level-E agreement omits `custody` because level E carries none. A custody reproduction compares `custody.files` as well as every scientific field; only `ledger_gate` and the local directory locators are outside that comparison. The rows that changed this code: 4 and 5 (the gap rule: only fresh-state journal readings count; first
 anchor at the turn's start without a fresh-state carry-in; floored at 0), 6 (a fresh start reading with Unknown
 or missing state, or a non-integer level, is `start_state_unobserved`: in the energy fit, τ̂ from the linear
 predictor, out of the onset fit), 7 (a fold's onset fits with at least 6 uncensored and convergence, else that
@@ -557,7 +558,7 @@ RL-166b §3 is the reading both implementations carry for these. In this code:
 (no line or frame of those two is parsed). **Time fields of the energy files (RL-173 E.1), through one reader,
 `joulewise/cadence_looks/time_fields.py`:** of each span's meter streams, the header's and trailer's operational
 keys, each poll line's `tx`, `rx`, `rt`, `n` and each sample's 16-bit device counter; of each development leg's
-`power_trace.csv`, the gpu_power rows' `interval_start_s` and `interval_end_s`. Nothing else in those files is
+`power_trace.csv`, the gpu_power rows' `timestamp_s`, `interval_start_s` and `interval_end_s`. Nothing else in those files is
 converted: the lexer tokenises the other members to skip them, the csv module splits the row. The decoded sample
 times are the pinned decoder's own (`km003c_parse.samples` and `clock_fit` run on the counters with zero value bytes),
 so stage 1 judges DC-in support on exactly the series stage 2 integrates. A test changes every power value of a
@@ -578,12 +579,49 @@ the stage-1 output:
 **The roster** is `manifest.resolve_roster`'s list `[{span_id, block_id, role, t0_local_date}]`; a span's
 directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwise.
 
-**Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` (through step 3's
+**Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` through the pinned step 3 reader, and that span's meter streams through the pinned decoder. It verifies all operational sources and the time projections before those value readers run.
 
 **Pins and commit (#793's helpers).** Both stages take `--manifest` (and `--allow-draft` for synthetic runs) and call
 `manifest.verify_pins(manifest, repo, allow_draft=..., running=(fit_interim.py, cadence_look_run.py))` before any
-input is opened. Stage 2 takes `--looks` and calls `manifest.require_stage1_committed(looks, "lm-interim-01",
-stage1_sha256)` after the stage-1 hash check and before any energy is opened.
+input is opened. In committed mode stage 2 calls `manifest.require_stage1_committed(repo, "lm-interim-01",
+stage1_sha256, stage1_doc=...)` against committed `LOOKS.json`; `--looks` is a synthetic draft override only. The gate runs after the stage-1 hash check and before any energy is opened.
+
+**Round 6 fixes (cold seats on 413697d4b; builder round 7).**
+- The required NumPy job and FreezeCommit run `test_predict` and the new guard/diagnostic regressions. The
+  expected-failure census was already repaired at 66fa7c452; no global exception was added.
+- A ruled rerun takes `--superseded-stage1 D.json --superseded-input R.json`, both authenticated by the prior
+  commitment. Keep `stage1 --write-input R.json` at the first run. Before applying the cumulative named exclusions,
+  the fresh source projection must equal the preserved R exactly. Historical manifest hashes must agree, and
+  any published `run`, `frozen` or output hash closes the rerun path. Shallow history refuses; Git replacement
+  objects are ignored. A later empty-exclusion hash correction preserves all earlier exclusions.
+- `custody.files_sha256` binds receipt, soak reference, leg records, summaries, token/turn events and journals,
+  including their presence. Both later readers record these operational byte hashes; assembly compares them
+  along with the GPU traces. Rich/plist timing and native state are separately bound by `native_pm_sha256` in D;
+  both readers verify that blinded projection before their value reads. Type-T runtime files are omitted.
+  Energy files retain time-only stage-1 projections.
+- Timestamp faults use rule 3 without converting power. Later trace/meter faults name the leg and stream with
+  field-only diagnostics; unavailable support is reported as unknown, never as an invented gap. R-18 names the leg.
+- Coefficient keys match unique columns independently of JSON object order. `fit_reproduction` removes
+  `ledger_gate` and custody's local `root`/`span_dirs` from `fit_sha256`, and retains every custody file hash.
+  Consequently identical bytes relocated on disk and read after ledger advancement produce the same freeze 2.
+- Receipt `soak_refusals[{attempt, kind}]` is supported alongside older receipts. In level R, each matching
+  refused attempt is copied with `soak_refusals_kind` (`slope` or `load`); the print prefers it to legacy kind
+  fields and records `read_from: "receipt soak_refusals[].kind"`. No runner pin is changed.
+
+A non-admitting stage-1 reproduction uses the kept level-R file in process: verify its bytes against
+D's `input_sha256`; run `fit_interim.stage1(R, D["input_sha256"], code_hashes)` with D's recorded non-input
+code hashes; restore D's `input:*` provenance, `manifest_sha256`, `allow_draft` and `ledger_gate` fields; compare
+canonical bytes with D after removing only `ledger_gate` on both sides. Use the pinned code and dependencies.
+This writes no ledger row and grants no second admission. The CLI's committed-mode rerun remains reserved for
+named exclusions. A level-O custody reproduction compares `custody.files`; root/override paths locate those files.
+The look records hashes and cross-checks readers; campaign seal/marker authentication belongs to the lead's
+custody handoff before this CLI, and no look command claims to verify that seal.
+
+Open research-lead questions remain explicit: N3's 2 s clock-fit line (unchanged from RL-173), the conservative
+reader's four unsupported malformed shapes, and whether a future persisted-coefficient reader must require
+schema/code provenance before calling the pure in-memory `predict` API. The writer validates its pinned schema;
+`predict` does not claim to authenticate a file or its executing code. Real-recording tests remain excluded here
+by the builder's synthetic-only blinding instruction.
 
 **Round 5 and RL-173 (cold seats on 246a41db6).**
 - **Trace clauses (RL-173 E.1 items 1, 2):** stage 1 judges both channels on the leg's energy-fit intervals from time

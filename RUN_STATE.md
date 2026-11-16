@@ -1,5 +1,13 @@
 # JouleWise Run State
 
+PR #795 builder round 7 (2026-11-15, this lane): resumed the restored Git worktree on
+`align/2026-11-14-fit-interim` from `66fa7c452`, with no incoming rebase changes. Round-6
+findings are repaired or explicitly dispositioned; 389 focused tests and 10 twin sets
+pass; 133/133 mutants are killed (0 survivors, 0 invalid). N3's clock-fit constant and the
+reader/provenance questions remain research-lead decisions. No real custody was opened,
+no MBP was contacted, and no merge is authorized. Evidence and exact next step: [run report](docs/run_reports/2026-11-15-pr795-round7-builder.md).
+
+
 This file is the single running pointer for the project: the one doc to
 read to get back here. Session records live in `docs/run_reports/` and
 `docs/process_traces/`; deliberation lives in `docs/council_log.md`;

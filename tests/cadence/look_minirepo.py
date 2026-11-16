@@ -138,7 +138,7 @@ def frozen_copy(test):
     test.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
     for tree in FROZEN_TREES:
         shutil.copytree(REPO / tree, root / tree, copy_function=_link_or_copy,
-                        ignore=shutil.ignore_patterns("__pycache__"))
+                        ignore=shutil.ignore_patterns("__pycache__", "fixtures"))
     for rel in (MANIFEST, lm.LOOK_LEDGER_PATH):
         (root / rel).unlink()
         shutil.copy2(REPO / rel, root / rel)

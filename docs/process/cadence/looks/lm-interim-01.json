@@ -86,7 +86,7 @@
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "5a48edc9bae69390c3953a7fb5e4025825702382f684090a759d5221f8663703"
+        "sha256": "ba5c5936ef4470ba224a5fdbb6453e647a103a54c7caaf2e014f9573fe27a7e1"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -372,13 +372,13 @@
         "stage": "inclusion"
       },
       {
-        "basename": "rich_telemetry.jsonl timestamp_s and elapsed_ns (inclusion_34.py: a decode hook drops every other key); raw/powermetrics.plist row-end stamp, elapsed_ns and thermal_pressure (the stage-1 CLI: extracted by pattern, no frame parsed)",
+        "basename": "rich_telemetry.jsonl timestamp_s and elapsed_ns (inclusion_34.py: extracted by pattern; no line parsed); raw/powermetrics.plist row-end stamp, elapsed_ns and thermal_pressure (the stage-1 CLI: extracted by pattern, no frame parsed)",
         "scope": "accepted attempt",
         "carries": "timestamps and power-management state only",
         "stage": "inclusion"
       },
       {
-        "basename": "hazards/meter/stream-*.jsonl header, trailer and the rt stamp of each sample line (inclusion_34.py; the line is dropped)",
+        "basename": "hazards/meter/stream-*.jsonl operational header/trailer keys, poll stamps and sample counters through time_fields.py (inclusion_34.py; no energy decoded)",
         "scope": "span, cut to the leg's interval",
         "carries": "timestamps and counts only, for rule 4",
         "stage": "inclusion"
@@ -495,15 +495,15 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "8ee72383817558e54ab7b25c18d155fa9493c30097da43b67eb8d9e1f335e8d4"
+        "sha256": "5872656180c208a1bf14a2f39f2c2e69127eb66ac5db0b8801e01fda9782bfa6"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "4a9c3c1dfcd56c0a6ded788eca419176a64aa3fca42004a3857c699fca47c96e"
+        "sha256": "5d68ec842a1d7c429ceb1fd96e169ffbfc08b142fb56c3200b37ba3febb3e1fa"
       },
       {
         "path": "joulewise/cadence_looks/time_fields.py",
-        "sha256": "c5a6419f395aaf238dc0151e3137e04e1e93fe2819681867d8e706121e7575ed"
+        "sha256": "a09bc50140615f7b3499a67f649392b8cb0616f06005e31985494b9cd858c82a"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -511,15 +511,15 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "3295b6c7a673d7b4c0d3d549c0822e672d28fa98bd9eb123b671b26cd338ae09"
+        "sha256": "b1ca2ac5fcbae9c503217e0a029e76f5ba36e529791f903e8a64351ac0d090f3"
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "c3fbfc31b16183b951e69f50c3fc4173a452067dedc4798ff21258f760c081e5"
+        "sha256": "0dc2f5884f243bb42889c690d78360737d9b0f580983ed2df9d0557986090808"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "a4ce8beee5576e98eeaacf12664b94f126e445c1597eb7f29b44f030b5d88abd"
+        "sha256": "41a5e8c4f52bea2a1aa786e96fc5c8bf35a5c0319a8d54e3e20c9149c72c1439"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -653,7 +653,7 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "3295b6c7a673d7b4c0d3d549c0822e672d28fa98bd9eb123b671b26cd338ae09"
+        "sha256": "b1ca2ac5fcbae9c503217e0a029e76f5ba36e529791f903e8a64351ac0d090f3"
       },
       "statistic": "iii",
       "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
@@ -809,7 +809,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "90f7692ee9c888d8af5d0367997fe29af4b864a23034929c228030cd26394809"
+        "sha256": "9b3343b275ebd0a8050b7ec8ba9dab58569382591cf23a299607a50f737db257"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -887,7 +887,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "4a9c3c1dfcd56c0a6ded788eca419176a64aa3fca42004a3857c699fca47c96e"
+          "sha256": "5d68ec842a1d7c429ceb1fd96e169ffbfc08b142fb56c3200b37ba3febb3e1fa"
         },
         "cite": [
           "RL-149 §2.4",
@@ -903,7 +903,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "4a9c3c1dfcd56c0a6ded788eca419176a64aa3fca42004a3857c699fca47c96e"
+          "sha256": "5d68ec842a1d7c429ceb1fd96e169ffbfc08b142fb56c3200b37ba3febb3e1fa"
         },
         "cite": [
           "RL-149 §2.4",
@@ -1229,7 +1229,7 @@
       "disposed_by": "RL-173",
       "evidence": {
         "path": "docs/process/cadence/looks/evidence/2026-11-15-q11-drift-10k-REPORT.md",
-        "sha256": "8a0b15223c405e222b96be26a35d4faba42cdd0fe7253684e73c4d5bac92b35f"
+        "sha256": "b175a786c5f9ec422e5fab603795d48f0238dea8dac1001e3fc41b2fb292edad"
       }
     },
     {

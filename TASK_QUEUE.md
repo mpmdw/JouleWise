@@ -1,5 +1,15 @@
 # JouleWise Task Queue
 
+PR #795 round-7 intake (2026-11-15): direct research-lead-requested code repair on the
+existing interim-look lane takes priority within this worktree; it does not select any
+quiet-machine task or alter generated project queue rankings. Complete the two round-6
+findings tables, synthetic focused suite, twin agreement and mutant harness; push and
+verify required quick, update the PR body, and hand research rulings back without merging.
+Local verification: 389 focused tests and 10 twin sets pass; 133/133 mutants killed
+(0 survivors, 0 invalid). Commit/push, hosted quick and PR readback remain pending at this record; their
+final receipts will be recorded in PR #795. Status/evidence: [builder run report](docs/run_reports/2026-11-15-pr795-round7-builder.md).
+
+
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 

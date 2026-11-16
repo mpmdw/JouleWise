@@ -34,6 +34,7 @@ TF_BACKSTOPS = T_TF + ".StageTwoBackstops"
 TF_CUSTODY = T_TF + ".CustodyBinding"
 TF_LEDGER = T_TF + ".SupersededStage1"
 TF_N9 = T_TF + ".N9Survivors"
+T_R6 = "tests.cadence.test_round6_guards"
 
 # (id, file, old, new, test modules)
 MUTANTS = [
@@ -68,7 +69,7 @@ MUTANTS = [
     ("row22_hp_in_level_e", FIT, '    needed = {L["leg_key"]: L for L in legs if L["in_energy_fit"]}', '    needed = {L["leg_key"]: L for L in legs if L["in_energy_fit"] or L["hp_describe"]}', [T_FIT]),
     ("row22_reader_reads_hp", RUN, '        if not L["in_energy_fit"]:                  # RL-167 §3: no hp-01 energy is opened\n            continue', '        if not (L["in_energy_fit"] or L["hp_describe"]):\n            continue', [T_RUN]),
     ("precedence_excluded_first", FIT, '        if leg["leg_type"] == "T":                      # RL-167 §2.1: type T, excluded, describe-only, missing start\n            reason = "type_T"\n        elif not included:\n            reason = "excluded"', '        if not included:\n            reason = "excluded"\n        elif leg["leg_type"] == "T":\n            reason = "type_T"', [T_FIT]),
-    ("r18_no_positive_check", FIT, '        if any(v <= 0 for v in meas_leg.values()):', '        if False:', [T_FIT]),
+    ("r18_no_positive_check", FIT, '        for k, v in meas_leg.items():\n            if v <= 0:', '        for k, v in meas_leg.items():\n            if False:', [T_FIT]),
     ("r11_n_days_zero", FIT, '"n_pairs": len(pairs), "n_days": n_days_pairs}', '"n_pairs": len(pairs), "n_days": 0}', [T_FIT]),
     ("r11_sd_floor_dropped", FIT, 'if len(pairs) < 3 or sd_l <= SD_FLOOR_J or sd_s <= SD_FLOOR_J:', 'if len(pairs) < 3:', [T_FIT]),
     ("r11_ci_with_one_day", FIT, '    if nd >= 2:\n        se = ', '    if nd >= 1:\n        se = ', [T_FIT]),
@@ -98,7 +99,7 @@ MUTANTS = [
     # RL-166c
     ("c4_p3_any_off_reading", FIT, '            if L["state"]["onset_use"] != "uncensored":          # RL-166c row 4: the onset sample\'s uncensored legs', '            if L["state"]["first_off_s"] is None:', [T_FIT]),
     ("c5_p3_no_refusal", FIT, '                    if not y[i] > 0:                             # RL-166c row 5, R-18', '                    if False:', [T_FIT]),
-    ("r18_hot_no_refusal", FIT, '        if any(v is not None and v <= 0 for v in meas_hot.values()):', '        if False:', [T_FIT]),
+    ("r18_hot_no_refusal", FIT, '        for k, v in meas_hot.items():\n            if v is not None and v <= 0:', '        for k, v in meas_hot.items():\n            if False:', [T_FIT]),
     ("f1_kinds_sorted", FIT, '    return t_off - ts, "+".join(k for k in OFF_KINDS if any(x == t_off and w == k for x, w in offs))', '    return t_off - ts, "+".join(sorted(k for x, k in offs if x == t_off))', [T_FIT]),
     ("f2_oos_none_when_not_estimable", FIT, '    if L["start"]["state"] == "start_out_of_state":\n        return 0.0\n    if model is None:\n        return None', '    if model is None:\n        return None\n    if L["start"]["state"] == "start_out_of_state":\n        return 0.0', [T_FIT]),
     # cold seats on 5ea1bdee9
@@ -151,10 +152,10 @@ MUTANTS = [
     ("tf_counter_low_byte_only", TF, 'return tuple(raw[i] | (raw[i + 1] << 8) for i in range(0, len(raw), SAMPLE_BYTES))', 'return tuple(raw[i] for i in range(0, len(raw), SAMPLE_BYTES))', [T_TF + ".MeterTimesEqualTheDecoder"]),
     ("tf_gpu_rows_any_source", TF, '            if row.get("rail") == "gpu_power" and row.get("source") == "powermetrics":', '            if row.get("rail") == "gpu_power":', [T_TF + ".GpuRowsEqualStep3"]),
     # Mythos r5 N6: the custody binding
-    ("n6_files_unchecked", RUN, '            if files.get(rel) is None or TF.file_sha256(sdir / rel) != files[rel]:', '            if False:', [TF_CUSTODY]),
+    ("n6_files_unchecked", MAN, '            if files.get(rel) != got.get(rel):', '            if False:', [TF_CUSTODY]),
     ("n6_meter_digest_unchecked", RUN, '            if sm.digest() != cust.get("meter_time_sha256"):', '            if False:', [TF_CUSTODY]),
     ("n6_trace_rows_unchecked", RUN, '        if TF.rows_digest(rows) != ((L.get("trace_holes") or {}).get("gpu_rail") or {}).get("rows_sha256"):', '        if False:', [TF_CUSTODY]),
-    ("n6_step3_leg_record_unchecked", S3R, '        if files.get(rel) != got:', '        if False:', [TF_CUSTODY]),
+    ("n6_step3_leg_record_unchecked", S3R, '    return lm.nonenergy_problems(stage1, sdir_of, ids)', '    return []', [TF_CUSTODY, T_R6]),
     # RL-173 E.1 item 4, Mythos r5 N3/N5: superseded stage-1 commitments
     ("n3_unlisted_history_accepted", MAN, '        if h != current and h not in superseded:', '        if h != current and False:', [TF_LEDGER]),
     ("n3_superseded_needs_no_entry", MAN, '        if h != current and h not in superseded:', '        if False:', [TF_LEDGER]),
@@ -172,6 +173,19 @@ MUTANTS = [
     ("n9_assemble_cached_bytecode_not_refused", CLI, '    problems = [f"a repository module may have run from cached bytecode: {m}" for m in lm.cached_bytecode(repo)]', '    problems = []', [TF_N9]),
     ("n9_step3_bytes_loaded_through_the_cache", S3R, '    exec(compile(raw, str(path), "exec"), module.__dict__)', '    __import__("importlib.machinery").machinery.SourceFileLoader(spec.name, str(path)).exec_module(module)', [TF_N9]),
     ("n9_run_prefix_not_removed_at_exit", RUN, 'atexit.register(shutil.rmtree, _PYC_PREFIX, True)     # Mythos r4 N4: leave no empty prefix directory behind\n', '', [TF_N9]),
+    # Mythos round-6 N11: the eleven guards the independent seat found untested. Direct behavioral
+    # controls isolate these checks; deleting one must fail an assertion rather than a source-pin test.
+    ("r6_tf_excess_positive_side_only", TF, '    return max(st["excess_latency_ms_max"], -st["excess_latency_ms_min"]) / 1000.0', '    return st["excess_latency_ms_max"] / 1000.0', [T_R6]),
+    ("r6_tf_excess_only_streams_spanning_the_leg", TF, '            if m["t"][0] <= b and m["t"][-1] >= a:', '            if m["t"][0] <= a and m["t"][-1] >= b:', [T_R6]),
+    ("r6_man_earlier_exclusions_may_be_dropped", MAN, '            if given_rx != want or not earlier <= set(want):', '            if given_rx != want:', [T_R6]),
+    ("r6_man_current_commitment_listed_superseded", MAN, '    if current in superseded:', '    if False:', [T_R6]),
+    ("r6_man_superseded_ruling_any_text", MAN, '        if not (isinstance(e["ruling"], str) and RULING_ID_RE.fullmatch(e["ruling"])):', '        if False:', [T_R6]),
+    ("r6_man_q11_evidence_not_required", MAN, '        elif th == DRIFT_RULED and drift.get("evidence") != Q11_EVIDENCE:', '        elif False:', [T_R6]),
+    ("r6_man_freeze2_schema_not_required", MAN, '        if kind == "interim" and "schema" not in f2:', '        if False:', [T_R6]),
+    ("r6_missing_real_custody_record_accepted", MAN, '            if stage1.get("synthetic") is not True:\n                out.append(f"{sid}: the stage-1 file carries no custody record")', '            if False:\n                out.append(f"{sid}: the stage-1 file carries no custody record")', [T_R6]),
+    ("r6_fit_coefficients_stage1_hash_unchecked", FIT, '    if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:\n        raise LookInputError("coefficients: the stage-1 output does not match the hash it was given")', '    if False:\n        raise LookInputError("coefficients: the stage-1 output does not match the hash it was given")', [T_R6]),
+    ("r6_fit_predict_inactive_column_accepted", FIT, '        if any(h in cols for h in HEAT_OF.values() if not c["active_readings"][_reading_of(h)]):', '        if False:', [T_R6]),
+    ("r6_run_coefficients_schema_unchecked", RUN, '            errs = SC.errors(coef, M.coefficients_schema(ROOT))', '            errs = []', [T_R6]),
 ]
 
 

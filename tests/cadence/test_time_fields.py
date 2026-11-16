@@ -627,7 +627,7 @@ class TraceClausesThroughTheCli(unittest.TestCase):
         files = {f["path"] for f in rj(fit)["custody"]["files"]}
         lid = lambda L: L["leg_key"].split("/")[1]
         self.assertTrue([f for f in files if f.startswith(f"{sid}/legs/{lid(B)}/")])
-        self.assertFalse([f for f in files if f.startswith(f"{sid}/legs/{lid(A)}/")])   # A's trace never opened
+        self.assertFalse([f for f in files if f.startswith(f"{sid}/legs/{lid(A)}/") and f.endswith("/power_trace.csv")])   # A's trace never opened
 
     def test_meter_attacks_are_excluded_in_stage_1(self):
         """Stage 1 excludes, by rule 4's DC-in clause, each shape of the round-5 reports; none reaches stage 2."""
@@ -965,10 +965,55 @@ class CustodyBinding(unittest.TestCase):
                 b = bundle_of(sdir_of(L["span_id"]), L["leg_key"])
                 want.add(str(b.relative_to(sdir_of(L["span_id"]).parent) / "power_trace.csv"))
                 want.add(f"{L['span_id']}/hazards/meter/stream-0001.jsonl")
+        for sid in {L["span_id"] for L in self.s1["legs"] if L["in_energy_fit"]}:
+            want.update(f"{sid}/{rel}" for rel in M.nonenergy_files(sdir_of(sid)))
         self.assertEqual({f["path"] for f in cust["files"]}, want)
         for f in cust["files"]:
             sid, rest = f["path"].split("/", 1)
             self.assertEqual(f["sha256"], R.sha256_file(sdir_of(sid) / rest))
+
+    def test_changed_operational_sources_refuse_before_later_readers(self):
+        lid = self.L["leg_key"].split("/")[1]
+        source = self.c.root / "dev-01-s02"
+        bundle = bundle_of(source, self.L["leg_key"])
+        rels = ["soak/soak_reference.json", f"legs/{lid}/leg_summary.json"]
+        rels += [(bundle / name).relative_to(source).as_posix() for name in
+                 ("events.jsonl", "outputs/align_turns.jsonl", "outputs/align_thermal.jsonl")]
+        for rel in rels:
+            with self.subTest(rel=rel):
+                d = tmpdir(self)
+                sdir = d / "dev-01-s02"
+                shutil.copytree(source, sdir)
+                p = sdir / rel
+                p.write_bytes(p.read_bytes() + b" ")
+                rc, err, run = self.stage2(sdir, d / "fit.json")
+                self.assertEqual(rc, 2, err)
+                self.assertIn(f"custody: dev-01-s02/{rel}", err)
+                energy = [(p, who) for p, who in run["frames"] if p.endswith("power_trace.csv")
+                          or "/hazards/meter/" in p.replace(os.sep, "/")]
+                self.assertFalse(energy, energy)
+                from joulewise.cadence_looks import step3_roster as s3
+                with unittest.mock.patch.object(s3, "entries_from_stage1", side_effect=AssertionError("late read")):
+                    self.assertTrue(s3.custody_problems(self.s1, None,
+                                    R.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])))
+
+    def test_native_pm_state_swap_refuses_without_hashing_energy_values(self):
+        d = tmpdir(self)
+        sdir = d / "dev-01-s02"
+        shutil.copytree(self.c.root / "dev-01-s02", sdir)
+        b = bundle_of(sdir, self.L["leg_key"])
+        p = b / "raw/powermetrics.plist"
+        raw = p.read_bytes()
+        raw, hits = re.subn(rb"(<key>thermal_pressure</key>\s*<string>)[^<]*(</string>)",
+                            rb"\g<1>synthetic-changed-state\g<2>", raw)
+        self.assertGreater(hits, 0)
+        p.write_bytes(raw)
+        rc, err, run = self.stage2(sdir, d / "fit.json")
+        self.assertEqual(rc, 2, err)
+        self.assertIn("native PM time/state projection", err)
+        from joulewise.cadence_looks import step3_roster as s3
+        self.assertTrue(s3.custody_problems(self.s1, None,
+                        R.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])))
 
     def test_step3_refuses_a_changed_leg_record_and_records_its_custody(self):
         d = tmpdir(self)
@@ -1028,7 +1073,7 @@ class SupersededStage1(unittest.TestCase):
         out = self.d / f"s1-{len(list(self.d.iterdir()))}.json"
         r = self.mr.py(self.mini, "scripts/cadence_look_run.py", "stage1", "--roster", self.c.paths["roster.json"],
                        "--custody", self.c.root, "--rules-3-4", self.c.paths["rules_3_4.json"], "--out", out,
-                       "--manifest", self.mini / self.mr.MANIFEST, *extra)
+                       "--manifest", self.mini / self.mr.MANIFEST, "--write-input", out.with_suffix(".input.json"), *extra)
         return r, out
 
     def stage2(self, s1p):
@@ -1104,7 +1149,8 @@ class SupersededStage1(unittest.TestCase):
         r, out = self.stage1("--ruled-exclusion", f"{leg}=sidecar_coverage=RL-999")      # the CLI, mismatched
         self.assertEqual(r.returncode, 2)
         self.assertFalse(out.exists())
-        r, out = self.stage1("--ruled-exclusion", f"{leg}=km003c_clean=RL-999")
+        r, out = self.stage1("--ruled-exclusion", f"{leg}=km003c_clean=RL-999",
+                             "--superseded-stage1", s1p, "--superseded-input", s1p.with_suffix(".input.json"))
         self.assertEqual(r.returncode, 0, r.stderr)
         s2 = rj(out)
         got = next(x for x in s2["legs"] if x["leg_key"] == leg)
@@ -1116,11 +1162,91 @@ class SupersededStage1(unittest.TestCase):
         M.require_stage1_committed(self.mini, "lm-interim-01", h2, stage1_doc=s2)       # the rerun is committed
         with self.assertRaises(M.ManifestError) as ctx:                                 # a file without it is not
             M.require_stage1_committed(self.mini, "lm-interim-01", h2, stage1_doc=rj(s1p))
-        self.assertTrue(any("are not the ones the row's last superseded entry names" in p
+        self.assertTrue(any("are not the ones the row's superseded entries names" in p
                             for p in ctx.exception.problems))
         with self.assertRaises(M.ManifestError) as ctx:                  # a row still naming a stage-1 hash
             req(rx)
         self.assertTrue(any("still names a stage-1 hash" in p for p in ctx.exception.problems))
+
+    def rerun_setup(self):
+        r, old = self.stage1()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        h = R.sha256_file(old)
+        self.set_row(status="stage1_committed", stage1_sha256=h)
+        leg = next(x["leg_key"] for x in rj(old)["legs"] if x["in_energy_fit"])
+        self.set_row(status="committed", stage1_sha256=None,
+                     stage1_superseded=[self.entry(h, [(leg, "km003c_clean")])])
+        return old, leg
+
+    def test_a_rerun_authenticates_both_kept_files_and_unchanged_source(self):
+        old, leg = self.rerun_setup()
+        args = ("--ruled-exclusion", f"{leg}=km003c_clean=RL-999")
+        r, out = self.stage1(*args)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("needs --superseded-stage1 and --superseded-input", r.stderr)
+        old_input = old.with_suffix(".input.json")
+        bad = self.d / "bad-old.json"
+        bad.write_bytes(old.read_bytes() + b" ")
+        r, out = self.stage1(*args, "--superseded-stage1", bad, "--superseded-input", old_input)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("not the superseded commitment", r.stderr)
+        bad.write_bytes(old_input.read_bytes() + b" ")
+        r, out = self.stage1(*args, "--superseded-stage1", old, "--superseded-input", bad)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("not the superseded stage-1 input", r.stderr)
+        changed = self.d / "changed-span"
+        shutil.copytree(self.c.root / "dev-01-s02", changed)
+        ldir = changed / "legs/L001"
+        rec = rj(ldir / "leg_record.json")
+        p = ldir / "runtime" / rec["result"]["bundle"] / "outputs/align_thermal.jsonl"
+        readings = [json.loads(line) for line in p.read_text().splitlines()]
+        for reading in readings:
+            if reading.get("kind") == "reading":
+                reading["values"]["sensors"]["Tf08"] += 8.0
+        p.write_text("".join(json.dumps(reading) + "\n" for reading in readings))
+        r, out = self.stage1(*args, "--superseded-stage1", old, "--superseded-input", old_input,
+                             "--span-dir", f"dev-01-s02={changed}")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("changes the superseded level-R source", r.stderr)
+        self.assertFalse(out.exists())
+
+    def test_rerun_preserves_manifest_and_refuses_any_completed_history(self):
+        old, leg = self.rerun_setup()
+        rx = {leg: ["km003c_clean", "RL-999"]}
+        req = lambda: M.require_inputs_committed(self.mini, "lm-interim-01", self.msha,
+                    roster_sha256=self.roster_sha, verdicts_sha256=self.verdicts_sha, ruled_exclusions=rx)
+        self.set_row(sha256="9" * 64)
+        with self.assertRaises(M.ManifestError) as ctx:
+            M.require_inputs_committed(self.mini, "lm-interim-01", "9" * 64,
+                    roster_sha256=self.roster_sha, verdicts_sha256=self.verdicts_sha, ruled_exclusions=rx)
+        self.assertTrue(any("manifest unchanged" in p for p in ctx.exception.problems))
+        self.set_row(sha256=self.msha, status="run", stage1_sha256=R.sha256_file(old), output_sha256="a" * 64)
+        self.set_row(status="committed", stage1_sha256=None, output_sha256=None)
+        with self.assertRaises(M.ManifestError) as ctx:
+            req()
+        self.assertTrue(any("after this look has run" in p for p in ctx.exception.problems))
+
+    def test_hash_correction_keeps_cumulative_exclusions(self):
+        old, leg = self.rerun_setup()
+        r, out = self.stage1("--ruled-exclusion", f"{leg}=km003c_clean=RL-999",
+                            "--superseded-stage1", old, "--superseded-input", old.with_suffix(".input.json"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        h = R.sha256_file(out)
+        typo = h[:-1] + ("0" if h[-1] != "0" else "1")
+        entries = [self.entry(R.sha256_file(old), [(leg, "km003c_clean")]), self.entry(typo)]
+        self.set_row(status="stage1_committed", stage1_sha256=typo)
+        self.set_row(stage1_sha256=h, stage1_superseded=entries)
+        M.require_stage1_committed(self.mini, "lm-interim-01", h, stage1_doc=rj(out))
+
+    def test_shallow_history_refuses_and_replacements_do_not_hide_commitments(self):
+        old, leg = self.rerun_setup()
+        self.mr.git(self.mini, "replace", "--graft", "HEAD")
+        # Without GIT_NO_REPLACE_OBJECTS, this graft hides the original commitment.
+        self.assertTrue(M.stage1_history(self.mini, "lm-interim-01", "HEAD"))
+        shallow = self.mini / ".git/shallow"
+        shallow.write_text(self.mr.git(self.mini, "rev-parse", "HEAD").stdout)
+        with self.assertRaisesRegex(M.ManifestError, "non-shallow"):
+            M.committed_ledger(self.mini)
 
     def test_history_on_another_remote_branch_is_seen(self):
         """Mythos round-5 N5: a stage-1 commitment published only on a second remote-tracking branch."""

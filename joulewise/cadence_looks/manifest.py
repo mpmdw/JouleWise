@@ -266,7 +266,7 @@ EVIDENCE = {"docs/process/cadence/looks/evidence/2026-11-14-mythos-passrate-reru
 # RL-173 E (Q11): the 8 % cell's two rows at 10,000 repetitions, synthetic (0.0280 and 0.0231, both at or under .035:
 # 0.08). The drift decision cites it when the threshold is the ruled 0.08.
 Q11_EVIDENCE = {"path": "docs/process/cadence/looks/evidence/2026-11-15-q11-drift-10k-REPORT.md",
-                "sha256": "8a0b15223c405e222b96be26a35d4faba42cdd0fe7253684e73c4d5bac92b35f"}
+                "sha256": "b175a786c5f9ec422e5fab603795d48f0238dea8dac1001e3fc41b2fb292edad"}
 # RL-166 Q8; ids as the stage-1 output (level D, docs/process/cadence_look_fit_interface.md section 3.3) names them
 STAGE1_TRIPWIRES = {"dev_included_below_45": 45, "days_below_4": 4, "cell_below_10": 10,     # days: RL-166b B-7
                     "start_reading_invalid_over_10pct": 0.10, "hp01_below_9": 9}
@@ -1259,6 +1259,7 @@ def _git(repo, *args):
     GIT_INDEX_FILE, GIT_OBJECT_DIRECTORY, GIT_CEILING_DIRECTORIES, ...) is dropped, so none can point the gate at
     another repository (Mythos round-3 N5)."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_NO_REPLACE_OBJECTS"] = "1"
     r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=60, env=env)
     return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace").strip()
 
@@ -1316,6 +1317,9 @@ def committed_ledger(repo, *, ledger_ref=None):
     rc, top, err = _git(repo, "rev-parse", "--show-toplevel")
     if rc != 0 or Path(top.decode().strip()).resolve() != repo:
         raise ManifestError([f"{repo} is not the top of a git worktree: the ledger must be committed ({err[:120]})"])
+    rc, shallow, _ = _git(repo, "rev-parse", "--is-shallow-repository")
+    if rc != 0 or shallow.strip() != b"false":
+        raise ManifestError(["the committed-ledger gate requires complete, non-shallow Git history"])
     rc, head, _ = _git(repo, "rev-parse", "HEAD")
     head = head.decode().strip()
     rc, raw, _ = _git(repo, "show", f"{head}:{LOOK_LEDGER_PATH}")
@@ -1340,25 +1344,29 @@ def committed_ledger(repo, *, ledger_ref=None):
     return head, ref, ledger
 
 
-def stage1_history(repo, look_id, head):
-    """The distinct (stage1_sha256, roster_sha256, verdicts_sha256) the look's LOOKS.json row has named, in every
-    commit that touched the ledger and is reachable from ``head`` or from ANY remote-tracking ref, newest first (Mythos
-    round-4 N3; round-5 N5: a second line of history, published under another remote branch, is seen too)."""
+def _ledger_history_rows(repo, look_id, head):
+    """Every preserved row of this look on HEAD or any remote-tracking history, newest first."""
     rc, out, err = _git(repo, "log", "--full-history", "--format=%H", head, "--remotes", "--", LOOK_LEDGER_PATH)
     if rc != 0:
         raise ManifestError([f"the history of {LOOK_LEDGER_PATH} cannot be read ({err[:120]})"])
-    seen = []
+    rows_out = []
     for commit in out.decode().split():
         rc, raw, _ = _git(repo, "show", f"{commit}:{LOOK_LEDGER_PATH}")
         try:
             rows = json.loads(raw).get("looks") if rc == 0 else None
         except ValueError:
             rows = None
-        for row in rows if isinstance(rows, list) else []:
-            if isinstance(row, dict) and row.get("look_id") == look_id and row.get("stage1_sha256"):
-                key = (row.get("stage1_sha256"), row.get("roster_sha256"), row.get("verdicts_sha256"))
-                if key not in seen:
-                    seen.append(key)
+        if isinstance(rows, list):
+            rows_out.extend(row for row in rows if isinstance(row, dict) and row.get("look_id") == look_id)
+    return rows_out
+
+
+def stage1_history(repo, look_id, head):
+    """The distinct stage-1/roster/verdict commitments on HEAD and every remote-tracking history."""
+    seen = []
+    for row in _ledger_history_rows(repo, look_id, head):
+        if row.get("stage1_sha256") and _triple(row) not in seen:
+            seen.append(_triple(row))
     return seen
 
 
@@ -1382,12 +1390,12 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
                             "(RL-166 Q8; RL-173 E.1 item 4)")
     if current in superseded:
         problems.append(f"LOOKS.json {look_id}: the current stage-1 commitment is listed as superseded")
-    last = (row.get("stage1_superseded") or [None])[-1]
-    want = sorted((x["leg_key"], x["rule"]) for x in (last or {}).get("ruled_exclusions") or [])
+    want = sorted({(x["leg_key"], x["rule"]) for e in row.get("stage1_superseded") or []
+                   for x in e.get("ruled_exclusions") or []})
     got = sorted((leg["leg_key"], leg["ruled_exclusion"]["rule"]) for leg in (stage1_doc or {}).get("legs") or []
                  if isinstance(leg, dict) and leg.get("ruled_exclusion"))
     if got != want:
-        problems.append(f"the stage-1 file's ruled exclusions {got} are not the ones the row's last superseded entry "
+        problems.append(f"the stage-1 file's ruled exclusions {got} are not the ones the row's superseded entries "
                         f"names {want}")
     if row.get("status") not in STAGE1_COMMITTED_STATUSES:
         problems.append(f"LOOKS.json {look_id} is {row.get('status')!r}: stage 1 is not committed")
@@ -1425,6 +1433,11 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
     given_rx = sorted((k, v[0]) for k, v in (ruled_exclusions or {}).items())
     entries = row.get("stage1_superseded") or []
     if history:
+        prior_rows = _ledger_history_rows(repo, look_id, head)
+        if any(r.get("status") in ("run", "frozen") or r.get("output_sha256") for r in prior_rows):
+            problems.append("stage 1 cannot run once more after this look has run, frozen, or named an output hash")
+        if any(r.get("stage1_sha256") and r.get("sha256") != manifest_sha256 for r in prior_rows):
+            problems.append("a stage 1 run once more takes the replaced commitment's manifest unchanged")
         # Mythos round-4 N3: stage 1 runs once. RL-173 E.1 item 4: once more only when the research lead has excluded
         # a leg by name after a stage-2 refusal: every earlier commitment is listed as superseded by a ruling, the
         # last entry names exactly the exclusions this run applies (with every earlier entry's), and the roster and
@@ -1466,6 +1479,101 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
     if problems:
         raise ManifestError(problems)
     return row
+
+
+def nonenergy_files(sdir):
+    """Operational sources reused by the look, with paths relative to a span and byte hashes.
+    Optional files are included when present; adding or removing one changes the map. No energy-bearing
+    telemetry, trace or meter file is opened here; those retain their dedicated time projections.
+    """
+    sdir = Path(sdir)
+    receipt = json.loads((sdir / "runner_receipt.json").read_text(encoding="utf-8"))
+    paths = {"runner_receipt.json", "soak/soak_reference.json"}
+    for lid in receipt["roster"]:
+        base = f"legs/{lid}"
+        paths.update((f"{base}/leg_record.json", f"{base}/leg_summary.json"))
+        recpath = sdir / base / "leg_record.json"
+        if recpath.is_file():
+            rec = json.loads(recpath.read_text(encoding="utf-8"))
+            bundle = (rec.get("result") or {}).get("bundle")
+            if bundle and (rec.get("spec") or {}).get("leg_type") != "T":
+                b = f"{base}/runtime/{bundle}"
+                paths.update(f"{b}/{n}" for n in ("events.jsonl", "outputs/align_turns.jsonl",
+                                                  "outputs/align_thermal.jsonl"))
+    return {rel: sha256_file(sdir / rel) for rel in sorted(paths) if (sdir / rel).is_file()}
+
+
+def native_pm_files(sdir):
+    """Blind digests of the rich/plist timing and native-state projection reused by step 3.
+    Each byte stream is scanned by pattern; no rich JSON line or plist frame is decoded.
+    A partial final plist frame remains outside the row pairing, as in the existing native-state reader.
+    """
+    sdir = Path(sdir)
+    receipt = json.loads((sdir / "runner_receipt.json").read_text(encoding="utf-8"))
+    out = {}
+    ts = re.compile(rb'"timestamp_s":\s*(-?[0-9][0-9.eE+-]*)')
+    el = re.compile(rb'"elapsed_ns":\s*([0-9]+)')
+    pel = re.compile(rb"<key>elapsed_ns</key>\s*<integer>([0-9]+)</integer>")
+    tp = re.compile(rb"<key>thermal_pressure</key>\s*<string>([^<]*)</string>")
+    for lid in receipt["roster"]:
+        p = sdir / "legs" / lid / "leg_record.json"
+        if not p.is_file():
+            continue
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        name = (rec.get("result") or {}).get("bundle")
+        if not name or (rec.get("spec") or {}).get("leg_type") == "T":
+            continue
+        rel = f"legs/{lid}/runtime/{name}"
+        b = sdir / rel
+        # Missing pairs are represented by absence and differ from any previously recorded projection.
+        if not (b / "rich_telemetry.jsonl").is_file() or not (b / "raw/powermetrics.plist").is_file():
+            continue
+        rows = []
+        with (b / "rich_telemetry.jsonl").open("rb") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                t, e = ts.search(line), el.search(line)
+                # Missing fields remain part of the blind projection. The existing turn reader decides
+                # whether that leg has a usable turn; an already excluded A must not become a look refusal.
+                rows.append([t.group(1).decode("ascii") if t else None,
+                             e.group(1).decode("ascii") if e else None])
+        frames = [fr for fr in (b / "raw/powermetrics.plist").read_bytes().split(b"\0") if fr.strip()]
+        states = []
+        for fr in frames[:len(rows)]:
+            e, state = pel.search(fr), tp.search(fr)
+            states.append([e.group(1).decode("ascii") if e else None, state.group(1).hex() if state else None])
+        data = json.dumps([rows, states, len(frames)], sort_keys=True, separators=(",", ":"), allow_nan=False)
+        out[rel] = hashlib.sha256(data.encode()).hexdigest()
+    return out
+
+
+def nonenergy_problems(stage1, sdir_of, span_ids):
+    spans = {sp["span_id"]: sp for sp in stage1["roster"]["spans"]}
+    out = []
+    for sid in sorted(set(span_ids)):
+        files = ((spans.get(sid) or {}).get("custody") or {}).get("files_sha256")
+        if files is None:
+            if stage1.get("synthetic") is not True:
+                out.append(f"{sid}: the stage-1 file carries no custody record")
+            continue
+        try:
+            got = nonenergy_files(sdir_of(sid))
+        except (OSError, ValueError, TypeError, KeyError):
+            out.append(f"custody: {sid}: operational source unreadable; no values decoded")
+            continue
+        for rel in sorted(set(files) | set(got)):
+            if files.get(rel) != got.get(rel):
+                out.append(f"custody: {sid}/{rel} is not the file stage 1 read")
+        try:
+            got_pm = native_pm_files(sdir_of(sid))
+        except (OSError, ValueError, TypeError, KeyError):
+            out.append(f"custody: {sid}: native PM time/state projection unreadable")
+            continue
+        want_pm = (spans[sid].get("custody") or {}).get("native_pm_sha256")
+        if want_pm != got_pm:
+            out.append(f"custody: {sid}: native PM time/state projection is not the one stage 1 read")
+    return out
 
 
 def loaded_repo_files(repo):

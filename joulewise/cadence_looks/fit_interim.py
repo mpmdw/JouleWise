@@ -85,7 +85,7 @@ _LEG_KEYS = {"leg_key", "span_id", "leg_id", "leg_type", "cell_prompt_tokens", "
              "trace_holes", "ruled_exclusion"}
 TRACE_MAX_GAP_S = 2.0               # RL-173 E.1: the gap bound on both channels, and the clock-fit excess bound
 _SOAK_KEYS = {"field_present", "soak_attempts", "soak_steps"}
-_CUSTODY_KEYS = {"files_sha256", "meter_time_sha256", "meter_streams", "meter_unreadable"}
+_CUSTODY_KEYS = {"native_pm_sha256", "files_sha256", "meter_time_sha256", "meter_streams", "meter_unreadable"}
 _STREAM_KEYS = {"name", "present", "aligned", "samples", "duplicates", "clock_fit_excess_s", "clock_rate_ppm",
                 "fit_error"}
 _GPU_HOLE_KEYS = {"max_gap_s", "rows_sha256", "excluded", "reason"}
@@ -215,6 +215,9 @@ def _validate_span_extras(s, w, synthetic):
     if not isinstance(c["files_sha256"], dict) or any(not isinstance(v, str) or not _HEX64.fullmatch(v)
                                                       for v in c["files_sha256"].values()):
         raise LookInputError(f"{w}.custody.files_sha256: path -> sha256")
+    if not isinstance(c["native_pm_sha256"], dict) or any(not isinstance(v, str) or not _HEX64.fullmatch(v)
+                                                         for v in c["native_pm_sha256"].values()):
+        raise LookInputError(f"{w}.custody.native_pm_sha256: bundle path -> blinded digest")
     if not (c["meter_time_sha256"] is None or (isinstance(c["meter_time_sha256"], str)
                                               and _HEX64.fullmatch(c["meter_time_sha256"]))):
         raise LookInputError(f"{w}.custody.meter_time_sha256")
@@ -1241,8 +1244,9 @@ def _channel(legs, E, ch, model, active, include=None):
 
     def errors(pred_leg, pred_hot):
         meas_leg = {k: float(sum(seg_y(by_key[k]))) for k in keys_all}
-        if any(v <= 0 for v in meas_leg.values()):
-            raise LookInputError("stage 2: a leg's measured energy is not positive (R-18)")
+        for k, v in meas_leg.items():
+            if v <= 0:
+                raise LookInputError(f"stage 2: {k}: {ch}: measured energy is not positive (R-18)")
         meas_hot = {}
         for k in keys_all:
             L = by_key[k]
@@ -1258,7 +1262,8 @@ def _channel(legs, E, ch, model, active, include=None):
             if hk:
                 pn, mn = sum(pred_hot[k] for k in hk), sum(meas_hot[k] for k in hk)
                 if mn <= 0:
-                    raise LookInputError("stage 2: a day's measured hot energy is not positive (R-18)")
+                    raise LookInputError(f"stage 2: {ch}: day {D}: measured hot energy is not positive (R-18); "
+                                         f"legs: {', '.join(hk)}")
                 hot_day[D] = (pn - mn) / mn
                 num_h += pn - mn                         # RL-167 row 12: pooled over every hot block, every day
                 den_h += mn
@@ -1270,8 +1275,9 @@ def _channel(legs, E, ch, model, active, include=None):
             den_l += mn
         mx = max(abs(hot_day[D]) for D in counted) if counted else None
         # P-2: per counted day, legs with a hot block, hot blocks and s/sqrt(n); s pooled within counted days
-        if any(v is not None and v <= 0 for v in meas_hot.values()):
-            raise LookInputError("stage 2: a leg's measured hot-stretch energy is not positive (R-18)")
+        for k, v in meas_hot.items():
+            if v is not None and v <= 0:
+                raise LookInputError(f"stage 2: {k}: {ch}: measured hot-stretch energy is not positive (R-18)")
         rh = {k: (pred_hot[k] - meas_hot[k]) / meas_hot[k] for k in keys_all if meas_hot[k] is not None}
         ss = dfree = 0.0
         for D in counted:
@@ -1326,7 +1332,7 @@ def _channel(legs, E, ch, model, active, include=None):
                 if 0 <= j < len(blocks):
                     i = blocks[j]
                     if not y[i] > 0:                             # RL-166c row 5, R-18
-                        raise LookInputError("stage 2: a block entering P-3 has measured energy at or below zero")
+                        raise LookInputError(f"stage 2: {k}: {ch}: a block entering P-3 has measured energy at or below zero")
                     acc[off].append((segs_pred[k][i] - y[i]) / y[i])
         tab = {str(off): {"n": len(v), "mean": (sum(v) / len(v)) if v else None,
                           "rms": math.sqrt(sum(x * x for x in v) / len(v)) if v else None} for off, v in acc.items()}
@@ -1490,6 +1496,16 @@ def _plain(obj):
     return json.loads(json.dumps(obj, allow_nan=False))
 
 
+def fit_reproduction(fit_out):
+    """Stable freeze-2 source: retain custody file identities; omit ledger position and local locator paths."""
+    doc = _plain(fit_out)
+    doc.pop("ledger_gate", None)
+    if isinstance(doc.get("custody"), dict):
+        doc["custody"].pop("root", None)
+        doc["custody"].pop("span_dirs", None)
+    return doc
+
+
 def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256):
     """Freeze 2's coefficient file (RL-173 §E; manifest `freeze2`; interface §4.2). Pure: it reads no energy and no
     file; it takes stage 1's output and the fit's output in memory and returns the document. Its hash (sha256 of
@@ -1519,12 +1535,14 @@ def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256):
         channels[ch] = {"columns": list(c["columns"]), "coefficients": dict(c["coefficients"]),
                         "covariance": c["covariance"], "hot_rms_over_legs": c["lodo"]["hot_rms_over_legs"],
                         "fold_coefficients": c["fold_coefficients"], "model_sha256": c["model_sha256"]}
-        if list(channels[ch]["coefficients"]) != channels[ch]["columns"]:
-            raise LookInputError(f"coefficients: channels.{ch}: coefficients are not keyed by its columns in order")
+        cols = channels[ch]["columns"]
+        if len(set(cols)) != len(cols) or set(channels[ch]["coefficients"]) != set(cols):
+            raise LookInputError(f"coefficients: channels.{ch}: coefficients must match unique columns")
+        channels[ch]["coefficients"] = {col: channels[ch]["coefficients"][col] for col in cols}
     doc = {
         "schema": COEFFICIENTS_SCHEMA, "look_id": LOOK_ID, "synthetic": stage1_out["synthetic"],
         "manifest_sha256": manifest_sha256, "stage1_sha256": stage1_sha256,
-        "fit_sha256": hashlib.sha256(dump(fit_out)).hexdigest(),
+        "fit_sha256": hashlib.sha256(dump(fit_reproduction(fit_out))).hexdigest(),
         "code_sha256": dict(fit_out["code_sha256"]), "numpy_version": fit_out["numpy_version"],
         "block_tokens": BLOCK, "prefix": dict(PREFIX),
         "rates": {"r_p": stage1_out["rates"]["r_p"], "r_d": stage1_out["rates"]["r_d"]},

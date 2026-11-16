@@ -412,10 +412,33 @@ items. The fit side's map is `docs/process/cadence_look_fit_interface.md` §7 "R
 | RL-173 E: the coefficient writer | `freeze2.schema` pins `lm-interim-01.coefficients.schema.json`; stage 2's `--coefficients-out` writes the file through `fit_interim.write_coefficients` and checks it against that schema | `test_predict` |
 | Mythos r5 N6: the custody stage 2 reads is not bound to stage 1's | Level R carries per span the sha256 of the receipt and each leg record and a digest of the meter time fields, and per leg the digest of the trace's row stamps; stage 2 checks them before any energy opens, and records the files it read by sha256. Step 3 checks the leg records and records its files; `assemble` refuses unless the fit and step 3 read one root and the same GPU traces | the custody-binding tests in `test_look_run` and `test_look_manifest` |
 | Mythos r5 N7: stage 1 never checks its own file | Stage 1 runs `manifest.stage1_problems` on its output before writing it; the stage-1 schema's block-id pattern is the validator's | `test_look_run` self-check test |
-| Mythos r5 N8: a `.zst` custody file | The reader refuses a `.zst` sibling of a stream or trace: the look reads a decompressed custody copy that matches its marker | `test_time_fields` |
+| Mythos r5 N8: a `.zst` custody file | The reader refuses a `.zst` sibling of a stream or trace: the look reads a decompressed custody copy; seal/marker verification is the lead's upstream handoff, not this CLI's check | `test_time_fields` |
 | Sol r5 NEW-2: a nested `k` decides a line's kind | The reader's lexer takes the TOP-LEVEL `k` and converts only whitelisted members; no line of a stream is given to `json.loads` | `test_time_fields`, inclusion's spy tests |
 | Sol r5 NEW-3: the ledger gate checked after energy | `manifest.stage1_problems` checks the gate against the run mode, so stage 2 and step 3 refuse before energy | `test_look_manifest` gate case |
 | Mythos r5 N9, N10 | Tests on private temp directories; the six surviving mutants killed; the interface page and this page corrected | the mutant harness |
+
+## 7f. The cold seats on `413697d4b` (round 6), builder round 7
+
+Mythos: ADMIT WITH FIXES (five MED, six LOW). Sol: REFUSE (five MED, two LOW). No HIGH.
+
+| Finding | Disposition |
+|---|---|
+| Mythos N1 / Sol NEW-4, NEW-5 | Census fixed at 66fa7c452; required NumPy CI and FreezeCommit now include predict and round-6 regressions |
+| Mythos N2 / Sol NEW-3 | Closed evidence and freeze-2 schema shapes added; dependency-free actual-manifest checks; interim GPU backstop schema aligned |
+| Mythos N3 | Research-lead ruling required: RL-173's 2 s excess line is retained; fitted excess can hide a counter step up to about 3.8 s in the synthetic review |
+| Mythos N4 / Sol NEW-1 | Reruns authenticate kept D and R, compare the unchanged source projection, bind historical manifest hashes, and refuse after run/frozen/output history |
+| Sol NEW-2 | All reused operational sources bound before later readers, recorded by both stages and compared at assembly; native PM timing/state is bound by a blinded projection, and energy projections remain blinded |
+| Mythos N5 / Sol NEW-7 | Timestamp validation and named leg/stream field-only refusals; unknown support is stated without inventing a gap |
+| Mythos N6 | Shallow history refuses; gate Git calls ignore replacement objects |
+| Mythos N7 | Empty-exclusion corrections retain cumulative earlier exclusions |
+| Mythos N8 | Non-admitting in-process reproduction from authenticated kept R documented in interface §7 |
+| Mythos N9 | Freeze-2 source hash omits ledger position and local custody locators; retains and compares custody file identities; seal verification boundary stated |
+| Mythos N10 | Full SHA-256 identities for all five Q11 scripts and both result files, retained at the original scratch location; no abbreviated-only identity remains |
+| Sol NEW-6 | Canonical JSON round-trip accepts coefficient maps independently of insertion order; unique columns required |
+| Mythos N11 | Stale custody/help corrected; ruled soak kind supported; named compressed-trace refusal; behavioral regressions and mutants expanded. Real-recording tests excluded by blinding. Reader/provenance policy questions listed for the research lead |
+
+The detailed code map and non-admitting reproduction procedure are in the fit interface §7, “Round 6 fixes”.
+Fresh validation results and gate limitations are recorded in the builder run report and PR #795 findings table.
 
 ## 8. Still owed
 

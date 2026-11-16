@@ -432,7 +432,8 @@ def support(t, a, b):
 # ============================================================================================ power_trace.csv
 def gpu_rows(bundle):
     """[(interval_start_s, interval_end_s)] of the ``gpu_power`` / ``powermetrics`` rows, sorted, as step 3's
-    ``load_gpu_trace`` selects them; ``power_w`` is never converted. Raises TimeFieldError where step 3 would fail."""
+    ``load_gpu_trace`` selects them; all three permitted time stamps are validated. ``power_w`` is never
+    converted. Raises TimeFieldError where step 3 would fail."""
     path = Path(bundle) / "power_trace.csv"
     if Path(str(path) + ".zst").exists():
         raise CompressedCustody(f"{path.name}.zst is desk-compressed; the look reads a decompressed custody copy")
@@ -447,6 +448,12 @@ def gpu_rows(bundle):
                     raise TimeFieldError("power_trace.csv: a gpu_power row without numeric interval stamps") from None
                 if not (math.isfinite(s) and math.isfinite(e)):
                     raise TimeFieldError("power_trace.csv: a gpu_power row with a non-finite interval stamp")
+                try:
+                    ts = float(row["timestamp_s"])
+                except (KeyError, TypeError, ValueError):
+                    raise TimeFieldError("power_trace.csv: a gpu_power row without numeric timestamp_s") from None
+                if not math.isfinite(ts):
+                    raise TimeFieldError("power_trace.csv: a gpu_power row with non-finite timestamp_s")
                 rows.append((s, e))
             del row
     rows.sort()
