@@ -68,8 +68,9 @@ ARMS = "refs/heads/span-watch/"
 ARM_SCHEMA = "joulewise.mbp_watch_arm.v1"
 CLOSE_SCHEMA = "joulewise.mbp_watch_close.v1"
 CLOSE_STATUSES = ("CLOSED_OK", "STOPPED", "REFUSED", "FAULT", "STRANDED", "CLOSE_UNPROVEN")
-EVENT_CODES = ("SPAN_SILENT", "SPAN_STOP", "RESULT_UNREADABLE")
-DETAILS = set(CLOSE_STATUSES) | {"NO_RESULTS_REF", "ARM_RECORD", "CLOSE_RECORD", "LOG_REWRITTEN"}
+EVENT_CODES = ("SPAN_SILENT", "SPAN_STOP", "RESULT_UNREADABLE", "WATCHER_GAP")
+DETAILS = set(CLOSE_STATUSES) | {"NO_RESULTS_REF", "ARM_RECORD", "CLOSE_RECORD", "LOG_REWRITTEN", "NO_RECENT_RUN"}
+GAP_S = 2 * 3600  # a watcher run with no successful run in the 2 h before it follows an outage
 CLOCK_SLACK_S = 300
 PROTECTED = ("span-watch/log",)  # the exact branch must carry rules blocking deletion and non-fast-forward
 REQUIRED_RULES = {"deletion", "non_fast_forward"}
@@ -475,12 +476,15 @@ def events(git, now, grace_s, api=None):
             if closed == "invalid":
                 found.append(event("RESULT_UNREADABLE", "CLOSE_RECORD", plan, LOG_REF, sha, observed=now))
             else:
-                if api is None or now - (arm_times[1] + grace_s) >= ACTIVITY_WINDOW_S:
-                    # Adjudicated: this close was inside the activity window for 80 days of watcher runs
-                    # (and no arm passes C.4's read while the watcher does not run). Its own time decides.
+                if sha in published and published[sha][1]:
+                    pushed = published[sha][0]  # GitHub's own push time for this record: always honoured
+                elif api is None or now - (arm_times[1] + grace_s) >= ACTIVITY_WINDOW_S:
+                    # Older than the activity window. Every earlier watcher run judged it with exact evidence;
+                    # a run after a gap in the watcher's runs files WATCHER_GAP (watch_gap), so a close first
+                    # seen after an outage is never accepted silently. Its own time decides here.
                     pushed = closed[1]
                 elif sha in published:
-                    pushed = published[sha][0]  # exact, or a later push as an upper bound
+                    pushed = published[sha][0]  # a later push: an upper bound
                 else:
                     pushed = now  # no server evidence yet: not visible before this observation
                 visible = max(closed[1], pushed)
@@ -600,12 +604,34 @@ def deliver(api, found, owner, run_url, dry_run=False):
     return opened
 
 
+def watch_gap(api, now, run_id):
+    """One alarm per outage: when no other successful run of this workflow started in the GAP_S before now,
+    this run follows a gap, and anything the log shows from that time was never judged as it happened. The
+    lead reviews the log and closes the issue; the arm's read refuses until then."""
+    answer = api.call("GET", f"/actions/workflows/{WORKFLOW}/runs",
+                      {"branch": "main", "status": "success", "per_page": 10})
+    if not isinstance(answer, dict) or not isinstance(answer.get("workflow_runs"), list):
+        raise WatchError("API_SHAPE_RUNS")
+    starts = []
+    for run in answer["workflow_runs"]:
+        if not isinstance(run, dict) or type(run.get("id")) is not int or parse_time(run.get("run_started_at")) is None:
+            raise WatchError("API_SHAPE_RUNS")
+        if run["id"] != run_id:
+            starts.append((parse_time(run["run_started_at"]), run["id"]))
+    previous = max(starts) if starts else None
+    if previous is not None and now - previous[0] <= GAP_S:
+        return []
+    marker = hashlib.sha256(f"watcher-gap:{previous[1] if previous else 'none'}".encode()).hexdigest()
+    times = {"observed": now} if previous is None else {"t0": previous[0], "observed": now}
+    return [event("WATCHER_GAP", "NO_RECENT_RUN", "watcher", LOG_REF, marker, **times)]
+
+
 def watch(args, git=None, api=None, now=None):
     now = time.time() if now is None else now
     git = git or Git()
     api = api or Api(args.repo, os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
     check_rulesets(api)
-    found = events(git, now, args.grace_s, api)
+    found = watch_gap(api, now, args.run_id) + events(git, now, args.grace_s, api)
     opened = deliver(api, found, args.owner, args.run_url, args.dry_run)
     print(f"MBP_WATCH observed={iso(now)} events={len(found)} opened={len(opened)}")
     for name in opened:
@@ -765,6 +791,7 @@ def parser():
     w.add_argument("--owner", required=True)
     w.add_argument("--grace-s", type=_finite(0), default=1200.0)
     w.add_argument("--run-url")
+    w.add_argument("--run-id", type=int, help="this run's id (GITHUB_RUN_ID), left out of the gap check")
     w.add_argument("--dry-run", action="store_true")
     r = sub.add_parser("read")
     r.add_argument("--repo", required=True)

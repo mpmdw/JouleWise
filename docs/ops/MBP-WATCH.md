@@ -57,8 +57,9 @@ Every 10 minutes (cron `3-59/10`, off the hour's peak; GitHub does not guarantee
 
 | Code | When | Detail |
 |---|---|---|
-| `SPAN_SILENT` | an arm with no close visible by its deadline + 1,200 s (C.1). "Visible" is the later of the close's own time and its **server-side push time**, read from GitHub's repository activity API (`GET /repos/mpmdw/JouleWise/activity?ref=refs/heads/span-watch/log&activity_type=push&time_period=quarter`, all pages): each record is pushed alone, so its own push row is its publication time (fractional seconds kept); without one, a later record's push is only an upper bound. So a close that finished late, was pushed late, or arrived between two delayed polls is still filed. A close the API does not show yet counts as visible only at this observation (conservative). A close whose arm limit is more than 80 days old has been adjudicated: it sat inside the activity window for 80 days of watcher runs, and no arm passes the C.4 read while the watcher is not running, so its own time decides | `NO_RESULTS_REF` |
+| `SPAN_SILENT` | an arm with no close visible by its deadline + 1,200 s (C.1). "Visible" is the later of the close's own time and its **server-side push time**, read from GitHub's repository activity API (`GET /repos/mpmdw/JouleWise/activity?ref=refs/heads/span-watch/log&activity_type=push&time_period=quarter`, all pages): each record is pushed alone, so its own push row is its publication time (fractional seconds kept); without one, a later record's push is only an upper bound. So a close that finished late, was pushed late, or arrived between two delayed polls is still filed. A close the API does not show yet counts as visible only at this observation (conservative). GitHub's own push row is honoured at any age. A close older than the activity window with no row left is judged by its own time: every watcher run while it was inside the window judged it with exact evidence, and a run that follows a gap in the watcher's own runs files `WATCHER_GAP` (below), so a close first seen after an outage is never accepted silently | `NO_RESULTS_REF` |
 | `SPAN_STOP` | a close with a status other than `CLOSED_OK` | the status |
+| `WATCHER_GAP` | no other successful run of this workflow started in the 2 h before this one (an outage, or the very first run): whatever the log gained meanwhile was not judged as it happened. The lead reads the log's records for that time and closes the issue; the arm's read refuses until then | `NO_RECENT_RUN` |
 | `RESULT_UNREADABLE` | a malformed arm or close, a close without an arm, or a log commit that is not one addition | `ARM_RECORD`, `CLOSE_RECORD`, `LOG_REWRITTEN` |
 
 - **No age limit.** An obligation lasts as long as the log, which cannot be deleted or rewritten; there is no
@@ -108,7 +109,7 @@ succeeded, started after the previous span's close and within `--max-age-s` (def
 latest run failed; 2: API or usage error, including any malformed answer and a start more than 300 s in the
 future (clock skew up to 300 s is accepted). A success stays usable for at most `--max-age-s`; it is bounded
 evidence, not proof that the watcher is still running.
-The read makes about 33 API calls, so it needs `GH_TOKEN` (any token that can read this public repository;
+The read makes about 65 API calls (two pages for each of 32 day windows at 144 runs a day, and the issue list), so it needs `GH_TOKEN` (any token that can read this public repository;
 on the MBP, `gh auth token` in the GUI context); unauthenticated, GitHub allows 60 an hour per address and
 the read then fails closed. **The remaining caller work (RL-173 Owners: the controller builder owns "the watcher read").** PR #800
 already reads the Actions API at each arm (`read_watcher_run`), but it checks only the run, not open
@@ -122,15 +123,16 @@ the magistrate runs the three lines by hand.
 Nothing to install on either Mac beyond the checkout the magistrate already uses. The schedule starts when the
 workflow is on `main`. Then:
 1. `init-log` and the ruleset above (the lead, once).
-2. `gh workflow run mbp-watch.yml --repo mpmdw/JouleWise`, then `gh run list --workflow mbp-watch.yml`: the
+2. Update the Air agent's checkout to this merge (it then polls `mbp-alarm`), so step 4's banner can appear.
+3. `gh workflow run mbp-watch.yml --repo mpmdw/JouleWise`, then `gh run list --workflow mbp-watch.yml`: the
    run must succeed (it fails while the log or the ruleset is missing, or if the activity API answers in
-   another shape than the tests assume).
-3. A delivery check, synthetic only: `scripts/mbp_watch.py arm --plan cq-notify-test-a1 --t0 <now-7200>
+   another shape than the tests assume). The first run files `WATCHER_GAP` (there was no earlier run):
+   close it once the log is checked. The workflow needs `actions: read` for that check.
+4. A delivery check, synthetic only: `scripts/mbp_watch.py arm --plan cq-notify-test-a1 --t0 <now-7200>
    --deadline <now-3600>` from the Air, dispatch the workflow, confirm the owner received the
    `mbp-alarm SPAN_SILENT cq-notify-test-a1` notification and the Air agent posted its banner, then
    `close --plan cq-notify-test-a1 --status CLOSED_OK --close-epoch <now>` and close the issue. The records
    stay in the log; the silence is already filed, so it never alarms again.
-4. Update the Air agent's checkout to this merge (it then polls `mbp-alarm`).
 5. Add the `arm` and `close` lines to the magistrate's launch and Check procedures, and the `read` line to
    the arm checklist (a lead item), until the controller carries them.
 
@@ -157,9 +159,12 @@ What is missing, in order:
    automatic part of two verdicts and exclude later hand inputs (`HAND_TABLE_DUE` against a hand-completed
    verdict is not a disagreement). The Actions desk should use them, not a new comparison. A disagreement
    files `mbp-alarm DESK_DISAGREES <plan>` (a new closed code), which the arm's read already refuses on.
-5. **Coverage.** Every bundle must be checked once, retried after a failed run, and marked checked (for
-   example a `desk-recheck/<plan>` ref holding the agreement result), so a missed schedule never skips a
-   span; no time lookback.
+5. **Coverage.** Every bundle must be checked once, retried after a failed run, and marked checked, with no
+   time lookback. The receipt must bind the bundle commit, both compared verdict commits, the desk code's
+   commit and the exact history snapshot, and a re-judgment or a code or history change needs a new check: a
+   plan-only "checked" mark is not enough. Writing such a receipt (for example a `desk-recheck/<plan>` ref)
+   needs `contents: write`, which this watcher deliberately does not have: a separate, narrowly scoped writer
+   job, or another durable receipt, has to be chosen.
 6. **Routing to the research lead.** RL-173 B says a disagreement "comes to me". An owner issue alone does
    not reach the research lead; the lead relays it as a ruling request. The hold must also reach the arm:
    `read` refuses on an open `mbp-alarm`, but PR #800's own API gate does not read issues (see above).
@@ -169,7 +174,8 @@ What is missing, in order:
    MBP verdict or the MBP's history. Missing: an authenticated, public-safe push of the exact MBP verdict
    (and the history snapshot it used), or an explicit rule that Actions compares against the Air's
    `cadence-desk-final` verdict instead.
-8. **Who publishes.** The Actions job reads with public keys only; it has no signing key, so it can report
-   agreement (an issue, a `desk-recheck` ref) but cannot publish a signed `cadence-desk-final` verdict. The
-   final-verdict producer stays the Air (or the MBP under section 6); that is a deliberate role, not a gap
-   to close with a secret.
+8. **Who publishes.** FORMAT section 6 has the off-host desk publish a verdict signed as `cadence-desk` and
+   compare it with the MBP's. An Actions job reads with public keys only and holds no signing key, so it can
+   report agreement but cannot be that signed producer; and the MBP's local `cadence-controller` verdict is
+   not the signed off-host verdict either. Which host produces the signed off-host verdict, and how the MBP
+   verdict reaches it, is an open contract decision for PR #799/#800 and the research lead.

@@ -15,6 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
@@ -49,3 +50,4 @@ jobs:
           --owner "$GITHUB_REPOSITORY_OWNER"
           --grace-s 1200
           --run-url "$RUN_URL"
+          --run-id "$GITHUB_RUN_ID"

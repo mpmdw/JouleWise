@@ -47,6 +47,9 @@ class FakeApi:
                 rows = [i for i in rows if i.get("creator", w.BOT) == params["creator"]]
             page = params.get("page", 1)
             return rows[(page - 1) * 100: page * 100]
+        if method == "GET" and path.startswith("/actions/workflows/") and "created" not in params:
+            rows = [r for r in self.runs if r["conclusion"] == params.get("status", r["conclusion"])]
+            return {"workflow_runs": rows[:params.get("per_page", 30)], "total_count": len(rows)}
         if method == "GET" and path.startswith("/actions/workflows/"):
             low, high = (w.parse_iso(t) for t in params["created"].split(".."))
             rows = [r for r in self.runs if low <= w.parse_iso(r.get("created_at", r["run_started_at"])) <= high]
@@ -90,7 +93,8 @@ class MbpWatchTests(unittest.TestCase):
     def ns(self, **kw):
         base = dict(repo="mpmdw/JouleWise", owner="mpmdw", grace_s=1200.0,
                     run_url="https://github.com/mpmdw/JouleWise/actions/runs/1", dry_run=False,
-                    after_epoch=NOW - 1000, max_age_s=7200.0, remote=str(self.origin), repo_dir=str(self.work))
+                    after_epoch=NOW - 1000, max_age_s=7200.0, remote=str(self.origin), repo_dir=str(self.work),
+                    run_id=999999)
         base.update(kw)
         return argparse.Namespace(**base)
 
@@ -127,6 +131,8 @@ class MbpWatchTests(unittest.TestCase):
 
     def watch(self, api, now=NOW, late=None):
         self.pushes_at_commit_times(api, late)
+        if not api.runs:  # a healthy watcher: a successful run ten minutes ago
+            api.runs = [self.wrun(7, now - 600)]
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = w.watch(self.ns(), git=w.Git(self.work), api=api, now=now)
@@ -379,7 +385,7 @@ class MbpWatchTests(unittest.TestCase):
     def test_a_close_github_has_not_reported_is_not_yet_visible(self):
         self.arm(deadline=NOW - 3600)
         self.close("CLOSED_OK")
-        api = FakeApi()
+        api = FakeApi(runs=[self.wrun(7, NOW - 600)])
         tip = w.Git(self.origin).run("rev-parse", w.LOG_REF).decode().strip()
         self.pushes_at_commit_times(api)
         api.activity = [row for row in api.activity if row["after"] != tip]
@@ -468,10 +474,36 @@ class MbpWatchTests(unittest.TestCase):
         self.assertIn(f"mbp-alarm SPAN_STOP {PLAN} STOPPED", titles)
         self.assertIn("mbp-alarm RESULT_UNREADABLE span-watch-log LOG_REWRITTEN", titles)
 
+    # --- round-6 regressions (Sol r6 finding 1) ------------------------------------------------
+
+    def test_exact_publication_is_honoured_at_any_age(self):
+        base = NOW - 80 * 86400
+        self.arm(t0=base - 7200, deadline=base - 3600)
+        self.close("CLOSED_OK", epoch=base - 3600)
+        tip = w.Git(self.origin).run("rev-parse", w.LOG_REF).decode().strip()
+        api = FakeApi()
+        self.watch(api, late={tip: base - 3600 + 1200 + 2400})  # pushed 2,400 s after the limit
+        self.assertEqual(self.titles(api), [f"mbp-alarm SPAN_SILENT {PLAN} NO_RESULTS_REF"])
+
+    def test_a_run_after_an_outage_files_a_watcher_gap(self):
+        api = FakeApi(runs=[self.wrun(7, NOW - 100 * 86400)])
+        self.watch(api)
+        self.assertEqual(self.titles(api), ["mbp-alarm WATCHER_GAP watcher NO_RECENT_RUN"])
+        self.watch(api)  # the same gap is filed once
+        self.assertEqual(len(self.opened(api)), 1)
+        self.assertEqual(self.read([self.wrun(8, NOW - 300)], issues=api.issues)[0], w.EXIT["open_alarm"])
+        fresh = FakeApi(runs=[])
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.pushes_at_commit_times(fresh)
+            w.watch(self.ns(), git=w.Git(self.work), api=fresh, now=NOW)  # the very first run: a gap too
+        self.assertEqual(self.titles(fresh), ["mbp-alarm WATCHER_GAP watcher NO_RECENT_RUN"])
+
     def test_workflow_shape(self):
         text = WORKFLOW.read_text()
         self.assertIn('cron: "3-59/10 * * * *"', text)
         self.assertIn("issues: write", text)
+        self.assertIn("actions: read", text)
+        self.assertIn('--run-id "$GITHUB_RUN_ID"', text)
         self.assertIn("contents: read", text)
         self.assertNotIn("contents: write", text)
         self.assertIn("python3 scripts/mbp_watch.py watch", text)
