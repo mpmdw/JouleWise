@@ -43,6 +43,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import unicodedata
 import zlib
 
 DESCRIPTOR_SCHEMA = "joulewise.span_offload.v1"
@@ -99,6 +100,23 @@ def integrity(code, detail=""):
 
 def number(value):
     return type(value) in (int, float) and math.isfinite(value)
+
+
+SPAN_STAMP_RE = re.compile(r"[0-9]{8}T[0-9]{6}Z")
+MAX_DEADLINE_AHEAD_S = 86400
+
+
+def span_name_ok(name, plan):
+    """OUT is named ``<plan>`` or ``<plan>-<YYYYMMDDTHHMMSSZ>`` (the runner's naming)."""
+    return name == plan or (name.startswith(plan + "-") and SPAN_STAMP_RE.fullmatch(name[len(plan) + 1:]) is not None)
+
+
+def _remove_stale_scratch(stage_root, plan, keep):
+    """Under the plan lock: a killed earlier run's private build and key directories are ours to remove."""
+    for entry in os.scandir(stage_root):
+        if entry.name.startswith((f".{plan}.building-", f".{plan}.key-")) and entry.path != str(keep) \
+                and entry.is_dir(follow_symlinks=False):
+            shutil.rmtree(entry.path, ignore_errors=True)
 
 
 def check_id(value, what):
@@ -365,7 +383,7 @@ def check_recipient(openssl, public_key, pinned_sha256, deadline=None):
         raise refused("RECIPIENT_MISMATCH", "the recipient public key is not the pinned one")
     if bits < MIN_RSA_BITS:
         raise refused("RECIPIENT_WEAK", f"RSA key under {MIN_RSA_BITS} bits")
-    return fingerprint
+    return fingerprint, bits
 
 
 def _enc_args(decrypt, fd):
@@ -477,9 +495,11 @@ def verify_ciphertext(openssl, passphrase, in_path, archive_sha256, deadline=Non
         raise refused("CIPHERTEXT_UNVERIFIED", "the staged ciphertext does not decrypt to the archive")
 
 
-def wrap_passphrase(openssl, public_key, passphrase, out_path, deadline=None):
+def wrap_passphrase(openssl, public_key, passphrase, out_path, deadline=None, bits=None):
     wrapped = _openssl_run(openssl, ["pkeyutl", "-encrypt", "-pubin", "-inkey", str(public_key),
                                      "-pkeyopt", "rsa_padding_mode:oaep"], input=passphrase, deadline=deadline)
+    if bits is not None and len(wrapped) != (bits + 7) // 8:
+        raise refused("WRAP_INVALID", "the wrapped key is not one RSA block")
     with open(out_path, "xb") as out:
         out.write(wrapped)
 
@@ -777,7 +797,7 @@ def _stage_complete(stage, plan):
     return descriptor
 
 
-def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=time.time):
+def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=time.time, bits=None):
     """Build the four files, or reuse a complete stage of the SAME source whose bytes have not changed.
 
     A complete stage of another source, of another recipient, or of a source whose bytes moved since is
@@ -812,7 +832,7 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
         manifest, archive_sha, archive_size, count = encrypt_span(openssl, span_dir, passphrase,
                                                                   building / files["ciphertext"], deadline)
         verify_ciphertext(openssl, passphrase, building / files["ciphertext"], archive_sha, deadline)
-        wrap_passphrase(openssl, recipient_pem, passphrase, building / files["wrapped_key"], deadline)
+        wrap_passphrase(openssl, recipient_pem, passphrase, building / files["wrapped_key"], deadline, bits)
         del passphrase
         (building / files["manifest"]).write_bytes(manifest)
         descriptor = {
@@ -881,18 +901,20 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
     check_id(plan, "plan")
     span_dir = Path(span_dir)
     check_id(span_dir.name, "span directory name")
-    if span_dir.name != plan and not span_dir.name.startswith(plan + "-"):
-        raise refused("PLAN_SPAN_MISMATCH", "the span directory's name does not start with the plan id")
+    if not span_name_ok(span_dir.name, plan):
+        raise refused("PLAN_SPAN_MISMATCH", "the span directory is not named <plan> or <plan>-<YYYYMMDDTHHMMSSZ>")
     for forbidden in config.get("forbid_paths", []):
         if not isinstance(forbidden, str) or not os.path.isabs(forbidden):
             raise refused("CONFIG", "forbid_paths entries must be absolute paths")
         if os.path.lexists(forbidden):
             raise refused("FORBIDDEN_PATH_PRESENT", "a forbid_paths entry exists (a fence is up)")
+    budget = config.get("default_budget_s", DEFAULT_BUDGET_S)
+    if not number(budget) or budget <= 0:
+        raise refused("CONFIG", "default_budget_s must be a positive number of seconds")
     if deadline_epoch is None:
-        budget = config.get("default_budget_s", DEFAULT_BUDGET_S)
-        if not number(budget) or budget <= 0:
-            raise refused("CONFIG", "default_budget_s must be a positive number of seconds")
         deadline_epoch = clock() + budget
+    elif not number(deadline_epoch) or deadline_epoch > clock() + MAX_DEADLINE_AHEAD_S:
+        raise refused("BAD_DEADLINE", "the deadline is not a finite epoch within 24 h (milliseconds given?)")
     marker_dir = Path(config["marker_dir"])
     stage_root = Path(config["stage_root"])
     if not marker_dir.is_dir() or not stage_root.is_dir():
@@ -906,6 +928,8 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
                "recipient_public_key": config["recipient_public_key"]}
     if isinstance(backend, LocalBackend):
         outputs["backend root"] = backend.root
+    if isinstance(backend, RcloneBackend) and backend.config:
+        outputs["rclone_config"] = backend.config  # rclone rewrites it when a token refreshes
     check_output_paths(span_dir, outputs)
     openssl = config.get("openssl", "openssl")
     deadline = Deadline(deadline_epoch, clock)
@@ -915,6 +939,7 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
             raise refused("SPAN_NOT_CLOSED", f"required file {name} is absent")
     deadline.remaining()
     with plan_lock(stage_root, plan), tempfile.TemporaryDirectory(prefix=f".{plan}.key-", dir=stage_root) as keydir:
+        _remove_stale_scratch(stage_root, plan, keydir)
         # One snapshot of the public key: the fingerprint, the size check and the wrap all use these bytes.
         recipient_pem = Path(keydir) / "recipient.pem"
         try:
@@ -925,8 +950,8 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
         if len(key_bytes) > 65536:
             raise refused("RECIPIENT_UNREADABLE", "the recipient public key file is too large")
         recipient_pem.write_bytes(key_bytes)
-        recipient = check_recipient(openssl, recipient_pem, config["recipient_sha256"], deadline)
-        stage, descriptor, reused = build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock)
+        recipient, bits = check_recipient(openssl, recipient_pem, config["recipient_sha256"], deadline)
+        stage, descriptor, reused = build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock, bits)
         files = names(plan)
         expected = {kind: (sha256_file(stage / files[kind]), os.stat(stage / files[kind]).st_size)
                     for kind in UPLOAD_ORDER}
@@ -1005,9 +1030,12 @@ def _safe_members(tar, top):
                     _check_name(part, "the archive")
         except OffloadError:
             raise integrity("ARCHIVE_PATH", "a member name has a newline, backslash or bad encoding") from None
-        if name.rstrip("/") in seen:
-            raise integrity("ARCHIVE_DUPLICATE", "a member name appears twice")
-        seen.add(name.rstrip("/"))
+        if "." in parts:
+            raise integrity("ARCHIVE_PATH", "a member name has a '.' component")
+        folded = unicodedata.normalize("NFC", name.rstrip("/")).casefold()
+        if folded in seen:
+            raise integrity("ARCHIVE_DUPLICATE", "a member name appears twice (case and normalisation folded)")
+        seen.add(folded)
         members.append(member)
     return members
 
@@ -1092,6 +1120,8 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
         try:
             check_id(span_name, "span_name")
             _check_name(span_name, "the descriptor")
+            if not span_name_ok(span_name, plan):
+                raise refused("PLAN_SPAN_MISMATCH", "span name")
         except OffloadError:
             raise integrity("DESCRIPTOR_INVALID", "the descriptor's span name is not a plain name") from None
         final = kit_dir / span_name

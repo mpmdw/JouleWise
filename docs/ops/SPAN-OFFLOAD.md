@@ -10,7 +10,8 @@ pull from the cloud, checked against the marker's hashes.
 `offload` (MBP, in the close interval, after the span's Check, before the next soak):
 
 1. Refuses at once, doing nothing, if `<marker_dir>/<plan>.ok` exists (exit 3), if OUT's name is not the
-   plan id or `<plan>-...` (`PLAN_SPAN_MISMATCH`), or if any `forbid_paths` entry exists (the config names
+   plan id or `<plan>-<YYYYMMDDTHHMMSSZ>` (`PLAN_SPAN_MISMATCH`; the pull applies the same rule to the
+   descriptor's span name), if `--deadline-epoch` is not finite or is more than 24 h ahead (`BAD_DEADLINE`), or if any `forbid_paths` entry exists (the config names
    the magistrate's desk fence: `FORBIDDEN_PATH_PRESENT`). Without `--deadline-epoch` the whole offload
    gets `default_budget_s` (90 min, item 347's limit); with no time left it does nothing.
 2. Reads no control file from inside OUT: the config path is checked against OUT before it is read, and
@@ -18,10 +19,14 @@ pull from the cloud, checked against the marker's hashes.
    followed, no fifo waited on). Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
    carriage return, backslash or non-UTF-8 bytes refuses the offload (exit 4). The stage root, the marker
    directory, the recipient key and a local backend root must not overlap OUT and must not be inside a git
-   repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`). OUT must hold at least one regular file and
+   repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`); so must the rclone config file, which rclone
+   rewrites when a token refreshes. The repository check walks every ancestor, so no `.git` may sit above
+   the stage root or the marker directory (check `/Users/edr`, `/Users/edr/night-custody` and
+   `/Users/Shared/JouleWise` at install). OUT must hold at least one regular file and
    `runner_receipt.json` (the default `--require-file`; existence only).
 3. Takes an exclusive lock for the plan (`<stage_root>/.<plan>.lock`, held until the marker; a second
-   offload of the same plan is refused `BUSY`).
+   offload of the same plan is refused `BUSY`), and removes this plan's private `.building-*` and `.key-*`
+   directories left by a killed earlier run.
 4. Reads the recipient public key once into a private snapshot, and checks that snapshot against the pinned
    fingerprint (sha256 of its DER encoding) and size (RSA, at least 3072 bits); the wrap uses the same bytes.
 5. Streams OUT through tar and gzip into `openssl enc`, reading each regular file **once, as bytes**. The
@@ -31,8 +36,8 @@ pull from the cloud, checked against the marker's hashes.
    the deadline it kills openssl and the offload fails `DEADLINE`.
 6. Decrypts the staged ciphertext once with the passphrase still in memory and requires the archive's
    sha256 (`CIPHERTEXT_UNVERIFIED` otherwise; plaintext is hashed, never written). The MBP cannot test the
-   RSA wrap; the first pull is that test (install step 8). Then wraps the passphrase to the recipient key and
-   writes the descriptor last. All of this happens in a private `.<plan>.building-*` directory, removed on
+   RSA wrap; the first pull is that test (install step 8). Then wraps the passphrase to the recipient key
+   (the wrapped key must be exactly one RSA block) and writes the descriptor last. All of this happens in a private `.<plan>.building-*` directory, removed on
    any failure and renamed to `<stage_root>/<plan>/` only when complete (about 4 % of OUT; the dev-02-s02
    archive was 110 MB for 2.9 GB), with a local `.source.json` naming OUT's resolved path.
 7. Uploads the four files synchronously (`rclone copyto --immutable`, which exits), and reads each back from
@@ -49,7 +54,8 @@ repository, and the remote is a private cloud folder, never the repository (A.6)
 marker and exits non-zero: 4 refused before upload, 5 upload or read-back failed or the deadline passed. A
 failed or unverified offload holds the next arm, and F0 does not run past it either (A.7). SIGTERM, SIGHUP
 and SIGINT kill openssl and rclone before the tool exits 5 with one line, so an exited tool leaves no upload
-running. The local backend exits 8 (its `<plan>.ok.unconfirmed` satisfies no gate).
+running. SIGKILL and other uncaught signals cannot do that: after one, check that no `rclone` is running
+before the next soak. The local backend exits 8 (its `<plan>.ok.unconfirmed` satisfies no gate).
 
 **Re-runs.** A complete stage is reused only for the same OUT (resolved path) and recipient, and only after
 OUT is re-hashed and still equals the staged manifest; the upload of the same bytes is then idempotent.
@@ -75,7 +81,8 @@ regular files; directories, including empty ones, are not in the manifest), and 
 symlinked kit directory, a symlinked backend plan directory and a kit directory inside a git repository are
 refused. `<span name>.pull.ok` is written last, synced and linked atomically, and marks a complete landing; a
 tree without a valid one is an interrupted landing, which the pull refuses (`INCOMPLETE_LANDING`) until the lead
-moves the tree and any sidecars aside. Exit 6 on any integrity failure (nothing lands), 7 if the
+moves the tree and any sidecars aside (`chmod u+w <tree>` first if the tree is already 0555: a read-only
+directory cannot be renamed on APFS). Exit 6 on any integrity failure (nothing lands), 7 if the
 destination exists. A look reads a pulled copy that matches the marker (A.5).
 
 `keygen` (Air): makes the recipient key pair and prints the fingerprint to pin.
@@ -200,10 +207,14 @@ MBP:
 After the span's Check passes, between spans, with no fence up and nothing else running:
 
 ```sh
+setopt NULL_GLOB 2>/dev/null
+OUT=$(ls -d /Users/edr/campaign-out/<kit>/${PLAN}-*Z); test "$(echo "$OUT" | wc -l | tr -d ' ')" = 1 || { echo "STOP: OUT"; exit 1; }
 python3.13 -B /Users/edr/code/jw-wt/span-offload-<sha>/scripts/span_offload.py offload \
   --config /Users/edr/night-custody/offload/span_offload.json --plan "$PLAN" --span-dir "$OUT" \
   --require-file runner_receipt.json --deadline-epoch "$NEXT_SOAK_EPOCH"
 ```
+
+`--require-file` replaces the default list; name `runner_receipt.json` whenever it is given.
 
 Exit 0 prints one `OFFLOAD_OK` line (plan, files, both hashes, ciphertext size, marker path), which goes
 into the span's RUN_STATE item. Exit 3 means the marker already exists: record which path wrote it. Any
