@@ -424,6 +424,9 @@ class SpanOffloadTests(unittest.TestCase):
         wrapper.write_text(f"#!/bin/sh\nexec {sys.executable} {script} \"$@\"\n")
         wrapper.chmod(0o755)
         (self.tmp / "rclone-root").mkdir(exist_ok=True)
+        conf = self.tmp / "rclone.conf"
+        if not conf.exists():
+            conf.write_text("[fake]\ntype = local\n")
         backend = {"kind": "rclone", "rclone": str(wrapper), "rclone_config": str(self.tmp / "rclone.conf"),
                    "remote": "fake:JouleWise-offload", "hash_type": hash_type, "timeout_s": 60,
                    "readback_tries": 2, "readback_wait_s": 0}
@@ -512,11 +515,11 @@ class SpanOffloadTests(unittest.TestCase):
         real_build, real_put = so.build_stage, so.LocalBackend.put
 
         def tamper_after_build(*args, **kwargs):
-            stage, descriptor, reused = real_build(*args, **kwargs)
+            stage, descriptor, reused, digest = real_build(*args, **kwargs)
             path = stage / f"{PLAN}.tgz.enc"
             os.chmod(path, 0o600)
             data = bytearray(path.read_bytes()); data[-1] ^= 1; path.write_bytes(bytes(data))
-            return stage, descriptor, reused
+            return stage, descriptor, reused, digest
 
         with mock.patch.object(so, "build_stage", tamper_after_build), self.assertRaises(so.OffloadError) as caught:
             self.offload()
@@ -896,12 +899,71 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "PATH_OVERLAPS_SPAN")
         self.assertEqual(os.listdir(self.tmp / "markers"), [])
 
-    def test_a_killed_runs_scratch_is_removed_under_the_lock(self):
-        stale = self.tmp / "stage" / f".{PLAN}.building-stale"
-        stale.mkdir()
-        (stale / "partial").write_bytes(b"x")
+    def test_directories_the_tool_did_not_make_are_never_removed(self):
+        foreign = self.tmp / "stage" / f".{PLAN}.building-foreign"
+        foreign.mkdir()
+        subprocess.run(["git", "init", "-q", str(foreign)], check=True)
+        (foreign / "PRESERVE.txt").write_bytes(b"x")
         self.offload()
-        self.assertFalse(stale.exists())
+        self.assertTrue((foreign / "PRESERVE.txt").exists() and (foreign / ".git").is_dir())
+
+    def test_hard_linked_control_files_are_refused(self):
+        inside = self.span / "config-alias.json"
+        inside.write_text(json.dumps(self.config))
+        outside = self.tmp / "mbp-linked.json"
+        os.link(inside, outside)
+        with self.assertRaises(so.OffloadError) as caught:
+            so.load_mbp_config(outside)
+        self.assertEqual(caught.exception.code, "CONFIG")
+        inside.unlink(); outside.unlink()
+        with mock.patch.object(so.LocalBackend, "put", side_effect=so.unverified("UPLOAD_TIMEOUT", "x")):
+            with self.assertRaises(so.OffloadError):
+                self.offload()
+        source = self.tmp / "stage" / PLAN / so.SOURCE_RECORD
+        alias = self.tmp / "alias-of-source"
+        os.link(source, alias)  # a second name for a stage record
+        with self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "STAGE_CONFLICT")
+        conf = self.span / "rclone.conf"
+        conf.write_text("[x]\n")
+        linked = self.tmp / "rclone-linked.conf"
+        os.link(conf, linked)
+        backend = {"kind": "rclone", "remote": "x:y", "rclone_config": str(linked)}
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, backend=backend), "cq-syn-01-s05-a1", self.span_for("cq-syn-01-s05-a1"))
+        self.assertEqual(caught.exception.code, "HARD_LINKED")
+
+    def test_a_descriptor_changed_after_validation_writes_no_marker(self):
+        real_build = so.build_stage
+
+        def rewrite_descriptor(*args, **kwargs):
+            stage, descriptor, reused, digest = real_build(*args, **kwargs)
+            path = stage / f"{PLAN}.offload.json"
+            os.chmod(path, 0o600)
+            doc = json.loads(path.read_bytes()); doc["archive"]["sha256"] = "0" * 64
+            path.write_bytes(so.canonical(doc)); os.chmod(path, 0o400)
+            return stage, descriptor, reused, digest
+
+        with mock.patch.object(so, "build_stage", rewrite_descriptor), self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "STAGE_CHANGED")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_a_stage_file_swapped_for_a_fifo_after_validation_does_not_block(self):
+        real_build = so.build_stage
+
+        def fifo_after(*args, **kwargs):
+            stage, descriptor, reused, digest = real_build(*args, **kwargs)
+            path = stage / f"{PLAN}.tgz.enc"
+            os.unlink(path); os.mkfifo(path)
+            return stage, descriptor, reused, digest
+
+        start = time.monotonic()
+        with mock.patch.object(so, "build_stage", fifo_after), self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "NOT_A_REGULAR_FILE")
+        self.assertLess(time.monotonic() - start, 10)
 
     def test_an_empty_wrapped_key_is_refused(self):
         original = so._openssl_run
@@ -1039,7 +1101,7 @@ class SpanOffloadStaticTests(unittest.TestCase):
         self.assertNotRegex(source, r"\[\s*['\"]git['\"]")
         loads = [line.strip() for line in source.splitlines() if "json.loads(" in line]
         allowed = ("descriptor_path.read_bytes()", "listing", "Path(path).read_text()",
-                   'tmp / files["descriptor"]', "_read_in(dfd", "handle.read(65536)", "handle.read(1 << 20)")
+                   'tmp / files["descriptor"]', "_read_in(dfd", "descriptor_bytes", "handle.read(65536)", "handle.read(1 << 20)")
         for line in loads:
             self.assertTrue(any(token in line for token in allowed), line)
 
