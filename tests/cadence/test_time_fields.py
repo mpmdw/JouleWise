@@ -1275,10 +1275,9 @@ class StageOneChecksItsOwnFile(unittest.TestCase):
         for bid in self.BLOCK_IDS:
             self.assertEqual(bool(M.BLOCK_ID_RE.fullmatch(bid)), self.by_block_ok(bid), repr(bid))
 
-    @unittest.expectedFailure
     def test_a_trailing_newline_block_id(self):
-        """Reported, not fixed here: schema_check applies a pattern with re.search, where "$" also matches before a
-        final newline (JSON Schema's ECMA-262 "$" does not), so "dev-01\n" passes the schema and not the validator."""
+        """schema_check applies a pattern as ECMA-262 does: "$" is the end of the string, never before a final newline,
+        so "dev-01\n" passes neither the schema nor the validator."""
         self.assertEqual(bool(M.BLOCK_ID_RE.fullmatch("dev-01\n")), self.by_block_ok("dev-01\n"))
 
     def run_input(self, li, extra=None):

@@ -66,6 +66,14 @@ def _equal(a, b):
     return type(a) is type(b) and a == b
 
 
+def _ecma_end(pattern):
+    """JSON Schema patterns are ECMA-262: "$" matches only at the end of the string, where Python's also matches
+    before a final newline. A trailing unescaped "$" becomes "\\Z" (Mythos/r6 test: "dev-01\\n" must not pass)."""
+    if pattern.endswith("$") and not pattern.endswith("\\$"):
+        return pattern[:-1] + "\\Z"
+    return pattern
+
+
 def errors(instance, schema, root=None, path="$"):
     """Every violation of ``schema`` by ``instance``, as ["<json path>: <message>"]; [] when valid."""
     root = schema if root is None else root
@@ -122,7 +130,7 @@ def errors(instance, schema, root=None, path="$"):
         if "contains" in schema and not any(not errors(v, schema["contains"], root, path) for v in instance):
             out.append(f"{path}: contains no item matching {json.dumps(schema['contains'])[:80]}")
     if isinstance(instance, str):
-        if "pattern" in schema and not re.search(schema["pattern"], instance):
+        if "pattern" in schema and not re.search(_ecma_end(schema["pattern"]), instance):
             out.append(f"{path}: does not match {schema['pattern']!r}")
         if "minLength" in schema and len(instance) < schema["minLength"]:
             out.append(f"{path}: shorter than {schema['minLength']}")

@@ -523,7 +523,7 @@
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
-        "sha256": "0b68c90a32c3fd82948d6583ef42316cb88c76a0088a04079a39b9359110de89"
+        "sha256": "ef2b5c841f6e2cfdbb5a770f0b1414a1f1a4daf54a0c810d0478e97f955f4d3f"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. The numpy version prints in both stages' outputs.",
