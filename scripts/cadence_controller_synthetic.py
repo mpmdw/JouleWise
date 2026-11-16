@@ -744,7 +744,9 @@ def scenario_recovery(workdir, log=print):
     w.env.t += 400
     assert "DESK_HOLD" in json.dumps([p["reasons"] for p in (ctl.unacked_pages() or [])] + [w.tick()]), "held"
     w.standing["dispositions"].append({"plan_id": "cq-qual-01-s01-a1", "resolution": "rerun",
-                                       "record": "the lead: soak refused twice, re-run (synthetic)"})
+                                       "record": "the lead: soak refused twice, re-run (synthetic)",
+                                       "verdicts": {"offhost": v["verdict_sha256"],
+                                                    "mbp": _close(w, "cq-qual-01-s01-a1")["mbp_desk"]["verdict_sha256"]}})
     rerun = dict(pilot, seq=2, span_id="qual-01-s01r", rerun_of="qual-01-s01")
     w.queue("qual01-pilot", [pilot, rerun], role="smoke")
     w.copy_journals("cq-qual-01-s01-a1")
@@ -867,6 +869,8 @@ plan_id, output, marker, flag = sys.argv[1:5]
 if os.path.exists(flag):
     print("synthetic offload: upload not confirmed", file=sys.stderr)
     sys.exit(7)
+if os.path.exists(marker):
+    sys.exit(0)    # an idempotent replay; the controller independently validates the existing marker
 doc = {"schema": "joulewise.offload_marker.v1", "plan_id": plan_id, "source": output, "manifest_sha256": "a" * 64,
        "manifest_files": 12, "ciphertext_sha256": "b" * 64, "ciphertext_bytes": 1048576, "provider": "synthetic cloud",
        "remote_path": "offload/" + plan_id + ".enc",
@@ -925,7 +929,11 @@ def scenario_offload(workdir, log=print):
     s = w.tick()
     assert "OFFLOAD_FAILED" not in json.dumps(s) and "OFFLOAD_FAILED" not in json.dumps(
         [p["reasons"] for p in ctl.unacked_pages()]), s
-    assert any(p["kind"] == "FALLBACK_F0_DUE" for p in ctl.unacked_pages()), s   # F0 only once the copy verifies
+    # Recovery is a controller-observed tool run too: the floor starts at its completion (gate 4 F4).
+    if "GAP" in json.dumps(s):
+        w.env.t += law.GAP_AFTER_CAMPAIGN_S + 1
+        s = w.tick()
+    assert any(p["kind"] == "FALLBACK_F0_DUE" for p in ctl.unacked_pages()), s   # F0 only once copy and floor pass
     log(f"offload: the tool failed in the close interval (rc 7): OFFLOAD_FAILED held every arm and F0 (no F0 page); a "
         f"marker with a wrong readback held the same; the lead's re-run wrote a verified marker, and only then was F0 "
         f"due ({s['state']} {sorted(_codes(s))})")

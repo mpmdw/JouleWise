@@ -160,8 +160,9 @@ def load_config(path):
         problems.append("bundle_ref_prefix: refs/...")
     if not (isinstance(cfg.get("watcher_name"), str) and cfg["watcher_name"]):
         problems.append("watcher_name: the Air watcher's launchd label (stamp) or the Actions workflow file (actions)")
-    if type(cfg.get("hold_standing_fence")) is not bool:
-        problems.append("hold_standing_fence: bool")
+    if (type(cfg.get("hold_standing_fence")) is not bool
+            or (not cfg["hold_standing_fence"] and os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1")):
+        problems.append("hold_standing_fence: true (false only in a synthetic run)")
     if cfg.get("watcher_kind") not in law.WATCHER_KINDS:
         problems.append(f"watcher_kind: one of {law.WATCHER_KINDS} (RL-173 C.4 Actions; C.5 the Air's stamp)")
     elif cfg["watcher_kind"] == "actions" and not str(cfg.get("watcher_name", "")).endswith((".yml", ".yaml")):
@@ -438,7 +439,7 @@ def verdict_signers_check(cfg):
     return {"ok": ok, "detail": f"{len(lines)} line(s), principals {sorted({x.split()[0] for x in lines})}"}
 
 
-DESK_PATHS = ("joulewise/cadence", "scripts/air")
+DESK_PATHS = ()   # gate 4: check the whole checkout, including package imports and controller
 
 
 def desk_commit_check(cfg, env):
@@ -446,7 +447,7 @@ def desk_commit_check(cfg, env):
     (the desk the close step runs) must be at ``desk_commit`` with the desk's files unmodified; a line of the arm
     proof, so a mismatch holds before a span runs, not only once an off-host verdict exists."""
     head = env.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], timeout=30)
-    dirty = env.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", *DESK_PATHS], timeout=60)
+    dirty = env.run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=all"], timeout=60)
     if head.rc != 0 or dirty.rc != 0:
         return {"ok": None, "detail": f"git rc {head.rc}/{dirty.rc}"}
     ok = head.stdout.strip() == cfg["desk_commit"] and not dirty.stdout.strip()
@@ -465,9 +466,12 @@ def controller_signers_check(cfg):
         return {"ok": False, "detail": f"{path}: {exc}"}
     ok = bool(lines) and all(x.split()[0] == desk_transport.CONTROLLER_PRINCIPAL for x in lines)
     pub = Path(cfg["signing_key"] + ".pub")
-    if ok and pub.is_file():
-        key = " ".join(pub.read_text().split()[:2])
-        ok = any(key in x for x in lines)
+    try:
+        fields = pub.read_text().split()
+    except OSError as exc:
+        return {"ok": False, "detail": f"public key unavailable: {exc}"}
+    key = " ".join(fields[:2])
+    ok = ok and len(fields) >= 2 and any(key in x for x in lines)
     return {"ok": ok, "detail": f"{len(lines)} line(s); the signing key's public key "
                                 f"{'listed' if ok else 'not listed or another principal'}"}
 
@@ -828,6 +832,7 @@ def receipt_census(roots, output_root):
     up, with its path), and every campaign receipt under the output root. A missing root, a lookup error or no
     receipt at all raises: missing evidence is never 0."""
     newest, path, count, campaign = None, None, 0, []
+    campaign_newest = None
     out_root = output_root.rstrip("/")
 
     def fail(error):
@@ -848,9 +853,12 @@ def receipt_census(roots, output_root):
                     newest, path = m, p
                 if p.startswith(out_root + "/") and p.count("/") - out_root.count("/") == 3:
                     campaign.append(p)
+                    if campaign_newest is None or m > campaign_newest[0]:
+                        campaign_newest = (m, p)
     if count == 0:
         raise FileNotFoundError("the receipt census found no runner_receipt.json")
-    return {"newest": (math.ceil(newest), path), "campaign": sorted(set(campaign))}
+    return {"newest": (math.ceil(newest), path), "campaign": sorted(set(campaign)),
+            "campaign_newest": None if campaign_newest is None else (math.ceil(campaign_newest[0]), campaign_newest[1])}
 
 
 # --------------------------------------------------------------------------
@@ -1114,7 +1122,7 @@ class Controller:
     def standing_purpose(self):
         return f"{STANDING_FENCE_PREFIX}{self.token}"
 
-    def hold_fence(self, seconds=STANDING_FENCE_S):
+    def hold_fence(self, seconds=STANDING_FENCE_S, *, minimum_s=None):
         if not self.cfg["hold_standing_fence"]:
             return "disabled"
         self.custody.mkdir(parents=True, exist_ok=True)
@@ -1123,7 +1131,7 @@ class Controller:
             if cur is not None and not (cur["purpose"] == self.standing_purpose() and cur["pid"] == self.pid):
                 if not (cur["purpose"].startswith(STANDING_FENCE_PREFIX) and not self.env.pid_alive(cur["pid"])):
                     return "foreign"
-            elif cur is not None and cur["deadline"] - self.env.now() >= seconds / 2:
+            elif cur is not None and cur["deadline"] - self.env.now() >= (seconds / 2 if minimum_s is None else minimum_s):
                 return "held"    # ours with time to spare: no rewrite, so a watched custody directory stays quiet (T4)
             fence.write_fence(self.custody, {"purpose": self.standing_purpose(), "pid": self.pid,
                                              "deadline": self.env.now() + seconds})
@@ -1308,6 +1316,7 @@ class Controller:
                 self.desk_close(rec["plan_id"])    # a desk run that left no verdict (RL-173 B)
                 self.offload_close(rec["plan_id"])  # an offload a restart interrupted (it runs once per span)
         records, _ = self.records()
+        now = self.env.now()   # retries can take an hour; judge evidence against the clock after them
         snap, extra = self.snapshot(now, records)
         decision = law.select(snap)
         self.critical_path(decision, now)
@@ -1388,10 +1397,12 @@ class Controller:
         markers, receipts = {}, {}
         # Gate 3 (Opus 1): the copy gate is per span: every controller span that left a receipt, and the host's
         # newest campaign receipt.
-        copy_due = {r["plan_id"]: {"source": r["output"], "after": r["receipt_epoch"]} for r in records
-                    if r.get("receipt_epoch") is not None and r.get("output")}
+        copy_due = {r["plan_id"]: {"source": r["output"], "after": r.get("receipt_epoch") or r["t0_epoch"]} for r in records
+                    if r.get("closed_epoch") is not None and r.get("output")}
         for pid in copy_due:
             markers[pid] = self.read_marker(pid)
+        for p in standing["prior_spans"]:
+            markers.setdefault(p["plan_id"], self.read_marker(p["plan_id"]))
         if isinstance(census, dict):
             m = law.CAMPAIGN_RECEIPT.search(census["newest"][1])
             if m and m.group("plan") not in markers:
@@ -1401,12 +1412,13 @@ class Controller:
                 m = law.CAMPAIGN_RECEIPT.search(path)
                 if m and m.group("plan") in prior_ids:
                     try:
-                        doc = json.loads(Path(path).read_text())
-                        outcomes = {leg.get("leg_id"): (leg.get("summary") or {}).get("g0_outcome")
-                                    for leg in doc.get("legs") or [] if isinstance(leg, dict)}
+                        receipt_path = Path(path)
+                        if receipt_path.is_symlink() or not receipt_path.is_file() or receipt_path.stat().st_size > 16 * 1024 * 1024:
+                            raise ValueError("prior receipt: symlink, non-regular or oversized")
+                        doc = json.loads(receipt_path.read_bytes())
                         receipts[m.group("plan")] = {
                             "roster": doc.get("roster"), "kit_sha256": (doc.get("kit") or {}).get("sha256"),
-                            "g0_unreleased": law.unreleased(outcomes, doc.get("roster") or [])}
+                            "g0_unreleased": law.receipt_unreleased(doc, {}, doc.get("roster") or [])}
                     except (OSError, ValueError, AttributeError):
                         receipts[m.group("plan")] = {"roster": None, "kit_sha256": None, "g0_unreleased": None}
         runs = law.build_runs(standing, records, self.externals(), kits=audit["kits"], prior_receipts=receipts)
@@ -1424,13 +1436,16 @@ class Controller:
         if self.cfg["watcher_kind"] == "actions":     # RL-173 C.4: read at every arm, newer than the last close
             run = self.watcher_run()
             extra["watcher_run"] = run
+            now = self.env.now()
             watcher = law.actions_watcher_reasons(run, now, None if last is None else last.closed,
                                                   self.cfg["watcher_name"], repo=self.cfg["repo_slug"])
         else:                                         # RL-173 C.5: the Air's stamp, re-read at every arm
+            now = self.env.now()
             watcher = law.watcher_reasons(audit["watcher"], audit["watcher_commit"], now, self.cfg["watcher_name"])
         # a failed offload is retried in the close interval; it holds as OFFLOAD_FAILED once the attempts are spent
         failures = [r["plan_id"] for r in records if (r.get("offload") or {}).get("ok") is False
-                    and ((r.get("offload") or {}).get("attempts") or 1) >= OFFLOAD_ATTEMPTS]
+                    and (((r.get("offload") or {}).get("attempts") or 1) >= OFFLOAD_ATTEMPTS
+                         or (markers.get(r["plan_id"]) or {}).get("doc") is not None)]
         snap = {"now": now, "standing": standing, "input_reasons": reasons, "queues": audit["queues"], "runs": runs,
                 "desk_halts": desk_halts, "vetoes": law.veto_reasons(issues, self.cfg["owner_login"]),
                 "watcher": watcher,
@@ -1569,7 +1584,7 @@ class Controller:
         if self.cfg["hold_standing_fence"] and self.hold_fence() != "held":
             # Sol R7: the arm child transfers the standing fence atomically; without it held there is nothing to
             # transfer and the watchdog could start an activation before the launch fence exists.
-            return self.wait(["SPAN_LIVE"], "the standing fence is not held; no arm without it")
+            return self.wait(["STANDING_FENCE_MISSING"], "the standing fence is not held; no arm without it")
         kit = next(v["kits"][sha] for v in audit["queues"] + audit["fallback_queues"] if sha in v["kits"])
         # 1. preparation's network part (a worktree prepared on an earlier tick for this plan is reused)
         prepared = read_json(self.span_dir(plan_id) / "prepared.json")
@@ -1582,7 +1597,8 @@ class Controller:
         if problem:
             return self._prepare_failed(plan_id, sid, "PREPARE", problem)
         self.prereqs(sid, self.env.now(), passed=["PREPARE"])
-        self.refresh_fence()                                   # every arm stage renews it (T12)
+        if self.arm_fence_failed(plan_id, sid):
+            return self.write_status("HALTED", {"plan_id": plan_id, "fence": "lost"})
         # 2. validate-kit and the pinned plan (local)
         info, problem = self.preparer.check(paths, kit, sha, list(span["legs"]), entry["batch_window"], self.env.now())
         if problem:
@@ -1591,7 +1607,8 @@ class Controller:
                 return self.wait(["PLAN_REFUSED_AT_T0"], problem)
             return self._prepare_failed(plan_id, sid, "VALIDATE_PLAN", problem)
         self.prereqs(sid, self.env.now(), passed=["VALIDATE_PLAN"])
-        self.refresh_fence()
+        if self.arm_fence_failed(plan_id, sid):
+            return self.write_status("HALTED", {"plan_id": plan_id, "fence": "lost"})
         out = Path(self.cfg["output_root"]) / kit["campaign_id"] / (
             f"{plan_id}-{datetime.fromtimestamp(self.env.now(), timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
         if out.exists() or OUT_REFUSED.search(str(out) + "/") or str(out).startswith(str(self.custody)):
@@ -1610,10 +1627,12 @@ class Controller:
             self.page("HALT", [dict(r, span=sid) for r in rs], {"plan_id": plan_id, "proof": proof_digest(proof)})
             return self.write_status("HALTED", {"codes": [r["code"] for r in rs]})
         self.prereqs(sid, self.env.now(), passed=["HOST_PROOF"])
-        self.refresh_fence()
+        if self.arm_fence_failed(plan_id, sid):
+            return self.write_status("HALTED", {"plan_id": plan_id, "fence": "lost"})
         # 4. every authority again, now (Sol 4): the same decision, or no arm. The lease counts from this read, and
         # everything after it (the clock check, the notice post, the launch) spends the same budget (Sol R3, N7).
-        self.refresh_fence()
+        if self.arm_fence_failed(plan_id, sid):
+            return self.write_status("HALTED", {"plan_id": plan_id, "fence": "lost"})
         authority_read = self.env.now()
         snap2, extra2 = self.snapshot(authority_read, records)
         d2 = law.select(snap2)
@@ -1700,6 +1719,13 @@ class Controller:
                    "standing_purpose": self.standing_purpose(), "controller_pid": self.pid}
         result = self.launcher.launch(request)
         return self.record_launch(plan_id, intent, result, kit)
+
+    def arm_fence_failed(self, plan_id, sid):
+        if self.cfg["hold_standing_fence"] and self.refresh_fence() != "held":
+            self.page("HALT", [law.reason("ARM_INDETERMINATE",
+                      f"{plan_id}: standing fence lost or lapsed during arm", span=sid)])
+            return True
+        return False
 
     def _prepare_failed(self, plan_id, sid, stage, problem):
         self.prereqs(sid, self.env.now(), blocking=[stage], stage_failed=f"{stage}: {problem}"[:300])
@@ -1844,7 +1870,7 @@ class Controller:
 
     def close(self, rec, stranded=None):
         plan_id = rec["plan_id"]
-        self.hold_fence()
+        self.hold_fence(minimum_s=STANDING_FENCE_S)
         intent = read_json(self.span_dir(plan_id) / "intent.json")
         out = Path(rec["output"])
         span, sha = intent["span"], intent["kit"]["sha256"]
@@ -1898,6 +1924,7 @@ class Controller:
                         for s in stopsmod.evaluate_named_stops(kit["stop_rules"], summary)]
         proof = self.proof("close", (self.standing_purpose(),))
         reasons += law.proof_reasons(proof["lines"], "close")
+        self.hold_fence(minimum_s=STANDING_FENCE_S)  # separate budget for log show (600 s)
         maintenance = self.maintenance_line(out, rec)
         codes = {r["code"] for r in reasons}
         status = ("CLOSED_OK" if not reasons else "STRANDED" if "RECEIPT_MISSING" in codes
@@ -1908,14 +1935,11 @@ class Controller:
         # RL-173 E: the legs whose G0 did not release (any outcome but "released", a missing one included: timeout,
         # deadman, unobserved; gate 3, Mythos T1), from the packed summaries, or from the host's receipt when nothing
         # was packed (Mythos T7). None only when no leg outcome can be read at all.
-        outcomes = {lid: x.get("g0_outcome") for lid, x in summaries.items()}
-        host_receipt = receipt
-        if not outcomes and (out / RECEIPT).is_file() and not self.unsafe_inputs(out):
+        host_receipt = receipt or None
+        if (out / RECEIPT).is_file() and not self.unsafe_inputs(out):
             with contextlib.suppress(OSError, ValueError):
-                host_receipt = json.loads((out / RECEIPT).read_text())
-                outcomes = {leg.get("leg_id"): (leg.get("summary") or {}).get("g0_outcome")
-                            for leg in host_receipt.get("legs") or [] if isinstance(leg, dict)}
-        g0_unreleased = law.unreleased(outcomes, span["legs"]) if outcomes else None
+                host_receipt = json.loads((out / RECEIPT).read_bytes())
+        g0_unreleased = law.receipt_unreleased(host_receipt, summaries, span["legs"])
         runner_t0 = (receipt.get("started") or {}).get("epoch_s") if receipt else None
         receipt_epoch = math.ceil(os.stat(out / RECEIPT).st_mtime) if (out / RECEIPT).is_file() else None
         transition = {
@@ -1950,9 +1974,8 @@ class Controller:
         self.offload_close(plan_id)     # RL-173 A: the offload tool, when the config names it (design 15.13)
         self.hold_fence()
         close = read_json(self.span_dir(plan_id) / "close.json")   # sign-time deny refusal rewrites the status
-        if close.get("closed_epoch") is not None:   # the floor counts after all the close work (Mythos F25)
-            close["closed_epoch"] = max(close["closed_epoch"], math.ceil(self.env.now()))
-            atomic_json(self.span_dir(plan_id) / "close.json", close)
+        close["closed_epoch"] = max(close.get("closed_epoch") or 0, math.ceil(self.env.now()))
+        atomic_json(self.span_dir(plan_id) / "close.json", close)
         status, reasons = close["status"], close["reasons"]
         launch_problems = (read_json(self.span_dir(plan_id) / "arm.json") or {}).get("launch_problems")
         if status != "CLOSED_OK" or launch_problems:
@@ -2053,15 +2076,17 @@ class Controller:
         if out.exists():
             shutil.rmtree(out)
         signers = self.cfg["controller_signers"]
-        self.hold_fence(DESK_TIMEOUT_S + STANDING_FENCE_S)     # the fence outlasts the step (RL-173 E)
-        argv = [sys.executable, "-I", "-B", str(DESK_CLI), "final", "--plan-id", plan_id, "--repo", self.git.dir,
+        self.hold_fence(DESK_TIMEOUT_S + STANDING_FENCE_S, minimum_s=DESK_TIMEOUT_S + 300)     # the fence outlasts the step (RL-173 E)
+        argv = [sys.executable, "-I", "-B", "-X", f"pycache_prefix={out / 'empty-pycache'}", str(DESK_CLI), "final", "--plan-id", plan_id, "--repo", self.git.dir,
                 "--bundle-ref", close["bundle_commit"], "--allowed-signers", signers, "--kit", intent["kit"]["path"],
                 "--out", str(out), "--lock", str(self.state / "desk.lock"), "--history-prefix", MBP_VERDICT_PREFIX,
                 "--history-signers", signers, "--history-principal", desk_transport.CONTROLLER_PRINCIPAL,
                 *(["--allow-mock"] if self.cfg["accept_mock_verdicts"] else []),
                 # the controller writes these records itself: none at all means none published yet (#799 T5)
                 *(["--history-empty"] if not self.git.local_refs(MBP_VERDICT_PREFIX) else [])]
-        res = self.host_run(argv, timeout=DESK_TIMEOUT_S, cwd=str(ROOT))
+        pin = self.desk_commit()  # code can have changed since the arm
+        res = (self.host_run(argv, timeout=DESK_TIMEOUT_S, cwd=str(ROOT)) if pin.get("ok") is True else
+               Result(2, "", f"desk checkout: {pin.get('detail')}"))
         verdict = read_json(out / desk_final.VERDICT_NAME) if (out / desk_final.VERDICT_NAME).is_file() else None
         attempts = ((close.get("mbp_desk") or {}).get("attempts") or 0) + 1
         record = {"rc": res.rc, "epoch": self.env.now(), "published": None, "problem": None, "attempts": attempts,
@@ -2078,6 +2103,7 @@ class Controller:
                 record["problem"] = f"publish: {exc}"[:300]
         close = read_json(path)
         close["mbp_desk"] = record
+        close["closed_epoch"] = max(close.get("closed_epoch") or 0, math.ceil(self.env.now()))
         atomic_json(path, close)
         self.transition(plan_id, "mbp_desk", {k: record[k] for k in ("rc", "published", "problem", "verdict_sha256",
                                                                      "desk_final", "next_arm_hold")})
@@ -2085,17 +2111,24 @@ class Controller:
 
     def offload_close(self, plan_id):
         """RL-173 A: the MBP's encrypted cloud offload, by the offload tool (built by its own lane; design 15.13),
-        run once in the close interval when ``offload_argv`` names it. The controller reads only the tool's exit
-        code and, at the next arm, its marker; a non-zero exit with no verified marker holds every arm, F0 too
+        run in the close interval when ``offload_argv`` names it, at most three automatic attempts, spaced
+        5 then 15 minutes after the previous attempt ended. A changed marker after exhaustion permits a
+        recovery run whose exit is recorded too. A verified marker contradicting a non-zero exit holds every arm, F0 too
         (OFFLOAD_FAILED, A.7). With ``offload_argv`` null another process writes the marker; the gate is the same."""
         argv = self.cfg.get("offload_argv")
         path = self.span_dir(plan_id) / "close.json"
         close = read_json(path)
         prior = (close or {}).get("offload")
-        marker_there = os.path.lexists(Path(self.cfg["copy_marker_dir"]) / f"{plan_id}.ok")
-        if not argv or not close or (prior is not None and (prior.get("ok") or marker_there
-                                                            or (prior.get("attempts") or 1) >= OFFLOAD_ATTEMPTS)):
+        marker_state = self.read_marker(plan_id)
+        marker_hash = law.digest(marker_state)
+        changed = prior is not None and marker_state.get("doc") is not None and marker_hash != prior.get("marker_sha256")
+        exhausted = prior is not None and (prior.get("attempts") or 1) >= OFFLOAD_ATTEMPTS
+        if not argv or not close or (prior is not None and prior.get("ok")) or (exhausted and not changed):
             return None     # done, or failed OFFLOAD_ATTEMPTS times: the hold stays for the lead (gate 3, Mythos T14)
+        if prior and not changed:
+            delay = 300 if (prior.get("attempts") or 1) == 1 else 900
+            if self.env.now() < prior.get("ended", 0) + delay:
+                return None
         intent = read_json(self.span_dir(plan_id) / "intent.json")
         marker = Path(self.cfg["copy_marker_dir"]) / f"{plan_id}.ok"
         values = {"{plan_id}": plan_id, "{output}": intent["output"], "{marker}": str(marker)}
@@ -2105,13 +2138,15 @@ class Controller:
                 arg = arg.replace(key, value)
             full.append(arg)
         started = self.env.now()
-        self.hold_fence(OFFLOAD_TIMEOUT_S + STANDING_FENCE_S)  # the fence outlasts the upload (RL-173 E)
+        self.hold_fence(OFFLOAD_TIMEOUT_S + STANDING_FENCE_S, minimum_s=OFFLOAD_TIMEOUT_S + 300)  # the fence outlasts the upload (RL-173 E)
         res = self.host_run(full, timeout=OFFLOAD_TIMEOUT_S)
         record = {"argv": full, "rc": res.rc, "ok": res.rc == 0, "started": started, "ended": self.env.now(),
                   "attempts": ((prior or {}).get("attempts") or (1 if prior else 0)) + 1,
-                  "tail": (res.stdout + res.stderr).strip()[-300:]}
+                  "tail": (res.stdout + res.stderr).strip()[-300:],
+                  "marker_sha256": law.digest(self.read_marker(plan_id))}
         close = read_json(path)
         close["offload"] = record
+        close["closed_epoch"] = max(close.get("closed_epoch") or 0, math.ceil(self.env.now()))
         atomic_json(path, close)
         self.transition(plan_id, "offload", {k: record[k] for k in ("rc", "ok", "started", "ended")})
         return record

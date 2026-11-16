@@ -821,12 +821,12 @@ halts (`GATE_DISAGREEMENT`).
   fence on the wake. The residual is that event latency (milliseconds; Mythos measured 0.1 to 0.2 ms), accepted by
   RL-173 E with the agent census as the backstop.
 - **Every wait is bounded (Mythos F7).** It pages `WAIT_STALL` after 30 min (an agent, a refused plan, a missing
-  copy marker, a foreign run, a failed read) or 2 h 30 min (anything else). That includes the waits inside the
+  copy marker, a missing standing fence, a failed read), 36 h for a live foreign run or night agent, or 2 h 30 min (anything else). That includes the waits inside the
   arm path.
 
 ### 15.8 The journal-copy gate and foreign runs (Sol 10, 11; Mythos F18)
 
-- **The copy gate (RL-173 A).** When the host's newest receipt is a campaign span's, its offload marker must exist
+- **The copy gate (RL-173 A).** Every closed controller output and the host's newest campaign receipt retain their own copy debt; each offload marker must exist
   and verify before another arm (15.13). Absent: `JOURNAL_COPY`, a wait. Unverified, a `.failed` file, or the
   controller's own offload step failed: `OFFLOAD_FAILED`, a halt. Either is a global reason, so F0 is held too.
 - **Unknown receipts.** A campaign receipt under the output root that no ledger knows halts
@@ -904,7 +904,7 @@ Research lead RL-173 (Sun 15 Nov 11:58). Each item, and where it is enforced:
 | RL-173 | What the controller does | Where |
 |---|---|---|
 | E, watchdog interlock (Sol R7) | The fence is held continuously from startup through arm and close while a queue is live (15.7); the wake is registered before the last observation. `magistrate_watchdog.py` is not touched | `startup_fence`, `refresh_fence`, `run_loop`, `monitor`, `close` |
-| C.4 (Sol R10) | `watcher_kind: actions`: each arm (both authority reads) reads the watcher workflow's latest completed run with `gh api repos/<slug>/actions/workflows/<watcher_name>/runs?status=completed&per_page=1`. The run must be `completed`/`success`, the configured workflow file, started after the latest close of anything on the host and within 24 h, and not after the host clock. A failed read is `WATCHER_UNREADABLE` (retry); not newer, `WATCHER_NOT_NEWER` (wait); failed or malformed, `WATCHER_FAILED` (halt); none, `WATCHER_RUN_MISSING` (halt). The run is bound into the intent; the lease is its start plus 24 h | `read_watcher_run`, `law.actions_watcher_reasons` |
+| C.4 (Sol R10) | `watcher_kind: actions`: each arm (both authority reads) reads the watcher workflow's latest completed run with `gh api repos/<slug>/actions/workflows/<watcher_name>/runs?status=completed&per_page=1&branch=main&event=schedule`. The run must be `completed`/`success`, the configured workflow file, started after the latest close of anything on the host and within 24 h, and not after the host clock. A failed read is `WATCHER_UNREADABLE` (retry); not newer, `WATCHER_NOT_NEWER` (wait); failed or malformed, `WATCHER_FAILED` (halt); none, `WATCHER_RUN_MISSING` (halt). The run is bound into the intent; the lease is its start plus 24 h | `read_watcher_run`, `law.actions_watcher_reasons` |
 | C.5 | `watcher_kind: stamp`: the Air's stamp, re-read at every arm; one observation under 24 h may serve several arms | `law.watcher_reasons` |
 | E, the draw (Sol R11) | The desk's v3 draw (FORMAT section 5): per span, append-stable, first of each group always | #799 |
 | E, Q1 (Sol R12) | The lead's typed record `<records_dir>/q1/<plan_id>.json` on the audit branch, validated by `desk_final.validate_q1_record`; span k's record before span k+2 arms (`K2_Q1_DEBT`), nothing sooner. Invalid, or committed before its span closed: `Q1_RECORD_INVALID` (halt). A kit that cannot be read owes one | `read_audit`, `law.apply_q1`, `law.k2_reasons` |
@@ -918,8 +918,8 @@ Research lead RL-173 (Sun 15 Nov 11:58). Each item, and where it is enforced:
 
 - **Invocation (optional).** With `offload_argv` in the config (an absolute program; placeholders `{plan_id}`,
   `{output}` (the span's output directory, read-only to the tool) and `{marker}` (the marker path)), the
-  controller runs it once in the close interval, after the push and the MBP desk, with a 3,600 s timeout, and
-  records its exit code (`close.json` `offload`). A non-zero exit with no verified marker is `OFFLOAD_FAILED`.
+  controller runs it in the close interval, after the push and the MBP desk, with a 3,600 s timeout, and
+  records its exit code (`close.json` `offload`). A non-zero exit contradicting a verified marker is `OFFLOAD_FAILED` even on the first attempt. Without a marker, retries remain `JOURNAL_COPY` until the three attempts are spent, then `OFFLOAD_FAILED`. Attempts two and three wait 5 and 15 minutes after the previous attempt ended. A changed marker after exhaustion permits a recovery run of the configured tool; its successful exit is required too. The tool must be idempotent on an existing verified marker: validate it and return success without rewriting it.
   With `offload_argv: null` another process runs the tool; the gate is the same.
 - **The marker** `<copy_marker_dir>/<plan_id>.ok`, a regular file under 64 KiB, created once when the upload is
   verified, JSON with exactly these keys:
@@ -939,12 +939,11 @@ Research lead RL-173 (Sun 15 Nov 11:58). Each item, and where it is enforced:
   `source` is exactly the `{output}` the controller passed; `written_at` falls after the span's receipt and not
   after the host clock (300 s skew). `key_second_copy` may be null only on a marker written before
   2026-11-16 11:58 PST (A.1's 24 h). A failed offload may leave
-  `<plan_id>.failed` (any content), which holds like a bad marker. The controller opens nothing else the tool
+  `<plan_id>.failed` (any content), which holds like a bad marker. The offload tool owns this status file and must remove it before publishing a successful retry's `.ok`; the controller never deletes the failed attempt's evidence. The controller opens nothing else the tool
   writes; the marker carries no denied key.
 - **The Actions watcher.** The controller reads the workflow named by `watcher_name` (a file name, e.g.
   `mbp-watcher.yml`) through the runs API. A run concludes `success` when it checked the host's results ref
-  (alarm or not); the alarm itself is the watcher's own issue (C.1-C.3). It counts only as a `schedule` or
-  `workflow_dispatch` run on `main`.
+  (alarm or not); the alarm itself is the watcher's own issue (C.1-C.3). It counts only as a `schedule` run on `main`.
 
 **Install additions:** `controller_signers` (an allowed-signers file naming `cadence-controller` with the
 controller's public key), `watcher_kind`, `offload_argv`, `desk_commit` (the commit the off-host desk runs; the
@@ -966,7 +965,7 @@ only; the frozen pins record no hash).
 | Opus 3 (MED): marker not bound to its span | `source` must be the span's output directory; `written_at` after the span's receipt and not after the host clock (300 s skew); A.1's key rule by the marker's own `written_at` |
 | Opus 4 (LOW): a stale desk lock was silent | `MBP_DESK_FAILED` (halt) on a stale lock or three failed runs; the step keeps retrying and the halt lifts when it publishes |
 | Opus 5 (LOW): L002 lifted by a disposition; a missing L002 summary read as released | Only the L002 release record lifts `L002_TIMEOUT`; a consumer-gate leg whose summary was not read is "not known" (holds) |
-| Opus 6 (LOW): any Actions run counted | The run must be `schedule` or `workflow_dispatch` on `main` |
+| Opus 6 (LOW): any Actions run counted | The run must be `schedule` on `main` in this repository |
 | Opus 7 (LOW): the draw over-selected | (#799) at the desk the history decides first-of-group |
 | Opus 8 (LOW): the MBP desk's commit not pinned | Config `desk_commit`; the arm proof's `desk_commit` line checks the controller checkout's HEAD and its clean desk files |
 | Opus 9 (LOW): unfenced first tick after an acknowledgement | The tick takes the fence before its network work whenever no page is unacknowledged |
@@ -987,3 +986,47 @@ only; the frozen pins record no hash).
 | T15 | = Opus 3; switch-over: the newest hand-armed campaign close needs a typed marker before the first tick (install list) |
 | T16 | `desk_code` names the transport, the kit loader and the CLI; the MBP's checkout is pinned (Opus 8) |
 | T17 | A second veto issue pages; a foreign-run wait is quiet (nothing synced) with the 36 h bound |
+
+
+### 15.15 Gate 4 dispositions (Sol fix round 5, 2026-11-15)
+
+Reports: `/Volumes/JW-EXT/scratch/mythos-gate4-800-799/REPORT.md` (ADMIT WITH FIXES) and
+`/Volumes/JW-EXT/scratch/opus-gate4-800-799/REPORT.md` (REFUSE), both at #799 `91e26dd66` / #800 `626272a75`.
+No fresh admission is claimed. This table supersedes earlier descriptions where they differ.
+
+| Mythos / Opus | Disposition and evidence |
+|---|---|
+| F1 / 2: premature global L002 release | FIXED. `l002_reasons` checks the release's authenticated commit time against the span's receipt for every campaign and fallback, independently of the candidate. Missing or early time leaves `L002_TIMEOUT` and `GATE_RECORD_PREMATURE`. `Gate4Law.test_l002_release_is_checked_globally_against_the_receipt`. |
+| F2: zero-leg receipt or no receipt | PARTLY FIXED. A readable zero-leg receipt stores `[]`; no L002 is invented. Receipt rows are merged with packed summaries, so a started L002 without its summary still counts (Opus 9). A missing receipt remains unknown and holds after rerun/withdrawn: the research lead must choose whether a disposition may release unknown L002 evidence. No fake release is prescribed. |
+| F3 / 4: forgotten hand-armed or stranded copy | FIXED. Census retains the newest campaign receipt even after a newer foreign receipt. Every closed controller span with an output owes a copy, including STRANDED without a receipt; all such closes get a completion time and are retried. Gate4Law copy-debt regression. Historical hand spans older than the newest campaign receipt are not retroactively required to have new markers. |
+| F4: stale tick time; retry floor | FIXED. Refresh the decision clock after close retries and after watcher acquisition. Desk/offload retry completion advances closed_epoch; every final close records the end of all its work. The 300 s floor cannot elapse during the upload. Gate4Controller upload timeout/floor regression. |
+| F5 / 5: fence budget and discarded lapse | FIXED. Long close steps reserve their full timeout plus margin; renew between close proof and log show, before each upload and desk attempt. Every mid-arm renewal acts on lost/lapsed. A default poll still avoids rewriting a fence with time to spare. Gate4Controller mid-arm and upload regressions. |
+| F6 / 3,12: offload interface residues | Exit contradiction FIXED. `.failed` remains a conservative hold; the producer removes it before a successful marker (above). DEFERRED to `ops/2026-11-15-air-independence`: prove all descendants have ended, and replace free-text key location/private destination assertions with a jointly reviewed typed contract. The controller cannot infer arbitrary helper identity or verify physical key custody from prose; no broad kill/reap path is introduced. Installation remains gated on that owner evidence. |
+| F7 / 8: dispatch documentation | FIXED. Code, query and design require schedule/main/this repository. workflow_dispatch does not count. |
+| F8: dead foreign fence waits 36 h | FIXED. An arm missing its own fence uses STANDING_FENCE_MISSING (30 min); a live foreign run retains SPAN_LIVE (36 h). Gate4Law stall-bound regression. |
+| F9 / 11: code pin and signer/config/read safety | FIXED. Whole checkout dirty-check at arm and close; isolated desk bytecode cache; missing signing-key .pub fails; production cannot disable the fence; prior receipt read rejects a symlink/nonregular/over-16-MiB file. `accept-audit-tip` is a lead maintenance command, run only at a clean boundary with the controller stopped; its no-op guard is not an arm path and remains an operator prerequisite. |
+| F10 / 6: valid rerun draw (T11) | NEEDS RESEARCH-LEAD RULING, #799. Does a disposed executed attempt consume the group's first-span draw? Resolve rerun chains, or count that attempt. Recommend resolving chains; no policy change before ruling. FORMAT now describes actual behavior. F12 sample-plan is an accepted queue-only preview: its printed caveat and FORMAT section 5 already distinguish it from the history-based desk; its hash is exact, its first-of-group prediction is provisional. |
+| F11 / 12: history-empty | FIXED auditability/invocation in #799: hash-covered history_empty_asserted; first-record command and host-local lock setup; truthful history error. ASSERTION REMAINS: the operator must fetch all verdict refs and verify the prefix is empty; a machine-verifiable remote-emptiness proof needs an owner contract. |
+| F12 / 11: matching refusal, code identity | FIXED in #799: normalize declared local roots only; preserve semantic diagnostics; hash the full 14-file desk import closure. |
+| — / 1: old clearance hides later verdicts | FIXED. A disposition's optional verdicts map binds exact verdict_sha256 values by mbp/offhost. A named-stop hold lifts only for the named desk's matching hash. DESK_DISAGREEMENT lifts only on a cleared record naming both current hashes. Missing bindings hold. Duplicate disposition plan ids are invalid. Signed transport commit dates are fixed for reproducibility and cannot date a clearance. New off-host verdicts cannot inherit an earlier clearance. Gate4Law later-verdict regression. |
+| — / 7: campaign-scope stops | DEFERRED, #799/#800. All nine current kits use span scope. Campaign-scope support needs shared authenticated history before a future kit uses it; agreement does not suppress such stops. |
+| — / 9: receipt row without summary | FIXED with F2: the close merges host receipt rows with packed summaries per leg; a row with no released outcome is unreleased. |
+| — / 10: upload attempts too close together | FIXED with F4/F5: delays are 5 then 15 minutes after the previous attempt's end, independent of the 60 s poll. Gate4Controller retry-spacing regression. |
+
+**Research-lead questions (not rulings).** In addition to the draw and unknown L002 recovery above:
+A.1's 24 h may mean current judgment time or marker written_at (current behavior); which is intended?
+Does an informational WAIT_STALL page release the continuous fence (gate-3 T13)? N12's reference hash
+is still bound by capture-run name only. Confirm Q1 records for hand-armed v1.1 spans counted in line 9,
+and the typed-marker switch-over requirement. A rerun/withdrawn span with desk disagreement currently
+needs a cleared record with updated bindings; should there be a non-counting clearance? Free-text custody assertions,
+arbitrary offload descendants, and campaign-history support stay with their named owners. The deny scan
+covers JSON keys, not arbitrary value semantics; current frozen producers are the supported input surface,
+and a stronger value/allowlist projection requires a separately reviewed owner contract.
+
+
+**Desk-clearance record (gate 4 Opus 1).** A STANDING disposition retains `plan_id`, `resolution`, `record`
+and may add `verdicts: {"mbp": "<verdict_sha256>", "offhost": "<verdict_sha256>"}`. Include each desk whose
+named-stop hold is being resolved. A disagreement requires both exact hashes and `resolution: cleared`.
+A missing binding never clears a hold; legacy three-field records still disposition a bad close (rerun/withdrawn remove its
+line-9 count; cleared retains it) but must be extended before they lift a desk hold. A later verdict requires an updated binding.
+The producer preserves deterministic fixed Git commit dates; no clearance chronology is inferred from them.

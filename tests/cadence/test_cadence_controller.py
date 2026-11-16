@@ -1043,3 +1043,119 @@ class Gate3ControllerMythos(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Gate4Controller(unittest.TestCase):
+    def test_a_missing_public_key_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            signers = root/'allowed'
+            signers.write_text('cadence-controller ssh-ed25519 wrong-key\n')
+            self.assertFalse(cc.controller_signers_check({'controller_signers': str(signers),
+                                                         'signing_key': str(root/'missing')})['ok'])
+
+    def test_production_cannot_disable_the_continuous_fence(self):
+        from unittest import mock
+        cfg = ConfigAndInstall().cfg()
+        cfg['hold_standing_fence'] = False
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {'JW_B5_SYNTHETIC_ONLY': '0'}):
+            path = Path(tmp)/'config.json'
+            path.write_text(json.dumps(cfg))
+            with self.assertRaisesRegex(cc.ConfigError, 'hold_standing_fence'):
+                cc.load_config(path)
+
+    @unittest.skipUnless(HAVE_TOOLS, 'synthetic git tools')
+    def test_every_mid_arm_fence_lapse_halts_before_intent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            w = synth.World(Path(tmp)/'w', prior=False)
+            ctl = w.controller()
+            w.queue('pilot', [w.span(1, 'dev-05-s01', 'cl-dev-05', L[:6])], role='smoke')
+            check = ctl.preparer.check
+            def slow_check(*a, **kw):
+                result = check(*a, **kw)
+                w.env.t += cc.STANDING_FENCE_S+1
+                return result
+            ctl.preparer.check = slow_check
+            self.assertEqual(w.tick()['state'], 'HALTED')
+            self.assertFalse((Path(w.cfg['state_dir'])/'spans/cq-dev-05-s01-a1/intent.json').exists())
+            self.assertIn('ARM_INDETERMINATE', json.dumps(ctl.unacked_pages()))
+
+    def test_upload_retry_reserves_full_timeout_and_resets_the_floor(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            ctl = object.__new__(cc.Controller)
+            ctl.state = Path(tmp)/'state'
+            ctl.custody = Path(tmp)/'custody'
+            ctl.cfg = {'hold_standing_fence': True, 'offload_argv': ['/fake/upload', '{plan_id}', '{marker}'],
+                       'copy_marker_dir': str(Path(tmp)/'markers')}
+            ctl.env = synth.FakeEnv(10000)
+            ctl.token, ctl.pid = 'test', os.getpid()
+            path = ctl.span_dir('p1')
+            cc.atomic_json(path/'intent.json', {'output': str(Path(tmp)/'output')})
+            cc.atomic_json(path/'close.json', {'closed_epoch': 9000, 'offload': {'ok': False, 'attempts': 1, 'ended': 9000}})
+            ctl.hold_fence(4500)
+            ctl.env.t += 1500   # 3000 left, less than timeout
+            left = []
+            def upload(argv, **kwargs):
+                left.append(cc.fence.read_fence(ctl.custody)['deadline']-ctl.env.now())
+                ctl.env.t += cc.OFFLOAD_TIMEOUT_S
+                return cc.Result(0, '', '')
+            ctl.host_run = upload
+            ctl.transition = mock.Mock()
+            result = ctl.offload_close('p1')
+            self.assertTrue(result['ok'])
+            self.assertGreater(left[0], cc.OFFLOAD_TIMEOUT_S)
+            self.assertGreater(cc.fence.read_fence(ctl.custody)['deadline'], ctl.env.now())
+            self.assertEqual(cc.read_json(path/'close.json')['closed_epoch'], ctl.env.now())
+
+    def test_upload_retries_wait_five_then_fifteen_minutes(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            ctl = object.__new__(cc.Controller)
+            ctl.state, ctl.custody = Path(tmp)/'state', Path(tmp)/'custody'
+            ctl.cfg = {'hold_standing_fence': False, 'offload_argv': ['/fake/upload', '{plan_id}'],
+                       'copy_marker_dir': str(Path(tmp)/'markers')}
+            ctl.env = synth.FakeEnv(10000)
+            ctl.host_run = mock.Mock(return_value=cc.Result(7, '', 'provider down'))
+            ctl.transition = mock.Mock()
+            cc.atomic_json(ctl.span_dir('p1')/'intent.json', {'output': '/synthetic/output'})
+            cc.atomic_json(ctl.span_dir('p1')/'close.json', {'closed_epoch': 9000})
+            ctl.offload_close('p1')
+            for step in (60, 60, 179):
+                ctl.env.t += step
+                self.assertIsNone(ctl.offload_close('p1'))
+            ctl.env.t += 1
+            ctl.offload_close('p1')
+            ctl.env.t += 899
+            self.assertIsNone(ctl.offload_close('p1'))
+            ctl.env.t += 1
+            ctl.offload_close('p1')
+            ctl.env.t += 900
+            self.assertIsNone(ctl.offload_close('p1'))
+            self.assertEqual(ctl.host_run.call_count, 3)
+
+
+class Gate4TickClock(unittest.TestCase):
+    def test_snapshot_uses_the_clock_after_close_retries(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            ctl = object.__new__(cc.Controller)
+            ctl.state, ctl.env = Path(tmp), synth.FakeEnv(1000)
+            ctl.records = lambda: ([{'plan_id': 'p1', 'status': 'CLOSED_OK', 'closed_epoch': 900}], [])
+            ctl.refresh_fence = ctl.hold_fence = mock.Mock(return_value='held')
+            ctl._foreign_fence = lambda: None
+            ctl.record_acked_sessions = lambda now: None
+            ctl.unacked_pages = lambda: []
+            ctl.night_agents = lambda: ([], True)
+            ctl.desk_close = lambda plan: None
+            def slow_upload(plan):
+                ctl.env.t += 400
+            ctl.offload_close = slow_upload
+            clocks = []
+            ctl.snapshot = lambda now, records: (clocks.append(now), ({}, {}))[1]
+            ctl.critical_path = mock.Mock()
+            ctl.act = lambda *args: {'state': 'WAIT'}
+            ctl.settle_pages = mock.Mock()
+            with mock.patch.object(law, 'select', return_value=law.Decision('wait', [])):
+                ctl.tick()
+            self.assertEqual(clocks, [1400])

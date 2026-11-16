@@ -109,7 +109,7 @@ def verdict(rec, *, final=True, mock=False, holds=None, next_hold=False, signed=
            "history_source": history,
            "holds": kit_holds(rec) if holds is None else list(holds), "mock": mock, "transport": {"signed": signed},
            "identities": {"manifest_sha256": anchor or rec["bundle_sha256"]}}
-    return {"doc": desk_final._finish(doc)}
+    return {"doc": desk_final._finish(doc), "epoch": NOW - 100}
 
 
 def q1_doc(plan_id):
@@ -123,6 +123,14 @@ def snap(views, st=None, *, now=NOW, runs=None, verdicts=None, issues=(), watche
          q1_epochs=None):
     st = st or standing()
     runs = runs if runs is not None else law.build_runs(st, list(records), list(externals), kits=KITS)
+    # Existing recovery tests explicitly clear the verdicts supplied to this fixture. Gate4Law tests later
+    # verdicts directly without this convenience binding.
+    disposed = {d["plan_id"] for d in st["dispositions"]}
+    for run in runs:
+        if run.plan_id in disposed:
+            run.extra['disposition_verdicts'] = {name: table[run.plan_id]['doc']['verdict_sha256']
+                for name, table in (('offhost', verdicts or {}), ('mbp', mbp_verdicts or {}))
+                if table.get(run.plan_id, {}).get('doc')}
     halts = law.apply_verdicts(runs, verdicts or {}, accept_mock=accept_mock, mbp_verdicts=mbp_verdicts)
     if q1 is None:      # every span's Q1 record present, committed after its close (RL-173 E has its own tests)
         q1 = {r.plan_id: {"doc": q1_doc(r.plan_id), "error": None} for r in runs if r.kind == "campaign"}
@@ -138,6 +146,7 @@ def snap(views, st=None, *, now=NOW, runs=None, verdicts=None, issues=(), watche
             "vetoes": law.veto_reasons(list(issues), "mpmdw"),
             "watcher": (law.watcher_reasons(stamp, now - 1800, now, WATCHER) if watcher
                         else law.watcher_reasons(None, None, now, WATCHER)),
+            "record_epochs": {(r["plan_id"], r["gate"]): NOW for r in st["gate_records"]},
             "sessions": law.session_reasons(st, list(sessions), set()), "census_reasons": [], "census_epoch": census,
             "fallback": st["fallback"], "fallback_queues": list(fallback_views),
             "plan_worst": plan_worst or (lambda cand: 3 * 3600)}
@@ -678,7 +687,7 @@ class Census(unittest.TestCase):
         good = {"cq-dev-05-s01-a1": {"doc": marker("cq-dev-05-s01-a1"), "error": None, "failed": False}}
         self.assertEqual(law.census_reasons(census, self.runs(), "/o", good, now=NOW), [])
         other = {"newest": (int(NOW), "/w/f0/runner_receipt.json"), "campaign": [newest]}
-        self.assertEqual(law.census_reasons(other, self.runs(), "/o", {}), [])
+        self.assertEqual([r["code"] for r in law.census_reasons(other, self.runs(), "/o", {})], ["JOURNAL_COPY"])
 
     def test_an_unknown_campaign_receipt_or_a_failed_census_halts(self):       # Mythos F18
         stray = "/o/cl-dev-03/cq-dev-03-s01-a1-20261117T020000Z/runner_receipt.json"
@@ -936,3 +945,72 @@ class Gate3LawMythos(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Gate4Law(unittest.TestCase):
+    def test_l002_release_is_checked_globally_against_the_receipt(self):
+        rec = record('cq-dev-03-s01-a1', '05', L[:3], NOW-1000, closed=NOW-600, gates=['L002'])
+        rec['g0_unreleased'] = ['L002']
+        st = standing(prior_spans=[], gate_records=released((rec['plan_id'], 'L002')))
+        runs = law.build_runs(st, [rec], [], kits=KITS)
+        for epoch in (None, NOW-601):
+            rs = law.l002_reasons(runs, st, {(rec['plan_id'], 'L002'): epoch})
+            self.assertEqual({r['code'] for r in rs}, {'GATE_RECORD_PREMATURE', 'L002_TIMEOUT'})
+        self.assertEqual(law.l002_reasons(runs, st, {(rec['plan_id'], 'L002'): NOW-600}), [])
+
+    def test_clearance_cannot_cover_a_later_verdict_or_disagreement(self):
+        rec, _ = pilot_done()
+        old = verdict(rec, next_hold=True, holds=[{'code': 'REFUSAL', 'scope': 'queue'}]+kit_holds(rec))
+        st = standing(prior_spans=[], dispositions=[{'plan_id': rec['plan_id'], 'resolution': 'cleared', 'record': 'RL-x',
+                          'verdicts': {'mbp': old['doc']['verdict_sha256'], 'offhost': old['doc']['verdict_sha256']}}])
+        runs = law.build_runs(st, [rec], [], kits=KITS)
+        def reasons(off):
+            return {r['code'] for r in law.apply_verdicts(runs, {rec['plan_id']: off}, accept_mock=False,
+                                                        mbp_verdicts={rec['plan_id']: old})}
+        self.assertEqual(reasons(old), set())
+        later = copy.deepcopy(old)
+        later['doc']['desk_code'] = {'new': 'a'*64}
+        desk_final._finish(later['doc'])
+        self.assertEqual(reasons(later), {'DESK_HOLD', 'DESK_DISAGREEMENT'})
+        runs[0].extra['disposition_verdicts']['offhost'] = later['doc']['verdict_sha256']
+        self.assertEqual(reasons(later), set())
+        runs[0].extra['disposition_verdicts'] = {}
+        self.assertEqual(reasons(later), {'DESK_HOLD', 'DESK_DISAGREEMENT'})
+
+    def test_prior_copy_debt_survives_a_newer_foreign_receipt(self):
+        pid = PRIOR[-1]['plan_id']
+        path = f'/o/cl-dev-01/{pid}-20261116T000000Z/runner_receipt.json'
+        census = {'newest': (NOW-100, '/foreign/f0/runner_receipt.json'), 'campaign': [path]}
+        runs = law.build_runs(standing(), [], [], kits=KITS)
+        rs = law.census_reasons(census, runs, '/o', {pid: {'failed': True}}, now=NOW)
+        self.assertEqual([r['code'] for r in rs], ['OFFLOAD_FAILED'])
+
+    def test_a_verified_marker_cannot_overrule_the_synchronous_exit(self):
+        pid = 'cq-dev-05-s01-a1'
+        census = {'newest': (NOW-600, '/foreign/runner_receipt.json'), 'campaign': []}
+        rs = law.census_reasons(census, [], '/o', {pid: {'doc': marker(pid)}}, now=NOW,
+                               copy_due={pid: {}}, offload_failures=[pid])
+        self.assertEqual([r['code'] for r in rs], ['OFFLOAD_FAILED'])
+
+    def test_missing_standing_fence_uses_the_short_stall_bound(self):
+        self.assertEqual(law.stall_bound(['STANDING_FENCE_MISSING']), law.STALL_SHORT_S)
+        self.assertEqual(law.stall_bound(['SPAN_LIVE']), law.STALL_LONG_S)
+
+
+class Gate4ReceiptOutcomes(unittest.TestCase):
+    def test_zero_legs_missing_receipt_and_partial_summary_are_distinct(self):
+        roster = ['L001', 'L002', 'L003']
+        self.assertEqual(law.receipt_unreleased({'legs': [], 'legs_finished': 0, 'rc': 2}, {}, roster), [])
+        for receipt in (None, {}, {'legs': [], 'legs_finished': 2}):
+            self.assertIsNone(law.receipt_unreleased(receipt, {}, roster))
+        partial = {'legs': [{'leg_id': 'L001'}, {'leg_id': 'L002'}], 'legs_finished': 1}
+        self.assertEqual(law.receipt_unreleased(partial, {'L001': {'g0_outcome': 'released'}}, roster), ['L002'])
+        partial['legs'][1]['summary'] = {'g0_outcome': 'released'}
+        self.assertEqual(law.receipt_unreleased(partial, {'L001': {'g0_outcome': 'released'}}, roster), [])
+
+
+class Gate4DispositionUniqueness(unittest.TestCase):
+    def test_a_new_duplicate_cannot_redate_an_unchanged_clearance(self):
+        with self.assertRaisesRegex(law.StandingError, 'duplicate plan_id'):
+            standing(dispositions=[{'plan_id': 'cq-x-a1', 'resolution': 'withdrawn', 'record': 'new'},
+                                   {'plan_id': 'cq-x-a1', 'resolution': 'cleared', 'record': 'old'}])

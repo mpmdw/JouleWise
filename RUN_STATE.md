@@ -8,6 +8,8 @@
 
 **2026-11-16 PR #799 gate 5:** valid new-id rerun_of coverage added; hash and append stability verified. First-of-group treatment of disposed ancestors remains NEEDS_RULING; no policy change. [Run report](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md). No MBP contact; no merge.
 
+**2026-11-15 Sol round 5, PR #800:** gate-4 controller corrections and dispositions are applied on #799 `6b4e32b20`. Independent delta findings were corrected. Local verification: 421 cadence tests OK with 12 explicit /bin/ps environment skips; 48 host/docs checks and 15 synthetic scenarios pass. Fresh admission, research questions and lead gates remain open. Isolated build tree `/Volumes/JW-EXT/scratch/sol-ctl-r5/wt800`; original metadata inaccessible. See [docs/run_reports/2026-11-15-queue-controller-gate4-sol-r5.md](docs/run_reports/2026-11-15-queue-controller-gate4-sol-r5.md). No MBP or custody access; no merge.
+
 **2026-11-15 Sol round 5, PR #799:** gate-4 desk fixes applied and reviewed; 71 desk tests pass. Rerun draw and latent campaign-scope history await research-lead policy; history-empty remains a recorded operator assertion. Isolated build tree: `/Volumes/JW-EXT/scratch/sol-ctl-r5/wt799`; original Git metadata is inaccessible. See [docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md](docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md). No MBP or custody access; no merge.
 
 This file is the single running pointer for the project: the one doc to

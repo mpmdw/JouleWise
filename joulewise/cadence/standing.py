@@ -61,7 +61,7 @@ STALL_S = 2.5 * 3600               # the default bound on any wait
 STALL_SHORT_S = 30 * 60            # waits the host or the lead clears in minutes, or never by themselves
 SHORT_STALL_CODES = frozenset({"AGENT_PRESENT", "PLAN_REFUSED_AT_T0", "JOURNAL_COPY", "CLOSING",
                                "ISSUES_UNREADABLE", "FETCH_FAILED", "NIGHT_UNKNOWN", "LEASE_EXPIRED",
-                               "WATCHER_UNREADABLE"})
+                               "WATCHER_UNREADABLE", "STANDING_FENCE_MISSING"})
 STALL_LONG_S = 36 * 3600           # a loaded night agent is a v4 window (28 to 33 h); it pages only past that
 LONG_STALL_CODES = frozenset({"NIGHT_AGENT", "SPAN_LIVE"})   # a foreign run (F0, a session) may last a day
 MIDNIGHT_MARGIN_S = 120            # a dated arm is refused this close to the end of its date (F19)
@@ -173,6 +173,7 @@ REASONS = {
     "NIGHT_UNKNOWN": ("wait", "the night-agent read failed: no network until it reads clean"),
     "LEASE_EXPIRED": ("wait", "the authority read is older than the arm lease: re-read before arming"),
     "SPAN_LIVE": ("wait", "a span or another run holds the host"),
+    "STANDING_FENCE_MISSING": ("wait", "the standing fence is not held; no arm without it"),
     "CLOSING": ("wait", "the span's fence is gone; its receipt or process absence is not yet proven"),
     "MIDNIGHT": ("wait", "a dated span is not armed within 120 s of the end of its date"),
     "FALLBACK_SPACING": ("wait", "F0 spacing: 4 h between t0s and at most three a date"),
@@ -393,10 +394,16 @@ def validate_standing(doc):
     if not (isinstance(wd, list) and all(_text(x) for x in wd)):
         p.append("withdrawn: a list of plan ids")
     disp = doc.get("dispositions")
-    if not (isinstance(disp, list) and all(isinstance(d, dict) and set(d) == {"plan_id", "resolution", "record"}
+    if not (isinstance(disp, list) and all(isinstance(d, dict) and set(d) in ({"plan_id", "resolution", "record"}, {"plan_id", "resolution", "record", "verdicts"})
                                            and _text(d["plan_id"]) and d["resolution"] in RESOLUTIONS
-                                           and _text(d["record"]) for d in disp)):
+                                           and _text(d["record"]) and ("verdicts" not in d or
+                                               (isinstance(d["verdicts"], dict) and bool(d["verdicts"])
+                                                and set(d["verdicts"]) <= {"mbp", "offhost"}
+                                                and all(isinstance(v, str) and HEX64.fullmatch(v)
+                                                        for v in d["verdicts"].values()))) for d in disp)):
         p.append(f"dispositions: a list of {{plan_id, resolution in {RESOLUTIONS}, record}}")
+    elif len({d["plan_id"] for d in disp}) != len(disp):
+        p.append("dispositions: duplicate plan_id")
     sessions = doc.get("sessions")
     if not isinstance(sessions, list):
         p.append("sessions: a list")
@@ -686,6 +693,7 @@ def build_runs(standing, controller_records, external_runs, kits=None, prior_rec
     ``gates_unknown``. ``g0_unreleased`` (the legs whose G0 did not release; None when not known) comes from the controller's
     close for its spans and from the host receipt (``prior_receipts``) for a prior span."""
     disp = {d["plan_id"]: d["resolution"] for d in standing["dispositions"]}
+    bindings = {d["plan_id"]: d.get("verdicts", {}) for d in standing["dispositions"]}
     runs = []
     for s in standing["prior_spans"]:
         cls = kit_class({"campaign_id": s["campaign_id"]})
@@ -712,7 +720,7 @@ def build_runs(standing, controller_records, external_runs, kits=None, prior_rec
                         gates=list(r.get("gates") or []), resolution=disp.get(r["plan_id"]),
                         extra={"kit_sha256": r.get("kit_sha256"), "armed": r.get("armed") or {},
                                "roster": r["legs"], "g0_unreleased": r.get("g0_unreleased"),
-                               "receipt_epoch": r.get("receipt_epoch")}))
+                               "receipt_epoch": r.get("receipt_epoch"), "disposition_verdicts": bindings.get(r["plan_id"], {})}))
     for e in external_runs:
         runs.append(Run(e["run_id"], e["kind"], None, None, 0, False, e["t0_epoch"], e.get("closed_epoch"),
                         "CLOSED_OK" if e.get("restore") == "proven" else "CLOSE_UNPROVEN", "external",
@@ -731,12 +739,18 @@ def apply_verdicts(runs, verdicts, *, accept_mock, mbp_verdicts=None):
     for run in runs:
         if run.source != "controller" or run.kind not in ("campaign", "f2"):
             continue
-        entries = [e for e in (verdicts.get(run.plan_id), (mbp_verdicts or {}).get(run.plan_id)) if e is not None]
+        pairs = [(name, entry) for name, entry in (("offhost", verdicts.get(run.plan_id)),
+                 ("mbp", (mbp_verdicts or {}).get(run.plan_id))) if entry is not None]
+        entries = [e for _, e in pairs]
+        bindings = run.extra.get("disposition_verdicts") or {}
         states = []
-        for entry in entries:
+        for name, entry in pairs:
             state, hs, kit_holds = verdict_state(entry, run=run, accept_mock=accept_mock)
             states.append(state)
-            if run.resolution in RESOLUTIONS:   # cleared lifts the hold; rerun and withdrawn also take it out (N3)
+            # The signed transport fixes commit dates for reproducibility. Bind the exact verdict instead:
+            # a later off-host recheck cannot inherit a clearance of an older stop (gate 4, Opus 1).
+            if (run.resolution in RESOLUTIONS and entry.get("doc") is not None
+                    and bool(bindings.get(name)) and bindings.get(name) == entry["doc"].get("verdict_sha256")):
                 hs = [h for h in hs if h["code"] != "DESK_HOLD"]
             halts += hs
             if not hs:
@@ -748,7 +762,9 @@ def apply_verdicts(runs, verdicts, *, accept_mock, mbp_verdicts=None):
         docs = [e["doc"] for e in entries if e.get("doc") is not None]
         if len(docs) == 2:
             diff = desk_final.compare_verdicts(docs[1], docs[0])
-            if diff and run.resolution != "cleared":
+            cleared = (run.resolution == "cleared" and all(
+                bool(bindings.get(name)) and bindings.get(name) == entry["doc"].get("verdict_sha256") for name, entry in pairs))
+            if diff and not cleared:
                 halts.append(reason("DESK_DISAGREEMENT", f"{run.plan_id}: {', '.join(diff)}", span=run.plan_id))
     return halts
 
@@ -836,7 +852,19 @@ def unreleased(outcomes, roster):
     return sorted(out)
 
 
-def l002_reasons(runs, standing):
+def receipt_unreleased(receipt, summaries, roster):
+    """Distinguish a proven zero-leg refusal from missing evidence; receipt rows prove a leg started.
+    A packed summary overrides that leg's receipt projection, never the presence of other receipt rows.
+    """
+    rows = receipt.get("legs") if isinstance(receipt, dict) else None
+    outcomes = {leg.get("leg_id"): (leg.get("summary") or {}).get("g0_outcome")
+                for leg in rows or [] if isinstance(leg, dict)}
+    outcomes.update({lid: x.get("g0_outcome") for lid, x in summaries.items()})
+    known_empty = (rows == [] and type(receipt.get("legs_finished")) is int and receipt["legs_finished"] == 0)
+    return unreleased(outcomes, roster) if outcomes or known_empty else None
+
+
+def l002_reasons(runs, standing, record_epochs=None):
     """RL-161 and RL-173 E: after an L002 G0 timeout nothing arms and the Q1 print goes to the research lead. A span
     that raised the L002 consumer gate and whose L002 timed out at G0 (or whose G0 outcome is not known: missing
     evidence never passes) halts every arm, every queue and the fallback included, until the lead's ``release``
@@ -851,7 +879,14 @@ def l002_reasons(runs, standing):
         unrel = run.extra.get("g0_unreleased")
         if unrel is not None and "L002" not in unrel:
             continue
-        if decisions.get((run.plan_id, "L002")) != "release":
+        released = decisions.get((run.plan_id, "L002")) == "release"
+        if released:
+            epoch, ended = (record_epochs or {}).get((run.plan_id, "L002")), _ended(run)
+            if epoch is None or ended is None or epoch < ended:
+                out.append(reason("GATE_RECORD_PREMATURE",
+                                  f"L002 of {run.plan_id}: released at {epoch}, span ended at {ended}", span=run.plan_id))
+                released = False
+        if not released:
             out.append(reason("L002_TIMEOUT", f"{run.plan_id}: L002 "
                                               f"{'did not release its G0' if unrel is not None else 'G0 outcome not known'}",
                               span=run.plan_id))
@@ -1233,7 +1268,7 @@ def census_reasons(census, runs, output_root, copy_markers, now=None, offload_fa
       an unknown one is a halt (Mythos F18: a hand-armed span missing from ``prior_spans``).
     * The copy gate (RL-173 A), bound to SPANS, not to the newest file (gate 3, Opus 1): every span in
       ``copy_due`` (plan_id -> {"source": its output directory, "after": its receipt time}: every controller span
-      that left a receipt) and the host's newest receipt when it is a campaign span's must each have a verified
+      with a closed output, even without a receipt) and the host's newest campaign receipt must each have a verified
       offload marker (``offload_marker_problems``) before another arm, cede or F0 page. ``copy_markers`` maps
       plan_id -> {"doc": parsed JSON or None, "error": text or None, "failed": bool (a ``<plan_id>.failed``
       file)}. Not there yet: a wait (JOURNAL_COPY). There but unverified, a ``.failed`` file, or the controller's
@@ -1248,6 +1283,20 @@ def census_reasons(census, runs, output_root, copy_markers, now=None, offload_fa
         if m is None or m.group("plan") not in known:
             out.append(reason("UNKNOWN_CAMPAIGN_RECEIPT", path))
     due = dict(copy_due or {})
+    # The most recent campaign close remains due when a newer foreign receipt appears (gate 4, Mythos F3).
+    campaign_newest = census.get("campaign_newest")
+    if campaign_newest is None and census["newest"][1] in census["campaign"]:
+        campaign_newest = census["newest"]
+    if campaign_newest is None:
+        known_runs = {r.plan_id: r for r in runs}
+        candidates = [(known_runs[m.group("plan")].closed or 0, path) for path in census["campaign"]
+                      if (m := CAMPAIGN_RECEIPT.search(path)) and m.group("plan") in known_runs]
+        campaign_newest = max(candidates) if candidates else None
+    if campaign_newest is not None:
+        epoch, path = campaign_newest
+        m = CAMPAIGN_RECEIPT.search(path)
+        if m:
+            due.setdefault(m.group("plan"), {"source": os.path.dirname(path), "after": epoch})
     newest_epoch, newest = census["newest"]
     m = CAMPAIGN_RECEIPT.search(newest) if newest.startswith(output_root.rstrip("/") + "/") else None
     if m is not None and m.group("plan") not in due:
@@ -1255,7 +1304,9 @@ def census_reasons(census, runs, output_root, copy_markers, now=None, offload_fa
     failures = set(offload_failures or ())
     for plan_id, expect in sorted(due.items()):
         marker = copy_markers.get(plan_id) or {}
-        if marker.get("failed"):
+        if plan_id in failures:
+            out.append(reason("OFFLOAD_FAILED", f"{plan_id}: the controller's synchronous offload failed"))
+        elif marker.get("failed"):
             out.append(reason("OFFLOAD_FAILED", f"{plan_id}: the offload left {plan_id}.failed"))
         elif marker.get("doc") is None and marker.get("error") is None:
             if plan_id in failures:
@@ -1322,7 +1373,7 @@ def select(snap):
         globals_ += queue_reasons(view, now, bool(_pending(view)))
     globals_ += cross_queue_reasons(views, _disposed(standing))
     globals_ += prior_reasons(standing, views, snap.get("receipts"))
-    globals_ += l002_reasons(snap["runs"], standing)        # RL-173 E: nothing arms, the fallback included
+    globals_ += l002_reasons(snap["runs"], standing, snap.get("record_epochs"))        # RL-173 E: nothing arms, the fallback included
     heads = [_pending(v)[0]["span_id"] for v in views if v.get("doc") and _pending(v)]
 
     def held(action, rs):
