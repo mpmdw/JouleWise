@@ -654,14 +654,25 @@ class RcloneBackend:
                  "--stats", "0", "-q", *args]
         timeout = deadline.remaining(cap or self.timeout_s) if deadline else (cap or self.timeout_s)
         try:
-            proc = subprocess.run(argv, capture_output=True, stdin=subprocess.DEVNULL, timeout=timeout)
-        except subprocess.TimeoutExpired:
-            raise unverified("UPLOAD_TIMEOUT", args[0]) from None
+            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
         except OSError:
             raise unverified("RCLONE_UNAVAILABLE", "the rclone binary could not run") from None
+        _CHILDREN.add(proc)  # a signal handler kills it too (kill_children)
+        try:
+            out, _ = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise unverified("UPLOAD_TIMEOUT", args[0]) from None
+        except BaseException:
+            proc.kill()
+            proc.wait()
+            raise
+        finally:
+            _CHILDREN.discard(proc)
         if proc.returncode:
             raise unverified("RCLONE_FAILED", f"rclone {args[0]} rc={proc.returncode}")
-        return proc.stdout
+        return out
 
     def put(self, local, plan, name, deadline=None):
         # sha256 and the provider's digest come from ONE read of the staged bytes, before the upload; after
@@ -1103,14 +1114,14 @@ def _safe_members(tar, top):
             raise integrity("ARCHIVE_PATH", "a member is outside the span's top directory")
         if not (member.isreg() or member.isdir()):
             raise integrity("ARCHIVE_MEMBER_TYPE", "a member is not a regular file or directory")
+        if "." in parts:
+            raise integrity("ARCHIVE_PATH", "a member name has a '.' component")
         try:
             for part in parts:
                 if part:
                     _check_name(part, "the archive")
         except OffloadError:
             raise integrity("ARCHIVE_PATH", "a member name has a newline, backslash or bad encoding") from None
-        if "." in parts:
-            raise integrity("ARCHIVE_PATH", "a member name has a '.' component")
         folded = unicodedata.normalize("NFC", name.rstrip("/")).casefold()
         if folded in seen:
             raise integrity("ARCHIVE_DUPLICATE", "a member name appears twice (case and normalisation folded)")
@@ -1136,7 +1147,7 @@ def landing_complete(done_path, plan, span_name):
     try:
         with open_regular(done_path, "the completion record", single_link=True) as handle:
             doc = json.loads(handle.read(65536))
-    except (OffloadError, ValueError, OSError):
+    except (OffloadError, ValueError, OSError, RecursionError):
         return False
     return isinstance(doc, dict) and doc.get("schema") == PULL_SCHEMA and doc.get("plan") == plan \
         and doc.get("span_name") == span_name and HEX64.fullmatch(str(doc.get("manifest_sha256"))) is not None
@@ -1159,13 +1170,15 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
         raise refused("EXPECT_CONFLICT", "the marker names another plan")
     backend = make_backend(config["backend"], allow_local)
     openssl = config.get("openssl", "openssl")
+    if deadline_epoch is not None and (not number(deadline_epoch) or deadline_epoch > clock() + MAX_DEADLINE_AHEAD_S):
+        raise refused("BAD_DEADLINE", "the deadline is not a finite epoch within 24 h")
     deadline = Deadline(deadline_epoch, clock)
     dest_root = Path(dest_root)
     kit_dir = dest_root / kit
     work_root = Path(config["work_root"])
     if not dest_root.is_dir() or not work_root.is_dir():
         raise refused("DEST_ROOT", "the destination root or work root is not a directory")
-    check_output_paths(None, {"dest_root": dest_root, "work_root": work_root})
+    check_output_paths(None, {"dest_root": dest_root, "work_root": work_root, "identity": config["identity"]})
     if os.stat(dest_root).st_dev != os.stat(work_root).st_dev:
         raise refused("CONFIG", "work_root must be on the same filesystem as the destination root")
     if os.path.islink(kit_dir) or (os.path.lexists(kit_dir) and not kit_dir.is_dir()):

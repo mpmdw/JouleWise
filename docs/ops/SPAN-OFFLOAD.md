@@ -21,8 +21,8 @@ pull from the cloud, checked against the marker's hashes.
    directory, the recipient key and a local backend root must not overlap OUT and must not be inside a git
    repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`); so must the rclone config file, which rclone
    rewrites when a token refreshes. The repository check walks every ancestor, so no `.git` may sit above
-   the stage root or the marker directory (check `/Users/edr`, `/Users/edr/night-custody` and
-   `/Users/Shared/JouleWise` at install). OUT must hold at least one regular file and
+   the stage root, the marker directory or the rclone config (check `/Users/edr`, `/Users/edr/.config`,
+   `/Users/edr/.config/rclone`, `/Users/edr/night-custody` and `/Users/Shared/JouleWise` at install). OUT must hold at least one regular file and
    `runner_receipt.json` (the default `--require-file`; existence only).
 3. Takes an exclusive lock for the plan (`<stage_root>/.<plan>.lock`, held until the marker; a second
    offload of the same plan is refused `BUSY`). It never deletes a directory it did not make in this run: a
@@ -55,8 +55,8 @@ repository, and the remote is a private cloud folder, never the repository (A.6)
 marker and exits non-zero: 4 refused before upload, 5 upload or read-back failed or the deadline passed. A
 failed or unverified offload holds the next arm, and F0 does not run past it either (A.7). SIGTERM, SIGHUP
 and SIGINT kill openssl and rclone before the tool exits 5 with one line, so an exited tool leaves no upload
-running. SIGKILL and other uncaught signals cannot do that: after one, check that no `rclone` is running
-before the next soak. The local backend exits 8 (its `<plan>.ok.unconfirmed` satisfies no gate).
+running, except in the millisecond while a child is being started. So after any exit other than 0, 3, 4 or
+8, check that no `rclone` is running (`pgrep -x rclone`) before the next soak. The local backend exits 8 (its `<plan>.ok.unconfirmed` satisfies no gate).
 
 **Re-runs.** A complete stage is reused only for the same OUT (resolved path) and recipient, and only after
 OUT is re-hashed and still equals the staged manifest; the upload of the same bytes is then idempotent.
