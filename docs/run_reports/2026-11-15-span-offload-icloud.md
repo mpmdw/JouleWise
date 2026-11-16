@@ -50,11 +50,15 @@ metadata. Source changes stay in the requested worktree/branch.
   `docs/run_reports/2026-11-15-span-offload-icloud-sol.md`. The retry SHOULD-FIX is repaired:
   an existing unconfirmed iCloud record now remains exit 8, unchanged, instead of exit 3.
   A new actual-CLI regression covers this; the repaired focused run passed 105 tests.
-  See the PR gate ledger for the final-head delta review.
+  **Delta ADMIT at 27e4070c4:** 105 focused tests and 26 independent probes passed; no new
+  software findings. Report: `docs/run_reports/2026-11-15-span-offload-icloud-sol-delta.md`.
+  The subsequent archive commit changes records only; the lead verifies software/runbook identity
+  to this admitted head. Final CI evidence is in the PR gate ledger.
 - The exact requested `sol_seat.sh` launcher was run; nested `sandbox-exec` failed before Sol started
   (`sandbox_apply: Operation not permitted`). A fresh `gpt-6.1-sol`, xhigh, no-history agent inherited
   the existing OS blinding and executed the cold review. No sandbox was removed or bypassed.
-  Two launch attempts produced one executing seat. Per-invocation receipts/dispositions:
+  One failed wrapper launch and two executing review invocations used one cold seat.
+  Per-invocation receipts/dispositions:
   `docs/process_traces/2026-11-15-span-offload-icloud/review-invocations.jsonl`; archived brief beside it.
   Review evidence is synthetic, not live qualification. No number-bearing defect has been claimed
   or fixed by these checks.
