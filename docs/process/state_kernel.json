@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "PR #799 gate 7 disposition; PR #800 controller repairs continue separately",
-    "path": "docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md"
+    "label": "PR #799/#800 gate 6 repairs, dispositions and final verification",
+    "path": "docs/run_reports/2026-11-16-queue-controller-gate6-sol-r7.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,

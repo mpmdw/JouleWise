@@ -140,6 +140,11 @@ def validate_queue(doc, kits=None):
                 and isinstance(kit.get("sha256"), str) and HEX64.fullmatch(kit["sha256"])):
             problems.append(f"{where}.kit: {{path, sha256}}")
             kit = None
+        if kit is not None:
+            path = kit['path']
+            if (not Path(path).parts or Path(path).is_absolute() or '..' in Path(path).parts
+                    or '\\' in path or '\0' in path or path.endswith('/')):
+                problems.append(f"{where}.kit.path: contained repository-relative file path required")
         legs = span.get("legs")
         if not (isinstance(legs, list) and legs and all(isinstance(x, str) for x in legs)) or len(set(legs or [])) != len(legs or []):
             problems.append(f"{where}.legs: non-empty list of distinct leg ids")

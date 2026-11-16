@@ -52,6 +52,116 @@ class WorldCase(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
+class Gate6Controller(WorldCase):
+    def prior_receipt_world(self, *, clean=False):
+        w = self.pilot_world()
+        prior = w.standing['prior_spans'][-1]
+        source = Path(w.cfg['output_root']) / prior['campaign_id'] / (prior['plan_id'] + '-20261116T180000Z')
+        source.mkdir(parents=True)
+        receipt = source / cc.RECEIPT
+        receipt.write_text(json.dumps({
+            'roster': prior['roster'], 'kit': {'sha256': prior['kit_sha256']},
+            'rc': 0 if clean else 9, 'error': None if clean else 'restore failed',
+            'span_result': {'chain_exit_code': 0 if clean else 9,
+                            'chain_outcome': 'COMPLETE' if clean else 'FAILED',
+                            'fault': not clean, 'outcome': 'MEASURED_OK' if clean else 'FAILED'},
+            'steps': [{'name': 'soak', 'rc': 0}, {'name': 'restore', 'rc': 0 if clean else 9}],
+            'feeds': {'meter': {'stop': {'proven_stopped': clean}}},
+            'legs_finished': len(prior['roster']), 'legs_planned': len(prior['roster']),
+            'legs': [{'leg_id': lid, 'summary': {'g0_outcome': 'released'}} for lid in prior['roster']]}))
+        ended = law.parse_time(prior['closed'])
+        os.utime(receipt, (ended, ended))
+        marker = synth.offload_marker(prior['plan_id'], w.env.now(), str(source))
+        (Path(w.cfg['copy_marker_dir']) / (prior['plan_id'] + '.ok')).write_text(json.dumps(marker))
+        return w
+
+    def test_failed_prior_receipt_halts_despite_matching_identity_and_verified_copy(self):
+        w = self.prior_receipt_world()
+        status = w.tick()
+        self.assertIn(status['state'], ('PAGED', 'HALTED'))
+        self.assertIn('SPAN_BAD_TERMINAL', self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_clean_prior_receipt_still_allows_the_successor(self):
+        w = self.prior_receipt_world(clean=True)
+        status = w.tick()
+        self.assertEqual(status['state'], 'LIVE', self.pages(w))
+
+    def test_watchdog_removal_of_expired_fence_requires_acknowledgement(self):
+        w = self.pilot_world(prior=False)
+        self.assertEqual(w.ctl.startup_fence(), 'held')
+        w.env.t = cc.fence.read_fence(w.ctl.custody)['deadline'] + 1
+        (w.ctl.custody / cc.fence.FENCE_NAME).unlink()  # synthetic stale cleanup, no watchdog invocation
+        w.controller()
+        self.assertEqual(w.tick()['state'], 'HALTED')
+        self.assertIn('ARM_INDETERMINATE', self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+        w.controller()
+        self.assertEqual(w.ctl.startup_fence(), 'paged')
+        self.assertTrue(w.tick()['detail']['silent'])
+        w.ack_all()
+        self.assertEqual(w.tick()['state'], 'LIVE')
+
+    def test_pid_changing_restart_preserves_an_expired_lease(self):
+        w = self.pilot_world(prior=False)
+        self.assertEqual(w.ctl.startup_fence(), 'held')
+        old = cc.fence.read_fence(w.ctl.custody)
+        w.env.t = old['deadline'] + 1
+        w.controller()
+        w.ctl.pid = old['pid'] + 1000000
+        w.env.pid_alive = lambda pid: pid != old['pid']
+        self.assertEqual(w.ctl.startup_fence(), 'lapsed')
+        self.assertEqual(cc.fence.read_fence(w.ctl.custody), old)
+        self.assertEqual(w.tick()['state'], 'HALTED')
+        self.assertIn('ARM_INDETERMINATE', self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_unexpected_removal_before_deadline_also_halts(self):
+        w = self.pilot_world(prior=False)
+        w.ctl.startup_fence()
+        (w.ctl.custody / cc.fence.FENCE_NAME).unlink()
+        self.assertEqual(w.tick()['state'], 'HALTED')
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_failed_night_observation_retains_the_owned_fence(self):
+        w = self.pilot_world(prior=False)
+        self.assertEqual(w.ctl.startup_fence(), 'held')
+        w.env.launchctl_rc = 5
+        self.assertEqual(w.tick()['detail']['codes'], ['NIGHT_UNKNOWN'])
+        self.assertIsNotNone(cc.fence.read_fence(w.ctl.custody))
+        w.env.launchctl_rc = 0
+        self.assertEqual(w.tick()['state'], 'LIVE')
+
+    def test_unknown_observation_after_a_known_handoff_stays_released(self):
+        w = self.pilot_world(prior=False)
+        w.ctl.startup_fence()
+        w.env.night_labels = ['com.joulewise.night.synthetic']
+        self.assertEqual(w.tick()['detail']['codes'], ['NIGHT_AGENT'])
+        self.assertIsNone(cc.fence.read_fence(w.ctl.custody))
+        w.env.launchctl_rc = 5
+        w.controller()
+        self.assertEqual(w.tick()['detail']['codes'], ['NIGHT_UNKNOWN'])
+        self.assertIsNone(cc.fence.read_fence(w.ctl.custody))
+
+    def test_unsafe_kit_paths_never_write_outside_staging(self):
+        from unittest import mock
+        for kind in ('absolute', 'traversal'):
+            with self.subTest(kind=kind):
+                w = synth.World(Path(self.tmp.name) / kind, prior=False)
+                w.controller()
+                sentinel = Path(self.tmp.name) / (kind + '-sentinel.json')
+                sentinel.write_text('immutable synthetic sentinel')
+                span = w.span(1, 'dev-05-s01', 'cl-dev-05', L[:6])
+                span['kit']['path'] = str(sentinel) if kind == 'absolute' else '../' + sentinel.name
+                w.queue('pilot', [span], role='smoke')
+                original = tempfile.TemporaryDirectory
+                with mock.patch.object(cc.tempfile, 'TemporaryDirectory', lambda: original(dir=self.tmp.name)):
+                    snap, _ = w.ctl.snapshot(w.env.now(), [])
+                self.assertEqual(sentinel.read_text(), 'immutable synthetic sentinel')
+                self.assertIn('QUEUE_INVALID', [r['code'] for r in law.select(snap).reasons])
+
+
+@unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
 class Gate5Controller(WorldCase):
     def keyless_world(self):
         w = self.pilot_world()
@@ -62,6 +172,11 @@ class Gate5Controller(WorldCase):
         source.mkdir(parents=True)
         receipt = source / cc.RECEIPT
         receipt.write_text(json.dumps({'roster': prior['roster'], 'kit': {'sha256': prior['kit_sha256']},
+                                      'rc': 0, 'span_result': {'chain_exit_code': 0, 'chain_outcome': 'COMPLETE',
+                                                             'fault': False, 'outcome': 'MEASURED_OK'},
+                                      'steps': [{'name': 'soak', 'rc': 0}, {'name': 'restore', 'rc': 0}],
+                                      'feeds': {'meter': {'stop': {'proven_stopped': True}}},
+                                      'legs_planned': len(prior['roster']),
                                       'legs': [{'leg_id': x, 'summary': {'g0_outcome': 'released'}}
                                                for x in prior['roster']], 'legs_finished': len(prior['roster'])}))
         closed = law.parse_time(prior['closed'])

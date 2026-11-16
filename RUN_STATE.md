@@ -4,6 +4,8 @@
 
 **2026-11-16 PR #799 gate 7:** no independent desk defect reproduced; 246 guarded cadence tests pass. This round changes records only; #800 owns four reproduced controller repairs. [Report](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md). No MBP contact or custody access; fresh stack admission and research-lead rulings remain open.
 
+**2026-11-16 PR #800 gate 6 repair:** F1–F3/F5 reproduced and repaired; #799 F4 is inherited by a linear rebase on `419e184c0`. Durable standing-lease expectations survive watchdog cleanup and PID changes; unknown observations retain the fence. [Run report](docs/run_reports/2026-11-16-queue-controller-gate6-sol-r7.md). Final verification and dispositions are recorded there; cold admission and research-lead questions remain open. No MBP contact, custody access or merge.
+
 **2026-11-16 PR #799 gate 6 repair:** declared summaries are required by signed publication/read, so a missing record cannot disappear from replay history. 76 desk tests, 246 safe cadence tests, 48 host/docs checks pass. [Run report](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md). No MBP contact, custody access or merge; stack admission remains with the lead.
 
 **2026-11-16 PR #800 gate 5:** four reproduced admission/fence defects repaired with failing-before regressions; current design dispositions are in §15.16. Rebased linearly on #799 `585bfa8cd`. [Run report](docs/run_reports/2026-11-16-queue-controller-gate5-sol-r6.md). Fresh cold admission and listed research-lead questions remain open. No MBP or real custody access; no merge.
@@ -6430,7 +6432,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #799 gate 7 disposition; PR #800 controller repairs continue separately](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #799/#800 gate 6 repairs, dispositions and final verification](docs/run_reports/2026-11-16-queue-controller-gate6-sol-r7.md).
 
 ### [ED-EXTERNAL]
 

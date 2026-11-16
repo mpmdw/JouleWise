@@ -748,12 +748,14 @@ def read_queue(git, entry, kits, standing, seen):
         with tempfile.TemporaryDirectory() as tmp:
             for kpath, (kit, _sha) in span_kits.items():
                 dest = Path(tmp) / kpath
+                if not dest.resolve().is_relative_to(Path(tmp).resolve()):
+                    raise q.QueueError([f"kit path escapes staging: {kpath}"])
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_text(json.dumps(kit))
             problems = cq.qual_roster_problems(doc, tmp)
         if problems:
             raise q.QueueError(problems)
-    except (ValueError, q.QueueError, kitmod.KitError) as error:
+    except (ValueError, OSError, q.QueueError, kitmod.KitError) as error:
         view["reasons"].append(law.reason("QUEUE_INVALID", f"{path}: {'; '.join(getattr(error, 'problems', [str(error)]))}"[:400]))
         return view
     view["doc"] = doc
@@ -1136,12 +1138,32 @@ class Controller:
     def standing_purpose(self):
         return f"{STANDING_FENCE_PREFIX}{self.token}"
 
+    def standing_lapsed(self, current):
+        """The expected lease survives watchdog cleanup and a new controller PID.
+
+        Only an explicit release or launch intent ends that expectation. Write the
+        expectation before publishing a lease, so a crash cannot hide a gap.
+        """
+        expected = read_json(self.state / "standing-lease.json") or {}
+        if expected.get("purpose"):
+            if expected["deadline"] <= self.env.now() or current is None:
+                return True
+        return bool(current and current["purpose"].startswith(STANDING_FENCE_PREFIX)
+                    and current["deadline"] <= self.env.now())
+
+    def write_standing_lease(self, seconds):
+        record = {"purpose": self.standing_purpose(), "pid": self.pid, "deadline": self.env.now() + seconds}
+        atomic_json(self.state / "standing-lease.json", record)
+        fence.write_fence(self.custody, record)
+
     def hold_fence(self, seconds=STANDING_FENCE_S, *, minimum_s=None):
         if not self.cfg["hold_standing_fence"]:
             return "disabled"
         self.custody.mkdir(parents=True, exist_ok=True)
         with fence.fence_lock(self.custody):
             cur = fence.read_fence(self.custody)
+            if self.standing_lapsed(cur):
+                raise FenceLapsed("taking the standing fence")
             if cur is not None and not (cur["purpose"] == self.standing_purpose() and cur["pid"] == self.pid):
                 if not (cur["purpose"].startswith(STANDING_FENCE_PREFIX) and not self.env.pid_alive(cur["pid"])):
                     return "foreign"
@@ -1150,8 +1172,7 @@ class Controller:
                     raise FenceLapsed("taking the standing fence")
                 if cur["deadline"] - self.env.now() >= (seconds / 2 if minimum_s is None else minimum_s):
                     return "held"    # ours with time to spare: no rewrite, so a watched custody directory stays quiet (T4)
-            fence.write_fence(self.custody, {"purpose": self.standing_purpose(), "pid": self.pid,
-                                             "deadline": self.env.now() + seconds})
+            self.write_standing_lease(seconds)
         return "held"
 
     def refresh_fence(self):
@@ -1163,14 +1184,15 @@ class Controller:
         with contextlib.suppress(OSError, ValueError):
             with fence.fence_lock(self.custody):
                 cur = fence.read_fence(self.custody)
+                if self.standing_lapsed(cur):
+                    return "lapsed"
                 if cur is not None and cur["purpose"] == self.standing_purpose() and cur["pid"] == self.pid:
                     left = cur["deadline"] - self.env.now()
                     if left <= 0:
                         return "lapsed"  # leave the expired deadline intact until the caller records the halt
                     if left >= STANDING_FENCE_S / 2:
                         return "held"
-                    fence.write_fence(self.custody, {"purpose": self.standing_purpose(), "pid": self.pid,
-                                                     "deadline": self.env.now() + STANDING_FENCE_S})
+                    self.write_standing_lease(STANDING_FENCE_S)
                     return "held"
         return "not held"
 
@@ -1196,8 +1218,16 @@ class Controller:
         return self.hold_fence()
 
     def release_fence(self):
+        lease_path = self.state / "standing-lease.json"
+        if (read_json(lease_path) or {}).get("handoff") != "released":
+            atomic_json(lease_path, {"handoff": "released", "epoch": self.env.now()})
         with contextlib.suppress(FileNotFoundError):
-            fence.clear_owned(self.custody, self.standing_purpose(), self.pid)
+            with fence.fence_lock(self.custody):
+                cur = fence.read_fence(self.custody)
+                if (cur and cur["purpose"] == self.standing_purpose()
+                        and (cur["pid"] == self.pid or not self.env.pid_alive(cur["pid"]))):
+                    (self.custody / fence.FENCE_NAME).unlink()
+                    fence.sync_directory(self.custody)
 
     # -- pages ---------------------------------------------------------------------------------------
     def unacked_pages(self):
@@ -1260,10 +1290,11 @@ class Controller:
                     sync=sync)
         return status
 
-    def wait(self, codes, detail, *, quiet=False):
+    def wait(self, codes, detail, *, quiet=False, handoff=False):
         """Every wait is bounded (Mythos F7): a wait whose codes persist past ``stall_bound`` pages WAIT_STALL once
         per episode. An informational page retains the live queue's continuous fence (RL-173 E). A ``quiet``
-        wait (a v4 window, an unreadable night-agent census) writes nothing synced and holds no fence (Mythos N15)."""
+        wait writes nothing synced. Only a proven ``handoff`` or a blocking page releases the fence;
+        an unreadable observation grants no authority to release it."""
         now = self.env.now()
         sig = sorted(set(codes))
         episode = read_json(self.state / "wait-episode.json") or {}
@@ -1275,11 +1306,17 @@ class Controller:
                                                               f"{detail}"[:400])],
                       {"sig": sig, "since": episode["since"]})
         pages = self.unacked_pages()
-        if quiet or any(p["kind"] != "WAIT_STALL" for p in pages):
+        if handoff or any(p["kind"] != "WAIT_STALL" for p in pages):
             self.release_fence()
             return self.write_status("PAGED" if self.unacked_pages() else "WAIT",
                                      {"codes": sig, "detail": detail, "quiet": quiet,
                                       "pages": [p["page_id"] for p in self.unacked_pages()]}, sync=not quiet)
+        if quiet:
+            held = self.refresh_fence()
+            if held == "lapsed":
+                raise FenceLapsed("waiting for an observation")
+            return self.write_status("PAGED" if pages else "WAIT",
+                                     {"codes": sig, "detail": detail, "quiet": True, "fence": held}, sync=False)
         held = self.hold_fence()
         return self.write_status("PAGED" if pages else "WAIT", {"codes": sig, "detail": detail, "fence": held})
 
@@ -1311,7 +1348,7 @@ class Controller:
             if not seen or seen.get("purpose") != current.get("purpose"):
                 atomic_json(self.state / "foreign.json", {"purpose": current.get("purpose"), "first_seen": now})
             # quiet: nothing synced, a look every five minutes (gate 3, Mythos T17)
-            return self.wait(["SPAN_LIVE"], f"another run holds the host: {current.get('purpose')}", quiet=True)
+            return self.wait(["SPAN_LIVE"], f"another run holds the host: {current.get('purpose')}", quiet=True, handoff=True)
         if seen:
             # Sol 10: the fence's disappearance proves nothing about the restore. Record the close as observed, the
             # restore unproven; the selector halts until note-run records the run's Check.
@@ -1329,7 +1366,7 @@ class Controller:
         if labels:
             if not night:
                 atomic_json(self.state / "night.json", {"labels": labels, "first_seen": now}, sync=False)
-            return self.wait(["NIGHT_AGENT"], ", ".join(labels), quiet=True)
+            return self.wait(["NIGHT_AGENT"], ", ".join(labels), quiet=True, handoff=True)
         if night:
             # Mythos N5: a W1, C or T window holds no desk fence. Its end is a close: observed now, restore unproven
             # until note-run records its Check; the 1,200 s floor counts from here.
@@ -1448,6 +1485,7 @@ class Controller:
                         doc = json.loads(receipt_path.read_bytes())
                         receipts[m.group("plan")] = {
                             "roster": doc.get("roster"), "kit_sha256": (doc.get("kit") or {}).get("sha256"),
+                            "command_reasons": law.receipt_command_reasons(doc),
                             "g0_unreleased": law.receipt_unreleased(doc, {}, doc.get("roster") or [])}
                     except (OSError, ValueError, AttributeError):
                         receipts[m.group("plan")] = {"roster": None, "kit_sha256": None, "g0_unreleased": None}
@@ -1746,6 +1784,7 @@ class Controller:
         except FileExistsError:
             self.page("HALT", [law.reason("ARM_INDETERMINATE", f"{plan_id}: intent already exists", span=sid)])
             return self.write_status("HALTED", {"plan_id": plan_id})
+        atomic_json(self.state / "standing-lease.json", {"handoff": "launch", "plan_id": plan_id})
         self.transition(plan_id, "arm_intent", {"queue_sha256": view["digest"], "plan_sha256": intent["plan_sha256"],
                                                 "arm_proof_sha256": intent["arm_proof_sha256"],
                                                 "network_end_epoch": network_end, "lease_until": lease})

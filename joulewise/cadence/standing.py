@@ -699,12 +699,17 @@ def build_runs(standing, controller_records, external_runs, kits=None, prior_rec
         cls = kit_class({"campaign_id": s["campaign_id"]})
         kit = (kits or {}).get(s["kit_sha256"])
         gates = derived_gates(kit, s["roster"]) if kit is not None else []
+        receipt = (prior_receipts or {}).get(s["plan_id"]) or {}
+        command_reasons = receipt.get("command_reasons") or []
+        status = ("CLOSE_UNPROVEN" if any(r["code"] == "CLOSE_UNPROVEN" for r in command_reasons)
+                  else "STOPPED" if command_reasons else "CLOSED_OK")
         runs.append(Run(s["plan_id"], "campaign" if cls["k2"] else "f2", cls["phase"], s["block_id"], s["legs"],
-                        s["mixed"], parse_time(s["t0"]), parse_time(s["closed"]), "CLOSED_OK", "prior",
+                        s["mixed"], parse_time(s["t0"]), parse_time(s["closed"]), status, "prior",
                         campaign=s["campaign_id"], desk="final" if s["desk_final"] else "pending", gates=gates,
                         resolution=disp.get(s["plan_id"]),
                         extra={"kit_sha256": s["kit_sha256"], "roster": list(s["roster"]),
                                "gates_unknown": kits is not None and kit is None,
+                               "command_reasons": command_reasons,
                                "g0_unreleased": ((prior_receipts or {}).get(s["plan_id"]) or {}).get("g0_unreleased")}))
     for r in controller_records:
         closed = r.get("closed_epoch")
@@ -1096,7 +1101,7 @@ def desk_input_reasons(*, span, kit_sha, kit, receipt, summaries, plan):
     return out
 
 
-def receipt_command_reasons(receipt, expected_windows):
+def receipt_command_reasons(receipt, expected_windows=None):
     """The close's command result: the runner's own restore and feed stops, read from its receipt."""
     out = []
     result = receipt.get("span_result") or {}
@@ -1118,7 +1123,7 @@ def receipt_command_reasons(receipt, expected_windows):
         if not (feed.get("stop") or {}).get("proven_stopped"):
             out.append(reason("CLOSE_UNPROVEN", f"feed {name} not proven stopped"))
     out += soak_attempt_reasons(receipt, clean)
-    if receipt.get("batch_windows") != expected_windows:
+    if expected_windows is not None and receipt.get("batch_windows") != expected_windows:
         out.append(reason("ROSTER_MISMATCH", f"batch_windows {receipt.get('batch_windows')} != {expected_windows}"))
     return out
 

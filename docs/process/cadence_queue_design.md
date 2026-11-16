@@ -1046,3 +1046,27 @@ The four reproduced defects are corrected under RL-173 and RL-172; no new policy
 A failed authority listing is retried as FETCH_FAILED; no work arms or cedes from incomplete authority.
 Old keyless markers require second-copy evidence from the offload owner after the absolute deadline; this change authors no custody assertion.
 All prior unresolved research questions in 15.15 remain except the deadline and informational-stall implementation defects corrected here. Fresh cold admission, installation and the watched native span remain separate lead gates.
+
+
+### 15.17 Gate 6 (cold Sol, REFUSE at #799 585bfa8cd / #800 f65960678)
+
+All five reproduced findings are repaired. The source report is
+`/Volumes/JW-EXT/jw-wt/mythos-repo/docs/run_reports/2026-11-16-cold-review-pr799-pr800.md`;
+before/after logs are under `/Volumes/JW-EXT/scratch/sol-ctl-r7/`.
+
+| Finding | Disposition and regression |
+|---|---|
+| F1 HIGH: failed hand-armed receipt became CLOSED_OK | FIXED. Snapshot retains receipt command/restore/feed-stop reasons; `build_runs` derives STOPPED or CLOSE_UNPROVEN from those reasons instead of overwriting an observed failure with ledger cleanliness. Existing bad-terminal disposition rules apply. `Gate6Controller.test_failed_prior_receipt_halts_despite_matching_identity_and_verified_copy` uses the real census layout and a valid typed copy marker; a complete clean prior receipt still permits the successor. |
+| F2 MED: watchdog removal or PID-changing restart erased a lapse | FIXED. `standing-lease.json` in controller state records the expected purpose/PID/deadline before fence publication. Expiry or unexpected absence remains a lapse even if the removable fence is gone or the controller PID changed. Explicit page/night/foreign-run releases and launch-intent transfers record the authorized handoff. A lapse produces durable HALT/ARM_INDETERMINATE; a blocking page prevents re-arm until acknowledgement and fresh evaluation. Regressions cover watchdog cleanup, a changed PID, absence before the deadline, restart persistence and acknowledgement. The watchdog is unchanged. |
+| F3 MED: failed night-agent observation released a live fence | FIXED. Quiet status writes and deliberate handoff are separate. NIGHT_UNKNOWN retains/renews an owned fence; a previously observed night handoff stays released. Regression controls cover both cases and return to a successful observation. |
+| F4 MED, #799: hashed summary missing from signed verdict/history | FIXED in #799. Publication requires and hashes a declared summary; reading and signed-history reconstruction refuse missing/unreadable declared summaries. Error verdicts without a declared summary still round-trip. `SignedTransport` regressions. |
+| F5 MED: kit locator overwrote an external file | FIXED. Queue validation rejects absolute/traversal/non-file locators; staging checks resolved containment before writes and reports filesystem conflicts as QUEUE_INVALID. Synthetic absolute/traversal sentinels remain byte-unchanged and the queue cannot arm. |
+| Hash-draw nondeterminism | NOT REPRODUCED with identical valid inputs/history; exact-hash and valid-rerun append-stability coverage stays green. No draw-policy ruling inferred. |
+| Singleton flock | NO DEFECT reproduced by the reviewer: competing acquisition refused, normal exit allowed reacquisition. F2/F3 concern the separate measurement fence. |
+| Orphan census unavailable | ENVIRONMENT LIMITATION: the review's ps read was denied; no clean-census claim or culling. Local signalling fixtures stay omitted/stubbed. |
+
+The older unresolved questions in 15.15 remain open: disposed-ancestor first-of-group semantics,
+unknown L002 recovery, N12 reference-hash binding, prior v1.1 Q1/typed-marker switch-over,
+and a non-counting desk-disagreement clearance. The earlier options and recommendations are retained,
+not decided here. External offload guarantees, typed custody assertions and future campaign-scope
+history remain with their named owners. No fresh cold admission, native smoke or installation is claimed.
