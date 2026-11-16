@@ -69,7 +69,10 @@ span succeeds, the lead may remove `<stage_root>/<plan>/`; a remote `<plan>/` fo
 lead, and only to retry a plan whose stage was lost (the immutable upload otherwise refuses new bytes).
 
 `--deadline-epoch` is the next soak's start: the offload gives up, without a marker, if it cannot finish
-by then (A.3: the upload ends before the next soak starts).
+by then (A.3: the upload ends before the next soak starts). The bound is enforced by watchdogs on the
+openssl and rclone children and by checks between files and phases; a single blocked filesystem call can
+return after the deadline, and the run then still ends without a marker. The caller awaits the command and
+holds the next arm on any failure.
 
 **What `hash_type: size` proves.** RL-173 A.3 accepts the provider's hash or size. A size read-back proves
 the upload finished with the right length, not byte equality; the pull still checks the ciphertext against
@@ -111,6 +114,8 @@ Why public-key:
   in the cloud folder, the repository or on the MBP.
 - **No new binary on the measurement host.** `openssl` (LibreSSL 3.3.6 on macOS; OpenSSL 3 in CI) does both
   halves; the passphrase travels over a pipe (`-pass fd:N`, `pkeyutl` stdin) and is never on disk or argv.
+  Every openssl child runs with `OPENSSL_CONF=/dev/null` and no inherited `OPENSSL_*`, `SSL_*` or
+  `RANDFILE` variable, so it reads no configuration file (one under OUT included).
   `age` would give the same separation with authenticated encryption, but it is not installed on either
   Mac. Integrity does not rest on the cipher: the ciphertext and the plaintext manifest are anchored by the
   marker's sha256 (and RUN_STATE), and the pull checks both, plus the archive hash, before anything lands.

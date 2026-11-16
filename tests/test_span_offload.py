@@ -1112,6 +1112,14 @@ class SpanOffloadTests(unittest.TestCase):
             self.pull(config=air)
         self.assertEqual(caught.exception.code, "PATH_IN_REPOSITORY")
 
+    def test_openssl_reads_no_configuration_from_the_environment(self):
+        (self.span / "runner_receipt.json").write_bytes(b"this is not = an [openssl config\nmissing equal sign\n")
+        with mock.patch.dict(os.environ, {"OPENSSL_CONF": str(self.span / "runner_receipt.json")}):
+            record = self.offload()  # a parsed OPENSSL_CONF here would fail with "missing equal sign"
+        self.assertEqual(record["schema"], so.MARKER_SCHEMA)
+        env = so.openssl_env()
+        self.assertEqual(env["OPENSSL_CONF"], os.devnull)
+
     # --- CLI ----------------------------------------------------------------------------------
 
     def test_cli_exit_codes_and_one_line_output(self):
