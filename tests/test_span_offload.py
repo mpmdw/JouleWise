@@ -252,7 +252,8 @@ class SpanOffloadTests(unittest.TestCase):
         with self.assertRaises(so.OffloadError) as caught:
             self.offload(require_files=["no_receipt_here.json"])
         self.assertEqual(caught.exception.code, "SPAN_NOT_CLOSED")
-        link = self.tmp / "campaign-out" / (SPAN + "-link")
+        (self.tmp / "links").mkdir()
+        link = self.tmp / "links" / SPAN
         os.symlink(self.span, link)
         with self.assertRaises(so.OffloadError) as caught:
             so.offload(self.config, PLAN, link, allow_local=True)
@@ -298,7 +299,7 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual(os.listdir(self.tmp / "markers"), [])
         self.assertEqual(os.listdir(self.tmp / "cloud"), [])
 
-    def test_retry_reuses_a_complete_stage_and_sets_aside_a_partial_one(self):
+    def test_retry_reuses_a_complete_stage_and_never_moves_a_foreign_one(self):
         with mock.patch.object(so.LocalBackend, "put", side_effect=so.unverified("UPLOAD_TIMEOUT", "x")):
             with self.assertRaises(so.OffloadError) as caught:
                 self.offload()
@@ -872,6 +873,58 @@ class SpanOffloadTests(unittest.TestCase):
         with self.assertRaises(so.OffloadError) as caught:
             self.pull(expect)
         self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("ARCHIVE_PATH", "integrity"))
+
+    # --- Mythos round-2 notes (R2-5, R2-7 to R2-11) -----------------------------------------------
+
+    def test_names_deadlines_and_paths_from_mythos_round_2(self):
+        for plan in ("cq-syn-01", "cq"):  # a bare prefix of the plan is not this span's plan
+            with self.assertRaises(so.OffloadError) as caught:
+                so.offload(self.config, plan, self.span, allow_local=True)
+            self.assertEqual(caught.exception.code, "PLAN_SPAN_MISMATCH")
+        for bad in (float("inf"), time.time() * 1000):
+            with self.assertRaises(so.OffloadError) as caught:
+                self.offload(deadline_epoch=bad)
+            self.assertEqual(caught.exception.code, "BAD_DEADLINE")
+        backend = {"kind": "rclone", "remote": "x:y", "rclone_config": str(self.span / "rclone.conf")}
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertEqual(caught.exception.code, "PATH_OVERLAPS_SPAN")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_a_killed_runs_scratch_is_removed_under_the_lock(self):
+        stale = self.tmp / "stage" / f".{PLAN}.building-stale"
+        stale.mkdir()
+        (stale / "partial").write_bytes(b"x")
+        self.offload()
+        self.assertFalse(stale.exists())
+
+    def test_an_empty_wrapped_key_is_refused(self):
+        original = so._openssl_run
+
+        def fake(openssl, args, **kwargs):
+            return b"" if args[:2] == ["pkeyutl", "-encrypt"] else original(openssl, args, **kwargs)
+
+        with mock.patch.object(so, "_openssl_run", fake), self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "WRAP_INVALID")
+
+    def test_pull_folds_duplicate_names_and_ties_the_span_to_the_plan(self):
+        cloud = self.tmp / "cloud" / PLAN
+        cloud.mkdir()
+        for index, names in enumerate(([f"{SPAN}/a.txt", f"{SPAN}/./a.txt"], [f"{SPAN}/A.txt", f"{SPAN}/a.txt"])):
+            raw = io.BytesIO()
+            with gzip.GzipFile(fileobj=raw, mode="wb") as gz, tarfile.open(fileobj=gz, mode="w|") as tar:
+                top = tarfile.TarInfo(SPAN); top.type = tarfile.DIRTYPE; tar.addfile(top)
+                for name in names:
+                    info = tarfile.TarInfo(name); info.size = 1
+                    tar.addfile(info, io.BytesIO(b"x"))
+            for f in cloud.iterdir():
+                f.unlink()
+            expect = self.plant_hostile(cloud, raw.getvalue(), b"")
+            with self.subTest(index=index), self.assertRaises(so.OffloadError) as caught:
+                self.pull(expect)
+            self.assertIn(caught.exception.code, ("ARCHIVE_PATH", "ARCHIVE_DUPLICATE"))
+            self.assertEqual(caught.exception.exit_kind, "integrity")
 
     # --- CLI ----------------------------------------------------------------------------------
 
