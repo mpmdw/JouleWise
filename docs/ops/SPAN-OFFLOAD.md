@@ -59,7 +59,10 @@ running, except in the millisecond while a child is being started. So after any 
 8, check that no `rclone` is running (`pgrep -x rclone`) before the next soak. The local backend exits 8 (its `<plan>.ok.unconfirmed` satisfies no gate).
 
 **Re-runs.** A complete stage is reused only for the same OUT (resolved path) and recipient, and only after
-OUT is re-hashed and still equals the staged manifest; the upload of the same bytes is then idempotent.
+the archive is derived again from OUT (deterministic: fixed gzip header and level, tar metadata from the
+files) and its manifest, digest and size equal the stored ones, so an edited or corrupted stored descriptor
+is refused; the upload of the same bytes is then idempotent. That costs one more archive pass (about a
+minute for 2.9 GB), and a span whose files or directory times changed since the first attempt is refused.
 Anything else at the stage path, complete or not, is refused `STAGE_CONFLICT`: the tool never moves a
 directory it did not build. The tool never deletes a stage or a remote folder. After the Air's pull of a
 span succeeds, the lead may remove `<stage_root>/<plan>/`; a remote `<plan>/` folder is removed only by the
@@ -123,7 +126,10 @@ Air's custody root and Ed's vault. (This tool will not re-offload that span: its
 `backend.kind` is pluggable:
 
 - `rclone` (production): `rclone copyto --immutable` then `rclone lsjson --files-only --hash --hash-type
-  <t>`. The remote must be a named rclone remote (`name:path`; a path, a `:backend:` string or a flag is refused).
+  <t>`. The remote must be a named rclone remote (`name:path`; a path, a `:backend:` string or a flag is refused),
+  and `rclone_config` is required: it is passed as `--config` on every call, checked like every other control
+  file on both Macs, and `RCLONE_*` environment variables are dropped, so rclone never finds a config or an
+  option on its own.
   `hash_type` is `sha256`, `sha1`, `md5` or `dropbox` (Dropbox's content hash, computed locally), or
   `size` (size only). The sha256 the marker records and the provider digest are computed from one read of
   the staged file before the upload, so the provider's digest must describe the same bytes the marker
