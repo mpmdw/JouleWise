@@ -259,18 +259,20 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
   - The group is the kit sha256 and the span's G0 shape (`span` if a leg after the first consumes, else `own`).
   - A span is drawn when sha256(`seed|kit_sha256|shape|span_id`) mod 4 is 0: one in four in expectation, per
     group. The attempt is not in the hash, so a re-run of a span draws as the span did.
-  - **The first span of each group is always drawn.** A span is first when no span of its group comes before it
-    in its own queue (by `seq`), or when the signed history holds no span of its group whose first leg started
-    before this span's first leg. Either clause marks a first span, so a group split across queues, or an
-    earlier entry that never ran, never hides the first span that did run. The draw errs towards a hand table.
+  - **The first span of each group is always drawn.** At the desk a span is first when the signed history holds
+    no span of its group whose first leg started before this span's first leg (machine order). A group split
+    across queues (a pilot in its smoke queue, the remainder in another), or an earlier entry that never ran, is
+    decided by what ran; a history that misses a record can only add a draw.
   - It reads only the span's own queue entry and spans before it. An append to its queue, a later span's
     verdict, or a re-judgment (a hand table supplied later) never changes it (Sol R11). A block-of-four draw is
     refused (RL-173 E).
   - The verdict's `hand_table.sample` records `value`, `first_in_queue`, `first_in_history`, `first_of_group`
     and `selected`; each span's `desk_summary.json` records its `sample_stratum`, which later spans' history
     clause reads.
-  - `cadence_desk.py sample-plan --queue Q --kit K` prints the queue clause at READY, so it is prospective. The
-    desk may add a span by the history clause, never remove one.
+  - `cadence_desk.py sample-plan --queue Q --kit K` prints the draw at READY, with the queue standing in for the
+    history (first in its queue by `seq`), so it is prospective; the hash part is exact.
+- **Schema change** compares with the latest summary in the history whose first leg started before this span's,
+  never a later span's (a re-judgment sees later records).
 
 ## 6. The MBP desk, the off-host re-check and the Q1 record (RL-173 B and E)
 
@@ -293,8 +295,10 @@ is `DESK_ATTEMPTS`. The refusal text and its kind (`slope`, `load`, `settle_or_q
   `cadence-desk`, as in section 2. When both verdicts exist, `desk_final.compare_verdicts(mbp, offhost)` must
   return nothing. It compares the automatic part (`agreement_view`): identities, summary hash, every
   non-hand named stop with its detail, the hand gates, the hand-table triggers (less the lead's own
-  `--hand-sample`), the draw, the transport, the history source, any error and `desk_code`. It leaves out what
-  the lead's later hand table changes. A difference holds the next arm and goes to the research lead.
+  `--hand-sample` and the history-dependent ones), the draw's hash part, the transport, the history source, any
+  error and `desk_code`. It leaves out what the lead's later hand table changes and what depends on each desk's
+  own history (the schema-change trigger, the draw's first-of-group clause): the two desks' histories are their
+  own records and may differ. A difference holds the next arm and goes to the research lead.
 - **The hand table** is the lead's input to the off-host desk (any host, from the pushed bundle). A span whose
   MBP verdict is `HAND_TABLE_DUE` becomes final by the off-host verdict that compares the table.
 - **The Q1 completion record** (RL-158 Q1; RL-173 E). One per v1.1 span, committed by the lead on the audit

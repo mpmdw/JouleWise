@@ -173,9 +173,9 @@ def sample_plan(args):
             rows.append({"plan_id": queuemod.plan_id(span), **draw})
     print(json.dumps({"law": desk_final.HAND_SAMPLE_LAW, "seed": desk_final.HAND_SAMPLE_SEED,
                       "rate": desk_final.HAND_SAMPLE_RATE, "kit_sha256": sha,
-                      "note": "prospective: the queue clause only. At the desk a span is also first of its group "
-                              "when no span of the group in the signed history started before it, so the desk "
-                              "may draw more than this print, never fewer", "spans": rows}, indent=1))
+                      "note": "prospective: the hash part is exact; first_of_group uses the queue in place of the "
+                              "history. At the desk a span is first of its group when no span of the group in the "
+                              "signed history started before it", "spans": rows}, indent=1))
     return 0
 
 

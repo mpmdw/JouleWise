@@ -1316,7 +1316,7 @@ class DrawV3(unittest.TestCase):
                                                           "span_id": sid, "attempt": 2}]}
             self.assertEqual(desk_final.hand_sample(rerun, f"cq-{sid}-a2", self.kit, self.sha)["value"], want)
 
-    def test_the_first_span_of_each_group_is_drawn_by_queue_or_by_history(self):
+    def test_the_first_span_of_each_group_is_drawn_by_the_history_at_the_desk_and_by_the_queue_at_ready(self):
         own = [x for x in self.ids if next(leg for leg in self.kit["legs"] if leg["leg_id"] == x)["g0_shape"] == "own"]
         queue = self.queue(["g-s01", "g-s02", "g-s03"])
         queue["spans"].append({"seq": 4, "span_id": "g-o01", "kit": {"path": "k", "sha256": self.sha}, "legs": own,
@@ -1329,8 +1329,11 @@ class DrawV3(unittest.TestCase):
         stratum = {"kit_sha256": self.sha, "shape": "span"}
         earlier = [{"sample_stratum": stratum, "first_leg_start_epoch_s": 100.0}]
         later = [{"sample_stratum": stratum, "first_leg_start_epoch_s": 900.0}]
-        # A group split across queues: the remainder queue's first span is first in its queue (drawn) ...
-        self.assertTrue(desk_final.hand_sample(queue, "cq-g-s01-a1", self.kit, self.sha, earlier, 500.0)["selected"])
+        # A group split across queues: at the desk the history decides; the remainder queue's first span is not first
+        # when the group's pilot ran before it (gate 3, Opus 7), though the prospective print counts it first.
+        d = desk_final.hand_sample(queue, "cq-g-s01-a1", self.kit, self.sha, earlier, 500.0)
+        self.assertTrue(d["first_in_queue"])
+        self.assertFalse(d["first_of_group"])
         # ... and an entry that never ran cannot hide the first span that did: the history clause draws g-s02.
         d = desk_final.hand_sample(queue, "cq-g-s02-a1", self.kit, self.sha, [], 500.0)
         self.assertTrue(d["first_in_history"] and d["selected"])
@@ -1437,6 +1440,29 @@ class MbpDeskRecords:
         v3 = json.loads((work3 / "out" / desk_final.VERDICT_NAME).read_text())
         self.assertEqual(v3["history_source"], "signed-records")
         self.assertNotIn("DESK_UNAUTHENTICATED", codes(v3))
+
+
+class Gate3Desk(DeskFinalCase):
+    """Gate 3 (Opus 2): the schema-change trigger compares with the latest EARLIER summary, and two desks whose
+    histories differ do not disagree on history-dependent parts."""
+
+    def test_a_later_span_in_the_history_is_not_previous_and_rejudgment_agrees(self):
+        work, bundle, anchor = self.pack()
+        first = self.judge(work, bundle, anchor, history=[])
+        self.assertIn("schema change (no earlier desk summary in the history)", first["hand_table"]["triggers"])
+        later = [{"kit_schema": self.fx.kit["schema"], "leg_keys": ["other"], "legs": [],
+                  "sample_stratum": {"kit_sha256": self.fx.sha, "shape": "span"},
+                  "first_leg_start_epoch_s": 9.9e9}]
+        work2 = self.work()
+        shutil.copytree(bundle, work2 / "bundle")
+        again = self.judge(work2, work2 / "bundle", anchor, history=later)
+        self.assertEqual(again["hand_table"]["triggers"], first["hand_table"]["triggers"])
+        self.assertEqual(desk_final.compare_verdicts(first, again), [])
+        work3 = self.work()
+        shutil.copytree(bundle, work3 / "bundle")
+        fuller = self.judge(work3, work3 / "bundle", anchor)          # the fixture history holds earlier spans
+        self.assertNotEqual(fuller["hand_table"]["triggers"], first["hand_table"]["triggers"])
+        self.assertEqual(desk_final.compare_verdicts(first, fuller), [])   # history-dependent: not compared
 
 
 SignedTransport.test_mbp_desk_publish_and_history_under_the_controller_principal = \

@@ -342,17 +342,18 @@ def _group(kit, span):
 def hand_sample(queue_doc, plan_id, kit, kit_sha256, history=None, started=None):
     """The seeded stratified draw (``sha256-hand-sample-v3``, RL-173 E). The group is (kit sha256, G0 shape of
     the span). The span is drawn when sha256 of ``<seed>|<kit sha256>|<shape>|<span id>`` is 0 modulo
-    HAND_SAMPLE_RATE, or when it is the first span of its group. It is the first of its group when either
+    HAND_SAMPLE_RATE, or when it is the first span of its group.
 
-    * no span of the group comes before it in its own queue (by ``seq``; the prospective clause, which
-      ``cadence_desk.py sample-plan`` prints at READY), or
-    * ``history`` (the campaign's signed desk summaries) holds no span of the group whose first leg started
-      before this span's (``started``) - so a group split across queues, or an earlier entry that never ran,
-      cannot hide the first span that did run.
+    * **At the desk** (``history`` given: the campaign's signed desk summaries) a span is first of its group when
+      the history holds no span of the group whose first leg started before this span's (``started``): RL-173 E's
+      "first span of each kit and G0-shape group" in machine order. A group split across queues (a pilot in its
+      smoke queue, the remainder in another), or an earlier entry that never ran, is decided by what ran. A
+      history that misses a record can only add a draw, never remove one.
+    * **Prospectively** (``history`` None: ``cadence_desk.py sample-plan`` at READY) the queue stands in for the
+      history: first when no span of the group comes before it in its own queue (by ``seq``).
 
-    Either clause alone marks a first span, so the draw errs towards a hand table. Both read only this span's
-    entry and spans before it: an append, or a later span's verdict, never changes the draw. ``history`` None
-    (the prospective print) applies the queue clause only."""
+    Both read only this span's entry and spans before it: an append, or a later span's verdict, never changes the
+    draw (gate 3, Opus 7: the queue clause no longer adds a draw at the desk)."""
     span = next((s for s in queue_doc["spans"] if queuemod.plan_id(s) == plan_id), None)
     if span is None or span["kit"]["sha256"] != kit_sha256:
         return None
@@ -365,7 +366,7 @@ def hand_sample(queue_doc, plan_id, kit, kit_sha256, history=None, started=None)
         first_in_history = started is None or not any(
             isinstance(h, dict) and h.get("sample_stratum") == stratum and _num(h.get("first_leg_start_epoch_s"))
             and h["first_leg_start_epoch_s"] < started for h in history)
-    first = first_in_queue or bool(first_in_history)
+    first = first_in_queue if history is None else bool(first_in_history)
     digest = hashlib.sha256(f"{HAND_SAMPLE_SEED}|{kit_sha256}|{group[1]}|{span['span_id']}".encode()).hexdigest()
     value = int(digest, 16) % HAND_SAMPLE_RATE
     return {"law": HAND_SAMPLE_LAW, "seed": HAND_SAMPLE_SEED, "stratum": stratum, "rate": HAND_SAMPLE_RATE,
@@ -972,7 +973,12 @@ def hand_table_triggers(ordered, expected, history, hand_sample_flag, soak_attem
     if refused:
         out.append(f"retried soak ({', '.join(str(a.get('refusal_kind')) for a in refused)}; RL-172a)")
     keys = sorted(set().union(*(set(r) for r in ordered))) if ordered else []
-    previous = next((h for h in reversed(list(history or [])) if isinstance(h, dict)), None)
+    # The previous span is the latest summary whose first leg started before this span's (FORMAT section 5: "no
+    # earlier summary"); a later span's record, present when a span is re-judged, is never "previous" (gate 3, Opus 2).
+    started = ordered[0].get("started_epoch_s") if ordered else None
+    earlier = [h for h in history or [] if isinstance(h, dict) and _num(started)
+               and _num(h.get("first_leg_start_epoch_s")) and h["first_leg_start_epoch_s"] < started]
+    previous = max(earlier, key=lambda h: h["first_leg_start_epoch_s"]) if earlier else None
     if previous is None:
         out.append("schema change (no earlier desk summary in the history)")
     elif previous.get("kit_schema") != expected["kit_schema"] or previous.get("leg_keys") != keys:
@@ -1431,13 +1437,18 @@ def counts_as_final(doc, *, plan_id, queue_id, span_id, attempt, manifest_sha256
 
 
 LEAD_SELECTION = "sampled (the lead's selection)"
+# Triggers that depend on each desk's own history (gate 3, Opus 2): the MBP desk's history is its own records and
+# the off-host desk's is its own, so these may differ between two correct verdicts and are not compared.
+HISTORY_TRIGGERS = ("schema change", "sampled (seeded draw")
+SAMPLE_COMPARED = ("law", "seed", "stratum", "rate", "value", "first_in_queue")
 
 
 def agreement_view(doc):
     """The automatic part of a verdict (RL-173 B): what two desks judging the same signed bundle at the same desk
     code must agree on. It leaves out what the lead's later hand input changes (the hand table, its findings, the
     pending HAND_TABLE_DUE, ``desk_final`` and ``next_arm_hold`` as they follow from those, the lead's own
-    ``--hand-sample`` selection) and when the verdict was built."""
+    ``--hand-sample`` selection), what depends on each desk's own history (the schema-change trigger and the draw's
+    first-of-group clause; the draw's hash part is compared) and when the verdict was built."""
     doc = doc if isinstance(doc, dict) else {}
     hand = doc.get("hand_table") if isinstance(doc.get("hand_table"), dict) else {}
     return {
@@ -1447,8 +1458,10 @@ def agreement_view(doc):
                               if isinstance(s, dict) and s.get("kind") != "hand"),
         "hand_gates": sorted([g.get("gate"), g.get("holds")] for g in doc.get("hand_gates") or []
                              if isinstance(g, dict)),
-        "triggers": sorted(t for t in hand.get("triggers") or [] if t != LEAD_SELECTION),
-        "sample": hand.get("sample"),
+        "triggers": sorted(t for t in hand.get("triggers") or []
+                           if t != LEAD_SELECTION and not t.startswith(HISTORY_TRIGGERS)),
+        "sample": ({k: hand["sample"].get(k) for k in SAMPLE_COMPARED} if isinstance(hand.get("sample"), dict)
+                   else hand.get("sample")),
         "transport": {k: (doc.get("transport") or {}).get(k) for k in ("signed", "bundle_commit", "signer",
                                                                        "queue_commit")},
         "history_source": doc.get("history_source"), "error": doc.get("error"), "desk_code": doc.get("desk_code")}
