@@ -588,6 +588,20 @@ class SpanOffloadTests(unittest.TestCase):
         record = so.offload(dict(self.config, backend=backend), PLAN, self.span)
         self.assertTrue(record["provider_confirmed"])
 
+    def test_icloud_repeated_unconfirmed_cli_exit_is_8_and_preserves_the_record(self):
+        backend = self.fake_brctl(FAKE_BRCTL_NO_EVICTION="1")
+        conf = self.tmp / "icloud.json"
+        conf.write_text(json.dumps(dict(self.config, backend=backend)))
+        argv = ["offload", "--config", str(conf), "--plan", PLAN, "--span-dir", str(self.span)]
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertEqual(cli.main(argv), 8)
+            original = self.marker().read_bytes()
+            self.assertEqual(cli.main(argv), 8)
+        self.assertIn("OFFLOAD_UNCONFIRMED ICLOUD_UNCONFIRMED", err.getvalue())
+        self.assertEqual(self.marker().read_bytes(), original)
+        self.assertFalse(self.marker(confirmed=True).exists())
+
     def test_icloud_no_flag_support_cannot_confirm_and_deadline_overrides_fallback(self):
         backend = self.fake_brctl()
         with mock.patch.object(so, "_is_dataless", return_value=None):

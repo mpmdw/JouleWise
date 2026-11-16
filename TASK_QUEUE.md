@@ -681,7 +681,7 @@ Superseded (2026-07-15, WO-017; D-043): P2-027 publication and uninvolved-party 
 <!-- BEGIN GENERATED: state-kernel current-queue -->
 <!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. -->
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-15).
 
 Generated compatibility table for repository consumers; the lane tables below are the detailed view of the same kernel state.
 
@@ -1360,6 +1360,7 @@ the author and integration repairs; later council work orders remain separate.
 
 ## PR #804 iCloud builder checkpoint (2026-11-15; explicit owner task)
 
-Software implemented; final cold Sol admission and CI pending. Lead installation on macOS 26 and
+Software built and cold-reviewed (ADMIT at da02b7fde); retry note repaired. Final review/CI evidence
+is in the report and PR #804 gate ledger. Lead installation on macOS 26 and
 the research-lead A.3 permanence ruling remain external. This historical checkpoint does not select
 work from the generated queue. Evidence: `docs/run_reports/2026-11-15-span-offload-icloud.md`.

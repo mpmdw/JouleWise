@@ -75,6 +75,9 @@ the archive is derived again from OUT (deterministic: fixed gzip header and leve
 files) and its manifest, digest and size equal the stored ones, so an edited or corrupted stored descriptor
 is refused; the upload of the same bytes is then idempotent. That costs one more archive pass (about a
 minute for 2.9 GB), and a span whose files or directory times changed since the first attempt is refused.
+A repeated iCloud attempt that is still unconfirmed exits 8 (`ICLOUD_UNCONFIRMED`) and preserves the
+existing `.ok.unconfirmed`; it never uses exit 3 for that record. A later confirmed attempt may create
+`.ok` while leaving the historical unconfirmed record intact.
 Anything else at the stage path, complete or not, is refused `STAGE_CONFLICT`: the tool never moves a
 directory it did not build. The tool never deletes a stage or a remote folder. After the Air's pull of a
 span succeeds, the lead may remove `<stage_root>/<plan>/`; a remote `<plan>/` folder is removed only by the
@@ -235,7 +238,9 @@ python3.13 -B /Users/edr/code/jw-wt/span-offload-<sha>/scripts/span_offload.py o
 `--require-file` replaces the default list; name `runner_receipt.json` whenever it is given.
 
 Exit 0 prints one `OFFLOAD_OK` line (plan, files, both hashes, ciphertext size, marker path), which goes
-into the span's RUN_STATE item. Exit 3 means the marker already exists: record which path wrote it. Any
+into the span's RUN_STATE item. Before treating exit 3 as an already satisfied copy gate, check that
+`<marker_dir>/<plan>.ok` actually exists and record which path wrote it. An `.ok.unconfirmed` record
+never satisfies that check. Any
 other exit holds the next arm and F0; mail Ed and the lead with the one stderr line.
 
 Later, on the Air:
