@@ -1,0 +1,708 @@
+{
+ "plan_id": "cq-dev-03-s01-a1",
+ "span": "dev-03-s01",
+ "legs": [
+  "L001",
+  "L002",
+  "L003"
+ ],
+ "built": "2026-11-16 05:36 PST on the Air (desk builder for the lead)",
+ "work_order": "RUN_STATE 355 (issued 2026-11-15 15:42:10 PST); launch RUN_STATE 362 (f845859d, 2026-11-16 ~03:39 PST); magistrate Check RUN_STATE 363 (d59960c1, 05:16 PST); origin/main cd1c9bdeb",
+ "data": "/Volumes/JW-EXT/cadence-desk/cl-dev-03/cq-dev-03-s01-a1-20261116T113830Z (read-only copy; sha256 -c of all 123 manifest entries OK; .air and .mbp manifests byte-equal, sha256 0489daf073bc8b6906e4e06d664517bd9158c9925f3529fb365f9cfa2cc441eb)",
+ "code": "2d347f721552fe03bdd19f113e7bad7a7c24908e (/Volumes/JW-EXT/jw-wt/desk-final-pin-2d347f721, detached, clean before and after, read-only); the desk checkout item 355 'After' names",
+ "kit": {
+  "source": "git show 9cbb365a6:docs/process/cadence/kits/cl-dev-03.v1.1.json, copied outside the checkout",
+  "sha256": "0f535774b413654d9d72b153a7dc8369df81575b34c5fa120898d76dfe04e14b",
+  "sha_asserted": true,
+  "receipt_kit": {
+   "campaign_id": "cl-dev-03",
+   "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+   "sha256": "0f535774b413654d9d72b153a7dc8369df81575b34c5fa120898d76dfe04e14b"
+  }
+ },
+ "desk_command": "TMPDIR=<scratch>/tmp python3.13 -B scripts/air/cadence_desk.py build --plan-id cq-dev-03-s01-a1 --input <OUT>/desk-bundle --out auto --kit kit.json (rc 0, 'stops 0'; WITH --kit, never --adapter, per D6)",
+ "D6_span_result_json_exists": true,
+ "desk_stops_json": [],
+ "comparison": {
+  "per_leg_values_compared": 57,
+  "per_leg_values_differing": 0,
+  "fields_per_leg": [
+   "attempts",
+   "band_reached",
+   "budget_s",
+   "contaminated_redos",
+   "g0_outcome",
+   "g0_role",
+   "g0_role(record vs desk)",
+   "g0_s",
+   "g0_shape",
+   "included/admitted",
+   "leg_id",
+   "os_level_max",
+   "pm_nominal",
+   "prefill_tokens(nominal: kit/spec vs desk)",
+   "redo_reasons",
+   "seed",
+   "span_reference",
+   "start_band",
+   "wall_s(stage vs summary)"
+  ],
+  "inclusion_included": true,
+  "span_level_compared": [
+   "leg count",
+   "named stops (hand [] vs desk [])",
+   "result (desk_summary vs receipt span_result)",
+   "meter",
+   "feeds_proven_stopped",
+   "span_reference (leg_id, attempt, consumers, consistent)"
+  ],
+  "span_level_differing": 0,
+  "diffs": [],
+  "scope_notes": [
+   "the desk table has no admitted column in JOURNAL-TABLE's first table; admitted read from desk_summary.json (D1); the v1.1 cell table lists it",
+   "hand 'reached' derives from G0 released + quiet_s 0 + release-to-turn < 5 s (0.071 / 0.085 / 0.076 s); same result",
+   "hand g0_shape and nominal prefill come from the kit (the leg spec of an own-shaped leg carries no g0_shape); hand g0_role from the kit shape (span = consume, own = capture), checked against the leg record's own g0_role; the hand span_reference is derived from the L002 G0 gate row's reference source_member, matched to L001's window reference run id, and L001's attempts/inclusion/redo by hand",
+   "the desk's prefill_tokens is the kit nominal; the realized counts (leg_record) are reported separately (RL-158 Q5), all within 5 %",
+   "OS level: hand os_level_max / pm_nominal equal the desk's on all three (1 / 2 / 2, false); not a rule: kit inclusion 'no_drop_by_outcome'",
+   "rules 3 and 4 left to the look (meter present, 27,414 polls, 0 bad, 0 usb, proven stopped)",
+   "the desk omits restore lines and censuses; the hand table carries them clean"
+  ]
+ },
+ "hand_legs": [
+  {
+   "leg": "L001",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 136.513,
+   "g0_role": "capture",
+   "g0_shape": "own",
+   "span_reference": null,
+   "prefill_tokens_realized": 2024,
+   "prefill_tokens_nominal": 2000,
+   "prefill_deviation_pct": 1.2,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 970.2,
+   "budget_s": 1076,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 2,
+   "rule5_max_busy_cores": 1.9070000000000003,
+   "os_level_max_turn": 1,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   }
+  },
+  {
+   "leg": "L002",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 209.095,
+   "g0_role": "consume",
+   "g0_shape": "span",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   },
+   "prefill_tokens_realized": 19458,
+   "prefill_tokens_nominal": 19458,
+   "prefill_deviation_pct": 0.0,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1251.9,
+   "budget_s": 1642,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 2,
+   "rule5_max_busy_cores": 2.017,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "g0_reference_source": "cadence-cl-dev-03-l001",
+   "g0_reference_record_sha256": "1675f04465f9a0db0eb2511d03f1c9c8c12afc6747912ace010d0e9cc854bf6e"
+  },
+  {
+   "leg": "L003",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 221.522,
+   "g0_role": "capture",
+   "g0_shape": "own",
+   "span_reference": null,
+   "prefill_tokens_realized": 10015,
+   "prefill_tokens_nominal": 10000,
+   "prefill_deviation_pct": 0.15,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1155.4,
+   "budget_s": 1156,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 6,
+   "rule5_max_busy_cores": 3.764,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   }
+  }
+ ],
+ "desk_final": {
+  "verdict": "FINAL",
+  "meaning": "automatic desk = independent hand table on every value, inclusion included (kit v1.1 fields too)",
+  "basis": "0 of 57 per-leg and 0 of 6 span-level values differ; 3 of 3 included by hand, 3 of 3 admitted by desk; stops.json [] and hand stops []"
+ },
+ "R9_proposed": {
+  "verdict": "R9: PASSED (proposed)",
+  "signed_by": "not signed: the lead signs (item 355 'After')",
+  "table": {
+   "1_closes_with_complete_records": "3 of 3 legs closed; receipt rc 0, outcome MEASURED_OK, chain COMPLETE, 25/25 steps rc 0; every leg_record leg_status complete, decode 4,096/4,096",
+   "2_admitted": "3 of 3 (desk, from each leg_summary.json); 3 of 3 included by hand",
+   "3_excluded_legs": "none (no leg fell under any inclusion rule 1-6; no redo; none refilled from the reserve)",
+   "4_hand_table_equals_desk": "0 of 57 per-leg and 0 of 6 span-level values differ, inclusion included; stops.json [] and hand stops []",
+   "named_stops_open": "none (desk stops.json [], hand [])"
+  }
+ },
+ "smoke_proposed": {
+  "verdict": "smoke: MET (proposed)",
+  "signed_by": "not signed: the lead signs (RL-161 section 2, RL-158 section 2)",
+  "statement": "L002's G0 released against L001's capture and L002 ran its turn",
+  "evidence": {
+   "L002_g0_role": "consume",
+   "L002_g0_shape": "span",
+   "L002_g0_outcome": "released",
+   "L002_g0_wait_s": 209.095,
+   "g0_timeout_s": 1200,
+   "L002_prefill_tokens_realized": 19458,
+   "L002_decode": "4096/4096",
+   "L002_leg_status": "complete",
+   "g0_reference_source": "cadence-cl-dev-03-l001",
+   "g0_reference_record_sha256": "1675f04465f9a0db0eb2511d03f1c9c8c12afc6747912ace010d0e9cc854bf6e",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   },
+   "reference_is_first_leg": true,
+   "record_sha256_equals_L001_window_reference_record_sha256": true,
+   "G0_row_reference_equals_L001_capture (fast_c and span_ns)": true,
+   "L001_window_reference": {
+    "status": "captured",
+    "record_sha256": "1675f04465f9a0db0eb2511d03f1c9c8c12afc6747912ace010d0e9cc854bf6e",
+    "TV0h_TV1h_c": 34.17414474487305
+   },
+   "L001_attempts_excluded_redone": [
+    1,
+    false,
+    false
+   ],
+   "release_to_turn_s": 0.085,
+   "turn_after_release_by_stamps": true,
+   "L002_G0_release_reading": {
+    "TV0h": 35.01946258544922,
+    "TV1h": 35.01946258544922,
+    "Tf08": 35.90250015258789
+   },
+   "L002_row_reference": {
+    "fast_c": 34.17414474487305,
+    "slow_c": 34.17414474487305,
+    "source_member": "cadence-cl-dev-03-l001",
+    "span_ns": [
+     2815919763784083,
+     2815979763784083
+    ]
+   },
+   "l002_included_rules_1_to_6": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "L002_admitted_by_desk": true
+  },
+  "marks": "none: the span's reference is not from a redo and not from an excluded leg"
+ },
+ "rules_by_hand": {
+  "1_ran_to_cap": "3/3 (decode 4,096/4,096 each, leg_status complete, stage rc 0)",
+  "2_g0_released": "3/3 (L001 136.5 s, L002 209.1 s, L003 221.5 s; journal G0 = record g0_wait_s; against the reference its kit shape names: L001 own capture, L002 L001's capture, L003 own capture)",
+  "5_not_contaminated": "3/3 (one attempt each, no redo; longest run over 0.5 core 2/2/6 s of 60; journals cover their attempts; hand agrees with recorded os_load)",
+  "6_power_mode_0": "3/3 (leg_record ac_powermode 0 at episode start; read_power before soak {'ac_powermode': 0, 'automatic': True, 'rc': 0}; restore observed 0)",
+  "3_4": "at the look; meter present, 27,414 polls, 0 bad, 0 usb, proven stopped"
+ },
+ "restore": {
+  "argv": [
+   "sudo",
+   "-n",
+   "/usr/bin/pmset",
+   "-c",
+   "powermode",
+   "0"
+  ],
+  "exit_code": 0,
+  "marker": null,
+  "marker_removed": false,
+  "observed": 0,
+  "ok": true,
+  "rc": 0,
+  "stderr": ""
+ },
+ "restore_proven_hand": true,
+ "close_steps_rc": {
+  "close-volumes": 0,
+  "restore": 0,
+  "stop-agents": 0,
+  "stop-meter": 0,
+  "stop-volumes": 0
+ },
+ "read_power_step_before_soak": {
+  "ac_powermode": 0,
+  "automatic": true,
+  "rc": 0
+ },
+ "LEG_OVERTIME": "no",
+ "LEG_OVERTIME_detail": "walls 970.2, 1251.9, 1155.4 s against 1.5 x budgets L001 1,076, L002 1,642, L003 1,156 = 1,614, 2,463, 1,734 s; max ratio 0.9995; none over budget_s; 0 legs over the limit, stop needs 2",
+ "RL150_R1_part3_print": {
+  "soak_reference_line": "soak_reference {'TV0h': 34.15946151097616, 'TV1h': 34.15946151097616} Tf08_last1200s_mean 26.964142163594563",
+  "L001": {
+   "g0": {
+    "duration_s": 136.513185104,
+    "outcome": "released",
+    "release": {
+     "TV0h": 34.47814178466797,
+     "TV1h": 34.47814178466797,
+     "Tf08": 30.729999542236328
+    },
+    "row_reference": {
+     "fast_c": 34.17414474487305,
+     "slow_c": 34.17414474487305,
+     "source_member": "cadence-cl-dev-03-l001",
+     "span_ns": [
+      2815919763784083,
+      2815979763784083
+     ]
+    },
+    "row_release": {
+     "fast_c": 34.47814178466797,
+     "slow_c": 34.47814178466797
+    }
+   },
+   "g0_reference_equals_L001_capture": true,
+   "own_reference": {
+    "TV0h": 34.17414474487305,
+    "TV1h": 34.17414474487305,
+    "Tf08_median": 27.206406593322754,
+    "status": "captured"
+   },
+   "own_reference_file": "present"
+  },
+  "L002": {
+   "g0": {
+    "duration_s": 209.094837146,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.01946258544922,
+     "TV1h": 35.01946258544922,
+     "Tf08": 35.90250015258789
+    },
+    "row_reference": {
+     "fast_c": 34.17414474487305,
+     "slow_c": 34.17414474487305,
+     "source_member": "cadence-cl-dev-03-l001",
+     "span_ns": [
+      2815919763784083,
+      2815979763784083
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.01946258544922,
+     "slow_c": 35.01946258544922
+    }
+   },
+   "g0_reference_equals_L001_capture": true,
+   "own_reference": null,
+   "own_reference_file": "absent (consumer leg, v1.1)"
+  },
+  "L003": {
+   "g0": {
+    "duration_s": 221.521905438,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.055049896240234,
+     "TV1h": 35.055049896240234,
+     "Tf08": 36.39656066894531
+    },
+    "row_reference": {
+     "fast_c": 34.754634857177734,
+     "slow_c": 34.754634857177734,
+     "source_member": "cadence-cl-dev-03-l003",
+     "span_ns": [
+      2818142188301896,
+      2818202188301896
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.055049896240234,
+     "slow_c": 35.055049896240234
+    }
+   },
+   "g0_reference_equals_L001_capture": false,
+   "own_reference": {
+    "TV0h": 34.754634857177734,
+    "TV1h": 34.754634857177734,
+    "Tf08_median": 33.1417179107666,
+    "status": "captured"
+   },
+   "own_reference_file": "present"
+  }
+ },
+ "RL150_R1_note": "TV0h = TV1h in every reading (soak, references, G0 releases), so nothing routes under RL-149 section 5 item 6. Kit v1.1: L001 (first leg) captures the span's reference (status captured, source_member = itself); L002 is the span-shaped consumer and writes no window reference of its own (file absent by design); L003 is own-shaped and captures its own",
+ "RL158_Q1": {
+  "print": "RL150_R1_part3_print above IS this span's Q1 print: the soak reference, L001's capture, and L002's release reading and G0 wait",
+  "soak_reference_line": "soak_reference {'TV0h': 34.15946151097616, 'TV1h': 34.15946151097616} Tf08_last1200s_mean 26.964142163594563",
+  "L001_capture": {
+   "TV0h": 34.17414474487305,
+   "TV1h": 34.17414474487305,
+   "Tf08_median": 27.206406593322754,
+   "status": "captured"
+  },
+  "L002_release_reading": {
+   "TV0h": 35.01946258544922,
+   "TV1h": 35.01946258544922,
+   "Tf08": 35.90250015258789
+  },
+  "L002_g0_wait_s": 209.095,
+  "g0_wait_s": {
+   "L001": 136.5,
+   "L002": 209.1,
+   "L003": 221.5
+  },
+  "marks": "none: L001 (the reference leg) ran one attempt, was not redone and not excluded; no 'reference from a redo' or 'reference from an excluded leg' mark",
+  "completion_record": "docs/research-audits/2026-11-10-fable/evidence/cadence-standing/q1/cq-dev-03-s01-a1.json (joulewise.cadence_q1_record.v1; RL-173 E)"
+ },
+ "RL158_Q5_prefill_deviation": {
+  "L001": {
+   "nominal": 2000,
+   "realized": 2024,
+   "pct": 1.2
+  },
+  "L002": {
+   "nominal": 19458,
+   "realized": 19458,
+   "pct": 0.0
+  },
+  "L003": {
+   "nominal": 10000,
+   "realized": 10015,
+   "pct": 0.15
+  }
+ },
+ "RL158_Q5_note": "no leg's realized prefill count is more than 5 % from its nominal (L001 +1.2 %, L002 0.0 %, L003 +0.15 %)",
+ "RL158_Q6_consumers": "1 consumer in this span (L002); on the 3 + 9 layout the block has 5 of the 10 warm legs as consumers (L002, L008, L009, L010, L012), item 355 line 4",
+ "RL156a": {
+  "starvation": "none",
+  "thermal_sampler": {
+   "L001": {
+    "cells": 948,
+    "reads": 949,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.084,
+    "empty_cells_on_100ms_tolerance": [],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 0,
+     "valid_samples": 948,
+     "expected_samples": 948
+    }
+   },
+   "L002": {
+    "cells": 1228,
+    "reads": 1229,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.103,
+    "empty_cells_on_100ms_tolerance": [
+     [
+      1217,
+      "post-turn",
+      139.6
+     ]
+    ],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1227,
+     "expected_samples": 1228
+    }
+   },
+   "L003": {
+    "cells": 1130,
+    "reads": 1131,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.123,
+    "empty_cells_on_100ms_tolerance": [
+     [
+      1122,
+      "post-turn",
+      159.8
+     ]
+    ],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1129,
+     "expected_samples": 1130
+    }
+   }
+  },
+  "thermal_note": "every 1-s cell holds a reading; 0 read errors; max intervals 1.084/1.103/1.123 s. Off-grid cells (140-160 ms from the grid, tolerance 100 ms): L002 1 post-turn, L003 1 post-turn, L001 none; none in G0 or the turn. Jitter, not starvation.",
+  "load_sampler": {
+   "L001": {
+    "samples": 969,
+    "max_gap_s": 1.155,
+    "coverage_ok": true
+   },
+   "L002": {
+    "samples": 1251,
+    "max_gap_s": 1.437,
+    "coverage_ok": true
+   },
+   "L003": {
+    "samples": 1154,
+    "max_gap_s": 1.155,
+    "coverage_ok": true
+   }
+  },
+  "inventory": "not exercised: the cadence-leg kind does not run the R1 ProcessInventory journal; no inventory journal in OUT (find -iname '*inventory*' empty)"
+ },
+ "os_level_census": {
+  "L001": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     329.1,
+     332.1
+    ],
+    "os_level": {
+     "0": 329,
+     "1": 4
+    },
+    "pm_state": {
+     "Moderate": 4,
+     "Nominal": 329
+    },
+    "readings": 333
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     329.1,
+     373.1
+    ],
+    "os_level": {
+     "0": 909,
+     "1": 40
+    },
+    "pm_state": {
+     "Moderate": 45,
+     "Nominal": 465,
+     "None": 439
+    },
+    "readings": 949
+   }
+  },
+  "L002": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     191.4,
+     439.4
+    ],
+    "os_level": {
+     "0": 191,
+     "1": 38,
+     "2": 211
+    },
+    "pm_state": {
+     "Heavy": 211,
+     "Moderate": 38,
+     "Nominal": 191
+    },
+    "readings": 440
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     191.4,
+     492.5
+    ],
+    "os_level": {
+     "0": 924,
+     "1": 53,
+     "2": 252
+    },
+    "pm_state": {
+     "Heavy": 264,
+     "Moderate": 38,
+     "Nominal": 401,
+     "None": 526
+    },
+    "readings": 1229
+   }
+  },
+  "L003": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     179.6,
+     379.6
+    ],
+    "os_level": {
+     "0": 179,
+     "1": 7,
+     "2": 194
+    },
+    "pm_state": {
+     "Heavy": 194,
+     "Moderate": 7,
+     "Nominal": 179
+    },
+    "readings": 380
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     179.6,
+     431.7
+    ],
+    "os_level": {
+     "0": 872,
+     "1": 24,
+     "2": 235
+    },
+    "pm_state": {
+     "Heavy": 246,
+     "Moderate": 7,
+     "Nominal": 401,
+     "None": 477
+    },
+    "readings": 1131
+   }
+  }
+ },
+ "rule5_placement": {
+  "L001": {
+   "attempt": 1,
+   "runs_ge_3s": []
+  },
+  "L002": {
+   "attempt": 1,
+   "runs_ge_3s": []
+  },
+  "L003": {
+   "attempt": 1,
+   "runs_ge_3s": [
+    {
+     "len_samples": 6,
+     "t_s": [
+      1084.1,
+      1089.1
+     ],
+     "pst": [
+      "05:08:54",
+      "05:08:59"
+     ],
+     "max_cores": 3.764
+    }
+   ]
+  }
+ },
+ "maintenance_overlap": "MAINTENANCE-OVERLAP.md (print only, gates nothing). Item 363's 05:00 bucket (softwareupdated 2,598, mobileassetd 2,217, XProtect* 612 = XProtectPluginService 562 + XProtect 50; no redo recorded) is judged for rule 5 as the s04, hp-01-s03 and dev-02-s02/s03 desks judged it: by the load journal's sustained-load test (RL-72 E2, > 0.5 core held 60 s), not by log-line counts. The burst sits wholly in L003.a1's POST-TURN phase (05:08:41-05:10:06; the turn ended 05:08:41): per minute (maint_burst.out) at 05:08 XProtect 50 + XProtectPluginService 562, mobileassetd 2,021, softwareupdated 2,582 (all four start 05:08:54; XProtect* ends 05:08:56), then mobileassetd 23 + softwareupdated 16 at 05:09; mobileassetd 165 at 05:04 and 8 at 05:05 (turn) are the small earlier entries. XProtect* is 0 in L001 and L002, softwareupdated 0 in L001/L002, mobileassetd 0/3. Rule 5: L003's longest run over 0.5 core is 6 s (rule5_place.out: 6 one-second samples 05:08:54-05:08:59 PST, max 3.764 cores, exactly at the burst's onset, post-turn), 6 of 60 required seconds; it does not fire. The runner recorded L003 clean (contaminated false, no redo), and the hand recomputation (hand_table.json attempt_detail) agrees; no other run of 3 s or more exists in the three legs (L001 and L002: none; their longest runs over 0.5 core are 2 s each by hand). JUDGEMENT: rule 5 passes on L001, L002 and L003; nothing excluded, no redo owed. L003's G0 released at 221.5 s (G0 04:58:40-05:02:21 held only backupd 24 and dasd 507), its turn 05:02:21-05:08:41 saw dasd 1,097, backupd 9, mobileassetd 173 and nothing else: the burst came after the turn, so it touches neither G0 nor the turn. Recorded for the look, print only: the post-turn phase of L003 holds an OS-update burst of about 6 s CPU; kit no_drop_by_outcome.",
+ "span_level": {
+  "rc": 0,
+  "mock": false,
+  "batch_windows": [
+   "02:00-02:35"
+  ],
+  "soak_rc": 0,
+  "agent_census": {
+   "argv": [
+    "/usr/bin/pgrep",
+    "-a",
+    "-lf",
+    "[c]odex|[c]laude"
+   ],
+   "first_after_start_s": 0.067301417,
+   "hits": 0,
+   "last_before_end_s": 5.488998542,
+   "max_gap_s": 30.295877166,
+   "polls": 183
+  },
+  "deadlines_files": [],
+  "load_redos_used": 0,
+  "feeds_proven_stopped": {
+   "agents": true,
+   "meter": true,
+   "volumes": true
+  },
+  "meter": {
+   "bad_polls": 0,
+   "elapsed_s": 5482.812866542,
+   "polls": 27414,
+   "present": true,
+   "proven_stopped": true,
+   "usb_errors": 0
+  },
+  "stages_unclosed": [],
+  "stages_end_rc_nonzero": [],
+  "steps_nonzero": [],
+  "n_steps": 25,
+  "legs_finished": 3,
+  "legs_planned": 3
+ },
+ "span_level_extra": {
+  "soak_s": 1800.5,
+  "volume_census": "6/6 PASS",
+  "redo_quota_kit": 2
+ },
+ "time_calendar_only": {
+  "receipt_started_epoch_s": 1794829123.34336,
+  "receipt_ended_epoch_s": 1794834607.149466,
+  "runner_span_s": 5483.8,
+  "item_355_plan_expected_s": 7024,
+  "item_355_plan_worst_s": 16650,
+  "mean_leg_wall_s": 1125.8
+ },
+ "block_line_dev03": "dev-03: 3 of 12 legs collected (L001-L003, this counted pilot), 3 admitted by the desk, 3 included by hand, 0 excluded, 0 redos, 0 named stops; L004-L012 are the remainder (not run; they wait for the lead's two verdicts)"
+}

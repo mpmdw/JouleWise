@@ -1,0 +1,100 @@
+{
+ "adapter": "leg-summary-v1",
+ "feeds_proven_stopped": true,
+ "legs": [
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1076,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794832197.5727391,
+   "g0_outcome": "released",
+   "g0_role": "capture",
+   "g0_s": 136.513185104,
+   "g0_shape": "own",
+   "leg_id": "L001",
+   "os_level_max": 1,
+   "pm_nominal": false,
+   "prefill_tokens": 2000,
+   "redo_reasons": [],
+   "seed": 4129284831,
+   "span_reference": null,
+   "start_band": "q0",
+   "started_epoch_s": 1794831227.37307,
+   "wall_s": 970.1993181705475
+  },
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1642,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794833450.123209,
+   "g0_outcome": "released",
+   "g0_role": "consume",
+   "g0_s": 209.094837146,
+   "g0_shape": "span",
+   "leg_id": "L002",
+   "os_level_max": 2,
+   "pm_nominal": false,
+   "prefill_tokens": 19458,
+   "redo_reasons": [],
+   "seed": 319096281,
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   },
+   "start_band": "q0",
+   "started_epoch_s": 1794832198.245632,
+   "wall_s": 1251.8771300315857
+  },
+  {
+   "admitted": true,
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1156,
+   "contaminated_redos": 0,
+   "ended_epoch_s": 1794834606.1917188,
+   "g0_outcome": "released",
+   "g0_role": "capture",
+   "g0_s": 221.521905438,
+   "g0_shape": "own",
+   "leg_id": "L003",
+   "os_level_max": 2,
+   "pm_nominal": false,
+   "prefill_tokens": 10000,
+   "redo_reasons": [],
+   "seed": 512394455,
+   "span_reference": null,
+   "start_band": "q0",
+   "started_epoch_s": 1794833450.784663,
+   "wall_s": 1155.4066090583801
+  }
+ ],
+ "meter": {
+  "bad_polls": 0,
+  "elapsed_s": 5482.812866542,
+  "polls": 27414,
+  "present": true,
+  "proven_stopped": true,
+  "usb_errors": 0
+ },
+ "plan_id": "cq-dev-03-s01-a1",
+ "result": {
+  "chain_exit_code": 0,
+  "chain_outcome": "COMPLETE",
+  "fault": false,
+  "outcome": "MEASURED_OK",
+  "verdict": "3/3 legs run"
+ },
+ "span_reference": {
+  "attempt": 1,
+  "consistent": true,
+  "consumers": 1,
+  "leg_id": "L001",
+  "marks": []
+ }
+}

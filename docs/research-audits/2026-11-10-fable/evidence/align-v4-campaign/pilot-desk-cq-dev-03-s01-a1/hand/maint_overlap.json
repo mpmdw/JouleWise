@@ -1,0 +1,236 @@
+{
+ "entries": 20885,
+ "non_entry_lines": 18678,
+ "first": "03:38:30",
+ "last": "05:09:57",
+ "named_totals": {
+  "softwareupdated": 2614,
+  "mds": 6,
+  "backupd": 90,
+  "dasd": 15218,
+  "mobileassetd": 2345,
+  "XProtect*": 612
+ },
+ "other_processes": {},
+ "legs": [
+  {
+   "leg": "L001",
+   "attempt": 1,
+   "counted": true,
+   "contaminated": false,
+   "redo_reason": null,
+   "start": "04:13:47",
+   "end": "04:29:57",
+   "whole": {
+    "dasd": 2610
+   },
+   "phases": [
+    {
+     "phase": "pre-G0",
+     "from": "04:13:47",
+     "to": "04:20:58",
+     "jobs": {
+      "dasd": 1013
+     }
+    },
+    {
+     "phase": "G0",
+     "from": "04:20:58",
+     "to": "04:23:14",
+     "jobs": {
+      "dasd": 342
+     }
+    },
+    {
+     "phase": "G0->turn",
+     "from": "04:23:14",
+     "to": "04:23:14",
+     "jobs": {}
+    },
+    {
+     "phase": "turn",
+     "from": "04:23:14",
+     "to": "04:28:46",
+     "jobs": {
+      "dasd": 810
+     }
+    },
+    {
+     "phase": "post-turn",
+     "from": "04:28:46",
+     "to": "04:29:57",
+     "jobs": {
+      "dasd": 445
+     }
+    }
+   ]
+  },
+  {
+   "leg": "L002",
+   "attempt": 1,
+   "counted": true,
+   "contaminated": false,
+   "redo_reason": null,
+   "start": "04:29:58",
+   "end": "04:50:50",
+   "whole": {
+    "backupd": 6,
+    "dasd": 3266,
+    "mobileassetd": 3
+   },
+   "phases": [
+    {
+     "phase": "pre-G0",
+     "from": "04:29:58",
+     "to": "04:38:37",
+     "jobs": {
+      "dasd": 1353
+     }
+    },
+    {
+     "phase": "G0",
+     "from": "04:38:37",
+     "to": "04:42:06",
+     "jobs": {
+      "backupd": 6,
+      "dasd": 621
+     }
+    },
+    {
+     "phase": "G0->turn",
+     "from": "04:42:06",
+     "to": "04:42:06",
+     "jobs": {}
+    },
+    {
+     "phase": "turn",
+     "from": "04:42:06",
+     "to": "04:49:26",
+     "jobs": {
+      "dasd": 1039,
+      "mobileassetd": 3
+     }
+    },
+    {
+     "phase": "post-turn",
+     "from": "04:49:26",
+     "to": "04:50:50",
+     "jobs": {
+      "dasd": 253
+     }
+    }
+   ]
+  },
+  {
+   "leg": "L003",
+   "attempt": 1,
+   "counted": true,
+   "contaminated": false,
+   "redo_reason": null,
+   "start": "04:50:50",
+   "end": "05:10:06",
+   "whole": {
+    "XProtect*": 612,
+    "backupd": 36,
+    "dasd": 3377,
+    "mobileassetd": 2217,
+    "softwareupdated": 2598
+   },
+   "phases": [
+    {
+     "phase": "pre-G0",
+     "from": "04:50:50",
+     "to": "04:58:40",
+     "jobs": {
+      "dasd": 1221
+     }
+    },
+    {
+     "phase": "G0",
+     "from": "04:58:40",
+     "to": "05:02:21",
+     "jobs": {
+      "backupd": 24,
+      "dasd": 507
+     }
+    },
+    {
+     "phase": "G0->turn",
+     "from": "05:02:21",
+     "to": "05:02:21",
+     "jobs": {}
+    },
+    {
+     "phase": "turn",
+     "from": "05:02:21",
+     "to": "05:08:41",
+     "jobs": {
+      "backupd": 9,
+      "dasd": 1097,
+      "mobileassetd": 173
+     }
+    },
+    {
+     "phase": "post-turn",
+     "from": "05:08:41",
+     "to": "05:10:06",
+     "jobs": {
+      "XProtect*": 612,
+      "backupd": 3,
+      "dasd": 552,
+      "mobileassetd": 2044,
+      "softwareupdated": 2598
+     }
+    }
+   ]
+  }
+ ],
+ "buckets_10min": {
+  "03:30": {
+   "softwareupdated": 8,
+   "mds": 6,
+   "backupd": 3,
+   "dasd": 318
+  },
+  "03:40": {
+   "dasd": 1419,
+   "backupd": 6
+  },
+  "03:50": {
+   "dasd": 1599,
+   "mobileassetd": 122,
+   "backupd": 24
+  },
+  "04:00": {
+   "dasd": 1587,
+   "backupd": 9
+  },
+  "04:10": {
+   "mobileassetd": 3,
+   "dasd": 1959,
+   "backupd": 6,
+   "softwareupdated": 8
+  },
+  "04:20": {
+   "dasd": 1693
+  },
+  "04:30": {
+   "dasd": 1689
+  },
+  "04:40": {
+   "dasd": 1327,
+   "backupd": 6,
+   "mobileassetd": 3
+  },
+  "04:50": {
+   "dasd": 1587
+  },
+  "05:00": {
+   "dasd": 2040,
+   "backupd": 36,
+   "mobileassetd": 2217,
+   "XProtect*": 612,
+   "softwareupdated": 2598
+  }
+ }
+}
