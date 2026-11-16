@@ -23,6 +23,7 @@ from unittest import mock
 
 from joulewise import span_offload as so
 from scripts import span_offload as cli
+from tests.git_fixture import init_git_fixture
 
 OPENSSL = shutil.which("openssl")
 PLAN = "cq-syn-01-s01-a1"
@@ -86,6 +87,42 @@ FAKE_RCLONE = textwrap.dedent('''\
     elif cmd == "hashsum":
         data = open(positional[2], "rb").read()
         print(dbx(data) + "  " + os.path.basename(positional[2]))
+    else:
+        sys.exit(2)
+''')
+
+
+FAKE_BRCTL = textwrap.dedent('''\
+    import json, os, pathlib, shutil, sys, time
+    args = sys.argv[1:]
+    state = pathlib.Path(os.environ["FAKE_BRCTL_STATE"])
+    with (state / "calls").open("a") as log:
+        log.write(json.dumps(args) + "\\n")
+    cmd = args[0]
+    if os.environ.get("FAKE_BRCTL_SLEEP") == cmd:
+        time.sleep(30)
+    if os.environ.get("FAKE_BRCTL_FAIL") == cmd or (cmd == "evict" and
+            os.environ.get("FAKE_BRCTL_FAIL_SUFFIX") and args[1].endswith(os.environ["FAKE_BRCTL_FAIL_SUFFIX"])):
+        sys.exit(1)
+    if cmd == "status":
+        assert args == ["status", "com.apple.CloudDocs"]
+        counter = state / "counter"
+        i = int(counter.read_text()) if counter.exists() else 0
+        counter.write_text(str(i + 1))
+        statuses = json.loads(os.environ.get("FAKE_BRCTL_STATUSES", '["com.apple.CloudDocs client:idle caught-up"]'))
+        print(statuses[min(i, len(statuses) - 1)])
+    elif cmd in ("evict", "download"):
+        path = pathlib.Path(args[1])
+        assert not path.is_symlink()
+        remote = state / path.name
+        if cmd == "evict":
+            if not os.environ.get("FAKE_BRCTL_NO_EVICTION"):
+                shutil.copyfile(path, remote)
+                path.write_bytes(b"")  # synthetic placeholder, observed ONLY by a test mock
+        elif remote.exists():
+            shutil.copyfile(remote, path)
+            if os.environ.get("FAKE_BRCTL_CORRUPT") == path.suffix:
+                data = bytearray(path.read_bytes()); data[-1] ^= 1; path.write_bytes(data)
     else:
         sys.exit(2)
 ''')
@@ -417,6 +454,212 @@ class SpanOffloadTests(unittest.TestCase):
 
     # --- rclone backend (fake binary) ---------------------------------------------------------
 
+    def fake_brctl(self, observe=True, **env):
+        """Fake executable on PATH; no real CloudDocs or file flags are touched, on any platform."""
+        bindir = self.tmp / "bin"
+        bindir.mkdir(exist_ok=True)
+        script = bindir / "brctl"
+        script.write_text(f"#!{sys.executable}\n" + FAKE_BRCTL)
+        script.chmod(0o755)
+        state = self.tmp / "brctl-state"
+        state.mkdir(exist_ok=True)
+        values = {"PATH": str(bindir) + os.pathsep + os.environ.get("PATH", ""), "FAKE_BRCTL_STATE": str(state)}
+        values.update(env)
+        patcher = mock.patch.dict(os.environ, values)
+        patcher.start(); self.addCleanup(patcher.stop)
+        if observe:
+            # The fake evicts by truncating a NONEMPTY synthetic artifact and downloads by restoring it.
+            # This is explicitly not hardware evidence: production observes Apple's SF_DATALESS instead.
+            flags = mock.patch.object(so, "_is_dataless", side_effect=lambda info: info.st_size == 0)
+            flags.start(); self.addCleanup(flags.stop)
+        return {"kind": "icloud", "root": str(self.tmp / "cloud"), "timeout_s": 10,
+                "poll_interval_s": 0.01, "evict_timeout_s": 0.3, "download_timeout_s": 1}
+
+    def test_icloud_default_and_observed_provider_round_trip(self):
+        backend = self.fake_brctl(FAKE_BRCTL_STATUSES=json.dumps([
+            "com.apple.CloudDocs client:needs-sync-up needs-upload", "com.apple.CloudDocs client:idle caught-up"]))
+        before = so.hash_tree(self.span)
+        config = dict(self.config, backend=backend)
+        record = so.offload(config, PLAN, self.span)
+        self.assertEqual(json.loads(self.marker(confirmed=True).read_bytes()), record)
+        self.assertTrue(record["provider_confirmed"])
+        self.assertFalse(self.marker().exists())
+        self.assertEqual(record["ciphertext"]["sha256"], so.sha256_file(self.tmp / "brctl-state" / f"{PLAN}.tgz.enc"))
+        self.assertEqual(record["manifest_sha256"], hashlib.sha256(before).hexdigest())
+        for row in record["provider_confirmation"]:
+            self.assertEqual(row["kind"], "icloud evict+redownload sha256 match")
+            self.assertEqual((row["provider_hash"], row["provider_size"]), (row["sha256"], row["size"]))
+            self.assertLessEqual(row["uploaded_epoch_s"], row["evicted_epoch_s"])
+            self.assertLessEqual(row["evicted_epoch_s"], row["verified_epoch_s"])
+        air = dict(self.air, backend=backend)
+        self.pull(so.expectations(record), config=air)
+        self.assertEqual(so.hash_tree(self.tmp / "desk" / "cl-syn-01" / SPAN), before)
+        self.assertEqual(so.hash_tree(self.span), before)
+        calls = [json.loads(line) for line in (self.tmp / "brctl-state" / "calls").read_text().splitlines()]
+        self.assertEqual(sum(c[0] == "evict" for c in calls), 4)
+        self.assertEqual(sum(c[0] == "download" for c in calls), 8)  # readback + later Air pull
+        self.assertEqual(calls[:2], [["status", "com.apple.CloudDocs"]] * 2)
+        self.assertIsInstance(so.make_backend({"root": str(self.tmp / "cloud")}), so.ICloudBackend)
+        self.assertEqual(so.make_backend({}).root, Path(so.ICLOUD_ROOT).expanduser())
+
+    def test_icloud_status_parser_requires_positive_evidence_and_no_pending_items(self):
+        good = b"<com.apple.CloudDocs[1] client:idle caught-up last-sync 2026-11-15 13:13:40>"
+        self.assertTrue(so.ICloudBackend._uploaded(good))
+        for text in (b"", b"unknown format", b"client:idle caught-up", b"com.apple.CloudDocs client:idle",
+                     good + b"\nneeds-upload file", good + b"\nuploading", good + b"\nerror: failed",
+                     b"com.apple.CloudDocs client:idle not-caught-up", good + b"\nneeds-sync-up"):
+            with self.subTest(text=text):
+                self.assertFalse(so.ICloudBackend._uploaded(text))
+
+    def test_icloud_status_failure_timeout_and_hash_mismatch_write_no_marker(self):
+        cases = [({"FAKE_BRCTL_FAIL": "status"}, {}, "BRCTL_FAILED"),
+                 ({"FAKE_BRCTL_SLEEP": "status"}, {"timeout_s": 0.2}, "BRCTL_TIMEOUT"),
+                 ({"FAKE_BRCTL_STATUSES": '["com.apple.CloudDocs client:idle caught-up needs-upload"]'},
+                  {"timeout_s": 0.2}, "DEADLINE"),
+                 ({"FAKE_BRCTL_STATUSES": '["unrecognized"]'}, {"timeout_s": 0.2}, "DEADLINE"),
+                 ({"FAKE_BRCTL_CORRUPT": ".enc"}, {}, "READBACK_HASH")]
+        for i, (env, overrides, code) in enumerate(cases):
+            with self.subTest(code=code):
+                backend = dict(self.fake_brctl(**env), **overrides)
+                plan = f"{PLAN}-bad{i}"
+                with self.assertRaises(so.OffloadError) as caught:
+                    so.offload(dict(self.config, backend=backend), plan, self.span_for(plan))
+                # A status process can start just before the same absolute deadline expires.
+                self.assertIn(caught.exception.code, ("DEADLINE", "BRCTL_TIMEOUT") if code == "DEADLINE" else (code,))
+                self.assertEqual(caught.exception.exit_kind, "unverified")
+                self.assertEqual(os.listdir(self.tmp / "markers"), [])
+                for key in env:
+                    os.environ.pop(key)
+        self.assertEqual(so._CHILDREN, set())
+
+    def test_icloud_failed_or_unobserved_eviction_and_failed_download_are_unconfirmed(self):
+        for i, env in enumerate(({"FAKE_BRCTL_FAIL": "evict"}, {"FAKE_BRCTL_FAIL": "download"},
+                                 {"FAKE_BRCTL_NO_EVICTION": "1"}, {"FAKE_BRCTL_SLEEP": "evict"})):
+            with self.subTest(env=env):
+                backend = self.fake_brctl(**env)
+                plan = f"{PLAN}-unconfirmed{i}"
+                record = so.offload(dict(self.config, backend=backend), plan, self.span_for(plan))
+                self.assertFalse(record["provider_confirmed"])
+                self.assertTrue(self.marker(plan).exists())
+                self.assertFalse(self.marker(plan, True).exists())
+                self.assertTrue(all(r["kind"] == "icloud-unconfirmed" for r in record["provider_confirmation"]))
+                self.assertTrue(all(r["provider_hash"] is None for r in record["provider_confirmation"]))
+                for key in env:
+                    os.environ.pop(key)
+        self.assertEqual(so._CHILDREN, set())
+
+    def test_icloud_cli_returns_8_without_observed_eviction_and_5_on_upload_timeout(self):
+        backend = self.fake_brctl(FAKE_BRCTL_NO_EVICTION="1")
+        conf = self.tmp / "icloud.json"
+        conf.write_text(json.dumps(dict(self.config, backend=backend)))
+        argv = ["offload", "--config", str(conf), "--plan", PLAN, "--span-dir", str(self.span)]
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertEqual(cli.main(argv), 8)
+        self.assertIn("OFFLOAD_OK_UNCONFIRMED", out.getvalue())
+        self.assertFalse(self.marker(confirmed=True).exists())
+        os.environ.pop("FAKE_BRCTL_NO_EVICTION")
+        # The same immutable stage can be verified later, upgrading to .ok without overwriting it.
+        record = so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertTrue(record["provider_confirmed"])
+        self.assertTrue(record["stage_reused"])
+        before_calls = (self.tmp / "brctl-state" / "calls").read_bytes()
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertEqual(caught.exception.exit_kind, "marker_exists")
+        self.assertEqual((self.tmp / "brctl-state" / "calls").read_bytes(), before_calls)
+        plan = PLAN + "-timeout"
+        conf.write_text(json.dumps(dict(self.config, backend=dict(backend, timeout_s=0.2))))
+        with mock.patch.dict(os.environ, {"FAKE_BRCTL_STATUSES": '["com.apple.CloudDocs needs-upload"]'}), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            self.assertEqual(cli.main(["offload", "--config", str(conf), "--plan", plan,
+                                       "--span-dir", str(self.span_for(plan))]), 5)
+        self.assertIn("OFFLOAD_UNVERIFIED", err.getvalue())
+        self.assertFalse(self.marker(plan).exists())
+        self.assertFalse(self.marker(plan, True).exists())
+
+    def test_icloud_one_unconfirmed_artifact_prevents_the_copy_gate_and_can_retry(self):
+        backend = self.fake_brctl(FAKE_BRCTL_FAIL_SUFFIX=".offload.json")
+        record = so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertEqual([r["provider_confirmed"] for r in record["provider_confirmation"]], [True, True, True, False])
+        self.assertFalse(record["provider_confirmed"])
+        self.assertFalse(self.marker(confirmed=True).exists())
+        os.environ.pop("FAKE_BRCTL_FAIL_SUFFIX")
+        record = so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertTrue(record["provider_confirmed"])
+
+    def test_icloud_no_flag_support_cannot_confirm_and_deadline_overrides_fallback(self):
+        backend = self.fake_brctl()
+        with mock.patch.object(so, "_is_dataless", return_value=None):
+            record = so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertFalse(record["provider_confirmed"])
+        self.assertFalse(self.marker(confirmed=True).exists())
+        plan = PLAN + "-deadline"
+        backend = self.fake_brctl(FAKE_BRCTL_SLEEP="evict")
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, backend=backend), plan, self.span_for(plan), deadline_epoch=time.time() + 0.3)
+        self.assertEqual(caught.exception.exit_kind, "unverified")
+        self.assertFalse(self.marker(plan).exists())
+        self.assertFalse(self.marker(plan, True).exists())
+
+    def test_icloud_never_follows_backend_links_or_hardlinks_or_writes_into_a_repository(self):
+        backend = self.fake_brctl()
+        path = self.tmp / "cloud" / PLAN
+        before = so.hash_tree(self.span)
+        path.symlink_to(self.span, target_is_directory=True)
+        with self.assertRaises(so.OffloadError):
+            so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        path.unlink(); path.mkdir()
+        target = path / f"{PLAN}.tgz.enc"
+        for hard in (False, True):
+            (os.link if hard else os.symlink)(self.span / "runner_receipt.json", target)
+            with self.subTest(hard=hard), self.assertRaises(so.OffloadError):
+                so.offload(dict(self.config, backend=backend), PLAN, self.span)
+            target.unlink()
+        os.mkfifo(target)
+        with self.assertRaises(so.OffloadError):
+            so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        target.unlink()
+        alias = self.tmp / "alias"
+        alias.symlink_to(self.tmp / "cloud", target_is_directory=True)
+        with self.assertRaises(so.OffloadError):
+            so.offload(dict(self.config, backend=dict(backend, root=str(alias))), PLAN, self.span)
+        init_git_fixture(path, "-q")
+        with self.assertRaises(so.OffloadError):
+            so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertEqual(sorted(p.name for p in path.iterdir()), [".git"])
+        self.assertEqual(so.hash_tree(self.span), before)
+        self.assertFalse((self.tmp / "brctl-state" / "calls").exists())
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_icloud_atomic_copy_conflicts_and_partial_copy_cleanup(self):
+        backend = so.make_backend(self.fake_brctl())
+        source = self.tmp / "artifact"
+        source.write_bytes(b"synthetic artifact")
+        name = so.names(PLAN)["ciphertext"]
+        real_run = backend._run
+
+        def inspect(args, deadline):
+            self.assertEqual((self.tmp / "cloud" / PLAN / name).read_bytes(), source.read_bytes())
+            self.assertEqual(os.listdir(self.tmp / "cloud" / PLAN), [name])
+            if args[0] == "evict":
+                raise so.unverified("BRCTL_FAILED")
+            return real_run(args, deadline)
+
+        with mock.patch.object(backend, "_run", side_effect=inspect):
+            backend.put(source, PLAN, name)
+        source.write_bytes(b"different")
+        with self.assertRaises(so.OffloadError) as caught:
+            backend.put(source, PLAN, name)
+        self.assertEqual(caught.exception.code, "REMOTE_CONFLICT")
+        plan = PLAN + "-partial"
+        with mock.patch.object(so.os, "rename", side_effect=OSError("synthetic interruption")), \
+                self.assertRaises(so.OffloadError):
+            backend.put(source, plan, so.names(plan)["ciphertext"])
+        self.assertEqual(os.listdir(self.tmp / "cloud" / plan), [])
+
+    # --- rclone backend (fake binary) ---------------------------------------------------------
+
     def fake_rclone(self, hash_type="sha256", **env):
         script = self.tmp / "fake-rclone.py"
         script.write_text(FAKE_RCLONE)
@@ -552,7 +795,7 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "PATH_OVERLAPS_SPAN")
         repo = self.tmp / "repo"
         (repo / "markers").mkdir(parents=True)
-        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        init_git_fixture(repo, "-q")
         with self.assertRaises(so.OffloadError) as caught:
             so.offload(dict(self.config, marker_dir=str(repo / "markers")), PLAN, self.span, allow_local=True)
         self.assertEqual(caught.exception.code, "PATH_IN_REPOSITORY")
@@ -818,7 +1061,7 @@ class SpanOffloadTests(unittest.TestCase):
         self.offload()
         kit = self.tmp / "desk" / "cl-syn-01"
         kit.mkdir()
-        subprocess.run(["git", "init", "-q", str(kit)], check=True)
+        init_git_fixture(kit, "-q")
         with self.assertRaises(so.OffloadError) as caught:
             self.pull()
         self.assertEqual(caught.exception.code, "PATH_IN_REPOSITORY")
@@ -905,7 +1148,7 @@ class SpanOffloadTests(unittest.TestCase):
     def test_directories_the_tool_did_not_make_are_never_removed(self):
         foreign = self.tmp / "stage" / f".{PLAN}.building-foreign"
         foreign.mkdir()
-        subprocess.run(["git", "init", "-q", str(foreign)], check=True)
+        init_git_fixture(foreign, "-q")
         (foreign / "PRESERVE.txt").write_bytes(b"x")
         self.offload()
         self.assertTrue((foreign / "PRESERVE.txt").exists() and (foreign / ".git").is_dir())
@@ -1036,7 +1279,7 @@ class SpanOffloadTests(unittest.TestCase):
         other = "cq-syn-01-s02-a1"
         nested = self.tmp / "cloud" / other
         nested.mkdir()
-        subprocess.run(["git", "init", "-q", str(nested)], check=True)
+        init_git_fixture(nested, "-q")
         with self.assertRaises(so.OffloadError) as caught:
             so.offload(self.config, other, self.span_for(other), allow_local=True)
         self.assertEqual(caught.exception.code, "BACKEND_PATH")
@@ -1074,7 +1317,7 @@ class SpanOffloadTests(unittest.TestCase):
         self.offload()
         repo = self.tmp / "keyrepo"
         repo.mkdir()
-        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        init_git_fixture(repo, "-q")
         shutil.copyfile(self.private, repo / "k.pem")
         with self.assertRaises(so.OffloadError) as caught:
             self.pull(config=dict(self.air, identity=str(repo / "k.pem")))
@@ -1105,7 +1348,7 @@ class SpanOffloadTests(unittest.TestCase):
         self.offload()
         repo = self.tmp / "conf-repo"
         repo.mkdir()
-        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        init_git_fixture(repo, "-q")
         (repo / "rclone.conf").write_text("[x]\n")
         air = dict(self.air, backend={"kind": "rclone", "remote": "x:y", "rclone_config": str(repo / "rclone.conf")})
         with self.assertRaises(so.OffloadError) as caught:
