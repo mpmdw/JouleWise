@@ -18,17 +18,19 @@ depend on a shadow pointer and an obligation can be neither deleted nor quietly 
 
 ``refs/heads/span-watch/log`` holds one commit per record, each adding ``arms/<plan>.json`` (plan, attempt,
 t0, the runner's deadline) or ``closes/<plan>.json`` (plan, status, close time); operational fields only.
-``watch`` re-reads the whole log every run (a commit that changes or removes a file is ``LOG_REWRITTEN``),
-and the ``desk-bundles/*`` and ``cadence-desk-final/*`` refs of the PR #800 controller and the desk:
+``watch`` re-reads the whole log every run (a commit that changes or removes a file is ``LOG_REWRITTEN``):
 
-- ``SPAN_SILENT``: an arm with no close and no bound bundle visible by its deadline + grace (C.1), judged by
-  the later of each result's own time and the commit that published it;
-- ``SPAN_STOP``: a close or bound bundle status other than ``CLOSED_OK``;
-- ``DESK_HOLD``: a verdict that holds the next arm;
-- ``RESULT_UNREADABLE``: a malformed or rewritten record, or a bundle not bound to the arm.
+- ``SPAN_SILENT``: an arm with no close visible by its deadline + grace (C.1), judged by the later of the
+  close's own time and the time of the commit that carries it;
+- ``SPAN_STOP``: a close status other than ``CLOSED_OK``;
+- ``RESULT_UNREADABLE``: a malformed or rewritten record, or a close without an arm.
+
+The results ref is the log: a controller that pushes desk bundles (PR #800) also pushes ``close``. Desk
+holds are the controller's own arm gate (line 9), not this watcher's.
 
 Each event opens one ``mbp-alarm`` issue, assigned to the repository owner with a mention (C.3), keyed by
-code, span, detail and the ref's commit, so a new commit is a new episode and an old one is never re-filed.
+code, span, detail and the record's commit, so a new record is a new episode and an old one is never
+re-filed.
 Every word in an issue comes from a closed vocabulary in this file, never from a record (C.2). A failed
 listing, fetch, issue read, or an issue creation that GitHub does not confirm, fails the run.
 
@@ -57,36 +59,17 @@ import urllib.request
 
 WORKFLOW = "mbp-watch.yml"
 LABEL = "mbp-alarm"
+BOT = "github-actions[bot]"  # the workflow's GITHUB_TOKEN files every alarm as this user
 PLAN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
 REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 SHA_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 ARMS = "refs/heads/span-watch/"
-BUNDLE = "refs/heads/desk-bundles/"
-VERDICT = "refs/heads/cadence-desk-final/"
 ARM_SCHEMA = "joulewise.mbp_watch_arm.v1"
 CLOSE_SCHEMA = "joulewise.mbp_watch_close.v1"
-TRANSITION_SCHEMA = "joulewise.cadence_controller_transition.v1"
 CLOSE_STATUSES = ("CLOSED_OK", "STOPPED", "REFUSED", "FAULT", "STRANDED", "CLOSE_UNPROVEN")
-TRANSITION_STATUSES = ("CLOSED_OK", "STOPPED", "REFUSED", "STRANDED", "CLOSE_UNPROVEN")
-# cadence_desk_format.md section 3, "Codes" (PR #800/#799). Anything else prints as UNKNOWN_HOLD.
-HOLD_CODES = ("DESK_DENIED_CONTENT", "DESK_UNAUTHENTICATED", "DESK_IDENTITY", "DESK_ROSTER", "DESK_NO_LEG_ROWS",
-              "DESK_DUPLICATE", "DESK_ATTEMPTS", "DESK_SCHEMA", "DESK_FEED_PROOF", "DESK_REFUSAL", "DESK_ERROR",
-              "REFUSAL", "INSTRUMENT_FAULT", "CONTAMINATED_REDOS", "LEG_OVERTIME", "HAND_TABLE_DISAGREES",
-              "HAND_TABLE_INVALID")
-EVENT_CODES = ("SPAN_SILENT", "SPAN_STOP", "DESK_HOLD", "RESULT_UNREADABLE")
-DETAILS = set(CLOSE_STATUSES) | set(HOLD_CODES) | {
-    "NO_RESULTS_REF", "UNKNOWN_HOLD", "MULTIPLE", "UNNAMED", "ARM_RECORD", "CLOSE_RECORD", "TRANSITION",
-    "TRANSITION_MISBOUND", "DESK_VERDICT", "LOG_REWRITTEN"}
-
-
-def epoch_ok(value):
-    return number(value) and MIN_EPOCH <= value <= MAX_EPOCH
-
-
-def attempt_of(plan):
-    match = ATTEMPT_RE.fullmatch(plan)
-    return int(match.group(1)) if match else None
+EVENT_CODES = ("SPAN_SILENT", "SPAN_STOP", "RESULT_UNREADABLE")
+DETAILS = set(CLOSE_STATUSES) | {"NO_RESULTS_REF", "ARM_RECORD", "CLOSE_RECORD", "LOG_REWRITTEN"}
 CLOCK_SLACK_S = 300
 PROTECTED = ("span-watch/log",)  # the exact branch must carry rules blocking deletion and non-fast-forward
 REQUIRED_RULES = {"deletion", "non_fast_forward"}
@@ -97,6 +80,15 @@ MAX_RECORD = 1 << 20
 MAX_ISSUE_PAGES = 100
 IDENT = {"GIT_AUTHOR_NAME": "JouleWise mbp-watch", "GIT_AUTHOR_EMAIL": "mbp-watch@example.invalid",
          "GIT_COMMITTER_NAME": "JouleWise mbp-watch", "GIT_COMMITTER_EMAIL": "mbp-watch@example.invalid"}
+
+
+def epoch_ok(value):
+    return number(value) and MIN_EPOCH <= value <= MAX_EPOCH
+
+
+def attempt_of(plan):
+    match = ATTEMPT_RE.fullmatch(plan)
+    return int(match.group(1)) if match else None
 
 
 class WatchError(Exception):
@@ -141,21 +133,15 @@ class Git:
 
     def refs(self):
         rows = {}
-        out = self.run("ls-remote", "--refs", self.remote, ARMS + "*", BUNDLE + "*", VERDICT + "*")
+        out = self.run("ls-remote", "--refs", self.remote, ARMS + "*")
         for line in out.decode("ascii", "replace").splitlines():
             sha, _, ref = line.partition("\t")
-            if not SHA_RE.fullmatch(sha) or not ref.startswith((ARMS, BUNDLE, VERDICT)):
+            if not SHA_RE.fullmatch(sha) or not ref.startswith(ARMS):
                 raise WatchError("GIT_INVALID_REFS")
             rows[ref] = sha
         return rows
 
-    def fetch(self, shas):
-        """One round trip for every tip the watch reads (GitHub serves advertised tips by id)."""
-        if shas:
-            self.run("fetch", "--quiet", "--no-tags", "--depth=1", self.remote, *sorted(set(shas)))
 
-    def commit_time(self, sha):
-        return float(self.run("show", "-s", "--format=%ct", sha).strip() or 0)
 
     def blob(self, sha, path):
         """The blob's bytes, or None when the tree has no such regular file. A git failure raises."""
@@ -377,95 +363,41 @@ def read_close(raw, plan, t0, now):
     return doc["status"], doc["close_epoch_s"]
 
 
-def read_transition(git, plan, sha, arm_times, now):
-    """('invalid' | 'misbound' | status word, receipt epoch or None).
-
-    Bound to the arm: the same attempt, launched no earlier than the arm (less clock slack) and by its
-    deadline, with a receipt after both the launch and the arm and not in the future.
-    """
-    doc = _json(git.blob(sha, "transition.json"))
-    if not doc or doc.get("schema") != TRANSITION_SCHEMA or doc.get("plan_id") != plan \
-            or doc.get("status") not in TRANSITION_STATUSES or type(doc.get("attempt")) is not int \
-            or doc["attempt"] != attempt_of(plan) or not epoch_ok(doc.get("t0_epoch")) \
-            or not epoch_ok(doc.get("receipt_epoch")) or doc["receipt_epoch"] < doc["t0_epoch"] \
-            or doc["receipt_epoch"] > now + CLOCK_SLACK_S:
-        return "invalid", None
-    if arm_times and not (arm_times[0] - CLOCK_SLACK_S <= doc["t0_epoch"] <= arm_times[1]
-                          and doc["receipt_epoch"] >= arm_times[0]):
-        return "misbound", None
-    return doc["status"], doc["receipt_epoch"]
-
-
-def read_verdict(git, plan, sha):
-    """'invalid', None (no hold), or a closed-vocabulary hold word."""
-    doc = _json(git.blob(sha, "desk_verdict.json"))
-    if not doc or doc.get("plan_id") != plan or type(doc.get("next_arm_hold")) is not bool:
-        return "invalid"
-    if not doc["next_arm_hold"]:
-        return None
-    codes = {h.get("code") for h in doc.get("holds") or [] if isinstance(h, dict)}
-    named = {c if c in HOLD_CODES else "UNKNOWN_HOLD" for c in codes if isinstance(c, str)}
-    return named.pop() if len(named) == 1 else ("MULTIPLE" if named else "UNNAMED")
-
-
 def event(code, detail, plan, ref, sha, **times):
     return {"code": code, "detail": detail, "plan": plan, "ref": ref, "sha": sha, "times": times}
 
 
 def events(git, now, grace_s):
-    """Every alarm the log and the result refs imply. No age limit: the log keeps every obligation."""
-    records, problems, tip = read_log(git)
+    """Every alarm the log implies. The log is append-only and protected, so no obligation, close or stop
+    in it can disappear: there is no age limit and nothing else to retain."""
+    records, problems, _ = read_log(git)
     found = [event("RESULT_UNREADABLE", detail, "span-watch-log", LOG_REF, sha, observed=now)
              for detail, sha in problems]
-    by_plan = {}
-    for ref, sha in git.refs().items():
-        prefix = next((p for p in (BUNDLE, VERDICT) if ref.startswith(p)), None)
-        if prefix and plan_ok(ref[len(prefix):]):
-            by_plan.setdefault(ref[len(prefix):], {})[prefix] = (ref, sha)
-    git.fetch([sha for entries in by_plan.values() for _, sha in entries.values()])
-    plans = sorted({plan for _, plan in records} | set(by_plan))
-    for plan in plans:
-        entries = by_plan.get(plan, {})
-        arm_times, available = None, []
-        if ("arm", plan) in records:
-            raw, sha, _ = records[("arm", plan)]
-            arm_times = _arm_times(_json(raw), plan)
-            if arm_times is None:
-                found.append(event("RESULT_UNREADABLE", "ARM_RECORD", plan, LOG_REF, sha, observed=now))
-        if arm_times and ("close", plan) in records:
+    for plan in sorted({plan for _, plan in records}):
+        if ("arm", plan) not in records:
+            raw, sha, _ = records[("close", plan)]
+            found.append(event("RESULT_UNREADABLE", "CLOSE_RECORD", plan, LOG_REF, sha, observed=now))
+            continue
+        raw, arm_sha, _ = records[("arm", plan)]
+        arm_times = _arm_times(_json(raw), plan)
+        if arm_times is None:
+            found.append(event("RESULT_UNREADABLE", "ARM_RECORD", plan, LOG_REF, arm_sha, observed=now))
+            continue
+        visible = None
+        if ("close", plan) in records:
             raw, sha, published = records[("close", plan)]
             closed = read_close(raw, plan, arm_times[0], now)
             if closed == "invalid":
                 found.append(event("RESULT_UNREADABLE", "CLOSE_RECORD", plan, LOG_REF, sha, observed=now))
             else:
-                available.append(max(closed[1], published))  # finished, and visible, no earlier than this
+                visible = max(closed[1], published)  # finished, and committed for publication, no earlier
                 if closed[0] != "CLOSED_OK":
                     found.append(event("SPAN_STOP", closed[0], plan, LOG_REF, sha, t0=arm_times[0], observed=now))
-        if BUNDLE in entries:
-            ref, sha = entries[BUNDLE]
-            status, receipt = read_transition(git, plan, sha, arm_times, now)
-            if status in ("invalid", "misbound"):
-                detail = "TRANSITION" if status == "invalid" else "TRANSITION_MISBOUND"
-                found.append(event("RESULT_UNREADABLE", detail, plan, ref, sha, observed=now))
-            else:
-                available.append(max(receipt, git.commit_time(sha)))
-                if status != "CLOSED_OK":
-                    found.append(event("SPAN_STOP", status, plan, ref, sha, observed=now))
-        if arm_times:
-            limit = arm_times[1] + grace_s
-            first = min(available) if available else None
-            # Silence now, or a silence that ended between two polls (the result became visible after the limit).
-            if (first is None and now > limit) or (first is not None and first > limit):
-                _, sha, _ = records[("arm", plan)]
-                found.append(event("SPAN_SILENT", "NO_RESULTS_REF", plan, LOG_REF, sha, t0=arm_times[0],
-                                   deadline=arm_times[1], grace_s=grace_s, observed=now))
-        if VERDICT in entries:
-            ref, sha = entries[VERDICT]
-            hold = read_verdict(git, plan, sha)
-            if hold == "invalid":
-                found.append(event("RESULT_UNREADABLE", "DESK_VERDICT", plan, ref, sha, observed=now))
-            elif hold:
-                found.append(event("DESK_HOLD", hold, plan, ref, sha, observed=now))
+        limit = arm_times[1] + grace_s
+        # Silence now, or a silence that ended between two polls (the close became visible after the limit).
+        if (visible is None and now > limit) or (visible is not None and visible > limit):
+            found.append(event("SPAN_SILENT", "NO_RESULTS_REF", plan, LOG_REF, arm_sha, t0=arm_times[0],
+                               deadline=arm_times[1], grace_s=grace_s, observed=now))
     return found
 
 
@@ -481,8 +413,7 @@ def body(event_, owner, run_url):
     """Only closed-vocabulary words, a pattern-checked span id, a ref, a sha, numbers and the run link."""
     if event_["code"] not in EVENT_CODES or event_["detail"] not in DETAILS or not plan_ok(event_["plan"]) \
             or not SHA_RE.fullmatch(event_["sha"] or "") \
-            or not (event_["ref"] == "refs/heads/span-watch/log" or re.fullmatch(
-                r"refs/heads/(desk-bundles|cadence-desk-final)/" + re.escape(event_["plan"]), event_["ref"] or "")):
+            or event_["ref"] != LOG_REF:
         raise WatchError("UNSAFE_FIELD")
     lines = [f"@{owner} MBP span alarm (RL-173 C). Operational codes only.", "",
              f"- span: `{event_['plan']}`", f"- code: `{event_['code']}`", f"- detail: `{event_['detail']}`",
@@ -508,7 +439,8 @@ def existing_keys(api):
     """Every filed event key -> its issue (open or closed)."""
     keys = {}
     for page in range(1, MAX_ISSUE_PAGES + 1):
-        rows = api.call("GET", "/issues", {"labels": LABEL, "state": "all", "per_page": 100, "page": page})
+        # By creator, not by label: an issue GitHub created without the label is still found and repaired.
+        rows = api.call("GET", "/issues", {"creator": BOT, "state": "all", "per_page": 100, "page": page})
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
             raise WatchError("API_SHAPE_ISSUES")
         for row in rows:
@@ -602,7 +534,8 @@ MAX_RUN_PAGES = 10
 
 
 def read(args, api=None, now=None):
-    """Every completed run on ``main`` created since a day before ``--after-epoch`` is enumerated (all pages,
+    """Every completed run on ``main`` created since a day before the later of ``--after-epoch`` and now minus
+    ``--max-age-s`` is enumerated (all pages,
     checked against ``total_count``); the latest is the most recently started execution among them (a re-run
     attempt counts with its own start; ties by ``run_number`` then ``run_attempt``). A re-run of a run created
     earlier than that window is outside the rule. A start up to 300 s in the future is clock skew; more is an
@@ -610,7 +543,8 @@ def read(args, api=None, now=None):
     """
     now = time.time() if now is None else now
     api = api or Api(args.repo, os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
-    since = dt.datetime.fromtimestamp(args.after_epoch - RUN_WINDOW_S, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    floor = max(args.after_epoch, now - args.max_age_s) if args.max_age_s is not None else args.after_epoch
+    since = dt.datetime.fromtimestamp(floor - RUN_WINDOW_S, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     runs = []
     for page in range(1, MAX_RUN_PAGES + 1):
         answer = api.call("GET", f"/actions/workflows/{WORKFLOW}/runs",
@@ -620,7 +554,7 @@ def read(args, api=None, now=None):
                 or type(answer.get("total_count")) is not int:
             raise WatchError("API_SHAPE_RUNS")
         runs += answer["workflow_runs"]
-        if len(answer["workflow_runs"]) < 100:
+        if len(answer["workflow_runs"]) < 100 or len(runs) >= answer["total_count"]:
             break
     else:
         raise WatchError("TOO_MANY_RUNS")
@@ -690,7 +624,7 @@ def alarm_poll(state_path, notify, api):
         plan = parts[1] if len(parts) > 1 and plan_ok(parts[1]) else "unknown"
         # The notifier shows level, code and one subject token: the subject carries span, issue and code.
         line = (f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M:%S} ALARM MBP_ALARM "
-                f"{plan}/issue-{number_}/{code}")
+                f"issue-{number_}/{code}/{plan}")  # the notifier keeps 80 characters: identity first
         if notify(line) is True:  # only a confirmed notification is acknowledged; a failure is retried
             seen.add(number_)
         lines.append(line)

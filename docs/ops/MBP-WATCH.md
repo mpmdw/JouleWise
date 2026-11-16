@@ -25,11 +25,10 @@ python3.13 -B scripts/mbp_watch.py close --plan "$PLAN" --status CLOSED_OK --clo
   than 300 s ahead. Epoch arguments must be finite and in 2026-2029.
 - Both run from the checkout the magistrate already pushes RUN_STATE from (`--remote` overrides the origin
   URL), at the arm boundary and in the Check, never during a measurement.
-- When the PR #800 controller pushes `desk-bundles/<plan>`, a bundle resolves the span only when its
-  `transition.json` is bound to this launch: same plan id and attempt, `t0_epoch` within [arm t0 - 300 s,
-  arm deadline], and a `receipt_epoch` no earlier than the launch or the arm and not in the future. Anything
-  else is `TRANSITION` or `TRANSITION_MISBOUND` and the silence obligation stays. `close` stays the
-  magistrate's own record either way.
+- **The log is the only results ref this watcher reads.** A controller that pushes desk bundles (PR #800)
+  must push `close` too; a bundle alone resolves nothing here. Desk holds (`cadence-desk-final`) are the
+  controller's own arm gate under line 9, not line 7, so this watcher does not read verdicts; nothing it
+  reports can be lost by deleting a ref outside the protected log.
 
 **Why one log, and the rule that protects it.** Every run re-reads the log's whole history: the root commit
 must hold only `README`, and every later commit must have one parent and add exactly one new
@@ -48,21 +47,19 @@ gh api -X POST repos/mpmdw/JouleWise/rulesets --input - <<'JSON'
 JSON
 ```
 
-A deleted or rewritten `desk-bundles` ref cannot hide a silence: the arm in the log stays unresolved and
-alarms.
+Because closes live in the same protected log, a recovered span cannot lose its recovery evidence, so a
+silence filed once never needs re-filing.
 
 ## What the watcher does
 
 Every 10 minutes (cron `3-59/10`, off the hour's peak; GitHub does not guarantee punctual schedules) and on
-`workflow_dispatch`, it fetches the log, lists `desk-bundles/*` and `cadence-desk-final/*` live, fetches
-their tips in one round trip, and reads only the log records, `transition.json` and `desk_verdict.json`.
+`workflow_dispatch`, it fetches the log and reads only its records.
 
 | Code | When | Detail |
 |---|---|---|
-| `SPAN_SILENT` | an arm with no close and no bound bundle visible by its deadline + 1,200 s (C.1). "Visible" is the later of the result's own time and the time of the commit that published it, so a result that finished on time but was pushed late, or that arrived between two delayed polls, is still filed | `NO_RESULTS_REF` |
-| `SPAN_STOP` | a close or bound bundle with a status other than `CLOSED_OK` | the status |
-| `DESK_HOLD` | a verdict with `next_arm_hold: true` | the hold code from the FORMAT's code list, `UNKNOWN_HOLD`, `MULTIPLE` or `UNNAMED` |
-| `RESULT_UNREADABLE` | a malformed arm, close, transition or verdict, a bundle not bound to the arm, or a log commit that is not one addition | `ARM_RECORD`, `CLOSE_RECORD`, `TRANSITION`, `TRANSITION_MISBOUND`, `DESK_VERDICT`, `LOG_REWRITTEN` |
+| `SPAN_SILENT` | an arm with no close visible by its deadline + 1,200 s (C.1). "Visible" is the later of the close's own time and the committer time of the commit that carries it, so a close that finished late, or was committed late, or arrived between two delayed polls, is still filed. **Limit:** the committer time is set by the MBP when `close` builds the commit, immediately before its push; a push that stalls after that moment is not seen as late. GitHub's only server-side push time is the repository activity API, which this watcher does not use (a research-lead question in the report) | `NO_RESULTS_REF` |
+| `SPAN_STOP` | a close with a status other than `CLOSED_OK` | the status |
+| `RESULT_UNREADABLE` | a malformed arm or close, a close without an arm, or a log commit that is not one addition | `ARM_RECORD`, `CLOSE_RECORD`, `LOG_REWRITTEN` |
 
 - **No age limit.** An obligation lasts as long as the log, which cannot be deleted or rewritten; there is no
   lookback that can drop a stop the watcher has not seen. Legacy `night-results/*` refs are not read here:
@@ -75,7 +72,7 @@ their tips in one round trip, and reads only the log records, `transition.json` 
 - **Episodes.** A stop, hold or unreadable record is keyed by the commit that carries it, so a new record is
   a new event and the same one is never filed twice. A silence is keyed by the arm's commit, so it is
   filed once per launch. Closing an issue is the lead's acknowledgement that the event is handled. An open
-  issue that was created without the label or the assignee is repaired on the next run, and the run fails
+  issue that was created without the label or the assignee (found by its creator, `github-actions[bot]`, and its hidden key) is repaired on the next run, and the run fails
   until GitHub confirms both.
 - **Fail loud.** A failed listing, fetch or issue read, a missing log or ruleset, or an issue that GitHub
   does not return with the label and the assignee, fails the run. A run that files an alarm succeeds; the
@@ -84,7 +81,7 @@ their tips in one round trip, and reads only the log records, `transition.json` 
   app, per the owner's notification settings). The lead: the Air watcher agent
   (`scripts/air/air_watch_agent.py`, the installed `com.joulewise.air-watch`) polls every open `mbp-alarm`
   issue (all pages) on its 900 s CI tick (`mbp_watch.alarm_poll`, public API, no token) and posts one macOS
-  notification per issue, `ALARM MBP_ALARM <span>/issue-<n>/<code>`, logged to
+  notification per issue, `ALARM MBP_ALARM issue-<n>/<code>/<span>` (identity first: the banner keeps 80 characters), logged to
   `~/Library/Logs/JouleWise/air-watch.log`. An issue is acknowledged only after the notifier reports success;
   a failed banner is retried at the next tick. It takes effect when the lead updates the agent's checkout to
   this merge. When the Air is off, the lead sees the alarm at its next session and at every arm through
@@ -100,11 +97,12 @@ their tips in one round trip, and reads only the log records, `transition.json` 
 python3 scripts/mbp_watch.py read --repo mpmdw/JouleWise --after-epoch "$PREVIOUS_CLOSE_EPOCH"
 ```
 
-It enumerates every completed run of the workflow on `main` created since one day before the previous
-close (`GET /repos/mpmdw/JouleWise/actions/workflows/mbp-watch.yml/runs?branch=main&status=completed&created=>=...`,
+It enumerates every completed run of the workflow on `main` created since one day before the later of the
+previous close and now minus `--max-age-s` (`GET /repos/mpmdw/JouleWise/actions/workflows/mbp-watch.yml/runs?branch=main&status=completed&created=>=...`,
 all pages, checked against `total_count`). The latest is the most recently started execution among them (a
-re-run attempt counts with its own start; ties by `run_number`, then `run_attempt`); a re-run of a run created
-before that window is outside the rule. Exit 0 only if it succeeded, started after the previous span's close
+re-run attempt counts with its own start; ties by `run_number`, then `run_attempt`). **A re-run of a run
+created before that window is outside the rule** (a manual re-run of an old run is not the schedule's health;
+a research-lead question in the report, since RL-173 C.4 says only "latest completed run"). Exit 0 only if it succeeded, started after the previous span's close
 and within `--max-age-s` (default 7,200 s), and no `mbp-alarm` issue is open. 20: no such run yet (wait;
 schedules can be late); 21: an alarm is open; 22: the latest run failed; 2: API or usage error, including
 any malformed answer and a start more than 300 s in the future (clock skew up to 300 s is accepted). A

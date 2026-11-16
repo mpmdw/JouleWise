@@ -34,6 +34,10 @@ class FakeApi:
         self.calls.append((method, path, params, body))
         if method == "GET" and path == "/issues":
             rows = [i for i in self.issues if params.get("state") == "all" or i.get("state") == params.get("state")]
+            if "labels" in params:
+                rows = [i for i in rows if params["labels"] in [l.get("name") for l in i.get("labels") or []]]
+            if "creator" in params:
+                rows = [i for i in rows if i.get("creator", w.BOT) == params["creator"]]
             page = params.get("page", 1)
             return rows[(page - 1) * 100: page * 100]
         if method == "GET" and path.startswith("/actions/workflows/"):
@@ -161,57 +165,23 @@ class MbpWatchTests(unittest.TestCase):
         with self.assertRaises(w.WatchError):
             self.arm(plan="cq-bad-a1", t0=NOW, deadline=NOW - 1)
 
-    def test_a_bound_bundle_resolves_and_a_stale_one_does_not(self):
-        self.arm()
-        self.push(f"refs/heads/desk-bundles/{PLAN}", {"transition.json": self.transition(PLAN, "CLOSED_OK", NOW - 7100)})
-        api = FakeApi()
-        self.watch(api)
-        self.assertEqual(self.opened(api), [])
-        other = "cq-syn-02-s03-a1"
-        self.arm(plan=other)
-        # A bundle from an earlier launch under the same name (t0 a day before this arm) is not this result.
-        self.push(f"refs/heads/desk-bundles/{other}",
-                  {"transition.json": self.transition(other, "CLOSED_OK", NOW - 90000)})
-        self.watch(api)
-        self.assertEqual(self.titles(api), [f"mbp-alarm RESULT_UNREADABLE {other} TRANSITION_MISBOUND",
-                                            f"mbp-alarm SPAN_SILENT {other} NO_RESULTS_REF"])
-
-    def test_bundle_and_verdict_stops_without_an_arm_ref(self):
-        self.push("refs/heads/desk-bundles/cq-syn-03-s01-a1",
-                  {"transition.json": self.transition("cq-syn-03-s01-a1", "STOPPED", NOW - 5000)})
-        self.push("refs/heads/cadence-desk-final/cq-syn-03-s02-a1",
-                  {"desk_verdict.json": json.dumps({"plan_id": "cq-syn-03-s02-a1", "next_arm_hold": True,
-                                                    "holds": [{"code": "INSTRUMENT_FAULT"}]}).encode()})
-        self.push("refs/heads/desk-bundles/cq-syn-03-s03-a1", {"transition.json": b"not json"})
-        api = FakeApi()
-        self.watch(api)
-        self.assertEqual(self.titles(api), ["mbp-alarm DESK_HOLD cq-syn-03-s02-a1 INSTRUMENT_FAULT",
-                                            "mbp-alarm RESULT_UNREADABLE cq-syn-03-s03-a1 TRANSITION",
-                                            "mbp-alarm SPAN_STOP cq-syn-03-s01-a1 STOPPED"])
-
-    # --- C.2 ----------------------------------------------------------------------------------
-
     def test_no_record_text_reaches_an_issue(self):
-        self.push(f"refs/heads/cadence-desk-final/{PLAN}",
-                  {"desk_verdict.json": json.dumps({"plan_id": PLAN, "next_arm_hold": True,
-                                                    "holds": [{"code": PRIVATE}], "reasons": [PRIVATE]}).encode()})
-        self.push("refs/heads/desk-bundles/cq-syn-04-s01-a1",
-                  {"transition.json": json.dumps({"schema": w.TRANSITION_SCHEMA, "plan_id": "cq-syn-04-s01-a1",
-                                                  "status": PRIVATE, "t0_epoch": 1}).encode()})
+        self.arm(deadline=NOW - 5000)
+        extra = json.dumps({"schema": w.CLOSE_SCHEMA, "plan_id": PLAN, "status": PRIVATE, "close_epoch_s": NOW - 6000,
+                            "note": PRIVATE}).encode()
+        self.log_commit(f"closes/{PLAN}.json", extra)
         api = FakeApi()
         self.watch(api)
-        self.assertEqual(self.titles(api), [f"mbp-alarm DESK_HOLD {PLAN} UNKNOWN_HOLD",
-                                            "mbp-alarm RESULT_UNREADABLE cq-syn-04-s01-a1 TRANSITION"])
+        self.assertEqual(self.titles(api), [f"mbp-alarm RESULT_UNREADABLE {PLAN} CLOSE_RECORD",
+                                            f"mbp-alarm SPAN_SILENT {PLAN} NO_RESULTS_REF"])
         for issue in self.opened(api):
             self.assertNotIn("ENERGY", issue["title"] + issue["body"])
             for line in issue["body"].splitlines():
-                self.assertRegex(line, r"^(|@mpmdw MBP span alarm.*|- [a-z_ ]+: .*|Closing this issue.*"
+                self.assertRegex(line, r"^(|@mpmdw MBP span alarm.*|- [a-z0-9_ ]+: .*|Closing this issue.*"
                                        r"|<!-- mbp-watch-key: .* -->)$")
-        bad = w.event("SPAN_STOP", PRIVATE, PLAN, f"refs/heads/span-watch/{PLAN}", "a" * 40)
+        bad = w.event("SPAN_STOP", PRIVATE, PLAN, w.LOG_REF, "a" * 40)
         with self.assertRaises(w.WatchError):
             w.body(bad, "mpmdw", None)
-
-    # --- C.3 ----------------------------------------------------------------------------------
 
     def test_new_commit_is_a_new_episode_and_delivery_is_verified(self):
         self.arm(deadline=NOW - 5000)
@@ -258,7 +228,7 @@ class MbpWatchTests(unittest.TestCase):
         self.assertEqual(self.read([])[0], w.EXIT["stale"])
         self.assertEqual(self.read([older, self.wrun(2, NOW - 300, "failure")])[0], w.EXIT["failed_run"])
         self.assertEqual(self.read([self.wrun(3, NOW - 9000)], after=NOW - 10000)[0], w.EXIT["stale"])  # too old
-        code, out, _ = self.read([ok], issues=[{"title": "x", "state": "open", "number": 7}])
+        code, out, _ = self.read([ok], issues=[{"title": "x", "state": "open", "number": 7, "labels": [{"name": "mbp-alarm"}]}])
         self.assertEqual(code, w.EXIT["open_alarm"])
         self.assertIn("first=#7", out)
         _, _, api = self.read([ok])
@@ -280,28 +250,6 @@ class MbpWatchTests(unittest.TestCase):
             w.read(self.ns(), api=api, now=NOW)
 
     # --- round-2 regressions (Sol r2 findings 1-7, 10) -----------------------------------------
-
-    def test_a_result_must_come_from_this_launch_and_attempt(self):
-        cases = {"before_this_launch": dict(t0=NOW - 7800, receipt=NOW - 7300),
-                 "other_attempt": dict(t0=NOW - 7100, attempt=2),
-                 "receipt_before_launch": dict(t0=NOW - 7100, receipt=NOW - 7150)}
-        for index, (name, fields) in enumerate(cases.items()):
-            with self.subTest(name=name):
-                plan = f"cq-syn-06-s0{index}-a1"
-                self.push(f"refs/heads/desk-bundles/{plan}", {"transition.json": self.transition(plan, "CLOSED_OK", **fields)})
-                self.arm(plan=plan)
-        api = FakeApi()
-        self.watch(api)
-        titles = self.titles(api)
-        for index in range(3):
-            plan = f"cq-syn-06-s0{index}-a1"
-            self.assertIn(f"mbp-alarm SPAN_SILENT {plan} NO_RESULTS_REF", titles)
-        incomplete = json.dumps({"schema": w.TRANSITION_SCHEMA, "plan_id": "cq-syn-06-s09-a1", "status": "CLOSED_OK",
-                                 "t0_epoch": NOW - 7100}).encode()
-        self.push("refs/heads/desk-bundles/cq-syn-06-s09-a1", {"transition.json": incomplete})
-        self.arm(plan="cq-syn-06-s09-a1")
-        self.watch(api)
-        self.assertIn("mbp-alarm SPAN_SILENT cq-syn-06-s09-a1 NO_RESULTS_REF", self.titles(api))
 
     def test_unprotected_refs_fail_the_run(self):
         with self.assertRaises(w.WatchError) as caught:
@@ -355,10 +303,10 @@ class MbpWatchTests(unittest.TestCase):
         w.alarm_poll(state, lambda line: sent.append(line) or True, api)  # then quiet
         self.assertEqual(len(failed), 1)
         self.assertEqual(len(sent), 1)
-        self.assertTrue(sent[0].endswith(f"ALARM MBP_ALARM {PLAN}/issue-1/SPAN_SILENT"))
+        self.assertTrue(sent[0].endswith(f"ALARM MBP_ALARM issue-1/SPAN_SILENT/{PLAN}"))
 
     def test_alarm_poll_reads_every_page(self):
-        issues = [{"number": n, "state": "open", "body": ""} for n in range(1, 102)]
+        issues = [{"number": n, "state": "open", "body": "", "labels": [{"name": "mbp-alarm"}]} for n in range(1, 102)]
         sent = []
         w.alarm_poll(self.tmp / "poll.json", lambda line: sent.append(line) or True, FakeApi(issues=issues))
         self.assertEqual(len(sent), 101)
@@ -413,8 +361,25 @@ class MbpWatchTests(unittest.TestCase):
 
     def test_the_lead_banner_keeps_span_and_issue(self):
         from scripts.air import air_watch_agent as agent
-        line = f"2026-11-15 00:00:00 ALARM MBP_ALARM {PLAN}/issue-7/SPAN_SILENT"
-        self.assertEqual(agent.structural_text(line)[1], f"ALARM MBP_ALARM {PLAN}/issue-7/SPAN_SILENT")
+        long_plan = "cq-" + "x" * 120 + "-a1"
+        line = f"2026-11-15 00:00:00 ALARM MBP_ALARM issue-7/SPAN_SILENT/{long_plan}"
+        self.assertTrue(agent.structural_text(line)[1].startswith("ALARM MBP_ALARM issue-7/SPAN_SILENT/cq-"))
+
+    # --- round-4 regressions (Sol r4 findings 5-7) -----------------------------------------------
+
+    def test_an_issue_created_without_its_label_is_found_and_repaired(self):
+        self.arm(deadline=NOW - 5000)
+        api = FakeApi(drop_label=True)
+        with self.assertRaises(w.WatchError):
+            self.watch(api)
+        api.drop_label = False
+        self.watch(api)
+        self.assertEqual(len(api.issues), 1)  # repaired, not filed twice
+        self.assertEqual(api.issues[0]["labels"], [{"name": "mbp-alarm"}])
+
+    def test_a_full_window_of_healthy_runs_is_read_to_its_total(self):
+        runs = [self.wrun(n, NOW - 5 * n) for n in range(1, 1001)]
+        self.assertEqual(self.read(runs, after=NOW - 600)[0], w.EXIT["ok"])
 
     def test_workflow_shape(self):
         text = WORKFLOW.read_text()
