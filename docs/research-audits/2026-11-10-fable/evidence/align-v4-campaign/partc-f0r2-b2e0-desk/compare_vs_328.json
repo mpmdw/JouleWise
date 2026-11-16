@@ -1,0 +1,272 @@
+{
+ "verdict": [
+  "pass",
+  "pass"
+ ],
+ "lines": {
+  "d_bank_mechanics": [
+   true,
+   true
+  ],
+  "d_bank_start_state": [
+   true,
+   true
+  ],
+  "step_d": [
+   true,
+   true
+  ],
+  "x_g": [
+   true,
+   true
+  ]
+ },
+ "log": [
+  [
+   "three-turn clause not evaluated: one D run"
+  ],
+  [
+   "three-turn clause not evaluated: one D run"
+  ]
+ ],
+ "admitted_turns": [
+  "not_applicable: episode returned at turn 1",
+  "not_applicable: episode returned at turn 1"
+ ],
+ "gate_time_s/limit_s": [
+  [
+   201.52,
+   392.23
+  ],
+  [
+   202.71,
+   392.42
+  ]
+ ],
+ "N_chunk": [
+  4096,
+  4096
+ ],
+ "T_dead_s": [
+  980.58,
+  981.04
+ ],
+ "lines_differ": [],
+ "desk": {
+  "f0run2_b2e01464d": {
+   "gates_released": "15/15",
+   "gates_release_sample_L0_Nominal_fresh": "15/15",
+   "replay_agrees": "15/15",
+   "step_D_G0_s/clause": [
+    215.21,
+    "slope_slow"
+   ],
+   "step_D_turn_s": 438.61,
+   "step_D_level1_s": 225.87,
+   "step_D_level2_s": 249.88,
+   "step_D_max_TV0h": 97.93,
+   "step_D_p7_level0_x5_s": 49.27,
+   "step_D_p7_band_1C_x5_s": 145.53,
+   "classifier_free_pick": [
+    "Tf3B",
+    "Tf0A"
+   ],
+   "night_confirmation": [
+    "TV0h",
+    "TV1h",
+    true
+   ],
+   "D_bank_G0+G1_s": [
+    103.68,
+    97.84
+   ],
+   "D_bank_turn1_first_off_s": 203.23,
+   "D_bank_exclusion_1Hz": [
+    "thermal.os_level_nonzero",
+    "thermal.powermetrics_non_nominal"
+   ],
+   "D_bank_stale_after_turn1": {
+    "from_s": 16.33,
+    "max_age_s": 42.92933127,
+    "n": 41,
+    "to_s": 56.33,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   },
+   "X_G_turns_all_L0_Nominal": true,
+   "G1_after_hot_turn": {
+    "D_bank": [],
+    "X_G": [],
+    "step_D": []
+   },
+   "TV_unequal_rows (member, seq, in gate, look-back)": [
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     582,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     751,
+     [],
+     []
+    ]
+   ],
+   "soak_TV0h=TV1h": [
+    34.072,
+    true
+   ]
+  },
+  "partc2_c3f4bacd8": {
+   "gates_released": "15/15",
+   "gates_release_sample_L0_Nominal_fresh": "15/15",
+   "replay_agrees": "15/15",
+   "step_D_G0_s/clause": [
+    199.96,
+    "slope_slow"
+   ],
+   "step_D_turn_s": 438.98,
+   "step_D_level1_s": 222.85,
+   "step_D_level2_s": 247.85,
+   "step_D_max_TV0h": 93.72,
+   "step_D_p7_level0_x5_s": 50.88,
+   "step_D_p7_band_1C_x5_s": 145.5,
+   "classifier_free_pick": [
+    "Tf3B",
+    "Tf0B"
+   ],
+   "night_confirmation": [
+    "TV0h",
+    "TV1h",
+    true
+   ],
+   "D_bank_G0+G1_s": [
+    102.8,
+    99.91
+   ],
+   "D_bank_turn1_first_off_s": 207.29,
+   "D_bank_exclusion_1Hz": [
+    "thermal.os_level_nonzero",
+    "thermal.powermetrics_non_nominal"
+   ],
+   "D_bank_stale_after_turn1": {
+    "from_s": 16.66,
+    "max_age_s": 43.151789124,
+    "n": 41,
+    "to_s": 56.88,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   },
+   "X_G_turns_all_L0_Nominal": true,
+   "G1_after_hot_turn": {
+    "D_bank": [],
+    "X_G": [],
+    "step_D": []
+   },
+   "TV_unequal_rows (member, seq, in gate, look-back)": [
+    [
+     "D_bank",
+     752,
+     [],
+     []
+    ]
+   ],
+   "soak_TV0h=TV1h": [
+    34.189,
+    true
+   ]
+  }
+ },
+ "desk_categorical_differ": {
+  "classifier_free_pick": [
+   [
+    "Tf3B",
+    "Tf0A"
+   ],
+   [
+    "Tf3B",
+    "Tf0B"
+   ]
+  ],
+  "D_bank_stale_after_turn1": [
+   {
+    "from_s": 16.33,
+    "max_age_s": 42.92933127,
+    "n": 41,
+    "to_s": 56.33,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   },
+   {
+    "from_s": 16.66,
+    "max_age_s": 43.151789124,
+    "n": 41,
+    "to_s": 56.88,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   }
+  ],
+  "TV_unequal_rows (member, seq, in gate, look-back)": [
+   [
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     582,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     751,
+     [],
+     []
+    ]
+   ],
+   [
+    [
+     "D_bank",
+     752,
+     [],
+     []
+    ]
+   ]
+  ]
+ },
+ "step_D_G0_clause_differ": false
+}

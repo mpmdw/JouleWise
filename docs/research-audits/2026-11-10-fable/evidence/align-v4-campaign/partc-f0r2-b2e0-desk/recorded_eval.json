@@ -1,0 +1,429 @@
+{
+ "N_chunk": 4096,
+ "T_dead_s": 980.578,
+ "error": null,
+ "evaluation": {
+  "authority": "RL-145 step 3; RL-145 addendum section 6; RL-149 sections 1.2 and 1.5",
+  "disposition": "Mechanics and start state hold. The no-hold TV1h design is adopted (RL-149 section 1.1); run at the commit of RL-149 step 3's PR, this is the Part C of the slot session's checklist (RL-149 section 5, items 11 and 12).",
+  "lines": {
+   "d_bank_mechanics": {
+    "checks": {
+     "admitted_turns": {
+      "authority": "RL-149 section 1.5",
+      "judged": false,
+      "need": 3,
+      "pass": null,
+      "status": "not_applicable: episode returned at turn 1",
+      "stop": {
+       "own_stop": true,
+       "why": null
+      },
+      "value": 2
+     },
+     "gate_time": {
+      "gates_plus_holds_s": 201.520994084,
+      "limit_s": 392.2313899379976,
+      "pass": true,
+      "share_of_t_dead": 0.20551235750494692
+     },
+     "h_records": {
+      "h_on_unknown_turns": [],
+      "n_chunk": 4096,
+      "pass": true,
+      "per_turn": [
+       {
+        "actual": [],
+        "decode_tokens": 103,
+        "expected": [],
+        "match": true,
+        "turn": 0
+       },
+       {
+        "actual": [],
+        "decode_tokens": 4096,
+        "expected": [],
+        "match": true,
+        "turn": 1
+       }
+      ]
+     },
+     "no_g1_timeout": {
+      "g1_timeout_turns": [],
+      "pass": true
+     },
+     "no_x7": {
+      "pass": true,
+      "x7": false
+     }
+    },
+    "pass": true
+   },
+   "d_bank_start_state": {
+    "pass": true,
+    "reasons": [],
+    "samples": [
+     {
+      "at": "G0 release",
+      "ok": true,
+      "os_level": 0,
+      "pm_age_s": -0.018011791,
+      "pm_state": "Nominal",
+      "stamp_fresh": true
+     },
+     {
+      "at": "G1 release (turn 1)",
+      "ok": true,
+      "os_level": 0,
+      "pm_age_s": -0.015125772,
+      "pm_state": "Nominal",
+      "stamp_fresh": true
+     },
+     {
+      "at": "first reading after turn 0 start",
+      "ok": true,
+      "os_level": 0,
+      "pm_age_s": -0.00345202,
+      "pm_state": "Nominal",
+      "stamp_fresh": true
+     },
+     {
+      "at": "first reading after turn 1 start",
+      "ok": true,
+      "os_level": 0,
+      "pm_age_s": -0.003612438,
+      "pm_state": "Nominal",
+      "stamp_fresh": true
+     }
+    ]
+   },
+   "step_d": {
+    "g0_wait_s": 215.20760625,
+    "over_reference_c": {
+     "fast_c": 0.27701759338378906,
+     "slow_c": 0.27701759338378906
+    },
+    "pass": true,
+    "reasons": [],
+    "slope_c_per_min": -0.17125800485373432
+   },
+   "x_g": {
+    "g1_timeout_turns": [],
+    "pass": true,
+    "x7": false
+   }
+  },
+  "log": [
+   "three-turn clause not evaluated: one D run"
+  ],
+  "n_chunk_configured": 4096,
+  "pass": true,
+  "printed_not_judged": {
+   "desk_verdict": {
+    "exclusion_reasons": [
+     "thermal.powermetrics_non_nominal"
+    ],
+    "flags": [
+     "model.position_limit_unread",
+     "ended_in_unclosed_reasoning",
+     "reasoning_open_tag_prefilled_or_missing",
+     "turn_token_budget_reached:1",
+     "unclosed_reasoning_span",
+     "reasoning_censored_at_token_limit",
+     "task.scratchpad_rule:upstream_closed_pairs:thinking,system_instructions",
+     "task.upstream_fixed_initial_state",
+     "single_request_summary_fields_not_episode_metrics:ttft_s,decode_latency_s,energy_token_j",
+     "episode_interval_excludes_scoring_and_serialization_tail",
+     "variable_averaging_support:ane_power",
+     "variable_averaging_support:cpu_power",
+     "variable_averaging_support:gpu_power"
+    ],
+    "member_excluded": true,
+    "per_turn": [
+     {
+      "os_nominal": true,
+      "pm_nominal": true,
+      "turn": 0
+     },
+     {
+      "os_nominal": false,
+      "pm_nominal": false,
+      "turn": 1
+     }
+    ]
+   },
+   "gate_states": {
+    "consecutive_readings": 5,
+    "fresh_stamp_bound_s": 2.0,
+    "g1_release_samples": [
+     {
+      "os_level": 0,
+      "outcome": "released",
+      "pm_state": "Nominal",
+      "stamp_age_s": -0.015125772,
+      "stamp_fresh": true,
+      "turn": 1
+     }
+    ],
+    "quiet_after_last_token": [
+     {
+      "fast_key_c": 85.92658996582031,
+      "readings_after_turn": 564,
+      "s_from_last_token": 0.161888645,
+      "turn": 0
+     },
+     {
+      "fast_key_c": null,
+      "readings_after_turn": 64,
+      "s_from_last_token": null,
+      "turn": 1
+     }
+    ]
+   },
+   "predicted": "D_bank turn 1 (11,211 prefill tokens and a long decode): OS level 2 before token 2,048; last-512 clock ratio between 0.83 and 0.93; token rate ratio at or above 0.98. Printed beside the measurement; no verdict reads it.",
+   "turns": [
+    {
+     "base_clock_mhz": 1335.1441782430265,
+     "clock_ratio_by_block": [
+      {
+       "block": 0,
+       "clock_ratio": 0.9860673218277395,
+       "full": false,
+       "tokens": [
+        0,
+        103
+       ]
+      }
+     ],
+     "clock_ratio_last_512": null,
+     "decode_os_level_share": {
+      "0": 1.0
+     },
+     "decode_pm_state_share": {
+      "Nominal": 1.0
+     },
+     "decode_readings": {
+      "os": 8,
+      "pm": 72
+     },
+     "decode_s": 8.220082786,
+     "decode_tokens": 103,
+     "desk_os_nominal": true,
+     "desk_pm_nominal": true,
+     "first_off": null,
+     "load_s": 56.792124792,
+     "prefill_s": 48.572042006,
+     "prefill_tokens": 10021,
+     "start_state": {
+      "os_level": 0,
+      "pm_state": "Nominal"
+     },
+     "token_basis": "stamps",
+     "token_rate_ratio_last_512": null,
+     "turn": 0
+    },
+    {
+     "base_clock_mhz": 1380.0,
+     "clock_ratio_by_block": [
+      {
+       "block": 0,
+       "clock_ratio": 0.9999622174026184,
+       "full": true,
+       "tokens": [
+        0,
+        256
+       ]
+      },
+      {
+       "block": 1,
+       "clock_ratio": 0.9999149110503331,
+       "full": true,
+       "tokens": [
+        256,
+        512
+       ]
+      },
+      {
+       "block": 2,
+       "clock_ratio": 0.9999263680806522,
+       "full": true,
+       "tokens": [
+        512,
+        768
+       ]
+      },
+      {
+       "block": 3,
+       "clock_ratio": 0.9999215991248855,
+       "full": true,
+       "tokens": [
+        768,
+        1024
+       ]
+      },
+      {
+       "block": 4,
+       "clock_ratio": 0.999958698353275,
+       "full": true,
+       "tokens": [
+        1024,
+        1280
+       ]
+      },
+      {
+       "block": 5,
+       "clock_ratio": 0.999915983168626,
+       "full": true,
+       "tokens": [
+        1280,
+        1536
+       ]
+      },
+      {
+       "block": 6,
+       "clock_ratio": 0.9999049692867692,
+       "full": true,
+       "tokens": [
+        1536,
+        1792
+       ]
+      },
+      {
+       "block": 7,
+       "clock_ratio": 0.9999477848551771,
+       "full": true,
+       "tokens": [
+        1792,
+        2048
+       ]
+      },
+      {
+       "block": 8,
+       "clock_ratio": 0.9999249601454419,
+       "full": true,
+       "tokens": [
+        2048,
+        2304
+       ]
+      },
+      {
+       "block": 9,
+       "clock_ratio": 0.99747190979551,
+       "full": true,
+       "tokens": [
+        2304,
+        2560
+       ]
+      },
+      {
+       "block": 10,
+       "clock_ratio": 0.9958368710069586,
+       "full": true,
+       "tokens": [
+        2560,
+        2816
+       ]
+      },
+      {
+       "block": 11,
+       "clock_ratio": 0.974046382132463,
+       "full": true,
+       "tokens": [
+        2816,
+        3072
+       ]
+      },
+      {
+       "block": 12,
+       "clock_ratio": 0.9512224805114968,
+       "full": true,
+       "tokens": [
+        3072,
+        3328
+       ]
+      },
+      {
+       "block": 13,
+       "clock_ratio": 0.9362532742201697,
+       "full": true,
+       "tokens": [
+        3328,
+        3584
+       ]
+      },
+      {
+       "block": 14,
+       "clock_ratio": 0.9194743312838461,
+       "full": true,
+       "tokens": [
+        3584,
+        3840
+       ]
+      },
+      {
+       "block": 15,
+       "clock_ratio": 0.9110890242964884,
+       "full": true,
+       "tokens": [
+        3840,
+        4096
+       ]
+      }
+     ],
+     "clock_ratio_last_512": 0.915281039077594,
+     "decode_os_level_share": {
+      "0": 0.41642228739002934,
+      "1": 0.005865102639296188,
+      "2": 0.5777126099706745
+     },
+     "decode_pm_state_share": {
+      "Heavy": 0.5778372949447607,
+      "Moderate": 0.005691329092735186,
+      "Nominal": 0.41647137596250416
+     },
+     "decode_readings": {
+      "os": 341,
+      "pm": 2987
+     },
+     "decode_s": 341.426783295,
+     "decode_tokens": 4096,
+     "desk_os_nominal": false,
+     "desk_pm_nominal": false,
+     "first_off": {
+      "in_prefill": false,
+      "os_level": null,
+      "pm_state": "Moderate",
+      "s_after_first_token": 142.114881792,
+      "s_after_turn_start": 202.59312754,
+      "tokens": 1713
+     },
+     "load_s": 401.905029043,
+     "prefill_s": 60.478245748,
+     "prefill_tokens": 11211,
+     "start_state": {
+      "os_level": 0,
+      "pm_state": "Nominal"
+     },
+     "token_basis": "stamps",
+     "token_rate_ratio_last_512": 0.9757484250390984,
+     "turn": 1
+    }
+   ],
+   "tv1h_trigger": {
+    "fires": false,
+    "keys": [
+     "TV0h",
+     "TV1h"
+    ],
+    "rows": [],
+    "unequal_rows": {
+     "inside_gate_windows": 0,
+     "outside_gate_windows": 3,
+     "rows_compared": 1147
+    }
+   }
+  },
+  "schema": "joulewise.align.r1_part_c.v1",
+  "slots_entered": false,
+  "verdict": "pass"
+ }
+}

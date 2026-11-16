@@ -1,0 +1,308 @@
+{
+ "verdict": [
+  "pass",
+  "pass"
+ ],
+ "lines": {
+  "d_bank_mechanics": [
+   true,
+   true
+  ],
+  "d_bank_start_state": [
+   true,
+   true
+  ],
+  "step_d": [
+   true,
+   true
+  ],
+  "x_g": [
+   true,
+   true
+  ]
+ },
+ "log": [
+  [
+   "three-turn clause not evaluated: one D run"
+  ],
+  [
+   "three-turn clause not evaluated: one D run"
+  ]
+ ],
+ "admitted_turns": [
+  "not_applicable: episode returned at turn 1",
+  "not_applicable: episode returned at turn 1"
+ ],
+ "gate_time_s/limit_s": [
+  [
+   201.52,
+   392.23
+  ],
+  [
+   200.5,
+   390.12
+  ]
+ ],
+ "N_chunk": [
+  4096,
+  4096
+ ],
+ "T_dead_s": [
+  980.58,
+  975.29
+ ],
+ "lines_differ": [],
+ "desk": {
+  "f0run2_b2e01464d": {
+   "gates_released": "15/15",
+   "gates_release_sample_L0_Nominal_fresh": "15/15",
+   "replay_agrees": "15/15",
+   "step_D_G0_s/clause": [
+    215.21,
+    "slope_slow"
+   ],
+   "step_D_turn_s": 438.61,
+   "step_D_level1_s": 225.87,
+   "step_D_level2_s": 249.88,
+   "step_D_max_TV0h": 97.93,
+   "step_D_p7_level0_x5_s": 49.27,
+   "step_D_p7_band_1C_x5_s": 145.53,
+   "classifier_free_pick": [
+    "Tf3B",
+    "Tf0A"
+   ],
+   "night_confirmation": [
+    "TV0h",
+    "TV1h",
+    true
+   ],
+   "D_bank_G0+G1_s": [
+    103.68,
+    97.84
+   ],
+   "D_bank_turn1_first_off_s": 203.23,
+   "D_bank_exclusion_1Hz": [
+    "thermal.os_level_nonzero",
+    "thermal.powermetrics_non_nominal"
+   ],
+   "D_bank_stale_after_turn1": {
+    "from_s": 16.33,
+    "max_age_s": 42.92933127,
+    "n": 41,
+    "to_s": 56.33,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   },
+   "X_G_turns_all_L0_Nominal": true,
+   "G1_after_hot_turn": {
+    "D_bank": [],
+    "X_G": [],
+    "step_D": []
+   },
+   "TV_unequal_rows (member, seq, in gate, look-back)": [
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     582,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     751,
+     [],
+     []
+    ]
+   ],
+   "soak_TV0h=TV1h": [
+    34.072,
+    true
+   ]
+  },
+  "f0run1_b2e01464d": {
+   "gates_released": "15/15",
+   "gates_release_sample_L0_Nominal_fresh": "15/15",
+   "replay_agrees": "14/15",
+   "step_D_G0_s/clause": [
+    208.1,
+    "slope_slow"
+   ],
+   "step_D_turn_s": 438.9,
+   "step_D_level1_s": 225.29,
+   "step_D_level2_s": 249.29,
+   "step_D_max_TV0h": 97.76,
+   "step_D_p7_level0_x5_s": 49.39,
+   "step_D_p7_band_1C_x5_s": 150.49,
+   "classifier_free_pick": [
+    "Tf3B",
+    "Tp0z"
+   ],
+   "night_confirmation": [
+    "TV0h",
+    "TV1h",
+    true
+   ],
+   "D_bank_G0+G1_s": [
+    102.71,
+    97.79
+   ],
+   "D_bank_turn1_first_off_s": 201.42,
+   "D_bank_exclusion_1Hz": [
+    "thermal.os_level_nonzero",
+    "thermal.powermetrics_non_nominal"
+   ],
+   "D_bank_stale_after_turn1": {
+    "from_s": 16.66,
+    "max_age_s": 41.965455687,
+    "n": 40,
+    "to_s": 55.69,
+    "value": [
+     [
+      "Heavy",
+      40
+     ]
+    ]
+   },
+   "X_G_turns_all_L0_Nominal": true,
+   "G1_after_hot_turn": {
+    "D_bank": [],
+    "X_G": [],
+    "step_D": []
+   },
+   "TV_unequal_rows (member, seq, in gate, look-back)": [
+    [
+     "D_bank",
+     580,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     750,
+     [],
+     []
+    ]
+   ],
+   "soak_TV0h=TV1h": [
+    34.16,
+    true
+   ]
+  }
+ },
+ "desk_categorical_differ": {
+  "replay_agrees": [
+   "15/15",
+   "14/15"
+  ],
+  "classifier_free_pick": [
+   [
+    "Tf3B",
+    "Tf0A"
+   ],
+   [
+    "Tf3B",
+    "Tp0z"
+   ]
+  ],
+  "D_bank_stale_after_turn1": [
+   {
+    "from_s": 16.33,
+    "max_age_s": 42.92933127,
+    "n": 41,
+    "to_s": 56.33,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   },
+   {
+    "from_s": 16.66,
+    "max_age_s": 41.965455687,
+    "n": 40,
+    "to_s": 55.69,
+    "value": [
+     [
+      "Heavy",
+      40
+     ]
+    ]
+   }
+  ],
+  "TV_unequal_rows (member, seq, in gate, look-back)": [
+   [
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     582,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     751,
+     [],
+     []
+    ]
+   ],
+   [
+    [
+     "D_bank",
+     580,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     750,
+     [],
+     []
+    ]
+   ]
+  ]
+ },
+ "step_D_G0_clause_differ": false
+}

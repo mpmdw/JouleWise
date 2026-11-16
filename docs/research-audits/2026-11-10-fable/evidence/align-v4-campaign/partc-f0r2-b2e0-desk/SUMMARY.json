@@ -1,0 +1,270 @@
+{
+ "run": "STANDING-F0 run 2 (item 346, launched by item 356, magistrate Check RUN_STATE 357), Part C only at b2e01464d",
+ "data": "/Volumes/JW-EXT/partc-desk/r1-partc-f0-20261116T011723Z (read-only Air copy; sha256 -c of all 133 manifest entries OK; .air and .mbp manifests byte-equal, sha256 bb24eeaba3c9808759c3a12b53c766fa2c2f070d653ff2766b8d6e90f811e745)",
+ "code": {
+  "desk": "deskf0.py unchanged from run 1 (BUILD /Volumes/JW-EXT/jw-wt/partc-b2e0 at b2e01464d, clean)",
+  "reeval": "reeval_partc_783.py unchanged, PR #783 evaluator at 561f4dd05 (clean)",
+  "recorded_eval": "evaluation key of smoke_part_c.json (item 357's Check print content); N_chunk 4096 and T_dead_s 980.578 taken from CHECK-c93b67ee.md / item 357 (not read from the slots block); error null as in run 1"
+ },
+ "evaluation_lines_vs_run1_item352": {
+  "verdict": [
+   "pass",
+   "pass"
+  ],
+  "lines": {
+   "d_bank_mechanics": [
+    true,
+    true
+   ],
+   "d_bank_start_state": [
+    true,
+    true
+   ],
+   "step_d": [
+    true,
+    true
+   ],
+   "x_g": [
+    true,
+    true
+   ]
+  },
+  "lines_differ": [],
+  "admitted_turns": [
+   "not_applicable: episode returned at turn 1",
+   "not_applicable: episode returned at turn 1"
+  ],
+  "N_chunk": [
+   4096,
+   4096
+  ],
+  "T_dead_s": [
+   980.58,
+   975.29
+  ],
+  "gate_time_s/limit_s": [
+   [
+    201.52,
+    392.23
+   ],
+   [
+    200.5,
+    390.12
+   ]
+  ]
+ },
+ "evaluation_lines_vs_item328": {
+  "verdict": [
+   "pass",
+   "pass"
+  ],
+  "lines": {
+   "d_bank_mechanics": [
+    true,
+    true
+   ],
+   "d_bank_start_state": [
+    true,
+    true
+   ],
+   "step_d": [
+    true,
+    true
+   ],
+   "x_g": [
+    true,
+    true
+   ]
+  },
+  "lines_differ": [],
+  "admitted_turns": [
+   "not_applicable: episode returned at turn 1",
+   "not_applicable: episode returned at turn 1"
+  ],
+  "N_chunk": [
+   4096,
+   4096
+  ],
+  "T_dead_s": [
+   980.58,
+   981.04
+  ],
+  "gate_time_s/limit_s": [
+   [
+    201.52,
+    392.23
+   ],
+   [
+    202.71,
+    392.42
+   ]
+  ]
+ },
+ "pr783_reeval": "differs [] ; verdict pass = recorded pass; 'CHECK3: same verdict and lines'",
+ "replay": "15/15 agree (run 1 was 14/15; item 328 15/15)",
+ "desk_categorical_differ_vs_run1": {
+  "replay_agrees": [
+   "15/15",
+   "14/15"
+  ],
+  "classifier_free_pick": [
+   [
+    "Tf3B",
+    "Tf0A"
+   ],
+   [
+    "Tf3B",
+    "Tp0z"
+   ]
+  ],
+  "D_bank_stale_after_turn1": [
+   {
+    "from_s": 16.33,
+    "max_age_s": 42.92933127,
+    "n": 41,
+    "to_s": 56.33,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   },
+   {
+    "from_s": 16.66,
+    "max_age_s": 41.965455687,
+    "n": 40,
+    "to_s": 55.69,
+    "value": [
+     [
+      "Heavy",
+      40
+     ]
+    ]
+   }
+  ],
+  "TV_unequal_rows (member, seq, in gate, look-back)": [
+   [
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     582,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     751,
+     [],
+     []
+    ]
+   ],
+   [
+    [
+     "D_bank",
+     580,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     750,
+     [],
+     []
+    ]
+   ]
+  ]
+ },
+ "desk_categorical_differ_vs_item328": {
+  "classifier_free_pick": [
+   [
+    "Tf3B",
+    "Tf0A"
+   ],
+   [
+    "Tf3B",
+    "Tf0B"
+   ]
+  ],
+  "D_bank_stale_after_turn1": [
+   {
+    "from_s": 16.33,
+    "max_age_s": 42.92933127,
+    "n": 41,
+    "to_s": 56.33,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   },
+   {
+    "from_s": 16.66,
+    "max_age_s": 43.151789124,
+    "n": 41,
+    "to_s": 56.88,
+    "value": [
+     [
+      "Heavy",
+      41
+     ]
+    ]
+   }
+  ],
+  "TV_unequal_rows (member, seq, in gate, look-back)": [
+   [
+    [
+     "D_bank",
+     581,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     582,
+     [],
+     [
+      "G1 t1"
+     ]
+    ],
+    [
+     "D_bank",
+     751,
+     [],
+     []
+    ]
+   ],
+   [
+    [
+     "D_bank",
+     752,
+     [],
+     []
+    ]
+   ]
+  ]
+ },
+ "differing_line": "NONE among the evaluation lines vs run 1 and vs item 328 (verdict, four lines' pass, log, admitted_turns status, N_chunk) and the #783 re-evaluation; desk print rows differ only as listed (replay 15/15 vs run 1 14/15; classifier-free pick s_slow Tf0A vs Tp0z/Tf0B; D_bank stale n 41 vs 40; TV-unequal rows D_bank 582/751 vs 580/750 (run1) and 752 (328), all outside gate windows)"
+}
