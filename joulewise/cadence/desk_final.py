@@ -363,9 +363,14 @@ def hand_sample(queue_doc, plan_id, kit, kit_sha256, history=None, started=None)
                              if s["kit"]["sha256"] == kit_sha256)
     first_in_history = None
     if history is not None:
+        # An earlier attempt of this same span (a refused attempt the lead re-ran) is not another span of the
+        # group: its re-run keeps "first" (gate 3, Mythos T11).
+        mine = f"cq-{span['span_id']}-a"
         first_in_history = started is None or not any(
             isinstance(h, dict) and h.get("sample_stratum") == stratum and _num(h.get("first_leg_start_epoch_s"))
-            and h["first_leg_start_epoch_s"] < started for h in history)
+            and h["first_leg_start_epoch_s"] < started
+            and not (str(h.get("plan_id", "")).startswith(mine) and str(h["plan_id"])[len(mine):].isdigit())
+            for h in history)
     first = first_in_queue if history is None else bool(first_in_history)
     digest = hashlib.sha256(f"{HAND_SAMPLE_SEED}|{kit_sha256}|{group[1]}|{span['span_id']}".encode()).hexdigest()
     value = int(digest, 16) % HAND_SAMPLE_RATE
@@ -1206,11 +1211,17 @@ def _finish(verdict):
 
 
 def _code_identity():
+    """The desk's code by hash: every module the judgment runs, the transport, the kit loader and the CLI (gate 3,
+    Mythos T16). The MBP pins its checkout to the off-host desk's commit separately (the controller's arm proof)."""
+    from joulewise.cadence import desk_transport, kit as kitmod
     out = {}
-    for mod in (desk, queuemod, stopsmod):
+    for mod in (desk, queuemod, stopsmod, desk_transport, kitmod):
         path = Path(mod.__file__)
         out[f"joulewise/cadence/{path.name}"] = sha256_bytes(path.read_bytes())
     out["joulewise/cadence/desk_final.py"] = sha256_bytes(Path(__file__).read_bytes())
+    cli = Path(__file__).resolve().parents[2] / "scripts" / "air" / "cadence_desk.py"
+    if cli.is_file():
+        out["scripts/air/cadence_desk.py"] = sha256_bytes(cli.read_bytes())
     return out
 
 

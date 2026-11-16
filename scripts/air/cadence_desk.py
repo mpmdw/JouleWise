@@ -112,6 +112,14 @@ def _final_locked(args, signed):
             history, history_source = json.loads(Path(args.history).read_text()), "file"
         elif args.history_prefix:
             kit, _ = kitmod.load_kit(args.kit)
+            # A prefix with no record at all cannot be told from one never fetched (gate 3, Mythos T5): it is refused
+            # unless the operator states the desk has no records yet (--history-empty).
+            listed = desk_transport._git(args.history_repo or args.repo, "for-each-ref", "--count=1",
+                                         "--format=%(refname)", args.history_prefix.rstrip("/") + "/")
+            if not desk_transport._out(listed) and not args.history_empty:
+                raise desk_transport.TransportRefusal(
+                    f"no verdict record under {args.history_prefix} (were the verdict refs fetched?): give "
+                    "--history-empty only when this desk has published none")
             history = desk_transport.history_from_records(
                 args.history_repo or args.repo, args.history_prefix,
                 allowed_signers=args.history_signers, principal=args.history_principal,
@@ -206,6 +214,8 @@ def main(argv=None):
     f.add_argument("--history-repo")
     f.add_argument("--history-signers", help="allowed-signers file naming the desk's key (cadence-desk); "
                                              "required with --history-prefix")
+    f.add_argument("--history-empty", action="store_true",
+                   help="the history prefix holds no record because this desk has published none yet (the first span)")
     f.add_argument("--history-principal", default=desk_transport.DESK_PRINCIPAL,
                    help="the principal that signed the history records: cadence-desk (the Air or Actions desk), or "
                         "cadence-controller for the MBP desk's own records (RL-173 B; FORMAT section 6)")

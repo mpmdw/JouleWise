@@ -1089,6 +1089,8 @@ class SignedTransport(DeskFinalCase):
                 "--allowed-signers", str(self.signers), "--kit", str(self.fx.kit_path),
                 "--out", str(work / "out"), "--history-prefix", "refs/remotes/origin/cadence-desk-final/",
                 "--history-signers", str(self.signers), "--lock", str(work / "lock"), "--allow-mock", *extra]
+        if not self.git(self.air, "for-each-ref", "refs/remotes/origin/cadence-desk-final/").stdout.strip():
+            argv.append("--history-empty")      # this desk has published nothing yet (gate 3, Mythos T5)
         if hand and (work / "bundle").is_dir():
             path = work / desk_final.HAND_TABLE_NAME
             path.write_text(json.dumps({"schema": desk_final.HAND_TABLE_SCHEMA, "plan_id": "cq-dg-s01-a1",
@@ -1465,8 +1467,51 @@ class Gate3Desk(DeskFinalCase):
         self.assertEqual(desk_final.compare_verdicts(first, fuller), [])   # history-dependent: not compared
 
 
+class Gate3DeskMythos:
+    """Gate 3 (Mythos T5, T11, T16); mixed into SignedTransport below (it needs its keys and clones)."""
+
+    def test_an_unfetched_history_prefix_is_refused_and_history_empty_is_explicit(self):
+        work, bundle, anchor = self.pack()
+        ref, _ = self.ship(bundle)
+        argv = ["final", "--plan-id", "cq-dg-s01-a1", "--repo", str(self.air), "--bundle-ref", ref,
+                "--allowed-signers", str(self.signers), "--kit", str(self.fx.kit_path), "--out", str(work / "out"),
+                "--history-prefix", "refs/remotes/origin/never-fetched/", "--history-signers", str(self.signers),
+                "--lock", str(work / "lock"), "--allow-mock"]
+        with redirect_stdout(io.StringIO()):
+            cli.main(argv)
+        v = json.loads((work / "out" / desk_final.VERDICT_NAME).read_text())
+        self.assertNotFinal(v, "DESK_UNAUTHENTICATED")
+        self.assertIn("history-empty", " ".join(v["reasons"]))
+        with redirect_stdout(io.StringIO()):
+            cli.main(argv + ["--history-empty"])
+        v = json.loads((work / "out" / desk_final.VERDICT_NAME).read_text())
+        self.assertNotIn("DESK_UNAUTHENTICATED", codes(v))
+
+    def test_an_earlier_attempt_of_the_same_span_keeps_its_rerun_first(self):
+        kit = span_kit(legs_per_span=6)
+        ids = [leg["leg_id"] for leg in kit["legs"]]
+        sha = "c" * 64
+        queue = {"queue_id": "q", "spans": [{"seq": 1, "span_id": "g-s01", "kit": {"sha256": sha}, "legs": ids[:6],
+                                             "attempt": 2}]}
+        stratum = {"kit_sha256": sha, "shape": "span"}
+        hist = [{"plan_id": "cq-g-s01-a1", "sample_stratum": stratum, "first_leg_start_epoch_s": 1.0}]
+        self.assertTrue(desk_final.hand_sample(queue, "cq-g-s01-a2", kit, sha, hist, 50.0)["first_of_group"])
+        hist = [{"plan_id": "cq-g-s00-a1", "sample_stratum": stratum, "first_leg_start_epoch_s": 1.0}]
+        self.assertFalse(desk_final.hand_sample(queue, "cq-g-s01-a2", kit, sha, hist, 50.0)["first_of_group"])
+
+    def test_desk_code_names_the_transport_kit_and_cli(self):
+        code = desk_final._code_identity()
+        for name in ("joulewise/cadence/desk_transport.py", "joulewise/cadence/kit.py", "scripts/air/cadence_desk.py"):
+            self.assertIn(name, code)
+
+
 SignedTransport.test_mbp_desk_publish_and_history_under_the_controller_principal = \
     MbpDeskRecords.test_mbp_desk_publish_and_history_under_the_controller_principal
+
+
+for _name in ("test_an_unfetched_history_prefix_is_refused_and_history_empty_is_explicit",
+              "test_an_earlier_attempt_of_the_same_span_keeps_its_rerun_first", "test_desk_code_names_the_transport_kit_and_cli"):
+    setattr(SignedTransport, _name, getattr(Gate3DeskMythos, _name))
 
 
 if __name__ == "__main__":

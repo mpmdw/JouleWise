@@ -117,6 +117,7 @@ also a receipt.
 
 ```
 git fetch origin '+refs/heads/desk-bundles/*:refs/remotes/origin/desk-bundles/*' \
+                 '+refs/heads/cadence-desk-final/*:refs/remotes/origin/cadence-desk-final/*' \
                  '+refs/heads/<audit branch>:refs/remotes/origin/<audit branch>'
 python3.13 -B scripts/air/cadence_desk.py final --plan-id PLAN --repo CLONE \
     --bundle-ref refs/remotes/origin/desk-bundles/PLAN --allowed-signers SIGNERS --kit KIT.json --out DIR \
@@ -136,7 +137,9 @@ python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --rep
   - 2: usage.
 - **History.** `--history-prefix`, with `--history-signers`, rebuilds the campaign's earlier summaries from
   the signed verdict records. This is the only history a production verdict may use (Mythos N11, Sol R8).
-  Zero records for the campaign is an established empty history.
+  Zero records for the campaign is an established empty history, when the prefix holds records at all: a prefix
+  with no record is refused (it cannot be told from verdict refs never fetched) unless `--history-empty` says the
+  desk has published none yet (gate 3, Mythos T5).
   - `--history FILE`, or no history at all, makes a signed-bundle verdict not final (`DESK_UNAUTHENTICATED`,
     "receipt replay cannot be checked").
   - The verdict records `history_source`.
