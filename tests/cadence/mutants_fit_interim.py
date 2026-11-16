@@ -189,8 +189,9 @@ def _copy_tree(tmp):
 
 
 def _unittest(tmp, tests, failfast, timeout):
-    (tmp / "tmp").mkdir(exist_ok=True)             # each copy's own TMPDIR: no test reads another's temp files
-    env = {**os.environ, "PYTHONPATH": str(tmp), "TMPDIR": str(tmp / "tmp")}
+    private = tmp.parent / f"{tmp.name}-tmp"       # each copy's own TMPDIR, outside the copied repository (a file
+    private.mkdir(exist_ok=True)                   # under it would count as a loaded repository module)
+    env = {**os.environ, "PYTHONPATH": str(tmp), "TMPDIR": str(private)}
     return subprocess.run([sys.executable, "-B", "-m", "unittest", *(["-f"] if failfast else []), *tests], cwd=tmp,
                           capture_output=True, text=True, timeout=timeout, env=env)
 
