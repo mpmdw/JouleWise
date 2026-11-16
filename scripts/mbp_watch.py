@@ -21,7 +21,7 @@ t0, the runner's deadline) or ``closes/<plan>.json`` (plan, status, close time);
 ``watch`` re-reads the whole log every run (a commit that changes or removes a file is ``LOG_REWRITTEN``):
 
 - ``SPAN_SILENT``: an arm with no close visible by its deadline + grace (C.1), judged by the later of the
-  close's own time and the time of the commit that carries it;
+  close's own time and GitHub's server-side push time for it (the repository activity API);
 - ``SPAN_STOP``: a close status other than ``CLOSED_OK``;
 - ``RESULT_UNREADABLE``: a malformed or rewritten record, or a close without an arm.
 
@@ -163,6 +163,37 @@ class Api:
             raise WatchError("BAD_REPO")
         self.repo, self.token, self.base, self.timeout = repo, token, base, timeout
         self.opener = opener or urllib.request.urlopen
+
+    def pages(self, path, params, limit=MAX_ISSUE_PAGES):
+        """Follow ``Link: rel="next"`` (cursor pagination). Yields each page's decoded body."""
+        url = f"{self.base}/repos/{self.repo}{path}?" + urllib.parse.urlencode(params)
+        for _ in range(limit):
+            body, link = self._get(url)
+            yield body
+            match = re.search(r'<([^>]+)>;\s*rel="next"', link or "")
+            if not match:
+                return
+            url = match.group(1)
+            if not url.startswith(self.base + "/"):
+                raise WatchError("API_BAD_LINK")
+        raise WatchError("TOO_MANY_PAGES")
+
+    def _get(self, url):
+        headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
+                   "User-Agent": "joulewise-mbp-watch"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        try:
+            with self.opener(urllib.request.Request(url, headers=headers), timeout=self.timeout) as response:
+                raw, link = response.read(), response.headers.get("Link")
+        except urllib.error.HTTPError as error:
+            raise WatchError(f"API_HTTP_{error.code}") from None
+        except (urllib.error.URLError, OSError):
+            raise WatchError("API_UNAVAILABLE") from None
+        try:
+            return json.loads(raw), link
+        except ValueError:
+            raise WatchError("API_UNPARSEABLE") from None
 
     def call(self, method, path, params=None, body=None, allow_422=False):
         url = f"{self.base}/repos/{self.repo}{path}"
@@ -330,6 +361,7 @@ def read_log(git):
     git.run("fetch", "--quiet", "--no-tags", git.remote, f"+{LOG_REF}:refs/mbp-watch/log")
     commits = git.run("rev-list", "--reverse", "--parents", "--format=%ct", tip).decode().split("\n")
     records, problems = {}, []
+    git.order = [line.split()[1] for line in commits if line.startswith("commit ")]
     rows = [line for line in commits if line and not line.startswith("commit ")]
     heads = [line.split()[1:] for line in commits if line.startswith("commit ")]
     for (sha, *parents), stamp in zip(heads, rows):
@@ -353,6 +385,32 @@ def read_log(git):
     return records, problems, tip
 
 
+ACTIVITY_WINDOW_S = 80 * 86400  # inside GitHub's "quarter" activity period
+
+
+def push_times(api, order):
+    """Server-side publication time of each log commit, from the repository activity API: the earliest
+    push of the log whose new tip is that commit or a later one (the log is linear)."""
+    index = {sha: i for i, sha in enumerate(order)}
+    pushes = []
+    for page in api.pages("/activity", {"ref": LOG_REF, "activity_type": "push", "time_period": "quarter",
+                                        "per_page": 100}):
+        if not isinstance(page, list) or not all(isinstance(row, dict) for row in page):
+            raise WatchError("API_SHAPE_ACTIVITY")
+        for row in page:
+            when = parse_time(str(row.get("timestamp", "")).split(".")[0].replace("+00:00", "Z").rstrip("Z") + "Z")
+            if when is None:
+                raise WatchError("API_SHAPE_ACTIVITY")
+            if row.get("after") in index:
+                pushes.append((index[row["after"]], when))
+    published = {}
+    for sha, i in index.items():
+        times = [when for j, when in pushes if j >= i]
+        if times:
+            published[sha] = min(times)
+    return published
+
+
 def read_close(raw, plan, t0, now):
     """'invalid' or (status word, close epoch)."""
     doc = _json(raw)
@@ -367,10 +425,16 @@ def event(code, detail, plan, ref, sha, **times):
     return {"code": code, "detail": detail, "plan": plan, "ref": ref, "sha": sha, "times": times}
 
 
-def events(git, now, grace_s):
+def events(git, now, grace_s, api=None):
     """Every alarm the log implies. The log is append-only and protected, so no obligation, close or stop
-    in it can disappear: there is no age limit and nothing else to retain."""
+    in it can disappear: there is no age limit and nothing else to retain.
+
+    A close is visible at the later of its own time and its publication: the server-side push time from
+    the activity API. A close the API does not show, for an arm whose limit is inside the activity window,
+    counts as visible only now (conservative); older ones fall back to the commit time.
+    """
     records, problems, _ = read_log(git)
+    published = push_times(api, git.order) if api is not None else {}
     found = [event("RESULT_UNREADABLE", detail, "span-watch-log", LOG_REF, sha, observed=now)
              for detail, sha in problems]
     for plan in sorted({plan for _, plan in records}):
@@ -385,12 +449,18 @@ def events(git, now, grace_s):
             continue
         visible = None
         if ("close", plan) in records:
-            raw, sha, published = records[("close", plan)]
+            raw, sha, published_commit = records[("close", plan)]
             closed = read_close(raw, plan, arm_times[0], now)
             if closed == "invalid":
                 found.append(event("RESULT_UNREADABLE", "CLOSE_RECORD", plan, LOG_REF, sha, observed=now))
             else:
-                visible = max(closed[1], published)  # finished, and committed for publication, no earlier
+                if sha in published:
+                    pushed = published[sha]
+                elif api is not None and now - (arm_times[1] + grace_s) < ACTIVITY_WINDOW_S:
+                    pushed = now  # no server evidence yet: not visible before this observation
+                else:
+                    pushed = published_commit  # older than the activity window: the commit time
+                visible = max(closed[1], pushed)
                 if closed[0] != "CLOSED_OK":
                     found.append(event("SPAN_STOP", closed[0], plan, LOG_REF, sha, t0=arm_times[0], observed=now))
         limit = arm_times[1] + grace_s
@@ -512,7 +582,7 @@ def watch(args, git=None, api=None, now=None):
     git = git or Git()
     api = api or Api(args.repo, os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"))
     check_rulesets(api)
-    found = events(git, now, args.grace_s)
+    found = events(git, now, args.grace_s, api)
     opened = deliver(api, found, args.owner, args.run_url, args.dry_run)
     print(f"MBP_WATCH observed={iso(now)} events={len(found)} opened={len(opened)}")
     for name in opened:
@@ -538,7 +608,8 @@ def read(args, api=None, now=None):
     ``--max-age-s`` is enumerated (all pages,
     checked against ``total_count``); the latest is the most recently started execution among them (a re-run
     attempt counts with its own start; ties by ``run_number`` then ``run_attempt``). A re-run of a run created
-    earlier than that window is outside the rule. A start up to 300 s in the future is clock skew; more is an
+    earlier than that window is outside the rule (the workflow fails every re-run, so a re-run never carries
+    a health signal). A start up to 300 s in the future is clock skew; more is an
     error. Every run must be well formed: a malformed answer is an error, never a pass.
     """
     now = time.time() if now is None else now

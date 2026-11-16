@@ -57,7 +57,7 @@ Every 10 minutes (cron `3-59/10`, off the hour's peak; GitHub does not guarantee
 
 | Code | When | Detail |
 |---|---|---|
-| `SPAN_SILENT` | an arm with no close visible by its deadline + 1,200 s (C.1). "Visible" is the later of the close's own time and the committer time of the commit that carries it, so a close that finished late, or was committed late, or arrived between two delayed polls, is still filed. **Limit:** the committer time is set by the MBP when `close` builds the commit, immediately before its push; a push that stalls after that moment is not seen as late. GitHub's only server-side push time is the repository activity API, which this watcher does not use (a research-lead question in the report) | `NO_RESULTS_REF` |
+| `SPAN_SILENT` | an arm with no close visible by its deadline + 1,200 s (C.1). "Visible" is the later of the close's own time and its **server-side push time**, read from GitHub's repository activity API (`GET /repos/mpmdw/JouleWise/activity?ref=refs/heads/span-watch/log&activity_type=push&time_period=quarter`, all pages): the earliest push of the log whose new tip is that commit or a later one. So a close that finished late, was pushed late, or arrived between two delayed polls is still filed. A close the API does not show yet counts as visible only at this observation (conservative); for an arm whose limit is more than 80 days old (outside the API's quarter) the commit time is used | `NO_RESULTS_REF` |
 | `SPAN_STOP` | a close with a status other than `CLOSED_OK` | the status |
 | `RESULT_UNREADABLE` | a malformed arm or close, a close without an arm, or a log commit that is not one addition | `ARM_RECORD`, `CLOSE_RECORD`, `LOG_REWRITTEN` |
 
@@ -101,8 +101,9 @@ It enumerates every completed run of the workflow on `main` created since one da
 previous close and now minus `--max-age-s` (`GET /repos/mpmdw/JouleWise/actions/workflows/mbp-watch.yml/runs?branch=main&status=completed&created=>=...`,
 all pages, checked against `total_count`). The latest is the most recently started execution among them (a
 re-run attempt counts with its own start; ties by `run_number`, then `run_attempt`). **A re-run of a run
-created before that window is outside the rule** (a manual re-run of an old run is not the schedule's health;
-a research-lead question in the report, since RL-173 C.4 says only "latest completed run"). Exit 0 only if it succeeded, started after the previous span's close
+created before that window is outside the rule** (the workflow refuses every re-run: its first step fails when
+`run_attempt` is not 1, so a re-run never carries a health signal, and a re-run of a recent run makes the
+latest execution a failure, which refuses the arm until the next scheduled run). Exit 0 only if it succeeded, started after the previous span's close
 and within `--max-age-s` (default 7,200 s), and no `mbp-alarm` issue is open. 20: no such run yet (wait;
 schedules can be late); 21: an alarm is open; 22: the latest run failed; 2: API or usage error, including
 any malformed answer and a start more than 300 s in the future (clock skew up to 300 s is accepted). A
@@ -122,7 +123,8 @@ Nothing to install on either Mac beyond the checkout the magistrate already uses
 workflow is on `main`. Then:
 1. `init-log` and the ruleset above (the lead, once).
 2. `gh workflow run mbp-watch.yml --repo mpmdw/JouleWise`, then `gh run list --workflow mbp-watch.yml`: the
-   run must succeed (it fails while the log or the ruleset is missing).
+   run must succeed (it fails while the log or the ruleset is missing, or if the activity API answers in
+   another shape than the tests assume).
 3. A delivery check, synthetic only: `scripts/mbp_watch.py arm --plan cq-notify-test-a1 --t0 <now-7200>
    --deadline <now-3600>` from the Air, dispatch the workflow, confirm the owner received the
    `mbp-alarm SPAN_SILENT cq-notify-test-a1` notification and the Air agent posted its banner, then

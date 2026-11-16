@@ -28,7 +28,14 @@ class FakeApi:
         self.drop_label = drop_label
         self.drop_assignee = drop_assignee
         self.rules = rules
+        self.activity = []  # [{"after": sha, "timestamp": iso}] newest first, as GitHub returns
         self.calls = []
+
+    def pages(self, path, params, limit=100):
+        self.calls.append(("PAGES", path, params, None))
+        assert path == "/activity" and params["ref"] == w.LOG_REF and params["activity_type"] == "push"
+        for start in range(0, max(len(self.activity), 1), 100):
+            yield self.activity[start:start + 100]
 
     def call(self, method, path, params=None, body=None, allow_422=False):
         self.calls.append((method, path, params, body))
@@ -105,7 +112,20 @@ class MbpWatchTests(unittest.TestCase):
         commit = git.run("commit-tree", tree, input=b"synthetic\n", env=w.IDENT).decode().strip()
         git.run("update-ref", ref, commit)
 
-    def watch(self, api, now=NOW):
+    def pushes_at_commit_times(self, api, late=None):
+        """Synthetic activity: every log commit published at its own commit time (or at ``late[sha]``)."""
+        git = w.Git(self.origin)
+        rows = []
+        for line in git.run("rev-list", "--format=%ct", w.LOG_REF).decode().splitlines():
+            if line.startswith("commit "):
+                sha = line.split()[1]
+            elif line:
+                when = (late or {}).get(sha, float(line))
+                rows.append({"after": sha, "timestamp": w.iso(when), "activity_type": "push"})
+        api.activity = rows
+
+    def watch(self, api, now=NOW, late=None):
+        self.pushes_at_commit_times(api, late)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = w.watch(self.ns(), git=w.Git(self.work), api=api, now=now)
@@ -343,15 +363,31 @@ class MbpWatchTests(unittest.TestCase):
         self.arm(deadline=NOW - 3600)
         record = json.dumps({"schema": w.CLOSE_SCHEMA, "plan_id": PLAN, "status": "CLOSED_OK",
                              "close_epoch_s": NOW - 3600}).encode() + b"\n"
-        self.log_commit(f"closes/{PLAN}.json", record, date=NOW)  # finished on time, visible only now
+        self.log_commit(f"closes/{PLAN}.json", record, date=NOW - 3600)  # committed on time ...
+        tip = w.Git(self.origin).run("rev-parse", w.LOG_REF).decode().strip()
         api = FakeApi()
-        self.watch(api)
+        self.watch(api, late={tip: NOW - 60})  # ... but the push reached GitHub only after the limit
+        self.assertEqual(self.titles(api), [f"mbp-alarm SPAN_SILENT {PLAN} NO_RESULTS_REF"])
+        on_time = FakeApi()
+        self.watch(on_time)  # pushed when committed: on time, no alarm
+        self.assertEqual(self.opened(on_time), [])
+
+    def test_a_close_github_has_not_reported_is_not_yet_visible(self):
+        self.arm(deadline=NOW - 3600)
+        self.close("CLOSED_OK")
+        api = FakeApi()
+        tip = w.Git(self.origin).run("rev-parse", w.LOG_REF).decode().strip()
+        self.pushes_at_commit_times(api)
+        api.activity = [row for row in api.activity if row["after"] != tip]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            w.watch(self.ns(), git=w.Git(self.work), api=api, now=NOW)
         self.assertEqual(self.titles(api), [f"mbp-alarm SPAN_SILENT {PLAN} NO_RESULTS_REF"])
 
     def test_a_missing_log_fails_the_run(self):
         w.Git(self.origin).run("update-ref", "-d", w.LOG_REF)
-        with self.assertRaises(w.WatchError) as caught:
-            self.watch(FakeApi())
+        with self.assertRaises(w.WatchError) as caught, contextlib.redirect_stdout(io.StringIO()):
+            w.watch(self.ns(), git=w.Git(self.work), api=FakeApi(), now=NOW)
         self.assertIn("LOG_MISSING", str(caught.exception))
 
     def test_read_enumerates_every_page_of_the_window(self):
@@ -389,6 +425,7 @@ class MbpWatchTests(unittest.TestCase):
         self.assertNotIn("contents: write", text)
         self.assertIn("python3 scripts/mbp_watch.py watch", text)
         self.assertIn("--grace-s 1200", text)
+        self.assertIn('if [ "$ATTEMPT" != "1" ]', text)
         self.assertEqual(w.WORKFLOW, WORKFLOW.name)
 
 
