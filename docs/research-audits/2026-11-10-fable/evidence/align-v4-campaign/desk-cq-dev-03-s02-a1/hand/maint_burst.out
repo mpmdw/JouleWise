@@ -1,0 +1,16 @@
+09:20 mds 32
+09:21 mobileassetd 1360
+09:26 mobileassetd 34
+first {'mds': '09:20:40', 'mobileassetd': '09:21:24'} last {'mds': '09:20:56', 'mobileassetd': '09:26:40'}
+---
+11:09 XProtect 50
+11:09 XProtectPluginService 562
+11:09 mobileassetd 2045
+11:09 softwareupdated 2573
+11:10 softwareupdated 8
+11:11 mobileassetd 14
+11:11 softwareupdated 23
+11:12 softwareupdated 8
+11:14 mobileassetd 1
+11:14 softwareupdated 1
+first {'softwareupdated': '11:09:06', 'XProtect': '11:09:06', 'XProtectPluginService': '11:09:06', 'mobileassetd': '11:09:06'} last {'softwareupdated': '11:14:21', 'XProtect': '11:09:23', 'XProtectPluginService': '11:09:23', 'mobileassetd': '11:14:21'}

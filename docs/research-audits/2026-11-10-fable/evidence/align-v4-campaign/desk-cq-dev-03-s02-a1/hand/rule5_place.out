@@ -1,0 +1,9 @@
+L004 {"attempt": 1, "runs_ge_3s": []}
+L005 {"attempt": 1, "runs_ge_3s": [{"len_samples": 3, "t_s": [385.1, 387.1], "pst": ["08:52:41", "08:52:43"], "max_cores": 1.844}]}
+L006 {"attempt": 1, "runs_ge_3s": [{"len_samples": 4, "t_s": [422.1, 425.1], "pst": ["09:09:41", "09:09:44"], "max_cores": 1.176}, {"len_samples": 7, "t_s": [551.1, 557.1], "pst": ["09:11:50", "09:11:56"], "max_cores": 2.642}, {"len_samples": 3, "t_s": [1126.1, 1128.1], "pst": ["09:21:25", "09:21:27"], "max_cores": 2.218}, {"len_samples": 12, "t_s": [1143.1, 1154.1], "pst": ["09:21:42", "09:21:53"], "max_cores": 1.053}, {"len_samples": 5, "t_s": [1160.1, 1164.1], "pst": ["09:21:59", "09:22:03"], "max_cores": 1.158}, {"len_samples": 5, "t_s": [1177.1, 1181.1], "pst": ["09:22:16", "09:22:20"], "max_cores": 1.03}]}
+L007 {"attempt": 1, "runs_ge_3s": [{"len_samples": 11, "t_s": [309.1, 319.1], "pst": ["09:28:44", "09:28:54"], "max_cores": 1.264}]}
+L008 {"attempt": 1, "runs_ge_3s": []}
+L009 {"attempt": 1, "runs_ge_3s": []}
+L010 {"attempt": 1, "runs_ge_3s": []}
+L011 {"attempt": 1, "runs_ge_3s": []}
+L012 {"attempt": 1, "runs_ge_3s": [{"len_samples": 4, "t_s": [708.1, 711.1], "pst": ["11:09:07", "11:09:10"], "max_cores": 3.296}]}

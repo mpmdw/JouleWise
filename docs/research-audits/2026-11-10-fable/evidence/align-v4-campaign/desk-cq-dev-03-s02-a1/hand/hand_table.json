@@ -1,0 +1,2262 @@
+{
+ "desk_stops": [],
+ "diffs": [],
+ "legs": [
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794847575.677723,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 1,
+      "max_cores": 1.7480000000000002,
+      "max_gap_s": 1.1087077911943197,
+      "required_samples": 1015.0,
+      "samples": 1132
+     },
+     "output_dir": "legs/L004/runtime",
+     "record_wall_s": 1133.3340418338776,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.7480000000000002,
+       "max_gap_s": 1.1087077911943197,
+       "seconds": 1132
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1133.3338661193848,
+     "started_epoch_s": 1794846442.343681
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1156,
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1156,
+     "hand": 1156
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 204.978628,
+     "hand": 204.978628
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L004",
+     "hand": "L004"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 10000,
+     "hand": 10000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 817444328,
+     "hand": 817444328
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": null,
+     "hand": null
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1133.3,
+     "hand": 1133.3
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": null,
+   "g0_reference_source_record": "cadence-cl-dev-03-l004",
+   "g0_role_hand": "capture",
+   "g0_role_record": "capture",
+   "g0_row_reference_fast_c": 34.20107460021973,
+   "g0_row_reference_source": "cadence-cl-dev-03-l004",
+   "g0_row_reference_span_ns": [
+    2831134761513646,
+    2831194761513646
+   ],
+   "g0_s_journal": 204.978628334,
+   "g0_s_record": 204.978628334,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L004",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 1,
+    "max_cores": 1.7480000000000002,
+    "max_gap_s": 1.1087077911943197,
+    "required_samples": 1015.0,
+    "samples": 1132
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": 34.20107460021973,
+    "record_sha256": "3692d95c86c55895a5ac9e0cf9c1008cd54d2c257d305aa2105ec8c66fc4fc44",
+    "source_run_id": "cadence-cl-dev-03-l004",
+    "span_ns": [
+     2831134761513646,
+     2831194761513646
+    ],
+    "status": "captured"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.15,
+   "prefill_tokens": 10015,
+   "prefill_tokens_nominal_kit": 10000,
+   "prefill_tokens_nominal_spec": 10000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.069922,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 817444328,
+   "span_reference_hand": null,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1110,
+    "gaps_ns": [
+     [
+      2831833543598333,
+      2831834645332124
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1101733791,
+    "sample_fraction": 0.9981981981981982,
+    "valid_samples": 1108
+   },
+   "wall_s_attempt": 1133.3340418338776,
+   "wall_s_stage": 1133.3338661193848
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794848558.3743029,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 3,
+      "max_cores": 1.844,
+      "max_gap_s": 1.1382264578714967,
+      "required_samples": 878.8,
+      "samples": 981
+     },
+     "output_dir": "legs/L005/runtime",
+     "record_wall_s": 982.0370228290558,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.844,
+       "max_gap_s": 1.1382264578714967,
+       "seconds": 981
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 982.0368461608887,
+     "started_epoch_s": 1794847576.33728
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1076,
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1076,
+     "hand": 1076
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 152.875743,
+     "hand": 152.875743
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "own",
+     "hand": "own"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L005",
+     "hand": "L005"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 2000,
+     "hand": 2000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 4214048134,
+     "hand": 4214048134
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": null,
+     "hand": null
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 982.0,
+     "hand": 982.0
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": null,
+   "g0_reference_source_record": "cadence-cl-dev-03-l005",
+   "g0_role_hand": "capture",
+   "g0_role_record": "capture",
+   "g0_row_reference_fast_c": 34.77459526062012,
+   "g0_row_reference_source": "cadence-cl-dev-03-l005",
+   "g0_row_reference_span_ns": [
+    2832266597791792,
+    2832326597791792
+   ],
+   "g0_s_journal": 152.87574323,
+   "g0_s_record": 152.87574323,
+   "g0_shape_hand": "own",
+   "g0_shape_kit": "own",
+   "g0_shape_record": "own",
+   "g0_shape_spec": null,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L005",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 3,
+    "max_cores": 1.844,
+    "max_gap_s": 1.1382264578714967,
+    "required_samples": 878.8,
+    "samples": 981
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": 34.77459526062012,
+    "record_sha256": "fa9325567abef35774a874da50646c81173dc3f22c83765450664f37ce5f5ab8",
+    "source_run_id": "cadence-cl-dev-03-l005",
+    "span_ns": [
+     2832266597791792,
+     2832326597791792
+    ],
+    "status": "captured"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 1.2,
+   "prefill_tokens": 2024,
+   "prefill_tokens_nominal_kit": 2000,
+   "prefill_tokens_nominal_spec": 2000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.06920902,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 4214048134,
+   "span_reference_hand": null,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 962,
+    "gaps_ns": [
+     [
+      2832846578886458,
+      2832847682707958
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1103821500,
+    "sample_fraction": 0.998960498960499,
+    "valid_samples": 961
+   },
+   "wall_s_attempt": 982.0370228290558,
+   "wall_s_stage": 982.0368461608887
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794849814.415484,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 12,
+      "max_cores": 2.642,
+      "max_gap_s": 1.118564082775265,
+      "required_samples": 1124.8,
+      "samples": 1254
+     },
+     "output_dir": "legs/L006/runtime",
+     "record_wall_s": 1255.3787178993225,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 2.642,
+       "max_gap_s": 1.118564082775265,
+       "seconds": 1254
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1255.3785510063171,
+     "started_epoch_s": 1794848559.036766
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 204.113353,
+     "hand": 204.113353
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "own",
+     "hand": "own"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L006",
+     "hand": "L006"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 19458,
+     "hand": 19458
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 2996931055,
+     "hand": 2996931055
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": null,
+     "hand": null
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1255.4,
+     "hand": 1255.4
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": null,
+   "g0_reference_source_record": "cadence-cl-dev-03-l006",
+   "g0_role_hand": "capture",
+   "g0_role_record": "capture",
+   "g0_row_reference_fast_c": 34.71696853637695,
+   "g0_row_reference_source": "cadence-cl-dev-03-l006",
+   "g0_row_reference_span_ns": [
+    2833249906312478,
+    2833309906312478
+   ],
+   "g0_s_journal": 204.113352979,
+   "g0_s_record": 204.113352979,
+   "g0_shape_hand": "own",
+   "g0_shape_kit": "own",
+   "g0_shape_record": "own",
+   "g0_shape_spec": null,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L006",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 12,
+    "max_cores": 2.642,
+    "max_gap_s": 1.118564082775265,
+    "required_samples": 1124.8,
+    "samples": 1254
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": 34.71696853637695,
+    "record_sha256": "84f771d127d507669d374917869e9b7cd600630e1fcfaa5624ce1fd11667b016",
+    "source_run_id": "cadence-cl-dev-03-l006",
+    "span_ns": [
+     2833249906312478,
+     2833309906312478
+    ],
+    "status": "captured"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.0,
+   "prefill_tokens": 19458,
+   "prefill_tokens_nominal_kit": 19458,
+   "prefill_tokens_nominal_spec": 19458,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.048027958,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2996931055,
+   "span_reference_hand": null,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1227,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1091888333,
+    "sample_fraction": 0.9967400162999185,
+    "valid_samples": 1223
+   },
+   "wall_s_attempt": 1255.3787178993225,
+   "wall_s_stage": 1255.3785510063171
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794850966.9146261,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 11,
+      "max_cores": 1.575,
+      "max_gap_s": 1.2431772500276566,
+      "required_samples": 1031.7,
+      "samples": 1151
+     },
+     "output_dir": "legs/L007/runtime",
+     "record_wall_s": 1151.840615272522,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.575,
+       "max_gap_s": 1.2431772500276566,
+       "seconds": 1151
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1151.8404211997986,
+     "started_epoch_s": 1794849815.0740108
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1156,
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1156,
+     "hand": 1156
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 221.194766,
+     "hand": 221.194766
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "own",
+     "hand": "own"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L007",
+     "hand": "L007"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 10000,
+     "hand": 10000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 2633008529,
+     "hand": 2633008529
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": null,
+     "hand": null
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1151.8,
+     "hand": 1151.8
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": null,
+   "g0_reference_source_record": "cadence-cl-dev-03-l007",
+   "g0_role_hand": "capture",
+   "g0_role_record": "capture",
+   "g0_row_reference_fast_c": 34.79117202758789,
+   "g0_row_reference_source": "cadence-cl-dev-03-l007",
+   "g0_row_reference_span_ns": [
+    2834507150654353,
+    2834567150654353
+   ],
+   "g0_s_journal": 221.194766271,
+   "g0_s_record": 221.194766271,
+   "g0_shape_hand": "own",
+   "g0_shape_kit": "own",
+   "g0_shape_record": "own",
+   "g0_shape_spec": null,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L007",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 11,
+    "max_cores": 1.575,
+    "max_gap_s": 1.2431772500276566,
+    "required_samples": 1031.7,
+    "samples": 1151
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": 34.79117202758789,
+    "record_sha256": "aee4f54781d0ba7256cac0af3798580d765175b27fa7964cb93481c78ffd1eb5",
+    "source_run_id": "cadence-cl-dev-03-l007",
+    "span_ns": [
+     2834507150654353,
+     2834567150654353
+    ],
+    "status": "captured"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.15,
+   "prefill_tokens": 10015,
+   "prefill_tokens_nominal_kit": 10000,
+   "prefill_tokens_nominal_spec": 10000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.049529563,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2633008529,
+   "span_reference_hand": null,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1128,
+    "gaps_ns": [
+     [
+      2835231327059562,
+      2835232429651354
+     ],
+     [
+      2835272327065791,
+      2835273477535749
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1150469958,
+    "sample_fraction": 0.9973404255319149,
+    "valid_samples": 1125
+   },
+   "wall_s_attempt": 1151.840615272522,
+   "wall_s_stage": 1151.8404211997986
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794851950.746026,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 2,
+      "max_cores": 2.142,
+      "max_gap_s": 1.4194215000607073,
+      "required_samples": 879.9,
+      "samples": 982
+     },
+     "output_dir": "legs/L008/runtime",
+     "record_wall_s": 983.1673102378845,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 2.142,
+       "max_gap_s": 1.4194215000607073,
+       "seconds": 982
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 983.1671199798584,
+     "started_epoch_s": 1794850967.5787158
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1467,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1467,
+     "hand": 1467
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 149.89467,
+     "hand": 149.89467
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L008",
+     "hand": "L008"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 2000,
+     "hand": 2000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 1075127983,
+     "hand": 1075127983
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L004",
+      "redone": false
+     },
+     "hand": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L004",
+      "redone": false
+     }
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 983.2,
+     "hand": 983.2
+    }
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": "3692d95c86c55895a5ac9e0cf9c1008cd54d2c257d305aa2105ec8c66fc4fc44",
+   "g0_reference_source_record": "cadence-cl-dev-03-l004",
+   "g0_role_hand": "consume",
+   "g0_role_record": "consume",
+   "g0_row_reference_fast_c": 34.20107460021973,
+   "g0_row_reference_source": "cadence-cl-dev-03-l004",
+   "g0_row_reference_span_ns": [
+    2831134761513646,
+    2831194761513646
+   ],
+   "g0_s_journal": 149.894670084,
+   "g0_s_record": 149.894670084,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L008",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 2.142,
+    "max_gap_s": 1.4194215000607073,
+    "required_samples": 879.9,
+    "samples": 982
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": null,
+    "record_sha256": null,
+    "source_run_id": null,
+    "span_ns": null,
+    "status": "absent (consumer)"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 1.2,
+   "prefill_tokens": 2024,
+   "prefill_tokens_nominal_kit": 2000,
+   "prefill_tokens_nominal_spec": 2000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.06941423,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 1075127983,
+   "span_reference_hand": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L004",
+    "redone": false
+   },
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 962,
+    "gaps_ns": [
+     [
+      2836258856607499,
+      2836259995179895
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1138572396,
+    "sample_fraction": 0.9958419958419958,
+    "valid_samples": 958
+   },
+   "wall_s_attempt": 983.1673102378845,
+   "wall_s_stage": 983.1671199798584
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794853206.684125,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 2,
+      "max_cores": 2.305,
+      "max_gap_s": 1.4191596671007574,
+      "required_samples": 1124.8,
+      "samples": 1254
+     },
+     "output_dir": "legs/L009/runtime",
+     "record_wall_s": 1255.2801959514618,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 2.305,
+       "max_gap_s": 1.4191596671007574,
+       "seconds": 1254
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1255.2800080776215,
+     "started_epoch_s": 1794851951.403929
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1642,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1642,
+     "hand": 1642
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 211.146351,
+     "hand": 211.146351
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L009",
+     "hand": "L009"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 19458,
+     "hand": 19458
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 1056162900,
+     "hand": 1056162900
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L004",
+      "redone": false
+     },
+     "hand": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L004",
+      "redone": false
+     }
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1255.3,
+     "hand": 1255.3
+    }
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": "3692d95c86c55895a5ac9e0cf9c1008cd54d2c257d305aa2105ec8c66fc4fc44",
+   "g0_reference_source_record": "cadence-cl-dev-03-l004",
+   "g0_role_hand": "consume",
+   "g0_role_record": "consume",
+   "g0_row_reference_fast_c": 34.20107460021973,
+   "g0_row_reference_source": "cadence-cl-dev-03-l004",
+   "g0_row_reference_span_ns": [
+    2831134761513646,
+    2831194761513646
+   ],
+   "g0_s_journal": 211.146351105,
+   "g0_s_record": 211.146351105,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L009",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 2.305,
+    "max_gap_s": 1.4191596671007574,
+    "required_samples": 1124.8,
+    "samples": 1254
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": null,
+    "record_sha256": null,
+    "source_run_id": null,
+    "span_ns": null,
+    "status": "absent (consumer)"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.0,
+   "prefill_tokens": 19458,
+   "prefill_tokens_nominal_kit": 19458,
+   "prefill_tokens_nominal_spec": 19458,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.076424082,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 1056162900,
+   "span_reference_hand": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L004",
+    "redone": false
+   },
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1231,
+    "gaps_ns": [
+     [
+      2837471672791833,
+      2837472777809750
+     ],
+     [
+      2837483672462187,
+      2837484815312729
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1142850542,
+    "sample_fraction": 0.9959382615759546,
+    "valid_samples": 1226
+   },
+   "wall_s_attempt": 1255.2801959514618,
+   "wall_s_stage": 1255.2800080776215
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794854181.1516328,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 2,
+      "max_cores": 2.121,
+      "max_gap_s": 1.424479375127703,
+      "required_samples": 871.4,
+      "samples": 973
+     },
+     "output_dir": "legs/L010/runtime",
+     "record_wall_s": 973.8064696788788,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 2.121,
+       "max_gap_s": 1.424479375127703,
+       "seconds": 973
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 973.8062708377838,
+     "started_epoch_s": 1794853207.345163
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1467,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1467,
+     "hand": 1467
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 145.637129,
+     "hand": 145.637129
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L010",
+     "hand": "L010"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 2000,
+     "hand": 2000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 2111502221,
+     "hand": 2111502221
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L004",
+      "redone": false
+     },
+     "hand": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L004",
+      "redone": false
+     }
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 973.8,
+     "hand": 973.8
+    }
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": "3692d95c86c55895a5ac9e0cf9c1008cd54d2c257d305aa2105ec8c66fc4fc44",
+   "g0_reference_source_record": "cadence-cl-dev-03-l004",
+   "g0_role_hand": "consume",
+   "g0_role_record": "consume",
+   "g0_row_reference_fast_c": 34.20107460021973,
+   "g0_row_reference_source": "cadence-cl-dev-03-l004",
+   "g0_row_reference_span_ns": [
+    2831134761513646,
+    2831194761513646
+   ],
+   "g0_s_journal": 145.637129001,
+   "g0_s_record": 145.637129001,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L010",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 2.121,
+    "max_gap_s": 1.424479375127703,
+    "required_samples": 871.4,
+    "samples": 973
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": null,
+    "record_sha256": null,
+    "source_run_id": null,
+    "span_ns": null,
+    "status": "absent (consumer)"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 1.2,
+   "prefill_tokens": 2024,
+   "prefill_tokens_nominal_kit": 2000,
+   "prefill_tokens_nominal_spec": 2000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.061801144,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2111502221,
+   "span_reference_hand": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L004",
+    "redone": false
+   },
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 954,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1088695812,
+    "sample_fraction": 0.9979035639412998,
+    "valid_samples": 952
+   },
+   "wall_s_attempt": 973.8064696788788,
+   "wall_s_stage": 973.8062708377838
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794855438.669485,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 2,
+      "max_cores": 1.3619999999999999,
+      "max_gap_s": 1.1321406671777368,
+      "required_samples": 1126.2,
+      "samples": 1256
+     },
+     "output_dir": "legs/L011/runtime",
+     "record_wall_s": 1256.855630159378,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.3619999999999999,
+       "max_gap_s": 1.1321406671777368,
+       "seconds": 1256
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1256.855437040329,
+     "started_epoch_s": 1794854181.813855
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 211.126042,
+     "hand": 211.126042
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "own",
+     "hand": "own"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L011",
+     "hand": "L011"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 19458,
+     "hand": 19458
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 3657592638,
+     "hand": 3657592638
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": null,
+     "hand": null
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1256.9,
+     "hand": 1256.9
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": null,
+   "g0_reference_source_record": "cadence-cl-dev-03-l011",
+   "g0_role_hand": "capture",
+   "g0_role_record": "capture",
+   "g0_row_reference_fast_c": 34.75976371765137,
+   "g0_row_reference_source": "cadence-cl-dev-03-l011",
+   "g0_row_reference_span_ns": [
+    2838872010955584,
+    2838932010955584
+   ],
+   "g0_s_journal": 211.126041958,
+   "g0_s_record": 211.126041958,
+   "g0_shape_hand": "own",
+   "g0_shape_kit": "own",
+   "g0_shape_record": "own",
+   "g0_shape_spec": null,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L011",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 1.3619999999999999,
+    "max_gap_s": 1.1321406671777368,
+    "required_samples": 1126.2,
+    "samples": 1256
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": 34.75976371765137,
+    "record_sha256": "6eca5bdd7f512ecb93e5933fa10e560d14820dd82c133d462c30848a8331500e",
+    "source_run_id": "cadence-cl-dev-03-l011",
+    "span_ns": [
+     2838872010955584,
+     2838932010955584
+    ],
+    "status": "captured"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.0,
+   "prefill_tokens": 19458,
+   "prefill_tokens_nominal_kit": 19458,
+   "prefill_tokens_nominal_spec": 19458,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.077754063,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 3657592638,
+   "span_reference_hand": null,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1231,
+    "gaps_ns": [
+     [
+      2839689039224520,
+      2839690159584312
+     ],
+     [
+      2839742065013187,
+      2839743175951228
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1120359792,
+    "sample_fraction": 0.9975629569455727,
+    "valid_samples": 1228
+   },
+   "wall_s_attempt": 1256.855630159378,
+   "wall_s_stage": 1256.855437040329
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794856577.93292,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 4,
+      "max_cores": 3.296,
+      "max_gap_s": 1.424223500303924,
+      "required_samples": 1019.7,
+      "samples": 1137
+     },
+     "output_dir": "legs/L012/runtime",
+     "record_wall_s": 1138.6078441143036,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 3.296,
+       "max_gap_s": 1.424223500303924,
+       "seconds": 1137
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1138.6076381206512,
+     "started_epoch_s": 1794855439.3250759
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1547,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1547,
+     "hand": 1547
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 213.225158,
+     "hand": 213.225158
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L012",
+     "hand": "L012"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 10000,
+     "hand": 10000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 1183198644,
+     "hand": 1183198644
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L004",
+      "redone": false
+     },
+     "hand": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L004",
+      "redone": false
+     }
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1138.6,
+     "hand": 1138.6
+    }
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": "3692d95c86c55895a5ac9e0cf9c1008cd54d2c257d305aa2105ec8c66fc4fc44",
+   "g0_reference_source_record": "cadence-cl-dev-03-l004",
+   "g0_role_hand": "consume",
+   "g0_role_record": "consume",
+   "g0_row_reference_fast_c": 34.20107460021973,
+   "g0_row_reference_source": "cadence-cl-dev-03-l004",
+   "g0_row_reference_span_ns": [
+    2831134761513646,
+    2831194761513646
+   ],
+   "g0_s_journal": 213.225157896,
+   "g0_s_record": 213.225157896,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L012",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 4,
+    "max_cores": 3.296,
+    "max_gap_s": 1.424223500303924,
+    "required_samples": 1019.7,
+    "samples": 1137
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": null,
+    "record_sha256": null,
+    "source_run_id": null,
+    "span_ns": null,
+    "status": "absent (consumer)"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.15,
+   "prefill_tokens": 10015,
+   "prefill_tokens_nominal_kit": 10000,
+   "prefill_tokens_nominal_spec": 10000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.07918352,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 1183198644,
+   "span_reference_hand": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L004",
+    "redone": false
+   },
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1116,
+    "gaps_ns": [
+     [
+      2840873592822083,
+      2840874758308499
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1165486416,
+    "sample_fraction": 0.9991039426523297,
+    "valid_samples": 1115
+   },
+   "wall_s_attempt": 1138.6078441143036,
+   "wall_s_stage": 1138.6076381206512
+  }
+ ],
+ "span": {
+  "agent_census": {
+   "argv": [
+    "/usr/bin/pgrep",
+    "-a",
+    "-lf",
+    "[c]odex|[c]laude"
+   ],
+   "first_after_start_s": 0.066087458,
+   "hits": 0,
+   "last_before_end_s": 22.8245565,
+   "max_gap_s": 30.291859792,
+   "polls": 407
+  },
+  "batch_windows": [
+   "02:00-02:35"
+  ],
+  "close_steps": {
+   "close-volumes": 0,
+   "restore": 0,
+   "stop-agents": 0,
+   "stop-meter": 0,
+   "stop-volumes": 0
+  },
+  "deadlines_files": [],
+  "feeds_proven_stopped": {
+   "agents": true,
+   "meter": true,
+   "volumes": true
+  },
+  "legs_finished": 9,
+  "legs_planned": 9,
+  "load_redos_used": 0,
+  "meter": {
+   "bad_polls": 0,
+   "elapsed_s": 12239.411014292,
+   "polls": 61197,
+   "present": true,
+   "proven_stopped": true,
+   "usb_errors": 0
+  },
+  "mock": false,
+  "n_steps": 37,
+  "rc": 0,
+  "read_power": {
+   "ac_powermode": 0,
+   "automatic": true,
+   "rc": 0
+  },
+  "redo_quota_kit": 2,
+  "redos_by_hand": 0,
+  "restore": {
+   "argv": [
+    "sudo",
+    "-n",
+    "/usr/bin/pmset",
+    "-c",
+    "powermode",
+    "0"
+   ],
+   "exit_code": 0,
+   "marker": null,
+   "marker_removed": false,
+   "observed": 0,
+   "ok": true,
+   "rc": 0,
+   "stderr": ""
+  },
+  "soak_rc": 0,
+  "soak_s": 1800.473102092743,
+  "span_result": {
+   "chain_exit_code": 0,
+   "chain_outcome": "COMPLETE",
+   "fault": false,
+   "outcome": "MEASURED_OK",
+   "verdict": "9/9 legs run"
+  },
+  "stages_end_rc_nonzero": [],
+  "stages_unclosed": [],
+  "step_names": [
+   "deadline",
+   "frozen",
+   "night_agents",
+   "ac_power",
+   "condition13",
+   "start-agents",
+   "start-meter",
+   "start-volumes",
+   "read_power",
+   "display",
+   "dwell",
+   "plan",
+   "before-soak-volumes",
+   "soak",
+   "before-L004-volumes",
+   "L004.a1",
+   "before-L005-volumes",
+   "L005.a1",
+   "before-L006-volumes",
+   "L006.a1",
+   "before-L007-volumes",
+   "L007.a1",
+   "before-L008-volumes",
+   "L008.a1",
+   "before-L009-volumes",
+   "L009.a1",
+   "before-L010-volumes",
+   "L010.a1",
+   "before-L011-volumes",
+   "L011.a1",
+   "before-L012-volumes",
+   "L012.a1",
+   "restore",
+   "stop-volumes",
+   "stop-meter",
+   "stop-agents",
+   "close-volumes"
+  ],
+  "steps_nonzero": [],
+  "stops_by_hand": [],
+  "volume_census": [
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ]
+  ]
+ }
+}
