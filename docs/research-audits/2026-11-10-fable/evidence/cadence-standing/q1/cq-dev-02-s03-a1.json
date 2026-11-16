@@ -1,0 +1,9 @@
+{
+ "schema": "joulewise.cadence_q1_record.v1",
+ "plan_id": "cq-dev-02-s03-a1",
+ "span_id": "dev-02-s03",
+ "attempt": 1,
+ "signer": "Laptop lead (interactive, Opus 5.5), desk-builder lane",
+ "recorded_at": "2026-11-16T05:33:03-08:00",
+ "print_ref": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-02-s03-a1/hand/r1print.out (RESULT.json keys RL150_R1_part3_print and RL158_Q1)"
+}

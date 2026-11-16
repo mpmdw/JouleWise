@@ -1,0 +1,1160 @@
+{
+ "desk_stops": [],
+ "diffs": [],
+ "legs": [
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794819639.227011,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 2,
+      "max_cores": 1.4709999999999999,
+      "max_gap_s": 1.2622100003063679,
+      "required_samples": 1114.8,
+      "samples": 1243
+     },
+     "output_dir": "legs/L007/runtime",
+     "record_wall_s": 1244.1826150417328,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.4709999999999999,
+       "max_gap_s": 1.2622100003063679,
+       "seconds": 1243
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1244.18248295784,
+     "started_epoch_s": 1794818395.044396
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 201.053117,
+     "hand": 201.053117
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L007",
+     "hand": "L007"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1244.2,
+     "hand": 1244.2
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 201.053117188,
+   "g0_s_record": 201.053117188,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L007",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 1.4709999999999999,
+    "max_gap_s": 1.2622100003063679,
+    "required_samples": 1114.8,
+    "samples": 1243
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.047288874,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 756369387,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1220,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1088502479,
+    "sample_fraction": 0.9983606557377049,
+    "valid_samples": 1218
+   },
+   "wall_s_attempt": 1244.1826150417328,
+   "wall_s_stage": 1244.18248295784
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794820890.3484411,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 4,
+      "max_cores": 2.1,
+      "max_gap_s": 1.1959110000170767,
+      "required_samples": 1120.4,
+      "samples": 1249
+     },
+     "output_dir": "legs/L008/runtime",
+     "record_wall_s": 1250.457379102707,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 2.1,
+       "max_gap_s": 1.1959110000170767,
+       "seconds": 1249
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1250.457221031189,
+     "started_epoch_s": 1794819639.891062
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 202.043663,
+     "hand": 202.043663
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L008",
+     "hand": "L008"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1250.5,
+     "hand": 1250.5
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 202.043663416,
+   "g0_s_record": 202.043663416,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L008",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 4,
+    "max_cores": 2.1,
+    "max_gap_s": 1.1959110000170767,
+    "required_samples": 1120.4,
+    "samples": 1249
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.065124604,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2814803342,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1224,
+    "gaps_ns": [
+     [
+      2805181141320353,
+      2805182243254583
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1101934230,
+    "sample_fraction": 0.9991830065359477,
+    "valid_samples": 1223
+   },
+   "wall_s_attempt": 1250.457379102707,
+   "wall_s_stage": 1250.457221031189
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794822147.955446,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 8,
+      "max_cores": 1.9609999999999999,
+      "max_gap_s": 1.2564604580402374,
+      "required_samples": 1126.1,
+      "samples": 1256
+     },
+     "output_dir": "legs/L009/runtime",
+     "record_wall_s": 1256.8148789405823,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.9609999999999999,
+       "max_gap_s": 1.2564604580402374,
+       "seconds": 1256
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1256.8147010803223,
+     "started_epoch_s": 1794820891.140567
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 204.093869,
+     "hand": 204.093869
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L009",
+     "hand": "L009"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1256.8,
+     "hand": 1256.8
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 204.093868874,
+   "g0_s_record": 204.093868874,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L009",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 8,
+    "max_cores": 1.9609999999999999,
+    "max_gap_s": 1.2564604580402374,
+    "required_samples": 1126.1,
+    "samples": 1256
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.053745167,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 3757715371,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1228,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1090497813,
+    "sample_fraction": 0.998371335504886,
+    "valid_samples": 1226
+   },
+   "wall_s_attempt": 1256.8148789405823,
+   "wall_s_stage": 1256.8147010803223
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794823405.8820128,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 3,
+      "max_cores": 2.1959999999999997,
+      "max_gap_s": 1.2105005416087806,
+      "required_samples": 1126.5,
+      "samples": 1256
+     },
+     "output_dir": "legs/L010/runtime",
+     "record_wall_s": 1257.2711737155914,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 2.1959999999999997,
+       "max_gap_s": 1.2105005416087806,
+       "seconds": 1256
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1257.27094912529,
+     "started_epoch_s": 1794822148.6108391
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 211.292133,
+     "hand": 211.292133
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L010",
+     "hand": "L010"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1257.3,
+     "hand": 1257.3
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 211.292132876,
+   "g0_s_record": 211.292132876,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L010",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 3,
+    "max_cores": 2.1959999999999997,
+    "max_gap_s": 1.2105005416087806,
+    "required_samples": 1126.5,
+    "samples": 1256
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.084090396,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2990673426,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1232,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1098984917,
+    "sample_fraction": 0.9983766233766234,
+    "valid_samples": 1230
+   },
+   "wall_s_attempt": 1257.2711737155914,
+   "wall_s_stage": 1257.27094912529
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794824645.4250891,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": true,
+      "longest_run_over_0p5_s": 711,
+      "max_cores": 3.753,
+      "max_gap_s": 1.1719855424016714,
+      "required_samples": 1110.0,
+      "samples": 1238
+     },
+     "output_dir": "legs/L011/runtime.rejected1",
+     "record_wall_s": 1238.8912131786346,
+     "recorded": {
+      "contaminated": true,
+      "os_load": {
+       "max_busy_cores": 3.753,
+       "max_gap_s": 1.1719855424016714,
+       "seconds": 1238
+      },
+      "redo_reason": "cpu_load",
+      "redone": true
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1238.8908243179321,
+     "started_epoch_s": 1794823406.533876
+    },
+    {
+     "attempt": 2,
+     "ended_epoch_s": 1794825907.257102,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 27,
+      "max_cores": 1.993,
+      "max_gap_s": 1.190398083999753,
+      "required_samples": 1130.0,
+      "samples": 1260
+     },
+     "output_dir": "legs/L011/runtime",
+     "record_wall_s": 1261.1566061973572,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.993,
+       "max_gap_s": 1.190398083999753,
+       "seconds": 1260
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1261.156289100647,
+     "started_epoch_s": 1794824646.1004958
+    }
+   ],
+   "attempts": 2,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 215.219995,
+     "hand": 215.219995
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L011",
+     "hand": "L011"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [
+      "cpu_load"
+     ],
+     "hand": [
+      "cpu_load"
+     ]
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1261.2,
+     "hand": 1261.2
+    }
+   },
+   "contaminated_redos": 1,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 215.219995355,
+   "g0_s_record": 215.219995355,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L011",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 27,
+    "max_cores": 1.993,
+    "max_gap_s": 1.190398083999753,
+    "required_samples": 1130.0,
+    "samples": 1260
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 2,
+   "redo": [
+    "cpu_load"
+   ],
+   "release_to_turn_s": 0.074454333,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 3918830640,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1236,
+    "gaps_ns": [
+     [
+      2808985334360354,
+      2808986439535541
+     ],
+     [
+      2810211360332562,
+      2810212478789687
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1118457125,
+    "sample_fraction": 0.9975728155339806,
+    "valid_samples": 1233
+   },
+   "wall_s_attempt": 1261.1566061973572,
+   "wall_s_stage": 1261.156289100647
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794827163.0804842,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 1,
+      "max_cores": 1.17,
+      "max_gap_s": 1.229959167074412,
+      "required_samples": 1124.6,
+      "samples": 1254
+     },
+     "output_dir": "legs/L012/runtime",
+     "record_wall_s": 1255.164025068283,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.17,
+       "max_gap_s": 1.229959167074412,
+       "seconds": 1254
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1255.1638050079346,
+     "started_epoch_s": 1794825907.916459
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1251,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1251,
+     "hand": 1251
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 211.201252,
+     "hand": 211.201252
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L012",
+     "hand": "L012"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1255.2,
+     "hand": 1255.2
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_s_journal": 211.201251895,
+   "g0_s_record": 211.201251895,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L012",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 1,
+    "max_cores": 1.17,
+    "max_gap_s": 1.229959167074412,
+    "required_samples": 1124.6,
+    "samples": 1254
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "pm_nominal_turn": false,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.093260917,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2835741939,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1230,
+    "gaps_ns": [
+     [
+      2811415139258083,
+      2811416239854875
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1100596792,
+    "sample_fraction": 0.9983739837398374,
+    "valid_samples": 1228
+   },
+   "wall_s_attempt": 1255.164025068283,
+   "wall_s_stage": 1255.1638050079346
+  }
+ ],
+ "span": {
+  "agent_census": {
+   "argv": [
+    "/usr/bin/pgrep",
+    "-a",
+    "-lf",
+    "[c]odex|[c]laude"
+   ],
+   "first_after_start_s": 0.071350958,
+   "hits": 0,
+   "last_before_end_s": 9.634003917,
+   "max_gap_s": 30.261008292,
+   "polls": 362
+  },
+  "batch_windows": [
+   "13:14-13:15"
+  ],
+  "close_steps": {
+   "close-volumes": 0,
+   "restore": 0,
+   "stop-agents": 0,
+   "stop-meter": 0,
+   "stop-volumes": 0
+  },
+  "deadlines_files": [],
+  "feeds_proven_stopped": {
+   "agents": true,
+   "meter": true,
+   "volumes": true
+  },
+  "legs_finished": 6,
+  "legs_planned": 6,
+  "load_redos_used": 1,
+  "meter": {
+   "bad_polls": 0,
+   "elapsed_s": 10871.811074583,
+   "polls": 54359,
+   "present": true,
+   "proven_stopped": true,
+   "usb_errors": 0
+  },
+  "mock": false,
+  "n_steps": 33,
+  "rc": 0,
+  "read_power": {
+   "ac_powermode": 0,
+   "automatic": true,
+   "rc": 0
+  },
+  "redo_quota_kit": 2,
+  "redos_by_hand": 1,
+  "restore": {
+   "argv": [
+    "sudo",
+    "-n",
+    "/usr/bin/pmset",
+    "-c",
+    "powermode",
+    "0"
+   ],
+   "exit_code": 0,
+   "marker": null,
+   "marker_removed": false,
+   "observed": 0,
+   "ok": true,
+   "rc": 0,
+   "stderr": ""
+  },
+  "soak_rc": 0,
+  "soak_s": 1800.4340751171112,
+  "span_result": {
+   "chain_exit_code": 0,
+   "chain_outcome": "COMPLETE",
+   "fault": false,
+   "outcome": "MEASURED_OK",
+   "verdict": "6/6 legs run"
+  },
+  "stages_end_rc_nonzero": [],
+  "stages_unclosed": [],
+  "step_names": [
+   "deadline",
+   "frozen",
+   "night_agents",
+   "ac_power",
+   "condition13",
+   "start-agents",
+   "start-meter",
+   "start-volumes",
+   "read_power",
+   "display",
+   "dwell",
+   "plan",
+   "before-soak-volumes",
+   "soak",
+   "before-L007-volumes",
+   "L007.a1",
+   "before-L008-volumes",
+   "L008.a1",
+   "before-L009-volumes",
+   "L009.a1",
+   "before-L010-volumes",
+   "L010.a1",
+   "before-L011-volumes",
+   "L011.a1",
+   "before-L011-volumes",
+   "L011.a2",
+   "before-L012-volumes",
+   "L012.a1",
+   "restore",
+   "stop-volumes",
+   "stop-meter",
+   "stop-agents",
+   "close-volumes"
+  ],
+  "steps_nonzero": [],
+  "stops_by_hand": [],
+  "volume_census": [
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ]
+  ]
+ }
+}

@@ -1,0 +1,1051 @@
+{
+ "plan_id": "cq-dev-02-s03-a1",
+ "span": "dev-02-s03",
+ "legs": [
+  "L007",
+  "L008",
+  "L009",
+  "L010",
+  "L011",
+  "L012"
+ ],
+ "built": "2026-11-16 05:32 PST on the Air (desk builder for the lead)",
+ "work_order": "RUN_STATE 354 (issued 2026-11-15 15:42:10 PST); launch RUN_STATE 360 (29e66c4b, 2026-11-16 ~00:04 PST); magistrate Check RUN_STATE 361 (f845859d, 03:21 PST); origin/main cd1c9bdeb",
+ "data": "/Volumes/JW-EXT/cadence-desk/cl-dev-02/cq-dev-02-s03-a1-20261116T080253Z (read-only copy; sha256 -c of all 256 manifest entries OK; .air and .mbp manifests byte-equal, sha256 8e7f1ee8ff71f2ceac2b953e9951d7a6bc89229e7eb8a484d84a47910d4ee547)",
+ "code": "b4b6aeb192da60d895a7529311b06599efff5be4 (/Volumes/JW-EXT/jw-wt/desk-final-pin-b4b6aeb19, detached, clean before and after, read-only)",
+ "kit": {
+  "source": "git show 589748f15af6415dc536520469cd19c7800d9adf:docs/process/cadence/kits/cl-dev-02.json (blob 7e8dc7a2), copied outside the checkout",
+  "sha256": "d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8",
+  "sha_asserted": true,
+  "receipt_kit": {
+   "campaign_id": "cl-dev-02",
+   "frozen_commit": "b4b6aeb192da60d895a7529311b06599efff5be4",
+   "sha256": "d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8"
+  }
+ },
+ "desk_command": "TMPDIR=<scratch>/tmp python3.13 -B scripts/air/cadence_desk.py build --plan-id cq-dev-02-s03-a1 --input <OUT>/desk-bundle --out auto --kit kit.json (rc 0, 'stops 0'; WITH --kit, never --adapter, per D6)",
+ "D6_span_result_json_exists": true,
+ "desk_stops_json": [],
+ "comparison": {
+  "per_leg_values_compared": 78,
+  "per_leg_values_differing": 0,
+  "fields_per_leg": [
+   "attempts",
+   "band_reached",
+   "budget_s",
+   "contaminated_redos",
+   "g0_outcome",
+   "g0_s",
+   "included/admitted",
+   "leg_id",
+   "os_level_max",
+   "pm_nominal",
+   "redo_reasons",
+   "start_band",
+   "wall_s(stage vs summary)"
+  ],
+  "inclusion_included": true,
+  "span_level_compared": [
+   "leg count",
+   "named stops (hand [] vs desk [])",
+   "result (desk_summary vs receipt span_result)",
+   "meter",
+   "feeds_proven_stopped"
+  ],
+  "span_level_differing": 0,
+  "diffs": [],
+  "scope_notes": [
+   "the desk table has no admitted column (dev-01 F8): admitted read from desk_summary.json, i.e. each leg_summary.json (D1)",
+   "hand 'reached' derives from G0 released + quiet_s 0 + release-to-turn < 5 s (0.047 / 0.065 / 0.054 / 0.084 / 0.074 / 0.093 s); same result",
+   "every leg reached os_level 2 / pm_state Heavy in its turn (non-Nominal from L007 236.3 s, L008 173.2 s, L009 170.3 s, L010 180.6 s, L011 180.1 s, L012 182.0 s after turn start, to the turn's end); hand os_level_max 2 / pm_nominal false agree with the desk on all six. Not a rule: kit inclusion 'no_drop_by_outcome'",
+   "rules 3 and 4 left to the look (meter present, 54,359 polls, 0 bad, 0 usb, proven stopped)",
+   "the desk omits restore lines and censuses; the hand table carries them clean"
+  ]
+ },
+ "hand_legs": [
+  {
+   "leg": "L007",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 201.053,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1244.2,
+   "budget_s": 1251,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 2,
+   "rule5_max_busy_cores": 1.4709999999999999,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   }
+  },
+  {
+   "leg": "L008",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 202.044,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1250.5,
+   "budget_s": 1251,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 4,
+   "rule5_max_busy_cores": 2.1,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   }
+  },
+  {
+   "leg": "L009",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 204.094,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1256.8,
+   "budget_s": 1251,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 8,
+   "rule5_max_busy_cores": 1.9609999999999999,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   }
+  },
+  {
+   "leg": "L010",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 211.292,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1257.3,
+   "budget_s": 1251,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 3,
+   "rule5_max_busy_cores": 2.1959999999999997,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   }
+  },
+  {
+   "leg": "L011",
+   "attempts": 2,
+   "g0": "released",
+   "g0_s": 215.22,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1261.2,
+   "budget_s": 1251,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 27,
+   "rule5_max_busy_cores": 1.993,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   }
+  },
+  {
+   "leg": "L012",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 211.201,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1255.2,
+   "budget_s": 1251,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 1,
+   "rule5_max_busy_cores": 1.17,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   }
+  }
+ ],
+ "desk_final": {
+  "verdict": "FINAL",
+  "meaning": "automatic desk = independent hand table on every value, inclusion included",
+  "basis": "0 of 78 per-leg and 0 of 5 span-level values differ; 6 of 6 included by hand, 6 of 6 admitted by desk; stops.json [] and hand stops []",
+  "R9": "not applicable (dev-02's pilot is dev-01's; item 354 line 8)"
+ },
+ "rules_by_hand": {
+  "1_ran_to_cap": "6/6 (decode 4,096/4,096 each, leg_status complete, stage rc 0)",
+  "2_g0_released": "6/6 (L007 201.1 s, L008 202.0 s, L009 204.1 s, L010 211.3 s, L011 215.2 s, L012 211.2 s; journal G0 = record g0_wait_s)",
+  "5_not_contaminated": "6/6 (counted attempt of each leg clean by hand; L011.a1 recorded contaminated cpu_load and fires by hand (a correct redo, 1 of quota 2); counted-attempt longest run over 0.5 core 2/4/8/3/27/1 s of 60; journals cover their attempts; hand agrees with recorded os_load)",
+  "6_power_mode_0": "6/6 (leg_record ac_powermode 0 at episode start; read_power before soak {'ac_powermode': 0, 'automatic': True, 'rc': 0}; restore observed 0)",
+  "3_4": "at the look; meter present, 54,359 polls, 0 bad, 0 usb, proven stopped"
+ },
+ "restore": {
+  "argv": [
+   "sudo",
+   "-n",
+   "/usr/bin/pmset",
+   "-c",
+   "powermode",
+   "0"
+  ],
+  "exit_code": 0,
+  "marker": null,
+  "marker_removed": false,
+  "observed": 0,
+  "ok": true,
+  "rc": 0,
+  "stderr": ""
+ },
+ "restore_proven_hand": true,
+ "close_steps_rc": {
+  "close-volumes": 0,
+  "restore": 0,
+  "stop-agents": 0,
+  "stop-meter": 0,
+  "stop-volumes": 0
+ },
+ "read_power_step_before_soak": {
+  "ac_powermode": 0,
+  "automatic": true,
+  "rc": 0
+ },
+ "LEG_OVERTIME": "no",
+ "LEG_OVERTIME_detail": "walls 1244.2, 1250.5, 1256.8, 1257.3, 1261.2, 1255.2 s against 1.5 x 1,251 = 1,876.5 s; max ratio 1.0081; 4 legs a few seconds over budget_s 1,251 (L009 +5.8 s, L010 +6.3 s, L011 +10.2 s, L012 +4.2 s), far under the 1.5 x limit; 0 legs over, stop needs 2",
+ "RL150_R1_part3_print": {
+  "soak_reference_line": "soak_reference {'TV0h': 34.127195721959, 'TV1h': 34.127195721959} Tf08_last1200s_mean 26.64902840486474",
+  "L007": {
+   "g0": {
+    "duration_s": 201.053117188,
+    "outcome": "released",
+    "release": {
+     "TV0h": 34.89231491088867,
+     "TV1h": 34.89231491088867,
+     "Tf08": 34.8728141784668
+    },
+    "row_reference": {
+     "fast_c": 34.16116714477539,
+     "slow_c": 34.16116714477539,
+     "source_member": "cadence-cl-dev-02-l007",
+     "span_ns": [
+      2803087261962416,
+      2803147261962416
+     ]
+    },
+    "row_release": {
+     "fast_c": 34.89231491088867,
+     "slow_c": 34.89231491088867
+    }
+   },
+   "own_reference": {
+    "TV0h": 34.16116714477539,
+    "TV1h": 34.16116714477539,
+    "Tf08_median": 27.027655601501465,
+    "status": "captured"
+   }
+  },
+  "L008": {
+   "g0": {
+    "duration_s": 202.043663416,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.09697341918945,
+     "TV1h": 35.09697341918945,
+     "Tf08": 36.856563568115234
+    },
+    "row_reference": {
+     "fast_c": 34.6876106262207,
+     "slow_c": 34.6876106262207,
+     "source_member": "cadence-cl-dev-02-l008",
+     "span_ns": [
+      2804331683896791,
+      2804391683896791
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.09697341918945,
+     "slow_c": 35.09697341918945
+    }
+   },
+   "own_reference": {
+    "TV0h": 34.6876106262207,
+    "TV1h": 34.6876106262207,
+    "Tf08_median": 32.50437355041504,
+    "status": "captured"
+   }
+  },
+  "L009": {
+   "g0": {
+    "duration_s": 204.093868874,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.06171417236328,
+     "TV1h": 35.06171417236328,
+     "Tf08": 36.56687545776367
+    },
+    "row_reference": {
+     "fast_c": 34.71028137207031,
+     "slow_c": 34.71028137207031,
+     "source_member": "cadence-cl-dev-02-l009",
+     "span_ns": [
+      2805581992076728,
+      2805641992076728
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.06171417236328,
+     "slow_c": 35.06171417236328
+    }
+   },
+   "own_reference": {
+    "TV0h": 34.71028137207031,
+    "TV1h": 34.71028137207031,
+    "Tf08_median": 32.690311431884766,
+    "status": "captured"
+   }
+  },
+  "L010": {
+   "g0": {
+    "duration_s": 211.292132876,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.01874542236328,
+     "TV1h": 35.01874542236328,
+     "Tf08": 36.16343688964844
+    },
+    "row_reference": {
+     "fast_c": 34.71851921081543,
+     "slow_c": 34.71851921081543,
+     "source_member": "cadence-cl-dev-02-l010",
+     "span_ns": [
+      2806839435458833,
+      2806899435458833
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.01874542236328,
+     "slow_c": 35.01874542236328
+    }
+   },
+   "own_reference": {
+    "TV0h": 34.71851921081543,
+    "TV1h": 34.71851921081543,
+    "Tf08_median": 32.72953224182129,
+    "status": "captured"
+   }
+  },
+  "L011": {
+   "g0": {
+    "duration_s": 215.219995355,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.05911636352539,
+     "TV1h": 35.05911636352539,
+     "Tf08": 36.255001068115234
+    },
+    "row_reference": {
+     "fast_c": 34.80009841918945,
+     "slow_c": 34.80009841918945,
+     "source_member": "cadence-cl-dev-02-l011",
+     "span_ns": [
+      2809336524378103,
+      2809396524378103
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.05911636352539,
+     "slow_c": 35.05911636352539
+    }
+   },
+   "own_reference": {
+    "TV0h": 34.80009841918945,
+    "TV1h": 34.80009841918945,
+    "Tf08_median": 33.57046890258789,
+    "status": "captured"
+   }
+  },
+  "L012": {
+   "g0": {
+    "duration_s": 211.201251895,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.066017150878906,
+     "TV1h": 35.066017150878906,
+     "Tf08": 36.53156280517578
+    },
+    "row_reference": {
+     "fast_c": 34.780282974243164,
+     "slow_c": 34.780282974243164,
+     "source_member": "cadence-cl-dev-02-l012",
+     "span_ns": [
+      2810597920704750,
+      2810657920704750
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.066017150878906,
+     "slow_c": 35.066017150878906
+    }
+   },
+   "own_reference": {
+    "TV0h": 34.780282974243164,
+    "TV1h": 34.780282974243164,
+    "Tf08_median": 33.41437530517578,
+    "status": "captured"
+   }
+  }
+ },
+ "RL150_R1_note": "TV0h = TV1h in every reading (soak, own references, G0 releases), so nothing routes under RL-149 section 5 item 6. Kit cl-dev-02 (v1): every leg captures its own reference (status captured, source_member = itself); no span reference",
+ "RL158_Q1": {
+  "applies": "Q1's hand print is defined for v1.1 spans (span reference = first leg's capture); cl-dev-02 is a v1 kit where each leg is its own reference",
+  "print": "RL150_R1_part3_print above IS this span's Q1 print in its v1 form: the soak reference, the first leg's (L007's) capture, and for every leg its own capture, release reading and G0 wait",
+  "first_leg_capture": {
+   "TV0h": 34.16116714477539,
+   "TV1h": 34.16116714477539,
+   "Tf08_median": 27.027655601501465,
+   "status": "captured"
+  },
+  "soak_reference_line": "soak_reference {'TV0h': 34.127195721959, 'TV1h': 34.127195721959} Tf08_last1200s_mean 26.64902840486474",
+  "g0_wait_s": {
+   "L007": 201.1,
+   "L008": 202.0,
+   "L009": 204.1,
+   "L010": 211.3,
+   "L011": 215.2,
+   "L012": 211.2
+  },
+  "marks": "none: L007 (the span's first leg) ran one attempt (no redo, not excluded); L011 is the redone leg",
+  "completion_record": "docs/research-audits/2026-11-10-fable/evidence/cadence-standing/q1/cq-dev-02-s03-a1.json (joulewise.cadence_q1_record.v1; RL-173 E)"
+ },
+ "RL156a": {
+  "starvation": "none",
+  "thermal_sampler": {
+   "L007": {
+    "cells": 1220,
+    "reads": 1220,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.089,
+    "empty_cells_on_100ms_tolerance": [
+     [
+      1183,
+      "post-turn",
+      106.3
+     ],
+     [
+      1206,
+      "post-turn",
+      125.3
+     ]
+    ],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1218,
+     "expected_samples": 1220
+    }
+   },
+   "L008": {
+    "cells": 1224,
+    "reads": 1225,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.102,
+    "empty_cells_on_100ms_tolerance": [
+     [
+      1204,
+      "post-turn",
+      138.7
+     ]
+    ],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1223,
+     "expected_samples": 1224
+    }
+   },
+   "L009": {
+    "cells": 1228,
+    "reads": 1229,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.09,
+    "empty_cells_on_100ms_tolerance": [
+     [
+      406,
+      "pre-G0",
+      127.3
+     ],
+     [
+      1208,
+      "post-turn",
+      100.3
+     ]
+    ],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1226,
+     "expected_samples": 1228
+    }
+   },
+   "L010": {
+    "cells": 1232,
+    "reads": 1233,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.099,
+    "empty_cells_on_100ms_tolerance": [
+     [
+      412,
+      "pre-G0",
+      116.5
+     ],
+     [
+      1207,
+      "post-turn",
+      135.6
+     ]
+    ],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1230,
+     "expected_samples": 1232
+    }
+   },
+   "L011": {
+    "cells": 1236,
+    "reads": 1237,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.118,
+    "empty_cells_on_100ms_tolerance": [
+     [
+      2,
+      "pre-G0",
+      115.8
+     ],
+     [
+      1214,
+      "post-turn",
+      121.4
+     ],
+     [
+      1228,
+      "post-turn",
+      155.0
+     ]
+    ],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1233,
+     "expected_samples": 1236
+    }
+   },
+   "L012": {
+    "cells": 1230,
+    "reads": 1231,
+    "read_errors": 0,
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.101,
+    "empty_cells_on_100ms_tolerance": [
+     [
+      1170,
+      "post-turn",
+      111.6
+     ],
+     [
+      1210,
+      "post-turn",
+      126.9
+     ]
+    ],
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1228,
+     "expected_samples": 1230
+    }
+   }
+  },
+  "thermal_note": "every 1-s cell holds a reading; 0 read errors; max intervals 1.089/1.102/1.09/1.099/1.118/1.101 s. Off-grid cells (100-155 ms from the grid, tolerance 100 ms): L007 2 post-turn, L008 1 post-turn, L009 1 pre-G0 + 1 post-turn, L010 1 pre-G0 + 1 post-turn, L011 1 pre-G0 + 2 post-turn, L012 2 post-turn; phases with any: ['post-turn', 'pre-G0']; none in G0 or the turn. Jitter, not starvation.",
+  "load_sampler": {
+   "L007": {
+    "samples": 1243,
+    "max_gap_s": 1.262,
+    "coverage_ok": true
+   },
+   "L008": {
+    "samples": 1249,
+    "max_gap_s": 1.196,
+    "coverage_ok": true
+   },
+   "L009": {
+    "samples": 1256,
+    "max_gap_s": 1.256,
+    "coverage_ok": true
+   },
+   "L010": {
+    "samples": 1256,
+    "max_gap_s": 1.211,
+    "coverage_ok": true
+   },
+   "L011": {
+    "samples": 1260,
+    "max_gap_s": 1.19,
+    "coverage_ok": true
+   },
+   "L012": {
+    "samples": 1254,
+    "max_gap_s": 1.23,
+    "coverage_ok": true
+   }
+  },
+  "inventory": "not exercised: the cadence-leg kind does not run the R1 ProcessInventory journal (item 354 line 8); no inventory journal in OUT (find -iname '*inventory*' empty)"
+ },
+ "os_level_census": {
+  "L007": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     236.3,
+     438.3
+    ],
+    "os_level": {
+     "0": 236,
+     "1": 25,
+     "2": 178
+    },
+    "pm_state": {
+     "Heavy": 178,
+     "Moderate": 25,
+     "Nominal": 236
+    },
+    "readings": 439
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     236.3,
+     492.3
+    ],
+    "os_level": {
+     "0": 966,
+     "1": 40,
+     "2": 214
+    },
+    "pm_state": {
+     "Heavy": 232,
+     "Moderate": 25,
+     "Nominal": 438,
+     "None": 525
+    },
+    "readings": 1220
+   }
+  },
+  "L008": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     173.2,
+     439.2
+    ],
+    "os_level": {
+     "0": 173,
+     "1": 50,
+     "2": 217
+    },
+    "pm_state": {
+     "Heavy": 217,
+     "Moderate": 50,
+     "Nominal": 173
+    },
+    "readings": 440
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     173.2,
+     495.2
+    ],
+    "os_level": {
+     "0": 907,
+     "1": 67,
+     "2": 251
+    },
+    "pm_state": {
+     "Heavy": 273,
+     "Moderate": 50,
+     "Nominal": 376,
+     "None": 526
+    },
+    "readings": 1225
+   }
+  },
+  "L009": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     170.3,
+     440.3
+    ],
+    "os_level": {
+     "0": 170,
+     "1": 47,
+     "2": 224
+    },
+    "pm_state": {
+     "Heavy": 224,
+     "Moderate": 47,
+     "Nominal": 170
+    },
+    "readings": 441
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     170.3,
+     497.3
+    ],
+    "os_level": {
+     "0": 908,
+     "1": 63,
+     "2": 258
+    },
+    "pm_state": {
+     "Heavy": 281,
+     "Moderate": 47,
+     "Nominal": 375,
+     "None": 526
+    },
+    "readings": 1229
+   }
+  },
+  "L010": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     180.6,
+     440.6
+    ],
+    "os_level": {
+     "0": 180,
+     "1": 40,
+     "2": 221
+    },
+    "pm_state": {
+     "Heavy": 221,
+     "Moderate": 40,
+     "Nominal": 180
+    },
+    "readings": 441
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     180.6,
+     494.7
+    ],
+    "os_level": {
+     "0": 917,
+     "1": 57,
+     "2": 259
+    },
+    "pm_state": {
+     "Heavy": 275,
+     "Moderate": 40,
+     "Nominal": 392,
+     "None": 526
+    },
+    "readings": 1233
+   }
+  },
+  "L011": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     180.1,
+     439.1
+    ],
+    "os_level": {
+     "0": 180,
+     "1": 49,
+     "2": 211
+    },
+    "pm_state": {
+     "Heavy": 211,
+     "Moderate": 49,
+     "Nominal": 180
+    },
+    "readings": 440
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     180.1,
+     494.3
+    ],
+    "os_level": {
+     "0": 925,
+     "1": 66,
+     "2": 246
+    },
+    "pm_state": {
+     "Heavy": 266,
+     "Moderate": 49,
+     "Nominal": 396,
+     "None": 526
+    },
+    "readings": 1237
+   }
+  },
+  "L012": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     182.0,
+     439.0
+    ],
+    "os_level": {
+     "0": 181,
+     "1": 46,
+     "2": 212
+    },
+    "pm_state": {
+     "Heavy": 212,
+     "Moderate": 46,
+     "Nominal": 181
+    },
+    "readings": 439
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     182.0,
+     494.0
+    ],
+    "os_level": {
+     "0": 922,
+     "1": 62,
+     "2": 247
+    },
+    "pm_state": {
+     "Heavy": 267,
+     "Moderate": 46,
+     "Nominal": 393,
+     "None": 525
+    },
+    "readings": 1231
+   }
+  }
+ },
+ "rule5_placement": {
+  "L007": {
+   "attempt": 1,
+   "runs_ge_3s": []
+  },
+  "L008": {
+   "attempt": 1,
+   "runs_ge_3s": [
+    {
+     "len_samples": 4,
+     "t_s": [
+      541.1,
+      544.1
+     ],
+     "pst": [
+      "01:09:41",
+      "01:09:43"
+     ],
+     "max_cores": 1.352
+    },
+    {
+     "len_samples": 4,
+     "t_s": [
+      1246.1,
+      1249.1
+     ],
+     "pst": [
+      "01:21:26",
+      "01:21:28"
+     ],
+     "max_cores": 1.147
+    }
+   ]
+  },
+  "L009": {
+   "attempt": 1,
+   "runs_ge_3s": [
+    {
+     "len_samples": 8,
+     "t_s": [
+      1.1,
+      8.1
+     ],
+     "pst": [
+      "01:21:32",
+      "01:21:39"
+     ],
+     "max_cores": 1.171
+    }
+   ]
+  },
+  "L010": {
+   "attempt": 1,
+   "runs_ge_3s": [
+    {
+     "len_samples": 3,
+     "t_s": [
+      576.1,
+      578.1
+     ],
+     "pst": [
+      "01:52:04",
+      "01:52:06"
+     ],
+     "max_cores": 0.732
+    }
+   ]
+  },
+  "L011": {
+   "attempt": 2,
+   "runs_ge_3s": [
+    {
+     "len_samples": 4,
+     "t_s": [
+      368.1,
+      371.1
+     ],
+     "pst": [
+      "02:30:14",
+      "02:30:17"
+     ],
+     "max_cores": 1.03
+    },
+    {
+     "len_samples": 27,
+     "t_s": [
+      599.1,
+      625.1
+     ],
+     "pst": [
+      "02:34:05",
+      "02:34:31"
+     ],
+     "max_cores": 1.021
+    },
+    {
+     "len_samples": 16,
+     "t_s": [
+      804.1,
+      819.1
+     ],
+     "pst": [
+      "02:37:30",
+      "02:37:45"
+     ],
+     "max_cores": 1.744
+    },
+    {
+     "len_samples": 4,
+     "t_s": [
+      1055.1,
+      1058.1
+     ],
+     "pst": [
+      "02:41:41",
+      "02:41:44"
+     ],
+     "max_cores": 1.111
+    }
+   ]
+  },
+  "L012": {
+   "attempt": 1,
+   "runs_ge_3s": []
+  }
+ },
+ "maintenance_overlap": "MAINTENANCE-OVERLAP.md (print only, gates nothing). Item 361's one load redo is the rule 5 case item 354 names, judged as the dev-01-s04 desk judged L012.a1: by the load journal's sustained-load test (RL-72 E2, > 0.5 core held 60 s), not by log-line counts. L011.a1 (02:03:26-02:24:05, redone for cpu_load): the load journal holds ONE run of 711 consecutive 1-s samples over 0.5 core, 02:09:10-02:21:00 PST (344.1-1054.1 s into the attempt; max 3.753 cores), i.e. 711 of 60 required seconds; it spans the attempt's G0 (02:12:08-02:15:20) and its turn. Its start matches the OS burst's start (maint_burst.out: softwareupdated and mds from 02:09:11, XProtect* from 02:09:27, 568 XProtectPluginService + 26 XProtect + 2,397 mobileassetd entries in the 02:09 minute) and its end matches XProtect's last entry (02:21:00). Maintenance-log totals for the attempt: dasd 8,866, mobileassetd 3,568, XProtect* 794, mds 73, softwareupdated 9, backupd 15. The runner recorded L011.a1 contaminated true, redo_reason cpu_load, redone true; the hand recomputation (hand_table.json attempt_detail) fires and agrees with the record. RULE 5 FIRES on L011.a1: the redo was correct (1 of quota 2); the attempt is excluded from the counted set by the redo, not by an inclusion rule. L011.a2 (02:24:06-02:45:07, counted): longest run over 0.5 core 27 s (rule5_place.out: 4 s at 02:30:14, 26 s at 02:34:05 max 1.021 cores, 15 s at 02:37:30 max 1.744 cores, 4 s at 02:41:41; hand max 1.993 cores), none near 60 s; it does not fire; runner recorded clean (contaminated false, no redo); hand agrees. Its mobileassetd 614/437/400 per 10 min (pre-G0 and later) and mds 5 are the tail of the batch and do not fire. Other legs: the 01:20 bucket's mobileassetd 3,652 lines sits in L008's post-turn (2,116, 01:20:02-01:21:30) and L009's pre-G0 (1,291, 01:21:31-01:30:10); longest runs over 0.5 core there are 4 s (L008, 01:21:26) and 8 s (L009, 01:21:32, max 1.171 cores); no fire, no redo, passes. L007, L010, L012: runs <= 4 s (L007 and L012 none >= 3 s). XProtect* is 0 in every attempt except L011.a1. JUDGEMENT: rule 5 passes on the six counted attempts (L007, L008, L009, L010, L011.a2, L012.a1); the L011.a1 redo is correct; nothing excluded, no further redo owed. G0 released 201.1-215.2 s on all six (L011.a2 215.2 s, the span's longest, its G0 02:32:45-02:36:20 holding only mobileassetd 1 and dasd 392). Recorded for the look, print only: the nightly batch window 02:00-02:20 overlapped L010.a1's end (dasd 1,087-1,103 per phase, no XProtect) and all of L011.a1; kit no_drop_by_outcome.",
+ "span_level": {
+  "rc": 0,
+  "mock": false,
+  "batch_windows": [
+   "13:14-13:15"
+  ],
+  "soak_rc": 0,
+  "agent_census": {
+   "argv": [
+    "/usr/bin/pgrep",
+    "-a",
+    "-lf",
+    "[c]odex|[c]laude"
+   ],
+   "first_after_start_s": 0.071350958,
+   "hits": 0,
+   "last_before_end_s": 9.634003917,
+   "max_gap_s": 30.261008292,
+   "polls": 362
+  },
+  "deadlines_files": [],
+  "load_redos_used": 1,
+  "feeds_proven_stopped": {
+   "agents": true,
+   "meter": true,
+   "volumes": true
+  },
+  "meter": {
+   "bad_polls": 0,
+   "elapsed_s": 10871.811074583,
+   "polls": 54359,
+   "present": true,
+   "proven_stopped": true,
+   "usb_errors": 0
+  },
+  "stages_unclosed": [],
+  "stages_end_rc_nonzero": [],
+  "steps_nonzero": [],
+  "n_steps": 33,
+  "legs_finished": 6,
+  "legs_planned": 6
+ },
+ "span_level_extra": {
+  "soak_s": 1800.4,
+  "volume_census": "10/10 PASS",
+  "redo_quota_kit": 2
+ },
+ "time_calendar_only": {
+  "receipt_started_epoch_s": 1794816291.130414,
+  "receipt_ended_epoch_s": 1794827163.903691,
+  "runner_span_s": 10872.8,
+  "item_360_plan_expected_s": 10656,
+  "item_360_plan_worst_s": 24750,
+  "mean_leg_wall_s": 1254.2
+ },
+ "block_line_dev02": "dev-02: 12 of 12 legs collected (L001-L006 in dev-02-s02, desk 522815544; L007-L012 in this span: 6 run, 6 admitted by the desk, 6 included by hand, 0 excluded, 1 load redo (L011.a1, cpu_load, correct; quota 2), 0 named stops)"
+}
