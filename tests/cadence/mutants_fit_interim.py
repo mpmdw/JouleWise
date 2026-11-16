@@ -141,7 +141,7 @@ MUTANTS = [
     ("e1_dc_excess_ignored", RUN, 'elif dc["clock_fit_excess_s"] is not None and dc["clock_fit_excess_s"] > TF.CLOCK_FIT_EXCESS_MAX_S:', 'elif False:', [T_TF + ".ClockFitExcessClause"]),
     ("e1_dc_bracket_ignored", RUN, '        if not dc["bracketed"]:\n', '        if False:\n', [T_RUN, TF_CLAUSES]),
     ("e1_validator_gpu_inclusive", FIT, 'over_g = g["max_gap_s"] is None or g["max_gap_s"] > TRACE_MAX_GAP_S', 'over_g = g["max_gap_s"] is None or g["max_gap_s"] >= TRACE_MAX_GAP_S', [TF_CLAUSES]),
-    ("e1_validator_excluded_rule_passes", FIT, '        if (g["excluded"] and leg["inclusion"]["sidecar_coverage"]) or (d["excluded"] and leg["inclusion"]["km003c_clean"]):', '        if False:', [T_TF, T_FIT]),
+    ("e1_validator_excluded_rule_passes", FIT, '        if (g["excluded"] and leg["inclusion"]["sidecar_coverage"]) or (d["excluded"] and leg["inclusion"]["km003c_clean"]):', '        if False:', [T_TF + ".LevelRTraceRecord"]),
     ("e1_clause_not_anded_gpu", RUN, '            inc["sidecar_coverage"] = inc["sidecar_coverage"] and not holes["gpu_rail"]["excluded"]', '            inc["sidecar_coverage"] = inc["sidecar_coverage"]', [TF_CLAUSES]),
     ("e1_gpu_backstop_inclusive", RUN, '                if gap > gpu_max_gap_s:', '                if gap >= gpu_max_gap_s:', [TF_CLAUSES]),
     ("e1_dc_backstop_at_3s", RUN, '        if gap > METER_MAX_GAP_S:', '        if gap > 3.0:', [TF_BACKSTOPS]),

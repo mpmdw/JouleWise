@@ -751,6 +751,53 @@ class ClockFitExcessClause(unittest.TestCase):
         self.assertLess(dc["clock_fit_excess_s"], 0.01)
 
 
+@NEEDS_NUMPY
+class LevelRTraceRecord(unittest.TestCase):
+    """fit_interim.validate_input on the RL-173 E.1 record: stage 1 refuses a level-R file whose clause verdicts
+    disagree with their numbers, whose excluded clause leaves its rule true, or that lacks what a real look carries."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.c = TLR._Custody.get()
+        cls.li = cls.c.read_r()
+
+    def refused(self, mutate, fragment):
+        li = copy.deepcopy(self.li)
+        leg = next(x for x in li["legs"] if x["trace_holes"] and all(x["inclusion"].values()))
+        mutate(li, leg)
+        with self.assertRaisesRegex(F.LookInputError, fragment):
+            F.validate_input(li)
+
+    def test_the_record_is_checked(self):
+        F.validate_input(copy.deepcopy(self.li))                       # the control
+        gpu = lambda **kw: (lambda li, leg: leg["trace_holes"]["gpu_rail"].update(kw))
+        dc = lambda **kw: (lambda li, leg: leg["trace_holes"]["dc_in"].update(kw))
+        self.refused(gpu(max_gap_s=3.0, excluded=True, reason="a stretch over 2 s with no power_trace row"),
+                     "a trace clause excluded the leg but its rule passes")
+        self.refused(dc(max_gap_s=2.5, excluded=True, reason="a gap over 2 s between decoded meter samples"),
+                     "a trace clause excluded the leg but its rule passes")
+        self.refused(gpu(max_gap_s=2.5), "a clause's verdict disagrees with its numbers and the 2 s bound")
+        self.refused(gpu(max_gap_s=None), "a clause's verdict disagrees with its numbers")
+        self.refused(dc(clock_fit_excess_s=2.5), "a clause's verdict disagrees with its numbers")
+        self.refused(dc(bracketed=False), "a clause's verdict disagrees with its numbers")
+        self.refused(dc(excluded=True), "excluded exactly when a reason is given")
+        self.refused(gpu(reason="x"), "excluded exactly when a reason is given")
+        self.refused(lambda li, leg: leg.update(turn=None, inclusion={k: False for k in leg["inclusion"]}),
+                     "trace clauses on a leg with no turn or outside the fit")
+        self.refused(lambda li, leg: leg.update(ruled_exclusion={"rule": "km003c_clean", "ruling": "RL-999"}),
+                     "a ruled exclusion's rule passes")
+        self.refused(lambda li, leg: leg.update(ruled_exclusion={"rule": "ran_to_cap", "ruling": "RL-999"}),
+                     "rule 3's or 4's id and an RL-n ruling")
+        real = lambda f: (lambda li, leg: (li.update(synthetic=False), f(li, leg)))
+        self.refused(real(lambda li, leg: leg.update(trace_holes=None)),
+                     "a real look's development leg with a turn carries its trace clauses")
+        self.refused(real(lambda li, leg: next(s for s in li["spans"] if s["span_id"] == leg["span_id"]).update(
+            custody=None)), "a real look's span carries its custody digests")
+        li = copy.deepcopy(self.li)                                     # a real look as stage 1 reads it: accepted
+        li["synthetic"] = False
+        F.validate_input(li)
+
+
 # ============================================================================================ 4. backstops
 @NEEDS_NUMPY
 class StageTwoBackstops(unittest.TestCase):
