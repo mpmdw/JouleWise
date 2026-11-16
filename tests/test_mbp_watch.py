@@ -498,6 +498,27 @@ class MbpWatchTests(unittest.TestCase):
             w.watch(self.ns(), git=w.Git(self.work), api=fresh, now=NOW)  # the very first run: a gap too
         self.assertEqual(self.titles(fresh), ["mbp-alarm WATCHER_GAP watcher NO_RECENT_RUN"])
 
+    # --- round-7 regressions (Sol r7 findings 1, 2, 5) -------------------------------------------
+
+    def test_each_recovery_is_its_own_gap_even_if_an_old_success_is_undone(self):
+        api = FakeApi(runs=[self.wrun(1, NOW - 3 * 86400)])
+        self.watch(api)
+        api.issues[0]["state"] = "closed"  # the lead acknowledged the first outage
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.pushes_at_commit_times(api)
+            w.watch(self.ns(run_id=424242), git=w.Git(self.work), api=api, now=NOW + 86400)  # a later recovery
+        self.assertEqual(len(self.opened(api)), 2)
+
+    def test_span_ids_are_the_campaign_form_only(self):
+        for plan in ("ENERGY_J_123456_TOKEN_IDS_101_202_PRIVATE_TEXT-a1", "cq-Upper-a1", "cq-x-a0", "x-a1"):
+            with self.subTest(plan=plan), self.assertRaises(w.WatchError):
+                self.arm(plan=plan)
+
+    def test_gap_evidence_is_validated_like_read(self):
+        future = self.wrun(1, NOW + 86400)
+        with self.assertRaises(w.WatchError):
+            w.watch_gap(FakeApi(runs=[future]), NOW, None)
+
     def test_workflow_shape(self):
         text = WORKFLOW.read_text()
         self.assertIn('cron: "3-59/10 * * * *"', text)

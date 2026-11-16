@@ -59,18 +59,19 @@ Every 10 minutes (cron `3-59/10`, off the hour's peak; GitHub does not guarantee
 |---|---|---|
 | `SPAN_SILENT` | an arm with no close visible by its deadline + 1,200 s (C.1). "Visible" is the later of the close's own time and its **server-side push time**, read from GitHub's repository activity API (`GET /repos/mpmdw/JouleWise/activity?ref=refs/heads/span-watch/log&activity_type=push&time_period=quarter`, all pages): each record is pushed alone, so its own push row is its publication time (fractional seconds kept); without one, a later record's push is only an upper bound. So a close that finished late, was pushed late, or arrived between two delayed polls is still filed. A close the API does not show yet counts as visible only at this observation (conservative). GitHub's own push row is honoured at any age. A close older than the activity window with no row left is judged by its own time: every watcher run while it was inside the window judged it with exact evidence, and a run that follows a gap in the watcher's own runs files `WATCHER_GAP` (below), so a close first seen after an outage is never accepted silently | `NO_RESULTS_REF` |
 | `SPAN_STOP` | a close with a status other than `CLOSED_OK` | the status |
-| `WATCHER_GAP` | no other successful run of this workflow started in the 2 h before this one (an outage, or the very first run): whatever the log gained meanwhile was not judged as it happened. The lead reads the log's records for that time and closes the issue; the arm's read refuses until then | `NO_RECENT_RUN` |
+| `WATCHER_GAP` | no other successful run of this workflow started in the 2 h before this one (an outage, or the very first run; keyed by this run, so every recovery is its own issue): whatever the log gained meanwhile was not judged as it happened. The lead reads the log's records for that time and closes the issue; the arm's read refuses until then | `NO_RECENT_RUN` |
 | `RESULT_UNREADABLE` | a malformed arm or close, a close without an arm, or a log commit that is not one addition | `ARM_RECORD`, `CLOSE_RECORD`, `LOG_REWRITTEN` |
 
 - **No age limit.** An obligation lasts as long as the log, which cannot be deleted or rewritten; there is no
   lookback that can drop a stop the watcher has not seen. Legacy `night-results/*` refs are not read here:
   the Air's `night_results_watch.py` keeps covering them.
 - **Issues (C.2, C.3).** One `mbp-alarm` issue per event, titled `mbp-alarm <CODE> <span> <detail> <sha12>`,
-  assigned to the repository owner and opening with an `@owner` mention. Every word comes from the closed
-  vocabularies in `scripts/mbp_watch.py`; a record's own strings are never copied (an unknown hold code
-  prints as `UNKNOWN_HOLD`). The body holds the span id, code, detail, ref, record id, times and run link,
-  and a hidden key `CODE:span:detail:id`.
-- **Episodes.** A stop, hold or unreadable record is keyed by the commit that carries it, so a new record is
+  assigned to the repository owner and opening with an `@owner` mention. The issue holds closed-vocabulary
+  codes and details, the span id, the log ref, a record id (hex), times and the run link, and a hidden key
+  `CODE:span:detail:id`; no other field of a record is copied. The span id is the one producer string that
+  reaches the issue: `arm` accepts only the campaign form `cq-<lower-case words>-a<N>` (at most 64
+  characters), and producers must use the registered, public span ids.
+- **Episodes.** A stop or an unreadable record is keyed by the commit that carries it, so a new record is
   a new event and the same one is never filed twice. A silence is keyed by the arm's commit, so it is
   filed once per launch. Closing an issue is the lead's acknowledgement that the event is handled. An open
   issue that was created without the label or the assignee (found by its creator, `github-actions[bot]`, and its hidden key) is repaired on the next run, and the run fails
@@ -153,8 +154,8 @@ What is missing, in order:
 3. **Authenticated inputs.** `final` needs `--kit` (the kit file the queue entry pins, checked by hash), the
    queue at `queue.commit:queue.path` from the transition (verified against `queue.sha256`), the
    `cadence-controller` allowed-signers line, and for `--history-prefix` the earlier signed verdict refs with
-   the `cadence-desk` line. Both desks must use the same history snapshot (pin the history refs' commits),
-   or a later verdict manufactures a disagreement. The signer lines are public keys; no secret is needed.
+   the `cadence-desk` line. FORMAT section 6 lets each desk use its own signed record history; record which
+   history snapshot each desk used and rely on `agreement_view`'s exclusions of history-dependent terms. The signer lines are public keys; no secret is needed.
 4. **The comparison.** PR #799 already has `desk_final.agreement_view` and `compare_verdicts`, which compare the
    automatic part of two verdicts and exclude later hand inputs (`HAND_TABLE_DUE` against a hand-completed
    verdict is not a disagreement). The Actions desk should use them, not a new comparison. A disagreement

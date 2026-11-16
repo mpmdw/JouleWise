@@ -31,7 +31,8 @@ holds are the controller's own arm gate (line 9), not this watcher's.
 Each event opens one ``mbp-alarm`` issue, assigned to the repository owner with a mention (C.3), keyed by
 code, span, detail and the record's commit, so a new record is a new episode and an old one is never
 re-filed.
-Every word in an issue comes from a closed vocabulary in this file, never from a record (C.2). A failed
+An issue holds closed-vocabulary codes, the span id (``cq-<lower-case words>-a<N>`` only), the log ref, a
+hex record id, numbers and the run link; no other record field is copied (C.2). A failed
 listing, fetch, issue read, or an issue creation that GitHub does not confirm, fails the run.
 
 ``read`` (C.4): the workflow's latest completed run on ``main`` succeeded, started after ``--after-epoch``
@@ -60,7 +61,9 @@ import urllib.request
 WORKFLOW = "mbp-watch.yml"
 LABEL = "mbp-alarm"
 BOT = "github-actions[bot]"  # the workflow's GITHUB_TOKEN files every alarm as this user
-PLAN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+PLAN_RE = re.compile(r"cq(-[a-z0-9]+)+-a[1-9][0-9]{0,3}")
+PLAN_MAX = 64
+PSEUDO_SPANS = ("span-watch-log", "watcher")  # the subjects of LOG_REWRITTEN and WATCHER_GAP
 LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
 REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 SHA_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -97,8 +100,7 @@ class WatchError(Exception):
 
 
 def plan_ok(value):
-    return isinstance(value, str) and PLAN_RE.fullmatch(value) is not None and ".." not in value \
-        and not value.endswith((".", ".lock"))
+    return isinstance(value, str) and len(value) <= PLAN_MAX and PLAN_RE.fullmatch(value) is not None
 
 
 def number(value):
@@ -382,7 +384,7 @@ def read_log(git):
             problems.append(("LOG_REWRITTEN", sha))
             continue
         kind = "arm" if match.group(1) == "arms" else "close"
-        if (kind, match.group(2)) in records:  # a path deleted and added again: the first addition stands
+        if not plan_ok(match.group(2)) or (kind, match.group(2)) in records:  # an off-form id, or a re-add  # a path deleted and added again: the first addition stands
             problems.append(("LOG_REWRITTEN", sha))
             continue
         records[(kind, match.group(2))] = (git.blob(sha, changes[0][1]), sha, when)
@@ -508,7 +510,8 @@ def title(event_):
 
 def body(event_, owner, run_url):
     """Only closed-vocabulary words, a pattern-checked span id, a ref, a sha, numbers and the run link."""
-    if event_["code"] not in EVENT_CODES or event_["detail"] not in DETAILS or not plan_ok(event_["plan"]) \
+    if event_["code"] not in EVENT_CODES or event_["detail"] not in DETAILS \
+            or not (plan_ok(event_["plan"]) or event_["plan"] in PSEUDO_SPANS) \
             or not SHA_RE.fullmatch(event_["sha"] or "") \
             or event_["ref"] != LOG_REF:
         raise WatchError("UNSAFE_FIELD")
@@ -614,14 +617,20 @@ def watch_gap(api, now, run_id):
         raise WatchError("API_SHAPE_RUNS")
     starts = []
     for run in answer["workflow_runs"]:
-        if not isinstance(run, dict) or type(run.get("id")) is not int or parse_time(run.get("run_started_at")) is None:
+        if not isinstance(run, dict) or type(run.get("id")) is not int or parse_time(run.get("run_started_at")) is None \
+                or run.get("status") != "completed" or run.get("conclusion") != "success":
             raise WatchError("API_SHAPE_RUNS")
+        if parse_time(run["run_started_at"]) > now + CLOCK_SLACK_S:
+            raise WatchError("RUN_IN_FUTURE")
         if run["id"] != run_id:
             starts.append((parse_time(run["run_started_at"]), run["id"]))
     previous = max(starts) if starts else None
     if previous is not None and now - previous[0] <= GAP_S:
         return []
-    marker = hashlib.sha256(f"watcher-gap:{previous[1] if previous else 'none'}".encode()).hexdigest()
+    # Keyed by THIS run (a fresh id per recovery), never by the predecessor, whose success a re-run can undo:
+    # an acknowledged earlier gap can never stand for a later one.
+    own = run_id if run_id is not None else (previous[1] if previous else "none")
+    marker = hashlib.sha256(f"watcher-gap:{own}".encode()).hexdigest()
     times = {"observed": now} if previous is None else {"t0": previous[0], "observed": now}
     return [event("WATCHER_GAP", "NO_RECENT_RUN", "watcher", LOG_REF, marker, **times)]
 
@@ -657,7 +666,7 @@ def read(args, api=None, now=None):
     one-day windows, each paginated and checked against its ``total_count``. The latest is the most recently
     started execution among them (a re-run counts with its own start; ties by ``run_number`` then
     ``run_attempt``), so a newer failed re-run of an old run is the latest and refuses. A start up to 300 s in
-    the future is clock skew; more is an error. A malformed answer is an error, never a pass. About 32 API
+    the future is clock skew; more is an error. A malformed answer is an error, never a pass. About 65 API
     calls: set ``GH_TOKEN`` (the unauthenticated limit is 60 an hour).
     """
     now = time.time() if now is None else now
@@ -745,7 +754,7 @@ def alarm_poll(state_path, notify, api):
         match = KEY_RE.search(row.get("body") or "")
         parts = match.group(1).split(":") if match else []
         code = parts[0] if parts and parts[0] in EVENT_CODES else "UNKNOWN"
-        plan = parts[1] if len(parts) > 1 and plan_ok(parts[1]) else "unknown"
+        plan = parts[1] if len(parts) > 1 and (plan_ok(parts[1]) or parts[1] in PSEUDO_SPANS) else "unknown"
         # The notifier shows level, code and one subject token: the subject carries span, issue and code.
         line = (f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M:%S} ALARM MBP_ALARM "
                 f"issue-{number_}/{code}/{plan}")  # the notifier keeps 80 characters: identity first
