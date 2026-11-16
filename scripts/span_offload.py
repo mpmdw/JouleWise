@@ -62,6 +62,9 @@ def parser():
 
 def run(args):
     if args.command == "offload":
+        # The config is a control file: it must not be read from inside OUT (A.4), so check before reading.
+        if so._overlaps(args.config, args.span_dir):
+            raise so.refused("PATH_OVERLAPS_SPAN", "the config file is inside the span directory")
         config = so.load_mbp_config(args.config)
         required = args.require_file if args.require_file is not None else ["runner_receipt.json"]
         record = so.offload(config, args.plan, args.span_dir, require_files=required,
@@ -95,6 +98,7 @@ class Terminated(BaseException):
 
 
 def _terminate(signum, _frame):
+    so.kill_children()  # first, so no unwinding step waits on a stalled openssl
     raise Terminated(signum)
 
 

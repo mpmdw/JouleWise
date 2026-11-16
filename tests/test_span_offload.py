@@ -512,6 +512,7 @@ class SpanOffloadTests(unittest.TestCase):
         def tamper_after_build(*args, **kwargs):
             stage, descriptor, reused = real_build(*args, **kwargs)
             path = stage / f"{PLAN}.tgz.enc"
+            os.chmod(path, 0o600)
             data = bytearray(path.read_bytes()); data[-1] ^= 1; path.write_bytes(bytes(data))
             return stage, descriptor, reused
 
@@ -716,8 +717,12 @@ class SpanOffloadTests(unittest.TestCase):
 
     def test_no_time_left_does_nothing(self):
         with self.assertRaises(so.OffloadError) as caught:
-            so.offload(dict(self.config, default_budget_s=-1), PLAN, self.span, allow_local=True)
+            so.offload(self.config, PLAN, self.span, allow_local=True, deadline_epoch=time.time() - 1)
         self.assertEqual(caught.exception.code, "DEADLINE")
+        for bad in (-1, 0, float("nan"), "90"):
+            with self.assertRaises(so.OffloadError) as caught:
+                so.offload(dict(self.config, default_budget_s=bad), PLAN, self.span, allow_local=True)
+            self.assertEqual(caught.exception.code, "CONFIG")
         self.assertEqual([n for n in os.listdir(self.tmp / "stage") if not n.startswith(".")], [])
 
     def test_remote_must_be_a_named_rclone_remote(self):
@@ -756,6 +761,118 @@ class SpanOffloadTests(unittest.TestCase):
                 os.kill(int(pid), 0)
         self.assertEqual(os.listdir(self.tmp / "markers"), [])
 
+    # --- round-2 regressions (Sol r2 findings 1-7) -----------------------------------------------
+
+    def test_staged_bytes_changing_at_the_upload_are_refused(self):
+        backend = self.fake_rclone()
+        real_run = so.RcloneBackend._run
+
+        def mutate_before_copy(rclone, args, deadline, cap=None):
+            if args[:2] == ["copyto", "--immutable"] and args[2].endswith(".tgz.enc"):
+                os.chmod(args[2], 0o600)
+                data = bytearray(Path(args[2]).read_bytes()); data[-1] ^= 1; Path(args[2]).write_bytes(bytes(data))
+            return real_run(rclone, args, deadline, cap)
+
+        with mock.patch.object(so.RcloneBackend, "_run", mutate_before_copy), \
+                self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertEqual(caught.exception.code, "STAGE_CHANGED")
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
+    def test_control_paths_inside_out_or_behind_links_are_never_read(self):
+        inside = self.span / "mbp.json"
+        inside.write_text(json.dumps(self.config))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cli.main(["offload", "--config", str(inside), "--plan", PLAN, "--span-dir",
+                                       str(self.span), "--allow-local-backend"]), so.EXIT["refused"])
+        self.assertIn("PATH_OVERLAPS_SPAN", err.getvalue())
+        inside.unlink()
+        os.symlink(self.span / "desk-bundle", self.tmp / "stage" / PLAN)
+        with mock.patch.object(so.json, "loads", wraps=json.loads) as loads, \
+                self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "STAGE_CONFLICT")
+        self.assertEqual(loads.call_count, 0)
+
+    def test_destinations_behind_links_or_in_repositories_are_refused(self):
+        os.symlink(self.span, self.tmp / "cloud" / PLAN)
+        before = so.hash_tree(self.span)
+        with self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "BACKEND_PATH")
+        self.assertEqual(so.hash_tree(self.span), before)
+        os.unlink(self.tmp / "cloud" / PLAN)
+        self.offload()
+        kit = self.tmp / "desk" / "cl-syn-01"
+        kit.mkdir()
+        subprocess.run(["git", "init", "-q", str(kit)], check=True)
+        with self.assertRaises(so.OffloadError) as caught:
+            self.pull()
+        self.assertEqual(caught.exception.code, "PATH_IN_REPOSITORY")
+        with self.assertRaises(so.OffloadError) as caught:
+            so.keygen(OPENSSL, kit, bits=3072)
+        self.assertEqual(caught.exception.code, "PATH_IN_REPOSITORY")
+
+    def test_a_fifo_as_the_recipient_key_does_not_hang(self):
+        fifo = self.tmp / "key.fifo"
+        os.mkfifo(fifo)
+        start = time.monotonic()
+        with self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, recipient_public_key=str(fifo)), PLAN, self.span, allow_local=True)
+        self.assertEqual(caught.exception.code, "RECIPIENT_UNREADABLE")
+        self.assertLess(time.monotonic() - start, 5)
+
+    def test_sigterm_during_a_stalled_encryption_exits_promptly(self):
+        stall = self.tmp / "openssl-stall"
+        stall.write_text(f'#!/bin/sh\ncase "$1" in enc) exec sleep 60 ;; esac\nexec {OPENSSL} "$@"\n')
+        stall.chmod(0o755)
+        (self.span / "runtime" / "incompressible.bin").write_bytes(os.urandom(4_000_000))
+        config = self.tmp / "mbp.json"
+        config.write_text(json.dumps(dict(self.config, openssl=str(stall))))
+        root = Path(__file__).resolve().parents[1]
+        proc = subprocess.Popen([sys.executable, str(root / "scripts" / "span_offload.py"), "offload", "--config",
+                                 str(config), "--plan", PLAN, "--span-dir", str(self.span), "--allow-local-backend"],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        time.sleep(2.0)
+        proc.send_signal(signal.SIGTERM)
+        out, err = proc.communicate(timeout=15)
+        self.assertEqual(proc.returncode, so.EXIT["unverified"])
+        self.assertEqual(len(err.strip().splitlines()), 1)
+        self.assertIn(b"TERMINATED", err)
+
+    def test_an_empty_completion_record_is_an_incomplete_landing(self):
+        self.offload()
+        real = so.write_marker
+
+        def crash(path, record):
+            Path(path).write_bytes(b"")
+            raise KeyboardInterrupt
+
+        with mock.patch.object(so, "write_marker", crash), self.assertRaises(KeyboardInterrupt):
+            self.pull()
+        with self.assertRaises(so.OffloadError) as caught:
+            self.pull()
+        self.assertEqual(caught.exception.code, "INCOMPLETE_LANDING")
+        self.assertIs(so.write_marker, real)
+
+    def test_odd_provider_listings_and_member_names_are_classified(self):
+        backend = so.RcloneBackend({"remote": "x:y", "hash_type": "size"})
+        with mock.patch.object(backend, "_run", return_value=b"null"), self.assertRaises(so.OffloadError) as caught:
+            backend._readback("p", "n", 1, "a" * 64, None, None)
+        self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("READBACK_UNPARSEABLE", "unverified"))
+        cloud = self.tmp / "cloud" / PLAN
+        cloud.mkdir()
+        raw = io.BytesIO()
+        with gzip.GzipFile(fileobj=raw, mode="wb") as gz, tarfile.open(fileobj=gz, mode="w|") as tar:
+            top = tarfile.TarInfo(SPAN); top.type = tarfile.DIRTYPE; tar.addfile(top)
+            info = tarfile.TarInfo(f"{SPAN}/bad\nname"); info.size = 1
+            tar.addfile(info, io.BytesIO(b"x"))
+        expect = self.plant_hostile(cloud, raw.getvalue(), b"")
+        with self.assertRaises(so.OffloadError) as caught:
+            self.pull(expect)
+        self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("ARCHIVE_PATH", "integrity"))
+
     # --- CLI ----------------------------------------------------------------------------------
 
     def test_cli_exit_codes_and_one_line_output(self):
@@ -790,7 +907,7 @@ class SpanOffloadStaticTests(unittest.TestCase):
         self.assertNotRegex(source, r"\[\s*['\"]git['\"]")
         loads = [line.strip() for line in source.splitlines() if "json.loads(" in line]
         allowed = ("descriptor_path.read_bytes()", "listing", "Path(path).read_text()",
-                   'tmp / files["descriptor"]', "stage / SOURCE_RECORD")
+                   'tmp / files["descriptor"]', "stage / SOURCE_RECORD", "handle.read(65536)")
         for line in loads:
             self.assertTrue(any(token in line for token in allowed), line)
 
