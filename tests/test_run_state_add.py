@@ -13,6 +13,7 @@ import unittest
 from unittest import mock
 
 from scripts import gen_current, run_state_add as add, run_state_items as items
+from tests.git_fixture import clone_git_fixture, init_git_fixture
 from tests.test_run_state_items import EXPIRY, ISSUED, LEGACY, doc, item
 
 
@@ -102,15 +103,16 @@ class GitTests(unittest.TestCase):
         })
         env.start()
         self.addCleanup(env.stop)
-        self.git(self.directory, "init", "--bare", "--initial-branch=main", str(self.remote))
+        self.remote.mkdir()
+        init_git_fixture(self.remote, "--bare", "--initial-branch=main")
         self.assertEqual(self.git(self.remote, "rev-parse", "--is-bare-repository").strip(), "true")
-        self.git(self.directory, "clone", str(self.remote), str(self.a))
+        clone_git_fixture(self.remote, self.a)
         self.assertEqual(self.git(self.a, "symbolic-ref", "--short", "HEAD").strip(), "main")
         self.write_state(doc([item(24, status="CLOSED"), item(23), item(22), item(21)]))
         self.git(self.a, "push", "origin", "HEAD:refs/heads/main")
         self.base = self.remote_head()
         self.assertEqual(self.base, self.git(self.a, "rev-parse", "HEAD").strip())
-        self.git(self.directory, "clone", str(self.remote), str(self.b))
+        clone_git_fixture(self.remote, self.b)
         self.assertEqual(self.git(self.b, "rev-parse", "HEAD").strip(), self.base)
 
     def git(self, repo, *args, input=None):

@@ -24,6 +24,8 @@ The first CI run exposed Git 2.56's distinct stale-ref response and the
 relaunch prompt's 25-line limit. The writer recognizes both Git responses
 and verifies the remote ref advanced before retrying either. The prompt
 keeps the new writer instruction on its own line within the existing limit.
+The full matrix also caught the fixture initialization guard. The tests
+use the repository's shared helpers to disable detached Git maintenance.
 
 The suite checks 42 named acceptance scenarios. In R18, the seven transitions
 to DRAFT are exercised at the replay boundary because the wire schema excludes
