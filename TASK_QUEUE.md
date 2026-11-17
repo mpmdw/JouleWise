@@ -595,6 +595,12 @@ At the end of substantial work:
 - Keep hand-authored edits here to policy, completed/history records, and
   non-selection context.
 
+### W1 intake record, 2026-11-17
+
+| Item | Priority and lane | Disposition |
+|---|---|---|
+| RL-176 builder work | P1 [AGENT], directly ordered for the blind W1 amendment and the pre-C1 code freeze | Token evidence published on the audit branch at `38bb2f40e`. Code and protocol text are in the W1 draft for independent execution and lead review. The analyst owns the step-4 cell triggered by both prompt differences. See the [builder report](docs/run_reports/2026-11-17-rl176-build.md). |
+
 ## Intake Batch Owed To The Kernel (2026-07-30/31)
 
 **PARTIALLY FOLDED 2026-07-30.** Six rows —
