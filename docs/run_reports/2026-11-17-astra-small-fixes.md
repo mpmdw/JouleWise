@@ -9,7 +9,7 @@ the earlier stale CURRENT pointer to item 394.
 | --- | --- | --- |
 | Astra ops 9 | `805617dba` | Failed notifier CLI status and persistent NOTICE/ALARM retries in `tests.test_air_watch_agent`. CI and watcher exit alarms also stay pending until delivery. |
 | Astra ops 12 | `3ab533d55` | `tests.test_gen_current.RenderTests` rejects reordered pointer collisions and heading collisions, and accepts only the commit-qualified historical 387 pair. |
-| Astra design 2 | `6cec8ffcc` on the main PR, `f61836440` on the W1 candidate | On the old F0 pin, the new `tests.align.test_rl145_part_c.EvaluatorFailureTests` cases pass malformed evidence through the verdict. On the candidate, they refuse missing, duplicate or unreleased G1 records and understated durations. The main suite exercises the identical gate logic in `tests.test_part_c_gate_evidence`. |
+| Astra design 2 | `6cec8ffcc` and `3babaf05a` on the main PR, `bdb1d232f` on the W1 candidate | On the old F0 pin, the new `tests.align.test_rl145_part_c.EvaluatorFailureTests` cases pass malformed evidence through the verdict. On the candidate, they refuse missing, duplicate or unreleased G1 records and understated durations, including missing or inconsistent evidence when X_G runs. The main suite exercises the identical gate logic in `tests.test_part_c_gate_evidence`. |
 | Astra ops throughput 3 | `d0ad35088` | `tests.test_magistrate_watchdog.StopAndDecisionTests` checks one advertisement with the exact positive control and matching stop refs. `tests.test_magistrate_watchdog_span` checks the in-flight fence crossing. |
 
 The focused Python 3.13 checks cover the Air watcher, the state generators,
@@ -29,15 +29,17 @@ G1 at each such admitted index, checks the recorded G0/G1/H seconds against
 the episode-monotonic interval bounds, and uses the reconciled durations
 for the existing 40% test. The episode's own-stop exception stays in the
 existing evaluator and the released G1 requirement still applies to every
-later turn that actually ran.
+later D_bank turn that actually ran. When X_G runs, its later turns also
+need one G1 record and reconciled timing. Its no-timeout rule still accepts
+the workload's unobserved outcome.
 
 Main carries the same evaluator source as the W1 candidate. The next
 STANDING-F0 renewal should move from `b2e01464d6d4fbf2901ff4d4154df9455104a12a`
-to `f618364409d00dc3a02d34d10ca32e42ae5340ed` on the W1 line after lead review
-and admission. Candidate tree `9dbd6f621c73655b9a2286d8627d7f2e2cee7698`.
+to `bdb1d232f1c2a945557e8ae29cffc791731aeace` on the W1 line after lead review
+and admission. Candidate tree `b92ebd3924f09141b1518f54fd553b382919b318`.
 The evaluator SHA-256 moves from
 `b2c91c77ef9f1c227c5c172690fadf5f36cff22b4874d0eeaa66798ca9ef12b8` to
-`91a68326c54087f3d0a59359513bd142d7ac5ad88ea3eac7fedf96fb89b02519`.
+`238ab79c72e2540ff2ce0522b6bf6864bca9602fa94685fc082c9d999907cfe3`.
 It is the sole executable path changed on the candidate. Item 346's
 W1-head and renewal checks still govern adoption. Lead-owned review, the
 applicable source binding, W1 CI and the renewal remain pending.
