@@ -1,0 +1,16 @@
+import unittest
+from unittest import mock
+from independent_probes import ColdProbes, so
+class RetrySourceProbe(ColdProbes):
+    def test_exposes_source_change_during_existing_marker_final_status(self):
+        r=self.off(); before=self.marker().read_bytes(); real=so.ICloudBackend._wait_uploaded
+        def mutate(backend,deadline):
+            t=real(backend,deadline)
+            (self.span/'a.bin').write_bytes(b'new bytes during retry final sync observation')
+            return t
+        with mock.patch.object(so.ICloudBackend,'_wait_uploaded',mutate): again=self.off()
+        self.assertEqual(r,again); self.assertEqual(before,self.marker().read_bytes())
+        self.assertNotEqual(so.sha256_bytes(so.hash_tree(self.span)),r['manifest_sha256'])
+        print('EXPOSED HIGH: existing-marker retry returns success after source mutation in final status read',flush=True)
+r=unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite([RetrySourceProbe('test_exposes_source_change_during_existing_marker_final_status')]))
+raise SystemExit(not r.wasSuccessful())
