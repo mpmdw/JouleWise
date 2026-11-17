@@ -1493,9 +1493,9 @@ computed, excluded or counted is checked by one executing refuter session; where
 ruled before it bound. From 10 November 2026 a single **research-lead** session's decision log has been the one
 binding record for research-design and paper-bound rulings. A ruling by any other session is a proposal until
 that log enters it. This section was written by a seat that log assigned.
-<!-- FACT H17: R2P P4. Roles and gates: docs/process/gate_policy.md:3-6 (Ed's policy, 2026-10-27), :37-39
+<!-- FACT H17: R2P P4. Roles and gates: b5a3b1154:docs/process/gate_policy.md:3-6 (Ed's policy, 2026-10-27), b5a3b1154:docs/process/gate_policy.md:37-39
 (one executing refuter; a judge only where a registration requires one, or where the refuter's executed result
-contradicts the lead on a counting or exclusion rule), :49-60 (amendment: the lead picks the
+contradicts the lead on a counting or exclusion rule), b5a3b1154:docs/process/gate_policy.md:49-60 (amendment: the lead picks the
 gate for each change; a refuter only when the text changes what is computed, excluded or counted). Two leads at once: RUN_STATE item 102 (Ed to "the second laptop session joulewise-28"),
 item 108 ("joulewise-28, as block-5 lead"), item 165 ("block-5 lead, M4 Air analysis box"). Cold judges: item 42
 (replication registration, "cold gate by two blind judges"), item 69 (BYTES pass 1, "registration cold gate ...
@@ -1503,7 +1503,7 @@ blind, executing"), item 85 (BYTES pass 2, registration section 21). Research le
 PST: the research lead's decision log is "the single binding record for research-design and paper-bound
 rulings"; any other ruling "is a proposal until the research lead enters it in that log"), item 252 (Ed,
 2026-11-10: "def fable 5.2 should be the final say for anything paper bound"), item 256b (Ed approved E1-E6 as
-the research lead recommended); RL-24 seat 9 assigns this section. Escalation list: gate_policy.md:54-57
+the research lead recommended); RL-24 seat 9 assigns this section. Escalation list: b5a3b1154:docs/process/gate_policy.md:54-57
 (science-design forks; changes to what a registration computes, excludes or counts) and RUN_STATE item 181
 ("Escalate to Ed ... only for": registered constants, the deciding contrast, the model, the exclusion rules; a
 result the design does not cover); delegation: item 257 ("have fable lead all research design work"), item
@@ -1624,7 +1624,7 @@ exclusion grounds registration_block5.md:4469-4473 (PHYSICS and NUMBER_INTEGRITY
 docs/registrations/block6_replication_DRAFT.md:551-559 (§8.1: P plus N, W, D, S). Item 6:
 configs/campaigns/v5_claim_25g83/analysis_plan_block5.md:174-178 ("Refusals"), softened from the blind draft's
 universal no-default/no-zero wording, which seat 9 could not source. Item 4:
-docs/process/gate_policy.md:1 (binding 2026-10-27) and :28-34 (rule 3: "Two executing reviews from different model
+b5a3b1154:docs/process/gate_policy.md:1 (binding 2026-10-27) and b5a3b1154:docs/process/gate_policy.md:28-34 (rule 3: "Two executing reviews from different model
 families, launched together, each told to probe and mutate"; regression test and counterfactual). -->
 
 ### 8.3 Failures and lessons
@@ -1664,9 +1664,9 @@ number, with what each taught. The record runs to 10 November 2026.
   real, so a hard cap on rounds would have been unsafe. The project therefore kept two parallel executing reviews
   from different model families for number-bearing code, and reduced reviews of documents, records and code that
   cannot change a number to continuous integration and, for code, the change's own regression test.
-  <!-- FACT S9-03: docs/process/gate_policy.md:13-21 ("What the October record showed": the #416 NEG-8
+  <!-- FACT S9-03: b5a3b1154:docs/process/gate_policy.md:13-21 ("What the October record showed": the #416 NEG-8
   reference-span blocker, RUN_STATE item 69; a reference silently dropped on a read failure; the twin diverging on
-  compressed input, #573; late rounds; councils) and :25-34 (rules 1-3). Meter path: RUN_STATE item 210 of
+  compressed input, #573; late rounds; councils) and b5a3b1154:docs/process/gate_policy.md:25-34 (rules 1-3). Meter path: RUN_STATE item 210 of
   2026-11-07 (Ed, verbatim: "the usb c power meter is between the magsafe cord and the wallbrick, so it does catch
   all power"); docs/capstone/TALK-OUTLINE-v2.md H12. -->
 - **Rules must be replayed on real non-claim data before they bind.** Two registered lines, written from first
@@ -1747,8 +1747,8 @@ number, with what each taught. The record runs to 10 November 2026.
   and gating had added time with little protection. The project's gate policy was rewritten then, before any primary,
   replication or BYTES result was seen, to fit the depth of review to whether a change can alter a number
   (Section 8.2, item 4). Analysis runtime was a second bottleneck (above).
-  <!-- FACT S9-11: docs/process/gate_policy.md:8 ("This policy was made before any block-5, block-6 or BYTES result
-  was seen") and :20-21 ("Councils on process questions, reviews of docs and bookkeeping, and serial re-reviews added
+  <!-- FACT S9-11: b5a3b1154:docs/process/gate_policy.md:8 ("This policy was made before any block-5, block-6 or BYTES result
+  was seen") and b5a3b1154:docs/process/gate_policy.md:20-21 ("Councils on process questions, reviews of docs and bookkeeping, and serial re-reviews added
   time and little protection"); docs/process_traces/2026-10-27-pipeline-audit/SYNTHESIS.md (proposals, not adopted;
   corrected by CRITIQUE.md). -->
 

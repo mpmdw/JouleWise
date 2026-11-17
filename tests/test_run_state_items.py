@@ -267,6 +267,29 @@ class RunStateItemsTests(unittest.TestCase):
     def test_r25_live_repository(self):
         self.assertEqual(items.main(["check"]), 0)
 
+    def test_check_refuses_typed_item_hidden_by_its_own_closing_fence(self):
+        hidden = doc([item(405, status="CLOSED", body="```\nunterminated"), item(404)], cutover=404)
+        expected_line = hidden.splitlines().index("404. **Item 404**") + 1
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "RUN_STATE.md"
+            path.write_text(hidden, encoding="utf-8")
+            errors = StringIO()
+            with redirect_stderr(errors):
+                self.assertEqual(items.main(["check", "--run-state", str(path)]), 2)
+            self.assertIn(f"RUN_STATE line {expected_line}: HIDDEN_ITEM:", errors.getvalue())
+        with self.assertRaisesRegex(gen_current.PointerError, "HIDDEN_ITEM"):
+            gen_current.render(hidden)
+        unclosed = hidden.replace("```\nunterminated", "~~~\nunterminated")
+        self.assertIn("UNCLOSED_FENCE", codes(unclosed))
+
+        for opener, closer in (("````markdown", "````"), ("~~~markdown", "~~~")):
+            with self.subTest(opener=opener):
+                example = f"{opener}\n{item(404)}{closer}"
+                valid = doc([item(405, status="CLOSED", body=example), item(404)], cutover=404)
+                parsed = items.parse(valid)
+                self.assertEqual(items.validate(parsed), [])
+                self.assertEqual([entry.number for entry in parsed.items], [405, 404])
+
     def test_r26_schema_matches_runtime_enums_and_epoch_bounds(self):
         schema = json.loads((gen_current.ROOT / "docs/process/run_state_item.schema.json").read_text())
         properties = schema["properties"]

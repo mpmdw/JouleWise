@@ -584,8 +584,9 @@ now has an explicit disposition:
 
 ## Queue Maintenance
 
-- **[AGENT] Typed RUN_STATE cutover (2026-11-17).** The Tier 1 landing needs
-  CI and one cross-family review. After merge, the lead runs
+- **[AGENT] Typed RUN_STATE cutover (2026-11-17).** The lead recorded a
+  Tier 1 MERGE review. The follow-up reruns both CI workflows before merge.
+  After merge, the lead runs
   `python3 scripts/run_state_add.py init` on `main` and verifies
   `python3 scripts/run_state_items.py check`. Open legacy items continue to
   close in prose. [Build handoff](docs/run_reports/2026-11-17-typed-items-pipeline.md)

@@ -86,6 +86,35 @@ class LocalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already initialized"):
             add.init_text(updated)
 
+    def test_unclosed_body_fence_refuses_add_and_preserves_item_404(self):
+        initialized, cutover = add.init_text(LEGACY.replace("20. **", "403. **"))
+        self.assertEqual(cutover, 404)
+        self.run_state.write_text(initialized, encoding="utf-8")
+        self.assertEqual(add.add_local(self.run_state, self.current, request()), 404)
+        before = self.run_state.read_bytes(), self.current.read_bytes()
+        for body in ("```\nunterminated", "~~~markdown\nunterminated", "````\n```\n"):
+            with self.subTest(body=body):
+                self.body.write_text(body, encoding="utf-8")
+                code, _, error = cli(*self.flags())
+                self.assertEqual(code, 2)
+                self.assertIn("body line 1: unclosed code fence", error)
+                self.assertEqual((self.run_state.read_bytes(), self.current.read_bytes()), before)
+        self.assertEqual(json.loads(self.current.read_bytes())["open_items"][0]["item"], 404)
+        self.assertEqual(add.add_local(self.run_state, self.current, request(body="```\nexample\n```")), 405)
+
+    def test_insertion_rejects_a_lost_or_changed_previous_item(self):
+        insert = add._insert_at
+        before = self.run_state.read_bytes(), self.current.read_bytes()
+        for replacement in ("", item(23, owner="ed")):
+            with self.subTest(replacement=replacement):
+                def damaged_insertion(text, top_line, rendered):
+                    return insert(text, top_line, rendered).replace(item(23), replacement, 1)
+
+                with mock.patch.object(add, "_insert_at", side_effect=damaged_insertion):
+                    with self.assertRaisesRegex(ValueError, "preserve .*previous typed item"):
+                        add.add_local(self.run_state, self.current, request())
+                self.assertEqual((self.run_state.read_bytes(), self.current.read_bytes()), before)
+
 
 class GitTests(unittest.TestCase):
     def setUp(self):

@@ -33,3 +33,17 @@ DRAFT as a target. The validator also checks that those inputs fail the schema.
 The live cutover stays pending. After CI, the lead routes one cross-family
 review. After merge, the lead runs `python3 scripts/run_state_add.py init` on
 main and confirms that `python3 scripts/run_state_items.py check` exits 0.
+
+## Review follow-up
+
+The cross-family review of `75efad8d5` returned MERGE with no verified HIGH.
+The rebase brings in legacy items 400–403 with an empty RUN_STATE diff
+against `origin/main`. The writer rejects unclosed body fences and checks
+that insertion preserves every prior typed heading and header. The checker
+reports a fenced item whose own closing delimiter would otherwise mask the
+loss. Three regression tests cover the writer refusal, the preservation
+guard, and the checker diagnostic.
+
+The five gate-policy FACT references in Paper 1 and the seat 9 citations
+now point to their verified historical lines at `b5a3b1154`. The paper
+changes are confined to those citations.

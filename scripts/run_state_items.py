@@ -75,16 +75,34 @@ def canonical(header: dict) -> str:
     return json.dumps(header, sort_keys=True, ensure_ascii=False, separators=(", ", ": "), allow_nan=False)
 
 
+def _hidden_item_heading(lines: list[str], opening: int, closing: int) -> _Line | None:
+    # The outer fence has borrowed the item's own closing delimiter. A
+    # wider fence or a tilde fence can enclose the same example deliberately.
+    if closing - opening < 4 or lines[closing - 2].removesuffix("\r") != "```item":
+        return None
+    heading = closing - 3
+    while heading > opening and not lines[heading].strip():
+        heading -= 1
+    text = lines[heading].removesuffix("\r")
+    if heading > opening and HEADING.match(text):
+        return _Line(heading + 1, text, "hidden_item")
+    return None
+
+
 def _scan(text: str):
-    """Yield only fence openers and lines outside fences, with one-based locations."""
+    """Yield declarations, outer Markdown fences and visible prose."""
     lines = text.split("\n")
     fence = None
+    opening = 0
     index = 0
     while index < len(lines):
         line = lines[index].removesuffix("\r")
         index += 1
         if fence is not None:
             if fence.fullmatch(line):
+                yield _Line(opening + 1, lines[opening], "prose")
+                if line == "```" and (hidden := _hidden_item_heading(lines, opening, index - 1)):
+                    yield hidden
                 fence = None
             continue
         kind = "blank" if not line.strip() else "prose"
@@ -111,8 +129,17 @@ def _scan(text: str):
             index = end
             continue
         elif match := FENCE.fullmatch(line):
+            opening = index - 1
             fence = re.compile(r"[ \t]*" + re.escape(match[1][0]) + "{" + str(len(match[1])) + r",}[ \t]*")
+            continue
         yield _Line(index, line, kind)
+    if fence is not None:
+        yield _Line(opening + 1, lines[opening], "unterminated_fence")
+
+
+def unclosed_code_fence(text: str) -> int | None:
+    """Return the line of an unclosed ordinary Markdown fence, if present."""
+    return next((line.number for line in _scan(text) if line.kind == "unterminated_fence"), None)
 
 
 def heading_lines(text: str):
@@ -193,6 +220,9 @@ def parse(text: str) -> Parsed:
     item_headings = set()
 
     for line in lines:
+        if (line.kind == "unterminated_fence" and top is not None and top < line.number
+                and (legacy is None or line.number < legacy)):
+            errors.append(ItemError(line.number, "UNCLOSED_FENCE", "code fence in typed region reaches end of file"))
         if top is None or legacy is None or not top < line.number < legacy:
             if line.kind == "heading":
                 match = HEADING.match(line.text)
@@ -206,6 +236,9 @@ def parse(text: str) -> Parsed:
             first_line = line.number
         if line.kind == "heading":
             heading, eligible, seen, pointer_seen = line, True, False, False
+        elif line.kind == "hidden_item" and cutover is not None and int(HEADING.match(line.text)[1]) >= cutover:
+            errors.append(ItemError(line.number, "HIDDEN_ITEM",
+                                    "typed item is inside a code fence that uses its closing delimiter"))
         elif line.kind == "pointer" and eligible and not pointer_seen:
             pointer_seen = True
         elif line.kind in ("item", "unterminated_item"):

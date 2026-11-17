@@ -120,18 +120,24 @@ def _prepare(text: str, request: dict, header: dict) -> tuple[int, str, bytes]:
     parsed = _validated(text)
     if parsed.cutover is None:
         raise ValueError("run init first")
-    for line in request["body"].splitlines():
+    body = request["body"]
+    for line in body.splitlines():
         if line.strip() in ("```item", "```pointer"):
             raise ValueError("body cannot contain item or pointer fences")
         if (match := items.HEADING.match(line)) and int(match[1]) >= parsed.cutover:
             raise ValueError("body cannot contain a heading at or above the cutover")
+    if (line := items.unclosed_code_fence(body)) is not None:
+        raise ValueError(f"body line {line}: unclosed code fence")
     number = max((row[1] for row in items.heading_lines(text)), default=0) + 1
-    rendered = render_item(number, request["heading"], {**header, "number": number},
-                           request["body"], request["pointer"])
+    rendered = render_item(number, request["heading"], {**header, "number": number}, body, request["pointer"])
     updated = _insert_at(text, parsed.top_line, rendered)
-    current = gen_current.render(updated)
-    # In particular, an unterminated body fence cannot hide the legacy marker.
-    return number, updated, current
+    new_items = items.parse(updated).items
+    if len(new_items) != len(parsed.items) + 1 or new_items[0].number != number:
+        raise ValueError("insertion must add exactly one typed item and preserve all previous typed items")
+    for before, after in zip(parsed.items, new_items[1:]):
+        if (before.number, before.heading, before.header) != (after.number, after.heading, after.header):
+            raise ValueError(f"insertion must preserve previous typed item {before.number}")
+    return number, updated, gen_current.render(updated)
 
 
 def _stage_file(path: Path, data: bytes) -> Path:
