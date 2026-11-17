@@ -729,7 +729,11 @@ def _campaign_hold(test, w):
     result = w.close(check, mode="owner", owner=w.read_fence(), retire=(span.plan,))
     _closed(test, result)
     test.assertTrue(span.output.is_dir())
-    test.assertIn("look", result.stdout)
+    may_retire, reason = w.ports["C"].may_retire(
+        w.config(), span.output, span.plan, named={span.plan})
+    test.assertFalse(may_retire)
+    test.assertTrue(reason)
+    test.assertIn(reason, result.stdout)
 
 
 @scenario("X-10", "OC")
@@ -1262,12 +1266,11 @@ def _reboot_live(test, w):
 def _offload_unrecorded(test, w, *, enospc=False):
     span = w.span()
     w.prepare(closed=span)
-    point = "controller.offload_returned"
     if enospc:
-        w.fault_at(point, errno.ENOSPC)
+        w.fault_at("controller.close_record_write", errno.ENOSPC)
         w.tick()
     else:
-        w.crash_at(point)
+        w.crash_at("controller.offload_returned")
         with test.assertRaises(Crash):
             w.tick()
     _clear(test, w, span)
@@ -1489,11 +1492,19 @@ def _cloud_unavailable(test, w):
         with test.subTest(availability=availability):
             w.prepare(cloud_availability=availability)
             before = {entry.name: entry.read_bytes() for entry in span.output.iterdir()}
-            result = w.offload(span)
-            test.assertEqual(result.code, 5, result)
-            test.assertIn(result.record["code"], {"ICLOUD_CONTAINER_MISSING", "ICLOUD_SIGNED_OUT", "ICLOUD_UNAVAILABLE"})
-            test.assertFalse(w.marker(span).exists())
-            test.assertEqual({entry.name: entry.read_bytes() for entry in span.output.iterdir()}, before)
+            codes = []
+            for _ in range(2):
+                result = w.offload(span)
+                test.assertEqual(result.code, 5, result)
+                # The offload CLI exposes the OffloadError code in its
+                # one-line diagnostic. The contract leaves naming to #804.
+                diagnostic = re.fullmatch(r"OFFLOAD_UNVERIFIED ([A-Z][A-Z0-9_]*)(?: .*)?",
+                                          result.stderr.strip())
+                test.assertIsNotNone(diagnostic, result)
+                codes.append(diagnostic[1])
+                test.assertFalse(w.marker(span).exists())
+                test.assertEqual({entry.name: entry.read_bytes() for entry in span.output.iterdir()}, before)
+            test.assertEqual(codes[0], codes[1])
 
 
 @scenario("G-01", "QCOD")
