@@ -1,0 +1,7 @@
+test_exposes_source_change_during_existing_marker_final_status (__main__.RetrySourceProbe.test_exposes_source_change_during_existing_marker_final_status) ... EXPOSED HIGH: existing-marker retry returns success after source mutation in final status read
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.254s
+
+OK

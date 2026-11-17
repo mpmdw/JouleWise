@@ -1,0 +1,163 @@
+FFFFFFEFEFEEEEEE
+======================================================================
+ERROR: test_keygen_creates_a_private_missing_output_directory (tests.test_span_offload.SpanOffloadTests.test_keygen_creates_a_private_missing_output_directory)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 246, in test_keygen_creates_a_private_missing_output_directory
+    fingerprint = so.keygen(OPENSSL, root, 3072)
+  File "/Volumes/JW-EXT/jw-wt/air-indep/joulewise/span_offload.py", line 1573, in keygen
+    _openssl_run(openssl, ["genpkey", "-algorithm", "RSA", "-pkeyopt", f"rsa_keygen_bits:{bits}",
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                           "-out", str(private)])
+                           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/JW-EXT/jw-wt/air-indep/joulewise/span_offload.py", line 412, in _openssl_run
+    raise OffloadError("OPENSSL_FAILED", f"openssl {args[0]} rc={proc.returncode}",
+                       "integrity" if "-decrypt" in args or "-d" in args else "refused")
+joulewise.span_offload.OffloadError: OPENSSL_FAILED: openssl genpkey rc=1
+
+======================================================================
+ERROR: test_pending_transfer_read_is_fail_closed_and_does_not_mutate_cloud (tests.test_span_offload.SpanOffloadTests.test_pending_transfer_read_is_fail_closed_and_does_not_mutate_cloud)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 266, in test_pending_transfer_read_is_fail_closed_and_does_not_mutate_cloud
+    result = so.pending_transfers(config)
+             ^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'joulewise.span_offload' has no attribute 'pending_transfers'
+
+======================================================================
+ERROR: test_close_cloud_only_deletes_raw_but_keeps_materialised_pack (tests.test_span_offload.SpanOffloadTests.test_close_cloud_only_deletes_raw_but_keeps_materialised_pack)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 294, in test_close_cloud_only_deletes_raw_but_keeps_materialised_pack
+    result = so.close_offload(config, PLAN, self.span)
+             ^^^^^^^^^^^^^^^^
+AttributeError: module 'joulewise.span_offload' has no attribute 'close_offload'
+
+======================================================================
+ERROR: test_close_unconfirmed_never_deletes_and_ssd_mismatch_never_evicts (tests.test_span_offload.SpanOffloadTests.test_close_unconfirmed_never_deletes_and_ssd_mismatch_never_evicts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 310, in test_close_unconfirmed_never_deletes_and_ssd_mismatch_never_evicts
+    so.close_offload(config, PLAN, self.span)
+    ^^^^^^^^^^^^^^^^
+AttributeError: module 'joulewise.span_offload' has no attribute 'close_offload'
+
+======================================================================
+ERROR: test_close_evicts_only_after_ssd_copy_readback_matches_receipt (tests.test_span_offload.SpanOffloadTests.test_close_evicts_only_after_ssd_copy_readback_matches_receipt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 327, in test_close_evicts_only_after_ssd_copy_readback_matches_receipt
+    with mock.patch.object(so, "require_ssd_mount"):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.18/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1503, in __enter__
+    original, local = self.get_original()
+                      ~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.18/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py", line 1473, in get_original
+    raise AttributeError(
+        "%s does not have the attribute %r" % (target, name)
+    )
+AttributeError: <module 'joulewise.span_offload' from '/Volumes/JW-EXT/jw-wt/air-indep/joulewise/span_offload.py'> does not have the attribute 'require_ssd_mount'
+
+======================================================================
+ERROR: test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction (tests.test_span_offload.SpanOffloadTests.test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction) (free=60000000001)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 341, in test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction
+    self.assertEqual(so.storage_alarm(self.config | {"lead_email": "lead@example.test"}, PLAN), expected)
+                     ^^^^^^^^^^^^^^^^
+AttributeError: module 'joulewise.span_offload' has no attribute 'storage_alarm'
+
+======================================================================
+ERROR: test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction (tests.test_span_offload.SpanOffloadTests.test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction) (free=60000000000)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 341, in test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction
+    self.assertEqual(so.storage_alarm(self.config | {"lead_email": "lead@example.test"}, PLAN), expected)
+                     ^^^^^^^^^^^^^^^^
+AttributeError: module 'joulewise.span_offload' has no attribute 'storage_alarm'
+
+======================================================================
+ERROR: test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction (tests.test_span_offload.SpanOffloadTests.test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction) (free=39000000000)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 341, in test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction
+    self.assertEqual(so.storage_alarm(self.config | {"lead_email": "lead@example.test"}, PLAN), expected)
+                     ^^^^^^^^^^^^^^^^
+AttributeError: module 'joulewise.span_offload' has no attribute 'storage_alarm'
+
+======================================================================
+FAIL: test_source_membership_and_cross_file_races_never_certify (tests.test_span_offload.SpanOffloadTests.test_source_membership_and_cross_file_races_never_certify) (change='add')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 224, in test_source_membership_and_cross_file_races_never_certify
+    with mock.patch.object(so, "_add_file", race), self.assertRaises(so.OffloadError) as caught:
+                                                   ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_source_membership_and_cross_file_races_never_certify (tests.test_span_offload.SpanOffloadTests.test_source_membership_and_cross_file_races_never_certify) (change='mixed')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 224, in test_source_membership_and_cross_file_races_never_certify
+    with mock.patch.object(so, "_add_file", race), self.assertRaises(so.OffloadError) as caught:
+                                                   ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_source_membership_and_cross_file_races_never_certify (tests.test_span_offload.SpanOffloadTests.test_source_membership_and_cross_file_races_never_certify) (change='restore-mtime')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 224, in test_source_membership_and_cross_file_races_never_certify
+    with mock.patch.object(so, "_add_file", race), self.assertRaises(so.OffloadError) as caught:
+                                                   ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_source_membership_and_cross_file_races_never_certify (tests.test_span_offload.SpanOffloadTests.test_source_membership_and_cross_file_races_never_certify) (change='empty-dir')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 224, in test_source_membership_and_cross_file_races_never_certify
+    with mock.patch.object(so, "_add_file", race), self.assertRaises(so.OffloadError) as caught:
+                                                   ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_source_membership_and_cross_file_races_never_certify (tests.test_span_offload.SpanOffloadTests.test_source_membership_and_cross_file_races_never_certify) (change='replace')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 224, in test_source_membership_and_cross_file_races_never_certify
+    with mock.patch.object(so, "_add_file", race), self.assertRaises(so.OffloadError) as caught:
+                                                   ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_source_change_during_cloud_readback_prevents_marker (tests.test_span_offload.SpanOffloadTests.test_source_change_during_cloud_readback_prevents_marker)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 239, in test_source_change_during_cloud_readback_prevents_marker
+    with mock.patch.object(so.ICloudBackend, "put", race), self.assertRaises(so.OffloadError) as caught:
+                                                           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_retry_of_failed_placeholder_download_remains_exit_8 (tests.test_span_offload.SpanOffloadTests.test_retry_of_failed_placeholder_download_remains_exit_8)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 259, in test_retry_of_failed_placeholder_download_remains_exit_8
+    self.assertEqual(cli.main(argv), 8)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: 5 != 8
+
+======================================================================
+FAIL: test_pack_readback_checks_per_file_manifest_before_any_deletion (tests.test_span_offload.SpanOffloadTests.test_pack_readback_checks_per_file_manifest_before_any_deletion)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 284, in test_pack_readback_checks_per_file_manifest_before_any_deletion
+    with mock.patch.object(so, "encrypt_span", wrong_manifest), self.assertRaises(so.OffloadError) as caught:
+                                                                ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+----------------------------------------------------------------------
+Ran 10 tests in 1.951s
+
+FAILED (failures=8, errors=8)

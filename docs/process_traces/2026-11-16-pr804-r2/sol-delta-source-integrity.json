@@ -1,0 +1,27 @@
+[
+  {
+    "path": "joulewise/span_offload.py",
+    "sha256": "922540f30eaca0024418b462d079d01ca43c9908f8430ff0454de9d2edfdc69f",
+    "exact_pin_bytes": true
+  },
+  {
+    "path": "scripts/span_offload.py",
+    "sha256": "2e182e8eb24e9276998dd054f1f2e5c0f753d7db1fbc6f5424d67cc8559d85e2",
+    "exact_pin_bytes": true
+  },
+  {
+    "path": "scripts/close_offload.py",
+    "sha256": "e1ccd44f76c129c3f7e6bd886df672a974ab2c91793b783c70524ba07e7d150d",
+    "exact_pin_bytes": true
+  },
+  {
+    "path": "tests/test_span_offload.py",
+    "sha256": "bd4aec40a0d7a4a205bc52f546f5106f164aaa0033b45adcbdf9439c75e4d42a",
+    "exact_pin_bytes": true
+  },
+  {
+    "path": "docs/ops/SPAN-OFFLOAD.md",
+    "sha256": "48742721a4512640314e90e3f8e59c3ae8b74ca7c8ea5a3ee2b17c19cf2540ae",
+    "exact_pin_bytes": true
+  }
+]

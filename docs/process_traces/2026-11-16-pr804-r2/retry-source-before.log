@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_typed_marker_retry_rechecks_source_after_final_pending_wait (tests.test_span_offload.SpanOffloadTests.test_typed_marker_retry_rechecks_source_after_final_pending_wait)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 372, in test_typed_marker_retry_rechecks_source_after_final_pending_wait
+    with mock.patch.object(so.ICloudBackend, "_wait_uploaded", changed), self.assertRaises(so.OffloadError) as caught:
+                                                                         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 1.559s
+
+FAILED (failures=1)

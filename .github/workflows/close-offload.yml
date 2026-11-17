@@ -3,14 +3,17 @@ on:
   pull_request:
     paths:
       - 'joulewise/close_offload.py'
+      - 'joulewise/span_offload.py'
       - 'scripts/close_offload.py'
+      - 'scripts/span_offload.py'
       - 'tests/test_close_offload.py'
+      - 'tests/test_span_offload.py'
       - '.github/workflows/close-offload.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  synthetic-zstd:
+  synthetic-close:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

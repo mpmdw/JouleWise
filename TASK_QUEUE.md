@@ -677,7 +677,7 @@ Superseded (2026-07-15, WO-017; D-043): P2-027 publication and uninvolved-party 
 <!-- BEGIN GENERATED: state-kernel current-queue -->
 <!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. -->
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16).
 
 Generated compatibility table for repository consumers; the lane tables below are the detailed view of the same kernel state.
 
@@ -1355,3 +1355,12 @@ required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
 defect) cold gate. The registered deadline was discharged when #149 landed
 the author and integration repairs; later council work orders remain separate.
+
+## PR #804 iCloud builder checkpoint (2026-11-15; explicit owner task)
+
+Superseded by the 2026-11-16 independent refusal and repair: source snapshot, keygen directory and
+placeholder retry findings fixed with regressions; RL-174 D.1/D.2 adds shared close, SSD receipt,
+pre-arm pending read and disk mail. Software verification and cold review/CI evidence are in
+`docs/run_reports/2026-11-16-pr804-r2.md` and PR #804. RL-174 accepts permanence conditionally on a
+recorded native production-key MBP round trip from the user's GUI domain; installation/qualification
+remain external. No MBP contact or merge in this build. This checkpoint does not select queue work.
