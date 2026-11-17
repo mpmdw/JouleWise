@@ -243,5 +243,7 @@ MBP/Air manifests and `<span>.pull.ok`. An existing tree without a valid record 
 registered look. Keep a pending look's designated raw copy until that look ends (RL-174 D.3).
 
 Legacy rclone configurations remain for low-level offload/pull; hash_type size proves length only.
-Local is synthetic only, requires --allow-local-backend, and writes only .ok.unconfirmed. Neither can
-perform RL-174 close or the iCloud arm check.
+Both rclone and local write only .ok.unconfirmed (exit 8): listing evidence cannot replace RL-174's
+observed iCloud round trip. Local additionally requires --allow-local-backend. Neither can perform
+RL-174 close, satisfy the copy gate, or supply the iCloud arm check. Existing legacy typed markers
+without that observed iCloud evidence refuse current retry validation.

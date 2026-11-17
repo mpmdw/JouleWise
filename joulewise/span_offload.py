@@ -62,7 +62,7 @@ EXIT = {
     "unverified": 5,  # upload or provider read-back failed: no marker (RL-173 A.7 holds the next arm)
     "integrity": 6,  # pull: a hash or archive check failed; nothing lands in the desk tree
     "dest_exists": 7,  # pull: the destination already exists; nothing changed
-    "unconfirmed": 8,  # local or iCloud without observed provider readback: no <plan>.ok
+    "unconfirmed": 8,  # any transport without observed iCloud readback: no <plan>.ok
 }
 
 ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -1398,11 +1398,14 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
             if (row["sha256"], row["size"]) != expected[kind] or (
                     row.get("provider_confirmed", True) and row["provider_size"] != expected[kind][1]):
                 raise unverified("STAGE_CHANGED", f"{files[kind]} changed during the upload")
+        # RL-174 D.1 is the global .ok rule. Legacy transports may retain their hash evidence,
+        # but no provider listing (including size-only) substitutes for observed iCloud readback.
+        confirmed = isinstance(backend, ICloudBackend) and backend.provider_confirmed
         record = {
             "schema": MARKER_SCHEMA, "plan": plan, "path": "cloud-offload", "span_name": descriptor["span_name"],
             "written_at": time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(clock())),
             "written_epoch_s": round(clock(), 3), "stage_reused": reused,
-            "backend": backend.describe(), "provider_confirmed": backend.provider_confirmed,
+            "backend": backend.describe(), "provider_confirmed": confirmed,
             "recipient_sha256": recipient,
             "manifest_sha256": expected["manifest"][0], "manifest_files": descriptor["manifest"]["files"],
             "ciphertext": {"sha256": expected["ciphertext"][0], "size": expected["ciphertext"][1]},
@@ -1411,13 +1414,13 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
             "archive_sha256": descriptor["archive"]["sha256"],
             "provider_confirmation": confirmations,
         }
-        if isinstance(backend, ICloudBackend) and backend.provider_confirmed:
+        if confirmed:
             marker_files(record, plan, icloud=True)
-        if isinstance(backend, ICloudBackend) and backend.provider_confirmed:
+        if confirmed:
             backend._wait_uploaded(deadline)
         require_snapshot(span_dir, source_snapshot, deadline.remaining)
         deadline.remaining()  # the last check before the marker
-        marker = marker_path(marker_dir, plan, backend.provider_confirmed)
+        marker = marker_path(marker_dir, plan, confirmed)
         try:
             write_marker(marker, record)
         except OffloadError as error:
@@ -1484,7 +1487,7 @@ def recheck_marker(config, plan, span_dir, backend, deadline):
         if error.code == "RECORD_INVALID":
             raise OffloadError("MARKER_EXISTS", "legacy marker preserved; verify it separately", "marker_exists") from None
         raise
-    expected = marker_files(record, plan)
+    expected = marker_files(record, plan, icloud=True)
     if record["backend"] != backend.describe() or record.get("recipient_sha256") != config["recipient_sha256"]:
         raise refused("MARKER_INVALID", "the marker belongs to another backend or key")
     controls = {"marker": marker, "stage_root": config["stage_root"], "recipient": config["recipient_public_key"]}
@@ -1663,7 +1666,7 @@ def close_offload(config, plan, span_dir, *, ssd_receipt=None, deadline_epoch=No
 def marker_path(marker_dir, plan, provider_confirmed):
     """The copy gate's ``<plan>.ok`` exists only after a provider-confirmed upload (RL-173 A.7).
 
-    A backend without a provider read-back (local, or iCloud without observed eviction/download) writes ``<plan>.ok.unconfirmed``,
+    A transport without observed iCloud eviction/download (including legacy rclone) writes ``<plan>.ok.unconfirmed``,
     which no copy gate accepts.
     """
     return Path(marker_dir) / (f"{plan}.ok" if provider_confirmed else f"{plan}.ok.unconfirmed")
