@@ -917,7 +917,7 @@ class ICloudBackend:
         return (re.search(r"\bcom\.apple\.CloudDocs\b", text) is not None
                 and re.search(r"\bclient\s*:\s*idle\b", text) is not None
                 and re.search(r"(?<![\w-])caught-up(?![\w-])", text) is not None
-                and re.search(r"needs-|uploading|downloading|\berror\b|\boffline\b|not[- ](?:caught|idle)",
+                and re.search(r"needs-|uploading|downloading|\bpending\b|\berror\b|\boffline\b|not[- ](?:caught|idle)",
                               text, re.I) is None)
 
     def _wait_uploaded(self, deadline):
@@ -1536,6 +1536,14 @@ def pending_transfers(config, *, clock=time.time):
 SSD_SCHEMA = "joulewise.span_offload_ssd.v1"
 
 
+def require_ssd_receipt(receipt, plan, record, expected):
+    """One receipt contract for both SSD-copy retries and MBP cleanup."""
+    if receipt.get("schema") != SSD_SCHEMA or receipt.get("plan") != plan \
+            or receipt.get("descriptor_sha256") != record["descriptor_sha256"] \
+            or receipt.get("files") != expected or not number(receipt.get("verified_epoch_s")):
+        raise refused("SSD_RECEIPT_INVALID", "SSD readback does not match this copy marker")
+
+
 def require_ssd_mount(root):
     if not os.path.ismount(root) or os.stat(root).st_dev == os.stat(root.anchor).st_dev:
         raise refused("SSD_MOUNT", "--ssd-root must be the mounted external SSD, not a directory on the system disk")
@@ -1569,8 +1577,7 @@ def ssd_copy(config, plan, marker, ssd_root, *, clock=time.time):
                 for kind, name in names(plan).items():
                     if _sha_size(final / name) != expected[kind]:
                         raise integrity("SSD_MISMATCH", "the existing SSD copy differs from the marker")
-                if read_record(receipt).get("files") != expected:
-                    raise integrity("SSD_MISMATCH", "the SSD receipt differs from the marker")
+                require_ssd_receipt(read_record(receipt), plan, marker, expected)
             return str(receipt)
         with tempfile.TemporaryDirectory(prefix=f".{plan}.ssd-", dir=archive_root) as tmp:
             tmp = Path(tmp)
@@ -1633,10 +1640,7 @@ def close_offload(config, plan, span_dir, *, ssd_receipt=None, deadline_epoch=No
         if ssd_receipt is not None:
             check_output_paths(span_dir, {"ssd_receipt": ssd_receipt})
             receipt = read_record(ssd_receipt)
-            if receipt.get("schema") != SSD_SCHEMA or receipt.get("plan") != plan \
-                    or receipt.get("descriptor_sha256") != record["descriptor_sha256"] \
-                    or receipt.get("files") != expected or not number(receipt.get("verified_epoch_s")):
-                raise refused("SSD_RECEIPT_INVALID", "SSD readback does not match this copy marker")
+            require_ssd_receipt(receipt, plan, record, expected)
         with _directory_no_links(stage):
             archive = stage / names(plan)["ciphertext"]
             if ssd_receipt is None and (not os.path.lexists(archive) or _sha_size(archive) != expected["ciphertext"]):
