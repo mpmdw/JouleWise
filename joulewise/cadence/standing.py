@@ -691,11 +691,12 @@ BAD = ("STOPPED", "REFUSED", "FAULT", "STRANDED", "CLOSE_UNPROVEN", "LAUNCH_REFU
        "RECEIPT_MISSING")
 
 
-def build_runs(standing, controller_records, external_runs, kits=None, prior_receipts=None):
+def build_runs(standing, controller_records, external_runs, kits=None, prior_receipts=None, *, required_prior=None):
     """Every run in machine order. A prior (hand-armed) span's gates are derived from its kit and roster like a
     controller span's (Mythos N2); ``kits`` maps sha256 -> kit, and a prior span whose kit is not in it carries
     ``gates_unknown``. ``g0_unreleased`` (the legs whose G0 did not release; None when not known) comes from the controller's
-    close for its spans and from the host receipt (``prior_receipts``) for a prior span."""
+    close for its spans and from the host receipt (``prior_receipts``) for a prior span.
+    ``required_prior`` is the latest hand-armed close that must have receipt evidence for admission."""
     disp = {d["plan_id"]: d["resolution"] for d in standing["dispositions"]}
     bindings = {d["plan_id"]: d.get("verdicts", {}) for d in standing["dispositions"]}
     runs = []
@@ -723,6 +724,8 @@ def build_runs(standing, controller_records, external_runs, kits=None, prior_rec
                 if finished != s["legs"]:
                     problems.append("declared leg count differs from the receipt")
         command_reasons = receipt.get("command_reasons") or []
+        if not receipt and s["plan_id"] == required_prior:
+            command_reasons = [reason("CLOSE_UNPROVEN", "the hand-armed predecessor's receipt is missing")]
         status = ("CLOSE_UNPROVEN" if any(r["code"] == "CLOSE_UNPROVEN" for r in command_reasons)
                   else "STOPPED" if command_reasons else "CLOSED_OK")
         runs.append(Run(s["plan_id"], "campaign" if cls["k2"] else "f2", cls["phase"], s["block_id"], legs_run,

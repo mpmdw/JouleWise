@@ -79,6 +79,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import shutil
 import subprocess
 import sys
@@ -1462,36 +1463,55 @@ class Controller:
         except OSError as exc:
             census = f"host receipt census: {exc}"
         markers, receipts = {}, {}
-        # Gate 3 (Opus 1): the copy gate is per span: every controller span that left a receipt, and the host's
-        # newest campaign receipt.
+        # The copy gate is per span: controller closes, the host's newest campaign receipt, and the latest
+        # hand-armed close declared by the ledger, even when the census finds a different receipt.
         copy_due = {r["plan_id"]: {"source": r["output"], "after": r.get("receipt_epoch") or r["t0_epoch"]} for r in records
                     if r.get("closed_epoch") is not None and r.get("output")}
         for pid in copy_due:
             markers[pid] = self.read_marker(pid)
-        for p in standing["prior_spans"]:
-            markers.setdefault(p["plan_id"], self.read_marker(p["plan_id"]))
+        priors = {p["plan_id"]: p for p in standing["prior_spans"]}
+        latest_prior = max(priors, key=lambda pid: law.parse_time(priors[pid]["closed"]), default=None)
+        for pid in priors:
+            markers.setdefault(pid, self.read_marker(pid))
         if isinstance(census, dict):
             m = law.CAMPAIGN_RECEIPT.search(census["newest"][1])
             if m and m.group("plan") not in markers:
                 markers[m.group("plan")] = self.read_marker(m.group("plan"))
-            prior_ids = {p["plan_id"] for p in standing["prior_spans"]}
             for path in census["campaign"]:   # a prior span's receipt: its roster, kit and G0 timeouts (N2; RL-173 E)
                 m = law.CAMPAIGN_RECEIPT.search(path)
-                if m and m.group("plan") in prior_ids:
+                if m and m.group("plan") in priors:
+                    pid = m.group("plan")
                     try:
+                        if pid in receipts:
+                            raise ValueError("multiple receipts for the declared plan")
+                        if m.group("campaign") != priors[pid]["campaign_id"]:
+                            raise ValueError("receipt directory names a different campaign")
                         receipt_path = Path(path)
-                        if receipt_path.is_symlink() or not receipt_path.is_file() or receipt_path.stat().st_size > 16 * 1024 * 1024:
+                        st = receipt_path.lstat()
+                        if not stat.S_ISREG(st.st_mode) or st.st_size > 16 * 1024 * 1024:
                             raise ValueError("prior receipt: symlink, non-regular or oversized")
                         doc = json.loads(receipt_path.read_bytes())
-                        receipts[m.group("plan")] = {
+                        if doc.get("plan_id", pid) != pid:
+                            raise ValueError("receipt names a different plan")
+                        receipts[pid] = {
+                            "source": str(receipt_path.parent), "receipt_epoch": math.ceil(st.st_mtime),
                             "roster": doc.get("roster"), "kit_sha256": (doc.get("kit") or {}).get("sha256"),
                             "campaign_id": (doc.get("kit") or {}).get("campaign_id"),
                             "legs_finished": doc.get("legs_finished"),
                             "command_reasons": law.receipt_command_reasons(doc),
                             "g0_unreleased": law.receipt_unreleased(doc, {}, doc.get("roster") or [])}
-                    except (OSError, ValueError, AttributeError):
-                        receipts[m.group("plan")] = {"roster": None, "kit_sha256": None, "g0_unreleased": None}
-        runs = law.build_runs(standing, records, self.externals(), kits=audit["kits"], prior_receipts=receipts)
+                    except (OSError, ValueError, TypeError, AttributeError) as error:
+                        problem = f"{pid}: {error}"
+                        reasons.append(law.reason("PRIOR_CONTRADICTS", problem))
+                        receipts[pid] = {"command_reasons": [law.reason("CLOSE_UNPROVEN", problem)]}
+        if latest_prior is not None:
+            evidence = receipts.get(latest_prior)
+            if evidence is None:
+                reasons.append(law.reason("RECEIPT_MISSING", f"{latest_prior}: no matching hand-armed receipt"))
+            elif "source" in evidence:
+                copy_due[latest_prior] = {"source": evidence["source"], "after": evidence["receipt_epoch"]}
+        runs = law.build_runs(standing, records, self.externals(), kits=audit["kits"], prior_receipts=receipts,
+                              required_prior=latest_prior)
         desk_halts = law.apply_verdicts(runs, audit["verdicts"], accept_mock=self.cfg["accept_mock_verdicts"],
                                         mbp_verdicts=audit["mbp_verdicts"])
         desk_halts += law.apply_q1(runs, audit["q1"], self.campaign_kits(audit, records), audit["q1_epochs"])

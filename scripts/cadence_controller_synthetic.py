@@ -47,7 +47,7 @@ two must agree.
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime
+from datetime import datetime, timezone
 import io
 import json
 import os
@@ -134,7 +134,7 @@ def git(cwd, *args, epoch=None, check=True):
 class World:
     """The synthetic MBP (controller), origin, lead and Air desk."""
 
-    def __init__(self, workdir, *, prior=True, freeze2=False):
+    def __init__(self, workdir, *, prior=True, freeze2=False, prior_evidence=True):
         self.w = Path(workdir).resolve()      # Mythos N17: a relative workdir broke the pinned children's paths
         if self.w.exists():
             shutil.rmtree(self.w)
@@ -207,9 +207,33 @@ class World:
             "desk_commit": "0" * 40}
         (self.w / "custody").mkdir()
         (self.w / "desk-copy").mkdir()
+        if self.standing["prior_spans"] and prior_evidence:
+            self.record_prior_close(self.standing["prior_spans"][-1])
         self.issues, self.notices, self.history, self.watcher_runs = [], [], {}, []
         self.launcher = MockLauncher(self)
         self.ctl = None
+
+    def record_prior_close(self, prior):
+        """Materialize a clean hand-armed fixture with its own receipt and verified copy marker."""
+        pid, roster = prior["plan_id"], prior["roster"]
+        stamp = datetime.fromtimestamp(law.parse_time(prior["t0"]), timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        source = Path(self.cfg["output_root"]) / prior["campaign_id"] / f"{pid}-{stamp}"
+        source.mkdir(parents=True)
+        receipt = source / cc.RECEIPT
+        receipt.write_text(json.dumps({
+            "roster": roster, "kit": {"sha256": prior["kit_sha256"], "campaign_id": prior["campaign_id"]},
+            "rc": 0, "span_result": {"chain_exit_code": 0, "chain_outcome": "COMPLETE",
+                                    "fault": False, "outcome": "MEASURED_OK"},
+            "steps": [{"name": "soak", "rc": 0}, {"name": "restore", "rc": 0}],
+            "feeds": {"meter": {"stop": {"proven_stopped": True}}},
+            "legs_finished": len(roster), "legs_planned": len(roster),
+            "legs": [{"leg_id": leg, "summary": {"g0_outcome": "released"}} for leg in roster],
+        }))
+        closed = law.parse_time(prior["closed"])
+        os.utime(receipt, (closed, closed))
+        marker = offload_marker(pid, closed, str(source))
+        (Path(self.cfg["copy_marker_dir"]) / f"{pid}.ok").write_text(json.dumps(marker))
+        return receipt
 
     # -- the pinned runners -------------------------------------------------------------------------
     def _export_pin(self, commit):
@@ -722,6 +746,7 @@ def scenario_prior_gate(workdir, log=print):
         "plan_id": "cq-dev-04-s01-a1", "campaign_id": "cl-dev-04", "block_id": "dev-04", "kit_sha256": w.sha["cl-dev-04"],
         "roster": L[:6], "legs": 6, "mixed": True, "t0": "2026-11-17T00:30:00-08:00",
         "closed": "2026-11-17T03:30:00-08:00", "desk_final": "synthetic hand table"})
+    w.record_prior_close(w.standing["prior_spans"][-1])
     w.controller()
     w.queue("dev04-rest", [w.span(1, "dev-04-s02", "cl-dev-04", L[6:])])
     s = w.tick()

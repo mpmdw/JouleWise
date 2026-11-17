@@ -54,7 +54,7 @@ class WorldCase(unittest.TestCase):
 @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
 class Gate6Controller(WorldCase):
     def prior_receipt_world(self, *, clean=False):
-        w = self.pilot_world()
+        w = self.pilot_world(prior_evidence=False)
         prior = w.standing['prior_spans'][-1]
         source = Path(w.cfg['output_root']) / prior['campaign_id'] / (prior['plan_id'] + '-20261116T180000Z')
         source.mkdir(parents=True)
@@ -87,6 +87,56 @@ class Gate6Controller(WorldCase):
         w = self.prior_receipt_world(clean=True)
         status = w.tick()
         self.assertEqual(status['state'], 'LIVE', self.pages(w))
+
+    def test_declared_predecessor_requires_its_own_receipt_and_copy(self):
+        w = self.world(prior=False)
+        pid = "cq-dev-04-s01-a1"
+        w.standing["prior_spans"] = [{
+            "plan_id": pid, "campaign_id": "cl-dev-04", "block_id": "dev-04",
+            "kit_sha256": w.sha["cl-dev-04"], "roster": L[:6], "legs": 6, "mixed": True,
+            "t0": "2026-11-17T03:30:00-08:00", "closed": "2026-11-17T07:00:00-08:00",
+            "desk_final": "synthetic hand table",
+        }]
+        w.lead_release(pid, "class-a")
+        w.lead_release(pid, "L005")
+        w.queue("pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
+        census = w.ctl.census()
+        self.assertEqual(census["campaign"], [])
+        self.assertIn("old-smoke", census["newest"][1])
+        self.assertFalse((Path(w.cfg["copy_marker_dir"]) / f"{pid}.ok").exists())
+        self.assertIn(w.tick()["state"], ("PAGED", "HALTED"))
+        self.assertIn("RECEIPT_MISSING", self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_prior_receipt_path_must_match_its_campaign(self):
+        w = self.prior_receipt_world(clean=True)
+        prior = w.standing["prior_spans"][-1]
+        receipt = Path(w.ctl.census()["campaign"][0])
+        wrong_campaign = receipt.parent.parent.with_name("cl-dev-04")
+        wrong_campaign.mkdir()
+        source = receipt.parent.rename(wrong_campaign / receipt.parent.name)
+        marker_path = Path(w.cfg["copy_marker_dir"]) / (prior["plan_id"] + ".ok")
+        marker_path.write_text(json.dumps(synth.offload_marker(prior["plan_id"], w.env.now(), str(source))))
+        self.assertIn(w.tick()["state"], ("PAGED", "HALTED"))
+        self.assertIn("PRIOR_CONTRADICTS", self.pages(w))
+        self.assertEqual(w.launcher.launched, [])
+
+    def test_predecessor_copy_is_due_when_a_different_receipt_is_newer_on_disk(self):
+        w = self.prior_receipt_world(clean=True)
+        prior = w.standing["prior_spans"][-1]
+        (Path(w.cfg["copy_marker_dir"]) / f"{prior['plan_id']}.ok").unlink()
+        other = w.standing["prior_spans"][0]
+        path = w.record_prior_close(other)
+        newer = law.parse_time(prior["closed"]) + 300
+        os.utime(path, (newer, newer))
+        marker = synth.offload_marker(other["plan_id"], newer, str(path.parent))
+        (Path(w.cfg["copy_marker_dir"]) / f"{other['plan_id']}.ok").write_text(json.dumps(marker))
+        self.assertEqual(w.ctl.census()["campaign_newest"][1], str(path))
+        status = w.tick()
+        self.assertEqual(status["state"], "WAIT")
+        self.assertIn("JOURNAL_COPY", status["detail"]["codes"])
+        self.assertIn(prior["plan_id"], status["detail"]["detail"])
+        self.assertEqual(w.launcher.launched, [])
 
     def test_watchdog_removal_of_expired_fence_requires_acknowledgement(self):
         w = self.pilot_world(prior=False)
@@ -165,7 +215,7 @@ class Gate6Controller(WorldCase):
 @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
 class Gate5Controller(WorldCase):
     def keyless_world(self):
-        w = self.pilot_world()
+        w = self.pilot_world(prior_evidence=False)
         prior = w.standing['prior_spans'][-1]
         prior.update(t0='2026-11-16T07:00:00-08:00', closed='2026-11-16T10:00:00-08:00')
         w.commit({f'{synth.RD}/STANDING.json': w.standing}, 'early prior close', w.env.now() - 100)
