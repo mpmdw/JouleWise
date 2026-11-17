@@ -19,6 +19,11 @@ path and the generated pointer were outside this task.
   hosted PR CI check. Local broad discovery includes tests that access
   prohibited data classes or signal processes, so this session ran the
   focused synthetic checks locally.
+- Hosted quick CI on the preceding head required scheduling entries for the
+  two new modules. The timing map now records the local shard observations.
+  The timing coverage invariant passed locally with filename discovery.
+  Full unittest discovery encountered denied metadata probes from unrelated
+  archive-dependent tests. Hosted quick CI runs the complete invariant.
 - The fixture census attempted `scripts/fixture_orphan_census.py --fail-on-orphans`
   and could not obtain the process inventory because `ps` was denied
   (`Operation not permitted`). No orphan count was established.
