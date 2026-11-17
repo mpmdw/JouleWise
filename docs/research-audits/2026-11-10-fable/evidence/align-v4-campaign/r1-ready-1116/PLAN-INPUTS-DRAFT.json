@@ -1,0 +1,22 @@
+{
+  "schema": "joulewise.r1_plan_inputs_draft.v1",
+  "status": "DRAFT_NOT_INSTALLABLE",
+  "producer": "b2e01464d:scripts/arm_align_r1.py prepare",
+  "measurement_root": "/Users/edr/code/jw-wt/r1-slot-b2e01464d",
+  "measurement_head": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+  "python": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+  "custody_root": "LEAD FILLS: fresh /Users/edr/night-align/r1-<UTC date>; never reuse",
+  "t0_epoch_s": "LEAD FILLS: whole minute >= now+900 and after actual clean close/gap; choose after review/notice ready",
+  "planned_bytes": 0,
+  "allocation_status": "explicitly unsized unless lead supplies sourced R1-specific estimate",
+  "receipt_class": "HAZARD_PACK",
+  "ac_powermode_field": "OMIT: absent is Automatic; do not add it",
+  "driver_s": 102168,
+  "window_max_s": 119880,
+  "shutdown_grace_s": 300,
+  "expected_s": null,
+  "batch_window_local": "02:00-02:35, R1 driver owned; no campaign argument override",
+  "prepare_packet": "LEAD FILLS: freshly recreated fixed .align-r1-prepare.json with real weight/stack checks; sha256 equal to arm.json",
+  "install_close_rule": "t0 minus watchdog 180 s minus driver 120 s; reserve 180 s installer budget before cutoff",
+  "next": "lead runs producer only in clean close; inspect/render/notice/veto/install as ITEM-R1.md"
+}

@@ -3,6 +3,18 @@
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
+## 2026-11-16 R1 preparation intake (audit branch; lead issue pending)
+
+P1 [AGENT], user-selected under RL-174 B/E: prepare the R1 slot session
+before filler builds. Off-host preparation delivered; native READY/issue
+remains lead-owned. [Checklist, drafts, staging and forecast](docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/r1-ready-1116/CHECKLIST.md).
+Authority/live state: audit `ebff15ad2` RL-174 and main `0656dfe3a`
+RUN_STATE 344–376. [Run report](docs/run_reports/2026-11-16-r1-ready-preparation.md).
+Final fetch: main `6fc02b192` item 377 adds running F0 run 6; native staging
+waits for its actual clean close/Check (forecast updated).
+Explicit user rule: never edit RUN_STATE; no generated views/kernel were
+rewritten. This dated intake does not issue a session or alter live queues.
+
 ## Intake Rule For New Tasks
 
 For every new user task:

@@ -1,0 +1,17 @@
+{
+  "schema": "joulewise.r1_priority_entry_draft.v1",
+  "status": "DRAFT_NOT_CONTROLLER_INPUT",
+  "kind": "v4-session",
+  "session": "R1-slot",
+  "priority_authority": "RL-172(f); RL-174 B ladder",
+  "route": "HAZARD_PACK via scripts/arm_align_r1.py; never cadence_queue next/launch",
+  "measurement_commit": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+  "item": "ITEM-R1.md",
+  "lead_ready_record": "LEAD FILLS: origin/main commit and RUN_STATE item, dated READY by the lead",
+  "staging_record": "LEAD FILLS: source-stage output, package commit, source hashes",
+  "predecessor": "LEAD FILLS: latest real running span/session at READY; its clean close/Check/copy/restore",
+  "notice": "LEAD FILLS: existing notice route, sent epoch, veto interval and fresh no-veto read",
+  "seal_receipt_restore": "R1 route only: D-7 packet + arm.json + pinned chain; R1 terminal/chain exit; observed Automatic and process absence",
+  "rule": "After lead READY no lower priority arm; running span finishes; R1 takes next clean close. Before READY normal queue rules continue. Never abort a running filler.",
+  "expiry": "LEAD FILLS: issue validity for this session, if any; RL-173 D.5 states a counted-span interim rule, not a v4 expiry grant"
+}

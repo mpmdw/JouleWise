@@ -1,0 +1,78 @@
+{
+  "observed_at": "2026-11-16 18:30:31 PST",
+  "source": "GitHub plugin: get_pr_info, fetch_commit_workflow_runs (read-only)",
+  "measurement_commit": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+  "workflows": {
+    "workflow_runs": [
+      {
+        "id": 43712204538,
+        "name": "gate-ledger",
+        "status": "completed",
+        "conclusion": "skipped",
+        "run_number": 2566,
+        "jobs_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43712204538/jobs",
+        "logs_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43712204538/logs",
+        "workflow_id": 348524224
+      },
+      {
+        "id": 43712204542,
+        "name": "ci",
+        "status": "completed",
+        "conclusion": "success",
+        "run_number": 4950,
+        "jobs_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43712204542/jobs",
+        "logs_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43712204542/logs",
+        "workflow_id": 292525771
+      }
+    ]
+  },
+  "merges": [
+    {
+      "pr": 777,
+      "url": "https://github.com/mpmdw/JouleWise/pull/777",
+      "head": "ae340d3da62192403fc0e9cfcc10f04fe19fd2e6",
+      "merged": true,
+      "merge": "f30a97d008b57acde9adec0f789dff13c9d6ef23",
+      "state": "closed"
+    },
+    {
+      "pr": 783,
+      "url": "https://github.com/mpmdw/JouleWise/pull/783",
+      "head": "0ec600128cb5e5040fe0dad2d30e4a10a38eae67",
+      "merged": true,
+      "merge": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "state": "closed"
+    },
+    {
+      "pr": 798,
+      "url": "https://github.com/mpmdw/JouleWise/pull/798",
+      "head": "bd66fd850105eb5033c9cb088e03d79fa97fa5e3",
+      "merged": true,
+      "merge": "e5b4f4f7fbc05d3c1ff661356867f95a24e0cf9a",
+      "state": "closed"
+    },
+    {
+      "pr": 734,
+      "url": "https://github.com/mpmdw/JouleWise/pull/734",
+      "head": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+      "merged": false,
+      "merge": "690b0bcf5c0f4fd4da307a6e1c4f4dfa90ed9fcb",
+      "state": "open"
+    },
+    {
+      "pr": 774,
+      "url": "https://github.com/mpmdw/JouleWise/pull/774",
+      "head": "9848520a4cc03cbd95d77a0a3f7b57e306224007",
+      "merged": true,
+      "merge": "cd1719441bdf4451f205d72bd71990f3d74ac69f",
+      "state": "closed"
+    }
+  ],
+  "pr790": {
+    "url": "https://github.com/mpmdw/JouleWise/pull/790",
+    "merged": true,
+    "head": "ca02c76e3b06118a6bcb5d612f034c93ceafb003",
+    "merge": "b2e01464d6d4fbf2901ff4d4154df9455104a12a"
+  },
+  "note": "CI proves source test status only. It is not a native R1 READY record."
+}

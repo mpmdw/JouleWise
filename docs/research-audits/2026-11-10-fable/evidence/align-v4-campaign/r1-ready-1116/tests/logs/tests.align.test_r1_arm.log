@@ -1,0 +1,7 @@
+..........
+----------------------------------------------------------------------
+Ran 10 tests in 17.020s
+
+OK
+R1_SYNTHETIC {"environment": {"MEASUREMENT_ROOT": "/private/tmp/jw-r1-checks.dbwvdv/tmpi6647gwk/measurement", "NIGHT_DIR": "/private/tmp/jw-r1-checks.dbwvdv/tmpi6647gwk/custody/night"}, "exit": 130, "host_lock_reacquired": true, "interrupt": true, "lock_blocked_during_high_power": [true], "power_mode": 0, "r1_status": "aborted"}
+R1_SYNTHETIC {"environment": {"MEASUREMENT_ROOT": "/private/tmp/jw-r1-checks.dbwvdv/tmpeghq4xk5/measurement", "NIGHT_DIR": "/private/tmp/jw-r1-checks.dbwvdv/tmpeghq4xk5/custody/night"}, "exit": 0, "host_lock_reacquired": true, "interrupt": false, "lock_blocked_during_high_power": [], "power_mode": 0, "r1_status": "complete"}

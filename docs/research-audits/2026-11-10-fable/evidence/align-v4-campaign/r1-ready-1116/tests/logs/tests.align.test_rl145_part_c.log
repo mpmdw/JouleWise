@@ -1,0 +1,21 @@
+..................Part C: X_G left out, the launcher could not run it without more condition-13 code: Refusal: runtime.x-g: exit 2: synthetic
+...usage: python3.13 -m unittest [-h] --output OUTPUT
+                              [--soak-reference SOAK_REFERENCE] [--fresh-soak]
+                              [--parts {AB,A,C}] [--inputs INPUTS]
+                              [--deadline DEADLINE] [--pmset-bin PMSET_BIN]
+python3.13 -m unittest: error: --parts C runs on a fresh soak (RL-145 addendum)
+..........
+----------------------------------------------------------------------
+Ran 31 tests in 0.080s
+
+OK
+Part C verdict: start_state_failed (pass: False)
+Part C log: three-turn clause not evaluated: one D run
+Part C verdict: other_failure (pass: False)
+Part C log: X_G was not run: no reason recorded
+Part C log: D_bank did not run (no step-D slots or an earlier failure): nothing to judge
+Part C verdict: pass (pass: True)
+Part C log: three-turn clause not evaluated: one D run
+Part C verdict: pass (pass: True)
+Part C log: three-turn clause not evaluated: one D run
+Part C log: X_G was not run: Refusal: runtime.x-g: exit 2: synthetic

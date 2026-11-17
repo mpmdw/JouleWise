@@ -1,0 +1,21 @@
+{
+  "programmed_span_s": 102168,
+  "base_terms_s": {
+    "r1_driver_span_s": 102168,
+    "hazard_arm_s": 3300,
+    "display_dwell_s": 300,
+    "bookends_s": 3600,
+    "close_s": 1200,
+    "harvest_s": 600
+  },
+  "base_s": 111168,
+  "writer_window_max_s": 119880,
+  "window_max_s": 119880,
+  "latest_driver_end_offset_s": 107598,
+  "batch_crossings_epoch_s": [
+    1795082400.0,
+    1795168800.0
+  ],
+  "batch_window_crossings": 2,
+  "authority": "RL-72 E2 at the RL-149 section 2.9 item 4 blackout (span 102,168 s, window_max_s 119,880 s); encounters inside the span"
+}

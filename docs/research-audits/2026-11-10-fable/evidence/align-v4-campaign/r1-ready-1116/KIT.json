@@ -1,0 +1,105 @@
+{
+  "schema": "joulewise.r1_preparation.v1",
+  "status": "PREPARATION_ONLY_NOT_ISSUED",
+  "created": "2026-11-16 18:17:12 PST",
+  "measurement_commit": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+  "measurement_tree": "c904864e46879a4adfbdf0b467d4da1ee5928285",
+  "authority": "RL-145 step 4 + close/addendum, as restored/amended by RL-149 \u00a75.12; RL-152/153/156/159/170/172b/172c; RL-172(f); RL-173; RL-174 B/E",
+  "adopted": {
+    "series_admission": "Automatic",
+    "d_n_chunk": 4096,
+    "gate_pair": [
+      "TV0h",
+      "TV1h"
+    ],
+    "holds": "none for D",
+    "record_only": [
+      "Tf08"
+    ]
+  },
+  "condition_13_paths": [
+    "scripts/align_r1_rehearsal.py",
+    "scripts/align_r1_runtime.py",
+    "joulewise/align/apple/r1_runtime.py",
+    "joulewise/align/apple/r1_runtime_contract.py",
+    "joulewise/align/apple/smc_enumeration.py",
+    "joulewise/align/apple/thermal_gates.py",
+    "configs/align/v4/r1_runtime.json",
+    "joulewise/align/apple/r1_phase_table.py",
+    "joulewise/align/apple/workload.py",
+    "joulewise/align/apple/thermal.py"
+  ],
+  "part_c_additional_paths": [
+    "scripts/launch_align_r0.py",
+    "scripts/run_align_r0_launchagent.sh",
+    "scripts/run_align_r1_smoke.py",
+    "scripts/align_r1_followup_kit.py",
+    "scripts/align_r1_part_c.py",
+    "joulewise/align/apple/rl145_prints.py",
+    "joulewise/align/apple/v4_registration.py"
+  ],
+  "route_additional_paths": [
+    "scripts/arm_align_r1.py",
+    "joulewise/align/r1_arm.py",
+    "scripts/night_chains/align_r1_rehearsal.zsh",
+    "docs/align/r1_arm_runbook.md",
+    "docs/run_reports/2026-11-13-rl145/sensor_ruling_rl145.json",
+    "docs/run_reports/2026-11-13-rl145/smoke_part_b.rl145.json",
+    "scripts/align_r1_r0_classes_from_r0.py",
+    "configs/campaigns/align_v4/registration/inputs.json"
+  ],
+  "source_sha256": {
+    "scripts/align_r1_rehearsal.py": "2806f9eae61210d457ae19a5484cfe7dc7ac70a31c20b1ca0a2856f32178a825",
+    "scripts/align_r1_runtime.py": "7403e69d9aedb54887bfc4218a45db84faa653329ca977bcf97edf20af88f923",
+    "joulewise/align/apple/r1_runtime.py": "a5ba3cd4dce1b41c8448e2e26653789a9f607ffc2836a7b4a9339b991f9b6dac",
+    "joulewise/align/apple/r1_runtime_contract.py": "4b9d1c69b0459a0382dfdd5e3aee56366e99f770ed2320cfff90539647ab6591",
+    "joulewise/align/apple/smc_enumeration.py": "0132579cc33f8a997cdfd5f3dd84466352cdeeeebf9ca7de8dc1ec7990cea0a9",
+    "joulewise/align/apple/thermal_gates.py": "c72937bd8bf7b5553c1ffd70e76018ffbf25f32578533c8749aa88419837918d",
+    "configs/align/v4/r1_runtime.json": "272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46",
+    "joulewise/align/apple/r1_phase_table.py": "ffd6c025f4691771ea348f5d0f670c8f4bbfcb61afe67b83831afdd6c3d6f1ea",
+    "joulewise/align/apple/workload.py": "837b74be97616c48c26b0c1277fe2a605b575d5cfc4396dc05e1139079daf1ba",
+    "joulewise/align/apple/thermal.py": "b9b46f9ede50b265c245dcc05d3503139632ae129e313675622fa1dce25d39d7",
+    "scripts/launch_align_r0.py": "242cd7aa0bf5788786ca8630e6931abcaaa3e01dc3bf014255a6191b50c6e799",
+    "scripts/run_align_r0_launchagent.sh": "ac1dc2a223754cfc3295dd1352a838a3077671da140ffeeba484400e1bd249c6",
+    "scripts/run_align_r1_smoke.py": "6f1fb9f4ac3109650b36b07012e24728c17e7112e7b59953e6557f2b5fdd35aa",
+    "scripts/align_r1_followup_kit.py": "39dd7946e899058987038130b9c133298283a80ae3db4dceee79daad3c8e08b8",
+    "scripts/align_r1_part_c.py": "b2c91c77ef9f1c227c5c172690fadf5f36cff22b4874d0eeaa66798ca9ef12b8",
+    "joulewise/align/apple/rl145_prints.py": "b605195f9a23226a702376d9fbdb2e451546d6c3187297c39bd5b88e2e78f167",
+    "joulewise/align/apple/v4_registration.py": "28caceeba15c30ca679e25c49a7c85b828096bb3b1ab3e2c676d8d1c8d10db80",
+    "scripts/arm_align_r1.py": "99aeb47b7d311be0c5061b5a49139b706ed632aebe7c995ad60ac838493dc4ab",
+    "joulewise/align/r1_arm.py": "e05fdfcd82332b83b0e513d85a33d4e5bda5eeffe7c6933cc9486b44736db4ff",
+    "scripts/night_chains/align_r1_rehearsal.zsh": "ccdeaa1d8c71955ac1256c5aa4304cf502fba4ab31b4bda79ac679b88e20d807",
+    "docs/align/r1_arm_runbook.md": "0af4c28d60428c12a6a5602d81336168fe0685dd83ba2e669ae1a6ee98b4b71f",
+    "docs/run_reports/2026-11-13-rl145/sensor_ruling_rl145.json": "1babf2afbb27ec3cbec447699f25e42f076a32b3f91405744e1101d41348fab3",
+    "docs/run_reports/2026-11-13-rl145/smoke_part_b.rl145.json": "0dd1d4efeec3acb1e6ee6f26b5ca94e1bd2748560a627a040811c3df6af9498b",
+    "scripts/align_r1_r0_classes_from_r0.py": "43b64ba4ff231fcd8e6e50c01f2b3b6683eb54348e458a7e6b480079af190643",
+    "configs/campaigns/align_v4/registration/inputs.json": "49806b61e50d5c2ceeeea323d8aceff75177a2f7e7d83ad2f5dfbe1c20090130"
+  },
+  "counted_part_c": {
+    "main_item": 328,
+    "executed_commit": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+    "carry_authority": [
+      "RL-170 \u00a72",
+      "RL-172b \u00a72",
+      "RL-172c"
+    ],
+    "new_part_c_required_at_this_pin": false
+  },
+  "bounds_s": {
+    "driver": 102168,
+    "outer": 119880,
+    "shutdown_grace": 300,
+    "sampler": 5764
+  },
+  "expected_runtime_s": null,
+  "expected_runtime_status": "UNKNOWN: source supplies bounds, not an expected runtime",
+  "source_refs": {
+    "rulings": "ebff15ad27e831499dd65796b3727d8c5d451e21",
+    "live_run_state": "0656dfe3a4263629e1d752933d386b99145fe8ac",
+    "census": "/Volumes/JW-EXT/scratch/mbp-plan-1116/seat-census/FINAL-MESSAGE.md \u00a73 (older; RL-174 supersedes host/storage/date text)",
+    "live_run_state_final_fetch": "6fc02b192:RUN_STATE.md item 377, observed 2026-11-16 18:33:20 PST"
+  },
+  "measurement_worktree": "/Users/edr/code/jw-wt/r1-slot-b2e01464d",
+  "measurement_python": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+  "not_a_campaign_kit": true
+}
