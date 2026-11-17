@@ -2142,7 +2142,7 @@
           "kind": "decision",
           "note": "Owner question pending; options and recommendation in the run report.",
           "required": "Resolve requested readable tar.zst versus RL-173 A.1-2 encryption and off-MBP key.",
-          "scope": "close",
+          "scope": "start",
           "state": "pending",
           "strength": "hard",
           "target": "CLOSE-OFFLOAD-ARCHIVE-FORMAT"
@@ -2152,7 +2152,7 @@
           "kind": "decision",
           "note": "Owner question pending; options and recommendation in the run report.",
           "required": "Resolve requested nonholding UPLOAD_PENDING versus RL-173 A.3/A.7.",
-          "scope": "close",
+          "scope": "start",
           "state": "pending",
           "strength": "hard",
           "target": "CLOSE-OFFLOAD-PENDING-ARM"
