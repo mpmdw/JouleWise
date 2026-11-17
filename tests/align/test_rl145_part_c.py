@@ -29,7 +29,8 @@ def turn(index, decode, **extra):
 
 def interval(kind, turn_index=0, *, duration=20.0, outcome='released', token_count=None, release_status='ok'):
     return {'kind': kind, 'turn': turn_index, 'token_count': token_count, 'outcome': outcome,
-            'duration_s': duration, 'release_status': status() if release_status == 'ok' else release_status}
+            'duration_s': duration, 'start_ns': 0, 'end_ns': round(duration * 1e9),
+            'release_status': status() if release_status == 'ok' else release_status}
 
 
 def bank(**override):
@@ -105,15 +106,30 @@ class EvaluatorFailureTests(unittest.TestCase):
         if key:
             self.assertFalse(node['checks'][key]['pass'], node)
 
+    def test_admitted_turns_cannot_pass_with_missing_duplicate_or_unreleased_g1(self):
+        g0, g1, g2 = bank()['intervals']
+        for intervals in ([g0], [g0, g1, g1, g2], [g0, g1, {**g2, 'turn': 8}],
+                          [g0, g1, {**g2, 'outcome': 'unobserved'}]):
+            with self.subTest(intervals=intervals):
+                self.check(run(d_bank=bank(intervals=intervals)), 'd_bank_mechanics',
+                           'g1_records', 'other_failure')
+
+    def test_g1_wait_cannot_be_understated_in_the_duty_budget(self):
+        d = bank()
+        d['intervals'][1].update(duration_s=0, start_ns=0, end_ns=90_000_000_000)
+        result = run(d_bank=d)
+        self.check(result, 'd_bank_mechanics', 'gate_durations', 'other_failure')
+        self.assertIsNone(result['lines']['d_bank_mechanics']['checks']['gate_time']['gates_plus_holds_s'])
+
     def test_fewer_than_three_admitted_turns(self):
         d = bank(turns=[turn(0, 1500), turn(1, 3000)])
         self.check(run(d_bank=d), 'd_bank_mechanics', 'admitted_turns', 'other_failure')
 
     def test_gate_time_over_forty_percent_of_t_dead_is_the_gate_time_branch(self):
         d = bank()
-        d['intervals'][0]['duration_s'] = 190.0          # 190 + 90 + 120 = 400 = 0.40 x 1000: at the limit holds (<=)
+        d['intervals'][0].update(duration_s=190.0, end_ns=190_000_000_000)          # 190 + 90 + 120 = 400 = 0.40 x 1000: at the limit holds (<=)
         self.assertTrue(run(d_bank=d)['pass'])
-        d['intervals'][0]['duration_s'] = 190.001
+        d['intervals'][0].update(duration_s=190.001, end_ns=190_001_000_000)
         result = run(d_bank=d)
         self.check(result, 'd_bank_mechanics', 'gate_time', 'mechanics_gate_time_failed')
         self.assertNotIn('fallback of', result['disposition'].replace('withdrew the fallback', ''))
@@ -257,7 +273,7 @@ class OwnStopTurnCheckTests(unittest.TestCase):
 
     def test_a_not_applicable_turn_check_does_not_hide_the_gate_time_branch(self):
         d = self.two_turns()
-        d['intervals'][0]['duration_s'] = 500.0
+        d['intervals'][0].update(duration_s=500.0, end_ns=500_000_000_000)
         self.assertEqual(run(d_bank=d)['verdict'], 'mechanics_gate_time_failed')
 
     def test_three_turns_need_no_stop_reading(self):
@@ -308,8 +324,10 @@ class SidecarJournalTests(unittest.TestCase):
         self.sidecar.event('align_thermal_gate', {'gate_kind': 'G1', 'state': 'release', 'turn': 1})
         self.sidecar.stop()
         intervals = [{'kind': 'G0', 'turn': 0, 'outcome': 'released', 'duration_s': 110.0,
+                      'start_ns': 0, 'end_ns': 110_000_000_000,
                       'exit_sample_ns': g0 if release_ns is None else release_ns},
-                     {'kind': 'G1', 'turn': 1, 'outcome': 'released', 'duration_s': 99.8, 'exit_sample_ns': g1}]
+                     {'kind': 'G1', 'turn': 1, 'outcome': 'released', 'duration_s': 99.8,
+                      'start_ns': 0, 'end_ns': 99_800_000_000, 'exit_sample_ns': g1}]
         turns = [SimpleNamespace(index=0, start_ns=t0, end_ns=t0 + 2, decode_tokens=2200, prefill_tokens=11211),
                  SimpleNamespace(index=1, start_ns=t1, end_ns=t1 + 2, decode_tokens=4096, prefill_tokens=40)]
         ep = SimpleNamespace(hardware={'thermal': {'intervals': intervals}, 'token_budget': {'deadman_s': 983.1}},

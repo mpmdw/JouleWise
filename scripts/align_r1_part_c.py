@@ -11,7 +11,10 @@ D_bank line):
 - Step-D: its G0 releases inside 1,200 s with both keys at most 1.0 C over the
   reference and the slope inside +/-0.2 C/min.
 - D_bank, mechanics: at least three admitted turns; gates plus holds <= 0.40 x T_dead;
-  no X7 (the deadman); no G1 timeout. The H (hold) records are exactly those the
+  no X7 (the deadman); no G1 timeout. Each later admitted turn requires exactly one
+  released G1. The duty sum reconciles durations to the episode-monotonic interval
+  bounds (Round 10 Astra design finding 2, cited rebind of the Part C evaluation
+  at b2e01464d). The H (hold) records are exactly those the
   configured N_chunk implies: one at each multiple of N_chunk that a turn reaches
   before it finishes and that is below 4,096. At N_chunk 4,096 that is none.
   RL-149 sections 1.2 item 5 and 1.5: a member that returned by its own stop (no
@@ -38,7 +41,9 @@ D_bank line):
 """
 from __future__ import annotations
 
+from collections import defaultdict
 import json
+import math
 from pathlib import Path
 
 MAX_TOKENS = 4096                  # frozen turn cap (D-17a); no hold fires at or above it
@@ -105,12 +110,46 @@ def _judged(checks):
     return {k: v for k, v in checks.items() if v.get("judged", True)}
 
 
+def g1_records(turns, intervals):
+    """Require a released G1 at every admitted index after the first turn."""
+    outcomes = defaultdict(list)
+    for row in intervals:
+        if row.get("kind") == "G1" and type(row.get("turn")) is int:
+            outcomes[row["turn"]].append(row.get("outcome"))
+    per_turn = [{"turn": turn["index"], "outcomes": outcomes[turn["index"]]}
+                for turn in turns if turn["index"] > 0]
+    return {"pass": all(row["outcomes"] == ["released"] for row in per_turn), "per_turn": per_turn}
+
+
+def gate_durations(intervals):
+    """Reconcile each G0/G1/H duration to the interval's episode-monotonic bounds."""
+    durations = []
+    errors = []
+    for row in intervals:
+        kind = row.get("kind")
+        if kind not in ("G0", "G1", "H"):
+            continue
+        start, end, duration = row.get("start_ns"), row.get("end_ns"), row.get("duration_s")
+        expected = None
+        if type(start) is int and type(end) is int and 0 <= start <= end:
+            try:
+                expected = (end - start) / 1_000_000_000
+            except OverflowError:
+                pass
+        if expected is None or type(duration) not in (int, float) or duration != expected:
+            errors.append({"kind": kind, "turn": row.get("turn"),
+                           "reason": "duration does not match monotonic bounds"})
+        else:
+            durations.append(expected)
+    return {"pass": not errors, "errors": errors, "total_s": None if errors else sum(durations)}
+
+
 def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
     """``d_bank``: {turns: [{index, decode_tokens, ...}], intervals: [{kind, turn, token_count, outcome,
     duration_s, ...}], x7, t_dead_s, episode_flags (None when not recorded)}."""
     from scripts.align_r1_rehearsal import turn_check
     turns, intervals = d_bank.get("turns", []), d_bank.get("intervals", [])
-    out, failed = {}, []
+    out = {}
     # RL-149 sections 1.2 item 5 and 1.5: the R1 driver's own turn rule. A G1 timeout is a gate timeout
     # and is read from the intervals as well as from the flags.
     flags = d_bank.get("episode_flags")
@@ -122,11 +161,15 @@ def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
                              if type(turns_ok) is bool else
                              {"pass": None, "judged": False, "status": turns_ok, "value": len(turns),
                               "need": MIN_ADMITTED_TURNS, "stop": stop, "authority": "RL-149 section 1.5"})
-    gate_s = sum(float(r.get("duration_s", 0.0)) for r in intervals if r.get("kind") in ("G0", "G1", "H"))
+    out["g1_records"] = g1_records(turns, intervals)
+    out["gate_durations"] = gate_durations(intervals)
+    gate_s = out["gate_durations"]["total_s"]
     t_dead = d_bank.get("t_dead_s")
-    limit = GATE_SHARE_OF_T_DEAD * t_dead if isinstance(t_dead, (int, float)) else None
-    out["gate_time"] = _check(limit is not None and gate_s <= limit, gates_plus_holds_s=gate_s,
-                              limit_s=limit, share_of_t_dead=None if not t_dead else gate_s / t_dead)
+    valid_budget = type(t_dead) in (int, float) and math.isfinite(t_dead) and t_dead > 0
+    limit = GATE_SHARE_OF_T_DEAD * t_dead if valid_budget else None
+    out["gate_time"] = _check(gate_s is not None and limit is not None and gate_s <= limit,
+                              gates_plus_holds_s=gate_s, limit_s=limit,
+                              share_of_t_dead=gate_s / t_dead if valid_budget and gate_s is not None else None)
     out["no_x7"] = _check(d_bank.get("x7") is False, x7=d_bank.get("x7"))
     g1_timeouts = [r.get("turn") for r in intervals if r.get("kind") == "G1" and r.get("outcome") == "timeout"]
     out["no_g1_timeout"] = _check(not g1_timeouts, g1_timeout_turns=g1_timeouts)
@@ -270,7 +313,7 @@ def facts_from_bundle(bundle, *, role):
     out_intervals = []
     for r in intervals:
         sample = by_ns.get(r.get("exit_sample_ns")) if r.get("exit_sample_ns") is not None else None
-        out_intervals.append({k: r.get(k) for k in ("kind", "turn", "token_count", "outcome", "duration_s", "reference",
+        out_intervals.append({k: r.get(k) for k in ("kind", "turn", "token_count", "outcome", "duration_s", "start_ns", "end_ns", "reference",
                                                     "release", "slope_c_per_min")}
                              | {"release_status": None if sample is None else _status_with_age(sample)})
     turns = []
