@@ -99,3 +99,15 @@ unweighed; added a 1.402 s scheduling hint from the local Python 3.13 final
 24-case run (14 zstd cases skipped). Python 3.14 functional coverage is the
 separate focused CI job, already PASS in run 43996700761. This is scheduling
 metadata only and will yield to a hosted timing harvest.
+
+Hosted CI quick on `68818a9a2` found a bookkeeping mismatch: registering the
+new state-kernel task also requires updating `tests/test_gen_state.py`'s exact
+live-id set and count. Both now include CLOSE-OFFLOAD-01 (284 rows); no state
+semantics or generated pointer changed. The offload synthetic CI job passed
+on both pushed heads. Local quick's final result was 282 modules, 14 failing
+modules in 458.427 s: mostly OS-denied restricted paths, one existing Python
+3.14 timestamp-parsing expectation, and the now-corrected timing-map entry.
+The local Python 3.14 shard-discovery invariant replay passed 8 tests; the
+Python 3.13 discovery replay instead meets the inherited sandbox's forbidden
+optional real-corpus stat probes. Fixture census returns 2 (ps denied), not
+an empty/clean census.
