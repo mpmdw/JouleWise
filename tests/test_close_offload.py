@@ -369,6 +369,42 @@ state.write_text(json.dumps(s))
                 except ProcessLookupError:
                     pass
 
+    @unittest.skipUnless(zstd, "stdlib zstd needs Python 3.14")
+    def test_interrupted_delete_resumes_with_verified_dangling_link(self):
+        def interrupted(source, guard):
+            (source / "runner_receipt.json").unlink()
+            (source / "nested/raw").unlink()
+            raise co.OutOfTime("DEADLINE")
+        with mock.patch.object(co, "remove_original", side_effect=interrupted):
+            self.assertEqual(co.run(self.config)[0], co.DEADLINE)
+        self.assertTrue((self.old / "link").is_symlink())
+        self.assertEqual(self.record()["state"], "DELETING")
+        code, result = co.run(self.config)
+        self.assertEqual(code, co.OK, result)
+        self.assertFalse(self.old.exists())
+        self.assertEqual(self.record()["state"], "COMPLETE")
+        self.assertEqual(co.run(self.config)[0], co.OK)
+
+    @unittest.skipUnless(zstd, "stdlib zstd needs Python 3.14")
+    def test_fresh_dangling_source_link_is_still_refused(self):
+        (self.old / "nested/raw").unlink()
+        code, result = co.run(self.config)
+        self.assertEqual((code, result["status"]), (co.VERIFY_FAILED, "UNRESOLVED_SYMLINK"))
+        self.assertTrue(self.old.exists())
+        self.assertFalse(list(self.cloud.rglob("*.tar.zst")))
+
+    @unittest.skipUnless(zstd, "stdlib zstd needs Python 3.14")
+    def test_pending_cloud_only_transaction_respects_current_opt_out(self):
+        self.provider(pending=1000)
+        self.assertEqual(self.pending_run()[0], co.UPLOAD_PENDING)
+        self.provider(pending=0)
+        code, result = co.run(replace(self.config, cloud_only_allowed=False))
+        self.assertEqual((code, result["status"]), (co.VERIFY_FAILED, "AIR_COPY_REQUIRED"))
+        self.assertTrue(self.old.exists())
+        self.assertTrue(Path(self.record()["archive"]).exists())
+        self.assertEqual(co.run(self.config)[0], co.OK)
+        self.assertFalse(self.old.exists())
+
     def test_special_and_escaping_links_refused(self):
         (self.old / "link").unlink()
         (self.old / "link").symlink_to("../outside")

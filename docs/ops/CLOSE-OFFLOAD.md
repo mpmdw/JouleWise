@@ -98,8 +98,8 @@ parsed). Part C/F0 uses its output basename in place of `<plan>`. Every path
 still gets its own verified cloud copy. `--cloud-only-allowed` is the default:
 absence of an Air marker is recorded as `copy_basis: cloud-only` and does not
 prevent cloud transfer. `--no-cloud-only-allowed` requires a marker for new
-work; skipped work returns a holding failure. Existing transactions resume
-with the copy policy originally recorded. Existing `.ok` markers are preserved.
+work; skipped work returns a holding failure. The current copy restriction also applies to resumptions; a prior cloud-only
+transaction cannot bypass a later `--no-cloud-only-allowed`. Existing `.ok` markers are preserved.
 
 This retains at most the newest output of each kind plus genuine pending or
 failed originals and any backlog until catch-up. It does not touch historical
@@ -134,7 +134,9 @@ For each selected output:
    original until **both** cloud objects have confirmed upload and eviction.
    Rehash the original once more, persist `DELETING`, delete it, then persist
    `COMPLETE`. Interrupted deletion resumes only if the remaining entries
-   match a subset of the verified manifest. New files are never swept up.
+   match a subset of the verified manifest. A leftover link may be dangling
+   because deletion already removed its target; its exact text must still match
+   the verified manifest. New files are never swept up.
 
 The controller-readable record is:
 

@@ -34,8 +34,8 @@ scripts were inspected as implementation references, not live validation.
 | Gate | State | Evidence |
 |---|---|---|
 | Byte-only implementation / deterministic close command | built | source and runbook |
-| Synthetic functional coverage on Python 3.14 | PASS, final 28 tests | scratch focused-final.log |
-| Python 3.13 structural compatibility and state fidelity | PASS, 72 cases, 18 zstd skips | scratch structural-final.log |
+| Synthetic functional coverage on Python 3.14 | PASS, final 31 tests | scratch focused-final.log |
+| Python 3.13 structural compatibility and state fidelity | PASS, 75 cases, 21 zstd skips | scratch structural-final.log |
 | Canonical suite | hosted PASS on c2612f16d; local attempt interrupted (130) after sandbox failures | CI 43998129636; scratch full-suite.log |
 | Quick tier | hosted PASS on c2612f16d; local diagnostic FAIL | CI 43998129636; scratch quick.log |
 | State/current/pins/diff fences | PASS locally; hosted fences PASS | gen_state/gen_current/repin --check and diff --check |
@@ -202,3 +202,38 @@ then was interrupted with SIGINT (exit 130) at 18:02 after inherited blinding
 made it unsuitable as a final green gate; no local whole-suite PASS is claimed.
 The fixture census was attempted and returned 2, `ps` denied, not a clean zero.
 PROJECT_STATUS is unchanged: no advisor-visible scientific state changed.
+
+## Same-seat delta 1 and second fix
+
+The same Sol seat reviewed `3e638800cb7301b4a626cd82c5f419db9ac5e3eb`:
+all three original implementation probes closed, 28 supplied tests passed.
+Its verdict remained REFUSE for the two authority conflicts and one newly
+reproduced P2: strict symlink resolution also rejected a legitimate partial
+DELETING tree after rmtree had removed a link target before its link.
+
+Lead disposition: fixed by checking exact link text (and every remaining entry)
+against the already verified manifest during DELETING, without resolving a
+link whose target may already be removed. Fresh-source manifests still require
+resolvable canonical internal links. Regression tests cover both partial-delete
+resumption and fresh dangling-link refusal. No new files or changed entries
+can pass the subset comparison, and removal never follows links.
+
+The builder also tightened the current invocation's copy flag for pending
+transactions: an earlier cloud-only transaction no longer bypasses a later
+`--no-cloud-only-allowed`. Its new regression proves the stricter run preserves
+the original/archive and a later explicitly allowed run can resume. The final
+record reflects the current invocation's copy policy and observed prior marker.
+
+Final local checks: Python 3.14, 31 focused tests PASS in 22.884 s; Python 3.13,
+75 focused/state cases PASS (21 zstd-dependent skips) in 4.574 s. State/kernel,
+CURRENT and diff checks are repeated before this fix commit. No MBP contact.
+
+| run_id | role/model/wrapper/session | prompt sha256 | output sha256 | disposition |
+|---|---|---|---|---|
+| close-offload-sol-delta-1 completed | same gpt-6.1-sol xhigh / collaboration.followup_task / /root/sol_cold_review | e4560b268a2d52a34e42716f5e6f6fda3814778d39df173aeb5b56d09e72ac09 (`review/fallback/DELTA-PROMPT.md`) | c25e09f75015f65487a6aab9bbdc625d60076730d0b64a284ccd21d3bcf26ebc (`review/fallback/DELTA-REPORT.md`) | original three code findings closed; new partial-delete defect fixed above; two authority conflicts still blocked |
+| close-offload-sol-delta-2 | same seat / same wrapper / /root/sol_cold_review delta-2 | saved as `review/fallback/DELTA2-PROMPT.md` | `review/fallback/DELTA2-REPORT.md`, same stable invocation; exact hash/result read into PR #807 body | requested after this fix commit; no new cold seat |
+
+Initial and delta-1 raw artifacts remain immutable. The final-head CI and
+same-seat delta-2 result are read back into the PR body; neither an absent
+review output nor a wrapper's zero exit is an admission. Production remains
+blocked until both owner questions and the separate live gate are resolved.

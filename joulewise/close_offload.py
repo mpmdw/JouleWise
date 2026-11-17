@@ -165,7 +165,7 @@ def link_safe(name, link):
             raise Refusal("ESCAPING_SYMLINK")
 
 
-def manifest(root, guard):
+def manifest(root, guard, *, deleting=False):
     if root.is_symlink() or not root.is_dir():
         raise Refusal("SOURCE_NOT_DIRECTORY")
     entries = {}
@@ -176,14 +176,15 @@ def manifest(root, guard):
             link = os.readlink(path)
             link_safe(name, link)
             # The 3.14 data extraction filter normalizes links. Accept only
-            # canonical, resolvable internal links so restoration is proved
-            # before removing the source (including chains and cycles).
-            try:
-                resolved = path.resolve(strict=True)
-            except (OSError, RuntimeError):
-                raise Refusal("UNRESOLVED_SYMLINK") from None
-            if not resolved.is_relative_to(root.resolve()):
-                raise Refusal("ESCAPING_SYMLINK")
+            # canonical, resolvable internal links in fresh-source manifests so
+            # restoration is proved before deletion (including chains/cycles).
+            if not deleting:
+                try:
+                    resolved = path.resolve(strict=True)
+                except (OSError, RuntimeError):
+                    raise Refusal("UNRESOLVED_SYMLINK") from None
+                if not resolved.is_relative_to(root.resolve()):
+                    raise Refusal("ESCAPING_SYMLINK")
             entries[name] = {"type": "link", "target": link}
         elif stat.S_ISREG(st.st_mode):
             entries[name] = {"type": "file", "size": st.st_size, "sha256": file_hash(path, guard)}
@@ -380,7 +381,7 @@ def offload(config, kind, source, guard):
     safe_name(source.name)
     record_file = record_path(config, source)
     copied = air_marker(config, kind, source)
-    if not copied and not config.cloud_only_allowed and not record_file.exists():
+    if not copied and not config.cloud_only_allowed:
         return "AIR_COPY_REQUIRED"
     cloud = config.cloud_root / kind
     cloud.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -414,6 +415,12 @@ def offload(config, kind, source, guard):
                   "cloud_only_allowed": config.cloud_only_allowed, "prior_copy_marker_observed": copied,
                   "copy_basis": "prior-copy-marker-and-cloud" if copied else "cloud-only", "state": "PACKED", "provider": {}}
         atomic_json(record_file, record)
+    # The current command's copy restriction also applies to resumptions.
+    # A previously started cloud-only transaction cannot bypass an explicit
+    # --no-cloud-only-allowed on this invocation.
+    record["cloud_only_allowed"] = config.cloud_only_allowed
+    record["prior_copy_marker_observed"] = copied
+    record["copy_basis"] = "prior-copy-marker-and-cloud" if copied else "cloud-only"
     if record["state"] == "COMPLETE":
         if source.exists():
             raise Refusal("COMPLETED_SOURCE_REAPPEARED")
@@ -457,7 +464,10 @@ def offload(config, kind, source, guard):
     # After an interrupted deletion, remaining entries must still be a subset
     # of the verified manifest. Never sweep up new files added during downtime.
     if source.exists():
-        remaining = manifest(source, guard)
+        # A target may already have been unlinked by the interrupted rmtree.
+        # Only the exact verified link text matters in this subset; no link
+        # is followed during removal. Fresh-source manifests remain strict.
+        remaining = manifest(source, guard, deleting=True)
         if any(receipt["manifest"].get(name) != entry for name, entry in remaining.items()):
             raise Refusal("SOURCE_CHANGED_DURING_DELETE")
     remove_original(source, guard)

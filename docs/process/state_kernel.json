@@ -2169,7 +2169,7 @@
       "priority": "p0_safety",
       "rank": 500,
       "status": "blocked",
-      "status_note": "2026-11-16: draft PR #807; initial full CI green at c2612f16d; ONE cold Sol seat REFUSE with 2 authority conflicts and 3 implementation defects, code fixes tested and awaiting same-seat delta/final CI. No MBP contact. Owner rulings on encryption/key and nonholding upload-pending required before ADMIT/standing-item issuance. Live GUI/provider gate remains lead-owned.",
+      "status_note": "2026-11-16: draft PR #807; initial full CI green at c2612f16d. ONE cold Sol seat plus same-seat delta closed the original 3 code findings and found a partial-deletion/link regression, now fixed. Final 31 focused tests and 75 structural/state cases pass (21 skips); same-seat delta-2/final CI in PR body. No MBP contact. Two owner rulings on encryption/key and nonholding pending upload still required before ADMIT/standing-item issuance; live GUI/provider gate lead-owned.",
       "stop_card": null
     },
     "COLDGATE-CONVENE-DOCTRINE-FREE-01": {
