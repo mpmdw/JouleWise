@@ -26,7 +26,9 @@
   "schema",
   "soak_retries",
   "synthetic",
-  "tripwires"
+  "tripwires",
+  "meter_unreadable",
+  "staging"
  ],
  "properties": {
   "schema": {
@@ -798,7 +800,8 @@
     "legs_included",
     "legs_named",
     "ruled_exclusions",
-    "type_T"
+    "type_T",
+    "clock_fit_excess_between_1_and_2_s"
    ],
    "properties": {
     "legs_named": {
@@ -913,6 +916,11 @@
     "ruled_exclusions": {
      "type": "integer",
      "minimum": 0
+    },
+    "clock_fit_excess_between_1_and_2_s": {
+     "type": "integer",
+     "minimum": 0,
+     "description": "RL-174 A.2: energy-fit legs with 1 < clock-fit excess <= 2 s; print only"
     }
    }
   },
@@ -1784,6 +1792,63 @@
      }
     }
    }
+  },
+  "meter_unreadable": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "span_ids",
+    "to_research_lead"
+   ],
+   "properties": {
+    "span_ids": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "uniqueItems": true
+    },
+    "to_research_lead": {
+     "type": "boolean"
+    }
+   },
+   "description": "RL-174 A.4: unreadable fit spans; a second span is referred to the research lead"
+  },
+  "staging": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "span_id",
+     "archive_sha256",
+     "manifest_sha256",
+     "marker_sha256",
+     "files_verified"
+    ],
+    "properties": {
+     "span_id": {
+      "type": "string"
+     },
+     "archive_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     },
+     "manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     },
+     "marker_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     },
+     "files_verified": {
+      "type": "integer",
+      "minimum": 1
+     }
+    }
+   },
+   "description": "RL-174 D.3: verified byte staging, empty for an already raw custody copy"
   }
  }
 }

@@ -34,7 +34,8 @@
     "RL-167 §2",
     "RL-167 §3",
     "RL-171 §2",
-    "RL-172a"
+    "RL-172a",
+    "RL-174"
   ],
   "when": {
     "after_desk_final": [
@@ -82,11 +83,14 @@
         "onsets_before_116_s by G0 role (P-4)",
         "meter_clock (RL-167 R-20)",
         "soak_retries: each roster span's soak attempts and the retried soaks by refusal kind (RL-172a)",
-        "the two time-stamp clauses (RL-173 E.1): a development leg whose energy-fit intervals hold a power_trace.csv stretch over 2 s with no gpu_power row fails rule 3, and one whose intervals are not bracketed by decoded meter samples, hold a gap over 2 s between them, or sit on a stream whose decoder clock-fit excess is over 2 s fails rule 4; per leg the numbers, per span the decoder's duplicate count, and the custody digests stage 2 checks before energy"
+        "the two time-stamp clauses (RL-173 E.1): a development leg whose energy-fit intervals hold a power_trace.csv stretch over 2 s with no gpu_power row fails rule 3, and one whose intervals are not bracketed by decoded meter samples, hold a gap over 2 s between them, or sit on a stream whose decoder clock-fit excess is over 2 s fails rule 4; per leg the numbers, per span the decoder's duplicate count, and the custody digests stage 2 checks before energy",
+        "counts.clock_fit_excess_between_1_and_2_s (1 < excess <= 2 s, print only; RL-174 A.2)",
+        "meter_unreadable.span_ids and to_research_lead on a second span (RL-174 A.4)",
+        "staging: span id, archive/manifest/marker sha256 and file count after byte verification (RL-174 D.3); empty for raw custody"
       ],
       "schema": {
         "path": "docs/process/cadence/looks/lm-interim-01.stage1.schema.json",
-        "sha256": "ba5c5936ef4470ba224a5fdbb6453e647a103a54c7caaf2e014f9573fe27a7e1"
+        "sha256": "8930c6f4929838e675315323f72d3200382b6d8caadee291b5e1c1da20353ace"
       },
       "committed_before_stage2": true,
       "dry_run": "Once the manifest is committed, stage 1 runs as a dry run on the custody copy of dev-01 to dev-04; it opens no energy and its counts go to the lead only (RL-166 §2 item 12).",
@@ -495,7 +499,7 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "5872656180c208a1bf14a2f39f2c2e69127eb66ac5db0b8801e01fda9782bfa6"
+        "sha256": "8846fadc892420be9d3dc55a313776abbd839285ce1ae3993ed5cb49114925bf"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -515,7 +519,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "2e61027eef3f75cadbf48fe25e90f4d355e28be3dd40521a108a9c811b0adca4"
+        "sha256": "e287dad3bc94b0b19efffd9c8063337bc3ec144dd5c1c4f0946f073f4859fda5"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -720,10 +724,11 @@
       },
       {
         "id": "qualified_pass_rate",
-        "text": "In simulation at the design's assumed spreads, a correct model gets yes 0.421 of the time (± 0.0025; about 4 times in 10; 0.04 to 0.69 over the five worlds tried) and a fit with no heat term 0.095 of the time (± 0.0015; about 1 time in 10.5). So no is the more likely word for a correct model. It is not evidence that the term is wrong, and no text may read it that way.",
+        "text": "In simulation at the design's assumed spreads, a correct model gets yes 0.421 of the time (± 0.0025; about 4 times in 10; 0.001 to 0.693 over all twelve worlds in the committed evidence, with 0.421 in the default world) and a fit with no heat term 0.095 of the time (± 0.0015; about 1 time in 10.5). So no is the more likely word for a correct model. It is not evidence that the term is wrong, and no text may read it that way.",
         "note": "Figures from the RL-166b pass-rate re-run with B-1's column: Mythos 5.2 seat, Sat 14 Nov 2026 22:19:48 PST, 40,000 synthetic campaigns in the default world (two seeds of 20,000), 20,000 per other world; no measurement opened. Held at docs/process/cadence/looks/evidence/2026-11-14-mythos-passrate-rerun-REPORT.md (sha256 f1c6bc323d736bb13483a1783266d652f6eea2d347b93ed6e5a307ae614773aa). The correct-model rate lies inside RL-166b's 0.25 to 0.60, so nothing went to the research lead.",
         "cite": [
-          "RL-166b §2.1"
+          "RL-166b §2.1",
+          "RL-174"
         ]
       },
       {
@@ -776,6 +781,13 @@
         "cite": [
           "RL-166b §4"
         ]
+      },
+      {
+        "id": "hidden_holes",
+        "text": "A pass of the 2 s clock-fit excess bound does not prove there is no hidden hole. Stage 1 prints the number of energy-fit legs with excess greater than 1 s and at most 2 s; this count decides nothing.",
+        "cite": [
+          "RL-174"
+        ]
       }
     ],
     "dependencies": [
@@ -809,7 +821,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "914c7dfced1d7a63f6a6eaeafeaaa0ce430f06957d47ac00d8efc4a51959ae27"
+        "sha256": "80bc17b81b5c16219314fc4b30bfc1b16612e140cdd19f329fda0457d8dae548"
       },
       {
         "path": "joulewise/desk_compress.py",

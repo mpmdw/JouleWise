@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from joulewise.cadence_looks import inclusion_34 as I34
 from joulewise.cadence_looks import manifest as M
@@ -84,6 +85,60 @@ class Admission(unittest.TestCase):
     def stage1(self, root):
         li = R.read_look_input(self.roster, R.span_dirs(root, []), self.verdicts)
         return F.stage1(li, hashlib.sha256(F.dump(li)).hexdigest())
+
+    def test_rl174_undecodable_span_excludes_even_fit_leg_without_turn(self):
+        root = self.source_copy()
+        sid = "dev-01-s01"
+        stream = next((root / sid / "hazards/meter").glob("stream-*.jsonl"))
+        rows = [json.loads(line) for line in stream.read_text().splitlines()]
+        for row in rows:
+            if row.get("p"):
+                row["p"] = "not-hex"
+                break
+        stream.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        path = root / sid / "legs/L001/leg_record.json"
+        rec = read(path)
+        rec["result"]["bundle"] = None
+        rec["result"]["leg_status"] = "failed"
+        path.write_text(json.dumps(rec))
+        # Isolate A.4 from replay's other reasons to exclude an incomplete leg.
+        with patch.object(R.I34, "judge_span", return_value=(self.verdicts, {}, {})):
+            got = self.stage1(root)
+        self.assertEqual(got["meter_unreadable"], {"span_ids": [sid], "to_research_lead": False})
+        rows = [leg for leg in got["legs"] if leg["span_id"] == sid]
+        self.assertTrue(rows)
+        self.assertTrue(all(not leg["inclusion"]["km003c_clean"] for leg in rows))
+        self.assertTrue(all(not leg["in_energy_fit"] for leg in rows))
+        self.assertIsNone(next(leg for leg in rows if leg["leg_key"] == sid + "/L001")["state"])
+
+    def test_rl174_staged_span_is_recorded_by_real_stage1_cli(self):
+        import tarfile
+        from tests.cadence.test_look_run import run_cli
+        root = self.source_copy()
+        sid = "dev-01-s01"
+        parent = root.parent
+        archive, manifest, marker = [parent / name for name in ("span.tgz", "SHA256SUMS", "marker.json")]
+        files = sorted(path for path in (root / sid).rglob("*") if path.is_file())
+        manifest.write_text("".join(f"{R.sha256_file(path)}  ./{path.relative_to(root / sid).as_posix()}\n"
+                                    for path in files))
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(root / sid, arcname=sid)
+        marker.write_text(json.dumps({"schema": "joulewise.span_offload_marker.v1", "span_name": sid,
+                                     "provider_confirmed": True, "manifest_files": len(files),
+                                     "manifest_sha256": R.sha256_file(manifest),
+                                     "archive_sha256": R.sha256_file(archive)}))
+        plan = parent / "stage-plan.json"
+        plan.write_text(json.dumps([{"span_id": sid, "archive": str(archive), "manifest": str(manifest),
+                                    "marker": str(marker)}]))
+        shutil.rmtree(root / sid)  # this span can only be read from the staged archive
+        out = parent / "stage1.json"
+        rc, _, err = run_cli(["stage1", "--roster", str(root / "roster.json"), "--custody", str(root),
+                              "--rules-3-4", str(root / "rules_3_4.json"), "--out", str(out),
+                              "--stage-archives", str(plan), "--staging-root", str(parent / "stage")])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(read(out)["staging"], [{"span_id": sid, "archive_sha256": R.sha256_file(archive),
+                                               "manifest_sha256": R.sha256_file(manifest),
+                                               "marker_sha256": R.sha256_file(marker), "files_verified": len(files)}])
 
     def test_boundary_hole_is_one_gap_in_stage1(self):
         for width, excluded in ((3.0, True), (2.0, False)):

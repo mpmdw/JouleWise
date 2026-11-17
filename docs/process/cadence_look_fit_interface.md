@@ -720,3 +720,29 @@ have covered refuses.
 
 `load_gpu_trace`, the module's sha256 checked against `84a1a553…eb173`), and each span's
 `hazards/meter/stream-*.jsonl` (through `joulewise.external.km003c_parse.parse`). Level E stays in memory.
+
+
+## 8. RL-174 and the round-9 rank repair
+
+Level D adds `counts.clock_fit_excess_between_1_and_2_s` (integer, energy-fit legs with
+1 < excess <= 2 s), `meter_unreadable` (`span_ids`, `to_research_lead` on a second span),
+and `staging` (empty for raw custody, otherwise records with `span_id`, `archive_sha256`,
+`manifest_sha256`, `marker_sha256`, `files_verified`). These fields are compared in twin
+agreement. The R-only twin records `staging: []`; byte staging is exercised through the
+real analyst CLI with synthetic archives. All existing comparison tolerances remain.
+
+The byte-staging CLI and its #804 marker/SHA256SUMS formats are specified in
+[cadence_look_manifest.md §7h](cadence_look_manifest.md#7h-cold-sol-low-and-rl-174-builder-round-9).
+It reads a pulled/decrypted archive, authenticates the manifest hash to the supplied
+verified marker, expands only safe regular files/directories, then checks every file's
+sha256 before publishing a raw span directory. It parses only custody metadata and
+copies/hashes opaque file bytes. The source marker is the lead's trusted upstream
+handoff; this step does not attest a provider or open encrypted custody itself.
+`.zst` refusal remains in the time reader. A failed archive publishes no span directory.
+
+Every type-A fit leg of an undecodable span fails rule 4, including a leg with no turn.
+The 2 s excess bound is unchanged; the new count is print-only. The manifest discloses
+hidden holes and gives the pass-rate range over all twelve committed worlds, 0.001 to
+0.693 with default 0.421. No new simulation or measurement is claimed. Full column
+rank is required before OLS: fewer rows than columns and a zero design refuse, as does
+the existing singular-value ratio below 1e-10.

@@ -129,6 +129,118 @@ def span_dirs(custody, pairs):
     return lambda sid: m.get(sid, Path(custody) / sid)
 
 
+def stage_archive(span_id, archive, manifest, marker, staging_root):
+    """RL-174 D.3: expand a pulled, decrypted #804 archive; hash bytes, decode no measurement.
+
+    The existing marker binds the exact SHA256SUMS bytes (``hash  ./relative/path``) and the archive.
+    Publish a new span directory only after all files match. The supplied marker is the upstream
+    custody handoff; this offline step neither contacts the provider nor decrypts ciphertext.
+    """
+    import tarfile
+    from pathlib import PurePosixPath
+
+    def refuse(reason):
+        raise F.LookInputError(f"staging: {span_id}: {reason}")
+
+    def relative(name):
+        p = PurePosixPath(name)
+        if not name or p.is_absolute() or any(x in ("", ".", "..") for x in name.split("/")):
+            refuse("unsafe archive or manifest path")
+        return p
+
+    if not isinstance(span_id, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]*", span_id):
+        refuse("invalid span id")
+    try:
+        mraw, kraw = Path(manifest).read_bytes(), Path(marker).read_bytes()
+        mark = json.loads(kraw)
+        msha = hashlib.sha256(mraw).hexdigest()
+        if (mark.get("schema") != "joulewise.span_offload_marker.v1"
+                or mark.get("provider_confirmed") is not True or mark.get("manifest_sha256") != msha):
+            refuse("manifest does not match the verified marker")
+        top = mark.get("span_name")
+        if not isinstance(top, str) or len(relative(top).parts) != 1 or top != span_id:
+            refuse("marker span name differs from the roster span")
+        expected = {}
+        for line in mraw.decode("utf-8").splitlines():
+            match = re.fullmatch(r"([0-9a-f]{64})  \./(.+)", line)
+            if not match:
+                refuse("invalid per-file manifest")
+            digest, name = match.groups()
+            relative(name)
+            if name in expected:
+                refuse("duplicate manifest file")
+            expected[name] = digest
+        if not expected or mark.get("manifest_files") != len(expected):
+            refuse("manifest file count differs from the marker")
+        root = Path(staging_root)
+        root.mkdir(parents=True, exist_ok=True)
+        destination = root / span_id
+        if destination.exists() or destination.is_symlink():
+            refuse("staged span already exists; use a fresh staging root")
+        with tempfile.TemporaryDirectory(prefix=".look-stage-", dir=root) as tmp:
+            tmp = Path(tmp)
+            # Hash the same open archive later expanded. No time-field reader sees compressed bytes.
+            with open(archive, "rb") as source:
+                archive_sha = hashlib.file_digest(source, "sha256").hexdigest()
+                if archive_sha != mark.get("archive_sha256"):
+                    refuse("archive does not match the marker")
+                source.seek(0)
+                with tarfile.open(fileobj=source, mode="r:*") as tar:
+                    seen, files = set(), set()
+                    for member in tar:
+                        parts = relative(member.name).parts
+                        if parts[0] != top or member.name in seen:
+                            refuse("unexpected or duplicate archive member")
+                        seen.add(member.name)
+                        path = tmp.joinpath(*parts)
+                        if member.isdir():
+                            path.mkdir(parents=True, exist_ok=True)
+                        elif member.isfile():
+                            name = "/".join(parts[1:])
+                            if name not in expected:
+                                refuse("archive file absent from the manifest")
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            with tar.extractfile(member) as src, path.open("xb") as dst:
+                                shutil.copyfileobj(src, dst)
+                            files.add(name)
+                        else:
+                            refuse("archive member is not a regular file or directory")
+            if files != set(expected):
+                refuse("archive file set differs from the manifest")
+            for name, digest in expected.items():
+                if sha256_file(tmp / top / name) != digest:
+                    refuse("staged file sha256 differs from the manifest")
+            (tmp / top).rename(destination)
+        return {"span_id": span_id, "archive_sha256": archive_sha, "manifest_sha256": msha,
+                "marker_sha256": hashlib.sha256(kraw).hexdigest(), "files_verified": len(expected)}
+    except (OSError, ValueError, KeyError, TypeError, tarfile.TarError, UnicodeError) as exc:
+        if isinstance(exc, F.LookInputError):
+            raise
+        refuse(f"cannot verify or expand archive ({type(exc).__name__})")
+
+
+def stage_custody(a, roster):
+    """Optional stage-1 plan: [{span_id, archive, manifest, marker}]. Paths are local pulled copies."""
+    if not getattr(a, "stage_archives", None):
+        return []
+    plan = _json(a.stage_archives)
+    allowed = {span["span_id"] for span in roster}
+    seen = {p.partition("=")[0] for p in a.span_dir or []}
+    records = []
+    if not isinstance(plan, list) or not plan:
+        raise F.LookInputError("staging plan: expected a nonempty list")
+    for entry in plan:
+        if not isinstance(entry, dict) or set(entry) != {"span_id", "archive", "manifest", "marker"}:
+            raise F.LookInputError("staging plan: expected span_id, archive, manifest and marker")
+        sid = entry["span_id"]
+        if sid not in allowed or sid in seen:
+            raise F.LookInputError("staging plan: duplicate, overridden or unrostered span")
+        seen.add(sid)
+        records.append(stage_archive(sid, entry["archive"], entry["manifest"], entry["marker"], a.staging_root))
+        a.span_dir = list(a.span_dir or []) + [f"{sid}={Path(a.staging_root) / sid}"]
+    return records
+
+
 # =============================================================================================== stage-1 reader
 _RICH_TS = re.compile(rb'"timestamp_s":\s*(-?[0-9][0-9.eE+-]*)')
 _RICH_EL = re.compile(rb'"elapsed_ns":\s*([0-9]+)')
@@ -402,6 +514,8 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
         if leg_type == "A":                     # type-T runtime is never read or rejudged at this look
             for rule in I34.VERDICT_KEYS:
                 inc[rule] = inc[rule] and replayed[key][rule]
+            if entry["role"] == "fit" and sm is None:   # RL-174 A.4: every fit leg, even without a turn
+                inc["km003c_clean"] = False
         turn = None
         if leg_type == "A" and result.get("bundle"):
             try:
@@ -733,6 +847,7 @@ def superseded_source(a, row):
 
 
 def cmd_stage1(a):
+    staging = []
     if a.input and not a.allow_draft:
         raise F.LookInputError("--input (level R) runs only with --allow-draft; a committed look reads custody")
     if a.input:
@@ -750,6 +865,7 @@ def cmd_stage1(a):
                                        verdicts_sha256=sha256_file(a.rules_3_4), ledger_ref=a.ledger_ref,
                                        ruled_exclusions={k: list(v) for k, v in ruled.items()})
         roster = _json(a.roster)
+        staging = stage_custody(a, roster)
         rules34 = _json(a.rules_3_4)
         if ruled and not a.allow_draft:
             old_input, old_ruled = superseded_source(a, row)
@@ -783,6 +899,7 @@ def cmd_stage1(a):
     if a.allow_draft and look_input.get("synthetic") is not True:
         raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
     out = F.stage1(look_input, input_sha, code_hashes())    # RL-172a's soak-retry print is level R's (F.stage1)
+    out["staging"] = staging
     if not a.input:
         stage2_preflight(out, span_dirs(a.custody, a.span_dir))
     if extra:
@@ -891,6 +1008,8 @@ def main(argv=None):
     p1.add_argument("--rules-3-4")
     p1.add_argument("--span-dir", action="append")
     p1.add_argument("--write-input")
+    p1.add_argument("--stage-archives", help="RL-174 D.3: JSON list of local span_id/archive/manifest/marker records")
+    p1.add_argument("--staging-root", help="fresh raw span destinations for --stage-archives")
     p1.add_argument("--superseded-stage1", help="kept stage-1 file authenticated to the replaced ledger commitment")
     p1.add_argument("--superseded-input", help="kept level-R input authenticated to the superseded stage-1 file")
     p1.add_argument("--ruled-exclusion", action="append", metavar="LEG_KEY=RULE=RL-n",
@@ -914,6 +1033,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.cmd == "stage1" and a.roster and not (a.custody and a.rules_3_4):
         ap.error("--roster needs --custody and --rules-3-4")
+    if a.cmd == "stage1" and (bool(a.stage_archives) != bool(a.staging_root) or (a.stage_archives and a.input)):
+        ap.error("--stage-archives and --staging-root must be used together with --roster")
     try:
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
         _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,

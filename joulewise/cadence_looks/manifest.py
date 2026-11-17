@@ -136,7 +136,7 @@ REQUIRED_DECISIONS = {"interim": {"drift_tripwire": None, "qualified_interim_hal
 # The sentences RL-166b dictates (fit.stated_limits) and the rules it fixes for freeze 2 (freeze2.deferred_rules).
 REQUIRED_STATED_LIMITS = {"interim": {"qualified_yes_meaning", "qualified_pass_rate", "pooled_error", "half_t2_limit",
                                       "partial_correction", "not_zero_before_onset", "delta_se_overstates",
-                                      "warm_series_outside_joint_range", "ratio_of_tokens"}}
+                                      "warm_series_outside_joint_range", "ratio_of_tokens", "hidden_holes"}}
 REQUIRED_DEFERRED = {"interim": {"kappa_signs", "sd_j_covariance", "leverage_flag", "hot_prefill_flag"}}
 STAGE2_HOLD_FLAGS = {"interim": {"onsets_before_116_s.to_research_lead", "meter_clock.to_research_lead",  # RL-166c §2 row 7
                                  "tripwires.any"}}                                                        # RL-166 Q8
@@ -172,7 +172,9 @@ VERBATIM_SHA256 = {
     "fit.stated_limits.pooled_error":
         "cb08f40ccf17b470577d649ed5ead00f3f980e8f6de996dd2999b43b5cb60019",
     "fit.stated_limits.qualified_pass_rate":
-        "8d6044f32b51ddefe790cbacbcb3eebaf53f67f780f699de4a100768fdf87c4a",
+        "c4c4313581a0f576aaefbd6b45e13dd2ef7500c1cd8b9cf39ec98d8b7f27bd4f",
+    "fit.stated_limits.hidden_holes":
+        "0f2dca00f1f203c75d2632fd7b23ce466af9248eb800c6f3d91454e82e2ac9a2",
     "fit.stated_limits.qualified_yes_meaning":
         "6195455f392c51de7021c26ca50351e259519689ccde13d236786b05fa53e80d",
     "fit.stated_limits.ratio_of_tokens":

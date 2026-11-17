@@ -38,6 +38,22 @@ T_R6 = "tests.cadence.test_round6_guards"
 
 # (id, file, old, new, test modules)
 MUTANTS = [
+    ("r9_underdetermined_design_accepted", FIT, 'len(S) < X.shape[1] or not len(S) or ', '',
+     [T_FIT + ".RL166b.test_two_leg_underdetermined_design_refuses"]),
+    ("r9_zero_design_accepted", FIT, ' or S[0] == 0', '',
+     [T_FIT + ".RL166b.test_zero_design_has_no_column_rank"]),
+    ("r9_excess_count_includes_1s", FIT, 'and 1.0 < excess <= 2.0)', 'and 1.0 <= excess <= 2.0)',
+     [T_FIT + ".RL166b.test_rl174_excess_count_is_print_only_and_uses_energy_fit_legs"]),
+    ("r9_stage_file_hash_ignored", RUN, 'if sha256_file(tmp / top / name) != digest:', 'if False:',
+     [T_RUN + ".Staging.test_one_changed_byte_refuses_before_publishing"]),
+    ("r9_stage_manifest_hash_ignored", RUN, ' or mark.get("manifest_sha256") != msha', '',
+     [T_RUN + ".Staging.test_manifest_and_archive_must_match_marker"]),
+    ("r9_stage_archive_hash_ignored", RUN, 'if archive_sha != mark.get("archive_sha256"):', 'if False:',
+     [T_RUN + ".Staging.test_manifest_and_archive_must_match_marker"]),
+    ("r9_unreadable_no_turn_rule4_passes", RUN,
+     'if entry["role"] == "fit" and sm is None:   # RL-174 A.4: every fit leg, even without a turn',
+     'if False:   # mutant',
+     ["tests.cadence.test_round7_admission.Admission.test_rl174_undecodable_span_excludes_even_fit_leg_without_turn"]),
     ("R1_decode_N_not_N_minus_1", FIT, 'legs_d[k]["decode_tokens"] - 1 for k in keys)', 'legs_d[k]["decode_tokens"] for k in keys)', [T_FIT]),
     ("R2_n_from_n_tokens", FIT, 'n = float(s["edge_hi"] - s["edge_lo"])', 'n = float(s["n_tokens"])', [T_FIT]),
     ("R3_c_from_tok", FIT, 'c = P + 0.5 * (s["edge_lo"] + 1 + s["edge_hi"])', 'c = P + 0.5 * (s["tok_first"] + s["tok_last"])', [T_FIT]),

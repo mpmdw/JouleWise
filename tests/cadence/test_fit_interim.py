@@ -933,6 +933,79 @@ class RL166b(unittest.TestCase):
         self.assertEqual(t["days_below_4"]["value"], 3)
         self.assertTrue(t["days_below_4"]["trips"])
 
+    def test_two_leg_underdetermined_design_refuses(self):
+        # Cold Sol's exact reproducer: two dates, P=9963/9961, N=2, hence
+        # two prefill rows for five columns. Thin SVD alone hides three zeros.
+        li, en, _ = synth.build("noisy", seed=795)
+        baseline = F.stage1(li, rehash(li))
+        good = {leg["leg_key"] for leg in baseline["legs"] if leg["in_energy_fit"]}
+        spans = {s["span_id"]: s for s in li["spans"]}
+        chosen, days = [], set()
+        for leg in li["legs"]:
+            day = spans[leg["span_id"]]["t0_local_date"]
+            if leg["leg_key"] in good and day not in days:
+                chosen.append(leg)
+                days.add(day)
+            if len(chosen) == 2:
+                break
+        li["legs"] = chosen
+        li["spans"] = [spans[leg["span_id"]] for leg in chosen]
+        for leg in chosen:
+            t = leg["turn"]
+            t["decode_tokens"] = 2
+            t["last_token_s"] = t["first_token_s"] + 1 / 12.8
+            t["segments"] = t["segments"][:1]
+            t["prefix_tails"] = []
+            t["journal"] = [r for r in t["journal"] if r["t_s"] <= t["last_token_s"] + 5]
+            t["native_pm"] = [r for r in t["native_pm"] if r["t_end_s"] <= t["last_token_s"]]
+        en["input_sha256"] = rehash(li)
+        en["legs"] = {leg["leg_key"]: en["legs"][leg["leg_key"]] for leg in chosen}
+        for channels in en["legs"].values():
+            for ch in F.CHANNELS:
+                channels[ch]["segments"] = channels[ch]["segments"][:1]
+                channels[ch]["prefix_tails"] = {}
+        s1 = F.stage1(li, rehash(li))
+        self.assertEqual([leg["prefill_tokens"] for leg in s1["legs"]], [9963, 9961])
+        self.assertEqual(len(s1["roster"]["fit_days"]), 2)
+        X = [[p, p * p, 0, 0, 0] for p in (9963, 9961)]
+        self.assertEqual(np.linalg.matrix_rank(X), 2)
+        with self.assertRaisesRegex(F.LookInputError, "rank deficient"):
+            F.stage2(s1, rehash(s1), en)
+
+    def test_zero_design_has_no_column_rank(self):
+        with self.assertRaisesRegex(F.LookInputError, "rank deficient"):
+            F._ols(np.zeros((3, 2)), [1, 2, 3], [1, 2, 3])
+
+    def test_rl174_excess_count_is_print_only_and_uses_energy_fit_legs(self):
+        li, _, _, _ = dataset("exact")
+        base = F.stage1(li, rehash(li))
+        keys = [leg["leg_key"] for leg in base["legs"] if leg["in_energy_fit"]][:6]
+        for key, excess in zip(keys, (None, 1.0, 1.0001, 1.5, 2.0, 1.7)):
+            leg = next(leg for leg in li["legs"] if leg["leg_key"] == key)
+            leg["trace_holes"] = {
+                "gpu_rail": {"max_gap_s": 0.0, "rows_sha256": "0" * 64, "excluded": False, "reason": None},
+                "dc_in": {"max_gap_s": 0.02, "bracketed": True, "clock_fit_excess_s": excess,
+                          "excluded": False, "reason": None}}
+        # An excluded development leg in the range is not an energy-fit leg.
+        next(leg for leg in li["legs"] if leg["leg_key"] == keys[-1])["inclusion"]["g0_released"] = False
+        got = F.stage1(li, rehash(li))
+        self.assertEqual(got["counts"]["clock_fit_excess_between_1_and_2_s"], 3)
+        self.assertEqual(got["counts"]["in_energy_fit"], base["counts"]["in_energy_fit"] - 1)
+
+    def test_rl174_second_unreadable_span_is_referred_by_id(self):
+        li, _, _, _ = dataset("exact")
+        ids = {span["span_id"] for span in li["spans"] if span["role"] == "fit"}
+        ids = set(sorted(ids)[:2])
+        for span in li["spans"]:
+            if span["span_id"] in ids:
+                span["custody"] = {"files_sha256": {}, "native_pm_sha256": {}, "meter_time_sha256": None,
+                                   "meter_streams": [], "meter_unreadable": "synthetic undecodable stream"}
+        for leg in li["legs"]:
+            if leg["span_id"] in ids and leg["leg_type"] == "A":
+                leg["inclusion"]["km003c_clean"] = False
+        self.assertEqual(F.stage1(li, rehash(li))["meter_unreadable"],
+                         {"span_ids": sorted(ids), "to_research_lead": True})
+
     def test_p1_p2_p3_prints(self):
         _, en, _, _ = dataset("noisy")
         s1 = stage1_of("noisy")

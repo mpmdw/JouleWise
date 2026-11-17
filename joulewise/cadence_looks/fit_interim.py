@@ -922,6 +922,13 @@ def stage1(look_input, input_sha256, code_sha256=None):
               "excluded_by_trace_clause": {ch: sum(1 for k in order if legs_d[k]["trace_holes"] is not None
                                                    and legs_d[k]["trace_holes"][ch]["excluded"]) for ch in CHANNELS},
               "ruled_exclusions": sum(1 for k in order if legs_d[k]["ruled_exclusion"] is not None)}
+    # RL-174 A.2: print only; exactly 2 s still passes the unchanged bound.
+    counts["clock_fit_excess_between_1_and_2_s"] = sum(
+        1 for k in fit_keys if legs_d[k]["trace_holes"] is not None
+        and (excess := legs_d[k]["trace_holes"]["dc_in"]["clock_fit_excess_s"]) is not None
+        and 1.0 < excess <= 2.0)
+    unreadable = sorted(s["span_id"] for s in look_input["spans"] if s["role"] == "fit"
+                        and s["custody"] is not None and s["custody"]["meter_unreadable"] is not None)
     try:
         soak = I34.soak_retries_from({s["span_id"]: s["soak_receipt"] for s in look_input["spans"]})
     except ValueError as exc:
@@ -934,6 +941,8 @@ def stage1(look_input, input_sha256, code_sha256=None):
         "rates": {"r_p": r_p, "r_d": r_d, "per_cell": per_cell},
         "centring": centring, "calibrated_range": cal, "onset": onset, "tripwires": trip, "counts": counts,
         "meter_clock": meter_clock(look_input["spans"]),
+        "meter_unreadable": {"span_ids": unreadable, "to_research_lead": len(unreadable) >= 2},
+        "staging": [],                            # CLI fills only after byte verification (RL-174 D.3)
         "active_readings": active_readings,
         "onsets_before_116_s": early,
         "soak_retries": soak,                       # RL-172a, from level R's receipt fields
@@ -1010,7 +1019,7 @@ def _ols(X, y, groups):
     Xs = X / scale
     with np.errstate(over="ignore", invalid="ignore", divide="ignore"):   # Accelerate's spurious matmul flags
         U, S, Vt = np.linalg.svd(Xs, full_matrices=False)
-        if not np.all(np.isfinite(S)) or S[-1] < RANK_RTOL * S[0]:
+        if len(S) < X.shape[1] or not len(S) or not np.all(np.isfinite(S)) or S[0] == 0 or S[-1] < RANK_RTOL * S[0]:
             raise LookInputError("stage 2: the design is rank deficient")
         bs = Vt.T @ ((U.T @ y) / S)
         beta = bs / scale

@@ -1,5 +1,13 @@
 # JouleWise Task Queue
 
+PR #795 round-9 intake (2026-11-16): direct user priority on this clean worktree at
+`41afd6eea`; [AGENT], synthetic only. Cold Sol's one LOW (underdetermined design)
+and RL-174 A.2/A.4/A.7/D.3 are implemented and gated: 407 focused tests (2 skips),
+144/144 mutants killed (0 survivors/invalid), 11/11 twin sets agree on stable source.
+Push, hosted quick and exact PR-body readback receipts are recorded in PR #795. No quiet work, real custody, MBP contact or merge. This lane supersedes the
+round-8 pointer; generated rankings and advisor state are unchanged. Evidence and
+remaining lead gates: [round-9 report](docs/run_reports/2026-11-16-pr795-round9-builder.md).
+
 PR #795 round-8 intake/disposition (2026-11-16): direct user priority on this worktree
 from `ac2e1ce33`; supersedes the round-7 lane pointer below without changing generated
 rankings. All three cold HIGH findings repaired; 397 focused tests (2 skips), 137/137

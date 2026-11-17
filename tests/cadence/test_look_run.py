@@ -73,6 +73,69 @@ def wb(p, data):
 ENERGY_MARKERS = ("power_trace.csv", "segment_energy.json")
 
 
+class Staging(unittest.TestCase):
+    def pack(self, root, files=None, changed=False):
+        import tarfile
+        files = files or {"nested/opaque.bin": b"synthetic\x00\xff", "raw.jsonl": b"no fields decoded\n"}
+        sid = "dev-01-s01"
+        manifest = root / "SHA256SUMS"
+        manifest.write_bytes("".join(f"{hashlib.sha256(data).hexdigest()}  ./{name}\n"
+                                     for name, data in sorted(files.items())).encode())
+        archive = root / "span.tgz"
+        with tarfile.open(archive, "w:gz") as tar:
+            for i, (name, data) in enumerate(files.items()):
+                if changed and i == 0:
+                    data = bytes([data[0] ^ 1]) + data[1:]
+                info = tarfile.TarInfo(sid + "/" + name)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+        marker = root / "marker.json"
+        marker.write_text(json.dumps({"schema": "joulewise.span_offload_marker.v1", "span_name": sid,
+                                     "provider_confirmed": True, "manifest_files": len(files),
+                                     "manifest_sha256": R.sha256_file(manifest),
+                                     "archive_sha256": R.sha256_file(archive)}))
+        return sid, archive, manifest, marker
+
+    def test_verifies_every_file_and_records_hash_chain(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            args = self.pack(root)
+            record = R.stage_archive(*args, root / "stage")
+            self.assertEqual(record, {"span_id": args[0], "archive_sha256": R.sha256_file(args[1]),
+                                     "manifest_sha256": R.sha256_file(args[2]),
+                                     "marker_sha256": R.sha256_file(args[3]), "files_verified": 2})
+            self.assertEqual((root / "stage" / args[0] / "nested/opaque.bin").read_bytes(), b"synthetic\x00\xff")
+            with self.assertRaisesRegex(F.LookInputError, "already exists"):
+                R.stage_archive(*args, root / "stage")
+
+    def test_one_changed_byte_refuses_before_publishing(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            args = self.pack(root, changed=True)  # archive hash is valid; a file differs by exactly one byte
+            with self.assertRaisesRegex(F.LookInputError, "staged file sha256 differs"):
+                R.stage_archive(*args, root / "stage")
+            self.assertEqual(list((root / "stage").iterdir()), [])
+
+    def test_manifest_and_archive_must_match_marker(self):
+        for target in (1, 2):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as td:
+                root = Path(td)
+                args = self.pack(root)
+                path = args[target]
+                path.write_bytes(path.read_bytes() + b"x")
+                with self.assertRaisesRegex(F.LookInputError, "does not match"):
+                    R.stage_archive(*args, root / "stage")
+                self.assertFalse((root / "stage" / args[0]).exists())
+
+    def test_unsafe_paths_refuse(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            args = self.pack(root, {"../escape": b"synthetic"})
+            with self.assertRaisesRegex(F.LookInputError, "unsafe"):
+                R.stage_archive(*args, root / "stage")
+            self.assertFalse((root / "escape").exists())
+
+
 class _Custody:
     tmp = None
 

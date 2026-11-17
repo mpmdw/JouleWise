@@ -262,7 +262,7 @@ legs. The stage-1 dry run on real custody remains the check of the real layout.
   - `onset.estimable_when` takes B-3, B-4 and B-5, plus the 0.30 censored-share report.
   - The days tripwire is `days_below_4`.
 - **Sentences RL-166b dictates.** They sit in `fit.stated_limits`, and the validator requires each id:
-  - what `yes` means, and its pass rate (0.421 for a correct model, about 4 in 10, 0.04 to 0.69 over five worlds; 0.095 with no heat term, about 1 in 10.5), and that `no` is not evidence against the term;
+  - what `yes` means, and its pass rate (0.421 for a correct model, about 4 in 10, 0.001 to 0.693 over all twelve committed worlds, 0.421 in the default; 0.095 with no heat term, about 1 in 10.5), and that `no` is not evidence against the term;
   - the pooled error;
   - the limit of ½T² (3 % of its 439 s value at 75 s; under about 150 s, Ĥ is the onset step alone);
   - the partial-correction share;
@@ -454,6 +454,45 @@ Verdict REFUSE: three HIGH, no MED or LOW. Source report and before/after eviden
 Every repair has a failing-before/passing-after synthetic regression. Required NumPy CI and FreezeCommit
 include the new module; the mutant harness adds a guard deletion per repaired boundary. All prior research
 questions in §7f and the round-7 builder report remain open; these repairs issue no ruling or live admission.
+
+## 7h. Cold Sol LOW and RL-174 (builder round 9)
+
+The cold review of `41afd6eea` admitted with one LOW: a two-row, five-column design
+passed the thin-SVD check. The solver now requires full column rank, including the
+structural missing singular values and a zero design. The review's exact two-leg,
+two-date reproducer (9,963 and 9,961 prefill tokens, two decode tokens each) refuses.
+
+RL-174 A.2 retains the 2 s bound. Stage 1 prints
+`counts.clock_fit_excess_between_1_and_2_s`: energy-fit legs with **1 < excess <= 2 s**.
+The manifest's pinned `hidden_holes` limitation states that a pass does not prove
+there is no hidden hole. This count changes no verdict.
+
+RL-174 A.4 makes rule 4 false for every type-A fit leg of an unreadable meter span,
+including a leg with no readable turn. `meter_unreadable.span_ids` prints the span ids;
+`to_research_lead` is true on a second such span. Type T remains unread and excluded.
+RL-174 A.7 confirms 0.08 and the mandatory 2 s GPU backstop. The pinned pass-rate
+sentence now covers **all twelve worlds in the committed evidence: 0.001 to 0.693**,
+and names **0.421 in the default world**. No simulation was rerun.
+
+RL-174 D.3 adds optional byte staging to stage 1: `--stage-archives PLAN.json
+--staging-root ROOT`, with `--roster`, `--custody` and `--rules-3-4`. The plan is a JSON
+list of `{span_id, archive, manifest, marker}` paths, naming a local pulled and already
+decrypted #804 archive, its exact `SHA256SUMS` bytes and its typed verified marker.
+The marker's `span_name` equals the roster id. The archive's sha256 and the manifest's
+sha256 must equal the marker's; every regular file must match its per-file digest.
+Missing, extra, duplicate, linked or unsafe files refuse. Only verified bytes are
+published at `ROOT/span_id`; existing destinations refuse. No measurement is parsed.
+Stage 1 records `staging[]` with span id, archive/manifest/marker hashes and file count;
+an already raw copy records `[]`. Later custody commands use that same raw staging
+root (or `--span-dir ID=ROOT/ID` for a partly staged roster). The time reader still
+refuses `.zst`; transport decryption and provider/marker authenticity stay upstream.
+
+The stage-1 schema, dictated-sentence hashes and draft code/ledger pins include these
+changes. The one-changed-byte test refuses even when the archive's hash matches its
+marker: per-file verification must also pass. Source and synthetic gate evidence:
+[round-9 report](../run_reports/2026-11-16-pr795-round9-builder.md). This section
+supersedes the carried questions about A.1–A.7 above; unrelated reader/provenance
+questions and final research admission remain with the lead.
 
 ## 8. Still owed
 
