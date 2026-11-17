@@ -24,6 +24,11 @@ existing mutation selectors resolve and compile after updating their source
 anchors. A direct byte comparison of the seven existing worlds at seed `20261114`
 matched the old stage-1 and fit outputs, including keyed residuals and prefix bias.
 
+Hosted shard 9 caught the synthetic generator's expanded usage docstring because
+the host-command inventory fingerprints the original isolated-Python usage text.
+The follow-up restores that text and retains the comparison command here and in
+CLI help. The host-command inventory regression passes on the follow-up.
+
 ## Held-out hot error
 
 `python3 -I scripts/cadence_look_synth.py --compare-hot --seed 20261114` compares

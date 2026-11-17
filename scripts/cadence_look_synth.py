@@ -6,7 +6,6 @@ shapes of the fit's interface page (`docs/process/cadence_look_fit_interface.md`
 parameters: the onset model, the rates, the count-only base, the heat term (kappa, delta) and the noise.
 
     python -I scripts/cadence_look_synth.py --out DIR [--scenario NAME] [--seed N]
-    python -I scripts/cadence_look_synth.py --compare-hot [--seed N]
 
 DIR receives `look_input.json` (level R, no energy), `segment_energy.json` (level E) and `truth.json` (the planted
 values and the planted per-leg quantities the fit should recover). Everything here is synthetic. No custody,
