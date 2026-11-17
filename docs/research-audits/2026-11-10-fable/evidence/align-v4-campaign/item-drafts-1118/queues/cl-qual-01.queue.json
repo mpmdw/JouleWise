@@ -11,7 +11,7 @@
       "block_id": "qual-01",
       "kit": {
         "path": "docs/process/cadence/kits/cl-qual-01.v1.1.json",
-        "sha256": "d125491feec1fc95ca962c6e7ea5d50d8d93634639c5a55417c93cb2c710c5be"
+        "sha256": "8d9ec7143d2e7b60d303a52ede374075bdaf807c4bbb214b418c269dba2dabbc"
       },
       "legs": [
         "L001",
@@ -30,7 +30,7 @@
       "block_id": "qual-01",
       "kit": {
         "path": "docs/process/cadence/kits/cl-qual-01.v1.1.json",
-        "sha256": "d125491feec1fc95ca962c6e7ea5d50d8d93634639c5a55417c93cb2c710c5be"
+        "sha256": "8d9ec7143d2e7b60d303a52ede374075bdaf807c4bbb214b418c269dba2dabbc"
       },
       "legs": [
         "L007",

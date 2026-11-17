@@ -94,14 +94,17 @@ def render(dates):
           'queue_scan':git('ls-tree','-r','--name-only',SOURCE,'docs/process/cadence').decode().splitlines(),
           'dates':dates,'queue_expiry':QUEUE_EXPIRY,'items':[],'standing':standing()}
     assert not any('qual' in p.lower() and 'queue' in Path(p).name.lower() for p in meta['queue_scan']),meta['queue_scan']
+    git_dir=git('rev-parse','--absolute-git-dir').decode().strip()
     with pinned() as repo:
         previous=('dev-05-s02','cl-dev-05',[f'L{i:03d}' for i in range(7,13)],'2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a','2d347f721552fe03bdd19f113e7bad7a7c24908e')
         for n in range(1,4):
             block=f'qual-{n:02d}'; camp='cl-'+block; kp=f'docs/process/cadence/kits/{camp}.v1.1.json'
-            raw=git('show',SOURCE+':'+kp); sha=hashlib.sha256(raw).hexdigest(); kit=json.loads(raw)
+            staged=repo/kp; staged.parent.mkdir(parents=True,exist_ok=True)
+            staged.write_bytes(git('show',SOURCE+':'+kp))
+            call(repo,'scripts/cadence_legs_runner.py','pin-kit',staged,'--commit',PIN,'--write',GIT_DIR=git_dir)
+            raw=staged.read_bytes(); sha=hashlib.sha256(raw).hexdigest(); kit=json.loads(raw)
             assert kit['frozen']['commit']==PIN and kit['runner']['kind']=='cadence-legs-v1.1'
             local=HERE/'kits'/Path(kp).name; local.write_bytes(raw)
-            staged=repo/kp; staged.parent.mkdir(parents=True,exist_ok=True); staged.write_bytes(raw)
             queue={'schema':'joulewise.cadence_queue.v1','queue_id':'cq-'+camp,'expires_at':QUEUE_EXPIRY,'halt':None,'standing_notice':None,'spans':[]}
             for s in range(1,3):
                 ids=[x['leg_id'] for x in kit['legs'][(s-1)*6:s*6]]
@@ -129,6 +132,7 @@ T0_DATE={dates[block]}; WINDOW_START={epoch(dates[block])}; WINDOW_END={limit}
 DAY_END={day_end}; FIRST_TO_SECOND_S={first_to_second}
 QUAL_DATES={','.join(k+'='+v for k,v in dates.items())}'''
                 values=dict(PRED_NOTE=('<LEAD FILLS: confirm dev-05-s02 is latest counted campaign span, or update the complete PRED_* identity and machine-order record>.' if n==s==1 else 'The qualification predecessor chain is fixed; no automatic skip or override.'),ORDINAL='FIRST' if s==1 else 'SECOND',BLOCK=block,SPAN=span,CAMP=camp,LEGS=legs,KIT_SHA=sha,PIN=PIN,FIRST=ids[0],SHORT=f"{short[0]['leg_id']} cap {short[0]['decode_tokens']:,}",EXPECTED=plan['expected_s'],WORST=plan['worst_case_s'],DATE=dates[block],START=epoch(dates[block]),END=limit,LIMIT_HMS=limit_hms,POINTER_DEADLINE=dt.datetime.fromtimestamp(limit+extra+900+3600,TZ).isoformat(),PRED=previous[0],PRED_CAMP=previous[1],PRED_LEGS=','.join(previous[2]),DATES=', '.join(k+'='+v for k,v in dates.items()),QUEUE_PATH=PREFIX+'/queues/'+qp.name,QUEUE_SHA=qsha,CONFIG=config,GATES=gates,MAINTENANCE=maintenance,Q1=q1,DEADLINE_SECONDS=int(extra+900),NEXT=f'Next: `{block}-s02` after its own gates.' if s==1 else ('Next block under its own dated item.' if n<3 else 'All 36 qualification legs collected; the lead owns look readiness.'),HAND_NOTE='After the first span only, RL-172a F1 requires the soak comparison before s02; this draft conservatively waits to issue later spans until that record exists.' if n==s==1 else 'Not issuable before qual-01-s01\'s soak hand-read record (RL-172a F1; conservative issue ordering).')
+                values['PIN_SHORT']=PIN[:9]
                 text=template
                 for key,value in values.items(): text=text.replace('@@'+key+'@@',str(value))
                 assert not re.search(r'@@[A-Z_]+@@',text)

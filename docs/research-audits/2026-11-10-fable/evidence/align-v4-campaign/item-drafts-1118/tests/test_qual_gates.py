@@ -94,7 +94,7 @@ def run_item(item,shell):
             paths={
                 '/Users/edr/code/jw-wt/cadence-'+item['span']: str(staged),
                 '/Users/edr/code/JouleWise': str(auth),
-                '/Users/edr/campaign-out/kits/'+item['camp']+'.v1.1-6010985a3.json': str(HERE/item['kit_file']),
+                '/Users/edr/campaign-out/kits/'+item['camp']+'.v1.1-'+META['pin'][:9]+'.json': str(HERE/item['kit_file']),
                 '/Users/edr/campaign-out/queues/'+item['camp']+'.queue.json': str(HERE/item['queue_file']),
                 '/Users/edr/campaign-out': str(root),
                 '/Users/edr/night-custody/magistrate': str(home/'synthetic-fence'),

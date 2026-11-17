@@ -5,7 +5,7 @@
  "deadline_epoch_s": 1795272750.0,
  "expected_s": 12310,
  "fixed_overhead_s": 1200,
- "kit_sha256": "94f20d749faee96e461431b3d420784ebb975498fbd3abb367401b4819b48bc8",
+ "kit_sha256": "85dfa025a84c7bdbcb79ecd0fa87bd52d1ffc7624e40fa94c5877646abd03bf9",
  "launch_deadline_epoch_s": 1795275260.0,
  "leg_cap_s": 2700,
  "legs": [

@@ -3,6 +3,15 @@
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
+## 2026-11-17 qualification t0 guard successor
+
+P1 [AGENT], user-selected Tier 2 on `audit/2026-11-10-fable`. Apply the
+lead-approved successor guard and rebind six unissued items. The
+[run report](docs/run_reports/2026-11-17-qual-pin-t0guard.md) tracks exact-pin
+admission. The named cold-seat confirmation and retry-reader disposition
+remain lead work. RL-175 C.4 batch enforcement and freeze 2 remain issue
+prerequisites. No phase exit-checklist row closes.
+
 ## 2026-11-17 user-directed Builder C draft repairs
 
 P1 [AGENT] on `audit/2026-11-10-fable`. Apply the WS qualification and

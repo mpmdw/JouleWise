@@ -77,19 +77,21 @@ class Round10(unittest.TestCase):
         sys.path.insert(0, str(HERE / 'tools'))
         from pinned import pinned
         with pinned() as source, tempfile.TemporaryDirectory(prefix='qual-child-t0-') as scratch:
-            if not os.environ.get('JW_TEST_UNPATCHED_T0'):
-                applied = subprocess.run(
-                    ['patch', '-p1', '--batch', '-i', str(HERE / 'tools/qualification-t0.patch')],
-                    cwd=source, text=True, capture_output=True,
-                )
-                self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
-            result = subprocess.run(
-                [sys.executable, '-B', str(HERE / 'tests/check_child_t0.py'), str(source),
-                 str(HERE / 'kits/cl-qual-03.v1.1.json'), scratch],
-                text=True, capture_output=True, env={**os.environ, 'JW_B5_SYNTHETIC_ONLY': '1'},
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn('PASS candidate child midnight during handoff', result.stdout)
+            for n in range(1, 4):
+                kit = HERE / 'kits' / f'cl-qual-{n:02d}.v1.1.json'
+                with self.subTest(kit=kit.name):
+                    result = subprocess.run(
+                        [sys.executable, '-B', str(HERE / 'tests/check_child_t0.py'), str(source),
+                         str(kit), str(Path(scratch) / kit.stem)],
+                        text=True, capture_output=True, env={**os.environ, 'JW_B5_SYNTHETIC_ONLY': '1'},
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(result.stdout.splitlines(), [
+                        'PASS pinned child last authorized fractional second',
+                        'PASS pinned child midnight during handoff',
+                        'PASS pinned child different date before numeric cutoff',
+                        'PASS pinned child item expires during handoff',
+                    ])
 
     def test_maintenance_predicate(self):
         campaign = HERE.parent

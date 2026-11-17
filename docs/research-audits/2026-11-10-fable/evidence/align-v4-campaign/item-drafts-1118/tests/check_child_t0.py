@@ -1,4 +1,4 @@
-"""Execute the candidate launcher and child CLIs with a synthetic handoff clock."""
+"""Execute the pinned launcher and child CLIs with a synthetic handoff clock."""
 import argparse
 from datetime import datetime
 import json
@@ -53,4 +53,4 @@ for label, epoch, cutoff, allowed in (
         assert rc == 3, (label, rc)
         assert not output.exists()
         assert not deps.host.calls
-    print('PASS candidate child', label)
+    print('PASS pinned child', label)
