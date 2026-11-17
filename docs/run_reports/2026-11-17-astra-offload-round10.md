@@ -2,8 +2,10 @@
 
 Mission M0 selected CLOSE-OFFLOAD-01 on the agent lane. The lead assigned
 findings 2, 7, 8 and 10 to Builder B. The starting heads were `ccfe442b6`
-for PR #804 and `297129cae` for PR #807. The previous retarget report
-records the RL-174 D acceptance and live gates.
+for PR #804 and `297129cae` for PR #807. The
+[retarget report](2026-11-17-close-offload-retarget.md) preserves
+the build record formerly summarized in RUN_STATE item 390a. The
+operational pointer continues to govern the next activation.
 
 | Finding | Repair and regression |
 | --- | --- |
@@ -17,8 +19,10 @@ also let the old config accept the new allowlist key to verify that the old
 selector deleted both the designated older OUT and the surviving files
 from an interrupted retirement.
 
-Local verification used the relevant offload, fixture census and state
-modules with process-signaling integration cases excluded. The local
+Local verification selected 74 cases on PR #804 and 198 cases on PR #807
+in the relevant offload, fixture census and state suites. All passed with
+one skip on PR #807. The Python 3.14 close-offload run passed 17 cases.
+The local runs excluded process-signaling integration cases. The
 harness intercepted attempts to send process signals. Hosted CI provides
 the canonical sharded suite. The PR bodies record the current heads and
 the audit regression names. Testing used synthetic source and control
