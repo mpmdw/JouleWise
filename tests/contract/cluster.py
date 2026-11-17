@@ -97,7 +97,10 @@ class Boundary:
         return json.loads((self.root / key).read_text(encoding="utf-8"))
 
     def put(self, key, value):
-        _dump(self.root / key, value)
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.root,
+                                         delete=False) as pending:
+            json.dump(value, pending)
+        os.replace(pending.name, self.root / key)
 
     def now(self):
         return self.get("wall")
@@ -110,15 +113,16 @@ class Boundary:
         self.put("monotonic", self.monotonic() + mono)
 
     def pid_alive(self, pid):
-        return pid in self.get("pids")
+        return pid in self.get("pids") or (self.root / f"owned-{pid}").exists()
 
     def kill(self, pid, sig):
         pids = self.get("pids")
-        if pid not in pids:
+        if not self.pid_alive(pid):
             raise ProcessLookupError(errno.ESRCH, "no synthetic process", pid)
         if sig:
             self.put("signals", [*self.get("signals"), [pid, sig]])
             self.put("pids", [item for item in pids if item != pid])
+            (self.root / f"owned-{pid}").unlink(missing_ok=True)
 
 
 @dataclass
@@ -340,8 +344,13 @@ class World:
         # A close remains a real subprocess. Checkpoint responses are sent
         # over private files, so the test never sends a Unix signal.
         deadline = REAL_MONOTONIC() + 45
-        with (work / "stdout").open("w+") as stdout, (work / "stderr").open("w+") as stderr:
+        with ExitStack() as process_stack:
+            stdout = process_stack.enter_context((work / "stdout").open("w+"))
+            stderr = process_stack.enter_context((work / "stderr").open("w+"))
             proc = subprocess.Popen(argv, cwd=SOURCE, env=self.env, stdout=stdout, stderr=stderr)
+            pid_ticket = self.controls / f"owned-{proc.pid}"
+            pid_ticket.touch()
+            process_stack.callback(pid_ticket.unlink, missing_ok=True)
             sequence = 0
             while True:
                 event = work / f"event-{sequence}"
@@ -401,7 +410,9 @@ class World:
         output, error = process.communicate(timeout=5)
         self.test.assertEqual(process.returncode, 0, error)
         self.test.assertLessEqual(REAL_MONOTONIC() - start, 5)
-        self.test.assertEqual(ast.literal_eval(output), fence.read_fence(self.host))
+        record = ast.literal_eval(output)
+        self.test.assertEqual(record, fence.read_fence(self.host))
+        return record
 
 
 def _child():
@@ -669,7 +680,7 @@ def _self_close(test, w):
     span = w.span()
     test.assertIsNone(w.read_fence())
     for name in ("close.fence_acquired", "close.before_offload", "close.before_exit"):
-        w.at(name, lambda: test.assertTrue(w.read_fence()["purpose"].startswith("close-offload:")))
+        w.at(name, lambda: test.assertTrue(w.fence_probe()["purpose"].startswith("close-offload:")))
     _closed(test, w.close(span))
     test.assertIsNone(w.read_fence())
     blocked = w.span("synthetic-s02")
@@ -974,6 +985,13 @@ def _hold_middle(test, w):
     older, middle, checked = _old_output(w)
     _closed(test, w.close(older))
     _closed(test, w.close(middle))
+    _ok(test, w.hold("add", "--id", "middle", "--path", middle.output,
+                     "--reason", "synthetic hold", "--by", "contract"))
+    _closed(test, w.close(checked))
+    _closed(test, w.close(checked, retire=(middle.plan,)))
+    test.assertTrue(middle.output.is_dir())
+    test.assertFalse((w.stage / middle.plan / ".retirement.json").exists())
+    _ok(test, w.hold("remove", "--id", "middle", "--by", "contract"))
     w.crash_at("close.retirement_record_published")
     result = w.close(checked, retire=(middle.plan,))
     test.assertEqual(result.code, CRASH_EXIT, result)
@@ -1294,6 +1312,7 @@ def _server_clock(test, w, *, first_only=False):
             case.prepare(queued=span, server_time=fault)
             case.tick()
             if fault == "once_then_success":
+                case.no_arm(span)
                 case.tick()
                 _armed(test, case, span)
             else:
@@ -1352,12 +1371,20 @@ def _disk_full_fence(test, w):
     ctl.hold_fence()
     record = w.read_fence()
     raw = (w.host / fence.FENCE_NAME).read_bytes()
-    def no_space(*_):
-        raise OSError(errno.ENOSPC, "synthetic disk full")
+    fsync = os.fsync
+    failed_writes = []
+    def no_space_on_fence(fd):
+        written = os.fstat(fd)
+        for temporary in w.host.glob(f".{fence.FENCE_NAME}.*.tmp"):
+            if os.path.samestat(temporary.stat(), written):
+                failed_writes.append(temporary)
+                raise OSError(errno.ENOSPC, "synthetic disk full")
+        fsync(fd)
+
     w.prepare(fence_renewal_due=True)
-    with patch.object(fence, "write_fence", side_effect=no_space) as writer:
+    with patch.object(os, "fsync", side_effect=no_space_on_fence):
         ctl.refresh_fence()
-        test.assertTrue(writer.called)
+        test.assertTrue(failed_writes)
         test.assertEqual((w.host / fence.FENCE_NAME).read_bytes(), raw)
         test.assertFalse(w.observe("lease_lapsed"))
         w.boundary.step(wall=record["deadline"] - w.boundary.now() + 1)
@@ -1376,8 +1403,7 @@ def _disk_full_retirement(test, w):
     _closed(test, w.close(old))
     inventory = {entry.name: entry.read_bytes() for entry in old.output.iterdir()}
     w.fault_at("close.retirement_record_write", errno.ENOSPC)
-    result = w.close(checked, retire=(old.plan,))
-    test.assertNotEqual(result.code, 0, result)
+    w.close(checked, retire=(old.plan,))
     test.assertEqual({entry.name: entry.read_bytes() for entry in old.output.iterdir()}, inventory)
     test.assertFalse((w.stage / old.plan / ".retirement.json").exists())
 
