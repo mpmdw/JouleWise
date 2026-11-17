@@ -330,3 +330,17 @@ findings remain above. This is a reviewable draft, not completion of the newly
 published storage contract. Independent authorized work (implementation, focused
 checks, one cold seat with deltas, current-main reconciliation and final-head CI)
 is preserved. The PR body carries final SHA/check readback and this blocking choice.
+
+## Final test-fixture hygiene
+
+The deadline regression's fake provider grandchild now carries the unique argv
+marker `jw-close-offload-fixture-provider-child-v1`. Registered it in
+`tests/fixture_signatures.json` as required by orchestration's session-end fixture
+census rule, with positive orphan, active-parent and non-fixture negative cases
+in `tests/test_fixture_orphan_census.py`. The child code ignores this extra argv
+and its heartbeat/cleanup assertion is unchanged. The focused child+signature
+checks passed on 3.14 and the static signature check passed on 3.13. There is no
+production offload-code delta from reviewed code head 603eae71b; only test
+fixture identification and records followed. Live global observation still
+returns 2 because ps is denied; no clean census is claimed. Final-head CI in the
+PR body includes this fixture-registration change.

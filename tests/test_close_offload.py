@@ -350,7 +350,7 @@ state.write_text(json.dumps(s))
         child_code = ("import time; from pathlib import Path; p=Path(" + repr(str(heartbeat))
                       + ");\nwhile True: p.write_text(str(time.monotonic())); time.sleep(0.03)")
         self.exe("brctl", "import subprocess,sys,time; from pathlib import Path; "
-                 + "child=subprocess.Popen([sys.executable,'-B','-c'," + repr(child_code) + "], "
+                 + "child=subprocess.Popen([sys.executable,'-B','-c'," + repr(child_code) + ",'jw-close-offload-fixture-provider-child-v1'], "
                  + "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
                  + "Path(" + repr(str(pid_file)) + ").write_text(str(child.pid)); time.sleep(30)\n")
         try:
