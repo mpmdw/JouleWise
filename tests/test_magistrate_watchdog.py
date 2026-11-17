@@ -1087,18 +1087,20 @@ class StopAndDecisionTests(WatchdogTestCase):
         run.assert_called_once_with(("/usr/bin/pgrep", "-lf", "[r]un_night\\.py"))
 
     def test_stop_branch_present_absent_and_positive_control_failure(self) -> None:
-        ok = subprocess.CompletedProcess([], 0, "main\n", "")
-        absent = subprocess.CompletedProcess([], 2, "", "")
-        present = subprocess.CompletedProcess([], 0, "stop\n", "")
-        failed = subprocess.CompletedProcess([], 128, "", "network")
-
-        with mock.patch.object(wd.subprocess, "run", side_effect=[ok, absent]):
-            self.assertEqual(wd.remote_stop_probe().state, "CLEAR")
-        with mock.patch.object(wd.subprocess, "run", side_effect=[ok, present]):
-            self.assertEqual(wd.remote_stop_probe().state, "STOPPED")
-        with mock.patch.object(wd.subprocess, "run", side_effect=[failed]) as run:
-            self.assertEqual(wd.remote_stop_probe().state, "NETWORK_UNCERTAIN")
-            self.assertEqual(run.call_count, 1, "a failed positive control cannot clear the switch")
+        main = f"{'a' * 40}\t{wd.POSITIVE_CONTROL_REF}\n"
+        stops = f"{'b' * 40}\trefs/heads/ops/stop\n{'c' * 40}\trefs/heads/ops/stop-second\n"
+        for rc, rows, expected in ((0, main, "CLEAR"), (0, main + stops, "STOPPED"),
+                                   (0, stops, "NETWORK_UNCERTAIN"), (0, "", "NETWORK_UNCERTAIN"),
+                                   (0, main + "malformed\n", "NETWORK_UNCERTAIN"),
+                                   (128, main, "NETWORK_UNCERTAIN")):
+            with self.subTest(rc=rc, rows=rows), mock.patch.object(
+                    wd.subprocess, "run", return_value=subprocess.CompletedProcess([], rc, rows, "")) as run:
+                observation = wd.remote_stop_probe()
+                self.assertEqual(observation.state, expected)
+                self.assertEqual(run.call_count, 1)
+                self.assertEqual(run.call_args.args[0][-2:], (wd.POSITIVE_CONTROL_REF, wd.STOP_REF_GLOB))
+                if expected == "STOPPED":
+                    self.assertIn("refs/heads/ops/stop-second", observation.detail)
 
     def test_stop_glob_catches_shortened_magistrate_branch_name(self) -> None:
         shortened = "refs/heads/ops/stop-magistrat"

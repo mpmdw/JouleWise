@@ -193,8 +193,8 @@ class TickSpanTests(WatchdogTestCase):
             self.assertEqual("FENCED", supervisor.state["state"])
             self.assertIn((100, signal.SIGKILL), self.harness.processes.signals)
 
-    def test_inflight_refresh_abandons_second_call_at_span_start(self) -> None:
-        # Reviewer CONTRACT probe: hold the positive-control transport while
+    def test_inflight_refresh_discards_advertisement_at_span_start(self) -> None:
+        # Reviewer CONTRACT probe: hold the combined ref advertisement while
         # the resident crosses the inclusive boundary and requests stand-down.
         plan = self.make_plan()
         supervisor = self.supervisor(plan)
@@ -206,12 +206,10 @@ class TickSpanTests(WatchdogTestCase):
         calls = []
 
         def transport(argv, **kwargs):
-            calls.append((argv[-1], self.harness.clock.wall.timestamp()))
-            if argv[-1] == wd.POSITIVE_CONTROL_REF:
-                entered.set()
-                self.assertTrue(release.wait(5))
-                return subprocess.CompletedProcess(argv, 0, "control", "")
-            return subprocess.CompletedProcess(argv, 2, "", "")
+            calls.append((argv[-2:], self.harness.clock.wall.timestamp()))
+            entered.set()
+            self.assertTrue(release.wait(5))
+            return subprocess.CompletedProcess(argv, 0, f"{'a' * 40}\t{wd.POSITIVE_CONTROL_REF}\n", "")
 
         self.harness.deps.git_probe = wd.remote_stop_probe
         with mock.patch.object(wd.subprocess, "run", side_effect=transport):
@@ -229,7 +227,7 @@ class TickSpanTests(WatchdogTestCase):
                 if thread is not None:
                     thread.join(5)
                     self.assertFalse(thread.is_alive())
-            self.assertEqual([wd.POSITIVE_CONTROL_REF], [ref for ref, _ in calls])
+            self.assertEqual([(wd.POSITIVE_CONTROL_REF, wd.STOP_REF_GLOB)], [refs for refs, _ in calls])
             self.assertLess(calls[0][1], plan.t0_epoch_s - wd.PLAN_LEAD_S)
             self.assertIs(cached, supervisor._remote_stop)
             self.assertEqual(cached_monotonic, supervisor._remote_stop_observed_monotonic)
