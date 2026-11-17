@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Activation 152c9255 record: acceptance ruled (Interactive+v3); claim-gate wiring, reducer and J/correct floor ruled; CG-1 accuracy-term amendment; PR-L/PR-R/PR-0/A292 in review",
-    "path": "docs/process_traces/2026-09-25-activation-152c9255/00-activation-record.md"
+    "label": "PR #799 gate 7 disposition; PR #800 controller repairs continue separately",
+    "path": "docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -11418,5 +11418,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-09-25"
+  "updated": "2026-11-16"
 }

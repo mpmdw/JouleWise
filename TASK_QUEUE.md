@@ -1,5 +1,17 @@
 # JouleWise Task Queue
 
+**2026-11-17 user-priority [AGENT] continuation.** PR #799 addresses Astra operations audit finding 4 with locked, concurrent and vanished ref regressions. [Run report](docs/run_reports/2026-11-17-desk-final-round10.md).
+
+**2026-11-17 explicit user-priority [AGENT] intake:** repair the four round 9 findings on PR #799 and PR #800. The desk history repair passes local tests. PR #800 inherits it before the controller repairs. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
+
+**2026-11-16 explicit user-priority [AGENT] gate-7 intake:** repair the cold Sol refusal of #799/#800 before ordinary queue work. No #799 implementation defect reproduced; #800 owns F1–F4. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md).
+
+**2026-11-16 explicit user-priority [AGENT] intake:** repair the cold Sol refusal of PR #799/#800 before ordinary queue work. #799 F4 reproduced and fixed with regressions; #800 repairs continue on its branch. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md).
+
+**2026-11-16 explicit intake, [AGENT]:** PR #799/#800 gate-5 repair outranks ordinary queue work. #799 coverage gap addressed; rerun policy and fresh stack admission remain open. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md).
+
+**2026-11-15 explicit user intake:** PR #799/#800 gate-4 repairs take priority over ordinary queue work. Desk fixes are applied; research-lead questions and fresh gate admission remain. No phase exit-checklist matrix row exists for this fix round. Evidence: [docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md](docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md).
+
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
@@ -677,7 +689,7 @@ Superseded (2026-07-15, WO-017; D-043): P2-027 publication and uninvolved-party 
 <!-- BEGIN GENERATED: state-kernel current-queue -->
 <!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. -->
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-09-25).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16).
 
 Generated compatibility table for repository consumers; the lane tables below are the detailed view of the same kernel state.
 
