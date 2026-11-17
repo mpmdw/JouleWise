@@ -1,5 +1,7 @@
 # JouleWise Run State
 
+**2026-11-17 PR #800 round 9.** The predecessor receipt and copy, continuous fence, and duplicate restore repairs pass focused checks. The branch inherits PR #799's signed-history repair. [Run report](docs/run_reports/2026-11-17-queue-controller-round9.md).
+
 **2026-11-17 PR #799 round 9:** failed or incomplete signed-history listings hold desk finality. 247 guarded cadence tests pass. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
 
 **2026-11-16 PR #800 gate 7 repair:** F1–F4 reproduced and repaired: pinned prior classification/count, duplicate gate authority, retained executed date occupancy and abnormal-exit fence lease. [Report](docs/run_reports/2026-11-16-queue-controller-gate7-sol-r8.md). No MBP contact or custody access; fresh admission, owner gates and listed research-lead questions remain open.
@@ -6434,7 +6436,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #799/#800 gate 7 repairs, dispositions and verification](docs/run_reports/2026-11-16-queue-controller-gate7-sol-r8.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17). Latest report: [PR #799/#800 round 9 repairs and verification](docs/run_reports/2026-11-17-queue-controller-round9.md).
 
 ### [ED-EXTERNAL]
 

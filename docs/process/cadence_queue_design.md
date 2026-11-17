@@ -1093,3 +1093,15 @@ hand-armed v1.1 Q1 and typed-marker switch-over, and non-counting desk-disagreem
 External offload guarantees and future campaign-scope authenticated history retain their named owners.
 Fresh independent admission, owner merged-tree suite, cold Fable pass and watched native span remain
 separate gates; no merge or installation is authorized by this repair.
+
+### Round 9 predecessor and transfer checks
+
+- The latest hand-armed close declared in the standing index needs its own receipt and typed offload marker
+  before admission. The receipt must match the plan and campaign path, pinned kit, roster and executed count.
+  The copy gate binds the marker to that receipt's output directory and time even when another receipt is
+  newer on disk. A missing receipt leaves the declared close unproven.
+- The arm child requires an unexpired standing fence for the controller's purpose and PID. Under the frozen
+  launcher's fence lock it verifies the record again before atomic replacement. It verifies the transferred
+  record before bootstrap. Absence, change or expiry makes the arm indeterminate.
+- Restore and feed-close stage records are evaluated in receipt order. A failed or duplicate close stage
+  leaves the close unproven.

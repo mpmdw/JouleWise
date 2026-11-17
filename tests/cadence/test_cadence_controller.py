@@ -138,6 +138,20 @@ class Gate6Controller(WorldCase):
         self.assertIn(prior["plan_id"], status["detail"]["detail"])
         self.assertEqual(w.launcher.launched, [])
 
+    def test_duplicate_prior_restore_stages_hold_despite_successful_last_stage(self):
+        for first_rc in (9, 0):
+            with self.subTest(first_rc=first_rc):
+                w = self.prior_receipt_world(clean=True)
+                path = Path(w.ctl.census()["campaign"][0])
+                receipt = json.loads(path.read_text())
+                receipt["steps"].insert(1, {"name": "restore", "rc": first_rc})
+                path.write_text(json.dumps(receipt))
+                ended = law.parse_time(w.standing["prior_spans"][-1]["closed"])
+                os.utime(path, (ended, ended))
+                self.assertIn(w.tick()["state"], ("PAGED", "HALTED"))
+                self.assertIn("CLOSE_UNPROVEN", self.pages(w))
+                self.assertEqual(w.launcher.launched, [])
+
     def test_watchdog_removal_of_expired_fence_requires_acknowledgement(self):
         w = self.pilot_world(prior=False)
         self.assertEqual(w.ctl.startup_fence(), 'held')

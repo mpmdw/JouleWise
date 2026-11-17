@@ -1137,11 +1137,18 @@ def receipt_command_reasons(receipt, expected_windows=None):
     if not clean:
         out.append(reason("RECEIPT_NOT_CLEAN", f"rc {receipt.get('rc')}, {result.get('verdict')}, "
                                                f"{receipt.get('error', '')}"[:200]))
-    steps = {s.get("name"): s for s in receipt.get("steps") or []}
-    close = [n for n in steps if n == "restore" or n.startswith(("stop-", "close-"))]
-    if "restore" not in steps or any(steps[n].get("rc") != 0 for n in close):
+    steps = receipt.get("steps")
+    if not isinstance(steps, list) or any(
+            not isinstance(step, dict) or not isinstance(step.get("name"), str) for step in steps):
+        return out + [reason("CLOSE_UNPROVEN", "the receipt has invalid stage records")]
+    close = [(step["name"], step.get("rc")) for step in steps
+             if step["name"] == "restore" or step["name"].startswith(("stop-", "close-"))]
+    names = [name for name, _ in close]
+    if "restore" not in names or any(type(rc) is not int or rc != 0 for _, rc in close):
         out.append(reason("CLOSE_UNPROVEN", "the receipt's restore or a feed stop is missing or failed: "
-                                            + ", ".join(f"{n}={steps[n].get('rc')}" for n in close)))
+                                            + ", ".join(f"{name}={rc}" for name, rc in close)))
+    if len(set(names)) != len(names):
+        out.append(reason("CLOSE_UNPROVEN", "duplicate restore or feed-close stages: " + ", ".join(names)))
     feeds = receipt.get("feeds") or {}
     if not feeds:
         out.append(reason("CLOSE_UNPROVEN", "the receipt names no feed"))

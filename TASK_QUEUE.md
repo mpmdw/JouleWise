@@ -1,5 +1,7 @@
 # JouleWise Task Queue
 
+**2026-11-17 explicit user-priority [AGENT] continuation.** PR #800 carries all four round 9 repairs, including the signed-history fix inherited from PR #799. Fresh cold admission remains with the lead. [Run report](docs/run_reports/2026-11-17-queue-controller-round9.md).
+
 **2026-11-17 explicit user-priority [AGENT] intake:** repair the four round 9 findings on PR #799 and PR #800. The desk history repair passes local tests. PR #800 inherits it before the controller repairs. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
 
 **2026-11-16 explicit user-priority [AGENT] gate-7 repair:** cold Sol F1–F4 fixed with failing-before/passing-after regressions on #800. #799 has no independent code defect this round. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-queue-controller-gate7-sol-r8.md). Fresh stack admission and research-lead rulings remain open.
@@ -696,7 +698,7 @@ Superseded (2026-07-15, WO-017; D-043): P2-027 publication and uninvolved-party 
 <!-- BEGIN GENERATED: state-kernel current-queue -->
 <!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. -->
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17).
 
 Generated compatibility table for repository consumers; the lane tables below are the detailed view of the same kernel state.
 
