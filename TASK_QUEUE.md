@@ -1,5 +1,7 @@
 # JouleWise Task Queue
 
+**2026-11-16 explicit user-priority [AGENT] gate-7 intake:** repair the cold Sol refusal of #799/#800 before ordinary queue work. No #799 implementation defect reproduced; #800 owns F1–F4. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md).
+
 **2026-11-16 explicit user-priority [AGENT] intake:** repair the cold Sol refusal of PR #799/#800 before ordinary queue work. #799 F4 reproduced and fixed with regressions; #800 repairs continue on its branch. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md).
 
 **2026-11-16 explicit intake, [AGENT]:** PR #799/#800 gate-5 repair outranks ordinary queue work. #799 coverage gap addressed; rerun policy and fresh stack admission remain open. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md).
