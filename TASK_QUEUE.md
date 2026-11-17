@@ -1,5 +1,7 @@
 # JouleWise Task Queue
 
+**2026-11-17 user-priority [AGENT] continuation.** PR #800 addresses Astra operations audit findings 1, 5, 6 and 11, plus the PR #807 adapter and the server clock retry. Fresh admission stays with the lead. [Run report](docs/run_reports/2026-11-17-queue-controller-round10.md).
+
 **2026-11-17 user-priority [AGENT] continuation.** PR #799 addresses Astra operations audit finding 4 with locked, concurrent and vanished ref regressions. [Run report](docs/run_reports/2026-11-17-desk-final-round10.md).
 
 **2026-11-17 explicit user-priority [AGENT] continuation.** PR #800 carries all four round 9 repairs, including the signed-history fix inherited from PR #799. Fresh cold admission remains with the lead. [Run report](docs/run_reports/2026-11-17-queue-controller-round9.md).

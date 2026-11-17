@@ -1,5 +1,7 @@
 # JouleWise Run State
 
+**2026-11-17 PR #800 round 10.** The Astra audit repairs bind the admitted copy marker to the staged receipt, check the controller-owned close contract, bound launch on both clocks, surface vanished verdicts, and publish arm intents durably. [Run report](docs/run_reports/2026-11-17-queue-controller-round10.md).
+
 **2026-11-17 PR #799 round 10.** Local desk publication checks the expected old ref, exit status and readback. All 80 desk-final tests pass. [Run report](docs/run_reports/2026-11-17-desk-final-round10.md).
 
 **2026-11-17 PR #800 round 9.** The predecessor receipt and copy, continuous fence, and duplicate restore repairs pass focused checks. The branch inherits PR #799's signed-history repair. [Run report](docs/run_reports/2026-11-17-queue-controller-round9.md).
@@ -6438,7 +6440,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17). Latest report: [PR #799/#800 round 9 repairs and verification](docs/run_reports/2026-11-17-queue-controller-round9.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17). Latest report: [PR #799/#800 round 10 Astra operations repairs](docs/run_reports/2026-11-17-queue-controller-round10.md).
 
 ### [ED-EXTERNAL]
 

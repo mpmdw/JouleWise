@@ -1230,12 +1230,13 @@ class ConfigAndInstall(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "c.json"
             path.write_text(json.dumps(base))
-            self.assertEqual(set(cc.load_config(path)), cc.CONFIG_KEYS)
+            self.assertEqual(set(cc.load_config(path)), cc.CONFIG_KEYS | cc.OPTIONAL_CONFIG_KEYS)
             saved = os.environ.pop("JW_B5_SYNTHETIC_ONLY", None)
             try:
                 for over in ({"git_dir": cc.CANONICAL_ROOT}, {"output_root": base["custody_root"] + "/out"},
                              {"output_root": "/Users/edr/night-custody/x"}, {"hold_standing_fence": "yes"},
-                             {"poll_live_s": 2}, {"accept_mock_verdicts": True}):
+                             {"poll_live_s": 2}, {"accept_mock_verdicts": True},
+                             {"copy_stage_root": "relative"}, {"copy_key_second_copy_sha256": "invalid"}):
                     path.write_text(json.dumps({**base, **over}))
                     with self.assertRaises(cc.ConfigError, msg=over):
                         cc.load_config(path)

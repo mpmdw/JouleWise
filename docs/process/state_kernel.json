@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "PR #799/#800 round 9 repairs and verification",
-    "path": "docs/run_reports/2026-11-17-queue-controller-round9.md"
+    "label": "PR #799/#800 round 10 Astra operations repairs",
+    "path": "docs/run_reports/2026-11-17-queue-controller-round10.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
