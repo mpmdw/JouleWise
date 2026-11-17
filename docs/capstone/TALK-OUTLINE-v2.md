@@ -106,7 +106,7 @@
 - **Sources:** `docs/analysis/b5/DEVIATION-LOG.md` DLE-0, DLE-1 and DLE-3; `docs/run_reports/2026-11-07-b5-release-hold-trace.md` §2 ("Every failing row maps to one of six defects"); `RESUME.md` (r3 held on D5 only; r4 = PR #697); H7.
 - **Speaker notes:**
   - The defects were real but mundane: a wrong key name that printed null (D1), a baseline from the wrong attempt (D2), dropped and mis-binned members (D3, D4), a double-counted campaign row (D5), and an unconditional comparison (D6). Mundane bugs are the point: they are what silently corrupts papers. D1 was in the main pipeline; D2-D4 and D6 were in the recompute or the comparator. Two programs disagreeing is how each found the other's bugs.
-  - CI enforces a five-row gate ledger in every PR body (`.github/workflows/gate-ledger.yml`, required on `main`). Number-bearing code needs two executing reviews from different model families, launched together (`docs/process/gate_policy.md` rule 3).
+  - CI checks the five-row gate ledger on PRs ready for review (`.github/workflows/gate-ledger.yml`, required on `main`). Tier 2 code that computes, selects or excludes a claim number needs one executing review from each model family (`docs/process/PIPELINE.md` §§1, 6).
   - `[FREEZE]` Status of the r4 release check: report only "agree", "hold" or "pending", plus whether Ed has given the unseal OK. No values.
 
 ## A7 · Win: 37 h to 1 h 40 min, proven equivalent blind (0:40) · CUT CANDIDATE 2

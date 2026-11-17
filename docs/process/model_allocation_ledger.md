@@ -75,6 +75,8 @@ Rules:
 
 ## 2. Current standing allocation dictate
 
+Superseded by `PIPELINE.md` §6 (2026-11-17); kept as history.
+
 **Ed, 2026-07-26** (recorded in
 `~/.claude/projects/-Users-edr-code-JouleWise/memory/instrument-mix-authority.md`,
 "SUPERSEDING DICTATE"), in substance:
@@ -512,3 +514,28 @@ instrument did anything. Every future row's `Outcome` field must trace
 to an envelope or a summary line, per the §Anti-fabrication rule. The
 generalization is recorded in `docs/council_log.md` §C-038
 ("Generalization adopted this session").
+
+## 7. Seat lines (PIPELINE.md §6)
+
+One line per seat. V/R/U = findings VERIFIED / REFUTED / UNVERIFIED (PIPELINE §2); FP = REFUTED findings at HIGH or
+MED; Esc = defects in this seat's scope found after merge; `unknown` per the anti-fabrication rule (§1). SEED rows were
+back-filled on 2026-11-17 from RUN_STATE text only and carry no V/R/U unless the item states it. No routing conclusion
+from fewer than 10 seats per (model, role).
+
+| Seat | Date | Model | Effort | Role | Tier | Task | Outcome | V/R/U | FP | Esc | Rounds | Wall | Evidence |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| S-001 SEED | 11-14 | Mythos 5.2 | unknown | cold kit review | 2 | hp-01 kit at `a95812f14` | ADMIT WITH FIXES | unknown | unknown | unknown | 1 | unknown | RUN_STATE 334 |
+| S-002 SEED | 11-14 | Mythos 5.2 | unknown | delta review | 2 | hp-01 delta at `dd206025a` | ADMIT WITH FIXES; F1-F9 closed (accepted, not labeled) | unknown | unknown | unknown | 1 | unknown | RUN_STATE 334 |
+| S-003 SEED | 11-14 | Mythos 5.2 | unknown | delta review | 2 | #775 kit delta | ADMIT WITH FIXES; F3-F5 closed in item text | unknown | unknown | unknown | 1 | unknown | RUN_STATE 331 |
+| S-004 SEED | 11-14 | Mythos 5.2 | unknown | delta review | 2 | `cl-dev-02` | ADMIT | unknown | unknown | unknown | 1 | unknown | RUN_STATE 354 |
+| S-005 SEED | 11-14 | Mythos 5.2 | unknown | first + delta review (2 seats) | 2 | dev-03 kit (READY line 2) | ADMIT WITH FIXES, then ADMIT | unknown | unknown | unknown | 2 | unknown | RUN_STATE 355 |
+| S-006 SEED | 11-14 | Mythos 5.2 | unknown | delta review | 2 | `cl-dev-04/05.v1.1` vs `cl-dev-03.v1.1` | ADMIT, "neither kit needs a byte changed" | 0/0/0 | 0 | unknown | 1 | unknown | RUN_STATE 394 |
+| S-007 SEED | 11-17 | Sol 6.1 | high | desk build (MBP) | 2 | dev-04-s01/s02 desks | FINAL; 0 of 114 values differ on re-execution | n/a | n/a | unknown | 1 | ~7 min | RUN_STATE 386 |
+| S-008 SEED | 11-17 | Sol 6.2 | xhigh | build | 2 | #800/#799 round-9 fixes (4 findings) | finished, unreviewed at record | n/a | n/a | unknown | round 9 | unknown | RUN_STATE 390, 391 |
+| S-009 SEED | 11-17 | Sol 6.2 | xhigh | build | 2 | #807 retarget onto #804's RL-174 D backend | finished, unreviewed at record | n/a | n/a | unknown | unknown | unknown | RUN_STATE 390, 391 |
+| S-010 SEED | 11-17 | Mythos 5.2 | unknown | design | 2 | MBP queue spec, Wed 18 to Mon 23 Nov | finished | n/a | n/a | unknown | 1 | unknown | RUN_STATE 390, 391 |
+| S-011 SEED | 11-17 | Astra 6.2 | high | audit | 2 | window schedule (throughput) | adopted idea 2 as item 395 (A) | unknown | unknown | unknown | 1 | unknown | RUN_STATE 391, 395 |
+| S-012 SEED | 11-17 | Astra 6.2 | high | audit | 2 | qual drafts; #800/#807 integration; F0 evaluator | "new HIGH issues"; verification not recorded | unknown | unknown | unknown | 1 | unknown | RUN_STATE 391, 395 |
+| S-013 SEED | 11-17 | Astra 6.2 | high | design audit | 2 | astra-design (finding 2 ruled in RL-175) | ruled by Fable | unknown | unknown | unknown | 1 | unknown | RUN_STATE 391, 396 |
+| S-014 SEED | 11-17 | Fable 5.2 | unknown | research-lead ruling | 2 | RL-175 | in force | n/a | n/a | n/a | 1 | unknown | RUN_STATE 396 |
+| S-015 SEED BATCH | 11-1x | unknown | unknown | review | 2 | #800 rounds 1-10 | REFUSE before round 9 (two HIGH); 4 findings fixed in round 9; round 10 open | unknown | unknown | unknown | 10 | unknown | RUN_STATE 384, 390; per-round counts to be filled from the PR thread |

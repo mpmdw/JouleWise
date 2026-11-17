@@ -408,6 +408,14 @@ class TimingTests(unittest.TestCase):
                 self.assertEqual(codes(events), {"DEADLINE_PASSED_UNCHECKED:" + expected})
                 self.assertEqual(self.context(wait=wait, now=1000), [])
 
+    def test_w01_current_v2_open_items_are_accepted(self):
+        doc = {"schema": "joulewise.current_pointer.v2", "source_item": "21",
+               "source_item_heading_date": "2026-11-17", "owner": "lead", "armed": None,
+               "wait": {"observable": "none", "deadline_epoch_s": None, "on_early_or_refused": None},
+               "next_observable": "fixture observable",
+               "open_items": [{"item": 21, "owner": "lead", "status": "ISSUED", "expires_epoch_s": None}]}
+        self.assertEqual(w.parse_current(encoded(doc)), doc)
+
     def test_current_present_absent_and_no_generator_import(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "CURRENT.json"

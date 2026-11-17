@@ -57,34 +57,39 @@ when an item with a higher number also carries one.
 
 The highest numbered item **carrying a block** wins, regardless of file order.
 Sort the numeric part first, then the optional lowercase letter (`256b > 256`,
-`257 > 256b`). Items without a block are ignored: an ordinary RUN_STATE commit
-needs no regeneration. Headings inside other fenced examples are ignored.
+`257 > 256b`). Items without a block do not affect pointer selection. Ordinary
+legacy text needs no regeneration. After cutover, `run_state_add.py` regenerates
+the file for each typed item. Headings inside other fenced examples are ignored.
 Quoted or indented pointer fences are examples and ignored; indented fenced
 examples also suppress recognition until their matching closing fence. Other
 Markdown fences close with the same character and at least the opening length.
 A declaration's own closing line must be exactly three backticks.
+A typed item block (TYPED-ITEMS, `docs/process/run_state_item.schema.json`) may
+follow the pointer block.
 
 ## Generated file and commands
 
 `CURRENT.json` has exactly `schema`, `source_item`, `source_item_heading_date`,
-`owner`, `armed`, `wait`, `next_observable`. The schema is
-`joulewise.current_pointer.v1`. The source item is a string such as `256b`;
+`owner`, `armed`, `wait`, `next_observable`, `open_items`. The schema is
+`joulewise.current_pointer.v2`. The source item is a string such as `256b`;
 its date is the first `YYYY-MM-DD` in that heading or null. There is no clock field.
 `armed` is null or `{plan_id, host, t0_epoch_s, latest_end_epoch_s}`.
 A block's `wait` is `{observable, deadline_epoch_s, on_early_or_refused}`;
-optional omitted fields for `none` become null. If no item has a block, all
-fields except `schema` are null, including `source_item`, `armed` and `wait`.
-That document does not assert live machine state.
+optional omitted fields for `none` become null. If no item has a block, the
+declaration fields are null, including `source_item`, `armed` and `wait`.
+`open_items` lists `{item, status, owner, expires_epoch_s}` for recorded DRAFT,
+ISSUED and ARMED items in descending item order. It is empty before cutover.
+Readers compare expiry against their own clock.
 
 Run `python3.13 -B scripts/gen_current.py` after editing a block. It atomically
 writes deterministic UTF-8 JSON with sorted keys, two-space indentation, literal
 Unicode and a final newline. Use `--check` for a read-only byte comparison and
-`--show` for a checked phone line. Fixture paths are `--run-state PATH --out PATH`.
+`--show` for a checked phone line including the open item count. Fixture paths
+are `--run-state PATH --out PATH`.
 Exit codes: 0 agreement/success, 1 generated-byte drift, 2 invalid block/file or
 usage. Drift prints the umbrella command `python3 scripts/gen_state.py`.
 
-Lead integration of `check_default()` and `generate_default()` into
-`scripts/gen_state.py` is pending; until then, run the standalone command above.
-The intended umbrella commands are `python3 scripts/gen_state.py` and
-`python3 scripts/gen_state.py --check`. The generator evaluates no observable
-and probes no hosts, Git refs, custody, results, or network service.
+The umbrella commands `python3 scripts/gen_state.py` and
+`python3 scripts/gen_state.py --check` also generate and check the live pointer.
+The generator evaluates no observable and probes no hosts, Git refs, custody,
+results, or network service.

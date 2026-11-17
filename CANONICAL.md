@@ -18,7 +18,9 @@ Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`,
 | Job | Canonical | Replaced |
 |---|---|---|
 | What is happening now, and what to do next | [`RUN_STATE.md`](RUN_STATE.md) (newest numbered item first; items from 150 on are current) | Dated `RESUME-*` files and session checkpoints under `docs/legacy/process_traces/` and `docs/process_traces/` (archived) |
-| Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json), generated from RUN_STATE's highest numbered item carrying a `pointer` block; [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md) | Hand-maintained pointer JSON; `WINDOW_STATUS.md` and its publisher `scripts/window_status.sh` (superseded on `main`; retrieval in [docs/ARCHIVE.md](docs/ARCHIVE.md)) |
+| Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json) v2 includes the highest numbered item carrying a `pointer` block and the recorded open typed items. See [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md). | Hand-maintained pointer JSON; `WINDOW_STATUS.md` and its publisher `scripts/window_status.sh` (superseded on `main`; retrieval in [docs/ARCHIVE.md](docs/ARCHIVE.md)) |
+| How work moves | [`docs/process/PIPELINE.md`](docs/process/PIPELINE.md) | The October 2026 gate policy |
+| Add a RUN_STATE item | [`scripts/run_state_add.py`](scripts/run_state_add.py) | Manual insertion of new items after cutover |
 | Work queue | [`TASK_QUEUE.md`](TASK_QUEUE.md); its marker-fenced region is generated from `docs/process/state_kernel.json` by `scripts/gen_state.py` (`--check` in CI) | Hand-kept queue lists in session traces |
 | Decisions and rulings | [`docs/decision_log.md`](docs/decision_log.md) (D-numbers), [`docs/council_log.md`](docs/council_log.md); research-design and paper-bound rulings (RL-numbers, the binding record per `RUN_STATE.md` item 257): `audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` | — |
 | Owner unseal records (RL-53 W-8) | `joulewise/unseal_record.py`: strict schema, canonical digest and committed verdict-bound permission; records in `docs/unseals/` | Future unseals recorded only in prose; Block 5 predates the rule, BYTES keeps its commitment journal |
@@ -97,7 +99,8 @@ Held, not canonical yet: the condition-waits lane (`align/2026-11-08-condition-w
 | CI workflows | Two newer: `.github/workflows/ci-reusable.yml` (the one CI definition, RL-144 step 1c: part B makes `ci.yml` a caller of it; until then `ci.yml` and it must be edited together) and `.github/workflows/ci-selftest.yml` (runs a PR's own copy when a CI file changes). The older three: `.github/workflows/ci.yml` (quick tier, fences, twelve ordinary `shard_tests.py` shards plus the two exclusive calibration jobs; docs-only ranges report success without running tests); `.github/workflows/gate-ledger.yml` + `scripts/check_gate_ledger.py` (**required** on `main`; validates the PR body's gate ledger); `.github/workflows/d117-production-proof.yml` (**dispatch-only**, `workflow_dispatch`, never runs on a PR) | — |
 | Pins | `python3 scripts/repin.py --check` (all families); `--write registry` after deleting or adding pinned files | Hand repins |
 | State kernel | `python3 scripts/gen_state.py --check` | — |
-| Current pointer generation, byte check, phone display | `python3.13 -B scripts/gen_current.py` (`--check`, `--show`); lead integration into `scripts/gen_state.py` pending | Hand-maintained pointer JSON |
+| RUN_STATE typed items | `python scripts/run_state_items.py check` (fences) | — |
+| Current pointer generation, byte check, phone display | `python3.13 -B scripts/gen_current.py` (`--check`, `--show`); generation and checks also run through `scripts/gen_state.py` | Hand-maintained pointer JSON |
 | Current pointer regression and repository drift gate | `python3.13 -B -m unittest tests.test_gen_current` (synthetic blocks/refusals and real generated-byte agreement) | — |
 
 ## Suite manifest producers

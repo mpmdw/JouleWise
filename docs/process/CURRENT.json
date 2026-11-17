@@ -1,8 +1,9 @@
 {
   "armed": null,
   "next_observable": "before install: the READY record and this item on main, the native record, the ordinary notice, PKT_SHA, the actual arm.json, plan digest, t0, end and dead-man, fresh host and no-veto reads. On the next post-fence activation: the registered R1 terminal status plus chain exit, restore and process-absence Check; the lead handles results and slot fills under the owning procedure.",
+  "open_items": [],
   "owner": "magistrate",
-  "schema": "joulewise.current_pointer.v1",
+  "schema": "joulewise.current_pointer.v2",
   "source_item": "398",
   "source_item_heading_date": "2026-11-16",
   "wait": {

@@ -719,6 +719,8 @@
     "tests.test_run_night": 108.804,
     "tests.test_run_night_probe_cadence": 4.811,
     "tests.test_run_night_probe_worker_cadence": 0.207,
+    "tests.test_run_state_add": 4.632,
+    "tests.test_run_state_items": 0.025,
     "tests.test_s0_blocked_enumeration": 3.614,
     "tests.test_s0_line_audit_guard": 0.526,
     "tests.test_salvage_dangler": 0.129,
