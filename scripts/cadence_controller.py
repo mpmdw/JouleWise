@@ -91,6 +91,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from joulewise import span_offload  # noqa: E402
 from joulewise.cadence import desk as deskmod, desk_final, desk_transport, kit as kitmod, queue as q  # noqa: E402
 from joulewise.cadence import standing as law  # noqa: E402
 from joulewise.cadence import stops as stopsmod  # noqa: E402
@@ -115,10 +116,11 @@ CONFIG_KEYS = {
     "copy_marker_dir", "watcher_name", "owner_login", "repo_slug", "gh_argv", "measurement_mode_script",
     "high_power_marker", "poll_idle_s", "poll_live_s", "hold_standing_fence", "accept_mock_verdicts",
     "watcher_kind", "controller_signers", "offload_argv", "desk_commit"}
+OPTIONAL_CONFIG_KEYS = {"copy_stage_root", "copy_key_second_copy_sha256"}
 MBP_VERDICT_PREFIX = "refs/heads/cadence-desk-mbp/"   # the MBP desk's own records, local only (FORMAT section 6)
 DESK_CLI = ROOT / "scripts" / "air" / "cadence_desk.py"
-OFFLOAD_PLACEHOLDERS = ("{plan_id}", "{output}", "{marker}")
 OFFLOAD_TIMEOUT_S = 3600
+OFFLOAD_EXIT_GRACE_S = 15
 OFFLOAD_ATTEMPTS = 3         # a transient outage is retried in the close interval, never past the next arm
 DESK_TIMEOUT_S = 900
 MARKER_MAX_BYTES = 65536
@@ -136,11 +138,23 @@ class FenceLapsed(RuntimeError):
     """A continuous standing-fence deadline passed before this operation."""
 
 
+class TornArmIntent(ValueError):
+    """A published arm intent is unreadable and must be reconciled by the lead."""
+
+
 def load_config(path):
     cfg = json.loads(Path(path).read_text(encoding="utf-8"))
     problems = []
-    if set(cfg) != CONFIG_KEYS:
-        problems.append(f"keys: missing {sorted(CONFIG_KEYS - set(cfg))}, unknown {sorted(set(cfg) - CONFIG_KEYS)}")
+    missing = CONFIG_KEYS - set(cfg)
+    unknown = set(cfg) - CONFIG_KEYS - OPTIONAL_CONFIG_KEYS
+    if missing or unknown:
+        problems.append(f"keys: missing {sorted(missing)}, unknown {sorted(unknown)}")
+    stage = cfg.get("copy_stage_root")
+    if stage is not None and not (isinstance(stage, str) and Path(stage).is_absolute()):
+        problems.append("copy_stage_root: an absolute path to the admitted offload stage")
+    key = cfg.get("copy_key_second_copy_sha256")
+    if key is not None and not (isinstance(key, str) and span_offload.HEX64.fullmatch(key)):
+        problems.append("copy_key_second_copy_sha256: null or the attested recipient fingerprint")
     if cfg.get("schema") != CONFIG_SCHEMA:
         problems.append(f"schema: {CONFIG_SCHEMA}")
     for key in ("state_dir", "git_dir", "worktrees_root", "output_root", "kits_dir", "custody_root",
@@ -175,10 +189,9 @@ def load_config(path):
     if not (isinstance(cfg.get("desk_commit"), str) and re.fullmatch(r"[0-9a-f]{40}", cfg["desk_commit"])):
         problems.append("desk_commit: the 40-hex commit the off-host desk runs (RL-173 B; the MBP desk runs at it)")
     argv = cfg.get("offload_argv")
-    if not (argv is None or (isinstance(argv, list) and argv and all(isinstance(a, str) for a in argv)
-                             and str(argv[0]).startswith("/") and "{plan_id}" in " ".join(argv))):
-        problems.append("offload_argv: null, or the offload tool's argv (absolute program, {plan_id} placeholder; "
-                        "design 15.13)")
+    if not (argv is None or (isinstance(argv, list) and argv and all(isinstance(a, str) and a for a in argv)
+                             and argv[0].startswith("/") and "after-check" in argv and "--config" in argv)):
+        problems.append("offload_argv: null or an absolute command prefix for PR #807 after-check --config")
     if type(cfg.get("accept_mock_verdicts")) is not bool or (
             cfg.get("accept_mock_verdicts") and os.environ.get("JW_B5_SYNTHETIC_ONLY") != "1"):
         problems.append("accept_mock_verdicts: false (true only in a synthetic run, JW_B5_SYNTHETIC_ONLY=1)")
@@ -223,14 +236,19 @@ def atomic_json(path, value, *, sync=True):
 
 
 def exclusive_json(path, value):
-    """Create-once. Raises FileExistsError if the record already exists (the idempotence guard)."""
+    """Publish a complete record once. An interrupted pre-publication write leaves only a temp file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "x", encoding="utf-8") as handle:
-        json.dump(value, handle, indent=1, sort_keys=True)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    with open(tmp, "x", encoding="utf-8") as handle:
+        try:
+            json.dump(value, handle, indent=1, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.link(tmp, path)
+        finally:
+            tmp.unlink()
     _fsync_dir(path.parent)
 
 
@@ -269,6 +287,9 @@ class Env:
 
     def now(self):
         return time.time()
+
+    def monotonic(self):
+        return time.monotonic()
 
     def sleep(self, seconds):
         time.sleep(seconds)
@@ -504,7 +525,7 @@ class Git:
     def fetch_audit(self):
         """The audit branch and the desk's signed verdict refs (FORMAT.md section 3), in one fetch."""
         self.guard("git fetch audit and verdicts")
-        res = self.git("fetch", "--quiet", "--no-tags", "origin",
+        res = self.git("fetch", "--quiet", "--no-tags", "--prune", "--refmap=", "origin",
                        f"+refs/heads/{self.cfg['audit_ref']}:{self.ref}",
                        f"+{desk_transport.VERDICT_REF_PREFIX}*:{self.VERDICTS}*", timeout=300)
         return res.rc == 0
@@ -643,11 +664,15 @@ def read_audit(cfg, git, state):
     for entry in [*standing["queues"], *f2]:
         view = read_queue(git, entry, kits, standing, seen_queues.get(entry["path"]))
         (out["fallback_queues"] if entry.get("fallback") else out["queues"]).append(view)
+    tips = read_json(state / "verdict-tips.json") or {}
     plans = git.verdict_refs()
     if plans is None:
         reasons.append(law.reason("FETCH_FAILED", "the desk verdict refs could not be listed"))
         plans = []
-    tips = read_json(state / "verdict-tips.json") or {}
+    else:
+        for pid in sorted({key for key in tips if not key.startswith("mbp:")} - set(plans)):
+            reasons.append(law.reason("DESK_VERDICT_INVALID",
+                                      f"{pid}: off-host verdict ref disappeared (was {tips[pid][:12]})"))
     for pid in plans:   # FORMAT.md section 4 item 1: the desk's own reader verifies each signed verdict
         tip = git.git("rev-parse", f"{git.VERDICTS}{pid}").stdout.strip()
         if tips.get(pid) and tips[pid] != tip and not git.is_ancestor(tips[pid], tip):
@@ -664,6 +689,10 @@ def read_audit(cfg, git, state):
     local_plans = git.local_refs(MBP_VERDICT_PREFIX)
     if local_plans is None:
         reasons.append(law.reason("FETCH_FAILED", "the MBP desk verdict refs could not be listed"))
+    else:
+        for pid in sorted({key[4:] for key in tips if key.startswith("mbp:")} - set(local_plans)):
+            reasons.append(law.reason("DESK_VERDICT_INVALID",
+                                      f"{pid}: local verdict ref disappeared (was {tips['mbp:' + pid][:12]})"))
     for pid in local_plans or []:   # the MBP desk's own signed records (RL-173 B; FORMAT section 6)
         ref = f"{MBP_VERDICT_PREFIX}{pid}"
         tip = git.git("rev-parse", ref).stdout.strip()
@@ -905,7 +934,7 @@ except (OSError, ValueError) as error:
     print(json.dumps({"arm_child_refused": str(error), "arm_indeterminate": True}), flush=True)
     sys.exit(3)
 t0 = time.time()
-if t0 > req["lease_until"]:
+if t0 >= req["lease_until"] or time.monotonic() >= req["monotonic_lease_until"]:
     print(json.dumps({"arm_child_refused": "the arm lease expired", "t0": t0, "lease_until": req["lease_until"]}),
           flush=True)
     sys.exit(4)
@@ -938,8 +967,8 @@ def _run(argv, *a, **k):
             state["fence_problem"] = f"before bootstrap: fence lock unavailable: {error}"
             raise FenceIndeterminate(state["fence_problem"]) from error
         now = time.time()
-        if now > req["lease_until"]:
-            raise _sp.SubprocessError(f"the arm lease expired before bootstrap ({now:.3f} > {req['lease_until']:.3f})")
+        if now >= req["lease_until"] or time.monotonic() >= req["monotonic_lease_until"]:
+            raise _sp.SubprocessError("the arm lease expired before bootstrap (calendar or monotonic deadline)")
         state["bootstrap_t"] = now
     return _real_run(argv, *a, **k)
 _sp.run = _run
@@ -1135,9 +1164,15 @@ class Controller:
         out, orphans = [], []
         base = self.state / "spans"
         for d in sorted(base.iterdir()) if base.is_dir() else []:
-            intent = read_json(d / "intent.json")
-            if intent is None:
+            path = d / "intent.json"
+            try:
+                intent = read_json(path)
+            except (OSError, ValueError, RecursionError) as error:
+                raise TornArmIntent(f"{d.name}: unreadable published arm intent; inspect {path.name}") from error
+            if intent is None and not os.path.lexists(path):
                 continue
+            if not isinstance(intent, dict) or intent.get("plan_id") != d.name:
+                raise TornArmIntent(f"{d.name}: invalid published arm intent; inspect {path.name}")
             arm = read_json(d / "arm.json")
             if arm is None:
                 orphans.append(intent)
@@ -1240,7 +1275,10 @@ class Controller:
         loaded (the queue is ceded to it). The magistrate watchdog is not touched."""
         if not self.cfg["hold_standing_fence"]:
             return "disabled"
-        records, _ = self.records()
+        try:
+            records, _ = self.records()
+        except TornArmIntent:
+            return "indeterminate"  # tick records the halt before opening the network or considering an arm
         if any(r["status"] == "LIVE" for r in records):
             return "live"
         if any(p["kind"] != "WAIT_STALL" for p in self.unacked_pages()):
@@ -1361,6 +1399,10 @@ class Controller:
     def tick(self):
         try:
             return self._tick()
+        except TornArmIntent as error:
+            self.network_open = False
+            self.page("HALT", [law.reason("ARM_INDETERMINATE", str(error))], {"torn_arm_intent": str(error)})
+            return self.write_status("HALTED", {"codes": ["ARM_INDETERMINATE"], "detail": str(error)})
         except FenceLapsed as error:
             self.page("HALT", [law.reason("ARM_INDETERMINATE", f"standing fence lapsed before {error}")])
             return self.write_status("HALTED", {"codes": ["ARM_INDETERMINATE"], "fence": "lapsed"})
@@ -1507,8 +1549,8 @@ class Controller:
             markers[pid] = self.read_marker(pid)
         priors = {p["plan_id"]: p for p in standing["prior_spans"]}
         latest_prior = max(priors, key=lambda pid: law.parse_time(priors[pid]["closed"]), default=None)
-        for pid in priors:
-            markers.setdefault(pid, self.read_marker(pid))
+        for pid in priors.keys() - markers.keys():
+            markers[pid] = self.read_marker(pid)
         if isinstance(census, dict):
             m = law.CAMPAIGN_RECEIPT.search(census["newest"][1])
             if m and m.group("plan") not in markers:
@@ -1577,7 +1619,8 @@ class Controller:
                 "watcher": watcher,
                 "sessions": law.session_reasons(standing, audit["ready"], audit["done"]),
                 "census_reasons": law.census_reasons(census, runs, self.cfg["output_root"], markers, now=now,
-                                                     offload_failures=failures, copy_due=copy_due)
+                                                     offload_failures=failures, copy_due=copy_due,
+                                                     key_second_copy=self.cfg.get("copy_key_second_copy_sha256"))
                 + self.desk_step_reasons(records),
                 "census_epoch": census["newest"][0] if isinstance(census, dict) else None,
                 "fallback": standing["fallback"], "fallback_queues": audit["fallback_queues"],
@@ -1616,25 +1659,41 @@ class Controller:
         return kits
 
     def read_marker(self, plan_id):
-        """The offload marker for ``plan_id`` (RL-173 A; design 15.13): {"doc", "error", "failed"}. A symlink, a
-        non-file or an oversized marker is an error, never a pass."""
+        """Read bounded offload controls only. The archive and source contents stay closed."""
         base = Path(self.cfg["copy_marker_dir"])
         out = {"doc": None, "error": None, "failed": os.path.lexists(base / f"{plan_id}.failed")}
         path = base / f"{plan_id}.ok"
         try:
             if not os.path.lexists(path):
                 return out
-            if path.is_symlink() or not path.is_file() or path.stat().st_size > MARKER_MAX_BYTES:
-                out["error"] = f"{path.name}: not a regular file under {MARKER_MAX_BYTES} bytes"
-                return out
-            raw = path.read_bytes()
+            with span_offload.open_regular(path, "copy marker", single_link=True) as handle:
+                raw = handle.read(MARKER_MAX_BYTES + 1)
+            if len(raw) > MARKER_MAX_BYTES:
+                raise ValueError(f"copy marker exceeds {MARKER_MAX_BYTES} bytes")
             if desk_final.denied_content(raw, path.name):
-                out["error"] = f"{path.name}: a denied key"
-                return out
+                raise ValueError("copy marker contains a denied key")
             out["doc"] = json.loads(raw)
-        except (OSError, ValueError, desk_final.DeniedContent) as error:
+            stage_root = self.cfg.get("copy_stage_root")
+            if stage_root and isinstance(out["doc"], dict) and out["doc"].get("schema") == span_offload.MARKER_SCHEMA:
+                stage_plan = span_offload.check_id(plan_id, "copy marker plan")
+                out["stage"] = self.read_copy_stage(Path(stage_root) / stage_plan, stage_plan)
+        except (OSError, ValueError, TypeError, RecursionError, desk_final.DeniedContent, span_offload.OffloadError) as error:
             out["error"] = f"{path.name}: {type(error).__name__}: {error}"[:200]
         return out
+
+    @staticmethod
+    def read_copy_stage(path, plan_id):
+        dfd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            source = json.loads(span_offload._read_in(dfd, span_offload.SOURCE_RECORD))
+            raw = span_offload._read_in(dfd, span_offload.names(plan_id)["descriptor"])
+            descriptor = json.loads(raw)
+        finally:
+            os.close(dfd)
+        if not isinstance(source, dict) or not isinstance(descriptor, dict):
+            raise ValueError("copy stage source or descriptor is not an object")
+        return {"source": source.get("source"), "descriptor_sha256": sha256_bytes(raw),
+                "created_epoch_s": descriptor.get("created_epoch_s")}
 
     def remember(self, audit):
         """Store the audit tip, each queue's first commit and spans, and each verdict ref's tip, after a read with no
@@ -1759,7 +1818,9 @@ class Controller:
         # everything after it (the clock check, the notice post, the launch) spends the same budget (Sol R3, N7).
         if self.arm_fence_failed(plan_id, sid):
             return self.write_status("HALTED", {"plan_id": plan_id, "fence": "lost"})
+        authority_monotonic = self.env.monotonic()
         authority_read = self.env.now()
+        authority_deadline = authority_monotonic + LEASE_S
         snap2, extra2 = self.snapshot(authority_read, records)
         d2 = law.select(snap2)
         self.critical_path(d2, self.env.now())
@@ -1769,12 +1830,14 @@ class Controller:
         audit2 = extra2["audit"]
         view = next(v for v in audit2["queues"] + audit2["fallback_queues"] if v["path"] == cand["queue_path"])
         server = self.clock()
+        if server is None and self.env.monotonic() < authority_deadline:
+            server = self.clock()  # one retry, still before notice and while launch has no authority
         if server is None or abs(server - self.env.now()) > CLOCK_SKEW_LIMIT_S:
             rs = [law.reason("CLOCK_SKEW", f"server {server}, host {self.env.now():.0f}", span=sid)]
             self.page("HALT", rs, {"plan_id": plan_id})
             return self.write_status("HALTED", {"codes": ["CLOCK_SKEW"]})
         self.prereqs(sid, self.env.now(), passed=["CLOCK"])
-        if self.env.now() > authority_read + LEASE_S:
+        if self.env.now() >= authority_read + LEASE_S or self.env.monotonic() >= authority_deadline:
             return self.wait(["LEASE_EXPIRED"], f"the authority read is {self.env.now() - authority_read:.0f} s old")
         notice_issue = view["doc"]["standing_notice"]["issue"]
         line = (f"{plan_id}: arming now ({iso(self.env.now())}), kit {kit['campaign_id']} {sha[:12]}, legs "
@@ -1788,7 +1851,7 @@ class Controller:
         self.network_open = False
         now = self.env.now()
         network_end = max([n["epoch"] for n in self.network_log] or [now])
-        if now > authority_read + LEASE_S:
+        if now >= authority_read + LEASE_S or self.env.monotonic() >= authority_deadline:
             return self.wait(["LEASE_EXPIRED"], f"the authority read is {now - authority_read:.0f} s old after the "
                                                 "notice post")
         run = extra2.get("watcher_run")
@@ -1799,12 +1862,16 @@ class Controller:
         if cand["cls"]["dated"]:
             leases["date"] = law.date_end(span["not_before"]) - law.MIDNIGHT_MARGIN_S
         if snap2["now"] < law.KEY_SECOND_COPY_DEADLINE and any(
-                isinstance(doc := marker.get("doc"), dict) and doc.get("schema") == law.OFFLOAD_MARKER_SCHEMA
-                and doc.get("key_second_copy") is None for marker in extra2.get("markers", {}).values()):
+                isinstance(doc := marker.get("doc"), dict) and doc.get("schema") == span_offload.MARKER_SCHEMA
+                and (not self.cfg.get("copy_key_second_copy_sha256")
+                     or doc.get("recipient_sha256") != self.cfg["copy_key_second_copy_sha256"])
+                for marker in extra2.get("markers", {}).values()):
             # A slow notice or launch cannot carry a temporary key-copy exception past its absolute deadline.
             leases["key_copy_exception"] = law.KEY_SECOND_COPY_DEADLINE
         lease = min(leases.values())
-        if now >= lease:
+        # The child gets this in its subprocess request, so both clocks come from the same boot.
+        monotonic_lease = authority_monotonic + (lease - authority_read)
+        if now >= lease or self.env.monotonic() >= monotonic_lease:
             return self.wait(["LEASE_EXPIRED"], "an admission prerequisite expired before the launch intent")
         last = law.last_close(snap2["runs"])
         intent = {
@@ -1849,7 +1916,7 @@ class Controller:
         self.critical_path_event(sid, ready_all=now, plan_id=plan_id)
         request = {"repo": paths["repo"], "python": self.cfg["measurement_python"], "kit": paths["kit"],
                    "legs": ",".join(span["legs"]), "batch_window": info["batch_window"], "output": str(out),
-                   "custody_root": str(self.custody), "lease_until": lease,
+                   "custody_root": str(self.custody), "lease_until": lease, "monotonic_lease_until": monotonic_lease,
                    "standing_purpose": self.standing_purpose(), "controller_pid": self.pid}
         result = self.launcher.launch(request)
         return self.record_launch(plan_id, intent, result, kit)
@@ -2250,6 +2317,21 @@ class Controller:
                                                                      "desk_final", "next_arm_hold")})
         return record
 
+    def run_controller_owned_close(self, argv, plan_id, output):
+        """Call PR #807's documented controller-owned after-check interface."""
+        held = self.hold_fence(OFFLOAD_TIMEOUT_S + STANDING_FENCE_S, minimum_s=OFFLOAD_TIMEOUT_S + 300)
+        if held != "held":
+            raise FenceLapsed("controller-owned close")
+        lease = read_json(self.state / "standing-lease.json")
+        deadline = self.env.now() + OFFLOAD_TIMEOUT_S - OFFLOAD_EXIT_GRACE_S
+        if not lease or (lease.get("purpose"), lease.get("pid")) != (self.standing_purpose(), self.pid) \
+                or not span_offload.number(lease.get("deadline")) or deadline > lease["deadline"]:
+            raise FenceLapsed("controller-owned close lease")
+        full = [*argv, "--span-dir", output, "--plan", plan_id, "--deadline-epoch", repr(deadline),
+                "--fence", str(self.custody / fence.FENCE_NAME), "--controller-fence-purpose", lease["purpose"],
+                "--controller-fence-pid", str(lease["pid"]), "--controller-fence-deadline-epoch", repr(lease["deadline"])]
+        return full, self.host_run(full, timeout=OFFLOAD_TIMEOUT_S)
+
     def offload_close(self, plan_id):
         """RL-173 A: the MBP's encrypted cloud offload, by the offload tool (built by its own lane; design 15.13),
         run in the close interval when ``offload_argv`` names it, at most three automatic attempts, spaced
@@ -2271,20 +2353,30 @@ class Controller:
             if self.env.now() < prior.get("ended", 0) + delay:
                 return None
         intent = read_json(self.span_dir(plan_id) / "intent.json")
-        marker = Path(self.cfg["copy_marker_dir"]) / f"{plan_id}.ok"
-        values = {"{plan_id}": plan_id, "{output}": intent["output"], "{marker}": str(marker)}
-        full = []
-        for arg in argv:
-            for key, value in values.items():
-                arg = arg.replace(key, value)
-            full.append(arg)
         started = self.env.now()
-        self.hold_fence(OFFLOAD_TIMEOUT_S + STANDING_FENCE_S, minimum_s=OFFLOAD_TIMEOUT_S + 300)  # the fence outlasts the upload (RL-173 E)
-        res = self.host_run(full, timeout=OFFLOAD_TIMEOUT_S)
-        record = {"argv": full, "rc": res.rc, "ok": res.rc == 0, "started": started, "ended": self.env.now(),
+        full, res = self.run_controller_owned_close(argv, plan_id, intent["output"])
+        ended = self.env.now()
+        final_marker = self.read_marker(plan_id)
+        problem = None
+        if res.rc != 0:
+            problem = "after-check did not exit zero"
+        else:
+            result = None
+            with contextlib.suppress(ValueError, RecursionError):
+                result = json.loads(res.stdout)
+            pending = result.get("pending") if isinstance(result, dict) else None
+            if not (isinstance(pending, dict) and pending.get("clear") is True and result.get("status") == "CLOSE_OK"):
+                problem = "after-check did not report CLOSE_OK and clear transfers"
+            else:
+                problems = [final_marker["error"]] if final_marker["error"] else law.offload_marker_problems(
+                    final_marker["doc"], plan_id, ended, source=intent["output"],
+                    after=close.get("receipt_epoch") or intent.get("decided_epoch"),
+                    stage=final_marker.get("stage"), key_second_copy=self.cfg.get("copy_key_second_copy_sha256"))
+                if problems or final_marker["failed"]:
+                    problem = problems[0] if problems else "after-check left a failed marker"
+        record = {"argv": full, "rc": res.rc, "ok": problem is None, "problem": problem, "started": started, "ended": ended,
                   "attempts": ((prior or {}).get("attempts") or (1 if prior else 0)) + 1,
-                  "tail": (res.stdout + res.stderr).strip()[-300:],
-                  "marker_sha256": law.digest(self.read_marker(plan_id))}
+                  "tail": (res.stdout + res.stderr).strip()[-300:], "marker_sha256": law.digest(final_marker)}
         close = read_json(path)
         close["offload"] = record
         close["closed_epoch"] = max(close.get("closed_epoch") or 0, math.ceil(self.env.now()))

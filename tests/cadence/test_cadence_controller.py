@@ -4,6 +4,7 @@ host command, no run bundle; the spans are the pinned runners' own mocks."""
 from __future__ import annotations
 
 import contextlib
+import errno
 import io
 import json
 import os
@@ -15,6 +16,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from joulewise.cadence import desk_transport, standing as law
 from scripts import cadence_controller as cc, cadence_controller_synthetic as synth
@@ -72,8 +74,7 @@ class Gate6Controller(WorldCase):
             'legs': [{'leg_id': lid, 'summary': {'g0_outcome': 'released'}} for lid in prior['roster']]}))
         ended = law.parse_time(prior['closed'])
         os.utime(receipt, (ended, ended))
-        marker = synth.offload_marker(prior['plan_id'], w.env.now(), str(source))
-        (Path(w.cfg['copy_marker_dir']) / (prior['plan_id'] + '.ok')).write_text(json.dumps(marker))
+        w.write_copy_marker(prior['plan_id'], w.env.now(), source)
         return w
 
     def test_failed_prior_receipt_halts_despite_matching_identity_and_verified_copy(self):
@@ -115,8 +116,7 @@ class Gate6Controller(WorldCase):
         wrong_campaign = receipt.parent.parent.with_name("cl-dev-04")
         wrong_campaign.mkdir()
         source = receipt.parent.rename(wrong_campaign / receipt.parent.name)
-        marker_path = Path(w.cfg["copy_marker_dir"]) / (prior["plan_id"] + ".ok")
-        marker_path.write_text(json.dumps(synth.offload_marker(prior["plan_id"], w.env.now(), str(source))))
+        w.write_copy_marker(prior["plan_id"], w.env.now(), source)
         self.assertIn(w.tick()["state"], ("PAGED", "HALTED"))
         self.assertIn("PRIOR_CONTRADICTS", self.pages(w))
         self.assertEqual(w.launcher.launched, [])
@@ -129,8 +129,7 @@ class Gate6Controller(WorldCase):
         path = w.record_prior_close(other)
         newer = law.parse_time(prior["closed"]) + 300
         os.utime(path, (newer, newer))
-        marker = synth.offload_marker(other["plan_id"], newer, str(path.parent))
-        (Path(w.cfg["copy_marker_dir"]) / f"{other['plan_id']}.ok").write_text(json.dumps(marker))
+        w.write_copy_marker(other["plan_id"], newer, path.parent)
         self.assertEqual(w.ctl.census()["campaign_newest"][1], str(path))
         status = w.tick()
         self.assertEqual(status["state"], "WAIT")
@@ -180,6 +179,54 @@ class Gate6Controller(WorldCase):
         self.assertEqual(w.tick()['state'], 'HALTED')
         self.assertIn('ARM_INDETERMINATE', self.pages(w))
         self.assertEqual(w.launcher.launched, [])
+
+    def test_copy_gate_accepts_only_admitted_icloud_marker_for_the_staged_receipt(self):
+        w = self.pilot_world()
+        pid = "cq-dev-05-s01-a1"
+        w.tick()
+        source = w.launcher.finish()["output"]
+        w.tick()
+        receipt = (source / cc.RECEIPT).stat().st_mtime
+        stage = w.w / "copy-stage" / pid
+        stage.mkdir(parents=True)
+        w.cfg["copy_stage_root"] = str(stage.parent)
+        w.cfg["copy_key_second_copy_sha256"] = "e" * 64
+        source_record = stage / ".source.json"
+        source_record.write_text(json.dumps({"source": str(source.resolve())}))
+        descriptor = json.dumps({"created_epoch_s": receipt, "span_name": source.name}).encode()
+        (stage / (pid + ".offload.json")).write_bytes(descriptor)
+        times = dict(uploaded_epoch_s=receipt, evicted_epoch_s=receipt, verified_epoch_s=receipt)
+        rows = [{"name": pid + suffix, "sha256": digest, "provider_hash": digest, "size": 16,
+                 "provider_size": 16, "provider_confirmed": True, "kind": "icloud evict+redownload sha256 match",
+                 **times} for suffix, digest in ((".tgz.enc", "b" * 64), (".key.enc", "c" * 64),
+                     (".SHA256SUMS", "a" * 64), (".offload.json", cc.sha256_bytes(descriptor)))]
+        marker_path = Path(w.cfg["copy_marker_dir"]) / (pid + ".ok")
+        admitted = {"schema": "joulewise.span_offload_marker.v1", "plan": pid, "span_name": source.name,
+                    "provider_confirmed": True, "backend": {"kind": "icloud"}, "written_epoch_s": receipt,
+                    "recipient_sha256": "e" * 64, "manifest_sha256": "a" * 64, "wrapped_key_sha256": "c" * 64,
+                    "descriptor_sha256": cc.sha256_bytes(descriptor), "ciphertext": {"sha256": "b" * 64, "size": 16},
+                    "provider_confirmation": rows}
+        legacy = {"schema": "joulewise.offload_marker.v1", "plan_id": pid, "source": str(source),
+                  "manifest_sha256": "a" * 64, "manifest_files": 12, "ciphertext_sha256": "b" * 64,
+                  "ciphertext_bytes": 16, "provider": "claim", "remote_path": "/claim",
+                  "upload": {"confirmed": True, "readback": "size", "value": 16, "evidence": "size claim"},
+                  "verified": True, "key_second_copy": "fixture", "written_at": cc.iso(receipt)}
+
+        def copy_codes(doc):
+            marker_path.write_text(json.dumps(doc))
+            snap, _ = w.ctl.snapshot(w.env.now(), w.ctl.records()[0])
+            return {reason["code"] for reason in snap["census_reasons"]}
+
+        cases = [(admitted, False), (legacy, True),
+                 ({**admitted, "written_epoch_s": receipt - 500}, True),
+                 ({**admitted, "provider_confirmation": rows[:-1]}, True),
+                 ({**admitted, "span_name": None}, True),
+                 ({**admitted, "descriptor_sha256": "f" * 64}, True)]
+        for doc, refused in cases:
+            with self.subTest(schema=doc["schema"], refused=refused):
+                self.assertEqual("OFFLOAD_FAILED" in copy_codes(doc), refused)
+        source_record.write_text(json.dumps({"source": str(source.parent.parent / "wrong" / source.name)}))
+        self.assertIn("OFFLOAD_FAILED", copy_codes(admitted))
 
     def test_unexpected_removal_before_deadline_also_halts(self):
         w = self.pilot_world(prior=False)
@@ -247,10 +294,8 @@ class Gate5Controller(WorldCase):
                                                for x in prior['roster']], 'legs_finished': len(prior['roster'])}))
         closed = law.parse_time(prior['closed'])
         os.utime(receipt, (closed, closed))
-        marker = synth.offload_marker(prior['plan_id'], law.KEY_SECOND_COPY_DEADLINE - 3600, str(source))
-        marker['key_second_copy'] = None
-        path = Path(w.cfg['copy_marker_dir']) / (prior['plan_id'] + '.ok')
-        path.write_text(json.dumps(marker))
+        w.write_copy_marker(prior['plan_id'], law.KEY_SECOND_COPY_DEADLINE - 3600, source)
+        w.cfg["copy_key_second_copy_sha256"] = None
         return w
 
     def test_an_early_keyless_copy_blocks_admission_after_the_deadline(self):
@@ -586,6 +631,29 @@ class SecondGate(WorldCase):
         w.tick()
         self.assertIn("rolled back", self.pages(w))
 
+    def test_deleted_remote_verdict_is_pruned_and_reported(self):
+        w = self.pilot_world()
+        pid = "cq-dev-05-s01-a1"
+        remote = desk_transport.VERDICT_REF_PREFIX + pid
+        tracking = w.ctl.git.VERDICTS + pid
+        w.tick()
+        w.launcher.finish()
+        w.tick()
+        w.air_final(pid)
+        w.copy_journals(pid)
+        w.tick()
+        remembered = cc.read_json(self.state(w, "verdict-tips.json"))[pid]
+        self.assertEqual(w.ctl.git.git("rev-parse", tracking).stdout.strip(), remembered)
+        unrelated = "refs/remotes/origin/independent-fixture"
+        self.assertEqual(w.ctl.git.git("update-ref", unrelated, remembered).rc, 0)
+        synth.git(w.seed, "push", "-q", "origin", f":{remote}")
+        w.ack_all()
+        w.tick()
+        self.assertNotEqual(w.ctl.git.git("show-ref", "--verify", tracking).rc, 0)
+        self.assertEqual(w.ctl.git.git("rev-parse", unrelated).stdout.strip(), remembered)
+        self.assertIn("disappeared", self.pages(w))
+        self.assertEqual(cc.read_json(self.state(w, "verdict-tips.json"))[pid], remembered)
+
     def test_no_verdict_signers_file_halts_before_any_launch(self):      # Mythos N14
         w = self.pilot_world()
         os.unlink(w.cfg["verdict_signers"])
@@ -597,6 +665,19 @@ class SecondGate(WorldCase):
         w = self.pilot_world()
         self.assertEqual(w.tick()["state"], "LIVE")
         self.assertTrue(w.launcher.fences_at_launch[0]["purpose"].startswith(cc.STANDING_FENCE_PREFIX))
+
+    def test_transient_server_clock_read_is_retried_before_notice(self):
+        w = self.pilot_world()
+        reads = []
+
+        def clock():
+            reads.append(w.env.now())
+            self.assertEqual(w.launcher.launched, [])
+            return None if len(reads) == 1 else w.env.now()
+
+        w.ctl.clock = clock
+        self.assertEqual(w.tick()["state"], "LIVE")
+        self.assertEqual(len(reads), 2)
 
     def test_slow_clock_and_notice_calls_spend_the_lease(self):          # Sol R3, Mythos N7
         w = self.pilot_world()
@@ -783,6 +864,34 @@ class BoundsAndLedger(WorldCase):
 
 @unittest.skipUnless(HAVE_TOOLS, "git and ssh-keygen are needed for the synthetic origin")
 class Restart(WorldCase):
+    def test_enospc_does_not_publish_a_partial_arm_intent(self):
+        w = self.pilot_world()
+        intent = self.state(w, "spans/cq-dev-05-s01-a1/intent.json")
+
+        def torn_dump(_value, handle, **_kwargs):
+            handle.write('{"schema":')
+            raise OSError(errno.ENOSPC, "synthetic intent write")
+
+        with mock.patch.object(cc.json, "dump", side_effect=torn_dump):
+            with self.assertRaises(OSError):
+                cc.exclusive_json(intent, {"schema": cc.RECORD_SCHEMA})
+        self.assertFalse(intent.exists())
+        w.controller()
+        self.assertEqual(w.tick()["state"], "LIVE")
+
+    def test_a_legacy_torn_intent_is_held_for_restart_disposition(self):
+        w = self.pilot_world()
+        intent = self.state(w, "spans/cq-dev-05-s01-a1/intent.json")
+        intent.parent.mkdir(parents=True)
+        torn = b'{"schema":'
+        intent.write_bytes(torn)
+        w.controller()
+        cc.run_loop(w.ctl, max_ticks=1)
+        self.assertEqual(cc.read_json(self.state(w, "STATUS.json"))["state"], "HALTED")
+        self.assertIn("ARM_INDETERMINATE", self.pages(w))
+        self.assertEqual(intent.read_bytes(), torn)
+        self.assertEqual(w.launcher.launched, [])
+
     def test_restart_adopts_a_launched_span_and_never_relaunches(self):
         w = self.pilot_world()
         self.assertEqual(w.tick()["state"], "LIVE")
@@ -861,7 +970,7 @@ class ArmChild(unittest.TestCase):
     def run_child(self, lease=4e9):
         req = {"repo": str(self.tmp / "repo"), "python": sys.executable, "kit": "/k.json", "legs": "L001,L002",
                "batch_window": None, "output": "/o", "custody_root": str(self.custody), "lease_until": lease,
-               "standing_purpose": "cadence-controller:abc", "controller_pid": os.getpid()}
+               "monotonic_lease_until": time.monotonic() + 120, "standing_purpose": "cadence-controller:abc", "controller_pid": os.getpid()}
         return subprocess.run([sys.executable, "-I", "-B", "-c", cc.ARM_CHILD, json.dumps(req)], capture_output=True,
                               text=True, cwd=self.tmp / "repo")
 
@@ -918,6 +1027,12 @@ class ArmChildBootstrapLease(unittest.TestCase):
     """Sol R3: the lease is enforced at the launcher's bootstrap call itself, not only before the launcher starts."""
 
     def test_a_lease_that_expires_inside_the_launcher_refuses_the_bootstrap(self):
+        self.assert_bootstrap_lease_refused(backward_step=False)
+
+    def test_a_backward_clock_step_cannot_extend_the_bootstrap_lease(self):
+        self.assert_bootstrap_lease_refused(backward_step=True)
+
+    def assert_bootstrap_lease_refused(self, *, backward_step):
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp)
         (tmp / "repo/scripts").mkdir(parents=True)
@@ -933,6 +1048,7 @@ class ArmChildBootstrapLease(unittest.TestCase):
             "        base.read_fence(root)\n"
             "        base.write_fence(root, {'purpose': 'align-r0:t', 'pid': 123, 'deadline': 9e9})\n"
             "    time.sleep(1.5)       # the launcher's own work, after the arm child's first check\n"
+            + ("    wall = time.time; time.time = lambda: wall() - 60\n" if backward_step else "") +
             "    try:\n"
             "        subprocess.run(['/usr/bin/true', 'bootstrap', 'gui/0', 'x.plist'], check=True)\n"
             "    except subprocess.SubprocessError as exc:\n"
@@ -944,7 +1060,8 @@ class ArmChildBootstrapLease(unittest.TestCase):
                                               "deadline": 4e9})
         req = {"repo": str(tmp / "repo"), "python": sys.executable, "kit": "/k.json", "legs": "L001",
                "batch_window": None, "output": "/o", "custody_root": str(tmp / "custody"),
-               "lease_until": time.time() + 1.0, "standing_purpose": "cadence-controller:abc",
+               "lease_until": time.time() + 1.0, "monotonic_lease_until": time.monotonic() + 1.0,
+               "standing_purpose": "cadence-controller:abc",
                "controller_pid": os.getpid()}
         done = subprocess.run([sys.executable, "-I", "-B", "-c", cc.ARM_CHILD, json.dumps(req)], capture_output=True,
                               text=True, cwd=tmp / "repo")
@@ -1001,7 +1118,8 @@ class ArmChildRealPin(unittest.TestCase):
                                                "deadline": 4e9})
         req = {"repo": str(self.pin), "python": sys.executable, "kit": str(ROOT / "docs/process/cadence/kits/cl-qual-01.v1.1.json"),
                "legs": "L001,L002,L003,L004,L005,L006", "batch_window": None, "output": str(self.tmp / "out"),
-               "custody_root": str(self.custody), "lease_until": lease, "standing_purpose": "cadence-controller:abc",
+               "custody_root": str(self.custody), "lease_until": lease, "monotonic_lease_until": time.monotonic() + 120,
+               "standing_purpose": "cadence-controller:abc",
                "controller_pid": os.getpid(), "launchctl_bin": str(self.launchctl)}
         return subprocess.run([sys.executable, "-I", "-B", "-c", cc.ARM_CHILD, json.dumps(req)], capture_output=True,
                               text=True, cwd=self.pin, timeout=120,
@@ -1156,6 +1274,34 @@ class RL173EndToEnd(WorldCase):
     def test_actions_watcher(self):                          # C.4
         synth.scenario_actions_watcher(Path(self.tmp.name) / "aw", log=quiet)
 
+    def test_controller_owned_close_uses_the_documented_fence_and_checks_the_result(self):
+        w = self.pilot_world()
+        w.cfg["offload_argv"] = ["/synthetic/close-offload", "after-check", "--config", "/synthetic/config.json"]
+        host_run = w.ctl.host_run
+        calls = []
+
+        def run(argv, **kwargs):
+            if argv[0] != w.cfg["offload_argv"][0]:
+                return host_run(argv, **kwargs)
+            calls.append(argv)
+            result = synth.stub_controller_owned_close(w, argv)
+            if len(calls) == 1:
+                return cc.Result(0, '{"status":"CLOSE_OK","pending":{"clear":false}}', "")
+            return result
+
+        w.ctl.host_run = run
+        self.assertEqual(w.tick()["state"], "LIVE")
+        w.launcher.finish()
+        self.assertEqual(w.tick()["state"], "CLOSED")
+        pid = "cq-dev-05-s01-a1"
+        path = self.state(w, "spans", pid, "close.json")
+        self.assertFalse(cc.read_json(path)["offload"]["ok"])
+        self.assertIn("clear transfers", cc.read_json(path)["offload"]["problem"])
+        w.env.t += 300
+        self.assertTrue(w.ctl.offload_close(pid)["ok"])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(cc.fence.read_fence(w.ctl.custody)["purpose"], w.ctl.standing_purpose())
+
     def test_offload_failed_or_unverified_holds_the_next_arm_and_f0(self):   # A.2, A.7
         synth.scenario_offload(Path(self.tmp.name) / "off", log=quiet)
 
@@ -1251,7 +1397,7 @@ class RL173Units(unittest.TestCase):
                 with self.assertRaises(cc.ConfigError, msg=over):
                     cc.load_config(path)
             for over in ({"watcher_kind": "stamp", "watcher_name": "com.joulewise.air-watch"},
-                         {"offload_argv": ["/usr/local/bin/jw-offload", "--plan", "{plan_id}", "--out", "{output}"]}):
+                         {"offload_argv": ["/usr/local/bin/jw-offload", "after-check", "--config", "/fixture/config.json"]}):
                 path.write_text(json.dumps({**base, **over}))
                 cc.load_config(path)
 
@@ -1382,7 +1528,7 @@ class Gate3ControllerMythos(unittest.TestCase):
     def test_a_failed_offload_is_retried_in_the_close_interval_then_held(self):
         with tempfile.TemporaryDirectory() as tmp:
             w = self.world(tmp)
-            w.cfg["offload_argv"] = ["/bin/false", "{plan_id}"]
+            w.cfg["offload_argv"] = ["/bin/false", "after-check", "--config", "/fixture/config.json"]
             w.controller()
             calls = []
             real = w.ctl.host_run
@@ -1459,7 +1605,7 @@ class Gate4Controller(unittest.TestCase):
             ctl = object.__new__(cc.Controller)
             ctl.state = Path(tmp)/'state'
             ctl.custody = Path(tmp)/'custody'
-            ctl.cfg = {'hold_standing_fence': True, 'offload_argv': ['/fake/upload', '{plan_id}', '{marker}'],
+            ctl.cfg = {'hold_standing_fence': True, 'offload_argv': ['/fake/upload', 'after-check', '--config', '/fixture/config.json'],
                        'copy_marker_dir': str(Path(tmp)/'markers')}
             ctl.env = synth.FakeEnv(10000)
             ctl.token, ctl.pid = 'test', os.getpid()
@@ -1472,10 +1618,11 @@ class Gate4Controller(unittest.TestCase):
             def upload(argv, **kwargs):
                 left.append(cc.fence.read_fence(ctl.custody)['deadline']-ctl.env.now())
                 ctl.env.t += cc.OFFLOAD_TIMEOUT_S
-                return cc.Result(0, '', '')
+                return cc.Result(0, '{"status":"CLOSE_OK","pending":{"clear":true}}', '')
             ctl.host_run = upload
             ctl.transition = mock.Mock()
-            result = ctl.offload_close('p1')
+            with mock.patch.object(law, "offload_marker_problems", return_value=[]):
+                result = ctl.offload_close('p1')
             self.assertTrue(result['ok'])
             self.assertGreater(left[0], cc.OFFLOAD_TIMEOUT_S)
             self.assertGreater(cc.fence.read_fence(ctl.custody)['deadline'], ctl.env.now())
@@ -1486,9 +1633,10 @@ class Gate4Controller(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ctl = object.__new__(cc.Controller)
             ctl.state, ctl.custody = Path(tmp)/'state', Path(tmp)/'custody'
-            ctl.cfg = {'hold_standing_fence': False, 'offload_argv': ['/fake/upload', '{plan_id}'],
+            ctl.cfg = {'hold_standing_fence': True, 'offload_argv': ['/fake/upload', 'after-check', '--config', '/fixture/config.json'],
                        'copy_marker_dir': str(Path(tmp)/'markers')}
             ctl.env = synth.FakeEnv(10000)
+            ctl.token, ctl.pid = 'test', os.getpid()
             ctl.host_run = mock.Mock(return_value=cc.Result(7, '', 'provider down'))
             ctl.transition = mock.Mock()
             cc.atomic_json(ctl.span_dir('p1')/'intent.json', {'output': '/synthetic/output'})

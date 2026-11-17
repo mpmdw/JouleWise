@@ -913,40 +913,34 @@ Research lead RL-173 (Sun 15 Nov 11:58). Each item, and where it is enforced:
 | A.2, A.7 | The offload marker contract below; absent is a wait, unverified or failed a halt; F0 held too | `read_marker`, `law.offload_marker_problems`, `law.census_reasons` |
 | A.3 | The maintenance line always lists `bird`, `cloudd`, `fileproviderd` | `MAINTENANCE` |
 
-**The offload interface (consumed, not built here).** The permanent offload tool is built on
-`ops/2026-11-15-air-independence`. The controller consumes it by this contract:
+**The offload interface.** The controller uses the admitted PR #804 validator from
+`joulewise/span_offload.py` and invokes PR #807's controller-owned `after-check` command.
 
-- **Invocation (optional).** With `offload_argv` in the config (an absolute program; placeholders `{plan_id}`,
-  `{output}` (the span's output directory, read-only to the tool) and `{marker}` (the marker path)), the
-  controller runs it in the close interval, after the push and the MBP desk, with a 3,600 s timeout, and
-  records its exit code (`close.json` `offload`). A non-zero exit contradicting a verified marker is `OFFLOAD_FAILED` even on the first attempt. Without a marker, retries remain `JOURNAL_COPY` until the three attempts are spent, then `OFFLOAD_FAILED`. Attempts two and three wait 5 and 15 minutes after the previous attempt ended. A changed marker after exhaustion permits a recovery run of the configured tool; its successful exit is required too. The tool must be idempotent on an existing verified marker: validate it and return success without rewriting it.
-  With `offload_argv: null` another process runs the tool; the gate is the same.
-- **The marker** `<copy_marker_dir>/<plan_id>.ok`, a regular file under 64 KiB, created once when the upload is
-  verified, JSON with exactly these keys:
+- **Invocation.** Set `offload_argv` to the absolute command prefix through
+  `after-check --config <offload config>`. The adapter supplies the plan, exact output, close
+  deadline and standing fence tuple documented by PR #807. It leaves the fence lock available
+  for the command. Success requires exit zero, `CLOSE_OK`, clear transfers and the matching
+  verified marker. The 3,600 s controller timeout leaves 15 s after the CLI deadline for exit.
+  Retries wait 5 and 15 minutes. After three failures, a changed marker permits a recovery run.
+  With `offload_argv: null` a separate owner runs the offload and the same copy gate applies.
+- **Copy controls.** The controller reads the bounded `<copy_marker_dir>/<plan_id>.ok`, the
+  stage's source record and descriptor, using the same `stage_root` as the offload producer.
+  The verified descriptor digest and recorded source must match that plan's exact output.
+  The stage and iCloud observations must follow the receipt, allowing whole-second receipt
+  rounding. Marker publication must follow provider verification and be within the host clock
+  tolerance. A missing marker waits. A bad marker, a `.failed` sidecar or an exhausted failed
+  offload holds every arm, including F0.
+- **Key attestation.** After the RL-173 A.1 deadline the lead must set
+  `copy_key_second_copy_sha256` to the recipient fingerprint whose private key has a second
+  off-MBP copy under the ruling. The controller compares fingerprints. It opens neither key.
 
-  ```json
-  {"schema": "joulewise.offload_marker.v1", "plan_id": "cq-...-a1", "source": "<span output dir>",
-   "manifest_sha256": "<plaintext manifest sha256>", "manifest_files": 226,
-   "ciphertext_sha256": "<sha256 of the uploaded ciphertext>", "ciphertext_bytes": 110295072,
-   "provider": "<provider>", "remote_path": "<object path in the private folder>",
-   "upload": {"confirmed": true, "readback": "sha256" | "size",
-              "value": "<the provider's read-back hash or size; must equal the ciphertext's>",
-              "evidence": "<the provider's confirmation that the upload finished>"},
-   "verified": true, "key_second_copy": "<where the key's second copy is>" | null,
-   "written_at": "<ISO 8601 with offset>"}
-  ```
-
-  `source` is exactly the `{output}` the controller passed; `written_at` falls after the span's receipt and not
-  after the host clock (300 s skew). `key_second_copy` may be null only while the current admission time is before
-  2026-11-16 11:58 PST (A.1's absolute 24 h deadline), including for older markers. A failed offload may leave
-  `<plan_id>.failed` (any content), which holds like a bad marker. The offload tool owns this status file and must remove it before publishing a successful retry's `.ok`; the controller never deletes the failed attempt's evidence. The controller opens nothing else the tool
-  writes; the marker carries no denied key.
 - **The Actions watcher.** The controller reads the workflow named by `watcher_name` (a file name, e.g.
   `mbp-watcher.yml`) through the runs API. A run concludes `success` when it checked the host's results ref
   (alarm or not); the alarm itself is the watcher's own issue (C.1-C.3). It counts only as a `schedule` run on `main`.
 
 **Install additions:** `controller_signers` (an allowed-signers file naming `cadence-controller` with the
-controller's public key), `watcher_kind`, `offload_argv`, `desk_commit` (the commit the off-host desk runs; the
+controller's public key), `watcher_kind`, `offload_argv`, `copy_stage_root`,
+`copy_key_second_copy_sha256`, and `desk_commit` (the commit the off-host desk runs; the
 controller's checkout must be at it). The deterministic desk needs no new key. On switch-over day the newest
 hand-armed campaign close needs a typed offload marker (a legacy one-line marker is `OFFLOAD_FAILED`).
 

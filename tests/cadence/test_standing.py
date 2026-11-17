@@ -10,6 +10,7 @@ from pathlib import Path
 import unittest
 
 from joulewise.cadence import desk_final, queue as q, standing as law
+from scripts import cadence_controller_synthetic as synth
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -666,14 +667,18 @@ class QueueIntegrity(unittest.TestCase):
         self.assertIn("QUEUE_DUPLICATE", codes(law.select(snap([a, c]))))
 
 
-def marker(plan_id, **over):
-    doc = {"schema": law.OFFLOAD_MARKER_SCHEMA, "plan_id": plan_id, "source": f"/o/cl-dev-05/{plan_id}-20261117T160000Z",
-           "manifest_sha256": "a" * 64, "manifest_files": 10, "ciphertext_sha256": "b" * 64, "ciphertext_bytes": 4096,
-           "provider": "cloud", "remote_path": f"offload/{plan_id}.enc",
-           "upload": {"confirmed": True, "readback": "size", "value": 4096, "evidence": "provider size readback"},
-           "verified": True, "key_second_copy": "the Air's custody root", "written_at": "2026-11-17T09:02:00-08:00"}
-    doc.update(over)
-    return doc
+def marker_source(plan_id):
+    return f"/o/cl-dev-05/{plan_id}-20261117T160000Z"
+
+
+def marker(plan_id, now=NOW, **over):
+    return {**synth.offload_marker(plan_id, now, marker_source(plan_id)), **over}
+
+
+def marker_evidence(plan_id):
+    doc = marker(plan_id)
+    return {"doc": doc, "stage": {"source": marker_source(plan_id), "created_epoch_s": NOW,
+                                  "descriptor_sha256": doc["descriptor_sha256"]}}
 
 
 class Census(unittest.TestCase):
@@ -684,8 +689,8 @@ class Census(unittest.TestCase):
         newest = "/o/cl-dev-05/cq-dev-05-s01-a1-20261117T160000Z/runner_receipt.json"
         census = {"newest": (int(NOW), newest), "campaign": [newest]}
         self.assertEqual([r["code"] for r in law.census_reasons(census, self.runs(), "/o", {})], ["JOURNAL_COPY"])
-        good = {"cq-dev-05-s01-a1": {"doc": marker("cq-dev-05-s01-a1"), "error": None, "failed": False}}
-        self.assertEqual(law.census_reasons(census, self.runs(), "/o", good, now=NOW), [])
+        good = {"cq-dev-05-s01-a1": marker_evidence("cq-dev-05-s01-a1")}
+        self.assertEqual(law.census_reasons(census, self.runs(), "/o", good, now=NOW, key_second_copy=synth.COPY_RECIPIENT), [])
         other = {"newest": (int(NOW), "/w/f0/runner_receipt.json"), "campaign": [newest]}
         self.assertEqual([r["code"] for r in law.census_reasons(other, self.runs(), "/o", {})], ["JOURNAL_COPY"])
 
@@ -826,23 +831,17 @@ class RL173(unittest.TestCase):
 
     def test_the_offload_marker_must_verify_and_a_failure_holds_f0_too(self):
         pid = "cq-dev-05-s01-a1"
-        self.assertEqual(law.offload_marker_problems(marker(pid), pid, NOW), [])
-        for bad in (dict(marker(pid), plan_id="cq-x-a1"), marker(pid, ciphertext_bytes=0), marker(pid, verified=False),
-                    marker(pid, upload={"confirmed": True, "readback": "size", "value": 1, "evidence": "e"}),
-                    marker(pid, upload={"confirmed": False, "readback": "size", "value": 4096, "evidence": "e"}),
-                    marker(pid, manifest_sha256="x"), dict(marker(pid), extra=1), "legacy text line"):
-            self.assertTrue(law.offload_marker_problems(bad, pid, NOW), bad)
-        self.assertTrue(law.offload_marker_problems(marker(pid, key_second_copy=None), pid, NOW))   # A.1: after 24 h
-        early = datetime.fromtimestamp(law.KEY_SECOND_COPY_DEADLINE - 60, law.ZONE).isoformat()
-        self.assertEqual(law.offload_marker_problems(marker(pid, key_second_copy=None, written_at=early), pid,
-                                                     law.KEY_SECOND_COPY_DEADLINE - 1), [])
-        # gate 3 (Opus 3): bound to the span's own output and written after its receipt, not after the host clock
-        src, after = f"/o/cl-dev-05/{pid}-20261117T160000Z", NOW - 600
-        self.assertEqual(law.offload_marker_problems(marker(pid), pid, NOW, source=src, after=after), [])
-        for bad in (marker(pid, source="/o/cl-dev-05/cq-dev-05-s00-a1-20261116T160000Z"),
-                    marker(pid, written_at="2026-11-15T09:00:00-08:00"),
-                    marker(pid, written_at="2027-11-17T09:00:00-08:00")):
-            self.assertTrue(law.offload_marker_problems(bad, pid, NOW, source=src, after=after), bad)
+        self.assertEqual(law.offload_marker_problems(marker(pid), pid, NOW, key_second_copy=synth.COPY_RECIPIENT), [])
+        for bad in (marker(pid, plan="cq-x-a1"), marker(pid, ciphertext={"sha256": "b" * 64, "size": 0}),
+                    marker(pid, provider_confirmed=False), marker(pid, provider_confirmation=[]),
+                    marker(pid, manifest_sha256="x"), "legacy text line"):
+            self.assertTrue(law.offload_marker_problems(bad, pid, NOW, key_second_copy=synth.COPY_RECIPIENT), bad)
+        self.assertTrue(law.offload_marker_problems(marker(pid), pid, NOW))  # A.1: after 24 h
+        early = law.KEY_SECOND_COPY_DEADLINE - 60
+        self.assertEqual(law.offload_marker_problems(marker(pid, now=early), pid, early + 1), [])
+        self.assertEqual(law.offload_marker_problems(marker(pid), pid, NOW, source=marker_source(pid),
+                                                    after=NOW - 600, stage=marker_evidence(pid)["stage"],
+                                                    key_second_copy=synth.COPY_RECIPIENT), [])
         runs = law.build_runs(standing(), [record(pid, "05", L[:6], NOW - 9000)], [], kits=KITS)
         newest = f"/o/cl-dev-05/{pid}-20261117T160000Z/runner_receipt.json"
         census = {"newest": (int(NOW), newest), "campaign": [newest]}
@@ -854,7 +853,7 @@ class RL173(unittest.TestCase):
         self.assertEqual(got({}, [pid]), ["OFFLOAD_FAILED"])
         self.assertEqual(got({pid: {"doc": None, "error": None, "failed": True}}), ["OFFLOAD_FAILED"])
         self.assertEqual(got({pid: {"doc": None, "error": "not JSON", "failed": False}}), ["OFFLOAD_FAILED"])
-        self.assertEqual(got({pid: {"doc": marker(pid, verified=False), "error": None, "failed": False}}),
+        self.assertEqual(got({pid: {"doc": marker(pid, provider_confirmed=False), "error": None, "failed": False}}),
                          ["OFFLOAD_FAILED"])
         f0 = [{"kind": "F0", "standing_item": "item 346", "worst_case_s": 12180}]
         st = standing(fallback=f0)
@@ -878,8 +877,8 @@ class Gate3Law(unittest.TestCase):
         due = {pid: {"source": f"/o/cl-dev-05/{pid}-20261117T160000Z", "after": NOW - 600}}
         self.assertEqual([r["code"] for r in law.census_reasons(newer, runs, "/o", {}, now=NOW, copy_due=due)],
                          ["JOURNAL_COPY"])                      # a newer non-campaign receipt does not dissolve it
-        good = {pid: {"doc": marker(pid), "error": None, "failed": False}}
-        self.assertEqual(law.census_reasons(newer, runs, "/o", good, now=NOW, copy_due=due), [])
+        good = {pid: marker_evidence(pid)}
+        self.assertEqual(law.census_reasons(newer, runs, "/o", good, now=NOW, copy_due=due, key_second_copy=synth.COPY_RECIPIENT), [])
         st = standing()
         sn = snap([], st, sessions=[{"schema": law.SESSION_READY_SCHEMA, "session_id": "slot-1", "by": "lead",
                                      "ready_at": "2026-11-17T08:00:00-08:00"}])
@@ -1020,10 +1019,9 @@ class Gate5KeyDeadline(unittest.TestCase):
     def test_the_same_early_marker_expires_by_admission_time(self):
         pid = 'cq-dev-05-s01-a1'
         deadline = law.KEY_SECOND_COPY_DEADLINE
-        early = datetime.fromtimestamp(deadline - 3600, law.ZONE).isoformat()
-        doc = marker(pid, written_at=early, key_second_copy=None)
+        doc = marker(pid, now=deadline - 3600)
         self.assertEqual(law.offload_marker_problems(doc, pid, deadline - 1), [])
         for now in (deadline, deadline + 1, deadline + 86400):
             with self.subTest(now=now):
                 self.assertTrue(law.offload_marker_problems(doc, pid, now))
-        self.assertEqual(law.offload_marker_problems(dict(doc, key_second_copy='Ed vault'), pid, deadline + 86400), [])
+        self.assertEqual(law.offload_marker_problems(doc, pid, deadline + 86400, key_second_copy=synth.COPY_RECIPIENT), [])

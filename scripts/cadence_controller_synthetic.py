@@ -61,6 +61,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from joulewise import span_offload  # noqa: E402
 from joulewise.cadence import desk_final, standing as law  # noqa: E402
 from scripts import cadence_controller as cc  # noqa: E402
 
@@ -200,6 +201,7 @@ class World:
             "measurement_python": sys.executable, "receipt_roots": [str(out), str(roots)],
             "signing_key": str(self.keys["ctl"]["key"]), "bundle_ref_prefix": "refs/heads/desk-bundles/",
             "verdict_signers": str(self.keys["air"]["allowed"]), "copy_marker_dir": str(self.w / "desk-copy"),
+            "copy_stage_root": str(self.w / "copy-stage"), "copy_key_second_copy_sha256": COPY_RECIPIENT,
             "watcher_name": WATCHER, "owner_login": "mpmdw", "repo_slug": "mpmdw/JouleWise", "gh_argv": ["/bin/false"],
             "measurement_mode_script": "/nonexistent", "high_power_marker": str(self.w / "high-power.marker"),
             "poll_idle_s": 60, "poll_live_s": 60, "hold_standing_fence": True, "accept_mock_verdicts": True,
@@ -231,8 +233,7 @@ class World:
         }))
         closed = law.parse_time(prior["closed"])
         os.utime(receipt, (closed, closed))
-        marker = offload_marker(pid, closed, str(source))
-        (Path(self.cfg["copy_marker_dir"]) / f"{pid}.ok").write_text(json.dumps(marker))
+        self.write_copy_marker(pid, closed, source)
         return receipt
 
     # -- the pinned runners -------------------------------------------------------------------------
@@ -288,8 +289,17 @@ class World:
     def copy_journals(self, plan_id):
         """The offload tool's verified marker (RL-173 A.2; design 15.13), standing in for its encrypted upload."""
         intent = json.loads((Path(self.cfg["state_dir"]) / "spans" / plan_id / "intent.json").read_text())
-        (Path(self.cfg["copy_marker_dir"]) / f"{plan_id}.ok").write_text(
-            json.dumps(offload_marker(plan_id, self.env.now(), intent["output"])))
+        self.write_copy_marker(plan_id, self.env.now(), intent["output"])
+
+    def write_copy_marker(self, plan_id, now, source):
+        source = Path(source)
+        stage = Path(self.cfg["copy_stage_root"]) / plan_id
+        stage.mkdir(parents=True, exist_ok=True)
+        (stage / span_offload.SOURCE_RECORD).write_text(json.dumps({"source": str(source.resolve())}))
+        (stage / span_offload.names(plan_id)["descriptor"]).write_bytes(offload_descriptor(source, now))
+        doc = offload_marker(plan_id, now, source)
+        (Path(self.cfg["copy_marker_dir"]) / f"{plan_id}.ok").write_text(json.dumps(doc))
+        return doc
 
     def q1_record(self, plan_id):
         """The lead's typed RL-158 Q1 completion record (RL-173 E), committed on the audit branch after the print."""
@@ -427,14 +437,27 @@ class World:
         return path
 
 
+COPY_RECIPIENT = "e" * 64
+
+
+def offload_descriptor(source, now):
+    return json.dumps({"span_name": Path(source).name, "created_epoch_s": now}).encode()
+
+
 def offload_marker(plan_id, now, source):
-    """A marker the offload tool writes (design 15.13), synthetic values."""
-    return {"schema": law.OFFLOAD_MARKER_SCHEMA, "plan_id": plan_id, "source": source,
-            "manifest_sha256": "a" * 64, "manifest_files": 12, "ciphertext_sha256": "b" * 64,
-            "ciphertext_bytes": 1048576, "provider": "synthetic cloud", "remote_path": f"offload/{plan_id}.enc",
-            "upload": {"confirmed": True, "readback": "sha256", "value": "b" * 64, "evidence": "synthetic readback"},
-            "verified": True, "key_second_copy": "synthetic vault",
-            "written_at": datetime.fromtimestamp(now, law.ZONE).isoformat()}
+    """The admitted marker format with synthetic observations for all four files."""
+    hashes = dict(ciphertext="b" * 64, wrapped_key="c" * 64, manifest="a" * 64,
+                  descriptor=cc.sha256_bytes(offload_descriptor(source, now)))
+    files = span_offload.names(plan_id)
+    observed = {"kind": span_offload.ICLOUD_CONFIRMATION, "provider_confirmed": True,
+                "uploaded_epoch_s": now, "evicted_epoch_s": now, "verified_epoch_s": now}
+    rows = [{"name": files[kind], "sha256": hashes[kind], "provider_hash": hashes[kind],
+             "size": 16, "provider_size": 16, **observed} for kind in span_offload.UPLOAD_ORDER]
+    return {"schema": span_offload.MARKER_SCHEMA, "plan": plan_id, "span_name": Path(source).name,
+            "written_epoch_s": now, "backend": {"kind": "icloud"}, "provider_confirmed": True,
+            "recipient_sha256": COPY_RECIPIENT, "manifest_sha256": hashes["manifest"],
+            "wrapped_key_sha256": hashes["wrapped_key"], "descriptor_sha256": hashes["descriptor"],
+            "ciphertext": {"sha256": hashes["ciphertext"], "size": 16}, "provider_confirmation": rows}
 
 
 class MockPreparer:
@@ -900,26 +923,19 @@ def scenario_actions_watcher(workdir, log=print):
     return w
 
 
-OFFLOAD_TOOL = r'''
-import json, sys, time, os
-from datetime import datetime, timezone
-plan_id, output, marker, flag = sys.argv[1:5]
-if os.path.exists(flag):
-    print("synthetic offload: upload not confirmed", file=sys.stderr)
-    sys.exit(7)
-if os.path.exists(marker):
-    sys.exit(0)    # an idempotent replay; the controller independently validates the existing marker
-doc = {"schema": "joulewise.offload_marker.v1", "plan_id": plan_id, "source": output, "manifest_sha256": "a" * 64,
-       "manifest_files": 12, "ciphertext_sha256": "b" * 64, "ciphertext_bytes": 1048576, "provider": "synthetic cloud",
-       "remote_path": "offload/" + plan_id + ".enc",
-       "upload": {"confirmed": True, "readback": "sha256", "value": "b" * 64, "evidence": "synthetic readback"},
-       "verified": True, "key_second_copy": "synthetic vault",
-       # the synthetic clock: just after the span's receipt (the real tool writes its own time)
-       "written_at": datetime.fromtimestamp(os.stat(os.path.join(output, "runner_receipt.json")).st_mtime + 1,
-                                            timezone.utc).isoformat()}
-with open(marker, "x") as handle:
-    json.dump(doc, handle)
-'''
+def stub_controller_owned_close(world, argv):
+    """Stub the documented PR #807 interface using a disposable fence and stage."""
+    assert argv[:3] == ["/synthetic/close-offload", "after-check", "--config"], argv
+    options = dict(zip(argv[4::2], argv[5::2], strict=True))
+    fence_file = Path(options["--fence"])
+    assert fence_file == Path(world.cfg["custody_root"]) / cc.fence.FENCE_NAME
+    with cc.fence.fence_lock(fence_file.parent):
+        expected = {"purpose": options["--controller-fence-purpose"], "pid": int(options["--controller-fence-pid"]),
+                    "deadline": float(options["--controller-fence-deadline-epoch"])}
+        assert cc.fence.read_fence(fence_file.parent) == expected
+        assert world.env.now() < float(options["--deadline-epoch"]) <= expected["deadline"]
+        world.write_copy_marker(options["--plan"], world.env.now(), options["--span-dir"])
+    return cc.Result(0, json.dumps({"status": "CLOSE_OK", "pending": {"clear": True}}), "")
 
 
 def scenario_offload(workdir, log=print):
@@ -928,11 +944,20 @@ def scenario_offload(workdir, log=print):
     and due, and no F0 page. A marker that does not verify (A.2) is the same halt. The lead's re-run of the tool writes
     a verified marker and the next span arms."""
     w = World(workdir, prior=False)
-    tool, flag = w.w / "offload_tool.py", w.w / "offload-fails"
-    tool.write_text(OFFLOAD_TOOL)
-    w.cfg["offload_argv"] = [sys.executable, "-I", str(tool), "{plan_id}", "{output}", "{marker}", str(flag)]
+    flag = w.w / "offload-fails"
+    w.cfg["offload_argv"] = ["/synthetic/close-offload", "after-check", "--config", "/synthetic/config.json"]
     w.standing["fallback"] = [{"kind": "F0", "standing_item": "item 346 (synthetic)", "worst_case_s": 12180}]
     ctl = w.controller()
+    host_run = ctl.host_run
+
+    def run(argv, **kwargs):
+        if argv[0] != w.cfg["offload_argv"][0]:
+            return host_run(argv, **kwargs)
+        if flag.exists():
+            return cc.Result(7, "", "synthetic provider down")
+        return stub_controller_owned_close(w, argv)
+
+    ctl.host_run = run
     w.queue("dev05-pilot", [w.span(1, "dev-05-s01", "cl-dev-05", L[:6])], role="smoke")
     flag.write_text("fail\n")
     w.tick()
@@ -952,17 +977,17 @@ def scenario_offload(workdir, log=print):
     marker = Path(w.cfg["copy_marker_dir"]) / "cq-dev-05-s01-a1.ok"
     out1 = json.loads((Path(w.cfg["state_dir"]) / "spans/cq-dev-05-s01-a1/intent.json").read_text())["output"]
     bad = offload_marker("cq-dev-05-s01-a1", w.env.now(), out1)
-    bad["upload"] = {**bad["upload"], "value": "f" * 64}              # a readback that is not the ciphertext's
+    bad["provider_confirmation"][0]["provider_hash"] = "f" * 64
     marker.write_text(json.dumps(bad))
     w.env.t += 300
     s = w.tick()
     assert _state(s) in ("HALTED", "PAGED") and "OFFLOAD_FAILED" in json.dumps(s), s   # the same episode: no re-page
-    assert "readback" in json.dumps(law.offload_marker_problems(bad, "cq-dev-05-s01-a1", w.env.now(), source=out1))
+    assert "invalid iCloud round trip" in json.dumps(law.offload_marker_problems(bad, "cq-dev-05-s01-a1", w.env.now()))
     assert not any(p["kind"] == "FALLBACK_F0_DUE" for p in ctl.unacked_pages())
     w.ack_all()
     marker.unlink()
     flag.unlink()
-    subprocess.run(w.cfg["offload_argv"][:3] + ["cq-dev-05-s01-a1", out1, str(marker), str(flag)], check=True)
+    w.write_copy_marker("cq-dev-05-s01-a1", w.env.now(), out1)
     w.env.t += 300
     s = w.tick()
     assert "OFFLOAD_FAILED" not in json.dumps(s) and "OFFLOAD_FAILED" not in json.dumps(

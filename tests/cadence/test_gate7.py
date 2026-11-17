@@ -89,8 +89,7 @@ class Gate7Controller(WorldCase):
             path.write_text(json.dumps(receipt))
             ended = law.parse_time(row['closed'])
             os.utime(path, (ended, ended))
-            marker = synth.offload_marker(pid, w.env.now(), str(source))
-            (Path(w.cfg['copy_marker_dir']) / (pid + '.ok')).write_text(json.dumps(marker))
+            w.write_copy_marker(pid, w.env.now(), source)
         if mutation == 'campaign':
             priors[0]['campaign_id'] = 'f2-inst-01'
         elif mutation == 'mixed':

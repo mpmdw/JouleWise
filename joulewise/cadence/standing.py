@@ -33,13 +33,13 @@ import os
 import re
 from zoneinfo import ZoneInfo
 
+from joulewise import span_offload
 from joulewise.cadence import desk_final, kit as kitmod, queue as q
 
 STANDING_SCHEMA = "joulewise.cadence_standing.v1"
 SESSION_READY_SCHEMA = "joulewise.cadence_session_ready.v1"
 SESSION_DONE_SCHEMA = "joulewise.cadence_session_done.v1"
 WATCHER_STAMP_SCHEMA = "joulewise.cadence_watcher_stamp.v1"
-OFFLOAD_MARKER_SCHEMA = "joulewise.offload_marker.v1"     # the offload tool's marker (RL-173 A.2; design 15.13)
 WATCHER_KINDS = ("actions", "stamp")
 WATCHER_EVENTS = ("schedule",)          # the watcher's own trigger, on the default branch (gate 3: Opus 6, Mythos T3)
 WATCHER_BRANCH = "main"                        # RL-173 C.4 (GitHub Actions) and C.5 (the Air's stamp)
@@ -1241,65 +1241,37 @@ CAMPAIGN_RECEIPT = re.compile(r"/(?P<campaign>cl-[a-z0-9-]+)/(?P<plan>cq-[a-z0-9
                               r"runner_receipt\.json$")
 
 
-OFFLOAD_MARKER_KEYS = {"schema", "plan_id", "source", "manifest_sha256", "manifest_files", "ciphertext_sha256",
-                       "ciphertext_bytes", "provider", "remote_path", "upload", "verified", "key_second_copy",
-                       "written_at"}
-UPLOAD_KEYS = {"confirmed", "readback", "value", "evidence"}
+def offload_marker_problems(doc, plan_id, now, source=None, after=None, *, stage=None, key_second_copy=None):
+    """Validate the admitted iCloud marker and bind it to this receipt and local stage (RL-173 A, RL-174 D.1)."""
+    try:
+        span_offload.marker_files(doc, plan_id, icloud=True)
+        written = doc.get("written_epoch_s")
+        observations = doc["provider_confirmation"]
+        started = min(row["uploaded_epoch_s"] for row in observations)
+        verified = max(row["verified_epoch_s"] for row in observations)
+        if not span_offload.number(written) or not verified <= written <= now + CLOCK_SKEW_S:
+            return ["marker time does not follow provider verification or is after the host clock"]
+    except (span_offload.OffloadError, AttributeError, TypeError, ValueError, OverflowError) as error:
+        return [f"invalid iCloud round trip: {error}"]
+
+    if source is not None:
+        if (not stage or stage.get("source") != os.path.realpath(source) or doc["span_name"] != os.path.basename(source)
+                or stage.get("descriptor_sha256") != doc["descriptor_sha256"]):
+            return ["marker descriptor and staged source do not match the span output"]
+        created = stage.get("created_epoch_s")
+        if type(created) not in (int, float) or not 0 < created <= started:
+            return ["stage time does not precede provider upload"]
+        started = created
+    # Close records ceil the receipt mtime to a whole second. Allow only that rounding.
+    if after is not None and started < after - (1 if type(after) is int else 0):
+        return ["staged copy predates the span receipt"]
+    if now >= KEY_SECOND_COPY_DEADLINE and (key_second_copy is None or doc.get("recipient_sha256") != key_second_copy):
+        return ["the lead's second-copy attestation does not match the offload recipient"]
+    return []
 
 
-def offload_marker_problems(doc, plan_id, now, source=None, after=None):
-    """RL-173 A: the MBP's verified encrypted cloud offload is the off-host copy. Its marker
-    (``<copy_marker_dir>/<plan_id>.ok``, written by the offload tool once the upload is verified; design 15.13)
-    must record the plaintext manifest's sha256, the ciphertext's sha256 and size, and the provider's confirmation
-    that the upload finished, read back as the ciphertext's sha256 or size (A.2). After RL-173 A.1's 24 h it must
-    also name where the key's second copy is (never the cloud folder or the repo). The marker is bound to its span
-    (gate 3, Opus 3): ``source`` must be the span's own output directory and ``written_at`` must fall after the
-    span's receipt and not after the host clock (each within the 300 s skew). Returns problems."""
-    if not isinstance(doc, dict):
-        return ["the marker is not a JSON object (a typed offload marker; RL-173 A.2)"]
-    p = []
-    if set(doc) != OFFLOAD_MARKER_KEYS:
-        p.append(f"keys: missing {sorted(OFFLOAD_MARKER_KEYS - set(doc))}, unknown {sorted(set(doc) - OFFLOAD_MARKER_KEYS)}")
-    if doc.get("schema") != OFFLOAD_MARKER_SCHEMA:
-        p.append(f"schema {doc.get('schema')!r}")
-    if doc.get("plan_id") != plan_id:
-        p.append(f"plan_id {doc.get('plan_id')!r} is not {plan_id}")
-    for k in ("manifest_sha256", "ciphertext_sha256"):
-        if not (isinstance(doc.get(k), str) and HEX64.fullmatch(doc[k])):
-            p.append(f"{k}: 64 hex")
-    for k in ("ciphertext_bytes", "manifest_files"):
-        if not (type(doc.get(k)) is int and doc[k] > 0):
-            p.append(f"{k}: a positive integer")
-    for k in ("provider", "remote_path", "source"):
-        if not _text(doc.get(k)):
-            p.append(f"{k}: text")
-    up = doc.get("upload")
-    if not (isinstance(up, dict) and set(up) == UPLOAD_KEYS and up.get("confirmed") is True and _text(up.get("evidence"))
-            and ((up.get("readback") == "sha256" and up.get("value") == doc.get("ciphertext_sha256"))
-                 or (up.get("readback") == "size" and up.get("value") == doc.get("ciphertext_bytes")))):
-        p.append("upload: {confirmed: true, readback: sha256|size, value: the ciphertext's, evidence} (A.2)")
-    if doc.get("verified") is not True:
-        p.append("verified: true")
-    written = parse_time(doc.get("written_at"))
-    key = doc.get("key_second_copy")
-    if not (key is None or _text(key)):
-        p.append("key_second_copy: null or where the key's second copy is")
-    elif key is None and now >= KEY_SECOND_COPY_DEADLINE:
-        p.append("key_second_copy: required at admission after RL-173's 24 h exception (A.1)")
-    if written is None:
-        p.append("written_at: ISO 8601 with an offset")
-    else:
-        if written > now + CLOCK_SKEW_S:
-            p.append("written_at: after the host clock")
-        if after is not None and written < after - CLOCK_SKEW_S:
-            p.append("written_at: before the span's receipt (not this span's offload)")
-    if source is not None and (not isinstance(doc.get("source"), str)
-                               or os.path.normpath(doc["source"]) != os.path.normpath(source)):
-        p.append(f"source {doc.get('source')!r} is not this span's output {source!r}")
-    return p
-
-
-def census_reasons(census, runs, output_root, copy_markers, now=None, offload_failures=(), copy_due=None):
+def census_reasons(census, runs, output_root, copy_markers, now=None, offload_failures=(), copy_due=None,
+                   *, key_second_copy=None):
     """``census``: {"newest": (epoch, path), "campaign": [paths under the output root]} or an error string.
 
     * Every campaign receipt under the output root belongs to a span the ledger knows (prior or controller);
@@ -1354,7 +1326,8 @@ def census_reasons(census, runs, output_root, copy_markers, now=None, offload_fa
         else:
             problems = ([marker["error"]] if marker.get("error") else
                         offload_marker_problems(marker["doc"], plan_id, now if now is not None else 0,
-                                                source=expect.get("source"), after=expect.get("after")))
+                                                source=expect.get("source"), after=expect.get("after"),
+                                                stage=marker.get("stage"), key_second_copy=key_second_copy))
             if problems:
                 out.append(reason("OFFLOAD_FAILED", f"{plan_id}: {'; '.join(problems)}"[:400]))
     return out
