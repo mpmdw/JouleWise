@@ -98,6 +98,12 @@ digest and all four hashes/sizes to match before eviction. Wrong/partial receipt
 No receipt means no eviction and no wait for the Air. Keep SSD bytes and receipt together.
 Configure and verify `/usr/bin/mail` and `lead_email` before close; mail failure holds the next arm.
 
+A failed partial raw-directory deletion keeps the verified pack and returns nonzero. Its next retry
+refuses the now-incomplete source rather than repacking it. The lead verifies the retained pack hash
+against `.ok` and the cloud artifacts (or obtains an equal SSD readback), then removes or quarantines
+only that partial original and retries close with OUT absent. Preserve the verified pack throughout;
+never rebuild from the partial tree or relax its source checks. This recovery is manual.
+
 ### Every arm: pending-transfer read
 
 From the MBP user's **GUI domain**, immediately before every arm and soak:

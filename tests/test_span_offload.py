@@ -415,6 +415,24 @@ class SpanOffloadTests(unittest.TestCase):
             so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd)
         self.assertFalse((ssd / "span-archives" / PLAN).exists())
 
+    def test_existing_ssd_copy_requires_a_complete_valid_receipt(self):
+        backend = self.fake_brctl()
+        record = so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        ssd = self.tmp / "ssd"
+        ssd.mkdir()
+        with mock.patch.object(so, "require_ssd_mount"):
+            path = Path(so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd))
+            original = so.read_record(path)
+            for key, bad in (("schema", "wrong"), ("plan", "other"), ("descriptor_sha256", "0" * 64),
+                             ("verified_epoch_s", None)):
+                with self.subTest(key=key):
+                    path.write_bytes(so.canonical(dict(original, **{key: bad})))
+                    with self.assertRaises(so.OffloadError) as caught:
+                        so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd)
+                    self.assertEqual(caught.exception.code, "SSD_RECEIPT_INVALID")
+            path.write_bytes(so.canonical(original))
+            self.assertEqual(so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd), str(path))
+
     def test_incomplete_readback_evidence_cannot_publish_ok(self):
         backend = self.fake_brctl()
         real = so.ICloudBackend.put
@@ -742,7 +760,8 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertTrue(so.ICloudBackend._uploaded(good))
         for text in (b"", b"unknown format", b"client:idle caught-up", b"com.apple.CloudDocs client:idle",
                      good + b"\nneeds-upload file", good + b"\nuploading", good + b"\nerror: failed",
-                     b"com.apple.CloudDocs client:idle not-caught-up", good + b"\nneeds-sync-up"):
+                     b"com.apple.CloudDocs client:idle not-caught-up", good + b"\nneeds-sync-up",
+                     good + b"\npending transfers: 1", good + b"\ntransfer-pending"):
             with self.subTest(text=text):
                 self.assertFalse(so.ICloudBackend._uploaded(text))
 
