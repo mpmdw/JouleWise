@@ -15,6 +15,7 @@ from unittest import mock
 
 from scripts.air import air_watch_agent as agent
 from scripts.air import main_ci_watch as ci
+from scripts.air import night_results_watch as watch
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "scripts/air/install_air_watch.sh"
@@ -86,6 +87,20 @@ class MainCiTest(unittest.TestCase):
         (self.tmp / "s.json").write_text("not json")
         self.assertEqual(ci.load(self.tmp / "s.json")["raised"], [])
 
+    def test_failed_ci_alarm_retries_after_a_newer_green_run(self):
+        path = self.tmp / "ci.json"
+        post = mock.Mock(side_effect=[False, True])
+        with mock.patch.object(ci, "latest_completed", side_effect=[(run_doc(7), ["quick"]),
+                                                                    (run_doc(8), []), (run_doc(8), [])]), \
+                mock.patch.object(ci.time, "time", side_effect=[1000, 1030, 1060]):
+            ci.run_once(path, notify=post)
+            self.assertEqual(ci.load(path)["raised"], [])
+            ci.run_once(path, notify=post)
+            post.assert_called_once()
+            ci.run_once(path, notify=post)
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(ci.load(path)["raised"], [7])
+
 
 class NotifyTest(unittest.TestCase):
     def setUp(self):
@@ -110,8 +125,50 @@ class NotifyTest(unittest.TestCase):
         run.assert_not_called()
         with mock.patch.object(agent.subprocess, "run", side_effect=FileNotFoundError()):
             self.assertFalse(agent.notify("2026-11-12 22:00:00 NOTICE RESULT_WITH_FLAGS ref", self.log))
-            self.assertEqual(agent.main(["notify", "--log", str(self.log), "2026-11-12 22:00:00 ALARM X y"]), 0)
+            self.assertEqual(agent.main(["notify", "--log", str(self.log), "2026-11-12 22:00:00 ALARM X y"]), 1)
         self.assertIn("NOTIFY failed NOTICE RESULT_WITH_FLAGS", self.log.read_text())
+
+    def test_failed_notices_and_alarms_stay_pending_until_delivery(self):
+        state_file = self.tmp / "watch.json"
+        argv = ["--once", "--state", str(state_file), "--current", str(self.tmp / "absent"),
+                "--retry-notifications", "--notify-cmd", "notifier"]
+        events = [watch.Event("ALARM", "RESULT_NOT_MEASURED", "fixture", identity="sha-a"),
+                  watch.Event("NOTICE", "RESULT_WITH_FLAGS", "fixture", identity="sha-b")]
+        now = 1000
+
+        def poll(watcher, *_):
+            return watcher._new(events)
+
+        def notify(argv, **kwargs):
+            result = subprocess.CompletedProcess(argv, agent.main(["notify", "--log", str(self.log), argv[-1]]))
+            if kwargs["check"]:
+                result.check_returncode()
+            return result
+
+        with mock.patch.object(watch, "Git"), mock.patch.object(watch.Watcher, "poll", poll), \
+                mock.patch.object(watch.time, "time", side_effect=lambda: now), \
+                mock.patch.object(watch.subprocess, "run", side_effect=notify), \
+                mock.patch.object(agent, "notify", side_effect=[False, False, True, False, True]) as post:
+            self.assertEqual(watch.main(argv), 20)
+            self.assertEqual(watch.load_state(state_file)["raised"], [])
+            self.assertEqual(len(watch.load_state(state_file)["pending_notifications"]), 2)
+            now += 30
+            watch.main(argv)
+            self.assertEqual(post.call_count, 2)
+            now += 30
+            watch.main(argv)
+            self.assertEqual(post.call_count, 4)
+            self.assertEqual(len(watch.load_state(state_file)["raised"]), 1)
+            events.clear()  # Recovery must work even after the source event disappears.
+            now += 119
+            watch.main(argv)
+            self.assertEqual(post.call_count, 4)
+            now += 1
+            watch.main(argv)
+            self.assertEqual(post.call_count, 5)
+            state = watch.load_state(state_file)
+            self.assertEqual(len(state["raised"]), 2)
+            self.assertEqual(state["pending_notifications"], {})
 
     def test_quote_injection_stripped(self):
         _, text = agent.structural_text('2026-11-12 22:00:00 ALARM A"b\\c sub"j')
@@ -156,6 +213,16 @@ class NotifyTest(unittest.TestCase):
             self.assertEqual(agent.run(args, popen=mock.Mock(side_effect=FileNotFoundError())), 2)
         self.assertEqual(osa.call_count, 4)
         self.assertIn("WATCHER_EXIT_SUPPRESSED", self.log.read_text())
+
+    def test_failed_exit_alarm_does_not_start_the_hourly_dedup_window(self):
+        path = self.tmp / "exit.json"
+        post = mock.Mock(side_effect=[False, True])
+        self.assertFalse(agent.watcher_exit(2, path, self.log, now=1000, notifier=post))
+        self.assertFalse(agent.watcher_exit(2, path, self.log, now=1030, notifier=post))
+        post.assert_called_once()
+        agent.watcher_exit(None, path, self.log, now=1060, notifier=post)
+        self.assertEqual(post.call_count, 2)
+        self.assertFalse(agent.watcher_exit(2, path, self.log, now=1061, notifier=post))
 
 
 class InstallerTest(unittest.TestCase):
