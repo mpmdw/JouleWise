@@ -1,12 +1,12 @@
 # JouleWise Run State
 
-**2026-11-17 PR #800 round 10.** The Astra audit repairs bind the admitted copy marker to the staged receipt, check the controller-owned close contract, bound launch on both clocks, surface vanished verdicts, and publish arm intents durably. [Run report](docs/run_reports/2026-11-17-queue-controller-round10.md).
-
 **2026-11-17 PR #799 round 10.** Local desk publication checks the expected old ref, exit status and readback. All 80 desk-final tests pass. [Run report](docs/run_reports/2026-11-17-desk-final-round10.md).
 
-**2026-11-17 PR #800 round 9.** The predecessor receipt and copy, continuous fence, and duplicate restore repairs pass focused checks. The branch inherits PR #799's signed-history repair. [Run report](docs/run_reports/2026-11-17-queue-controller-round9.md).
-
 **2026-11-17 PR #799 round 9:** failed or incomplete signed-history listings hold desk finality. 247 guarded cadence tests pass. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
+
+**2026-11-17 PR #800 round 10.** The Astra audit repairs bind the admitted copy marker to the staged receipt, check the controller-owned close contract, bound launch on both clocks, surface vanished verdicts, and publish arm intents durably. [Run report](docs/run_reports/2026-11-17-queue-controller-round10.md).
+
+**2026-11-17 PR #800 round 9.** The predecessor receipt and copy, continuous fence, and duplicate restore repairs pass focused checks. The branch inherits PR #799's signed-history repair. [Run report](docs/run_reports/2026-11-17-queue-controller-round9.md).
 
 **2026-11-16 PR #800 gate 7 repair:** F1–F4 reproduced and repaired: pinned prior classification/count, duplicate gate authority, retained executed date occupancy and abnormal-exit fence lease. [Report](docs/run_reports/2026-11-16-queue-controller-gate7-sol-r8.md). No MBP contact or custody access; fresh admission, owner gates and listed research-lead questions remain open.
 
