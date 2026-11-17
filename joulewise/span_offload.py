@@ -1288,16 +1288,46 @@ def write_marker(marker_path, record):
     """Create the marker only if it does not exist (``test ! -e``), atomically and complete."""
     marker_path = Path(marker_path)
     tmp = marker_path.parent / f".{marker_path.name}.tmp-{os.getpid()}-{secrets.token_hex(4)}"
-    with open(tmp, "xb") as handle:
-        handle.write(canonical(record))
-        handle.flush()
-        os.fsync(handle.fileno())
+    handle = open(tmp, "xb")
     try:
-        os.link(tmp, marker_path)
-    except FileExistsError:
-        raise OffloadError("MARKER_EXISTS", "another writer created the marker first", "marker_exists") from None
+        with handle:
+            handle.write(canonical(record))
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(tmp, marker_path)
+        except FileExistsError:
+            raise OffloadError("MARKER_EXISTS", "another writer created the marker first", "marker_exists") from None
     finally:
         tmp.unlink()
+    sync_marker_directory(marker_path.parent)
+
+
+def sync_marker_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def recover_marker_link(marker):
+    """Under the plan lock, finish a publisher's interrupted unlink."""
+    info = marker.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 2:
+        return
+    pattern = re.compile(rf"\.{re.escape(marker.name)}\.tmp-[0-9]+-[0-9a-f]{{8}}")
+    for candidate in marker.parent.iterdir():
+        if not pattern.fullmatch(candidate.name):
+            continue
+        try:
+            pending = candidate.lstat()
+        except FileNotFoundError:
+            continue
+        if os.path.samestat(info, pending):
+            candidate.unlink()
+            sync_marker_directory(marker.parent)
+            return
 
 
 @contextlib.contextmanager
@@ -1426,6 +1456,7 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
         except OffloadError as error:
             if (isinstance(backend, ICloudBackend) and not backend.provider_confirmed
                     and error.exit_kind == "marker_exists"):
+                recover_marker_link(marker)
                 with open_regular(marker, "the existing unconfirmed marker", single_link=True):
                     pass  # preserve it; never confuse this with a completed copy-gate marker
                 raise OffloadError("ICLOUD_UNCONFIRMED",
@@ -1482,7 +1513,14 @@ def marker_files(record, plan, *, icloud=False):
 def recheck_marker(config, plan, span_dir, backend, deadline):
     marker = marker_path(config["marker_dir"], plan, True)
     try:
-        record = read_record(marker)
+        try:
+            record = read_record(marker)
+        except OffloadError as error:
+            if error.code != "HARD_LINKED":
+                raise
+            with plan_lock(config["stage_root"], plan):
+                recover_marker_link(marker)
+                record = read_record(marker)
     except OffloadError as error:
         if error.code == "RECORD_INVALID":
             raise OffloadError("MARKER_EXISTS", "legacy marker preserved; verify it separately", "marker_exists") from None
