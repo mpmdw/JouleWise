@@ -159,7 +159,8 @@ def row(args):
     """Mythos round-5 N3: the LOOKS.json row's hashes are written from the files, never pasted. ``--roster`` with
     ``--verdicts``: the inputs, on a row at status committed (before stage 1). ``--stage1``: the stage-1 file, after
     checking it as stage 2 will (``manifest.stage1_problems``, committed mode) and that it records the row's roster
-    and verdict hashes; the status becomes stage1_committed. Prints the change with full hashes; writes LOOKS.json
+    and verdict hashes; the status becomes stage1_committed. ``--output`` records the assembled public file and its
+    restricted digest and advances the status to run. Prints the change with full hashes; writes LOOKS.json
     only with ``--write``. Never commits."""
     repo = Path(args.repo)
     looks_path = repo / lm.LOOK_LEDGER_PATH
@@ -172,7 +173,18 @@ def row(args):
     elif r.get("sha256") != lm.sha256_file(args.manifest):
         problems.append("LOOKS.json's row does not name this manifest's sha256")
     changes = {}
-    if not problems and args.stage1:
+    if not problems and args.output:
+        problems += check_output(args.output, args.manifest, repo)
+        public = lm.load_json(args.output)
+        if (not problems and (r.get("status") != "stage1_committed"
+                             or public["stage1_sha256"] != r.get("stage1_sha256")
+                             or any(record[flag] is not False for record in (public, public["fit"], public["step3"])
+                                    for flag in ("allow_draft", "synthetic")))):
+            problems.append("record a committed public output for this row's stage-1 commitment")
+        if not problems:
+            changes = {"output_sha256": lm.sha256_file(args.output),
+                       "restricted_sha256": public["fit"]["restricted_sha256"], "status": "run"}
+    elif not problems and args.stage1:
         stage1 = json.loads(Path(args.stage1).read_bytes())
         problems += lm.stage1_problems(repo, doc, stage1, lm.sha256_file(args.manifest), allow_draft=False)
         rec = stage1.get("code_sha256") or {}
@@ -247,6 +259,24 @@ def _coefficient_problems(fit):
         if isinstance(without, dict) and not set(without) <= cols:
             problems.append(f"the fit's {ch_name} coefficients_without carries a key outside its columns")
     return problems
+
+
+def _sparse_day_problems(stage1, fit):
+    counts = {}
+    for leg in stage1["legs"]:
+        if leg["in_energy_fit"]:
+            counts[leg["day"]] = counts.get(leg["day"], 0) + 1
+    allowed = {day for day, n in counts.items() if n >= lm.MIN_PUBLIC_FIT_LEGS_PER_DAY}
+    for channel in fit["channels"].values():
+        lodo = channel["lodo"]
+        for model in (lodo, lodo["no_heat"]):
+            named = (set(model["hot"]["per_day"]) | set(model["leg"]["per_day"])
+                     | set(model["hot"]["n_hot_legs_per_day"]) | set(model["hot"]["counted_days"]))
+            if named - allowed:
+                return ["the public fit includes a day diagnostic below the RL-175 B.3 fit-leg minimum"]
+        if set(channel["day_detail"]["days"]) - allowed:
+            return ["the public fit includes a day diagnostic below the RL-175 B.3 fit-leg minimum"]
+    return []
 
 
 def _custody_problems(fit, step3, allow_draft):
@@ -330,6 +360,8 @@ def assemble(args):
             problems.append(f"stage 1 shows {f} true: stage 2 was held; name the clearing ruling with --hold-cleared {f}=RL-n")
     for f in sorted(set(cleared) - set(raised)):
         problems.append(f"--hold-cleared {f}: stage 1 does not show that flag true")
+    if not problems:
+        problems += _sparse_day_problems(stage1, fit)
     if problems:
         for p in problems:
             print(f"REFUSE {p}")
@@ -358,7 +390,8 @@ def assemble(args):
                           "statement": "An energy read on conditionless campaign legs only, by frozen code at the "
                                        "interim look (RL-149 section 2.6; RL-150 R6): none comes from a run with a "
                                        "sabotage instruction, a slot or a v4 member. Of the energy files, stage 1 "
-                                       "read time stamps and sample counters only (RL-173 E.1)."}}
+                                       "read time stamps and sample counters only (RL-173 E.1). "
+                                       + lm.PUBLIC_RELEASE_STATEMENT}}
     out_errors = sc.errors(out, out_schema)
     if out_errors:
         for e in out_errors[:20]:
@@ -390,6 +423,8 @@ def check_output(path, manifest_path, repo):
         problems.append("output: made under another manifest")
     if out.get("allow_draft") is True and out.get("synthetic") is not True:
         problems.append("output: made under --allow-draft on input that is not synthetic")
+    if not str((out.get("disclosure") or {}).get("statement", "")).endswith(lm.PUBLIC_RELEASE_STATEMENT):
+        problems.append("output: missing the RL-175 B.3 release statement")
     return problems
 
 
@@ -415,6 +450,7 @@ def main(argv=None):
     g = rw.add_mutually_exclusive_group(required=True)
     g.add_argument("--stage1")
     g.add_argument("--roster")
+    g.add_argument("--output", help="record the public output and its restricted artifact digest")
     rw.add_argument("--verdicts")
     rw.add_argument("--write", action="store_true")
     a = sub.add_parser("assemble")

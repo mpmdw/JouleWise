@@ -74,6 +74,50 @@ def plant_onset(s1, truth):
 
 
 class AstraDesign(unittest.TestCase):
+    def test_prefix_bias_centres_both_statistics_on_equal_day_means(self):
+        # Astra's 12/1/1 design, with separately scaled long and short errors.
+        pairs = [(f"a/L{i:03d}", "d1", 3 + i / 10, 1 - i / 20) for i in range(12)]
+        pairs += [("b/L001", "d2", -1, 4), ("c/L001", "d3", -3, 6)]
+        long, short = (np.array([p[j] for p in pairs]) for j in (2, 3))
+        standardized = long / long.std(ddof=1) - short / short.std(ddof=1)
+        day_means = np.array([standardized[:12].mean(), *standardized[12:]])
+        expected = day_means.mean()
+        half_width = 2.9199855803537256 * day_means.std(ddof=1) / math.sqrt(3)
+        out = F.prefix_bias(3724, pairs)
+        self.assertNotAlmostEqual(expected, standardized.mean())
+        self.assertAlmostEqual(out["estimate"], expected)
+        np.testing.assert_allclose(out["ci90"], [expected - half_width, expected + half_width])
+        self.assertEqual((out["n_pairs"], out["n_days"]), (14, 3))
+
+    def test_single_fit_leg_day_is_restricted_without_a_pooled_backdoor(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        day = s1["roster"]["fit_days"][0]
+        legs = [leg for leg in s1["legs"] if leg["in_energy_fit"] and leg["day"] == day]
+        self.assertGreater(len(legs), 1)
+        for leg in legs[1:]:
+            leg["in_energy_fit"] = False
+            del en["legs"][leg["leg_key"]]
+        restricted = {}
+        fit = F.stage2(s1, rehash(s1), en, restricted_out=restricted)
+        self.assertEqual(fit["restricted_sha256"], rehash(restricted))
+        daily_measured = {}
+        for leg in s1["legs"]:
+            if leg["in_energy_fit"]:
+                value = sum(en["legs"][leg["leg_key"]]["gpu_rail"]["segments"])
+                daily_measured[leg["day"]] = daily_measured.get(leg["day"], 0) + value
+        for model, public in (("with_heat", fit["channels"]["gpu_rail"]["lodo"]),
+                              ("no_heat", fit["channels"]["gpu_rail"]["lodo"]["no_heat"])):
+            for lines in (public["hot"]["per_day"], public["hot"]["n_hot_legs_per_day"], public["leg"]["per_day"]):
+                self.assertNotIn(day, lines)
+            withheld = restricted["channels"]["gpu_rail"]["day_diagnostics"][model]
+            self.assertIn(day, withheld["per_day"])
+            self.assertNotEqual(public["leg"]["pooled"], withheld["pooled"]["leg"])
+            published = public["leg"]["per_day"]
+            self.assertAlmostEqual(public["leg"]["pooled"],
+                                   sum(published[d] * daily_measured[d] for d in published)
+                                   / sum(daily_measured[d] for d in published))
+
     def test_level_r_rejects_false_or_impossible_date_before_folding(self):
         li, _, _, _ = dataset("noisy")
         for day in ("2026-11-20", "2026-11-99"):
@@ -94,7 +138,7 @@ class AstraDesign(unittest.TestCase):
         self.assertEqual(svd.call_count, 2 + 2 * (len(days) + len(unmarked_days)))
         gpu, dc = (out["channels"][ch] for ch in F.CHANNELS)
         self.assertNotEqual(gpu["covariance"], dc["covariance"])
-        self.assertNotEqual(gpu["residuals"], dc["residuals"])
+        self.assertNotEqual(gpu["lodo"], dc["lodo"])
         self.assertIsNotNone(gpu["marked_sensitivity"]["coefficients_without"])
 
     def test_realized_onset_world_keeps_predictors_but_changes_responses(self):
@@ -243,8 +287,7 @@ class Noisy(unittest.TestCase):
         for word in ("joule", "watt", "power", "energy"):
             self.assertFalse(word in text, word)
         for ch in F.CHANNELS:
-            for v in self.out["channels"][ch]["residuals"]["leg"].values():
-                self.assertLess(abs(v), 0.2)
+            self.assertNotIn("residuals", self.out["channels"][ch])
 
     def test_prefix_bias_has_three_lengths_and_intervals(self):
         for ch in F.CHANNELS:
@@ -515,11 +558,8 @@ class Refusals(unittest.TestCase):
             F.output_check({"channels": {"gpu_rail": {"leg_energy": 1.0}}})
         with self.assertRaises(ValueError):
             F.output_check({"x": {"dev-01-s01/L001": 0.01}})
-        # Sol cold seat 3: a relative residual of any finite size is valid (a ratio by construction)
-        F.output_check({"channels": {"gpu_rail": {"residuals": {"leg": {"dev-01-s01/L001": 5.12},
-                                                                "hot_stretch": {"dev-01-s01/L001": -1.5}}}}})
-        with self.assertRaises(ValueError):
-            F.output_check({"channels": {"gpu_rail": {"residuals": {"leg": {"dev-01-s01/L001": float("inf")}}}}})
+        with self.assertRaisesRegex(ValueError, "leg-keyed"):
+            F.output_check({"channels": {"gpu_rail": {"residuals": {"leg": {"dev-01-s01/L001": 5.12}}}}})
 
 
 if __name__ == "__main__":
@@ -1060,14 +1100,15 @@ class RL166b(unittest.TestCase):
     def test_p1_p2_p3_prints(self):
         _, en, _, _ = dataset("noisy")
         s1 = stage1_of("noisy")
-        out = F.stage2(s1, rehash(s1), en)
+        restricted = {}
+        out = F.stage2(s1, rehash(s1), en, restricted_out=restricted)
         c = out["channels"]["gpu_rail"]
         fit_days = sorted({L["day"] for L in s1["legs"] if L["in_energy_fit"]})
         self.assertEqual(sorted(c["fold_coefficients"]), fit_days)
         for v in c["fold_coefficients"].values():
             self.assertEqual(list(v), c["columns"])
-        # P-2: s pooled within counted days, from the printed per-leg hot-stretch errors
-        res = c["residuals"]["hot_stretch"]
+        # P-2: s pooled within counted days, from the restricted per-leg hot-stretch errors
+        res = restricted["channels"]["gpu_rail"]["residuals"]["hot_stretch"]
         day_of = {L["leg_key"]: L["day"] for L in s1["legs"]}
         ss = df = 0.0
         for D in c["lodo"]["hot"]["counted_days"]:

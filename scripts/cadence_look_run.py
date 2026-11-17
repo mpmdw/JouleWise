@@ -37,6 +37,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -117,6 +118,60 @@ def write_canonical(path, obj):
     with open(path, "wb") as f:
         f.write(data)
     return hashlib.sha256(data).hexdigest()
+
+
+def restricted_path(a):
+    """Stage 2's new private destination. A committed look keeps it in custody."""
+    name = getattr(a, "restricted_out", None)
+    if a.allow_draft and name is None:
+        return None
+    path = Path(name or (Path(a.custody) / f"{F.LOOK_ID}.{a.stage1_sha256}.restricted.json")).resolve()
+    if path.is_relative_to(ROOT.resolve()) or (not a.allow_draft and not path.is_relative_to(Path(a.custody).resolve())):
+        raise F.LookInputError("stage 2: restricted output must be outside the repository and in custody for a committed look")
+    if any(path == Path(other).resolve() for other in (a.out, a.coefficients_out, a.stage1, a.energy) if other):
+        raise F.LookInputError("stage 2: the restricted and other artifact paths must differ")
+    if path.exists() or not path.parent.is_dir():
+        raise F.LookInputError("stage 2: restricted output requires a new file in an existing directory")
+    return path
+
+
+def write_restricted(path, data):
+    """Publish complete owner-only bytes without replacing an existing custody file."""
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".look-restricted-") as f:
+        f.write(data)
+        f.flush()
+        os.link(f.name, path)
+
+
+def restricted_max_difference(left, right):
+    if isinstance(left, dict) and isinstance(right, dict) and left.keys() == right.keys():
+        return max((restricted_max_difference(left[key], right[key]) for key in left), default=0.0)
+    if type(left) in (float, int) and type(right) in (float, int):
+        difference = abs(left - right)
+        if math.isfinite(difference):
+            return difference
+    if type(left) is type(right) and (left is None or isinstance(left, (str, bool))) and left == right:
+        return 0.0
+    raise F.LookInputError("incompatible restricted artifacts")
+
+
+def compare_restricted(a):
+    """Print only the maximum absolute difference. An incompatible input exits silently."""
+    try:
+        custody = Path(a.custody).resolve()
+        paths = [Path(name).resolve() for name in (a.left, a.right)]
+        if any(not path.is_relative_to(custody) or path.is_relative_to(ROOT.resolve()) for path in paths):
+            return 2
+        left, right = (_json(path) for path in paths)
+        for doc in (left, right):
+            if (not isinstance(doc, dict) or doc.get("schema") != F.RESTRICTED_SCHEMA
+                    or doc.get("look_id") != F.LOOK_ID or not isinstance(doc.get("channels"), dict)):
+                return 2
+        maximum = restricted_max_difference(left, right)
+    except (OSError, TypeError, ValueError, OverflowError, RecursionError):
+        return 2
+    print(f"{maximum:.17g}")
+    return 0
 
 
 def span_dirs(custody, pairs):
@@ -932,6 +987,8 @@ def cmd_stage2(a):
         M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1, ledger_ref=a.ledger_ref)
     prepared = F.stage2_preflight(s1)               # all required designs must pass before responses open
     stage2_energy_preflight(s1, a)                  # Mythos round 3 N1, N2: every remaining refusal, before energy
+    a._restricted_path = restricted_path(a)
+    a._restricted = {} if a._restricted_path is not None else None
     if a.energy:
         energy, custody = _json(a.energy), None
     else:
@@ -945,7 +1002,7 @@ def cmd_stage2(a):
                    "files": files}
     a._stage1_doc = s1
     a._prepared_fit = prepared
-    out = F.stage2(s1, a.stage1_sha256, energy, code_hashes(), _prepared=prepared)
+    out = F.stage2(s1, a.stage1_sha256, energy, code_hashes(), restricted_out=a._restricted, _prepared=prepared)
     out["custody"] = custody                        # Mythos r5 N6: what stage 2 read, by path and sha256
     return _stamp(out, a)
 
@@ -1002,6 +1059,9 @@ def _check_sources():
 def main(argv=None):
     ap = argparse.ArgumentParser(description="The interim look's two stages (RL-166 Q8).")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    pc = sub.add_parser("compare-restricted", help="print the maximum difference between two custody artifacts")
+    for opt in ("custody", "left", "right"):
+        pc.add_argument(f"--{opt}", required=True)
     p1 = sub.add_parser("stage1")
     p1.add_argument("--out", required=True)
     g = p1.add_mutually_exclusive_group(required=True)
@@ -1028,12 +1088,15 @@ def main(argv=None):
     g2.add_argument("--custody")
     p2.add_argument("--span-dir", action="append")
     p2.add_argument("--coefficients-out", help="freeze 2's coefficient file (fit_interim.write_coefficients; RL-173 E)")
+    p2.add_argument("--restricted-out", help="new owner-only RL-175 artifact; defaults to a hash-named file in custody")
     p2.add_argument("--looks", help="with --allow-draft only: a scratch LOOKS.json in place of the repository's")
     p2.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     for p in (p1, p2):
         p.add_argument("--manifest", required=True, help="the look manifest whose pins the running code must match")
         p.add_argument("--allow-draft", action="store_true", help="synthetic runs: accept a draft manifest")
     a = ap.parse_args(argv)
+    if a.cmd == "compare-restricted":
+        return compare_restricted(a)
     if a.cmd == "stage1" and a.roster and not (a.custody and a.rules_3_4):
         ap.error("--roster needs --custody and --rules-3-4")
     if a.cmd == "stage1" and (bool(a.stage_archives) != bool(a.staging_root) or (a.stage_archives and a.input)):
@@ -1058,6 +1121,11 @@ def main(argv=None):
             errs = SC.errors(coef, M.coefficients_schema(ROOT))
             if errs:
                 raise F.LookInputError("the coefficient file does not pass its schema: " + "; ".join(errs[:5]))
+        if a.cmd == "stage2" and getattr(a, "_restricted_path", None) is not None:
+            data = F.dump(a._restricted)
+            if hashlib.sha256(data).hexdigest() != out["restricted_sha256"]:
+                raise F.LookInputError("stage 2: restricted artifact digest differs from the public fit")
+            write_restricted(a._restricted_path, data)
         sha = write_canonical(a.out, out)
         if coef is not None:
             print(f"wrote {a.coefficients_out} sha256={write_canonical(a.coefficients_out, coef)}")

@@ -314,6 +314,7 @@
     "manifest_sha256",
     "numpy_version",
     "qualified_interim_half",
+    "restricted_sha256",
     "schema",
     "stage1_sha256",
     "synthetic",
@@ -385,6 +386,11 @@
     },
     "numpy_version": {
      "type": "string"
+    },
+    "restricted_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$",
+     "description": "SHA-256 of the canonical RL-175 B.3 custody artifact"
     },
     "tau_uncertainty_propagated": {
      "const": false
@@ -473,7 +479,6 @@
     "onset_offset_residuals",
     "prefix_bias",
     "qualified",
-    "residuals",
     "trace_coverage"
    ],
    "properties": {
@@ -621,7 +626,7 @@
          }
         },
         "pooled": {
-         "type": "number"
+         "type": ["number", "null"]
         },
         "rms_over_legs": {
          "type": "number"
@@ -727,7 +732,7 @@
            }
           },
           "pooled": {
-           "type": "number"
+           "type": ["number", "null"]
           },
           "rms_over_legs": {
            "type": "number"
@@ -880,37 +885,6 @@
         "n_days": {
          "type": "integer"
         }
-       }
-      }
-     }
-    },
-    "residuals": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "hot_stretch",
-      "leg"
-     ],
-     "properties": {
-      "leg": {
-       "type": "object",
-       "additionalProperties": {
-        "type": "number"
-       },
-       "propertyNames": {
-        "pattern": "^[a-z0-9-]+/[LH]\\d{3}$"
-       }
-      },
-      "hot_stretch": {
-       "type": "object",
-       "additionalProperties": {
-        "type": [
-         "number",
-         "null"
-        ]
-       },
-       "propertyNames": {
-        "pattern": "^[a-z0-9-]+/[LH]\\d{3}$"
        }
       }
      }

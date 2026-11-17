@@ -363,8 +363,8 @@ is a receipt field `refusal_kind` in ("slope", "load") when present, else "kind 
 
 ## 4. Level O: `fit_output` (what the fit must emit)
 
-Closed at every level. **No joule or watt per leg, turn or block (Q16).** Coefficients, covariances, errors,
-ratios, counts and per-leg *signed relative* residuals only. The manifest builder's
+The public fit is closed at every level. It carries coefficients, covariances, aggregate diagnostics,
+counts and the restricted artifact's `restricted_sha256`. The manifest builder's
 `lm-interim-01.output.schema.json` embeds this object as its fit section; the field names below are the
 contract between the two.
 
@@ -378,6 +378,7 @@ contract between the two.
   "tau_uncertainty_propagated": false,    # RL-166b: the onset's scatter is in the delta column; its coefficients'
                                           # uncertainty is not propagated
   "delta_column": "kept" | "dropped_onset_not_estimable",
+  "restricted_sha256": hex64,             # RL-175 B.3, also recorded in LOOKS.json
   "channels": { "gpu_rail": ChannelFit, "dc_in": ChannelFit },
   "qualified_interim_half": { "statistic": "gpu_rail.lodo.hot.max_abs", "value": float | null,
                               "threshold": 0.02, "verdict": "passes" | "fails" | "not_evaluable" }
@@ -397,9 +398,9 @@ contract between the two.
     "hot":  { "per_day": {day: float},    # SIGNED (Σpred − Σmeas)/Σmeas over the day's hot blocks
               "counted_days": [day], "n_hot_legs_per_day": {day: int},
               "max_abs": float | null,       # over counted days
-              "pooled": float | null,        # over every hot block on every day (RL-167 row 12)
+              "pooled": float | null,        # over all hot blocks on public days (RL-175 B.3)
               "verdict": "passes" | "fails" | "not_evaluable" },
-    "leg":  { "per_day": {day: float}, "pooled": float, "rms_over_legs": float },
+    "leg":  { "per_day": {day: float}, "pooled": float | null, "rms_over_legs": float },
     "hot_rms_over_legs": float | null,    # THE "frozen holdout relative error" freeze 2 takes for SD_j (RL-167 R-14)
     "folds_delta_dropped": [day],         # see §4.3
     "no_heat": { "hot": {same as hot}, "leg": {same as leg}, "hot_rms_over_legs": float | null }
@@ -423,16 +424,34 @@ contract between the two.
                 "mean_with_heat": float | null, "rms_with_heat": float | null,
                 "mean_no_heat": float | null, "rms_no_heat": float | null}},
     "rms_offsets_m2_to_p3": {"with_heat": float | null, "no_heat": float | null} },
-  "residuals": {                          # Q16: signed relative, keyed by leg_key; LODO
-    "leg": {leg_key: float},
-    "hot_stretch": {leg_key: float | null}
-  },
   "marked_sensitivity": { "marked_spans": [span_id], "n_legs_without": int,
                           "coefficients_without": {column: float} | null,
                           "lodo_hot_max_abs_without": float | null },
   "model_sha256": hex64, "qualified": "yes" | "no" | "not_run"
 }
 ```
+
+### Restricted diagnostics (RL-175 B.3)
+
+Committed stage 2 writes a new owner-only restricted JSON file at
+`<custody>/lm-interim-01.<stage1_sha256>.restricted.json`. Use `--restricted-out`
+to choose another new path within custody and outside the checkout. The public
+fit is written after the restricted file. Synthetic draft runs write a separate
+restricted file when `--restricted-out` is supplied.
+
+The restricted file carries `channels[ch].residuals.{leg,hot_stretch}` keyed by
+leg and `channels[ch].day_diagnostics.{with_heat,no_heat}`. Each model records
+`per_day` lines for days with fewer than three fit legs and the full `pooled`
+ratios. Public day lines and public pooled ratios use only days with at least
+three fit legs, so subtracting disclosed day totals from a public pool cannot
+recover a withheld day. Registered holdout RMS and the qualification verdict
+retain their scoring populations. `cadence_look_manifest.py row --output` takes
+the digest from the validated public assembly. `cadence_look_run.py
+compare-restricted --custody DIR --left PATH --right PATH` prints only the
+maximum absolute difference for matching custody artifacts.
+
+RL-175 B.4 takes the mean of each day's standardized pair differences, then
+weights those day means equally for the estimate and its 90% t interval.
 
 ### 4.2 Freeze-2 coefficient file and the predict path (RL-173 E)
 

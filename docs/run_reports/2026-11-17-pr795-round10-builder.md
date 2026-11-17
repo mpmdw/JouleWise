@@ -42,13 +42,30 @@ Each world fits its own response coefficients. All five days are counted.
 | Expected onset | DC-in | 0.173% | 0.484% | −0.018% |
 | Drawn onset | DC-in | 0.457% | 0.713% | +0.178% |
 
+## RL-175 follow-up
+
+The clean resumed head was `0b93be9f7`, with the same tip locally and on origin.
+The research lead ruled on the audit branch at `b26c0d0e7`.
+
+| Ruling | Implementation and regression |
+|---|---|
+| B.3, design 1 | The public fit carries only aggregate diagnostics and the restricted SHA-256. A committed run writes the custody-only artifact with owner-only permissions before public outputs. `test_public_outputs_block_astras_keyed_residual_reconstruction` runs the audit's calculation on stage 1, the public fit and Freeze 2. The previous code reconstructs 53 of 53 synthetic totals for each channel within 1%. The split reconstructs zero. `test_single_fit_leg_day_is_restricted_without_a_pooled_backdoor` checks that a sparse day cannot be recovered by subtracting the released days from the pool. |
+| B.3, release boundaries | `test_assemble_refuses_keyed_residuals_and_sparse_day_lines`, `test_ledger_records_restricted_digest_from_public_output`, `test_restricted_destination_keeps_existing_bytes_and_owner_only_mode` and `test_restricted_comparison_prints_only_the_maximum_difference` cover the public schema, digest handoff, file mode and comparator. |
+| B.4, design 8 | `test_prefix_bias_centres_both_statistics_on_equal_day_means` reproduces the 12/1/1 allocation. Both the estimate and its 90% t interval use the mean of day means. The registered scaling and null rules still apply. |
+
+The twin check uses a source-only scratch copy of the retained independent v5.2
+twin under `sol62-E-look/rl175-twin`, with builder-authored changes for the new
+disclosure, equal-day weights and frozen fold fields. The comparison uses only
+generated in-memory fixtures and publishes only aggregate comparison evidence.
+All nine cases agreed, including the sparse-day fixture. The comparator's
+maximum absolute difference was `1.2232188439237346e-10`. The sparse fixture's
+prefix interval differed by under `1e-9` absolute, which the comparison uses
+alongside `1e-8` relative for near-zero interval endpoints. The focused suite
+ran 155 tests with one optional skip. This builder-authored compatibility check
+leaves the fresh lead review gate open.
+
 ## NEEDS_RULING
 
-- **Design 1, disclosure.** Should keyed residuals be restricted to the
-  analyst artifact when the matching frozen predictions are available? I
-  recommend analyst-only access to the keyed residuals and releasing day-level
-  diagnostics or an integrity digest. Joint access can recover absolute per-leg
-  totals.
 - **Design 5, load redo.** Which runner and desk change will move both sustained
   load decisions to monotonic elapsed time? I recommend one coordinated change
   with independent runner and hand-desk tests for 56 samples over 60.5 s and
@@ -56,8 +73,3 @@ Each world fits its own response coefficients. All five days are counted.
   and `:715`, with the sample-count rule in `scripts/align_r1_rehearsal.py:813`
   and `:852`. Astra points to the independent hand reader's `hand_table.py:28`.
   Those paths are outside the PR diff.
-- **Design 8, estimand.** Should prefix bias target the average scheduled day or
-  the average observed pair? I recommend equal-day weights for the point and
-  interval if the day remains the intended replication unit. If the lead chooses
-  the average pair, derive the interval for that pair-weighted estimate before
-  qualification.

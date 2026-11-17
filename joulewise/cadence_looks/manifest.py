@@ -48,7 +48,11 @@ LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen
 # What each status needs recorded, so that "committed" is checkable (Mythos cold seat 8).
 # verdicts_sha256: inclusion_34.py's verdict file, committed with the roster's hash before stage 1 runs, so stage 1
 # can authenticate both inputs (Mythos round-3 N8).
-LOOK_ROW_HASHES = ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256")
+LOOK_ROW_HASHES = ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256",
+                   "restricted_sha256")
+PUBLIC_RELEASE_STATEMENT = "The public outputs do not determine any single leg's energy. Day totals can be recovered from them."
+MIN_PUBLIC_FIT_LEGS_PER_DAY = 3
+INTERIM_PREFIX_STATISTIC = "the mean of the day means; its 90 % t interval uses the same equal-day weights"
 LOOK_ROW_REQUIRES = {"stage1_committed": ("roster_sha256", "verdicts_sha256", "stage1_sha256"),
                      "run": ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256"),
                      "frozen": ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256",
@@ -122,7 +126,7 @@ LOOK_JUDGED_RULES = {3, 4}                        # RL-150 R9: "Rules 3 and 4 ar
 REQUIRED_PRINTS = {
     "interim": {"inclusion_table", "rates", "onset_fit", "onset_lodo_error", "heat_term_fit",
                 "lodo_rel_error_hot_stretch", "lodo_rel_error_leg", "holdout_rms_rel_error", "without_heat_columns",
-                "per_leg_relative_residuals", "prefix_length_bias", "step3_statistic_iii",
+                "restricted_sha256", "prefix_length_bias", "step3_statistic_iii",
                 "qualified_interim_half", "marked_span_sensitivity", "realized_prompt_tokens", "disclosure",
                 "active_readings", "onsets_before_116_s", "fold_coefficients", "day_detail",
                 "onset_offset_residuals",                                              # RL-166b B-2, P-1 to P-4
@@ -684,7 +688,9 @@ def _energy(e, kind, problems):
     if e.get("per_leg_energy_in_output") is not False:
         problems.append("energy.per_leg_energy_in_output: false (no joule or watt per leg, turn or block; RL-166 Q16)")
     if not isinstance(e.get("per_leg_relative_residuals_in_output"), bool):
-        problems.append("energy.per_leg_relative_residuals_in_output: boolean (RL-166 Q16 allows them)")
+        problems.append("energy.per_leg_relative_residuals_in_output: boolean")
+    elif kind == "interim" and e["per_leg_relative_residuals_in_output"]:
+        problems.append("energy.per_leg_relative_residuals_in_output: false (RL-175 B.3)")
 
 
 def _fit(f, kind, problems, final):
@@ -803,6 +809,8 @@ def _fit(f, kind, problems, final):
     pb = f.get("prefix_bias")
     if _closed(pb, {"long", "short", "residuals", "statistic", "cite"}, "fit.prefix_bias", problems):
         _need_cite(pb, "fit.prefix_bias", problems)
+        if kind == "interim" and pb.get("statistic") != INTERIM_PREFIX_STATISTIC:
+            problems.append("fit.prefix_bias.statistic: use equal-day weights for both parts (RL-175 B.4)")
     s3 = f.get("step3")
     if _closed(s3, {"code", "adapter", "statistic", "method", "kept", "dropped", "tripwire_reads", "leg_failure",
                     "cite"}, "fit.step3", problems):
@@ -1178,6 +1186,9 @@ def validate_look_ledger(doc, repo=None):
                 if not (isinstance(row.get(k), str) and SHA_RE.fullmatch(row[k])):
                     problems.append(f"{where}: status {st} needs {k} (Mythos cold seat 8)")
         lid = row.get("look_id")
+        if lid == "lm-interim-01" and st in ("run", "frozen") and not (
+                isinstance(row.get("restricted_sha256"), str) and SHA_RE.fullmatch(row["restricted_sha256"])):
+            problems.append(f"{where}: status {st} needs restricted_sha256 (RL-175 B.3)")
         if not (isinstance(lid, str) and LOOK_ID_RE.fullmatch(lid)) or lid in seen:
             problems.append(f"{where}.look_id: unique lm-<id>")
         seen.add(lid)

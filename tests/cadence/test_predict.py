@@ -173,6 +173,36 @@ class Reproduces(unittest.TestCase):
 
 class Document(unittest.TestCase):
 
+    def test_public_outputs_block_astras_keyed_residual_reconstruction(self):
+        _, s1, _, fit, frozen = run("noisy")
+        _, responses, _ = synth.build("noisy")
+        # The auditor's inputs are public stage 1, fit and Freeze 2. Synthetic
+        # responses only score the attack and are never used to predict.
+        recovered = []
+        attempts = 0
+        for L in s1["legs"]:
+            if not L["in_energy_fit"]:
+                continue
+            key = L["leg_key"]
+            on = frozen["onset"]
+            model = F._onset_model(on["folds"][L["day"]], on["predictors"])
+            onsets = F._onsets([L], model)
+            attempts += 1
+            for ch in F.CHANNELS:
+                channel = frozen["channels"][ch]
+                vector = channel["fold_coefficients"][L["day"]]
+                cols = [c for c in channel["columns"] if c in vector]
+                fold = F._Fold([L], cols, onsets)
+                predicted = (np.array(fold.rows(L)) @ np.array([vector[c] for c in cols])).sum()
+                keyed = fit["channels"][ch].get("residuals", {}).get("leg", {})
+                if key in keyed:
+                    total = predicted / (1 + keyed[key])
+                    measured = sum(responses["legs"][key][ch]["segments"])
+                    if abs(total / measured - 1) <= 0.01:
+                        recovered.append((key, ch))
+        self.assertEqual(attempts, 53)
+        self.assertEqual(len(recovered), 0)
+
     def test_frozen_fold_onsets_reproduce_the_reference_day_jackknife(self):
         li, _, _, _, coef = run("noisy")
         frozen = json.loads(F.dump(coef))

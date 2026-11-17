@@ -487,19 +487,20 @@
       }
     ],
     "per_leg_energy_in_output": false,
-    "per_leg_relative_residuals_in_output": true,
+    "per_leg_relative_residuals_in_output": false,
     "cite": [
       "RL-149 §2.6",
       "RL-150 R8",
       "RL-166 Q16",
-      "RL-166 Q17"
+      "RL-166 Q17",
+      "RL-175"
     ]
   },
   "fit": {
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "7afc043e9e3db1deaa3ad8e7dea1569f68fbaec486e7fe681318256700d52a75"
+        "sha256": "56425979dd1ad53789891cfed79dfe53d9e3a9a7346a36f9e0a4a21f5fb61c03"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -519,11 +520,11 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "204aca45dcba688c7c6d828077a0c4c33345ccd013ecfa5ba873b4527bae2d3d"
+        "sha256": "8ba70468758d7a645a237984273006cf30e9955cf24afa81f0c16c1243438c61"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "41a5e8c4f52bea2a1aa786e96fc5c8bf35a5c0319a8d54e3e20c9149c72c1439"
+        "sha256": "e202656e5301163cd62bf65f215143d3f2ee5e9df23961c7703c11ffce87ea28"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -643,11 +644,12 @@
       "long": "the whole leg",
       "short": "its prefix of 3,724, 3,151 or 2,981 decode tokens (ratios 1.10, 1.30, 1.374)",
       "residuals": "leave-one-day-out, each divided by the SD of its own length over legs",
-      "statistic": "the mean paired difference; its 90 % interval is a t interval on day means",
+      "statistic": "the mean of the day means; its 90 % t interval uses the same equal-day weights",
       "cite": [
         "RL-166 Q2",
         "RL-150 §3.2",
-        "RL-151 §2.2"
+        "RL-151 §2.2",
+        "RL-175"
       ]
     },
     "step3": {
@@ -821,7 +823,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "dfe9b69c0ef06b656565dfa50408d364a5837e12de5ae4d1ff0f5e45ea7cb98f"
+        "sha256": "00b3cb38911d4071d801cc1d7ce8f8a941a0af065ebec819ad0e1ec81a8a1584"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -961,7 +963,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "ebbb2e48cf91dca3689b48a0b1592a5113b957c952a10131de3cca29aed924a0"
+      "sha256": "543c579ae71e5203ebd33f7be8ffdf803dade24733358a07128e3afeaeb3ad94"
     },
     "prints": [
       {
@@ -1061,14 +1063,14 @@
         ]
       },
       {
-        "id": "per_leg_relative_residuals",
-        "what": "Per-leg signed relative residuals, leg and hot stretch, keyed by leg id. No joule or watt.",
+        "id": "restricted_sha256",
+        "what": "SHA-256 of the custody-only artifact containing keyed leg and hot-stretch residuals and diagnostics for days with fewer than three fit legs. The public artifact and LOOKS.json carry the digest.",
         "channels": [
           "gpu_rail",
           "dc_in"
         ],
         "cite": [
-          "RL-166 Q16"
+          "RL-175"
         ]
       },
       {
@@ -1455,7 +1457,7 @@
       "every frozen path of every leg kit"
     ],
     "fit_paths_outside_kit_frozen_paths": true,
-    "disclosure": "The amendment's blind statement lists this look with its date, code hashes and outputs, worded as RL-150 R6 restates RL-149 §2.6: none comes from a run with a sabotage instruction, a slot or a v4 member. Of the energy files, stage 1 read time stamps and sample counters only (RL-173 E.1).",
+    "disclosure": "The amendment's blind statement lists this look with its date, code hashes and outputs, worded as RL-150 R6 restates RL-149 §2.6: none comes from a run with a sabotage instruction, a slot or a v4 member. Of the energy files, stage 1 read time stamps and sample counters only (RL-173 E.1). The public outputs do not determine any single leg's energy. Day totals can be recovered from them.",
     "pre_run_check": "Planted-truth synthetic bundles (a few legs, not a cohort) for the review and the twin comparison: coefficients to 1e-8 relative, the censored fit to 1e-6, every verdict equal. Then stage 1 as a dry run on the real roster, which opens no energy (RL-166 Q15, §2 items 7 and 12).",
     "cite": [
       "RL-149 §2.6",

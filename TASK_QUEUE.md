@@ -2,8 +2,9 @@
 
 PR #795 round-10 disposition (2026-11-17) takes direct user priority in the
 interim-look worktree. WS 1 and design 4, 7 and throughput 1–2 have synthetic
-regressions. Design 1 and 8 need research-lead rulings. Design 5 needs a scoped
-cadence runner and desk patch. Keep the PR open for review. See the
+regressions. RL-175 B.3 and B.4 resolve design 1 and 8 and have synthetic
+regressions. Design 5 needs a scoped cadence runner and desk patch. Keep the PR
+open for review. See the
 [round-10 report](docs/run_reports/2026-11-17-pr795-round10-builder.md).
 
 PR #795 round-9 intake (2026-11-16): direct user priority on this clean worktree at

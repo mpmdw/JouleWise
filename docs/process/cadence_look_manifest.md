@@ -94,7 +94,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 |---|---|---|
 | E1 | **GPU rail and DC-in only** | RL-166 Q17 |
 | E2 | GPU rail: through the committed step 3 module's loaders and `Trace`. DC-in: the trapezoid between consecutive KM003C samples, cut at the segment's ends | RL-166 Q2 |
-| E3 | No joule or watt per leg, turn or block in the output. Per-leg signed relative residuals keyed by leg id are allowed | RL-166 Q16 |
+| E3 | The public output carries aggregate diagnostics and the restricted artifact's SHA-256. Custody retains the keyed residuals and diagnostics for days with fewer than three fit legs | RL-175 B.3 |
 
 ### 1.5 The fit (RL-166 Q1, Q2, Q4, Q5)
 
@@ -128,7 +128,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | P1 | Hot stretch: the full decode blocks from the first off-state reading onward. Relative error for day D: \|Σpred − Σmeas\|/Σmeas over D's hot blocks, with the base, heat term and onset model fitted without D. Rates and medians are not refitted | RL-166 Q3 |
 | P2 | Also printed: the per-day signed error, the pooled error, the holdout RMS (SD_j), and all of these without the heat columns | RL-166 Q3 |
 | P3 | `qualified`, interim half: the maximum over counted days (each with at least 3 included legs that have a hot stretch), GPU rail, ≤ 0.02. Fewer than 3 counted days gives `not_evaluable`, which counts as no | RL-151 §2.1; RL-166 Q3 |
-| P4 | Prefix bias: the long leg is the whole leg; the short is its prefix of 3,724, 3,151 or 2,981 tokens. Residuals are LODO, each divided by its own length's SD. The statistic is the mean paired difference, with a 90 % t interval on day means | RL-166 Q2 |
+| P4 | Prefix bias uses the whole leg and its 3,724-, 3,151- or 2,981-token prefix. Each LODO residual is divided by its length's SD. The mean of day means and its 90% t interval use equal-day weights | RL-166 Q2, RL-175 B.4 |
 | P5 | Step 3 (iii), one call per prompt-size cell, 10k first. The tripwire reads the largest `drift_fraction_linear` over cells where γ is estimable. **Threshold 0.08**, or 0.04 if the cold seat's Q11 check fails | RL-151 §1.3; RL-166 Q6, Q11 |
 | P6 | With/without marked spans, both marks in one print | RL-161 §4; RL-166 Q20 |
 | P7 | No extension rule | RL-166 Q12 |
@@ -161,7 +161,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | Q13 | Reserve legs if desk-final | reserve-01 block, `desk_final_if_any` |
 | Q14 | Type T not read | `reads.leg_types_never`, `never_read` |
 | Q15 | Synthetic review, then stage-1 dry run | `custody.pre_run_check`, `stages.stage1.dry_run` |
-| Q16 | No joules; relative residuals allowed | `energy`, print `per_leg_relative_residuals` |
+| Q16 | Public aggregate diagnostics and a digest; keyed residuals stay in custody under RL-175 B.3 | `energy`, print `restricted_sha256` |
 | Q17 | GPU rail and DC-in only | `energy.channels`, `energy.not_read` |
 | Q18 | LOOKS.json; no BLOCK-QUEUE change | `freeze1.ledger_pointer`, LOOKS.json |
 | Q19 | Step 3's legs stay out | `never_read` |

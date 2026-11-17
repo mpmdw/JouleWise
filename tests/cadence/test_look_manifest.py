@@ -787,6 +787,7 @@ class Assemble(Base):
         self.assertEqual(out["realized_prompt_tokens"],                                 # RL-158 Q5, > 5 %
                          [{"leg_key": "dev-03-s01/L001", "nominal": 2000, "realized": 2200}])
         self.assertEqual(out["disclosure"]["holds_cleared"], [])
+        self.assertTrue(out["disclosure"]["statement"].endswith(lm.PUBLIC_RELEASE_STATEMENT))
         self.assertEqual((out["allow_draft"], out["synthetic"]), (True, True))         # Mythos N2
         self.assertEqual(out["soak_retries"], self.stage1["soak_retries"])              # RL-172a
         r = self.run_("--allow-draft", "--hp-table", self.d / "fit.json")               # the option is gone
@@ -806,6 +807,36 @@ class Assemble(Base):
             rc = cli.main(["validate", str(self.mini / self.mr.MANIFEST), "--output", str(self.d / "out2.json")])
         self.assertEqual(rc, 1)
         self.assertIn("made under --allow-draft on input that is not synthetic", so.getvalue())
+
+    def test_assemble_refuses_keyed_residuals_and_sparse_day_lines(self):
+        channel = self.fit["channels"]["gpu_rail"]
+        channel["residuals"] = {"leg": {"dev-03-s01/L001": 0.01}}
+        self.dump()
+        self.refused_run("does not pass its schema", "--allow-draft")
+        del channel["residuals"]
+        channel["lodo"]["leg"]["per_day"] = {"2026-11-17": 0.01}
+        self.dump()
+        self.refused_run("below the RL-175 B.3 fit-leg minimum", "--allow-draft")
+
+    def test_ledger_records_restricted_digest_from_public_output(self):
+        self.mr.commit(self.mini)
+        sha = self.undraft()
+        self.mr.commit(self.mini, stage1_sha256=sha, roster_sha256=self.ROSTER)
+        result = self.run_()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        path = self.d / "out.json"
+        public = json.loads(path.read_text())
+        for record in (public, public["fit"], public["step3"]):
+            record["synthetic"] = False  # fabricated committed-mode metadata only
+        digest = "d" * 64
+        public["fit"]["restricted_sha256"] = digest
+        path.write_text(json.dumps(public))
+        result = self.mr.py(self.mini, "scripts/cadence_look_manifest.py", "row", "--repo", self.mini,
+                            "--manifest", self.mini / self.mr.MANIFEST, "--output", path, "--write")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        row = lm.load_json(self.mini / lm.LOOK_LEDGER_PATH)["looks"][0]
+        self.assertEqual((row["status"], row["restricted_sha256"], row["output_sha256"]),
+                         ("run", digest, lm.sha256_file(path)))
 
     def test_assemble_refuses_code_that_is_not_the_pin(self):
         """Mythos 3: the hashes the fit recorded are compared with the manifest's pins."""
@@ -1316,6 +1347,10 @@ class ColdSeatFixes(Base):
         lm.validate_look_ledger(led)
         row["output_sha256"] = "nothex"
         self.refused(lambda: lm.validate_look_ledger(led), "output_sha256: 64 hex or null")
+        row.update(status="run", output_sha256="6" * 64)
+        self.refused(lambda: lm.validate_look_ledger(led), "needs restricted_sha256")
+        row["restricted_sha256"] = "7" * 64
+        lm.validate_look_ledger(led)
 
     def test_require_stage1_committed_reads_git(self):
         """Sol N1: the row is read from LOOKS.json as committed at HEAD and published on the shared ref; a loose

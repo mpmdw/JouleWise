@@ -74,6 +74,30 @@ ENERGY_MARKERS = ("power_trace.csv", "segment_energy.json")
 
 
 class AstraPreResponse(unittest.TestCase):
+    def test_restricted_comparison_prints_only_the_maximum_difference(self):
+        left = {"schema": F.RESTRICTED_SCHEMA, "look_id": F.LOOK_ID,
+                "channels": {"gpu_rail": {"residuals": {"leg": {"a/L001": 0.5, "a/L002": 0.25}}}}}
+        right = copy.deepcopy(left)
+        right["channels"]["gpu_rail"]["residuals"]["leg"]["a/L001"] = 0.625
+        argv = ["compare-restricted", "--custody", "/synthetic-only", "--left", "/synthetic-only/a.json",
+                "--right", "/synthetic-only/b.json"]
+        with unittest.mock.patch.object(R, "_json", side_effect=[left, right]), \
+             contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(R.main(argv), 0)
+        self.assertEqual(out.getvalue(), "0.125\n")
+        self.assertEqual(err.getvalue(), "")
+
+    def test_restricted_destination_keeps_existing_bytes_and_owner_only_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "private.json"
+            R.write_restricted(path, b"synthetic test, no payload\n")
+            info = path.stat()
+            self.assertEqual(info.st_mode & 0o777, 0o600)
+            with self.assertRaises(FileExistsError):
+                R.write_restricted(path, b"attempted replacement")
+            self.assertEqual(path.stat().st_ino, info.st_ino)
+            self.assertEqual(path.stat().st_size, info.st_size)
+
     def test_receipt_epoch_overrules_the_roster_date_at_the_la_boundary(self):
         # 05:00 UTC on Nov 15 is still Nov 14 in Los Angeles.
         entry = {"span_id": "dev-01-s01", "block_id": "dev-01", "role": "fit"}
@@ -149,6 +173,8 @@ class AstraPreResponse(unittest.TestCase):
              unittest.mock.patch.object(R, "_json", side_effect=read), \
              unittest.mock.patch.object(R, "draft_ledger_check"), \
              unittest.mock.patch.object(R, "stage2_energy_preflight"), \
+             unittest.mock.patch.object(R, "restricted_path", return_value=Path("synthetic-private")), \
+             unittest.mock.patch.object(R, "write_restricted") as write_restricted, \
              unittest.mock.patch.object(R, "_stamp", side_effect=lambda out, _: out), \
              unittest.mock.patch.object(R, "_VERIFIED", []), \
              unittest.mock.patch.object(R.M, "verify_pins", return_value={}), \
@@ -165,6 +191,9 @@ class AstraPreResponse(unittest.TestCase):
         self.assertEqual(opened_after, [(1, folds.call_count)])
         self.assertEqual(preflight.call_count, 1)
         self.assertEqual(write.call_count, 2)
+        private_bytes = write_restricted.call_args.args[1]
+        public = write.call_args_list[0].args[1]
+        self.assertEqual(hashlib.sha256(private_bytes).hexdigest(), public["restricted_sha256"])
 
 
 class Staging(unittest.TestCase):

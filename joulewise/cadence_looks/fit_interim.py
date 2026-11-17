@@ -11,8 +11,8 @@ Two stages, on the data shapes of `docs/process/cadence_look_fit_interface.md`:
   (GPU rail, DC-in): the segment OLS with the count-only base and the heat term fitted jointly, covariance
   clustered by leg, no sign assumed (Q1, Q2); leave-one-day-out errors over the hot stretch and over the leg, with
   and without the heat columns (Q3); the prefix bias at 1.10, 1.30 and 1.374 (Q2, P2); the marked-span print (Q20).
-  The output holds coefficients, covariances, errors, ratios, counts and per-leg SIGNED RELATIVE residuals only
-  (Q16): no joule or watt per leg, turn or block.
+  The public output holds coefficients, covariances and aggregate diagnostics. RL-175 B.3 restricts the keyed
+  residuals and sparse-day diagnostics to a separate custody artifact.
 
 Python stdlib plus numpy; no scipy. Every open reading of the interface page's section 6 is named where it is
 applied (R-1 ... R-12).
@@ -29,11 +29,13 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 from joulewise.cadence_looks import inclusion_34 as I34
+from joulewise.cadence_looks.manifest import MIN_PUBLIC_FIT_LEGS_PER_DAY
 
 STAGE1_SCHEMA = "joulewise.cadence_look_stage1.v1"
 FIT_SCHEMA = "joulewise.cadence_look_fit.v1"
 INPUT_SCHEMA = "joulewise.cadence_look_input.v1"
 ENERGY_SCHEMA = "joulewise.cadence_look_energy.v1"
+RESTRICTED_SCHEMA = "joulewise.cadence_look_restricted.v1"
 LOOK_ID = "lm-interim-01"
 
 BLOCK = 256
@@ -1233,8 +1235,9 @@ def t_quantile(p, df):
 
 def prefix_bias(plen, pairs):
     """Q2 P2 with RL-166a R-8 and RL-167 R-11. pairs: [(leg_key, day, long residual J, short residual J)],
-    residual = measured - predicted (LODO). Bias = mean over pairs of long/SD_long - short/SD_short; 90 % interval
-    = bias +/- t(0.95, D - 1) SD(day means)/sqrt(D). Null under 3 pairs or an SD at or under 1e-12 J; no
+    residual = measured - predicted (LODO). RL-175 B.4 averages the standardized pair differences within
+    each day, then weights those days equally for both the estimate and the 90 % t interval.
+    Null under 3 pairs or an SD at or under 1e-12 J; no
     interval under 2 days; n_days is always the days among the pairs."""
     n_days_pairs = len({p[1] for p in pairs})            # RL-167 R-11: always the days among the pairs
     sd_l = float(np.std([p[2] for p in pairs], ddof=1)) if len(pairs) >= 2 else 0.0
@@ -1242,12 +1245,12 @@ def prefix_bias(plen, pairs):
     if len(pairs) < 3 or sd_l <= SD_FLOOR_J or sd_s <= SD_FLOOR_J:
         return {"prefix_len": plen, "estimate": None, "ci90": None, "n_pairs": len(pairs), "n_days": n_days_pairs}
     diffs = [(d, rl / sd_l - rs / sd_s) for (_, d, rl, rs) in pairs]
-    est = sum(x for _, x in diffs) / len(diffs)
     dm = {}
     for d, x in diffs:
         dm.setdefault(d, []).append(x)
     means = [sum(v) / len(v) for v in dm.values()]
     nd = len(means)
+    est = sum(means) / nd
     if nd >= 2:
         se = float(np.std(means, ddof=1)) / math.sqrt(nd)
         q = t_quantile(0.95, nd - 1)
@@ -1258,7 +1261,7 @@ def prefix_bias(plen, pairs):
 
 
 def _channel(design, E, ch):
-    """Fit and score one response using the shared, response-blind designs."""
+    """Fit and score one response. Return its public diagnostics and restricted data separately."""
     by_key = design.legs
     fit = by_key.values()
 
@@ -1311,27 +1314,40 @@ def _channel(design, E, ch):
             L = by_key[k]
             hot = [i for i, s in enumerate(L["segments"]) if s["hot"]]
             meas_hot[k] = float(sum(seg_y(L)[i] for i in hot)) if hot else None
-        hot_day, leg_day, n_hot = {}, {}, {}
+        hot_day, leg_day, n_hot, withheld = {}, {}, {}, {}
         counted = []
         num_h = den_h = num_l = den_l = 0.0
+        public_num_h = public_den_h = public_num_l = public_den_l = 0.0
         for D in days:
             ks = [k for k in keys_all if by_key[k]["day"] == D]
             hk = [k for k in ks if meas_hot[k] is not None]
-            n_hot[D] = len(hk)
+            public = len(ks) >= MIN_PUBLIC_FIT_LEGS_PER_DAY
+            hot_error = None
             if hk:
                 pn, mn = sum(pred_hot[k] for k in hk), sum(meas_hot[k] for k in hk)
                 if mn <= 0:
                     raise LookInputError(f"stage 2: {ch}: day {D}: measured hot energy is not positive (R-18); "
                                          f"legs: {', '.join(hk)}")
-                hot_day[D] = (pn - mn) / mn
+                hot_error = (pn - mn) / mn
                 num_h += pn - mn                         # RL-167 row 12: pooled over every hot block, every day
                 den_h += mn
+                if public:
+                    hot_day[D] = hot_error
+                    public_num_h += pn - mn
+                    public_den_h += mn
                 if len(hk) >= MIN_HOT_LEGS_PER_DAY:
                     counted.append(D)
             pn, mn = sum(pred_leg[k] for k in ks), sum(meas_leg[k] for k in ks)
-            leg_day[D] = (pn - mn) / mn
+            leg_error = (pn - mn) / mn
             num_l += pn - mn
             den_l += mn
+            if public:
+                n_hot[D] = len(hk)
+                leg_day[D] = leg_error
+                public_num_l += pn - mn
+                public_den_l += mn
+            else:
+                withheld[D] = {"hot": hot_error, "leg": leg_error, "n_hot_legs": len(hk)}
         mx = max(abs(hot_day[D]) for D in counted) if counted else None
         # P-2: per counted day, legs with a hot block, hot blocks and s/sqrt(n); s pooled within counted days
         for k, v in meas_hot.items():
@@ -1360,18 +1376,19 @@ def _channel(design, E, ch):
         res_hot = {k: None if meas_hot[k] is None else (pred_hot[k] - meas_hot[k]) / meas_hot[k] for k in keys_all}
         hv = [v for v in res_hot.values() if v is not None]
         return ({"hot": {"per_day": hot_day, "counted_days": counted, "n_hot_legs_per_day": n_hot, "max_abs": mx,
-                         "pooled": (num_h / den_h) if den_h else None, "verdict": verdict},
-                 "leg": {"per_day": leg_day, "pooled": num_l / den_l,
+                         "pooled": public_num_h / public_den_h if public_den_h else None, "verdict": verdict},
+                 "leg": {"per_day": leg_day, "pooled": public_num_l / public_den_l if public_den_l else None,
                          "rms_over_legs": math.sqrt(sum(v * v for v in res_leg.values()) / len(res_leg))},
                  "hot_rms_over_legs": math.sqrt(sum(v * v for v in hv) / len(hv)) if hv else None},
-                res_leg, res_hot, meas_leg)
+                res_leg, res_hot, meas_leg,
+                {"per_day": withheld, "pooled": {"hot": num_h / den_h if den_h else None, "leg": num_l / den_l}})
 
     pl, ph, pp = lodo(True)
-    err, res_leg, res_hot, meas_leg = errors(pl, ph)
+    err, res_leg, res_hot, meas_leg, private_heat = errors(pl, ph)
     err["folds_delta_dropped"] = [day for day in days if design.onset_models[day] is None
                                   and DELTA_COL in design.heat_cols]
     pl0, ph0, _ = lodo(False)
-    err0, _, _, _ = errors(pl0, ph0)
+    err0, _, _, _, private_base = errors(pl0, ph0)
     err["no_heat"] = err0
 
     # P-3: held-out relative residual by block offset from the leg's first hot block
@@ -1409,7 +1426,7 @@ def _channel(design, E, ch):
                   "s_with_heat": s1_, "s_no_heat": s0_}
 
     # Q2 P2: prefix bias. Residual = measured - predicted (LODO), each divided by the SD of its own length over
-    # legs (R-8); the bias is the mean paired difference long - short (R-11); 90 % t interval on day means.
+    # legs (R-8). Both the mean paired difference and its 90 % t interval use equal day weights (RL-175 B.4).
     bias = {}
     for lab, plen in PREFIX.items():
         pairs = []
@@ -1437,8 +1454,8 @@ def _channel(design, E, ch):
             "n_legs_under_0_99": sum(1 for k in keys_all if E[k][ch]["coverage_min"] < TRACE_COVERAGE_PRINT)},
         "day_detail": day_detail,
         "onset_offset_residuals": onset_blocks,
-        "residuals": {"leg": res_leg, "hot_stretch": res_hot},
-    }
+    }, {"residuals": {"leg": res_leg, "hot_stretch": res_hot},
+        "day_diagnostics": {"with_heat": private_heat, "no_heat": private_base}}
 
 
 class _Stage2Design:
@@ -1472,8 +1489,8 @@ def stage2_preflight(stage1_out):
     return _Stage2Design(stage1_out)
 
 
-def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, _prepared=None):
-    """Stage 2 (Q8): the energy fit. `stage1_out` must hash to `stage1_sha256` (canonical bytes, see `dump`)."""
+def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, restricted_out=None, _prepared=None):
+    """Return the public fit. If supplied, populate `restricted_out` for the custody writer (RL-175 B.3)."""
     if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:
         raise LookInputError("stage 2: the stage-1 output does not match the hash it was given")
     design = _prepared if _prepared is not None else stage2_preflight(stage1_out)
@@ -1483,13 +1500,15 @@ def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, _prepared=Non
     E = energy["legs"]
     with_delta = DELTA_COL in design.main.heat_cols
     channels = {}
+    private = {"schema": RESTRICTED_SCHEMA, "look_id": LOOK_ID, "stage1_sha256": stage1_sha256,
+               "synthetic": stage1_out["synthetic"], "channels": {}}
     for ch in CHANNELS:
-        c = _channel(design.main, E, ch)
+        c, private["channels"][ch] = _channel(design.main, E, ch)
         sensitivity = {"marked_spans": design.marked, "n_legs_without": design.n_without,
                        "coefficients_without": None, "lodo_hot_max_abs_without": None}
         if design.without_marked is not None:
             try:
-                cw = _channel(design.without_marked, E, ch)
+                cw, _ = _channel(design.without_marked, E, ch)
                 sensitivity.update(coefficients_without=cw["coefficients"], lodo_hot_max_abs_without=cw["lodo"]["hot"]["max_abs"])
             except LookInputError:
                 pass
@@ -1507,11 +1526,13 @@ def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, _prepared=Non
         "tau_uncertainty_propagated": False,    # RL-166b: the onset's scatter is in the delta column (B-1); its
                                                 # coefficients' uncertainty is not propagated
         "delta_column": "kept" if with_delta else "dropped_onset_not_estimable",
-        "channels": channels,
+        "channels": channels, "restricted_sha256": hashlib.sha256(dump(private)).hexdigest(),
         "qualified_interim_half": {"statistic": "gpu_rail.lodo.hot.max_abs", "value": hot["max_abs"],
                                    "threshold": QUALIFIED_THRESHOLD, "verdict": hot["verdict"]},
     }
     output_check(out)
+    if restricted_out is not None:
+        restricted_out.update(private)
     return out
 
 
@@ -1521,7 +1542,7 @@ _OUT_FORBIDDEN = ("joule", "watt", "power", "energy", "_mj", "_wh", "measured", 
 
 
 def output_check(obj, path="$"):
-    """No key may name an energy or power quantity (Q16). Leg-keyed maps may only sit under residuals."""
+    """Public fit and Freeze 2 never carry energy quantities or leg-keyed maps (RL-175 B.3)."""
     if isinstance(obj, dict):
         for k, v in obj.items():
             kl = str(k).lower()
@@ -1530,12 +1551,7 @@ def output_check(obj, path="$"):
                     raise ValueError("code_sha256 holds a non-hash")
                 continue
             if _LEG_KEY.search(str(k)):
-                if not (path.endswith(".residuals.leg") or path.endswith(".residuals.hot_stretch")):
-                    raise ValueError("a per-leg value outside residuals")
-                # a ratio by construction ((pred - meas)/meas, R-18 guarantees meas > 0); any size is valid
-                if v is not None and not (isinstance(v, float) and math.isfinite(v)):
-                    raise ValueError("a per-leg residual that is not a finite relative value")
-                continue
+                raise ValueError("a leg-keyed value in public output")
             if any(f in kl for f in _OUT_FORBIDDEN) or kl.endswith("_j") or kl.endswith("_w"):
                 raise ValueError("forbidden output key")
             output_check(v, path + "." + str(k))
