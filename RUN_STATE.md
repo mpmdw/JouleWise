@@ -19859,6 +19859,7 @@ Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the CURRENT STATE block at
 the top of this file.
 
+- 2026-11-17 cluster contract step 1 (item 399) — [builder report](docs/run_reports/2026-11-17-cluster-contract-step1.md). Lead review and hosted CI are the next gates.
 - 2026-07-31 claims desk day (metrology suite merged via PR #90 + D-096
   window-A freeze; D-094/D-095; cooldown-join gauntlet commits 1-2 merged
   via PR #91 with DA-1 closed under the D-097 cold-gate deferral):

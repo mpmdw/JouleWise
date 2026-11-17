@@ -663,6 +663,10 @@ remain outstanding.
 
 T38c folds the six live follow-ups (including the existing bridge-baseline row) into the kernel and generated Current Queue below. Registration date is carried in each status note. The completed liveness-docs row above is the sole DONE record; completed tasks are absent from the live-only kernel. [Verification and flagged evidence discrepancies](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-08-handoff-redo/99gk-bookkeeping-t38c-astra.md).
 
+## Cluster contract handoff — 2026-11-17
+
+- [AGENT] Tier 2 step 1, selected directly under RUN_STATE 399. The draft is for lead review and hosted CI. After admission, #804 consumes I0 and binds the offload tests. See the [builder report](docs/run_reports/2026-11-17-cluster-contract-step1.md).
+
 ## Current Queue
 
 The generated region below is the sole live queue and source of truth for
