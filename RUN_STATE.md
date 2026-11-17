@@ -15384,7 +15384,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-15). Latest report: [PR #804 iCloud backend: software review and synthetic verification; macOS 26 installation remains external](docs/run_reports/2026-11-15-span-offload-icloud.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #804 repair and RL-174 D.1/D.2: synthetic software checks; native GUI-domain qualification external](docs/run_reports/2026-11-16-pr804-r2.md).
 
 ### [ED-EXTERNAL]
 

@@ -12,7 +12,7 @@ Air (later; verifies against the marker's hashes and decrypts read-only):
     python3.13 -B scripts/span_offload.py keygen --out-dir DIR [--openssl PATH]
 
 Output is one line of operational codes and hashes. Exit codes: 0 ok, 1 internal, 2 usage, 3 marker
-already exists (nothing done), 4 refused before upload, 5 upload or provider read-back failed, the
+legacy marker exists / marker writer raced, 4 input or stability refused, 5 upload or provider read-back failed, the
 deadline passed or the tool was terminated (no marker), 6 pull integrity failure, 7 pull destination
 exists (or an interrupted landing), 8 unconfirmed local/iCloud offload (no copy-gate marker).
 """
@@ -32,7 +32,7 @@ from joulewise import span_offload as so  # noqa: E402
 def parser():
     top = argparse.ArgumentParser(prog="span_offload.py", description=__doc__.split("\n\n")[0])
     sub = top.add_subparsers(dest="command", required=True)
-    off = sub.add_parser("offload", help="MBP: archive, encrypt, upload, read back, write the marker")
+    off = sub.add_parser("offload", aliases=["close"], help="MBP: verified cloud copy; close also applies RL-174 D.2")
     off.add_argument("--config", required=True)
     off.add_argument("--plan", required=True)
     off.add_argument("--span-dir", required=True)
@@ -43,6 +43,14 @@ def parser():
                      help="give up (no marker) if the offload cannot finish by this epoch (the next soak)")
     off.add_argument("--allow-local-backend", action="store_true",
                      help="tests and the interim sync folder only: the marker says provider_confirmed false")
+    off.add_argument("--ssd-receipt", help="close only: trusted receipt from ssd-copy; permits local archive eviction")
+    pending = sub.add_parser("pending", help="GUI domain: read pending iCloud transfers before every arm")
+    pending.add_argument("--config", required=True)
+    ssd = sub.add_parser("ssd-copy", help="Air: retain ciphertext on the external SSD and issue a readback receipt")
+    ssd.add_argument("--config", required=True)
+    ssd.add_argument("--plan", required=True)
+    ssd.add_argument("--marker", required=True)
+    ssd.add_argument("--ssd-root", required=True)
     pl = sub.add_parser("pull", help="Air: fetch, verify against the marker, decrypt read-only")
     pl.add_argument("--config", required=True)
     pl.add_argument("--plan", required=True)
@@ -61,14 +69,33 @@ def parser():
 
 
 def run(args):
-    if args.command == "offload":
+    if args.command == "pending":
+        result = so.pending_transfers(so.load_mbp_config(args.config))
+        if not result["clear"]:
+            raise so.unverified("ICLOUD_PENDING", "pending or unknown CloudDocs state; hold the arm")
+        return f"ICLOUD_CLEAR scope={result['scope']} observed_epoch_s={result['observed_epoch_s']}"
+    if args.command == "ssd-copy":
+        receipt = so.ssd_copy(so.load_air_config(args.config), args.plan, so.read_record(args.marker), args.ssd_root)
+        return f"SSD_COPY_OK plan={args.plan} receipt={receipt}"
+    if args.command in ("offload", "close"):
         # The config is a control file: it must not be read from inside OUT (A.4), so check before reading.
         if so._overlaps(args.config, args.span_dir):
             raise so.refused("PATH_OVERLAPS_SPAN", "the config file is inside the span directory")
         config = so.load_mbp_config(args.config)
         required = args.require_file if args.require_file is not None else ["runner_receipt.json"]
+        if args.command == "close":
+            if required != ["runner_receipt.json"] or args.allow_local_backend:
+                raise so.refused("CLOSE_CONFIG", "close requires runner_receipt.json and iCloud")
+            record = so.close_offload(config, args.plan, args.span_dir, ssd_receipt=args.ssd_receipt,
+                                     deadline_epoch=args.deadline_epoch)
+            return (f"CLOSE_OK plan={record['plan']} original_deleted={str(record['original_deleted']).lower()} "
+                    f"archive_evicted={str(record['archive_evicted']).lower()} "
+                    f"storage_mail_sent={str(record['storage_mail_sent']).lower()} "
+                    f"manifest_sha256={record['manifest_sha256']} ciphertext_sha256={record['ciphertext']['sha256']}")
+        if args.ssd_receipt:
+            raise so.refused("CLOSE_REQUIRED", "--ssd-receipt is used only by close")
         record = so.offload(config, args.plan, args.span_dir, require_files=required,
-                            allow_local=args.allow_local_backend, deadline_epoch=args.deadline_epoch)
+                           allow_local=args.allow_local_backend, deadline_epoch=args.deadline_epoch)
         label = "OFFLOAD_OK" if record["provider_confirmed"] else "OFFLOAD_OK_UNCONFIRMED"
         marker = so.marker_path(config["marker_dir"], record["plan"], record["provider_confirmed"])
         return (f"{label} plan={record['plan']} backend={record['backend']['kind']} "
