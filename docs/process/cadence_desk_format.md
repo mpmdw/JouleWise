@@ -148,6 +148,8 @@ python3.13 -B scripts/air/cadence_desk.py publish --plan-id PLAN --out DIR --rep
   Zero records for the campaign is an established empty history, when the prefix holds records at all: a prefix
   with no record is refused (it cannot be told from verdict refs never fetched) unless `--history-empty` says the
   desk has published none yet (gate 3, Mythos T5).
+  - A failed or incomplete Git listing, including the prefix probe, produces `DESK_UNAUTHENTICATED`
+    with `desk_final=false` even when `--history-empty` is supplied.
   - `--history FILE`, or no history at all, makes a signed-bundle verdict not final (`DESK_UNAUTHENTICATED`,
     "receipt replay cannot be checked").
   - The verdict records `history_source` and the boolean `history_empty_asserted`. The assertion is

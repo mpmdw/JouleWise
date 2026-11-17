@@ -1198,6 +1198,41 @@ class SignedTransport(DeskFinalCase):
                 desk_transport.history_from_records(self.air, prefix, allowed_signers=self.signers,
                                                     campaign_id=self.fx.kit["campaign_id"])
 
+    def test_failed_history_listing_refuses_signed_desk_final(self):
+        work, bundle, _ = self.pack()
+        ref, _ = self.ship(bundle)
+        self.assertEqual(self.final(work, ref)[0], 0)
+        prefix = "refs/remotes/origin/cadence-desk-final/"
+        plan_id = "cq-dg-s01-a1"
+        desk_transport.publish_verdict(self.air, work / "out", plan_id=plan_id,
+                                       signing_key=self.keys["cadence-desk"], ref_prefix=prefix, push=False)
+        record = (prefix + plan_id).encode()
+        original = desk_transport._git
+        cases = (
+            ("full failure", False, 128, b"", b"synthetic history listing failed"),
+            ("partial failure", False, 128, record + b"\n", b"synthetic history listing failed"),
+            ("partial with warning", False, 0, record + b"\n", b"warning: ignoring broken ref"),
+            ("truncated record", False, 0, record, b""),
+            ("probed record missing from full listing", False, 0, b"", b""),
+            ("prefix probe with empty assertion", True, 128, b"", b"synthetic history listing failed"),
+        )
+        for label, probe, status, stdout, stderr in cases:
+            with self.subTest(label=label):
+                def listing_error(repo, *args, **kw):
+                    if args[0] == "for-each-ref" and ("--count=1" in args) == probe:
+                        return self.sp.CompletedProcess(args, status, stdout, stderr)
+                    return original(repo, *args, **kw)
+
+                extra = ("--history-empty",) if probe else ()
+                with mock.patch.object(desk_transport, "_git", listing_error):
+                    rc, verdict = self.final(work, ref, *extra)
+                self.assertEqual(rc, 3, verdict["reasons"])
+                self.assertNotFinal(verdict, "DESK_UNAUTHENTICATED")
+                self.assertIn("history listing", " ".join(verdict["reasons"]))
+                self.assertEqual(verdict["history_source"], "none")
+                self.assertTrue(verdict["transport"]["signed"])
+                self.assertTrue(desk_final.verify_verdict(verdict))
+
     def test_error_verdict_without_a_declared_summary_still_roundtrips(self):
         work, bundle, _ = self.pack()
         ref, _ = self.ship(bundle, key="rogue")

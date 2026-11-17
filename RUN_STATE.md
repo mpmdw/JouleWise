@@ -1,5 +1,7 @@
 # JouleWise Run State
 
+**2026-11-17 PR #799 round 9:** failed or incomplete signed-history listings hold desk finality. 247 guarded cadence tests pass. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
+
 **2026-11-16 PR #799 gate 7:** no independent desk defect reproduced; 246 guarded cadence tests pass. This round changes records only; #800 owns four reproduced controller repairs. [Report](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md). No MBP contact or custody access; fresh stack admission and research-lead rulings remain open.
 
 **2026-11-16 PR #799 gate 6 repair:** declared summaries are required by signed publication/read, so a missing record cannot disappear from replay history. 76 desk tests, 246 safe cadence tests, 48 host/docs checks pass. [Run report](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md). No MBP contact, custody access or merge; stack admission remains with the lead.

@@ -1,5 +1,7 @@
 # JouleWise Task Queue
 
+**2026-11-17 explicit user-priority [AGENT] intake:** repair the four round 9 findings on PR #799 and PR #800. The desk history repair passes local tests. PR #800 inherits it before the controller repairs. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
+
 **2026-11-16 explicit user-priority [AGENT] gate-7 intake:** repair the cold Sol refusal of #799/#800 before ordinary queue work. No #799 implementation defect reproduced; #800 owns F1–F4. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md).
 
 **2026-11-16 explicit user-priority [AGENT] intake:** repair the cold Sol refusal of PR #799/#800 before ordinary queue work. #799 F4 reproduced and fixed with regressions; #800 repairs continue on its branch. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md).

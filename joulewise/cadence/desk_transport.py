@@ -331,13 +331,34 @@ def read_verdict(repo, ref, *, allowed_signers, plan_id, principal=DESK_PRINCIPA
     return doc, summary
 
 
+def list_history_refs(repo, ref_prefix, *, probe=False):
+    """Require a complete Git listing, including for the prefix existence check."""
+    prefix = ref_prefix.rstrip("/") + "/"
+    try:
+        listed = _git(repo, "for-each-ref", *(("--count=1",) if probe else ()), "--format=%(refname)", prefix)
+    except subprocess.TimeoutExpired as error:
+        raise TransportRefusal(f"history listing for {prefix} timed out") from error
+    # Git can warn that it skipped broken refs even when it exits zero.
+    if listed.returncode != 0 or listed.stderr:
+        detail = listed.stderr.decode("utf-8", "replace").strip()[:160]
+        raise TransportRefusal(f"history listing for {prefix} failed (git exit {listed.returncode}): {detail}")
+    if listed.stdout and not listed.stdout.endswith(b"\n"):
+        raise TransportRefusal(f"history listing for {prefix} ended with an incomplete ref")
+    refs = _out(listed).splitlines()
+    if any(not ref.startswith(prefix) or ref == prefix for ref in refs):
+        raise TransportRefusal(f"history listing for {prefix} returned an invalid ref")
+    return refs
+
+
 def history_from_records(repo, ref_prefix, *, allowed_signers, campaign_id, exclude_plan_id=None,
-                         principal=DESK_PRINCIPAL):
+                         principal=DESK_PRINCIPAL, expected_ref=None):
     """The campaign's earlier desk summaries, from signed verdict records, in machine order (the first leg's
     start). A record that does not verify is a refusal, never skipped."""
-    refs = _git(repo, "for-each-ref", "--format=%(refname)", ref_prefix.rstrip("/") + "/")
+    refs = list_history_refs(repo, ref_prefix)
+    if expected_ref is not None and expected_ref not in refs:
+        raise TransportRefusal(f"history listing for {ref_prefix} lost the ref seen in the prefix probe")
     out = []
-    for ref in _out(refs).splitlines():
+    for ref in refs:
         plan_id = ref[len(ref_prefix.rstrip("/")) + 1:]
         if not plan_id or plan_id == exclude_plan_id:
             continue

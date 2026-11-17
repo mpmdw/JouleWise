@@ -129,16 +129,17 @@ def _final_locked(args, signed):
             kit, _ = kitmod.load_kit(args.kit)
             # A prefix with no record at all cannot be told from one never fetched (gate 3, Mythos T5): it is refused
             # unless the operator states the desk has no records yet (--history-empty).
-            listed = desk_transport._git(args.history_repo or args.repo, "for-each-ref", "--count=1",
-                                         "--format=%(refname)", args.history_prefix.rstrip("/") + "/")
-            if not desk_transport._out(listed) and not args.history_empty:
+            history_repo = args.history_repo or args.repo
+            listed = desk_transport.list_history_refs(history_repo, args.history_prefix, probe=True)
+            if not listed and not args.history_empty:
                 raise desk_transport.TransportRefusal(
                     f"no verdict record under {args.history_prefix} (were the verdict refs fetched?): give "
                     "--history-empty only when this desk has published none")
             history = desk_transport.history_from_records(
-                args.history_repo or args.repo, args.history_prefix,
+                history_repo, args.history_prefix,
                 allowed_signers=args.history_signers, principal=args.history_principal,
-                campaign_id=kit["campaign_id"], exclude_plan_id=args.plan_id)
+                campaign_id=kit["campaign_id"], exclude_plan_id=args.plan_id,
+                expected_ref=listed[0] if listed else None)
             history_source = "signed-records"
 
     except desk_final.DeniedContent as error:
