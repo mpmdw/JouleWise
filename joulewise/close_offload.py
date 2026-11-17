@@ -89,13 +89,37 @@ class Guard:
     def __init__(self, args):
         self.fence = args.fence
         self.deadline = so.Deadline(args.deadline_epoch)
+        purpose, pid, lease = (getattr(args, f"controller_fence_{field}", None)
+                               for field in ("purpose", "pid", "deadline_epoch"))
+        self.controller_fence = None
+        if any(value is not None for value in (purpose, pid, lease)):
+            if (not re.fullmatch(r"cadence-controller:[0-9a-f]{12}", purpose or "")
+                    or pid is None or pid <= 1 or not so.number(lease)):
+                raise so.refused("CONTROLLER_FENCE_ARGUMENTS", "supply the controller purpose, PID and lease deadline")
+            self.controller_fence = {"purpose": purpose, "pid": pid, "deadline": lease}
         self.pgrep = shutil.which("pgrep")
         if not self.pgrep or any(so._overlaps(root, self.pgrep) for root in protected_roots(args)):
             raise so.refused("RUNNER_CENSUS_FAILED", "runner census executable is missing or inside a receipt root")
 
-    def quiet(self):
-        if os.path.lexists(self.fence):
+    def check_fence(self):
+        if self.controller_fence is None:
+            if not os.path.lexists(self.fence):
+                return
             raise so.refused("DESK_FENCE_PRESENT", "close requires the desk fence to be down")
+        try:
+            with so.open_regular(self.fence, "the standing desk fence", single_link=True) as handle:
+                raw = handle.read(4097)
+            record = json.loads(raw) if len(raw) <= 4096 else None
+        except (so.OffloadError, OSError, ValueError, RecursionError):
+            record = None
+        if (not isinstance(record, dict) or type(record.get("pid")) is not int
+                or not so.number(record.get("deadline")) or record != self.controller_fence):
+            raise so.refused("CONTROLLER_FENCE_MISMATCH", "the standing fence differs from the supplied owner and lease")
+        if record["deadline"] <= time.time() or record["deadline"] < self.deadline.epoch:
+            raise so.refused("CONTROLLER_FENCE_LEASE", "the standing fence must cover the whole close deadline")
+
+    def quiet(self):
+        self.check_fence()
         try:
             probe = subprocess.run([self.pgrep, "-f", RUNNERS], stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL, timeout=self.deadline.remaining())
@@ -108,7 +132,6 @@ class Guard:
 
     @contextlib.contextmanager
     def lock(self):
-        self.quiet()
         lock = self.fence.parent / ".desk-fence.lock"
         fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
@@ -179,13 +202,14 @@ def separate_out(args):
 
 
 def checked_close(args, config, guard, spans):
+    retained = so.raw_retention_paths(config)
     checked = next((span for span in spans if span.path == args.span_dir and span.receipt_mtime_ns is not None), None)
     if checked is None:
         checked = separate_out(args)
         if any(span.plan.casefold() == checked.plan.casefold() for span in spans):
             raise so.refused("PLAN_COLLISION", "the separate OUT conflicts with a managed plan")
         if not os.path.lexists(checked.path):
-            if args.keep_raw:
+            if args.keep_raw or checked.path in retained:
                 raise so.refused("CHECK_OUT_REQUIRED", "the designated raw OUT is absent")
             require_staged_source(config, checked)
     elif args.require_file or (args.plan is not None and args.plan != checked.plan):
@@ -194,7 +218,7 @@ def checked_close(args, config, guard, spans):
     for span in spans:
         if span.receipt_mtime_ns is not None:
             newest[span.kind] = max(newest.get(span.kind, span.receipt_mtime_ns), span.receipt_mtime_ns)
-    eligible = [span for span in spans if span != checked and
+    eligible = [span for span in spans if span != checked and span.path not in retained and
                 (span.receipt_mtime_ns is None or span.receipt_mtime_ns < newest[span.kind])]
 
     # Resume interrupted removals and rotate the most recent eligible output of each kind.
@@ -225,7 +249,8 @@ def reclaim(args, config, guard):
         span = Span("partc", path, span_plan("partc", path), None)
     else:
         span = separate_out(args)
-    if path.resolve() != path or os.path.lexists(path) or os.path.lexists(so.retirement_path(path)):
+    if (path in so.raw_retention_paths(config) or path.resolve() != path or os.path.lexists(path)
+            or os.path.lexists(so.retirement_path(path))):
         raise so.refused("RAW_RETAINED", "reclaim needs an already retired OUT")
     if args.plan is not None and args.plan != span.plan:
         raise so.refused("PLAN_SPAN_MISMATCH", "the requested plan differs from the retired OUT")
@@ -239,6 +264,12 @@ def run(args):
     guard = Guard(args)
     with guard.lock():
         config = load_config(args)
+        if guard.controller_fence is not None:
+            forbidden = config.get("forbid_paths", [])
+            if not isinstance(forbidden, list):
+                raise so.refused("CONFIG", "forbid_paths must be a list")
+            # The guard verified this exact fence and holds its lock through the entire close.
+            config["forbid_paths"] = [path for path in forbidden if path != str(args.fence)]
         if args.command == "after-check":
             result = checked_close(args, config, guard, scan_spans(args, guard.deadline))
         else:
@@ -258,6 +289,9 @@ def parser():
     after.add_argument("--catch-up", action="store_true", help="also process all older eligible outputs")
     after.add_argument("--require-file", action="append", help="for a separate OUT only, require this Check file basename")
     after.add_argument("--keep-raw", action="store_true", help="preserve a separate OUT designated for a pending look")
+    after.add_argument("--controller-fence-purpose", help="exact standing fence purpose, including the controller token")
+    after.add_argument("--controller-fence-pid", type=int, help="exact standing fence owner PID")
+    after.add_argument("--controller-fence-deadline-epoch", type=float, help="exact standing fence lease deadline")
     cleanup = commands.add_parser("reclaim", help="later SSD-backed eviction of a retired OUT")
     cleanup.add_argument("--ssd-receipt", type=Path, required=True)
     for command in (after, cleanup):

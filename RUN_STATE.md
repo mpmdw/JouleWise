@@ -18186,7 +18186,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17). Latest report: [PR #807 retarget to RL-174 D](docs/run_reports/2026-11-17-close-offload-retarget.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17). Latest report: [PR #804 and PR #807 Astra operations audit round 10](docs/run_reports/2026-11-17-astra-offload-round10.md).
 
 ### [ED-EXTERNAL]
 

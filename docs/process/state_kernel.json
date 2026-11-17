@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "PR #807 retarget to RL-174 D",
-    "path": "docs/run_reports/2026-11-17-close-offload-retarget.md"
+    "label": "PR #804 and PR #807 Astra operations audit round 10",
+    "path": "docs/run_reports/2026-11-17-astra-offload-round10.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2163,7 +2163,7 @@
       "priority": "p0_safety",
       "rank": 500,
       "status": "partial",
-      "status_note": "2026-11-17: PR #807 retargeted and remains draft. Software evidence in the run report and PR body. RL-174 D blind check, native GUI production-key round trip, close-interval floor recheck and standing-item issue are lead-owned.",
+      "status_note": "2026-11-17: Astra audit round 10 revises controller-owned close, reclaim, marker publication and raw retention. PR #807 remains draft. Software evidence in the run report and PR bodies. RL-174 D blind check, native GUI production-key round trip, close-interval floor recheck and standing-item issue are lead-owned.",
       "stop_card": null
     },
     "COLDGATE-CONVENE-DOCTRINE-FREE-01": {

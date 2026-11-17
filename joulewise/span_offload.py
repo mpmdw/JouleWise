@@ -1049,17 +1049,26 @@ class ICloudBackend:
             return dict(row, kind=ICLOUD_CONFIRMATION, provider_confirmed=True,
                         provider_hash=got[0], provider_size=got[1], verified_epoch_s=deadline.clock())
 
-    def get(self, plan, name, dest, deadline=None):
+    @contextlib.contextmanager
+    def _downloaded(self, plan, name, deadline):
         if name not in names(plan).values():
             raise refused("BAD_NAME", "an iCloud object must have its plan's fixed name")
         deadline = self._bounded(deadline, self.download_timeout_s)
         try:
             with self._plan(plan) as (fd, directory):
                 self._download(fd, directory / name, deadline)
-                with open(dest, "xb") as out:
-                    self._digest(fd, name, deadline, out)
+                yield fd, deadline
         except OffloadError as error:
             raise integrity("DOWNLOAD_FAILED", f"{name}: {error.code}") from None
+
+    def get(self, plan, name, dest, deadline=None):
+        with self._downloaded(plan, name, deadline) as (fd, deadline), open(dest, "xb") as out:
+            self._digest(fd, name, deadline, out)
+
+    def readback_digest(self, plan, name, deadline):
+        with self._downloaded(plan, name, deadline) as (fd, deadline):
+            digest, size = self._digest(fd, name, deadline)
+        return {"sha256": digest, "size": size}
 
 
 BACKENDS = {"icloud": ICloudBackend, "local": LocalBackend, "rclone": RcloneBackend}
@@ -1078,7 +1087,7 @@ def make_backend(spec, allow_local=False):
 # --- configs ---------------------------------------------------------------------------------------
 
 MBP_KEYS = {"schema", "recipient_public_key", "recipient_sha256", "stage_root", "marker_dir", "backend", "openssl",
-            "forbid_paths", "default_budget_s", "lead_email"}
+            "forbid_paths", "default_budget_s", "lead_email", "raw_retention_paths"}
 DEFAULT_BUDGET_S = 5400  # item 347's 90 minutes, when the caller names no deadline
 AIR_KEYS = {"schema", "identity", "recipient_sha256", "work_root", "backend", "openssl"}
 
@@ -1110,7 +1119,23 @@ def _absolute(doc, keys):
 def load_mbp_config(path):
     doc = load_config(path, MBP_CONFIG_SCHEMA, MBP_KEYS,
                       ("recipient_public_key", "recipient_sha256", "stage_root", "marker_dir"))
+    raw_retention_paths(doc)
     return _absolute(doc, ("recipient_public_key", "stage_root", "marker_dir"))
+
+
+def raw_retention_paths(config):
+    entries = config.get("raw_retention_paths", [])
+    if not isinstance(entries, list):
+        raise refused("CONFIG", "raw_retention_paths must be a list of absolute OUT paths")
+    paths = set()
+    for entry in entries:
+        if not isinstance(entry, str) or "\x00" in entry:
+            raise refused("CONFIG", "raw_retention_paths must contain absolute OUT paths")
+        path = Path(entry)
+        if path.anchor != "/" or not path.name or ".." in path.parts or str(path) != entry:
+            raise refused("CONFIG", "raw_retention_paths must use exact absolute OUT paths without parent traversal")
+        paths.add(path)
+    return paths
 
 
 def load_air_config(path):
@@ -1288,16 +1313,46 @@ def write_marker(marker_path, record):
     """Create the marker only if it does not exist (``test ! -e``), atomically and complete."""
     marker_path = Path(marker_path)
     tmp = marker_path.parent / f".{marker_path.name}.tmp-{os.getpid()}-{secrets.token_hex(4)}"
-    with open(tmp, "xb") as handle:
-        handle.write(canonical(record))
-        handle.flush()
-        os.fsync(handle.fileno())
+    handle = open(tmp, "xb")
     try:
-        os.link(tmp, marker_path)
-    except FileExistsError:
-        raise OffloadError("MARKER_EXISTS", "another writer created the marker first", "marker_exists") from None
+        with handle:
+            handle.write(canonical(record))
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(tmp, marker_path)
+        except FileExistsError:
+            raise OffloadError("MARKER_EXISTS", "another writer created the marker first", "marker_exists") from None
     finally:
         tmp.unlink()
+    sync_marker_directory(marker_path.parent)
+
+
+def sync_marker_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def recover_marker_link(marker):
+    """Under the plan lock, finish a publisher's interrupted unlink."""
+    info = marker.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 2:
+        return
+    pattern = re.compile(rf"\.{re.escape(marker.name)}\.tmp-[0-9]+-[0-9a-f]{{8}}")
+    for candidate in marker.parent.iterdir():
+        if not pattern.fullmatch(candidate.name):
+            continue
+        try:
+            pending = candidate.lstat()
+        except FileNotFoundError:
+            continue
+        if os.path.samestat(info, pending):
+            candidate.unlink()
+            sync_marker_directory(marker.parent)
+            return
 
 
 @contextlib.contextmanager
@@ -1426,6 +1481,7 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
         except OffloadError as error:
             if (isinstance(backend, ICloudBackend) and not backend.provider_confirmed
                     and error.exit_kind == "marker_exists"):
+                recover_marker_link(marker)
                 with open_regular(marker, "the existing unconfirmed marker", single_link=True):
                     pass  # preserve it; never confuse this with a completed copy-gate marker
                 raise OffloadError("ICLOUD_UNCONFIRMED",
@@ -1482,7 +1538,15 @@ def marker_files(record, plan, *, icloud=False):
 def recheck_marker(config, plan, span_dir, backend, deadline):
     marker = marker_path(config["marker_dir"], plan, True)
     try:
-        record = read_record(marker)
+        try:
+            record = read_record(marker)
+        except OffloadError as error:
+            if error.code != "HARD_LINKED":
+                raise
+            check_output_paths(span_dir, {"marker": marker, "stage_root": config["stage_root"]})
+            with plan_lock(config["stage_root"], plan):
+                recover_marker_link(marker)
+                record = read_record(marker)
     except OffloadError as error:
         if error.code == "RECORD_INVALID":
             raise OffloadError("MARKER_EXISTS", "legacy marker preserved; verify it separately", "marker_exists") from None
@@ -1490,19 +1554,15 @@ def recheck_marker(config, plan, span_dir, backend, deadline):
     expected = marker_files(record, plan, icloud=True)
     if record["span_name"] != Path(span_dir).name:
         raise refused("PLAN_SPAN_MISMATCH", "the copy marker describes a different span")
-    if record["backend"] != backend.describe() or record.get("recipient_sha256") != config["recipient_sha256"]:
+    if (not isinstance(backend, ICloudBackend) or record["backend"] != backend.describe()
+            or record.get("recipient_sha256") != config["recipient_sha256"]):
         raise refused("MARKER_INVALID", "the marker belongs to another backend or key")
-    controls = {"marker": marker, "stage_root": config["stage_root"], "recipient": config["recipient_public_key"]}
-    if isinstance(backend, (ICloudBackend, LocalBackend)):
-        controls["backend"] = backend.root
-    if isinstance(backend, RcloneBackend):
-        controls["rclone_config"] = backend.config
+    controls = {"marker": marker, "stage_root": config["stage_root"],
+                "recipient": config["recipient_public_key"], "backend": backend.root}
     check_output_paths(span_dir, controls)
-    with plan_lock(config["stage_root"], plan), tempfile.TemporaryDirectory(dir=config["stage_root"]) as tmp:
+    with plan_lock(config["stage_root"], plan):
         for kind, name in names(plan).items():
-            target = Path(tmp) / name
-            backend.get(plan, name, target, deadline)
-            if _sha_size(target) != expected[kind]:
+            if backend.readback_digest(plan, name, deadline) != expected[kind]:
                 raise unverified("READBACK_HASH", "a previously verified cloud artifact changed")
         source_snapshot = None
         if os.path.lexists(span_dir):
@@ -1510,8 +1570,7 @@ def recheck_marker(config, plan, span_dir, backend, deadline):
             manifest, digest, _size, _count = write_archive(span_dir, _NullSink(), deadline.remaining)
             if sha256_bytes(manifest) != record["manifest_sha256"] or digest != record["archive_sha256"]:
                 raise refused("SPAN_CHANGED", "the source differs from the existing copy marker")
-        if isinstance(backend, ICloudBackend):
-            backend._wait_uploaded(deadline)
+        backend._wait_uploaded(deadline)
         if source_snapshot is not None:
             # The final status subprocess must not reopen a source-mutation gap on a valid retry.
             require_snapshot(span_dir, source_snapshot, deadline.remaining)
@@ -1647,6 +1706,8 @@ def retire_original(span_dir, stage, record, deadline, snapshot):
     expected = {"source": _real(span_dir), "descriptor_sha256": record["descriptor_sha256"]}
     if snapshot is not None and not os.path.lexists(receipt):
         write_marker(receipt, dict(expected, inventory=snapshot))
+    if os.path.lexists(receipt):
+        recover_marker_link(receipt)
     with _directory_no_links(stage) as fd:
         recorded = json.loads(_read_in(fd, receipt.name, 64 << 20))
     inventory = recorded.pop("inventory", None)
@@ -1683,6 +1744,7 @@ def close_offload(config, plan, span_dir, *, ssd_receipt=None, deadline_epoch=No
         raise refused("ICLOUD_REQUIRED", "close requires observed iCloud readback")
     span_dir = Path(span_dir)
     check_close_source(span_dir, partc_work_root)
+    retain_original = retain_original or Path(_real(span_dir)) in raw_retention_paths(config)
     target = retirement_path(span_dir)
     check_output_paths(target, {"stage_root": config["stage_root"], "marker_dir": config["marker_dir"],
                                 "recipient": config["recipient_public_key"], "backend root": backend.root})

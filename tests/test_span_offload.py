@@ -508,6 +508,49 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual(os.listdir(self.tmp / "cloud"), [])
         self.assertEqual(marker.read_text(), "written by the Air\n")
 
+    def test_interrupted_marker_publish_recovers_its_temp_under_plan_lock(self):
+        config = dict(self.config, backend=self.fake_brctl())
+        record = so.offload(config, PLAN, self.span)
+        marker = self.marker(confirmed=True)
+        before = marker.read_bytes()
+        temp = marker.with_name(f".{marker.name}.tmp-123-0123abcd")
+        os.link(marker, temp)
+
+        with so.plan_lock(config["stage_root"], PLAN), self.assertRaisesRegex(so.OffloadError, "BUSY"):
+            so.offload(config, PLAN, self.span)
+        self.assertTrue(temp.exists())
+
+        sync = os.fsync
+        synced_directories = []
+
+        def track_sync(fd):
+            if stat.S_ISDIR(os.fstat(fd).st_mode):
+                synced_directories.append(os.fstat(fd).st_ino)
+            sync(fd)
+
+        with mock.patch.object(so.os, "fsync", side_effect=track_sync):
+            self.assertEqual(so.offload(config, PLAN, self.span), record)
+        self.assertIn(marker.parent.stat().st_ino, synced_directories)
+        self.assertFalse(temp.exists())
+        self.assertEqual(marker.read_bytes(), before)
+        self.assertEqual(marker.stat().st_nlink, 1)
+
+        foreign = marker.with_name("foreign-link")
+        os.link(marker, foreign)
+        temp.write_bytes(before)  # a matching name and contents are insufficient
+        with self.assertRaisesRegex(so.OffloadError, "HARD_LINKED"):
+            so.offload(config, PLAN, self.span)
+        self.assertTrue(foreign.exists())
+        self.assertTrue(temp.exists())
+
+        misplaced = self.span / marker.name
+        misplaced.write_bytes(before)
+        misplaced_temp = self.span / temp.name
+        os.link(misplaced, misplaced_temp)
+        with self.assertRaisesRegex(so.OffloadError, "PATH_OVERLAPS_SPAN"):
+            so.offload(config | {"marker_dir": str(self.span)}, PLAN, self.span)
+        self.assertTrue(misplaced_temp.exists())
+
     def test_marker_race_keeps_the_first_writer(self):
         marker = self.marker()
         real = so.write_marker

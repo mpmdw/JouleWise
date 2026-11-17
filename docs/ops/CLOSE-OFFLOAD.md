@@ -18,10 +18,38 @@ status and output before proceeding. MBP iCloud access requires the GUI domain.
 ```
 
 Use absolute paths. OUT is the exact checked output. The deadline is epoch
-seconds before the next soak, within the close interval. The command holds the
-desk fence lock, refuses an existing fence or runner, and supervises the worker
-and provider children to the deadline. The magistrate serializes Check, close and
-arm. Run from the GUI session or GUI LaunchAgent, never over SSH.
+seconds before the next soak, within the close interval. For a manual close, the
+desk fence must be absent. The command holds the desk fence lock, checks the
+runner census and supervises the worker and provider children to the deadline.
+The magistrate serializes Check, close and arm. Run from the GUI session or GUI
+LaunchAgent, never over SSH.
+
+### Controller-owned close (PR #800)
+
+After the controller holds or renews its standing fence for the close, pass
+the exact purpose, owner PID and stored lease deadline from that operation.
+Use the same fence path and a close deadline within both the close interval
+and the standing lease. The controller waits for the close subprocess with
+the standing fence in place and leaves the lock available for the subprocess.
+
+```sh
+"$PY" -B "$REPO/scripts/close_offload.py" after-check --config "$MBP_CONFIG" \
+  --span-dir "$OUT" --deadline-epoch "$CLOSE_DEADLINE_EPOCH" \
+  --fence "$DESK_FENCE" --controller-fence-purpose "$STANDING_PURPOSE" \
+  --controller-fence-pid "$CONTROLLER_PID" \
+  --controller-fence-deadline-epoch "$STANDING_LEASE_DEADLINE_EPOCH"
+```
+
+Pass all three controller flags together. The purpose is the full
+`cadence-controller:<token>` string. Use the controller's own expected lease
+tuple, with the deadline as stored and the PID of the controller process.
+Close verifies the exact tuple under `.desk-fence.lock`, keeps the runner
+census, and holds the lock through the final transfer check. It leaves the
+fence in place. The exact verified fence path may remain in `forbid_paths`.
+Other configured fences still apply. A changed or missing tuple, an expired
+or insufficient lease, a busy lock or a live runner holds close.
+
+### OUT and result
 
 For a separately rooted Check OUT, such as F2, add `--plan "$PLAN"` from the
 Check. The basename must equal PLAN or PLAN followed by its UTC timestamp. If
@@ -29,7 +57,8 @@ that controller uses a different top-level completion record, also pass its
 declared basename with `--require-file`. Close verifies its presence and
 archives its bytes without parsing them. Such an OUT is outside the GAP roots
 and can retire once its pack and cloud round trip are verified. Pass
-`--keep-raw` if this OUT is the designated raw copy for a pending registered look.
+`--keep-raw` to retain a separate OUT for this invocation. Record a designated
+raw copy in the durable allowlist before it can enter rotation.
 
 Require exit zero, `CLOSE_OK`, the exact OUT's verified marker, and `pending.clear`
 true. Nonzero, timeout, missing or unverified output holds the next arm, including
@@ -54,9 +83,15 @@ records. No iCloud writes from the MBP while armed. Include `bird`, `cloudd` and
 - The command rotates the most recent eligible older output of each kind from
   `/Users/edr/campaign-out/<kit>/<plan>-<stamp>` and
   `/Users/edr/code/jw-wt/<tree>/.desk/r1-partc-*`. Use `--catch-up` in a close
-  interval to process all eligible older outputs. The lead and magistrate keep
-  unfinished work and projections still needed by a desk outside the retirement
-  set. Newest outputs preserve their receipt bytes and timestamps.
+  interval to process all eligible older outputs. Newest outputs preserve their
+  receipt bytes and timestamps.
+- In the private MBP config, set `raw_retention_paths` to a JSON array of exact
+  absolute OUT paths. An empty array is valid. The lead or magistrate records
+  designated raw copies before rotation and updates the same config atomically
+  between close invocations. Use the original OUT path even if retirement
+  has already renamed it. Rotation and catch-up skip allowlisted paths,
+  including interrupted retirements, and leave surviving files in place.
+  Release a path only after the owning retention decision allows it.
 - The shared backend verifies the encrypted pack's per-file manifest and the
   iCloud evict, re-download and hash round trip before removing older raw
   directories. Interrupted removal is retried using a same-parent renamed
@@ -85,7 +120,8 @@ interval:
   --span-dir "$OLD_OUT" --ssd-receipt "$SSD_RECEIPT" --deadline-epoch "$CLOSE_DEADLINE_EPOCH"
 ```
 
-The backend rechecks cloud hashes and requires the SSD receipt's plan, descriptor
-and artifact hashes/sizes to match before eviction. Keep the SSD receipt with the
-retained artifacts. Supply `--plan "$PLAN"` for a separately rooted OUT.
+The backend streams all four cloud objects through SHA-256 and byte counting
+without a second copy on the stage filesystem. Eviction requires matching cloud
+hashes and sizes and a matching SSD receipt. Keep the SSD receipt with the retained
+artifacts. Supply `--plan "$PLAN"` for a separately rooted OUT.
 This later cleanup is outside the after-Check arm path.

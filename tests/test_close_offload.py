@@ -1,6 +1,7 @@
 """After-Check regressions on opaque synthetic spans and a fake iCloud provider."""
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import os
@@ -171,6 +172,27 @@ class CloseOffloadTests(unittest.TestCase):
         self.assertEqual(so.sha256_file(receipt.with_name(so.names("cq-old")["ciphertext"])),
                          record["ciphertext"]["sha256"])
 
+    def test_reclaim_streams_cloud_readback_with_no_space_for_a_second_copy(self):
+        old, current = self.span("cq-old", 100), self.span("cq-current", 200)
+        self.verify(current)
+        ssd = self.root / "external-ssd"
+        ssd.mkdir()
+        record = so.read_record(self.marker("cq-old"))
+        with mock.patch.object(so, "require_ssd_mount"):
+            receipt = so.ssd_copy(self.config, "cq-old", record, ssd)
+        cipher = self.root / "provider" / so.names("cq-old")["ciphertext"]
+        original = cipher.read_bytes()
+        cipher.write_bytes(b"x" * len(original))
+        argv = ("--ssd-receipt", receipt)
+        with mock.patch.object(so.tempfile, "TemporaryDirectory", side_effect=OSError(errno.ENOSPC, "stage full")):
+            with self.assertRaisesRegex(so.OffloadError, "READBACK_HASH"):
+                self.verify(old, *argv, command="reclaim")
+            self.assertTrue(self.archive("cq-old").is_file())
+            cipher.write_bytes(original)
+            result = self.verify(old, *argv, command="reclaim")
+        self.assertTrue(result["spans"][0]["archive_evicted"])
+        self.assertFalse(self.archive("cq-old").exists())
+
     def test_low_disk_mails_lead_without_evicting_the_only_local_archive(self):
         old = self.span("cq-old", 100)
         current = self.span("cq-current", 200)
@@ -260,6 +282,43 @@ class CloseOffloadTests(unittest.TestCase):
         self.assertEqual(json.loads(response.stdout)["status"], "DESK_LOCK_BUSY")
         self.assertFalse((self.root / "provider/calls").exists())
 
+    def test_controller_fence_requires_exact_lease_under_lock_and_keeps_runner_census(self):
+        out = self.span("cq-current", 200)
+        lease = {"purpose": "cadence-controller:012345abcdef", "pid": os.getpid(), "deadline": time.time() + 120}
+        self.fence.write_bytes(so.canonical(lease))
+        other_fence = self.root / "magistrate/another-fence.json"
+        self.config["forbid_paths"] = [str(self.fence), str(other_fence)]
+        self.config_path.write_bytes(so.canonical(self.config))
+        options = ("--controller-fence-purpose", lease["purpose"], "--controller-fence-pid", str(lease["pid"]),
+                   "--controller-fence-deadline-epoch", str(lease["deadline"]))
+
+        with self.assertRaisesRegex(so.OffloadError, "DESK_FENCE_PRESENT"):
+            self.verify(out)
+        with (self.fence.parent / ".desk-fence.lock").open("w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(so.OffloadError, "DESK_LOCK_BUSY"):
+                self.verify(out, *options)
+        for change in ({"purpose": "cadence-controller:fedcba987654"}, {"pid": lease["pid"] + 1},
+                       {"deadline": lease["deadline"] + 1}):
+            self.fence.write_bytes(so.canonical(lease | change))
+            with self.subTest(change=change), self.assertRaisesRegex(so.OffloadError, "CONTROLLER_FENCE_MISMATCH"):
+                self.verify(out, *options)
+        for deadline in (time.time() - 1, time.time() + 5):
+            self.fence.write_bytes(so.canonical(lease | {"deadline": deadline}))
+            with self.assertRaisesRegex(so.OffloadError, "CONTROLLER_FENCE_LEASE"):
+                self.verify(out, *options[:-1], str(deadline))
+        self.fence.write_bytes(so.canonical(lease))
+        for rc, status in (("0", "RUNNER_PRESENT"), ("2", "RUNNER_CENSUS_FAILED")):
+            with mock.patch.dict(os.environ, {"FAKE_PGREP_RC": rc}), self.assertRaisesRegex(so.OffloadError, status):
+                self.verify(out, *options)
+        other_fence.touch()
+        with self.assertRaisesRegex(so.OffloadError, "FORBIDDEN_PATH_PRESENT"):
+            self.verify(out, *options)
+        other_fence.unlink()
+        self.assertFalse((self.root / "provider/calls").exists())
+        self.assertEqual(self.verify(out, *options)["status"], "CLOSE_OK")
+        self.assertEqual(so.read_record(self.fence), lease)
+
     def test_deadline_reaps_provider_group_and_holds_with_no_marker(self):
         out = self.span("cq-current", 200)
         heartbeat = self.root / "heartbeat"
@@ -311,6 +370,39 @@ class CloseOffloadTests(unittest.TestCase):
     def test_interrupted_retirement_resumes_after_receipt_is_gone(self):
         current, old = self.span("cq-current", 200), self.span("cq-old", 100)
         retiring = self.interrupt_retirement(current, old)
+        self.assertEqual(self.verify(current)["status"], "CLOSE_OK")
+        self.assertFalse(retiring.exists())
+
+    def test_retirement_resumes_with_an_interrupted_receipt_publication(self):
+        current, old = self.span("cq-current", 200), self.span("cq-old", 100)
+        retiring = self.interrupt_retirement(current, old)
+        receipt = self.archive("cq-old").parent / ".retirement.json"
+        tmp = receipt.with_name(f".{receipt.name}.tmp-123-0123abcd")
+        os.link(receipt, tmp)
+        self.assertEqual(self.verify(current)["status"], "CLOSE_OK")
+        self.assertFalse(retiring.exists())
+        self.assertFalse(tmp.exists())
+        self.assertEqual(receipt.stat().st_nlink, 1)
+
+    def test_raw_retention_allowlist_preserves_an_older_output_across_checks(self):
+        oldest = self.span("cq-oldest", 50)
+        pinned = self.span("cq-pinned", 100)
+        current = self.span("cq-current", 200)
+        self.config_path.write_bytes(so.canonical(self.config | {"raw_retention_paths": [str(pinned)]}))
+
+        self.assertEqual(self.verify(current, "--keep-raw")["status"], "CLOSE_OK")
+        self.assertTrue((pinned / "runner_receipt.json").is_file())
+        self.assertFalse(oldest.exists())
+        self.assertEqual(self.verify(current, "--catch-up")["status"], "CLOSE_OK")
+        self.assertTrue(pinned.is_dir())
+
+    def test_raw_retention_allowlist_stops_an_interrupted_retirement(self):
+        current, old = self.span("cq-current", 200), self.span("cq-old", 100)
+        retiring = self.interrupt_retirement(current, old)
+        self.config_path.write_bytes(so.canonical(self.config | {"raw_retention_paths": [str(old)]}))
+        self.assertEqual(self.verify(current, "--catch-up")["status"], "CLOSE_OK")
+        self.assertTrue((retiring / "opaque.bin").is_file())
+        self.config_path.write_bytes(so.canonical(self.config | {"raw_retention_paths": []}))
         self.assertEqual(self.verify(current)["status"], "CLOSE_OK")
         self.assertFalse(retiring.exists())
 
