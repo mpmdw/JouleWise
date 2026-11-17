@@ -1,0 +1,16 @@
+Verified 2026-11-16T17:57:10.192659-08:00
+Authorized write scope: item-drafts-1118/ only. All artifacts DRAFT, nothing issued.
+Source audit 38aa22e50710cd981d0eb6c0b9f5786cf3d21fb9; source main 8fd5c8cc549311537b65d64e68036e52beebc28b.
+Kit source 6010985a3312c77bb8e4bb4bf5c920c4d49b8512; frozen runtime e1b85a59c53bfbeaa3477df46bcbe9dd8fdfc427.
+Final fetch/rebase: up to date; fetched item346 byte-equal to snapshot; W1 head b2e01464d6d4fbf2901ff4d4154df9455104a12a unchanged.
+Commands: python3 -B build_items.py; bash tests/run_all_gates.sh.
+Results:
+lint: 74 shell syntax checks; 60 Python programs compiled; BAD 0
+pinned-checks: 91 pinned checks; zero failures; source/config plus synthetic files only
+gates: 1092 synthetic gate checks; 0 failures; exact item functions under bash and zsh
+standing-f0-tests: 21 standing-F0 checks; zero failures; unchanged hash table/launch/Check and spacing/day/window rules
+redate-tests: 6 generator checks; zero failures; default items/queues/plans restored byte for byte
+All mock/temporary files and Git repositories were inside this folder and removed.
+No full suite: docs/tooling-only draft changes, production/frozen bytes unchanged; targeted checks explicitly requested.
+No SSH, MBP contact, real measurement/energy/power/meter/transcript/custody read, external message, main or RUN_STATE edit.
+Final Git diff review/commit/push remains primary builder responsibility; exact pushed commit is returned in final response.

@@ -1,0 +1,47 @@
+{
+  "schema": "joulewise.cadence_queue.v1",
+  "queue_id": "cq-cl-qual-03",
+  "expires_at": "2026-11-23T00:00:00-08:00",
+  "halt": null,
+  "standing_notice": null,
+  "spans": [
+    {
+      "seq": 1,
+      "span_id": "qual-03-s01",
+      "block_id": "qual-03",
+      "kit": {
+        "path": "docs/process/cadence/kits/cl-qual-03.v1.1.json",
+        "sha256": "94f20d749faee96e461431b3d420784ebb975498fbd3abb367401b4819b48bc8"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "attempt": 1,
+      "not_before": "2026-11-21"
+    },
+    {
+      "seq": 2,
+      "span_id": "qual-03-s02",
+      "block_id": "qual-03",
+      "kit": {
+        "path": "docs/process/cadence/kits/cl-qual-03.v1.1.json",
+        "sha256": "94f20d749faee96e461431b3d420784ebb975498fbd3abb367401b4819b48bc8"
+      },
+      "legs": [
+        "L007",
+        "L008",
+        "L009",
+        "L010",
+        "L011",
+        "L012"
+      ],
+      "attempt": 1,
+      "not_before": "2026-11-21"
+    }
+  ]
+}

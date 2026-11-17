@@ -1,0 +1,4 @@
+PASS one argument re-dates all six items, queue lower bounds and plan t0s to Fri/Sat/Sun
+PASS two blocks may share one date while plan retains two independent dates; runtime caps still apply
+PASS one-date, known development-date and expired queue plans refused
+6 generator checks; zero failures; default items/queues/plans restored byte for byte

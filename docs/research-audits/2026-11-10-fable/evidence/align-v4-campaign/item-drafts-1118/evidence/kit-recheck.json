@@ -1,0 +1,1559 @@
+{
+  "qualification": "SYNTHETIC ONLY; no hardware or real measurement/custody read",
+  "pin": "e1b85a59c53bfbeaa3477df46bcbe9dd8fdfc427",
+  "source": "6010985a3312c77bb8e4bb4bf5c920c4d49b8512",
+  "checks": [
+    {
+      "name": "validate-kit qual-01 frozen paths",
+      "result": {
+        "campaign_id": "cl-qual-01",
+        "frozen_commit": "e1b85a59c53bfbeaa3477df46bcbe9dd8fdfc427",
+        "frozen_paths_verified": true,
+        "kit_sha256": "d125491feec1fc95ca962c6e7ea5d50d8d93634639c5a55417c93cb2c710c5be",
+        "legs": 12,
+        "ok": true
+      }
+    },
+    {
+      "name": "gen-legs exact qual-01",
+      "result": {
+        "seed_law": {
+          "method": "sha256-qual-v1",
+          "master_seed": 2026111422,
+          "n_legs": 12,
+          "bands": [
+            "q0"
+          ],
+          "spans": 2,
+          "span_a_tokens": [
+            2000,
+            10000,
+            19458,
+            19458
+          ],
+          "pairs": [
+            {
+              "prefill_tokens": 19458,
+              "decode_tokens": [
+                3724,
+                4096
+              ]
+            },
+            {
+              "prefill_tokens": 19458,
+              "decode_tokens": [
+                3151,
+                4096
+              ]
+            }
+          ],
+          "g0_shapes": [
+            "own",
+            "span"
+          ]
+        },
+        "legs": [
+          {
+            "leg_id": "L001",
+            "seed": 1941667135,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "own",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L002",
+            "seed": 434314557,
+            "start_band": "q0",
+            "prefill_tokens": 10000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L003",
+            "seed": 3518965301,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L004",
+            "seed": 3318332175,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 3151,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p2"
+          },
+          {
+            "leg_id": "L005",
+            "seed": 1022163680,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p2"
+          },
+          {
+            "leg_id": "L006",
+            "seed": 1480179938,
+            "start_band": "q0",
+            "prefill_tokens": 2000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L007",
+            "seed": 1043361625,
+            "start_band": "q0",
+            "prefill_tokens": 10000,
+            "decode_tokens": 4096,
+            "g0_shape": "own",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L008",
+            "seed": 3719543739,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L009",
+            "seed": 3625051798,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p1"
+          },
+          {
+            "leg_id": "L010",
+            "seed": 163257201,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 3724,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p1"
+          },
+          {
+            "leg_id": "L011",
+            "seed": 3906232746,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L012",
+            "seed": 2956001561,
+            "start_band": "q0",
+            "prefill_tokens": 2000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "validate-queue qual-01",
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-qual-01-s01-a1",
+          "cq-qual-01-s02-a1"
+        ],
+        "queue_id": "cq-cl-qual-01",
+        "spans": 2
+      }
+    },
+    {
+      "name": "validate-queue refuses qual-01 cross-law-span",
+      "result": "REFUSE qual-01-s01: roster crosses the law's spans of 6 (sha256-qual-v1; RL-165 section 8.1)"
+    },
+    {
+      "name": "validate-queue refuses qual-01 split-pair",
+      "result": "REFUSE qual-01-s01: roster splits type-L pair p2 (L004, L005); the research lead rules a re-run that splits a pair\nREFUSE qual-01-s01: roster starts on L004, a type-L pair member; a span's first leg is type A (RL-165 section 8.1)"
+    },
+    {
+      "name": "validate-queue refuses qual-01 starts-on-pair",
+      "result": "REFUSE qual-01-s01: roster starts on L004, a type-L pair member; a span's first leg is type A (RL-165 section 8.1)"
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 00:00:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 02:00:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 02:34:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 02:35:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 10:50:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 10:50:01",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 13:14:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 13:15:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 22:40:01",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s01 23:59:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "mock and exact operational Check qual-01-s01",
+      "result": {
+        "rc": 0,
+        "legs": 6,
+        "five_consumers": true
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 00:00:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 02:00:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 02:34:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 02:35:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 10:50:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 10:50:01",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 13:14:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 13:15:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 22:40:01",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-01-s02 23:59:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "mock and exact operational Check qual-01-s02",
+      "result": {
+        "rc": 0,
+        "legs": 6,
+        "five_consumers": true
+      }
+    },
+    {
+      "name": "soak retry qual-01 refusals 1",
+      "result": {
+        "rc": 0,
+        "attempts": [
+          {
+            "attempt": 1,
+            "output_dir": "soak.rejected1",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795118700.0
+          },
+          {
+            "attempt": 2,
+            "output_dir": "soak",
+            "refused": null,
+            "started_epoch_s": 1795120530.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "soak retry qual-01 refusals 2",
+      "result": {
+        "rc": 2,
+        "attempts": [
+          {
+            "attempt": 1,
+            "output_dir": "soak.rejected1",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795118700.0
+          },
+          {
+            "attempt": 2,
+            "output_dir": "soak",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795120530.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "validate-kit qual-02 frozen paths",
+      "result": {
+        "campaign_id": "cl-qual-02",
+        "frozen_commit": "e1b85a59c53bfbeaa3477df46bcbe9dd8fdfc427",
+        "frozen_paths_verified": true,
+        "kit_sha256": "d7dadff85b1bde79053b9e89a6533fe9b64a098250144f4f2578494db03d36bb",
+        "legs": 12,
+        "ok": true
+      }
+    },
+    {
+      "name": "gen-legs exact qual-02",
+      "result": {
+        "seed_law": {
+          "method": "sha256-qual-v1",
+          "master_seed": 2026111423,
+          "n_legs": 12,
+          "bands": [
+            "q0"
+          ],
+          "spans": 2,
+          "span_a_tokens": [
+            2000,
+            10000,
+            19458,
+            19458
+          ],
+          "pairs": [
+            {
+              "prefill_tokens": 19458,
+              "decode_tokens": [
+                3724,
+                4096
+              ]
+            },
+            {
+              "prefill_tokens": 19458,
+              "decode_tokens": [
+                3151,
+                4096
+              ]
+            }
+          ],
+          "g0_shapes": [
+            "own",
+            "span"
+          ]
+        },
+        "legs": [
+          {
+            "leg_id": "L001",
+            "seed": 361523141,
+            "start_band": "q0",
+            "prefill_tokens": 2000,
+            "decode_tokens": 4096,
+            "g0_shape": "own",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L002",
+            "seed": 4110263177,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p2"
+          },
+          {
+            "leg_id": "L003",
+            "seed": 357010911,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 3151,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p2"
+          },
+          {
+            "leg_id": "L004",
+            "seed": 1711309731,
+            "start_band": "q0",
+            "prefill_tokens": 10000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L005",
+            "seed": 3266271702,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L006",
+            "seed": 2358025464,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L007",
+            "seed": 3982796985,
+            "start_band": "q0",
+            "prefill_tokens": 10000,
+            "decode_tokens": 4096,
+            "g0_shape": "own",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L008",
+            "seed": 4055061816,
+            "start_band": "q0",
+            "prefill_tokens": 2000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L009",
+            "seed": 4182067065,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L010",
+            "seed": 2866102146,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p1"
+          },
+          {
+            "leg_id": "L011",
+            "seed": 112350110,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 3724,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p1"
+          },
+          {
+            "leg_id": "L012",
+            "seed": 884933799,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "validate-queue qual-02",
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-qual-02-s01-a1",
+          "cq-qual-02-s02-a1"
+        ],
+        "queue_id": "cq-cl-qual-02",
+        "spans": 2
+      }
+    },
+    {
+      "name": "validate-queue refuses qual-02 cross-law-span",
+      "result": "REFUSE qual-02-s01: roster crosses the law's spans of 6 (sha256-qual-v1; RL-165 section 8.1)"
+    },
+    {
+      "name": "validate-queue refuses qual-02 split-pair",
+      "result": "REFUSE qual-02-s01: roster splits type-L pair p2 (L002, L003); the research lead rules a re-run that splits a pair\nREFUSE qual-02-s01: roster starts on L003, a type-L pair member; a span's first leg is type A (RL-165 section 8.1)"
+    },
+    {
+      "name": "validate-queue refuses qual-02 starts-on-pair",
+      "result": "REFUSE qual-02-s01: roster starts on L002, a type-L pair member; a span's first leg is type A (RL-165 section 8.1)"
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 00:00:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 02:00:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 02:34:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 02:35:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 10:50:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 10:50:01",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 13:14:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 13:15:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 22:40:01",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s01 23:59:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "mock and exact operational Check qual-02-s01",
+      "result": {
+        "rc": 0,
+        "legs": 6,
+        "five_consumers": true
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 00:00:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 02:00:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 02:34:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 02:35:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 10:50:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 10:50:01",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 13:14:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 13:15:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 22:40:01",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-02-s02 23:59:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "mock and exact operational Check qual-02-s02",
+      "result": {
+        "rc": 0,
+        "legs": 6,
+        "five_consumers": true
+      }
+    },
+    {
+      "name": "soak retry qual-02 refusals 1",
+      "result": {
+        "rc": 0,
+        "attempts": [
+          {
+            "attempt": 1,
+            "output_dir": "soak.rejected1",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795205100.0
+          },
+          {
+            "attempt": 2,
+            "output_dir": "soak",
+            "refused": null,
+            "started_epoch_s": 1795206930.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "soak retry qual-02 refusals 2",
+      "result": {
+        "rc": 2,
+        "attempts": [
+          {
+            "attempt": 1,
+            "output_dir": "soak.rejected1",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795205100.0
+          },
+          {
+            "attempt": 2,
+            "output_dir": "soak",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795206930.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "validate-kit qual-03 frozen paths",
+      "result": {
+        "campaign_id": "cl-qual-03",
+        "frozen_commit": "e1b85a59c53bfbeaa3477df46bcbe9dd8fdfc427",
+        "frozen_paths_verified": true,
+        "kit_sha256": "94f20d749faee96e461431b3d420784ebb975498fbd3abb367401b4819b48bc8",
+        "legs": 12,
+        "ok": true
+      }
+    },
+    {
+      "name": "gen-legs exact qual-03",
+      "result": {
+        "seed_law": {
+          "method": "sha256-qual-v1",
+          "master_seed": 2026111428,
+          "n_legs": 12,
+          "bands": [
+            "q0"
+          ],
+          "spans": 2,
+          "span_a_tokens": [
+            2000,
+            10000,
+            19458,
+            19458
+          ],
+          "pairs": [
+            {
+              "prefill_tokens": 19458,
+              "decode_tokens": [
+                3724,
+                4096
+              ]
+            },
+            {
+              "prefill_tokens": 19458,
+              "decode_tokens": [
+                3151,
+                4096
+              ]
+            }
+          ],
+          "g0_shapes": [
+            "own",
+            "span"
+          ]
+        },
+        "legs": [
+          {
+            "leg_id": "L001",
+            "seed": 1358388043,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "own",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L002",
+            "seed": 701056896,
+            "start_band": "q0",
+            "prefill_tokens": 2000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L003",
+            "seed": 2956697698,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 3724,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p1"
+          },
+          {
+            "leg_id": "L004",
+            "seed": 802910834,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p1"
+          },
+          {
+            "leg_id": "L005",
+            "seed": 2861196611,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L006",
+            "seed": 479130868,
+            "start_band": "q0",
+            "prefill_tokens": 10000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L007",
+            "seed": 327096817,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "own",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L008",
+            "seed": 1586172121,
+            "start_band": "q0",
+            "prefill_tokens": 10000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L009",
+            "seed": 1321227925,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p2"
+          },
+          {
+            "leg_id": "L010",
+            "seed": 2588091677,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 3151,
+            "g0_shape": "span",
+            "leg_type": "L",
+            "pair": "p2"
+          },
+          {
+            "leg_id": "L011",
+            "seed": 2288949035,
+            "start_band": "q0",
+            "prefill_tokens": 2000,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          },
+          {
+            "leg_id": "L012",
+            "seed": 2982706561,
+            "start_band": "q0",
+            "prefill_tokens": 19458,
+            "decode_tokens": 4096,
+            "g0_shape": "span",
+            "leg_type": "A",
+            "pair": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "validate-queue qual-03",
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-qual-03-s01-a1",
+          "cq-qual-03-s02-a1"
+        ],
+        "queue_id": "cq-cl-qual-03",
+        "spans": 2
+      }
+    },
+    {
+      "name": "validate-queue refuses qual-03 cross-law-span",
+      "result": "REFUSE qual-03-s01: roster crosses the law's spans of 6 (sha256-qual-v1; RL-165 section 8.1)"
+    },
+    {
+      "name": "validate-queue refuses qual-03 split-pair",
+      "result": "REFUSE qual-03-s01: roster splits type-L pair p1 (L003, L004); the research lead rules a re-run that splits a pair\nREFUSE qual-03-s01: roster starts on L003, a type-L pair member; a span's first leg is type A (RL-165 section 8.1)"
+    },
+    {
+      "name": "validate-queue refuses qual-03 starts-on-pair",
+      "result": "REFUSE qual-03-s01: roster starts on L003, a type-L pair member; a span's first leg is type A (RL-165 section 8.1)"
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 00:00:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 02:00:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 02:34:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 02:35:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 10:50:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 10:50:01",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 13:14:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 13:15:00",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 22:40:01",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s01 23:59:59",
+      "result": {
+        "plan_expected_s": 12310,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "mock and exact operational Check qual-03-s01",
+      "result": {
+        "rc": 0,
+        "legs": 6,
+        "five_consumers": true
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 00:00:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 02:00:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 02:34:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 02:35:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 10:50:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 10:50:01",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 13:14:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 13:15:00",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 22:40:01",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "plan/launcher-plan qual-03-s02 23:59:59",
+      "result": {
+        "plan_expected_s": 12262,
+        "work_worst_case_s": 24750,
+        "launcher": {
+          "windows": [],
+          "minimum": 27260.0
+        }
+      }
+    },
+    {
+      "name": "mock and exact operational Check qual-03-s02",
+      "result": {
+        "rc": 0,
+        "legs": 6,
+        "five_consumers": true
+      }
+    },
+    {
+      "name": "soak retry qual-03 refusals 1",
+      "result": {
+        "rc": 0,
+        "attempts": [
+          {
+            "attempt": 1,
+            "output_dir": "soak.rejected1",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795291500.0
+          },
+          {
+            "attempt": 2,
+            "output_dir": "soak",
+            "refused": null,
+            "started_epoch_s": 1795293330.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "soak retry qual-03 refusals 2",
+      "result": {
+        "rc": 2,
+        "attempts": [
+          {
+            "attempt": 1,
+            "output_dir": "soak.rejected1",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795291500.0
+          },
+          {
+            "attempt": 2,
+            "output_dir": "soak",
+            "refused": "soak exit 5: the idle soak failed its settle or quiet check (mock)",
+            "started_epoch_s": 1795293330.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "synthetic predecessor dev-05-s02",
+      "result": {
+        "rc": 0,
+        "legs": 6,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/dev-05-s02/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/dev-05-s02/desk/JOURNAL-TABLE.md"
+      }
+    }
+  ],
+  "mock_spans": [
+    {
+      "span": "qual-01-s01",
+      "mock": {
+        "rc": 0,
+        "legs": 6,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-01-s01/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-01-s01/desk/JOURNAL-TABLE.md"
+      },
+      "g0_roles": [
+        "capture",
+        "consume",
+        "consume",
+        "consume",
+        "consume",
+        "consume"
+      ],
+      "item_operational_check_rc": 0,
+      "qualification": "synthetic fixture, never live evidence"
+    },
+    {
+      "span": "qual-01-s02",
+      "mock": {
+        "rc": 0,
+        "legs": 6,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-01-s02/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-01-s02/desk/JOURNAL-TABLE.md"
+      },
+      "g0_roles": [
+        "capture",
+        "consume",
+        "consume",
+        "consume",
+        "consume",
+        "consume"
+      ],
+      "item_operational_check_rc": 0,
+      "qualification": "synthetic fixture, never live evidence"
+    },
+    {
+      "span": "qual-02-s01",
+      "mock": {
+        "rc": 0,
+        "legs": 6,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-02-s01/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-02-s01/desk/JOURNAL-TABLE.md"
+      },
+      "g0_roles": [
+        "capture",
+        "consume",
+        "consume",
+        "consume",
+        "consume",
+        "consume"
+      ],
+      "item_operational_check_rc": 0,
+      "qualification": "synthetic fixture, never live evidence"
+    },
+    {
+      "span": "qual-02-s02",
+      "mock": {
+        "rc": 0,
+        "legs": 6,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-02-s02/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-02-s02/desk/JOURNAL-TABLE.md"
+      },
+      "g0_roles": [
+        "capture",
+        "consume",
+        "consume",
+        "consume",
+        "consume",
+        "consume"
+      ],
+      "item_operational_check_rc": 0,
+      "qualification": "synthetic fixture, never live evidence"
+    },
+    {
+      "span": "qual-03-s01",
+      "mock": {
+        "rc": 0,
+        "legs": 6,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-03-s01/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-03-s01/desk/JOURNAL-TABLE.md"
+      },
+      "g0_roles": [
+        "capture",
+        "consume",
+        "consume",
+        "consume",
+        "consume",
+        "consume"
+      ],
+      "item_operational_check_rc": 0,
+      "qualification": "synthetic fixture, never live evidence"
+    },
+    {
+      "span": "qual-03-s02",
+      "mock": {
+        "rc": 0,
+        "legs": 6,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-03-s02/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/jw-wt/mbp-plan-1116/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/.synthetic-XgJzBa/mock/qual-03-s02/desk/JOURNAL-TABLE.md"
+      },
+      "g0_roles": [
+        "capture",
+        "consume",
+        "consume",
+        "consume",
+        "consume",
+        "consume"
+      ],
+      "item_operational_check_rc": 0,
+      "qualification": "synthetic fixture, never live evidence"
+    }
+  ],
+  "total_checks": 91
+}

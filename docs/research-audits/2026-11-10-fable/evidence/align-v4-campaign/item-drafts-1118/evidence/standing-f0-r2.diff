@@ -1,0 +1,59 @@
+--- origin/main@8fd5c8cc549311537b65d64e68036e52beebc28b:RUN_STATE item 346
++++ STANDING-F0-r2.md
+@@ -1,19 +1,22 @@
+-346. **Laptop lead (interactive, Opus 5.5), drafted by the items-rl165 drafter 2026-11-14 PST and re-drafted under RL-171 and RL-172 and re-pinned to the W1-line head `b2e01464d` (RL-172b condition 3; RL-172c) by the items-rl171 builder 2026-11-15 PST, ISSUED 2026-11-15 11:51:24 PST (`date`): STANDING ITEM (RL-165 §3). MAGISTRATE: you may run filler F0, the Part C bridge, ON YOUR OWN, without a further item from the lead, whenever one of the three triggers below holds and every rule below holds: a FRESH TV0h/TV1h idle soak, then Part C only (`--fresh-soak --parts C`: the 30B predecessor, a full step-D on TV1h, the gated D_bank member seed 1, then X_G) on `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (the merge of PR #790, head of `ops/2026-11-11-w1-presign`), in the staged worktree `/Users/edr/code/jw-wt/partc-b2e01464d`. Each run is a DIAGNOSTIC, journals only: it adopts nothing, enters nothing and produces no slots. ONE run per activation, with its own OUT. No prepare, no arm, no session, no W1, no other smoke. The launch is your LAST action and you exit at once. The item stays live after each run. It is VOID as soon as the W1-line head is not `b2e01464d` (the lead re-issues it with that merge), and it EXPIRES at 2026-11-22 11:51:24 PST (epoch 1795377084). If any rule fails, do not launch; mail the lead.**
++TBD. **Laptop lead (interactive, Opus 5.5), drafted by the items-rl165 drafter 2026-11-14 PST and re-drafted under RL-171 and RL-172 and re-pinned to the W1-line head `b2e01464d` (RL-172b condition 3; RL-172c) by the items-rl171 builder 2026-11-15 PST, ISSUED <LEAD FILLS: actual issue at 2026-11-22 11:51:24 PST; if later, re-date the renewal> (`date`): STANDING ITEM (RL-165 §3). MAGISTRATE: you may run filler F0, the Part C bridge, ON YOUR OWN, without a further item from the lead, whenever one of the three triggers below holds and every rule below holds: a FRESH TV0h/TV1h idle soak, then Part C only (`--fresh-soak --parts C`: the 30B predecessor, a full step-D on TV1h, the gated D_bank member seed 1, then X_G) on `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (the merge of PR #790, head of `ops/2026-11-11-w1-presign`), in the staged worktree `/Users/edr/code/jw-wt/partc-b2e01464d`. Each run is a DIAGNOSTIC, journals only: it adopts nothing, enters nothing and produces no slots. ONE run per activation, with its own OUT. No prepare, no arm, no session, no W1, no other smoke. The launch is your LAST action and you exit at once. The item stays live after each run. It is VOID as soon as the W1-line head is not `b2e01464d` (the lead re-issues it with that merge), and it EXPIRES at 2026-11-29 11:51:24 PST (epoch 1795981884). If any rule fails, do not launch; mail the lead.**
+ 
+ ```pointer
+ owner: magistrate
+ wait: none
+-deadline: 2026-11-22T11:51:24-08:00
++deadline: 2026-11-29T11:51:24-08:00
+ on_early_or_refused: any failed line of "Start and check", a void or expired item, a launch refusal (rc≠0 or no claimed fence), or a launch that cannot meet rules 5 to 7 (rule 6 is now the b2e01464d launch window 02:35:00-22:40:00, RL-171): NOTHING launches; mail the lead. Do not retry, do not extend, do not reuse OUT. A launcher refusal at b2e01464d is recorded and goes to the research lead (RL-164 §2(c)). A completed run, whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json), is NOT a refusal: it is reported and compared line by line with the previous Part C's verdict (rule 10). A running F0 is never aborted (rule 9)
+ next_observable: the next activation after each run's fence is gone runs "Check" below and reports, by email to Ed and the lead, as the next RUN_STATE item and as one line on the standing notice: receipt rc, parts, soak rc and sha256, part-C rc; from smoke_part_c.json ONLY the evaluation, N_chunk and T_dead; the restore lines; the trigger that launched it
+ ```
+ 
++- **Renewal r2 (DRAFT, RL-165 §3 rule 2).** Item 346 was issued 2026-11-15 11:51:24 PST; its seven-day expiry is **Sun 22 Nov 2026 11:51:24 PST** (epoch 1795377084). This unissued renewal begins exactly then, with planned expiry Sun 29 Nov 2026 11:51:24 PST (epoch 1795981884). The lead must issue at that instant for these fixed bounds; a later actual issue needs a re-dated seven-day window. F0 spacing and daily counts continue across renewals; never reset its ledger. Fetched main `8fd5c8cc549311537b65d64e68036e52beebc28b` and W1 head `b2e01464d6d4fbf2901ff4d4154df9455104a12a` checked by builder: unchanged at item 346 pin; the 17 hashes, Mac-check and all rules carry as written. Nothing is issued by this file.
++- **Optional hold paragraph (item 374 form; inactive until the lead issues it):** MAGISTRATE: arm NO STANDING-F0 from <LEAD FILLS: hold issue instant> until the lead's RUN_STATE record "offload window closed" or <LEAD FILLS: hold end instant and epoch>, whichever is first. Counted items keep their own gates/windows; a running packer is a STOP at any arm. This does not carry forward item 374's Mon16-only hold, authorize offloading, or change F0's 02:35:00–22:40:00 launch window. Lead-owned hold records must be re-read before Start and Run.
++
+ - **What this item is (RL-165 §3; RL-155a §2 row F0; RL-164 §5).** The filler ladder's F0 row, made self-executing. One RUN_STATE item, issued once, which you launch without the lead under the ten rules below. It needs no item per run. It does not change F0's design: the same Part C kit as items 319 and 325, at the commit item 325 runs. **F0's cap is not raised:** at most three a day, t0 at least 4 h apart (RL-165 §3, closing line).
+ - **Not a campaign span.** It does not count for RL-149 §2.8 line 9 (RL-155 §3.4; RL-165 §6). v4 sessions take the machine first (RL-155 R-A; rule 3 below).
+ 
+ **The ten rules (RL-165 §3; record each at every launch):**
+ 1. **Pin.** The full sha `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (tree `c904864e46879a4adfbdf0b467d4da1ee5928285`), the 17-hash table below, the Mac-check line below and the staged worktree `/Users/edr/code/jw-wt/partc-b2e01464d` (created by the script if absent). Pre-qualified on the Air at `b2e01464d` by the items-rl171 builder, 2026-11-15: the six dry-check modules OK (`/Volumes/JW-EXT/scratch/items-rl171/probe/tests-b2e01464d.log`: 1, 31, 15, 58, 24 and 24 tests, one skip), the 17 hashes (`probe/hashes-b2e01464d.txt`: sixteen equal the `c3f4bacd8` table, Mythos's independent one; `v4_registration.py` differs by one line, below), and the bounds re-derived from these bytes (`probe/b2e01464d-derived.txt`). The six modules still run once on the MBP at this sha (Start and check).
+-2. **Void and expiry.** The item is VOID when the W1-line head (`origin/ops/2026-11-11-w1-presign`) is not `b2e01464d`. The lead re-issues it as part of that merge (for example PR #774's: RL-165 §9 lets a pass carry to #774's merge commit, but this item names a sha, so it is re-issued there). This issue replaces the one at `c3f4bacd8` (RL-172b condition 3: re-issued at the merge commit; the W1-line head moved by #798's merge `e5b4f4f7f` and then #790's merge `b2e01464d`). It EXPIRES 7 days after issue. A void or expired item launches nothing: mail the lead.
++2. **Void and expiry.** The item is VOID when the W1-line head (`origin/ops/2026-11-11-w1-presign`) is not `b2e01464d`. The lead re-issues it as part of that merge (for example PR #774's: RL-165 §9 lets a pass carry to #774's merge commit, but this item names a sha, so it is re-issued there). This renewal supersedes item 346 at its expiry; historically item 346 replaced the issue at `c3f4bacd8` (RL-172b condition 3: re-issued at the merge commit; the W1-line head moved by #798's merge `e5b4f4f7f` and then #790's merge `b2e01464d`). It EXPIRES 7 days after issue. A void or expired item launches nothing: mail the lead.
+ 3. **When (the triggers; exactly one is recorded).**
+    - (a) **REFUSAL:** a slot's arm refused (a failed "Start and check" line or a launcher refusal of a staged campaign span or session).
+    - (b) **NOT_READY:** a slot's block is not READY at its earliest t0 (its item is not issued and staged, or one of its gate lines does not hold).
+@@ -79,7 +82,7 @@
+ : "${MAGISTRATE_PID:?Set to the PID of this magistrate own claude process}"
+ ps -o pid=,comm= -p "$MAGISTRATE_PID"     # must show the claude process, not a tool shell
+ 
+-EXPIRY_EPOCH=1795377084
++EXPIRY_EPOCH=1795981884
+ QUIET_CAMPAIGN_S=300    # RL-171 §6.1, confirmed by RL-172 §0: 300 s after a campaign close; 1,200 s after F0, F2 or any other close
+ WT=/Users/edr/code/jw-wt/partc-b2e01464d
+ test -e "$WT" || git -C /Users/edr/code/JouleWise worktree add --detach "$WT" b2e01464d6d4fbf2901ff4d4154df9455104a12a
+@@ -152,9 +155,21 @@
+   echo "journal copy of $plan_id: $(cat "$copy_ok")"     # record this line
+ )
+ 
++# Renewal starts at item 346's seven-day expiry, never earlier (RL-165 §3 rule 2).
++RENEWAL_ISSUED_EPOCH="<LEAD FILLS: actual issue epoch; planned 1795377084>"
++RENEWAL_START_EPOCH=1795377084
++renewal_gate() {
++  case "$RENEWAL_ISSUED_EPOCH" in ''|*[!0-9]*) echo 'WAIT: renewal not issued'; return 1;; esac
++  test "$RENEWAL_ISSUED_EPOCH" = "$RENEWAL_START_EPOCH" \
++    || { echo 'VOID: actual renewal issue differs; lead re-dates seven-day window'; return 1; }
++  test "$(date +%s)" -ge "$RENEWAL_START_EPOCH" && test "$(date +%s)" -lt "$EXPIRY_EPOCH" \
++    || { echo 'WAIT/EXPIRED: outside renewal validity'; return 1; }
++}
++
+ # THE COMPLETE ELIGIBILITY CHECK (rules 1-8, expiry, reservation, current time, current head). It runs here AND again
+ # as the first step of "Run", on freshly re-read state (Sol items review P1-3). Any failure: return 1, nothing launches.
+ f0_eligible() {
++  renewal_gate || return 1
+   # Rule 2: void if the W1-line head moved (fetched fresh); expiry
+   git -C /Users/edr/code/JouleWise fetch -q origin ops/2026-11-11-w1-presign || { echo "STOP: fetch failed"; return 1; }
+   W1HEAD="$(git -C /Users/edr/code/JouleWise rev-parse origin/ops/2026-11-11-w1-presign)"
