@@ -55,6 +55,11 @@ lines, a second block in one item, an unterminated block, and a misplaced block
 are named errors with RUN_STATE line numbers. Every block is validated, even
 when an item with a higher number also carries one.
 
+A pointer-bearing item number must identify exactly one heading, even if a
+second heading has no block. The two historical prose headings numbered 387
+are retained by their exact heading digests from commits `754cc672c3` and
+`d65f60d8b8`. Adding a pointer or a third heading to that pair is refused.
+
 The highest numbered item **carrying a block** wins, regardless of file order.
 Sort the numeric part first, then the optional lowercase letter (`256b > 256`,
 `257 > 256b`). Items without a block are ignored: an ordinary RUN_STATE commit
