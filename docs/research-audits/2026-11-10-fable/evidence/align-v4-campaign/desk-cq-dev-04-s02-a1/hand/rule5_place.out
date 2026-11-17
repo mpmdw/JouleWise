@@ -1,0 +1,6 @@
+L007 {"attempt": 1, "runs_ge_3s": [{"len_samples": 3, "t_s": [319.1, 321.1], "pst": ["04:04:06", "04:04:08"], "max_cores": 1.521}]}
+L008 {"attempt": 1, "runs_ge_3s": []}
+L009 {"attempt": 1, "runs_ge_3s": []}
+L010 {"attempt": 1, "runs_ge_3s": [{"len_samples": 4, "t_s": [914.2, 917.2], "pst": ["05:09:53", "05:09:56"], "max_cores": 1.013}]}
+L011 {"attempt": 1, "runs_ge_3s": [{"len_samples": 3, "t_s": [1211.2, 1213.2], "pst": ["05:31:08", "05:31:10"], "max_cores": 1.676}]}
+L012 {"attempt": 1, "runs_ge_3s": []}

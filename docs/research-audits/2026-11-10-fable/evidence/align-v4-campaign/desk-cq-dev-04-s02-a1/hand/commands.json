@@ -1,0 +1,233 @@
+{
+ "desk": {
+  "cwd": "/Users/edr/code/jw-wt/desk-pin-2d347f721",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "scripts/air/cadence_desk.py",
+   "build",
+   "--plan-id",
+   "cq-dev-04-s02-a1",
+   "--input",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle",
+   "--out",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/auto",
+   "--kit",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/cl-dev-04.v1.1.json",
+   "--lock",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/cq-dev-04-s02-a1.lock"
+  ],
+  "exit_code": 0
+ },
+ "hand_table": {
+  "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/hand_table.py",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/auto",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/hand_table.json",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/cl-dev-04.v1.1.json"
+  ],
+  "exit_code": 0
+ },
+ "keyscan": {
+  "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/keyscan.py",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/runner_receipt.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/span_plan.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/chain-stages.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/censuses.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/volume_censuses.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/soak/soak_reference.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/soak/idle_soak/sensors/align_thermal.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle/span/meter.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle/span/result.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L007/leg_record.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle/legs/L007/leg_summary.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L007/runtime/load_journal.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L007/runtime/runs/cadence-cl-dev-04-l007/outputs/align_thermal.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L007/runtime/runs/cadence-cl-dev-04-l007/outputs/align_window_reference.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L008/leg_record.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle/legs/L008/leg_summary.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L008/runtime/load_journal.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L008/runtime/runs/cadence-cl-dev-04-l008/outputs/align_thermal.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L009/leg_record.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle/legs/L009/leg_summary.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L009/runtime/load_journal.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L009/runtime/runs/cadence-cl-dev-04-l009/outputs/align_thermal.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L010/leg_record.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle/legs/L010/leg_summary.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L010/runtime/load_journal.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L010/runtime/runs/cadence-cl-dev-04-l010/outputs/align_thermal.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L011/leg_record.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle/legs/L011/leg_summary.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L011/runtime/load_journal.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L011/runtime/runs/cadence-cl-dev-04-l011/outputs/align_thermal.jsonl",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L012/leg_record.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/desk-bundle/legs/L012/leg_summary.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L012/runtime/load_journal.json",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z/legs/L012/runtime/runs/cadence-cl-dev-04-l012/outputs/align_thermal.jsonl"
+  ],
+  "exit_code": 0,
+  "stdout_file": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/keyscan.out"
+ },
+ "r1print": {
+  "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/r1print.py",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z"
+  ],
+  "exit_code": 0,
+  "stdout_file": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/r1print.out"
+ },
+ "sampler": {
+  "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/sampler.py",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z",
+   "L007",
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "exit_code": 0,
+  "stdout_file": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/sampler.out"
+ },
+ "oslevel": {
+  "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/oslevel.py",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z",
+   "L007",
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "exit_code": 0,
+  "stdout_file": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/oslevel.out"
+ },
+ "rule5_place": {
+  "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/rule5_place.py",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z",
+   "L007",
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "exit_code": 0,
+  "stdout_file": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/rule5_place.out"
+ },
+ "maint_overlap": {
+  "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/maint_overlap.py",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/maint_overlap.json",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/MAINTENANCE-OVERLAP.md"
+  ],
+  "exit_code": 0,
+  "stdout_file": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/maint_overlap.stdout"
+ },
+ "maint_burst": [
+  {
+   "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+   "env": {
+    "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+   },
+   "argv": [
+    "/opt/homebrew/bin/python3.13",
+    "-I",
+    "-B",
+    "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/maint_burst.py",
+    "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z",
+    "05:00",
+    "05:15"
+   ],
+   "exit_code": 0
+  }
+ ],
+ "build_result": {
+  "cwd": "/Users/edr/code/jw-wt/desk-dev04-cb24533b",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/build_result.py",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/cl-dev-04.v1.1.json",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s01-a1/hand/hand_table.json"
+  ],
+  "exit_code": 0,
+  "stdout_file": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/build_result.stdout"
+ },
+ "manifest_hash_replay": {
+  "cwd": "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s02-a1-20261117T112332Z",
+  "argv": [
+   "shasum",
+   "-a",
+   "256",
+   "-c",
+   "/Users/edr/night-custody/offload/cq-dev-04-s02-a1/cq-dev-04-s02-a1.SHA256SUMS"
+  ],
+  "note": "Equivalent replay; this session verified all entries with Python hashlib SHA256, streaming bytes only. Paths ./ are span-relative."
+ }
+}

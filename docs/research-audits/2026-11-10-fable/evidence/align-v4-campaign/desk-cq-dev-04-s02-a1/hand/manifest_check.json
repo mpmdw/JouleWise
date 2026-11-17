@@ -1,0 +1,893 @@
+{
+ "manifest": "/Users/edr/night-custody/offload/cq-dev-04-s02-a1/cq-dev-04-s02-a1.SHA256SUMS",
+ "manifest_sha256": "e60459cd7887ae14ba2e37070782f643befa0562e43308d1f9012313a7a43dcc",
+ "mapping": "./ paths are relative to the supplied original span directory; no other root mapping",
+ "count": 221,
+ "failed": 0,
+ "entries": [
+  {
+   "path": "./censuses.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./chain-stages.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./desk-bundle/legs/L007/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./desk-bundle/legs/L008/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./desk-bundle/legs/L009/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./desk-bundle/legs/L010/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./desk-bundle/legs/L011/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./desk-bundle/legs/L012/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./desk-bundle/span/meter.json",
+   "ok": true
+  },
+  {
+   "path": "./desk-bundle/span/result.json",
+   "ok": true
+  },
+  {
+   "path": "./hazards/meter/stream-001.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/L007.a1.stderr.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/L007.a1.stdout.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/leg_record.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/leg_spec.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/battery.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/load_journal.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/config.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/events.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/logs/controller.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/logs/custody/powermetrics-powermetrics_idle_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/logs/custody/powermetrics-powermetrics_idle_post_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/logs/custody/powermetrics-powermetrics_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/logs/runtime.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/logs/telemetry.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/metadata.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/outputs/align_episode.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/outputs/align_thermal.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/outputs/align_transcript.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/outputs/align_turns.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/outputs/align_window_reference.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/power_trace.csv",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/raw/battery_float.post.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/raw/battery_float.pre.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/raw/powermetrics.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/raw/powermetrics_idle.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/raw/powermetrics_idle_post.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/rich_telemetry.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/rich_telemetry_idle.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/rich_telemetry_idle_post.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runs/cadence-cl-dev-04-l007/summary_metrics.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runtime_custody.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L007/runtime/runtime_result.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/L008.a1.stderr.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/L008.a1.stdout.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/leg_record.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/leg_spec.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/battery.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/load_journal.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/config.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/events.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/logs/controller.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/logs/custody/powermetrics-powermetrics_idle_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/logs/custody/powermetrics-powermetrics_idle_post_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/logs/custody/powermetrics-powermetrics_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/logs/runtime.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/logs/telemetry.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/metadata.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/outputs/align_episode.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/outputs/align_thermal.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/outputs/align_transcript.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/outputs/align_turns.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/power_trace.csv",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/raw/battery_float.post.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/raw/battery_float.pre.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/raw/powermetrics.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/raw/powermetrics_idle.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/raw/powermetrics_idle_post.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/rich_telemetry.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/rich_telemetry_idle.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/rich_telemetry_idle_post.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runs/cadence-cl-dev-04-l008/summary_metrics.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runtime_custody.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L008/runtime/runtime_result.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/L009.a1.stderr.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/L009.a1.stdout.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/leg_record.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/leg_spec.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/battery.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/load_journal.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/config.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/events.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/logs/controller.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/logs/custody/powermetrics-powermetrics_idle_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/logs/custody/powermetrics-powermetrics_idle_post_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/logs/custody/powermetrics-powermetrics_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/logs/runtime.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/logs/telemetry.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/metadata.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/outputs/align_episode.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/outputs/align_thermal.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/outputs/align_transcript.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/outputs/align_turns.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/power_trace.csv",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/raw/battery_float.post.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/raw/battery_float.pre.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/raw/powermetrics.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/raw/powermetrics_idle.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/raw/powermetrics_idle_post.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/rich_telemetry.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/rich_telemetry_idle.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/rich_telemetry_idle_post.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runs/cadence-cl-dev-04-l009/summary_metrics.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runtime_custody.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L009/runtime/runtime_result.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/L010.a1.stderr.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/L010.a1.stdout.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/leg_record.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/leg_spec.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/battery.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/load_journal.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/config.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/events.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/logs/controller.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/logs/custody/powermetrics-powermetrics_idle_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/logs/custody/powermetrics-powermetrics_idle_post_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/logs/custody/powermetrics-powermetrics_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/logs/runtime.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/logs/telemetry.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/metadata.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/outputs/align_episode.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/outputs/align_thermal.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/outputs/align_transcript.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/outputs/align_turns.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/power_trace.csv",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/raw/battery_float.post.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/raw/battery_float.pre.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/raw/powermetrics.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/raw/powermetrics_idle.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/raw/powermetrics_idle_post.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/rich_telemetry.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/rich_telemetry_idle.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/rich_telemetry_idle_post.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runs/cadence-cl-dev-04-l010/summary_metrics.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runtime_custody.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L010/runtime/runtime_result.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/L011.a1.stderr.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/L011.a1.stdout.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/leg_record.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/leg_spec.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/battery.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/load_journal.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/config.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/events.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/logs/controller.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/logs/custody/powermetrics-powermetrics_idle_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/logs/custody/powermetrics-powermetrics_idle_post_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/logs/custody/powermetrics-powermetrics_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/logs/runtime.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/logs/telemetry.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/metadata.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/outputs/align_episode.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/outputs/align_thermal.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/outputs/align_transcript.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/outputs/align_turns.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/power_trace.csv",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/raw/battery_float.post.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/raw/battery_float.pre.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/raw/powermetrics.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/raw/powermetrics_idle.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/raw/powermetrics_idle_post.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/rich_telemetry.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/rich_telemetry_idle.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/rich_telemetry_idle_post.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runs/cadence-cl-dev-04-l011/summary_metrics.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runtime_custody.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L011/runtime/runtime_result.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/L012.a1.stderr.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/L012.a1.stdout.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/leg_record.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/leg_spec.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/leg_summary.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/battery.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/load_journal.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/config.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/events.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/logs/controller.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/logs/custody/powermetrics-powermetrics_idle_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/logs/custody/powermetrics-powermetrics_idle_post_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/logs/custody/powermetrics-powermetrics_plist.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/logs/runtime.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/logs/telemetry.log",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/metadata.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/outputs/align_episode.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/outputs/align_thermal.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/outputs/align_transcript.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/outputs/align_turns.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/power_trace.csv",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/raw/battery_float.post.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/raw/battery_float.pre.ioreg",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/raw/powermetrics.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/raw/powermetrics_idle.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/raw/powermetrics_idle_post.plist",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/rich_telemetry.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/rich_telemetry_idle.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/rich_telemetry_idle_post.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runs/cadence-cl-dev-04-l012/summary_metrics.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runtime_custody.json",
+   "ok": true
+  },
+  {
+   "path": "./legs/L012/runtime/runtime_result.json",
+   "ok": true
+  },
+  {
+   "path": "./maintenance-log.err",
+   "ok": true
+  },
+  {
+   "path": "./maintenance-log.txt",
+   "ok": true
+  },
+  {
+   "path": "./meter.stderr.log",
+   "ok": true
+  },
+  {
+   "path": "./meter.stdout.log",
+   "ok": true
+  },
+  {
+   "path": "./meter_supervision.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./runner_receipt.json",
+   "ok": true
+  },
+  {
+   "path": "./soak.stderr.log",
+   "ok": true
+  },
+  {
+   "path": "./soak.stdout.log",
+   "ok": true
+  },
+  {
+   "path": "./soak/idle_soak/battery.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./soak/idle_soak/load_journal.json",
+   "ok": true
+  },
+  {
+   "path": "./soak/idle_soak/runtime_custody.json",
+   "ok": true
+  },
+  {
+   "path": "./soak/idle_soak/runtime_result.json",
+   "ok": true
+  },
+  {
+   "path": "./soak/idle_soak/sensors/align_thermal.jsonl",
+   "ok": true
+  },
+  {
+   "path": "./soak/soak_reference.json",
+   "ok": true
+  },
+  {
+   "path": "./soak/soak_row.json",
+   "ok": true
+  },
+  {
+   "path": "./span_plan.json",
+   "ok": true
+  },
+  {
+   "path": "./volume_censuses.jsonl",
+   "ok": true
+  }
+ ]
+}

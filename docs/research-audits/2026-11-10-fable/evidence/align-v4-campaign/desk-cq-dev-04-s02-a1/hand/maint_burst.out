@@ -1,0 +1,15 @@
+WINDOW 05:00-05:15
+05:08 XProtect 25
+05:08 XProtectPluginService 281
+05:08 mobileassetd 2021
+05:08 softwareupdated 2582
+05:09 XProtect 31
+05:09 XProtectPluginService 562
+05:09 mobileassetd 24
+05:09 softwareupdated 15
+05:10 mobileassetd 11
+05:10 softwareupdated 22
+05:12 softwareupdated 8
+05:13 mobileassetd 1
+05:13 softwareupdated 1
+first {'softwareupdated': '05:08:45', 'XProtect': '05:08:45', 'XProtectPluginService': '05:08:45', 'mobileassetd': '05:08:45'} last {'softwareupdated': '05:13:50', 'XProtect': '05:09:03', 'XProtectPluginService': '05:09:03', 'mobileassetd': '05:13:50'}
