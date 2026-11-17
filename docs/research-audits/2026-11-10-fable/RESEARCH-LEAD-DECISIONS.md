@@ -17531,3 +17531,145 @@ Research lead (Fable 5.2), Sun Nov 15 11:58 PST 2026 (from `date`). Ed, 11-15: "
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. The hole figures are from synthetic custody. The exclusion clauses and the Q11 rule are fixed before any development energy is read.
 
 **For Ed, plainly.** "Agreed, and it is now the rule and not a stopgap: the laptop encrypts and uploads each run's data, checks the upload, runs its own table check, and starts the next run. The Air is no longer needed for any of that. The alarm that watches for a stuck run moves to GitHub, so it works when both of us are away. One condition matters: a second copy of the encryption key must exist somewhere other than the laptop, or the cloud copy is useless if the laptop dies. I also tightened the analysis so that a gap in a power recording drops that one run before any energy is read."
+
+# RL-174. The host event is not a gate: freeze 2 proceeds on the host as it is. Qualification runs on three dates, one block each, with its six rules unchanged and maintenance overlaps print-only. Two more instrument kits at ctl-01's doses and a second High Power block are admitted as fillers; ctl-01's runner is built now. The supervised iCloud backend is the permanent offload tool, and an MBP original is deleted only when two verified copies exist off the MBP. The batch of 16 is ruled
+
+Research lead (Fable 5.2), Mon Nov 16 18:04 PST 2026 (from `date`). Ed, 11-16: measurement data must not accumulate on either Mac; everything is compressed and offloaded to iCloud and the SSD. RL-149 to RL-173 stand except where "Amends" says otherwise.
+
+**Read.** Sol's briefing on the 16 questions, and the raw batch in `fable-batch-next.md`; the gate census and the provisional plan for Wed 18 to Sun 22; `item-drafts-1118/STATUS.md` at `80969605d`; RUN_STATE 350, 353 and 374 to 376 on `origin/main` `0656dfe3a`; AGENDA's experiment table; my RL-149 §2.3 and §2.5, RL-155 §5.3, RL-166b §4, RL-167 §8.1, RL-169 §1 to §5, RL-171 §5 and §6, RL-172 (a), (b), (e) and (f), and RL-173.
+
+**Not checked.** I ran nothing. I did not read the code of #795, #799, #800, #804 or `close_offload.py`; every statement about what the code does is Sol's or the census's. I did not check whether today's 153 archives are encrypted or whether their iCloud copies were read back. I did not check that the kit validator on F2's pin accepts a 128 or 256 token decode. No SSH; no energy, power, meter, transcript, slot or custody file was opened.
+
+---
+
+## A. The 16 questions
+
+| # | Question | Ruling |
+|---|---|---|
+| 1 | Clock-fit excess two-sided | **As recommended.** The excess is the larger magnitude of the residuals about the fitted line. 2 s stands |
+| 2 | Hidden holes with excess between 1 and 2 s | **Accepted, as recommended.** The bound stays 2 s. The manifest says a pass does not prove there is no hidden hole, and stage 1 prints the count of fit legs with excess between 1 and 2 s. Print only |
+| 3 | Which interval the trace clauses use | **As built.** RL-173 E.1's two clauses are judged on the energy-fit intervals. RL-166 Q7's rules 3 and 4 keep the G0-to-last-token interval. A leg must pass both |
+| 4 | Undecodable stream; `.zst` input | **As recommended.** A stream that cannot be decoded fails rule 4 for every fit leg of its span; stage 1 prints the span id. A second span lost this way comes to me. A `.zst` input refuses the look (see 6) |
+| 5 | Ruling id for a replaced stage-1 hash | **Every published replacement gets a ledger entry with a ruling id.** This ruling is the standing id (`RL-174 A.5`) for one case only: the stage-1 output bytes are unchanged and the ledger's transcription of a hash was wrong. Any replacement whose output bytes differ needs its own ruling |
+| 6 | Is cadence custody ever desk-compressed | **No.** Compression is for storage and transport. A look reads a raw copy (section D.3) |
+| 7 | Q11 and the five-world sentence | **0.08 is confirmed and the GPU backstop is mandatory. No further simulation.** The sentence is rewritten to the range over every world in the committed evidence, with the default world's figure named. The lead takes the numbers from the evidence file |
+| 8 | Reference record hash (Mythos N12) | **As recommended.** The capture record's own sha256 is carried in the close bundle and the desk compares it, wherever the record exists. No frozen pin changes. A past span with no recorded hash keeps the indirect binding and is listed by span id as an exception |
+| 9 | Fence during an informational page | **The repaired behaviour is confirmed:** the fence is held through `WAIT_STALL` and every wait. Only a halt or a cede releases it |
+| 10 | L002 not released | **The global hold is intended, fallback included.** RL-165 §4's "own-shaped legs may arm without me" is withdrawn. Two cases: a real timeout comes to me; evidence that is missing or unreadable is cleared by the lead's release record after a hand read |
+| 11 | Q1 records for hand-armed v1.1 spans | **As recommended.** The lead writes them at switch-over, dated when written, each linked to its print |
+| 12 | Legacy one-line copy marker | **As recommended.** A typed marker is written from verified evidence and the original line is kept beside it. Where the evidence is short, the verification is re-run. A hand-written "ok" is not a marker |
+| 13 | Which watcher runs count | **As built:** scheduled runs on `main` of this repository, completed with success, started after the previous span's close. A manual run is for tests and never serves an arm |
+| 14 | The SSH probes during F0 runs 1 and 5 | **Recorded deviations, no rerun.** F0 is a diagnostic and both checks equalled their neighbours. Chaining every lead job to the Check item is the fix |
+| 15 | Host events | **Section C** |
+| 16 | iCloud as the permanent tool | **Section D** |
+
+**Marker and exit code (briefing, under 16).** One marker schema and one iCloud backend, shared by the span offload and `close_offload.py`. The lead picks which side changes; it is engineering. The marker carries RL-173 A.2's fields. A retry that finds a valid marker re-checks its hashes and exits 0.
+
+## B. Thursday to Sunday
+
+**The largest use of these hours is the R1 slot session** (driver bound 28 h 23 min). No READY record is staged. The lead's spare effort goes to that checklist before any filler build. An idle hour is not a defect (RL-172); the fillers below are admitted because each answers a question I have.
+
+| # | Question | Ruling |
+|---|---|---|
+| 1 | A standing filler below F2 | **Two finite fillers, no standing one.** (a) the kits of row 2; (b) `hp-02`, a second High Power block. AGENDA experiment 3's weightless loads and IOReport collector, and experiments 5 to 9, are not admitted: each needs a new runner or a design page. The lead may commission one Mythos design page for experiment 3's collector, to me |
+| 2 | A second F2 kit before `lm-inst-01` is read | **Yes, for one design only:** `f2-inst-02` and `f2-inst-03`, equal to `f2-inst-01` in every field except the name, the seed, the ruling and `leg_defaults.decode_tokens`, which is 128 and 256. These are ctl-01's other two doses, so the kits are useful whatever `lm-inst-01` prints. Any other kit (other holds, other prompts) still waits for my reading |
+| 3 | Qualification dates | **Three t0-dates, one block each.** Each block holds two L pairs, and fewer than three pair-days prints `not_evaluable` for the ±0.10 word (RL-166b §4). Qualification does inherit RL-149 §2.3's cap: at most two blocks and 24 legs on a t0-date, block starts at least 10 h apart. The cap is not used in the plan and is not a slip remedy. A block that misses its date is re-dated (RL-172 (a) 5) |
+| 4 | ctl-01's runner | **Build it now, off the MBP, ahead of type T** (amends RL-155 §5.3's order). Class A, one executing Mythos seat on its PR, up to nine legs a span. The doses are kit data. The kit is not frozen until I have read `lm-inst-01`. The print code is frozen before any ctl energy is read |
+| 5 | Maintenance flags at freeze 2 | **Decided now: the six rules are unchanged and overlaps are print-only.** The drafts' INCLUSION_RECORD is this row |
+
+**Conditions for `f2-inst-02` and `f2-inst-03`.**
+- RL-169 §2 to §5 and RL-169a apply as written: same pin, same runner, an F2 root outside every campaign and v4 root, `redo_quota` 0, four pieces of three, no leg in any campaign count.
+- READY after `f2-inst-01` piece 1's hand-read PASS and one executing delta check per kit. If the validator, `plan` or the mock refuses a 128 or 256 decode, the builder stops and tells me.
+- Sealed until freeze 2, then read once by `lm-inst-01`'s code. The manifest lists the three kits before any F2 energy is read and prints per kit.
+- Each kit voids seven days after its issue.
+
+**Conditions for `hp-02`.**
+- Only if `lm-hp-01` has not been run. Its manifest then lists both blocks before any High Power energy is read. If it has been run, `hp-02` is not admitted.
+- hp-01's kit with a new seed: data only, same pin, one delta check. RL-157 applies. Its t0-date holds no hp-01 leg.
+- It never arms before a qualification span on the same t0-date.
+- Description only, never in a fit, as RL-149 §2.5 has hp-01.
+
+**The ladder:** a READY v4 session, then counted work, then F0, then F2 (`inst-01`, `-02`, `-03`), then `hp-02`, then `DESIGN_QUEUE_LOW`.
+
+**Why row 5 goes this way.** The count is not zero (L010 and L012.a2), so RL-171 §5 item 3 needs a reason and not only a count.
+- Qualification tests the frozen fit on the population the v4 windows will admit. Their admission rules are registered and hold no maintenance clause. A stricter rule for qualification than for the fit would test a cleaner population than the one the fit serves.
+- A log overlap is not a measured disturbance.
+- `lm-qual-01` prints qualification's errors for flagged and unflagged legs side by side, with the counts by job. Description only; it carries no word.
+- The lead appends the by-job count through dev-05 to the record when dev-05's desk is final. It gates nothing.
+
+## C. The host event: not a gate on freeze 2
+
+**RL-173 E set a last opportunity, not a requirement.** The remote attempt was made and read back (item 353). Freeze 2 proceeds.
+
+| Setting | State that qualification runs on | Stated by each arm record |
+|---|---|---|
+| `spotlightknowledged` and its updater | Stopped since Sun 15 15:32 | Present or absent |
+| `corespotlightd` | Runs on demand | Present |
+| Indexing of `/` | Off | Off |
+| Time Machine | Automatic backups not disabled; no destination, so no backup can run; `backupd` resident | Destination none |
+
+- **Nothing is required of Ed.** If he is at the machine for another reason before freeze 2 is committed, he may disable Time Machine and restart, with a readback and a restore line. Nobody arranges a visit for it.
+- **From freeze 2's commit through qual-03's close, nobody changes a hygiene setting.** This holds for ctl-01 and W1 as far as the lead controls it.
+- **An unplanned restart** is recorded as a host event and the next arm states the four lines. It holds nothing. The maintenance line and the print of B.5 are how the paper sees it.
+- **The look's maintenance print carries the date `spotlightknowledged` was stopped,** because development spans ran on both sides of it.
+
+## D. Storage
+
+**1. The #804 iCloud backend is the permanent tool under RL-173 A.3.** A full evict, re-download and sha256 of the ciphertext is a stronger readback than a provider's hash. Conditions:
+- The tool exits only after the readback is equal, and before the next soak. Without an observed eviction and re-download it writes no `.ok`.
+- Permanent status starts with one recorded native round trip on the MBP with the production key. Until that record exists, the status is interim, as now.
+- Each arm reads that no iCloud transfer is pending under the JouleWise folders.
+- `bird`, `cloudd` and `fileproviderd` stay in the maintenance line for good.
+- Nothing of ours writes to iCloud Drive on the MBP while a span is armed. The Air's uploads and its evict loop are allowed; the maintenance line shows what they cost.
+- Unreleased custody (campaign, F2, v4) goes to the cloud encrypted, as #804 does. Archives of released blocks may be plain.
+
+**2. Deleting the MBP's originals: compliant when two verified copies exist off the MBP's disk.** RL-173 A.5 is amended to this:
+
+| State | What the MBP may do |
+|---|---|
+| Archive packed; stream re-read equals the per-file manifest | Delete the uncompressed original. The archive stays on the MBP, materialised |
+| iCloud readback equal, and the SSD copy's sha256 equals the receipt | Evict the local archive |
+| Only iCloud is verified (the Air is away) | Keep the local archive. The MBP does not wait for the Air and does not evict |
+| Free disk within 20 GB of the kit's 40 GB line | The lead is mailed. No tool evicts down to a single copy |
+
+- **Today's 153 archives.** The SSD copies are verified. Each iCloud copy counts once it has been downloaded once and hashed equal to its receipt. If that was not done, the lead does it on the Air now. If any archive holds unreleased content in plain form, the record says so and the lead replaces the cloud copy with an encrypted one. Neither holds an arm.
+- **`close_offload.py`** handles bytes only and parses nothing (A.4). It runs in the close interval with nothing armed, after the span's desk bundle is pushed and after the MBP desk, and ends before the next soak. RL-171 §6.1's floor is re-measured with it in the interval. A failure holds the next arm (A.7). A packed archive of sealed content is as restricted as its content: nobody expands one outside a registered look.
+
+**3. What the look and the desk change.**
+- **The look: one staging step.** The archive is expanded into a staging root and every file's sha256 is checked against the per-file manifest. That manifest's sha256 equals the marker's. Stage 1 records it. The tool handles bytes only, and a test with one changed byte must refuse. The time-field reader keeps refusing `.zst`.
+- **The copy a pending look reads stays raw until that look has finished.** For `lm-interim-01` that is the Air's copy of dev-01 to dev-05 and hp-01. No staging tool is needed before freeze 2 unless that copy is packed.
+- **The desk: nothing.** It reads the leg-summary projection and the pushed bundle, and both exist before the pack. The newest output of each kind stays for the GAP census, as designed.
+
+## E. From the census, not on the lead's list
+
+| # | Item | What I rule or ask |
+|---|---|---|
+| 1 | Freeze 2's date is set by admissions, not by the host | The fresh Mythos cold seat on #795, my cold pass of the manifest, the stage-1 dry run on dev-01 to dev-04 and the stage-2 time against the 20 min budget are all open. The lead schedules them now and sends me the manifest when the cold seat is clean |
+| 2 | #794 | It is unmerged, and its line 1 (no open finding, per kit) and line 2 (equal to `c3f4bacd8`'s red set, test for test) are not on record. Qualification cannot arm without them. If the merge moves the W1 head, STANDING-F0 is void and is reissued with it |
+| 3 | The dated transfer block's design page (RL-172 (e)) | Due before stage 2 of the interim look runs, which is the point of the condition. It does not gate freeze 2. If it is not with me by then, the transfer block is dropped |
+| 4 | Queue and item expiry | The qualification queues expire Mon 23 00:00, so the slip schedule leaves qual-03 no margin: a re-date re-commits the queues. Items 367 and 372 expire Tue 17 at 05:38 and 11:40, before their printed date windows end |
+| 5 | Debt into qualification | qual-01's two spans need dev-05's desk-final and Q1 records, span for span |
+| 6 | The Actions off-host desk (RL-173 B) | Not built. Not a blocker: the MBP desk counts for line 9 and the Air re-checks while it is present. It stays owed |
+
+## Owners
+
+- **Lead:** the R1 checklist first; the items of E; `hp-02` and the two F2 kits (builder and delta checks); the ctl-01 runner's builder and seat; the Q1 records and typed markers of A.11 and A.12; the iCloud readback of today's archives; the native round trip; the by-job count.
+- **Look builder and twin (Sol):** A.2's print, A.4's span print, A.7's sentence, the staging step and its test.
+- **Controller and desk builders:** A.8's hash in the close bundle; A.10's two cases; one marker schema.
+- **Offload builder (Sol), then a Mythos blind check:** `close_offload.py` under D.2's table.
+- **Magistrate:** the four host lines at each arm; the pending-transfer read; `close_offload.py` after each Check once issued.
+
+**Amends.**
+- RL-173 A.3 (the supervised iCloud backend is permanent) and A.5 (the table of D.2).
+- RL-173 E, the restart and Time Machine rows: closed as attempted; no gate.
+- RL-171 §5 item 3: decided by B.5.
+- RL-169 §5's last stop line: by B.2, for the two kits named and nothing else.
+- RL-149 §2.5: a second High Power block, under B's conditions.
+- RL-155 §5.3: ctl-01's runner no longer follows type T.
+- RL-165 §4: the own-shaped exception during an L002 hold is withdrawn.
+- RL-172 (a) 3: the two-block, 24-leg, 10 h cap applies to qualification; the plan is three dates.
+- RL-166 Q7 and RL-173 E.1: the readings of A.1 to A.4.
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. B.5 was decided from two overlap records and the design, with no energy. The fillers of B are sealed until freeze 2 and enter no fit.
+
+**For Ed, plainly.** "Nothing needs you at the laptop: the measurement goes ahead on the machine as it is, and I record its state. iCloud is now the permanent offload, as you chose. The laptop deletes a run's raw files once a checked compressed copy exists, and drops that compressed copy only when both iCloud and the SSD hold a checked one. The final test blocks run on three separate days, one a day. The free hours go first to getting the long calibration session ready, then to three small extra instrument runs that need no new code."
