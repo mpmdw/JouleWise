@@ -40,7 +40,7 @@ scripts were inspected as implementation references, not live validation.
 | Quick tier | hosted PASS on c2612f16d; local diagnostic FAIL | CI 43998129636; scratch quick.log |
 | State/current/pins/diff fences | PASS locally; hosted fences PASS | gen_state/gen_current/repin --check and diff --check |
 | PR / final-head CI | draft PR #807; initial full CI green; final delta CI tracked in PR checks | https://github.com/mpmdw/JouleWise/pull/807 |
-| Requested one Sol cold seat | REFUSE: 2 authority conflicts, 3 reproduced implementation defects; code fixes await same-seat delta | private fallback/REPORT.md; manifest below |
+| Requested one Sol cold seat and same-seat deltas | REFUSE solely for 2 authority conflicts; all 4 reproduced implementation findings closed | private fallback/DELTA2-REPORT.md; final manifest below |
 | Policy / production admission | BLOCKED | plaintext-vs-encryption and pending-upload-vs-next-soak conflicts |
 | Live GUI/TCC/provider validation | PROVISIONAL, lead-owned | never attempted from this session |
 
@@ -237,3 +237,37 @@ Initial and delta-1 raw artifacts remain immutable. The final-head CI and
 same-seat delta-2 result are read back into the PR body; neither an absent
 review output nor a wrapper's zero exit is an admission. Production remains
 blocked until both owner questions and the separate live gate are resolved.
+
+## Final same-seat result and handoff
+
+Delta-2 reviewed `603eae71bb1a444d464e43d4fc7285a3dab03986`. All 31 supplied
+tests passed, zero skipped; 12 synthetic probes passed. The peer confirmed
+partial deletion resumes when a verified target has already been unlinked,
+fresh-source dangling links still refuse, current copy restrictions apply to
+pending and DELETING resumptions, and completion provenance reflects the
+invocation. No new material implementation defect was reproduced. The four
+reproduced implementation findings across the initial review and first delta
+are closed. The top-level builder independently ran the 31-case focused suite,
+75-case structural/state suite, reviewed the diffs and retained final authority.
+
+**Actual verdict: REFUSE solely for the two P1 authority conflicts.** No owner
+answer arrived. This is a concrete, reviewable draft PR, not an ADMIT and not
+production authority. The two pending hard start decisions keep CLOSE-OFFLOAD-01
+blocked; no global stop card or operational pointer was changed. The next exact
+step is the owner's answers to the two NEEDS_RULING questions above. The lead
+may then revise the code or record prospective exceptions and resume this SAME
+Sol seat. No new cold seat is needed or authorized by this handoff. Never merge
+or contact/install on the MBP from this build session.
+
+| run_id | parent_report / role / model / wrapper / session | prompt_path / sha256 | output_path / sha256 | status / consumed_by / disposition / commit_or_pr |
+|---|---|---|---|---|
+| close-offload-sol-delta-2 completed | this report / delta executing review / gpt-6.1-sol xhigh / collaboration.followup_task / /root/sol_cold_review | review/fallback/DELTA2-PROMPT.md / 3a3bbe9be6f80464f547be3fe0fe308f4afd4fa7d104a4675e17f1887ff99835 | review/fallback/DELTA2-REPORT.md / 705a548ca7227031ea98887067df996436c8aa981a5cfcdacdcaec3a1607be48 | REFUSE / top-level builder / code findings closed, authority questions to owner / 603eae71b, PR #807 |
+
+The artifact paths remain relative to the private scratch root identified
+above. They are not promoted to the public repository because raw execution
+traces are private; the committed path/hash rows are the audit record. The
+original failed-wrapper artifacts, initial report and both deltas are preserved.
+Final-head CI, exact SHA and review hashes are copied into the PR body from
+readbacks after the final records commit. That CI remains a separate required
+check; green implementation tests never substitute for the missing rulings.
+The PR stays draft and no merge is attempted.

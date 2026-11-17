@@ -11,7 +11,7 @@ because nobody could see which tool was current. The 2026-11-06 prune
 ([run report](docs/run_reports/2026-11-06-repo-prune.md)) removed about 8,100 stale files so
 that cannot happen again.
 
-Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`, RL-1; earlier the same day, file-prune stack; CA-42 retirement held at the live ALIGN registration gate). The v4 line section remains as recorded on 2026-11-08; current lane state is in `RUN_STATE.md`.
+Last updated: 2026-11-16 (automatic close-offload row added, PROVISIONAL; 2026-11-10 Paper rows: Paper 1 landed under `docs/paper/paper1/`, RL-1; earlier the same day, file-prune stack; CA-42 retirement held at the live ALIGN registration gate). The v4 line section remains as recorded on 2026-11-08; current lane state is in `RUN_STATE.md`.
 
 ## Project state
 
