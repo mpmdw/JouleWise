@@ -2140,22 +2140,12 @@
         {
           "evidence": null,
           "kind": "decision",
-          "note": "Owner question pending; options and recommendation in the run report.",
-          "required": "Resolve requested readable tar.zst versus RL-173 A.1-2 encryption and off-MBP key.",
+          "note": "Latest ruling exists at audit ref 4f4934df6; owner/lead contract choice asked asynchronously. Recommendation: adapt selection frontend to #804 under RL-174 D; no exceptions inferred.",
+          "required": "Reconcile the explicit original tar.zst/nonholding/cloud-only eviction interface with newly published RL-174 D and shared #804 backend/typed marker; lead picks integration side and format/path/CLI compatibility.",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "CLOSE-OFFLOAD-ARCHIVE-FORMAT"
-        },
-        {
-          "evidence": null,
-          "kind": "decision",
-          "note": "Owner question pending; options and recommendation in the run report.",
-          "required": "Resolve requested nonholding UPLOAD_PENDING versus RL-173 A.3/A.7.",
-          "scope": "start",
-          "state": "pending",
-          "strength": "hard",
-          "target": "CLOSE-OFFLOAD-PENDING-ARM"
+          "target": "CLOSE-OFFLOAD-RL174-INTEGRATION"
         }
       ],
       "fallback": null,
@@ -2169,7 +2159,7 @@
       "priority": "p0_safety",
       "rank": 500,
       "status": "blocked",
-      "status_note": "2026-11-16: draft PR #807. Initial full CI green at c2612f16d; final-head CI in PR body. ONE cold Sol seat plus two same-seat deltas closed all 4 reproduced implementation findings; final code head 603eae71b passes 31 focused tests/12 peer probes, local structural/state checks pass. Actual verdict REFUSE solely for pending owner decisions on encryption/key and nonholding pending upload. No MBP contact, standing-item issue or merge; live GUI/provider gate lead-owned. Next: owner rulings, then resume same seat.",
+      "status_note": "2026-11-16: draft PR #807, implementation probes closed by ONE Sol cold seat plus same-seat deltas at code head 603eae71b (31 tests/12 probes). Current main integrated; build note 376b. RL-174 D was published during this build and requires shared #804 encryption/roundtrip/SSD retention, differing from original requested interface. Blocked on owner/lead integration choice; final-head CI in PR body. No MBP contact, standing-item issue or PR merge.",
       "stop_card": null
     },
     "COLDGATE-CONVENE-DOCTRINE-FREE-01": {

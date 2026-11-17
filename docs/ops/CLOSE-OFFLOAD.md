@@ -1,7 +1,8 @@
 # Automatic close offload
 
-**PROVISIONAL: synthetic validation only. Do not deploy or issue the standing
-item until the policy questions below are settled and the PR is admitted.**
+**PROVISIONAL: synthetic validation only. RL-174 D was published during this
+build and materially changes the original requested interface. Do not deploy
+or issue the standing item until the contract is reconciled and admitted.**
 This is an [AGENT] build; it makes no MBP contact. Live installation, GUI/TCC
 access, provider behavior and host quiet remain the lead's gates.
 
@@ -17,6 +18,37 @@ Authority: RL-173 A on `origin/audit/2026-11-10-fable`, in
 `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`;
 RL-171 process-based quiet and RL-172 (g)(i); RUN_STATE 346–375's Check,
 copy gate and receipt-mtime GAP census. No frozen runner path changes.
+
+## New governing contract published during the build
+
+At 18:04 PST on 2026-11-16 the research lead issued RL-174, now available at
+`origin/audit/2026-11-10-fable` commit
+`4f4934df65e290e6bc9b744138b6a1c33222cbeb`. A.16 and D require one backend
+and typed marker shared with PR #804. D.1 requires encrypted unreleased custody
+and an observed evict, re-download and ciphertext SHA-256 round trip; every arm
+reads pending transfers. D.2 permits raw deletion after verified packing while
+keeping a materialized local archive; only an equal cloud readback AND an equal
+SSD receipt permit archive eviction. Without SSD verification, retain that archive
+and proceed without waiting for the Air. Every nonzero failure holds the next arm.
+
+This reviewed prototype implements the owner's original explicit tar.zst,
+nonholding-upload-pending, cloud-only eviction interface. It does **not** implement
+RL-174 D. The new ruling is no longer missing; the task's requested wire behavior
+and new contract must be reconciled before changing either shared implementation.
+PR #804 (`ops/2026-11-15-air-independence`, inspected at `ccfe442b6`) already has
+`joulewise/span_offload.py`, `joulewise.span_offload_marker.v1`, and a
+`scripts/close_offload.py` shim. Its current transport is encrypted tar+gzip with
+RSA public-key wrapping, an SSD receipt and a separate pending-transfer command.
+It lacks this prototype's automatic two-root selection/newest-kept rotation API.
+
+Recommendation: retain this PR's selection/newest-kept requirements and adapt its
+frontend to #804's single backend/typed-marker protocol under RL-174 D; have the
+lead settle the archive-format/path/CLI integration (the original request names
+tar.zst paths and --deadline, while #804 names tgz.enc and explicit plan/config
+commands). Do not create a second competing backend. The owner may instead
+prospectively authorize the original behavior as explicit exceptions, but none
+has been supplied. This contract choice is the blocking NEEDS_RULING; the older
+questions below explain why the cold seat refused the original contract.
 
 ## Policy questions requiring a lead/owner ruling
 

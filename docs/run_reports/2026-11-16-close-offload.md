@@ -271,3 +271,62 @@ Final-head CI, exact SHA and review hashes are copied into the PR body from
 readbacks after the final records commit. That CI remains a separate required
 check; green implementation tests never substitute for the missing rulings.
 The PR stays draft and no merge is attempted.
+
+## Latest intake: main advanced and RL-174 was published
+
+Before the final handoff, the live remote main was re-read. It advanced from
+`8fd5c8cc5` to `6fc02b1925b726585e66ff32885964f4207d7d09`, adding the lead's
+item 376 (offload window closed) and magistrate item 377 (F0 launch). Those
+operational records and their process trace were integrated into the feature
+branch; only RUN_STATE's insert location conflicted. The build note is now
+**376b**, below 377 and above 376, so future operational integer items cannot
+collide with it. Both upstream records are preserved. No PR was merged, no host
+instruction changed and no MBP was contacted. The current pointer still comes
+from item 372. The code/scripts/tests/workflow tree is identical to reviewed
+code head `603eae71b`; integration and subsequent records are documentation only.
+
+Main item 376 pointed to a newly requested RL-174 D. The audit ref was refreshed
+and the ruling was found at `4f4934df65e290e6bc9b744138b6a1c33222cbeb`, issued
+2026-11-16 18:04 PST while this build was in progress. Its storage clauses are
+now known, not absent. No claim of admission under that new contract is made.
+The Sol seat's initial review/deltas were against the originally supplied
+RL-173 A read set, as the owner explicitly requested.
+
+| New clause | Required integration gap in this prototype |
+|---|---|
+| A.16: one backend and marker; lead picks which side changes | integrate automatic selection/newest retention with PR #804's existing `joulewise/span_offload.py` and `joulewise.span_offload_marker.v1`; do not fork another backend |
+| D.1: observed evict/re-download/hash of encrypted custody | this prototype's plaintext tar.zst and evict/dataless/size confirmation are insufficient; reuse #804's ciphertext round trip |
+| D.1: every arm reads no transfer pending | use #804's `pending` command in the lead's arm item; not issued here |
+| D.2: packed raw may be removed, materialized archive retained | split raw deletion from final local archive eviction |
+| D.2: cloud plus equal SSD receipt before archive eviction | retain compressed MBP bytes while Air/SSD away; add typed SSD receipt validation; current cloud-only eviction is not compliant |
+| D.2: low-disk mail, native qualification and scheduling | lead-owned mail/key/GUI setup and live record remain separate; no native attempt made |
+
+Read-only engineering inspection of PR #804 at
+`ccfe442b628d840405a6ecac1f1805a947dabb52` found that it already implements
+encryption, the supervised iCloud backend, typed marker, SSD receipt and close
+shim. Its archive format, artifact layout and command arguments differ from
+the explicit original build request. Its sources were inspected, not copied,
+merged into this implementation or run against any live provider.
+
+### Current NEEDS_RULING (supersedes the two older unanswered questions)
+
+**Question:** should this task be retargeted to RL-174 D and the shared #804
+backend contract, or does the owner explicitly authorize the originally
+requested plaintext/nonholding/cloud-only-eviction behavior as exceptions?
+
+**Options considered:** (1) adapt this selection/newest-kept frontend to #804,
+letting the lead settle format/path/CLI compatibility; (2) preserve this reviewed
+prototype only under explicit prospective owner exceptions. **Recommendation:**
+option 1. The source-of-truth ruling exists, but the task's requested wire
+behavior conflicts and A.16 leaves the shared-side choice to the lead.
+**Blocked work:** changing the shared storage/marker contract, ADMIT, and issuance
+of a standing item. AGENTS.md's contract/naming/authority early-return rule
+requires this question rather than guessing. A new asynchronous question was
+sent once the ruling was found; no answer has arrived.
+
+The prior two decision dependency names are superseded by the single
+CLOSE-OFFLOAD-RL174-INTEGRATION dependency; their full reasoning and review
+findings remain above. This is a reviewable draft, not completion of the newly
+published storage contract. Independent authorized work (implementation, focused
+checks, one cold seat with deltas, current-main reconciliation and final-head CI)
+is preserved. The PR body carries final SHA/check readback and this blocking choice.
