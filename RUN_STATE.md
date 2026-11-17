@@ -1042,6 +1042,8 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+390a. **Close-offload builder (Sol 6.2), 2026-11-17: draft PR #807 retargeted to RL-174 D and admitted #804 backend.** The close command verifies the exact Check OUT in the GUI domain, keeps newest GAP receipts, and records item 388 Air fallback. After-Check close and fresh pre-arm transfer CLEAR apply to F0. MBP ciphertext stays until the later matching SSD readback. See [the build record](docs/run_reports/2026-11-17-close-offload-retarget.md) and [runbook](docs/ops/CLOSE-OFFLOAD.md). PROVISIONAL pending the lead blind check, native production-key round trip and floor recheck. This is a build note. The operational pointer governs the next activation.
+
 390. **Laptop lead (interactive, Opus 5.5), 2026-11-17 10:33:28 PST (`date`): AIR RESUMED (Ed restarted the laptop session at ~10:28 and re-mounted the SSD; asked the lead to help the MBP). `com.joulewise.air-watch`, `pipeline-watch` and `icloud-evict` are bootstrapped again; `air_watch_agent.py` and `night_results_watch.py` have been running since 10:30. Item 388 stays in force: the MBP never waits for the Air. dev-05's line 7 may be met by either path, the Air watcher (filled by the lead) or item 388 fallback 3 (the magistrate's own Check plus email), whichever is at hand first. Neither is a stop.**
 - **Numbering note:** the magistrate's STANDING-F0 run 8 pre-launch record (commit `d65f60d8b`, 10:24) carries the number 387, which item 387 (the lead's ruling, 10:16) already used. Both stand as written. Cite the run 8 record by its commit. The next free number is 391.
 - **Lead lanes now running on the Air (no MBP contact, no agent load on the MBP):**
@@ -18184,7 +18186,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #804 repair and RL-174 D.1/D.2: synthetic software checks; native GUI-domain qualification external](docs/run_reports/2026-11-16-pr804-r2.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17). Latest report: [PR #807 retarget to RL-174 D](docs/run_reports/2026-11-17-close-offload-retarget.md).
 
 ### [ED-EXTERNAL]
 

@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "PR #804 repair and RL-174 D.1/D.2: synthetic software checks; native GUI-domain qualification external",
-    "path": "docs/run_reports/2026-11-16-pr804-r2.md"
+    "label": "PR #807 retarget to RL-174 D",
+    "path": "docs/run_reports/2026-11-17-close-offload-retarget.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2124,26 +2124,30 @@
         "evidence": [
           "scripts/close_offload.py",
           "tests/test_close_offload.py",
-          "docs/ops/CLOSE-OFFLOAD.md"
+          "docs/ops/CLOSE-OFFLOAD.md",
+          "tests/test_span_offload.py"
         ],
         "pointer": {
           "label": "Close offload exit checklist",
-          "path": "docs/run_reports/2026-11-16-close-offload.md"
+          "path": "docs/run_reports/2026-11-17-close-offload-retarget.md"
         },
-        "summary": "Synthetic checks, final-head CI and one owner-requested Sol cold review; owner settles archive encryption and pending-upload policy conflicts before production."
+        "summary": "The after-Check frontend uses the admitted #804 backend, preserves newest GAP receipts, records the Air-independent route, and requires verified close and fresh transfer CLEAR. The lead owns cold and native admission before standing-item issue."
       },
       "authority": {
-        "label": "Owner 2026-11-16 direct build request and RL-173 A; run record",
-        "path": "docs/run_reports/2026-11-16-close-offload.md"
+        "label": "2026-11-17 lead retarget ruling, RL-174 D, and RUN_STATE item 388",
+        "path": "docs/run_reports/2026-11-17-close-offload-retarget.md"
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "test_air_absent_cloud_only_arms_with_materialised_archive_and_no_ssd_probe",
+            "path": "tests/test_close_offload.py"
+          },
           "kind": "decision",
-          "note": "Latest ruling exists at audit ref 4f4934df6; owner/lead contract choice asked asynchronously. Recommendation: adapt selection frontend to #804 under RL-174 D; no exceptions inferred.",
-          "required": "Reconcile the explicit original tar.zst/nonholding/cloud-only eviction interface with newly published RL-174 D and shared #804 backend/typed marker; lead picks integration side and format/path/CLI compatibility.",
+          "note": "Lead ruling 2026-11-17 resolves the old contract conflict.",
+          "required": "Use the shared #804 backend and RL-174 D storage logic with item 388 Air independence.",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "CLOSE-OFFLOAD-RL174-INTEGRATION"
         }
@@ -2158,8 +2162,8 @@
       "lane": "agent",
       "priority": "p0_safety",
       "rank": 500,
-      "status": "blocked",
-      "status_note": "2026-11-16: draft PR #807, implementation probes closed by ONE Sol cold seat plus same-seat deltas at code head 603eae71b (31 tests/12 probes). Current main integrated; build note 376b. RL-174 D was published during this build and requires shared #804 encryption/roundtrip/SSD retention, differing from original requested interface. Blocked on owner/lead integration choice; final-head CI in PR body. No MBP contact, standing-item issue or PR merge.",
+      "status": "partial",
+      "status_note": "2026-11-17: PR #807 retargeted and remains draft. Software evidence in the run report and PR body. RL-174 D blind check, native GUI production-key round trip, close-interval floor recheck and standing-item issue are lead-owned.",
       "stop_card": null
     },
     "COLDGATE-CONVENE-DOCTRINE-FREE-01": {
@@ -11492,5 +11496,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-11-16"
+  "updated": "2026-11-17"
 }
