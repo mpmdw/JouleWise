@@ -357,6 +357,23 @@ class SpanOffloadTests(unittest.TestCase):
             so.offload(config, PLAN, self.span)
         self.assertEqual(self.marker(confirmed=True).read_bytes(), marker)
 
+    def test_typed_marker_retry_rechecks_source_after_final_pending_wait(self):
+        backend = self.fake_brctl()
+        config = dict(self.config, backend=backend)
+        so.offload(config, PLAN, self.span)
+        original = self.marker(confirmed=True).read_bytes()
+        real = so.ICloudBackend._wait_uploaded
+
+        def changed(instance, deadline):
+            result = real(instance, deadline)
+            (self.span / "late.bin").write_bytes(b"late in final pending wait")
+            return result
+
+        with mock.patch.object(so.ICloudBackend, "_wait_uploaded", changed), self.assertRaises(so.OffloadError) as caught:
+            so.offload(config, PLAN, self.span)
+        self.assertEqual(caught.exception.code, "SPAN_CHANGED")
+        self.assertEqual(self.marker(confirmed=True).read_bytes(), original)
+
     def test_pending_cli_holds_on_unknown_or_pending_state(self):
         backend = self.fake_brctl()
         conf = self.tmp / "mbp.json"
