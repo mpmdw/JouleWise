@@ -477,6 +477,13 @@ class Roster(Base):
         del led["spans"][0]["energy_seal"]
         self.refused(lambda: lm.resolve_roster(self.doc, led), "missing key 'energy_seal'")
 
+    def test_span_ledger_rejects_impossible_dates(self):
+        for day in ("2026-11-99", "2026-02-29", "2026-04-31"):
+            with self.subTest(day=day):
+                led = ledger()
+                led["spans"][0]["t0_local_date"] = day
+                self.refused(lambda: lm.resolve_roster(self.doc, led), "t0_local_date")
+
 
 class LookLedger(Base):
     def setUp(self):

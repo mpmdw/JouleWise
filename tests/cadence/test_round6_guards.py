@@ -183,6 +183,7 @@ class CoefficientGuards(unittest.TestCase):
         # writer's own checks, enforces the schema before writing either artifact.
         def stage2(a):
             a._stage1_doc = {}
+            a._prepared_fit = None
             return {"synthetic": True}
         stderr = io.StringIO()
         with mock.patch.object(M, "verify_pins", return_value={}), \

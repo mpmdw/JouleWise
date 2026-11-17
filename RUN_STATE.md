@@ -1,5 +1,14 @@
 # JouleWise Run State
 
+PR #795 Builder E round 10 (2026-11-17) applies the Astra audit repairs on
+`align/2026-11-14-fit-interim` from `a33b37a00`. Stage 1 binds days to Los Angeles
+receipt dates. Stage 2 checks rank before reading responses and shares the fold
+onsets and factorizations across channels. Freeze 2 supports day-jackknife replay.
+The paired synthetic worlds report held-out hot error. The research lead owns
+the keyed-residual disclosure and prefix-bias estimand. The cadence runner and
+desk own the load-redo change. Verification and lead handoff are in the
+[round-10 report](docs/run_reports/2026-11-17-pr795-round10-builder.md).
+
 PR #795 builder round 9 (2026-11-16): direct user priority on this clean worktree at
 `41afd6eea`; [AGENT], synthetic only. Cold Sol's one LOW (underdetermined design)
 and RL-174 A.2/A.4/A.7/D.3 are implemented and gated: 407 focused tests (2 skips),

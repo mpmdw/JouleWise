@@ -499,7 +499,7 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "8846fadc892420be9d3dc55a313776abbd839285ce1ae3993ed5cb49114925bf"
+        "sha256": "7afc043e9e3db1deaa3ad8e7dea1569f68fbaec486e7fe681318256700d52a75"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -519,7 +519,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "e287dad3bc94b0b19efffd9c8063337bc3ec144dd5c1c4f0946f073f4859fda5"
+        "sha256": "204aca45dcba688c7c6d828077a0c4c33345ccd013ecfa5ba873b4527bae2d3d"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -821,7 +821,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "80bc17b81b5c16219314fc4b30bfc1b16612e140cdd19f329fda0457d8dae548"
+        "sha256": "dfe9b69c0ef06b656565dfa50408d364a5837e12de5ae4d1ff0f5e45ea7cb98f"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -1366,7 +1366,7 @@
     "artifact": "docs/process/cadence/looks/lm-interim-01.coefficients.json (written by stage 2's --coefficients-out through fit_interim.write_coefficients, committed with its sha256; fit_interim.predict scores a turn from it alone)",
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json",
-      "sha256": "945de8454cf58d0470dd5d8c7d8ffaa697b555b044d0c3c7e8a4e7d5ffdd03b3"
+      "sha256": "766a25fd6f39a6483a60d8d35636fc11496e78ff45521ec1a396396142f7ccd9"
     },
     "contents": [
       "the base and heat parameters per channel, with the leg-clustered covariance (S_w's SD_j)",
@@ -1376,7 +1376,8 @@
       "the onset model's coefficients, its error and the count-only cut, or not_estimable",
       "the interim half of qualified",
       "the hashes of this manifest, the code that ran, stage 1's output and stage 2's output; the numpy version",
-      "the active readings (RL-166b B-2) and each fold's coefficient vector (P-1), which the SD_j rule reads"
+      "the active readings (RL-166b B-2) and each fold's coefficient vector (P-1), which the SD_j rule reads",
+      "each held-out day's onset coefficients and scatter for the reference-turn day-jackknife, or null when delta is absent"
     ],
     "commit_before": [
       "qualification_energy_opened",

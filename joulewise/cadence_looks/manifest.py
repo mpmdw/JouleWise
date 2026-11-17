@@ -36,6 +36,7 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+from datetime import date
 
 from joulewise.cadence_looks import schema_check
 
@@ -1781,8 +1782,12 @@ def validate_ledger(ledger):
                 problems.append(f"{where}.energy_seal: 'sealed' or 'opened'")
             if not isinstance(s.get("desk_final"), bool):
                 problems.append(f"{where}.desk_final: boolean")
-            if not (isinstance(s.get("t0_local_date"), str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", s["t0_local_date"])):
-                problems.append(f"{where}.t0_local_date: YYYY-MM-DD (a leg's day is its span's t0 date, RL-155a §1.2)")
+            day = s.get("t0_local_date")
+            try:
+                if date.fromisoformat(day).isoformat() != day:
+                    raise ValueError
+            except (TypeError, ValueError):
+                problems.append(f"{where}.t0_local_date: a valid YYYY-MM-DD date (RL-155a §1.2)")
     for i, r in enumerate(ledger.get("energy_reads") or []):
         if _closed(r, {"read_id", "spans", "cite"}, f"ledger.energy_reads[{i}]", problems):
             if not isinstance(r.get("spans"), list):

@@ -2,7 +2,7 @@
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "$id": "joulewise.cadence_look_coefficients.v1",
  "title": "Interim look, freeze 2's coefficient file (lm-interim-01): no energy",
- "description": "RL-173 section E; the manifest's freeze2 block; interface section 4.2. Written by fit_interim.write_coefficients from stage 1's output and the fit's output (both in memory, both by hash); its sha256 (of fit_interim.dump's canonical bytes) is freeze 2. fit_interim.predict reads this file alone and reproduces the main fit's fitted values for any type-A leg with a valid start reading. Closed at every level; it carries no energy, power or meter value and no per-leg value.",
+ "description": "RL-173 section E; the manifest's freeze2 block; interface section 4.2. Written by fit_interim.write_coefficients from stage 1's output and the fit's output (both in memory, both by hash); its sha256 (of fit_interim.dump's canonical bytes) is freeze 2. fit_interim.predict reads the frozen full-fit or held-out-day parameters for any type-A leg with a valid start reading. Closed at every level; it carries no energy, power or meter value and no per-leg value.",
  "type": "object",
  "additionalProperties": false,
  "required": [
@@ -192,6 +192,7 @@
      "required": [
       "coefficients",
       "count_only_cut",
+      "folds",
       "lodo_rms_s",
       "predictors",
       "sigma_s",
@@ -200,6 +201,16 @@
      "properties": {
       "status": {
        "const": "estimable"
+      },
+      "folds": {
+       "type": "object",
+       "propertyNames": {"pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+       "additionalProperties": {
+        "oneOf": [
+         {"type": "null"},
+         {"$ref": "#/$defs/fold_onset"}
+        ]
+       }
       },
       "predictors": {
        "$ref": "#/$defs/onset_predictors"
@@ -283,6 +294,7 @@
      "required": [
       "coefficients",
       "count_only_cut",
+      "folds",
       "lodo_rms_s",
       "predictors",
       "sigma_s",
@@ -291,6 +303,11 @@
      "properties": {
       "status": {
        "const": "not_estimable"
+      },
+      "folds": {
+       "type": "object",
+       "propertyNames": {"pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+       "additionalProperties": {"type": "null"}
       },
       "predictors": {
        "$ref": "#/$defs/onset_predictors"
@@ -413,6 +430,20 @@
   }
  ],
  "$defs": {
+  "fold_onset": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": ["coefficients", "sigma_s"],
+   "properties": {
+    "coefficients": {
+     "type": "object",
+     "propertyNames": {"enum": ["intercept", "tf08_c", "fan_rpm", "tv0h_excess_c", "t_p_s"]},
+     "additionalProperties": {"type": "number"},
+     "required": ["intercept", "t_p_s"]
+    },
+    "sigma_s": {"type": "number", "exclusiveMinimum": 0}
+   }
+  },
   "onset_predictors": {
    "type": "array",
    "items": {

@@ -23,6 +23,8 @@ import hashlib
 import json
 import math
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -135,6 +137,18 @@ def _no_forbidden(obj, where="$"):
             _no_forbidden(x, where + "[]")
 
 
+def span_day(epoch_s, roster_day, where):
+    """Use the span start's Los Angeles calendar day and require the roster to agree."""
+    try:
+        _num(epoch_s, where + ".t0_epoch_s")
+        day = datetime.fromtimestamp(math.floor(epoch_s), ZoneInfo("America/Los_Angeles")).date().isoformat()
+    except (OverflowError, OSError, ValueError):
+        raise LookInputError(f"{where}.t0_epoch_s: invalid receipt epoch") from None
+    if roster_day != day:
+        raise LookInputError(f"{where}.t0_local_date: must match the Los Angeles date of t0_epoch_s")
+    return day
+
+
 def validate_input(doc):
     """Refuse a level-R document that is not exactly the interface's shape (section 5)."""
     _keys(doc, {"schema", "look_id", "synthetic", "spans", "legs"}, "look_input")
@@ -151,15 +165,12 @@ def validate_input(doc):
             raise LookInputError(f"{w}: role or phase")
         if s["power_mode"] not in ("automatic", "high_power"):
             raise LookInputError(f"{w}: power_mode")
-        _num(s["t0_epoch_s"], w + ".t0_epoch_s")
+        span_day(s["t0_epoch_s"], s["t0_local_date"], w)
         _num(s["soak_reference_tv0h_c"], w + ".soak_reference_tv0h_c", allow_none=True)
         _keys(s["meter_offsets_ns"], {"header", "end"}, w + ".meter_offsets_ns")
         for k in ("header", "end"):
             if s["meter_offsets_ns"][k] is not None:
                 _int(s["meter_offsets_ns"][k], f"{w}.meter_offsets_ns.{k}")
-        d = s["t0_local_date"]
-        if not (isinstance(d, str) and len(d) == 10 and d[4] == "-" and d[7] == "-" and d.replace("-", "").isdigit()):
-            raise LookInputError(f"{w}: t0_local_date")
         if not isinstance(s["marks"], list) or any(m not in _MARKS for m in s["marks"]):
             raise LookInputError(f"{w}: marks")
         _validate_span_extras(s, w, doc["synthetic"])
@@ -1008,37 +1019,57 @@ def _design_row(L, s, kind, cols, onset):
     return [vals[c] for c in cols]
 
 
-def _ols(X, y, groups):
-    """RL-166b B-6: each column divided by its RMS over rows; the solve is an SVD of that matrix; rank deficient
-    when the smallest singular value is under 1e-10 of the largest; the normal matrix is never formed in raw
-    units. Covariance clustered by leg (CR1, R-10), from the SVD. Returns (beta, cov)."""
-    X = np.asarray(X, dtype=float)
-    y = np.asarray(y, dtype=float)
-    scale = np.sqrt((X * X).mean(axis=0))
-    scale[scale == 0] = 1.0
-    Xs = X / scale
-    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):   # Accelerate's spurious matmul flags
-        U, S, Vt = np.linalg.svd(Xs, full_matrices=False)
-        if len(S) < X.shape[1] or not len(S) or not np.all(np.isfinite(S)) or S[0] == 0 or S[-1] < RANK_RTOL * S[0]:
-            raise LookInputError("stage 2: the design is rank deficient")
-        bs = Vt.T @ ((U.T @ y) / S)
-        beta = bs / scale
-        e = y - Xs @ bs
-        bread = (Vt.T / (S * S)) @ Vt                     # (Xs'Xs)^-1 from the SVD
-        meat = np.zeros((X.shape[1], X.shape[1]))
-        gidx = {}
+class _Regression:
+    """RL-166b B-6's rank check and RMS-scaled SVD, shared by both responses."""
+
+    def __init__(self, X, groups, label):
+        X = np.asarray(X, dtype=float)
+        error = f"stage 2: {label}: the design is rank deficient"
+        if not X.size:
+            raise LookInputError(error)
+        scale = np.sqrt((X * X).mean(axis=0))
+        scale[scale == 0] = 1.0
+        Xs = X / scale
+        if not np.all(np.isfinite(Xs)):
+            raise LookInputError(error)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):   # Accelerate's spurious matmul flags
+            try:
+                U, S, Vt = np.linalg.svd(Xs, full_matrices=False)
+            except np.linalg.LinAlgError:
+                raise LookInputError(error) from None
+            if len(S) < X.shape[1] or not len(S) or not np.all(np.isfinite(S)) or S[0] == 0 or S[-1] < RANK_RTOL * S[0]:
+                raise LookInputError(error)
+            self.bread = (Vt.T / (S * S)) @ Vt             # (Xs'Xs)^-1 from the SVD
+        if not np.all(np.isfinite(self.bread)):
+            raise LookInputError(f"stage 2: {label}: a non-finite factorization")
+        self.Xs, self.scale = Xs, scale
+        self.U, self.S, self.Vt = U, S, Vt
+        self.gidx = {}
         for i, g in enumerate(groups):
-            gidx.setdefault(g, []).append(i)
-        for idx in gidx.values():
-            sg = Xs[idx].T @ e[idx]
-            meat += np.outer(sg, sg)
-    if not (np.all(np.isfinite(beta)) and np.all(np.isfinite(meat)) and np.all(np.isfinite(bread))):
-        raise LookInputError("stage 2: a non-finite fit")
-    n, k, G = X.shape[0], X.shape[1], len(gidx)
-    corr = (G / (G - 1)) * ((n - 1) / (n - k)) if G > 1 and n > k else 1.0
-    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-        cov = (corr * bread @ meat @ bread) / np.outer(scale, scale)
-    return beta, cov
+            self.gidx.setdefault(g, []).append(i)
+        n, k = X.shape
+        G = len(self.gidx)
+        self.corr = (G / (G - 1)) * ((n - 1) / (n - k)) if G > 1 and n > k else 1.0
+
+    def solve(self, y):
+        """Solve one response and compute its leg-clustered CR1 covariance (R-10)."""
+        y = np.asarray(y, dtype=float)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            bs = self.Vt.T @ ((self.U.T @ y) / self.S)
+            beta = bs / self.scale
+            e = y - self.Xs @ bs
+            meat = np.zeros_like(self.bread)
+            for idx in self.gidx.values():
+                sg = self.Xs[idx].T @ e[idx]
+                meat += np.outer(sg, sg)
+            cov = (self.corr * self.bread @ meat @ self.bread) / np.outer(self.scale, self.scale)
+        if not (np.all(np.isfinite(beta)) and np.all(np.isfinite(cov))):
+            raise LookInputError("stage 2: a non-finite fit")
+        return beta, cov
+
+
+def _ols(X, y, groups):
+    return _Regression(X, groups, "fit").solve(y)
 
 
 class _Fold:
@@ -1069,6 +1100,55 @@ def _onsets(legs, model):
         return {}
     return {L["leg_key"]: (linear_predictor(L, model), model["sigma"],
                            L["start"]["state"] == "start_out_of_state") for L in legs}
+
+
+def _onset_model(onset, predictors):
+    if onset is None or onset["coefficients"] is None:
+        return None
+    return {"cols": list(predictors), "beta": np.array([onset["coefficients"][c] for c in predictors]),
+            "sigma": onset["sigma_s"]}
+
+
+def _days_training(legs):
+    days = sorted({L["day"] for L in legs.values()})
+    return {day: [k for k, L in legs.items() if L["day"] != day] for day in days}
+
+
+def _fold_onset_models(legs, train, model):
+    # RL-167 row 7: the held-out date is absent from the onset fit, and a failed fold drops delta.
+    return {day: fit_onset_fold(legs, keys, model["cols"]) if model is not None else None
+            for day, keys in train.items()}
+
+
+class _FitDesign:
+    """The full and leave-one-day-out fits for one roster, prepared before either response is read."""
+
+    def __init__(self, legs, model, active):
+        self.legs = legs
+        self.train = _days_training(legs)
+        self.base_cols = list(BASE_COLS)
+        self.heat_cols = self.base_cols + [HEAT_OF[n] for n in READINGS if active[n]]
+        if model is not None:
+            self.heat_cols.append(DELTA_COL)
+        self.full = self._prepare(legs, self.heat_cols, model, "full fit")[1]
+        self.onset_models = _fold_onset_models(legs, self.train, model)
+        self.heat, self.base = {}, {}
+        for day, keys in self.train.items():
+            onset = self.onset_models[day]
+            cols = self.heat_cols if onset is not None else [c for c in self.heat_cols if c != DELTA_COL]
+            self.heat[day] = self._prepare(keys, cols, onset, f"held-out day {day} heat fit")
+            self.base[day] = (self.heat[day] if cols == self.base_cols else
+                              self._prepare(keys, self.base_cols, None, f"held-out day {day} count-only fit"))
+
+    def _prepare(self, keys, cols, model, label):
+        fit = self.legs
+        fold = _Fold(fit.values(), cols, _onsets(fit.values(), model))
+        X, groups = [], []
+        for k in keys:
+            L = fit[k]
+            X += fold.rows(L)
+            groups += [k] * len(L["segments"])
+        return fold, _Regression(X, groups, label)
 
 
 def _validate_energy(energy, stage1_out, needed):
@@ -1177,65 +1257,35 @@ def prefix_bias(plen, pairs):
     return {"prefix_len": plen, "estimate": est, "ci90": ci, "n_pairs": len(pairs), "n_days": nd}
 
 
-def _channel(legs, E, ch, model, active, include=None):
-    """Everything one channel prints. `model`: the onset model the full fit uses ({cols, beta, sigma}; None:
-    delta dropped). `active`: stage 1's active readings (B-2). `include`: optional set of leg keys (the
-    marked-spans print)."""
-    fit = [L for L in legs if L["in_energy_fit"] and (include is None or L["leg_key"] in include)]
-    with_delta = model is not None
-    onset_cols_ = model["cols"] if with_delta else None
-    base_cols = list(BASE_COLS)
-    heat_cols = (list(BASE_COLS) + [HEAT_OF[n] for n in READINGS if active[n]]
-                 + ([DELTA_COL] if with_delta else []))
-    by_key = {L["leg_key"]: L for L in fit}
+def _channel(design, E, ch):
+    """Fit and score one response using the shared, response-blind designs."""
+    by_key = design.legs
+    fit = by_key.values()
 
     def seg_y(L):
         return E[L["leg_key"]][ch]["segments"]
 
-    def fit_on(keys, cols, onsets):
-        fold = _Fold(fit, cols, onsets)
-        X, y, g = [], [], []
-        for k in keys:
-            L = by_key[k]
-            X += fold.rows(L)
-            y += seg_y(L)
-            g += [k] * len(L["segments"])
-        b, cov = _ols(X, y, g)
-        return b, cov, fold
+    def solve(regression, keys):
+        return regression.solve([y for k in keys for y in seg_y(by_key[k])])
 
-    keys_all = [L["leg_key"] for L in fit]
-    b_full, cov_full, _ = fit_on(keys_all, heat_cols, _onsets(fit, model))
-    days = sorted({L["day"] for L in fit})
+    keys_all = list(by_key)
+    b_full, cov_full = solve(design.full, keys_all)
+    days = list(design.train)
 
-    folds_dropped = []
     fold_coef = {}
     detail_out = []
     pred_seg = {}
 
-    def lodo(cols, use_heat):
+    def lodo(use_heat):
         """Per held-out day: fitted without D (base, heat term and onset model). Returns predictions per leg."""
         pred_leg, pred_hot, pred_prefix, segs = {}, {}, {}, {}
-        folds_dropped.clear()
-        for D in days:
-            train = [k for k in keys_all if by_key[k]["day"] != D]
+        designs = design.heat if use_heat else design.base
+        for D, train in design.train.items():
             test = [k for k in keys_all if by_key[k]["day"] == D]
-            fold_cols = cols
-            if use_heat and with_delta:
-                # RL-167 row 7: the onset model is refitted without D (at least 6 uncensored, converged; no
-                # 12-on-3 rule); a fold where it cannot be fitted drops delta and is listed. No full-data value
-                # is used for a held-out day.
-                bo = fit_onset_fold({k: by_key[k] for k in keys_all}, train, onset_cols_)
-                if bo is None:
-                    fold_cols = [c for c in cols if c != DELTA_COL]
-                    folds_dropped.append(D)
-                    onsets = {}
-                else:
-                    onsets = _onsets(fit, bo)
-            else:
-                onsets = {}
-            b, _, fold = fit_on(train, fold_cols, onsets)
+            fold, regression = designs[D]
+            b, _ = solve(regression, train)
             if use_heat:
-                fold_coef[D] = {c: float(x) for c, x in zip(fold_cols, b)}       # P-1
+                fold_coef[D] = {c: float(x) for c, x in zip(fold.cols, b)}       # P-1
             for k in test:
                 L = by_key[k]
                 rows = np.asarray(fold.rows(L))
@@ -1316,10 +1366,11 @@ def _channel(legs, E, ch, model, active, include=None):
                  "hot_rms_over_legs": math.sqrt(sum(v * v for v in hv) / len(hv)) if hv else None},
                 res_leg, res_hot, meas_leg)
 
-    pl, ph, pp = lodo(heat_cols, True)
+    pl, ph, pp = lodo(True)
     err, res_leg, res_hot, meas_leg = errors(pl, ph)
-    err["folds_delta_dropped"] = list(folds_dropped)
-    pl0, ph0, _ = lodo(base_cols, False)
+    err["folds_delta_dropped"] = [day for day in days if design.onset_models[day] is None
+                                  and DELTA_COL in design.heat_cols]
+    pl0, ph0, _ = lodo(False)
     err0, _, _, _ = errors(pl0, ph0)
     err["no_heat"] = err0
 
@@ -1373,7 +1424,7 @@ def _channel(legs, E, ch, model, active, include=None):
             pairs.append((k, L["day"], meas_leg[k] - pp[k]["_long"], m_short - pp[k][lab]))
         bias[lab] = prefix_bias(plen, pairs)
 
-    cols = heat_cols
+    cols = design.heat_cols
     return {
         "columns": cols,
         "coefficients": {c: float(b) for c, b in zip(cols, b_full)},
@@ -1390,55 +1441,59 @@ def _channel(legs, E, ch, model, active, include=None):
     }
 
 
+class _Stage2Design:
+    def __init__(self, stage1_out):
+        self.stage1_sha256 = hashlib.sha256(dump(stage1_out)).hexdigest()
+        legs = {L["leg_key"]: L for L in stage1_out["legs"] if L["in_energy_fit"]}      # RL-167 §3: no hp-01 energy
+        on = stage1_out["onset"]
+        model = _onset_model(on, on["predictors"])
+        active = {n: stage1_out["active_readings"][n]["active"] for n in READINGS}
+        self.main = _FitDesign(legs, model, active)
+        self.marked = sorted({L["span_id"] for L in legs.values() if L["marks"]})
+        keep = {k: L for k, L in legs.items() if L["span_id"] not in self.marked}
+        self.n_without = len(keep)
+        self.without_marked = None
+        if self.marked and keep:
+            # RL-167 row 16: refit the onset on the remaining legs under row 7's rule.
+            model_keep = fit_onset_fold(keep, sorted(keep), model["cols"]) if model is not None else None
+            if model is None or model_keep is not None:
+                try:
+                    self.without_marked = _FitDesign(keep, model_keep, active)
+                except LookInputError:
+                    pass  # An inestimable marked-spans sensitivity prints nulls.
+
+
 def stage2_preflight(stage1_out):
-    """Checks on the stage-1 file alone, run before any energy is opened. Leave-one-day-out needs at least two
-    fit days (RL-149 §2.3; fewer than 4 already sends stage 1 to the research lead, RL-166b B-7)."""
+    """Prepare and check the full design and each fold from the frozen stage-1 file alone."""
     if stage1_out.get("schema") != STAGE1_SCHEMA:
         raise LookInputError("stage 2: not a stage-1 output")
     if len(stage1_out["roster"]["fit_days"]) < 2:
         raise LookInputError("stage 2: fewer than two fit days; no leave-one-day-out fold can be formed")
+    return _Stage2Design(stage1_out)
 
 
-def stage2(stage1_out, stage1_sha256, energy, code_sha256=None):
+def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, _prepared=None):
     """Stage 2 (Q8): the energy fit. `stage1_out` must hash to `stage1_sha256` (canonical bytes, see `dump`)."""
     if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:
         raise LookInputError("stage 2: the stage-1 output does not match the hash it was given")
-    stage2_preflight(stage1_out)
-    legs = stage1_out["legs"]
-    needed = {L["leg_key"]: L for L in legs if L["in_energy_fit"]}      # RL-167 §3: no hp-01 energy
-    _validate_energy(energy, stage1_out, needed)
+    design = _prepared if _prepared is not None else stage2_preflight(stage1_out)
+    if design.stage1_sha256 != stage1_sha256:
+        raise LookInputError("stage 2: the prepared design comes from another stage-1 file")
+    _validate_energy(energy, stage1_out, design.main.legs)
     E = energy["legs"]
-    on = stage1_out["onset"]
-    with_delta = on["status"] == "estimable"
-    model_main = ({"cols": list(on["predictors"]), "beta": np.array([on["coefficients"][c] for c in on["predictors"]]),
-                   "sigma": on["sigma_s"]} if with_delta else None)
-    active = {n: stage1_out["active_readings"][n]["active"] for n in READINGS}
-    marked = sorted({L["span_id"] for L in legs if L["in_energy_fit"] and L["marks"]})
-    keep = {L["leg_key"] for L in legs if L["in_energy_fit"] and L["span_id"] not in marked}
-    # RL-167 row 16: the marked-spans print refits the onset on the remaining legs under row 7's rule; columns as
-    # in the main look; a fit that fails gives nulls
-    model_keep, keep_ok = None, True
-    if marked and with_delta:
-        model_keep = fit_onset_fold({L["leg_key"]: L for L in legs if L["leg_key"] in keep}, sorted(keep),
-                                    model_main["cols"])
-        keep_ok = model_keep is not None
+    with_delta = DELTA_COL in design.main.heat_cols
     channels = {}
     for ch in CHANNELS:
-        c = _channel(legs, E, ch, model_main, active)
-        if marked:
+        c = _channel(design.main, E, ch)
+        sensitivity = {"marked_spans": design.marked, "n_legs_without": design.n_without,
+                       "coefficients_without": None, "lodo_hot_max_abs_without": None}
+        if design.without_marked is not None:
             try:
-                if not keep_ok:
-                    raise LookInputError("marked print: the onset cannot be refitted on the remaining legs")
-                cw = _channel(legs, E, ch, model_keep, active, include=keep)
-                c["marked_sensitivity"] = {"marked_spans": marked, "n_legs_without": cw["n_legs"],
-                                           "coefficients_without": cw["coefficients"],
-                                           "lodo_hot_max_abs_without": cw["lodo"]["hot"]["max_abs"]}
+                cw = _channel(design.without_marked, E, ch)
+                sensitivity.update(coefficients_without=cw["coefficients"], lodo_hot_max_abs_without=cw["lodo"]["hot"]["max_abs"])
             except LookInputError:
-                c["marked_sensitivity"] = {"marked_spans": marked, "n_legs_without": len(keep),
-                                           "coefficients_without": None, "lodo_hot_max_abs_without": None}
-        else:
-            c["marked_sensitivity"] = {"marked_spans": [], "n_legs_without": c["n_legs"],
-                                       "coefficients_without": None, "lodo_hot_max_abs_without": None}
+                pass
+        c["marked_sensitivity"] = sensitivity
         c["model_sha256"] = hashlib.sha256(dump({"stage1_sha256": stage1_sha256, "channel": ch,
                                                  "columns": c["columns"], "coefficients": c["coefficients"],
                                                  "covariance": c["covariance"]})).hexdigest()
@@ -1515,10 +1570,11 @@ def fit_reproduction(fit_out):
     return doc
 
 
-def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256):
+def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256, *, _prepared=None):
     """Freeze 2's coefficient file (RL-173 §E; manifest `freeze2`; interface §4.2). Pure: it reads no energy and no
     file; it takes stage 1's output and the fit's output in memory and returns the document. Its hash (sha256 of
-    `dump` of it) is freeze 2. `predict` reads this document alone."""
+    `dump` of it) is freeze 2. `predict` reads this document alone. When replaying from saved outputs, recompute
+    only the fold onsets from the authenticated level-D file. The CLI supplies its already-prepared fold models."""
     if stage1_out.get("schema") != STAGE1_SCHEMA or fit_out.get("schema") != FIT_SCHEMA:
         raise LookInputError("coefficients: not a stage-1 output and a fit output")
     if stage1_out.get("look_id") != LOOK_ID or fit_out.get("look_id") != LOOK_ID:
@@ -1538,6 +1594,16 @@ def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256):
     estimable = on["status"] == "estimable"
     if (fit_out["delta_column"] == "kept") != estimable:
         raise LookInputError("coefficients: delta_column disagrees with the onset model's status")
+    if _prepared is None:
+        legs = {L["leg_key"]: L for L in stage1_out["legs"] if L["in_energy_fit"]}
+        models = _fold_onset_models(legs, _days_training(legs), _onset_model(on, on["predictors"]))
+    else:
+        if _prepared.stage1_sha256 != stage1_sha256:
+            raise LookInputError("coefficients: the prepared design comes from another stage-1 file")
+        models = _prepared.main.onset_models
+    folds = {day: ({"coefficients": {c: float(b) for c, b in zip(model["cols"], model["beta"])},
+                    "sigma_s": model["sigma"]} if model is not None else None)
+             for day, model in models.items()}
     channels = {}
     for ch in CHANNELS:
         c = fit_out["channels"][ch]
@@ -1548,6 +1614,9 @@ def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256):
         if len(set(cols)) != len(cols) or set(channels[ch]["coefficients"]) != set(cols):
             raise LookInputError(f"coefficients: channels.{ch}: coefficients must match unique columns")
         channels[ch]["coefficients"] = {col: channels[ch]["coefficients"][col] for col in cols}
+        if set(c["fold_coefficients"]) != set(folds) or any(
+                (DELTA_COL in vec) != (folds[day] is not None) for day, vec in c["fold_coefficients"].items()):
+            raise LookInputError(f"coefficients: channels.{ch}: fold coefficients disagree with the fold onset models")
     doc = {
         "schema": COEFFICIENTS_SCHEMA, "look_id": LOOK_ID, "synthetic": stage1_out["synthetic"],
         "manifest_sha256": manifest_sha256, "stage1_sha256": stage1_sha256,
@@ -1561,6 +1630,7 @@ def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256):
         "onset": {"status": on["status"], "predictors": list(on["predictors"]),
                   "coefficients": on["coefficients"] if estimable else None,
                   "sigma_s": on["sigma_s"] if estimable else None,
+                  "folds": folds,
                   "lodo_rms_s": on["lodo"]["rms_s"] if (estimable and on["lodo"] is not None) else None,
                   "count_only_cut": on["count_only_cut"]},
         "delta_column": fit_out["delta_column"],
@@ -1572,12 +1642,13 @@ def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256):
     return doc
 
 
-def predict(coefficients, leg, soak_reference_tv0h_c):
+def predict(coefficients, leg, soak_reference_tv0h_c, *, held_out_day=None):
     """RL-173 §E's predict path: from the freeze-2 coefficient file ALONE (no stage-1 or fit file, no energy), the
     main fit's prediction for one level-R leg (interface §1.2: a type-A leg with a turn) of a span whose soak
     reference is `soak_reference_tv0h_c`. It runs stage 1's arithmetic for that leg with the frozen rates,
     centring and onset model (start_reading, _count_clock_on, linear_predictor, tau_hat) and stage 2's design
-    (_onsets, _Fold, _design_row) with each channel's frozen columns and coefficients.
+    (_onsets, _Fold, _design_row) with each channel's frozen columns and coefficients. With `held_out_day`, use
+    that date's frozen onset and response coefficients for the day-jackknife.
 
     Returns {leg_key, start, tau_hat_s, t_p_s, load_s, channels: {ch: {segments, heat, H_hat, total,
     prefix_tails}}}: `segments` are the fitted values per segment in order (the prefill, then the full blocks);
@@ -1616,21 +1687,33 @@ def predict(coefficients, leg, soak_reference_tv0h_c):
     estimable = on["status"] == "estimable"
     if (c["delta_column"] == "kept") != estimable:
         raise LookInputError("predict: delta_column disagrees with the onset model's status")
-    model = ({"cols": list(on["predictors"]), "beta": np.array([on["coefficients"][p] for p in on["predictors"]]),
-              "sigma": on["sigma_s"]} if estimable else None)            # as stage 2 builds model_main
+    source = on
+    if held_out_day is not None:
+        if held_out_day not in on.get("folds", {}):
+            raise LookInputError("predict: no frozen onset for the requested held-out day")
+        source = on["folds"][held_out_day]
+    model = _onset_model(source, on["predictors"])
     th = tau_hat(L, model)
-    onsets = _onsets([L], model) if c["delta_column"] == "kept" else {}
+    onsets = _onsets([L], model)
 
     heat_cols = set(HEAT_COLS) | {DELTA_COL}
     channels = {}
     for ch in CHANNELS:
         cc = c["channels"][ch]
         cols = list(cc["columns"])
+        vector = cc["coefficients"]
+        if held_out_day is not None:
+            if held_out_day not in cc["fold_coefficients"]:
+                raise LookInputError(f"predict: channels.{ch}: no coefficients for the requested held-out day")
+            vector = cc["fold_coefficients"][held_out_day]
+            cols = [col for col in cols if col in vector]
+            if (DELTA_COL in cols) != (source is not None):
+                raise LookInputError(f"predict: channels.{ch}: held-out coefficients disagree with the fold onset model")
         if DELTA_COL in cols and not onsets:
             raise LookInputError(f"predict: channels.{ch}: a delta column without an onset model")
         if any(h in cols for h in HEAT_OF.values() if not c["active_readings"][_reading_of(h)]):
             raise LookInputError(f"predict: channels.{ch}: an inactive reading's column is present")
-        b = np.array([cc["coefficients"][col] for col in cols])
+        b = np.array([vector[col] for col in cols])
         fold = _Fold([L], cols, onsets)
         X = np.asarray(fold.rows(L), dtype=float)
         is_heat = np.array([col in heat_cols for col in cols])

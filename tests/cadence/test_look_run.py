@@ -73,6 +73,100 @@ def wb(p, data):
 ENERGY_MARKERS = ("power_trace.csv", "segment_energy.json")
 
 
+class AstraPreResponse(unittest.TestCase):
+    def test_receipt_epoch_overrules_the_roster_date_at_the_la_boundary(self):
+        # 05:00 UTC on Nov 15 is still Nov 14 in Los Angeles.
+        entry = {"span_id": "dev-01-s01", "block_id": "dev-01", "role": "fit"}
+        receipt = {"started": {"epoch_s": 1_794_718_800}, "roster": [], "sensors": {}}
+        with unittest.mock.patch.object(R, "_json", return_value=receipt), \
+             unittest.mock.patch.object(R.TF, "file_sha256", return_value="0" * 64), \
+             unittest.mock.patch.object(R, "span_meter", return_value=(None, None)), \
+             unittest.mock.patch.object(R.I34, "keys", return_value=()), \
+             unittest.mock.patch.object(R.I34, "judge_span", return_value=({}, None, None)), \
+             unittest.mock.patch.object(R.M, "nonenergy_files", return_value={}), \
+             unittest.mock.patch.object(R.M, "native_pm_files", return_value={}):
+            for date in ("2026-11-20", "2026-11-99", "2026-11-15"):
+                with self.subTest(date=date), self.assertRaisesRegex(F.LookInputError, "t0_local_date"):
+                    R.read_span(Path("synthetic"), dict(entry, t0_local_date=date), {}, ())
+            span, _ = R.read_span(Path("synthetic"), dict(entry, t0_local_date="2026-11-14"), {}, ())
+            self.assertEqual(span["t0_local_date"], "2026-11-14")
+            midnight = 1_794_729_600.0
+            for epoch, date in ((math.nextafter(midnight, -math.inf), "2026-11-14"), (midnight, "2026-11-15")):
+                receipt["started"]["epoch_s"] = epoch
+                span, _ = R.read_span(Path("synthetic"), dict(entry, t0_local_date=date), {}, ())
+                self.assertEqual(span["t0_local_date"], date)
+
+    def test_dependent_full_design_refuses_before_opening_responses(self):
+        li, _, _ = synth.build("noisy")
+        for leg in li["legs"]:
+            if leg["turn"]:
+                for reading in leg["turn"]["journal"]:
+                    if reading["tf08_c"] is not None:
+                        reading["fan_rpm"] = 100 * reading["tf08_c"]
+        stage1 = F.stage1(li, "0" * 64)
+        self.assertFalse(any(t["trips"] for t in stage1["tripwires"].values() if isinstance(t, dict)))
+        self.assertTrue(stage1["active_readings"]["fan_rpm"]["active"])
+        self.assertTrue(stage1["active_readings"]["tf08_c"]["active"])
+        self.assert_rank_refusal_before_responses(stage1, "full fit.*rank deficient")
+
+    def test_dependent_fold_refuses_before_opening_responses(self):
+        li, _, _ = synth.build("noisy")
+        stage1 = F.stage1(li, "0" * 64)
+        day = stage1["roster"]["fit_days"][0]
+        # The full design retains independent readings on day one. Training without
+        # that day makes the fan and temperature columns collinear.
+        for leg in stage1["legs"]:
+            if leg["in_energy_fit"] and leg["day"] != day:
+                leg["start"]["z"][1] = 100 * leg["start"]["z"][0]
+        self.assert_rank_refusal_before_responses(stage1, f"{day}.*rank deficient")
+
+    def assert_rank_refusal_before_responses(self, stage1, reason):
+        sha = hashlib.sha256(F.dump(stage1)).hexdigest()
+        args = R.argparse.Namespace(stage1="frozen-stage1", stage1_sha256=sha, allow_draft=True,
+                                    energy="unopened-responses", looks=None)
+        with unittest.mock.patch.object(builtins, "open", return_value=io.BytesIO(F.dump(stage1))), \
+             unittest.mock.patch.object(R, "_json", side_effect=[{}, AssertionError("opened responses")]) as read, \
+             unittest.mock.patch.object(R, "draft_ledger_check"), \
+             unittest.mock.patch.object(R, "stage2_energy_preflight"):
+            with self.assertRaisesRegex(F.LookInputError, reason):
+                R.cmd_stage2(args)
+            read.assert_called_once()
+
+    def test_cli_reuses_the_blind_design_for_fit_and_freeze(self):
+        li, responses, _ = synth.build("noisy")
+        s1 = F.stage1(li, responses["input_sha256"])
+        raw = F.dump(s1)
+        sha = hashlib.sha256(raw).hexdigest()
+        opened_after = []
+
+        def read(path):
+            if path == "memory-responses":
+                opened_after.append((preflight.call_count, folds.call_count))
+                return responses
+            return {}
+
+        with unittest.mock.patch.object(builtins, "open", return_value=io.BytesIO(raw)), \
+             unittest.mock.patch.object(R, "_json", side_effect=read), \
+             unittest.mock.patch.object(R, "draft_ledger_check"), \
+             unittest.mock.patch.object(R, "stage2_energy_preflight"), \
+             unittest.mock.patch.object(R, "_stamp", side_effect=lambda out, _: out), \
+             unittest.mock.patch.object(R, "_VERIFIED", []), \
+             unittest.mock.patch.object(R.M, "verify_pins", return_value={}), \
+             unittest.mock.patch.object(R, "code_hashes", return_value={}), \
+             unittest.mock.patch.object(R, "sha256_file", return_value="a" * 64), \
+             unittest.mock.patch.object(R, "write_canonical", return_value="b" * 64) as write, \
+             unittest.mock.patch.object(F, "stage2_preflight", wraps=F.stage2_preflight) as preflight, \
+             unittest.mock.patch.object(F, "fit_onset_fold", wraps=F.fit_onset_fold) as folds, \
+             contextlib.redirect_stdout(io.StringIO()):
+            rc = R.main(["stage2", "--stage1", "memory-stage1", "--stage1-sha256", sha, "--energy",
+                         "memory-responses", "--out", "memory-fit", "--coefficients-out", "memory-coefficients",
+                         "--manifest", "memory-manifest", "--allow-draft"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(opened_after, [(1, folds.call_count)])
+        self.assertEqual(preflight.call_count, 1)
+        self.assertEqual(write.call_count, 2)
+
+
 class Staging(unittest.TestCase):
     def pack(self, root, files=None, changed=False):
         import tarfile

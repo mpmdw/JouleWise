@@ -41,7 +41,7 @@ Units: tokens are integers; temperatures °C; fan speed rpm; energy J. "Epoch" i
   "role": "fit" | "describe",             # describe = hp-01: never in any fit (Q9, RL-149 §2.3)
   "power_mode": "automatic" | "high_power",
   "t0_epoch_s": float,                    # the span's t0
-  "t0_local_date": "YYYY-MM-DD",          # the calendar day; the unit of every leave-one-out (RL-149 §2.3)
+  "t0_local_date": "YYYY-MM-DD",          # Los Angeles date of t0_epoch_s; the leave-one-out unit (RL-149 §2.3)
   "soak_reference_tv0h_c": float | null,  # the span's soak reference on TV0h (RL-150 R1 part 1); null = missing
   "marks": [ "reference from a redo" | "reference from an excluded leg", ... ],  # Q20; [] if none
   "meter_offsets_ns": { "header": int | null,    # KM003C header start_real_ns − start_raw_ns
@@ -447,7 +447,8 @@ contract between the two.
   "block_tokens": 256, "prefix": {"1.10": 3724, "1.30": 3151, "1.374": 2981},
   "rates": {"r_p", "r_d"}, "centring": {...}, "calibrated_range": {...},   # stage 1's
   "active_readings": {"tf08_c": bool, "fan_rpm": bool, "tv0h_excess_c": bool},
-  "onset": {"status", "predictors", "coefficients" | null, "sigma_s" | null, "lodo_rms_s" | null, "count_only_cut"},
+  "onset": {"status", "predictors", "coefficients" | null, "sigma_s" | null, "lodo_rms_s" | null, "count_only_cut",
+            "folds": {day: {"coefficients": {column: float}, "sigma_s": float} | null}},
   "delta_column": "kept" | "dropped_onset_not_estimable",
   "channels": {"gpu_rail" | "dc_in": {"columns", "coefficients", "covariance", "hot_rms_over_legs",
                                       "fold_coefficients", "model_sha256"}},
@@ -462,6 +463,10 @@ channel's own columns. It returns `{"leg_key", "start": {"status", "state", "z",
 the segments, "total": Σ segments, "prefix_tails": {"3724" | "3151" | "2981": prefill + full blocks before the prefix
 + its tail, or null when the prefix is not shorter than the leg}}}}`. On every energy-fit leg its segments equal the
 main fit's fitted values (tested). A start reading that is not ok, a type-T leg or a leg with no turn refuses by name.
+For a day-jackknife, call `predict` on the same reference leg with `held_out_day=day` for every frozen day and
+take the jackknife standard error of the resulting `H_hat` values. Each call uses that date's frozen onset
+coefficients and scatter and each channel's matching `fold_coefficients[day]`. A null onset fold uses its
+frozen vector with delta absent.
 The twin writes its own `predict`; the agreement compares both on each set's coefficient file.
 
 ### 4.3 The two fold lists (RL-167 row 7: "listed in both lists")
@@ -581,9 +586,11 @@ including optional presence, join the source hash map checked by both later read
 ```
 
 **The roster** is `manifest.resolve_roster`'s list `[{span_id, block_id, role, t0_local_date}]`; a span's
-directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwise.
+directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwise. The span ledger requires valid
+calendar dates. Stage 1 derives the Los Angeles date from `runner_receipt.json`'s `started.epoch_s` and requires
+the roster date to match. Direct level-R input must satisfy the same epoch-to-date check.
 
-**Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` through the pinned step 3 reader, and that span's meter streams through the pinned decoder. It verifies all operational sources and the time projections before those value readers run.
+**Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` through the pinned step 3 reader, and that span's meter streams through the pinned decoder. Before reading responses it verifies the operational sources and time projections and checks the full design and every required leave-one-day-out design for column rank. Both channels use the same fold onsets and factorizations and retain their own residuals and covariance.
 
 **Pins and commit (#793's helpers).** Both stages take `--manifest` (and `--allow-draft` for synthetic runs) and call
 `manifest.verify_pins(manifest, repo, allow_draft=..., running=(fit_interim.py, cadence_look_run.py))` before any

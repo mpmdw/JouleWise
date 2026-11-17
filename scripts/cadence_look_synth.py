@@ -6,6 +6,7 @@ shapes of the fit's interface page (`docs/process/cadence_look_fit_interface.md`
 parameters: the onset model, the rates, the count-only base, the heat term (kappa, delta) and the noise.
 
     python -I scripts/cadence_look_synth.py --out DIR [--scenario NAME] [--seed N]
+    python -I scripts/cadence_look_synth.py --compare-hot [--seed N]
 
 DIR receives `look_input.json` (level R, no energy), `segment_energy.json` (level E) and `truth.json` (the planted
 values and the planted per-leg quantities the fit should recover). Everything here is synthetic. No custody,
@@ -97,6 +98,8 @@ SCENARIOS = {
               "onset": {"sigma_s": 12.0}},
     # realistic noise, jittered per-leg rates
     "noisy": {"noise": {"rate_jitter": {"r_p": 0.02, "r_d": 0.01}}},
+    # matched to noisy, with a hard step at each leg's drawn onset
+    "realized_onset": {"noise": {"rate_jitter": {"r_p": 0.02, "r_d": 0.01}}, "realized_onset": True},
     # almost every turn censored: onset not estimable, delta dropped, 116 s cut
     "onset_not_estimable": {"onset": {"intercept": 1500.0}},
     # only two days carry hot stretches on at least three legs: not_evaluable
@@ -335,21 +338,23 @@ def build(scenario="noisy", seed=20261114, tokens=None):
         if not tlg["in_energy_fit"]:            # RL-167 §3: level E holds energy-fit legs only
             continue
         entry = {}
+        # The zero-scatter plant gives the exact hot overlap at the drawn onset, with the same full-hot
+        # convention for legs that start out of state. Prediction still uses the fitted normal expectation.
+        onset = ((p["tau_true"], 0.0, p["out_of_state"]) if par.get("realized_onset") else
+                 (p["lin"], on["sigma_s"], p["out_of_state"]))
         for ch in ("gpu_rail", "dc_in"):
             cp = par[ch]
             sd = par["noise"]["seg_sd_j"][ch]
             leg_w = float(rng.normal(0, par["noise"]["leg_power_sd_w"][ch])) if par["noise"]["leg_power_sd_w"][ch] else 0.0
             segs, mean = [], []
             for s in tlg["count_segments"]:
-                mu = planted_segment_energy(cp, s["kind"], s["n"], p["P"], s["c"], s["u"], s["v"], p["z"],
-                                            (p["lin"], on["sigma_s"], p["out_of_state"]))
+                mu = planted_segment_energy(cp, s["kind"], s["n"], p["P"], s["c"], s["u"], s["v"], p["z"], onset)
                 e = mu + leg_w * (s["v"] - s["u"]) + (float(rng.normal(0, sd)) if sd else 0.0)
                 segs.append(e)
                 mean.append(mu)
             tails = {}
             for L, s in tlg["count_tails"].items():
-                mu = planted_segment_energy(cp, "decode", s["n"], p["P"], s["c"], s["u"], s["v"], p["z"],
-                                            (p["lin"], on["sigma_s"], p["out_of_state"]))
+                mu = planted_segment_energy(cp, "decode", s["n"], p["P"], s["c"], s["u"], s["v"], p["z"], onset)
                 tails[L] = mu + leg_w * (s["v"] - s["u"]) + (float(rng.normal(0, sd)) if sd else 0.0)
             entry[ch] = {"segments": segs, "prefix_tails": tails, "coverage_min": 1.0}
             tlg.setdefault("planted_mean_j", {})[ch] = sum(mean)
@@ -729,6 +734,23 @@ def dump(obj):
     return (json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
 
 
+def compare_hot_worlds(seed=20261114):
+    """Report held-out hot error for both matched synthetic worlds, using one frozen design."""
+    from joulewise.cadence_looks import fit_interim as F
+
+    level_r, expected, _ = build("noisy", seed)
+    _, realized, _ = build("realized_onset", seed)
+    stage1 = F.stage1(level_r, expected["input_sha256"])
+    sha = hashlib.sha256(F.dump(stage1)).hexdigest()
+    prepared = F.stage2_preflight(stage1)
+    report = {}
+    for world, responses in (("noisy", expected), ("realized_onset", realized)):
+        fit = F.stage2(stage1, sha, responses, _prepared=prepared)
+        report[world] = {ch: {**c["lodo"]["hot"], "rms_over_legs": c["lodo"]["hot_rms_over_legs"]}
+                         for ch, c in fit["channels"].items()}
+    return report
+
+
 def write(out_dir, scenario="noisy", seed=20261114, custody=False):
     tokens = {}
     look_input, energy, truth = build(scenario, seed, tokens)
@@ -746,11 +768,18 @@ def write(out_dir, scenario="noisy", seed=20261114, custody=False):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--out", required=True)
+    action = ap.add_mutually_exclusive_group(required=True)
+    action.add_argument("--out")
+    action.add_argument("--compare-hot", action="store_true", help="compare held-out hot error in the two onset worlds")
     ap.add_argument("--scenario", default="noisy", choices=sorted(SCENARIOS))
     ap.add_argument("--seed", type=int, default=20261114)
     ap.add_argument("--custody", action="store_true", help="also write the custody layout under OUT/custody")
     a = ap.parse_args(argv)
+    if a.compare_hot:
+        if a.custody or a.scenario != "noisy":
+            ap.error("--compare-hot uses both onset worlds and writes only a report to stdout")
+        print(json.dumps(compare_hot_worlds(a.seed), indent=2, sort_keys=True))
+        return 0
     paths = write(a.out, a.scenario, a.seed, a.custody)
     for name, path in paths.items():
         with open(path, "rb") as f:
@@ -759,4 +788,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     sys.exit(main())

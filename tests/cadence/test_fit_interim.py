@@ -73,6 +73,57 @@ def plant_onset(s1, truth):
     return s1
 
 
+class AstraDesign(unittest.TestCase):
+    def test_level_r_rejects_false_or_impossible_date_before_folding(self):
+        li, _, _, _ = dataset("noisy")
+        for day in ("2026-11-20", "2026-11-99"):
+            with self.subTest(day=day), self.assertRaisesRegex(F.LookInputError, "t0_local_date"):
+                li["spans"][0]["t0_local_date"] = day
+                F.stage1(li, rehash(li))
+
+    def test_channels_share_onset_fits_and_factorizations(self):
+        _, en, _, _ = dataset("noisy")
+        s1 = stage1_of("noisy")
+        fit_legs = [leg for leg in s1["legs"] if leg["in_energy_fit"]]
+        days = {leg["day"] for leg in fit_legs}
+        unmarked_days = {leg["day"] for leg in fit_legs if not leg["marks"]}
+        with unittest.mock.patch.object(F, "fit_onset_fold", wraps=F.fit_onset_fold) as onset, \
+             unittest.mock.patch.object(np.linalg, "svd", wraps=np.linalg.svd) as svd:
+            out = F.stage2(s1, rehash(s1), en)
+        self.assertEqual(onset.call_count, len(days) + 1 + len(unmarked_days))
+        self.assertEqual(svd.call_count, 2 + 2 * (len(days) + len(unmarked_days)))
+        gpu, dc = (out["channels"][ch] for ch in F.CHANNELS)
+        self.assertNotEqual(gpu["covariance"], dc["covariance"])
+        self.assertNotEqual(gpu["residuals"], dc["residuals"])
+        self.assertIsNotNone(gpu["marked_sensitivity"]["coefficients_without"])
+
+    def test_realized_onset_world_keeps_predictors_but_changes_responses(self):
+        li, expected, tr, _ = dataset("noisy")
+        li2, realized, tr2 = synth.build("realized_onset")
+        self.assertEqual(li2, li)
+        self.assertEqual(tr2["legs"].keys(), tr["legs"].keys())
+        key = "dev-01-s01/L001"
+        truth_leg = tr2["legs"][key]
+        t_p = truth_leg["t_p_planted_s"]
+        r_d = tr2["params"]["rates"]["r_d"]
+        step = tr2["params"]["gpu_rail"]["delta"]
+        onset = truth_leg["tau_true_s"]
+        differences = []
+        for i, (_, _, _, _, lo, hi) in enumerate(synth.seg_edges(4096), 1):
+            u, v = t_p + lo / r_d, t_p + hi / r_d
+            realized_s = max(0, v - max(u, onset))
+            expected_s = synth.planted_hot_seconds(u, v, (truth_leg["onset_linear_predictor_s"],
+                                                        tr["params"]["onset"]["sigma_s"], False))
+            diff = realized["legs"][key]["gpu_rail"]["segments"][i] - expected["legs"][key]["gpu_rail"]["segments"][i]
+            self.assertAlmostEqual(diff, step * (realized_s - expected_s), places=10)
+            differences.append(abs(diff))
+        self.assertGreater(max(differences), 1.0)
+        report = synth.compare_hot_worlds()
+        for ch in F.CHANNELS:
+            self.assertGreater(report["realized_onset"][ch]["rms_over_legs"], report["noisy"][ch]["rms_over_legs"])
+            self.assertNotEqual(report["realized_onset"][ch]["per_day"], report["noisy"][ch]["per_day"])
+
+
 class Exact(unittest.TestCase):
     """No noise, exact stamps: given the planted onset model, stage 2 recovers every planted coefficient."""
 

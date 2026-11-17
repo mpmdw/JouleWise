@@ -1,5 +1,11 @@
 # JouleWise Task Queue
 
+PR #795 round-10 disposition (2026-11-17) takes direct user priority in the
+interim-look worktree. WS 1 and design 4, 7 and throughput 1–2 have synthetic
+regressions. Design 1 and 8 need research-lead rulings. Design 5 needs a scoped
+cadence runner and desk patch. Keep the PR open for review. See the
+[round-10 report](docs/run_reports/2026-11-17-pr795-round10-builder.md).
+
 PR #795 round-9 intake (2026-11-16): direct user priority on this clean worktree at
 `41afd6eea`; [AGENT], synthetic only. Cold Sol's one LOW (underdetermined design)
 and RL-174 A.2/A.4/A.7/D.3 are implemented and gated: 407 focused tests (2 skips),

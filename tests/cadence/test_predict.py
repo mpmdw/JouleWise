@@ -142,6 +142,8 @@ class Reproduces(unittest.TestCase):
         self.assertIsNone(co["onset"]["coefficients"])
         for ch in F.CHANNELS:
             self.assertNotIn("delta", co["channels"][ch]["columns"])
+            folds = co["channels"][ch]["fold_coefficients"]
+            self.assertEqual(co["onset"]["folds"], dict.fromkeys(folds))
 
     def test_inactive_reading(self):
         n, fit, co = self.check("inactive_fan")
@@ -170,6 +172,27 @@ class Reproduces(unittest.TestCase):
 
 
 class Document(unittest.TestCase):
+
+    def test_frozen_fold_onsets_reproduce_the_reference_day_jackknife(self):
+        li, _, _, _, coef = run("noisy")
+        frozen = json.loads(F.dump(coef))
+        self.assertIn("folds", frozen["onset"])
+        days = sorted(frozen["channels"]["gpu_rail"]["fold_coefficients"])
+        self.assertEqual(sorted(frozen["onset"]["folds"]), days)
+        leg = next(leg for leg in li["legs"] if leg["leg_key"] == "dev-01-s01/L001")
+        ref = next(s["soak_reference_tv0h_c"] for s in li["spans"] if s["span_id"] == leg["span_id"])
+        actual, main_onset = [], []
+        for day in days:
+            p = F.predict(frozen, leg, ref, held_out_day=day)
+            actual.append(p["channels"]["gpu_rail"]["H_hat"])
+            wrong = copy.deepcopy(frozen)
+            for ch in F.CHANNELS:
+                c = wrong["channels"][ch]
+                c["coefficients"] = c["fold_coefficients"][day]
+                c["columns"] = [name for name in c["columns"] if name in c["coefficients"]]
+            main_onset.append(F.predict(wrong, leg, ref)["channels"]["gpu_rail"]["H_hat"])
+        self.assertAlmostEqual(np.std(actual, ddof=0) * np.sqrt(len(days) - 1), 11.64, places=2)
+        self.assertAlmostEqual(np.std(main_onset, ddof=0) * np.sqrt(len(days) - 1), 18.28, places=2)
 
     def test_schema_and_determinism(self):
         schema = json.loads(SCHEMA.read_text())

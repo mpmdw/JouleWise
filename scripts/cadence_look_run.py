@@ -460,6 +460,8 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
     named exclusions for a stage 1 run once more (RL-173 E.1 item 4)."""
     ruled = ruled or {}
     receipt = _json(sdir / "runner_receipt.json")
+    epoch_s = receipt["started"]["epoch_s"]
+    day = F.span_day(epoch_s, entry["t0_local_date"], entry["span_id"])
     files = {"runner_receipt.json": TF.file_sha256(sdir / "runner_receipt.json")}
     sm, sm_why = span_meter(sdir)                 # preserves the field-only compressed-custody refusal
     # A committed verdict hashes the decision file, not the source copy. Replay the same blind rules on
@@ -474,8 +476,8 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
     power = "high_power" if entry["block_id"].startswith("hp-") else "automatic"
     span = {"span_id": entry["span_id"], "block_id": entry["block_id"],
             "phase": "extension" if entry["role"] == "describe" else "development", "role": entry["role"],
-            "power_mode": power, "t0_epoch_s": float(receipt["started"]["epoch_s"]),
-            "t0_local_date": entry["t0_local_date"], "soak_reference_tv0h_c": soak, "marks": [],
+            "power_mode": power, "t0_epoch_s": float(epoch_s),
+            "t0_local_date": day, "soak_reference_tv0h_c": soak, "marks": [],
             "meter_offsets_ns": dict(zip(("header", "end"), meter_offsets(sm) if sm else (None, None))),
             "soak_receipt": I34.soak_fields(receipt),
             "custody": {"files_sha256": files, "meter_time_sha256": sm.digest() if sm else None,
@@ -928,7 +930,7 @@ def cmd_stage2(a):
     else:
         # the committed ledger at HEAD, HEAD on the ledger ref, the manifest and roster bound (builder's contract)
         M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1, ledger_ref=a.ledger_ref)
-    F.stage2_preflight(s1)                          # refuses before any energy file is opened
+    prepared = F.stage2_preflight(s1)               # all required designs must pass before responses open
     stage2_energy_preflight(s1, a)                  # Mythos round 3 N1, N2: every remaining refusal, before energy
     if a.energy:
         energy, custody = _json(a.energy), None
@@ -942,7 +944,8 @@ def cmd_stage2(a):
                                  for sid, pth in sorted(dict(x.split("=", 1) for x in a.span_dir or []).items())],
                    "files": files}
     a._stage1_doc = s1
-    out = F.stage2(s1, a.stage1_sha256, energy, code_hashes())
+    a._prepared_fit = prepared
+    out = F.stage2(s1, a.stage1_sha256, energy, code_hashes(), _prepared=prepared)
     out["custody"] = custody                        # Mythos r5 N6: what stage 2 read, by path and sha256
     return _stamp(out, a)
 
@@ -1050,7 +1053,8 @@ def main(argv=None):
             # RL-173 E: freeze 2's coefficient file, written from the stage-1 file and this fit (no energy), checked
             # against its pinned schema before anything is written
             from joulewise.cadence_looks import schema_check as SC
-            coef = F.write_coefficients(a._stage1_doc, a.stage1_sha256, out, sha256_file(a.manifest))
+            coef = F.write_coefficients(a._stage1_doc, a.stage1_sha256, out, sha256_file(a.manifest),
+                                        _prepared=a._prepared_fit)
             errs = SC.errors(coef, M.coefficients_schema(ROOT))
             if errs:
                 raise F.LookInputError("the coefficient file does not pass its schema: " + "; ".join(errs[:5]))
