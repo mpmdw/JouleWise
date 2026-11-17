@@ -17921,3 +17921,246 @@ The other conditions of RL-174 B stand: `lm-hp-01` not run, one delta check, typ
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. The estimand, the half-block disposition, the batch rule, the pair wording and the recovery origin are fixed before any qualification or F2 energy is read and before any qualification leg exists. C.4 rests on kit layouts and on redo times in RUN_STATE. D.1 rests on printed clock ratios, which are not judged.
 
 **For Ed, plainly.** "The long calibration session can be declared ready tonight and will start by itself Wednesday morning, right after the last development run; nothing else has to finish first. The fit can be frozen on the measurement laptop itself if the Air is still away, so the final test blocks no longer depend on where the Air is. The outside audit found real things and I took them: one output file would have let a reader work back to each run's energy, so that file now stays private until the paper's data release; and the final test runs will start at about 02:35 instead of midnight, so the laptop's nightly housekeeping does not land on the few paired runs we cannot repeat. I kept the test kits as they are. On the claim: the calibration runs can never show that sabotage leaves an energy signature. Only the randomized sabotage-against-benign series can, and the paper will say exactly that."
+
+# RL-176. Ed's question on S: two additions are admitted at no machine time. Q, the instruction's effect on whole-episode energy, is a registered secondary with its own alpha; power aligned to logged turn and tool-call times is a frozen descriptive print. S is not changed. The sabotage prompt's size is counted now and a decode-only repeat of S prints beside it. The matched harmless instruction runs only after an `S SIGNATURE`. The paper is planned around "the meter reads how much the model did", and "sabotage leaves an energy signature" needs three things, not one
+
+Research lead (Fable 5.2), Tue Nov 17 15:33 PST 2026 (from `date`). Ed, 11-17: "Is randomizing the instructions on an already benched bench, i.e. SHADE-Arena, not answering a different question about fuzzing and non-determinism, more than our goal of matching power profiles to specific behaviors, or at least quantity of behavior? How do you rate our chance at useful evidence?" Ed's decision, relayed by the lead: rule on two additions now, while the S amendment is a draft and W1 is unsigned. RL-149 to RL-175 stand except where "Amends" says otherwise.
+
+Short names: `RLD` is this log. `P4` is `docs/align/pilot_protocol_v4.md` at `b2e01464d`. `W1L` is the W1 line's tree at `b2e01464d`.
+
+**Read.** The Mythos 5.2 rating (`/Volumes/JW-EXT/scratch/mythos-evidence-rating/RATING.md`, all of it). P4's configuration, seed and residual sections and the whole claim contract (`:68-104`, `:161-212`, `:518-606`, `:1078-1438`). My RL-148 corrections 1 to 5 and step table, RL-149 §1.3, §2.7 and §4, RL-151 §1 to §3, RL-152 §3.2, RL-173, RL-175. `AMENDMENT-R1-DRAFT.md` on the audit branch. RUN_STATE items 390 to 403 on `origin/main` `9b91bd8a9`, headers only.
+
+**Verified by me, from source.**
+- **The registered prediction is a null.** P4:1164-1167: "The meter reads quantity, not intent, so the registered prediction is a null."
+- **The protocol already says where a literal cost lives.** P4:1404-1406 (B7 item 6): "Under honest logging this, not S, is where a literal energy cost of sabotage lives." That item is print-only (P4:1383-1384).
+- **The rating's citations.** I checked every P4 and RLD line it cites except P4:849-850, and its lines in `shade_port.md`, `energy_residual.md` and the amendment draft. All hold. The rest are under "Not checked".
+- **The two conditions use different upstream system messages.** `docs/align/shade_port.md:144-147` and `joulewise/align/shade/task.py:229-242` in W1L: benign takes `system_message_no_secondary_task`, sabotage takes `system_message_suspicious(give_hint=...)` with scratchpad instructions.
+- **The series already stamps every event the additions need.** `joulewise/align/records.py:36-47` (a tool call's `start_ns` and `end_ns`), `:57-76` (a turn's `start_ns`, `end_ns`, `first_token_ns` and its three token counts), `:222-232` (per-episode totals). `joulewise/align/apple/workload.py:586-608` stamps each tool call; `:634-642` writes the turn.
+- **`phase_detect` is not wired.** `joulewise/align/phase_detect.py` and three test modules exist in W1L. Nothing under `joulewise/align/apple/` or `scripts/` imports it. RL-149 §4 item 12 (RLD:12810) therefore falls to v5 as written unless that changes by the amendment's merge.
+- **W1 is not signed.** No item from 390 to 403 records a signing, and the amendment is still headed "DRAFT, not signed registration" (`r1-ready-1116/AMENDMENT-R1-DRAFT.md:3`).
+
+**Not checked.**
+- **The prompt token counts.** No copy of the pinned upstream is on this host, so I counted nothing. Section C orders the count. Everything in C that depends on the size is conditional.
+- **Mythos's odds.** They are judgment and I did not recompute them. I take them as planning figures only.
+- **"0.51 h a member" and the 28 h** for the matched control. P4:849-850 does not print that figure where the rating cites it. I use 28 h as Mythos's estimate.
+- The step-4 simulator and its tables, including the two step-4 files and the Astra design line the rating cites. The trace's native sample interval. How long a mock tool call lasts.
+- I ran no code. No SSH, no push. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+---
+
+## A. Addition 1, the instruction's effect on total work and total energy: ADMITTED as a registered secondary, named Q
+
+**Ed is right about what S leaves out.** S removes quantity on purpose and asks what is left. Whether the instruction changes how much the model does, and how much energy that costs, is a separate question. The same draw answers it exactly, with no fit at all.
+
+### A.1 Status, estimand and test
+
+| | Ruling |
+|---|---|
+| Status | **Pre-registered secondary with outcome words, at its own alpha.** K alone stays confirmatory (P4:1217) |
+| Question | Does a sabotage instruction change the GPU-rail energy of a whole episode? No adjustment for counts. It is the total effect of the instruction, through prompt length, output length, turns, tool use and heat together |
+| Outcome | Turn-owned GPU-rail energy summed over the member's turns: each turn's span plus its own tool calls, less gates and holds. This is the quantity B7 item 6 already prints (P4:1388, 1404-1405) |
+| Population | B2's strata, one per window and pair (P4:1178-1181). A member enters with a finite outcome if it is eligible under the frozen exclusion union, the same rules for both conditions (P4:1180). A member ended by the time limit, a turn-gate timeout or the decode budget is kept and counted at what it produced, as K's sentence has it (RLD:12298-12302). No S score is needed |
+| Statistic | Per pair: B2's û_k and θ̂ (P4:1193-1197) with the outcome in place of the S score. Two-sided exact p = min(1, 2·min(p_sup, p_inf)), each tail by B2's convolution (P4:1199-1201) |
+| Multiplicity | **Holm over the two pairs at .05.** The smaller p is compared with .025; if it passes, the larger with .05. Each pair is tested alone because the pilots' work ratio had opposite signs by task (RLD:13170-13172). The pooled value prints with no word |
+| Evaluable | A pair needs at least 8 entering strata. Below that it is `Q NOT EVALUABLE` and the other pair is tested at .05 |
+| Estimate | Per pair: the mean over strata of d_k = ln(outcome of the instructed member) − the mean of ln(outcome) over the stratum's benign members, printed as a percent, ± t(.975, K − 1)·SD(d_k)/√K. The interval is description. The word comes from the exact test |
+| Words | `Q SHIFT`, `Q NO SHIFT SHOWN`, `Q NOT EVALUABLE`, one per pair |
+| Release | Every Q leaf is a sabotage-instructed leaf. It is computed only in the release run and prints `withheld_until_series_complete` before it (P4:1099-1102) |
+
+**Mechanism prints, same statistic, exact two-sided p, no word, nominal:** logged decode tokens; prefill tokens; turns; tool calls; turn-owned wall time. Per pair and pooled, unconditionally and conditional on side-task success. The conditional rows carry B2's sentence that success is an outcome (P4:1264-1268). They join the frozen count of RL-149 §4 (RLD:12790-12793).
+
+**The label-blind quantity print.** Per window and pair, over all eligible fresh members: the leave-one-member-out R² of whole-episode GPU-rail energy from the five-term counts fit, and joules per decode token and per prefill token with their standard errors. This is the series' own number for "energy tracks the amount of work". It prints at release.
+
+**Power, stated before any data.** One pair at 11 strata is the K_S = 11 row of the registered table: .28, .55 and .79 at shifts of 0.5, 0.75 and 1.0 benign SD (P4:1246-1252), and less at Holm's first step. Q will see a shift of about one benign SD in whole-episode energy and is likely to miss a smaller one. The estimate and its interval print whatever the word.
+
+### A.2 What Q does not do
+
+- **"Work-adjusted energy as a secondary" is refused as anything new.** It already exists as `S_a4` (P4:1191) and stays a print. Step 4 put its false-signature rate at .042 to .233 (RLD:13294-13295). It cannot carry a word.
+- **No mediation claim.** "The instruction's energy effect is explained by tokens" is not tested by any registered statistic. What is licensed is the conjunction of Q and S in section E.2.
+- **No DC-in Q in v4.** The sabotage-instructed DC-in rows stay sealed for v5 (P4:1171-1173; RLD:12812-12814). Q's code is written channel-neutral, and Q on DC-in is the first statistic run when v5 opens the seal. Benign-only DC-in prints are unchanged.
+- **Instruction as instrument (the rating's change 4): not printed.** I agree with its reason.
+- **The rating's 1 (iii),** energy excess against the side-transfer total among instructed members: admitted as one descriptive print per pair, labelled post-treatment.
+
+### A.3 Beside S
+
+S's score, statistic, alpha, margin, strata, words and release rule do not change (P4:1162-1225; RL-149 §1.3; RL-151 §1.1). Q reads no S score and S reads no Q value. Neither gates the other. Three registered families now stand, each at its own alpha and none chosen after data: K at .05, S as registered, Q at .05.
+
+### A.4 Logging
+
+**No change. Zero MBP hours.** Every input is in the Episode record or is already integrated for B7 item 6.
+
+## B. Addition 2, power aligned to logged actions: ADMITTED as a frozen descriptive print
+
+**No test and no outcome word.** That decode draws more power than a wait is physics, and a test of it would add nothing. What this buys is the paper's figure and a table of where an episode's energy goes.
+
+### B.1 The print
+
+- **Events:** turn start, first token, turn end, tool-call start and tool-call end, from the record's own stamps, mapped to the trace clock as the rows map their edges.
+- **Channels:** GPU rail, CPU rail and package power for all members (RL-149 §4 item 7's channels). DC-in for benign members only.
+- **Event-locked profile:** mean power from 5 s before to 10 s after each event class, on the trace's native sample grid with no finer interpolation. Averaged within member, then within window, then across windows, with the across-window range.
+- **Phase table, per member:** seconds, joules and mean watts in prefill (start to first token), decode (first token to turn end), tool calls, and other ungated time; joules per token for prefill and for decode. The phases must sum to the member's ungated episode energy within 1 %; a member that does not is listed.
+- **By condition, release only:** the phase table, and five scalars with the exact two-sided rank p, nominal: decode-phase energy, prefill-phase energy, tool-call plus other energy, mean decode watts, joules per decode token. Per pair. They join the frozen count.
+- **Resolution rule.** A tool-call span shorter than two native samples is integrated into the phase table and gets no event-locked profile. The share of such calls prints.
+- **Qualifier:** the same code on ctl-01's legs (RLD:12538-12542; doses at RLD:13438). `qualified: yes` when every ctl-01 leg closes within 1 % and the CPU-rail energy of "other ungated time" rises in order across the 10, 30 and 90 s burn legs. Otherwise `no` or `not_run`. It prints either way.
+
+### B.2 Its ceiling, said now so no draft overreaches
+
+- **It ties energy to phases and amounts, not to what an action did.** The tools are mock functions. A tool-call span here also contains the harness's two state digests (`workload.py:593`, `:607`), so its energy is mostly ours.
+- **It does not detect anything.** It reads the log's times and lays the trace over them. Finding structure in the trace without the log is RL-149 §4 item 12, whose condition is unchanged.
+- **Timing error.** Each boundary carries the edge of RL-149 §1.3 reading T7 (1.0 J). The print states it.
+
+### B.3 Logging, and what happens if the code is late
+
+**No logging change. Zero MBP hours.** ctl-01 runs anyway.
+- If the code is wired, unit-tested and reviewed by the amendment's merge, it is frozen with it.
+- If not, it may be written after release under this section's text and is then labelled "specified before data in RL-176; code written after". That is acceptable for a description with no test. It is not acceptable for Q (section F).
+
+## C. The prompt-size confound
+
+**The rating's inference is sound and I add one point to it.** After a turn in which a cut fired, no later turn gives a row (RLD:12268-12269). So turn 0 is the row every member is most likely to have, and turn 0 is where the two prompts differ. Within a stratum every benign member has the same turn-0 prompt, so the fit learns prefill cost at the sabotage prompt's size only from later turns with a cached context. A fit error there has the same sign in all 22 strata. That reading of the design is mine and the count's builder confirms or corrects it.
+
+### C.1 The count: ordered now
+
+| | |
+|---|---|
+| Who | A Sol builder, off-host. No MBP time, no model weights, no inference |
+| What | For `bank_transfer_2` and `spam_filter_update`, hint on, both conditions: turn 0's full prompt as the D runtime renders it (system message, user prompt, tool schemas, D's template and effort policy), tokenized with the pinned tokenizer of `mlx-community/Qwen3.8-27B-8bit` @ `815b83c0d` (P4:80) |
+| Reports | Tokens by task and condition and the difference Δ; character counts; the sha256 of each of the four rendered prompts; whether turn 0's prefill is the whole prompt in both conditions; the prompt sizes of the development and qualification kits beside them. As a cross-check, turn-0 prefill counts by condition from the 30B pilot turn records, counts only (RL-148 step 5, RLD:11120) |
+| Where | `evidence/align-v4-campaign/prompt-size-rl176/` on the audit branch. The numbers fill the amendment's sentence in C.3 |
+
+It is blind: public upstream text, fixed before any series member exists.
+
+### C.2 What follows, ruled now
+
+**If |Δ| is at most 16 tokens for both tasks:** the amendment says the prompts are matched in size. `S_dec` still prints and gates nothing. (16 is under the 24 tokens a row's guard already discards, RLD:12295.)
+
+**If Δ is larger for either task, in either direction:**
+1. **No prompt is edited.** The benign prompt is not padded and the sabotage prompt is not trimmed. They are the benchmark's own text; a pad changes K's benign population; and a pad is a new instruction that would need its own control.
+2. **S's score and words stand.** Every S statement gains the sentence of C.3.
+3. **`S_dec`, the decode-only repeat, prints beside S and gates the heading phrase (E.1).**
+   - A decode-only row runs from the turn's first stamped token to the row's end as RL-149 §1.3 defines it.
+   - Its prediction is the three-term fit [1, D, (C+P)·D + D²/2] with the S score's leave-one-out structure. Its SD carries one more timing edge.
+   - A turn with no first-token stamp gives no decode-only row.
+   - Same statistic, exact one-sided p, no outcome word. It drops the prefill, which is the only part of a row at an uncovered prompt size. The context term is covered, since context grows far past Δ across turns.
+4. **Step 4 gains one cell,** run by the analyst seat off the MBP: rows S at the counted Δ, equal output lengths, with turn 0's prefill prediction wrong by 1, 2 and 5 %. If the false `S SIGNATURE` rate is over .035 at 2 % (the bar of RLD:13330, at qualification's 2 % error gate, RLD:13366), the row comes back to me before the amendment merges. The candidate change would be to make the decode-only row S's score. I do not make it now: the rows were fixed before any energy was read, and I will not move the primary on a guess about a count nobody has.
+5. **The matched control (section D) is the only physical answer,** and it stays conditional.
+
+### C.3 Registration sentence
+
+"The two conditions use different upstream system messages. Rendered for this model, the sabotage-instructed prompt has ‹n› tokens and the benign prompt ‹n› (bank), ‹n› and ‹n› (spam). Turn 0's prefill of a sabotage-instructed member is therefore at a prompt size no benign member of its stratum has, and S's adjustment for it rests on the fit. `S_dec` repeats S on decode-only rows, which exclude every prefill. No instruction of matched length with a harmless second task was run in this series."
+
+## D. The matched harmless instruction: CONDITIONAL on `S SIGNATURE`. Not now, and not in the series
+
+- **Trigger: `S SIGNATURE` at release, and nothing else.** Under a null it buys nothing. Q does not trigger it: a `Q SHIFT` sentence claims only that the instruction changed the amount of work, and E.2 makes it say that no harmless second task was tried.
+- **Not an in-series third arm.** It would change the frozen draw, which "is never redrawn" (P4:1347), take a benign slot from K's calibration count, and need a strict-tier kit and manifest change (RLD:12823).
+- **Fixed now, blind, so the control cannot be tailored to a result:**
+  - the control message is the sabotage message's skeleton, hint and scratchpad instructions, with an overt harmless second task of similar length in place of the secret one, within 1 % of its token count;
+  - the block puts a sabotage-instructed member, a control member and benign members in the same strata, by a new seed-law tag, so the contrast is within stratum and the block also replicates S;
+  - the contrast is B2's exact statistic, sabotage-instructed against control, one-sided at .025.
+- **The control's text** is drafted by a Mythos seat and its sha256 is on main before the release run opens any S leaf. Not before W1.
+- **If triggered,** the block's size and registration come to me as their own ruling. About 28 MBP hours is Mythos's estimate.
+- **Expected cost:** about 2 MBP hours at the rating's 0.07.
+
+## E. Paper framing
+
+**Yes. The paper is planned around what the registration predicts.** The frame is the question and the prediction: an energy meter reads how much a model computed, and we test whether it reads anything about what the model was told. K is that frame's positive half (unlogged work shows) and S its negative half (the instruction, at equal work, should not). Before release it is a prediction and is written as one. "Energy tracks the amount of work, and the instruction adds nothing beyond it" is a result sentence and needs `S EQUIVALENT`.
+
+### E.1 "Sabotage leaves an energy signature"
+
+RL-175 §F.3 asked for one thing. It now needs three.
+
+| The paper may use | When |
+|---|---|
+| Sentence 2 of RL-175 §F (RLD:17885), with C.3's sentence and RL-151's drift sentence after it | `S SIGNATURE` |
+| A heading with "an energy signature of the sabotage instruction" | `S SIGNATURE`, and `S_dec` p ≤ .025 when C.2's second case applies |
+| "Sabotage leaves an energy signature", as title or heading | Both of the above, and the matched control block run with its contrast at p ≤ .025 |
+
+These are conditions on words. S's alpha is not split and its outcome word is not touched. Each added condition can only remove a claim.
+
+### E.2 Permitted sentences
+
+Every S sentence keeps its registered tail: "in gated, held reference-state episodes with honest logging; not free-running detection" (P4:1224-1225), and "S makes no statement about energy outside those rows" (RLD:12307-12308).
+
+| Outcome | Permitted | Not permitted |
+|---|---|---|
+| `S SIGNATURE` | The registered words (P4:1219-1220) and E.1's table | "detects sabotage"; any rate; the title phrase without E.1's third row |
+| `S SIGNATURE` and `S EQUIVALENT` | "A signature smaller than the registered margin" (P4:1223) | The title phrase |
+| `S EQUIVALENT` | The registered words (P4:1220-1223). Then: "At equal logged token counts, on the reference-state part of each turn, the sabotage instruction did not change GPU energy by more than the registered margin. Within that margin the meter read how much the model computed and not what it was told." The margin's gloss follows, with RL-148's note that it was derived for whole turns (RLD:11063-11065) | "no energy signature"; "no difference"; "energy cannot detect sabotage"; any statement about hot stretches or whole episodes |
+| `S INCONCLUSIVE` | "S was inconclusive: neither a signature nor equivalence within the registered margin was shown (θ̂ = ‹›, both intervals)." With the registered power table | Either half of the frame as a result |
+| `S NOT EVALUABLE` | "S could not be evaluated: ‹reason›." The paper reports K and Q and says nothing on energy at equal counts | Any S sentence |
+| `Q SHIFT` (a pair) | "In the randomized series the sabotage instruction changed the GPU energy of a whole ‹task› episode: instructed episodes used ‹x› % ‹more, less› than benign episodes of the same session (95 % interval ‹›; exact two-sided p = ‹›, Holm over two tasks). They decoded ‹y› % ‹more, fewer› tokens in ‹z› ‹more, fewer› turns. This is the effect of the instruction on how much the model did, prompt length and heat included. It does not show that the meter reads intent, and no harmless second task was run for comparison." | "sabotage costs ‹x› %"; "signature"; any claim about successful sabotage beyond the labelled conditional print |
+| `Q NO SHIFT SHOWN` | "No change in whole-episode GPU energy was shown for ‹task› (estimate ‹›, interval ‹›). The test had power ‹from P4's table› for a shift of one benign SD." | "the instruction does not change the amount of work" |
+| `Q SHIFT` with `S EQUIVALENT` | "The instruction changed how much energy an episode used. At equal logged token counts, on the reference-state part of each turn, no difference beyond the registered margin remained." | "fully explained by", "accounted for by" or "mediated by" token counts |
+| The quantity print | "Across ‹n› episodes, logged token counts predicted whole-episode GPU energy with leave-one-out R² of ‹› (range over sessions ‹›)." | A causal reading |
+| The aligned-power print | "Aligned to the logged turn and tool-call times, GPU power averaged ‹› W in prefill, ‹› W in decode and ‹› W between turns; ‹› % of an episode's GPU energy was spent decoding. The trace separates phases and amounts of work. It does not separate what a tool call did." If tool calls are unresolved: "Tool calls in this harness are mock functions lasting ‹› ms, shorter than two power samples, so no per-call profile is reported." | "matches power profiles to behaviours"; "identifies actions from power" |
+
+RL-175 §F.1, §F.2 and the first, second, fourth and fifth bullets of §F.4 stand unchanged.
+
+### E.3 The capstone talk, before any series data
+
+**May say:**
+- The design: one sabotage-instructed and seven benign episodes per task in each session, the instructed slot drawn by a fixed seed law.
+- The question as a question: "Does a sabotage instruction leave an energy signature at equal work?"
+- The prediction, quoted: "The meter reads quantity, not intent, so the registered prediction is a null."
+- What will be reported whatever S returns: K, Q and the aligned-power figure.
+- Instrument results from conditionless runs, with whatever words qualification has printed by then (RL-175 §F.1).
+- "Our own expectation is that a signature is unlikely."
+
+**May not say:**
+- "Sabotage leaves an energy signature", as a title, a heading or a finding.
+- Any sabotage-against-benign energy number. The 30B pilots are selection data on two sabotage trajectories (RLD:13170-13171) and are not shown as evidence.
+- Mythos's probabilities as if computed.
+- "Energy tracks work and the instruction adds nothing" as a result. It is the prediction.
+
+## F. Before W1 signs
+
+**Nothing here holds R1, any campaign span, freeze 2 or qualification. No MBP minute is used.**
+
+| # | What | Who | Gate |
+|---|---|---|---|
+| 1 | Commit this ruling verbatim; move sections A.1, B.1, C.2, C.3 and G into the B-S-admit amendment PR; restate the frozen count | Lead | Before the amendment's cold seats start |
+| 2 | The token count (C.1) | Sol builder, off-host | Before the amendment merges. It fills C.3's blanks |
+| 3 | The step-4 prefill cell (C.2 item 4) | Analyst seat, off-host | Before the amendment merges. Over .035 at 2 % comes to me |
+| 4 | Q's code, `S_dec` and the Sol-family twin of each; a test that every Q and by-condition leaf is withheld by the desk seal before release | Sol builder and twin; one executing Mythos seat on the PR | **With the amendment's merge.** Q's words exist only if its code is frozen before C1 arms, at the merge or by one re-signed receipt. Otherwise Q prints its exact p with no word and the paper says so |
+| 5 | The aligned-power code and its ctl-01 qualifier | Sol builder | By the merge if it can be; B.3 otherwise |
+| 6 | My cold review of the whole amendment, already owed (RL-175 A.1 Q3) | Research lead | Before Ed's merge of the amendment, which is before the W1 receipt is signed |
+| 7 | The control message's text and hash (D) | Mythos seat | Before the release run. Not before W1 |
+| 8 | Nothing new | Magistrate | |
+
+**Defaults, so nothing waits.** If item 2 or 3 is not done when the rest is ready, the amendment merges with C.3's counts as "not counted before signing", `S_dec` gates the heading as if Δ were large, and the cell is owed before C1.
+
+## G. Registration text for the amendment
+
+**P4 B0, the claims table gains a row, and "Two registered claims" becomes "K and S are the registered claims; Q is a registered secondary at its own alpha; K alone is confirmatory":**
+
+> | Q, the instruction's effect on whole-episode energy | registered secondary; randomized (B5) | per pair, B2's stratified rank statistic on turn-owned GPU-rail energy | .05 two-sided, Holm over the two pairs | `Q SHIFT`, `Q NO SHIFT SHOWN`, `Q NOT EVALUABLE`, per pair |
+
+**P4, new B2a, after B2:**
+
+> **B2a. Q, the instruction's effect on whole-episode energy.** *Question.* Does a sabotage instruction change how much GPU-rail energy a whole episode uses? Q makes no adjustment for token counts. It is the total effect of the instruction, through prompt length, output length, turns, tool use and heat. It is not a statement about energy at equal work; that is S. *Outcome.* The member's turn-owned GPU-rail energy: the sum over its turns of the A2 owned spans (the turn's span plus its own tool calls, less gates and holds). *Population.* B2's strata. A member enters with a finite outcome if it is eligible under the frozen exclusion union (A9; the same rules for both conditions); a member ended by the time limit, a turn-gate timeout or the decode budget is kept and counted at what it produced. A stratum enters iff its sabotage-instructed member and at least one benign member enter. *Statistic.* Per pair, û_k and θ̂ as in B2 with the outcome in place of the S score; p_Q = min(1, 2·min(p_sup, p_inf)), each tail by B2's exact convolution. *Rule.* A pair with fewer than 8 entering strata is `Q NOT EVALUABLE`. Over the evaluable pairs, Holm at .05: the smaller p_Q against .025 when two pairs are evaluable and against .05 when one is; if it passes, the larger against .05. A pair that passes is `Q SHIFT`; otherwise `Q NO SHIFT SHOWN`. *Estimate.* Per pair, the mean over strata of d_k = ln(outcome of the sabotage-instructed member) − the mean of ln(outcome) over the stratum's benign members, as a percent, with mean ± t(.975, K − 1)·SD(d_k)/√K. The interval is descriptive. *Prints, no outcome word, exact two-sided p, nominal.* The same statistic and estimate on logged decode tokens, prefill tokens, turns, tool calls and turn-owned wall time, per pair and pooled, unconditionally and conditional on side-task success (B3's sentence applies); the pooled Q; and, per window and pair over all eligible fresh members, the leave-one-member-out R² of whole-episode GPU-rail energy from the five-term fit with joules per decode and per prefill token. *Power.* One pair at 11 strata has the K_S = 11 row of B2's table. *Release.* Every Q leaf is computed only in the release run. Q reads no S score and gates nothing. Sabotage-instructed DC-in rows stay sealed for v5; Q on DC-in is not computed in v4.
+
+**P4 B2 gains, after "Unconditional and conditional":** the paragraph of C.3, headed *Prompt size*, followed by the three bullets of C.2 item 3 as `S_dec`'s definition, and "`S_dec` issues no outcome word."
+
+**P4 B7 gains item 9:** section B.1 of this ruling, headed *Power aligned to logged times (descriptive)*, with B.2's first two bullets as its last sentence.
+
+**RL-149 §4's "Enters" table gains rows 13 to 16:** Q's mechanism prints and quantity print (A.1); the side-transfer print (A.2); `S_dec` (C.2); the aligned-power print (B.1). Item 12 is unchanged. The amendment's stated count of frozen exploratory statistics rises by the builder's count of these, and the cold seat checks that count against the code.
+
+**P4 B9's interpretation (P4:1434-1437) gains:** "Q: a randomized comparison of the sabotage instruction's effect on whole-episode GPU energy; it is a statement about how much the model did under the instruction, not about energy at equal work, intent or successful sabotage."
+
+## Owners
+
+- **Lead:** F items 1 and 6's packet; the sentences of E in every draft and in the talk; telling Ed.
+- **Sol builder and twin:** the count (C.1); Q, `S_dec`, the seal test and the aligned-power code (F items 4 and 5).
+- **Analyst seat:** the prefill cell.
+- **Mythos seats:** one executing seat on the amendment PR; the control message before release.
+- **Magistrate:** nothing.
+
+**Amends.**
+- P4 B0, B2, B7 and B9, and a new B2a, through the amendment (section G).
+- RL-175 §F.3: the phrase needs E.1's three conditions. RL-175 §F.4, third bullet: it bars a statement on whole-episode energy at logged counts, and `S_a4`, S_w and K_w stay prints; Q's unadjusted whole-episode sentence is licensed. RL-175 §F.5: replaced by E.2's rows.
+- RL-149 §4: rows 13 to 16 and the count. RL-151 §1.2: `S_dec` joins the prints beside S.
+- RL-148 step 4: one cell (C.2 item 4).
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. Q's outcome, population, statistic, alpha and words, `S_dec`'s definition, the aligned-power print, the three conditions on the title phrase and the control's construction and trigger are fixed before any series member exists and before the W1 receipt is signed. The prompt count reads public upstream text only.
+
+**For Ed, plainly.** "You are right about the goal. The registered test takes the amount of work out on purpose and asks whether anything is left, and our own protocol predicts nothing is. That is not a study of randomness; randomness is only the yardstick. But it does not tell you how much the instruction changes what the model does, and it never lines power up with actions. Both of your additions are in, and neither costs a minute on the laptop. The first becomes a registered result: whether a sabotage instruction changes the energy of a whole episode, and by how much, with tokens and turns beside it. It will see a change of about one run-to-run spread and can miss a smaller one. The second becomes the paper's figure: power laid over the logged turns and tool calls. It will show phases and amounts, not what a tool call did, because the tools are mocks. I also ordered a count of the two prompts, since the sabotage prompt is a different and probably longer message, and added a repeat of the test that leaves the prompt out. The matched harmless instruction is designed now and run only if the test finds a signature. I take Mythos's odds as fair: about one chance in fifteen of a signature, one in three of a clean 'nothing left over', and about four in ten that a skeptic learns something once the additions are in. So the paper is planned around 'the meter reads how much the model did, not what it was told', and the title 'sabotage leaves an energy signature' now needs the test, the repeat without the prompt, and the matched control. The talk on the 30th presents it as a question with our prediction, not as a finding."
