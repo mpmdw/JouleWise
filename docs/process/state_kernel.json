@@ -2119,6 +2119,38 @@
       "status_note": "Registered 2026-09-25 after PR #410 final pass.",
       "stop_card": null
     },
+    "CLOSE-OFFLOAD-01": {
+      "acceptance": {
+        "evidence": [
+          "scripts/close_offload.py",
+          "tests/test_close_offload.py",
+          "docs/ops/CLOSE-OFFLOAD.md"
+        ],
+        "pointer": {
+          "label": "Close offload exit checklist",
+          "path": "docs/run_reports/2026-11-16-close-offload.md"
+        },
+        "summary": "Synthetic checks, final-head CI and one owner-requested Sol cold review; owner settles archive encryption and pending-upload policy conflicts before production."
+      },
+      "authority": {
+        "label": "Owner 2026-11-16 direct build request and RL-173 A; run record",
+        "path": "docs/run_reports/2026-11-16-close-offload.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "provisional_until_live"
+      ],
+      "goal": "Build automatic closed-span verified cloud offload and Air SSD pull without contacting the measurement host.",
+      "id": "CLOSE-OFFLOAD-01",
+      "lane": "agent",
+      "priority": "p0_safety",
+      "rank": 500,
+      "status": "partial",
+      "status_note": "2026-11-16: bounded owner-requested build on ops/2026-11-16-close-offload; synthetic implementation done, PR/CI/review pending; no live run or deployment; two policy questions awaiting owner.",
+      "stop_card": null
+    },
     "COLDGATE-CONVENE-DOCTRINE-FREE-01": {
       "acceptance": {
         "evidence": [
