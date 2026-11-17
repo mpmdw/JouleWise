@@ -190,22 +190,34 @@ v4_gate() {
   case "${SESSION_READY:-}" in no) echo "V4 not READY: $SESSION_RECORD";; yes) echo 'CEDE: READY v4 session; DO NOT ARM (RL-172 (f))'; return 1;; *) echo 'STOP: unknown v4 readiness'; return 1;; esac
 }
 day_gate() {
-  "$PY" -I -B - /Users/edr/campaign-out "$(date +%s)" "$T0_DATE" "$QUAL_DATES" "$CAMP" "$LEGS" <<'PY'
+  "$PY" -I -B - /Users/edr/campaign-out "$(date +%s)" "$T0_DATE" "$QUAL_DATES" "$SPAN" "$CAMP" "$LEGS" <<'PY'
 import datetime as dt, json, math, os, re, sys
 from pathlib import Path
 from zoneinfo import ZoneInfo
-root, now, wanted, dates, camp, legs = sys.argv[1:]
+root, now, wanted, dates, current, camp, legs = sys.argv[1:]
 def stop(s): sys.exit('REFUSE: day law ' + s)
 TZ=ZoneInfo('America/Los_Angeles'); day=dt.datetime.fromtimestamp(int(now),TZ).date().isoformat()
+spans=[f'qual-{n:02d}-s{i:02d}' for n in (1,2,3) for i in (1,2)]
+def block(span): return span.rsplit('-',1)[0]
+def roster_for(span):
+    start=1 if span.endswith('-s01') else 7
+    return [f'L{i:03d}' for i in range(start,start+6)]
 try:
-    planned=dict(x.split('=') for x in dates.split(','))
-    if set(planned)!= {'qual-01','qual-02','qual-03'} or len(set(planned.values())) != 3: stop('three distinct dates, one block each (RL-174 B.3)')
-    for date in planned.values(): dt.date.fromisoformat(date)
-    if day != wanted or planned[camp.removeprefix('cl-')] != day: stop('outside this item t0-date; lead re-dates (RL-172 (a)5)')
-    if '2026-11-14' <= day <= '2026-11-18': stop('known development date Sat14-Wed18 (RL-172 (a)3)')
-    if any('2026-11-14'<=d<='2026-11-18' for d in planned.values()): stop('planned qualification date is a development date')
+    entries=[entry.split('=') for entry in dates.split(',')]
+    planned=dict(entries)
+    if len(entries)!=len(spans) or set(planned)!=set(spans): stop('six unique span dates required (RL-175 C.3)')
+    days_by_span=[planned[span] for span in spans]
+    blocks_by_day={}
+    for span, date in zip(spans,days_by_span):
+        if dt.date.fromisoformat(date).isoformat()!=date: stop('t0-date must use YYYY-MM-DD')
+        if '2026-11-14'<=date<='2026-11-18': stop('planned qualification date is a development date')
+        if blocks_by_day.setdefault(date,block(span))!=block(span): stop('one qualification block per t0-date (RL-175 C.3)')
+    if days_by_span!=sorted(days_by_span): stop('t0 dates must follow span order')
+    if day!=wanted or planned[current]!=day: stop('outside this item t0-date; lead re-dates (RL-172 (a)5)')
+    if camp!='cl-'+block(current) or legs.split(',')!=roster_for(current): stop('item span, block or roster mismatch')
     if not os.path.isdir(root): stop('receipt root missing')
-    count=0; blocks=set(); firsts={}; seen=[]
+    recorded=set()
+    count=0
     for family in sorted(Path(root).iterdir()):
         if not family.is_dir() or not re.fullmatch(r'cl-(dev|qual)-[a-zA-Z0-9-]+',family.name): continue
         for out in sorted(family.iterdir()):
@@ -213,31 +225,38 @@ try:
             p=out/'runner_receipt.json'
             if not p.is_file(): stop('pending output without receipt '+str(out))
             r=json.loads(p.read_text()); t=r['started']['epoch_s']; roster=r['roster']
-            if isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t): stop('bad t0 '+str(p))
-            if not isinstance(roster,list) or not roster or len(set(roster)) != len(roster) or not all(isinstance(x,str) and re.fullmatch('L[0-9]{3}',x) for x in roster): stop('bad roster '+str(p))
+            if isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t) or t<=0: stop('bad t0 '+str(p))
+            if (not isinstance(roster,list) or not roster
+                    or not all(isinstance(x,str) and re.fullmatch('L[0-9]{3}',x) for x in roster)
+                    or len(set(roster))!=len(roster)): stop('bad roster '+str(p))
             actual=dt.datetime.fromtimestamp(t,TZ).date().isoformat()
             if family.name.startswith('cl-dev-'):
-                if actual in planned.values(): stop('development receipt on qualification date '+actual+' '+str(p))
+                if actual in blocks_by_day: stop('development receipt on qualification date '+actual+' '+str(p))
             else:
-                block=family.name.removeprefix('cl-')
-                if block in planned and planned[block] != actual: stop('existing qualification receipt disagrees with date plan '+str(p))
+                match=re.fullmatch(r'cq-(qual-0[1-3]-s0[12])-a[1-9][0-9]*-\d{8}T\d{6}Z',out.name)
+                if not match or family.name!='cl-'+block(match[1]): stop('unrecognized qualification span output '+str(out))
+                span=match[1]
+                if roster!=roster_for(span): stop('bad qualification span roster '+str(p))
+                if planned[span]!=actual: stop('existing qualification receipt disagrees with its span plan '+str(p))
+                if span in recorded: stop('multiple receipts for qualification span '+span)
+                recorded.add(span)
                 if actual==day:
-                    count+=len(roster); blocks.add(block); firsts[block]=min(firsts.get(block,t),t); seen.append((out.name,len(roster)))
-    n=len(legs.split(',')); blocks.add(camp.removeprefix('cl-'))
-    if count+n > 24: stop('25th leg / >24 qualification legs; RL-174 B.3 / RL-149 §2.3 cap applies')
-    if len(blocks)>2: stop('more than two qualification blocks; RL-174 B.3 / RL-149 §2.3 cap applies')
-    firsts.setdefault(camp.removeprefix('cl-'),int(now))
-    if len(firsts)==2 and abs(max(firsts.values())-min(firsts.values()))<36000: stop('two block starts less than 10 h apart; RL-174 B.3 / RL-149 §2.3 cap applies')
-    if len(blocks)>1: stop('one qualification block per t0-date; cap is not a slip remedy (RL-174 B.3)')
+                    count+=len(roster)
+    if current in recorded: stop('qualification span already has a recorded t0 '+current)
+    for first, second in zip(spans[::2],spans[1::2]):
+        if planned[first]!=planned[second] and first not in recorded:
+            stop('untouched qualification block must move whole '+block(first))
+    n=len(legs.split(','))
+    if count+n>24: stop('more than 24 qualification legs (RL-149 §2.3)')
 except (OSError,ValueError,KeyError,TypeError,OverflowError) as e: stop('unreadable/contradictory receipt or plan '+str(e))
-print('DAY OK',day,'already',count,'plus',n,'blocks',sorted(blocks),'RL-174 B.3: three dates/one block each; <=24/two blocks/10h cap applies, never a slip remedy',seen)
+print('DAY OK',day,current,'already',count,'plus',n,'one block on this date (RL-175 C.3); RL-149 §2.3 cap applies')
 PY
 }
 queue_gate() {
   filled "$QUEUE_COMMIT" || { echo 'WAIT: lead records queue commit (RL-149 §2.8 line 3)'; return 1; }
-  QUEUE_EXPIRES_EPOCH="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$(date +%s)" <<'PY'
+  QUEUE_EXPIRES_EPOCH="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$T0_DATE" "$KIT_SHA" "$(date +%s)" <<'PY'
 import hashlib, json, re, subprocess, sys
-repo, commit, path, sha, span, legs, now=sys.argv[1:]; now=int(now)
+repo, commit, path, sha, span, legs, day, kit_sha, now=sys.argv[1:]; now=int(now)
 def git(*a): return subprocess.check_output(['git','-C',repo,*a],stderr=subprocess.DEVNULL)
 try:
     assert re.fullmatch('[0-9a-f]{40}',commit)
@@ -249,8 +268,10 @@ try:
     committed=int(git('show','-s','--format=%ct',commit))
     assert committed <= now < expiry <= committed+7*86400
     assert q['halt'] is None
-    entries=[s for s in q['spans'] if s['span_id']==span]; assert len(entries)==1 and entries[0]['legs']==legs.split(',')
-except (OSError,ValueError,KeyError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/seven-day expiry (RL-149 §2.8 line 3)')
+    entries=[s for s in q['spans'] if s['span_id']==span]; assert len(entries)==1
+    entry=entries[0]
+    assert entry['legs']==legs.split(',') and entry['not_before']==day and entry['kit']['sha256']==kit_sha and entry['attempt']==1
+except (OSError,ValueError,KeyError,TypeError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/span date/kit/attempt/seven-day expiry (RL-149 §2.8 line 3; RL-175 C.3)')
 print(int(expiry))
 PY
 )" || return 1
@@ -325,8 +346,40 @@ arm_bound_gate() {
   }
   echo "AUTHORIZED T0 $T0_DATE before $ARM_BEFORE_EPOCH"
 }
+batch_gate() {
+  # Fresh boot read at both Start and Run. Carry the next hold boundary to the child.
+  BATCH_BOOT="$(sysctl -n kern.boottime)" || { echo 'STOP: boot time unavailable (RL-175 C.4)'; return 1; }
+  ARM_BEFORE_EPOCH="$("$PY" -I -B - "$BATCH_BOOT" "$(date +%s)" "$EXPECTED_SPAN_S" "$ARM_BEFORE_EPOCH" <<'PY'
+import re, sys
+raw, now, expected, cutoff = sys.argv[1:]
+boot = re.fullmatch(r'\{\s*sec\s*=\s*([0-9]+),\s*usec\s*=\s*[0-9]+\s*\}.*',raw)
+if not boot or not all(v.isascii() and v.isdecimal() for v in (now,expected,cutoff)):
+    sys.exit('STOP: unreadable boot time or qualification plan (RL-175 C.4)')
+boot, now, expected, cutoff = int(boot[1]), int(now), int(expected), int(cutoff)
+soak_s, cooldown_s, day_s = 1950, 27*60, 86400
+if not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or now>=cutoff:
+    sys.exit('STOP: invalid boot time, span duration or t0 cutoff (RL-175 C.4)')
+# The existing prediction is anchored to boot, with the observed 48 s offset.
+first = boot + 43248
+occurrences = max(0,(now-first)//day_s + 1)
+upcoming = first + occurrences*day_s
+previous = upcoming-day_s if occurrences else None
+expected_close = now+expected
+held = previous if previous is not None and now<previous+cooldown_s else None
+if held is None and upcoming<=expected_close:
+    held = upcoming
+if held is not None:
+    sys.exit(f'WAIT: RL-175 C.4 predicted OS batch {held}; arm at or after {held+cooldown_s}')
+before = min(cutoff,upcoming-expected)
+print(f'BATCH OK RL-175 C.4 boot {boot}; next OS batch {upcoming}; soak end {now+soak_s}; '
+      f'expected close {expected_close}; authorized t0 before {before}',file=sys.stderr)
+print(before)
+PY
+)" || return 1
+}
 all_gates() {
   expiry_gate && watch_gate && freeze2_gate && qual_pin_gate && host_event_gate && v4_gate \
-    && admission_gate && queue_gate && debt_gate && pred_gate && close_gate && day_gate && window_gate && arm_bound_gate
+    && admission_gate && queue_gate && debt_gate && pred_gate && close_gate && day_gate && window_gate \
+    && arm_bound_gate && batch_gate
 }
 # END TESTABLE GATES

@@ -14,8 +14,9 @@ says how to get back files removed from `main` in the 2026-11-06 prune.
 
 **2026-11-17 qualification draft handoff [AGENT].** The lead approved the
 successor containing the recorded-t0 guard. The six unissued qualification
-items bind pin `0576ed76d3a74d20ce3c6b6b96711e360775a25f` and the
-re-pinned kit and queue hashes. Qualification remains HOLD_FOR_FIT_FREEZE.
+items bind pin `0576ed76d3a74d20ce3c6b6b96711e360775a25f`, the
+re-pinned kit and queue hashes, and the RL-175 C.3 span-date and C.4
+predicted-batch gates. Qualification remains HOLD_FOR_FIT_FREEZE.
 See the [run report](docs/run_reports/2026-11-17-qual-pin-t0guard.md) for
 the two admission checks and remaining prerequisites.
 

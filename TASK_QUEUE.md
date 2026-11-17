@@ -8,9 +8,9 @@ triage it here instead of assuming it should happen immediately.
 P1 [AGENT], user-selected Tier 2 on `audit/2026-11-10-fable`. Apply the
 lead-approved successor guard and rebind six unissued items. The
 [run report](docs/run_reports/2026-11-17-qual-pin-t0guard.md) tracks exact-pin
-admission. The named cold-seat confirmation and retry-reader disposition
-remain lead work. RL-175 C.4 batch enforcement and freeze 2 remain issue
-prerequisites. No phase exit-checklist row closes.
+admission. All six drafts carry the RL-175 C.3 span-date and C.4 batch
+gates. The named cold-seat confirmation, retry-reader disposition and
+freeze 2 remain issue prerequisites. No phase exit-checklist row closes.
 
 ## 2026-11-17 user-directed Builder C draft repairs
 

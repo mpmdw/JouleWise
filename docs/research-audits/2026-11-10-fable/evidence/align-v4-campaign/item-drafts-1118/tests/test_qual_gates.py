@@ -78,7 +78,7 @@ def run_item(item,shell):
         p=predout/'desk-bundle'/'legs'/leg/'leg_summary.json'; r=json.loads(p.read_text()); r.update(kw); dump(p,r)
     def debt_change(key,value):
         r=json.loads(debt.read_text()); r['machine_order'][0][key]=value; dump(debt,r)
-    def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,contains=None,full_start=False):
+    def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,contains=None,full_start=False,run_boot=None):
         global checks,failures
         fixture(); setup(); vals={**defaults,**(overrides or {})}; ff={**fills,**(fill_changes or {})}; program=gates
         for key,value in ff.items():
@@ -86,7 +86,14 @@ def run_item(item,shell):
             assert re.search(pattern,program,re.M),key
             if value is not None: program=re.sub(pattern,key+'='+quote(value),program,flags=re.M)
         assignments='\n'.join('unset '+key if value is None else key+'='+quote(value) for key,value in vals.items())
-        clock=f'date() {{ echo {now if stamp is None else stamp}; }}\n'
+        default_boot=quote(f'{{ sec = {now-21600}, usec = 0 }}')
+        clock=f'''date() {{ echo {now if stamp is None else stamp}; }}
+BATCH_DEFAULT_BOOT={default_boot}
+sysctl() {{
+  test "$*" = '-n kern.boottime' && test "${{BATCH_SYSCTL_RC:-0}}" = 0 || return 1
+  printf '%s\n' "${{BATCH_SYSCTL:-$BATCH_DEFAULT_BOOT}}"
+}}
+'''
         if full_start:
             start=blocks[0].replace(blocks[0].split('# BEGIN TESTABLE GATES\n')[1].split('# END TESTABLE GATES')[0], program)
             # Redirect every native path and stub every native command. The two
@@ -107,6 +114,7 @@ def run_item(item,shell):
     "-B scripts/cadence_queue.py validate-kit "*) echo MOCK_VALIDATE_KIT;;
     "-B scripts/cadence_queue.py checklist "*) echo MOCK_NATIVE_CHECKLIST; test "$NATIVE_RC" = 0;;
     "-B scripts/cadence_legs_runner.py plan "*) echo MOCK_PLAN;;
+    "-B scripts/launch_cadence_span.py launch "*) echo MOCK_LAUNCH "$@";;
     *) {quote(sys.executable)} "$@";;
   esac
 }}
@@ -124,13 +132,14 @@ lsof() {{ return 1; }}
 pgrep() {{ return 1; }}
 launchctl() {{ :; }}
 zsh() {{ :; }}
-sysctl() {{ echo "unavailable"; }}
 PY=synthetic_python
 MAGISTRATE_PID=100
 CHECKLIST_OBSERVATIONS=synthetic
 unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
 '''
             script=assignments+'\n'+clock+overrides_sh+start
+            if run_boot is not None:
+                script+='\nBATCH_SYSCTL='+quote(run_boot)+'\n'+blocks[1]
         else:
             script=f'PY={quote(sys.executable)}\n'+config+program+clock+assignments+'\n'+command+'\n'
         result=subprocess.run([shell],input=script,text=True,capture_output=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',TMPDIR=str(home)))
@@ -142,6 +151,30 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         full_start=True, contains='MOCK_PLAN')
     run('WS 2 native checklist failure clears prefilled yes', overrides={'CHECKLIST_OK':'yes','NATIVE_RC':1},
         full_start=True, want=False, contains='MOCK_NATIVE_CHECKLIST')
+    def boot_at(batch):
+        return f'{{ sec = {batch-43248}, usec = 0 }} Mon synthetic'
+    run('C.4 Start refuses predicted overlap', overrides={'NATIVE_RC':0,'BATCH_SYSCTL':boot_at(now+3600)},
+        full_start=True, want=False, contains='RL-175 C.4 predicted OS batch')
+    run('C.4 Run refreshes boot after a clear Start',overrides={'NATIVE_RC':0,'BATCH_SYSCTL':boot_at(now+21648-86400)},full_start=True,
+        run_boot=boot_at(now+3600),want=False,contains='RL-175 C.4 predicted OS batch')
+    expected=item['expected_s']
+    run('C.4 Run sends tightened cutoff to child',overrides={'NATIVE_RC':0},full_start=True,
+        run_boot=boot_at(now+expected+1),contains=f'--t0-before {now+1}')
+    batch_only=f'ARM_BEFORE_EPOCH={now+86400}; batch_gate && echo "FINAL CUTOFF $ARM_BEFORE_EPOCH"'
+    for label, batch, allow in (
+        ('expected close one second before batch',now+expected+1,True),
+        ('batch starts exactly at expected close',now+expected,False),
+        ('batch starts exactly at soak end',now+1950,False),
+        ('batch during soak',now+1200,False),
+        ('batch starts at arm',now,False),
+        ('one second before 27-minute release',now-1619,False),
+        ('exact 27-minute release',now-1620,True),
+    ):
+        note='FINAL CUTOFF '+str(now+1) if batch==now+expected+1 else (
+            'FINAL CUTOFF' if allow else f'arm at or after {batch+1620}')
+        run('C.4 '+label,overrides={'BATCH_SYSCTL':boot_at(batch)},command=batch_only,want=allow,contains=note)
+    run('C.4 missing boot STOP',overrides={'BATCH_SYSCTL_RC':1},command=batch_only,want=False,contains='boot time unavailable')
+    run('C.4 malformed boot STOP',overrides={'BATCH_SYSCTL':'invalid'},command=batch_only,want=False,contains='unreadable boot time')
     run('freeze2 unfilled WAIT',fill_changes={'FREEZE2_COMMIT':None},want=False,contains='HOLD_FOR_FIT_FREEZE')
     run('coefficient sha unfilled WAIT',fill_changes={'FREEZE2_COEF_SHA256':None},want=False,contains='HOLD_FOR_FIT_FREEZE')
     run('freeze2 wrong sha STOP',fill_changes={'FREEZE2_COEF_SHA256':'0'*64},want=False,contains='sha256 mismatch')
@@ -169,6 +202,8 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('soak handread absent',overrides={'QUAL01_SOAK_HAND_READ':'pending'},want=item['span']=='qual-01-s01',contains=None if item['span']=='qual-01-s01' else 'WAIT')
     run('queue commit unfilled WAIT',fill_changes={'QUEUE_COMMIT':None},want=False,contains='WAIT')
     run('queue wrong hash STOP',overrides={'QUEUE_SHA':'0'*64},want=False,contains='STOP')
+    run('C.3 queue date binding STOP',overrides={'T0_DATE':'2026-11-22'},command='queue_gate',want=False,contains='span date')
+    run('C.3 queue kit binding STOP',overrides={'KIT_SHA':'0'*64},command='queue_gate',want=False,contains='kit')
     run('queue expired STOP',stamp=1795420800,command='queue_gate',want=False,contains='STOP')
     run('Q1 debt unpaid WAIT',setup=lambda:debt_change('q1_complete_record',''),want=False,contains='WAIT')
     run('desk debt unpaid WAIT',setup=lambda:debt_change('desk_final_record',''),want=False,contains='WAIT')
@@ -211,39 +246,61 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('Air campaign marker accepted',setup=air_copy,overrides={'LAST_CLOSE_KIND':'campaign'})
     run('campaign exact 300 allowed',setup=lambda:campaign_close(300),overrides={'LAST_CLOSE_KIND':'campaign'})
     run('campaign 299 WAIT',setup=lambda:campaign_close(299),overrides={'LAST_CLOSE_KIND':'campaign'},want=False,contains='interval 300')
-    def date_receipt(camp,date,n):
-        out=root/camp/'cq-synthetic-date-a1-20261119T000000Z'
-        dump(out/'runner_receipt.json',{'synthetic_fixture':True,'started':{'epoch_s':epoch(date)},'roster':[f'L{i:03d}' for i in range(1,n+1)]})
-    run('development receipt on qual date REFUSE',setup=lambda:date_receipt('cl-dev-99',item['date'],1),command='day_gate',want=False,contains='development receipt')
-    # Use current block for cap fixtures: not already a second/third block by metadata.
-    run('25th leg on date REFUSE',setup=lambda:date_receipt(item['camp'],item['date'],19-(6 if item['predecessor_camp']==item['camp'] else 0)),command='day_gate',want=False,contains='25th leg')
-    run('exact 24 leg cap; RL-174 printed',setup=lambda:date_receipt(item['camp'],item['date'],18-(6 if item['predecessor_camp']==item['camp'] else 0)),command='day_gate',contains='cap applies')
-    other=next(k for k in META['dates'] if k!=item['block'] and 'cl-'+k!=item['predecessor_camp'])
-    shared_dates=','.join(k+'='+(item['date'] if k==other else v) for k,v in META['dates'].items())
-    run('shared-date slip plan REFUSE',overrides={'QUAL_DATES':shared_dates},command='day_gate',want=False,contains='three distinct dates')
-    run('second unplanned block within 10h REFUSE',setup=lambda:date_receipt('cl-qual-extra',item['date'],1),command='day_gate',want=False,contains='10 h')
-    def spaced_block():
-        date_receipt('cl-qual-extra',item['date'],1)
-        p=root/'cl-qual-extra'/'cq-synthetic-date-a1-20261119T000000Z'/'runner_receipt.json'
-        r=json.loads(p.read_text()); r['started']['epoch_s']=now-36000; dump(p,r)
-    run('10h cap is no slip remedy',setup=spaced_block,command='day_gate',want=False,contains='one qualification block')
-    one=','.join(k+'='+item['date'] for k in META['dates'])
-    run('all qual blocks same date REFUSE',overrides={'QUAL_DATES':one},command='day_gate',want=False,contains='three distinct dates')
-    newdates=','.join(k+'='+('2026-11-18' if k==item['block'] else v) for k,v in META['dates'].items())
-    run('known development date REFUSE',overrides={'T0_DATE':'2026-11-18','QUAL_DATES':newdates},stamp=epoch('2026-11-18'),command='day_gate',want=False,contains='development date')
-    if item['span']=='qual-03-s02':
-        sunday=epoch('2026-11-22')
-        def partial_block():
-            p=predout/'runner_receipt.json'
-            receipt=json.loads(p.read_text())
-            receipt['started']={'epoch_s': epoch(item['date'])}
-            dump(p,receipt)
-        revised=','.join(k+'='+('2026-11-22' if k==item['block'] else v) for k,v in META['dates'].items())
-        run('WS 3 Saturday s01; Sunday cannot use original item', setup=partial_block, stamp=sunday,
-            command='day_gate', want=False, contains='outside this item t0-date')
-        run('WS 3 Sunday re-date conflicts with recorded Saturday s01', setup=partial_block,
-            stamp=sunday, overrides={'T0_DATE':'2026-11-22','QUAL_DATES':revised},
-            command='day_gate', want=False, contains='existing qualification receipt disagrees')
+    def date_receipt(camp,span,day,roster,attempt=1):
+        out=root/camp/f'cq-{span}-a{attempt}-20261119T000000Z'
+        dump(out/'runner_receipt.json',{'synthetic_fixture':True,'started':{'epoch_s':epoch(day)},'roster':roster})
+    run('development receipt on qual date REFUSE',
+        setup=lambda:date_receipt('cl-dev-99','dev-99-s01',item['date'],['L001']),
+        command='day_gate',want=False,contains='development receipt')
+    run('one block with declared cap applies',command='day_gate',contains='cap applies')
+    plan=META['dates']
+    def dates_arg(dates):
+        return ','.join(k+'='+v for k,v in dates.items())
+    other=next(i['span'] for i in META['items'] if i['block']!=item['block'])
+    run('C.3 shared date between blocks REFUSE',overrides={'QUAL_DATES':dates_arg({**plan,other:item['date']})},
+        command='day_gate',want=False,contains='one qualification block')
+    run('C.3 duplicate plan key REFUSE',overrides={'QUAL_DATES':dates_arg(plan)+','+item['span']+'='+item['date']},
+        command='day_gate',want=False,contains='six unique span dates')
+    run('known development date REFUSE',overrides={'T0_DATE':'2026-11-18','QUAL_DATES':dates_arg({**plan,item['span']:'2026-11-18'})},
+        stamp=epoch('2026-11-18'),command='day_gate',want=False,contains='development date')
+    run('C.3 qualifying span with existing t0 cannot re-arm',
+        setup=lambda:date_receipt(item['camp'],item['span'],item['date'],item['legs']),
+        command='day_gate',want=False,contains='already has a recorded t0')
+    shift=lambda date: (dt.date.fromisoformat(date)+dt.timedelta(days=1)).isoformat()
+    revised={span:shift(day) if span>=item['block']+'-s02' else day for span,day in plan.items()}
+    if item['span'].endswith('s02'):
+        later=shift(item['date'])
+        run('C.3 missing s02 cannot use old-date item',stamp=epoch(later),
+            command='day_gate',want=False,contains='outside this item t0-date')
+        recovery={'T0_DATE':later,'QUAL_DATES':dates_arg(revised)}
+        run('C.3 missing s02 can use later unused date; s01 date retained',stamp=epoch(later),
+            overrides=recovery,command='day_gate',contains='DAY OK')
+        run('C.3 recovery without recorded s01 REFUSE',setup=lambda:shutil.rmtree(predout),
+            stamp=epoch(later),overrides=recovery,command='day_gate',want=False,contains='must move whole')
+        run('C.3 re-dating recorded s01 REFUSE',stamp=epoch(later),
+            overrides={**recovery,'QUAL_DATES':dates_arg({**revised,item['predecessor']:later})},
+            command='day_gate',want=False,contains='receipt disagrees with its span plan')
+        run('C.3 second receipt for recorded s01 REFUSE',stamp=epoch(later),overrides=recovery,
+            setup=lambda:date_receipt(item['camp'],item['predecessor'],item['date'],item['predecessor_legs'],2),
+            command='day_gate',want=False,contains='multiple receipts')
+        queue_path=auth/item['queue_path']
+        queue=json.loads(queue_path.read_bytes())
+        next(entry for entry in queue['spans'] if entry['span_id']==item['span'])['not_before']=later
+        dump(queue_path,queue)
+        git(auth,'add',item['queue_path'])
+        git(auth,'commit','-q','-m','Synthetic half-run queue',env=env)
+        recovery_commit=git(auth,'rev-parse','HEAD')
+        git(auth,'update-ref','refs/remotes/origin/audit/2026-11-10-fable',recovery_commit)
+        later_noon=epoch(later)
+        run('C.3 full recovery with authenticated later queue and original s01',stamp=later_noon,
+            overrides={**recovery,'QUEUE_SHA':hashlib.sha256(queue_path.read_bytes()).hexdigest(),
+                       'WINDOW_START':later_noon-43200,'WINDOW_END':later_noon+43199,
+                       'WATCH_UNTIL_EPOCH':later_noon+10000},
+            fill_changes={'QUEUE_COMMIT':recovery_commit,'ISSUED_EPOCH':later_noon-100},
+            contains='BATCH OK')
+    else:
+        run('C.3 split plan for an untouched block REFUSE',overrides={'QUAL_DATES':dates_arg(revised)},
+            command='day_gate',want=False,contains='must move whole')
     if item['span'].endswith('s01'):
         pair_budget=int(item['launch_minimum_s'])+300
         # If s02's item expires at exactly the backed-out handoff, s01 is too late.

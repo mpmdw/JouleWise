@@ -1,6 +1,7 @@
 """Render six unissued qualification items and the same-pin standing-F0 renewal.
 
-python3 -B build_items.py [--dates qual-01=YYYY-MM-DD,qual-02=YYYY-MM-DD,qual-03=YYYY-MM-DD]
+python3 -B build_items.py [--dates qual-01=YYYY-MM-DD,qual-02-s02=YYYY-MM-DD]
+                        [--queue-expiry ISO-8601-with-offset]
 Only read-only pinned planners/validators run; no hardware/measurement command.
 """
 import argparse
@@ -26,6 +27,29 @@ PREFIX=HERE.relative_to(ROOT).as_posix()
 
 def write_json(path,obj): path.write_text(json.dumps(obj,indent=2)+'\n')
 def epoch(date, hms='00:00:00'): return int(dt.datetime.fromisoformat(date+'T'+hms).replace(tzinfo=TZ).timestamp())
+
+def span_dates(overrides):
+    dates={f'{block}-s{i:02d}':day for block,day in DEFAULTS.items() for i in (1,2)}
+    assigned=set()
+    for entry in overrides.split(',') if overrides else ():
+        key, separator, day=entry.partition('=')
+        keys=[f'{key}-s01',f'{key}-s02'] if key in DEFAULTS else [key]
+        if not separator or any(k not in dates or k in assigned for k in keys):
+            raise ValueError('span date entries require known, non-overlapping block or span keys')
+        if dt.date.fromisoformat(day).isoformat()!=day:
+            raise ValueError('t0 dates must use YYYY-MM-DD')
+        dates.update(dict.fromkeys(keys,day))
+        assigned.update(keys)
+    if any('2026-11-14'<=day<='2026-11-18' for day in dates.values()):
+        raise ValueError('planned qualification date is a known development date')
+    blocks_by_day={}
+    for span,day in dates.items():
+        block=span.rsplit('-',1)[0]
+        if blocks_by_day.setdefault(day,block)!=block:
+            raise ValueError('one qualification block per t0-date (RL-175 C.3)')
+    if list(dates.values())!=sorted(dates.values()):
+        raise ValueError('qualification t0 dates must follow the span order')
+    return dates
 
 def standing():
     main='6fc02b1925b726585e66ff32885964f4207d7d09'  # Preserved item 346 source.
@@ -75,14 +99,7 @@ renewal_gate() {{
     (evidence/'standing-f0-r2.diff').write_text(diff)
     return {'source_main':main,'original_issue':issued+' PST','renewal_start':start.isoformat(),'renewal_expiry':end.isoformat(),'w1_head':head,'pin_unchanged':head==old}
 
-def render(dates):
-    assert set(dates)==set(DEFAULTS)
-    for value in dates.values(): dt.date.fromisoformat(value)
-    # Invalid date plans can be rendered for gate refusal tests; normal builder refuses known development dates.
-    if len(set(dates.values()))!=3 or any('2026-11-14'<=d<='2026-11-18' for d in dates.values()):
-        raise SystemExit('REFUSE: RL-174 B.3: three distinct dates, one block each, disjoint from development Sat14-Wed18')
-    if max(epoch(d) for d in dates.values())>=dt.datetime.fromisoformat(QUEUE_EXPIRY).timestamp():
-        raise SystemExit('REFUSE: re-dating exceeds finite queue expiry; lead needs a new queue commit/window')
+def render(dates, queue_expiry):
     for sub in ('kits','queues','evidence'): (HERE/sub).mkdir(exist_ok=True)
     base=HERE.parent/'item-drafts-1115/ITEM-dev05-s01.md'
     old=base.read_text()
@@ -92,7 +109,7 @@ def render(dates):
     template=(HERE/'tools/item-template.md').read_text(); gates=(HERE/'gates.sh').read_text()
     meta={'source':SOURCE,'pin':PIN,'merged_w1':W1,'source_audit':git('rev-parse','HEAD').decode().strip(),
           'queue_scan':git('ls-tree','-r','--name-only',SOURCE,'docs/process/cadence').decode().splitlines(),
-          'dates':dates,'queue_expiry':QUEUE_EXPIRY,'items':[],'standing':standing()}
+          'dates':dates,'queue_expiry':queue_expiry,'items':[],'standing':standing()}
     assert not any('qual' in p.lower() and 'queue' in Path(p).name.lower() for p in meta['queue_scan']),meta['queue_scan']
     git_dir=git('rev-parse','--absolute-git-dir').decode().strip()
     with pinned() as repo:
@@ -105,46 +122,61 @@ def render(dates):
             raw=staged.read_bytes(); sha=hashlib.sha256(raw).hexdigest(); kit=json.loads(raw)
             assert kit['frozen']['commit']==PIN and kit['runner']['kind']=='cadence-legs-v1.1'
             local=HERE/'kits'/Path(kp).name; local.write_bytes(raw)
-            queue={'schema':'joulewise.cadence_queue.v1','queue_id':'cq-'+camp,'expires_at':QUEUE_EXPIRY,'halt':None,'standing_notice':None,'spans':[]}
+            queue={'schema':'joulewise.cadence_queue.v1','queue_id':'cq-'+camp,'expires_at':queue_expiry,'halt':None,'standing_notice':None,'spans':[]}
             for s in range(1,3):
                 ids=[x['leg_id'] for x in kit['legs'][(s-1)*6:s*6]]
-                queue['spans'].append({'seq':s,'span_id':f'{block}-s{s:02d}','block_id':block,
-                    'kit':{'path':kp,'sha256':sha},'legs':ids,'attempt':1,'not_before':dates[block]})
+                span=f'{block}-s{s:02d}'
+                queue['spans'].append({'seq':s,'span_id':span,'block_id':block,
+                    'kit':{'path':kp,'sha256':sha},'legs':ids,'attempt':1,'not_before':dates[span]})
             qp=HERE/'queues'/f'{camp}.queue.json'; write_json(qp,queue)
             qsha=hashlib.sha256(qp.read_bytes()).hexdigest()
             for s, entry in enumerate(queue['spans'],1):
-                name=f'qual{n:02d}-s{s:02d}'; span=entry['span_id']; ids=entry['legs']; legs=','.join(ids); t0=epoch(dates[block],'12:00:00' if n==1 else '00:00:00')
+                name=f'qual{n:02d}-s{s:02d}'; span=entry['span_id']; day=dates[span]
+                ids=entry['legs']; legs=','.join(ids); t0=epoch(day,'12:00:00' if n==1 else '00:00:00')
                 result=call(repo,'scripts/cadence_legs_runner.py','plan','--kit',local,'--legs',legs,'--t0',t0)
                 (HERE/'evidence'/f'plan-{name}.json').write_text(result.stdout)
                 plan=json.loads(result.stdout); assert plan['batch_windows']==[] and plan['blackout_clear'] and plan['runner_kind']=='cadence-legs-v1.1'
+                assert plan['soak_s']==1950 and [leg['leg_id'] for leg in plan['legs']]==ids
                 short=[x for x in kit['legs'] if x['leg_id'] in ids and x['decode_tokens']<4096]
                 assert len(short)==1
                 limit_hms='16:32:00' if s==1 else '23:59:59'
-                day_end=epoch(dates[block],'23:59:59')
-                limit=epoch(dates[block],limit_hms)
+                day_end=epoch(day,'23:59:59')
+                limit=epoch(day,limit_hms)
                 extra=plan['launch_deadline_epoch_s']-plan['t0_epoch_s']
                 assert extra==plan['worst_case_s']+1950+560
                 first_to_second=int(extra+300) if s==1 else 0
                 config=f'''SPAN={span}; CAMP={camp}; LEGS={legs}
 PRED_SPAN={previous[0]}; PRED_CAMP={previous[1]}; PRED_ROSTER={','.join(previous[2])}
 PRED_KIT_SHA={previous[3]}; PRED_PIN={previous[4]}
-T0_DATE={dates[block]}; WINDOW_START={epoch(dates[block])}; WINDOW_END={limit}
+T0_DATE={day}; WINDOW_START={epoch(day)}; WINDOW_END={limit}
 DAY_END={day_end}; FIRST_TO_SECOND_S={first_to_second}
+EXPECTED_SPAN_S={plan['expected_s']}
 QUAL_DATES={','.join(k+'='+v for k,v in dates.items())}'''
-                values=dict(PRED_NOTE=('<LEAD FILLS: confirm dev-05-s02 is latest counted campaign span, or update the complete PRED_* identity and machine-order record>.' if n==s==1 else 'The qualification predecessor chain is fixed; no automatic skip or override.'),ORDINAL='FIRST' if s==1 else 'SECOND',BLOCK=block,SPAN=span,CAMP=camp,LEGS=legs,KIT_SHA=sha,PIN=PIN,FIRST=ids[0],SHORT=f"{short[0]['leg_id']} cap {short[0]['decode_tokens']:,}",EXPECTED=plan['expected_s'],WORST=plan['worst_case_s'],DATE=dates[block],START=epoch(dates[block]),END=limit,LIMIT_HMS=limit_hms,POINTER_DEADLINE=dt.datetime.fromtimestamp(limit+extra+900+3600,TZ).isoformat(),PRED=previous[0],PRED_CAMP=previous[1],PRED_LEGS=','.join(previous[2]),DATES=', '.join(k+'='+v for k,v in dates.items()),QUEUE_PATH=PREFIX+'/queues/'+qp.name,QUEUE_SHA=qsha,CONFIG=config,GATES=gates,MAINTENANCE=maintenance,Q1=q1,DEADLINE_SECONDS=int(extra+900),NEXT=f'Next: `{block}-s02` after its own gates.' if s==1 else ('Next block under its own dated item.' if n<3 else 'All 36 qualification legs collected; the lead owns look readiness.'),HAND_NOTE='After the first span only, RL-172a F1 requires the soak comparison before s02; this draft conservatively waits to issue later spans until that record exists.' if n==s==1 else 'Not issuable before qual-01-s01\'s soak hand-read record (RL-172a F1; conservative issue ordering).')
+                values=dict(PRED_NOTE=('<LEAD FILLS: confirm dev-05-s02 is latest counted campaign span, or update the complete PRED_* identity and machine-order record>.' if n==s==1 else 'The qualification predecessor chain is fixed; no automatic skip or override.'),ORDINAL='FIRST' if s==1 else 'SECOND',BLOCK=block,SPAN=span,CAMP=camp,LEGS=legs,KIT_SHA=sha,PIN=PIN,FIRST=ids[0],SHORT=f"{short[0]['leg_id']} cap {short[0]['decode_tokens']:,}",EXPECTED=plan['expected_s'],WORST=plan['worst_case_s'],DATE=day,START=epoch(day),END=limit,LIMIT_HMS=limit_hms,POINTER_DEADLINE=dt.datetime.fromtimestamp(limit+extra+900+3600,TZ).isoformat(),PRED=previous[0],PRED_CAMP=previous[1],PRED_LEGS=','.join(previous[2]),DATES=', '.join(k+'='+v for k,v in dates.items()),QUEUE_PATH=PREFIX+'/queues/'+qp.name,QUEUE_SHA=qsha,CONFIG=config,GATES=gates,MAINTENANCE=maintenance,Q1=q1,DEADLINE_SECONDS=int(extra+900),NEXT=f'Next: `{block}-s02` after its own gates.' if s==1 else ('Next block under its own dated item.' if n<3 else 'All 36 qualification legs collected; the lead owns look readiness.'),HAND_NOTE='After the first span only, RL-172a F1 requires the soak comparison before s02; this draft conservatively waits to issue later spans until that record exists.' if n==s==1 else 'Not issuable before qual-01-s01\'s soak hand-read record (RL-172a F1; conservative issue ordering).')
                 values['PIN_SHORT']=PIN[:9]
+                values['QUEUE_EXPIRY']=queue_expiry
                 text=template
                 for key,value in values.items(): text=text.replace('@@'+key+'@@',str(value))
                 assert not re.search(r'@@[A-Z_]+@@',text)
                 (HERE/f'ITEM-{name}.md').write_text(text)
-                meta['items'].append(dict(item=name,span=span,block=block,camp=camp,date=dates[block],legs=ids,kit_path=kp,kit_file=str(local.relative_to(HERE)),kit_sha=sha,seed=kit['seed_law']['master_seed'],queue_file=str(qp.relative_to(HERE)),queue_path=values['QUEUE_PATH'],queue_sha=qsha,predecessor=previous[0],predecessor_camp=previous[1],predecessor_legs=previous[2],predecessor_kit_sha=previous[3],predecessor_pin=previous[4],short_leg=short[0],expected_s=plan['expected_s'],worst_case_s=plan['worst_case_s'],launch_minimum_s=extra))
+                meta['items'].append(dict(item=name,span=span,block=block,camp=camp,date=day,legs=ids,kit_path=kp,kit_file=str(local.relative_to(HERE)),kit_sha=sha,seed=kit['seed_law']['master_seed'],queue_file=str(qp.relative_to(HERE)),queue_path=values['QUEUE_PATH'],queue_sha=qsha,predecessor=previous[0],predecessor_camp=previous[1],predecessor_legs=previous[2],predecessor_kit_sha=previous[3],predecessor_pin=previous[4],short_leg=short[0],expected_s=plan['expected_s'],worst_case_s=plan['worst_case_s'],launch_minimum_s=extra))
                 previous=(span,camp,ids,sha,PIN)
     write_json(HERE/'items.json',meta)
     print('Rendered six items and STANDING-F0 r2; six pinned plan outputs; queues local to draft folder')
     for i in meta['items']: print(i['span'],i['kit_sha'],','.join(i['legs']),i['expected_s'],i['worst_case_s'],i['short_leg']['leg_id'],i['short_leg']['decode_tokens'])
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__); parser.add_argument('--dates')
-    args=parser.parse_args(); dates=DEFAULTS.copy()
-    if args.dates: dates.update(dict(x.split('=') for x in args.dates.split(',')))
-    render(dates)
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--dates')
+    parser.add_argument('--queue-expiry',default=QUEUE_EXPIRY)
+    args=parser.parse_args()
+    try:
+        dates=span_dates(args.dates)
+        expiry=dt.datetime.fromisoformat(args.queue_expiry)
+        if expiry.utcoffset() is None or not expiry.timestamp().is_integer():
+            raise ValueError('queue expiry requires a UTC offset and whole seconds')
+        if max(epoch(day) for day in dates.values())>=expiry.timestamp():
+            raise ValueError('re-dating exceeds finite queue expiry; lead needs a new queue commit/window')
+    except ValueError as error:
+        parser.error(str(error))
+    render(dates,expiry.astimezone(TZ).isoformat())

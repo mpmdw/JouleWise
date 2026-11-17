@@ -2,6 +2,8 @@
 
 **DRAFT / HOLD_FOR_FIT_FREEZE. Nothing issued.** These items carry the 2026-11-17 successor pin approved by the lead for the recorded-t0 guard. The existing [RL-174 and #794 admission record](../qual-lines-794/LINES.md) documents the original pin and findings. The [successor run report](../../../../../run_reports/2026-11-17-qual-pin-t0guard.md) records checks on the new bytes. Execution checks here use synthetic fixtures and source.
 
+The forecast below predates C.4. Recompute arm and close times at issue using the fresh boot prediction. With a 02:08:39 batch, the forecast midnight arm holds until 02:35:39.
+
 | Item | t0-date window, PST (00:00:00–23:59:59) | Forecast t0: freeze Thu19 12:00 / slip Fri20 12:00 | Expected / work-worst close at those forecast starts | Exactly missing before issue; owner |
 |---|---|---|---|---|
 | qual01-s01 | Thu19; slip requires Fri20 re-date | Thu19 12:00 / Fri20 12:00 | Thu15:24:22 / Thu18:52:30; slip Fri same times | Lead: freeze2 commit/coefficient path/hash, per-kit admission pointers and exact line2 equality, four host-state lines/readback, queue commit/staging, prior dev-05-s02 confirmation, lines6/7/9 and issue fills. INCLUSION_RECORD filled by RL-174 B.5; dev-05-s01 desk-final + typed Q1 record required (RL-174 E.5). Magistrate: live arm observations. Builder: no remaining prerequisite after verification. |
@@ -44,6 +46,8 @@ F0 renewal: item346 ISSUED Nov15 11:51:24 +7 days = **Nov22 11:51:24 PST, epoch1
 
 ## Verification and reproduction
 
+The successor's exact CI checkout passed all 21 jobs. Against the merged W1 baseline the failing-test sets are both empty, so Line 2 passes for each kit. Both draft wrappers passed again after RL-175 C.3 and C.4, with 1,336 gate checks and 91 pinned checks per run. The per-kit cold attestations remain lead fills. [Successor run report](../../../../../run_reports/2026-11-17-qual-pin-t0guard.md)
+
 Original `80969605d` verification (before RL-174): **1092 gate, 91 pinned, 21 F0, 6 generator, 74 shell syntax and 60 Python compile checks; all pass**. These historical logs are preserved. Current RL-174 verification and its limits are in [LINES.md](../qual-lines-794/LINES.md) and `../qual-lines-794/verification/`. This update changes draft tooling and records only; production runner, kit and frozen paths are unchanged. Original logs: `evidence/lint.log`, `pinned-checks.log`, `gates.log`, `standing-f0-tests.log`, `redate-tests.log`; pinned re-check detail in `kit-recheck.json`. Read-only fresh peer review and lead disposition are recorded in `evidence/review.md`; this builder retains final diff/verification responsibility.
 
 ```sh
@@ -78,10 +82,16 @@ New tests execute the embedded functions in bash and zsh, keeping an older recei
 
 **Untouched block.** Verify that neither span has a recorded t0. Re-date both spans together onto a valid unused t0-date, commit a new finite queue, and issue fresh items. Supply a new finite expiry if the old one cannot cover the schedule. Preserve the three distinct dates and the predecessor order.
 
-**Partially run block.** Preserve s01's recorded t0, original queue and receipts. Hold s02 pending a lead-issued recovery item. A late s02 on the original date fails the current-date gate. Moving both spans' date conflicts with the recorded s01 date. Under RL-175 A.2 a READY record cannot take effect between the halves.
+**Partially run block.** The span-keyed date gate implements RL-175 C.3 at `b26c0d0e7`. Preserve s01's recorded t0, original queue and receipts. The lead assigns only missing s02 to the next unused legal date, moves later untouched blocks whole, and issues only the remaining spans. The same kit binds the original legs and seeds. Each receipt must match its own span's date. A recorded t0 prevents re-arm. Under RL-175 A.2 a READY record cannot take effect between the halves.
 
-**NEEDS_RULING — partially run qualification block (WS 3, resolved).** How should the incomplete block and the remaining span be handled when s02 loses its date? RL-175 C.3 at `b26c0d0e7` answers: retain s01 on its date, run s02 once with the same legs and seeds on the next date with no other qualification span, and move later untouched blocks whole. The look uses each span's actual t0-date. Preserve the existing evidence and hold for the lead's hand-issued s02 until the span-keyed regeneration. The lead may commit a fresh queue with expiry within seven days of that commit.
+If qual-01-s01 ran Thu19 and qual-01-s02 missed Thu19, use this date plan.
+
+```sh
+python3 -B build_items.py --dates qual-01-s02=2026-11-20,qual-02=2026-11-21,qual-03=2026-11-22
+```
+
+If recovery needs a later expiry, pass `--queue-expiry` with an explicit UTC offset, commit the new queue, and issue fresh items. The queue gate enforces the seven-day ceiling from the authenticated commit. The look uses each span's actual t0-date.
 
 **Successor qualification pin (WS 5).** The lead's 2026-11-17 decision admits a successor containing Builder C's tested guard. The three draft kits move to that pin. Each kit changes its frozen commit and the two entry-script hashes. The per-kit admission checks still govern issue.
 
-**RL-175 handoff.** C.3 assigns the span-keyed date-plan change to the Friday regeneration and supplies the lead's hand-issued fallback above. C.4 adds a separate boot-relative batch arm rule for all six qualification spans. The current items still need that enforcement and plan readback before issue. The printed batch hint by itself grants no arm authority.
+**RL-175 C.4.** All six items read boot time independently in Start and Run. The predicted OS batch uses the existing boot + 12 h + 48 s offset, recurring every 24 hours. The hold starts when the pinned expected close reaches the predicted batch and lasts until batch start plus 27 minutes. A safe pre-batch arm carries the next hold boundary to the child as an exclusive t0 cutoff.

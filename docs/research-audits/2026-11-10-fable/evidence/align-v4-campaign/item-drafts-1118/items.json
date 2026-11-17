@@ -2,7 +2,7 @@
   "source": "6010985a3312c77bb8e4bb4bf5c920c4d49b8512",
   "pin": "0576ed76d3a74d20ce3c6b6b96711e360775a25f",
   "merged_w1": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
-  "source_audit": "dddf95c04daf1298d91f06e3e4be41ce16fbc37e",
+  "source_audit": "c0051b1cfb4275a12a75af0fc2941fb150ae6de1",
   "queue_scan": [
     "docs/process/cadence/BLOCK-QUEUE.json",
     "docs/process/cadence/kits/cl-dev-01.json",
@@ -16,9 +16,12 @@
     "docs/process/cadence/kits/cl-qual-03.v1.1.json"
   ],
   "dates": {
-    "qual-01": "2026-11-19",
-    "qual-02": "2026-11-20",
-    "qual-03": "2026-11-21"
+    "qual-01-s01": "2026-11-19",
+    "qual-01-s02": "2026-11-19",
+    "qual-02-s01": "2026-11-20",
+    "qual-02-s02": "2026-11-20",
+    "qual-03-s01": "2026-11-21",
+    "qual-03-s02": "2026-11-21"
   },
   "queue_expiry": "2026-11-23T00:00:00-08:00",
   "items": [

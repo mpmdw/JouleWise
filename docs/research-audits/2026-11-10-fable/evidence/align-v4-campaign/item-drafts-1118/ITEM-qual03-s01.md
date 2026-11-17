@@ -12,9 +12,10 @@ next_observable: after fence disappearance, Check below reports operational rece
 - **Why (RL-149 §2.3; RL-155 §5.3; RL-165 §8.1; RL-167 Part B; RL-172 (a),(b)).** Qualification tests the committed fit on held-out dates. This law's 6 + 6 cut keeps each true type-L pair adjacent in one span and gives each span four A legs and one L pair. First leg own-shaped/capture, all five others span-shaped/consume; no T or M. The M slots are ordinary A legs at 19,458. No class A smoke: class B, a mock span, plan and diff check (RL-165 §8.1; RL-172a F1). At the first qualification arm cite RL-172a F1. Its soak's operational fields and reference schema must be hand-compared with dev-05 before qual-01-s02; a difference goes to the research lead. The retry fires on slope or load refusal, once (RL-172a F2); the desk/look read `soak_attempts`, a retried soak forces the sampled hand table, and refusal kind prints "kind not recorded" until a later pin (RL-173 E).
 - **Config provenance (RL-167 Part B Q1; Mythos #794 F5).** Record both runtime-config hashes: development `bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df`, qualification `272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46`. Only the unused `d_n_chunk_status` label differs; `lm-qual-01` prints both and must not require equality for inclusion.
 - **Freeze and pin.** `freeze2_gate` implements RL-165 §8.1, RL-172 (i) row 9 and RL-173 E. Full commit/hash/path unfilled = WAIT/HOLD_FOR_FIT_FREEZE. The commit must be an ancestor of freshly fetched audit or main and contain that exact coefficient hash. No forecast or fit-code hash substitutes for it. `qual_pin_gate`: line 1 cold seat ADMIT **per kit**, including RL-167 Part B Q2's same-code capture/five-consumer confirmation; line 2 suite red set at the frozen bytes equals the merged W1-line commit `c3f4bacd8`, test for test, no added red (RL-165 §8.1). Record pointers remain lead fills. Later W1 merges do not move the qualification pin. The frozen child validates the authorized date and exclusive cutoff against its recorded start before span work. HOLD until both admission lines are recorded against the exact successor kit bytes. RL-175 C.4 also requires the separate predicted-batch check at each arm.
-- **Day law (RL-174 B.3).** Dates: qual-01=2026-11-19, qual-02=2026-11-20, qual-03=2026-11-21. **Three distinct t0-dates, one block each**, none with a development leg. Each block holds two L pairs; fewer than three pair-days prints `not_evaluable` for the ±0.10 word (RL-166b §4). Sat 14–Wed 18 Nov are reserved development dates, and `day_gate` also checks moved development spans. The local t0-date assigns all six legs, including excluded legs and a close after midnight. RL-149 §2.3's cap **applies**: at most two blocks and 24 legs on a date, block starts at least 10 h apart. It is not used by this plan and cannot remedy a slip. Use the missed-date recovery below. The queues expire **Mon 23 Nov 00:00 PST** (RL-174 E.4). No automatic extension.
+- **Day law (RL-174 B.3, RL-175 C.3).** Span dates: qual-01-s01=2026-11-19, qual-01-s02=2026-11-19, qual-02-s01=2026-11-20, qual-02-s02=2026-11-20, qual-03-s01=2026-11-21, qual-03-s02=2026-11-21. Each date holds spans from only one qualification block, with no development leg. Each whole block holds two L pairs. Fewer than three pair-days prints `not_evaluable` for the ±0.10 word (RL-166b §4). Sat 14–Wed 18 Nov are reserved development dates, and `day_gate` also checks moved development spans. Each span's recorded t0-date assigns all six legs even if it closes after midnight. The one-block rule is stricter than the RL-149 §2.3 cap of two blocks and 24 legs with block starts at least 10 h apart. The queues expire **2026-11-23T00:00:00-08:00**. A new expiry requires a new lead-committed queue.
 - **Dependent spans (WS 4 and QUEUE-SPEC D8).** The printed s01 LIMIT is 16:32:00 PST at the latest. Reserve 24,750 s for s01 work, 1,950 s for a possible soak retry plus 560 s of cleanup reserve, then 300 s for the campaign close interval before s02. The latest s01 t0 moves earlier if s02's date, item or queue expires before this pair can fit. Use the same bounds in standing-F0 rule 7 while both spans remain outstanding, including planned s02 when its hand gate prevents early issue. Provide the actual s02 issue epoch when issued, or record `unissued` when its hand gate still holds. The plan then assumes a fresh s02 item in time for the planned t0. The actual Check, verified copy, hand-read and remaining gates still govern.
-- **Missed-date recovery (WS 3).** **Untouched block:** if neither span has a recorded t0, re-date both together to a valid unused day, commit the new finite queue, and issue fresh items. **Partially run block:** preserve s01's recorded t0 and receipts. **NEEDS_RULING was resolved in RL-175 C.3.** The current block-keyed gate stops. Until the span-keyed regeneration, only the lead can issue s02 by hand on the next unused qualification date, with the same legs and seeds and a fresh soak. Move later untouched blocks whole. Keep both recorded span dates. The magistrate waits for the lead's explicit issue.
+- **Missed-date recovery (RL-175 C.3).** **Untouched block:** move both spans together to an unused legal date. **Partially run block:** retain s01's recorded date and receipts, then schedule only the missing s02 once on the next unused legal date with the same legs and seeds and a fresh soak. Move later untouched blocks whole. Every qualification receipt's recorded date must match its own span entry. A span with an existing t0 cannot arm again. The lead commits the revised finite queue and issues fresh items for the remaining spans.
+- **Predicted OS batch (RL-175 C.4).** Start and Run each read the current boot time and use this span's pinned expected close. A planned span that reaches the predicted batch holds until batch start plus 27 minutes. The boot read also refreshes the prediction after a restart. Record the boot, batch, soak and close epochs and the resulting t0 bound from the gate.
 - **Host state (RL-174 C).** Freeze 2 proceeds on the host as it is; no visit, hygiene action or restart is a gate. Each arm states four lines: `spotlightknowledged` and updater present/absent (stopped Sun 15 Nov 15:32); `corespotlightd` present/on demand; indexing of `/` off; Time Machine destination none (`backupd` resident). The lead supplies the readback record and a hygiene-state identity, excluding boot time. Nobody changes a hygiene setting from freeze 2 through qual-03 close. An unplanned restart is an event: record it and refresh the four lines at the next arm; it holds nothing. `INCLUSION_RECORD` is filled by **RL-174 B.5**: the six rules stay unchanged and maintenance overlaps are print-only. `lm-qual-01` prints flagged and unflagged errors side by side, with counts by job, description only and no word. The lead appends the by-job count through dev-05 when its desk is final; that count gates nothing. The maintenance print carries the Sun15 15:32 service-stop date.
 - **Gates 5–9 (RL-149 §2.8; RL-165 §6; RL-172 (c),(f); RL-173 A–E; RL-174 E.5).** Line 6: no named stop, halt or veto open, lead record of dispositions. Line 7: watcher observed within 24 h, re-read at both gates; this draft uses C.5. For an Actions watcher, RL-174 A.13 requires a scheduled successful completed run on this repository's `main`, started after the previous close; a manual run never serves an arm. Line 9: actual machine order across blocks/queues, desk-final and **typed Q1 completion** through span k−2. In particular qual-01-s01 needs dev-05-s01's desk-final and Q1 records; qual-01-s02 needs dev-05-s02's, span for span. `debt_gate` requires those named rows as well as the full machine-order debt record. No "first span of kit" exception. Automatic desk must satisfy all four RL-172 (c) identity/authentication rules, sampled hand table clear, disagreement holds next arm. Lead/magistrate supply observations and pointers; no default yes.
 - **Close and copy (RL-171 §6.1; RL-172 (d); RL-173 A,B).** At least 300 s after a campaign close; 1,200 s after F0/F2/Part C/session/W1, using the **latest close of anything**, its Check and process-group absence, fence gone. Census stops on missing roots, unreadable or ambiguous stamps; `OTHER_CLOSE_EPOCH` covers sessions outside it. `PRIOR_CLOSE_EPOCH` cannot precede predecessor close. After a campaign close, copy marker `.ok` or `.air.ok` for that plan is required; after any other close, its Check/copy proof must bind the exact latest receipt path and close epoch; verified synchronous encrypted cloud offload counts permanently, upload finished before soak, plaintext/ciphertext hashes and size/provider confirmation recorded, key held off MBP, originals retained until verified copy. An unverified offload holds every arm including F0. A sync daemon is interim only; maintenance print includes bird/cloudd/fileproviderd. No marker is written by this item.
@@ -47,7 +48,8 @@ PRED_SPAN=qual-02-s02; PRED_CAMP=cl-qual-02; PRED_ROSTER=L007,L008,L009,L010,L01
 PRED_KIT_SHA=612327b4fe5bbbcb0da28676a4d54e92c7d855a4c286157dbb3f4cc6073f923b; PRED_PIN=0576ed76d3a74d20ce3c6b6b96711e360775a25f
 T0_DATE=2026-11-21; WINDOW_START=1795248000; WINDOW_END=1795307520
 DAY_END=1795334399; FIRST_TO_SECOND_S=27560
-QUAL_DATES=qual-01=2026-11-19,qual-02=2026-11-20,qual-03=2026-11-21
+EXPECTED_SPAN_S=12310
+QUAL_DATES=qual-01-s01=2026-11-19,qual-01-s02=2026-11-19,qual-02-s01=2026-11-20,qual-02-s02=2026-11-20,qual-03-s01=2026-11-21,qual-03-s02=2026-11-21
 # Included verbatim in each item by build_items.py; no production command runs here.
 # BEGIN TESTABLE GATES
 ISSUED_EPOCH="<LEAD FILLS: ISSUED_EPOCH>"
@@ -240,22 +242,34 @@ v4_gate() {
   case "${SESSION_READY:-}" in no) echo "V4 not READY: $SESSION_RECORD";; yes) echo 'CEDE: READY v4 session; DO NOT ARM (RL-172 (f))'; return 1;; *) echo 'STOP: unknown v4 readiness'; return 1;; esac
 }
 day_gate() {
-  "$PY" -I -B - /Users/edr/campaign-out "$(date +%s)" "$T0_DATE" "$QUAL_DATES" "$CAMP" "$LEGS" <<'PY'
+  "$PY" -I -B - /Users/edr/campaign-out "$(date +%s)" "$T0_DATE" "$QUAL_DATES" "$SPAN" "$CAMP" "$LEGS" <<'PY'
 import datetime as dt, json, math, os, re, sys
 from pathlib import Path
 from zoneinfo import ZoneInfo
-root, now, wanted, dates, camp, legs = sys.argv[1:]
+root, now, wanted, dates, current, camp, legs = sys.argv[1:]
 def stop(s): sys.exit('REFUSE: day law ' + s)
 TZ=ZoneInfo('America/Los_Angeles'); day=dt.datetime.fromtimestamp(int(now),TZ).date().isoformat()
+spans=[f'qual-{n:02d}-s{i:02d}' for n in (1,2,3) for i in (1,2)]
+def block(span): return span.rsplit('-',1)[0]
+def roster_for(span):
+    start=1 if span.endswith('-s01') else 7
+    return [f'L{i:03d}' for i in range(start,start+6)]
 try:
-    planned=dict(x.split('=') for x in dates.split(','))
-    if set(planned)!= {'qual-01','qual-02','qual-03'} or len(set(planned.values())) != 3: stop('three distinct dates, one block each (RL-174 B.3)')
-    for date in planned.values(): dt.date.fromisoformat(date)
-    if day != wanted or planned[camp.removeprefix('cl-')] != day: stop('outside this item t0-date; lead re-dates (RL-172 (a)5)')
-    if '2026-11-14' <= day <= '2026-11-18': stop('known development date Sat14-Wed18 (RL-172 (a)3)')
-    if any('2026-11-14'<=d<='2026-11-18' for d in planned.values()): stop('planned qualification date is a development date')
+    entries=[entry.split('=') for entry in dates.split(',')]
+    planned=dict(entries)
+    if len(entries)!=len(spans) or set(planned)!=set(spans): stop('six unique span dates required (RL-175 C.3)')
+    days_by_span=[planned[span] for span in spans]
+    blocks_by_day={}
+    for span, date in zip(spans,days_by_span):
+        if dt.date.fromisoformat(date).isoformat()!=date: stop('t0-date must use YYYY-MM-DD')
+        if '2026-11-14'<=date<='2026-11-18': stop('planned qualification date is a development date')
+        if blocks_by_day.setdefault(date,block(span))!=block(span): stop('one qualification block per t0-date (RL-175 C.3)')
+    if days_by_span!=sorted(days_by_span): stop('t0 dates must follow span order')
+    if day!=wanted or planned[current]!=day: stop('outside this item t0-date; lead re-dates (RL-172 (a)5)')
+    if camp!='cl-'+block(current) or legs.split(',')!=roster_for(current): stop('item span, block or roster mismatch')
     if not os.path.isdir(root): stop('receipt root missing')
-    count=0; blocks=set(); firsts={}; seen=[]
+    recorded=set()
+    count=0
     for family in sorted(Path(root).iterdir()):
         if not family.is_dir() or not re.fullmatch(r'cl-(dev|qual)-[a-zA-Z0-9-]+',family.name): continue
         for out in sorted(family.iterdir()):
@@ -263,31 +277,38 @@ try:
             p=out/'runner_receipt.json'
             if not p.is_file(): stop('pending output without receipt '+str(out))
             r=json.loads(p.read_text()); t=r['started']['epoch_s']; roster=r['roster']
-            if isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t): stop('bad t0 '+str(p))
-            if not isinstance(roster,list) or not roster or len(set(roster)) != len(roster) or not all(isinstance(x,str) and re.fullmatch('L[0-9]{3}',x) for x in roster): stop('bad roster '+str(p))
+            if isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t) or t<=0: stop('bad t0 '+str(p))
+            if (not isinstance(roster,list) or not roster
+                    or not all(isinstance(x,str) and re.fullmatch('L[0-9]{3}',x) for x in roster)
+                    or len(set(roster))!=len(roster)): stop('bad roster '+str(p))
             actual=dt.datetime.fromtimestamp(t,TZ).date().isoformat()
             if family.name.startswith('cl-dev-'):
-                if actual in planned.values(): stop('development receipt on qualification date '+actual+' '+str(p))
+                if actual in blocks_by_day: stop('development receipt on qualification date '+actual+' '+str(p))
             else:
-                block=family.name.removeprefix('cl-')
-                if block in planned and planned[block] != actual: stop('existing qualification receipt disagrees with date plan '+str(p))
+                match=re.fullmatch(r'cq-(qual-0[1-3]-s0[12])-a[1-9][0-9]*-\d{8}T\d{6}Z',out.name)
+                if not match or family.name!='cl-'+block(match[1]): stop('unrecognized qualification span output '+str(out))
+                span=match[1]
+                if roster!=roster_for(span): stop('bad qualification span roster '+str(p))
+                if planned[span]!=actual: stop('existing qualification receipt disagrees with its span plan '+str(p))
+                if span in recorded: stop('multiple receipts for qualification span '+span)
+                recorded.add(span)
                 if actual==day:
-                    count+=len(roster); blocks.add(block); firsts[block]=min(firsts.get(block,t),t); seen.append((out.name,len(roster)))
-    n=len(legs.split(',')); blocks.add(camp.removeprefix('cl-'))
-    if count+n > 24: stop('25th leg / >24 qualification legs; RL-174 B.3 / RL-149 §2.3 cap applies')
-    if len(blocks)>2: stop('more than two qualification blocks; RL-174 B.3 / RL-149 §2.3 cap applies')
-    firsts.setdefault(camp.removeprefix('cl-'),int(now))
-    if len(firsts)==2 and abs(max(firsts.values())-min(firsts.values()))<36000: stop('two block starts less than 10 h apart; RL-174 B.3 / RL-149 §2.3 cap applies')
-    if len(blocks)>1: stop('one qualification block per t0-date; cap is not a slip remedy (RL-174 B.3)')
+                    count+=len(roster)
+    if current in recorded: stop('qualification span already has a recorded t0 '+current)
+    for first, second in zip(spans[::2],spans[1::2]):
+        if planned[first]!=planned[second] and first not in recorded:
+            stop('untouched qualification block must move whole '+block(first))
+    n=len(legs.split(','))
+    if count+n>24: stop('more than 24 qualification legs (RL-149 §2.3)')
 except (OSError,ValueError,KeyError,TypeError,OverflowError) as e: stop('unreadable/contradictory receipt or plan '+str(e))
-print('DAY OK',day,'already',count,'plus',n,'blocks',sorted(blocks),'RL-174 B.3: three dates/one block each; <=24/two blocks/10h cap applies, never a slip remedy',seen)
+print('DAY OK',day,current,'already',count,'plus',n,'one block on this date (RL-175 C.3); RL-149 §2.3 cap applies')
 PY
 }
 queue_gate() {
   filled "$QUEUE_COMMIT" || { echo 'WAIT: lead records queue commit (RL-149 §2.8 line 3)'; return 1; }
-  QUEUE_EXPIRES_EPOCH="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$(date +%s)" <<'PY'
+  QUEUE_EXPIRES_EPOCH="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$T0_DATE" "$KIT_SHA" "$(date +%s)" <<'PY'
 import hashlib, json, re, subprocess, sys
-repo, commit, path, sha, span, legs, now=sys.argv[1:]; now=int(now)
+repo, commit, path, sha, span, legs, day, kit_sha, now=sys.argv[1:]; now=int(now)
 def git(*a): return subprocess.check_output(['git','-C',repo,*a],stderr=subprocess.DEVNULL)
 try:
     assert re.fullmatch('[0-9a-f]{40}',commit)
@@ -299,8 +320,10 @@ try:
     committed=int(git('show','-s','--format=%ct',commit))
     assert committed <= now < expiry <= committed+7*86400
     assert q['halt'] is None
-    entries=[s for s in q['spans'] if s['span_id']==span]; assert len(entries)==1 and entries[0]['legs']==legs.split(',')
-except (OSError,ValueError,KeyError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/seven-day expiry (RL-149 §2.8 line 3)')
+    entries=[s for s in q['spans'] if s['span_id']==span]; assert len(entries)==1
+    entry=entries[0]
+    assert entry['legs']==legs.split(',') and entry['not_before']==day and entry['kit']['sha256']==kit_sha and entry['attempt']==1
+except (OSError,ValueError,KeyError,TypeError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/span date/kit/attempt/seven-day expiry (RL-149 §2.8 line 3; RL-175 C.3)')
 print(int(expiry))
 PY
 )" || return 1
@@ -375,9 +398,41 @@ arm_bound_gate() {
   }
   echo "AUTHORIZED T0 $T0_DATE before $ARM_BEFORE_EPOCH"
 }
+batch_gate() {
+  # Fresh boot read at both Start and Run. Carry the next hold boundary to the child.
+  BATCH_BOOT="$(sysctl -n kern.boottime)" || { echo 'STOP: boot time unavailable (RL-175 C.4)'; return 1; }
+  ARM_BEFORE_EPOCH="$("$PY" -I -B - "$BATCH_BOOT" "$(date +%s)" "$EXPECTED_SPAN_S" "$ARM_BEFORE_EPOCH" <<'PY'
+import re, sys
+raw, now, expected, cutoff = sys.argv[1:]
+boot = re.fullmatch(r'\{\s*sec\s*=\s*([0-9]+),\s*usec\s*=\s*[0-9]+\s*\}.*',raw)
+if not boot or not all(v.isascii() and v.isdecimal() for v in (now,expected,cutoff)):
+    sys.exit('STOP: unreadable boot time or qualification plan (RL-175 C.4)')
+boot, now, expected, cutoff = int(boot[1]), int(now), int(expected), int(cutoff)
+soak_s, cooldown_s, day_s = 1950, 27*60, 86400
+if not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or now>=cutoff:
+    sys.exit('STOP: invalid boot time, span duration or t0 cutoff (RL-175 C.4)')
+# The existing prediction is anchored to boot, with the observed 48 s offset.
+first = boot + 43248
+occurrences = max(0,(now-first)//day_s + 1)
+upcoming = first + occurrences*day_s
+previous = upcoming-day_s if occurrences else None
+expected_close = now+expected
+held = previous if previous is not None and now<previous+cooldown_s else None
+if held is None and upcoming<=expected_close:
+    held = upcoming
+if held is not None:
+    sys.exit(f'WAIT: RL-175 C.4 predicted OS batch {held}; arm at or after {held+cooldown_s}')
+before = min(cutoff,upcoming-expected)
+print(f'BATCH OK RL-175 C.4 boot {boot}; next OS batch {upcoming}; soak end {now+soak_s}; '
+      f'expected close {expected_close}; authorized t0 before {before}',file=sys.stderr)
+print(before)
+PY
+)" || return 1
+}
 all_gates() {
   expiry_gate && watch_gate && freeze2_gate && qual_pin_gate && host_event_gate && v4_gate \
-    && admission_gate && queue_gate && debt_gate && pred_gate && close_gate && day_gate && window_gate && arm_bound_gate
+    && admission_gate && queue_gate && debt_gate && pred_gate && close_gate && day_gate && window_gate \
+    && arm_bound_gate && batch_gate
 }
 # END TESTABLE GATES
 
@@ -412,8 +467,6 @@ all_gates || exit 1
 "$PY" -B scripts/cadence_legs_runner.py plan --kit "$KIT" --legs "$LEGS" || exit 1
 # Plan must print expected_s 12310, worst_case_s 24750, batch_windows [], runner_kind cadence-legs-v1.1.
 # Record HEAD, kit frozen.commit, all identities and every native checklist line, meter presence and veto read.
-BOOT="$(sysctl -n kern.boottime | sed -E 's/^\{ sec = ([0-9]+),.*$/\1/')"
-case "$BOOT" in ''|*[!0-9]*) echo 'batch print: boot unreadable';; *) NEXT_BATCH=$((BOOT+43248)); while [ "$NEXT_BATCH" -le "$(date +%s)" ]; do NEXT_BATCH=$((NEXT_BATCH+86400)); done; echo "next OS batch epoch $NEXT_BATCH (boot + 12 h + 48 s + whole days)";; esac
 OUT=/Users/edr/campaign-out/cl-qual-03/cq-${SPAN}-a1-$(date -u '+%Y%m%dT%H%M%SZ')
 test ! -e "$OUT" || exit 1
 case "$OUT" in */restricted/*|*/night-*|"$REPO"/*|*/configs/campaigns/align_v4*) exit 1;; esac
@@ -421,7 +474,7 @@ case "$OUT" in */restricted/*|*/night-*|"$REPO"/*|*/configs/campaigns/align_v4*)
 
 Lead/magistrate supplies the current observations listed in `evidence/record-shapes.md`. `CHECKLIST_OK=yes` is set only **after** every native read above and the kit's complete checklist passes; each call clears any supplied yes before running the checks. Disk, meter, process census, no halt/veto and all restore lines are mandatory.
 
-**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity and v4 READY record now, refreshing the observations. No cached eligibility answer. Verify the current kit/queue hashes again; fetch refs before the last gate. The pinned runner checks its native checklist and per-leg process census. RL-175 C.4's boot-relative batch check is an arm rule outside this runner. Apply it at each arm; the LaunchAgent's **shared desk fence still exists** until close. No `--batch-window` argument is passed.
+**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and fetch refs before the last gate. Pass the date and tightened t0 cutoff from the fresh gates to the child. The pinned runner checks its native checklist and per-leg process census. The LaunchAgent holds the **shared desk fence** until close. The launch omits `--batch-window`.
 
 ```sh
 git -C "$AUTH_REPO" fetch -q origin audit/2026-11-10-fable main || exit 1

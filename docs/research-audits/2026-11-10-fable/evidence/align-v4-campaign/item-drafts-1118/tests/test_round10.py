@@ -33,9 +33,9 @@ class Round10(unittest.TestCase):
                 guide = item.read_text()
                 self.assertIn('Untouched block', guide)
                 self.assertIn('Partially run block', guide)
-                self.assertIn('NEEDS_RULING was resolved in RL-175 C.3', guide)
-                self.assertIn('lead can issue s02 by hand', guide)
-        self.assertIn('NEEDS_RULING — partially run qualification block', status)
+                self.assertIn('Every qualification receipt\'s recorded date must match its own span entry', guide)
+                self.assertIn('schedule only the missing s02 once', guide)
+        self.assertIn('span-keyed date gate', status)
 
     def test_pair_bound(self):
         program = re.search(r'F0_NOW=.*?<<\'PY\'\n(.*?)\nPY', STANDING, re.S)[1]
