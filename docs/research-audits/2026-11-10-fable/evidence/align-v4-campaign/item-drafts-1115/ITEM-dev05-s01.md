@@ -63,30 +63,30 @@ echo "close interval GAP $GAP s (RL-171 §6.1; 1,200 s after a Part C or F0, F2,
 # ONE newest-close selection over both roots, used by the host gate and by copy_gate (Sol RL-172 re-check 1)
 close_census() {
   CENSUS="$("$PY" -I -B - /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
-import math, os, sys
-def fail(e):
-    raise e
-newest, path, count = None, None, 0
+import json, math, os, sys
+def fail(e): raise e
+found = []
 for root in sys.argv[1:]:
-    if not os.path.isdir(root):
-        sys.exit(f"STOP: receipt root missing: {root}")
-    base = root.rstrip("/").count("/")
-    for dirpath, dirnames, filenames in os.walk(root, onerror=fail):
-        if dirpath.count("/") - base >= 3:
-            dirnames[:] = []          # receipts at depth <= 4, as `find -maxdepth 4`
-        if "runner_receipt.json" in filenames:
-            p = os.path.join(dirpath, "runner_receipt.json")
-            m = os.stat(p).st_mtime
-            count += 1
-            if newest is None or m > newest:
-                newest, path = m, p
-if count == 0:
-    sys.exit("STOP: the receipt census found no runner_receipt.json; receipts are expected on this host")
-if "\n" in path:
-    sys.exit("STOP: newline in a receipt path")
-print(math.ceil(newest))
-print(path)
-print(f"census: {count} receipts, newest mtime {newest!r} {path}", file=sys.stderr)
+    if not os.path.isdir(root): sys.exit('STOP: missing receipt root: ' + root)
+    base = root.rstrip('/').count('/')
+    for d, dirs, files in os.walk(root, onerror=fail):
+        if d.count('/') - base >= 3: dirs[:] = []
+        if 'runner_receipt.json' in files:
+            p = os.path.join(d, 'runner_receipt.json')
+            if '\n' in p: sys.exit('STOP: bad receipt path')
+            try:
+                with open(p) as handle: ended = json.load(handle)['ended']['epoch_s']
+                if (isinstance(ended, bool) or not isinstance(ended, (int, float))
+                        or not math.isfinite(ended) or ended <= 0):
+                    raise ValueError('invalid ended.epoch_s')
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
+            found.append((ended, p))
+if not found: sys.exit('STOP: empty receipt census')
+latest = max(t for t, p in found)
+newest = [p for t, p in found if t == latest]
+if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt close epoch')
+print(math.ceil(latest)); print(newest[0])
 PY
 )" || return 1
   CENSUS_EPOCH="$(printf '%s\n' "$CENSUS" | sed -n 1p)"
@@ -357,7 +357,7 @@ test ! -e "$CUSTODY/desk_fence.json" || { echo "STOP: a desk fence is up"; exit 
 launchctl list | grep -qE 'com\.joulewise\.(night|align-r0)' && { echo "STOP: a night or smoke agent is loaded"; exit 1; }
 { test ! -e /Users/Shared/JouleWise/host-power/high-power.marker && test ! -L /Users/Shared/JouleWise/host-power/high-power.marker; } || { echo "STOP: High Power marker"; exit 1; }
 case "${OTHER_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo "STOP: OTHER_CLOSE_EPOCH must be a whole epoch (rounded up) or an explicit 0"; exit 1;; esac
-# The receipt census: every runner_receipt.json at depth <= 4 under both roots, fractional mtimes, ROUNDED UP.
+# The receipt census: every runner_receipt.json at depth <= 4 under both roots, fractional recorded close epochs, ROUNDED UP.
 # Any lookup error, a missing root, or no receipt at all STOPS: missing evidence never becomes 0 (Sol re-check 2, 3).
 effective_close || { echo "STOP: the receipt census failed; missing evidence stops the launch; mail the lead"; exit 1; }
 HOST_LAST_CLOSE=$EFF_EPOCH    # the effective close (max of the census and OTHER_CLOSE_EPOCH), computed once (Sol confirm P1)

@@ -62,7 +62,7 @@ next_observable: the next activation after each run's fence is gone runs "Check"
 - **Conditions (RL-145 close §8, §12; RL-155 §3.1, §4).**
   - No agent session on the MBP during the run: you exit at once after the launch, and no other `claude` or `codex` process is running. No lead SSH, desk job, campaign span or R12 process until the fence is gone.
   - **Never while anything is armed** (RL-155 §4 rule 1): no desk fence, no `com.joulewise.(night|align-r0)` job, no `cadence_legs_runner` or `launch_cadence_span` process.
-  - **The close interval (RL-171 §6.1, amending RL-155 R-B's 20 minutes)** after the latest close of anything on this host (span, Part C or F0, slot session, W1): every restore line of that close passed and its Check (with the hash-verified journal copy) is reported, and at least GAP seconds have passed. GAP is QUIET_CAMPAIGN_S when the latest close was a campaign span (300 s, confirmed by RL-172 §0), and 1,200 s after a Part C or F0, F2, a slot session or W1. The close is read from the newest `runner_receipt.json` under `/Users/edr/campaign-out` and `/Users/edr/code/jw-wt`, from a census that stops on a missing root, any lookup error or an empty result, with fractional mtimes rounded up; or OTHER_CLOSE_EPOCH for a session's close, which is required (a whole epoch or an explicit 0; unset or empty stops).
+  - **The close interval (RL-171 §6.1, amending RL-155 R-B's 20 minutes)** after the latest close of anything on this host (span, Part C or F0, slot session, W1): every restore line of that close passed and its Check (with the hash-verified journal copy) is reported, and at least GAP seconds have passed. GAP is QUIET_CAMPAIGN_S when the latest close was a campaign span (300 s, confirmed by RL-172 §0), and 1,200 s after a Part C or F0, F2, a slot session or W1. The close is read from the newest `runner_receipt.json` under `/Users/edr/campaign-out` and `/Users/edr/code/jw-wt`, from a census that stops on a missing root, any lookup error or an empty result, with fractional recorded close epochs rounded up; or OTHER_CLOSE_EPOCH for a session's close, which is required (a whole epoch or an explicit 0; unset or empty stops).
   - **The complete eligibility check runs twice:** in "Start and check" and again as the first step of "Run", on state re-read at that moment (the current clock, the current W1-line head, the expiry, the refusal and reply state, the staged items' window ends, the session READY record, LAST_CLOSE_KIND, the restart hold). The launch follows it with nothing in between but the deadline.
   - The usual restore before the launch and again in "Check": AC with powermode 0; network time OFF; the kernel frequency word at 0 (item 251's remedy if not); no stray `km003c_monitor.py`, `hazard_monitor.py` or root `powermetrics`; no High Power marker; `night.lock` with no holder (an hp-01 span holds it while it runs). `sudo -n -l /bin/kill` rc 0. Leave `night.lock` as found.
   - **High Power marker:** if `/Users/Shared/JouleWise/host-power/high-power.marker` exists, STOP and report. Never run `restore-owed` under this item.
@@ -91,30 +91,30 @@ mkdir -p "$CUSTODY/standing-f0"
 # ONE newest-close selection over both roots, used by the host gate and by copy_gate (Sol RL-172 re-check 1)
 close_census() {
   CENSUS="$("$PY" -I -B - /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
-import math, os, sys
-def fail(e):
-    raise e
-newest, path, count = None, None, 0
+import json, math, os, sys
+def fail(e): raise e
+found = []
 for root in sys.argv[1:]:
-    if not os.path.isdir(root):
-        sys.exit(f"STOP: receipt root missing: {root}")
-    base = root.rstrip("/").count("/")
-    for dirpath, dirnames, filenames in os.walk(root, onerror=fail):
-        if dirpath.count("/") - base >= 3:
-            dirnames[:] = []          # receipts at depth <= 4, as `find -maxdepth 4`
-        if "runner_receipt.json" in filenames:
-            p = os.path.join(dirpath, "runner_receipt.json")
-            m = os.stat(p).st_mtime
-            count += 1
-            if newest is None or m > newest:
-                newest, path = m, p
-if count == 0:
-    sys.exit("STOP: the receipt census found no runner_receipt.json; receipts are expected on this host")
-if "\n" in path:
-    sys.exit("STOP: newline in a receipt path")
-print(math.ceil(newest))
-print(path)
-print(f"census: {count} receipts, newest mtime {newest!r} {path}", file=sys.stderr)
+    if not os.path.isdir(root): sys.exit('STOP: missing receipt root: ' + root)
+    base = root.rstrip('/').count('/')
+    for d, dirs, files in os.walk(root, onerror=fail):
+        if d.count('/') - base >= 3: dirs[:] = []
+        if 'runner_receipt.json' in files:
+            p = os.path.join(d, 'runner_receipt.json')
+            if '\n' in p: sys.exit('STOP: bad receipt path')
+            try:
+                with open(p) as handle: ended = json.load(handle)['ended']['epoch_s']
+                if (isinstance(ended, bool) or not isinstance(ended, (int, float))
+                        or not math.isfinite(ended) or ended <= 0):
+                    raise ValueError('invalid ended.epoch_s')
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
+            found.append((ended, p))
+if not found: sys.exit('STOP: empty receipt census')
+latest = max(t for t, p in found)
+newest = [p for t, p in found if t == latest]
+if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt close epoch')
+print(math.ceil(latest)); print(newest[0])
 PY
 )" || return 1
   CENSUS_EPOCH="$(printf '%s\n' "$CENSUS" | sed -n 1p)"
@@ -223,7 +223,7 @@ HASHES
   pgrep -fl 'cadence_legs_runner|launch_cadence_span' >/dev/null && { echo "STOP: a campaign span is running"; return 1; }
   { test ! -e /Users/Shared/JouleWise/host-power/high-power.marker && test ! -L /Users/Shared/JouleWise/host-power/high-power.marker; } || { echo "STOP: High Power marker"; return 1; }
   case "${OTHER_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo "STOP: OTHER_CLOSE_EPOCH must be set to a whole epoch (rounded up) or an explicit 0 (unset or empty stops)"; return 1;; esac
-  # The receipt census: every runner_receipt.json at depth <= 4 under both roots, fractional mtimes, ROUNDED UP.
+  # The receipt census: every runner_receipt.json at depth <= 4 under both roots, fractional recorded close epochs, ROUNDED UP.
   # Any lookup error, a missing root, or no receipt at all STOPS: missing evidence never becomes 0 (Sol re-check 2, 3).
   effective_close || { echo "STOP: the receipt census failed; missing evidence stops the launch; mail the lead"; return 1; }
   HOST_LAST_CLOSE=$EFF_EPOCH    # the effective close (max of the census and OTHER_CLOSE_EPOCH), computed once (Sol confirm P1)

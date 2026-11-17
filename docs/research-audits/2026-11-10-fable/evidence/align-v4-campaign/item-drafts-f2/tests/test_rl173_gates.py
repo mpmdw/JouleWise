@@ -35,6 +35,7 @@ def run_item(item, shell):
     cfg = re.search(r'PIECE=.+\n',blocks[0]).group()
     pick = re.search(r'pick_arg\(\) \{.*?\n\}',blocks[0],re.S).group()
     gates = blocks[0].split('# BEGIN TESTABLE GATES\n')[1].split('# END TESTABLE GATES')[0]
+    assert gates == (HERE/'gates.sh').read_text().split('# BEGIN TESTABLE GATES\n')[1].split('# END TESTABLE GATES')[0]
     assert gates.count(ISSUE) == gates.count(WATCH) == 1
     # The gates tested must also be the gates used twice by the runnable item.
     assert sum(b.count('all_gates || exit 1') for b in blocks) == 2
@@ -68,15 +69,19 @@ def run_item(item, shell):
             os.utime(predout/'runner_receipt.json',(now-4000,now-4000))
             for leg in item['predecessor_legs']:
                 dump(predout/'desk-bundle'/'legs'/leg/'leg_summary.json',{'wall_s':1361,'budget_s':1361,'contaminated_redos':0})
-            dump(current/'runner_receipt.json',{'synthetic_fixture':True})
+            dump(current/'runner_receipt.json',{'synthetic_fixture':True,'ended':{'epoch_s':now-1200}})
             os.utime(current/'runner_receipt.json',(now-1200,now-1200))
             (markers/f'{latest_id}.ok').write_text('SYNTHETIC verified plaintext/ciphertext hashes, size, provider confirmation\n')
+        def close_stamp(path, epoch):
+            r=json.loads(path.read_text()); r['ended']={'epoch_s':epoch}; dump(path,r)
         def mutate_receipt(**kwargs):
             p=predout/'runner_receipt.json'; r=json.loads(p.read_text()); r.update(kwargs); dump(p,r)
             os.utime(p,(now-4000,now-4000))
         def summary(leg, **kwargs):
             p=predout/'desk-bundle'/'legs'/leg/'leg_summary.json'; s=json.loads(p.read_text()); s.update(kwargs); dump(p,s)
-        defaults = dict(PRIOR_CLOSE_EPOCH=now-4000, OTHER_CLOSE_EPOCH=0, HOST_RESTORE_OK=1, GROUPS_ABSENT=1,
+        defaults = dict(NONCAMPAIGN_COPY_OK='yes', NONCAMPAIGN_COPY_CLOSE_EPOCH=now-1200,
+                        NONCAMPAIGN_COPY_RECEIPT=str(current/'runner_receipt.json'), NONCAMPAIGN_COPY_RECORD='synthetic Check and verified copy',
+                        PRIOR_CLOSE_EPOCH=now-4000, OTHER_CLOSE_EPOCH=0, HOST_RESTORE_OK=1, GROUPS_ABSENT=1,
                         LAST_CLOSE_KIND='other', SESSION_READY='no',HP_READY='no',P_READY='no',
                         F0_ELIGIBLE='no', F0_REASON='daily_cap',OUTSTANDING_REFUSAL='none', F2_STOPS_CLEAR='yes',
                         RESTART_PENDING='no',NEXT_COUNTED_EPOCH=now+13010,PRIORITY_EVIDENCE='synthetic fresh staged/READY census',
@@ -122,30 +127,39 @@ def run_item(item, shell):
         check('kit void',stamp=1795325340,issued=1795325300,watch=1795325400,want=False,command='expiry_gate')
         check('missing root',lambda:shutil.rmtree(wt),want=False,contains='missing receipt root')
         check('empty census',lambda:[p.unlink() for p in root.rglob('runner_receipt.json')],want=False,command='effective_close',contains='empty receipt census')
-        check('ambiguous newest receipt',lambda:os.utime(predout/'runner_receipt.json',(now-1200,now-1200)),want=False,command='effective_close',contains='ambiguous newest')
-        check('round fractional close up',lambda:os.utime(current/'runner_receipt.json',(now-1199.9,now-1199.9)),want=False,contains='interval 1200')
+        check('ambiguous newest receipt',lambda:close_stamp(predout/'runner_receipt.json',now-1200),want=False,command='effective_close',contains='ambiguous newest')
+        check('round fractional close up',lambda:close_stamp(current/'runner_receipt.json',now-1199.9),overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1199},want=False,contains='interval 1200')
         check('F2 gap exactly 1200')
-        check('F2 gap 1199',lambda:os.utime(current/'runner_receipt.json',(now-1199,now-1199)),want=False)
+        check('F2 gap 1199',lambda:close_stamp(current/'runner_receipt.json',now-1199),overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1199},want=False)
         check('restore unproven',overrides={'HOST_RESTORE_OK':0},want=False)
         check('group absence unproven',overrides={'GROUPS_ABSENT':0},want=False)
         check('kind contradiction',overrides={'LAST_CLOSE_KIND':'campaign'},want=False)
         check('OTHER unset',overrides={'OTHER_CLOSE_EPOCH':None},want=False)
         check('OTHER newer without copy',overrides={'OTHER_CLOSE_EPOCH':now-1200},
-              setup=lambda:os.utime(current/'runner_receipt.json',(now-1300,now-1300)),want=False)
+              setup=lambda:close_stamp(current/'runner_receipt.json',now-1300),want=False)
         def other_copy():
-            os.utime(current/'runner_receipt.json',(now-1300,now-1300))
+            close_stamp(current/'runner_receipt.json',now-1300)
             (markers/'slot-synthetic.ok').write_text('SYNTHETIC verified offload')
-        check('OTHER newer with copy',overrides={'OTHER_CLOSE_EPOCH':now-1200,'OTHER_COPY_PLAN_ID':'slot-synthetic'},setup=other_copy)
+        check('OTHER newer with copy',overrides={'OTHER_CLOSE_EPOCH':now-1200,'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1200,'NONCAMPAIGN_COPY_RECEIPT':'OTHER'},setup=other_copy)
         def campaign_close(age):
             dest=root/'cl-dev-04'/'cq-dev-04-s02-a1-20261117T090000Z'; dest.parent.mkdir(parents=True)
             current.rename(dest)
-            os.utime(dest/'runner_receipt.json',(now-age,now-age))
+            close_stamp(dest/'runner_receipt.json',now-age)
             (markers/f'{latest_id}.ok').rename(markers/'cq-dev-04-s02-a1.ok')
         check('campaign gap exactly 300',lambda:campaign_close(300),overrides={'LAST_CLOSE_KIND':'campaign'})
         check('campaign gap 299',lambda:campaign_close(299),overrides={'LAST_CLOSE_KIND':'campaign'},want=False,contains='interval 300')
-        check('no copy marker',lambda:shutil.rmtree(markers),want=False,contains='WAIT')
-        check('empty copy marker',lambda:(markers/f'{latest_id}.ok').write_text(''),want=False)
-        check('Air marker accepted',lambda:(markers/f'{latest_id}.ok').rename(markers/f'{latest_id}.air.ok'))
+        def campaign_marker(kind):
+            campaign_close(300); marker=markers/'cq-dev-04-s02-a1.ok'
+            if kind=='missing': marker.unlink()
+            elif kind=='empty': marker.write_text('')
+            else: marker.rename(marker.with_name('cq-dev-04-s02-a1.air.ok'))
+        check('no campaign copy marker',lambda:campaign_marker('missing'),overrides={'LAST_CLOSE_KIND':'campaign'},want=False,contains='WAIT')
+        check('empty campaign copy marker',lambda:campaign_marker('empty'),overrides={'LAST_CLOSE_KIND':'campaign'},want=False)
+        check('Air marker accepted',lambda:campaign_marker('air'),overrides={'LAST_CLOSE_KIND':'campaign'})
+        check('noncampaign Check needs no marker',lambda:shutil.rmtree(markers),contains='COPY CHECK VERIFIED')
+        for key in ('NONCAMPAIGN_COPY_OK','NONCAMPAIGN_COPY_CLOSE_EPOCH','NONCAMPAIGN_COPY_RECEIPT','NONCAMPAIGN_COPY_RECORD'):
+            check('noncampaign proof missing '+key,overrides={key:None},want=False,contains='WAIT')
+        check('unfilled noncampaign proof',overrides={'NONCAMPAIGN_COPY_RECORD':'<LEAD FILLS: Check>'},want=False,contains='WAIT')
         for key in ('SESSION_READY','HP_READY','P_READY'):
             check(key+' takes precedence',overrides={key:'yes'},want=False,contains='CEDE')
             check(key+' unknown stops',overrides={key:None},want=False)

@@ -1,0 +1,15 @@
+PASS ITEM-dev02-s03.md bash recorded close identity and copy regressions
+PASS ITEM-dev02-s03.md zsh recorded close identity and copy regressions
+PASS ITEM-dev03-pilot.md bash recorded close identity and copy regressions
+PASS ITEM-dev03-pilot.md zsh recorded close identity and copy regressions
+PASS ITEM-dev03-rest.md bash recorded close identity and copy regressions
+PASS ITEM-dev03-rest.md zsh recorded close identity and copy regressions
+PASS ITEM-dev04-s01.md bash recorded close identity and copy regressions
+PASS ITEM-dev04-s01.md zsh recorded close identity and copy regressions
+PASS ITEM-dev04-s02.md bash recorded close identity and copy regressions
+PASS ITEM-dev04-s02.md zsh recorded close identity and copy regressions
+PASS ITEM-dev05-s01.md bash recorded close identity and copy regressions
+PASS ITEM-dev05-s01.md zsh recorded close identity and copy regressions
+PASS ITEM-dev05-s02.md bash recorded close identity and copy regressions
+PASS ITEM-dev05-s02.md zsh recorded close identity and copy regressions
+210 close/copy regression checks; zero failures; bash and zsh; synthetic only

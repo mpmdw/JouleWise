@@ -1,0 +1,27 @@
+pin 2d347f721552fe03bdd19f113e7bad7a7c24908e; kit sha256 651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b; f2-p02: L004,L005,L006
+Synthetic schedule; actual pinned plan CLI; no measurement/custody reads.
+expected_s 7442; worst_case_s 11250; launch reserve 560; fence reserve 1460
+PASS 2026-11-18T00:00:00-08:00 epoch 1794988800 arg 13:14-13:15: rc 0, expected admit
+PASS 2026-11-18T02:34:59-08:00 epoch 1794998099 arg 02:00-02:35: rc 1, expected refuse
+PASS 2026-11-18T02:34:59-08:00 epoch 1794998099 arg 13:14-13:15: rc 0, expected admit
+PASS 2026-11-18T02:35:00-08:00 epoch 1794998100 arg 02:00-02:35: rc 0, expected admit
+PASS 2026-11-18T02:35:00-08:00 epoch 1794998100 arg 13:14-13:15: rc 0, expected admit
+PASS 2026-11-18T09:32:10-08:00 epoch 1795023130 arg 02:00-02:35: rc 0, expected admit
+PASS 2026-11-18T09:32:10-08:00 epoch 1795023130 arg 13:14-13:15: rc 0, expected admit
+PASS 2026-11-18T09:32:11-08:00 epoch 1795023131 arg 02:00-02:35: rc 0, expected admit
+PASS 2026-11-18T09:32:11-08:00 epoch 1795023131 arg 13:14-13:15: rc 1, expected refuse
+PASS 2026-11-18T10:50:00-08:00 epoch 1795027800 arg 02:00-02:35: rc 0, expected admit
+PASS 2026-11-18T10:50:00-08:00 epoch 1795027800 arg 13:14-13:15: rc 1, expected refuse
+PASS 2026-11-18T10:50:01-08:00 epoch 1795027801 arg 02:00-02:35: rc 1, expected refuse
+PASS 2026-11-18T10:50:01-08:00 epoch 1795027801 arg 13:14-13:15: rc 1, expected refuse
+PASS 2026-11-18T13:14:59-08:00 epoch 1795036499 arg 02:00-02:35: rc 1, expected refuse
+PASS 2026-11-18T13:14:59-08:00 epoch 1795036499 arg 13:14-13:15: rc 1, expected refuse
+PASS 2026-11-18T13:15:00-08:00 epoch 1795036500 arg 02:00-02:35: rc 0, expected admit
+PASS 2026-11-18T13:15:00-08:00 epoch 1795036500 arg 13:14-13:15: rc 0, expected admit
+PASS 2026-11-18T22:13:10-08:00 epoch 1795068790 arg 02:00-02:35: rc 0, expected admit
+PASS 2026-11-18T22:13:10-08:00 epoch 1795068790 arg 13:14-13:15: rc 0, expected admit
+PASS 2026-11-18T22:18:10-08:00 epoch 1795069090 arg 02:00-02:35: rc 0, expected admit
+PASS 2026-11-18T22:18:10-08:00 epoch 1795069090 arg 13:14-13:15: rc 0, expected admit
+PASS 2026-11-18T22:18:11-08:00 epoch 1795069091 arg 02:00-02:35: rc 1, expected refuse
+PASS 2026-11-18T22:18:11-08:00 epoch 1795069091 arg 13:14-13:15: rc 0, expected admit
+PASS 2026-11-18T23:59:59-08:00 epoch 1795075199 arg 13:14-13:15: rc 0, expected admit

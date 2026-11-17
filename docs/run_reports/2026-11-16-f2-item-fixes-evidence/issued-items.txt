@@ -1,0 +1,32 @@
+Issued source 0656dfe3a4263629e1d752933d386b99145fe8ac ; synthetic counterexamples only
+354 bash NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+354 bash NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+354 bash DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+354 zsh NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+354 zsh NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+354 zsh DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+355 bash NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+355 bash NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+355 bash DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+355 zsh NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+355 zsh NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+355 zsh DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+366 bash NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+366 bash NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+366 bash DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+366 zsh NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+366 zsh NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+366 zsh DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+367 bash NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+367 bash NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+367 bash DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+367 zsh NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+367 zsh NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+367 zsh DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+372 bash NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+372 bash NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+372 bash DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+372 zsh NORMAL ORDER: uncopied latest holds | rc 1 | WAIT
+372 zsh NORMAL ORDER: latest copy admits | rc 0 | journal copy of cq-dev-04-s02-a1
+372 zsh DEFECT: restored old mtime accepts old marker | rc 0 | journal copy of cq-dev-01-s04-a1
+30 expected observations reproduced; all five issued items carry the defect in both shells

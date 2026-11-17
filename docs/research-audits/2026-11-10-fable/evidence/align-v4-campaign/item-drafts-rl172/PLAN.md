@@ -1,5 +1,7 @@
 # MBP chain under RL-171 and RL-172, Sun 15 Nov 00:20 to Wed 18 Nov
 
+Repair note, 2026-11-16: these older unissued templates also received the recorded `ended.epoch_s` census fix. Use the RL-173/current 1115 forms for any issuance; this older chain and its captured tests are historical. New regression results are recorded with the F2 fix report. Historical plans, mock bundles and test captures remain unchanged.
+
 Items builder. First draft Sat 14 Nov 23:51 to Sun 15 Nov 00:21 PST; revised for RL-172 and the Sol items review Sun 15 Nov 00:40-00:50 PST (from `date`). Nothing was issued, committed or pushed, there was no SSH, and RUN_STATE was not touched. No energy, power, meter-sample, powermetrics, transcript, slot or custody file was opened; plans and mocks are synthetic. The RL-172 revision is listed in `CHANGES-RL172.md`.
 
 **The rules this chain applies.**

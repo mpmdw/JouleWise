@@ -53,3 +53,9 @@ python3 -B build_items.py --dates qual-01=2026-11-20,qual-02=2026-11-21,qual-03=
 ```
 
 Fetch the source refs first if absent. The generator extracts only allowlisted Python/shell source and two configs into a disposable directory **inside this folder**, never a worktree or measurement root. Runner tests create labeled synthetic Git coefficients/queues and mock spans there, then remove them. Both bash and zsh are required. Next exact step: lead records Q2 (Q1 is needed only to loosen the conservative shared-date rule), commits freeze2 coefficient file, supplies admission/host/queue/operational pointers, stages on a clean close, and issues only the next ≤3 spans inside their 24 h windows; magistrate alone runs the issued native item.
+
+## Close-census repair — 2026-11-16
+
+All unissued item copies now select the latest close by the receipt's recorded `ended.epoch_s`, never filesystem mtime. Identity is chosen before ceiling to whole seconds; missing/unreadable/invalid stamps and equal latest epochs stop. The exact selected campaign span's marker remains mandatory. The non-campaign Check rule is unchanged. Generators carry the same repair; the 1118 standing-F0 renewal is included. Earlier test captures and source-item evidence are preserved.
+
+New tests execute the embedded functions in bash and zsh, keeping an older receipt's bytes unchanged while giving it a later mtime; its marker cannot authorize a newer uncopied campaign. The actual latest marker passes. New evidence lives under `evidence/fix-2026-11-16/{bash,zsh}/`; the current standing renewal's derivative comparison is `evidence/fix-2026-11-16/standing-f0-r2.diff`. See `docs/run_reports/2026-11-16-f2-item-fixes.md` for results and the issued-item assessment. This repair issues no item and clears no live prerequisite.

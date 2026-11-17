@@ -102,5 +102,7 @@ try:
                                   'qualification':'SYNTHETIC; stage_completed warmup includes post-warmup settling; do not label it the inference-end stamp'}
 finally:
     T.tearDownClass()
-(HERE/'evidence/kit-recheck.json').write_text(json.dumps(report,indent=2)+'\n')
+evidence = Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence/fix-2026-11-16'))
+evidence.mkdir(parents=True, exist_ok=True)
+(evidence/'kit-recheck.json').write_text(json.dumps(report,indent=2)+'\n')
 print('PASS pinned kit, generated layout, queue a, temporary queue b, eight mock spans, q600 synthetic runtime')

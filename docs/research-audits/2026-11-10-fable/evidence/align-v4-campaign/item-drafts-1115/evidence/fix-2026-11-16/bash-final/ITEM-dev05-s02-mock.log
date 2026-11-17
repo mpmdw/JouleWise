@@ -1,0 +1,9 @@
+{
+ "rc": 0,
+ "legs": 6,
+ "stops": [],
+ "receipt": "/Volumes/JW-EXT/tmp/jw-1115-mocks-ni435acb/ITEM-dev05-s02/runner_receipt.json",
+ "table": "/Volumes/JW-EXT/tmp/jw-1115-mocks-ni435acb/ITEM-dev05-s02/desk/JOURNAL-TABLE.md"
+}
+/Volumes/JW-EXT/jw-wt/desk-final-pin-2d347f721/scripts/align_r1_rehearsal.py:1986: SyntaxWarning: 'return' in a 'finally' block
+  return 4

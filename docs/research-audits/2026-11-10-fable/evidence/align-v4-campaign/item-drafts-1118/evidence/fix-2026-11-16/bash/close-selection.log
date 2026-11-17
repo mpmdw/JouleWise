@@ -1,0 +1,15 @@
+PASS ITEM-qual01-s01.md bash recorded close identity and copy regressions
+PASS ITEM-qual01-s01.md zsh recorded close identity and copy regressions
+PASS ITEM-qual01-s02.md bash recorded close identity and copy regressions
+PASS ITEM-qual01-s02.md zsh recorded close identity and copy regressions
+PASS ITEM-qual02-s01.md bash recorded close identity and copy regressions
+PASS ITEM-qual02-s01.md zsh recorded close identity and copy regressions
+PASS ITEM-qual02-s02.md bash recorded close identity and copy regressions
+PASS ITEM-qual02-s02.md zsh recorded close identity and copy regressions
+PASS ITEM-qual03-s01.md bash recorded close identity and copy regressions
+PASS ITEM-qual03-s01.md zsh recorded close identity and copy regressions
+PASS ITEM-qual03-s02.md bash recorded close identity and copy regressions
+PASS ITEM-qual03-s02.md zsh recorded close identity and copy regressions
+PASS STANDING-F0-r2.md bash recorded close identity and copy regressions
+PASS STANDING-F0-r2.md zsh recorded close identity and copy regressions
+246 close/copy regression checks; zero failures; bash and zsh; synthetic only

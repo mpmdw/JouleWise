@@ -1,0 +1,6 @@
+74 shell syntax checks; 60 Python programs compiled; BAD 0
+246 close/copy regression checks; zero failures; bash and zsh; synthetic only
+91 pinned checks; zero failures; source/config plus synthetic files only
+1092 synthetic gate checks; 0 failures; exact item functions under bash and zsh
+21 standing-F0 checks; zero failures; unchanged hash table/launch/Check and spacing/day/window rules
+7 generator checks; zero failures; isolated default items/queues/plans restored byte for byte

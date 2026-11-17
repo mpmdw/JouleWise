@@ -1,0 +1,22 @@
+PASS bash renewal unissued
+PASS bash renewal early
+PASS bash renewal start
+PASS bash renewal last second
+PASS bash renewal expiry
+PASS bash renewal later actual issue
+PASS zsh renewal unissued
+PASS zsh renewal early
+PASS zsh renewal start
+PASS zsh renewal last second
+PASS zsh renewal expiry
+PASS zsh renewal later actual issue
+PASS F0 original ledger law 02:34:59 refused
+PASS F0 original ledger law 02:35 admitted
+PASS F0 original ledger law 22:40 admitted
+PASS F0 original ledger law 22:40:01 refused
+PASS F0 original ledger law spacing 14399 refused
+PASS F0 original ledger law spacing 14400 allowed
+PASS F0 original ledger law three today refused
+PASS F0 original ledger law counted bound exact allowed
+PASS F0 original ledger law counted bound second short refused
+21 standing-F0 checks; zero failures; unchanged hash table/launch/Check and spacing/day/window rules

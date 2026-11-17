@@ -1,0 +1,8 @@
+PASS ITEM-qual01-s01.md 4 sh blocks; Python heredocs compile
+PASS ITEM-qual01-s02.md 4 sh blocks; Python heredocs compile
+PASS ITEM-qual02-s01.md 4 sh blocks; Python heredocs compile
+PASS ITEM-qual02-s02.md 4 sh blocks; Python heredocs compile
+PASS ITEM-qual03-s01.md 4 sh blocks; Python heredocs compile
+PASS ITEM-qual03-s02.md 4 sh blocks; Python heredocs compile
+PASS STANDING-F0-r2.md 4 sh blocks; Python heredocs compile
+74 shell syntax checks; 60 Python programs compiled; BAD 0

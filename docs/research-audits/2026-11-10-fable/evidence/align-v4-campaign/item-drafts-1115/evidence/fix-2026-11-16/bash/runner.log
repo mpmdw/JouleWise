@@ -1,0 +1,17 @@
+lint.log BAD 0
+close-selection.log 210 close/copy regression checks; zero failures; bash and zsh; synthetic only
+ITEM-dev02-s03-mock.log }
+ITEM-dev02-s03-gates.log FAILS 0
+ITEM-dev03-pilot-mock.log }
+ITEM-dev03-pilot-gates.log FAILS 0
+ITEM-dev03-rest-mock.log }
+ITEM-dev03-rest-gates.log FAILS 0
+ITEM-dev04-s01-mock.log }
+ITEM-dev04-s01-gates.log FAILS 0
+ITEM-dev04-s02-mock.log }
+ITEM-dev04-s02-gates.log FAILS 0
+ITEM-dev05-s01-mock.log }
+ITEM-dev05-s01-gates.log FAILS 0
+ITEM-dev05-s02-mock.log }
+ITEM-dev05-s02-gates.log FAILS 0
+PASS seven drafts: syntax, close/copy regressions, seven pinned mocks, 238 predecessor/expiry/watcher checks

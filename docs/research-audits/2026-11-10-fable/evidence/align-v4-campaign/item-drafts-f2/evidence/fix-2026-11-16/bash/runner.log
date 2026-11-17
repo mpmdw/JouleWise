@@ -1,0 +1,25 @@
+Verification started 2026-11-17T02:19:39Z
+PASS f2-p01 bash gate cases complete
+PASS f2-p02 bash gate cases complete
+PASS f2-p03 bash gate cases complete
+PASS f2-p04 bash gate cases complete
+PASS f2-p01 zsh gate cases complete
+PASS f2-p02 zsh gate cases complete
+PASS f2-p03 zsh gate cases complete
+PASS f2-p04 zsh gate cases complete
+872 synthetic gate checks; 0 failures; both bash and zsh; no MBP/custody
+PASS ITEM-f2-p01.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p01.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p02.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p02.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p03.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p03.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p04.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p04.md zsh recorded close identity and copy regressions
+144 close/copy regression checks; zero failures; bash and zsh; synthetic only
+/Volumes/JW-EXT/jw-wt/desk-final-pin-2d347f721/scripts/align_r1_rehearsal.py:1986: SyntaxWarning: 'return' in a 'finally' block
+  return 4
+PASS pinned kit, generated layout, queue a, temporary queue b, eight mock spans, q600 synthetic runtime
+PASS bash local staging: dry, create, reuse, all pieces, hand/commit/fence/dirty/hash refusals
+PASS zsh local staging: dry, create, reuse, all pieces, hand/commit/fence/dirty/hash refusals
+22 local staging checks; no network or MBP

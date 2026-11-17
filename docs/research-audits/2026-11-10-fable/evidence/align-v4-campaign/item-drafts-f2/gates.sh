@@ -65,7 +65,7 @@ PY
 effective_close() {
   case "${OTHER_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo 'STOP: OTHER_CLOSE_EPOCH required, explicit 0 if none'; return 1;; esac
   CENSUS="$("$PY" -I -B - /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
-import math, os, sys
+import json, math, os, sys
 def fail(e): raise e
 found = []
 for root in sys.argv[1:]:
@@ -74,13 +74,21 @@ for root in sys.argv[1:]:
     for d, dirs, files in os.walk(root, onerror=fail):
         if d.count('/') - base >= 3: dirs[:] = []
         if 'runner_receipt.json' in files:
-            p = os.path.join(d, 'runner_receipt.json'); m = os.stat(p).st_mtime
-            if not math.isfinite(m) or '\n' in p: sys.exit('STOP: bad receipt path/stamp')
-            found.append((m, p))
+            p = os.path.join(d, 'runner_receipt.json')
+            if '\n' in p: sys.exit('STOP: bad receipt path')
+            try:
+                with open(p) as handle: ended = json.load(handle)['ended']['epoch_s']
+                if (isinstance(ended, bool) or not isinstance(ended, (int, float))
+                        or not math.isfinite(ended) or ended <= 0):
+                    raise ValueError('invalid ended.epoch_s')
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
+            found.append((ended, p))
 if not found: sys.exit('STOP: empty receipt census')
-m = max(t for t, p in found); newest = [p for t, p in found if t == m]
-if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt')
-print(math.ceil(m)); print(newest[0])
+latest = max(t for t, p in found)
+newest = [p for t, p in found if t == latest]
+if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt close epoch')
+print(math.ceil(latest)); print(newest[0])
 PY
 )" || return 1
   EFF_EPOCH="$(printf '%s\n' "$CENSUS" | sed -n 1p)"
@@ -90,12 +98,17 @@ PY
   fi
 }
 copy_gate() (
-  # Verified marker written by the MBP offloader or Air, never by this item.
-  if test "$EFF_PATH" = OTHER; then
-    id="${OTHER_COPY_PLAN_ID:-}"
-  else
-    id="$(basename "$(dirname "$EFF_PATH")" | sed -E 's/-[0-9]{8}T[0-9]{6}Z$//')"
-  fi
+  # RL-171 §6.1/RL-173 A: campaign marker, or exact latest non-campaign Check's copy proof.
+  case "$EFF_PATH" in
+    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json)
+      id="$(basename "$(dirname "$EFF_PATH")" | sed -E 's/-[0-9]{8}T[0-9]{6}Z$//')";;
+    *)
+      test "${NONCAMPAIGN_COPY_OK:-}" = yes && test "${NONCAMPAIGN_COPY_CLOSE_EPOCH:-}" = "$EFF_EPOCH" \
+        && test "${NONCAMPAIGN_COPY_RECEIPT:-}" = "$EFF_PATH" && test -n "${NONCAMPAIGN_COPY_RECORD:-}" \
+        || { echo 'WAIT: exact latest non-campaign Check/copy proof missing (RL-171 §6.1; RL-173 A)'; exit 1; }
+      case "$NONCAMPAIGN_COPY_RECORD" in *'<LEAD '*) echo 'WAIT: unfilled non-campaign Check/copy record'; exit 1;; esac
+      echo "COPY CHECK VERIFIED receipt $EFF_PATH close $EFF_EPOCH: $NONCAMPAIGN_COPY_RECORD"; exit 0;;
+  esac
   case "$id" in ''|*[!a-zA-Z0-9_.-]*) echo 'STOP: missing/invalid copy plan id'; exit 1;; esac
   for marker in "/Users/Shared/JouleWise/desk-copy/$id.ok" "/Users/Shared/JouleWise/desk-copy/$id.air.ok"; do
     if test -s "$marker"; then echo "COPY VERIFIED $id: $(cat "$marker")"; exit 0; fi

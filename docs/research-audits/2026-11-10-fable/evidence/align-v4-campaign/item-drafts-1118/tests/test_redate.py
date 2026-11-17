@@ -2,13 +2,23 @@
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
+import tempfile
 import sys
-HERE=Path(__file__).resolve().parents[1]; checks=0
+SOURCE=Path(__file__).resolve().parents[1]; checks=0
+# Exercise the mutating generator only in an isolated copy, never over source
+# drafts or their retained evidence. The copy stays inside this Git repository.
+temporary=tempfile.TemporaryDirectory(prefix='.redate-fixture-',dir=SOURCE.parent)
+fixture=Path(temporary.name)
+HERE=fixture/'item-drafts-1118'
+shutil.copytree(SOURCE,HERE,ignore=shutil.ignore_patterns('.synthetic-*','.pinned-*'))
+shutil.copytree(SOURCE.parent/'item-drafts-1115',fixture/'item-drafts-1115')
 def call(*args,ok=True):
     global checks
     r=subprocess.run([sys.executable,'-B',str(HERE/'build_items.py'),*args],text=True,capture_output=True)
     assert (r.returncode==0)==ok,(args,r.stdout,r.stderr); checks+=1; return r
+call()  # Establish this fixture's default output at the current source refs.
 paths=[*HERE.glob('ITEM-*.md'),*HERE.glob('queues/*.json'),*HERE.glob('evidence/plan-*.json')]
 before={str(p.relative_to(HERE)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
 try:
@@ -26,4 +36,5 @@ try:
 finally:
     call()
 after={str(p.relative_to(HERE)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}; assert before==after
-print(checks,'generator checks; zero failures; default items/queues/plans restored byte for byte')
+temporary.cleanup()
+print(checks,'generator checks; zero failures; isolated default items/queues/plans restored byte for byte')

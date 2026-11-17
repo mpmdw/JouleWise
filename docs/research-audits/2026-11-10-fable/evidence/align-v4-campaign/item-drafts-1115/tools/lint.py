@@ -1,6 +1,7 @@
 """Syntax-check every sh block (bash -n and zsh -n, placeholders stubbed) and every python heredoc of each item."""
 import re, subprocess, sys, glob, os
-D = "/Volumes/JW-EXT/scratch/items-1115"; bad = 0
+from pathlib import Path
+D = str(Path(__file__).resolve().parents[1]); bad = 0
 for f in sorted(glob.glob(f"{D}/ITEM-*.md")):
     t = open(f).read()
     blocks = re.findall(r"```sh\n(.*?)```", t, re.S)

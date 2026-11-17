@@ -1,20 +1,20 @@
-TBD. **Laptop lead, drafted by Sol 6.1; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm F2 instrument-characterization piece 3 only, span `f2-inst-p3`, kit `f2-inst-01.v1.1` (sha256 `651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b`), runner `cadence-legs-v1.1`, detached pin `2d347f721552fe03bdd19f113e7bad7a7c24908e`. Roster L007,L008,L009: L007 256 tokens, L008 2,000 tokens, L009 19,458 tokens; own-shaped G0, q600, decode cap 512, Automatic. Fresh soak, then three legs; expected 7,442 s, worst case 11,250 s. These are instrument legs, outside every campaign count and look. Predecessor `f2-inst-p2` must have a clean close receipt or this item is VOID and never skipped. EARLIEST Tue 17 Nov 2026 00:00:00 PST (1794902400); LIMIT Tue 17 Nov 23:59:59 PST (1794988799), shortened by 24 h after issue. F2 is a filler: it cedes to all armable counted work and a READY v4 session; use the complete priority trigger below. Launch is the last action; exit immediately. Nothing else is authorized.**
+TBD. **Laptop lead, drafted by Sol 6.1; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm F2 instrument-characterization piece 3 only, span `f2-inst-p3`, kit `f2-inst-01.v1.1` (sha256 `651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b`), runner `cadence-legs-v1.1`, detached pin `2d347f721552fe03bdd19f113e7bad7a7c24908e`. Roster L007,L008,L009: L007 256 tokens, L008 2,000 tokens, L009 19,458 tokens; own-shaped G0, q600, decode cap 512, Automatic. Fresh soak, then three legs; expected 7,442 s, worst case 11,250 s. These are instrument legs, outside every campaign count and look. Predecessor `f2-inst-p2` must have a clean close receipt or this item is VOID and never skipped. EARLIEST Wed 18 Nov 2026 00:00:00 PST (1794988800); LIMIT Wed 18 Nov 23:59:59 PST (1795075199), shortened by 24 h after issue. F2 is a filler: it cedes to all armable counted work and a READY v4 session; use the complete priority trigger below. Launch is the last action; exit immediately. Nothing else is authorized.**
 
 ```pointer
 owner: magistrate
 wait: none
-deadline: 2026-11-18T04:31:49-08:00
+deadline: 2026-11-19T04:31:49-08:00
 on_early_or_refused: WAIT if predecessor has not closed or a higher rung can arm; VOID if predecessor is not clean, the date window is missed, or 24 h has elapsed since issue. No retry after a launcher/runner refusal; report to the lead. Never skip a predecessor, reuse OUT, re-run a leg, or queue another piece on this item's authority
 next_observable: after the fence is gone, Check below reports operational receipt/leg records, feeds, restore and copy; piece 1's hand-read is lead-owned
 ```
 
 - **Admission and authority (RL-169; RL-169a).** Data only; frozen pin and all 38 path hashes unchanged. Queue b is intentionally absent until the lead records piece 1's PASS hand-read. The lead commits a new `cq-f2-inst-01-b` queue containing pieces 2–4 in kit order, expiry `2026-11-21T21:29:00-08:00`, and fills QUEUE_FILE and QUEUE_SHA below. Do not issue or stage this item before that commit. Require the independent executing re-check, dev-03's first span closed on this same pin with all restore lines passed, line 2 carried from the dev-03 item by frozen-path equality (RL-165 §5), every applicable checklist line, watcher line 7 and campaign line-9 debt. F2 neither adds to nor pays down line 9. Record the evidence for each `*_OK` value below; a yes without its evidence is not authority. STATUS.md lists unfilled prerequisites. Nothing is issued across a class A, L002 or L005 hand gate (RL-173 D.4).
 - **Issued ahead (RL-173 D).** Own predecessor `f2-inst-p2`, own date and own `pick_arg`; expires 24 h after ISSUED_EPOCH, checked twice. At most three counted spans ahead plus standing F0. No F2 item grants standing authority or authority to issue another item. Pieces 2–4 are not issuable before the piece-1 hand gate and queue-b commit.
-- **Exact ladder.** READY v4 session takes the next clean close from the lead's READY record (RL-172 (f); no reservation at a merely intended session t0). Preserve the applicable counted development order: dev-03 pilot/remainder and dev-04/dev-05 dated spans are never displaced. The Monday ladder after dev-02 is READY slot session, dev-03 pilot, hp-01's unrun spans, P, F0; RL-169 appends F2 after F0, then DESIGN_QUEUE_LOW. F2 is eligible only when no counted item can arm within its worst case and ensuing close, hp-01 and P cannot arm, and F0 is ineligible under its own spacing, daily-cap or launch-window rule. `priority_gate` encodes that trigger and blocks unknown state, unresolved refusal, open F2 stop, or pending host-event disposition. Re-read all current issued/staged counted items and READY counted work awaiting staging twice; set NEXT_COUNTED_EPOCH to the earliest legal arm including the next day's spans. Do not omit a known item merely because staging is pending. Unknown gate readiness stops the arm. An explicit 0 requires a recorded complete empty census. This conservative check protects 13,010 s: 11,250 work + 560 launcher/runner reserve + 1,200 close; it also clears the 12,710 s fence. A new READY record before launch cedes immediately. Nothing aborts an already running span.
-- **Day law.** F2 is outside development/day/cap counts (RL-172 (a)). This item's date is a bounded scheduling choice, not a new development date; a missed window needs a newly dated item from the lead. No shortening/re-cutting of the admitted four-piece layout is needed for the forecast gaps.
-- **Bands verified at the pin:** 00:00:00–02:34:59 alternate `13:14-13:15`; 02:35:00–10:50:00 default `02:00-02:35`; 10:50:01–13:14:59 no launch; 13:15:00–22:18:10 default; 22:18:11–23:59:59 alternate. RL-171 retires RL-169a's 22:13:10/02:40 clock rules. The pin admits exactly 10:50:00; both arguments refuse one second later. `evidence/verify-f2-p03.txt` checks endpoints and adjacent seconds, including the alternate's 09:32:10/09:32:11 limit. All validate-kit, plan and launch commands name the same argument and explicit roster.
-- **Close and copy.** 300 s after a campaign span close; **1,200 s after F2, F0 or any other close**, from the actual close with fence gone (RL-171 §6.1; RL-172 (d)). The latest close census rounds fractional mtimes up and stops on missing roots, errors, ambiguity or no receipt. Latest-close restore and process-group absence are proven. Copy marker is the MBP's verified encrypted cloud offload `.ok` or the Air's verified `.air.ok` for that plan; a failed/unverified offload holds every next arm, F0 included (RL-173 A). The writer guarantees plaintext manifest hash, ciphertext hash/size and provider confirmation, upload finished before soak; the key is safe off the MBP and originals retained. This item never manufactures a marker. For an out-of-census session supply OTHER_CLOSE_EPOCH and its OTHER_COPY_PLAN_ID. A mere `.ok` existence is trusted only because the authorized writer writes it after verification, as in the dev-03 pilot.
-- **Quiet and host event.** Quiet is agent/process census and rule 5, not the retired night clock. No MBP agent, SSH, analysis, build or test during a span. Same measurement_mode, Automatic, network time OFF, frequency word 0, no night/smoke job, monitor, High Power marker, lock holder or desk fence. RL-172 (h), amended by RL-173: no password/physical step by an agent; service-stop readback or restart disposition is lead-owned, last point before freeze 2. Each arm prints boot + 12 h + 48 s batch time, a print only.
+- **Exact ladder.** READY v4 session takes the next clean close from the lead's READY record (RL-172 (f); no reservation at a merely intended session t0). Preserve the applicable counted development order: dev-03 pilot/remainder and dev-04/dev-05 dated spans are never displaced. RL-174 B's current ladder is READY v4, counted work (including qualification), F0, F2 (inst-01, -02, -03), hp-02, then DESIGN_QUEUE_LOW. The historical hp-01/P work must also be closed or unavailable; no pending higher rung is displaced. F2 is eligible only when no counted item can arm within its worst case and ensuing close, hp-01 and P cannot arm, and F0 is ineligible under its own spacing, daily-cap or launch-window rule. `priority_gate` encodes that trigger and blocks unknown state, unresolved refusal, open F2 stop, or pending host-event disposition. Re-read all current issued/staged counted items and READY counted work awaiting staging twice; set NEXT_COUNTED_EPOCH to the earliest legal arm including the next day's spans. Do not omit a known item merely because staging is pending. Unknown gate readiness stops the arm. An explicit 0 requires a recorded complete empty census. This conservative check protects 13,010 s: 11,250 work + 560 launcher/runner reserve + 1,200 close; it also clears the 12,710 s fence. A new READY record before launch cedes immediately. Nothing aborts an already running span.
+- **Day law.** F2 may run on any date, including a qualification date; it is outside development/day/cap counts (RL-172 (a); RL-174 B). This item's date is a bounded scheduling choice, not a new development date; a missed window needs a newly dated item from the lead. No shortening/re-cutting of the admitted four-piece layout is needed for the forecast gaps.
+- **Bands verified at the pin:** 00:00:00–02:34:59 alternate `13:14-13:15`; 02:35:00–10:50:00 default `02:00-02:35`; 10:50:01–13:14:59 no launch; 13:15:00–22:18:10 default; 22:18:11–23:59:59 alternate. RL-171 retires RL-169a's 22:13:10/02:40 clock rules. The pin admits exactly 10:50:00; both arguments refuse one second later. `evidence/fix-2026-11-16/verify-f2-p03.txt` checks endpoints and adjacent seconds, including the alternate's 09:32:10/09:32:11 limit. All validate-kit, plan and launch commands name the same argument and explicit roster.
+- **Close and copy.** 300 s after a campaign span close; **1,200 s after F2, F0 or any other close**, from the actual close with fence gone (RL-171 §6.1; RL-172 (d)). The latest close census reads only each receipt's recorded ended.epoch_s, selects its identity before rounding fractional epochs up, and stops on missing roots, unreadable/missing/invalid close stamps, equal latest epochs or no receipt. File mtime never selects a marker. Latest-close restore and process-group absence are proven. After a campaign close require that exact span's verified encrypted cloud offload `.ok` or Air `.air.ok` marker; after F0/F2/Part C/session/W1 the non-campaign Check covers the copy, with NONCAMPAIGN_COPY_OK=yes, NONCAMPAIGN_COPY_CLOSE_EPOCH equal to EFF_EPOCH, NONCAMPAIGN_COPY_RECEIPT equal to EFF_PATH and NONCAMPAIGN_COPY_RECORD pointing to the actual Check and verified copy. No F0 marker is manufactured; a failed/unverified offload holds every next arm, F0 included (RL-173 A). The writer guarantees plaintext manifest hash, ciphertext hash/size and provider confirmation, upload finished before soak; the key is safe off the MBP and originals retained. This item never manufactures a marker. For an out-of-census session supply OTHER_CLOSE_EPOCH and the same Check/copy proof with NONCAMPAIGN_COPY_RECEIPT=OTHER. A mere `.ok` existence is trusted only because the authorized writer writes it after verification, as in the dev-03 pilot.
+- **Quiet and host event.** Quiet is agent/process census and rule 5, not the retired night clock. No MBP agent, SSH, analysis, build or test during a span. Same measurement_mode, Automatic, network time OFF, frequency word 0, no night/smoke job, monitor, High Power marker, lock holder or desk fence. RL-172 (h), amended by RL-173 and RL-174 C: the host runs as it is; no completed restart/service-stop is required. A pending/unresolved event still holds the arm; no password/physical step by an agent; service-stop readback or restart disposition is lead-owned, last point before freeze 2. Each arm prints boot + 12 h + 48 s batch time, a print only.
 - **Blinding.** F2 measures only its own instrument streams. Neither this magistrate item nor its tests read campaign/v4 energy, power, meter samples, powermetrics, transcripts, slots or custody. F2's own energy is sealed until freeze 2; only the single analyst using frozen `lm-inst-01` may read it once. The operational Check reads only receipts, leg records and leg-summary projections. Recovery beyond the rails' 1 s tail is censored per RL-169a; no F2 number enters a fit, coefficient, threshold or score.
 - **Stops.** Any F2 REFUSAL, INSTRUMENT_FAULT, CONTAMINATED_REDOS (three loaded legs) or LEG_OVERTIME (two above 1.5× budget) stops its queue; an open cadence-stop holds every queue. A G0 timeout alone, or one/two loaded legs, is recorded. No running span is aborted. Only the lead disposes a stop under RL-169a §4, with a new queue for unrun pieces; no member-bearing leg is repeated and unbundled legs of a stopped piece are dropped. Second stops go to the research lead. Restore unproven holds everything. A failed piece-1 hand-read leaves queue b uncommitted.
 
@@ -39,10 +39,10 @@ test "$(shasum -a 256 "$QUEUE_FILE" | cut -c1-64)" = "$QUEUE_SHA" || exit 1
 PIECE=3; SPAN=f2-inst-p3; LEGS=L007,L008,L009; PRED_CAMP=f2-inst-01; PRED_SPAN=f2-inst-p2; PRED_KIT_SHA=651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b; PRED_ROSTER=L004,L005,L006
 pick_arg() {
   n=$1
-  if [ "$n" -ge 1794902400 ] && [ "$n" -le 1794911699 ]; then echo 13:14-13:15
-  elif [ "$n" -ge 1794911700 ] && [ "$n" -le 1794941400 ]; then echo 02:00-02:35
-  elif [ "$n" -ge 1794950100 ] && [ "$n" -le 1794982690 ]; then echo 02:00-02:35
-  elif [ "$n" -ge 1794982691 ] && [ "$n" -le 1794988799 ]; then echo 13:14-13:15
+  if [ "$n" -ge 1794988800 ] && [ "$n" -le 1794998099 ]; then echo 13:14-13:15
+  elif [ "$n" -ge 1794998100 ] && [ "$n" -le 1795027800 ]; then echo 02:00-02:35
+  elif [ "$n" -ge 1795036500 ] && [ "$n" -le 1795069090 ]; then echo 02:00-02:35
+  elif [ "$n" -ge 1795069091 ] && [ "$n" -le 1795075199 ]; then echo 13:14-13:15
   else echo NONE; fi
 }
 # Included verbatim in each item by build_items.py; no production command runs here.
@@ -112,7 +112,7 @@ PY
 effective_close() {
   case "${OTHER_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo 'STOP: OTHER_CLOSE_EPOCH required, explicit 0 if none'; return 1;; esac
   CENSUS="$("$PY" -I -B - /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
-import math, os, sys
+import json, math, os, sys
 def fail(e): raise e
 found = []
 for root in sys.argv[1:]:
@@ -121,13 +121,21 @@ for root in sys.argv[1:]:
     for d, dirs, files in os.walk(root, onerror=fail):
         if d.count('/') - base >= 3: dirs[:] = []
         if 'runner_receipt.json' in files:
-            p = os.path.join(d, 'runner_receipt.json'); m = os.stat(p).st_mtime
-            if not math.isfinite(m) or '\n' in p: sys.exit('STOP: bad receipt path/stamp')
-            found.append((m, p))
+            p = os.path.join(d, 'runner_receipt.json')
+            if '\n' in p: sys.exit('STOP: bad receipt path')
+            try:
+                with open(p) as handle: ended = json.load(handle)['ended']['epoch_s']
+                if (isinstance(ended, bool) or not isinstance(ended, (int, float))
+                        or not math.isfinite(ended) or ended <= 0):
+                    raise ValueError('invalid ended.epoch_s')
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
+            found.append((ended, p))
 if not found: sys.exit('STOP: empty receipt census')
-m = max(t for t, p in found); newest = [p for t, p in found if t == m]
-if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt')
-print(math.ceil(m)); print(newest[0])
+latest = max(t for t, p in found)
+newest = [p for t, p in found if t == latest]
+if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt close epoch')
+print(math.ceil(latest)); print(newest[0])
 PY
 )" || return 1
   EFF_EPOCH="$(printf '%s\n' "$CENSUS" | sed -n 1p)"
@@ -137,12 +145,17 @@ PY
   fi
 }
 copy_gate() (
-  # Verified marker written by the MBP offloader or Air, never by this item.
-  if test "$EFF_PATH" = OTHER; then
-    id="${OTHER_COPY_PLAN_ID:-}"
-  else
-    id="$(basename "$(dirname "$EFF_PATH")" | sed -E 's/-[0-9]{8}T[0-9]{6}Z$//')"
-  fi
+  # RL-171 §6.1/RL-173 A: campaign marker, or exact latest non-campaign Check's copy proof.
+  case "$EFF_PATH" in
+    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json)
+      id="$(basename "$(dirname "$EFF_PATH")" | sed -E 's/-[0-9]{8}T[0-9]{6}Z$//')";;
+    *)
+      test "${NONCAMPAIGN_COPY_OK:-}" = yes && test "${NONCAMPAIGN_COPY_CLOSE_EPOCH:-}" = "$EFF_EPOCH" \
+        && test "${NONCAMPAIGN_COPY_RECEIPT:-}" = "$EFF_PATH" && test -n "${NONCAMPAIGN_COPY_RECORD:-}" \
+        || { echo 'WAIT: exact latest non-campaign Check/copy proof missing (RL-171 §6.1; RL-173 A)'; exit 1; }
+      case "$NONCAMPAIGN_COPY_RECORD" in *'<LEAD '*) echo 'WAIT: unfilled non-campaign Check/copy record'; exit 1;; esac
+      echo "COPY CHECK VERIFIED receipt $EFF_PATH close $EFF_EPOCH: $NONCAMPAIGN_COPY_RECORD"; exit 0;;
+  esac
   case "$id" in ''|*[!a-zA-Z0-9_.-]*) echo 'STOP: missing/invalid copy plan id'; exit 1;; esac
   for marker in "/Users/Shared/JouleWise/desk-copy/$id.ok" "/Users/Shared/JouleWise/desk-copy/$id.air.ok"; do
     if test -s "$marker"; then echo "COPY VERIFIED $id: $(cat "$marker")"; exit 0; fi

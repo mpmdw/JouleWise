@@ -58,12 +58,14 @@ def run_item(item,shell):
         for d in (root,wt,markers): shutil.rmtree(d,ignore_errors=True); d.mkdir()
         source=BASE/'mock'/item['predecessor']; shutil.copytree(source,predout)
         p=predout/'runner_receipt.json'; r=json.loads(p.read_text()); r['mock']=False; r['synthetic_fixture']=True; r['ended']={'epoch_s':now-4000}; dump(p,r); os.utime(p,(now-4000,now-4000))
-        dump(latest/'runner_receipt.json',{'synthetic_fixture':True}); os.utime(latest/'runner_receipt.json',(now-1200,now-1200))
+        dump(latest/'runner_receipt.json',{'synthetic_fixture':True,'ended':{'epoch_s':now-1200}}); os.utime(latest/'runner_receipt.json',(now-1200,now-1200))
         (markers/'f0-synthetic.ok').write_text('SYNTHETIC verified hashes, size, provider upload completion\n')
         # Minimal but typed k+2 proof: prior two entries only stand for the full census in this test.
         dump(debt,{'next_span':item['span'],'authenticated_roster_identity_checks':'RL-172 (c)','machine_order':[
             {'span_id':'synthetic-k-minus-2','runner_kind':'cadence-legs-v1.1','desk_final_record':'synthetic authenticated FINAL','q1_complete_record':'synthetic typed Q1 completion'},
             {'span_id':item['predecessor'],'runner_kind':'cadence-legs-v1.1'}]})
+    def close_stamp(path, epoch):
+        r=json.loads(path.read_text()); r['ended']={'epoch_s':epoch}; dump(path,r)
     def mutate(**kw):
         p=predout/'runner_receipt.json'; r=json.loads(p.read_text()); r.update(kw); dump(p,r); os.utime(p,(now-4000,now-4000))
     def summary(leg,**kw):
@@ -136,10 +138,10 @@ def run_item(item,shell):
     run('missing receipt root STOP',setup=lambda:shutil.rmtree(wt),want=False,contains='missing receipt root')
     run('restore unproven STOP',overrides={'HOST_RESTORE_OK':0},want=False,contains='STOP')
     run('process group unproven STOP',overrides={'GROUPS_ABSENT':0},want=False,contains='STOP')
-    run('F0/F2 gap 1199 WAIT',setup=lambda:os.utime(latest/'runner_receipt.json',(now-1199,now-1199)),overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1199},want=False,contains='interval 1200')
-    run('fractional close rounded up',setup=lambda:os.utime(latest/'runner_receipt.json',(now-1199.9,now-1199.9)),overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1199},want=False,contains='interval 1200')
+    run('F0/F2 gap 1199 WAIT',setup=lambda:close_stamp(latest/'runner_receipt.json',now-1199),overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1199},want=False,contains='interval 1200')
+    run('fractional close rounded up',setup=lambda:close_stamp(latest/'runner_receipt.json',now-1199.9),overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1199},want=False,contains='interval 1200')
     def campaign_close(age):
-        dest=root/'cl-hp-01'/'cq-hp-01-s03-a1-20261119T110000Z'; dest.parent.mkdir(parents=True); latest.rename(dest); os.utime(dest/'runner_receipt.json',(now-age,now-age))
+        dest=root/'cl-hp-01'/'cq-hp-01-s03-a1-20261119T110000Z'; dest.parent.mkdir(parents=True); latest.rename(dest); close_stamp(dest/'runner_receipt.json',now-age)
         (markers/'cq-hp-01-s03-a1.ok').write_text('SYNTHETIC verified offload')
     def campaign_no_copy():
         campaign_close(300); (markers/'cq-hp-01-s03-a1.ok').unlink()

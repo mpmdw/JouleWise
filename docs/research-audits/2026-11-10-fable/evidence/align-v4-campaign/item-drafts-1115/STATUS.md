@@ -61,3 +61,11 @@ Tonight's issue-ahead set is therefore **two counted spans (dev-02-s03, dev-03 p
 - Finalized items: `ITEM-dev02-s03.md`, `ITEM-dev03-pilot.md`, `ITEM-dev03-rest.md`, `ITEM-dev04-s01.md`, `ITEM-dev04-s02.md`, `ITEM-dev05-s01.md`, `ITEM-dev05-s02.md` (built by `tools/rl173.py` from the items-rl171 drafts; reproducible).
 - `stage_mbp_span.sh`; `tools/rl173.py`, `tools/lint.py`; `tests/test_rl173_gates.py`, `tests/run_all_gates.sh`; `evidence/`.
 - In git: audit/2026-11-10-fable, `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/`.
+
+## Close-census repair — 2026-11-16
+
+All unissued item copies now select the latest close by the receipt's recorded `ended.epoch_s`, never filesystem mtime. Identity is chosen before ceiling to whole seconds; missing/unreadable/invalid stamps and equal latest epochs stop. The exact selected campaign span's marker remains mandatory. The non-campaign Check rule is unchanged. Generators carry the same repair; the 1118 standing-F0 renewal is included. Earlier test captures and source-item evidence are preserved.
+
+New tests execute the embedded functions in bash and zsh, keeping an older receipt's bytes unchanged while giving it a later mtime; its marker cannot authorize a newer uncopied campaign. The actual latest marker passes. New evidence lives under `evidence/fix-2026-11-16/{bash,zsh}/`; the current standing renewal's derivative comparison is `evidence/fix-2026-11-16/standing-f0-r2.diff`. See `docs/run_reports/2026-11-16-f2-item-fixes.md` for results and the issued-item assessment. This repair issues no item and clears no live prerequisite.
+
+The portable runner is `bash tests/run_all_gates.sh /path/to/detached/2d347f721` (also run with zsh). It generates its own pinned synthetic mocks, checks all seven items and exits on a failure. It no longer reads a historical scratch directory. Syntax lint likewise targets this folder.

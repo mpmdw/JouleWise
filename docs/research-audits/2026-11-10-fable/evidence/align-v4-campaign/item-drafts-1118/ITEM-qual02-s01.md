@@ -112,7 +112,7 @@ PY
 effective_close() {
   case "${OTHER_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo 'STOP: OTHER_CLOSE_EPOCH required, explicit 0 if none'; return 1;; esac
   CENSUS="$("$PY" -I -B - /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
-import math, os, sys
+import json, math, os, sys
 def fail(e): raise e
 found = []
 for root in sys.argv[1:]:
@@ -121,13 +121,21 @@ for root in sys.argv[1:]:
     for d, dirs, files in os.walk(root, onerror=fail):
         if d.count('/') - base >= 3: dirs[:] = []
         if 'runner_receipt.json' in files:
-            p = os.path.join(d, 'runner_receipt.json'); m = os.stat(p).st_mtime
-            if not math.isfinite(m) or '\n' in p: sys.exit('STOP: bad receipt path/stamp')
-            found.append((m, p))
+            p = os.path.join(d, 'runner_receipt.json')
+            if '\n' in p: sys.exit('STOP: bad receipt path')
+            try:
+                with open(p) as handle: ended = json.load(handle)['ended']['epoch_s']
+                if (isinstance(ended, bool) or not isinstance(ended, (int, float))
+                        or not math.isfinite(ended) or ended <= 0):
+                    raise ValueError('invalid ended.epoch_s')
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
+            found.append((ended, p))
 if not found: sys.exit('STOP: empty receipt census')
-m = max(t for t, p in found); newest = [p for t, p in found if t == m]
-if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt')
-print(math.ceil(m)); print(newest[0])
+latest = max(t for t, p in found)
+newest = [p for t, p in found if t == latest]
+if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt close epoch')
+print(math.ceil(latest)); print(newest[0])
 PY
 )" || return 1
   EFF_EPOCH="$(printf '%s\n' "$CENSUS" | sed -n 1p)"

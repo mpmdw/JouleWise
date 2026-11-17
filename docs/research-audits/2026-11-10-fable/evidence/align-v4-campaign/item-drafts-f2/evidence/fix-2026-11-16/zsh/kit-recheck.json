@@ -1,0 +1,226 @@
+{
+  "pin": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+  "kit_source": "1f683fc634ed6b8722a3976af400920ee1f7dd7d",
+  "kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+  "synthetic_only": true,
+  "checks": [
+    {
+      "validate-kit": "02:00-02:35",
+      "output": {
+        "campaign_id": "f2-inst-01",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "legs": 12,
+        "ok": true
+      }
+    },
+    {
+      "validate-kit": "13:14-13:15",
+      "output": {
+        "campaign_id": "f2-inst-01",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "legs": 12,
+        "ok": true
+      }
+    },
+    {
+      "gen-legs": "exact equality",
+      "layout": [
+        [
+          19458,
+          256,
+          2000
+        ],
+        [
+          2000,
+          256,
+          19458
+        ],
+        [
+          256,
+          2000,
+          19458
+        ],
+        [
+          2000,
+          19458,
+          256
+        ]
+      ],
+      "every_size_every_position": true
+    },
+    {
+      "validate-queue-a": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-inst-p1-a1"
+        ],
+        "queue_id": "cq-f2-inst-01-a",
+        "spans": 1
+      }
+    },
+    {
+      "validate-queue-b-SYNTHETIC-NOT-COMMITTED": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-inst-p2-a1",
+          "cq-f2-inst-p3-a1",
+          "cq-f2-inst-p4-a1"
+        ],
+        "queue_id": "cq-f2-inst-01-b",
+        "spans": 3
+      }
+    }
+  ],
+  "mock_spans": [
+    {
+      "item": "f2-p01",
+      "t0_local": "2026-11-17T00:30:00",
+      "argument": "13:14-13:15",
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "item_check_on_synthetic_fixture_rc": 0,
+      "restore_rc": [
+        0
+      ],
+      "feeds_proven_stopped": true
+    },
+    {
+      "item": "f2-p01",
+      "t0_local": "2026-11-17T13:15:00",
+      "argument": "02:00-02:35",
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "item_check_on_synthetic_fixture_rc": 0,
+      "restore_rc": [
+        0
+      ],
+      "feeds_proven_stopped": true
+    },
+    {
+      "item": "f2-p02",
+      "t0_local": "2026-11-18T00:30:00",
+      "argument": "13:14-13:15",
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "item_check_on_synthetic_fixture_rc": 0,
+      "restore_rc": [
+        0
+      ],
+      "feeds_proven_stopped": true
+    },
+    {
+      "item": "f2-p02",
+      "t0_local": "2026-11-18T13:15:00",
+      "argument": "02:00-02:35",
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "item_check_on_synthetic_fixture_rc": 0,
+      "restore_rc": [
+        0
+      ],
+      "feeds_proven_stopped": true
+    },
+    {
+      "item": "f2-p03",
+      "t0_local": "2026-11-18T00:30:00",
+      "argument": "13:14-13:15",
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "item_check_on_synthetic_fixture_rc": 0,
+      "restore_rc": [
+        0
+      ],
+      "feeds_proven_stopped": true
+    },
+    {
+      "item": "f2-p03",
+      "t0_local": "2026-11-18T13:15:00",
+      "argument": "02:00-02:35",
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "item_check_on_synthetic_fixture_rc": 0,
+      "restore_rc": [
+        0
+      ],
+      "feeds_proven_stopped": true
+    },
+    {
+      "item": "f2-p04",
+      "t0_local": "2026-11-20T00:30:00",
+      "argument": "13:14-13:15",
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "item_check_on_synthetic_fixture_rc": 0,
+      "restore_rc": [
+        0
+      ],
+      "feeds_proven_stopped": true
+    },
+    {
+      "item": "f2-p04",
+      "t0_local": "2026-11-20T13:15:00",
+      "argument": "02:00-02:35",
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "item_check_on_synthetic_fixture_rc": 0,
+      "restore_rc": [
+        0
+      ],
+      "feeds_proven_stopped": true
+    }
+  ],
+  "warmup_observation": {
+    "nominal_leg_prompt_tokens": 256,
+    "task_prefill_chars": 526,
+    "warmup_runs": 1,
+    "post_warmup_settling_s": 5.0,
+    "events": [
+      {
+        "event_type": "stage_started",
+        "phase": "warmup",
+        "timestamp_s": 302,
+        "metadata": {}
+      },
+      {
+        "event_type": "stage_completed",
+        "phase": "warmup",
+        "timestamp_s": 308.7119999999999,
+        "metadata": {
+          "warmup_runs": 1,
+          "warmup_seconds": 5.0
+        }
+      },
+      {
+        "event_type": "sampling_started",
+        "phase": "measured_run",
+        "timestamp_s": 308.7119999999999,
+        "metadata": {}
+      }
+    ],
+    "operational_log_lines": [
+      "303.712000 completed 1 warmup run(s)",
+      "303.712000 post-warmup settling for 5.0 s before sampling"
+    ],
+    "g0_release_ns": 320000000000,
+    "quiet_spans_ns": [
+      [
+        320000000000,
+        920000000000
+      ]
+    ],
+    "decode_tokens": 512,
+    "qualification": "SYNTHETIC; stage_completed warmup includes post-warmup settling; do not label it the inference-end stamp"
+  }
+}

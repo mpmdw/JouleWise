@@ -2,12 +2,12 @@
 Builds fake campaign-out roots from the items-rl171 MOCK spans (synthetic; mock flag cleared), never a real receipt."""
 import json, os, re, shutil, subprocess, sys, tempfile, time
 ITEM = sys.argv[1]; MOCK = sys.argv[2]; CAMP, PRED, ROSTER = sys.argv[3], sys.argv[4], sys.argv[5].split(",")
-PY = "/opt/homebrew/opt/python@3.13/bin/python3.13"
+PY = sys.executable
 t = open(ITEM).read()
 sh = "\n".join(re.findall(r"```sh\n(.*?)```", t, re.S))
 a = sh.index("# RL-173 D.5: this item EXPIRES"); b = sh.index("# RL-172 (a): t0-date caps")
 funcs = sh[a:b]
-base = tempfile.mkdtemp(dir=os.environ["TMPDIR"])
+base = tempfile.mkdtemp(dir=os.environ.get("TMPDIR"))
 root = os.path.join(base, "campaign-out")
 funcs = funcs.replace("/Users/edr/campaign-out", root)
 now = int(time.time())

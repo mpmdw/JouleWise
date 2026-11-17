@@ -69,5 +69,7 @@ with pinned() as repo:
     r=call(repo,'scripts/cadence_legs_runner.py','mock','--kit',kp,'--legs',','.join(first['predecessor_legs']),'--t0-local','2026-11-18T03:00:00','--output',output/'dev-05-s02'); assert json.loads(r.stdout)['rc']==0
     record('synthetic predecessor dev-05-s02',json.loads(r.stdout))
 report['total_checks']=checks
-(HERE/'evidence/kit-recheck.json').write_text(json.dumps(report,indent=2)+'\n')
+evidence = Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence/fix-2026-11-16'))
+evidence.mkdir(parents=True, exist_ok=True)
+(evidence/'kit-recheck.json').write_text(json.dumps(report,indent=2)+'\n')
 print(checks,'pinned checks; zero failures; source/config plus synthetic files only')

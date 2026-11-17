@@ -6,6 +6,7 @@ Reads the RL-171/172 drafts in /Volumes/JW-EXT/scratch/items-rl171 (never edits 
 """
 import pathlib
 import sys
+from close_census import repair_census
 
 SRC = pathlib.Path("/Volumes/JW-EXT/scratch/items-rl171")
 DST = pathlib.Path("/Volumes/JW-EXT/scratch/items-1115")
@@ -281,7 +282,7 @@ def main():
     for name, it in ITEMS.items():
         t = (SRC / name).read_text()
         t = apply_common(t, it)
-        t = it["extra"](t)
+        t = repair_census(it["extra"](t))
         (DST / name).write_text(t)
         print(f"{name}: written, {t.count('<LEAD FILLS')} LEAD FILLS left")
 

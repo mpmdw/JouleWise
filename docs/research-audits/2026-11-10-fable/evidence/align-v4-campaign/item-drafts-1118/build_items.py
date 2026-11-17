@@ -15,6 +15,8 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0,str(Path(__file__).resolve().parent/'tools'))
 from pinned import HERE, ROOT, PIN, SOURCE, W1, git, pinned, call
+sys.path.insert(0,str(HERE.parent/'item-drafts-1115/tools'))
+from close_census import repair_census
 TZ=ZoneInfo('America/Los_Angeles')
 DEFAULTS={'qual-01':'2026-11-19','qual-02':'2026-11-20','qual-03':'2026-11-21'}
 QUEUE_EXPIRY='2026-11-23T00:00:00-08:00'  # <7 days after this Nov16 draft commit; gate verifies authenticated commit.
@@ -60,10 +62,12 @@ renewal_gate() {{
     if head!=old:
         renewed=renewed.replace(old,'<LEAD FILLS: W1_LINE_HEAD and fresh pin qualification under RL-165 §3 rule 2>')
         renewed=renewed.replace('b2e01464d','<LEAD FILLS: W1_LINE_SHORT>')
+    renewed=repair_census(renewed)
     (HERE/'STANDING-F0-r2.md').write_text(renewed)
     (HERE/'evidence/standing-f0-original.md').write_text(original)
     diff=''.join(difflib.unified_diff(original.splitlines(True),renewed.splitlines(True),fromfile=f'origin/main@{main}:RUN_STATE item 346',tofile='STANDING-F0-r2.md'))
-    (HERE/'evidence/standing-f0-r2.diff').write_text(diff)
+    (HERE/'evidence/fix-2026-11-16').mkdir(exist_ok=True)
+    (HERE/'evidence/fix-2026-11-16/standing-f0-r2.diff').write_text(diff)
     return {'source_main':main,'original_issue':issued+' PST','renewal_start':start.isoformat(),'renewal_expiry':end.isoformat(),'w1_head':head,'pin_unchanged':head==old}
 
 def render(dates):

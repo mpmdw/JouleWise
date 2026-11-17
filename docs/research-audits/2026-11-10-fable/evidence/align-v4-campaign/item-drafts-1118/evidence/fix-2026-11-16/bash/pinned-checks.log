@@ -1,0 +1,92 @@
+PASS validate-kit qual-01 frozen paths
+PASS gen-legs exact qual-01
+PASS validate-queue qual-01
+PASS validate-queue refuses qual-01 cross-law-span
+PASS validate-queue refuses qual-01 split-pair
+PASS validate-queue refuses qual-01 starts-on-pair
+PASS plan/launcher-plan qual-01-s01 00:00:00
+PASS plan/launcher-plan qual-01-s01 02:00:00
+PASS plan/launcher-plan qual-01-s01 02:34:59
+PASS plan/launcher-plan qual-01-s01 02:35:00
+PASS plan/launcher-plan qual-01-s01 10:50:00
+PASS plan/launcher-plan qual-01-s01 10:50:01
+PASS plan/launcher-plan qual-01-s01 13:14:59
+PASS plan/launcher-plan qual-01-s01 13:15:00
+PASS plan/launcher-plan qual-01-s01 22:40:01
+PASS plan/launcher-plan qual-01-s01 23:59:59
+PASS mock and exact operational Check qual-01-s01
+PASS plan/launcher-plan qual-01-s02 00:00:00
+PASS plan/launcher-plan qual-01-s02 02:00:00
+PASS plan/launcher-plan qual-01-s02 02:34:59
+PASS plan/launcher-plan qual-01-s02 02:35:00
+PASS plan/launcher-plan qual-01-s02 10:50:00
+PASS plan/launcher-plan qual-01-s02 10:50:01
+PASS plan/launcher-plan qual-01-s02 13:14:59
+PASS plan/launcher-plan qual-01-s02 13:15:00
+PASS plan/launcher-plan qual-01-s02 22:40:01
+PASS plan/launcher-plan qual-01-s02 23:59:59
+PASS mock and exact operational Check qual-01-s02
+PASS soak retry qual-01 refusals 1
+PASS soak retry qual-01 refusals 2
+PASS validate-kit qual-02 frozen paths
+PASS gen-legs exact qual-02
+PASS validate-queue qual-02
+PASS validate-queue refuses qual-02 cross-law-span
+PASS validate-queue refuses qual-02 split-pair
+PASS validate-queue refuses qual-02 starts-on-pair
+PASS plan/launcher-plan qual-02-s01 00:00:00
+PASS plan/launcher-plan qual-02-s01 02:00:00
+PASS plan/launcher-plan qual-02-s01 02:34:59
+PASS plan/launcher-plan qual-02-s01 02:35:00
+PASS plan/launcher-plan qual-02-s01 10:50:00
+PASS plan/launcher-plan qual-02-s01 10:50:01
+PASS plan/launcher-plan qual-02-s01 13:14:59
+PASS plan/launcher-plan qual-02-s01 13:15:00
+PASS plan/launcher-plan qual-02-s01 22:40:01
+PASS plan/launcher-plan qual-02-s01 23:59:59
+PASS mock and exact operational Check qual-02-s01
+PASS plan/launcher-plan qual-02-s02 00:00:00
+PASS plan/launcher-plan qual-02-s02 02:00:00
+PASS plan/launcher-plan qual-02-s02 02:34:59
+PASS plan/launcher-plan qual-02-s02 02:35:00
+PASS plan/launcher-plan qual-02-s02 10:50:00
+PASS plan/launcher-plan qual-02-s02 10:50:01
+PASS plan/launcher-plan qual-02-s02 13:14:59
+PASS plan/launcher-plan qual-02-s02 13:15:00
+PASS plan/launcher-plan qual-02-s02 22:40:01
+PASS plan/launcher-plan qual-02-s02 23:59:59
+PASS mock and exact operational Check qual-02-s02
+PASS soak retry qual-02 refusals 1
+PASS soak retry qual-02 refusals 2
+PASS validate-kit qual-03 frozen paths
+PASS gen-legs exact qual-03
+PASS validate-queue qual-03
+PASS validate-queue refuses qual-03 cross-law-span
+PASS validate-queue refuses qual-03 split-pair
+PASS validate-queue refuses qual-03 starts-on-pair
+PASS plan/launcher-plan qual-03-s01 00:00:00
+PASS plan/launcher-plan qual-03-s01 02:00:00
+PASS plan/launcher-plan qual-03-s01 02:34:59
+PASS plan/launcher-plan qual-03-s01 02:35:00
+PASS plan/launcher-plan qual-03-s01 10:50:00
+PASS plan/launcher-plan qual-03-s01 10:50:01
+PASS plan/launcher-plan qual-03-s01 13:14:59
+PASS plan/launcher-plan qual-03-s01 13:15:00
+PASS plan/launcher-plan qual-03-s01 22:40:01
+PASS plan/launcher-plan qual-03-s01 23:59:59
+PASS mock and exact operational Check qual-03-s01
+PASS plan/launcher-plan qual-03-s02 00:00:00
+PASS plan/launcher-plan qual-03-s02 02:00:00
+PASS plan/launcher-plan qual-03-s02 02:34:59
+PASS plan/launcher-plan qual-03-s02 02:35:00
+PASS plan/launcher-plan qual-03-s02 10:50:00
+PASS plan/launcher-plan qual-03-s02 10:50:01
+PASS plan/launcher-plan qual-03-s02 13:14:59
+PASS plan/launcher-plan qual-03-s02 13:15:00
+PASS plan/launcher-plan qual-03-s02 22:40:01
+PASS plan/launcher-plan qual-03-s02 23:59:59
+PASS mock and exact operational Check qual-03-s02
+PASS soak retry qual-03 refusals 1
+PASS soak retry qual-03 refusals 2
+PASS synthetic predecessor dev-05-s02
+91 pinned checks; zero failures; source/config plus synthetic files only

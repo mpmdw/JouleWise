@@ -1353,3 +1353,22 @@ required_before_arm vs D-126's post-window ruling — needs a registry-level
 resolution). Full gauntlet: lenses + delta + (if a second round on the same
 defect) cold gate. The registered deadline was discharged when #149 landed
 the author and integration repairs; later council work orders remain separate.
+
+## User-directed F2 item repair — 2026-11-16
+
+Explicit user priority: repair independent F2 review F1/F2, sweep the same copy
+selection in unissued forms, re-date under RL-174 B, run every current runner in
+bash/zsh, assess issued main items 354/355/366/367/372, commit and push the audit
+branch. Draft repair complete: 30 unissued forms select recorded close epochs;
+F2 uses the exact non-campaign Check/copy route. p01/p02/p03/p04 are READY as
+drafts on Tue17/Wed18/Wed18/Fri20; live admission/staging/hand gates and fresh
+issue observations remain lead-owned. All five issued forms carry the latent
+mtime defect; routine append-only closes preserve order, while old-receipt
+restore/copy-back/touch can trigger it. No live occurrence is inferred.
+
+Full results, 960 universal regressions, all runner results and issued-source
+reproductions: [repair report](docs/run_reports/2026-11-16-f2-item-fixes.md).
+The user's no-RUN_STATE-edit constraint overrides normal handoff/regeneration;
+this append is outside generated views. No MBP contact or custody access.
+Next: lead adopts corrected forms and supplies p01's current live prerequisites
+before issuance; later pieces still require the live piece-1 PASS and queue b.
