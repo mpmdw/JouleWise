@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "PR #804 iCloud backend: software review and synthetic verification; macOS 26 installation remains external",
-    "path": "docs/run_reports/2026-11-15-span-offload-icloud.md"
+    "label": "PR #804 repair and RL-174 D.1/D.2: synthetic software checks; native GUI-domain qualification external",
+    "path": "docs/run_reports/2026-11-16-pr804-r2.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -11449,5 +11449,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-11-15"
+  "updated": "2026-11-16"
 }

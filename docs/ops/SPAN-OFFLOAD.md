@@ -1,255 +1,247 @@
-# Span cloud offload (RL-173 A): the MBP's own off-host copy
+# Span cloud offload and close (RL-173 A; RL-174 D.1/D.2)
 
-Tool: `scripts/span_offload.py` (library `joulewise/span_offload.py`, tests `tests/test_span_offload.py`).
-Ruling: RL-173 A (research lead, 2026-11-15) makes a verified, encrypted cloud offload made by the MBP the
-off-host copy of RL-171 §6.1, permanently. The Air leaves the arm path. The lead's Air copy becomes a later
-pull from the cloud, checked against the marker's hashes.
+The MBP makes its own encrypted off-host copy between spans. The Air is outside the arm path.
+`scripts/span_offload.py` and `scripts/close_offload.py` share `joulewise/span_offload.py`, one iCloud
+backend and one marker schema, `joulewise.span_offload_marker.v1`. Synthetic coverage is in
+`tests/test_span_offload.py`.
 
-## What it does
+Authority: RL-173 A, amended by RL-174 D.1/D.2 in
+`origin/audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`.
+The research lead accepted this supervised backend as the permanent tool. **Operational status remains
+INTERIM / macOS 26 qualification PROVISIONAL until the lead records one native MBP round trip with
+the production key.** Software tests do not establish that gate.
 
-`offload` (MBP, in the close interval, after the span's Check, before the next soak):
+## Operations and gates
 
-1. Refuses at once, doing nothing, if `<marker_dir>/<plan>.ok` exists (exit 3), if OUT's name is not the
-   plan id or `<plan>-<YYYYMMDDTHHMMSSZ>` (`PLAN_SPAN_MISMATCH`; the pull applies the same rule to the
-   descriptor's span name), if `--deadline-epoch` is not finite or is more than 24 h ahead (`BAD_DEADLINE`), or if any `forbid_paths` entry exists (the config names
-   the magistrate's desk fence: `FORBIDDEN_PATH_PRESENT`). Without `--deadline-epoch` the whole offload
-   gets `default_budget_s` (90 min, item 347's limit); with no time left it does nothing.
-2. Reads no control file from inside OUT: the config path is checked against OUT before it is read, and
-   the config, the recipient key, any optional rclone config, the stage files and the completion records are opened
-   only as single-name regular files (no symlink followed, no hard link accepted, no fifo waited on). Walks OUT without following links. A symlink, a socket, fifo or device, or a name with a newline,
-   carriage return, backslash or non-UTF-8 bytes refuses the offload (exit 4). The stage root, the marker
-   directory, the recipient key and the iCloud/local backend root must not overlap OUT and must not be
-   inside a git repository (`PATH_OVERLAPS_SPAN`, `PATH_IN_REPOSITORY`). The repository check walks
-   every ancestor. Check `/Users/edr`, `/Users/edr/night-custody`, `/Users/Shared/JouleWise` and the iCloud
-   destination at install. Optional rclone configs get the same checks (rclone may rewrite them on token
-   refresh). OUT must hold at least one regular file and
-   `runner_receipt.json` (the default `--require-file`; existence only).
-3. Takes an exclusive lock for the plan (`<stage_root>/.<plan>.lock`, held until the marker; a second
-   offload of the same plan is refused `BUSY`). It never deletes a directory it did not make in this run: a
-   killed run's `.<plan>.building-*` and `.<plan>.key-*` directories stay for the lead to remove.
-4. Reads the recipient public key once into a private snapshot, and checks that snapshot against the pinned
-   fingerprint (sha256 of its DER encoding) and size (RSA, at least 3072 bits); the wrap uses the same bytes.
-5. Streams OUT through tar and gzip into `openssl enc`, reading each regular file **once, as bytes**. The
-   plaintext manifest (`<plan>.SHA256SUMS`, `shasum -a 256` format on `./<path>`, byte order) hashes exactly
-   the archived bytes. A file that changes while it is read refuses the offload. **No file under OUT is
-   parsed** (A.4). The deadline is checked before each file, and one watchdog bounds the whole stream: at
-   the deadline it kills openssl and the offload fails `DEADLINE`.
-6. Decrypts the staged ciphertext once with the passphrase still in memory and requires the archive's
-   sha256 (`CIPHERTEXT_UNVERIFIED` otherwise; plaintext is hashed, never written). The MBP cannot test the
-   RSA wrap; the first pull is that test (install step 6). Then wraps the passphrase to the recipient key
-   (the wrapped key must be exactly one RSA block) and writes the descriptor last. All of this happens in a private `.<plan>.building-*` directory, removed on
-   any failure and renamed to `<stage_root>/<plan>/` only when complete (about 4 % of OUT; the dev-02-s02
-   archive was 110 MB for 2.9 GB), with a local `.source.json` naming OUT's resolved path.
-7. Copies the four files to iCloud Drive using exclusive random temporary names and atomic rename,
-   under `~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-offload/<plan>/`. Every directory
-   component is opened without following links; files must be single-name regular files. Existing
-   objects must match the staged bytes (immutable retry). For **each** file it waits for
-   `brctl status com.apple.CloudDocs` to report the container `client:idle` and `caught-up`, with no
-   pending or error state. Empty or unknown status text never counts. Then it calls `brctl evict <file>`,
-   waits until `stat.st_flags & SF_DATALESS` is set, calls `brctl download <file>`, waits until that flag
-   clears, and hashes the downloaded bytes. The size and sha256 must equal the stage's pre-upload
-   snapshot. All four artifacts, including the descriptor, get this readback. The staged files are
-   read-only (0400). The tool parses only brctl's status text, never CloudDocs databases or journals.
-   An upload/status timeout or a hash mismatch is UNVERIFIED (exit 5), without any marker. If eviction
-   or download fails, times out within its phase budget, or cannot be observed, only `.ok.unconfirmed`
-   may be written (exit 8). Expiry of the overall deadline still writes no marker.
-8. Checks the deadline once more, then writes the marker `<marker_dir>/<plan>.ok` only if it does not exist
-   (`link(2)` of a complete, synced temporary file: the `test ! -e` rule, atomic). It records the plaintext
-   manifest's sha256, the ciphertext's sha256 and size, and the provider's confirmation for each file (A.2):
-   `icloud evict+redownload sha256 match`, `uploaded_epoch_s`, `evicted_epoch_s`, `verified_epoch_s`,
-   and the downloaded size and sha256. Only four confirmed readbacks permit `.ok`.
+`offload` packs a closed OUT and retains the original. `close` (also exposed as
+`scripts/close_offload.py`) performs the same offload, then applies the storage table below.
+Run close after the span's Check, the desk bundle's push and the MBP desk, with all source writers
+stopped, nothing armed, and before the next soak. Failure holds the next arm and F0. The tool handles
+bytes and parses only its own transport records, tar headers and brctl status; no source payload is
+parsed. A packed unreleased span remains as restricted as its source. Never expand one outside a
+registered look. Keep the newest desk projections outside OUT for the GAP census.
 
-Nothing under OUT is changed or deleted (A.5). The tool has no git step, refuses output paths inside a
-repository, and the destination is a private iCloud folder, never the repository (A.6). Exit 4 means
-refused before upload; exit 5 means UNVERIFIED (upload/status/readback/deadline failure); neither writes
-a marker. Exit 8 writes only `<plan>.ok.unconfirmed`, which satisfies no gate. A failed or unverified
-offload holds the next arm, and F0 does not run past it either (A.7). SIGTERM, SIGHUP and SIGINT kill
-tracked openssl/brctl/rclone children before exit 5. An uncatchable kill can leave a child alive and
-CloudDocs can keep syncing; after an abnormal exit the controller holds the next soak and the lead
-checks child activity and outstanding sync. Await the command, then recheck the time before starting
-the next soak. While iCloud sync is in use, **RL-171 §5's maintenance line must list `bird`, `cloudd`
-and `fileproviderd`** (RL-173 A.3), including after this tool exits.
+1. Refuse unsafe plan/OUT names (OUT must be `<plan>` or `<plan>-<YYYYMMDDTHHMMSSZ>`), an empty tree,
+   absent `runner_receipt.json` (existence only), or any configured `forbid_paths`. Refuse source links,
+   special files and unsafe names, and control/output paths overlapping OUT or inside Git repositories.
+   Configs, keys, stages and records must be single-name regular files; iCloud directory components
+   are opened with O_NOFOLLOW. A plan lock excludes concurrent offloads of the same plan.
+2. Census every source name and its device, inode, mode, link count, size, mtime and ctime **before any
+   payload is read**. Record each directory before enumerating its children. Compare the entire census
+   after packing and immediately before publishing the marker. Added/removed members, inode replacement,
+   writes between different files' reads, and writes with restored mtime refuse `SPAN_CHANGED`. Ignore
+   only read-induced atime. This requires a closed source on a local filesystem; it cannot freeze an
+   active writer or defeat forged kernel metadata. A mutation after the final check is outside that
+   contract; the controller must stop writers before close.
+3. Stream tar+gzip into OpenSSL; the SHA256SUMS manifest hashes exactly those archived bytes, in byte
+   order, as `sha256  ./relative-path`. Re-read the decrypted transport stream while the fresh passphrase
+   is still in memory, requiring both the archive hash and **every file's manifest digest and exact file
+   set**. No plaintext archive is written on the MBP. Only this pack receives the descriptor field
+   `pack_verification: stream per-file manifest match`.
+4. Snapshot and pin the RSA public key by the sha256 of its DER SubjectPublicKeyInfo (>=3072 bits;
+   production defaults to 4096). Each span gets a fresh 256-bit random passphrase, AES-256-CBC,
+   PBKDF2-SHA256/10000 iterations and RSA-OAEP wrapping. Passphrases travel over pipes, never argv or
+   disk. OpenSSL runs with OPENSSL_CONF=/dev/null and no inherited OpenSSL/SSL config environment.
+   Integrity rests on marker hashes. The MBP holds only the public key; the Air and Ed's vault hold the
+   private key. The first native Air pull tests the RSA unwrap.
+5. Complete a private `.<plan>.building-*` directory and rename it to `<stage_root>/<plan>` with read-only
+   ciphertext, wrapped key, manifest and descriptor, plus `.source.json`. The descriptor is written last.
+   A failed new build removes only its own directory. A complete stage is reused only for the same
+   source/recipient after deterministically recreating the archive and comparing manifest, hash and size.
+   Foreign/incomplete stages refuse STAGE_CONFLICT; the tool never moves them.
+6. Copy all four artifacts using exclusive temporary files and atomic rename to
+   `~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-offload/<plan>/`. Existing objects must
+   match. For **each** artifact require positive `brctl status com.apple.CloudDocs` idle/caught-up with
+   no pending/error state; request eviction; observe SF_DATALESS; request download; observe
+   materialisation; compare downloaded sha256 AND size against the stage snapshot. Command success
+   alone never proves eviction. The stage remains materialised throughout this verification cycle.
+7. Only four complete, consistent observed readbacks permit the absent-only atomic `<plan>.ok`.
+   It records all artifact hashes, ciphertext size, source name, key fingerprint and per-artifact
+   `icloud evict+redownload sha256 match`, upload, observed eviction and verification times. Recheck
+   CloudDocs idle and source stability before publication. Successful completion precedes the next soak.
 
-**Re-runs.** A complete stage is reused only for the same OUT (resolved path) and recipient, and only after
-the archive is derived again from OUT (deterministic: fixed gzip header and level, tar metadata from the
-files) and its manifest, digest and size equal the stored ones, so an edited or corrupted stored descriptor
-is refused; the upload of the same bytes is then idempotent. That costs one more archive pass (about a
-minute for 2.9 GB), and a span whose files or directory times changed since the first attempt is refused.
-A repeated iCloud attempt that is still unconfirmed exits 8 (`ICLOUD_UNCONFIRMED`) and preserves the
-existing `.ok.unconfirmed`; it never uses exit 3 for that record. A later confirmed attempt may create
-`.ok` while leaving the historical unconfirmed record intact.
-Anything else at the stage path, complete or not, is refused `STAGE_CONFLICT`: the tool never moves a
-directory it did not build. The tool never deletes a stage or a remote folder. After the Air's pull of a
-span succeeds, the lead may remove `<stage_root>/<plan>/`; a remote `<plan>/` folder is removed only by the
-lead, and only to retry a plan whose stage was lost (the immutable upload otherwise refuses new bytes).
+Upload/status failure, wrong bytes or the overall deadline returns 5 without a new marker. Failed,
+unobserved or phase-timeout eviction/download returns 8 with only `.ok.unconfirmed`, including a retry
+of a placeholder left by failed download. That record satisfies no gate. A confirmed retry may add
+`.ok` while preserving the historical unconfirmed record. A valid typed `.ok` retry rechecks all four
+cloud hashes (and the original archive if OUT remains), then returns 0 without rewriting the marker.
+A legacy one-line marker returns 3 and needs separate evidence verification; existence alone authorises
+nothing. A racing marker writer also returns 3.
 
-`--deadline-epoch` is the next soak's start: the offload gives up, without a marker, if it cannot finish
-by then (A.3: the upload ends before the next soak starts). The bound is enforced by watchdogs on the
-openssl and provider children and by checks between files and phases; a single blocked filesystem call can
-return after the deadline. Expiry detected before publication prevents a marker; a delayed final
-marker filesystem call can publish an already verified marker after the last deadline check. The caller awaits the command and
-holds the next arm on any failure.
+Other exits: 1 internal, 2 usage, 4 input/stability refusal, 6 pull/SSD integrity failure, 7 existing or
+incomplete pull destination. Every nonzero exit holds the next arm. Await completion and recheck time.
+Without `--deadline-epoch`, one 5400 s budget covers the close; an explicit deadline must be finite and
+within 24 h. Supervised children are killed on deadline or TERM/HUP/INT. Filesystem calls are
+cooperative: a final delayed publication can complete after its last check, so the caller must still
+await and recheck time. After abnormal termination check remaining children and pending sync.
 
-**What `hash_type: size` proves.** RL-173 A.3 accepts the provider's hash or size. A size read-back proves
-the upload finished with the right length, not byte equality; the pull still checks the ciphertext against
-the marker. Prefer a hash type for production.
+### RL-174 D.2 storage table
 
-`pull` (Air, any time later): downloads the four files, checks the ciphertext and manifest against the
-marker's hashes (or the two A.2 hashes given by hand from RUN_STATE), checks the descriptor, decrypts with
-the private key, checks the archive hash, extracts only regular files and directories under the span's
-top directory (no duplicate names), re-hashes every regular file against the manifest (the exact set of
-regular files; directories, including empty ones, are not in the manifest), and moves the tree read-only
-(files 0444, directories 0555) to `/Volumes/JW-EXT/cadence-desk/<kit>/<span name>/`, beside
-`<span name>.mbp.SHA256SUMS` and `<span name>.air.SHA256SUMS`, the layout the Air copies already use. A
-symlinked kit directory, a symlinked backend plan directory and a kit directory inside a git repository are
-refused. `<span name>.pull.ok` is written last, synced and linked atomically, and marks a complete landing; a
-tree without a valid one is an interrupted landing, which the pull refuses (`INCOMPLETE_LANDING`) until the lead
-moves the tree and any sidecars aside (`chmod u+w <tree>` first if the tree is already 0555: a read-only
-directory cannot be renamed on APFS). Exit 6 on any integrity failure (nothing lands), 7 if the
-destination exists. A look reads a pulled copy that matches the marker (A.5).
+| Verified state | Close action |
+|---|---|
+| Packed stream re-read equals the per-file manifest | May delete the uncompressed original; archive stays materialised on the MBP |
+| iCloud readback AND SSD copy sha256 equal the receipt | May evict the local iCloud ciphertext and remove the stage ciphertext |
+| Only iCloud verified; Air/SSD away | Keep the materialised stage archive; proceed without waiting for the Air |
+| Free space <=60 decimal GB (20 GB above the kit's 40 GB line) | Mail lead_email; never force eviction to a single verified copy |
 
-`keygen` (Air): makes the recipient key pair and prints the fingerprint to pin.
+Close conservatively also waits for the iCloud gate before raw deletion. It rechecks the materialised
+stage, descriptor and original bytes immediately before deletion. Low-level offload retains OUT.
+Close refuses a missing/corrupt local pack when only iCloud is verified. Optional backends cannot drive
+close's deletion or eviction. Close leaves small stage metadata; it never removes the remote folder.
 
-## Key scheme (proposed; replaces `offload.key`)
+On the Air, `ssd-copy` downloads the four encrypted artifacts to `<mounted SSD>/span-archives/<plan>`,
+syncs and re-reads them against the marker, then issues `ssd.ok.json`. It requires an external mounted
+filesystem and never expands custody. Courier that small receipt to the MBP through the lead's approved
+record-delivery path. Like the copy marker, it is a **trusted record of an observed readback**, not an
+authenticated statement of current drive health. `close --ssd-receipt PATH` requires its plan, descriptor
+digest and all four hashes/sizes to match before eviction. Wrong/partial receipts refuse cleanup.
+No receipt means no eviction and no wait for the Air. Keep SSD bytes and receipt together.
+Configure and verify `/usr/bin/mail` and `lead_email` before close; mail failure holds the next arm.
 
-| | Interim (item 347) | This tool |
-|---|---|---|
-| Encryption | `openssl enc -aes-256-cbc -pbkdf2 -iter 200000`, one symmetric key file | Per span: a fresh 256-bit random passphrase, `openssl enc -aes-256-cbc -pbkdf2 -md sha256 -iter 10000`; the passphrase wrapped with RSA-OAEP to a 4096-bit recipient key |
-| What the MBP holds | the secret key `~/night-custody/offload/offload.key` | the **public** key only, pinned by fingerprint |
-| Who can decrypt | anyone with the MBP account | only the holder of the private key (Air custody root and Ed's vault) |
-| A.1 (second key copy off the MBP) | must be copied off the MBP by hand, within 24 h | met at creation: the private key is made on the Air and never exists on the MBP |
+### Every arm: pending-transfer read
 
-Why public-key:
-- **The MBP needs only to encrypt.** It holds no persistent archive-decryption key (it decrypts each new
-  ciphertext once, with the in-memory passphrase, only to self-check it), so a stolen MBP disk does not open
-  past cloud copies.
-  (The MBP still holds the plaintext originals, each span's passphrase in memory while it encrypts, and the
-  upload credential; a live compromise of the MBP is out of scope.)
-- **A.1 holds by construction.** The cloud copy is useless only if the private key is lost. The private key
-  is generated on the Air, kept in its custody root, and a second copy goes to Ed's vault. It is never
-  in the cloud folder, the repository or on the MBP.
-- **No new binary on the measurement host.** `openssl` (LibreSSL 3.3.6 on macOS; OpenSSL 3 in CI) does both
-  halves; the passphrase travels over a pipe (`-pass fd:N`, `pkeyutl` stdin) and is never on disk or argv.
-  Every openssl child runs with `OPENSSL_CONF=/dev/null` and no inherited `OPENSSL_*`, `SSL_*` or
-  `RANDFILE` variable, so it reads no configuration file (one under OUT included).
-  `age` would give the same separation with authenticated encryption, but it is not installed on either
-  Mac. Integrity does not rest on the cipher: the ciphertext and the plaintext manifest are anchored by the
-  marker's sha256 (and RUN_STATE), and the pull checks both, plus the archive hash, before anything lands.
-- **Rotation** is a new key pair and a new pinned fingerprint; old copies stay readable with the old
-  private key, which is kept.
-
-**The interim archive** `cq-dev-02-s02-a1` (item 350) was encrypted with `offload.key`, which is on the
-MBP only. RL-173 A.1 gives it 24 h from the ruling (until 2026-11-16 11:58 PST): copy `offload.key` to the
-Air's custody root and Ed's vault. (This tool will not re-offload that span: its marker exists, exit 3.)
-
-## iCloud is the default production path; no new credential
-
-Owner decision, 2026-11-15 17:46 PST: "use icloud, no? why would you not use icloud".
-Omitting `backend` or `backend.kind` selects `icloud`. The existing macOS iCloud Drive sign-in supplies
-access; there is no new account, OAuth token, rclone install or credential. Both Macs must already have
-access to the private iCloud Drive folder. Do not share it publicly. The provider sees encrypted file
-contents, wrapped keys, the descriptor and the plaintext manifest (relative names and per-file hashes).
-
-The optional, already tested `rclone` backend remains available for existing configurations. It requires
-an explicit absolute `rclone_config`, a named `remote`, and `hash_type` (`sha256`, `sha1`, `md5`, `dropbox`
-or `size`); it uses synchronous immutable copy and provider listing readback. No such provisioning is
-part of this install. `local` is synthetic testing only, requires `--allow-local-backend`, and always
-writes `.ok.unconfirmed`.
-
-### What the iCloud evidence establishes
-
-CloudDocs sync is asynchronous. This command synchronously waits for it and tests provider readback;
-it cannot shut down or bound the lifetime of Apple's daemons. The idle/caught-up status observation is
-from item 350's hand-run on the MBP. Eviction followed by an observed dataless placeholder and matching
-re-downloaded bytes supplies stronger evidence than hashing the still-resident sync-folder copy.
-A successful `brctl evict` exit alone does **not** prove eviction.
-
-The implementation uses Apple's `SF_DATALESS` flag (`0x40000000` in `sys/stat.h`), via Python's
-`os.stat(..., follow_symlinks=False).st_flags`, as described in
-[Apple TN3150](https://developer.apple.com/documentation/technotes/tn3150-getting-ready-for-data-less-files).
-The local Apple `brctl(1)` manual describes `evict` and `download`. No xattr, Spotlight (`mdls`) or
-`brctl monitor` interpretation is used. Unknown status formats, missing flag support, missing/removed
-commands, or a pinned file that cannot become dataless never earn `.ok`.
-
-**PROVISIONAL on macOS 26:** the builder ran synthetic fake-brctl tests on macOS 15.8.3; it did not
-contact the MBP or exercise live CloudDocs. Apple does not specify a stable `brctl status` wire format.
-The lead must qualify the commands/status/flag transitions on macOS 26 with synthetic bytes at install.
-The phase budgets default to 30 s for observed eviction and 600 s for download; `timeout_s` defaults
-to 5400 s, `poll_interval_s` to 2 s. Every phase is also bounded by the overall offload deadline.
-A filesystem operation can still block; the deadline is cooperative outside supervised subprocesses.
-
-**Research-lead question:** is iCloud with evict+redownload readback the permanent tool under A.3?
-The owner selected iCloud; this software review does not settle A.3's classification of its daemons.
-Until the research lead rules, retain the daemon maintenance line and the PROVISIONAL label.
-
-## Install (the lead, between spans; no measurement running)
-
-1. On the Air, run `python3.13 -B scripts/span_offload.py keygen --out-dir <Air custody root>/offload`.
-   Record `recipient_sha256`; put a second copy of `span-offload.key.pem` in Ed's vault (A.1).
-   The MBP receives only `span-offload.pub.pem` at `/Users/edr/night-custody/offload/`.
-2. On each Mac, verify iCloud Drive is already signed in and the destination is private. Create
-   `~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-offload` if needed. No directory component
-   may be a link. Check that no `.git` exists in any ancestor of this destination, the custody control
-   paths, the stage root, the marker directory or the Air work/destination roots.
-3. On the MBP, create `/Users/edr/night-custody/offload/span-offload` (separate from the interim stages).
-   Install a checkout of the eventual merge under `/Users/edr/code/jw-wt/span-offload-<sha>`.
-   Write `/Users/edr/night-custody/offload/span_offload.json` as a single-name regular file:
-
-```json
-{"schema": "joulewise.span_offload_config.v1",
- "recipient_public_key": "/Users/edr/night-custody/offload/span-offload.pub.pem",
- "recipient_sha256": "<the keygen fingerprint>",
- "stage_root": "/Users/edr/night-custody/offload/span-offload",
- "marker_dir": "/Users/Shared/JouleWise/desk-copy",
- "openssl": "/usr/bin/openssl",
- "backend": {"kind": "icloud", "brctl": "/usr/bin/brctl", "timeout_s": 5400},
- "forbid_paths": ["/Users/edr/night-custody/magistrate/desk_fence.json"],
- "default_budget_s": 5400}
-```
-
-   The root defaults to the item-350 destination above. `root` can be specified as an absolute path
-   for a synthetic probe; `poll_interval_s`, `evict_timeout_s` and `download_timeout_s` can be tuned.
-   Unknown top-level config keys are refused; no private key belongs on the MBP.
-4. On the Air, write a config with schema `joulewise.span_offload_pull_config.v1`, `identity` (the
-   private key path), `recipient_sha256`, `work_root` (on JW-EXT, same filesystem as `--dest-root`),
-   `openssl: /usr/bin/openssl` and `backend: {"kind": "icloud", "brctl": "/usr/bin/brctl"}`.
-5. Add `bird`, `cloudd`, `fileproviderd` to the RL-171 §5 maintenance line. Configure the controller
-   to await offload, hold the next arm and F0 on any nonzero/unconfirmed result, and check its deadline
-   again before the next soak. No test here authorizes a live measurement.
-6. **Qualify with synthetic bytes and production keys before counting any tool marker.** Make a scratch
-   span named for a probe plan (with a synthetic `runner_receipt.json`); use a scratch `marker_dir`.
-   Run `offload` on the MBP between spans. Require exit 0, four readback confirmations with observed
-   eviction/download times, and the documented status/flag transitions on macOS 26. Pull on the Air
-   into a scratch destination and compare manifests. The lead may remove the probe's cloud folder
-   afterwards. If the host cannot evict or redownload, exit 8 is expected: it does not satisfy a gate.
-
-## The close step (magistrate or controller)
-
-After the span's Check passes, between spans, with no fence up and nothing else running:
+From the MBP user's **GUI domain**, immediately before every arm and soak:
 
 ```sh
-setopt NULL_GLOB 2>/dev/null
-OUT=$(ls -d /Users/edr/campaign-out/<kit>/${PLAN}-*Z); test "$(echo "$OUT" | wc -l | tr -d ' ')" = 1 || { echo "STOP: OUT"; exit 1; }
-python3.13 -B /Users/edr/code/jw-wt/span-offload-<sha>/scripts/span_offload.py offload \
-  --config /Users/edr/night-custody/offload/span_offload.json --plan "$PLAN" --span-dir "$OUT" \
-  --require-file runner_receipt.json --deadline-epoch "$NEXT_SOAK_EPOCH"
+"$PY" -B "$REPO/scripts/span_offload.py" pending --config "$MBP_CONFIG"
 ```
 
-`--require-file` replaces the default list; name `runner_receipt.json` whenever it is given.
+Require exit 0 and a fresh ICLOUD_CLEAR line in the arm record. This read-only CloudDocs status check
+never uploads, downloads or evicts. It requires the whole container idle/caught-up, conservatively
+including all JouleWise folders. Pending/error/offline/empty/unknown status holds the arm. A cached
+observation cannot qualify another arm. Nothing of ours writes to iCloud Drive on the MBP while armed.
+Air uploads/evictions are allowed. Permanently list **bird, cloudd and fileproviderd** on the maintenance
+line, including after qualification.
 
-Exit 0 prints one `OFFLOAD_OK` line (plan, files, both hashes, ciphertext size, marker path), which goes
-into the span's RUN_STATE item. Before treating exit 3 as an already satisfied copy gate, check that
-`<marker_dir>/<plan>.ok` actually exists and record which path wrote it. An `.ok.unconfirmed` record
-never satisfies that check. Any
-other exit holds the next arm and F0; mail Ed and the lead with the one stderr line.
+## Install (lead, between spans)
 
-Later, on the Air:
+**MBP iCloud access requires a process launched in the signed-in user's GUI domain**, such as a
+LaunchAgent or the magistrate. SSH processes cannot reach iCloud Drive. Do not run qualification,
+offload, close or pending through SSH or count SSH output as provider evidence. Preparing files is
+separate from launching the actual GUI job. The PR builder does not contact the MBP or install this.
+
+1. On the Air, create the private key directory (keygen also creates a missing final directory as 0700):
+
+   ```sh
+   mkdir -m 700 /absolute/Air-custody/offload
+   python3.13 -B scripts/span_offload.py keygen --out-dir /absolute/Air-custody/offload
+   ```
+
+   Record recipient_sha256. Private key mode is 0600. Put a second private-key copy in Ed's vault;
+   deliver only span-offload.pub.pem to the MBP. Keep old private keys through rotation. The item-350
+   legacy offload.key needs its separate off-MBP backup; generating this pair does not back up that key.
+2. In each Mac's GUI session, verify the private iCloud Drive sign-in and create the default
+   JouleWise-offload folder if needed. Control/stage/marker/iCloud paths must have no links or `.git`
+   ancestor. No rclone, new account, OAuth token or new credential is needed.
+3. Install the reviewed checkout at `/Users/edr/code/jw-wt/span-offload-<sha>` on the MBP. Create private
+   `/Users/edr/night-custody/offload/span-offload` and `/Users/Shared/JouleWise/desk-copy` directories.
+   Write a single-name regular config, substituting the actual fingerprint and lead address:
+
+   ```json
+   {"schema":"joulewise.span_offload_config.v1",
+    "recipient_public_key":"/Users/edr/night-custody/offload/span-offload.pub.pem",
+    "recipient_sha256":"<keygen fingerprint>",
+    "stage_root":"/Users/edr/night-custody/offload/span-offload",
+    "marker_dir":"/Users/Shared/JouleWise/desk-copy",
+    "openssl":"/usr/bin/openssl",
+    "backend":{"kind":"icloud","brctl":"/usr/bin/brctl","timeout_s":5400},
+    "forbid_paths":["/Users/edr/night-custody/magistrate/desk_fence.json"],
+    "lead_email":"<lead email>","default_budget_s":5400}
+   ```
+
+   Add the controller's actual armed/close fences to forbid_paths. Verify the mail route. Unknown
+   top-level keys refuse. An absolute backend root may override the default for a synthetic probe.
+   Defaults: polling 2 s, observed eviction 30 s, download 600 s; every phase shares the overall deadline.
+4. On the Air, create a config with schema joulewise.span_offload_pull_config.v1, absolute identity,
+   recipient_sha256, absolute work_root on JW-EXT (same filesystem as pull destination),
+   openssl `/usr/bin/openssl`, and the same iCloud backend/root. Work/desk roots stay outside Git.
+5. Configure the GUI-domain magistrate to await close, hold every nonzero result, read pending transfers
+   before every arm, and retain the daemon maintenance line. Qualification below precedes production use.
+
+## Native production-key round trip (external gate; still owed)
+
+Between spans, with no measurement, pending soak or source writer, use **synthetic bytes** and the
+production key pair. Use scratch source/stage/marker/destination paths; never real custody.
+
+1. In the MBP user's **local GUI session**, choose absolute PY (installed Python 3.13), REPO,
+   PROBE_CONFIG and PROBE_OUT. Name the plan `span-offload-native-<UTC timestamp>`; OUT's basename must
+   equal that plan. Make a random binary file, nested and empty directories, and a synthetic
+   runner_receipt.json. Copy the production config to PROBE_CONFIG, keeping its production public
+   key/fingerprint and iCloud root but substituting scratch stage/marker roots. Save the source manifest.
+2. Create a one-shot LaunchAgent at
+   `~/Library/LaunchAgents/com.joulewise.span-offload-probe.plist`, using absolute paths and these fields:
+
+   ```text
+   Label = com.joulewise.span-offload-probe
+   ProgramArguments = [PY, -B, REPO/scripts/span_offload.py, offload,
+                       --config, PROBE_CONFIG, --plan, PROBE_PLAN, --span-dir, PROBE_OUT]
+   RunAtLoad = true
+   StandardOutPath = <absolute scratch path>/probe.stdout
+   StandardErrorPath = <absolute scratch path>/probe.stderr
+   ```
+
+   Use a real XML/binary plist and an array for ProgramArguments; placeholders are not literal argv.
+   From the local GUI session run:
+
+   ```sh
+   launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.joulewise.span-offload-probe.plist"
+   ```
+
+   Alternatively the magistrate already running in the GUI domain runs the same command directly.
+   **Do not substitute an SSH shell or SSH-launched Python.**
+3. Await completion. In that GUI session record
+   `launchctl print "gui/$(id -u)/com.joulewise.span-offload-probe"` (last exit status 0), stdout/stderr,
+   sw_vers, checkout SHA, Python/OpenSSL versions, public-key fingerprint and complete scratch `.ok`.
+   Require four `icloud evict+redownload sha256 match` rows with ordered upload/observed eviction/readback
+   times and equal hashes/sizes. The tool observes Apple's stat.st_flags SF_DATALESS (0x40000000).
+   Preserve the status/flag transition evidence in the native record. Unknown status, unsupported
+   flags or exit 8 leaves qualification PROVISIONAL; keep source and stage and report to the lead.
+4. Courier the scratch marker to the Air by the approved record path. In the Air GUI session, pull into
+   a scratch desk using the command below. Require exit 0, exact MBP/Air manifest equality and every
+   synthetic file's hash. This tests the production RSA unwrap. Run ssd-copy against that marker and
+   JW-EXT; preserve ssd.ok.json and require the retained ciphertext digest to equal the marker.
+5. In the MBP GUI domain, run probe close without an SSD receipt: require raw removal and a materialised
+   stage ciphertext. Deliver the probe SSD receipt and repeat close with it: require observed cache
+   eviction and stage ciphertext removal. Require a fresh pending read / ICLOUD_CLEAR before any next
+   soak. Failure holds the next arm.
+6. The lead records plan, paths, hashes, key fingerprint, native evidence and verdict in a dated report.
+   Only then change INTERIM/PROVISIONAL to permanent/qualified. Boot out the probe LaunchAgent in the
+   GUI session. The lead may remove only the synthetic probe/cloud artifacts; retain the native record.
+   A software-review verdict never substitutes for this round trip.
+
+## Close and Air commands
+
+The magistrate uses the exact OUT from the span record, in its GUI domain after the pushed desk bundle
+and MBP desk, before soak:
 
 ```sh
-python3.13 -B scripts/span_offload.py pull --config <air config> --plan "$PLAN" --kit "$KIT" \
-  --dest-root /Volumes/JW-EXT/cadence-desk --marker <copy of the .ok marker>
-# or, from RUN_STATE alone: --expect-manifest-sha256 <...> --expect-ciphertext-sha256 <...>
+"$PY" -B "$REPO/scripts/close_offload.py" --config "$MBP_CONFIG" \
+  --plan "$PLAN" --span-dir "$OUT" --deadline-epoch "$NEXT_SOAK_EPOCH"
+"$PY" -B "$REPO/scripts/span_offload.py" pending --config "$MBP_CONFIG"
 ```
 
-The MBP keeps OUT, uncompressed, until a second verified location holds it (A.5): the Air's pulled copy
-is that location.
+Record CLOSE_OK and fresh ICLOUD_CLEAR, then recheck time. Any nonzero result holds the next arm and F0;
+report stderr to the lead. On the Air, retaining encrypted SSD copies does not require the private key:
+
+```sh
+python3.13 -B scripts/span_offload.py ssd-copy --config "$AIR_CONFIG" --plan "$PLAN" \
+  --marker "$MARKER" --ssd-root /Volumes/JW-EXT
+# Courier /Volumes/JW-EXT/span-archives/$PLAN/ssd.ok.json through the approved record path.
+```
+
+In a later close interval the MBP may repeat close with `--ssd-receipt <courier path>` to reclaim local
+ciphertext. Cloud hashes are rechecked even with OUT absent. A registered desk/look can stage raw bytes:
+
+```sh
+python3.13 -B scripts/span_offload.py pull --config "$AIR_CONFIG" --plan "$PLAN" --kit "$KIT" \
+  --dest-root /Volumes/JW-EXT/cadence-desk --marker "$MARKER"
+```
+
+Pull verifies anchored hashes, safe tar paths/types and the exact manifest, then lands a read-only tree,
+MBP/Air manifests and `<span>.pull.ok`. An existing tree without a valid record is an interrupted landing
+(exit 7); the lead moves it and sidecars aside before retrying. Expand unreleased content only in a
+registered look. Keep a pending look's designated raw copy until that look ends (RL-174 D.3).
+
+Legacy rclone configurations remain for low-level offload/pull; hash_type size proves length only.
+Local is synthetic only, requires --allow-local-backend, and writes only .ok.unconfirmed. Neither can
+perform RL-174 close or the iCloud arm check.

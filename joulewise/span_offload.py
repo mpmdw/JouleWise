@@ -5,8 +5,9 @@ and writes the copy marker itself, so it never waits for the Air. The Air later 
 against the marker's hashes and decrypts it read-only into its desk tree.
 
 Bytes only (RL-173 A.4): no file under OUT is parsed. Each regular file is read once, as bytes, into the
-archive; the plaintext manifest is the sha256 of exactly those bytes. Nothing under OUT is changed or
-deleted (A.5). Nothing is written to the repository (A.6): the tool has no git step.
+archive; the plaintext manifest is the sha256 of exactly those bytes. Low-level offload retains OUT;
+explicit close applies RL-174 D.2 after verified packing and off-host readback. Nothing is written to
+the repository (A.6): the tool has no git step.
 
 Key scheme (documented in ``docs/ops/SPAN-OFFLOAD.md``): per span, a fresh 256-bit passphrase encrypts
 the archive (``openssl enc -aes-256-cbc -pbkdf2 -md sha256``) and is wrapped to an RSA (>= 3072-bit)
@@ -209,6 +210,48 @@ def _walk_error(error):
     raise refused("SPAN_UNREADABLE", type(error).__name__)
 
 
+def span_snapshot(span_dir, check=None):
+    """Census names and identities before reading ANY payload; ignore read-induced atime only.
+
+    ctime catches writes with restored mtime, inode/device catch replacement, directory metadata
+    catches membership changes. Comparing a second census after the last read establishes a common
+    stable interval for the whole tree. This assumes a closed source on a local filesystem, not an
+    adversary able to forge kernel metadata. The controller must stop all writers before close.
+    """
+    snapshot = {}
+
+    def visit(rel):
+        if check:
+            check()
+        path = Path(span_dir) / rel
+        info = os.lstat(path)  # directory identity BEFORE enumerating its children
+        snapshot[rel] = (info.st_dev, info.st_ino, info.st_mode, info.st_nlink, info.st_size,
+                         info.st_mtime_ns, info.st_ctime_ns)
+        if stat.S_ISDIR(info.st_mode):
+            with os.scandir(path) as entries:
+                children = sorted(entry.name for entry in entries)
+            for name in children:
+                _check_name(name, "the span")
+                visit(name if rel == "." else rel + "/" + name)
+        elif not stat.S_ISREG(info.st_mode):
+            raise refused("SPAN_SYMLINK" if stat.S_ISLNK(info.st_mode) else "SPAN_SPECIAL_FILE",
+                          "the source holds a link or special file")
+
+    visit(".")
+    return snapshot
+
+
+def require_snapshot(span_dir, expected, check=None):
+    try:
+        current = span_snapshot(span_dir, check)
+    except (OSError, OffloadError) as error:
+        if isinstance(error, OffloadError) and error.exit_kind != "refused":
+            raise
+        raise refused("SPAN_CHANGED", "the source tree changed during offload") from None
+    if current != expected:
+        raise refused("SPAN_CHANGED", "the source names, identities or metadata changed during offload")
+
+
 def manifest_bytes(digests):
     """``digests`` maps relative path -> sha256 hex. Output matches ``shasum -a 256`` on ``./path``."""
     return "".join(f"{digests[rel]}  ./{rel}\n" for rel in sorted(digests, key=lambda r: r.encode("utf-8"))).encode()
@@ -335,7 +378,10 @@ def write_archive(span_dir, sink, check=None):
     span_dir = Path(span_dir)
     top = span_dir.name
     _check_name(top, "the span's parent")
-    dirs, files = walk_span(span_dir)
+    snapshot = span_snapshot(span_dir, check)
+    dirs = sorted((rel for rel, info in snapshot.items() if rel != "." and stat.S_ISDIR(info[2])),
+                  key=lambda r: r.encode("utf-8"))
+    files = sorted((rel for rel, info in snapshot.items() if stat.S_ISREG(info[2])), key=lambda r: r.encode("utf-8"))
     writer = _HashingWriter(sink)
     digests = {}
     gz = gzip.GzipFile(filename="", mode="wb", fileobj=writer, compresslevel=GZIP_LEVEL, mtime=0)
@@ -353,6 +399,7 @@ def write_archive(span_dir, sink, check=None):
             if check:
                 check()
             digests[rel] = _add_file(tar, span_dir / rel, f"{top}/{rel}")
+        require_snapshot(span_dir, snapshot, check)
         tar.close()
         gz.close()
     except BaseException:
@@ -385,7 +432,8 @@ def _add_file(tar, path, arcname):
                 raise refused("SPAN_CHANGED", "a file shrank while it was archived") from None
             raise
         after = os.fstat(handle.fileno())
-        if handle.read(1) or (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
+        if handle.read(1) or (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (
+                before.st_size, before.st_mtime_ns, before.st_ctime_ns):
             raise refused("SPAN_CHANGED", "a file changed while it was archived")
         return reader.hash.hexdigest()
 
@@ -504,7 +552,7 @@ def encrypt_span(openssl, span_dir, passphrase, out_path, deadline=None):
     return result
 
 
-def verify_ciphertext(openssl, passphrase, in_path, archive_sha256, deadline=None):
+def verify_ciphertext(openssl, passphrase, in_path, archive_sha256, deadline=None, *, manifest=None, top=None):
     """Decrypt the staged ciphertext with the passphrase still in memory and require the archive's sha256.
 
     The MBP cannot test the RSA wrap (it has no private key), but it can prove the ciphertext it uploads
@@ -527,10 +575,32 @@ def verify_ciphertext(openssl, passphrase, in_path, archive_sha256, deadline=Non
     timer = threading.Timer(budget, proc.kill)
     timer.daemon = True
     timer.start()
-    digest = hashlib.sha256()
+    reader = _HashingReader(proc.stdout)
     try:
-        for chunk in iter(lambda: proc.stdout.read(CHUNK), b""):
-            digest.update(chunk)
+        if manifest is not None:
+            digests, seen = {}, set()
+            try:
+                # Parse only our freshly generated transport container, never a source payload.
+                with tarfile.open(fileobj=reader, mode="r|gz") as tar:
+                    for member in tar:
+                        if member.name in seen or not (member.isdir() or member.isreg()) or (
+                                member.name != top and not member.name.startswith(top + "/")):
+                            raise refused("PACK_MANIFEST_MISMATCH", "invalid packed member")
+                        seen.add(member.name)
+                        if member.isreg():
+                            digest = hashlib.sha256()
+                            with tar.extractfile(member) as handle:
+                                for chunk in iter(lambda: handle.read(CHUNK), b""):
+                                    if deadline:
+                                        deadline.remaining()
+                                    digest.update(chunk)
+                            digests[member.name[len(top) + 1:]] = digest.hexdigest()
+                if manifest_bytes(digests) != manifest:
+                    raise refused("PACK_MANIFEST_MISMATCH", "packed files differ from the per-file manifest")
+            except (tarfile.TarError, EOFError, zlib.error):
+                raise refused("CIPHERTEXT_UNVERIFIED", "the packed stream cannot be read") from None
+        for _chunk in iter(lambda: reader.read(CHUNK), b""):
+            pass  # include trailing compressed bytes in the archive digest; drain openssl before wait
         rc = proc.wait()
     finally:
         timer.cancel()
@@ -541,7 +611,7 @@ def verify_ciphertext(openssl, passphrase, in_path, archive_sha256, deadline=Non
         _CHILDREN.discard(proc)
     if deadline:
         deadline.remaining()
-    if rc or digest.hexdigest() != archive_sha256:
+    if rc or reader.hash.hexdigest() != archive_sha256:
         raise refused("CIPHERTEXT_UNVERIFIED", "the staged ciphertext does not decrypt to the archive")
 
 
@@ -913,12 +983,22 @@ class ICloudBackend:
         self._run(["download", str(path)], deadline)
         self._wait_flag(fd, path.name, False, deadline)
 
+    def _unconfirmed(self, error, deadline, row):
+        deadline.remaining()  # overall exhaustion is always exit 5
+        if error.code not in ("BRCTL_FAILED", "BRCTL_UNAVAILABLE", "BRCTL_TIMEOUT", "DEADLINE",
+                              "DATALESS_UNAVAILABLE"):
+            raise error
+        self.provider_confirmed = False
+        return dict(row, kind="icloud-unconfirmed", reason=error.code)
+
     def put(self, local, plan, name, deadline=None):
         if name not in names(plan).values():
             raise refused("BAD_NAME", "an iCloud object must have its plan's fixed name")
         deadline = self._bounded(deadline, self.timeout_s)
         snap = snapshot_digests(local, ())
         expected = snap["sha256"], snap["size"]
+        row = {"name": name, "sha256": expected[0], "size": expected[1], "provider_hash_type": "sha256",
+               "provider_hash": None, "provider_size": None, "provider_confirmed": False}
         with self._plan(plan, create=True) as (fd, directory):
             path = directory / name
             try:
@@ -928,7 +1008,11 @@ class ICloudBackend:
                 exists = False
             if exists:
                 if _is_dataless(self._info(fd, name)):
-                    self._download(fd, path, self._bounded(deadline, self.download_timeout_s))
+                    row["uploaded_epoch_s"] = self._wait_uploaded(deadline)
+                    try:
+                        self._download(fd, path, self._bounded(deadline, self.download_timeout_s))
+                    except OffloadError as error:
+                        return self._unconfirmed(error, deadline, row)
                 if self._digest(fd, name, deadline) != expected:
                     raise unverified("REMOTE_CONFLICT", f"{name} exists with other bytes")
             else:
@@ -947,8 +1031,6 @@ class ICloudBackend:
                         os.unlink(tmp, dir_fd=fd)
                 if self._digest(fd, name, deadline) != expected:
                     raise unverified("READBACK_HASH", name)
-            row = {"name": name, "sha256": expected[0], "size": expected[1], "provider_hash_type": "sha256",
-                   "provider_hash": None, "provider_size": None, "provider_confirmed": False}
             row["uploaded_epoch_s"] = self._wait_uploaded(deadline)
             try:
                 self._info(fd, name)
@@ -957,12 +1039,7 @@ class ICloudBackend:
                 row["evicted_epoch_s"] = self._wait_flag(fd, name, True, eviction)
                 self._download(fd, path, self._bounded(deadline, self.download_timeout_s))
             except OffloadError as error:
-                deadline.remaining()  # an exhausted overall budget is UNVERIFIED, never a completion
-                if error.code not in ("BRCTL_FAILED", "BRCTL_UNAVAILABLE", "BRCTL_TIMEOUT", "DEADLINE",
-                                      "DATALESS_UNAVAILABLE"):
-                    raise
-                self.provider_confirmed = False
-                return dict(row, kind="icloud-unconfirmed", reason=error.code)
+                return self._unconfirmed(error, deadline, row)
             got = self._digest(fd, name, deadline)
             if got != expected:
                 raise unverified("READBACK_HASH", name)
@@ -1001,7 +1078,7 @@ def make_backend(spec, allow_local=False):
 # --- configs ---------------------------------------------------------------------------------------
 
 MBP_KEYS = {"schema", "recipient_public_key", "recipient_sha256", "stage_root", "marker_dir", "backend", "openssl",
-            "forbid_paths", "default_budget_s"}
+            "forbid_paths", "default_budget_s", "lead_email"}
 DEFAULT_BUDGET_S = 5400  # item 347's 90 minutes, when the caller names no deadline
 AIR_KEYS = {"schema", "identity", "recipient_sha256", "work_root", "backend", "openssl"}
 
@@ -1178,7 +1255,8 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
         passphrase = secrets.token_hex(32).encode("ascii")
         manifest, archive_sha, archive_size, count = encrypt_span(openssl, span_dir, passphrase,
                                                                   building / files["ciphertext"], deadline)
-        verify_ciphertext(openssl, passphrase, building / files["ciphertext"], archive_sha, deadline)
+        verify_ciphertext(openssl, passphrase, building / files["ciphertext"], archive_sha, deadline,
+                          manifest=manifest, top=Path(span_dir).name)
         wrap_passphrase(openssl, recipient_pem, passphrase, building / files["wrapped_key"], deadline, bits)
         del passphrase
         (building / files["manifest"]).write_bytes(manifest)
@@ -1189,6 +1267,7 @@ def build_stage(config, plan, span_dir, openssl, recipient_pem, deadline, clock=
                        "passphrase": "256-bit random, hex", "wrap": "rsa-oaep",
                        "recipient_sha256": config["recipient_sha256"]},
             "archive": {"sha256": archive_sha, "size": archive_size},
+            "pack_verification": "stream per-file manifest match",
             "manifest": {"files": count},
             "files": {kind: {"name": files[kind], **_sha_size(building / files[kind])}
                       for kind in ("ciphertext", "wrapped_key", "manifest")},
@@ -1266,9 +1345,9 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
     stage_root = Path(config["stage_root"])
     if not marker_dir.is_dir() or not stage_root.is_dir():
         raise refused("CONFIG", "the marker directory or the stage root does not exist")
-    if os.path.lexists(marker_path(marker_dir, plan, True)):
-        raise OffloadError("MARKER_EXISTS", "the marker already exists; nothing done", "marker_exists")
     backend = make_backend(config.get("backend", {}), allow_local)
+    if os.path.lexists(marker_path(marker_dir, plan, True)):
+        return recheck_marker(config, plan, span_dir, backend, Deadline(deadline_epoch, clock))
     if not walk_span(span_dir)[1]:  # refuses links/special files and a missing or symlinked span, too
         raise refused("SPAN_EMPTY", "the span holds no regular file")
     outputs = {"stage_root": stage_root, "marker_dir": marker_dir,
@@ -1289,6 +1368,7 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
             raise refused("SPAN_NOT_CLOSED", f"required file {name} is absent")
     deadline.remaining()
     with plan_lock(stage_root, plan), tempfile.TemporaryDirectory(prefix=f".{plan}.key-", dir=stage_root) as keydir:
+        source_snapshot = span_snapshot(span_dir, deadline.remaining)
         # One snapshot of the public key: the fingerprint, the size check and the wrap all use these bytes.
         recipient_pem = Path(keydir) / "recipient.pem"
         try:
@@ -1331,6 +1411,11 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
             "archive_sha256": descriptor["archive"]["sha256"],
             "provider_confirmation": confirmations,
         }
+        if isinstance(backend, ICloudBackend) and backend.provider_confirmed:
+            marker_files(record, plan, icloud=True)
+        if isinstance(backend, ICloudBackend) and backend.provider_confirmed:
+            backend._wait_uploaded(deadline)
+        require_snapshot(span_dir, source_snapshot, deadline.remaining)
         deadline.remaining()  # the last check before the marker
         marker = marker_path(marker_dir, plan, backend.provider_confirmed)
         try:
@@ -1345,6 +1430,234 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
                                    "unconfirmed") from None
             raise
     return record
+
+
+def read_record(path):
+    with open_regular(path, "an offload record", single_link=True) as handle:
+        try:
+            record = json.loads(handle.read(1 << 20))
+        except (ValueError, RecursionError):
+            raise refused("RECORD_INVALID", "the offload record is not JSON") from None
+    if not isinstance(record, dict):
+        raise refused("RECORD_INVALID", "the offload record is not an object")
+    return record
+
+
+def marker_files(record, plan, *, icloud=False):
+    """Validate a typed copy marker, including every observed round trip. Legacy lines are no proof."""
+    try:
+        if record["schema"] != MARKER_SCHEMA or record["plan"] != plan or record["provider_confirmed"] is not True:
+            raise ValueError
+        if not span_name_ok(record["span_name"], plan):
+            raise ValueError
+        if icloud and record["backend"]["kind"] != "icloud":
+            raise ValueError
+        expect = expectations(record)
+        files = {}
+        rows = record["provider_confirmation"]
+        if len(rows) != len(UPLOAD_ORDER):
+            raise ValueError
+        for kind, row in zip(UPLOAD_ORDER, rows):
+            if row["name"] != names(plan)[kind] or row["sha256"] != expect[kind] or not HEX64.fullmatch(expect[kind]):
+                raise ValueError
+            if type(row["size"]) is not int or row["size"] < 1 or row["provider_size"] != row["size"]:
+                raise ValueError
+            if icloud or record["backend"]["kind"] == "icloud":
+                times = [row[k] for k in ("uploaded_epoch_s", "evicted_epoch_s", "verified_epoch_s")]
+                if row.get("provider_confirmed") is not True or row["kind"] != ICLOUD_CONFIRMATION \
+                        or row["provider_hash"] != expect[kind] or not all(number(t) for t in times) \
+                        or times != sorted(times):
+                    raise ValueError
+            files[kind] = {"sha256": expect[kind], "size": row["size"]}
+        if files["ciphertext"] != record["ciphertext"]:
+            raise ValueError
+        return files
+    except (KeyError, TypeError, ValueError):
+        raise refused("MARKER_INVALID", "the marker lacks complete, consistent verification evidence") from None
+
+
+def recheck_marker(config, plan, span_dir, backend, deadline):
+    marker = marker_path(config["marker_dir"], plan, True)
+    try:
+        record = read_record(marker)
+    except OffloadError as error:
+        if error.code == "RECORD_INVALID":
+            raise OffloadError("MARKER_EXISTS", "legacy marker preserved; verify it separately", "marker_exists") from None
+        raise
+    expected = marker_files(record, plan)
+    if record["backend"] != backend.describe() or record.get("recipient_sha256") != config["recipient_sha256"]:
+        raise refused("MARKER_INVALID", "the marker belongs to another backend or key")
+    controls = {"marker": marker, "stage_root": config["stage_root"], "recipient": config["recipient_public_key"]}
+    if isinstance(backend, (ICloudBackend, LocalBackend)):
+        controls["backend"] = backend.root
+    if isinstance(backend, RcloneBackend):
+        controls["rclone_config"] = backend.config
+    check_output_paths(span_dir, controls)
+    with plan_lock(config["stage_root"], plan), tempfile.TemporaryDirectory(dir=config["stage_root"]) as tmp:
+        for kind, name in names(plan).items():
+            target = Path(tmp) / name
+            backend.get(plan, name, target, deadline)
+            if _sha_size(target) != expected[kind]:
+                raise unverified("READBACK_HASH", "a previously verified cloud artifact changed")
+        if os.path.lexists(span_dir):
+            manifest, digest, _size, _count = write_archive(span_dir, _NullSink(), deadline.remaining)
+            if sha256_bytes(manifest) != record["manifest_sha256"] or digest != record["archive_sha256"]:
+                raise refused("SPAN_CHANGED", "the source differs from the existing copy marker")
+        if isinstance(backend, ICloudBackend):
+            backend._wait_uploaded(deadline)
+        deadline.remaining()
+    return record  # immutable marker; valid retries exit 0 only after rechecking hashes
+
+
+def pending_transfers(config, *, clock=time.time):
+    """Read-only pre-arm observation. Container-wide idle is stricter than JouleWise folders only.
+
+    Unknown, pending, offline and error states fail closed. This command never downloads or evicts.
+    Run in the user's GUI domain; an SSH observation cannot qualify the MBP's iCloud session.
+    """
+    backend = make_backend(config.get("backend", {}))
+    if not isinstance(backend, ICloudBackend):
+        raise refused("ICLOUD_REQUIRED", "pending-transfer checks require the iCloud backend")
+    deadline = Deadline(clock() + min(backend.timeout_s, 30), clock)
+    clear = backend._uploaded(backend._run(["status", "com.apple.CloudDocs"], deadline))
+    return {"clear": clear, "observed_epoch_s": clock(), "scope": "com.apple.CloudDocs"}
+
+
+SSD_SCHEMA = "joulewise.span_offload_ssd.v1"
+
+
+def require_ssd_mount(root):
+    if not os.path.ismount(root) or os.stat(root).st_dev == os.stat(root.anchor).st_dev:
+        raise refused("SSD_MOUNT", "--ssd-root must be the mounted external SSD, not a directory on the system disk")
+
+
+def ssd_copy(config, plan, marker, ssd_root, *, clock=time.time):
+    """Air: retain encrypted transport bytes on the mounted SSD; read back and publish a receipt.
+
+    No archive is expanded. The receipt is a trusted courier record, like the copy marker; copy it
+    to the MBP only after this command succeeds. It certifies a readback, not perpetual SSD health.
+    """
+    check_id(plan, "plan")
+    expected = marker_files(marker, plan, icloud=True)
+    root = Path(ssd_root)
+    if not root.is_absolute() or ".." in root.parts:
+        raise refused("SSD_MOUNT", "the SSD mount must be an absolute path")
+    require_ssd_mount(root)
+    check_output_paths(None, {"ssd_root": root})
+    backend = make_backend(config.get("backend", {}))
+    if not isinstance(backend, ICloudBackend) or backend.describe() != marker["backend"]:
+        raise refused("ICLOUD_REQUIRED", "the SSD copy must use the marker's iCloud backend")
+    deadline = Deadline(clock() + DEFAULT_BUDGET_S, clock)
+    with _directory_no_links(root):
+        archive_root = root / "span-archives"
+        archive_root.mkdir(mode=0o700, exist_ok=True)
+    with _directory_no_links(archive_root):
+        final = archive_root / plan
+        receipt = final / "ssd.ok.json"
+        if os.path.lexists(final):
+            with _directory_no_links(final):
+                for kind, name in names(plan).items():
+                    if _sha_size(final / name) != expected[kind]:
+                        raise integrity("SSD_MISMATCH", "the existing SSD copy differs from the marker")
+                if read_record(receipt).get("files") != expected:
+                    raise integrity("SSD_MISMATCH", "the SSD receipt differs from the marker")
+            return str(receipt)
+        with tempfile.TemporaryDirectory(prefix=f".{plan}.ssd-", dir=archive_root) as tmp:
+            tmp = Path(tmp)
+            for kind, name in names(plan).items():
+                target = tmp / name
+                backend.get(plan, name, target, deadline)
+                with open_regular(target, "an SSD artifact", single_link=True) as handle:
+                    os.fsync(handle.fileno())
+                if _sha_size(target) != expected[kind]:
+                    raise integrity("SSD_MISMATCH", "the SSD readback differs from the marker")
+                target.chmod(0o400)
+            write_marker(tmp / "ssd.ok.json", {"schema": SSD_SCHEMA, "plan": plan,
+                         "descriptor_sha256": marker["descriptor_sha256"], "files": expected,
+                         "destination": str(final), "verified_epoch_s": clock()})
+            os.rename(tmp, final)
+    return str(receipt)
+
+
+def storage_alarm(config, plan):
+    """Mail at <=60 decimal GB (20 GB above the 40 GB line). Never authorise eviction."""
+    free = shutil.disk_usage(config["stage_root"])[2]
+    if free > 60_000_000_000:
+        return False
+    recipient = config.get("lead_email", "")
+    if not re.fullmatch(r"[A-Za-z0-9_.+%-]+@[A-Za-z0-9.-]+", recipient):
+        raise refused("LEAD_EMAIL", "configure lead_email for the RL-174 storage alarm")
+    try:
+        result = subprocess.run(["/usr/bin/mail", "-s", "JouleWise disk space: " + plan, recipient],
+                                input=f"plan={plan} free_bytes={free}; 40 GB line + 20 GB warning. No forced eviction.\n".encode(),
+                                capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        raise unverified("STORAGE_MAIL_FAILED", "the lead's disk-space mail could not be sent") from None
+    if result.returncode:
+        raise unverified("STORAGE_MAIL_FAILED", "the lead's disk-space mail was refused")
+    return True
+
+
+def close_offload(config, plan, span_dir, *, ssd_receipt=None, deadline_epoch=None, clock=time.time):
+    """Explicit RL-174 D.2 close, after the desk bundle is pushed and the MBP desk is final.
+
+    A verified pack permits raw deletion. Keep its materialised ciphertext until BOTH iCloud and
+    a trusted SSD readback receipt are verified. No receipt means no wait for the Air and no eviction.
+    """
+    backend = make_backend(config.get("backend", {}))
+    if not isinstance(backend, ICloudBackend):
+        raise refused("ICLOUD_REQUIRED", "close requires observed iCloud readback")
+    span_dir = Path(span_dir)
+    check_output_paths(None, {"original": span_dir})  # never delete any repository
+    if deadline_epoch is None:
+        deadline_epoch = clock() + config.get("default_budget_s", DEFAULT_BUDGET_S)
+    mailed = storage_alarm(config, plan)
+    record = offload(config, plan, span_dir, deadline_epoch=deadline_epoch, clock=clock)
+    if not record["provider_confirmed"]:
+        raise OffloadError("ICLOUD_UNCONFIRMED", "the original and archive are retained", "unconfirmed")
+    expected = marker_files(record, plan, icloud=True)
+    deadline = Deadline(deadline_epoch, clock)
+    stage = Path(config["stage_root"]) / plan
+    with plan_lock(config["stage_root"], plan):
+        # Validate the courier receipt BEFORE deleting or evicting anything.
+        if ssd_receipt is not None:
+            check_output_paths(span_dir, {"ssd_receipt": ssd_receipt})
+            receipt = read_record(ssd_receipt)
+            if receipt.get("schema") != SSD_SCHEMA or receipt.get("plan") != plan \
+                    or receipt.get("descriptor_sha256") != record["descriptor_sha256"] \
+                    or receipt.get("files") != expected or not number(receipt.get("verified_epoch_s")):
+                raise refused("SSD_RECEIPT_INVALID", "SSD readback does not match this copy marker")
+        with _directory_no_links(stage):
+            archive = stage / names(plan)["ciphertext"]
+            if ssd_receipt is None and (not os.path.lexists(archive) or _sha_size(archive) != expected["ciphertext"]):
+                raise refused("PACK_UNVERIFIED", "keep a materialised local archive while only iCloud is verified")
+        if os.path.lexists(span_dir):
+            found = _stage_complete(stage, plan)
+            if found is None or found["descriptor_sha256"] != record["descriptor_sha256"] \
+                    or found["descriptor"].get("pack_verification") != "stream per-file manifest match" \
+                    or found["source"].get("source") != _real(span_dir):
+                raise refused("PACK_UNVERIFIED", "a verified, materialised local pack is required before raw deletion")
+            snapshot = span_snapshot(span_dir, deadline.remaining)
+            manifest, digest, _size, _count = write_archive(span_dir, _NullSink(), deadline.remaining)
+            if sha256_bytes(manifest) != record["manifest_sha256"] or digest != record["archive_sha256"]:
+                raise refused("SPAN_CHANGED", "the original differs from the verified pack")
+            require_snapshot(span_dir, snapshot, deadline.remaining)
+            shutil.rmtree(span_dir)  # explicit close only; the low-level offload never deletes OUT
+        if ssd_receipt is not None:
+            deadline.remaining()
+            name = names(plan)["ciphertext"]
+            with backend._plan(plan) as (fd, directory):
+                backend._run(["evict", str(directory / name)], deadline)
+                backend._wait_flag(fd, name, True, deadline)
+            archive = stage / name
+            if os.path.lexists(archive):
+                if _sha_size(archive) != expected["ciphertext"]:
+                    raise refused("STAGE_CHANGED", "local archive changed; retained")
+                archive.unlink()
+        backend._wait_uploaded(deadline)
+        if not mailed:
+            mailed = storage_alarm(config, plan)
+    return dict(record, original_deleted=True, archive_evicted=ssd_receipt is not None, storage_mail_sent=mailed)
 
 
 def marker_path(marker_dir, plan, provider_confirmed):
@@ -1565,6 +1878,9 @@ def keygen(openssl, out_dir, bits=4096):
     out_dir = Path(out_dir)
     if inside_git(out_dir):
         raise refused("PATH_IN_REPOSITORY", "the key directory is inside a git repository")
+    out_dir.mkdir(mode=0o700, exist_ok=True)
+    if out_dir.is_symlink() or not out_dir.is_dir():
+        raise refused("KEY_DIRECTORY", "the key directory must be a real private directory")
     private, public = out_dir / "span-offload.key.pem", out_dir / "span-offload.pub.pem"
     if os.path.lexists(private) or os.path.lexists(public):
         raise refused("KEY_EXISTS", "a key file already exists; nothing written")

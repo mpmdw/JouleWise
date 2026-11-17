@@ -193,6 +193,222 @@ class SpanOffloadTests(unittest.TestCase):
 
     # --- offload ------------------------------------------------------------------------------
 
+    def test_source_membership_and_cross_file_races_never_certify(self):
+        real = so._add_file
+        for change in ("add", "mixed", "restore-mtime", "empty-dir", "replace"):
+            with self.subTest(change=change):
+                plan = PLAN + "-race-" + change
+                span = self.span_for(plan)
+                fired = []
+
+                def race(tar, path, arcname):
+                    result = real(tar, path, arcname)
+                    if not fired:
+                        fired.append(True)
+                        if change == "add":
+                            (span / "late.bin").write_bytes(b"late")
+                        elif change == "empty-dir":
+                            (span / "late-dir").mkdir()
+                        elif change == "replace":
+                            data = path.read_bytes()
+                            path.unlink()
+                            path.write_bytes(data)
+                        else:
+                            stamp = path.stat()
+                            path.write_bytes(b"changed after its read")
+                            (span / "runner_receipt.json").write_bytes(b"changed before its read")
+                            if change == "restore-mtime":
+                                os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+                    return result
+
+                with mock.patch.object(so, "_add_file", race), self.assertRaises(so.OffloadError) as caught:
+                    so.offload(self.config, plan, span, allow_local=True)
+                self.assertEqual(caught.exception.code, "SPAN_CHANGED")
+                self.assertFalse(self.marker(plan).exists())
+                self.assertFalse((self.tmp / "cloud" / plan).exists())
+
+    def test_source_change_during_cloud_readback_prevents_marker(self):
+        backend = self.fake_brctl()
+        real = so.ICloudBackend.put
+
+        def race(instance, *args, **kwargs):
+            row = real(instance, *args, **kwargs)
+            (self.span / "late.bin").write_bytes(b"late")
+            return row
+
+        with mock.patch.object(so.ICloudBackend, "put", race), self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertEqual(caught.exception.code, "SPAN_CHANGED")
+        self.assertEqual(list((self.tmp / "markers").iterdir()), [])
+
+    def test_keygen_creates_a_private_missing_output_directory(self):
+        root = self.tmp / "new-private-keys"
+        fingerprint = so.keygen(OPENSSL, root, 3072)
+        self.assertRegex(fingerprint, r"^[0-9a-f]{64}$")
+        self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE((root / "span-offload.key.pem").stat().st_mode), 0o600)
+
+    def test_retry_of_failed_placeholder_download_remains_exit_8(self):
+        backend = self.fake_brctl(FAKE_BRCTL_FAIL="download")
+        conf = self.tmp / "icloud.json"
+        conf.write_text(json.dumps(dict(self.config, backend=backend)))
+        argv = ["offload", "--config", str(conf), "--plan", PLAN, "--span-dir", str(self.span)]
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(argv), 8)
+            original = self.marker().read_bytes()
+            self.assertEqual(cli.main(argv), 8)
+        self.assertEqual(self.marker().read_bytes(), original)
+        self.assertFalse(self.marker(confirmed=True).exists())
+
+    def test_pending_transfer_read_is_fail_closed_and_does_not_mutate_cloud(self):
+        backend = self.fake_brctl()
+        config = dict(self.config, backend=backend)
+        result = so.pending_transfers(config)
+        self.assertTrue(result["clear"])
+        for status in ("", "unknown", "com.apple.CloudDocs client:idle caught-up needs-upload",
+                       "com.apple.CloudDocs client:idle caught-up downloading"):
+            with mock.patch.dict(os.environ, {"FAKE_BRCTL_STATUSES": json.dumps([status])}):
+                self.assertFalse(so.pending_transfers(config)["clear"])
+        calls = [json.loads(line) for line in (self.tmp / "brctl-state" / "calls").read_text().splitlines()]
+        self.assertTrue(all(call == ["status", "com.apple.CloudDocs"] for call in calls))
+        with mock.patch.dict(os.environ, {"FAKE_BRCTL_FAIL": "status"}), self.assertRaises(so.OffloadError):
+            so.pending_transfers(config)
+
+    def test_pack_readback_checks_per_file_manifest_before_any_deletion(self):
+        real = so.encrypt_span
+
+        def wrong_manifest(*args, **kwargs):
+            manifest, digest, size, count = real(*args, **kwargs)
+            return b"0" * 64 + manifest[64:], digest, size, count
+
+        with mock.patch.object(so, "encrypt_span", wrong_manifest), self.assertRaises(so.OffloadError) as caught:
+            self.offload()
+        self.assertEqual(caught.exception.code, "PACK_MANIFEST_MISMATCH")
+        self.assertTrue(self.span.exists())
+        self.assertEqual(list((self.tmp / "cloud").iterdir()), [])
+
+    def test_close_cloud_only_deletes_raw_but_keeps_materialised_pack(self):
+        backend = self.fake_brctl()
+        config = dict(self.config, backend=backend, lead_email="lead@example.test")
+        before = so.hash_tree(self.span)
+        result = so.close_offload(config, PLAN, self.span)
+        self.assertTrue(result["original_deleted"])
+        self.assertFalse(result["archive_evicted"])
+        self.assertFalse(self.span.exists())
+        archive = self.tmp / "stage" / PLAN / (PLAN + ".tgz.enc")
+        self.assertGreater(archive.stat().st_size, 0)
+        self.assertEqual(so.sha256_file(archive), result["ciphertext"]["sha256"])
+        self.pull(so.expectations(result), config=dict(self.air, backend=backend))
+        self.assertEqual(so.hash_tree(self.tmp / "desk" / "cl-syn-01" / SPAN), before)
+        # Retrying a completed close rechecks its cloud hashes and returns 0, including with no OUT.
+        self.assertTrue(so.close_offload(config, PLAN, self.span)["original_deleted"])
+
+    def test_close_unconfirmed_never_deletes_and_ssd_mismatch_never_evicts(self):
+        backend = self.fake_brctl(FAKE_BRCTL_NO_EVICTION="1")
+        config = dict(self.config, backend=backend, lead_email="lead@example.test")
+        with self.assertRaises(so.OffloadError):
+            so.close_offload(config, PLAN, self.span)
+        self.assertTrue(self.span.exists())
+        os.environ.pop("FAKE_BRCTL_NO_EVICTION")
+        record = so.offload(config, PLAN, self.span)
+        receipt = self.tmp / "ssd.json"
+        receipt.write_bytes(so.canonical({"schema": so.SSD_SCHEMA, "plan": PLAN, "files": {}}))
+        with self.assertRaises(so.OffloadError):
+            so.close_offload(config, PLAN, self.span, ssd_receipt=receipt)
+        self.assertTrue((self.tmp / "stage" / PLAN / (PLAN + ".tgz.enc")).exists())
+        self.assertTrue(record["provider_confirmed"])
+
+    def test_close_evicts_only_after_ssd_copy_readback_matches_receipt(self):
+        backend = self.fake_brctl()
+        config = dict(self.config, backend=backend, lead_email="lead@example.test")
+        record = so.offload(config, PLAN, self.span)
+        ssd = self.tmp / "ssd"
+        ssd.mkdir()
+        with mock.patch.object(so, "require_ssd_mount"):
+            receipt = so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd)
+        self.assertEqual(so.sha256_file(Path(receipt).parent / (PLAN + ".tgz.enc")), record["ciphertext"]["sha256"])
+        result = so.close_offload(config, PLAN, self.span, ssd_receipt=receipt)
+        self.assertTrue(result["archive_evicted"])
+        self.assertFalse(self.span.exists())
+        self.assertFalse((self.tmp / "stage" / PLAN / (PLAN + ".tgz.enc")).exists())
+        self.assertEqual((self.tmp / "cloud" / PLAN / (PLAN + ".tgz.enc")).stat().st_size, 0)
+
+    def test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction(self):
+        for free, expected in ((60_000_000_001, False), (60_000_000_000, True), (39_000_000_000, True)):
+            with self.subTest(free=free), mock.patch.object(so.shutil, "disk_usage", return_value=(100, 0, free)), \
+                    mock.patch.object(so.subprocess, "run") as mail:
+                mail.return_value.returncode = 0
+                self.assertEqual(so.storage_alarm(self.config | {"lead_email": "lead@example.test"}, PLAN), expected)
+                self.assertEqual(mail.called, expected)
+                if expected:
+                    self.assertEqual(mail.call_args.args[0][-1], "lead@example.test")
+
+    def test_typed_marker_retry_rechecks_cloud_hashes_and_never_rewrites_marker(self):
+        backend = self.fake_brctl()
+        config = dict(self.config, backend=backend)
+        original = so.offload(config, PLAN, self.span)
+        marker = self.marker(confirmed=True).read_bytes()
+        self.assertEqual(so.offload(config, PLAN, self.span), original)
+        path = self.tmp / "brctl-state" / (PLAN + ".key.enc")
+        path.write_bytes(b"bad")
+        with self.assertRaises(so.OffloadError):
+            so.offload(config, PLAN, self.span)
+        self.assertEqual(self.marker(confirmed=True).read_bytes(), marker)
+
+    def test_pending_cli_holds_on_unknown_or_pending_state(self):
+        backend = self.fake_brctl()
+        conf = self.tmp / "mbp.json"
+        conf.write_text(json.dumps(dict(self.config, backend=backend)))
+        argv = ["pending", "--config", str(conf)]
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(argv), 0)
+            with mock.patch.dict(os.environ, {"FAKE_BRCTL_STATUSES": '["unknown"]'}):
+                self.assertEqual(cli.main(argv), 5)
+        self.assertIn("ICLOUD_CLEAR", out.getvalue())
+
+    def test_close_refuses_missing_or_corrupt_local_pack_before_raw_deletion(self):
+        backend = self.fake_brctl()
+        config = dict(self.config, backend=backend)
+        so.offload(config, PLAN, self.span)
+        archive = self.tmp / "stage" / PLAN / (PLAN + ".tgz.enc")
+        data = archive.read_bytes()
+        archive.chmod(0o600)
+        archive.write_bytes(b"bad")
+        with self.assertRaises(so.OffloadError):
+            so.close_offload(config, PLAN, self.span)
+        self.assertTrue(self.span.exists())
+        archive.write_bytes(data)
+        shutil.rmtree(self.span)
+        archive.unlink()
+        with self.assertRaises(so.OffloadError):
+            so.close_offload(config, PLAN, self.span)
+
+    def test_ssd_copy_refuses_system_disk_and_wrong_cloud_bytes(self):
+        backend = self.fake_brctl()
+        record = so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        ssd = self.tmp / "ssd"
+        ssd.mkdir()
+        with self.assertRaises(so.OffloadError) as caught:
+            so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd)
+        self.assertEqual(caught.exception.code, "SSD_MOUNT")
+        (self.tmp / "brctl-state" / (PLAN + ".tgz.enc")).write_bytes(b"bad")
+        with mock.patch.object(so, "require_ssd_mount"), self.assertRaises(so.OffloadError):
+            so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd)
+        self.assertFalse((ssd / "span-archives" / PLAN).exists())
+
+    def test_incomplete_readback_evidence_cannot_publish_ok(self):
+        backend = self.fake_brctl()
+        real = so.ICloudBackend.put
+
+        def missing_observation(instance, *args, **kwargs):
+            row = real(instance, *args, **kwargs)
+            row.pop("evicted_epoch_s")
+            return row
+
+        with mock.patch.object(so.ICloudBackend, "put", missing_observation), self.assertRaises(so.OffloadError):
+            so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        self.assertFalse(self.marker(confirmed=True).exists())
+
     def test_round_trip_marker_and_read_only_pull(self):
         before = so.hash_tree(self.span)
         record = self.offload(require_files=["runner_receipt.json"])
@@ -563,11 +779,9 @@ class SpanOffloadTests(unittest.TestCase):
         record = so.offload(dict(self.config, backend=backend), PLAN, self.span)
         self.assertTrue(record["provider_confirmed"])
         self.assertTrue(record["stage_reused"])
-        before_calls = (self.tmp / "brctl-state" / "calls").read_bytes()
-        with self.assertRaises(so.OffloadError) as caught:
-            so.offload(dict(self.config, backend=backend), PLAN, self.span)
-        self.assertEqual(caught.exception.exit_kind, "marker_exists")
-        self.assertEqual((self.tmp / "brctl-state" / "calls").read_bytes(), before_calls)
+        marker_before = self.marker(confirmed=True).read_bytes()
+        self.assertEqual(so.offload(dict(self.config, backend=backend), PLAN, self.span), record)
+        self.assertEqual(self.marker(confirmed=True).read_bytes(), marker_before)
         plan = PLAN + "-timeout"
         conf.write_text(json.dumps(dict(self.config, backend=dict(backend, timeout_s=0.2))))
         with mock.patch.dict(os.environ, {"FAKE_BRCTL_STATUSES": '["com.apple.CloudDocs needs-upload"]'}), \
