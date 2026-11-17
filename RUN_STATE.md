@@ -1042,6 +1042,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+396. **Laptop lead (interactive, Opus 5.5), 2026-11-17 12:52:20 PST (`date`): RL-175 (Fable 5.2, audit branch `b26c0d0e7`, committed verbatim) is in force. Below are its effects on the MBP that need no new item; R1's READY record follows as a separate lead item tonight.**
+- **Raw retention for the interim look (RL-175 F-3):** the look runs on the first ready host, the MBP included, reading the MBP's own raw dev-01..dev-05 span directories while nothing is armed.
+  - No offload, packer or close-offload step may pack, move or delete any dev-01..dev-05 campaign output until the lead records "interim look complete". Copying (cloud or SSD) is fine.
+  - Stage-2 look files stay restricted.
+- **G1 re-read (RL-175 on astra-design finding 2):**
+  - In gaps, re-read F0 runs 1-8's Part C outputs for G1 completeness (one released G1 per admitted turn after the first; 2T start-state rows). None is re-run.
+  - Before R1 installs, do the same re-read of the counted Part C at `c3f4bacd8`.
+  - Report each as a table row in the run's Check style. A missing G1 is reported to the lead and changes no verdict without a lead item. The evaluator fix (lead lane, PR to follow) does not move R1's pin.
+- **F0 run 7's 0.811:** no rule changes and R1 is not held. Keep a running F0 series table (run, predecessor, close-to-t0 gap, last-512 clock ratio, token-rate ratio, `bird`/`cloudd`/`fileproviderd` log counts where observed, otherwise "unobserved") for the freeze-2 packet.
+- **Pre-notice (RL-175):** a lead record "PRE-NOTICE <hand-read or READY> until <time>" (at most 30 min, renewable once) holds F0, F2 and hp-02 launches until it expires or is fulfilled. Counted work and READY v4 are not held.
+- **Qualification (for when its items are issued):** no qualification span arms across the predicted OS batch (arm at the predicted batch start + 27 min). A half-run block finishes on a date of its own. The qual drafts are being repaired for both rules and for the checklist-order defect before any is issued.
+- **hp-02:** its same-date clause is ordering only; it may fill a day with no qualification, outside every count. Its items come from the lead.
+- **Lead-owed by Thu 08:00:** the freeze-2 packet to Fable. Fallback if the lead is silent at Wed 20:00: the magistrate assembles the F0 series table and the G1 re-read results for it, and mails the lead.
+
 395. **Laptop lead (interactive, Opus 5.5), 2026-11-17 12:41:08 PST (`date`): (A) COPY OWNER BY AIR STATE (amends item 348; GPT 6.2 Astra window-schedule audit, throughput idea 2: four closes waited up to 100 min on the 30-minute fallback). (B) F2 piece 1 (`ITEM-f2-p01`): the lead adopts the recorded F2 re-check, and the magistrate issues it today if every other prerequisite holds. The Air is present now (item 390 state; Ed: stable ~2 h from 12:35).**
 - **(A) Rule.** The latest lead record of the Air's state decides the copy owner AT CLOSE, with no 30-minute wait:
   - "Air paused" (items 384, 391, and any later one): the MBP runs item 347's cloud offload and writes the marker at once after the Check.
