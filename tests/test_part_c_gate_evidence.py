@@ -1,7 +1,7 @@
 """Synthetic gate evidence for the Part C cited rebind."""
 import unittest
 
-from joulewise.part_c_gate_evidence import g1_records, gate_durations
+from scripts.align_r1_part_c import g1_records, gate_durations
 
 
 def interval(kind, turn, seconds, outcome="released"):
