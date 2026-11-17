@@ -288,8 +288,12 @@ def publish_verdict(repo, out_dir, *, plan_id, signing_key, remote="origin", ref
             if _git(repo, "fetch", "--quiet", remote, tip, timeout=120).returncode != 0:
                 raise TransportRefusal(f"fetch {tip[:12]} failed")
             parents = [tip]
-    elif _git(repo, "rev-parse", "--verify", "--quiet", ref).returncode == 0:
-        parents = [_out(_git(repo, "rev-parse", ref))]
+    else:
+        current = _git(repo, "show-ref", "--verify", "--quiet", ref)
+        if current.returncode == 0:
+            parents = [resolve(repo, ref)]
+        elif current.returncode != 1:
+            raise TransportRefusal(f"show-ref {ref}: {current.stderr.decode()[:160]}")
     message = (f"{VERDICT_SUBJECT.format(plan_id=plan_id)}\n\nVerdict-SHA256: {doc['verdict_sha256']}\n"
                f"Desk-Final: {str(doc['desk_final']).lower()}")
     sha = _signed_commit(repo, files, message=message, signing_key=signing_key, principal=principal, parents=parents)
@@ -298,7 +302,16 @@ def publish_verdict(repo, out_dir, *, plan_id, signing_key, remote="origin", ref
         if res.returncode != 0:
             raise TransportRefusal(f"push {ref}: {res.stderr.decode()[:200]}")
     else:
-        _git(repo, "update-ref", ref, sha)
+        old = parents[0] if parents else "0" * len(sha)
+        res = _git(repo, "update-ref", "--no-deref", ref, sha, old)
+        if res.returncode != 0:
+            raise TransportRefusal(f"update-ref {ref}: {res.stderr.decode()[:200]}")
+        try:
+            published = resolve(repo, ref)
+        except TransportRefusal as error:
+            raise TransportRefusal(f"could not read back {ref} after update-ref") from error
+        if published != sha:
+            raise TransportRefusal(f"read back {ref} at {published[:12]}, expected {sha[:12]}")
     return sha
 
 

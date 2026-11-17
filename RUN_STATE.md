@@ -1,5 +1,7 @@
 # JouleWise Run State
 
+**2026-11-17 PR #799 round 10.** Local desk publication checks the expected old ref, exit status and readback. All 80 desk-final tests pass. [Run report](docs/run_reports/2026-11-17-desk-final-round10.md).
+
 **2026-11-17 PR #800 round 9.** The predecessor receipt and copy, continuous fence, and duplicate restore repairs pass focused checks. The branch inherits PR #799's signed-history repair. [Run report](docs/run_reports/2026-11-17-queue-controller-round9.md).
 
 **2026-11-17 PR #799 round 9:** failed or incomplete signed-history listings hold desk finality. 247 guarded cadence tests pass. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
