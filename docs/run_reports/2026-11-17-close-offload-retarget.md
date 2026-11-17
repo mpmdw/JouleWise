@@ -6,10 +6,11 @@ The 2026-11-17 lead ruling resolves the integration question in the
 (audit commit `4f4934df6`). RUN_STATE item 388 governs Air availability.
 The pinned MBP public key can encrypt while the Air is away.
 
-- `after-check` verifies the exact Check OUT, keeps it and all newest GAP
-  receipt ties, and rotates the most recent eligible older output of each
-  kind. `--catch-up` includes the older backlog. Campaign marker names match
-  #804's plan IDs. Part C/F0 use the full OUT basename.
+- `after-check` verifies the exact Check OUT, preserves the checked OUT and
+  newest receipt ties in the GAP roots, and rotates eligible older outputs.
+  `--catch-up` includes the older backlog. Campaign marker names match #804's
+  plan IDs. Part C/F0 use the full OUT basename. Checks in a separate root can
+  pass their explicit plan and declared completion filename.
 - Both commands use the shared encrypted pack, typed marker, observed iCloud
   round trip, SSD validation, and storage mail. A verified stage archive
   stays materialised if the Air is absent. The later SSD pull has no

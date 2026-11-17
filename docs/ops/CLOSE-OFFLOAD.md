@@ -23,6 +23,14 @@ desk fence lock, refuses an existing fence or runner, and supervises the worker
 and provider children to the deadline. The magistrate serializes Check, close and
 arm. Run from the GUI session or GUI LaunchAgent, never over SSH.
 
+For a separately rooted Check OUT, such as F2, add `--plan "$PLAN"` from the
+Check. The basename must equal PLAN or PLAN followed by its UTC timestamp. If
+that controller uses a different top-level completion record, also pass its
+declared basename with `--require-file`. Close verifies its presence and
+archives its bytes without parsing them. Such an OUT is outside the GAP roots
+and can retire once its pack and cloud round trip are verified. Keep any raw
+copy designated for a pending registered look.
+
 Require exit zero, `CLOSE_OK`, the exact OUT's verified marker, and `pending.clear`
 true. Nonzero, timeout, missing or unverified output holds the next arm, including
 F0. A retry repeats the same Check OUT and rechecks any typed marker's hashes.
@@ -39,8 +47,8 @@ records. No iCloud writes from the MBP while armed. Include `bird`, `cloudd` and
 
 ## GAP and archive retention
 
-- The exact checked OUT is encrypted and cloud-verified on every Check. Its raw
-  files stay, as do the newest receipt-bearing output and all ties in each GAP root.
+- The exact checked OUT is encrypted and cloud-verified on every Check. In the
+  managed GAP roots, its raw files stay, as do the newest output and all ties.
   The selection reads receipt presence and mtime only. Campaign plans use OUT's
   basename without its UTC timestamp. Part C/F0 plans use the complete OUT basename.
 - The command rotates the most recent eligible older output of each kind from
@@ -79,4 +87,5 @@ interval:
 
 The backend rechecks cloud hashes and requires the SSD receipt's plan, descriptor
 and artifact hashes/sizes to match before eviction. Keep the SSD receipt with the
-retained artifacts. This later cleanup is outside the after-Check arm path.
+retained artifacts. Supply `--plan "$PLAN"` for a separately rooted OUT.
+This later cleanup is outside the after-Check arm path.

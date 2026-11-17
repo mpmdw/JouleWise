@@ -90,7 +90,7 @@ class Guard:
         self.fence = args.fence
         self.deadline = so.Deadline(args.deadline_epoch)
         self.pgrep = shutil.which("pgrep")
-        if not self.pgrep or any(so._overlaps(root, self.pgrep) for root in (args.campaign_root, args.work_root)):
+        if not self.pgrep or any(so._overlaps(root, self.pgrep) for root in protected_roots(args)):
             raise so.refused("RUNNER_CENSUS_FAILED", "runner census executable is missing or inside a receipt root")
 
     def quiet(self):
@@ -122,8 +122,12 @@ class Guard:
             os.close(fd)
 
 
+def protected_roots(args):
+    return args.campaign_root, args.work_root, args.span_dir, so.retirement_path(args.span_dir)
+
+
 def outside_receipt_roots(args, paths):
-    for root in (args.campaign_root, args.work_root):
+    for root in protected_roots(args):
         so.check_output_paths(root, paths)
 
 
@@ -136,7 +140,7 @@ def load_config(args):
                 "public key": config["recipient_public_key"], "cloud root": backend.root}
     for name, executable in (("OpenSSL", config.get("openssl", "openssl")), ("brctl", backend.brctl)):
         resolved = shutil.which(executable)
-        if resolved and any(so._overlaps(root, resolved) for root in (args.campaign_root, args.work_root)):
+        if resolved and any(so._overlaps(root, resolved) for root in protected_roots(args)):
             raise so.refused("PATH_OVERLAPS_SPAN", f"{name} is inside a receipt root")
     if args.command == "reclaim":
         controls["SSD receipt"] = args.ssd_receipt
@@ -144,19 +148,46 @@ def load_config(args):
     return config
 
 
-def close_one(args, config, span, *, retain_original=False, ssd_receipt=None):
+def close_one(args, config, span, *, retain_original=False, ssd_receipt=None,
+              require_files=("runner_receipt.json",)):
     record = so.close_offload(config, span.plan, span.path, retain_original=retain_original,
                               ssd_receipt=ssd_receipt, deadline_epoch=args.deadline_epoch,
-                              partc_work_root=args.work_root if span.kind == "partc" else None)
+                              partc_work_root=args.work_root if span.kind == "partc" else None,
+                              require_files=require_files)
     return {"plan": span.plan, "original_deleted": record["original_deleted"],
             "archive_evicted": record["archive_evicted"], "storage_mail_sent": record["storage_mail_sent"],
             "manifest_sha256": record["manifest_sha256"], "ciphertext_sha256": record["ciphertext"]["sha256"]}
 
 
+def require_staged_source(config, span):
+    stage = Path(config["stage_root"]) / span.plan
+    with so._directory_no_links(stage) as fd:
+        source = json.loads(so._read_in(fd, so.SOURCE_RECORD))
+    if source != {"source": str(span.path)}:
+        raise so.refused("STAGE_CONFLICT", "the stage belongs to another OUT")
+
+
+def separate_out(args):
+    """A Check in a separate custody root supplies its exact OUT and #804 plan."""
+    if args.plan is None or any(so._overlaps(root, args.span_dir) for root in (args.campaign_root, args.work_root)):
+        raise so.refused("CHECK_OUT_REQUIRED", "use a managed Check OUT or name the plan for a separate OUT")
+    plan = so.check_id(args.plan, "plan")
+    so.check_close_source(args.span_dir, None)
+    if args.span_dir.resolve() != args.span_dir or not so.span_name_ok(args.span_dir.name, plan):
+        raise so.refused("PLAN_SPAN_MISMATCH", "the separate OUT path is linked or differs from the plan")
+    return Span("separate", args.span_dir, plan, None)
+
+
 def checked_close(args, config, guard, spans):
     checked = next((span for span in spans if span.path == args.span_dir and span.receipt_mtime_ns is not None), None)
     if checked is None:
-        raise so.refused("CHECK_OUT_REQUIRED", "the exact Check OUT must have a regular runner receipt")
+        checked = separate_out(args)
+        if any(span.plan.casefold() == checked.plan.casefold() for span in spans):
+            raise so.refused("PLAN_COLLISION", "the separate OUT conflicts with a managed plan")
+        if not os.path.lexists(checked.path):
+            require_staged_source(config, checked)
+    elif args.require_file or (args.plan is not None and args.plan != checked.plan):
+        raise so.refused("CHECK_OUT_REQUIRED", "a managed OUT uses its derived plan and runner receipt")
     newest = {}
     for span in spans:
         if span.receipt_mtime_ns is not None:
@@ -168,7 +199,8 @@ def checked_close(args, config, guard, spans):
     # Catch-up can also retire older receipt-bearing outputs in the same close interval.
     selected = set()
     guard.quiet()
-    results = [close_one(args, config, checked, retain_original=True)]
+    results = [close_one(args, config, checked, retain_original=checked.kind != "separate",
+                         require_files=tuple(args.require_file or ("runner_receipt.json",)))]
     for span in sorted(eligible, key=lambda span: (span.receipt_mtime_ns is not None, -(span.receipt_mtime_ns or 0),
                                                     str(span.path))):
         if span.receipt_mtime_ns is not None:
@@ -185,21 +217,19 @@ def checked_close(args, config, guard, spans):
 def reclaim(args, config, guard):
     path = args.span_dir
     if path.is_relative_to(args.campaign_root) and len(path.relative_to(args.campaign_root).parts) == 2:
-        kind = "campaign"
-    else:
-        kind = "partc"
+        span = Span("campaign", path, span_plan("campaign", path), None)
+    elif path.is_relative_to(args.work_root):
         so.check_close_source(path, args.work_root)
+        span = Span("partc", path, span_plan("partc", path), None)
+    else:
+        span = separate_out(args)
     if path.resolve() != path or os.path.lexists(path) or os.path.lexists(so.retirement_path(path)):
         raise so.refused("RAW_RETAINED", "reclaim needs an already retired OUT")
-    plan = span_plan(kind, path)
-    stage = Path(config["stage_root"]) / plan
-    with so._directory_no_links(stage) as fd:
-        # The marker names the span, and the stage binds it to its original absolute OUT.
-        source = json.loads(so._read_in(fd, so.SOURCE_RECORD))
-    if source != {"source": str(path)}:
-        raise so.refused("STAGE_CONFLICT", "the stage belongs to another OUT")
+    if args.plan is not None and args.plan != span.plan:
+        raise so.refused("PLAN_SPAN_MISMATCH", "the requested plan differs from the retired OUT")
+    require_staged_source(config, span)
     guard.quiet()
-    return {"spans": [close_one(args, config, Span(kind, path, plan, None), ssd_receipt=args.ssd_receipt)]}
+    return {"spans": [close_one(args, config, span, ssd_receipt=args.ssd_receipt)]}
 
 
 def run(args):
@@ -224,11 +254,13 @@ def parser():
     commands = top.add_subparsers(dest="command", required=True)
     after = commands.add_parser("after-check", help="verify Check OUT, preserve GAP and rotate older outputs")
     after.add_argument("--catch-up", action="store_true", help="also process all older eligible outputs")
+    after.add_argument("--require-file", action="append", help="for a separate OUT only, require this Check file basename")
     cleanup = commands.add_parser("reclaim", help="later SSD-backed eviction of a retired OUT")
     cleanup.add_argument("--ssd-receipt", type=Path, required=True)
     for command in (after, cleanup):
         command.add_argument("--config", type=Path, required=True)
         command.add_argument("--span-dir", type=Path, required=True, help="absolute OUT from the Check")
+        command.add_argument("--plan", help="required for an OUT in a separate custody root")
         command.add_argument("--deadline-epoch", type=float, required=True)
         command.add_argument("--campaign-root", type=Path, default=CAMPAIGN_ROOT)
         command.add_argument("--work-root", type=Path, default=WORK_ROOT)
@@ -262,7 +294,7 @@ def main(argv=None):
     left = args.deadline_epoch - time.time()
     if not so.number(left) or left > so.MAX_DEADLINE_AHEAD_S:
         top.error("deadline must be a finite epoch at most 24 hours ahead")
-    if not all(path.is_absolute() and ".." not in path.parts
+    if not all(path.is_absolute() and path.name and ".." not in path.parts
                for path in (args.span_dir, args.campaign_root, args.work_root, args.fence)):
         top.error("OUT, receipt roots and fence must be absolute paths without parent traversal")
     if left <= 0:

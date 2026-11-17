@@ -1639,7 +1639,7 @@ def check_close_source(span_dir, partc_work_root):
 
 
 def retire_original(span_dir, stage, record, deadline, snapshot):
-    """Rename a verified original out of the GAP census and resume interrupted removal safely."""
+    """Rename a verified original before removal so interrupted removal can resume safely."""
     target = retirement_path(span_dir)
     receipt = stage / ".retirement.json"
     if os.path.lexists(span_dir) and os.path.lexists(target):
@@ -1671,7 +1671,7 @@ def retire_original(span_dir, stage, record, deadline, snapshot):
 
 
 def close_offload(config, plan, span_dir, *, ssd_receipt=None, deadline_epoch=None, clock=time.time,
-                  retain_original=False, partc_work_root=None):
+                  retain_original=False, partc_work_root=None, require_files=("runner_receipt.json",)):
     """Explicit RL-174 D.2 close, after the desk bundle is pushed and the MBP desk is final.
 
     A verified pack permits raw deletion. Keep its materialised ciphertext until BOTH iCloud and
@@ -1694,7 +1694,8 @@ def close_offload(config, plan, span_dir, *, ssd_receipt=None, deadline_epoch=No
         if any(".git" in Path(name).parts for name in span_snapshot(span_dir, deadline.remaining)):
             raise refused("PARTC_PATH", "the Part C output contains Git metadata")
     mailed = storage_alarm(config, plan)
-    record = offload(config, plan, span_dir, deadline_epoch=deadline_epoch, clock=clock)
+    record = offload(config, plan, span_dir, deadline_epoch=deadline_epoch, clock=clock,
+                     require_files=require_files)
     if not record["provider_confirmed"]:
         raise OffloadError("ICLOUD_UNCONFIRMED", "the original and archive are retained", "unconfirmed")
     expected = marker_files(record, plan, icloud=True)

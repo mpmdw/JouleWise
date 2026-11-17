@@ -203,6 +203,24 @@ class CloseOffloadTests(unittest.TestCase):
         self.assertTrue((older.parents[1] / ".git").is_file())
         self.assertTrue(self.marker("r1-partc-f0-checked").is_file())
 
+    def test_separate_check_out_uses_explicit_plan_and_opaque_completion_file(self):
+        plan = "synthetic-external"
+        out = self.root / "separate" / plan
+        out.mkdir(parents=True)
+        done = out / "controller-close.json"
+        done.write_bytes(b"deliberately opaque \xff")
+        gap = self.span("cq-current", 200)
+        with self.assertRaisesRegex(so.OffloadError, "SPAN_NOT_CLOSED"):
+            self.verify(out, "--plan", plan)
+        args = ("--plan", plan, "--require-file", done.name)
+        result = self.verify(out, *args)
+        self.assertEqual(result["spans"][0]["plan"], plan)
+        self.assertTrue(result["pending"]["clear"])
+        self.assertTrue(gap.is_dir())
+        self.assertFalse(out.exists())
+        self.assertTrue(self.archive(plan).is_file())
+        self.assertEqual(self.verify(out, *args)["status"], "CLOSE_OK")
+
     def test_pending_or_unknown_at_final_read_holds_even_after_good_markers(self):
         out = self.span("r1-partc-f0-check", 200, kind="partc")
         with mock.patch.object(so, "pending_transfers", return_value={"clear": False}), \
