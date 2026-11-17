@@ -1,0 +1,4 @@
+$ git add -- docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/issue-dev05-1117
+fatal: Unable to create '/Users/edr/code/JouleWise/.git/worktrees/desk-dev04-cb24533b/index.lock': Operation not permitted
+EXIT_CODE 128
+No commit attempted after staging refusal. Nothing pushed. Scratch never added.

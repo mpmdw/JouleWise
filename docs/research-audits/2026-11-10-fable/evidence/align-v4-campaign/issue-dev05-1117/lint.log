@@ -1,0 +1,10 @@
+$ /opt/homebrew/opt/python@3.13/bin/python3.13 -B /Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/issue-dev05-1117/lint/tools/lint.py
+CWD /Users/edr/code/jw-wt/desk-dev04-cb24533b
+JW_B5_SYNTHETIC_ONLY=1 TMPDIR=/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp
+ITEM-dev05-s01.lineflag.md blocks 4 py 5 pick_arg ok
+ITEM-dev05-s01.md blocks 4 py 5 pick_arg ok
+ITEM-dev05-s02.lineflag.md blocks 4 py 5 pick_arg ok
+ITEM-dev05-s02.md blocks 4 py 5 pick_arg ok
+BAD 0
+
+EXIT_CODE 0

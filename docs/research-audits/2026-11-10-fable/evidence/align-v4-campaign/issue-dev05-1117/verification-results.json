@@ -1,0 +1,65 @@
+[
+  {
+    "log": "lint.log",
+    "exit_code": 0,
+    "tail": [
+      "BAD 0"
+    ]
+  },
+  {
+    "log": "gates-harness-A-dev05-s01.log",
+    "exit_code": 0,
+    "tail": [
+      "FAILS 0"
+    ]
+  },
+  {
+    "log": "gates-A-dev05-s01.log",
+    "exit_code": 1,
+    "tail": [
+      "FAILS 4"
+    ]
+  },
+  {
+    "log": "gates-harness-B-dev05-s01.log",
+    "exit_code": 1,
+    "tail": [
+      "FAILS 2"
+    ]
+  },
+  {
+    "log": "gates-B-dev05-s01.log",
+    "exit_code": 1,
+    "tail": [
+      "FAILS 4"
+    ]
+  },
+  {
+    "log": "gates-harness-A-dev05-s02.log",
+    "exit_code": 0,
+    "tail": [
+      "FAILS 0"
+    ]
+  },
+  {
+    "log": "gates-A-dev05-s02.log",
+    "exit_code": 1,
+    "tail": [
+      "FAILS 4"
+    ]
+  },
+  {
+    "log": "gates-harness-B-dev05-s02.log",
+    "exit_code": 1,
+    "tail": [
+      "FAILS 2"
+    ]
+  },
+  {
+    "log": "gates-B-dev05-s02.log",
+    "exit_code": 1,
+    "tail": [
+      "FAILS 4"
+    ]
+  }
+]

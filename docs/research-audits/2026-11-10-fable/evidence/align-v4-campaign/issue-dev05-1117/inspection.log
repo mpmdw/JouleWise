@@ -1,0 +1,8 @@
+PASS dev05-s01: A/B differ only line 7, WATCH_UNTIL_EPOCH, watch_gate; issue placeholders A=7 B=5
+PASS dev05-s02: A/B differ only line 7, WATCH_UNTIL_EPOCH, watch_gate; issue placeholders A=7 B=5
+PASS original lint.py unchanged SHA256 5f1eec0b8ab228cc074387a5de929e31af71d21e7d9f3e79e0503e242e45bae9
+PASS original test_rl173_gates.py unchanged SHA256 334f5a255fb9385d091a242bf3e03788274b9e347c85fbefa4fea0e2000dd58b
+PASS staging dry-run created no destinations
+PASS source RUN_STATE clean against HEAD: /Users/edr/code/JouleWise
+PASS source RUN_STATE clean against HEAD: /Users/edr/code/jw-wt/mag-cb24533b
+PASS verification runner Python compile
