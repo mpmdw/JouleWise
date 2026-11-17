@@ -595,6 +595,9 @@ At the end of substantial work:
 - Keep hand-authored edits here to policy, completed/history records, and
   non-selection context.
 
+- 2026-11-17, Round 10 Astra audit Builder D. The fixes and prospective
+  STANDING-F0 pin are recorded in the [draft PR handoff](docs/run_reports/2026-11-17-astra-small-fixes.md).
+
 ## Intake Batch Owed To The Kernel (2026-07-30/31)
 
 **PARTIALLY FOLDED 2026-07-30.** Six rows —
