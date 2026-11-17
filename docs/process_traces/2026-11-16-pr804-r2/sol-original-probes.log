@@ -1,0 +1,32 @@
+test_add_then_remove_while_archiving_cannot_certify (__main__.ColdProbes.test_add_then_remove_while_archiving_cannot_certify) ... ok
+test_all_artifacts_reject_one_changed_downloaded_byte (__main__.ColdProbes.test_all_artifacts_reject_one_changed_downloaded_byte) ... ok
+test_changed_ssd_receipt_each_bound_field_prevents_deletion (__main__.ColdProbes.test_changed_ssd_receipt_each_bound_field_prevents_deletion) ... ok
+test_characterize_status_with_unrecognised_pending_text (__main__.ColdProbes.test_characterize_status_with_unrecognised_pending_text) ... OBSERVATION: positive token parser also accepts an unknown pending-transfers line; native grammar not established
+ok
+test_cloud_only_close_and_repeated_close_keep_matching_archive (__main__.ColdProbes.test_cloud_only_close_and_repeated_close_keep_matching_archive) ... ok
+test_corrupt_cloud_retry_never_deletes_raw_or_rewrites_marker (__main__.ColdProbes.test_corrupt_cloud_retry_never_deletes_raw_or_rewrites_marker) ... ok
+test_corrupt_materialised_pack_never_deletes_raw (__main__.ColdProbes.test_corrupt_materialised_pack_never_deletes_raw) ... ok
+test_crash_before_marker_reuses_stage_then_roundtrips (__main__.ColdProbes.test_crash_before_marker_reuses_stage_then_roundtrips) ... ok
+test_cross_file_mix_with_restored_mtime_cannot_certify (__main__.ColdProbes.test_cross_file_mix_with_restored_mtime_cannot_certify) ... ok
+test_exposes_existing_ssd_receipt_schema_not_validated_on_retry (__main__.ColdProbes.test_exposes_existing_ssd_receipt_schema_not_validated_on_retry) ... EXPOSED LOW: ssd-copy returns success for existing receipt with wrong schema; close correctly refuses it
+ok
+test_exposes_legacy_provider_listing_can_create_copy_gate_marker (__main__.ColdProbes.test_exposes_legacy_provider_listing_can_create_copy_gate_marker) ... EXPOSED HIGH: legacy size-only listing creates .ok with no provider hash and zero brctl calls
+ok
+test_mail_threshold_and_failed_delivery_are_exact_without_real_mail (__main__.ColdProbes.test_mail_threshold_and_failed_delivery_are_exact_without_real_mail) ... ok
+test_missing_keygen_output_dir_and_cli_entrypoint (__main__.ColdProbes.test_missing_keygen_output_dir_and_cli_entrypoint) ... ok
+test_mutation_after_last_provider_readback_cannot_certify (__main__.ColdProbes.test_mutation_after_last_provider_readback_cannot_certify) ... ok
+test_new_member_between_reads_cannot_certify (__main__.ColdProbes.test_new_member_between_reads_cannot_certify) ... ok
+test_pack_manifest_mismatch_never_deletes_source (__main__.ColdProbes.test_pack_manifest_mismatch_never_deletes_source) ... ok
+test_partial_raw_cleanup_failure_retains_pack_and_refuses_changed_retry (__main__.ColdProbes.test_partial_raw_cleanup_failure_retains_pack_and_refuses_changed_retry) ... RECOVERY LIMIT: partial raw deletion retains verified pack; retry holds with SPAN_CHANGED pending lead recovery
+ok
+test_pending_observation_is_readonly_fresh_and_refuses_known_bad_states (__main__.ColdProbes.test_pending_observation_is_readonly_fresh_and_refuses_known_bad_states) ... ok
+test_placeholder_failed_download_retry_keeps_exit8_then_recovers (__main__.ColdProbes.test_placeholder_failed_download_retry_keeps_exit8_then_recovers) ... ok
+test_ssd_eviction_failure_retains_pack_and_recovers (__main__.ColdProbes.test_ssd_eviction_failure_retains_pack_and_recovers) ... ok
+test_ssd_readback_corruption_never_issues_receipt (__main__.ColdProbes.test_ssd_readback_corruption_never_issues_receipt) ... ok
+test_success_without_observed_eviction_is_exit8 (__main__.ColdProbes.test_success_without_observed_eviction_is_exit8) ... ok
+test_unsupported_flag_observation_never_certifies (__main__.ColdProbes.test_unsupported_flag_observation_never_certifies) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 19.533s
+
+OK
