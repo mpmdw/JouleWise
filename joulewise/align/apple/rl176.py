@@ -20,8 +20,7 @@ from joulewise.align.apple.rl176_phases import (
 )
 from joulewise.align.attribution import attribute_episode, trace_energy
 from joulewise.align.energy_residual import (
-    _wls, fit_energy_model, predict_episode, turn_energy_from_attribution,
-    turn_rows_from_episode,
+    _wls, turn_energy_from_attribution, turn_rows_from_episode,
 )
 from joulewise.align.records import Episode
 from joulewise.analysis_engine.distributions import student_t_quantile
@@ -196,6 +195,17 @@ def _decode_rows(member):
     return tuple(rows)
 
 
+def _ols(x, y):
+    if not x or len(x) <= len(x[0]):
+        return None
+    fit = _wls(x, y, [1.0] * len(x))
+    if fit is None:
+        return None
+    coef, covariance_shape, residuals = fit
+    sigma2 = math.fsum(r * r for r in residuals) / (len(x) - len(coef))
+    return coef, covariance_shape, sigma2
+
+
 def _decode_scores(observations):
     results = {}
     for held in observations:
@@ -205,11 +215,10 @@ def _decode_scores(observations):
         if len(training) < 6:
             continue
         x, y, _ = zip(*training)
-        fit = _wls(x, y, [1.0] * len(x))
+        fit = _ols(x, y)
         if fit is None:
             continue
-        coef, cov_shape, residuals = fit
-        s2 = math.fsum(r * r for r in residuals) / (len(x) - len(coef))
+        coef, cov_shape, s2 = fit
         if s2 <= 0:
             continue
         design, energy, bounds = zip(*held.decode_rows)
@@ -233,30 +242,48 @@ def _decode_print(groups):
     return {name: report[name] for name in ("strata", "theta", "p_sup")}
 
 
+def _sequence_design(row):
+    c, p, d = row.context_tokens, row.prefill_tokens, row.decode_tokens
+    return (1.0, p, d, (c + p) * d + d * d / 2, c * p + p * p / 2)
+
+
 def _quantity_print(observations):
-    """Use the five-term turn fit; evaluate held-out totals at the member level."""
-    fit_members = [m for m in observations if finite(m.q_j) and m.rows]
-    model = fit_energy_model([r for m in fit_members for r in m.rows])
+    """Fit P4's five sequence terms on turns and evaluate members' held-out sums."""
+    fit_members = [m for m in observations if finite(m.q_j) and m.rows
+                   and all(finite(row.energy_j) for row in m.rows)]
+    designs = {m.episode.episode_id: [(_sequence_design(row), row.energy_j) for row in m.rows]
+               for m in fit_members}
+
+    def fit(exclude=None):
+        rows = [row for member_id, data in designs.items() if member_id != exclude for row in data]
+        return _ols(*zip(*rows)) if rows else None
+
+    full = fit()
     coefficients = {}
-    for token in ("decode", "prefill"):
-        j = model.names.index(token + "_tokens")
-        coef, var = model.coef[j], model.cov[j][j]
-        identified = (f"unidentified_column:{token}_tokens" not in model.flags
-                      and finite(coef) and finite(var) and var >= 0)
-        coefficients[token] = {"joules_per_token": coef if identified else None,
-                               "standard_error": math.sqrt(var) if identified else None}
+    for token, idx in (("prefill", 1), ("decode", 2)):
+        if full is None:
+            coefficients[token] = {"joules_per_token": None, "standard_error": None}
+        else:
+            coef, covariance_shape, s2 = full
+            coefficients[token] = {"joules_per_token": coef[idx],
+                                   "standard_error": math.sqrt(s2 * covariance_shape[idx][idx])}
     observed = [m.q_j for m in fit_members]
     estimates = []
     for held in fit_members:
-        fit = fit_energy_model([r for m in fit_members if m is not held for r in m.rows])
-        estimates.append(predict_episode(fit, held.rows)[0])
+        member_id = held.episode.episode_id
+        model = fit(exclude=member_id)
+        if model is not None:
+            estimates.append(math.fsum(
+                b * d for design, _ in designs[member_id] for b, d in zip(model[0], design)))
     r2 = None
-    if observed and all(map(finite, estimates)):
-        tss = math.fsum((y - fmean(observed)) ** 2 for y in observed)
+    if observed and len(estimates) == len(observed) and all(map(finite, estimates)):
+        center = fmean(observed)
+        tss = math.fsum((y - center) ** 2 for y in observed)
         if tss > 0:
             r2 = 1 - math.fsum((y - yhat) ** 2 for y, yhat in zip(observed, estimates)) / tss
     return {"eligible_members": len(observations), "fit_members": len(fit_members),
-            "loo_r2": r2, "coefficients": coefficients, "fit_flags": list(model.flags)}
+            "loo_r2": r2, "coefficients": coefficients,
+            "fit_status": "full_rank" if full is not None else "insufficient_or_rank_deficient"}
 
 
 def _side_transfer(groups):
