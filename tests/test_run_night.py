@@ -4220,7 +4220,9 @@ raise SystemExit(run_night.main(sys.argv[3:]))
                 "PATH", "MAGISTRATE_SESSION_BIN", "MAGISTRATE_WATCHDOG_CUSTODY_ROOT",
                 "MAGISTRATE_WATCHDOG_STATUS_HOST"},
             # Block 6's loop tick (never runs the night driver; it installs night jobs by this template's sibling).
-            "com.joulewise.b6loop.plist.template": {"PATH", "JW_B6_LOOP_ROOT"}}
+            "com.joulewise.b6loop.plist.template": {"PATH", "JW_B6_LOOP_ROOT"},
+            # The standing-queue controller (RL-172 (g)); it never runs the night driver.
+            "com.joulewise.cadence-controller.plist.template": {"PATH", "LC_ALL"}}
         templates = sorted((repo / "configs/launchd").glob("*.plist.template"))
         self.assertEqual({t.name for t in templates}, set(expected_environment))
         for template in templates:

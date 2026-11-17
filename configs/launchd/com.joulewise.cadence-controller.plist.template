@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The standing-queue controller (RL-172 (g)): a KeepAlive loop in the GUI domain (gh needs the keychain).
+     Project rule: never StartInterval with ProcessType Background (pipeline-watch went dark 5 h on 11-13).
+     @@REPO@@ is the controller's own checkout at the admitted commit, never a measurement worktree. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.joulewise.cadence-controller</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@@PYTHON@@</string>
+    <string>-B</string>
+    <string>@@REPO@@/scripts/cadence_controller.py</string>
+    <string>loop</string>
+    <string>--config</string>
+    <string>@@CONFIG@@</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>@@REPO@@</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>LC_ALL</key>
+    <string>C</string>
+  </dict>
+  <key>KeepAlive</key>
+  <true/>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>ProcessType</key>
+  <string>Standard</string>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
+  <key>StandardOutPath</key>
+  <string>@@STATE_DIR@@/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>@@STATE_DIR@@/launchd.err</string>
+</dict>
+</plist>

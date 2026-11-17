@@ -1,0 +1,38 @@
+{
+ "schema": "joulewise.cadence_controller_config.v1",
+ "state_dir": "/Users/edr/cadence-controller",
+ "git_dir": "/Users/edr/code/jw-controller",
+ "audit_ref": "audit/2026-11-10-fable",
+ "records_dir": "docs/research-audits/2026-11-10-fable/evidence/cadence-standing",
+ "worktrees_root": "/Users/edr/code/jw-wt",
+ "output_root": "/Users/edr/campaign-out",
+ "kits_dir": "/Users/edr/campaign-out/kits",
+ "custody_root": "/Users/edr/night-custody/magistrate",
+ "measurement_python": "@@MEASUREMENT_PYTHON@@",
+ "receipt_roots": [
+  "/Users/edr/campaign-out",
+  "/Users/edr/code/jw-wt"
+ ],
+ "signing_key": "/Users/edr/.ssh/jw_cadence_controller",
+ "bundle_ref_prefix": "refs/heads/desk-bundles/",
+ "verdict_signers": "/Users/edr/cadence-controller/desk_allowed_signers",
+ "copy_marker_dir": "/Users/Shared/JouleWise/desk-copy",
+ "copy_stage_root": "/Users/edr/night-custody/offload/span-offload",
+ "copy_key_second_copy_sha256": null,
+ "watcher_name": "@@ACTIONS_WATCHER_WORKFLOW@@.yml",
+ "owner_login": "mpmdw",
+ "repo_slug": "mpmdw/JouleWise",
+ "gh_argv": [
+  "/opt/homebrew/bin/gh"
+ ],
+ "measurement_mode_script": "/Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh",
+ "high_power_marker": "/Users/Shared/JouleWise/host-power/high-power.marker",
+ "poll_idle_s": 60,
+ "poll_live_s": 60,
+ "hold_standing_fence": true,
+ "accept_mock_verdicts": false,
+ "watcher_kind": "actions",
+ "controller_signers": "/Users/edr/cadence-controller/controller_allowed_signers",
+ "offload_argv": null,
+ "desk_commit": "@@DESK_COMMIT@@"
+}

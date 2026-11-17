@@ -4,11 +4,24 @@
 
 **2026-11-17 explicit user-priority [AGENT] intake:** repair the four round 9 findings on PR #799 and PR #800. The desk history repair passes local tests. PR #800 inherits it before the controller repairs. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
 
+**2026-11-17 user-priority [AGENT] continuation.** PR #800 addresses Astra operations audit findings 1, 5, 6 and 11, plus the PR #807 adapter and the server clock retry. Fresh admission stays with the lead. [Run report](docs/run_reports/2026-11-17-queue-controller-round10.md).
+
+**2026-11-17 explicit user-priority [AGENT] continuation.** PR #800 carries all four round 9 repairs, including the signed-history fix inherited from PR #799. Fresh cold admission remains with the lead. [Run report](docs/run_reports/2026-11-17-queue-controller-round9.md).
+
+**2026-11-16 explicit user-priority [AGENT] gate-7 repair:** cold Sol F1–F4 fixed with failing-before/passing-after regressions on #800. #799 has no independent code defect this round. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-queue-controller-gate7-sol-r8.md). Fresh stack admission and research-lead rulings remain open.
+
 **2026-11-16 explicit user-priority [AGENT] gate-7 intake:** repair the cold Sol refusal of #799/#800 before ordinary queue work. No #799 implementation defect reproduced; #800 owns F1–F4. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md).
+
+**2026-11-16 user-priority [AGENT] continuation:** cold Sol gate-6 repairs for #799/#800 precede ordinary queue work by explicit user direction. All five reproduced findings have regression-backed fixes; no phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-queue-controller-gate6-sol-r7.md). Installation, fresh admission and research-lead rulings remain gated.
 
 **2026-11-16 explicit user-priority [AGENT] intake:** repair the cold Sol refusal of PR #799/#800 before ordinary queue work. #799 F4 reproduced and fixed with regressions; #800 repairs continue on its branch. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate6-sol-r7.md).
 
+**2026-11-16 user-priority [AGENT] continuation:** PR #800 gate-5 repairs and exact-head regressions precede ordinary queue work. F1–F4 fixed; valid-rerun coverage is in #799, policy questions remain with the research lead. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-queue-controller-gate5-sol-r6.md).
+
+
 **2026-11-16 explicit intake, [AGENT]:** PR #799/#800 gate-5 repair outranks ordinary queue work. #799 coverage gap addressed; rerun policy and fresh stack admission remain open. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate5-sol-r6.md).
+
+**2026-11-15 user-priority continuation:** PR #800 gate-4 fixes cover global L002 chronology, later verdict clearance, retained copy debt, retry clocks/floors and fence budgets; full dispositions in design §15.15. Research-lead questions and external offload guarantees remain gated. No phase exit-checklist matrix row exists. Evidence: [docs/run_reports/2026-11-15-queue-controller-gate4-sol-r5.md](docs/run_reports/2026-11-15-queue-controller-gate4-sol-r5.md).
 
 **2026-11-15 explicit user intake:** PR #799/#800 gate-4 repairs take priority over ordinary queue work. Desk fixes are applied; research-lead questions and fresh gate admission remain. No phase exit-checklist matrix row exists for this fix round. Evidence: [docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md](docs/run_reports/2026-11-15-desk-final-gate4-sol-r5.md).
 
@@ -689,7 +702,7 @@ Superseded (2026-07-15, WO-017; D-043): P2-027 publication and uninvolved-party 
 <!-- BEGIN GENERATED: state-kernel current-queue -->
 <!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. -->
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17).
 
 Generated compatibility table for repository consumers; the lane tables below are the detailed view of the same kernel state.
 
