@@ -1,0 +1,50 @@
+FFFFF
+======================================================================
+FAIL: test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate (tests.test_span_offload.SpanOffloadTests.test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate) (hash_type='sha256')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 917, in test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate
+    self.assertFalse(record["provider_confirmed"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate (tests.test_span_offload.SpanOffloadTests.test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate) (hash_type='md5')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 917, in test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate
+    self.assertFalse(record["provider_confirmed"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate (tests.test_span_offload.SpanOffloadTests.test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate) (hash_type='dropbox')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 917, in test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate
+    self.assertFalse(record["provider_confirmed"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate (tests.test_span_offload.SpanOffloadTests.test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate) (hash_type='size')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 917, in test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate
+    self.assertFalse(record["provider_confirmed"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate (tests.test_span_offload.SpanOffloadTests.test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 934, in test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate
+    self.assertTrue(downloads and all("--immutable" not in c for c in downloads))
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [] is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 2.866s
+
+FAILED (failures=5)
