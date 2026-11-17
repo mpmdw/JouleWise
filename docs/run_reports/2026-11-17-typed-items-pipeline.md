@@ -20,6 +20,11 @@ hook to advance the ref after each push advertisement. Ordinary hook
 refusals are Git failures. Full shard verification runs on GitHub because
 the local suite includes process-signaling tests.
 
+The first CI run exposed Git 2.56's distinct stale-ref response and the
+relaunch prompt's 25-line limit. The writer recognizes both Git responses
+and verifies the remote ref advanced before retrying either. The prompt
+keeps the new writer instruction on its own line within the existing limit.
+
 The suite checks 42 named acceptance scenarios. In R18, the seven transitions
 to DRAFT are exercised at the replay boundary because the wire schema excludes
 DRAFT as a target. The validator also checks that those inputs fail the schema.

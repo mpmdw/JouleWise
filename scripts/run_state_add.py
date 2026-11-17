@@ -179,7 +179,8 @@ def add_local(run_state: Path, current: Path, request: dict) -> int:
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True,
-                          text=True, encoding="utf-8", errors="replace").stdout
+                          text=True, encoding="utf-8", errors="replace",
+                          env={**os.environ, "LC_ALL": "C"}).stdout
 
 
 def _sha(output: str) -> str:
@@ -245,8 +246,10 @@ def _push(repo: Path, remote: str, ref: str, base: str) -> bool:
                 continue
             if reason in ("[rejected] (fetch first)", "[rejected] (non-fast-forward)"):
                 return False
-            if reason == "[remote rejected] (failed to update ref)" and _remote_head(repo, remote, ref) != base:
-                return False
+            if reason in ("[remote rejected] (failed to update ref)",
+                          "[remote rejected] (incorrect old value provided)"):
+                if _remote_head(repo, remote, ref) != base:
+                    return False
         raise
     for line in result.splitlines():
         flag, destination, _ = (line.split("\t") + ["", ""])[:3]

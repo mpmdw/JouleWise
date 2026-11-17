@@ -221,6 +221,7 @@ class GitTests(unittest.TestCase):
             self.assertEqual(self.git(self.remote, "rev-parse", ref).strip(), head)
             parent = head
         hook = self.remote / "hooks/pre-receive"
+        hook.parent.mkdir(exist_ok=True)
         hook.write_text("""#!/bin/sh
 set -eu
 read old new ref
