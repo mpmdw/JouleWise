@@ -79,9 +79,12 @@ def cadence_minimum_seconds(plan: dict) -> float:
 
 def runner_argv(args) -> list[str]:
     legs, window = getattr(args, "legs", None), getattr(args, "batch_window", None)
+    t0_date = getattr(args, "authorized_t0_date", None)
+    t0_before = getattr(args, "t0_before", None)
+    t0_args = ["--authorized-t0-date", t0_date, "--t0-before", str(t0_before)] if t0_date else []
     return [str(args.python_bin), str(args.repo / RUNNER), "run", "--kit", str(args.kit), "--output", str(args.output),
             *(["--legs", legs] if legs else []), *(["--batch-window", window] if window else []),
-            "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin)]
+            "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin), *t0_args]
 
 
 def launch(args) -> None:
@@ -209,6 +212,8 @@ def main(argv=None) -> int:
     start.add_argument("--custody-root", type=Path, required=True)
     start.add_argument("--magistrate-pid", type=int, required=True)
     start.add_argument("--deadline", type=float, required=True)
+    start.add_argument("--authorized-t0-date", help="authorized America/Los_Angeles calendar date")
+    start.add_argument("--t0-before", type=int, help="exclusive start cutoff in whole epoch seconds")
     start.add_argument("--launchctl-bin", default="/bin/launchctl")
     start.add_argument("--pmset-bin", default="/usr/bin/pmset")
     start.add_argument("--pgrep-bin", default="/usr/bin/pgrep")
@@ -220,6 +225,12 @@ def main(argv=None) -> int:
     run.add_argument("--runner-spec", type=Path, required=True)
     run.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
+    if args.command == "launch":
+        from scripts.cadence_legs_runner import validate_t0_authority
+        try:
+            validate_t0_authority(args.authorized_t0_date, args.t0_before)
+        except ValueError as error:
+            parser.error(str(error))
     for name in ("repo", "kit", "output", "disk_path", "custody_root"):
         if getattr(args, name, None) is not None:
             setattr(args, name, getattr(args, name).expanduser().resolve())

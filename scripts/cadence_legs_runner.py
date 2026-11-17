@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 import hashlib
 import json
 import math
@@ -334,14 +334,33 @@ def production_deps(*, inputs, pmset_bin, output):
 # --------------------------------------------------------------------------
 # The span
 # --------------------------------------------------------------------------
-def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
+def validate_t0_authority(authorized_date, t0_before):
+    if authorized_date is None and t0_before is None:
+        return
+    if authorized_date is None or type(t0_before) is not int or t0_before <= 0:
+        raise ValueError("authorized t0 date and positive exclusive epoch cutoff must be supplied together")
+    if date.fromisoformat(authorized_date).isoformat() != authorized_date:
+        raise ValueError("authorized t0 date must use YYYY-MM-DD")
+
+
+def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
+             authorized_t0_date=None, t0_before=None):
     """Run one span. Returns the receipt's rc (0 = every roster leg attempted, cleanup proven)."""
+    validate_t0_authority(authorized_t0_date, t0_before)
+    clock = deps.clock
+    started = _stamp(clock)
+    if authorized_t0_date is not None:
+        t0 = started["epoch_s"]
+        day = datetime.fromtimestamp(t0, legsmod.LOCAL_ZONE).date().isoformat()
+        if day != authorized_t0_date or t0 >= t0_before:
+            print(f"REFUSE: t0 {t0} ({day}) outside authorized date {authorized_t0_date} "
+                  f"or exclusive cutoff {t0_before}", file=sys.stderr)
+            return 3
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)   # create-once: a retry cannot overwrite a span
-    clock = deps.clock
     stages = legsmod.StageJournal(output / legsmod.STAGE_JOURNAL, clock)
     record = {"schema": RECEIPT_SCHEMA, "runner_kind": kit["runner"]["kind"], "mock": deps.mock,
-              "started": _stamp(clock), "deadline": deadline, "work_reserve_s": WORK_RESERVE_S,
+              "started": started, "deadline": deadline, "work_reserve_s": WORK_RESERVE_S,
               "kit": {"campaign_id": kit["campaign_id"], "sha256": kit_sha256, "frozen_commit": kit["frozen"]["commit"]},
               "roster": list(leg_ids) if leg_ids is not None else [leg["leg_id"] for leg in kit["legs"]],
               "batch_windows": [legsmod.format_window(w) for w in windows], "steps": [], "legs": [],
@@ -879,6 +898,8 @@ def main(argv=None):
         if name == "run":
             p.add_argument("--output", type=Path, required=True)
             p.add_argument("--deadline", type=float, required=True)
+            p.add_argument("--authorized-t0-date", help="authorized America/Los_Angeles calendar date")
+            p.add_argument("--t0-before", type=int, help="exclusive start cutoff in whole epoch seconds")
             p.add_argument("--pmset-bin", default="/usr/bin/pmset")
             p.add_argument("--inputs", type=Path,
                            default=ROOT / "configs/campaigns/align_v4/registration/inputs.json")
@@ -939,10 +960,15 @@ def main(argv=None):
         return 1
     if not math.isfinite(args.deadline):
         parser.error("deadline must be finite")
+    try:
+        validate_t0_authority(args.authorized_t0_date, args.t0_before)
+    except ValueError as error:
+        parser.error(str(error))
     output = args.output.resolve()
     deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output)
     return run_span(kit=kit, kit_sha256=sha, output=output, deadline=args.deadline, windows=windows, deps=deps,
-                    leg_ids=_roster(args))
+                    leg_ids=_roster(args), authorized_t0_date=args.authorized_t0_date,
+                    t0_before=args.t0_before)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@
 synthetic backend, and the launcher registration. No model, sensor, host setting or energy is touched."""
 from __future__ import annotations
 
+from contextlib import redirect_stderr
 from datetime import datetime
 import io
 import json
@@ -52,6 +53,48 @@ def campaign_kit(n_legs=12, bands=("q0",), validate=True, **template):
         "looks": [], "desk": {"adapter": "leg-summary-v1"},
     }
     return kitmod.validate_kit(kit) if validate else kit
+
+
+class T0AuthorityTests(unittest.TestCase):
+    def test_launcher_handoff_checks_the_recorded_child_start(self):
+        day = "2026-11-22"
+        midnight = int(local("2026-11-23T00:00:00"))
+        cases = (
+            ("last authorized fraction", midnight - 0.25, midnight, True),
+            ("midnight during handoff", midnight, midnight, False),
+            ("wrong date before cutoff", midnight, midnight + 3600, False),
+            ("expiry during handoff", midnight - 30, midnight - 30, False),
+        )
+        with tempfile.TemporaryDirectory(dir=TMP) as tmp:
+            root = Path(tmp)
+            kit = root / "kit.json"
+            kit.write_text(json.dumps(campaign_kit(n_legs=6, legs_per_span=6)))
+            for case, epoch, cutoff, allowed in cases:
+                with self.subTest(case=case):
+                    output = root / case
+                    authority = ["--authorized-t0-date", day, "--t0-before", str(cutoff)]
+                    argv = [
+                        "launch", "--repo", tmp, "--python-bin", sys.executable,
+                        "--kit", str(kit), "--output", str(output), "--disk-path", tmp,
+                        "--custody-root", str(root / "synthetic-fence"), "--magistrate-pid", "123",
+                        "--deadline", str(epoch + 29000), *authority,
+                    ]
+                    with patch.object(cadence_launch, "launch") as launch:
+                        self.assertEqual(cadence_launch.main(argv), 0)
+                        child_argv = cadence_launch.runner_argv(launch.call_args.args[0])
+                    self.assertEqual(child_argv[-4:], authority)
+
+                    deps = runner.mock_deps(output, runner.FakeClock(epoch))
+                    with patch.object(runner, "production_deps", return_value=deps), redirect_stderr(io.StringIO()):
+                        rc = runner.main(child_argv[2:])
+                    if allowed:
+                        self.assertEqual(rc, 0)
+                        receipt = json.loads((output / runner.RECEIPT_NAME).read_text())
+                        self.assertEqual(receipt["started"]["epoch_s"], epoch)
+                    else:
+                        self.assertEqual(rc, 3)
+                        self.assertFalse(output.exists())
+                        self.assertEqual(deps.host.calls, [])
 
 
 # --------------------------------------------------------------------------
