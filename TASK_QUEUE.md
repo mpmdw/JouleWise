@@ -5,6 +5,13 @@ triage it here instead of assuming it should happen immediately.
 
 ## Intake Rule For New Tasks
 
+2026-11-16 ctl-01 intake: user-directed [AGENT] work under RL-174 B.4, ahead of
+type T; runner and synthetic checks in progress on `cadence/2026-11-16-ctl01-runner`.
+Draft kit only; issue waits for the research lead's `lm-inst-01` reading.
+Tracking: [ctl runner](docs/process/cadence_ctl_runner.md) and
+[session report](docs/run_reports/2026-11-16-ctl01-runner.md).
+`RUN_STATE.md` issuing remains lead-owned and is not edited in this worktree.
+
 For every new user task:
 
 1. Read `RUN_STATE.md`.

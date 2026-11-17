@@ -102,6 +102,10 @@ def launch(args) -> None:
     if args.batch_window is not None and not BATCH_WINDOW_PATTERN.fullmatch(args.batch_window):
         raise ValueError("--batch-window must be HH:MM-HH:MM")
     plan = cadence_plan(args.kit, args.legs, args.batch_window)
+    from joulewise.cadence import kit as kitmod, ctl
+    loaded, _ = kitmod.load_kit(args.kit)
+    if loaded["runner"]["kind"] == ctl.RUNNER_KIND:
+        ctl.require_issued(loaded)   # before publishing a fence or invoking any host command
     if args.deadline - time.time() < cadence_minimum_seconds(plan):
         raise ValueError("cadence-legs-v1 deadline cannot fit the span's worst case, work reserve and cleanup grace")
     runner = Path(runner_argv(args)[1])

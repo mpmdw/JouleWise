@@ -249,6 +249,12 @@ class ProductionHost:
 
 
 def verify_frozen_production(kit):
+    if kit.get("runner", {}).get("kind") == "cadence-ctl-v1":
+        from joulewise.cadence import ctl
+        try:
+            ctl.require_issued(kit)
+        except kitmod.KitError as error:
+            raise SpanRefusal(str(error)) from error
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
                           timeout=60).stdout.strip()
     if head != kit["frozen"]["commit"]:
@@ -505,7 +511,8 @@ _RESULT_KEEP = ("leg_id", "leg_status", "bundle", "member_status", "g0_outcome",
                 "g0_timeout_s", "quiet_s", "prefill_chars", "prefill_tokens", "decode_cap", "decode_tokens",
                 "decode_cap_reached", "os_level_max", "pm_nominal", "incomplete_reasons", "ac_powermode",
                 "turn_start_ns", "turn_end_ns", "first_token_ns", "quiet_spans_ns", "config_sha256",
-                "g0_shape", "g0_role", "g0_reference_source", "g0_reference_record_sha256")
+                "g0_shape", "g0_role", "g0_reference_source", "g0_reference_record_sha256",
+                "script_complete", "script_record_sha256")
 
 
 def _close(record, state, deps, output, step, kit):

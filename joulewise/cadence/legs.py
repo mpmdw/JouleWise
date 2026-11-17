@@ -41,7 +41,7 @@ from joulewise.cadence.desk import DENIED_KEY_RE, LEG_SUMMARY_KEYS, METER_KEYS, 
 
 RUNNER_KIND = "cadence-legs-v1"
 # Runner kinds this runner executes: v1 kits, and v1.1 kits (the cell law; design doc section 14).
-RUNNER_KINDS = (RUNNER_KIND, "cadence-legs-v1.1")
+RUNNER_KINDS = (RUNNER_KIND, "cadence-legs-v1.1", "cadence-ctl-v1")
 LEG_KIND = "cadence-leg"
 LEG_SPEC_SCHEMA = "joulewise.cadence_leg_spec.v1"
 PLAN_SCHEMA = "joulewise.cadence_span_plan.v1"
@@ -112,6 +112,8 @@ def prefill_chars(tokens):
 
 def leg_spec_keys(spec):
     """The closed key set of ``spec``'s schema."""
+    if spec.get("schema") == "joulewise.cadence_leg_spec.ctl.v1":
+        return LEG_SPEC_KEYS_V11 | {"script"}
     return LEG_SPEC_KEYS_V11 if spec.get("schema") == LEG_SPEC_SCHEMA_V11 else LEG_SPEC_KEYS
 
 
@@ -138,6 +140,17 @@ def _validate_leg_spec_v11(spec):
 
 def validate_leg_spec(spec):
     """Return ``spec`` or raise PlanError. Closed keys; a leg runtime reads nothing else."""
+    if isinstance(spec, dict) and spec.get("schema") == "joulewise.cadence_leg_spec.ctl.v1":
+        from joulewise.cadence import ctl
+        try:
+            ctl.validate_script(spec.get("script"))
+        except kitmod.KitError as error:
+            raise PlanError(error.problems) from error
+        _validate_leg_spec_v11({**{k: v for k, v in spec.items() if k != "script"},
+                               "schema": LEG_SPEC_SCHEMA_V11})
+        if spec["decode_tokens"] != sum(spec["script"]["turn_tokens"]):
+            raise PlanError(["decode_tokens differs from the script's logged total"])
+        return spec
     if isinstance(spec, dict) and spec.get("schema") == LEG_SPEC_SCHEMA_V11:
         return _validate_leg_spec_v11(spec)
     problems = []
@@ -183,6 +196,8 @@ def leg_specs(kit, leg_ids=None):
     by_id = {leg["leg_id"]: leg for leg in kit["legs"]}
     order = [leg["leg_id"] for leg in kit["legs"]]
     ids = list(order) if leg_ids is None else list(leg_ids)
+    if kit["runner"]["kind"] == "cadence-ctl-v1" and ids not in kit["layout"]:
+        raise PlanError(["ctl roster: must equal a fixed kit layout span (legs_per_span <= 9)"])
     problems = []
     if not ids:
         problems.append("roster: no legs")
@@ -213,6 +228,9 @@ def leg_specs(kit, leg_ids=None):
                 "decode_tokens": decode, "quiet_s": BAND_RECIPES[band]["quiet_s"]}
         if shape == "span":   # the span's first leg captures the span's reference; later span legs consume it
             spec.update(schema=LEG_SPEC_SCHEMA_V11, g0_shape="span", g0_role="capture" if position == 0 else "consume")
+        if kit["runner"]["kind"] == "cadence-ctl-v1":
+            from joulewise.cadence import ctl
+            spec.update(schema=ctl.SPEC_SCHEMA, script=leg["script"])
         specs.append(validate_leg_spec(spec))
     return specs
 
@@ -225,6 +243,11 @@ def leg_g0_s(spec, model=TIME_MODEL):
 def leg_expected_s(spec, model=TIME_MODEL):
     """Modeled wall seconds of one leg: fixed + warm-up (one prefill) + G0 + quiet + prefill + decode."""
     prefill = spec["prefill_tokens"] * model["prefill_s_per_token"]
+    if "script" in spec:
+        from joulewise.cadence import ctl
+        seconds, calls = ctl.script_seconds(spec["script"], model)
+        return (model["fixed_s"] + prefill + model["warmup_extra_s"] + leg_g0_s(spec, model)
+                + spec["quiet_s"] + calls*prefill + seconds)
     return (model["fixed_s"] + prefill + model["warmup_extra_s"] + leg_g0_s(spec, model) + spec["quiet_s"]
             + prefill + spec["decode_tokens"] / model["decode_tokens_per_s"])
 
