@@ -9,7 +9,7 @@ the earlier stale CURRENT pointer to item 394.
 | --- | --- | --- |
 | Astra ops 9 | `805617dba` | Failed notifier CLI status and persistent NOTICE/ALARM retries in `tests.test_air_watch_agent`. CI and watcher exit alarms also stay pending until delivery. |
 | Astra ops 12 | `3ab533d55` | `tests.test_gen_current.RenderTests` rejects reordered pointer collisions and heading collisions, and accepts only the commit-qualified historical 387 pair. |
-| Astra design 2 | `6cec8ffcc` and `3babaf05a` on the main PR, `bdb1d232f` on the W1 candidate | On the old F0 pin, the new `tests.align.test_rl145_part_c.EvaluatorFailureTests` cases pass malformed evidence through the verdict. On the candidate, they refuse missing, duplicate or unreleased G1 records and understated durations, including missing or inconsistent evidence when X_G runs. The main suite exercises the identical gate logic in `tests.test_part_c_gate_evidence`. |
+| Astra design 2 | `6cec8ffcc` and `3babaf05a` on the main PR, `bdb1d232f` on W1 | On the old F0 pin, the new `tests.align.test_rl145_part_c.EvaluatorFailureTests` cases pass malformed evidence through the verdict. On the candidate, they refuse missing, duplicate or unreleased G1 records and understated durations, including missing or inconsistent evidence when X_G runs. The main suite exercises the identical gate logic in `tests.test_part_c_gate_evidence`. |
 | Astra ops throughput 3 | `d0ad35088` | `tests.test_magistrate_watchdog.StopAndDecisionTests` checks one advertisement with the exact positive control and matching stop refs. `tests.test_magistrate_watchdog_span` checks the in-flight fence crossing. |
 
 The focused Python 3.13 checks cover the Air watcher, the state generators,
@@ -17,7 +17,9 @@ the watchdog and the Part C evaluator. The regressions reproduced failures
 before the implementation changes. The real-process watchdog CLI module
 was excluded from local testing. Evaluation used synthetic facts and fake
 transports. The end-of-work fixture census could not obtain a process
-snapshot because the runner denied `ps`.
+snapshot because the runner denied `ps`. The first final-head CI attempt caught the new
+test module's missing shard timing entry. Both branches now register its
+standard pending-hosted-timing exemption in `scripts/test_timings.json`.
 
 ## Standing F0 rebind
 
@@ -35,8 +37,8 @@ the workload's unobserved outcome.
 
 Main carries the same evaluator source as the W1 candidate. The next
 STANDING-F0 renewal should move from `b2e01464d6d4fbf2901ff4d4154df9455104a12a`
-to `bdb1d232f1c2a945557e8ae29cffc791731aeace` on the W1 line after lead review
-and admission. Candidate tree `b92ebd3924f09141b1518f54fd553b382919b318`.
+to `4d7dd28cc93bb02f6f6782dacd7af04abd6eda8e` on the W1 line after lead review
+and admission. Candidate tree `39a465bdf30da9b05c889b4cff882b837326c1a1`.
 The evaluator SHA-256 moves from
 `b2c91c77ef9f1c227c5c172690fadf5f36cff22b4874d0eeaa66798ca9ef12b8` to
 `238ab79c72e2540ff2ce0522b6bf6864bca9602fa94685fc082c9d999907cfe3`.
