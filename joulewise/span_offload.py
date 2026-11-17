@@ -1502,12 +1502,19 @@ def recheck_marker(config, plan, span_dir, backend, deadline):
             backend.get(plan, name, target, deadline)
             if _sha_size(target) != expected[kind]:
                 raise unverified("READBACK_HASH", "a previously verified cloud artifact changed")
+        source_snapshot = None
         if os.path.lexists(span_dir):
+            source_snapshot = span_snapshot(span_dir, deadline.remaining)
             manifest, digest, _size, _count = write_archive(span_dir, _NullSink(), deadline.remaining)
             if sha256_bytes(manifest) != record["manifest_sha256"] or digest != record["archive_sha256"]:
                 raise refused("SPAN_CHANGED", "the source differs from the existing copy marker")
         if isinstance(backend, ICloudBackend):
             backend._wait_uploaded(deadline)
+        if source_snapshot is not None:
+            # The final status subprocess must not reopen a source-mutation gap on a valid retry.
+            require_snapshot(span_dir, source_snapshot, deadline.remaining)
+        elif os.path.lexists(span_dir):
+            raise refused("SPAN_CHANGED", "an original appeared during marker retry")
         deadline.remaining()
     return record  # immutable marker; valid retries exit 0 only after rechecking hashes
 
