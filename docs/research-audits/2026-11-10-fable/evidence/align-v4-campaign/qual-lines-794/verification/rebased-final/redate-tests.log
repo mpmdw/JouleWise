@@ -1,0 +1,4 @@
+PASS one argument re-dates all six items, queue lower bounds and plan t0s to Fri/Sat/Sun
+PASS shared-date plan refused: RL-174 B.3 requires three dates, one block each
+PASS one-date, known development-date and expired queue plans refused
+7 generator checks; zero failures; isolated default items/queues/plans restored byte for byte

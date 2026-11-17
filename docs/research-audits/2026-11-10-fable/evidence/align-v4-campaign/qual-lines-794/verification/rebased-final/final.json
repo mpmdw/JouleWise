@@ -1,0 +1,14 @@
+{
+  "verified_at": "2026-11-16 18:42:34 PST",
+  "result": "PASS",
+  "integrated_gate_checks": 1108,
+  "close_copy_checks": 246,
+  "pinned_checks": 91,
+  "standing_checks": 21,
+  "isolated_generator_checks": 7,
+  "shell_syntax_checks": 74,
+  "python_compile_checks": 60,
+  "preservation": "34 upstream evidence files; all kit/queue bytes; RUN_STATE and kernel unchanged",
+  "failed_run_preserved": "../rebased/standing-f0-tests.log; stale derivative path corrected in test, then affected checks passed",
+  "notes": "Hosted line-2 CI evidence is separate from these synthetic checks. Line-1 authority remains unfilled."
+}

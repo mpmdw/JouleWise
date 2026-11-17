@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/sol-qual794-lines/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/tests/test_standing.py", line 23, in <module>
+    assert patch==expected
+           ^^^^^^^^^^^^^^^
+AssertionError

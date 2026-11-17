@@ -1,6 +1,7 @@
 """One-argument regeneration and conservative date rejection, restoring defaults."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,7 +17,8 @@ shutil.copytree(SOURCE,HERE,ignore=shutil.ignore_patterns('.synthetic-*','.pinne
 shutil.copytree(SOURCE.parent/'item-drafts-1115',fixture/'item-drafts-1115')
 def call(*args,ok=True):
     global checks
-    r=subprocess.run([sys.executable,'-B',str(HERE/'build_items.py'),*args],text=True,capture_output=True)
+    env=dict(os.environ,JW_DRAFT_EVIDENCE_DIR=str(HERE/'evidence/regeneration-test'))
+    r=subprocess.run([sys.executable,'-B',str(HERE/'build_items.py'),*args],text=True,capture_output=True,env=env)
     assert (r.returncode==0)==ok,(args,r.stdout,r.stderr); checks+=1; return r
 call()  # Establish this fixture's default output at the current source refs.
 paths=[*HERE.glob('ITEM-*.md'),*HERE.glob('queues/*.json'),*HERE.glob('evidence/plan-*.json')]

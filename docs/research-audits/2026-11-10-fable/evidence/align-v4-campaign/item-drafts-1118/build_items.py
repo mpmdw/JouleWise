@@ -8,6 +8,7 @@ import datetime as dt
 import difflib
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -67,8 +68,9 @@ renewal_gate() {{
     (HERE/'STANDING-F0-r2.md').write_text(renewed)
     (HERE/'evidence/standing-f0-original.md').write_text(original)
     diff=''.join(difflib.unified_diff(original.splitlines(True),renewed.splitlines(True),fromfile=f'origin/main@{main}:RUN_STATE item 346',tofile='STANDING-F0-r2.md'))
-    (HERE/'evidence/fix-2026-11-16').mkdir(exist_ok=True)
-    (HERE/'evidence/fix-2026-11-16/standing-f0-r2.diff').write_text(diff)
+    evidence=Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence/fix-2026-11-16'))
+    evidence.mkdir(parents=True,exist_ok=True)
+    (evidence/'standing-f0-r2.diff').write_text(diff)
     return {'source_main':main,'original_issue':issued+' PST','renewal_start':start.isoformat(),'renewal_expiry':end.isoformat(),'w1_head':head,'pin_unchanged':head==old}
 
 def render(dates):

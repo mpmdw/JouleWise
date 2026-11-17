@@ -2,6 +2,7 @@
 import datetime as dt
 import difflib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -18,7 +19,8 @@ assert re.search("<<'HASHES'\n(.*?)\nHASHES",original,re.S).group(1)==re.search(
 assert '--fresh-soak --parts C' in text and '14400' in text and 'len(today) >= 3' in text
 oldblocks=re.findall(r'```sh\n(.*?)```',original,re.S); blocks=re.findall(r'```sh\n(.*?)```',text,re.S)
 assert blocks[1:]==oldblocks[1:]
-patch=(HERE/'evidence/fix-2026-11-16/standing-f0-r2.diff').read_text()
+evidence=Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence/fix-2026-11-16'))
+patch=(evidence/'standing-f0-r2.diff').read_text()
 expected=''.join(difflib.unified_diff(original.splitlines(True),text.splitlines(True),fromfile=f"origin/main@{meta['standing']['source_main']}:RUN_STATE item 346",tofile='STANDING-F0-r2.md'))
 assert patch==expected
 checks=0

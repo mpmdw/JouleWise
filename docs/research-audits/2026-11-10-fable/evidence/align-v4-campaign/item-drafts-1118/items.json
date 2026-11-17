@@ -2,7 +2,7 @@
   "source": "6010985a3312c77bb8e4bb4bf5c920c4d49b8512",
   "pin": "e1b85a59c53bfbeaa3477df46bcbe9dd8fdfc427",
   "merged_w1": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
-  "source_audit": "ebff15ad27e831499dd65796b3727d8c5d451e21",
+  "source_audit": "3bfff530bde9be0dd490e7ff0931cd3baab33b6f",
   "queue_scan": [
     "docs/process/cadence/BLOCK-QUEUE.json",
     "docs/process/cadence/kits/cl-dev-01.json",
