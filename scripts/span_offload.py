@@ -14,7 +14,7 @@ Air (later; verifies against the marker's hashes and decrypts read-only):
 Output is one line of operational codes and hashes. Exit codes: 0 ok, 1 internal, 2 usage, 3 marker
 legacy marker exists / marker writer raced, 4 input or stability refused, 5 upload or provider read-back failed, the
 deadline passed or the tool was terminated (no marker), 6 pull integrity failure, 7 pull destination
-exists (or an interrupted landing), 8 unconfirmed local/iCloud offload (no copy-gate marker).
+exists (or an interrupted landing), 8 offload without observed iCloud readback (no copy-gate marker).
 """
 from __future__ import annotations
 

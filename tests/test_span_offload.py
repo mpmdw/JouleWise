@@ -144,6 +144,8 @@ class SpanOffloadTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="offload-test-"))
         self.addCleanup(self._cleanup)
+        # Disk state and mail are synthetic too: runner capacity must never trigger real mail.
+        self.enterContext(mock.patch.object(so.shutil, "disk_usage", return_value=(1_000_000_000_000, 0, 900_000_000_000)))
         self.span = self.tmp / "campaign-out" / SPAN
         self.make_span(self.span)
         for name in ("stage", "markers", "cloud", "desk", "work"):
@@ -908,13 +910,14 @@ class SpanOffloadTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         return backend
 
-    def test_rclone_backend_confirms_each_hash_type(self):
+    def test_rclone_checks_each_hash_type_but_never_satisfies_rl174_copy_gate(self):
         for hash_type in ("sha256", "md5", "dropbox", "size"):
             with self.subTest(hash_type=hash_type):
                 plan = f"{PLAN}-{hash_type}"
                 config = dict(self.config, backend=self.fake_rclone(hash_type))
                 record = so.offload(config, plan, self.span_for(plan))
-                self.assertTrue(record["provider_confirmed"])
+                self.assertFalse(record["provider_confirmed"])
+                self.assertFalse(self.marker(plan, True).exists())
                 for row in record["provider_confirmation"]:
                     self.assertEqual(row["provider_size"], row["size"])
                     self.assertEqual(row["provider_hash_type"], hash_type)
@@ -923,8 +926,13 @@ class SpanOffloadTests(unittest.TestCase):
                     elif hash_type == "size":
                         self.assertIsNone(row["provider_hash"])
                 air = dict(self.air, backend=config["backend"])
-                marker = json.loads(self.marker(plan, True).read_bytes())
+                marker = json.loads(self.marker(plan).read_bytes())
                 so.pull(air, plan, "cl-" + hash_type, self.tmp / "desk", so.expectations(marker))
+                # Historical typed rclone markers are retained, but cannot satisfy today's gate.
+                self.marker(plan, True).write_bytes(so.canonical(dict(record, provider_confirmed=True)))
+                with self.assertRaises(so.OffloadError) as caught:
+                    so.offload(config, plan, self.span_for(plan))
+                self.assertEqual(caught.exception.code, "MARKER_INVALID")
         calls = [json.loads(line) for line in (self.tmp / "rclone.log").read_text().splitlines()]
         copies = [c for c in calls if "copyto" in c and c[c.index("copyto") + 1] == "--immutable"]
         self.assertEqual(len(copies), 4 * 4)
