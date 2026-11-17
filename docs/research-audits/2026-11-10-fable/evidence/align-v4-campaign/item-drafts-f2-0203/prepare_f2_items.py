@@ -23,6 +23,7 @@ def source(path):
 
 def main(pin):
     report=json.loads((HERE/'evidence/kit-build.json').read_text())
+    maintenance=(HERE.parent/'item-drafts-f2'/'maintenance-check.md').read_text() + '\n'
     allitems=[]
     for index,record in enumerate(report['kits'][:2],2):
         name=record['name']; folder=HERE/name; sha=record['sha256']; dose=record['decode']
@@ -94,6 +95,9 @@ def main(pin):
             item['predecessor_sha']=pred_sha if item['piece']==1 else sha
             path=folder/('ITEM-'+item['item']+'.md')
             text=path.read_text()
+            check=text.index('**Check.**')
+            first_block=text.index('```sh\n',check)
+            text=text[:first_block]+maintenance+text[first_block:]
             text=text.replace('evidence/fix-2026-11-16/verify-','evidence/verify-')
             text=text.replace('stage_mbp_span.sh','python3 -B ../stage_mbp_span.py --commit <LEAD FILLS committed draft source> --admission <LEAD FILLS administrative admission JSON>')
             text=text.replace('/queues/'+name+'.v1.1.queue-a.json','/queues/'+name+'-queue-a.json')

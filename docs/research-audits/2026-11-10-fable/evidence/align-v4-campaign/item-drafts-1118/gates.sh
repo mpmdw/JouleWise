@@ -235,7 +235,7 @@ PY
 }
 queue_gate() {
   filled "$QUEUE_COMMIT" || { echo 'WAIT: lead records queue commit (RL-149 §2.8 line 3)'; return 1; }
-  "$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$(date +%s)" <<'PY'
+  QUEUE_EXPIRES_EPOCH="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$(date +%s)" <<'PY'
 import hashlib, json, re, subprocess, sys
 repo, commit, path, sha, span, legs, now=sys.argv[1:]; now=int(now)
 def git(*a): return subprocess.check_output(['git','-C',repo,*a],stderr=subprocess.DEVNULL)
@@ -245,13 +245,16 @@ try:
     raw=git('cat-file','blob',commit+':'+path); assert hashlib.sha256(raw).hexdigest()==sha
     q=json.loads(raw); from datetime import datetime
     expiry=datetime.fromisoformat(q['expires_at']).timestamp()
+    assert expiry.is_integer()
     committed=int(git('show','-s','--format=%ct',commit))
     assert committed <= now < expiry <= committed+7*86400
     assert q['halt'] is None
     entries=[s for s in q['spans'] if s['span_id']==span]; assert len(entries)==1 and entries[0]['legs']==legs.split(',')
 except (OSError,ValueError,KeyError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/seven-day expiry (RL-149 §2.8 line 3)')
-print('QUEUE COMMITTED',commit,'finite expiry',q['expires_at'])
+print(int(expiry))
 PY
+)" || return 1
+  echo "QUEUE COMMITTED $QUEUE_COMMIT finite expiry $QUEUE_EXPIRES_EPOCH"
 }
 debt_gate() {
   filled "${LINE9_RECORD:-}" || { echo 'WAIT: typed desk/Q1 debt record (RL-165 §6; RL-172 (c); RL-173 E Q1)'; return 1; }
@@ -296,10 +299,34 @@ admission_gate() {
 window_gate() {
   now=$(date +%s)
   test "$now" -ge "$WINDOW_START" && test "$now" -le "$WINDOW_END" \
-    || { echo 'REFUSE: outside item t0-date; lead re-dates (RL-172 (a)5)'; return 1; }
+    || { echo 'REFUSE: outside item t0-date or LIMIT; follow missed-date recovery (RL-172 (a)5)'; return 1; }
+}
+arm_bound_gate() {
+  # Date/window end is inclusive to the printed second. Item and queue expiries are exclusive.
+  ARM_BEFORE_EPOCH=$((WINDOW_END + 1))
+  for expires in "$EXPIRES_EPOCH" "$QUEUE_EXPIRES_EPOCH"; do
+    if test "$expires" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$expires; fi
+  done
+  if test "$FIRST_TO_SECOND_S" -gt 0; then
+    second_before=$((DAY_END + 1))
+    if test "$QUEUE_EXPIRES_EPOCH" -lt "$second_before"; then second_before=$QUEUE_EXPIRES_EPOCH; fi
+    case "${S02_ISSUED_EPOCH:-}" in
+      unissued) ;;
+      ''|*[!0-9]*) echo 'WAIT: record the actual s02 issue epoch or unissued'; return 1;;
+      *) second_expires=$((S02_ISSUED_EPOCH + 86400))
+         if test "$second_expires" -lt "$second_before"; then second_before=$second_expires; fi;;
+    esac
+    pair_before=$((second_before - FIRST_TO_SECOND_S))
+    if test "$pair_before" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$pair_before; fi
+  fi
+  test "$(date +%s)" -lt "$ARM_BEFORE_EPOCH" || {
+    echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, item/queue expiry, dependent span)"
+    return 1
+  }
+  echo "AUTHORIZED T0 $T0_DATE before $ARM_BEFORE_EPOCH"
 }
 all_gates() {
   expiry_gate && watch_gate && freeze2_gate && qual_pin_gate && host_event_gate && v4_gate \
-    && admission_gate && queue_gate && debt_gate && pred_gate && close_gate && day_gate && window_gate
+    && admission_gate && queue_gate && debt_gate && pred_gate && close_gate && day_gate && window_gate && arm_bound_gate
 }
 # END TESTABLE GATES

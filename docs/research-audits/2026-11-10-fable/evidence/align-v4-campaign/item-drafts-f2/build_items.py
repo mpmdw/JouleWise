@@ -37,6 +37,7 @@ def render(pin_repo):
     kit = json.loads(kit_bytes)
     (HERE / 'queue-a.json').write_text(git('show', f'{SOURCE}:{QUEUE_PATH}'))
     gates = (HERE / 'gates.sh').read_text()
+    maintenance = (HERE / 'maintenance-check.md').read_text() + '\n'
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     specs = [(1, 17, 'cl-dev-03', 'dev-03-s02', list(range(4, 13)), '16:45:12'),
              (2, 18, 'f2-inst-01', 'f2-inst-p1', [1, 2, 3], '16:45:12'),
@@ -165,7 +166,7 @@ echo "$OUT"
 
 **Check.** Only on the next activation, after the shared fence is gone. Read no stream, member output, feed file or custody content. This operational print is not the analyst read and never prints measured power/energy. All queue stops are judged by the pinned desk's operational projection and the lead; nothing is automatically re-armed.
 
-```sh
+{maintenance}```sh
 "$PY" -I -B - "$OUT" "$LEGS" <<'PY'
 import json, sys
 from pathlib import Path

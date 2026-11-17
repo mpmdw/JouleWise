@@ -1,14 +1,14 @@
-TBD. **Laptop lead (interactive, Opus 5.5), drafted by the items-rl165 drafter 2026-11-14 PST and re-drafted under RL-171 and RL-172 and re-pinned to the W1-line head `b2e01464d` (RL-172b condition 3; RL-172c) by the items-rl171 builder 2026-11-15 PST, ISSUED <LEAD FILLS: actual issue at 2026-11-22 11:51:24 PST; if later, re-date the renewal> (`date`): STANDING ITEM (RL-165 §3). MAGISTRATE: you may run filler F0, the Part C bridge, ON YOUR OWN, without a further item from the lead, whenever one of the three triggers below holds and every rule below holds: a FRESH TV0h/TV1h idle soak, then Part C only (`--fresh-soak --parts C`: the 30B predecessor, a full step-D on TV1h, the gated D_bank member seed 1, then X_G) on `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (the merge of PR #790, head of `ops/2026-11-11-w1-presign`), in the staged worktree `/Users/edr/code/jw-wt/partc-b2e01464d`. Each run is a DIAGNOSTIC, journals only: it adopts nothing, enters nothing and produces no slots. ONE run per activation, with its own OUT. No prepare, no arm, no session, no W1, no other smoke. The launch is your LAST action and you exit at once. The item stays live after each run. It is VOID as soon as the W1-line head is not `b2e01464d` (the lead re-issues it with that merge), and it EXPIRES at 2026-11-29 11:51:24 PST (epoch 1795981884). If any rule fails, do not launch; mail the lead.**
+TBD. **Laptop lead (interactive, Opus 5.5), drafted by the items-rl165 drafter 2026-11-14 PST and re-drafted under RL-171 and RL-172 and re-pinned to the W1-line head `b2e01464d` (RL-172b condition 3; RL-172c) by the items-rl171 builder 2026-11-15 PST, ISSUED <LEAD FILLS: actual issue at or before 2026-11-22 11:51:24 PST; if later, re-date the renewal> (`date`): STANDING ITEM (RL-165 §3). MAGISTRATE: you may run filler F0, the Part C bridge, ON YOUR OWN, without a further item from the lead, whenever one of the three triggers below holds and every rule below holds: a FRESH TV0h/TV1h idle soak, then Part C only (`--fresh-soak --parts C`: the 30B predecessor, a full step-D on TV1h, the gated D_bank member seed 1, then X_G) on `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (the merge of PR #790, head of `ops/2026-11-11-w1-presign`), in the staged worktree `/Users/edr/code/jw-wt/partc-b2e01464d`. Each run is a DIAGNOSTIC, journals only: it adopts nothing, enters nothing and produces no slots. ONE run per activation, with its own OUT. No prepare, no arm, no session, no W1, no other smoke. The launch is your LAST action and you exit at once. The item stays live after each run. It is VOID as soon as the W1-line head is not `b2e01464d` (the lead re-issues it with that merge), and it EXPIRES seven days after the actual issue (no later than 2026-11-29 11:51:24 PST). If any rule fails, do not launch; mail the lead.**
 
 ```pointer
 owner: magistrate
 wait: none
-deadline: 2026-11-29T11:51:24-08:00
+deadline: <LEAD FILLS: actual issue + 604800 s in PST; no later than 2026-11-29T11:51:24-08:00>
 on_early_or_refused: any failed line of "Start and check", a void or expired item, a launch refusal (rc≠0 or no claimed fence), or a launch that cannot meet rules 5 to 7 (rule 6 is now the b2e01464d launch window 02:35:00-22:40:00, RL-171): NOTHING launches; mail the lead. Do not retry, do not extend, do not reuse OUT. A launcher refusal at b2e01464d is recorded and goes to the research lead (RL-164 §2(c)). A completed run, whatever its verdict (receipt rc 0 or 1 with an `evaluation` in smoke_part_c.json), is NOT a refusal: it is reported and compared line by line with the previous Part C's verdict (rule 10). A running F0 is never aborted (rule 9)
 next_observable: the next activation after each run's fence is gone runs "Check" below and reports, by email to Ed and the lead, as the next RUN_STATE item and as one line on the standing notice: receipt rc, parts, soak rc and sha256, part-C rc; from smoke_part_c.json ONLY the evaluation, N_chunk and T_dead; the restore lines; the trigger that launched it
 ```
 
-- **Renewal r2 (DRAFT, RL-165 §3 rule 2).** Item 346 was issued 2026-11-15 11:51:24 PST; its seven-day expiry is **Sun 22 Nov 2026 11:51:24 PST** (epoch 1795377084). This unissued renewal begins exactly then, with planned expiry Sun 29 Nov 2026 11:51:24 PST (epoch 1795981884). The lead must issue at that instant for these fixed bounds; a later actual issue needs a re-dated seven-day window. F0 spacing and daily counts continue across renewals; never reset its ledger. Fetched main `6fc02b1925b726585e66ff32885964f4207d7d09` and W1 head `b2e01464d6d4fbf2901ff4d4154df9455104a12a` checked by builder: unchanged at item 346 pin; the 17 hashes, Mac-check and all rules carry as written. Nothing is issued by this file.
+- **Renewal r2 (DRAFT, RL-165 §3 rule 2).** Item 346 was issued 2026-11-15 11:51:24 PST; its seven-day expiry is **Sun 22 Nov 2026 11:51:24 PST** (epoch 1795377084). This unissued renewal begins exactly then, with outer expiry Sun 29 Nov 2026 11:51:24 PST (epoch 1795981884). The lead may issue ahead; it becomes effective at item 346’s expiry and expires seven days after the actual issue under RL-165 §3 rule 2. A later actual issue needs a re-dated window. F0 spacing and daily counts continue across renewals; never reset its ledger. Item 346 source main `6fc02b1925b726585e66ff32885964f4207d7d09` and observed W1 head `b2e01464d6d4fbf2901ff4d4154df9455104a12a`: unchanged at item 346 pin; the 17 hashes and the Mac-check digest carry forward. Nothing is issued by this file.
 - **RL-174 E.2:** if merging #794 moves the W1-line head, STANDING-F0 is void immediately and the lead reissues it with that head. This same-pin renewal cannot authorize a moved head.
 - **Optional hold paragraph (item 374 form; inactive until the lead issues it):** MAGISTRATE: arm NO STANDING-F0 from <LEAD FILLS: hold issue instant> until the lead's RUN_STATE record "offload window closed" or <LEAD FILLS: hold end instant and epoch>, whichever is first. Counted items keep their own gates/windows; a running packer is a STOP at any arm. This does not carry forward item 374's Mon16-only hold, authorize offloading, or change F0's 02:35:00–22:40:00 launch window. Lead-owned hold records must be re-read before Start and Run.
 
@@ -17,18 +17,18 @@ next_observable: the next activation after each run's fence is gone runs "Check"
 
 **The ten rules (RL-165 §3; record each at every launch):**
 1. **Pin.** The full sha `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (tree `c904864e46879a4adfbdf0b467d4da1ee5928285`), the 17-hash table below, the Mac-check line below and the staged worktree `/Users/edr/code/jw-wt/partc-b2e01464d` (created by the script if absent). Pre-qualified on the Air at `b2e01464d` by the items-rl171 builder, 2026-11-15: the six dry-check modules OK (`/Volumes/JW-EXT/scratch/items-rl171/probe/tests-b2e01464d.log`: 1, 31, 15, 58, 24 and 24 tests, one skip), the 17 hashes (`probe/hashes-b2e01464d.txt`: sixteen equal the `c3f4bacd8` table, Mythos's independent one; `v4_registration.py` differs by one line, below), and the bounds re-derived from these bytes (`probe/b2e01464d-derived.txt`). The six modules still run once on the MBP at this sha (Start and check).
-2. **Void and expiry.** The item is VOID when the W1-line head (`origin/ops/2026-11-11-w1-presign`) is not `b2e01464d`. The lead re-issues it as part of that merge (for example PR #774's: RL-165 §9 lets a pass carry to #774's merge commit, but this item names a sha, so it is re-issued there). This renewal supersedes item 346 at its expiry; historically item 346 replaced the issue at `c3f4bacd8` (RL-172b condition 3: re-issued at the merge commit; the W1-line head moved by #798's merge `e5b4f4f7f` and then #790's merge `b2e01464d`). It EXPIRES 7 days after issue. A void or expired item launches nothing: mail the lead.
+2. **Void and expiry.** The item is VOID when the W1-line head (`origin/ops/2026-11-11-w1-presign`) is not `b2e01464d`. The lead re-issues it as part of that merge (for example PR #774's: RL-165 §9 lets a pass carry to #774's merge commit, but this item names a sha, so it is re-issued there). This renewal supersedes item 346 at its expiry; historically item 346 replaced the issue at `c3f4bacd8` (RL-172b condition 3: re-issued at the merge commit; the W1-line head moved by #798's merge `e5b4f4f7f` and then #790's merge `b2e01464d`). It expires seven days after the actual issue, even when issued ahead. A void or expired item launches nothing: mail the lead.
 3. **When (the triggers; exactly one is recorded).**
    - (a) **REFUSAL:** a slot's arm refused (a failed "Start and check" line or a launcher refusal of a staged campaign span or session).
    - (b) **NOT_READY:** a slot's block is not READY at its earliest t0 (its item is not issued and staged, or one of its gate lines does not hold).
    - (c) **NO_STAGED:** a close leaves no staged item whose gate can hold within 2 h 30 min of that close (for example Sunday afternoon after the dev-02 pull: dev-02's second half, `dev-02-s03`, is the Monday span of the 6 + 6 split, so it cannot arm before Mon 00:00:00).
-   - **Order (RL-165 §1, §2, §4).** F0 is the last rung. Sunday after `dev-01-s04`: the R1 slot session if READY, then hp-01's spans, then the dev-02 pull, then F0. Monday after dev-02 closes: the slot session if READY, then the dev-03 pilot, then hp-01's unrun spans, then P, then F0. After either G0-timeout contingency: the slot session if READY, hp-01's unrun spans, then F0. Do not use F0 to pass over a staged item that can launch now.
-   - **R-A (RL-172 (f), which retires RL-165 §7's worst-case reservation).** From the lead's record that a v4 session is READY, nothing of lower priority arms, F0 included; the session takes the next clean close. Before that record F0 arms on its own rules.
+   - **Order (RL-174 B).** A READY v4 session, then counted work, then F0, then F2, hp-02 and DESIGN_QUEUE_LOW. An F2 item whose priority gate fails is not a staged item for trigger (c). Counted work which can launch now takes precedence. Rule 7 protects its remaining dated schedule.
+   - **R-A (RL-172 (f), which retires RL-165 §7's worst-case reservation).** From the effective v4 READY record under RL-175 A.2, nothing of lower priority arms, F0 included; the session takes the next clean close. Before that record F0 arms on its own rules.
 4. **After a refusal (trigger a).** Mail the lead at once (suggested: "F0 STANDING: <span> refused at <time>: <reason>; F0 launches at <time + 20 min> unless you reply that you are clearing it"), record the send epoch, and wait 20 minutes. With no clearing reply, launch. **Any reply that unambiguously says the lead is clearing (or will clear) the stop counts, in any words** (Sol items review P1-5; RL-165 §3 rule 4); a subject or first line starting `CLEARING` is only a suggested format. A reply that is not clear either way: do not launch in this activation, and mail the lead once to ask. If the lead is clearing, do not launch: wait for the refused span's re-arm instead, and F0 waits for its next trigger. **An outstanding refusal takes precedence over every other trigger** (Sol items review P1-4): from the refusal until either this rule's 20-minute wait has passed with no clearing reply (F0 then launches under trigger (a)) or the refused span re-arms or the lead releases it, F0 may not launch under trigger (b) or (c), even if the same failed gate would also read as NOT_READY. Record OUTSTANDING_REFUSAL as the span until then, and none after.
 5. **Spacing.** t0 at least 14,400 s after the last F0's t0 (any Part C run counts: items 319 and 325 and every run under this item), and at most three F0 t0s in one local calendar day. The ledger below carries the t0s.
 6. **Launch window: 02:35:00 to 22:40:00 local (RL-171 §2 and §3; RL-156 §5's 22:40 restored).** RL-171 retires "launch + 12,180 s by 01:30" (RL-164 §5) and "no F0 between 01:30 and 02:40". What is left is what the bytes at `b2e01464d` do (re-derived on the Air at this sha, unchanged from `c3f4bacd8`): `soak_child` refuses a soak whose start lies in (22:50:40, 02:35:00), because the soak plus Part C's cap (11,360 s) would meet 02:00-02:35 (run on the Air at `b2e01464d`: `OS_BATCH_WINDOW_LOCAL` 02:00-02:35, soak 1,800 s + Part C cap 9,560 s = 11,360 s; soak start 22:50:40 admitted, 22:50:41 refused, 02:34:59 refused, 02:35:00 admitted; `/Volumes/JW-EXT/scratch/items-rl171/probe/b2e01464d-derived.txt`). So the launch is at or after 02:35:00 and at or before 22:40:00 (ten minutes of preflight before the latest soak start). RL-171 §4 keeps this refusal until the slot session has run. A run that crosses 00:00 is recorded, not a gate.
-7. **It never costs a counted span its day.** Launch + 12,180 s + 1,200 s is at or before the latest legal t0 of every staged counted span due that calendar day (each staged item states its latest legal t0; take the end of its last window). Under RL-171 a counted span's latest legal t0 is the end of its item's window (the calendar day for the dev-02 halves). Example: with the Sunday dev-02 pull staged and not yet run (window to Sun 23:59:59), an F0 may launch only by 20:16:59 (23:59:59 - 12,180 s - 1,200 s); a staged span inside the 10:50-13:15 band of its pin cannot arm there, so it does not bind rule 7 there.
-8. **Host state and the restart (RL-172 (h)).** The MBP restarts once at 14:08 (± 15 min) on the first day no span is armed then (Sunday if dev-02's first half has closed): **no F0 arms after 12:00 that day until the lead records the restart done** (RESTART_PENDING). The lead's journal-copy marker is required after a campaign close, as for the campaign items (Sol items-rl171 P1). **Host state.** Every restore line of the latest close of anything on this host passed (its Check is reported), and no leg child's process group is unproven (RL-157 §2 condition 2). **"Restore unproven" (RESTORE_UNPROVEN) and any host-state stop (a change to host state outside `measurement_mode`, RL-149 §2.4) hold F0.** Other campaign stops (REFUSAL, disk, watcher down, INSTRUMENT_FAULT, CONTAMINATED_REDOS, LEG_OVERTIME, a frozen-kit-path change, a High Power `revoked` entry) do not hold it (RL-155 §3.1). A High Power marker present holds it (see Conditions).
+7. **Preserve the remaining counted schedule.** F0's launch plus 12,180 s and its 1,200 s close interval must fit before the effective t0 cutoff of every outstanding counted span it could delay. A span's last legal whole second is the earliest of its window end, its exclusive item expiry minus one, and its exclusive queue expiry minus one. When two outstanding spans are dependent, also work back from s02's last legal second by s01's bounded duration (including any allowed soak retry and cleanup reserve) and the campaign close interval of at least 300 s. Compare the F0 handoff to the earlier of this result and s01's own limit. Include a dated dependent s02 whose hand gate prevents issue, using its prospective window/queue bounds until issued. Use the actual item expiry once issued. When s01 has closed, protect s02 on its own. Retain any later proven fence, Check, copy or hand-read timing in the readiness assessment.
+8. **Host state (RL-174 C).** The lead's journal-copy marker is required after a campaign close, as for the campaign items (Sol items-rl171 P1). Every restore line of the latest close of anything on this host passed (its Check is reported), and no leg child's process group is unproven (RL-157 §2 condition 2). **"Restore unproven" (RESTORE_UNPROVEN) and any host-state stop (a change to host state outside `measurement_mode`, RL-149 §2.4) hold F0.** Other campaign stops (REFUSAL, disk, watcher down, INSTRUMENT_FAULT, CONTAMINATED_REDOS, LEG_OVERTIME, a frozen-kit-path change, a High Power `revoked` entry) do not hold it (RL-155 §3.1). A High Power marker present holds it (see Conditions).
 9. **A running F0 is never aborted.** A span that the lead clears while F0 runs arms after F0's close + 20 minutes. RL-155 §4 rule 1's 30 minutes does not apply to an F0 begun under trigger (a), (b) or (c).
 10. **After it.** One line on the standing notice (RUN_STATE: each F0 run's Check item is the line, headed "F0 standing notice"; there is no separate issue), and the verdict line by mail to Ed and the lead. Journals only; nothing is adopted. The lead reads each verdict under RL-164 §3 against the previous Part C's. A line whose verdict differs from the previous run's goes to the research lead with both runs; this item stays live meanwhile.
 
@@ -157,13 +157,15 @@ copy_gate() (   # a subshell: it reads EFF_PATH (from effective_close) and LAST_
 )
 
 # Renewal starts at item 346's seven-day expiry, never earlier (RL-165 §3 rule 2).
-RENEWAL_ISSUED_EPOCH="<LEAD FILLS: actual issue epoch; planned 1795377084>"
+RENEWAL_ISSUED_EPOCH="<LEAD FILLS: actual issue epoch, at or before 1795377084>"
 RENEWAL_START_EPOCH=1795377084
 renewal_gate() {
   case "$RENEWAL_ISSUED_EPOCH" in ''|*[!0-9]*) echo 'WAIT: renewal not issued'; return 1;; esac
-  test "$RENEWAL_ISSUED_EPOCH" = "$RENEWAL_START_EPOCH" \
-    || { echo 'VOID: actual renewal issue differs; lead re-dates seven-day window'; return 1; }
-  test "$(date +%s)" -ge "$RENEWAL_START_EPOCH" && test "$(date +%s)" -lt "$EXPIRY_EPOCH" \
+  test "$RENEWAL_ISSUED_EPOCH" -le "$RENEWAL_START_EPOCH" \
+    || { echo 'VOID: issue after planned effective instant; lead re-dates seven-day window'; return 1; }
+  now=$(date +%s)
+  renewal_expires=$((RENEWAL_ISSUED_EPOCH + 604800))
+  test "$now" -ge "$RENEWAL_START_EPOCH" && test "$now" -lt "$renewal_expires" && test "$now" -lt "$EXPIRY_EPOCH" \
     || { echo 'WAIT/EXPIRED: outside renewal validity'; return 1; }
 }
 
@@ -232,12 +234,12 @@ HASHES
   test "$(date +%s)" -ge $((HOST_LAST_CLOSE + GAP)) || { echo "WAIT: close interval $GAP s after the latest close ($HOST_LAST_CLOSE; RL-171 §6.1)"; return 1; }
   copy_gate || return 1
   # RL-172 (h): on the restart day no F0 arms after 12:00 until the lead records the restart done
-  case "${RESTART_PENDING:-}" in yes) test "$(date +%H)" -lt 12 || { echo "HOLD: the RL-172 (h) restart is pending today; no F0 after 12:00 until it is recorded done"; return 1; };; no) ;; *) echo "STOP: set RESTART_PENDING to yes (restart due today, not yet done) or no"; return 1;; esac
+  # RL-174 C closes the restart hold.
   # R-A: from the lead's READY record a v4 session takes the next clean close (RL-172 (f); RL-155 R-A)
   test "${SESSION_READY:-}" = no || { echo "CEDE: a READY v4 session takes this slot, or SESSION_READY is unset"; return 1; }
   # Rules 5, 6, 7 and the session reservation, on the current clock
   test -s "$LEDGER" || { echo "STOP: seed the ledger first (item 319's t0 1794703426; item 325's t0 if it launched)"; return 1; }
-  F0_NOW="$("$PY" -I -B - "$LEDGER" "${COUNTED_LATEST:?}" none <<'PY'
+  F0_NOW="$("$PY" -I -B - "$LEDGER" "${COUNTED_SCHEDULE:?}" none <<'PY'
 import sys, time, datetime as dt, zoneinfo
 TZ = zoneinfo.ZoneInfo("America/Los_Angeles")
 now = time.time(); d = dt.datetime.fromtimestamp(now, TZ)
@@ -247,8 +249,35 @@ if t0s and now < t0s[-1] + 14400: sys.exit(f"WAIT: F0 spacing, 4 h after the las
 if len(today) >= 3: sys.exit("STOP: three F0 t0s already today (rule 5)")
 hm = d.hour * 3600 + d.minute * 60 + d.second
 if not (9300 <= hm <= 81600): sys.exit("STOP: outside 02:35:00-22:40:00, the b2e01464d soak child's window (rule 6, RL-171)")
-for e in ([] if sys.argv[2] == "none" else sys.argv[2].split()):
-    if now + 12180 + 1200 > float(e): sys.exit(f"STOP: it would cost the counted span due by {e} its day (rule 7)")
+def latest(span):
+    window_end, item_expiry, queue_expiry = span.split(":")
+    bounds = [int(window_end)]
+    bounds.extend(int(value) - 1 for value in (item_expiry, queue_expiry) if value != "-")
+    if min(bounds) <= 0:
+        raise ValueError("nonpositive cutoff")
+    return min(bounds)
+
+census = sys.argv[2].split()
+try:
+    if not census:
+        raise ValueError("missing census")
+    for entry in ([] if census == ["none"] else census):
+        parts = entry.split("/")
+        if len(parts) == 1:
+            bound = latest(entry)
+        elif len(parts) == 3:
+            first, second, budget = parts
+            first_s, close_s = map(int, budget.split(":"))
+            if first_s <= 0 or close_s < 300:
+                raise ValueError("invalid dependent-span budget")
+            bound = min(latest(first), latest(second) - first_s - close_s)
+        else:
+            raise ValueError("invalid census row")
+        # Eligibility is reported in whole seconds. Keep the exclusive next-second boundary.
+        if now + 12180 + 1200 >= bound + 1:
+            sys.exit(f"STOP: F0 would cost a counted span its effective t0 (rule 7; latest {bound})")
+except ValueError as error:
+    sys.exit(f"STOP: invalid counted schedule (rule 7): {error}")
 print(int(now))
 PY
 )" || return 1
@@ -262,8 +291,15 @@ PY
 #   HOST_RESTORE_OK, UNPROVEN_GROUP, HOLDING_STOP   rule 8
 #   OTHER_CLOSE_EPOCH   REQUIRED: a whole epoch (rounded up) of a close outside the census roots (session, W1), or an explicit 0
 #   LAST_CLOSE_KIND     campaign (the latest close was a campaign span) or other (Part C/F0, F2, slot session, W1)
-#   SESSION_READY, COUNTED_LATEST   R-A (the lead's READY record, RL-172 (f)) and rule 7; RESTART_PENDING  RL-172 (h) (COUNTED_LATEST: the window-end epochs
-#                       of every staged counted span due today, space-separated, or none)
+#   SESSION_READY  R-A (the lead's READY record, RL-172 (f))
+#   COUNTED_SCHEDULE  rule 7. Re-read every outstanding staged counted item and its dated successors,
+#     including those that become due during F0's handoff. Use space-separated rows or explicit none
+#     after a complete census. A single span row is window_end:item_expiry:queue_expiry (whole epochs).
+#     Use "-" for an unissued prospective item expiry or an absent expiry only when the law allows it.
+#     A dependent pair row is first/second/first_bound_s:close_s, with both spans in the same format.
+#     For a pending qualification pair, record 27260:300 or a longer proven first-to-second bound.
+#     Supply actual issue + 86400 and authenticated queue expiry wherever applicable. Missing evidence stops.
+
 f0_eligible || exit 1
 
 # The staged worktree at the pin
@@ -285,9 +321,9 @@ for p in scripts/align_r1_rehearsal.py scripts/align_r1_runtime.py joulewise/ali
   printf '%s %s\n' "$(shasum -a 256 "$p" | cut -c1-64)" "$p"; done        # compare with the table above
 "$PY" -B -c 'from pathlib import Path; import subprocess; from joulewise.align.apple import v4_registration as r; root=Path.cwd(); head=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(); print(r.verify_r1_executed_sources(root,{"executed_commit":head}))'
 # must print b2e01464d6d4fbf2901ff4d4154df9455104a12a
-# RL-89 Mac check: item 325's script, verbatim (R0=/Users/edr/night-align/r0-v4-20261108T0550Z/smc/r0.json, EXPECT e6231a8f…769b)
-R0=/Users/edr/night-align/r0-v4-20261108T0550Z/smc/r0.json
-"$PY" -I -B - "$R0" "$REPO/configs/align/v4/r1_runtime.json" <<'PY'
+# RL-89 Mac check using item 377’s verified restored copy (LQ5).
+R0="$CUSTODY/standing-f0/r0-restore-ade002e9/r0.json"
+"$PY" -I -B - "$R0" "$REPO/configs/align/v4/r1_runtime.json" <<'PY' || exit 1
 import hashlib, json, sys
 EXPECT = "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b"
 raw = open(sys.argv[1], "rb").read()
@@ -352,11 +388,11 @@ T0=$(date +%s)
 echo "$OUT"
 ```
 
-Require exit 0, and `"next": "exit the magistrate session now"` with a claimed fence (fence `pid` ≠ `MAGISTRATE_PID`). Record PY, MAGISTRATE_PID, OUT, DEADLINE, T0, LAST_CLOSE_KIND, QUIET_CAMPAIGN_S, the two F0 ELIGIBLE lines, OUTSTANDING_REFUSAL, TRIGGER and TRIGGER_SPAN (with MAIL_EPOCH, LEAD_REPLY and the reply's text for a refusal), HOST_RESTORE_OK, UNPROVEN_GROUP, HOLDING_STOP, OTHER_CLOSE_EPOCH, the host last close, SESSION_READY, RESTART_PENDING, COUNTED_LATEST, the journal-copy line and the batch-time print in your RUN_STATE item and in `/Users/edr/night-custody/magistrate/r1-partc-f0-out-<activation>.txt`. Then exit at once, with no other `claude` or `codex` process running.
+Require exit 0, and `"next": "exit the magistrate session now"` with a claimed fence (fence `pid` ≠ `MAGISTRATE_PID`). Record PY, MAGISTRATE_PID, OUT, DEADLINE, T0, LAST_CLOSE_KIND, QUIET_CAMPAIGN_S, the two F0 ELIGIBLE lines, OUTSTANDING_REFUSAL, TRIGGER and TRIGGER_SPAN (with MAIL_EPOCH, LEAD_REPLY and the reply's text for a refusal), HOST_RESTORE_OK, UNPROVEN_GROUP, HOLDING_STOP, OTHER_CLOSE_EPOCH, the host last close, SESSION_READY, COUNTED_SCHEDULE, the journal-copy line and the batch-time print in your RUN_STATE item and in `/Users/edr/night-custody/magistrate/r1-partc-f0-out-<activation>.txt`. Then exit at once, with no other `claude` or `codex` process running.
 
 **Check (next activation, after the fence is gone):**
 
-**Maintenance line first (RL-171 §5 item 1; as item 331). Print only: it gates nothing and is not a stop.** One read-only system-log query over the run's interval (from OUT's UTC launch stamp to the receipt's mtime) for the OS maintenance processes, saved BESIDE the journals as `$OUT/maintenance-log.txt`, with a per-10-minute count printed for the report. F0 now launches from 02:35, beside the second cluster (02:37-02:43) and the XProtect fast scans (05:08, 11:08, 17:08, 23:08 on the current boot); the line records what overlapped. Nothing is judged on it.
+**Maintenance line first (RL-171 §5 item 1; as item 331). Print only: it gates nothing and is not a stop.** One read-only system-log query over the run's interval (from OUT's UTC launch stamp to the receipt's mtime) for the OS maintenance processes, saved BESIDE the journals as `$OUT/maintenance-log.txt`, with a per-10-minute count printed for the report. F0 now launches from 02:35, beside the second cluster (02:37-02:43) and the XProtect fast scans (05:08, 11:08, 17:08, 23:08 on the current boot); the line records what overlapped. Nothing is judged on it. Earlier queries without the three cloud jobs recorded them as unobserved.
 
 ```sh
 START_UTC="$(basename "$OUT" | sed -E 's/.*-([0-9]{8}T[0-9]{6}Z)$/\1/')"
@@ -364,7 +400,7 @@ START_LOCAL="$("$PY" -B -c 'import sys,datetime as d; t=d.datetime.strptime(sys.
 END_LOCAL="$(date -r "$(stat -f %m "$OUT/runner_receipt.json")" '+%Y-%m-%d %H:%M:%S')"
 echo "maintenance window $START_LOCAL .. $END_LOCAL"
 sudo -n /usr/bin/log show --style compact --start "$START_LOCAL" --end "$END_LOCAL" \
-  --predicate 'process IN {"dasd","XProtect","XprotectService","XProtectPluginService","mds","mds_stores","mdworker","mdworker_shared","backupd","softwareupdated","mobileassetd"}' \
+  --predicate 'process IN {"dasd","XProtect","XprotectService","XProtectPluginService","mds","mds_stores","mdworker","mdworker_shared","backupd","softwareupdated","mobileassetd","bird","cloudd","fileproviderd"}' \
   > "$OUT/maintenance-log.txt" 2>"$OUT/maintenance-log.err"; echo "log show rc $?"
 wc -l < "$OUT/maintenance-log.txt"
 awk '{ if ($2 ~ /^[0-9][0-9]:[0-9][0-9]/) { b=substr($2,1,4) "0"; for (i=3;i<=NF;i++) if ($i ~ /\[[0-9]+:/) { split($i,a,"["); p=a[1]; break } ; c[b" "p]++ } } END { for (k in c) print k, c[k] }' "$OUT/maintenance-log.txt" | sort

@@ -1,0 +1,65 @@
+--- a/scripts/launch_cadence_span.py
++++ b/scripts/launch_cadence_span.py
+@@ -81,0 +82,3 @@
++    t0_date = getattr(args, "authorized_t0_date", None)
++    t0_before = getattr(args, "t0_before", None)
++    t0_args = ["--authorized-t0-date", t0_date, "--t0-before", str(t0_before)] if t0_date else []
+@@ -84 +87 @@
+-            "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin)]
++            "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin), *t0_args]
+@@ -211,0 +215,2 @@
++    start.add_argument("--authorized-t0-date", help="authorized America/Los_Angeles calendar date")
++    start.add_argument("--t0-before", type=int, help="exclusive start cutoff in whole epoch seconds")
+@@ -222,0 +228,6 @@
++    if args.command == "launch":
++        from scripts.cadence_legs_runner import validate_t0_authority
++        try:
++            validate_t0_authority(args.authorized_t0_date, args.t0_before)
++        except ValueError as error:
++            parser.error(str(error))
+--- a/scripts/cadence_legs_runner.py
++++ b/scripts/cadence_legs_runner.py
+@@ -49 +49 @@
+-from datetime import datetime
++from datetime import date, datetime
+@@ -337 +337,11 @@
+-def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
++def validate_t0_authority(authorized_date, t0_before):
++    if authorized_date is None and t0_before is None:
++        return
++    if authorized_date is None or type(t0_before) is not int or t0_before <= 0:
++        raise ValueError("authorized t0 date and positive exclusive epoch cutoff must be supplied together")
++    if date.fromisoformat(authorized_date).isoformat() != authorized_date:
++        raise ValueError("authorized t0 date must use YYYY-MM-DD")
++
++
++def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
++             authorized_t0_date=None, t0_before=None):
+@@ -338,0 +349,10 @@
++    validate_t0_authority(authorized_t0_date, t0_before)
++    clock = deps.clock
++    started = _stamp(clock)
++    if authorized_t0_date is not None:
++        t0 = started["epoch_s"]
++        day = datetime.fromtimestamp(t0, legsmod.LOCAL_ZONE).date().isoformat()
++        if day != authorized_t0_date or t0 >= t0_before:
++            print(f"REFUSE: t0 {t0} ({day}) outside authorized date {authorized_t0_date} "
++                  f"or exclusive cutoff {t0_before}", file=sys.stderr)
++            return 3
+@@ -341 +360,0 @@
+-    clock = deps.clock
+@@ -344 +363 @@
+-              "started": _stamp(clock), "deadline": deadline, "work_reserve_s": WORK_RESERVE_S,
++              "started": started, "deadline": deadline, "work_reserve_s": WORK_RESERVE_S,
+@@ -881,0 +901,2 @@
++            p.add_argument("--authorized-t0-date", help="authorized America/Los_Angeles calendar date")
++            p.add_argument("--t0-before", type=int, help="exclusive start cutoff in whole epoch seconds")
+@@ -941,0 +963,4 @@
++    try:
++        validate_t0_authority(args.authorized_t0_date, args.t0_before)
++    except ValueError as error:
++        parser.error(str(error))
+@@ -945 +970,2 @@
+-                    leg_ids=_roster(args))
++                    leg_ids=_roster(args), authorized_t0_date=args.authorized_t0_date,
++                    t0_before=args.t0_before)

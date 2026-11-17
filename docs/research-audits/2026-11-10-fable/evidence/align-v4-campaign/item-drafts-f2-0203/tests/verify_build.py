@@ -94,5 +94,7 @@ try:
 finally:
     T.tearDownClass()
 out={'synthetic_only':True,'checks':checks,'count':len(checks),'measurement_streams_opened':False}
-(HERE/'evidence/pinned-verification.json').write_text(json.dumps(out,indent=2)+'\n')
+evidence = Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence'))
+evidence.mkdir(parents=True, exist_ok=True)
+(evidence/'pinned-verification.json').write_text(json.dumps(out,indent=2)+'\n')
 print(len(checks),'pinned kit/law/delta/queue/fault-injection checks PASS; no measured input or stream opened')

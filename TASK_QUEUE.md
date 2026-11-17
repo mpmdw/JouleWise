@@ -3,6 +3,16 @@
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
+## 2026-11-17 user-directed Builder C draft repairs
+
+P1 [AGENT] on `audit/2026-11-10-fable`. Apply the WS qualification and
+F0-renewal findings and QUEUE-SPEC D8–D10 to unissued drafts. The
+[run report](docs/run_reports/2026-11-17-round10-builder-c-drafts.md)
+records the regression and draft-suite evidence. No phase exit-checklist
+row is being closed. RL-175 C.3 supplies the lead-issued recovery for a half-run
+block. Admission of a successor pin for the child t0 guard remains
+lead-owned before qualification issue.
+
 ## 2026-11-16 R1 preparation intake (audit branch; lead issue pending)
 
 P1 [AGENT], user-selected under RL-174 B/E: prepare the R1 slot session

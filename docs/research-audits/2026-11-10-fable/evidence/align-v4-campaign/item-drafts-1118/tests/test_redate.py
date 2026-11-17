@@ -13,8 +13,15 @@ SOURCE=Path(__file__).resolve().parents[1]; checks=0
 temporary=tempfile.TemporaryDirectory(prefix='.redate-fixture-',dir=SOURCE.parent)
 fixture=Path(temporary.name)
 HERE=fixture/'item-drafts-1118'
-shutil.copytree(SOURCE,HERE,ignore=shutil.ignore_patterns('.synthetic-*','.pinned-*'))
-shutil.copytree(SOURCE.parent/'item-drafts-1115',fixture/'item-drafts-1115')
+HERE.mkdir()
+for name in ('build_items.py', 'gates.sh'):
+    shutil.copy2(SOURCE/name, HERE/name)
+shutil.copytree(SOURCE/'tools', HERE/'tools')
+dev=SOURCE.parent/'item-drafts-1115'
+dev_fixture=fixture/dev.name
+(dev_fixture/'tools').mkdir(parents=True)
+shutil.copy2(dev/'tools/close_census.py', dev_fixture/'tools')
+shutil.copy2(dev/'ITEM-dev05-s01.md', dev_fixture)
 def call(*args,ok=True):
     global checks
     env=dict(os.environ,JW_DRAFT_EVIDENCE_DIR=str(HERE/'evidence/regeneration-test'))

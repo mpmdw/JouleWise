@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0,str(Path(__file__).resolve().parent/'tools'))
 from pinned import HERE, ROOT, PIN, SOURCE, W1, git, pinned, call
+from standing_round10 import repair_standing
 sys.path.insert(0,str(HERE.parent/'item-drafts-1115/tools'))
 from close_census import repair_census
 TZ=ZoneInfo('America/Los_Angeles')
@@ -27,7 +28,7 @@ def write_json(path,obj): path.write_text(json.dumps(obj,indent=2)+'\n')
 def epoch(date, hms='00:00:00'): return int(dt.datetime.fromisoformat(date+'T'+hms).replace(tzinfo=TZ).timestamp())
 
 def standing():
-    main=git('rev-parse','origin/main').decode().strip()
+    main='6fc02b1925b726585e66ff32885964f4207d7d09'  # Preserved item 346 source.
     text=git('show',main+':RUN_STATE.md').decode()
     original=re.search(r'^346\. .*?(?=^345\. )',text,re.S|re.M).group().rstrip()+'\n'
     old='b2e01464d6d4fbf2901ff4d4154df9455104a12a'
@@ -36,26 +37,28 @@ def standing():
     start=dt.datetime.fromisoformat(issued).replace(tzinfo=TZ)+dt.timedelta(days=7)
     end=start+dt.timedelta(days=7)
     renewed=original.replace('346. **','TBD. **',1)
-    renewed=renewed.replace('ISSUED '+issued+' PST','ISSUED <LEAD FILLS: actual issue at '+start.strftime('%Y-%m-%d %H:%M:%S')+' PST; if later, re-date the renewal>',1)
+    renewed=renewed.replace('ISSUED '+issued+' PST','ISSUED <LEAD FILLS: actual issue at or before '+start.strftime('%Y-%m-%d %H:%M:%S')+' PST; if later, re-date the renewal>',1)
     renewed=renewed.replace('This issue replaces the one at `c3f4bacd8`', 'This renewal supersedes item 346 at its expiry; historically item 346 replaced the issue at `c3f4bacd8`')
-    renewed=renewed.replace('2026-11-22 11:51:24 PST (epoch 1795377084)',end.strftime('%Y-%m-%d %H:%M:%S PST')+f' (epoch {int(end.timestamp())})')
-    renewed=renewed.replace('deadline: 2026-11-22T11:51:24-08:00','deadline: '+end.isoformat())
+    renewed=renewed.replace('at 2026-11-22 11:51:24 PST (epoch 1795377084)', 'seven days after the actual issue (no later than '+end.strftime('%Y-%m-%d %H:%M:%S PST')+')')
+    renewed=renewed.replace('deadline: 2026-11-22T11:51:24-08:00','deadline: <LEAD FILLS: actual issue + 604800 s in PST; no later than '+end.isoformat()+'>')
     renewed=renewed.replace('EXPIRY_EPOCH=1795377084',f'EXPIRY_EPOCH={int(end.timestamp())}')
     assert f'EXPIRY_EPOCH={int(end.timestamp())}' in renewed
     gate=f'''# Renewal starts at item 346's seven-day expiry, never earlier (RL-165 §3 rule 2).
-RENEWAL_ISSUED_EPOCH="<LEAD FILLS: actual issue epoch; planned {int(start.timestamp())}>"
+RENEWAL_ISSUED_EPOCH="<LEAD FILLS: actual issue epoch, at or before {int(start.timestamp())}>"
 RENEWAL_START_EPOCH={int(start.timestamp())}
 renewal_gate() {{
   case "$RENEWAL_ISSUED_EPOCH" in ''|*[!0-9]*) echo 'WAIT: renewal not issued'; return 1;; esac
-  test "$RENEWAL_ISSUED_EPOCH" = "$RENEWAL_START_EPOCH" \\
-    || {{ echo 'VOID: actual renewal issue differs; lead re-dates seven-day window'; return 1; }}
-  test "$(date +%s)" -ge "$RENEWAL_START_EPOCH" && test "$(date +%s)" -lt "$EXPIRY_EPOCH" \\
+  test "$RENEWAL_ISSUED_EPOCH" -le "$RENEWAL_START_EPOCH" \\
+    || {{ echo 'VOID: issue after planned effective instant; lead re-dates seven-day window'; return 1; }}
+  now=$(date +%s)
+  renewal_expires=$((RENEWAL_ISSUED_EPOCH + 604800))
+  test "$now" -ge "$RENEWAL_START_EPOCH" && test "$now" -lt "$renewal_expires" && test "$now" -lt "$EXPIRY_EPOCH" \\
     || {{ echo 'WAIT/EXPIRED: outside renewal validity'; return 1; }}
 }}
 '''
     renewed=renewed.replace('f0_eligible() {\n','f0_eligible() {\n  renewal_gate || return 1\n',1)
     renewed=renewed.replace('# THE COMPLETE ELIGIBILITY CHECK',gate+'\n# THE COMPLETE ELIGIBILITY CHECK',1)
-    note=f'''- **Renewal r2 (DRAFT, RL-165 §3 rule 2).** Item 346 was issued {issued} PST; its seven-day expiry is **{start.strftime('%a %d Nov %Y %H:%M:%S PST')}** (epoch {int(start.timestamp())}). This unissued renewal begins exactly then, with planned expiry {end.strftime('%a %d Nov %Y %H:%M:%S PST')} (epoch {int(end.timestamp())}). The lead must issue at that instant for these fixed bounds; a later actual issue needs a re-dated seven-day window. F0 spacing and daily counts continue across renewals; never reset its ledger. Fetched main `{main}` and W1 head `{head}` checked by builder: {'unchanged at item 346 pin; the 17 hashes, Mac-check and all rules carry as written' if head==old else 'MOVED: do not carry the old pin/hashes/qualification; lead re-pins under rule 2'}. Nothing is issued by this file.
+    note=f'''- **Renewal r2 (DRAFT, RL-165 §3 rule 2).** Item 346 was issued {issued} PST; its seven-day expiry is **{start.strftime('%a %d Nov %Y %H:%M:%S PST')}** (epoch {int(start.timestamp())}). This unissued renewal begins exactly then, with outer expiry {end.strftime('%a %d Nov %Y %H:%M:%S PST')} (epoch {int(end.timestamp())}). The lead may issue ahead; it becomes effective at item 346’s expiry and expires seven days after the actual issue under RL-165 §3 rule 2. A later actual issue needs a re-dated window. F0 spacing and daily counts continue across renewals; never reset its ledger. Item 346 source main `{main}` and observed W1 head `{head}`: {'unchanged at item 346 pin; the 17 hashes and the Mac-check digest carry forward' if head==old else 'MOVED: do not carry the old pin/hashes/qualification; lead re-pins under rule 2'}. Nothing is issued by this file.
 - **RL-174 E.2:** if merging #794 moves the W1-line head, STANDING-F0 is void immediately and the lead reissues it with that head. This same-pin renewal cannot authorize a moved head.
 - **Optional hold paragraph (item 374 form; inactive until the lead issues it):** MAGISTRATE: arm NO STANDING-F0 from <LEAD FILLS: hold issue instant> until the lead's RUN_STATE record "offload window closed" or <LEAD FILLS: hold end instant and epoch>, whichever is first. Counted items keep their own gates/windows; a running packer is a STOP at any arm. This does not carry forward item 374's Mon16-only hold, authorize offloading, or change F0's 02:35:00–22:40:00 launch window. Lead-owned hold records must be re-read before Start and Run.
 
@@ -64,11 +67,10 @@ renewal_gate() {{
     if head!=old:
         renewed=renewed.replace(old,'<LEAD FILLS: W1_LINE_HEAD and fresh pin qualification under RL-165 §3 rule 2>')
         renewed=renewed.replace('b2e01464d','<LEAD FILLS: W1_LINE_SHORT>')
-    renewed=repair_census(renewed)
+    renewed=repair_standing(repair_census(renewed))
     (HERE/'STANDING-F0-r2.md').write_text(renewed)
-    (HERE/'evidence/standing-f0-original.md').write_text(original)
-    diff=''.join(difflib.unified_diff(original.splitlines(True),renewed.splitlines(True),fromfile=f'origin/main@{main}:RUN_STATE item 346',tofile='STANDING-F0-r2.md'))
-    evidence=Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence/fix-2026-11-16'))
+    diff=''.join(difflib.unified_diff(original.splitlines(True),renewed.splitlines(True),fromfile=f'origin/main@{main}:RUN_STATE item 346',tofile='STANDING-F0-r2.md',n=0))
+    evidence=Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence/round10'))
     evidence.mkdir(parents=True,exist_ok=True)
     (evidence/'standing-f0-r2.diff').write_text(diff)
     return {'source_main':main,'original_issue':issued+' PST','renewal_start':start.isoformat(),'renewal_expiry':end.isoformat(),'w1_head':head,'pin_unchanged':head==old}
@@ -86,7 +88,7 @@ def render(dates):
     old=base.read_text()
     q1=re.search(r'"\$PY" -I -B - "\$OUT" "\$LEGS" <<\'PY\'\nimport json, statistics.*?\nPY',old,re.S).group()
     maintenance=re.search(r'START_UTC=.*?\| sort\n',old,re.S).group()
-    maintenance=maintenance.replace('"mobileassetd"','"mobileassetd","bird","cloudd","fileproviderd"')
+    maintenance=maintenance.replace('"mobileassetd"}', '"mobileassetd","bird","cloudd","fileproviderd"}')
     template=(HERE/'tools/item-template.md').read_text(); gates=(HERE/'gates.sh').read_text()
     meta={'source':SOURCE,'pin':PIN,'merged_w1':W1,'source_audit':git('rev-parse','HEAD').decode().strip(),
           'queue_scan':git('ls-tree','-r','--name-only',SOURCE,'docs/process/cadence').decode().splitlines(),
@@ -114,13 +116,19 @@ def render(dates):
                 plan=json.loads(result.stdout); assert plan['batch_windows']==[] and plan['blackout_clear'] and plan['runner_kind']=='cadence-legs-v1.1'
                 short=[x for x in kit['legs'] if x['leg_id'] in ids and x['decode_tokens']<4096]
                 assert len(short)==1
+                limit_hms='16:32:00' if s==1 else '23:59:59'
+                day_end=epoch(dates[block],'23:59:59')
+                limit=epoch(dates[block],limit_hms)
+                extra=plan['launch_deadline_epoch_s']-plan['t0_epoch_s']
+                assert extra==plan['worst_case_s']+1950+560
+                first_to_second=int(extra+300) if s==1 else 0
                 config=f'''SPAN={span}; CAMP={camp}; LEGS={legs}
 PRED_SPAN={previous[0]}; PRED_CAMP={previous[1]}; PRED_ROSTER={','.join(previous[2])}
 PRED_KIT_SHA={previous[3]}; PRED_PIN={previous[4]}
-T0_DATE={dates[block]}; WINDOW_START={epoch(dates[block])}; WINDOW_END={epoch(dates[block],'23:59:59')}
+T0_DATE={dates[block]}; WINDOW_START={epoch(dates[block])}; WINDOW_END={limit}
+DAY_END={day_end}; FIRST_TO_SECOND_S={first_to_second}
 QUAL_DATES={','.join(k+'='+v for k,v in dates.items())}'''
-                extra=plan['launch_deadline_epoch_s']-plan['t0_epoch_s']; assert extra==plan['worst_case_s']+1950+560
-                values=dict(PRED_NOTE=('<LEAD FILLS: confirm dev-05-s02 is latest counted campaign span, or update the complete PRED_* identity and machine-order record>.' if n==s==1 else 'The qualification predecessor chain is fixed; no automatic skip or override.'),ORDINAL='FIRST' if s==1 else 'SECOND',BLOCK=block,SPAN=span,CAMP=camp,LEGS=legs,KIT_SHA=sha,PIN=PIN,FIRST=ids[0],SHORT=f"{short[0]['leg_id']} cap {short[0]['decode_tokens']:,}",EXPECTED=plan['expected_s'],WORST=plan['worst_case_s'],DATE=dates[block],START=epoch(dates[block]),END=epoch(dates[block],'23:59:59'),POINTER_DEADLINE=dt.datetime.fromtimestamp(epoch(dates[block],'23:59:59')+extra+900+3600,TZ).isoformat(),PRED=previous[0],PRED_CAMP=previous[1],PRED_LEGS=','.join(previous[2]),DATES=', '.join(k+'='+v for k,v in dates.items()),QUEUE_PATH=PREFIX+'/queues/'+qp.name,QUEUE_SHA=qsha,CONFIG=config,GATES=gates,MAINTENANCE=maintenance,Q1=q1,DEADLINE_SECONDS=int(extra+900),NEXT=f'Next: `{block}-s02` after its own gates.' if s==1 else ('Next block under its own dated item.' if n<3 else 'All 36 qualification legs collected; the lead owns look readiness.'),HAND_NOTE='After the first span only, RL-172a F1 requires the soak comparison before s02; this draft conservatively waits to issue later spans until that record exists.' if n==s==1 else 'Not issuable before qual-01-s01\'s soak hand-read record (RL-172a F1; conservative issue ordering).')
+                values=dict(PRED_NOTE=('<LEAD FILLS: confirm dev-05-s02 is latest counted campaign span, or update the complete PRED_* identity and machine-order record>.' if n==s==1 else 'The qualification predecessor chain is fixed; no automatic skip or override.'),ORDINAL='FIRST' if s==1 else 'SECOND',BLOCK=block,SPAN=span,CAMP=camp,LEGS=legs,KIT_SHA=sha,PIN=PIN,FIRST=ids[0],SHORT=f"{short[0]['leg_id']} cap {short[0]['decode_tokens']:,}",EXPECTED=plan['expected_s'],WORST=plan['worst_case_s'],DATE=dates[block],START=epoch(dates[block]),END=limit,LIMIT_HMS=limit_hms,POINTER_DEADLINE=dt.datetime.fromtimestamp(limit+extra+900+3600,TZ).isoformat(),PRED=previous[0],PRED_CAMP=previous[1],PRED_LEGS=','.join(previous[2]),DATES=', '.join(k+'='+v for k,v in dates.items()),QUEUE_PATH=PREFIX+'/queues/'+qp.name,QUEUE_SHA=qsha,CONFIG=config,GATES=gates,MAINTENANCE=maintenance,Q1=q1,DEADLINE_SECONDS=int(extra+900),NEXT=f'Next: `{block}-s02` after its own gates.' if s==1 else ('Next block under its own dated item.' if n<3 else 'All 36 qualification legs collected; the lead owns look readiness.'),HAND_NOTE='After the first span only, RL-172a F1 requires the soak comparison before s02; this draft conservatively waits to issue later spans until that record exists.' if n==s==1 else 'Not issuable before qual-01-s01\'s soak hand-read record (RL-172a F1; conservative issue ordering).')
                 text=template
                 for key,value in values.items(): text=text.replace('@@'+key+'@@',str(value))
                 assert not re.search(r'@@[A-Z_]+@@',text)

@@ -1,22 +1,24 @@
-TBD. **Laptop lead, drafted by Sol 6.1; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the @@ORDINAL@@ span of qualification block `@@BLOCK@@`, span `@@SPAN@@`, legs @@LEGS@@, kit `@@CAMP@@.v1.1` (sha256 `@@KIT_SHA@@`), runner kind `cadence-legs-v1.1`, frozen pin `@@PIN@@` checked out detached in a fresh staged worktree. A fresh soak, then six conditionless 27B legs, Automatic, band q0; @@FIRST@@ captures the span reference, the five other legs consume it. Short leg: @@SHORT@@; all other caps 4,096. Expected @@EXPECTED@@ s; work worst case @@WORST@@ s; launcher deadline reserve includes the additional 1,950 s soak retry and 560 s cleanup reserves. EARLIEST @@DATE@@ 00:00:00 PST (epoch @@START@@), LIMIT @@DATE@@ 23:59:59 PST (epoch @@END@@), shortened by 24 h after issue. HOLD_FOR_FIT_FREEZE until freeze 2 is committed and verified. Predecessor `@@PRED@@` must close clean or this item is VOID and is never skipped. No clock exclusion, batch-window argument or clock fence at this pin (RL-171 §3; RL-172a). Launch is your LAST action; exit at once. Nothing else is authorized.**
+TBD. **Laptop lead, drafted by Sol 6.1; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the @@ORDINAL@@ span of qualification block `@@BLOCK@@`, span `@@SPAN@@`, legs @@LEGS@@, kit `@@CAMP@@.v1.1` (sha256 `@@KIT_SHA@@`), runner kind `cadence-legs-v1.1`, frozen pin `@@PIN@@` checked out detached in a fresh staged worktree. A fresh soak, then six conditionless 27B legs, Automatic, band q0; @@FIRST@@ captures the span reference, the five other legs consume it. Short leg: @@SHORT@@; all other caps 4,096. Expected @@EXPECTED@@ s; work worst case @@WORST@@ s; launcher deadline reserve includes the additional 1,950 s soak retry and 560 s cleanup reserves. EARLIEST @@DATE@@ 00:00:00 PST (epoch @@START@@), LIMIT @@DATE@@ @@LIMIT_HMS@@ PST (epoch @@END@@), shortened by 24 h after issue. HOLD_FOR_FIT_FREEZE until freeze 2 is committed and verified. Predecessor `@@PRED@@` must close clean or this item is VOID and is never skipped. The pinned runner takes no batch-window argument for qualification. The arm remains subject to RL-175 C.4. Launch is your LAST action; exit at once. Nothing else is authorized.**
 
 ```pointer
 owner: magistrate
 wait: none
 deadline: @@POINTER_DEADLINE@@
-on_early_or_refused: WAIT on an unfilled prerequisite or predecessor not closed. VOID on a dirty predecessor or 24 h expiry; REFUSE outside the date window, on development/qualification date overlap or date cap. READY v4 session: CEDE, do not arm. Any failed native checklist or launcher refusal: nothing launches, report to lead. Never retry, skip a predecessor, extend a queue, reuse OUT, or re-run a leg; a missed date requires a new lead item
+on_early_or_refused: WAIT on an unfilled prerequisite or predecessor not closed. VOID on a dirty predecessor or 24 h expiry; REFUSE outside the date window, on development/qualification date overlap or date cap. Effective READY v4 session: CEDE, do not arm (RL-175 A.2). Any failed native checklist or launcher refusal: nothing launches, report to lead. Never retry, skip a predecessor, extend a queue, reuse OUT, or re-run a leg; follow the missed-date recovery below
 next_observable: after fence disappearance, Check below reports operational receipt, all six leg summaries, Q1 reference print, maintenance overlaps, restore/process-group proof and close epoch; lead records desk-final and typed Q1 completion before span k+2 arms
 ```
 
 - **Issued ahead (RL-173 D).** At most three counted spans ahead plus standing F0. Predecessor `@@PRED@@` in `@@PRED_CAMP@@`, roster @@PRED_LEGS@@; `pred_gate` reads only its receipt and leg-summary projection. Absent receipt = WAIT; any unclean close = VOID, never skipped. @@PRED_NOTE@@ This item has its own t0-date and no window argument; `expiry_gate` enforces 24 h and `watch_gate` re-reads the hand-stamped watcher observation at each arm (RL-173 C.5). Nothing is issued across a class A, L002 or L005 hand gate. @@HAND_NOTE@@
 - **Why (RL-149 §2.3; RL-155 §5.3; RL-165 §8.1; RL-167 Part B; RL-172 (a),(b)).** Qualification tests the committed fit on held-out dates. This law's 6 + 6 cut keeps each true type-L pair adjacent in one span and gives each span four A legs and one L pair. First leg own-shaped/capture, all five others span-shaped/consume; no T or M. The M slots are ordinary A legs at 19,458. No class A smoke: class B, a mock span, plan and diff check (RL-165 §8.1; RL-172a F1). At the first qualification arm cite RL-172a F1. Its soak's operational fields and reference schema must be hand-compared with dev-05 before qual-01-s02; a difference goes to the research lead. The retry fires on slope or load refusal, once (RL-172a F2); the desk/look read `soak_attempts`, a retried soak forces the sampled hand table, and refusal kind prints "kind not recorded" until a later pin (RL-173 E).
 - **Config provenance (RL-167 Part B Q1; Mythos #794 F5).** Record both runtime-config hashes: development `bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df`, qualification `272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46`. Only the unused `d_n_chunk_status` label differs; `lm-qual-01` prints both and must not require equality for inclusion.
-- **Freeze and pin.** `freeze2_gate` implements RL-165 §8.1, RL-172 (i) row 9 and RL-173 E. Full commit/hash/path unfilled = WAIT/HOLD_FOR_FIT_FREEZE. The commit must be an ancestor of freshly fetched audit or main and contain that exact coefficient hash. No forecast or fit-code hash substitutes for it. `qual_pin_gate`: line 1 cold seat ADMIT **per kit**, including RL-167 Part B Q2's same-code capture/five-consumer confirmation; line 2 suite red set at the frozen bytes equals the merged W1-line commit `c3f4bacd8`, test for test, no added red (RL-165 §8.1). Record pointers remain lead fills. Later W1 merges do not move the qualification pin. Builder's mock checks grant no admission.
-- **Day law (RL-174 B.3).** Dates: @@DATES@@. **Three distinct t0-dates, one block each**, none with a development leg. Each block holds two L pairs; fewer than three pair-days prints `not_evaluable` for the ±0.10 word (RL-166b §4). Sat 14–Wed 18 Nov are reserved development dates, and `day_gate` also checks moved development spans. The local t0-date assigns all six legs, including excluded legs and a close after midnight. RL-149 §2.3's cap **applies**: at most two blocks and 24 legs on a date, block starts at least 10 h apart. It is not used by this plan and cannot remedy a slip. A missed date requires the lead to re-date and re-commit the queues; they expire **Mon 23 Nov 00:00 PST** (RL-174 E.4). No automatic extension.
+- **Freeze and pin.** `freeze2_gate` implements RL-165 §8.1, RL-172 (i) row 9 and RL-173 E. Full commit/hash/path unfilled = WAIT/HOLD_FOR_FIT_FREEZE. The commit must be an ancestor of freshly fetched audit or main and contain that exact coefficient hash. No forecast or fit-code hash substitutes for it. `qual_pin_gate`: line 1 cold seat ADMIT **per kit**, including RL-167 Part B Q2's same-code capture/five-consumer confirmation; line 2 suite red set at the frozen bytes equals the merged W1-line commit `c3f4bacd8`, test for test, no added red (RL-165 §8.1). Record pointers remain lead fills. Later W1 merges do not move the qualification pin. Builder's mock checks grant no admission. The current frozen pin lacks the child t0 guard. HOLD until a successor pin with the candidate guard in `tools/qualification-t0.patch` is authorized and all three kits are re-pinned and admitted at those exact bytes. Do not patch the staged frozen checkout. RL-175 C.4 also requires the separate predicted-batch check at each arm.
+- **Day law (RL-174 B.3).** Dates: @@DATES@@. **Three distinct t0-dates, one block each**, none with a development leg. Each block holds two L pairs; fewer than three pair-days prints `not_evaluable` for the ±0.10 word (RL-166b §4). Sat 14–Wed 18 Nov are reserved development dates, and `day_gate` also checks moved development spans. The local t0-date assigns all six legs, including excluded legs and a close after midnight. RL-149 §2.3's cap **applies**: at most two blocks and 24 legs on a date, block starts at least 10 h apart. It is not used by this plan and cannot remedy a slip. Use the missed-date recovery below. The queues expire **Mon 23 Nov 00:00 PST** (RL-174 E.4). No automatic extension.
+- **Dependent spans (WS 4 and QUEUE-SPEC D8).** The printed s01 LIMIT is 16:32:00 PST at the latest. Reserve 24,750 s for s01 work, 1,950 s for a possible soak retry plus 560 s of cleanup reserve, then 300 s for the campaign close interval before s02. The latest s01 t0 moves earlier if s02's date, item or queue expires before this pair can fit. Use the same bounds in standing-F0 rule 7 while both spans remain outstanding, including planned s02 when its hand gate prevents early issue. Provide the actual s02 issue epoch when issued, or record `unissued` when its hand gate still holds. The plan then assumes a fresh s02 item in time for the planned t0. The actual Check, verified copy, hand-read and remaining gates still govern.
+- **Missed-date recovery (WS 3).** **Untouched block:** if neither span has a recorded t0, re-date both together to a valid unused day, commit the new finite queue, and issue fresh items. **Partially run block:** preserve s01's recorded t0 and receipts. **NEEDS_RULING was resolved in RL-175 C.3.** The current block-keyed gate stops. Until the span-keyed regeneration, only the lead can issue s02 by hand on the next unused qualification date, with the same legs and seeds and a fresh soak. Move later untouched blocks whole. Keep both recorded span dates. The magistrate waits for the lead's explicit issue.
 - **Host state (RL-174 C).** Freeze 2 proceeds on the host as it is; no visit, hygiene action or restart is a gate. Each arm states four lines: `spotlightknowledged` and updater present/absent (stopped Sun 15 Nov 15:32); `corespotlightd` present/on demand; indexing of `/` off; Time Machine destination none (`backupd` resident). The lead supplies the readback record and a hygiene-state identity, excluding boot time. Nobody changes a hygiene setting from freeze 2 through qual-03 close. An unplanned restart is an event: record it and refresh the four lines at the next arm; it holds nothing. `INCLUSION_RECORD` is filled by **RL-174 B.5**: the six rules stay unchanged and maintenance overlaps are print-only. `lm-qual-01` prints flagged and unflagged errors side by side, with counts by job, description only and no word. The lead appends the by-job count through dev-05 when its desk is final; that count gates nothing. The maintenance print carries the Sun15 15:32 service-stop date.
 - **Gates 5–9 (RL-149 §2.8; RL-165 §6; RL-172 (c),(f); RL-173 A–E; RL-174 E.5).** Line 6: no named stop, halt or veto open, lead record of dispositions. Line 7: watcher observed within 24 h, re-read at both gates; this draft uses C.5. For an Actions watcher, RL-174 A.13 requires a scheduled successful completed run on this repository's `main`, started after the previous close; a manual run never serves an arm. Line 9: actual machine order across blocks/queues, desk-final and **typed Q1 completion** through span k−2. In particular qual-01-s01 needs dev-05-s01's desk-final and Q1 records; qual-01-s02 needs dev-05-s02's, span for span. `debt_gate` requires those named rows as well as the full machine-order debt record. No "first span of kit" exception. Automatic desk must satisfy all four RL-172 (c) identity/authentication rules, sampled hand table clear, disagreement holds next arm. Lead/magistrate supply observations and pointers; no default yes.
 - **Close and copy (RL-171 §6.1; RL-172 (d); RL-173 A,B).** At least 300 s after a campaign close; 1,200 s after F0/F2/Part C/session/W1, using the **latest close of anything**, its Check and process-group absence, fence gone. Census stops on missing roots, unreadable or ambiguous stamps; `OTHER_CLOSE_EPOCH` covers sessions outside it. `PRIOR_CLOSE_EPOCH` cannot precede predecessor close. After a campaign close, copy marker `.ok` or `.air.ok` for that plan is required; after any other close, its Check/copy proof must bind the exact latest receipt path and close epoch; verified synchronous encrypted cloud offload counts permanently, upload finished before soak, plaintext/ciphertext hashes and size/provider confirmation recorded, key held off MBP, originals retained until verified copy. An unverified offload holds every arm including F0. A sync daemon is interim only; maintenance print includes bird/cloudd/fileproviderd. No marker is written by this item.
-- **Quiet, native checks and stops.** Same measurement_mode (RL-149 §2.2/§2.4), Automatic, network time Off, frequency word 0, AC, meter ready, disk ≥40 GiB, no night/smoke agent, High Power marker, night.lock holder, stray monitor, root powermetrics or other agent. Preserve the dev-05 own-process-tree-only measurement_mode exception. Process/load census and rule 5 enforce quiet (RL-171 §2); no builds, analysis, SSH or tests while anything is armed. Named stops stop the next arm, never a running span. REFUSAL/restore/disk/watcher: lead clears; INSTRUMENT_FAULT: research lead; 3 contaminated redos: lead once, then research lead; two legs >1.5× own budget: lead; frozen-path/host-state changes: research lead (RL-149 §2.4). A reference missing at capture is refusal; no consumer proceeds on an invented reference. A READY v4 record preempts immediately (RL-172 (f)); no intended-session-time reservation.
+- **Quiet, native checks and stops.** Same measurement_mode (RL-149 §2.2/§2.4), Automatic, network time Off, frequency word 0, AC, meter ready, disk ≥40 GiB, no night/smoke agent, High Power marker, night.lock holder, stray monitor, root powermetrics or other agent. Preserve the dev-05 own-process-tree-only measurement_mode exception. Process/load census and rule 5 enforce quiet (RL-171 §2); no builds, analysis, SSH or tests while anything is armed. Named stops stop the next arm, never a running span. REFUSAL/restore/disk/watcher: lead clears; INSTRUMENT_FAULT: research lead; 3 contaminated redos: lead once, then research lead; two legs >1.5× own budget: lead; frozen-path/host-state changes: research lead (RL-149 §2.4). A reference missing at capture is refusal; no consumer proceeds on an invented reference. A v4 READY record preempts when effective under RL-175 A.2. A READY record cannot take effect between the halves of a block.
 
 **Start and check** (magistrate on the MBP only **after issue**; this builder never executes these blocks).
 
@@ -44,27 +46,32 @@ test "$(shasum -a 256 "$QUEUE_FILE" | cut -c1-64)" = "$QUEUE_SHA" || exit 1
 @@GATES@@
 # Fresh refs for the hash/ancestry gate; repeat in Run. No network remains after launch.
 git -C "$AUTH_REPO" fetch -q origin audit/2026-11-10-fable main || exit 1
-all_gates || exit 1
 CUSTODY="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-/Users/edr/night-custody/magistrate}"
-test ! -e "$CUSTODY/desk_fence.json" || exit 1
-{ test ! -e /Users/Shared/JouleWise/host-power/high-power.marker && test ! -L /Users/Shared/JouleWise/host-power/high-power.marker; } || exit 1
-lsof -- /Users/Shared/JouleWise/host-power/night.lock 2>/dev/null && exit 1 || true
-sudo -n -l /bin/kill >/dev/null || exit 1
-sudo -n systemsetup -getusingnetworktime   # Off; any other readback STOPS
-pmset -g | grep -i powermode               # 0; frequency word 0 as item 308/251
-pgrep -fl 'b6_r12|r12' || echo 'no r12'
-pgrep -fl 'claude|codex|mcp-server|mcp_server|modelcontextprotocol' | grep -v "^$MAGISTRATE_PID " || echo 'no other agent'
-pgrep -fl 'km003c_monitor.py|hazard_monitor.py' || echo 'no stray monitor'
-pgrep -u root -fl powermetrics || echo 'no root powermetrics'
-launchctl list | grep -E 'com\.joulewise\.(night|align-r0)' || echo 'no night/smoke agent'
-MODE_RC=0
-zsh /Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh verify || MODE_RC=$?
-echo "measurement_mode verify rc $MODE_RC"
-# Inspect every FAIL: only own-process-tree agent lines allowed. Any other FAIL STOPS; WARN is recorded.
-"$PY" -B scripts/launch_align_r0.py preflight --disk-path "$REPO"   # AC true, disk >=40 GiB; checklist includes meter
-"$PY" -B scripts/cadence_queue.py validate-kit "$KIT" --repo "$REPO" || exit 1
-: "${CHECKLIST_OBSERVATIONS:?fresh native checklist observations JSON, recorded by magistrate}"
-"$PY" -B scripts/cadence_queue.py checklist --kit "$KIT" --kit-sha256 "$KIT_SHA" --observations "$CHECKLIST_OBSERVATIONS" || exit 1
+native_checks() {
+  unset CHECKLIST_OK
+  test ! -e "$CUSTODY/desk_fence.json" || return 1
+  { test ! -e /Users/Shared/JouleWise/host-power/high-power.marker && test ! -L /Users/Shared/JouleWise/host-power/high-power.marker; } || return 1
+  lsof -- /Users/Shared/JouleWise/host-power/night.lock 2>/dev/null && return 1 || true
+  sudo -n -l /bin/kill >/dev/null || return 1
+  sudo -n systemsetup -getusingnetworktime || return 1   # Off; any other readback STOPS
+  pmset -g | grep -i powermode || return 1               # 0; frequency word 0 as item 308/251
+  pgrep -fl 'b6_r12|r12' || echo 'no r12'
+  pgrep -fl 'claude|codex|mcp-server|mcp_server|modelcontextprotocol' | grep -v "^$MAGISTRATE_PID " || echo 'no other agent'
+  pgrep -fl 'km003c_monitor.py|hazard_monitor.py' || echo 'no stray monitor'
+  pgrep -u root -fl powermetrics || echo 'no root powermetrics'
+  launchctl list | grep -E 'com\.joulewise\.(night|align-r0)' || echo 'no night/smoke agent'
+  MODE_RC=0
+  zsh /Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh verify || MODE_RC=$?
+  echo "measurement_mode verify rc $MODE_RC"
+  # Inspect every FAIL: only own-process-tree agent lines allowed. Any other FAIL STOPS; WARN is recorded.
+  "$PY" -B scripts/launch_align_r0.py preflight --disk-path "$REPO" || return 1   # AC true, disk >=40 GiB; checklist includes meter
+  "$PY" -B scripts/cadence_queue.py validate-kit "$KIT" --repo "$REPO" || return 1
+  test -n "${CHECKLIST_OBSERVATIONS:-}" || return 1
+  "$PY" -B scripts/cadence_queue.py checklist --kit "$KIT" --kit-sha256 "$KIT_SHA" --observations "$CHECKLIST_OBSERVATIONS" || return 1
+  CHECKLIST_OK=yes
+}
+native_checks || exit 1
+all_gates || exit 1
 "$PY" -B scripts/cadence_legs_runner.py plan --kit "$KIT" --legs "$LEGS" || exit 1
 # Plan must print expected_s @@EXPECTED@@, worst_case_s @@WORST@@, batch_windows [], runner_kind cadence-legs-v1.1.
 # Record HEAD, kit frozen.commit, all identities and every native checklist line, meter presence and veto read.
@@ -75,15 +82,15 @@ test ! -e "$OUT" || exit 1
 case "$OUT" in */restricted/*|*/night-*|"$REPO"/*|*/configs/campaigns/align_v4*) exit 1;; esac
 ```
 
-Lead/magistrate supplies the current observations listed in `evidence/record-shapes.md`. `CHECKLIST_OK=yes` is set only **after** every native read above and the kit's complete checklist passes; an earlier supplied yes does not bypass a failed read. Disk, meter, process census, no halt/veto and all restore lines are mandatory.
+Lead/magistrate supplies the current observations listed in `evidence/record-shapes.md`. `CHECKLIST_OK=yes` is set only **after** every native read above and the kit's complete checklist passes; each call clears any supplied yes before running the checks. Disk, meter, process census, no halt/veto and all restore lines are mandatory.
 
-**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity and v4 READY record now, refreshing the observations. No cached eligibility answer. Verify the current kit/queue hashes again; fetch refs before the last gate. The pinned runner checks its native checklist and per-leg process census. It has no launch-time fence rule; the LaunchAgent's **shared desk fence still exists** until close. No `--batch-window` argument is passed.
+**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity and v4 READY record now, refreshing the observations. No cached eligibility answer. Verify the current kit/queue hashes again; fetch refs before the last gate. The pinned runner checks its native checklist and per-leg process census. RL-175 C.4's boot-relative batch check is an arm rule outside this runner. Apply it at each arm; the LaunchAgent's **shared desk fence still exists** until close. No `--batch-window` argument is passed.
 
 ```sh
 git -C "$AUTH_REPO" fetch -q origin audit/2026-11-10-fable main || exit 1
 test "$(shasum -a 256 "$KIT" | cut -c1-64)" = "$KIT_SHA" || exit 1
 test "$(shasum -a 256 "$QUEUE_FILE" | cut -c1-64)" = "$QUEUE_SHA" || exit 1
-"$PY" -B scripts/cadence_queue.py checklist --kit "$KIT" --kit-sha256 "$KIT_SHA" --observations "$CHECKLIST_OBSERVATIONS" || exit 1
+native_checks || exit 1
 all_gates || exit 1
 test ! -e "$CUSTODY/desk_fence.json" || exit 1
 # Frozen plan launch minimum includes the one-soak retry; extra 900 s is start/preflight slack.
@@ -92,7 +99,8 @@ DEADLINE="$("$PY" -I -B -c 'import time; print(time.time()+@@DEADLINE_SECONDS@@)
   --repo "$REPO" --python-bin "$PY" --kit "$KIT" --legs "$LEGS" \
   --output "$OUT" --disk-path "$REPO" --custody-root "$CUSTODY" \
   --magistrate-pid "$MAGISTRATE_PID" --deadline "$DEADLINE" \
-  --exit-wait-seconds 180 --start-wait-seconds 30
+  --authorized-t0-date "$T0_DATE" --t0-before "$ARM_BEFORE_EPOCH" \
+  --exit-wait-seconds 180 --start-wait-seconds 30 || exit 1
 echo "$OUT"
 ```
 

@@ -2,7 +2,6 @@
 import datetime as dt
 import difflib
 import json
-import os
 from pathlib import Path
 import re
 import subprocess
@@ -14,14 +13,14 @@ text=(HERE/'STANDING-F0-r2.md').read_text(); original=(HERE/'evidence/standing-f
 meta=json.loads((HERE/'items.json').read_text()); start=int(dt.datetime.fromisoformat(meta['standing']['renewal_start']).timestamp()); end=start+7*86400
 assert start==1795377084 and end==1795981884
 assert meta['standing']['pin_unchanged']
-# Every original hash and all ten rules' operational bytes stay unchanged.
+# The original hash table, launch block and operational Check stay fixed.
 assert re.search("<<'HASHES'\n(.*?)\nHASHES",original,re.S).group(1)==re.search("<<'HASHES'\n(.*?)\nHASHES",text,re.S).group(1)
 assert '--fresh-soak --parts C' in text and '14400' in text and 'len(today) >= 3' in text
 oldblocks=re.findall(r'```sh\n(.*?)```',original,re.S); blocks=re.findall(r'```sh\n(.*?)```',text,re.S)
-assert blocks[1:]==oldblocks[1:]
-evidence=Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence/fix-2026-11-16'))
+assert blocks[1]==oldblocks[1] and blocks[3:]==oldblocks[3:]
+evidence=HERE/'evidence/round10'
 patch=(evidence/'standing-f0-r2.diff').read_text()
-expected=''.join(difflib.unified_diff(original.splitlines(True),text.splitlines(True),fromfile=f"origin/main@{meta['standing']['source_main']}:RUN_STATE item 346",tofile='STANDING-F0-r2.md'))
+expected=''.join(difflib.unified_diff(original.splitlines(True),text.splitlines(True),fromfile=f"origin/main@{meta['standing']['source_main']}:RUN_STATE item 346",tofile='STANDING-F0-r2.md',n=0))
 assert patch==expected
 checks=0
 gate=re.search(r'renewal_gate\(\) \{.*?\n\}',text,re.S).group()
@@ -38,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='.standing-test-',dir=HERE) as temp:
         global checks
         ledger.write_text(''.join(f'{t}\tsynthetic\tSYNTHETIC\n' for t in t0s))
         code=program.replace('now = time.time();',f'now = {now};')
-        r=subprocess.run([sys.executable,'-I','-B','-',str(ledger),str(bound),'none'],input=code,text=True,capture_output=True)
+        r=subprocess.run([sys.executable,'-I','-B','-',str(ledger),(bound if bound=='none' else f"{int(bound)}:-:-"),'none'],input=code,text=True,capture_output=True)
         assert (r.returncode==0)==ok,(name,r.stdout,r.stderr); checks+=1; print('PASS F0 original ledger law',name)
     day=dt.datetime(2026,11,22,tzinfo=TZ).timestamp()
     test('02:34:59 refused',day+9299,ok=False); test('02:35 admitted',day+9300)
@@ -47,4 +46,4 @@ with tempfile.TemporaryDirectory(prefix='.standing-test-',dir=HERE) as temp:
     test('three today refused',day+81600,[day+9300,day+23700,day+38100],ok=False)
     test('counted bound exact allowed',start,bound=start+12180+1200)
     test('counted bound second short refused',start,bound=start+12180+1199,ok=False)
-print(checks,'standing-F0 checks; zero failures; unchanged hash table/launch/Check and spacing/day/window rules')
+print(checks,'standing-F0 checks; zero failures; hash table, launch, operational Check and spacing/day/window rules verified')

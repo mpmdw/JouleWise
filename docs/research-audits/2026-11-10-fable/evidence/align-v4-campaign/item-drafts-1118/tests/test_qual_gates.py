@@ -45,18 +45,24 @@ def run_item(item,shell):
     now=epoch(item['date']); predout=root/item['predecessor_camp']/f"cq-{item['predecessor']}-a1-20261119T090000Z"
     latest=wt/'partc'/'.desk'/'f0-synthetic-20261119T100000Z'
     debt=home/'synthetic-debt.json'
+    staged=home/'staged'; staged.mkdir()
     gates=gates.replace('/Users/edr/campaign-out',str(root)).replace('/Users/edr/code/jw-wt',str(wt)).replace('/Users/Shared/JouleWise/desk-copy',str(markers))
     defaults=dict(AUTH_REPO=str(auth),PIN=META['pin'],KIT_SHA=item['kit_sha'],QUEUE_PATH=item['queue_path'],QUEUE_SHA=item['queue_sha'],
         NONCAMPAIGN_COPY_OK='yes',NONCAMPAIGN_COPY_CLOSE_EPOCH=now-1200,NONCAMPAIGN_COPY_RECEIPT=str(latest/'runner_receipt.json'),NONCAMPAIGN_COPY_RECORD='synthetic latest Check/copy proof',PRIOR_CLOSE_EPOCH=now-4000,OTHER_CLOSE_EPOCH=0,HOST_RESTORE_OK=1,GROUPS_ABSENT=1,LAST_CLOSE_KIND='other',
         QUAL_COLD_SEAT='ADMIT',LINE2_EQUAL='yes',LINE2_PIN=META['pin'],LINE2_BASE=META['merged_w1'],COLD_SEAT_KIT_SHA=item['kit_sha'],FIRST_CAPTURE_CONFIRMED='yes',
         HOST_EVENT_DISPOSITION='done',CURRENT_HOST_STATE_ID='synthetic-host',FREEZE2_HOST_STATE_ID='synthetic-host',HOST_EVENT_BEFORE_FREEZE2='yes',QUAL_INCLUSION_UNCHANGED='yes',
-        SESSION_READY='no',SESSION_RECORD='synthetic fresh READY census',STOPS_CLEAR='yes',VETO_CLEAR='yes',CHECKLIST_OK='yes',PILOT_PASSED='yes',SAMPLE_HAND_CLEAR='yes',COPY_KEY_SAFE='yes',OFFLOAD_CLEAR='yes',
+        S02_ISSUED_EPOCH='unissued',SESSION_READY='no',SESSION_RECORD='synthetic fresh READY census',STOPS_CLEAR='yes',VETO_CLEAR='yes',CHECKLIST_OK='yes',PILOT_PASSED='yes',SAMPLE_HAND_CLEAR='yes',COPY_KEY_SAFE='yes',OFFLOAD_CLEAR='yes',
         LINE6_RECORD='synthetic stops clear',CHECKLIST_RECORD='synthetic native checklist',VETO_RECORD='synthetic veto census',SAMPLE_HAND_RECORD='synthetic sampled hand pass',
         QUAL01_SOAK_HAND_READ='SAME',QUAL01_SOAK_RECORD='synthetic RL172a soak comparison',LINE9_RECORD=str(debt))
     fills=dict(ISSUED_EPOCH=now-100,WATCH_UNTIL_EPOCH=now+10000,FREEZE2_COMMIT=commit,FREEZE2_COEF_SHA256=coefsha,FREEZE2_COEF_PATH='coefficients.json',COLD_SEAT_RECORD='synthetic cold seat pointer',LINE2_RECORD='synthetic test-for-test red comparison',HOST_EVENT_RECORD='synthetic pre-freeze event/readback',HOST_STATE_ID='synthetic-host',INCLUSION_RECORD='synthetic research-lead unchanged inclusion ruling',QUEUE_COMMIT=commit)
     def fixture():
         for d in (root,wt,markers): shutil.rmtree(d,ignore_errors=True); d.mkdir()
-        source=BASE/'mock'/item['predecessor']; shutil.copytree(source,predout)
+        source=BASE/'mock'/item['predecessor']
+        relative=['runner_receipt.json',*(f'desk-bundle/legs/{leg}/leg_summary.json' for leg in item['predecessor_legs'])]
+        for name in relative:
+            target=predout/name
+            target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(source/name,target)
         p=predout/'runner_receipt.json'; r=json.loads(p.read_text()); r['mock']=False; r['synthetic_fixture']=True; r['ended']={'epoch_s':now-4000}; dump(p,r); os.utime(p,(now-4000,now-4000))
         dump(latest/'runner_receipt.json',{'synthetic_fixture':True,'ended':{'epoch_s':now-1200}}); os.utime(latest/'runner_receipt.json',(now-1200,now-1200))
         (markers/'f0-synthetic.ok').write_text('SYNTHETIC verified hashes, size, provider upload completion\n')
@@ -72,7 +78,7 @@ def run_item(item,shell):
         p=predout/'desk-bundle'/'legs'/leg/'leg_summary.json'; r=json.loads(p.read_text()); r.update(kw); dump(p,r)
     def debt_change(key,value):
         r=json.loads(debt.read_text()); r['machine_order'][0][key]=value; dump(debt,r)
-    def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,contains=None):
+    def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,contains=None,full_start=False):
         global checks,failures
         fixture(); setup(); vals={**defaults,**(overrides or {})}; ff={**fills,**(fill_changes or {})}; program=gates
         for key,value in ff.items():
@@ -80,12 +86,62 @@ def run_item(item,shell):
             assert re.search(pattern,program,re.M),key
             if value is not None: program=re.sub(pattern,key+'='+quote(value),program,flags=re.M)
         assignments='\n'.join('unset '+key if value is None else key+'='+quote(value) for key,value in vals.items())
-        script=f'PY={quote(sys.executable)}\n'+config+program+f'\ndate() {{ echo {now if stamp is None else stamp}; }}\n'+assignments+'\n'+command+'\n'
+        clock=f'date() {{ echo {now if stamp is None else stamp}; }}\n'
+        if full_start:
+            start=blocks[0].replace(blocks[0].split('# BEGIN TESTABLE GATES\n')[1].split('# END TESTABLE GATES')[0], program)
+            # Redirect every native path and stub every native command. The two
+            # authenticated Git gates still use the real, disposable Git repo.
+            paths={
+                '/Users/edr/code/jw-wt/cadence-'+item['span']: str(staged),
+                '/Users/edr/code/JouleWise': str(auth),
+                '/Users/edr/campaign-out/kits/'+item['camp']+'.v1.1-6010985a3.json': str(HERE/item['kit_file']),
+                '/Users/edr/campaign-out/queues/'+item['camp']+'.queue.json': str(HERE/item['queue_file']),
+                '/Users/edr/campaign-out': str(root),
+                '/Users/edr/night-custody/magistrate': str(home/'synthetic-fence'),
+                '/Users/Shared/JouleWise': str(home/'synthetic-host'),
+            }
+            for old,new in paths.items(): start=start.replace(old,new)
+            overrides_sh=f'''synthetic_python() {{
+  case "$*" in
+    "-B scripts/launch_align_r0.py preflight "*) echo MOCK_NATIVE_PREFLIGHT;;
+    "-B scripts/cadence_queue.py validate-kit "*) echo MOCK_VALIDATE_KIT;;
+    "-B scripts/cadence_queue.py checklist "*) echo MOCK_NATIVE_CHECKLIST; test "$NATIVE_RC" = 0;;
+    "-B scripts/cadence_legs_runner.py plan "*) echo MOCK_PLAN;;
+    *) {quote(sys.executable)} "$@";;
+  esac
+}}
+git() {{
+  case "$*" in
+    "rev-parse HEAD") echo {META['pin']};;
+    "symbolic-ref -q HEAD") return 1;;
+    "status --porcelain"|"-C "*fetch*) :;;
+    *) echo "unexpected Git command" >&2; return 2;;
+  esac
+}}
+sudo() {{ echo 'network time: Off'; }}
+pmset() {{ echo 'powermode 0'; }}
+lsof() {{ return 1; }}
+pgrep() {{ return 1; }}
+launchctl() {{ :; }}
+zsh() {{ :; }}
+sysctl() {{ echo "unavailable"; }}
+PY=synthetic_python
+MAGISTRATE_PID=100
+CHECKLIST_OBSERVATIONS=synthetic
+unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
+'''
+            script=assignments+'\n'+clock+overrides_sh+start
+        else:
+            script=f'PY={quote(sys.executable)}\n'+config+program+clock+assignments+'\n'+command+'\n'
         result=subprocess.run([shell],input=script,text=True,capture_output=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',TMPDIR=str(home)))
         out=result.stdout+result.stderr; passed=(result.returncode==0)==want and (contains is None or contains in out)
         checks+=1; failures+=not passed
         print(('PASS' if passed else 'FAIL'),item['span'],shell,name,'| rc',result.returncode,'|',out.strip().replace('\n',' / ')[-500:])
     run('clean full arm path')
+    run('WS 2 full Start with checklist initially unset', overrides={'CHECKLIST_OK':None,'NATIVE_RC':0},
+        full_start=True, contains='MOCK_PLAN')
+    run('WS 2 native checklist failure clears prefilled yes', overrides={'CHECKLIST_OK':'yes','NATIVE_RC':1},
+        full_start=True, want=False, contains='MOCK_NATIVE_CHECKLIST')
     run('freeze2 unfilled WAIT',fill_changes={'FREEZE2_COMMIT':None},want=False,contains='HOLD_FOR_FIT_FREEZE')
     run('coefficient sha unfilled WAIT',fill_changes={'FREEZE2_COEF_SHA256':None},want=False,contains='HOLD_FOR_FIT_FREEZE')
     run('freeze2 wrong sha STOP',fill_changes={'FREEZE2_COEF_SHA256':'0'*64},want=False,contains='sha256 mismatch')
@@ -175,10 +231,34 @@ def run_item(item,shell):
     run('all qual blocks same date REFUSE',overrides={'QUAL_DATES':one},command='day_gate',want=False,contains='three distinct dates')
     newdates=','.join(k+'='+('2026-11-18' if k==item['block'] else v) for k,v in META['dates'].items())
     run('known development date REFUSE',overrides={'T0_DATE':'2026-11-18','QUAL_DATES':newdates},stamp=epoch('2026-11-18'),command='day_gate',want=False,contains='development date')
-    for t in (int(epoch(item['date'])-43200),int(epoch(item['date'])+43199)):
+    if item['span']=='qual-03-s02':
+        sunday=epoch('2026-11-22')
+        def partial_block():
+            p=predout/'runner_receipt.json'
+            receipt=json.loads(p.read_text())
+            receipt['started']={'epoch_s': epoch(item['date'])}
+            dump(p,receipt)
+        revised=','.join(k+'='+('2026-11-22' if k==item['block'] else v) for k,v in META['dates'].items())
+        run('WS 3 Saturday s01; Sunday cannot use original item', setup=partial_block, stamp=sunday,
+            command='day_gate', want=False, contains='outside this item t0-date')
+        run('WS 3 Sunday re-date conflicts with recorded Saturday s01', setup=partial_block,
+            stamp=sunday, overrides={'T0_DATE':'2026-11-22','QUAL_DATES':revised},
+            command='day_gate', want=False, contains='existing qualification receipt disagrees')
+    if item['span'].endswith('s01'):
+        pair_budget=int(item['launch_minimum_s'])+300
+        # If s02's item expires at exactly the backed-out handoff, s01 is too late.
+        run('WS 4 s02 item expiry binds s01', overrides={'S02_ISSUED_EPOCH': now+pair_budget-86400},
+            want=False, contains='effective t0 cutoff')
+        run('WS 4 s02 cutoff exact last second', overrides={'S02_ISSUED_EPOCH': now+pair_budget+1-86400})
+        run('WS 4 s02 queue expiry binds s01',
+            command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+pair_budget}; arm_bound_gate',
+            want=False, contains='effective t0 cutoff')
+    day_start=epoch(item['date'])-43200
+    limit=day_start+(16*3600+32*60 if item['span'].endswith('s01') else 86399)
+    for t in (day_start,limit):
         run('date endpoint admitted',stamp=t,command='window_gate')
     run('one second before date REFUSE',stamp=epoch(item['date'])-43201,command='window_gate',want=False,contains='REFUSE')
-    run('one second after date REFUSE',stamp=epoch(item['date'])+43200,command='window_gate',want=False,contains='REFUSE')
+    run('D8/window one second past LIMIT REFUSE',stamp=limit+1,command='window_gate',want=False,contains='REFUSE')
 
 for shell in ('bash','zsh'):
     assert shutil.which(shell),shell
