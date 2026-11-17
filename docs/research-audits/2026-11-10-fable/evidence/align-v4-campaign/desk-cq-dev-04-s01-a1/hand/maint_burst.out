@@ -1,0 +1,41 @@
+WINDOW 01:15-01:30
+01:21 mobileassetd 3651
+first {'mobileassetd': '01:21:26'} last {'mobileassetd': '01:21:44'}
+
+WINDOW 02:05-02:30
+02:08 mobileassetd 171
+02:09 mobileassetd 1152
+02:09 softwareupdated 1
+02:10 mds 5
+02:10 mobileassetd 1191
+02:11 XProtect 13
+02:11 XProtectPluginService 290
+02:11 mds 17
+02:11 mobileassetd 233
+02:11 softwareupdated 8
+02:12 XProtectPluginService 9
+02:12 mds 1
+02:13 XProtectPluginService 39
+02:14 XProtectPluginService 9
+02:14 mds 15
+02:14 mobileassetd 16
+02:15 XProtect 48
+02:15 XProtectPluginService 295
+02:15 mds 33
+02:15 mobileassetd 218
+02:16 XProtectPluginService 24
+02:17 XProtectPluginService 6
+02:18 XProtectPluginService 24
+02:18 mobileassetd 217
+02:22 XProtect 35
+02:22 XProtectPluginService 2
+02:23 mobileassetd 1
+02:24 mobileassetd 170
+02:25 mobileassetd 8
+02:29 mobileassetd 1
+first {'mobileassetd': '02:08:49', 'softwareupdated': '02:09:57', 'mds': '02:10:14', 'XProtect': '02:11:03', 'XProtectPluginService': '02:11:03'} last {'mobileassetd': '02:29:59', 'softwareupdated': '02:11:54', 'mds': '02:15:51', 'XProtect': '02:22:18', 'XProtectPluginService': '02:22:18'}
+
+WINDOW 02:40-02:50
+02:46 mobileassetd 379
+02:47 mobileassetd 18
+first {'mobileassetd': '02:46:56'} last {'mobileassetd': '02:47:26'}

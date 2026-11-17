@@ -1,0 +1,6 @@
+L001 {"attempt": 1, "runs_ge_3s": []}
+L002 {"attempt": 1, "runs_ge_3s": [{"len_samples": 4, "t_s": [782.1, 785.1], "pst": ["01:09:00", "01:09:03"], "max_cores": 1.19}]}
+L003 {"attempt": 1, "runs_ge_3s": [{"len_samples": 18, "t_s": [282.1, 299.1], "pst": ["01:21:26", "01:21:43"], "max_cores": 1.26}]}
+L004 {"attempt": 1, "runs_ge_3s": []}
+L005 {"attempt": 1, "runs_ge_3s": []}
+L006 {"attempt": 2, "runs_ge_3s": [{"len_samples": 32, "t_s": [388.1, 419.1], "pst": ["02:36:04", "02:36:35"], "max_cores": 2.58}, {"len_samples": 16, "t_s": [457.1, 472.1], "pst": ["02:37:13", "02:37:28"], "max_cores": 1.425}, {"len_samples": 3, "t_s": [776.1, 778.1], "pst": ["02:42:32", "02:42:34"], "max_cores": 1.05}]}

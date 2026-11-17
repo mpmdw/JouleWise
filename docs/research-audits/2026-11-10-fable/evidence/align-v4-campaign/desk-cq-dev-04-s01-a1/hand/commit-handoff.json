@@ -1,0 +1,8 @@
+{
+ "attempted_action": "git add (s01 desk and Q1 only)",
+ "exit_code": 128,
+ "error": "index.lock: Operation not permitted",
+ "commits_created": 0,
+ "pushed": false,
+ "next": "Lead stages only each desk directory and matching Q1, then makes one commit per span; never add .desk-scratch."
+}

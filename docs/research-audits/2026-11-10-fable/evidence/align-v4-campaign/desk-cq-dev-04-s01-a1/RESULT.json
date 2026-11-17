@@ -1,0 +1,1897 @@
+{
+ "plan_id": "cq-dev-04-s01-a1",
+ "span": "dev-04-s01",
+ "status": "PROPOSED",
+ "signed_by": "not signed: magistrate lead re-executes and signs",
+ "legs": [
+  "L001",
+  "L002",
+  "L003",
+  "L004",
+  "L005",
+  "L006"
+ ],
+ "built": "2026-11-17T08:40:41.947347-08:00",
+ "work_order": "Brief; main RUN_STATE Check item 380, Air pause item 384",
+ "data": {
+  "path": "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s01-a1-20261117T080153Z",
+  "original_MBP_read_only": true,
+  "manifest": "/Users/edr/night-custody/offload/cq-dev-04-s01-a1/cq-dev-04-s01-a1.SHA256SUMS",
+  "manifest_sha256": "f8508272caf332bcddb0ac6798a4e142c251be40b923441012d69206d3d15cfc",
+  "entries_verified": 255,
+  "failed": 0,
+  "mapping": "./ paths are relative to the supplied original span directory; no other root mapping",
+  "air_copy": false,
+  "air_mbp_comparison": "none"
+ },
+ "code": {
+  "commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+  "checkout": "/Users/edr/code/jw-wt/desk-pin-2d347f721",
+  "status_before": "",
+  "status_after": ""
+ },
+ "kit": {
+  "source": "git show fecaf73f3:docs/process/cadence/kits/cl-dev-04.v1.1.json",
+  "scratch_path": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/cl-dev-04.v1.1.json",
+  "sha256": "1cc6673d78922a67b381155e24d53744e8515a6ca821e9a4a0ed62943d752228",
+  "sha_asserted": true,
+  "receipt_kit": {
+   "campaign_id": "cl-dev-04",
+   "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+   "sha256": "1cc6673d78922a67b381155e24d53744e8515a6ca821e9a4a0ed62943d752228"
+  }
+ },
+ "desk_command": {
+  "cwd": "/Users/edr/code/jw-wt/desk-pin-2d347f721",
+  "env": {
+   "TMPDIR": "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/tmp"
+  },
+  "argv": [
+   "/opt/homebrew/bin/python3.13",
+   "-I",
+   "-B",
+   "scripts/air/cadence_desk.py",
+   "build",
+   "--plan-id",
+   "cq-dev-04-s01-a1",
+   "--input",
+   "/Users/edr/campaign-out/cl-dev-04/cq-dev-04-s01-a1-20261117T080153Z/desk-bundle",
+   "--out",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s01-a1/auto",
+   "--kit",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/cl-dev-04.v1.1.json",
+   "--lock",
+   "/Users/edr/code/jw-wt/desk-dev04-cb24533b/.desk-scratch/cq-dev-04-s01-a1.lock"
+  ],
+  "exit_code": 0
+ },
+ "desk_stops_json": [],
+ "comparison": {
+  "per_leg_values_compared": 114,
+  "per_leg_values_differing": 0,
+  "fields_per_leg": [
+   "attempts",
+   "band_reached",
+   "budget_s",
+   "contaminated_redos",
+   "g0_outcome",
+   "g0_role",
+   "g0_role(record vs desk)",
+   "g0_s",
+   "g0_shape",
+   "included/admitted",
+   "leg_id",
+   "os_level_max",
+   "pm_nominal",
+   "prefill_tokens(nominal: kit/spec vs desk)",
+   "redo_reasons",
+   "seed",
+   "span_reference",
+   "start_band",
+   "wall_s(stage vs summary)"
+  ],
+  "inclusion_included": true,
+  "span_level_compared": [
+   "leg count",
+   "named stops",
+   "result",
+   "meter",
+   "feeds_proven_stopped",
+   "span_reference (leg_id, attempt, consumers, consistent)"
+  ],
+  "span_level_differing": 0,
+  "diffs": [],
+  "scope_notes": [
+   "hand_table.py comparison unchanged: G0 seconds rounded to 6 decimal places, wall seconds to 1 decimal place; all other pairs use equality",
+   "shape from kit; first leg captures; later span-shaped legs consume; source, record sha, fast_c and span_ns checked against capture",
+   "desk prefill is kit nominal; realized prefill reported separately",
+   "rules 3 and 4 remain at the look, as in the template; receipt instrument health only; no measured energy opened",
+   "restore lines and censuses carried by hand; all attempts recomputed for rule 5"
+  ]
+ },
+ "hand_legs": [
+  {
+   "leg": "L001",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 201.032,
+   "g0_role": "capture",
+   "g0_shape": "own",
+   "span_reference": null,
+   "prefill_tokens_realized": 10015,
+   "prefill_tokens_nominal": 10000,
+   "prefill_deviation_pct": 0.15,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1121.7,
+   "budget_s": 1156,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 2,
+   "rule5_max_busy_cores": 2.235,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "own_window_reference_record_sha256": "78383ca7fc0860d95acb45669e221d7429489c8144613c990fc4a3b3f9acf15b"
+  },
+  {
+   "leg": "L002",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 202.016,
+   "g0_role": "capture",
+   "g0_shape": "own",
+   "span_reference": null,
+   "prefill_tokens_realized": 19458,
+   "prefill_tokens_nominal": 19458,
+   "prefill_deviation_pct": 0.0,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1245.3,
+   "budget_s": 1251,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 4,
+   "rule5_max_busy_cores": 2.651,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "own_window_reference_record_sha256": "125a225e5e52296e723e5047b67a36c9607f283091efc62d815c96e604b7c88f"
+  },
+  {
+   "leg": "L003",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 145.731,
+   "g0_role": "capture",
+   "g0_shape": "own",
+   "span_reference": null,
+   "prefill_tokens_realized": 2024,
+   "prefill_tokens_nominal": 2000,
+   "prefill_deviation_pct": 1.2,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 977.2,
+   "budget_s": 1076,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 18,
+   "rule5_max_busy_cores": 1.361,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "own_window_reference_record_sha256": "10cafbeaa5b895dc1df589b500729589a23177949efa72adbbebf710fff8d17a"
+  },
+  {
+   "leg": "L004",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 221.345,
+   "g0_role": "capture",
+   "g0_shape": "own",
+   "span_reference": null,
+   "prefill_tokens_realized": 10015,
+   "prefill_tokens_nominal": 10000,
+   "prefill_deviation_pct": 0.15,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1155.0,
+   "budget_s": 1156,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 1,
+   "rule5_max_busy_cores": 1.849,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "own_window_reference_record_sha256": "aeb36133e3be909b111ada508f74922ef8d32b2ff91711effb688466cce72b7a"
+  },
+  {
+   "leg": "L005",
+   "attempts": 1,
+   "g0": "released",
+   "g0_s": 151.902,
+   "g0_role": "consume",
+   "g0_shape": "span",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   },
+   "prefill_tokens_realized": 2024,
+   "prefill_tokens_nominal": 2000,
+   "prefill_deviation_pct": 1.2,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 980.8,
+   "budget_s": 1467,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 1,
+   "rule5_max_busy_cores": 1.799,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "g0_reference_source": "cadence-cl-dev-04-l001",
+   "g0_reference_record_sha256": "78383ca7fc0860d95acb45669e221d7429489c8144613c990fc4a3b3f9acf15b"
+  },
+  {
+   "leg": "L006",
+   "attempts": 2,
+   "g0": "released",
+   "g0_s": 215.268,
+   "g0_role": "capture",
+   "g0_shape": "own",
+   "span_reference": null,
+   "prefill_tokens_realized": 19458,
+   "prefill_tokens_nominal": 19458,
+   "prefill_deviation_pct": 0.0,
+   "decode": "4096/4096",
+   "leg_status": "complete",
+   "wall_s": 1266.1,
+   "budget_s": 1251,
+   "leg_record_ac_powermode": 0,
+   "rule5_longest_run_over_0p5_core_s": 32,
+   "rule5_max_busy_cores": 2.58,
+   "os_level_max_turn": 2,
+   "pm_nominal_turn": false,
+   "included": true,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "own_window_reference_record_sha256": "ecbdcb451526a4c398598af56aec7a56e633bc787d8b87e450c7e75c8ebf2314"
+  }
+ ],
+ "desk_final": {
+  "verdict": "FINAL",
+  "meaning": "automatic desk = independent hand table on every value, inclusion included; lead signature pending",
+  "basis": "0 of 114 per-leg and 0 span-level values differ; 6 of 6 included by hand, 6 of 6 admitted by desk; stops.json [] and hand stops []"
+ },
+ "consumers_released": {
+  "this_span": "1 of 1 released against L001 capture; all consumer checks true"
+ },
+ "dev04_consumer_releases": [
+  {
+   "span": "dev-04-s01",
+   "consumer": "L005",
+   "g0_outcome": "released",
+   "wait_s": 151.902,
+   "timeout_s": 1200,
+   "released_against_span_reference": true,
+   "reference_source": "cadence-cl-dev-04-l001",
+   "reference_record_sha256": "78383ca7fc0860d95acb45669e221d7429489c8144613c990fc4a3b3f9acf15b",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   }
+  },
+  {
+   "span": "dev-04-s02",
+   "consumer": "L008",
+   "g0_outcome": "released",
+   "wait_s": 205.013,
+   "timeout_s": 1200,
+   "released_against_span_reference": true,
+   "reference_source": "cadence-cl-dev-04-l007",
+   "reference_record_sha256": "0311a7c45acb8b9267a088155543b1b2c1f33c8bd097ed746619a6be4b597f0b",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L007",
+    "redone": false
+   }
+  },
+  {
+   "span": "dev-04-s02",
+   "consumer": "L009",
+   "g0_outcome": "released",
+   "wait_s": 213.229,
+   "timeout_s": 1200,
+   "released_against_span_reference": true,
+   "reference_source": "cadence-cl-dev-04-l007",
+   "reference_record_sha256": "0311a7c45acb8b9267a088155543b1b2c1f33c8bd097ed746619a6be4b597f0b",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L007",
+    "redone": false
+   }
+  },
+  {
+   "span": "dev-04-s02",
+   "consumer": "L010",
+   "g0_outcome": "released",
+   "wait_s": 147.913,
+   "timeout_s": 1200,
+   "released_against_span_reference": true,
+   "reference_source": "cadence-cl-dev-04-l007",
+   "reference_record_sha256": "0311a7c45acb8b9267a088155543b1b2c1f33c8bd097ed746619a6be4b597f0b",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L007",
+    "redone": false
+   }
+  },
+  {
+   "span": "dev-04-s02",
+   "consumer": "L011",
+   "g0_outcome": "released",
+   "wait_s": 215.322,
+   "timeout_s": 1200,
+   "released_against_span_reference": true,
+   "reference_source": "cadence-cl-dev-04-l007",
+   "reference_record_sha256": "0311a7c45acb8b9267a088155543b1b2c1f33c8bd097ed746619a6be4b597f0b",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L007",
+    "redone": false
+   }
+  },
+  {
+   "span": "dev-04-s02",
+   "consumer": "L012",
+   "g0_outcome": "released",
+   "wait_s": 217.178,
+   "timeout_s": 1200,
+   "released_against_span_reference": true,
+   "reference_source": "cadence-cl-dev-04-l007",
+   "reference_record_sha256": "0311a7c45acb8b9267a088155543b1b2c1f33c8bd097ed746619a6be4b597f0b",
+   "span_reference": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L007",
+    "redone": false
+   }
+  }
+ ],
+ "dev05_draft_gate_facts": {
+  "search": "audit ref and worktree item-drafts-1118/ plus nearby item-drafts*; no dev-05 drafts under 1118 (qualification items there); found current RL-173 D dev-05 drafts in 1115 and older nearby equivalents under rl172",
+  "drafts_modified": false,
+  "gate_lines": [
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 1,
+    "gate_line": "TBD. **Laptop lead (interactive, Opus 5.5), drafted under RL-171 by the items-rl171 builder 2026-11-15 PST (new draft; the dev-04/05 kits' builder and the Mythos dev-04/05 delta seat supply the facts), ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the FIRST span of block dev-05 (RL-158 \u00a73; RL-165 \u00a71, \u00a74; RL-171), span `dev-05-s01`, legs L001, L002, L003, L004, L005, L006, kit `cl-dev-05.v1.1` (sha256 `2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a`), runner kind `cadence-legs-v1.1`, on `2d347f721552fe03bdd19f113e7bad7a7c24908e` checked out detached in a fresh scratch worktree. One span: a fresh soak, then six legs at their cells (L001 first; consumers L002, L003, L005, L006 judge their G0 against L001's capture), decode cap 4,096, Automatic, band q0. They are counted development legs of dev-05. No other span, no queue extension, no session, no W1. EARLIEST: the close interval (RL-171 \u00a76.1) after dev-04's last span (`dev-04-s02`) closed with its fence gone and its Check reported, and not before 00:00:00 PST Wed 18 Nov (epoch 1794988800; this block's t0-date, RL-172 (a)). LAUNCH as soon as every gate holds, at any hour up to 23:59:59 PST Wed 18 Nov (LIMIT, epoch 1795075199; this block's t0-date, RL-172 (a)), except 10:50:00-13:15:00 (the pin's `fence_problems` refuses it under either argument). The batch-window argument follows the launch time (RL-171 \u00a73): `02:00-02:35` from 02:35:00 to 10:50:00 and from 13:15:00 to 18:33:10; `13:14-13:15` from 18:33:11 to 02:34:59. ISSUED AHEAD (RL-173 D): this item names its predecessor `dev-04-s02` and requires that span's clean close receipt, else it is VOID and is not skipped; it EXPIRES 24 h after issue, so its window ends at the earlier of LIMIT and the expiry. The launch is your LAST action and you exit at once. If you cannot, do not launch; mail the lead (the standing F0 item then applies).**",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 7,
+    "gate_line": "on_early_or_refused: VOID, so that nothing of this item ever launches (mail the lead; a new item is needed), if `dev-04-s02` closed without a clean receipt (RL-173 D.2) or once 24 h have passed since the issue (RL-173 D.5). Otherwise: any failed line of \"Start and check\", any launch refusal (rc\u22600 or no claimed fence), or a launch that cannot happen inside the bands below (Wed 00:00:00 to Wed 23:59:59 PST, outside 10:50:00-13:15:00): NOTHING of this item launches; mail the lead; a later t0 needs a new item, and the standing F0 item applies meanwhile. A span that ran but ends with any named stop or a receipt rc\u22600: nothing relaunches, nothing is re-run, nothing else is queued; mail the lead. Do not retry, do not extend, do not reuse OUT",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 11,
+    "gate_line": "- **Issued ahead (RL-173 D; the interim until #800 is admitted; items-1115 builder, Sun 15 Nov 2026 PST).** (1) At most three counted spans are issued ahead of the machine, plus the standing F0. (2) **Predecessor: `dev-04-s02`** (dev-04's second span). This item requires its clean close receipt: `pred_gate` below reads its `runner_receipt.json` (rc, error, roster, leg counts, span_result, close steps, close time) and its desk bundle's `leg_summary.json` files (wall against budget, contaminated redos), never an energy, power or meter value. No receipt yet is WAIT. A receipt that is not clean makes this item VOID: it is not skipped, nothing launches on its authority, and the lead decides. (3) Its date window is Wed 18 Nov (RL-172 (a)), and its own argument choice is `pick_arg` below. (4) Nothing is issued past a class A hand-read or an L002 or L005 gate. **Not issuable ahead of dev-04's L005 gate** (RL-173 D.4): it follows `dev-04-s02`, which is itself behind that gate. (5) It expires 24 h after issue: `expiry_gate` (ISSUED_EPOCH + 86,400 s) runs in Start and check and again just before the launch.",
+    "fact": "L005 gate fact: released 151.9 s against L001 capture; Check item 380 agrees. dev-04-s02 ran and closed clean (item 382). Issuance remains lead-owned.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 14,
+    "gate_line": "  - dev-04's last span (`dev-04-s02`) closed and checked: <LEAD FILLS: RUN_STATE <n>: RECEIPT OK, legs run and admitted, no named stop open, restore lines clean, close epoch>.",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 18,
+    "gate_line": "  - **dev-04 ran span-shaped to its end:** if dev-04's second span did not arm under the L005 gate (fewer than four of dev-03's consumers released), this item is NOT issued: dev-05 then runs own-shaped (RL-165 \u00a74).",
+    "fact": "dev-04-s02 ran cl-dev-04.v1.1 L007-L012; L008-L012 released against L007 capture (5/5). dev-04-s01 L005 released 151.9 s against L001 capture; no fallback inference needed.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 38,
+    "gate_line": "6. No named stop, veto or halt open (the `directive` and `cadence-stop` issues; gh via `launchctl asuser`). By hand: no named stop open from any earlier span, no RESTORE_UNPROVEN and no High Power `revoked` hold: <LEAD FILLS: span ids, their desk `stops.json` result and the time read>.",
+    "fact": "These dev-04 desks: auto stops [] and hand stops []; restore proven observed 0 and all close steps rc 0 in both spans. This is historical span evidence; current veto/halt/High Power and other spans remain fresh arm checks.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 41,
+    "gate_line": "9. Line 9, across blocks in run order (RL-165 \u00a76). Expected: this span is campaign span 13, so span 11's desk, `dev-04-s01` (campaign span 11), must be FINAL. As run: this span is campaign span <LEAD FILLS: N>, and the desk of the span two back, <LEAD FILLS: SPAN ID>, is FINAL: <LEAD FILLS: the desk's stamp and where it is recorded>.",
+    "fact": "dev-04-s01: proposed Desk FINAL; 0 of 114 per-leg and 0 span-level values differ; 6/6 hand included and desk admitted; stops [] on both sides. Expected ordinal 13 reads two-back span 11; lead verifies as-run ordering and signs.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 56,
+    "gate_line": ": \"${PRIOR_CLOSE_EPOCH:?Set to the later of dev-04 last span (dev-04-s02) runner_receipt ended.epoch_s and the epoch its fence was seen gone}\"",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s01.md",
+    "line": 140,
+    "gate_line": "PRED_SPAN=dev-04-s02; PRED_CAMP=cl-dev-04; PRED_ROSTER=L007,L008,L009,L010,L011,L012",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s02.md",
+    "line": 11,
+    "gate_line": "- **Issued ahead (RL-173 D; the interim until #800 is admitted; items-1115 builder, Sun 15 Nov 2026 PST).** (1) At most three counted spans are issued ahead of the machine, plus the standing F0. (2) **Predecessor: `dev-05-s01`** (dev-05's first span). This item requires its clean close receipt: `pred_gate` below reads its `runner_receipt.json` (rc, error, roster, leg counts, span_result, close steps, close time) and its desk bundle's `leg_summary.json` files (wall against budget, contaminated redos), never an energy, power or meter value. No receipt yet is WAIT. A receipt that is not clean makes this item VOID: it is not skipped, nothing launches on its authority, and the lead decides. (3) Its date window is Wed 18 Nov (RL-172 (a)), and its own argument choice is `pick_arg` below. (4) Nothing is issued past a class A hand-read or an L002 or L005 gate. **Not issuable ahead of dev-04's L005 gate** (RL-173 D.4), and only within the three-ahead cap. (5) It expires 24 h after issue: `expiry_gate` (ISSUED_EPOCH + 86,400 s) runs in Start and check and again just before the launch.",
+    "fact": "L005 gate fact: released 151.9 s against L001 capture; Check item 380 agrees. dev-04-s02 ran and closed clean (item 382). Issuance remains lead-owned.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s02.md",
+    "line": 37,
+    "gate_line": "6. No named stop, veto or halt open (the `directive` and `cadence-stop` issues; gh via `launchctl asuser`). By hand: no named stop open from any earlier span, no RESTORE_UNPROVEN and no High Power `revoked` hold: <LEAD FILLS: span ids, their desk `stops.json` result and the time read>.",
+    "fact": "These dev-04 desks: auto stops [] and hand stops []; restore proven observed 0 and all close steps rc 0 in both spans. This is historical span evidence; current veto/halt/High Power and other spans remain fresh arm checks.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1115/ITEM-dev05-s02.md",
+    "line": 40,
+    "gate_line": "9. Line 9, across blocks in run order (RL-165 \u00a76). Expected: this span is campaign span 14, so span 12's desk, `dev-04-s02` (campaign span 12), must be FINAL. As run: this span is campaign span <LEAD FILLS: N>, and the desk of the span two back, <LEAD FILLS: SPAN ID>, is FINAL: <LEAD FILLS: the desk's stamp and where it is recorded>.",
+    "fact": "dev-04-s02: proposed Desk FINAL; 0 of 114 per-leg and 0 span-level values differ; 6/6 hand included and desk admitted; stops [] on both sides. Expected ordinal 14 reads two-back span 12; lead verifies as-run ordering and signs.",
+    "current_RL173_D_draft": true
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s01.md",
+    "line": 1,
+    "gate_line": "TBD. **Laptop lead (interactive, Opus 5.5), drafted under RL-171 by the items-rl171 builder 2026-11-15 PST (new draft; the dev-04/05 kits' builder and the Mythos dev-04/05 delta seat supply the facts), ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the FIRST span of block dev-05 (RL-158 \u00a73; RL-165 \u00a71, \u00a74; RL-171), span `dev-05-s01`, legs L001, L002, L003, L004, L005, L006, kit `cl-dev-05.v1.1` (sha256 `2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a`), runner kind `cadence-legs-v1.1`, on `2d347f721552fe03bdd19f113e7bad7a7c24908e` checked out detached in a fresh scratch worktree. One span: a fresh soak, then six legs at their cells (L001 first; consumers L002, L003, L005, L006 judge their G0 against L001's capture), decode cap 4,096, Automatic, band q0. They are counted development legs of dev-05. No other span, no queue extension, no session, no W1. EARLIEST: the close interval (RL-171 \u00a76.1) after dev-04's last span (`dev-04-s02`) closed with its fence gone and its Check reported, and not before 00:00:00 PST Wed 18 Nov (epoch 1794988800; this block's t0-date, RL-172 (a)). LAUNCH as soon as every gate holds, at any hour up to 23:59:59 PST Wed 18 Nov (LIMIT, epoch 1795075199; this block's t0-date, RL-172 (a)), except 10:50:00-13:15:00 (the pin's `fence_problems` refuses it under either argument). The batch-window argument follows the launch time (RL-171 \u00a73): `02:00-02:35` from 02:35:00 to 10:50:00 and from 13:15:00 to 18:33:10; `13:14-13:15` from 18:33:11 to 02:34:59. The launch is your LAST action and you exit at once. If you cannot, do not launch; mail the lead (the standing F0 item then applies).**",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": false
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s01.md",
+    "line": 7,
+    "gate_line": "on_early_or_refused: any failed line of \"Start and check\", any launch refusal (rc\u22600 or no claimed fence), or a launch that cannot happen inside the bands below (Wed 00:00:00 to Wed 23:59:59 PST, outside 10:50:00-13:15:00): NOTHING of this item launches; mail the lead; a later t0 needs a new item, and the standing F0 item applies meanwhile. A span that ran but ends with any named stop or a receipt rc\u22600: nothing relaunches, nothing is re-run, nothing else is queued; mail the lead. Do not retry, do not extend, do not reuse OUT",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": false
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s01.md",
+    "line": 13,
+    "gate_line": "  - dev-04's last span (`dev-04-s02`) closed and checked: <LEAD FILLS: RUN_STATE <n>: RECEIPT OK, legs run and admitted, no named stop open, restore lines clean, close epoch>.",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": false
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s01.md",
+    "line": 17,
+    "gate_line": "  - **dev-04 ran span-shaped to its end:** if dev-04's second span did not arm under the L005 gate (fewer than four of dev-03's consumers released), this item is NOT issued: dev-05 then runs own-shaped (RL-165 \u00a74).",
+    "fact": "dev-04-s02 ran cl-dev-04.v1.1 L007-L012; L008-L012 released against L007 capture (5/5). dev-04-s01 L005 released 151.9 s against L001 capture; no fallback inference needed.",
+    "current_RL173_D_draft": false
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s01.md",
+    "line": 37,
+    "gate_line": "6. No named stop, veto or halt open (the `directive` and `cadence-stop` issues; gh via `launchctl asuser`). By hand: no named stop open from any earlier span, no RESTORE_UNPROVEN and no High Power `revoked` hold: <LEAD FILLS: span ids, their desk `stops.json` result and the time read>.",
+    "fact": "These dev-04 desks: auto stops [] and hand stops []; restore proven observed 0 and all close steps rc 0 in both spans. This is historical span evidence; current veto/halt/High Power and other spans remain fresh arm checks.",
+    "current_RL173_D_draft": false
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s01.md",
+    "line": 40,
+    "gate_line": "9. Line 9, across blocks in run order (RL-165 \u00a76). Expected: this span is campaign span 13, so span 11's desk, `dev-04-s01` (campaign span 11), must be FINAL. As run: this span is campaign span <LEAD FILLS: N>, and the desk of the span two back, <LEAD FILLS: SPAN ID>, is FINAL: <LEAD FILLS: the desk's stamp and where it is recorded>.",
+    "fact": "dev-04-s01: proposed Desk FINAL; 0 of 114 per-leg and 0 span-level values differ; 6/6 hand included and desk admitted; stops [] on both sides. Expected ordinal 13 reads two-back span 11; lead verifies as-run ordering and signs.",
+    "current_RL173_D_draft": false
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s01.md",
+    "line": 55,
+    "gate_line": ": \"${PRIOR_CLOSE_EPOCH:?Set to the later of dev-04 last span (dev-04-s02) runner_receipt ended.epoch_s and the epoch its fence was seen gone}\"",
+    "fact": "dev-04-s02 receipt rc 0, 6/6 run/admitted, MEASURED_OK / COMPLETE, close 1794923463.33 (05:51:03 PST); restore observed 0, close steps rc 0; desk and hand stops []. Fence-gone epoch is lead-owned and not inferred from receipt.",
+    "current_RL173_D_draft": false
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s02.md",
+    "line": 36,
+    "gate_line": "6. No named stop, veto or halt open (the `directive` and `cadence-stop` issues; gh via `launchctl asuser`). By hand: no named stop open from any earlier span, no RESTORE_UNPROVEN and no High Power `revoked` hold: <LEAD FILLS: span ids, their desk `stops.json` result and the time read>.",
+    "fact": "These dev-04 desks: auto stops [] and hand stops []; restore proven observed 0 and all close steps rc 0 in both spans. This is historical span evidence; current veto/halt/High Power and other spans remain fresh arm checks.",
+    "current_RL173_D_draft": false
+   },
+   {
+    "draft": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-rl172/ITEM-dev05-s02.md",
+    "line": 39,
+    "gate_line": "9. Line 9, across blocks in run order (RL-165 \u00a76). Expected: this span is campaign span 14, so span 12's desk, `dev-04-s02` (campaign span 12), must be FINAL. As run: this span is campaign span <LEAD FILLS: N>, and the desk of the span two back, <LEAD FILLS: SPAN ID>, is FINAL: <LEAD FILLS: the desk's stamp and where it is recorded>.",
+    "fact": "dev-04-s02: proposed Desk FINAL; 0 of 114 per-leg and 0 span-level values differ; 6/6 hand included and desk admitted; stops [] on both sides. Expected ordinal 14 reads two-back span 12; lead verifies as-run ordering and signs.",
+    "current_RL173_D_draft": false
+   }
+  ],
+  "not_claimed": "No fresh host, fence-gone time, watcher, stop-issue, issuance/expiry or global arm approval supplied by this desk."
+ },
+ "rules_by_hand": {
+  "1_ran_to_cap": 6,
+  "2_g0_released": 6,
+  "5_not_contaminated": 6,
+  "6_power_mode_0": 6
+ },
+ "rule5_judgements": {
+  "L001": [
+   {
+    "attempt": 1,
+    "ended_epoch_s": 1794905758.261918,
+    "hand_agrees_with_record": true,
+    "hand_load": {
+     "census_present": true,
+     "coverage_ok": true,
+     "fires": false,
+     "longest_run_over_0p5_s": 2,
+     "max_cores": 2.235,
+     "max_gap_s": 1.17760687507689,
+     "required_samples": 1004.5,
+     "samples": 1121
+    },
+    "output_dir": "legs/L001/runtime",
+    "record_wall_s": 1121.6594741344452,
+    "recorded": {
+     "contaminated": false,
+     "os_load": {
+      "max_busy_cores": 2.235,
+      "max_gap_s": 1.17760687507689,
+      "seconds": 1121
+     },
+     "redo_reason": null,
+     "redone": false
+    },
+    "stage_rc": 0,
+    "stage_wall_s": 1121.6592819690704,
+    "started_epoch_s": 1794904636.602444
+   }
+  ],
+  "L002": [
+   {
+    "attempt": 1,
+    "ended_epoch_s": 1794907004.236264,
+    "hand_agrees_with_record": true,
+    "hand_load": {
+     "census_present": true,
+     "coverage_ok": true,
+     "fires": false,
+     "longest_run_over_0p5_s": 4,
+     "max_cores": 2.6510000000000002,
+     "max_gap_s": 1.3194897919893265,
+     "required_samples": 1115.8,
+     "samples": 1244
+    },
+    "output_dir": "legs/L002/runtime",
+    "record_wall_s": 1245.3228330612183,
+    "recorded": {
+     "contaminated": false,
+     "os_load": {
+      "max_busy_cores": 2.6510000000000002,
+      "max_gap_s": 1.3194897919893265,
+      "seconds": 1244
+     },
+     "redo_reason": null,
+     "redone": false
+    },
+    "stage_rc": 0,
+    "stage_wall_s": 1245.32261967659,
+    "started_epoch_s": 1794905758.913431
+   }
+  ],
+  "L003": [
+   {
+    "attempt": 1,
+    "ended_epoch_s": 1794907982.122463,
+    "hand_agrees_with_record": true,
+    "hand_load": {
+     "census_present": true,
+     "coverage_ok": true,
+     "fires": false,
+     "longest_run_over_0p5_s": 18,
+     "max_cores": 1.361,
+     "max_gap_s": 1.4338878747075796,
+     "required_samples": 874.5,
+     "samples": 976
+    },
+    "output_dir": "legs/L003/runtime",
+    "record_wall_s": 977.2363457679749,
+    "recorded": {
+     "contaminated": false,
+     "os_load": {
+      "max_busy_cores": 1.361,
+      "max_gap_s": 1.4338878747075796,
+      "seconds": 976
+     },
+     "redo_reason": null,
+     "redone": false
+    },
+    "stage_rc": 0,
+    "stage_wall_s": 977.236170053482,
+    "started_epoch_s": 1794907004.8861172
+   }
+  ],
+  "L004": [
+   {
+    "attempt": 1,
+    "ended_epoch_s": 1794909137.748857,
+    "hand_agrees_with_record": true,
+    "hand_load": {
+     "census_present": true,
+     "coverage_ok": true,
+     "fires": false,
+     "longest_run_over_0p5_s": 1,
+     "max_cores": 1.849,
+     "max_gap_s": 1.3388033327646554,
+     "required_samples": 1034.5,
+     "samples": 1154
+    },
+    "output_dir": "legs/L004/runtime",
+    "record_wall_s": 1154.966777086258,
+    "recorded": {
+     "contaminated": false,
+     "os_load": {
+      "max_busy_cores": 1.849,
+      "max_gap_s": 1.3388033327646554,
+      "seconds": 1154
+     },
+     "redo_reason": null,
+     "redone": false
+    },
+    "stage_rc": 0,
+    "stage_wall_s": 1154.9665579795837,
+    "started_epoch_s": 1794907982.78208
+   }
+  ],
+  "L005": [
+   {
+    "attempt": 1,
+    "ended_epoch_s": 1794910119.1665769,
+    "hand_agrees_with_record": true,
+    "hand_load": {
+     "census_present": true,
+     "coverage_ok": true,
+     "fires": false,
+     "longest_run_over_0p5_s": 1,
+     "max_cores": 1.7990000000000002,
+     "max_gap_s": 1.4086873340420425,
+     "required_samples": 877.7,
+     "samples": 980
+    },
+    "output_dir": "legs/L005/runtime",
+    "record_wall_s": 980.7648646831512,
+    "recorded": {
+     "contaminated": false,
+     "os_load": {
+      "max_busy_cores": 1.7990000000000002,
+      "max_gap_s": 1.4086873340420425,
+      "seconds": 980
+     },
+     "redo_reason": null,
+     "redone": false
+    },
+    "stage_rc": 0,
+    "stage_wall_s": 980.7646877765656,
+    "started_epoch_s": 1794909138.4017122
+   }
+  ],
+  "L006": [
+   {
+    "attempt": 1,
+    "ended_epoch_s": 1794911375.934269,
+    "hand_agrees_with_record": true,
+    "hand_load": {
+     "census_present": true,
+     "coverage_ok": true,
+     "fires": true,
+     "longest_run_over_0p5_s": 232,
+     "max_cores": 3.638,
+     "max_gap_s": 1.1572136250324547,
+     "required_samples": 1125.5,
+     "samples": 1255
+    },
+    "output_dir": "legs/L006/runtime.rejected1",
+    "record_wall_s": 1256.1156198978424,
+    "recorded": {
+     "contaminated": true,
+     "os_load": {
+      "max_busy_cores": 3.638,
+      "max_gap_s": 1.1572136250324547,
+      "seconds": 1255
+     },
+     "redo_reason": "cpu_load",
+     "redone": true
+    },
+    "stage_rc": 0,
+    "stage_wall_s": 1256.1154577732086,
+    "started_epoch_s": 1794910119.818649
+   },
+   {
+    "attempt": 2,
+    "ended_epoch_s": 1794912642.698981,
+    "hand_agrees_with_record": true,
+    "hand_load": {
+     "census_present": true,
+     "coverage_ok": true,
+     "fires": false,
+     "longest_run_over_0p5_s": 32,
+     "max_cores": 2.58,
+     "max_gap_s": 1.197606417350471,
+     "required_samples": 1134.5,
+     "samples": 1265
+    },
+    "output_dir": "legs/L006/runtime",
+    "record_wall_s": 1266.0793859958649,
+    "recorded": {
+     "contaminated": false,
+     "os_load": {
+      "max_busy_cores": 2.58,
+      "max_gap_s": 1.197606417350471,
+      "seconds": 1265
+     },
+     "redo_reason": null,
+     "redone": false
+    },
+    "stage_rc": 0,
+    "stage_wall_s": 1266.079031944275,
+    "started_epoch_s": 1794911376.619595
+   }
+  ]
+ },
+ "restore": {
+  "argv": [
+   "sudo",
+   "-n",
+   "/usr/bin/pmset",
+   "-c",
+   "powermode",
+   "0"
+  ],
+  "exit_code": 0,
+  "marker": null,
+  "marker_removed": false,
+  "observed": 0,
+  "ok": true,
+  "rc": 0,
+  "stderr": ""
+ },
+ "restore_proven_hand": true,
+ "close_steps_rc": {
+  "close-volumes": 0,
+  "restore": 0,
+  "stop-agents": 0,
+  "stop-meter": 0,
+  "stop-volumes": 0
+ },
+ "read_power_step_before_soak": {
+  "ac_powermode": 0,
+  "automatic": true,
+  "rc": 0
+ },
+ "LEG_OVERTIME": "no",
+ "LEG_OVERTIME_detail": {
+  "walls_and_ratios": [
+   [
+    "L001",
+    1121.7,
+    0.9703
+   ],
+   [
+    "L002",
+    1245.3,
+    0.9955
+   ],
+   [
+    "L003",
+    977.2,
+    0.9082
+   ],
+   [
+    "L004",
+    1155.0,
+    0.9991
+   ],
+   [
+    "L005",
+    980.8,
+    0.6686
+   ],
+   [
+    "L006",
+    1266.1,
+    1.0121
+   ]
+  ],
+  "factor": 1.5,
+  "over_factor": 0,
+  "stop_needs": 2
+ },
+ "RL150_R1_part3_print": {
+  "soak_reference_line": "soak_reference {'TV0h': 34.15174111041499, 'TV1h': 34.15174111041499} Tf08_last1200s_mean 26.811260941225125",
+  "L001": {
+   "g0": {
+    "duration_s": 201.032353521,
+    "outcome": "released",
+    "release": {
+     "TV0h": 34.84083557128906,
+     "TV1h": 34.84083557128906,
+     "Tf08": 34.444374084472656
+    },
+    "row_reference": {
+     "fast_c": 34.18779182434082,
+     "slow_c": 34.18779182434082,
+     "source_member": "cadence-cl-dev-04-l001",
+     "span_ns": [
+      2889326298060625,
+      2889386298060625
+     ]
+    },
+    "row_release": {
+     "fast_c": 34.84083557128906,
+     "slow_c": 34.84083557128906
+    }
+   },
+   "g0_reference_equals_L001_capture": true,
+   "own_reference": {
+    "TV0h": 34.18779182434082,
+    "TV1h": 34.18779182434082,
+    "Tf08_median": 27.30109405517578,
+    "status": "captured"
+   },
+   "own_reference_file": "present"
+  },
+  "L002": {
+   "g0": {
+    "duration_s": 202.015922312,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.075401306152344,
+     "TV1h": 35.075401306152344,
+     "Tf08": 36.58281326293945
+    },
+    "row_reference": {
+     "fast_c": 34.71293640136719,
+     "slow_c": 34.71293640136719,
+     "source_member": "cadence-cl-dev-04-l002",
+     "span_ns": [
+      2890448933156833,
+      2890508933156833
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.075401306152344,
+     "slow_c": 35.075401306152344
+    }
+   },
+   "g0_reference_equals_L001_capture": false,
+   "own_reference": {
+    "TV0h": 34.71293640136719,
+    "TV1h": 34.71293640136719,
+    "Tf08_median": 32.772499084472656,
+    "status": "captured"
+   },
+   "own_reference_file": "present"
+  },
+  "L003": {
+   "g0": {
+    "duration_s": 145.730840022,
+    "outcome": "released",
+    "release": {
+     "TV0h": 34.89237976074219,
+     "TV1h": 34.89237976074219,
+     "Tf08": 34.65156173706055
+    },
+    "row_reference": {
+     "fast_c": 34.749332427978516,
+     "slow_c": 34.749332427978516,
+     "source_member": "cadence-cl-dev-04-l003",
+     "span_ns": [
+      2891697134434854,
+      2891757134434854
+     ]
+    },
+    "row_release": {
+     "fast_c": 34.89237976074219,
+     "slow_c": 34.89237976074219
+    }
+   },
+   "g0_reference_equals_L001_capture": false,
+   "own_reference": {
+    "TV0h": 34.749332427978516,
+    "TV1h": 34.749332427978516,
+    "Tf08_median": 33.14906311035156,
+    "status": "captured"
+   },
+   "own_reference_file": "present"
+  },
+  "L004": {
+   "g0": {
+    "duration_s": 221.345054521,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.07530212402344,
+     "TV1h": 35.07530212402344,
+     "Tf08": 36.50374984741211
+    },
+    "row_reference": {
+     "fast_c": 34.7921085357666,
+     "slow_c": 34.7921085357666,
+     "source_member": "cadence-cl-dev-04-l004",
+     "span_ns": [
+      2892675159440604,
+      2892735159440604
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.07530212402344,
+     "slow_c": 35.07530212402344
+    }
+   },
+   "g0_reference_equals_L001_capture": false,
+   "own_reference": {
+    "TV0h": 34.7921085357666,
+    "TV1h": 34.7921085357666,
+    "Tf08_median": 33.487342834472656,
+    "status": "captured"
+   },
+   "own_reference_file": "present"
+  },
+  "L005": {
+   "g0": {
+    "duration_s": 151.901538395,
+    "outcome": "released",
+    "release": {
+     "TV0h": 34.932769775390625,
+     "TV1h": 34.932769775390625,
+     "Tf08": 35.2009391784668
+    },
+    "row_reference": {
+     "fast_c": 34.18779182434082,
+     "slow_c": 34.18779182434082,
+     "source_member": "cadence-cl-dev-04-l001",
+     "span_ns": [
+      2889326298060625,
+      2889386298060625
+     ]
+    },
+    "row_release": {
+     "fast_c": 34.932769775390625,
+     "slow_c": 34.932769775390625
+    }
+   },
+   "g0_reference_equals_L001_capture": true,
+   "own_reference": null,
+   "own_reference_file": "absent (consumer leg, v1.1)"
+  },
+  "L006": {
+   "g0": {
+    "duration_s": 215.267762041,
+    "outcome": "released",
+    "release": {
+     "TV0h": 35.09354782104492,
+     "TV1h": 35.09354782104492,
+     "Tf08": 36.62937545776367
+    },
+    "row_reference": {
+     "fast_c": 34.84598350524902,
+     "slow_c": 34.84598350524902,
+     "source_member": "cadence-cl-dev-04-l006",
+     "span_ns": [
+      2896066754780708,
+      2896126754780708
+     ]
+    },
+    "row_release": {
+     "fast_c": 35.09354782104492,
+     "slow_c": 35.09354782104492
+    }
+   },
+   "g0_reference_equals_L001_capture": false,
+   "own_reference": {
+    "TV0h": 34.84598350524902,
+    "TV1h": 34.84598350524902,
+    "Tf08_median": 34.06374931335449,
+    "status": "captured"
+   },
+   "own_reference_file": "present"
+  }
+ },
+ "RL158_Q1": {
+  "print": "hand/r1print.out (thermal-only print)",
+  "soak_reference_line": "soak_reference {'TV0h': 34.15174111041499, 'TV1h': 34.15174111041499} Tf08_last1200s_mean 26.811260941225125",
+  "L001_capture": {
+   "TV0h": 34.18779182434082,
+   "TV1h": 34.18779182434082,
+   "Tf08_median": 27.30109405517578,
+   "status": "captured"
+  },
+  "consumer_release_readings": {
+   "L005": {
+    "TV0h": 34.932769775390625,
+    "TV1h": 34.932769775390625,
+    "Tf08": 35.2009391784668
+   }
+  },
+  "g0_wait_s": {
+   "L001": 201.0,
+   "L002": 202.0,
+   "L003": 145.7,
+   "L004": 221.3,
+   "L005": 151.9,
+   "L006": 215.3
+  },
+  "marks": "none: L001 ran one attempt, was not redone and not excluded; no reference-from-redo or reference-from-excluded-leg mark",
+  "completion_record": "docs/research-audits/2026-11-10-fable/evidence/cadence-standing/q1/cq-dev-04-s01-a1.json"
+ },
+ "RL158_Q5_prefill_deviation": {
+  "L001": {
+   "nominal": 10000,
+   "realized": 10015,
+   "pct": 0.15
+  },
+  "L002": {
+   "nominal": 19458,
+   "realized": 19458,
+   "pct": 0.0
+  },
+  "L003": {
+   "nominal": 2000,
+   "realized": 2024,
+   "pct": 1.2
+  },
+  "L004": {
+   "nominal": 10000,
+   "realized": 10015,
+   "pct": 0.15
+  },
+  "L005": {
+   "nominal": 2000,
+   "realized": 2024,
+   "pct": 1.2
+  },
+  "L006": {
+   "nominal": 19458,
+   "realized": 19458,
+   "pct": 0.0
+  }
+ },
+ "RL158_Q6_consumers": "6 of 6 consumers released over dev-04: L005, L008, L009, L010, L011, L012",
+ "RL156a": {
+  "thermal_sampler": {
+   "L001": {
+    "cells": 1100,
+    "reads": 1101,
+    "read_errors": 0,
+    "empty_cells_tol": [],
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.038,
+    "g0_has_start_ns": true,
+    "cov_reported": {
+     "max_consecutive_empty_cells": 0,
+     "valid_samples": 1100,
+     "expected_samples": 1100
+    }
+   },
+   "L002": {
+    "cells": 1221,
+    "reads": 1222,
+    "read_errors": 0,
+    "empty_cells_tol": [
+     [
+      1173,
+      "post-turn",
+      135.2
+     ],
+     [
+      1185,
+      "post-turn",
+      101.0
+     ],
+     [
+      1189,
+      "post-turn",
+      108.6
+     ],
+     [
+      1213,
+      "post-turn",
+      167.5
+     ]
+    ],
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.131,
+    "g0_has_start_ns": true,
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1217,
+     "expected_samples": 1221
+    }
+   },
+   "L003": {
+    "cells": 957,
+    "reads": 958,
+    "read_errors": 0,
+    "empty_cells_tol": [
+     [
+      919,
+      "post-turn",
+      101.3
+     ],
+     [
+      940,
+      "post-turn",
+      180.9
+     ]
+    ],
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.144,
+    "g0_has_start_ns": true,
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 955,
+     "expected_samples": 957
+    }
+   },
+   "L004": {
+    "cells": 1130,
+    "reads": 1131,
+    "read_errors": 0,
+    "empty_cells_tol": [
+     [
+      1084,
+      "post-turn",
+      108.3
+     ],
+     [
+      1095,
+      "post-turn",
+      125.7
+     ],
+     [
+      1120,
+      "post-turn",
+      109.4
+     ]
+    ],
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.089,
+    "g0_has_start_ns": true,
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1127,
+     "expected_samples": 1130
+    }
+   },
+   "L005": {
+    "cells": 961,
+    "reads": 962,
+    "read_errors": 0,
+    "empty_cells_tol": [
+     [
+      924,
+      "post-turn",
+      159.5
+     ],
+     [
+      933,
+      "post-turn",
+      102.0
+     ],
+     [
+      944,
+      "post-turn",
+      122.1
+     ],
+     [
+      952,
+      "post-turn",
+      101.0
+     ]
+    ],
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.123,
+    "g0_has_start_ns": true,
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 957,
+     "expected_samples": 961
+    }
+   },
+   "L006": {
+    "cells": 1238,
+    "reads": 1239,
+    "read_errors": 0,
+    "empty_cells_tol": [
+     [
+      2,
+      "pre-G0",
+      104.5
+     ]
+    ],
+    "cells_with_no_reading_at_all": [],
+    "max_interval_s": 1.094,
+    "g0_has_start_ns": true,
+    "cov_reported": {
+     "max_consecutive_empty_cells": 1,
+     "valid_samples": 1237,
+     "expected_samples": 1238
+    }
+   }
+  },
+  "thermal_note": "0 read errors; 0 cells with no reading at all; max interval 1.144 s; 100 ms tolerance jitter cells retained as template prints, no new bar",
+  "load_sampler": {
+   "L001": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 2.235,
+    "max_gap_s": 1.17760687507689,
+    "required_samples": 1004.5,
+    "samples": 1121
+   },
+   "L002": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 4,
+    "max_cores": 2.6510000000000002,
+    "max_gap_s": 1.3194897919893265,
+    "required_samples": 1115.8,
+    "samples": 1244
+   },
+   "L003": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 18,
+    "max_cores": 1.361,
+    "max_gap_s": 1.4338878747075796,
+    "required_samples": 874.5,
+    "samples": 976
+   },
+   "L004": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 1,
+    "max_cores": 1.849,
+    "max_gap_s": 1.3388033327646554,
+    "required_samples": 1034.5,
+    "samples": 1154
+   },
+   "L005": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 1,
+    "max_cores": 1.7990000000000002,
+    "max_gap_s": 1.4086873340420425,
+    "required_samples": 877.7,
+    "samples": 980
+   },
+   "L006": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 32,
+    "max_cores": 2.58,
+    "max_gap_s": 1.197606417350471,
+    "required_samples": 1134.5,
+    "samples": 1265
+   }
+  },
+  "inventory": "not exercised: cadence-leg kind does not run R1 ProcessInventory journal"
+ },
+ "os_level_census": {
+  "L001": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     206.9,
+     378.9
+    ],
+    "os_level": {
+     "0": 206,
+     "1": 6,
+     "2": 167
+    },
+    "pm_state": {
+     "Heavy": 167,
+     "Moderate": 6,
+     "Nominal": 206
+    },
+    "readings": 379
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     206.9,
+     425.9
+    ],
+    "os_level": {
+     "0": 876,
+     "1": 22,
+     "2": 203
+    },
+    "pm_state": {
+     "Heavy": 214,
+     "Moderate": 6,
+     "Nominal": 408,
+     "None": 473
+    },
+    "readings": 1101
+   }
+  },
+  "L002": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     166.2,
+     440.2
+    ],
+    "os_level": {
+     "0": 165,
+     "1": 44,
+     "2": 232
+    },
+    "pm_state": {
+     "Heavy": 231,
+     "Moderate": 44,
+     "Nominal": 166
+    },
+    "readings": 441
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     166.2,
+     493.3
+    ],
+    "os_level": {
+     "0": 895,
+     "1": 62,
+     "2": 265
+    },
+    "pm_state": {
+     "Heavy": 284,
+     "Moderate": 44,
+     "Nominal": 369,
+     "None": 525
+    },
+    "readings": 1222
+   }
+  },
+  "L003": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     161.6,
+     332.6
+    ],
+    "os_level": {
+     "0": 161,
+     "1": 44,
+     "2": 128
+    },
+    "pm_state": {
+     "Heavy": 128,
+     "Moderate": 44,
+     "Nominal": 161
+    },
+    "readings": 333
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     161.6,
+     372.6
+    ],
+    "os_level": {
+     "0": 738,
+     "1": 48,
+     "2": 172
+    },
+    "pm_state": {
+     "Heavy": 168,
+     "Moderate": 44,
+     "Nominal": 308,
+     "None": 438
+    },
+    "readings": 958
+   }
+  },
+  "L004": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     182.8,
+     380.8
+    ],
+    "os_level": {
+     "0": 182,
+     "1": 2,
+     "2": 197
+    },
+    "pm_state": {
+     "Heavy": 197,
+     "Moderate": 2,
+     "Nominal": 182
+    },
+    "readings": 381
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     182.8,
+     431.8
+    ],
+    "os_level": {
+     "0": 874,
+     "1": 14,
+     "2": 243
+    },
+    "pm_state": {
+     "Heavy": 248,
+     "Moderate": 2,
+     "Nominal": 404,
+     "None": 477
+    },
+    "readings": 1131
+   }
+  },
+  "L005": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     156.9,
+     332.9
+    ],
+    "os_level": {
+     "0": 156,
+     "1": 60,
+     "2": 117
+    },
+    "pm_state": {
+     "Heavy": 117,
+     "Moderate": 60,
+     "Nominal": 156
+    },
+    "readings": 333
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     156.9,
+     371.9
+    ],
+    "os_level": {
+     "0": 738,
+     "1": 70,
+     "2": 154
+    },
+    "pm_state": {
+     "Heavy": 156,
+     "Moderate": 60,
+     "Nominal": 309,
+     "None": 437
+    },
+    "readings": 962
+   }
+  },
+  "L006": {
+   "turn": {
+    "non_nominal_from_turn_start_s": [
+     173.7,
+     439.7
+    ],
+    "os_level": {
+     "0": 173,
+     "1": 51,
+     "2": 216
+    },
+    "pm_state": {
+     "Heavy": 216,
+     "Moderate": 51,
+     "Nominal": 173
+    },
+    "readings": 440
+   },
+   "whole_leg": {
+    "non_nominal_from_turn_start_s": [
+     173.7,
+     497.7
+    ],
+    "os_level": {
+     "0": 914,
+     "1": 67,
+     "2": 258
+    },
+    "pm_state": {
+     "Heavy": 274,
+     "Moderate": 51,
+     "Nominal": 389,
+     "None": 525
+    },
+    "readings": 1239
+   }
+  }
+ },
+ "rule5_placement": {
+  "L001": {
+   "attempt": 1,
+   "runs_ge_3s": []
+  },
+  "L002": {
+   "attempt": 1,
+   "runs_ge_3s": [
+    {
+     "len_samples": 4,
+     "t_s": [
+      782.1,
+      785.1
+     ],
+     "pst": [
+      "01:09:00",
+      "01:09:03"
+     ],
+     "max_cores": 1.19
+    }
+   ]
+  },
+  "L003": {
+   "attempt": 1,
+   "runs_ge_3s": [
+    {
+     "len_samples": 18,
+     "t_s": [
+      282.1,
+      299.1
+     ],
+     "pst": [
+      "01:21:26",
+      "01:21:43"
+     ],
+     "max_cores": 1.26
+    }
+   ]
+  },
+  "L004": {
+   "attempt": 1,
+   "runs_ge_3s": []
+  },
+  "L005": {
+   "attempt": 1,
+   "runs_ge_3s": []
+  },
+  "L006": {
+   "attempt": 2,
+   "runs_ge_3s": [
+    {
+     "len_samples": 32,
+     "t_s": [
+      388.1,
+      419.1
+     ],
+     "pst": [
+      "02:36:04",
+      "02:36:35"
+     ],
+     "max_cores": 2.58
+    },
+    {
+     "len_samples": 16,
+     "t_s": [
+      457.1,
+      472.1
+     ],
+     "pst": [
+      "02:37:13",
+      "02:37:28"
+     ],
+     "max_cores": 1.425
+    },
+    {
+     "len_samples": 3,
+     "t_s": [
+      776.1,
+      778.1
+     ],
+     "pst": [
+      "02:42:32",
+      "02:42:34"
+     ],
+     "max_cores": 1.05
+    }
+   ]
+  }
+ },
+ "maintenance_overlap": "MAINTENANCE-OVERLAP.md (RL-171 section 5; print only, gates nothing). Judged by the template's rule 5: >0.5 core held 60 seconds (consecutive journal samples); no_drop_by_outcome, no log-count exclusion.\nL003.a1: mobileassetd 3,651 entries at 01:21:26-01:21:44, wholly pre-G0 (01:16:44-01:23:56), before G0 01:23:56-01:26:21 and turn 01:26:21-01:31:55. Longest >0.5-core run 18 samples, 01:21:26-01:21:43 (282.1-299.1 s; run max 1.260 cores, attempt max 1.361); does not fire.\nL006.a1: rejected cpu_load attempt 02:08:39-02:29:35, OS batch across pre-G0 02:08:39-02:17:24, G0 02:17:24-02:20:50, and after-G0 (turn+post) 02:20:50-02:29:35. Template does not open rejected attempt turn stamps, so exact rejected turn boundaries are not claimed. Attempt totals: dasd 7,384, mobileassetd 3,377, XProtect* 794, mds 71, softwareupdated 9, backupd 6. The 02:08-02:24 named burst sits within this rejected attempt (mobileassetd main activity begins 02:08:49; XProtect starts 02:11:03, ends 02:22:18). Longest >0.5-core run 232 consecutive samples, 587.1-818.1 s into attempt, 02:18:26-02:22:17 PST; run max 2.571 cores, attempt max 3.638. This run crosses G0 into after-G0; 232 >= 60: RULE 5 FIRES. Several other runs also fire (122, 131, 99 samples). Recorded contaminated true, redone true, redo_reason cpu_load; hand agrees. Redo correct, 1 of quota 2; a1 is not counted.\nL006.a2: admitted 02:29:36-02:50:42; pre-G0 02:29:36-02:38:15, G0 02:38:15-02:41:50, turn 02:41:50-02:49:10. mobileassetd 379 entries in minute 02:46 (from 02:46:56) plus 18 in 02:47 (last 02:47:26), wholly inside turn (397 turn entries, plus 1 pre-G0). Longest >0.5-core run 32 samples 02:36:04-02:36:35, pre-G0, max 2.580 cores; other runs 16 and 3 samples, none reaches 60. Recorded clean; hand agrees; no further redo owed.\nAll counted attempts pass rule 5: L001 2, L002 4, L003 18, L004 1, L005 1, L006.a2 32 samples of 60; all load journals cover their attempts. No leg excluded, none refilled. Checks item 380 agrees: bursts are inside the named attempts; finer phase placement is recorded here.",
+ "span_level": {
+  "rc": 0,
+  "mock": false,
+  "batch_windows": [
+   "13:14-13:15"
+  ],
+  "soak_rc": 0,
+  "agent_census": {
+   "argv": [
+    "/usr/bin/pgrep",
+    "-a",
+    "-lf",
+    "[c]odex|[c]laude"
+   ],
+   "first_after_start_s": 0.06571175,
+   "hits": 0,
+   "last_before_end_s": 30.472796792,
+   "max_gap_s": 30.165182542,
+   "polls": 336
+  },
+  "deadlines_files": [],
+  "load_redos_used": 1,
+  "feeds_proven_stopped": {
+   "agents": true,
+   "meter": true,
+   "volumes": true
+  },
+  "meter": {
+   "bad_polls": 0,
+   "elapsed_s": 10109.807637541,
+   "polls": 50549,
+   "present": true,
+   "proven_stopped": true,
+   "usb_errors": 0
+  },
+  "stages_unclosed": [],
+  "stages_end_rc_nonzero": [],
+  "steps_nonzero": [],
+  "n_steps": 33,
+  "legs_finished": 6,
+  "legs_planned": 6
+ },
+ "span_level_extra": {
+  "soak_s": 1800.4,
+  "volume_census": "10/10 PASS",
+  "redo_quota_kit": 2
+ },
+ "time_calendar_only": {
+  "receipt_started_epoch_s": 1794902532.69898,
+  "receipt_ended_epoch_s": 1794912643.424489,
+  "runner_span_s": 10110.7,
+  "mean_leg_wall_s": 1124.4
+ },
+ "check_agreement": {
+  "check_item": 380,
+  "rounding_note": "Compare only at the Check printed precision; no tolerance added to desk-vs-hand comparison",
+  "checks": {
+   "legs_run_and_admitted": true,
+   "g0_released": true,
+   "named_consumer_waits_1dp": true,
+   "redos": true,
+   "max_wall_budget_3dp": true,
+   "restore": true,
+   "receipt_MEASURED_OK_COMPLETE": true
+  },
+  "disagreements": [],
+  "notes": [
+   "L001 shape discrepancy is with brief, not item 380."
+  ]
+ },
+ "findings": [
+  {
+   "id": "F1",
+   "text": "Brief calls L001 span-shaped. Kit, leg_record spec/result and desk all say own; L001 captures the span reference and L005 consumes it. No inclusion or printed number is changed."
+  }
+ ],
+ "decisions_I_made": [
+  "Use L001 accepted attempt 1 as this span reference, as the kit/data and template first-leg rule determine; source cadence-cl-dev-04-l001.",
+  "Use kit/data shapes and roles; L001 and L007 are own-shaped captures, L005 and L008-L012 consume their respective span reference.",
+  "Keep hand_table.py numerical comparisons unchanged; no new tolerance or bar.",
+  "Judge maintenance by rule 5 load-journal sustained runs, not log counts; retain kit no_drop_by_outcome.",
+  "Keep all scratch including kit, lock and TMPDIR under .desk-scratch; pass --kit and an explicit scratch lock to pinned desk code.",
+  "Use dev-05 drafts in item-drafts-1115 (RL-173 D); item-drafts-1118 contains qualification drafts. List nearby item-drafts-rl172 equivalents; do not edit or issue items.",
+  "Earlier dev-02-s03 REPORT.md is absent at 4a53c34a4 and audit ref; use its committed RESULT.json, OPENED.txt, maint_judgement.txt and rule5_place_a1.py for the redo method.",
+  "L006 a1 fires by hand and was correctly redone once; count L006 a2 (clean) within quota 2; no refill or further redo."
+ ],
+ "NEEDS_RULING": [],
+ "rule5_placement_a1": {
+  "L006": {
+   "attempt": 1,
+   "runs_ge_3s": [
+    {
+     "len_samples": 3,
+     "t_s": [
+      61.1,
+      63.1
+     ],
+     "pst": [
+      "02:09:40",
+      "02:09:42"
+     ],
+     "max_cores": 3.638
+    },
+    {
+     "len_samples": 20,
+     "t_s": [
+      95.1,
+      114.1
+     ],
+     "pst": [
+      "02:10:14",
+      "02:10:33"
+     ],
+     "max_cores": 3.383
+    },
+    {
+     "len_samples": 4,
+     "t_s": [
+      128.1,
+      131.1
+     ],
+     "pst": [
+      "02:10:47",
+      "02:10:50"
+     ],
+     "max_cores": 1.185
+    },
+    {
+     "len_samples": 122,
+     "t_s": [
+      144.1,
+      265.1
+     ],
+     "pst": [
+      "02:11:03",
+      "02:13:04"
+     ],
+     "max_cores": 2.91
+    },
+    {
+     "len_samples": 31,
+     "t_s": [
+      267.1,
+      297.1
+     ],
+     "pst": [
+      "02:13:06",
+      "02:13:36"
+     ],
+     "max_cores": 2.162
+    },
+    {
+     "len_samples": 131,
+     "t_s": [
+      301.1,
+      431.1
+     ],
+     "pst": [
+      "02:13:40",
+      "02:15:50"
+     ],
+     "max_cores": 3.086
+    },
+    {
+     "len_samples": 24,
+     "t_s": [
+      433.1,
+      456.1
+     ],
+     "pst": [
+      "02:15:52",
+      "02:16:15"
+     ],
+     "max_cores": 1.106
+    },
+    {
+     "len_samples": 99,
+     "t_s": [
+      459.1,
+      557.1
+     ],
+     "pst": [
+      "02:16:18",
+      "02:17:56"
+     ],
+     "max_cores": 2.211
+    },
+    {
+     "len_samples": 27,
+     "t_s": [
+      559.1,
+      585.1
+     ],
+     "pst": [
+      "02:17:58",
+      "02:18:24"
+     ],
+     "max_cores": 2.049
+    },
+    {
+     "len_samples": 232,
+     "t_s": [
+      587.1,
+      818.1
+     ],
+     "pst": [
+      "02:18:26",
+      "02:22:17"
+     ],
+     "max_cores": 2.571
+    }
+   ]
+  }
+ }
+}

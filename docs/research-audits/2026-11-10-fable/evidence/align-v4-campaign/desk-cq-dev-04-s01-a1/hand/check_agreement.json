@@ -1,0 +1,17 @@
+{
+ "check_item": 380,
+ "rounding_note": "Compare only at the Check printed precision; no tolerance added to desk-vs-hand comparison",
+ "checks": {
+  "legs_run_and_admitted": true,
+  "g0_released": true,
+  "named_consumer_waits_1dp": true,
+  "redos": true,
+  "max_wall_budget_3dp": true,
+  "restore": true,
+  "receipt_MEASURED_OK_COMPLETE": true
+ },
+ "disagreements": [],
+ "notes": [
+  "L001 shape discrepancy is with brief, not item 380."
+ ]
+}
