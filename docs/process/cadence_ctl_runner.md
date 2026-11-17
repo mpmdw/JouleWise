@@ -20,8 +20,8 @@ This is class A, not evidence of native hardware validation.
 
 The kit supplies each script's physical decode caps, unlogged decode cap,
 one-core CPU seconds, split gaps, and sampled recovery seconds. Caps are exact:
-an early model return refuses that attempt rather than reporting an intended
-dose as a delivered dose. CPU work uses one thread in the leg process, bounded
+an early model return records the delivered dose and leaves the leg unadmitted;
+the remaining span continues (RL-149 §2.4). CPU work uses one thread in the leg process, bounded
 by wall time; tests advance synthetic time. No worker process needs signalling.
 
 Each leg has one G0, then its q0 history and its script, with one resident model

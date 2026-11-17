@@ -12,8 +12,6 @@ from contextlib import contextmanager
 from dataclasses import replace
 import hashlib
 import json
-import math
-from pathlib import Path
 import time
 
 from joulewise.align.apple import cadence_leg, r1_runtime as rt
@@ -45,27 +43,30 @@ def endpoint_class(base, script, audit, *, synthetic):
             return monotonic_ns(self.clock.stamp())
 
         def interval(self, kind, seconds):
-            start = self.stamp()
-            epoch = self.clock.stamp().epoch_s
-            if kind == "cpu":
-                cpu_burn(self.clock, seconds, synthetic=synthetic)
-            else:
-                self.clock.sleep(seconds)
-            audit["steps"].append({"kind": kind, "started_ns": start, "ended_ns": self.stamp(),
-                                   "started_epoch_s": epoch, "ended_epoch_s": self.clock.stamp().epoch_s,
-                                   "requested_s": seconds})
+            row = {"kind": kind, "started_ns": self.stamp(), "started_epoch_s": self.clock.stamp().epoch_s,
+                   "requested_s": seconds, "complete": False}
+            audit["steps"].append(row)
+            try:
+                if kind == "cpu":
+                    cpu_burn(self.clock, seconds, synthetic=synthetic)
+                else:
+                    self.clock.sleep(seconds)
+                row["complete"] = True
+            finally:
+                row.update(ended_ns=self.stamp(), ended_epoch_s=self.clock.stamp().epoch_s)
 
         def physical_call(self, endpoint, messages, kwargs, tokens, *, logged):
-            start = self.stamp()
-            result = base.chat(endpoint, messages, **{**kwargs, "max_tokens": tokens})
-            audit["steps"].append({"kind": "turn" if logged else "hidden", "started_ns": start,
-                                   "ended_ns": self.stamp(), "requested_tokens": tokens,
-                                   "actual_tokens": result.completion_tokens,
-                                   "first_token_ns": result.first_token_ns})
-            if result.completion_tokens != tokens:
-                raise rt.RuntimeFailure("scripted call did not reach its exact token dose")
+            row = {"kind": "turn" if logged else "hidden", "started_ns": self.stamp(),
+                   "requested_tokens": tokens, "actual_tokens": None, "complete": False}
+            audit["steps"].append(row)
+            try:
+                result = base.chat(endpoint, messages, **{**kwargs, "max_tokens": tokens})
+                row.update(actual_tokens=result.completion_tokens, first_token_ns=result.first_token_ns)
+            finally:
+                row["ended_ns"] = self.stamp()
             if result.tool_calls:
                 raise rt.RuntimeFailure("scripted step unexpectedly returned a tool call")
+            row["complete"] = result.completion_tokens == tokens
             return result
 
         def chat(self, messages, **kwargs):
@@ -85,7 +86,7 @@ def endpoint_class(base, script, audit, *, synthetic):
                 visible.append(self.physical_call(self, messages, kwargs, tokens, logged=True))
             # The model and the member's rail sampler are still alive here. No new session is opened.
             self.interval("recovery", script["recovery_s"])
-            audit["complete"] = True
+            audit["complete"] = all(row["complete"] for row in audit["steps"])
             first, last = visible[0], visible[-1]
             return replace(last, start_ns=first.start_ns, first_token_ns=first.first_token_ns,
                            prompt_tokens=sum(r.prompt_tokens for r in visible),
@@ -111,14 +112,14 @@ def scripted_endpoint(script, audit, *, synthetic):
 class CtlSegment(cadence_leg.CadenceLegSegment):
     def k_cadence_leg(self):
         # The inherited turn deadman covers the entire script, including sampled recovery.
-        seconds, calls = ctl.script_seconds(self.leg["script"], legs.TIME_MODEL)
-        post_g0 = math.ceil(seconds + calls*self.leg["prefill_tokens"]*legs.TIME_MODEL["prefill_s_per_token"] + 60)
+        post_g0 = ctl.post_g0_budget_s(self.leg, legs.TIME_MODEL)
         self.config = {**self.config, "step": {**self.config["step"], "deadman_s": post_g0}}
         result = super().k_cadence_leg()
         raw = (self.out / AUDIT_NAME).read_bytes()
         audit = json.loads(raw)
         if result["g0_released"] and not audit["complete"]:
-            raise rt.RuntimeFailure("incomplete control script")
+            result.update(leg_status="incomplete", decode_cap_reached=False,
+                          incomplete_reasons=[*result["incomplete_reasons"], "script_dose_short"])
         return {**result, "script_complete": audit["complete"],
                 "script_record_sha256": hashlib.sha256(raw).hexdigest()}
 

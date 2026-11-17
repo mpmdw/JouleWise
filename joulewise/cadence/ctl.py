@@ -6,6 +6,7 @@ Draft kits plan and rehearse but cannot pass the production preflight.
 from __future__ import annotations
 
 from copy import deepcopy
+import math
 
 from joulewise.cadence import kit as base, kit_v11
 
@@ -28,7 +29,7 @@ def validate_script(script):
     if not (isinstance(turns, list) and turns and len(turns) <= 3
             and all(base._is_int(n, 1, 4096) for n in turns) and sum(turns) <= 4096):
         problems.append("script.turn_tokens: 1..3 positive caps, total <= 4096")
-    for k, maximum in (("hidden_tokens", 4096), ("cpu_s", 90), ("gap_s", 600), ("recovery_s", 600)):
+    for k, maximum in (("hidden_tokens", 4096), ("cpu_s", 600), ("gap_s", 600), ("recovery_s", 600)):
         if not base._is_int(script[k], 0, maximum):
             problems.append(f"script.{k}: integer 0..{maximum}")
     if problems:
@@ -107,8 +108,8 @@ def validate_kit(kit, *, batch_window=base.OS_BATCH_WINDOW):
                 hidden = [s["hidden_tokens"] for s in scripts if s["kind"] == "hidden"]
                 if len(set(hidden)) != 3 or any(hidden.count(n) != 2 for n in hidden):
                     problems.append("scripts: three hidden doses, two legs each")
-                if sorted(s["cpu_s"] for s in scripts if s["kind"] == "cpu") != [10, 30, 90]:
-                    problems.append("scripts: CPU doses 10, 30, 90 s")
+                if len({s["cpu_s"] for s in scripts if s["kind"] == "cpu"}) != 3:
+                    problems.append("scripts: three distinct CPU doses")
                 split = next((s for s in scripts if s["kind"] == "split"), None)
                 plain = next((s for s in scripts if s["kind"] == "plain"), None)
                 if split and plain and (sum(split["turn_tokens"]) != sum(plain["turn_tokens"]) or
@@ -149,6 +150,12 @@ def validate_kit(kit, *, batch_window=base.OS_BATCH_WINDOW):
         problems.extend(error.problems)
     if problems:
         raise base.KitError(problems)
+    from joulewise.cadence import legs
+    try:
+        for roster in kit["layout"]:
+            legs.leg_specs(kit, roster)
+    except legs.PlanError as error:
+        raise base.KitError(error.problems) from error
     return kit
 
 
@@ -161,3 +168,9 @@ def script_seconds(script, model):
     calls = len(script["turn_tokens"]) + bool(script["hidden_tokens"])
     return ((sum(script["turn_tokens"]) + script["hidden_tokens"]) / model["decode_tokens_per_s"]
             + script["cpu_s"] + (len(script["turn_tokens"])-1)*script["gap_s"] + script["recovery_s"], calls)
+
+
+def post_g0_budget_s(spec, model):
+    seconds, calls = script_seconds(spec["script"], model)
+    # Existing EpisodeSpec's deadman limit; no change to that shared workload contract.
+    return math.ceil(seconds + calls*spec["prefill_tokens"]*model["prefill_s_per_token"] + 60)

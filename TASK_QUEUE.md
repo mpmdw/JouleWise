@@ -6,7 +6,10 @@ triage it here instead of assuming it should happen immediately.
 ## Intake Rule For New Tasks
 
 2026-11-16 ctl-01 intake: user-directed [AGENT] work under RL-174 B.4, ahead of
-type T; runner and synthetic checks in progress on `cadence/2026-11-16-ctl01-runner`.
+type T; runner in draft [PR #808](https://github.com/mpmdw/JouleWise/pull/808),
+branch `cadence/2026-11-16-ctl01-runner`. Focused synthetic checks pass;
+CI and the required cold review remain open. The requested review wrapper
+cannot start in this session (`sandbox_apply: Operation not permitted`).
 Draft kit only; issue waits for the research lead's `lm-inst-01` reading.
 Tracking: [ctl runner](docs/process/cadence_ctl_runner.md) and
 [session report](docs/run_reports/2026-11-16-ctl01-runner.md).

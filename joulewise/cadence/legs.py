@@ -150,6 +150,8 @@ def validate_leg_spec(spec):
                                "schema": LEG_SPEC_SCHEMA_V11})
         if spec["decode_tokens"] != sum(spec["script"]["turn_tokens"]):
             raise PlanError(["decode_tokens differs from the script's logged total"])
+        if ctl.post_g0_budget_s(spec, TIME_MODEL) >= 1800 / 1.13544:
+            raise PlanError(["ctl script cannot fit the existing EpisodeSpec post-G0 deadman limit"])
         return spec
     if isinstance(spec, dict) and spec.get("schema") == LEG_SPEC_SCHEMA_V11:
         return _validate_leg_spec_v11(spec)

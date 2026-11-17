@@ -1,6 +1,5 @@
 """SYNTHETIC ONLY. Real launch-to-close orchestration; no hardware or process signalling."""
 from copy import deepcopy
-import hashlib
 import io
 import json
 from pathlib import Path
@@ -36,6 +35,8 @@ class KitTests(unittest.TestCase):
         for s in altered["seed_law"]["scripts"]:
             if s["hidden_tokens"] == 128:
                 s["hidden_tokens"] = 192
+            if s["cpu_s"] == 90:
+                s["cpu_s"] = 120
         altered["legs"] = ctl.generate_legs(altered["campaign_id"], altered["seed_law"], altered["leg_defaults"])
         ctl.validate_kit(altered)  # no runner hardcoding of a dose that lm-inst-01 may change
 
@@ -94,6 +95,15 @@ class KitTests(unittest.TestCase):
                 ctl.validate_kit({**draft(),field:value})
         with self.assertRaises(kits.KitError):
             ctl.validate_script({**draft()["seed_law"]["scripts"][0],"kind":[]})
+
+    def test_a_script_beyond_the_shared_deadman_limit_refuses_at_validation(self):
+        spec = deepcopy(specs()[0])
+        spec.update(prefill_tokens=32768,prefill_chars=legs.prefill_chars(32768),decode_tokens=4096)
+        spec["script"].update(turn_tokens=[2048,2048],recovery_s=600)
+        # Additive budget must fit; a large split with long gaps cannot be silently truncated.
+        spec["script"].update(kind="split",turn_tokens=[1366,1365,1365],gap_s=600)
+        with self.assertRaisesRegex(legs.PlanError,"deadman limit"):
+            legs.validate_leg_spec(spec)
 
     def test_launch_refuses_draft_before_publishing_a_fence(self):
         from types import SimpleNamespace
@@ -177,19 +187,22 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(code,rt.EXIT_REFUSED)
         self.assertFalse((out/cadence_ctl.AUDIT_NAME).exists())
 
-    def test_short_physical_dose_refuses_and_restores_endpoint(self):
+    def test_short_physical_dose_is_unadmitted_and_restores_endpoint(self):
         original = workload.MlxEndpoint
         native_chat = original.chat
         from dataclasses import replace
         def short(endpoint,*args,**kwargs):
             return replace(native_chat(endpoint,*args,**kwargs),completion_tokens=1)
         with patch.object(original,"chat",short):
-            code,out,_ = self.call(specs()[0],"short")
-        self.assertEqual(code,rt.EXIT_FAILED)
+            code,out,result = self.call(specs()[0],"short")
+        self.assertEqual(code,0,(out/rt.CUSTODY_NAME).read_text())
+        self.assertEqual(result["leg_status"],"incomplete")
+        self.assertFalse(result["decode_cap_reached"])
+        self.assertFalse(legs.leg_admitted(result,contaminated=False))
         audit = json.loads((out/cadence_ctl.AUDIT_NAME).read_text())
         self.assertFalse(audit["complete"])
         self.assertEqual(audit["steps"][0]["actual_tokens"],1)
-        self.assertNotEqual(json.loads((out/rt.CUSTODY_NAME).read_text())["status"],"complete")
+        self.assertEqual(json.loads((out/rt.CUSTODY_NAME).read_text())["status"],"complete")
 
     def test_cpu_failure_keeps_partial_ground_truth_and_refuses(self):
         spec = next(s for s in specs() if s["script"]["kind"]=="cpu")
@@ -199,7 +212,25 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(code,rt.EXIT_FAILED)
         audit = json.loads((out/cadence_ctl.AUDIT_NAME).read_text())
         self.assertFalse(audit["complete"])
-        self.assertEqual([s["kind"] for s in audit["steps"]],["turn"])
+        self.assertEqual([s["kind"] for s in audit["steps"]],["turn","cpu"])
+        self.assertFalse(audit["steps"][-1]["complete"])
+        self.assertIn("ended_ns",audit["steps"][-1])
+
+    def test_short_hidden_dose_is_unadmitted_even_with_a_complete_visible_call(self):
+        original = workload.MlxEndpoint
+        native_chat = original.chat
+        from dataclasses import replace
+        def short_hidden(endpoint,*args,**kwargs):
+            result = native_chat(endpoint,*args,**kwargs)
+            return replace(result,completion_tokens=1) if type(endpoint) is original else result
+        spec = next(s for s in specs() if s["script"]["kind"]=="hidden")
+        spec = {**spec,"g0_role":"capture"}
+        with patch.object(original,"chat",short_hidden):
+            code,out,result = self.call(spec,"short-hidden")
+        self.assertEqual(code,0,(out/rt.CUSTODY_NAME).read_text())
+        self.assertEqual(result["decode_tokens"],sum(spec["script"]["turn_tokens"]))
+        self.assertFalse(result["script_complete"])
+        self.assertFalse(legs.leg_admitted(result,contaminated=False))
 
     def test_g0_timeout_never_runs_the_script(self):
         from tests.align.test_r1_runtime import IncompleteMemberTests
@@ -214,7 +245,8 @@ class RuntimeTests(unittest.TestCase):
         # Full 3 + 9 release-candidate rehearsal, every script, both capture and consumer references.
         from tests.align.test_r1_runtime import write_soak
         kit = draft()
-        for name,ids in (("pilot",["L001","L002","L003"]),("rest",[f"L{i:03d}" for i in range(4,13)])):
+        for name,ids in (("pilot",["L001","L002","L003"]),("rest",[f"L{i:03d}" for i in range(4,13)]),
+                         ("short",["L001","L002","L003"])):
             out = self.root/name
             clock = runner.FakeClock(local("2026-11-17T02:40"))
             deps = runner.mock_deps(out,clock)
@@ -229,7 +261,12 @@ class RuntimeTests(unittest.TestCase):
                     args += ["--span-reference",str(span_reference)]
                 if cadence_ctl.main(args,stdout=io.StringIO()):
                     raise runner.LegRuntimeError("synthetic ctl runtime refused")
-                return runner.accepted_result(path)
+                result = runner.accepted_result(path)
+                if name=="short" and result["leg_id"]=="L001":
+                    # A scripted dose cut, like the real short-dose test above, is operationally
+                    # incomplete. It must not abort the span; consumers retain the exclusion mark.
+                    result.update(leg_status="incomplete",decode_cap_reached=False,script_complete=False)
+                return result
             deps.run_soak,deps.run_leg = soak,run_leg
             p = legs.plan_span(kit,t0_epoch=clock.time(),windows=NEW_WINDOW,leg_ids=ids)
             with patch.object(runner.signal,"signal",wraps=runner.signal.signal):
@@ -241,7 +278,10 @@ class RuntimeTests(unittest.TestCase):
                                              adapter=kit["desk"]["adapter"],stop_rules=kit["stop_rules"],now=clock.time())
             self.assertEqual(stops,[])
             self.assertEqual([s["leg_id"] for s in summary["legs"]],ids)
-            self.assertTrue(all(s["admitted"] for s in summary["legs"]))
+            self.assertEqual([s["admitted"] for s in summary["legs"]],
+                             [False,True,True] if name=="short" else [True]*len(ids))
+            if name=="short":
+                self.assertTrue(summary["legs"][1]["span_reference"]["excluded"])
             self.assertNotIn("script",json.dumps(summary))
 
 
