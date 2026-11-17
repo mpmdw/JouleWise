@@ -1149,6 +1149,67 @@ class SignedTransport(DeskFinalCase):
                                                    allowed_signers=self.signers, campaign_id=self.fx.kit["campaign_id"])
         self.assertEqual([h["plan_id"] for h in hist], ["cq-dg-s01-a1"])
 
+    def test_local_publication_refuses_git_ref_lock(self):
+        work, bundle, _ = self.pack()
+        ref, _ = self.ship(bundle)
+        self.assertEqual(self.final(work, ref)[0], 0)
+        local_ref = "refs/heads/cadence-desk-local-lock/cq-dg-s01-a1"
+        lock = self.air / ".git" / (local_ref + ".lock")
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.touch()
+        self.addCleanup(lock.unlink)
+        with self.assertRaisesRegex(desk_transport.TransportRefusal, "update-ref"):
+            desk_transport.publish_verdict(
+                self.air, work / "out", plan_id="cq-dg-s01-a1", signing_key=self.keys["cadence-desk"],
+                ref_prefix="refs/heads/cadence-desk-local-lock/", push=False)
+        self.assertNotEqual(self.git(self.air, "show-ref", "--verify", local_ref).returncode, 0)
+
+    def test_local_publication_refuses_a_concurrent_ref_update(self):
+        work, bundle, _ = self.pack()
+        bundle_ref, _ = self.ship(bundle)
+        self.assertEqual(self.final(work, bundle_ref)[0], 0)
+        prefix = "refs/heads/cadence-desk-local-race/"
+        ref = prefix + "cq-dg-s01-a1"
+
+        def publish():
+            return desk_transport.publish_verdict(
+                self.air, work / "out", plan_id="cq-dg-s01-a1", signing_key=self.keys["cadence-desk"],
+                ref_prefix=prefix, push=False)
+
+        first = publish()
+        sign = desk_transport._signed_commit
+        concurrent = desk_transport.resolve(self.air, bundle_ref)
+
+        def raced_sign(*args, **kwargs):
+            sha = sign(*args, **kwargs)
+            self.assertEqual(self.git(self.air, "update-ref", ref, concurrent, first).returncode, 0)
+            return sha
+
+        with mock.patch.object(desk_transport, "_signed_commit", side_effect=raced_sign):
+            with self.assertRaisesRegex(desk_transport.TransportRefusal, "update-ref"):
+                publish()
+        self.assertEqual(desk_transport.resolve(self.air, ref), concurrent)
+
+    def test_local_publication_reads_back_the_new_tip(self):
+        work, bundle, _ = self.pack()
+        bundle_ref, _ = self.ship(bundle)
+        self.assertEqual(self.final(work, bundle_ref)[0], 0)
+        prefix = "refs/heads/cadence-desk-local-readback/"
+        ref = prefix + "cq-dg-s01-a1"
+        git = desk_transport._git
+
+        def deleted_after_update(repo, *args, **kwargs):
+            result = git(repo, *args, **kwargs)
+            if args[0] == "update-ref" and ref in args and result.returncode == 0:
+                self.assertEqual(git(repo, "update-ref", "-d", ref, args[args.index(ref) + 1]).returncode, 0)
+            return result
+
+        with mock.patch.object(desk_transport, "_git", side_effect=deleted_after_update):
+            with self.assertRaisesRegex(desk_transport.TransportRefusal, "read back"):
+                desk_transport.publish_verdict(
+                    self.air, work / "out", plan_id="cq-dg-s01-a1", signing_key=self.keys["cadence-desk"],
+                    ref_prefix=prefix, push=False)
+
     def test_publication_requires_the_declared_summary(self):
         work, bundle, _ = self.pack()
         ref, _ = self.ship(bundle)
