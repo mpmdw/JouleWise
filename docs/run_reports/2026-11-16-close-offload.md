@@ -92,3 +92,10 @@ committed). Logs: `focused.log`, `focused-313.log`, `full-suite.log`,
 Next exact step: finish synthetic/CI checks and the authorized cold review,
 resolve the two policy questions with the owner, then hand the admitted PR
 and proposed standing item to the lead. Do not merge or install on the MBP.
+
+Additional verification catch: the repository requires a timing-map entry for
+new test modules. The quick tier identified `tests.test_close_offload` as
+unweighed; added a 1.402 s scheduling hint from the local Python 3.13 final
+24-case run (14 zstd cases skipped). Python 3.14 functional coverage is the
+separate focused CI job, already PASS in run 43996700761. This is scheduling
+metadata only and will yield to a hosted timing harvest.

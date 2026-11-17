@@ -496,6 +496,7 @@
     "tests.test_cli_run": 66.976,
     "tests.test_clock": 0.001,
     "tests.test_clock_reference": 0.008,
+    "tests.test_close_offload": 1.402,
     "tests.test_codex_app_bridge": 0.814,
     "tests.test_codex_bridge_observer": 3.636,
     "tests.test_codex_mcp_server": 9.987,
