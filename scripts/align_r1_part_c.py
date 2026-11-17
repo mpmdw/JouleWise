@@ -37,7 +37,8 @@ D_bank line):
 - D_bank, printed and not judged: per turn, the first reading off (0, Nominal); the
   share of decode readings at each level; the clock ratio by 256-token block and over
   the last 512 tokens; the token-rate ratio.
-- X_G, if run: no X7 and no G1 timeout.
+- X_G, if run: no X7 or G1 timeout. Every later admitted turn needs one G1
+  record with a workload-admitting outcome and reconciled interval durations.
 """
 from __future__ import annotations
 
@@ -110,15 +111,16 @@ def _judged(checks):
     return {k: v for k, v in checks.items() if v.get("judged", True)}
 
 
-def g1_records(turns, intervals):
-    """Require a released G1 at every admitted index after the first turn."""
+def g1_records(turns, intervals, *, allowed_outcomes=("released",)):
+    """Require exactly one eligible G1 at each admitted index after turn zero."""
     outcomes = defaultdict(list)
     for row in intervals:
         if row.get("kind") == "G1" and type(row.get("turn")) is int:
             outcomes[row["turn"]].append(row.get("outcome"))
     per_turn = [{"turn": turn["index"], "outcomes": outcomes[turn["index"]]}
                 for turn in turns if turn["index"] > 0]
-    return {"pass": all(row["outcomes"] == ["released"] for row in per_turn), "per_turn": per_turn}
+    return {"pass": all(len(row["outcomes"]) == 1 and row["outcomes"][0] in allowed_outcomes
+                        for row in per_turn), "per_turn": per_turn}
 
 
 def gate_durations(intervals):
@@ -230,11 +232,15 @@ def d_bank_start_state(d_bank):
 
 
 def x_g_line(x_g):
-    """``x_g``: None when it was not run, else {x7, intervals}. No X7 and no G1 timeout."""
+    """Check X_G only when it ran. Its contrast rule permits unobserved G1."""
     if x_g is None:
         return None
-    timeouts = [r.get("turn") for r in x_g.get("intervals", []) if r.get("kind") == "G1" and r.get("outcome") == "timeout"]
-    return _check(x_g.get("x7") is False and not timeouts, x7=x_g.get("x7"), g1_timeout_turns=timeouts)
+    intervals = x_g.get("intervals", [])
+    timeouts = [r.get("turn") for r in intervals if r.get("kind") == "G1" and r.get("outcome") == "timeout"]
+    coverage = g1_records(x_g.get("turns", []), intervals, allowed_outcomes=("released", "unobserved"))
+    durations = gate_durations(intervals)
+    return _check(x_g.get("x7") is False and not timeouts and coverage["pass"] and durations["pass"],
+                  x7=x_g.get("x7"), g1_timeout_turns=timeouts, g1_records=coverage, gate_durations=durations)
 
 
 def _printed_rows(printed):

@@ -45,7 +45,8 @@ def bank(**override):
 
 STEP = {'g0_outcome': 'released', 'g0_wait_s': 212.0, 'release': {'fast_c': 35.4, 'slow_c': 35.4},
         'reference': {'fast_c': 35.0, 'slow_c': 35.0}, 'slope_c_per_min': 0.05}
-XG = {'x7': False, 'intervals': [interval('G0'), interval('G1', 1)]}
+XG = {'x7': False, 'turns': [turn(0, 1500), turn(1, 3000)],
+      'intervals': [interval('G0'), interval('G1', 1)]}
 
 
 def run(step=STEP, d_bank=None, n_chunk=4096, x_g=XG, **kw):
@@ -213,6 +214,16 @@ class EvaluatorFailureTests(unittest.TestCase):
         for ok in ({'g0_wait_s': 1200.0}, {'slope_c_per_min': -0.2}, {'release': {'fast_c': 36.0, 'slow_c': 34.0}}):
             with self.subTest(ok=ok):
                 self.assertTrue(run(step={**STEP, **ok})['pass'])
+
+    def test_x_g_checks_g1_completeness_and_timing_when_run(self):
+        d = {'x7': False, 'turns': [turn(0, 1500), turn(1, 3000)],
+             'intervals': [interval('G0'), interval('G1', 1, outcome='unobserved')]}
+        self.assertTrue(run(x_g=d)['pass'])   # The contrast has no released-sample requirement.
+        for intervals in ([d['intervals'][0]], [{**d['intervals'][1], 'duration_s': 0}]):
+            with self.subTest(intervals=intervals):
+                result = run(x_g={**d, 'intervals': intervals})
+                self.assertFalse(result['pass'])
+                self.assertFalse(result['lines']['x_g']['pass'])
 
     def test_x_g_line(self):
         self.check_x(dict(XG, x7=True))
