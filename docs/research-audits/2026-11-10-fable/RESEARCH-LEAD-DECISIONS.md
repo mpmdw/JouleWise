@@ -17673,3 +17673,251 @@ Research lead (Fable 5.2), Mon Nov 16 18:04 PST 2026 (from `date`). Ed, 11-16: m
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. B.5 was decided from two overlap records and the design, with no energy. The fillers of B are sealed until freeze 2 and enter no fit.
 
 **For Ed, plainly.** "Nothing needs you at the laptop: the measurement goes ahead on the machine as it is, and I record its state. iCloud is now the permanent offload, as you chose. The laptop deletes a run's raw files once a checked compressed copy exists, and drops that compressed copy only when both iCloud and the SSD hold a checked one. The final test blocks run on three separate days, one a day. The free hours go first to getting the long calibration session ready, then to three small extra instrument runs that need no new code."
+
+# RL-175. The slot session may go READY tonight with effect from dev-05-s02's launch; #734 is not its prerequisite and no READY record takes effect between the two spans of a block. The interim look runs on whichever host is ready first, the MBP included, from the MBP's own raw files. Keyed residuals leave the public output. Qualification keeps its kits: the L pairs stand as independently seeded, the order and span alias is disclosed, a half-run block is finished on a date of its own, and no qualification span arms across the predicted OS batch. The prefix-bias estimate takes equal-day weights. hp-02's date clause is ordering only. The campaign licenses no sabotage sentence; only S in the randomized series does
+
+Research lead (Fable 5.2), Tue Nov 17 12:48 PST 2026 (from `date`). Ed, 11-17: "the mbp should have fallback mechanisms to keep work going even if slower, without the mbair" (RUN_STATE 388). RL-149 to RL-174 stand except where "Amends" says otherwise.
+
+**Read.** The Mythos queue spec for Wed 18 to Mon 23 Nov (`QUEUE-SPEC.md`, all of it); the three GPT 6.2 Astra audits (design, window-schedule, ops) and builder E's brief; `r1-ready-1116/READY-FORECAST.md` and `CHECKLIST.md`; `qual-lines-794/LINES.md`; the three item-draft STATUS files and `HP-ADMISSION.md`; RUN_STATE 380 to 392 on `origin/main` `459e9841f`, and the F0 launch and Check items for runs 1 to 8; my RL-149 §1.3 and §5 steps 12 and 13, RL-151 §2.1, RL-166b §2.1 and §4, RL-167 Part B, RL-172 (a), (f), (g) and (i), RL-172a, RL-173 and RL-174.
+
+**Verified by me, from source.**
+- The three qualification kits' leg tables (`item-drafts-1118/kits/`): pair, order, span and seed for every type-L leg. Section C.2's table is from them.
+- `day_gate` in `ITEM-qual03-s02.md`: it refuses a second span on a later date under either date plan (window-schedule finding 3).
+- `scripts/align_r1_part_c.py` at `b2e01464d`: no line matches G1 records to admitted turns (design finding 2).
+- `fit_interim.py` at `a33b37a00`: stage 2 exports `residuals` keyed by leg beside `fold_coefficients`, and `prefix_bias` weights pairs in the estimate and days in the interval (design findings 1 and 8).
+- `cadence_desk_format.md` at `28ceeaba9`: the bundle holds no journal and no soak reference (design finding 6).
+- `git merge-base`: `f30a97d00`, `c3f4bacd8` and `cd1719441` are ancestors of `b2e01464d`, whose tree is `c904864e4…`.
+
+**Not checked.** I ran no code beyond reading three kit files' leg tables. I did not reproduce the auditor's energy reconstruction, the coverage simulation or the load-redo boundary cases. I did not read the ops audit's twelve findings against code; none is ruled here. The per-leg clock times in section C.4 are my arithmetic from the drafts' expected span time, not from the pinned `plan`. I do not know which development spans still have uncompressed originals on the MBP. No SSH; no custody, energy, power, meter, transcript, slot, hazard or sealed file was opened.
+
+---
+
+## A. The R1 slot session
+
+**It is the first use of the machine after dev-05. Nothing in freeze 2, qualification or the Air stands in front of it.**
+
+### A.1 READY-FORECAST Q1 to Q6
+
+| # | Question | Ruling or recommendation |
+|---|---|---|
+| Q1 | Must #734 merge first | **Ruled: no.** RL-149 §5 step 12 asks for the build PR and the kit change merged on the W1 line, and they are (#777, #783, #774, #798 and #790; I checked that their merges are ancestors of `b2e01464d`). #734 is the W1 pre-signing set and belongs to step 13. RUN_STATE 355's sentence described that day's state; it is not a rule. R1 arms at `b2e01464d`, tree `c904864e4…` |
+| Q2 | The Part C table and the carried records | **Lead's. Recommendation:** adopt `CARRY-RECORD-DRAFT.md` as the S 329 correction and cite RUN_STATE 328 for the table. No new Part C. One line is added by section D.2 |
+| Q3 | Which amendment draft | **Ruled:** `AMENDMENT-R1-DRAFT.md` on the audit branch at its commit is "the amendment draft" of step 12. Its move into the B-S-admit PR, the attack seats and my cold review are W1's and do not gate R1 |
+| Q4 | Expected duration | **Ruled: print UNKNOWN,** with the driver bound (28 h 23 min) and the outer bound (33 h 23 min). No bound is relabelled as an expectation. The notice and every schedule use the bounds |
+| Q5 | Issue validity, notice, predecessor | **Lead's. Recommendation:** the READY record is valid for 72 h or until R1 arms. The notice and veto route are the existing ones, unchanged. Every native line (A14, A15, B01 to B15) is read fresh at the real arm, whatever was staged earlier |
+| Q6 | Network time on return | **Ruled: network time is not a hygiene setting under RL-174 C.** That clause covers its four lines (the two Spotlight rows, indexing, Time Machine). Every close and arm already sets and verifies network time. The item says: ON at return, as the pinned runbook has it; then the post-R1 Check sets it OFF and the frequency word to 0, with a readback, before anything arms. The minutes it was ON are recorded. R1 may run between freeze 2 and qual-03's close |
+
+### A.2 A READY record may carry one effective condition (F-6)
+
+**Yes, in one form only: "effective from the launch record of span X".** X is a span already issued. No clock time and no other event.
+- **Why it is sound.** READY is a priority record. RL-172 (f) already says the queue arms as usual before it. The condition only dates the record by an event the magistrate writes on main.
+- **How a gate reads it.** Until X's launch record is on main, the magistrate fills `SESSION_READY=no` and cites the record and this section. After it, `yes`.
+- **A standing rule, for the day design (RL-172 (a)):** no READY record takes effect between the first and second span of a development or qualification block. A record posted in that interval is read as effective from the second span's launch. The session then waits one span, about 3.4 h, and no block is split by it.
+
+**So: R1 may go READY tonight, effective from dev-05-s02's launch (about Wed 03:50).** dev-05-s02 runs, R1 takes its clean close, t0 about Wed 08:15. From my side the record needs only A.1, D.2's count and the lead's adoptions.
+- **Who posts it.** READY stays the lead's record. Recommendation: if the lead will be away at the time, it writes the adoptions (A03, A06, A10, A11, A13, A16 to A19) on main and one line delegating the record to the interim lead once A14, B01 and B02 pass natively. Those three are the magistrate's own observations.
+- **If READY comes later,** R1 takes the first block boundary after it. Qualification dates do not hold it back (C.5).
+
+### A.3 A short pre-notice may hold F0 (window-schedule idea 3)
+
+**Accepted.** F0 is a diagnostic below counted work and below a v4 session.
+- The lead or interim lead posts one typed line: "hand-read of span X" or "READY record for session Y", expected within N minutes, N at most 30. It may be renewed once.
+- While it is unexpired, F0, F2 and hp-02 do not launch. Nothing else changes.
+- It is not the hand-read and not the READY record. The counted item is issued only after the signed PASS, and R1 arms only after the READY record.
+- When it expires, F0 launches on its own rules.
+
+## B. The interim look and freeze 2
+
+### B.1 Where it runs and what it reads (F-3)
+
+**On the first host that has an admitted #795 head and a complete verified copy. The MBP is one of them. Nobody waits for the Air.**
+
+| Host | Copy | Conditions |
+|---|---|---|
+| The MBP | Its own uncompressed span directories for dev-01 to dev-05, each checked against its close manifest | Nothing is armed and no fence is held. The magistrate starts the look's commands at the admitted commit and exits; no agent reads beside it. The end of the look counts as an "other" close: 1,200 s before the next arm. Stage 2's 20 min budget is measured there |
+| The Air, or any host of the lead's | A staging root expanded from the MBP's verified cloud archives, every file's sha256 equal to the per-file manifest (RL-174 D.3). The Air's own raw copy serves for the spans it has | As RL-174 D.3 |
+
+- **RL-172 (i) row 4 is amended for one case:** a registered look, as deterministic commands at an admitted commit, may run on the MBP while nothing is armed. Builds, tests, mutants and seats that write code stay off it.
+- **The MBP keeps those originals raw until `lm-interim-01` has finished.** `close_offload.py` is not issued on the MBP before then, or its issue names dev-01 to dev-05 as excluded. If an original is already gone, RL-174 D.3's staging step applies to that span.
+- **On the MBP, stage 2's files stay in custody as restricted.** The magistrate reports the exit code, the file hashes and the public part of B.3. It opens none of them.
+- **Default:** if the Air is not back with its copy when R1 closes, the look runs on the MBP in that close interval.
+
+### B.2 The manifest cold pass (F-2)
+
+**I do it the day the packet reaches me, and before stage 2 reads energy.** Order: #795's round 10 merged into its head; the Mythos cold seat clean on that head; my pass; stage 1 on dev-01 to dev-05; the ledger entry; stage 2; the coefficient file's hash on main. That hash is freeze 2.
+- **The packet, in one piece:** the manifest; the cold seat's report; the stage-1 dry-run output on dev-01 to dev-04; the stage-2 time on synthetic custody; the round 10 table of finding, commit and test.
+- **What I check and nothing else:** the manifest equals RL-166 to RL-175; the blind statement is true, B.3 included; the receipt-derived date and the per-fold onset parameters (window-schedule finding 1, design finding 4) are in the admitted head. I reopen nothing already ruled.
+- **Timing.** A packet with me by Thu 08:00 gets its answer by Thu 12:00, which keeps a Friday start. A later packet moves qualification by whole dates. Qualification never arms before freeze 2 (RL-172 (i) row 9).
+- **Design finding 4 is accepted as the auditor wrote it:** the coefficient file carries each fold's onset parameters, so RL-166b §4's jackknife is reproducible from the frozen file alone.
+
+### B.3 What the look may release (design finding 1)
+
+**The auditor is right, and I confirmed the two exports.** Stage 1 plus the fold coefficients give each leg's prediction P. The keyed residual r = (P − M)/M then gives M = P/(1 + r). No live value has been published; stage 2 has not run.
+
+| Output | Class | Who may hold it |
+|---|---|---|
+| Stage-1 output; the coefficient file and its hash; verdict words; pooled and per-day errors; counts; `prefix_bias`; `trace_coverage`; onset residuals in seconds | Public | The repository |
+| `residuals.leg` and `residuals.hot_stretch` keyed by leg; any per-day line for a day with fewer than three fit legs | Restricted, as campaign energy | Custody only. The look's own process and the twin's write them. A comparison script prints the largest absolute difference and nothing else. I read them only under a named ruling, after freeze 2's hash is on main. No lead, magistrate or seat opens them |
+| The sha256 of the restricted file | Public | In the ledger |
+
+- **Day totals are recoverable from the public part,** and that is accepted: a day holds at least six conditionless legs.
+- **The blind statement becomes:** "The public outputs do not determine any single leg's energy. Day totals can be recovered from them."
+- **A test backs it:** on the `noisy` synthetic world, the auditor's reconstruction run on the public outputs alone must fail to recover any leg total to within 1 %.
+- **The keyed file is published with the paper's data release,** not before.
+- **This does not gate freeze 2.** If the split is not in the admitted head when the rest is ready, the whole stage-2 output stays restricted; only the coefficient file, its hash and the verdict words are committed, and the public diagnostics follow from the split tool.
+- **Why not leave it.** This is not a v4 outcome and no blind is broken by it. But the manifest says no energy is printed, the repository is public, and `lm-qual-01`'s draft is not yet frozen. People who will write it should not hold per-leg development energy.
+
+### B.4 The prefix-bias estimand (design finding 8)
+
+**Equal-day weights for both parts.** The estimate is the mean of the day means. The interval is that mean ± t(0.95, D − 1) · SD(day means)/√D.
+- **Why.** The day is the unit of independence (RL-149 §2.3, RL-172 (a)). An interval built on days belongs to an estimate built on days.
+- **As designed it changes no number:** each ratio has one pair on each of three days, and the two weightings are then equal. RL-166b §4's 0.84 stands. It matters only when days hold unequal numbers of pairs, as after an exclusion or if a look pools both ratios. The auditor's 86 % coverage is for 12, 1 and 1 pairs on three days.
+- **`lm-qual-01`: fixed here, before any qualification leg exists.** It carries the ±0.10 word.
+- **`lm-interim-01`:** the same change, with the twin, in round 10 if that round is still open. It is not in the coefficient file and does not gate freeze 2. If it is not in the admitted head, the manifest says "pair-weighted estimate, day-weighted interval" and the look prints pairs per day.
+
+## C. Qualification
+
+### C.1 The L pairs are not token prefixes: accepted as built (F-1, M0-F7, RQ1)
+
+**No law change. M0-F7 is closed for all three kits.** Each pair's two legs have their own seeds at temperature 1.0 (checked: twelve type-L legs, twelve seeds).
+- **What the pair tests** is the frozen fit's error against true length, on turns like those the series will score. No series member is a prefix of another.
+- **The seed is drawn independently of which leg is short,** so different content adds spread to the contrast and no bias. That spread is in the SD the estimate is scaled by.
+- **A prefix law** would be a new seed law, a new search and a re-pin, for a gain in precision that cannot be sized blind.
+- **Wording.** `lm-qual-01`'s manifest and the paper say: "The two legs of a pair have the same prompt size and start rule and different decode caps. They are independently seeded; the short leg is not the first tokens of the long one." The field keeps its name `prefix_bias`, and the interface page says the name refers to length.
+
+### C.2 Pair order and span position (design finding 3, window-schedule finding 6)
+
+**Disclosed. The frozen kits do not change.** From the kits:
+
+| Kit | Pair p1 (3,724 and 4,096) | Pair p2 (3,151 and 4,096) |
+|---|---|---|
+| qual-01 | span 2, full first | span 1, short first |
+| qual-02 | span 2, full first | span 1, full first |
+| qual-03 | span 1, short first | span 2, full first |
+
+- For p1, "full first" and "span 2" are the same column. For p2 they are not. Every second span runs full first.
+- **My RL-167 Part B item 3 checked each margin and not the joint table.** The auditor's reading is correct, and that item's "order and heat history could not be told apart" was met for p2 only.
+- **Why no re-seed.** Each ratio has three pairs. A model with an intercept, an order effect and a span effect has three parameters, so no layout of three pairs can estimate either nuisance with any error left over. With three pairs the best any layout can do is two against one on each margin, so the mean contrast carries one third of an order effect and one third of a span effect under the present layout and under an un-aliased one alike. A re-seed buys nothing the word can use and costs a search, three delta checks and the regenerated items.
+- **`lm-qual-01` prints** the joint table above, each pair's contrast beside its order and span, and one line pooling both ratios (six pairs in three of the four cells), all as description with no word.
+- **Its manifest and the paper carry this sentence:** "At the 1.10 ratio the long-first pairs were also the second-span pairs, so an effect of order cannot be told from an effect of span position. A pass says the contrast was small in the orders and positions that were run."
+- **The next seed search** requires, for each pair across the blocks, full rank for intercept, order and span, and no empty cell in the pooled table.
+
+### C.3 A half-run block (window-schedule finding 3)
+
+**Confirmed: both date plans refuse.** The disposition, fixed before any qualification leg exists:
+1. **The half that ran stands,** on its own t0-date. Nothing is re-run. Each pair sits whole inside one span (checked in all three kits), so no pair is split.
+2. **The missing span runs once,** the same legs and seeds, on the next date that holds no other qualification span. It has its own soak, so nothing physical ties it to the first half.
+3. **`lm-qual-01` takes a day to be a span's t0-date as run** (RL-172 (a)). A split block gives two days. Nothing is pooled back into a block.
+4. **Later blocks move whole,** one date each. The two-block cap is still not a slip remedy.
+5. **The lead may commit a new qualification queue** with an expiry up to seven days from its commit (RL-172 (g) 3) without coming to me. Monday 23 Nov is not a scientific limit.
+6. **The gate.** The date plan is keyed by span, and the rule is "every t0-date holds spans of one block only". An existing receipt must agree with its own span's entry. The items builder changes `build_items.py` with the Friday regeneration. Until then a half-run block stops, and the lead issues the second span's item by hand under this section. The magistrate does not improvise it.
+
+A.2's standing rule removes the one cause the auditor named, a READY record between the halves.
+
+### C.4 The overnight redos (window-schedule finding 7)
+
+**For development it is reporting only. For qualification it is not.**
+- **Development.** The batch arrives 12 h after boot (02:08:39 this week) and a leg is running then, so a redo each night is expected; long legs are the likeliest to be caught. No schedule changes. The lead's by-job record (RL-174 B.5) gains one table through dev-05: attempts by prompt size, span position and attempt number, with the maintenance lines that overlap each admitted second attempt. `lm-qual-01` prints the same from receipts.
+- **Qualification.** With a 00:00 arm and about 25 min a leg, the batch falls on the fourth and fifth legs of the first span. In qual-01 those are pair p2; in qual-03 the fourth is p1's long leg. Each ratio has three pairs and no leg is re-run to mend one (RL-167 Part B item 5).
+- **Ruled, for every qualification span:** it does not arm while the arm record's predicted batch start lies between its soak end (t0 + 1,950 s) and its expected close. It arms at the predicted batch start plus 27 min or later. This week that is 02:35:39 for a first span.
+- **This is a rule about a process,** read from the boot time at each arm (RL-171). If the host restarts, the time moves with it. It is not an inclusion rule: B.5 of RL-174 stands, and the load detector and the redo quota are unchanged.
+- **It matches the v4 population.** The slot-session driver holds through the same batch.
+- **Cost:** about 2 h 35 min a date, which an F2 piece on the alternate argument or a late F0 can use.
+- **To confirm:** the items builder reads the per-leg windows from the pinned `plan`. dev-05-s01 arms tonight at 00:00 and shows where the batch lands. Neither changes the rule, which is the same on all three dates so that they stay comparable.
+
+### C.5 R1 and whole blocks (window-schedule idea 1)
+
+**Adopted as planning; no deadline is adopted as a rule.**
+- A READY session takes the next block boundary (A.2). The next whole block is re-dated to the first date after R1's post-close Check, and its items are issued fresh.
+- "R1 by Fri 06:46:59" is correct arithmetic for a Thursday start to qualification. It is not a reason to hold R1 or to hurry a READY record. R1 outranks a qualification date.
+- Qualification dates must be distinct. They need not be consecutive.
+
+## D. F0, F2 and hp-02
+
+### D.1 F0 run 7's clock ratio of 0.811 (F-8, window-schedule finding 9)
+
+**Recorded as one excursion in eight. No rule changes, and R1 is not held.**
+- Every judged line of run 7 equalled run 6's. Run 8 printed 0.912.
+- **The close floor is not lengthened.** Run 1 followed a campaign close and a cloud offload with the same gap (33 min 41 s against 32 min 29 s) and printed 0.933. Elapsed cooling does not explain run 7, and neither does the offload.
+- **What would settle it:** the F0 series as one table, runs 1 to 9 and onward, with predecessor kind, close-to-start gap, occupied minutes in the six hours before, soak reference, first off-nominal token, token-rate ratio, admitted turns, and a count of `bird`, `cloudd` and `fileproviderd` log lines during turn 1. The last comes from one `log show` query per run, in a gap. Those three were not in F0's predicate (window-schedule finding 8), so earlier counts read "unobserved" until the query fills them.
+- **By when:** in the freeze-2 packet (B.2). It gates nothing.
+- **Trigger:** a second run under 0.83 in the next ten, or any run under 0.78, and I read the table before the next v4 session after R1.
+
+### D.2 F0 and Part C with missing G1 records (design finding 2)
+
+**Confirmed in the code at the pin. The workload is not at fault; the evaluator never counts.**
+- **Runs 1 to 8 are not re-run and keep their verdicts,** marked "G1 presence not checked by the evaluator". F0 is a diagnostic and carries no claim.
+- **One re-read settles each run,** from its stored verdict file's interval and sample rows (gate records only): for T admitted turns, one released G0 and exactly one released G1 for each turn after the first, by index; 2T start-state rows; and `gate_time` including those G1 durations. Run 7's published line (2 turns, 4 samples) already fits. A run that passes is marked "G1 complete (RL-175 re-read)". One that does not is marked "not established", and its number comes to me.
+- **The counted Part C at `c3f4bacd8` (RUN_STATE 328) gets the same re-read before R1 installs.** Checklist line A09 rests on it. If it fails, R1 is not READY and it comes to me.
+- **The fix does not move R1's pin.** It lands on the W1 line after R1 returns and before W1 signing, and STANDING-F0 is reissued with that head. Until then each F0 Check and R1's post-return disposition add the count by hand, before A12 and A20 are evaluated.
+
+### D.3 hp-02's three points (F-4)
+
+| Point | Ruling |
+|---|---|
+| Inherited kit prose | **Keep the exact bytes** (the builder's option A). The item lists the literals that RL-174 overrides. A delta seat does not count inherited prose as a finding. The same holds for `f2-inst-02` and `-03` |
+| Accounting and the first-three gate | **Outside the 132 cap, line 9, the day count and RL-173 D.1's three-ahead count.** It is a filler and description only. hp-01's class A smoke serves: hp-02 is the same pin with a new seed. Its three spans may be issued together; each names its predecessor (D.2) and expires in 24 h (D.5). Each gets the automatic desk and the magistrate's Check. No new hand gate |
+| "Never arms before a qualification span on the same t0-date" | **Ordering only.** It does not need a qualification span on its date. Restated: hp-02 never arms on a date before a counted span that is still to run that date, and it closes, with every restore line read, at least 1,200 s before any counted arm. So it may fill a day with no qualification, Thursday included. The predecessor is the latest clean close. The draft's stricter reading is withdrawn |
+
+The other conditions of RL-174 B stand: `lm-hp-01` not run, one delta check, typed markers, no hp-01 date.
+
+### D.4 `lm-inst-01`'s recovery origin (F-7)
+
+**The runtime's completion-log time stamp,** mapped to the trace clock as the look maps its edges. The load ends there; the stage event is 5 s later by construction.
+- The look prints, per leg, the gap between the two stamps.
+- A leg with no completion-log stamp uses the stage event minus 5.000 s and is listed.
+- A gap outside 4.5 to 5.5 s lists the leg. It is not excluded.
+- Fixed here, before any F2 energy is read. It goes into `lm-inst-01`'s manifest.
+
+## E. The hand-read's source (design finding 6)
+
+**RL-173 B's last bullet was wrong and is withdrawn.** The pushed bundle supports the off-host re-check of the automatic table and nothing more. The hand table needs the load journal; the Q1 print needs the soak record, the capture and the consumer readings.
+- **The authorized source** is the span's own output directory on the MBP, or a copy verified against its close manifest (the Air's, or a staging root under RL-174 D.3). Only the files on the desk template's list are opened. `OPENED.txt` records them, and the key scan runs first.
+- **Who.** The lead on a verified copy, or a cold local seat on the MBP between spans, re-executed and signed by the magistrate, as RUN_STATE 386 did. RL-173 B's "no agent" governs the controller's step in the close interval. A seat between spans is allowed when it has exited before the next arm's agent census.
+- **What is published** on the audit branch: the hand table, `OPENED.txt`, the sha256 of every file read, the typed Q1 record and the signature. That digest is what makes the read checkable off-host.
+- **The Actions desk (RL-174 E.6)** re-checks the projection only, and its page says so.
+
+## F. What the paper may say
+
+**The auditor's headline is correct, and it is what RL-149 §1.3 and RL-151 already registered. I restate it so no draft drifts.**
+
+1. **The cadence campaign licenses no sentence about sabotage.** Its legs carry no condition. It supports instrument sentences only: how well a model frozen in advance predicts held-out energy from prompt size, decode length and start state, with qualification's words as printed.
+2. **Only S in the randomized series can carry the claim.** If S passes, the paper may say: "In a randomized series on one Apple-silicon laptop and one 27B model, episodes instructed to sabotage differed from benign episodes in energy on the reference-state part of each turn." The registered sentence follows it unchanged: "S makes no statement about energy outside those rows."
+3. **"Sabotage leaves an energy signature"** may be the title or a heading only if S passes. The abstract's first statement of the result is sentence 2, with its numbers.
+4. **Not licensed, whatever passes:**
+   - "detects sabotage", or any detection rate, unless a registered detector row gives it;
+   - a claim about sabotage behaviour as distinct from the instruction, since the series randomizes the instruction;
+   - a confirmatory statement on whole-episode or whole-turn energy. `S_a4`, S_w and K_w are prints, and S_w stays print-only even if qualification says `yes` (RL-151 §2.1);
+   - any other machine, model, power mode or task family;
+   - reading the campaign's heat term as evidence for or against a signature.
+5. **If S fails or is not evaluable,** the phrase is not used. The paper reports the result with the registered sensitivity statement.
+
+## G. Not ruled here
+
+- **Design finding 5 (the load-redo rule counts samples, not seconds).** It changes which attempt is kept, in pinned runner code. The pinned rule stays for this campaign. The lead sends me, from receipts and load journals only, the number of redo decisions that lie within five samples of the 60-sample line. I rule on that count.
+- **Design finding 7, window-schedule findings 1, 2, 4, 5 and 8, and both audits' other throughput ideas** are builder work. I accept builder E's scope as briefed. Finding 2 (the checklist flag read before the checklist runs) must be fixed before qual-01 is issued.
+- **The ops audit's twelve findings** go to the #799, #800, #804 and #807 builders and their gates. None changes a ruling.
+- **QUEUE-SPEC D13** (a seat builds the desk) is answered by section E. **C2** (the 30 min wait for an Air marker) is the lead's: RL-173 A never asked for a wait.
+
+## Owners
+
+- **Lead:** the R1 adoptions and the READY record with its condition (A.1, A.2); the freeze-2 packet by Thu 08:00 (B.2); the hp-02 and F2 delta checks and re-dating (D.3); the redo table and the count for G; the paper sentences of F in every draft.
+- **Magistrate:** R1's native staging in tonight's gap; the Part C re-read before R1 installs and the F0 re-reads in gaps (D.2); the F0 series table and the three-daemon query (D.1); the look on the MBP if the Air is not back (B.1); `SESSION_READY` read under A.2; pre-notices under A.3.
+- **Builder E and the twin (Sol), on #795:** the residual split and its test (B.3); equal-day weights (B.4); per-fold onset parameters.
+- **Items builder (Sol):** the span-keyed date plan (C.3 item 6); the batch rule in all six qualification items (C.4); the checklist-order fix; hp-02 re-dated under D.3.
+- **`lm-qual-01`'s drafter:** C.1's wording, C.2's prints and sentence, C.3 item 3, B.4.
+- **Part C fix builder:** the G1 count in the evaluator, for the W1 line after R1 (D.2).
+
+**Amends.**
+- RL-172 (f): a READY record may carry A.2's condition, and none takes effect between a block's two spans.
+- RL-172 (i) row 4: a registered look may run on the MBP with nothing armed (B.1).
+- RL-173 B, last bullet: withdrawn; section E replaces it. RL-173 B's "no agent": scoped to the controller's step.
+- RL-174 B, hp-02's third condition: restated as ordering (D.3). RL-174 B.3: a half-run block (C.3). RL-174 D.3: the copy the look reads may be the MBP's originals. RL-174 E.4: the lead may commit a later queue expiry.
+- RL-167 Part B item 3: the joint table and the next search's rule (C.2).
+- RL-166 and RL-167 R-11: the estimand (B.4) and the output classes (B.3).
+- RL-169a §1: the recovery origin (D.4).
+- RL-171 §3 and RL-172a, for qualification spans only: the batch rule (C.4).
+
+**Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. The estimand, the half-block disposition, the batch rule, the pair wording and the recovery origin are fixed before any qualification or F2 energy is read and before any qualification leg exists. C.4 rests on kit layouts and on redo times in RUN_STATE. D.1 rests on printed clock ratios, which are not judged.
+
+**For Ed, plainly.** "The long calibration session can be declared ready tonight and will start by itself Wednesday morning, right after the last development run; nothing else has to finish first. The fit can be frozen on the measurement laptop itself if the Air is still away, so the final test blocks no longer depend on where the Air is. The outside audit found real things and I took them: one output file would have let a reader work back to each run's energy, so that file now stays private until the paper's data release; and the final test runs will start at about 02:35 instead of midnight, so the laptop's nightly housekeeping does not land on the few paired runs we cannot repeat. I kept the test kits as they are. On the claim: the calibration runs can never show that sabotage leaves an energy signature. Only the randomized sabotage-against-benign series can, and the paper will say exactly that."
