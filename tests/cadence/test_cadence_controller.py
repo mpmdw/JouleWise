@@ -60,7 +60,8 @@ class Gate6Controller(WorldCase):
         source.mkdir(parents=True)
         receipt = source / cc.RECEIPT
         receipt.write_text(json.dumps({
-            'roster': prior['roster'], 'kit': {'sha256': prior['kit_sha256']},
+            'roster': prior['roster'], 'kit': {'sha256': prior['kit_sha256'],
+                                            'campaign_id': prior['campaign_id']},
             'rc': 0 if clean else 9, 'error': None if clean else 'restore failed',
             'span_result': {'chain_exit_code': 0 if clean else 9,
                             'chain_outcome': 'COMPLETE' if clean else 'FAILED',
@@ -171,7 +172,8 @@ class Gate5Controller(WorldCase):
         source = Path(w.cfg['output_root']) / prior['campaign_id'] / (prior['plan_id'] + '-20261116T150000Z')
         source.mkdir(parents=True)
         receipt = source / cc.RECEIPT
-        receipt.write_text(json.dumps({'roster': prior['roster'], 'kit': {'sha256': prior['kit_sha256']},
+        receipt.write_text(json.dumps({'roster': prior['roster'], 'kit': {'sha256': prior['kit_sha256'],
+                                                                      'campaign_id': prior['campaign_id']},
                                       'rc': 0, 'span_result': {'chain_exit_code': 0, 'chain_outcome': 'COMPLETE',
                                                              'fault': False, 'outcome': 'MEASURED_OK'},
                                       'steps': [{'name': 'soak', 'rc': 0}, {'name': 'restore', 'rc': 0}],

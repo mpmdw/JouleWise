@@ -2,6 +2,8 @@
 
 **2026-11-17 PR #799 round 9:** failed or incomplete signed-history listings hold desk finality. 247 guarded cadence tests pass. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
 
+**2026-11-16 PR #800 gate 7 repair:** F1–F4 reproduced and repaired: pinned prior classification/count, duplicate gate authority, retained executed date occupancy and abnormal-exit fence lease. [Report](docs/run_reports/2026-11-16-queue-controller-gate7-sol-r8.md). No MBP contact or custody access; fresh admission, owner gates and listed research-lead questions remain open.
+
 **2026-11-16 PR #799 gate 7:** no independent desk defect reproduced; 246 guarded cadence tests pass. This round changes records only; #800 owns four reproduced controller repairs. [Report](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md). No MBP contact or custody access; fresh stack admission and research-lead rulings remain open.
 
 **2026-11-16 PR #800 gate 6 repair:** F1–F3/F5 reproduced and repaired; #799 F4 is inherited by a linear rebase on `419e184c0`. Durable standing-lease expectations survive watchdog cleanup and PID changes; unknown observations retain the fence. [Run report](docs/run_reports/2026-11-16-queue-controller-gate6-sol-r7.md). Final verification and dispositions are recorded there; cold admission and research-lead questions remain open. No MBP contact, custody access or merge.
@@ -6432,7 +6434,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #799/#800 gate 6 repairs, dispositions and final verification](docs/run_reports/2026-11-16-queue-controller-gate6-sol-r7.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #799/#800 gate 7 repairs, dispositions and verification](docs/run_reports/2026-11-16-queue-controller-gate7-sol-r8.md).
 
 ### [ED-EXTERNAL]
 

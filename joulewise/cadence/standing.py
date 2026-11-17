@@ -361,6 +361,10 @@ def validate_standing(doc):
             isinstance(r, dict) and set(r) == {"plan_id", "gate", "decision", "record"} and _text(r["plan_id"])
             and _text(r["gate"]) and r["decision"] in GATE_DECISIONS and _text(r["record"]) for r in records)):
         p.append(f"gate_records: a list of {{plan_id, gate, decision in {GATE_DECISIONS}, record}}")
+    else:
+        keys = [(r["plan_id"], r["gate"]) for r in records]
+        if len(set(keys)) != len(keys):
+            p.append("gate_records: duplicate (plan_id, gate); each gate has one authoritative decision")
     prior = doc.get("prior_spans")
     if not isinstance(prior, list):
         p.append("prior_spans: a list")
@@ -696,19 +700,39 @@ def build_runs(standing, controller_records, external_runs, kits=None, prior_rec
     bindings = {d["plan_id"]: d.get("verdicts", {}) for d in standing["dispositions"]}
     runs = []
     for s in standing["prior_spans"]:
-        cls = kit_class({"campaign_id": s["campaign_id"]})
         kit = (kits or {}).get(s["kit_sha256"])
+        cls = kit_class(kit if kit is not None else {"campaign_id": s["campaign_id"]})
+        campaign = kit["campaign_id"] if kit is not None else s["campaign_id"]
         gates = derived_gates(kit, s["roster"]) if kit is not None else []
         receipt = (prior_receipts or {}).get(s["plan_id"]) or {}
+        problems = []
+        if kit is not None:
+            if campaign != s["campaign_id"]:
+                problems.append("declared campaign differs from the pinned kit")
+            if cls["mixed"] != s["mixed"]:
+                problems.append("declared mixed-size flag differs from the pinned kit")
+        legs_run = s["legs"]
+        if receipt:
+            if receipt.get("campaign_id") != campaign:
+                problems.append("receipt campaign differs from the pinned kit")
+            finished = receipt.get("legs_finished")
+            if type(finished) is not int or not 0 <= finished <= len(s["roster"]):
+                problems.append("receipt has no valid finished-leg count")
+            else:
+                legs_run = finished
+                if finished != s["legs"]:
+                    problems.append("declared leg count differs from the receipt")
         command_reasons = receipt.get("command_reasons") or []
         status = ("CLOSE_UNPROVEN" if any(r["code"] == "CLOSE_UNPROVEN" for r in command_reasons)
                   else "STOPPED" if command_reasons else "CLOSED_OK")
-        runs.append(Run(s["plan_id"], "campaign" if cls["k2"] else "f2", cls["phase"], s["block_id"], s["legs"],
-                        s["mixed"], parse_time(s["t0"]), parse_time(s["closed"]), status, "prior",
-                        campaign=s["campaign_id"], desk="final" if s["desk_final"] else "pending", gates=gates,
+        runs.append(Run(s["plan_id"], "campaign" if cls["k2"] else "f2", cls["phase"], s["block_id"], legs_run,
+                        cls["mixed"] if kit is not None else s["mixed"],
+                        parse_time(s["t0"]), parse_time(s["closed"]), status, "prior",
+                        campaign=campaign, desk="final" if s["desk_final"] else "pending", gates=gates,
                         resolution=disp.get(s["plan_id"]),
                         extra={"kit_sha256": s["kit_sha256"], "roster": list(s["roster"]),
                                "gates_unknown": kits is not None and kit is None,
+                               "prior_problems": problems,
                                "command_reasons": command_reasons,
                                "g0_unreleased": ((prior_receipts or {}).get(s["plan_id"]) or {}).get("g0_unreleased")}))
     for r in controller_records:
@@ -935,8 +959,7 @@ def date_reasons(span, cls, t0, runs, queued, standing):
     if t0 > date_end(day) - MIDNIGHT_MARGIN_S:
         out.append(reason("MIDNIGHT", f"{sid}: within {MIDNIGHT_MARGIN_S} s of the end of {day}",
                           eta=date_end(day), span=sid))
-    same = [r for r in runs if r.kind == "campaign" and local_date(r.t0) == day
-            and r.resolution != "withdrawn"]
+    same = [r for r in runs if r.kind == "campaign" and local_date(r.t0) == day and r.legs > 0]
     if cls["phase"] == "development":
         dev = sum(r.legs for r in same if r.phase == "development") + len(span["legs"])
         mixed = sum(r.legs for r in same if r.phase == "development" and r.mixed) + (
@@ -1378,6 +1401,9 @@ def select(snap):
         globals_ += queue_reasons(view, now, bool(_pending(view)))
     globals_ += cross_queue_reasons(views, _disposed(standing))
     globals_ += prior_reasons(standing, views, snap.get("receipts"))
+    for run in snap["runs"]:
+        globals_ += [reason("PRIOR_CONTRADICTS", f"{run.plan_id}: {problem}", span=run.plan_id)
+                     for problem in run.extra.get("prior_problems", [])]
     globals_ += l002_reasons(snap["runs"], standing, snap.get("record_epochs"))        # RL-173 E: nothing arms, the fallback included
     heads = [_pending(v)[0]["span_id"] for v in views if v.get("doc") and _pending(v)]
 

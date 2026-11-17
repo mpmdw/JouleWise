@@ -2,6 +2,8 @@
 
 **2026-11-17 explicit user-priority [AGENT] intake:** repair the four round 9 findings on PR #799 and PR #800. The desk history repair passes local tests. PR #800 inherits it before the controller repairs. [Run report](docs/run_reports/2026-11-17-desk-final-round9.md).
 
+**2026-11-16 explicit user-priority [AGENT] gate-7 repair:** cold Sol F1–F4 fixed with failing-before/passing-after regressions on #800. #799 has no independent code defect this round. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-queue-controller-gate7-sol-r8.md). Fresh stack admission and research-lead rulings remain open.
+
 **2026-11-16 explicit user-priority [AGENT] gate-7 intake:** repair the cold Sol refusal of #799/#800 before ordinary queue work. No #799 implementation defect reproduced; #800 owns F1–F4. No phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-desk-final-gate7-sol-r8.md).
 
 **2026-11-16 user-priority [AGENT] continuation:** cold Sol gate-6 repairs for #799/#800 precede ordinary queue work by explicit user direction. All five reproduced findings have regression-backed fixes; no phase exit-checklist row exists. [Evidence](docs/run_reports/2026-11-16-queue-controller-gate6-sol-r7.md). Installation, fresh admission and research-lead rulings remain gated.

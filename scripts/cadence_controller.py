@@ -1485,6 +1485,8 @@ class Controller:
                         doc = json.loads(receipt_path.read_bytes())
                         receipts[m.group("plan")] = {
                             "roster": doc.get("roster"), "kit_sha256": (doc.get("kit") or {}).get("sha256"),
+                            "campaign_id": (doc.get("kit") or {}).get("campaign_id"),
+                            "legs_finished": doc.get("legs_finished"),
                             "command_reasons": law.receipt_command_reasons(doc),
                             "g0_unreleased": law.receipt_unreleased(doc, {}, doc.get("roster") or [])}
                     except (OSError, ValueError, AttributeError):
@@ -2379,10 +2381,10 @@ def main(argv=None):
         if args.cmd == "tick":
             print(json.dumps(ctl.tick(), indent=1, sort_keys=True, default=str))
             return 0
-        try:
-            run_loop(ctl)
-        finally:
-            ctl.release_fence()
+        # Only an explicit page, cede or launch handoff releases the standing lease.
+        # An unexpected loop exit must leave the expected deadline intact so that
+        # the watchdog and the next controller can detect the lapse (RL-173 E).
+        run_loop(ctl)
     return 0
 
 

@@ -1070,3 +1070,26 @@ unknown L002 recovery, N12 reference-hash binding, prior v1.1 Q1/typed-marker sw
 and a non-counting desk-disagreement clearance. The earlier options and recommendations are retained,
 not decided here. External offload guarantees, typed custody assertions and future campaign-scope
 history remain with their named owners. No fresh cold admission, native smoke or installation is claimed.
+
+
+### 15.18 Gate 7 (cold Sol, REFUSE at #799 419e184c0 / #800 8100bd44c)
+
+Source: `/Volumes/JW-EXT/jw-wt/mythos-repo/docs/run_reports/2026-11-16-independent-cold-review-pr799-pr800.md`.
+All four reproduced findings are repaired under RL-172(a)(c)(g) and RL-173 E.
+Regressions are in `tests/cadence/test_gate7.py`; exact before/after logs are in
+`/Volumes/JW-EXT/scratch/sol-ctl-r8/`. No new research policy is inferred.
+
+| Finding | Disposition and regression |
+|---|---|
+| F1 HIGH: declared prior campaign/mixed/count erased Q1 debt or date occupancy | FIXED. `build_runs` derives campaign, phase, counted kind and mixed-size classification from the hash-pinned kit. Snapshot retains receipt campaign and actual finished-leg count; a readable receipt's count populates the run. Contradictory declarations, receipt campaign or invalid count produce global PRIOR_CONTRADICTS even after disposition. The unchanged honest full-controller control waits on K2_Q1_DEBT; campaign, mixed, count and receipt-campaign mutations halt with no launch. A pure ledger assertion checks all derived fields and retained executed count. The old clean-prior and key-deadline fixtures now include their receipt campaign. |
+| F2 HIGH: duplicate gate keys resolved L002 hold/release by list order | FIXED. STANDING validation rejects every duplicate (plan_id, gate), including identical decisions. No supersession protocol is invented. Regression reverses hold/release order for L002, L005 and class A and also rejects repeated releases. A lead updates the single record; authenticated presence/chronology rules remain unchanged. |
+| F3 HIGH: withdrawal erased executed date occupancy | FIXED. Date accounting includes every positive executed leg count irrespective of disposition. Tests retain the mixed-size 12-leg cap, total 24-leg cap and development/qualification date separation after withdrawal. A zero-leg refusal contributes neither legs nor an executed phase/date. Withdrawal still retires the debts allowed by the existing disposition contract. |
+| F4 MED: abnormal CLI loop exit silently released the fence | FIXED. Main no longer releases in unconditional cleanup. Explicit page/cede/launch handoffs still own deliberate releases. An abnormal exit preserves the expected purpose/PID/deadline and fence; restart detects its lapse and records ARM_INDETERMINATE. Fault injection covers sleep, watch creation, watch wait, watch cleanup and the second tick. No signals or watchdog changes. |
+| #799 / hash or append stability | No independent #799 defect reproduced in gate 7. No desk implementation change this round. Earlier non-defect and deferred dispositions in 15.15–15.17 remain in force. |
+
+All research-lead questions in 15.15 remain open with their earlier options/recommendations:
+disposed-ancestor first-of-group semantics, unknown L002 recovery, N12 reference-hash binding,
+hand-armed v1.1 Q1 and typed-marker switch-over, and non-counting desk-disagreement clearance.
+External offload guarantees and future campaign-scope authenticated history retain their named owners.
+Fresh independent admission, owner merged-tree suite, cold Fable pass and watched native span remain
+separate gates; no merge or installation is authorized by this repair.
