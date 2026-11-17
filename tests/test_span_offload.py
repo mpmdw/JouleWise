@@ -543,6 +543,14 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertTrue(foreign.exists())
         self.assertTrue(temp.exists())
 
+        misplaced = self.span / marker.name
+        misplaced.write_bytes(before)
+        misplaced_temp = self.span / temp.name
+        os.link(misplaced, misplaced_temp)
+        with self.assertRaisesRegex(so.OffloadError, "PATH_OVERLAPS_SPAN"):
+            so.offload(config | {"marker_dir": str(self.span)}, PLAN, self.span)
+        self.assertTrue(misplaced_temp.exists())
+
     def test_marker_race_keeps_the_first_writer(self):
         marker = self.marker()
         real = so.write_marker

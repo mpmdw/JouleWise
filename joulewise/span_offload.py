@@ -1518,6 +1518,7 @@ def recheck_marker(config, plan, span_dir, backend, deadline):
         except OffloadError as error:
             if error.code != "HARD_LINKED":
                 raise
+            check_output_paths(span_dir, {"marker": marker, "stage_root": config["stage_root"]})
             with plan_lock(config["stage_root"], plan):
                 recover_marker_link(marker)
                 record = read_record(marker)
