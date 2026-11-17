@@ -2136,7 +2136,28 @@
         "label": "Owner 2026-11-16 direct build request and RL-173 A; run record",
         "path": "docs/run_reports/2026-11-16-close-offload.md"
       },
-      "dependencies": [],
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "decision",
+          "note": "Owner question pending; options and recommendation in the run report.",
+          "required": "Resolve requested readable tar.zst versus RL-173 A.1-2 encryption and off-MBP key.",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "CLOSE-OFFLOAD-ARCHIVE-FORMAT"
+        },
+        {
+          "evidence": null,
+          "kind": "decision",
+          "note": "Owner question pending; options and recommendation in the run report.",
+          "required": "Resolve requested nonholding UPLOAD_PENDING versus RL-173 A.3/A.7.",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "CLOSE-OFFLOAD-PENDING-ARM"
+        }
+      ],
       "fallback": null,
       "fences": [],
       "flags": [
@@ -2147,8 +2168,8 @@
       "lane": "agent",
       "priority": "p0_safety",
       "rank": 500,
-      "status": "partial",
-      "status_note": "2026-11-16: bounded owner-requested build on ops/2026-11-16-close-offload; synthetic implementation done, PR/CI/review pending; no live run or deployment; two policy questions awaiting owner.",
+      "status": "blocked",
+      "status_note": "2026-11-16: draft PR #807; initial full CI green at c2612f16d; ONE cold Sol seat REFUSE with 2 authority conflicts and 3 implementation defects, code fixes tested and awaiting same-seat delta/final CI. No MBP contact. Owner rulings on encryption/key and nonholding upload-pending required before ADMIT/standing-item issuance. Live GUI/provider gate remains lead-owned.",
       "stop_card": null
     },
     "COLDGATE-CONVENE-DOCTRINE-FREE-01": {

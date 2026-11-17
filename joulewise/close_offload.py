@@ -153,6 +153,8 @@ def member_name(name):
 
 
 def link_safe(name, link):
+    if os.path.normpath(link) != link:
+        raise Refusal("NONCANONICAL_SYMLINK")
     target = PurePosixPath(link)
     if target.is_absolute():
         raise Refusal("ABSOLUTE_SYMLINK")
@@ -173,6 +175,15 @@ def manifest(root, guard):
         if stat.S_ISLNK(st.st_mode):
             link = os.readlink(path)
             link_safe(name, link)
+            # The 3.14 data extraction filter normalizes links. Accept only
+            # canonical, resolvable internal links so restoration is proved
+            # before removing the source (including chains and cycles).
+            try:
+                resolved = path.resolve(strict=True)
+            except (OSError, RuntimeError):
+                raise Refusal("UNRESOLVED_SYMLINK") from None
+            if not resolved.is_relative_to(root.resolve()):
+                raise Refusal("ESCAPING_SYMLINK")
             entries[name] = {"type": "link", "target": link}
         elif stat.S_ISREG(st.st_mode):
             entries[name] = {"type": "file", "size": st.st_size, "sha256": file_hash(path, guard)}
@@ -400,8 +411,8 @@ def offload(config, kind, source, guard):
         record = {"schema": SCHEMA, "source": str(source), "kind": kind, "archive": str(archive),
                   "manifest_sha256": receipt["manifest_sha256"], "archive_sha256": receipt["archive_sha256"],
                   "archive_bytes": receipt["archive_bytes"], "receipt_sha256": digest(receipt),
-                  "cloud_only_allowed": config.cloud_only_allowed, "air_marker_observed": copied,
-                  "copy_basis": "air-marker-and-cloud" if copied else "cloud-only", "state": "PACKED", "provider": {}}
+                  "cloud_only_allowed": config.cloud_only_allowed, "prior_copy_marker_observed": copied,
+                  "copy_basis": "prior-copy-marker-and-cloud" if copied else "cloud-only", "state": "PACKED", "provider": {}}
         atomic_json(record_file, record)
     if record["state"] == "COMPLETE":
         if source.exists():
@@ -452,12 +463,6 @@ def offload(config, kind, source, guard):
     remove_original(source, guard)
     record["state"], record["completed_epoch_s"] = "COMPLETE", time.time()
     atomic_json(record_file, record)
-    if kind == "campaign":
-        plan = re.sub(r"-\d{8}T\d{6}Z$", "", source.name)
-        config.marker_root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        marker = config.marker_root / (plan + ".ok")
-        if not marker.exists():
-            atomic_json(marker, record)
     return "COMPLETE"
 
 
@@ -613,7 +618,14 @@ def main(argv=None):
     try:
         return worker.wait(timeout=left)
     except (subprocess.TimeoutExpired, KeyboardInterrupt):
-        os.killpg(worker.pid, signal.SIGKILL)
-        worker.wait()
         print('{"status":"DEADLINE","holds_next_arm":true}', flush=True)
         return DEADLINE
+    finally:
+        # subprocess.run kills only its direct child on timeout. The worker
+        # can exit normally with UPLOAD_PENDING while a provider grandchild
+        # still lives. Always clear the group, including successful exits.
+        try:
+            os.killpg(worker.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        worker.wait()

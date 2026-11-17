@@ -177,7 +177,7 @@ state.write_text(json.dumps(s))
         self.assertEqual(record["copy_basis"], "cloud-only")
         self.assertEqual(record["manifest_sha256"], co.digest(expected))
         self.assertEqual(set(record["provider"]), {"archive", "receipt"})
-        self.assertTrue((self.config.marker_root / "cq-example-a1.ok").exists())
+        self.assertFalse((self.config.marker_root / "cq-example-a1.ok").exists())
         config = replace(self.config, air_pull="campaign/" + self.old.name, receipt_sha256=record["receipt_sha256"])
         code, result = co.run(config)
         self.assertEqual(code, co.OK, result)
@@ -192,7 +192,7 @@ state.write_text(json.dumps(s))
         normal.write_bytes(b"existing-proof")
         code, result = co.run(replace(self.config, cloud_only_allowed=False))
         self.assertEqual(code, co.OK, result)
-        self.assertEqual(self.record()["copy_basis"], "air-marker-and-cloud")
+        self.assertEqual(self.record()["copy_basis"], "prior-copy-marker-and-cloud")
         self.assertEqual(normal.read_bytes(), b"existing-proof")
 
     @unittest.skipUnless(zstd, "stdlib zstd needs Python 3.14")
@@ -316,6 +316,58 @@ state.write_text(json.dumps(s))
     def test_air_pull_requires_independent_receipt_digest(self):
         code, result = co.run(replace(self.config, air_pull="campaign/" + self.old.name))
         self.assertEqual((code, result["status"]), (co.VERIFY_FAILED, "AIR_PULL_REQUIRES_MARKER_RECEIPT_SHA256"))
+
+    @unittest.skipUnless(zstd, "stdlib zstd needs Python 3.14")
+    def test_cloud_only_completion_never_satisfies_air_opt_out_for_later_source(self):
+        self.assertEqual(co.run(self.config)[0], co.OK)
+        self.span("campaign", "cq-example-a1-20261116T030000Z", 300)
+        code, result = co.run(replace(self.config, cloud_only_allowed=False))
+        self.assertEqual((code, result["status"]), (co.VERIFY_FAILED, "AIR_COPY_REQUIRED"))
+        self.assertTrue(self.new.exists())
+        self.assertFalse(co.record_path(self.config, self.new).exists())
+
+    @unittest.skipUnless(zstd, "stdlib zstd needs Python 3.14")
+    def test_noncanonical_symlink_refuses_before_any_original_is_removed(self):
+        (self.old / "link").unlink()
+        (self.old / "link").symlink_to("nested/../nested/raw")
+        code, result = co.run(self.config)
+        self.assertEqual((code, result["status"]), (co.VERIFY_FAILED, "NONCANONICAL_SYMLINK"))
+        self.assertTrue(self.old.exists())
+        self.assertFalse(list(self.cloud.rglob("*.tar.zst")))
+
+    @unittest.skipUnless(zstd, "stdlib zstd needs Python 3.14")
+    def test_symlink_cycle_refuses_before_delete(self):
+        (self.old / "a").symlink_to("b")
+        (self.old / "b").symlink_to("a")
+        code, result = co.run(self.config)
+        self.assertEqual((code, result["status"]), (co.VERIFY_FAILED, "UNRESOLVED_SYMLINK"))
+        self.assertTrue(self.old.exists())
+
+    @unittest.skipUnless(zstd, "stdlib zstd needs Python 3.14")
+    def test_deadline_cleans_provider_grandchild_after_normal_worker_exit(self):
+        heartbeat = self.root / "heartbeat"
+        pid_file = self.root / "provider-child.pid"
+        child_code = ("import time; from pathlib import Path; p=Path(" + repr(str(heartbeat))
+                      + ");\nwhile True: p.write_text(str(time.monotonic())); time.sleep(0.03)")
+        self.exe("brctl", "import subprocess,sys,time; from pathlib import Path; "
+                 + "child=subprocess.Popen([sys.executable,'-B','-c'," + repr(child_code) + "], "
+                 + "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+                 + "Path(" + repr(str(pid_file)) + ").write_text(str(child.pid)); time.sleep(30)\n")
+        try:
+            result = self.cli(2.0)
+            self.assertIn(result.returncode, (co.UPLOAD_PENDING, co.DEADLINE), result.stdout + result.stderr)
+            self.assertTrue(pid_file.exists(), "probe must actually launch the grandchild")
+            time.sleep(0.1)
+            stopped = heartbeat.read_bytes()
+            time.sleep(0.2)
+            self.assertEqual(heartbeat.read_bytes(), stopped, "provider work survived CLI exit")
+            self.assertTrue(self.old.exists())
+        finally:
+            if pid_file.exists():
+                try:
+                    os.kill(int(pid_file.read_text()), co.signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
     def test_special_and_escaping_links_refused(self):
         (self.old / "link").unlink()

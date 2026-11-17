@@ -62,7 +62,7 @@ its result before considering any next arm. It does not launch a span or
 change the process-based quiet, minimum GAP, restore, Check or other arm gates.
 
 A supervising process imposes the hard deadline even during filesystem or
-compression I/O and kills/reaps its worker process group. Normal upload polls
+compression I/O and kills/reaps its worker process group on every exit, including normal pending exits, so provider grandchildren cannot survive it. Normal upload polls
 stop slightly early to leave time for an orderly `UPLOAD_PENDING` exit. A
 forced timeout is conservatively `DEADLINE` and holds the next arm.
 
@@ -112,7 +112,9 @@ For each selected output:
 
 1. Build a canonical manifest: SHA-256 and size for every regular file,
    directory entries (including empty directories), and relative symlink
-   targets. Refuse special files and escaping/absolute links.
+   targets. Refuse special files, escaping/absolute links, noncanonical targets
+   that the extraction filter would normalize, dangling links and cycles. This
+   refusal happens before upload or removal of originals.
 2. Write a Python 3.14 stdlib `tar.zst`, then stream it back to compare the
    complete member set, file sizes/hashes and link targets. Rehash the source
    tree to detect changes. Hardlinked files are stored as independent bytes.
@@ -142,13 +144,14 @@ The controller-readable record is:
 
 Schema `joulewise.close-offload.v1` records `source`, `kind`, `archive`,
 `manifest_sha256`, `archive_sha256`, `archive_bytes`, `receipt_sha256`,
-`cloud_only_allowed`, `air_marker_observed`, `copy_basis`, `state`, and
+`cloud_only_allowed`, `prior_copy_marker_observed`, `copy_basis`, `state`, and
 per-object `provider` confirmations (logical size, command/readback and time).
 States are `PACKED`, `UPLOAD_PENDING`, `EVICTED`, `DELETING`, `COMPLETE`.
 Stage receipts remain small local metadata; local staging archives are removed
-once installed and verified in iCloud. A new campaign `.ok`, if needed, is
-written only after successful completion and contains this record. No failure
-writes a copy marker. These private artifacts must never be committed,
+once installed and verified in iCloud. This tool never creates or overwrites a
+legacy `.ok` or `.air.ok`: a cloud-only completion cannot become evidence of an
+Air copy or satisfy a newer output's legacy copy gate. The per-source-path
+record is the cloud-offload marker. Existing copy markers are read only. These private artifacts must never be committed,
 uploaded to releases, attached to PRs or stored in this PUBLIC repository.
 
 Exit codes and final JSON are the controller interface:
