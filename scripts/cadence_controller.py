@@ -894,14 +894,15 @@ plan = L.cadence_plan(Path(req["kit"]), req["legs"], req["batch_window"])
 deadline = R.launch_deadline(plan) + 60
 root = Path(req["custody_root"])
 real_read, real_write = base.read_fence, base.write_fence
-state = {"transferred": False, "bootstrap_t": None}
-def ours(cur):
-    return cur is not None and cur["purpose"] == req["standing_purpose"] and cur["pid"] == req["controller_pid"]
-with base.fence_lock(root):
-    cur = real_read(root)
-if cur is not None and not ours(cur):
-    print(json.dumps({"arm_child_refused": "a fence other than the controller's standing fence is up", "fence": cur}),
-          flush=True)
+state = {"launch_fence": None, "bootstrap_t": None, "fence_problem": None}
+try:
+    with base.fence_lock(root):
+        standing = real_read(root)
+    if (standing is None or standing["purpose"] != req["standing_purpose"]
+            or standing["pid"] != req["controller_pid"] or standing["deadline"] <= time.time()):
+        raise ValueError("the controller's unexpired standing fence is absent")
+except (OSError, ValueError) as error:
+    print(json.dumps({"arm_child_refused": str(error), "arm_indeterminate": True}), flush=True)
     sys.exit(3)
 t0 = time.time()
 if t0 > req["lease_until"]:
@@ -913,8 +914,29 @@ if t0 > req["lease_until"]:
 # clears its fence, and main() returns 2. Every other subprocess call passes through unchanged.
 import subprocess as _sp
 _real_run = _sp.run
+
+class FenceIndeterminate(ValueError):
+    pass
+
+def require_fence(r, expected, at):
+    try:
+        cur = real_read(r)
+    except (OSError, ValueError) as error:
+        state["fence_problem"] = f"{at}: fence unreadable: {error}"
+        raise FenceIndeterminate(state["fence_problem"]) from error
+    if cur is None or cur != expected or cur["deadline"] <= time.time():
+        state["fence_problem"] = f"{at}: the expected fence disappeared, changed or expired"
+        raise FenceIndeterminate(state["fence_problem"])
+
 def _run(argv, *a, **k):
     if len(argv) > 1 and str(argv[1]) == "bootstrap":
+        # Release the lock before launchctl so the LaunchAgent can claim its fence.
+        try:
+            with base.fence_lock(root):
+                require_fence(root, state["launch_fence"], "before bootstrap")
+        except OSError as error:
+            state["fence_problem"] = f"before bootstrap: fence lock unavailable: {error}"
+            raise FenceIndeterminate(state["fence_problem"]) from error
         now = time.time()
         if now > req["lease_until"]:
             raise _sp.SubprocessError(f"the arm lease expired before bootstrap ({now:.3f} > {req['lease_until']:.3f})")
@@ -924,11 +946,17 @@ _sp.run = _run
 # The atomic fence transfer: the launcher's busy check does not see the controller's own standing fence, and its
 # write_fence (an os.replace under the fence lock) replaces it, so a live owner holds the fence at every instant.
 def read_fence(r):
-    cur = real_read(r)
-    return None if (not state["transferred"] and ours(cur)) else cur
+    if state["launch_fence"] is not None:
+        return real_read(r)
+    require_fence(r, standing, "before transfer")
+    return None
+
 def write_fence(r, record):
+    # The frozen launcher calls this under the same lock as its read.
+    require_fence(r, standing, "at replacement")
     real_write(r, record)
-    state["transferred"] = True
+    state["launch_fence"] = record
+
 base.read_fence, base.write_fence = read_fence, write_fence
 argv = ["launch", "--repo", req["repo"], "--python-bin", req["python"], "--kit", req["kit"], "--legs", req["legs"],
         *(["--batch-window", req["batch_window"]] if req["batch_window"] else []),
@@ -936,9 +964,16 @@ argv = ["launch", "--repo", req["repo"], "--python-bin", req["python"], "--kit",
         "--magistrate-pid", str(os.getpid()), "--deadline", repr(deadline),
         "--exit-wait-seconds", "180", "--start-wait-seconds", "30",
         *(["--launchctl-bin", req["launchctl_bin"]] if req.get("launchctl_bin") else [])]
-rc = L.main(argv)
-print(json.dumps({"arm_child_pid": os.getpid(), "launch_rc": rc, "t0": state.get("bootstrap_t"), "checked_at": t0,
-                  "deadline": deadline, "transferred": state["transferred"]}), flush=True)
+try:
+    rc = L.main(argv)
+except FenceIndeterminate as error:
+    print(str(error), file=sys.stderr)
+    rc = 3
+result = {"arm_child_pid": os.getpid(), "launch_rc": rc, "t0": state["bootstrap_t"], "checked_at": t0,
+          "deadline": deadline, "transferred": state["launch_fence"] is not None}
+if state["fence_problem"] is not None:
+    result.update(arm_child_refused=state["fence_problem"], arm_indeterminate=True)
+print(json.dumps(result), flush=True)
 sys.exit(rc)
 '''
 
@@ -1028,6 +1063,7 @@ class Launcher:
                     child = doc
         return {"rc": res.rc, "launch": launched, "arm_child_pid": child.get("arm_child_pid"), "t0": child.get("t0"),
                 "deadline": child.get("deadline"), "refused": child.get("arm_child_refused"),
+                "indeterminate": child.get("arm_indeterminate", False),
                 "stderr": res.stderr[-1500:]}
 
 
@@ -1862,7 +1898,9 @@ class Controller:
         if intent["class"]["dated"] and law.local_date(t0) != intent["span"]["not_before"]:
             problems.append(f"the launch t0 {iso(t0)} is not on the span's date {intent['span']['not_before']}")
         # It launched if the LaunchAgent holds the fence: monitor and close it, and halt after its close.
-        status = "LIVE" if fence_held else "LAUNCH_REFUSED"
+        failure_code = "ARM_INDETERMINATE" if result.get("indeterminate") else "LAUNCH_REFUSED"
+        failed_status = "INDETERMINATE" if result.get("indeterminate") else "LAUNCH_REFUSED"
+        status = "LIVE" if fence_held else failed_status
         arm = self._arm_record(plan_id, intent, status, launch_epoch=self.env.now(), deadline=result.get("deadline"),
                                fence_purpose=claimed.get("purpose"),
                                arm_command={"rc": result.get("rc"), "launch": launched,
@@ -1881,7 +1919,7 @@ class Controller:
         self.critical_path_event(intent["span"]["span_id"], start=t0, plan_id=plan_id,
                                  refusal="; ".join(problems) or None)
         if problems:
-            self.page("HALT", [law.reason("LAUNCH_REFUSED", "; ".join(problems)[:400], span=intent["span"]["span_id"])])
+            self.page("HALT", [law.reason(failure_code, "; ".join(problems)[:400], span=intent["span"]["span_id"])])
             if status != "LIVE":
                 return self.write_status("HALTED", {"plan_id": plan_id})
         return self.write_status("LIVE", {"plan_id": plan_id, "deadline": arm["deadline"]})

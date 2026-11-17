@@ -819,16 +819,25 @@ class ArmChild(unittest.TestCase):
         (self.tmp / "repo/scripts/cadence_legs_runner.py").write_text(
             "def launch_deadline(plan):\n    return plan['t0'] + 1000.0\n")
         (self.tmp / "repo/scripts/launch_cadence_span.py").write_text(
-            "import json, os, sys, time\nfrom pathlib import Path\nfrom scripts import launch_align_r0 as base\n"
+            "import json, os, subprocess, sys, time\nfrom pathlib import Path\nfrom scripts import launch_align_r0 as base\n"
             "def cadence_plan(kit, legs=None, batch_window=None, t0=None):\n    return {'t0': 5000.0}\n"
             "def main(argv):\n"
             "    root = Path(argv[argv.index('--custody-root') + 1]); pid = int(argv[argv.index('--magistrate-pid') + 1])\n"
+            "    path = root / base.FENCE_NAME\n"
+            "    race = (root / 'race').read_text() if (root / 'race').exists() else None\n"
             "    with base.fence_lock(root):\n"
+            "        if race == 'remove before read': path.unlink()\n"
             "        cur = base.read_fence(root)\n"
             "        if cur and base.pid_alive(cur['pid']):\n"
             "            print('active fence', file=sys.stderr); return 2\n"
-            "        existed = (root / base.FENCE_NAME).exists()\n"
+            "        if race == 'replace after read':\n"
+            "            change = json.loads(path.read_text()); change['deadline'] -= 1\n"
+            "            path.write_text(json.dumps(change))\n"
+            "        existed = path.exists()\n"
             "        base.write_fence(root, {'purpose': 'align-r0:t', 'pid': pid, 'deadline': 4e9})\n"
+            "    if race == 'remove before bootstrap':\n"
+            "        path.unlink()\n"
+            "        subprocess.run(['/usr/bin/true', 'bootstrap'], check=True)\n"
             "    (root / 'argv.json').write_text(json.dumps({'argv': argv, 'fence_existed_at_write': existed}))\n"
             "    print(json.dumps({'fence': {'purpose': 'align-r0:t'}, 'next': 'exit the magistrate session now'}))\n"
             "    return 0\n")
@@ -869,6 +878,27 @@ class ArmChild(unittest.TestCase):
         self.assertFalse((self.custody / "argv.json").exists())
         self.assertEqual(cc.fence.read_fence(self.custody)["purpose"], "cadence-controller:abc")
 
+    def test_fence_loss_or_replacement_after_precheck_refuses_launch(self):
+        for race in ("remove before read", "replace after read", "remove before bootstrap"):
+            with self.subTest(race=race):
+                (self.custody / "argv.json").unlink(missing_ok=True)
+                (self.custody / "race").write_text(race)
+                standing = {"purpose": "cadence-controller:abc", "pid": os.getpid(), "deadline": 4e9}
+                cc.fence.write_fence(self.custody, standing)
+                done = self.run_child()
+                self.assertNotEqual(done.returncode, 0, done.stdout)
+                self.assertIn("arm_indeterminate", done.stdout)
+                self.assertFalse((self.custody / "argv.json").exists())
+                expected = {**standing, "deadline": 4e9 - 1} if race == "replace after read" else None
+                self.assertEqual(cc.fence.read_fence(self.custody), expected)
+
+    def test_expired_standing_fence_refuses_launch(self):
+        cc.fence.write_fence(self.custody, {"purpose": "cadence-controller:abc", "pid": os.getpid(),
+                                           "deadline": time.time() - 1})
+        done = self.run_child()
+        self.assertNotEqual(done.returncode, 0, done.stdout)
+        self.assertFalse((self.custody / "argv.json").exists())
+
 
 class ArmChildBootstrapLease(unittest.TestCase):
     """Sol R3: the lease is enforced at the launcher's bootstrap call itself, not only before the launcher starts."""
@@ -881,8 +911,13 @@ class ArmChildBootstrapLease(unittest.TestCase):
         (tmp / "repo/scripts/cadence_legs_runner.py").write_text("def launch_deadline(plan):\n    return 9e9\n")
         (tmp / "repo/scripts/launch_cadence_span.py").write_text(
             "import json, subprocess, sys, time\nfrom pathlib import Path\n"
+            "from scripts import launch_align_r0 as base\n"
             "def cadence_plan(kit, legs=None, batch_window=None, t0=None):\n    return {}\n"
             "def main(argv):\n"
+            "    root = Path(argv[argv.index('--custody-root') + 1])\n"
+            "    with base.fence_lock(root):\n"
+            "        base.read_fence(root)\n"
+            "        base.write_fence(root, {'purpose': 'align-r0:t', 'pid': 123, 'deadline': 9e9})\n"
             "    time.sleep(1.5)       # the launcher's own work, after the arm child's first check\n"
             "    try:\n"
             "        subprocess.run(['/usr/bin/true', 'bootstrap', 'gui/0', 'x.plist'], check=True)\n"
@@ -891,6 +926,8 @@ class ArmChildBootstrapLease(unittest.TestCase):
             "        return 2\n"
             "    return 0\n")
         (tmp / "custody").mkdir()
+        cc.fence.write_fence(tmp / "custody", {"purpose": "cadence-controller:abc", "pid": os.getpid(),
+                                              "deadline": 4e9})
         req = {"repo": str(tmp / "repo"), "python": sys.executable, "kit": "/k.json", "legs": "L001",
                "batch_window": None, "output": "/o", "custody_root": str(tmp / "custody"),
                "lease_until": time.time() + 1.0, "standing_purpose": "cadence-controller:abc",
@@ -944,8 +981,10 @@ class ArmChildRealPin(unittest.TestCase):
         self.custody.mkdir()
         self.log = self.tmp / "launchctl.jsonl"
 
-    def run_child(self, lease):
-        cc.fence.write_fence(self.custody, {"purpose": "cadence-controller:abc", "pid": os.getpid(), "deadline": 4e9})
+    def run_child(self, lease, *, standing=True):
+        if standing:
+            cc.fence.write_fence(self.custody, {"purpose": "cadence-controller:abc", "pid": os.getpid(),
+                                               "deadline": 4e9})
         req = {"repo": str(self.pin), "python": sys.executable, "kit": str(ROOT / "docs/process/cadence/kits/cl-qual-01.v1.1.json"),
                "legs": "L001,L002,L003,L004,L005,L006", "batch_window": None, "output": str(self.tmp / "out"),
                "custody_root": str(self.custody), "lease_until": lease, "standing_purpose": "cadence-controller:abc",
@@ -971,6 +1010,13 @@ class ArmChildRealPin(unittest.TestCase):
         self.assertEqual(done.returncode, 4)
         self.assertFalse(self.log.exists())
         self.assertEqual(cc.fence.read_fence(self.custody)["purpose"], "cadence-controller:abc")
+
+    def test_the_real_launcher_cannot_bootstrap_without_a_standing_fence(self):
+        done = self.run_child(time.time() + 120, standing=False)
+        self.assertEqual(done.returncode, 3, done.stdout)
+        self.assertIn("arm_indeterminate", done.stdout)
+        self.assertFalse(self.log.exists())
+        self.assertIsNone(cc.fence.read_fence(self.custody))
 
 
 class FakeRunEnv(cc.Env):
