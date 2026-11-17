@@ -28,8 +28,8 @@ Check. The basename must equal PLAN or PLAN followed by its UTC timestamp. If
 that controller uses a different top-level completion record, also pass its
 declared basename with `--require-file`. Close verifies its presence and
 archives its bytes without parsing them. Such an OUT is outside the GAP roots
-and can retire once its pack and cloud round trip are verified. Keep any raw
-copy designated for a pending registered look.
+and can retire once its pack and cloud round trip are verified. Pass
+`--keep-raw` if this OUT is the designated raw copy for a pending registered look.
 
 Require exit zero, `CLOSE_OK`, the exact OUT's verified marker, and `pending.clear`
 true. Nonzero, timeout, missing or unverified output holds the next arm, including

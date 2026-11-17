@@ -185,6 +185,8 @@ def checked_close(args, config, guard, spans):
         if any(span.plan.casefold() == checked.plan.casefold() for span in spans):
             raise so.refused("PLAN_COLLISION", "the separate OUT conflicts with a managed plan")
         if not os.path.lexists(checked.path):
+            if args.keep_raw:
+                raise so.refused("CHECK_OUT_REQUIRED", "the designated raw OUT is absent")
             require_staged_source(config, checked)
     elif args.require_file or (args.plan is not None and args.plan != checked.plan):
         raise so.refused("CHECK_OUT_REQUIRED", "a managed OUT uses its derived plan and runner receipt")
@@ -199,7 +201,7 @@ def checked_close(args, config, guard, spans):
     # Catch-up can also retire older receipt-bearing outputs in the same close interval.
     selected = set()
     guard.quiet()
-    results = [close_one(args, config, checked, retain_original=checked.kind != "separate",
+    results = [close_one(args, config, checked, retain_original=checked.kind != "separate" or args.keep_raw,
                          require_files=tuple(args.require_file or ("runner_receipt.json",)))]
     for span in sorted(eligible, key=lambda span: (span.receipt_mtime_ns is not None, -(span.receipt_mtime_ns or 0),
                                                     str(span.path))):
@@ -255,6 +257,7 @@ def parser():
     after = commands.add_parser("after-check", help="verify Check OUT, preserve GAP and rotate older outputs")
     after.add_argument("--catch-up", action="store_true", help="also process all older eligible outputs")
     after.add_argument("--require-file", action="append", help="for a separate OUT only, require this Check file basename")
+    after.add_argument("--keep-raw", action="store_true", help="preserve a separate OUT designated for a pending look")
     cleanup = commands.add_parser("reclaim", help="later SSD-backed eviction of a retired OUT")
     cleanup.add_argument("--ssd-receipt", type=Path, required=True)
     for command in (after, cleanup):

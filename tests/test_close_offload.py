@@ -213,6 +213,9 @@ class CloseOffloadTests(unittest.TestCase):
         with self.assertRaisesRegex(so.OffloadError, "SPAN_NOT_CLOSED"):
             self.verify(out, "--plan", plan)
         args = ("--plan", plan, "--require-file", done.name)
+        kept = self.verify(out, *args, "--keep-raw")
+        self.assertFalse(kept["spans"][0]["original_deleted"])
+        self.assertTrue(done.is_file())
         result = self.verify(out, *args)
         self.assertEqual(result["spans"][0]["plan"], plan)
         self.assertTrue(result["pending"]["clear"])
