@@ -10,10 +10,11 @@ next_observable: after fence disappearance, Check below reports operational rece
 
 - **Issued ahead (RL-173 D).** At most three counted spans ahead plus standing F0. Predecessor `qual-01-s02` in `cl-qual-01`, roster L007,L008,L009,L010,L011,L012; `pred_gate` reads only its receipt and leg-summary projection. Absent receipt = WAIT; any unclean close = VOID, never skipped. The qualification predecessor chain is fixed; no automatic skip or override. This item has its own t0-date and no window argument; `expiry_gate` enforces 24 h and `watch_gate` re-reads the hand-stamped watcher observation at each arm (RL-173 C.5). Nothing is issued across a class A, L002 or L005 hand gate. Not issuable before qual-01-s01's soak hand-read record (RL-172a F1; conservative issue ordering).
 - **Why (RL-149 §2.3; RL-155 §5.3; RL-165 §8.1; RL-167 Part B; RL-172 (a),(b)).** Qualification tests the committed fit on held-out dates. This law's 6 + 6 cut keeps each true type-L pair adjacent in one span and gives each span four A legs and one L pair. First leg own-shaped/capture, all five others span-shaped/consume; no T or M. The M slots are ordinary A legs at 19,458. No class A smoke: class B, a mock span, plan and diff check (RL-165 §8.1; RL-172a F1). At the first qualification arm cite RL-172a F1. Its soak's operational fields and reference schema must be hand-compared with dev-05 before qual-01-s02; a difference goes to the research lead. The retry fires on slope or load refusal, once (RL-172a F2); the desk/look read `soak_attempts`, a retried soak forces the sampled hand table, and refusal kind prints "kind not recorded" until a later pin (RL-173 E).
+- **Config provenance (RL-167 Part B Q1; Mythos #794 F5).** Record both runtime-config hashes: development `bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df`, qualification `272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46`. Only the unused `d_n_chunk_status` label differs; `lm-qual-01` prints both and must not require equality for inclusion.
 - **Freeze and pin.** `freeze2_gate` implements RL-165 §8.1, RL-172 (i) row 9 and RL-173 E. Full commit/hash/path unfilled = WAIT/HOLD_FOR_FIT_FREEZE. The commit must be an ancestor of freshly fetched audit or main and contain that exact coefficient hash. No forecast or fit-code hash substitutes for it. `qual_pin_gate`: line 1 cold seat ADMIT **per kit**, including RL-167 Part B Q2's same-code capture/five-consumer confirmation; line 2 suite red set at the frozen bytes equals the merged W1-line commit `c3f4bacd8`, test for test, no added red (RL-165 §8.1). Record pointers remain lead fills. Later W1 merges do not move the qualification pin. Builder's mock checks grant no admission.
-- **Day law.** Dates: qual-01=2026-11-19, qual-02=2026-11-20, qual-03=2026-11-21. At least two dates and none with a development leg (RL-172 (a)3). Sat 14–Wed 18 Nov are reserved development dates, and `day_gate` additionally reads every development receipt's t0-date, including moved development spans. The local t0-date assigns **all six legs**, even if close crosses midnight. It counts qualification rosters already launched, including excluded legs, and conservatively refuses >24 legs, >two blocks or two block starts less than 10 h apart on a date under RL-149 §2.3 (STATUS OPEN Q1: RL-172's explicit 24-leg cap says development). It prints which rule it used. No doubling up or automatic redating.
-- **Host event (RL-171 §5; RL-172 (h); RL-173 E).** Lead supplies the pre-freeze-2 hygiene/restart/service-stop event or explicit waiver/deferral, with its readback and host-state identity. Unfilled = WAIT. That same state stays fixed throughout qualification. No password, physical step or new restart is authorized. The research lead's freeze-2 disposition of the maintenance flag is required; conservative draft keeps the existing kit inclusion only with an explicit unchanged-rule record (STATUS OPEN Q2). A changed rule returns for a new draft; nobody silently edits the kit.
-- **Gates 5–9 (RL-149 §2.8; RL-165 §6; RL-172 (c),(f); RL-173 A–E).** Line 6: no named stop, halt or veto open, lead record of dispositions. Line 7: watcher observed within 24 h, re-read at both gates; this draft uses C.5, not an assumed Actions pass (C.4 would need the latest completed API run newer than predecessor close). Line 9: actual machine order across blocks/queues, desk-final and **typed Q1 completion** through span k−2. `debt_gate` requires the lead's full typed record (shape in `evidence/record-shapes.md`); no "first span of kit" exception. Automatic desk must satisfy all four RL-172 (c) identity/authentication rules, sampled hand table clear, disagreement holds next arm. All relevant pointer/observation values are supplied by the lead/magistrate, never default yes.
+- **Day law (RL-174 B.3).** Dates: qual-01=2026-11-19, qual-02=2026-11-20, qual-03=2026-11-21. **Three distinct t0-dates, one block each**, none with a development leg. Each block holds two L pairs; fewer than three pair-days prints `not_evaluable` for the ±0.10 word (RL-166b §4). Sat 14–Wed 18 Nov are reserved development dates, and `day_gate` also checks moved development spans. The local t0-date assigns all six legs, including excluded legs and a close after midnight. RL-149 §2.3's cap **applies**: at most two blocks and 24 legs on a date, block starts at least 10 h apart. It is not used by this plan and cannot remedy a slip. A missed date requires the lead to re-date and re-commit the queues; they expire **Mon 23 Nov 00:00 PST** (RL-174 E.4). No automatic extension.
+- **Host state (RL-174 C).** Freeze 2 proceeds on the host as it is; no visit, hygiene action or restart is a gate. Each arm states four lines: `spotlightknowledged` and updater present/absent (stopped Sun 15 Nov 15:32); `corespotlightd` present/on demand; indexing of `/` off; Time Machine destination none (`backupd` resident). The lead supplies the readback record and a hygiene-state identity, excluding boot time. Nobody changes a hygiene setting from freeze 2 through qual-03 close. An unplanned restart is an event: record it and refresh the four lines at the next arm; it holds nothing. `INCLUSION_RECORD` is filled by **RL-174 B.5**: the six rules stay unchanged and maintenance overlaps are print-only. `lm-qual-01` prints flagged and unflagged errors side by side, with counts by job, description only and no word. The lead appends the by-job count through dev-05 when its desk is final; that count gates nothing. The maintenance print carries the Sun15 15:32 service-stop date.
+- **Gates 5–9 (RL-149 §2.8; RL-165 §6; RL-172 (c),(f); RL-173 A–E; RL-174 E.5).** Line 6: no named stop, halt or veto open, lead record of dispositions. Line 7: watcher observed within 24 h, re-read at both gates; this draft uses C.5. For an Actions watcher, RL-174 A.13 requires a scheduled successful completed run on this repository's `main`, started after the previous close; a manual run never serves an arm. Line 9: actual machine order across blocks/queues, desk-final and **typed Q1 completion** through span k−2. In particular qual-01-s01 needs dev-05-s01's desk-final and Q1 records; qual-01-s02 needs dev-05-s02's, span for span. `debt_gate` requires those named rows as well as the full machine-order debt record. No "first span of kit" exception. Automatic desk must satisfy all four RL-172 (c) identity/authentication rules, sampled hand table clear, disagreement holds next arm. Lead/magistrate supply observations and pointers; no default yes.
 - **Close and copy (RL-171 §6.1; RL-172 (d); RL-173 A,B).** At least 300 s after a campaign close; 1,200 s after F0/F2/Part C/session/W1, using the **latest close of anything**, its Check and process-group absence, fence gone. Census stops on missing roots, unreadable or ambiguous stamps; `OTHER_CLOSE_EPOCH` covers sessions outside it. `PRIOR_CLOSE_EPOCH` cannot precede predecessor close. After a campaign close, copy marker `.ok` or `.air.ok` for that plan is required; after any other close, its Check/copy proof must bind the exact latest receipt path and close epoch; verified synchronous encrypted cloud offload counts permanently, upload finished before soak, plaintext/ciphertext hashes and size/provider confirmation recorded, key held off MBP, originals retained until verified copy. An unverified offload holds every arm including F0. A sync daemon is interim only; maintenance print includes bird/cloudd/fileproviderd. No marker is written by this item.
 - **Quiet, native checks and stops.** Same measurement_mode (RL-149 §2.2/§2.4), Automatic, network time Off, frequency word 0, AC, meter ready, disk ≥40 GiB, no night/smoke agent, High Power marker, night.lock holder, stray monitor, root powermetrics or other agent. Preserve the dev-05 own-process-tree-only measurement_mode exception. Process/load census and rule 5 enforce quiet (RL-171 §2); no builds, analysis, SSH or tests while anything is armed. Named stops stop the next arm, never a running span. REFUSAL/restore/disk/watcher: lead clears; INSTRUMENT_FAULT: research lead; 3 contaminated redos: lead once, then research lead; two legs >1.5× own budget: lead; frozen-path/host-state changes: research lead (RL-149 §2.4). A reference missing at capture is refusal; no consumer proceeds on an invented reference. A READY v4 record preempts immediately (RL-172 (f)); no intended-session-time reservation.
 
@@ -183,9 +184,9 @@ FREEZE2_COEF_SHA256="<LEAD FILLS: FREEZE2_COEF_SHA256>"
 FREEZE2_COEF_PATH="<LEAD FILLS: FREEZE2_COEF_PATH>"
 COLD_SEAT_RECORD="<LEAD FILLS: per-kit cold seat ADMIT and RL-167 Part B Q2 confirmation>"
 LINE2_RECORD="<LEAD FILLS: qual-pin suite red set equals c3f4bacd8 test for test>"
-HOST_EVENT_RECORD="<LEAD FILLS: pre-freeze-2 host event done or explicit waiver/deferral and readback>"
+HOST_EVENT_RECORD="<LEAD FILLS: four host-state lines under RL-174 C, with readback>"
 HOST_STATE_ID="<LEAD FILLS: qualification host-state identity frozen before freeze 2>"
-INCLUSION_RECORD="<LEAD FILLS: research-lead freeze-2 maintenance-flag disposition RL-171 §5.3>"
+INCLUSION_RECORD="RL-174 B.5 at ebff15ad27e831499dd65796b3727d8c5d451e21: six rules unchanged; maintenance overlaps print-only (RESEARCH-LEAD-DECISIONS.md)"
 QUEUE_COMMIT="<LEAD FILLS: authenticated audit commit containing this queue>"
 filled() {
   case "${1:-}" in ''|*'<LEAD '*) return 1;; *) return 0;; esac
@@ -220,11 +221,11 @@ qual_pin_gate() {
 }
 host_event_gate() {
   filled "$HOST_EVENT_RECORD" && filled "$HOST_STATE_ID" \
-    || { echo 'WAIT: pre-freeze-2 host event record unfilled (RL-171 §5; RL-172 (h); RL-173 E)'; return 1; }
+    || { echo 'WAIT: four host-state lines/readback unfilled (RL-174 C); no restart or hygiene action required'; return 1; }
   case "${HOST_EVENT_DISPOSITION:-}" in done|waived|deferred) ;; *) echo 'WAIT: host-event disposition absent'; return 1;; esac
+  # Identity covers hygiene settings, not boot time. RL-174 C permits an unplanned restart.
   test "${CURRENT_HOST_STATE_ID:-}" = "$HOST_STATE_ID" && test "${FREEZE2_HOST_STATE_ID:-}" = "$HOST_STATE_ID" \
-    && test "${HOST_EVENT_BEFORE_FREEZE2:-}" = yes \
-    || { echo 'STOP: host state differs or event not recorded before freeze 2 (RL-173 E)'; return 1; }
+    || { echo 'WAIT: record current host state under RL-174 C; an unplanned restart needs an event and four fresh lines, not a new hygiene gate'; return 1; }
   filled "$INCLUSION_RECORD" || { echo 'WAIT: research-lead maintenance-flag disposition at freeze 2 (RL-171 §5.3)'; return 1; }
   # The kit is not silently amended. A changed inclusion rule requires its own lead/research-lead disposition.
   test "${QUAL_INCLUSION_UNCHANGED:-}" = yes \
@@ -245,7 +246,7 @@ def stop(s): sys.exit('REFUSE: day law ' + s)
 TZ=ZoneInfo('America/Los_Angeles'); day=dt.datetime.fromtimestamp(int(now),TZ).date().isoformat()
 try:
     planned=dict(x.split('=') for x in dates.split(','))
-    if set(planned)!= {'qual-01','qual-02','qual-03'} or len(set(planned.values())) < 2: stop('three blocks require at least two dates (RL-172 (a)3)')
+    if set(planned)!= {'qual-01','qual-02','qual-03'} or len(set(planned.values())) != 3: stop('three distinct dates, one block each (RL-174 B.3)')
     for date in planned.values(): dt.date.fromisoformat(date)
     if day != wanted or planned[camp.removeprefix('cl-')] != day: stop('outside this item t0-date; lead re-dates (RL-172 (a)5)')
     if '2026-11-14' <= day <= '2026-11-18': stop('known development date Sat14-Wed18 (RL-172 (a)3)')
@@ -270,12 +271,13 @@ try:
                 if actual==day:
                     count+=len(roster); blocks.add(block); firsts[block]=min(firsts.get(block,t),t); seen.append((out.name,len(roster)))
     n=len(legs.split(',')); blocks.add(camp.removeprefix('cl-'))
-    if count+n > 24: stop('25th leg / >24 qualification legs; conservative RL-149 §2.3 two-block reading, OPEN Q1')
-    if len(blocks)>2: stop('more than two qualification blocks; conservative RL-149 §2.3, OPEN Q1')
+    if count+n > 24: stop('25th leg / >24 qualification legs; RL-174 B.3 / RL-149 §2.3 cap applies')
+    if len(blocks)>2: stop('more than two qualification blocks; RL-174 B.3 / RL-149 §2.3 cap applies')
     firsts.setdefault(camp.removeprefix('cl-'),int(now))
-    if len(firsts)==2 and abs(max(firsts.values())-min(firsts.values()))<36000: stop('two block starts less than 10 h apart; conservative RL-149 §2.3, OPEN Q1')
+    if len(firsts)==2 and abs(max(firsts.values())-min(firsts.values()))<36000: stop('two block starts less than 10 h apart; RL-174 B.3 / RL-149 §2.3 cap applies')
+    if len(blocks)>1: stop('one qualification block per t0-date; cap is not a slip remedy (RL-174 B.3)')
 except (OSError,ValueError,KeyError,TypeError,OverflowError) as e: stop('unreadable/contradictory receipt or plan '+str(e))
-print('DAY OK',day,'already',count,'plus',n,'blocks',sorted(blocks),'rule RL-172 (a)3; <=24/two blocks/10h conservative RL-149 §2.3 OPEN Q1',seen)
+print('DAY OK',day,'already',count,'plus',n,'blocks',sorted(blocks),'RL-174 B.3: three dates/one block each; <=24/two blocks/10h cap applies, never a slip remedy',seen)
 PY
 }
 queue_gate() {
@@ -310,6 +312,14 @@ try:
         assert isinstance(s['desk_final_record'],str) and s['desk_final_record'].strip() and '<LEAD ' not in s['desk_final_record']
         if s['runner_kind']=='cadence-legs-v1.1':
             assert isinstance(s['q1_complete_record'],str) and s['q1_complete_record'].strip() and '<LEAD ' not in s['q1_complete_record']
+    # RL-174 E.5: retain the named dev-05 debt even if a supplied census omits it.
+    if sys.argv[2] in ('qual-01-s01','qual-01-s02'):
+        required='dev-05-'+sys.argv[2].rsplit('-',1)[1]
+        rows=[s for s in order if s['span_id']==required]
+        assert len(rows)==1 and rows[0]['runner_kind']=='cadence-legs-v1.1'
+        for key in ('desk_final_record','q1_complete_record'):
+            value=rows[0].get(key)
+            assert isinstance(value,str) and value.strip() and '<LEAD ' not in value
     assert r['authenticated_roster_identity_checks']=='RL-172 (c)'
 except (OSError,ValueError,KeyError,TypeError,AssertionError): sys.exit('WAIT: line 9 desk-final or typed Q1 record absent/contradictory; debt counts across blocks')
 print('LINE9 PAID through',ids[-2],'; Q1 completion through same span (RL-173 E); next',sys.argv[2])
@@ -397,9 +407,10 @@ echo "$OUT"
 
 Require exit 0, `"next": "exit the magistrate session now"`, a claimed desk fence whose pid differs from MAGISTRATE_PID, and launch plan `batch_windows == []`. Record every gate print, all record pointers, date-rule/cap reading, predecessor/host close epochs and kind, GAP, issue/expiry/watch stamps, freeze-2 commit/path/hash, host-state identity, worktree HEAD, kit/queue commit/hash, six legs and their caps, OUT, DEADLINE, native readbacks and plan. Then exit at once. Any refusal is reported; nothing is re-armed on this authority.
 
-**Check (next activation, after the fence is gone).** Maintenance first, print only while OPEN Q2 is unresolved: one system-log query over this span, save beside journals, count by 10-minute bucket and process, associate leg intervals from summaries if available. It adds no exclusion by itself (RL-171 §5; RL-173 A.3).
+**Check (next activation, after the fence is gone).** Maintenance first, print only under RL-174 B.5: one system-log query over this span, save beside journals, count by 10-minute bucket and process, associate leg intervals from summaries if available. No additional exclusion. Keep `bird`, `cloudd` and `fileproviderd` in the print permanently (RL-174 D.1).
 
 ```sh
+echo 'maintenance context: spotlightknowledged and updater stopped 2026-11-15 15:32 PST (RL-174 C)'
 START_UTC="$(basename "$OUT" | sed -E 's/.*-([0-9]{8}T[0-9]{6}Z)$/\1/')"
 START_LOCAL="$("$PY" -B -c 'import sys,datetime as d; t=d.datetime.strptime(sys.argv[1],"%Y%m%dT%H%M%SZ").replace(tzinfo=d.timezone.utc); print(t.astimezone().strftime("%Y-%m-%d %H:%M:%S"))' "$START_UTC")"
 END_LOCAL="$(date -r "$(stat -f %m "$OUT/runner_receipt.json")" '+%Y-%m-%d %H:%M:%S')"

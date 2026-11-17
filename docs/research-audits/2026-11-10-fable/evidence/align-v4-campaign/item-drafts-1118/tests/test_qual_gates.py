@@ -62,7 +62,7 @@ def run_item(item,shell):
         (markers/'f0-synthetic.ok').write_text('SYNTHETIC verified hashes, size, provider upload completion\n')
         # Minimal but typed k+2 proof: prior two entries only stand for the full census in this test.
         dump(debt,{'next_span':item['span'],'authenticated_roster_identity_checks':'RL-172 (c)','machine_order':[
-            {'span_id':'synthetic-k-minus-2','runner_kind':'cadence-legs-v1.1','desk_final_record':'synthetic authenticated FINAL','q1_complete_record':'synthetic typed Q1 completion'},
+            {'span_id':'dev-05-s01' if item['span']=='qual-01-s01' else 'dev-05-s02' if item['span']=='qual-01-s02' else 'synthetic-k-minus-2','runner_kind':'cadence-legs-v1.1','desk_final_record':'synthetic authenticated FINAL','q1_complete_record':'synthetic typed Q1 completion'},
             {'span_id':item['predecessor'],'runner_kind':'cadence-legs-v1.1'}]})
     def close_stamp(path, epoch):
         r=json.loads(path.read_text()); r['ended']={'epoch_s':epoch}; dump(path,r)
@@ -76,7 +76,7 @@ def run_item(item,shell):
         global checks,failures
         fixture(); setup(); vals={**defaults,**(overrides or {})}; ff={**fills,**(fill_changes or {})}; program=gates
         for key,value in ff.items():
-            pattern=rf'^{key}="<LEAD FILLS:[^>]*>"$'
+            pattern=rf'^{key}="[^"]*"$'
             assert re.search(pattern,program,re.M),key
             if value is not None: program=re.sub(pattern,key+'='+quote(value),program,flags=re.M)
         assignments='\n'.join('unset '+key if value is None else key+'='+quote(value) for key,value in vals.items())
@@ -98,10 +98,12 @@ def run_item(item,shell):
         run('admission mismatch '+key,overrides={key:value},want=False,contains='STOP')
     run('host event unfilled WAIT',fill_changes={'HOST_EVENT_RECORD':None},want=False,contains='WAIT')
     run('host state unfilled WAIT',fill_changes={'HOST_STATE_ID':None},want=False,contains='WAIT')
-    for key,value in [('CURRENT_HOST_STATE_ID','changed'),('FREEZE2_HOST_STATE_ID','changed'),('HOST_EVENT_BEFORE_FREEZE2','no')]:
-        run('host mismatch '+key,overrides={key:value},want=False,contains='STOP')
+    for key,value in [('CURRENT_HOST_STATE_ID','changed'),('FREEZE2_HOST_STATE_ID','changed')]:
+        run('host mismatch '+key,overrides={key:value},want=False,contains='WAIT')
     for state in ('waived','deferred'): run('explicit host event '+state,overrides={'HOST_EVENT_DISPOSITION':state})
-    run('maintenance ruling unfilled WAIT',fill_changes={'INCLUSION_RECORD':None},want=False,contains='WAIT')
+    assert 'INCLUSION_RECORD="RL-174 B.5 at ebff15ad27e831499dd65796b3727d8c5d451e21' in src
+    run('maintenance record erased WAIT',fill_changes={'INCLUSION_RECORD':''},want=False,contains='WAIT')
+    run('unplanned restart has no before-freeze gate',overrides={'HOST_EVENT_BEFORE_FREEZE2':'no'})
     run('maintenance inclusion changed WAIT',overrides={'QUAL_INCLUSION_UNCHANGED':'no'},want=False,contains='WAIT')
     run('READY v4 DO NOT ARM',overrides={'SESSION_READY':'yes'},want=False,contains='DO NOT ARM')
     run('unknown v4 STOP',overrides={'SESSION_READY':None},want=False,contains='STOP')
@@ -115,6 +117,8 @@ def run_item(item,shell):
     run('Q1 debt unpaid WAIT',setup=lambda:debt_change('q1_complete_record',''),want=False,contains='WAIT')
     run('desk debt unpaid WAIT',setup=lambda:debt_change('desk_final_record',''),want=False,contains='WAIT')
     run('Q1 debt unfilled WAIT',setup=lambda:debt_change('q1_complete_record','<LEAD FILLS: Q1>'),want=False,contains='WAIT')
+    if item['span'].startswith('qual-01-'):
+        run('named dev-05 debt omitted WAIT',setup=lambda:debt_change('span_id','unrelated-paid-span'),command='debt_gate',want=False,contains='WAIT')
     run('no predecessor WAIT',setup=lambda:shutil.rmtree(predout),want=False,contains='WAIT')
     run('pending predecessor WAIT',setup=lambda:(predout/'runner_receipt.json').unlink(),want=False,contains='WAIT')
     run('lookalike predecessor WAIT',setup=lambda:predout.rename(predout.with_name(predout.name.replace('-a1-','b-a1-'))),want=False,contains='WAIT')
@@ -157,17 +161,18 @@ def run_item(item,shell):
     run('development receipt on qual date REFUSE',setup=lambda:date_receipt('cl-dev-99',item['date'],1),command='day_gate',want=False,contains='development receipt')
     # Use current block for cap fixtures: not already a second/third block by metadata.
     run('25th leg on date REFUSE',setup=lambda:date_receipt(item['camp'],item['date'],19-(6 if item['predecessor_camp']==item['camp'] else 0)),command='day_gate',want=False,contains='25th leg')
-    run('exact 24 legs allowed conservative rule printed',setup=lambda:date_receipt(item['camp'],item['date'],18-(6 if item['predecessor_camp']==item['camp'] else 0)),command='day_gate',contains='conservative')
+    run('exact 24 leg cap; RL-174 printed',setup=lambda:date_receipt(item['camp'],item['date'],18-(6 if item['predecessor_camp']==item['camp'] else 0)),command='day_gate',contains='cap applies')
     other=next(k for k in META['dates'] if k!=item['block'] and 'cl-'+k!=item['predecessor_camp'])
     shared_dates=','.join(k+'='+(item['date'] if k==other else v) for k,v in META['dates'].items())
-    run('second block within 10h REFUSE',setup=lambda:date_receipt('cl-'+other,item['date'],1),overrides={'QUAL_DATES':shared_dates},command='day_gate',want=False,contains='10 h')
+    run('shared-date slip plan REFUSE',overrides={'QUAL_DATES':shared_dates},command='day_gate',want=False,contains='three distinct dates')
+    run('second unplanned block within 10h REFUSE',setup=lambda:date_receipt('cl-qual-extra',item['date'],1),command='day_gate',want=False,contains='10 h')
     def spaced_block():
-        date_receipt('cl-'+other,item['date'],1)
-        p=root/('cl-'+other)/'cq-synthetic-date-a1-20261119T000000Z'/'runner_receipt.json'
+        date_receipt('cl-qual-extra',item['date'],1)
+        p=root/'cl-qual-extra'/'cq-synthetic-date-a1-20261119T000000Z'/'runner_receipt.json'
         r=json.loads(p.read_text()); r['started']['epoch_s']=now-36000; dump(p,r)
-    run('two blocks exactly 10h allowed',setup=spaced_block,overrides={'QUAL_DATES':shared_dates},command='day_gate',contains='10h')
+    run('10h cap is no slip remedy',setup=spaced_block,command='day_gate',want=False,contains='one qualification block')
     one=','.join(k+'='+item['date'] for k in META['dates'])
-    run('all qual blocks same date REFUSE',overrides={'QUAL_DATES':one},command='day_gate',want=False,contains='at least two dates')
+    run('all qual blocks same date REFUSE',overrides={'QUAL_DATES':one},command='day_gate',want=False,contains='three distinct dates')
     newdates=','.join(k+'='+('2026-11-18' if k==item['block'] else v) for k,v in META['dates'].items())
     run('known development date REFUSE',overrides={'T0_DATE':'2026-11-18','QUAL_DATES':newdates},stamp=epoch('2026-11-18'),command='day_gate',want=False,contains='development date')
     for t in (int(epoch(item['date'])-43200),int(epoch(item['date'])+43199)):

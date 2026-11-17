@@ -71,5 +71,6 @@ with pinned() as repo:
 report['total_checks']=checks
 evidence = Path(os.environ.get('JW_DRAFT_EVIDENCE_DIR', HERE/'evidence/fix-2026-11-16'))
 evidence.mkdir(parents=True, exist_ok=True)
-(evidence/'kit-recheck.json').write_text(json.dumps(report,indent=2)+'\n')
+report_path=Path(sys.argv[2]) if len(sys.argv)>2 else evidence/'kit-recheck.json'
+report_path.write_text(json.dumps(report,indent=2)+'\n')
 print(checks,'pinned checks; zero failures; source/config plus synthetic files only')

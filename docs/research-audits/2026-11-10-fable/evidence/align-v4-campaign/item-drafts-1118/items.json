@@ -2,7 +2,7 @@
   "source": "6010985a3312c77bb8e4bb4bf5c920c4d49b8512",
   "pin": "e1b85a59c53bfbeaa3477df46bcbe9dd8fdfc427",
   "merged_w1": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
-  "source_audit": "38aa22e50710cd981d0eb6c0b9f5786cf3d21fb9",
+  "source_audit": "ebff15ad27e831499dd65796b3727d8c5d451e21",
   "queue_scan": [
     "docs/process/cadence/BLOCK-QUEUE.json",
     "docs/process/cadence/kits/cl-dev-01.json",
@@ -306,7 +306,7 @@
     }
   ],
   "standing": {
-    "source_main": "8fd5c8cc549311537b65d64e68036e52beebc28b",
+    "source_main": "6fc02b1925b726585e66ff32885964f4207d7d09",
     "original_issue": "2026-11-15 11:51:24 PST",
     "renewal_start": "2026-11-22T11:51:24-08:00",
     "renewal_expiry": "2026-11-29T11:51:24-08:00",

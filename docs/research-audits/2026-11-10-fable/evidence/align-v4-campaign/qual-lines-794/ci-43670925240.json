@@ -1,0 +1,8126 @@
+{
+  "id": 43670925240,
+  "name": "ci",
+  "path": ".github/workflows/ci.yml",
+  "event": "pull_request",
+  "head_branch": "ops/2026-11-11-w1-presign",
+  "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+  "status": "completed",
+  "conclusion": "success",
+  "run_attempt": 1,
+  "created_at": "2026-11-15T03:07:40Z",
+  "run_started_at": "2026-11-15T03:07:40Z",
+  "updated_at": "2026-11-15T04:10:30Z",
+  "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240",
+  "observed_at": "2026-11-16 18:14:25 PST",
+  "jobs": [
+    {
+      "id": 132680554095,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GCWbw",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680554095",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680554095",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:07:40Z",
+      "started_at": "2026-11-15T03:07:42Z",
+      "completed_at": "2026-11-15T03:08:02Z",
+      "name": "changes",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:07:43Z",
+          "completed_at": "2026-11-15T03:07:43Z"
+        },
+        {
+          "name": "Select Python interpreters",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:07:43Z",
+          "completed_at": "2026-11-15T03:07:43Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:07:43Z",
+          "completed_at": "2026-11-15T03:08:00Z"
+        },
+        {
+          "name": "Detect code changes",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:00Z",
+          "completed_at": "2026-11-15T03:08:00Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-15T03:08:00Z",
+          "completed_at": "2026-11-15T03:08:00Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T03:08:00Z",
+          "completed_at": "2026-11-15T03:08:00Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680554095",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063826,
+      "runner_name": "GitHub Actions 1000063826",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680554290,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GCXMg",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680554290",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680554290",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:07:40Z",
+      "started_at": "2026-11-15T03:07:43Z",
+      "completed_at": "2026-11-15T03:09:04Z",
+      "name": "fences",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:07:44Z",
+          "completed_at": "2026-11-15T03:07:45Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:07:45Z",
+          "completed_at": "2026-11-15T03:08:05Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:08:05Z",
+          "completed_at": "2026-11-15T03:08:06Z"
+        },
+        {
+          "name": "State kernel and generated-view drift",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:06Z",
+          "completed_at": "2026-11-15T03:08:06Z"
+        },
+        {
+          "name": "Hard-coded pins that protect a number are current",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:08:06Z",
+          "completed_at": "2026-11-15T03:08:34Z"
+        },
+        {
+          "name": "Documentation freshness",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:08:34Z",
+          "completed_at": "2026-11-15T03:08:35Z"
+        },
+        {
+          "name": "Historical receipt semantics",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:08:35Z",
+          "completed_at": "2026-11-15T03:08:58Z"
+        },
+        {
+          "name": "CLI smoke - validate example configs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-15T03:08:58Z",
+          "completed_at": "2026-11-15T03:08:59Z"
+        },
+        {
+          "name": "Strict mock run, validate, reduce, and revalidate",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T03:08:59Z",
+          "completed_at": "2026-11-15T03:09:01Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-11-15T03:09:01Z",
+          "completed_at": "2026-11-15T03:09:01Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 18,
+          "started_at": "2026-11-15T03:09:01Z",
+          "completed_at": "2026-11-15T03:09:01Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 19,
+          "started_at": "2026-11-15T03:09:02Z",
+          "completed_at": "2026-11-15T03:09:02Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680554290",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063827,
+      "runner_name": "GitHub Actions 1000063827",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680554427,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GCXuw",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680554427",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680554427",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:07:40Z",
+      "started_at": "2026-11-15T03:07:42Z",
+      "completed_at": "2026-11-15T03:08:01Z",
+      "name": "build",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:07:43Z",
+          "completed_at": "2026-11-15T03:07:44Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:07:44Z",
+          "completed_at": "2026-11-15T03:07:51Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:07:51Z",
+          "completed_at": "2026-11-15T03:07:51Z"
+        },
+        {
+          "name": "Install build frontend",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:07:51Z",
+          "completed_at": "2026-11-15T03:07:53Z"
+        },
+        {
+          "name": "Build wheel and source distribution",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:07:53Z",
+          "completed_at": "2026-11-15T03:07:58Z"
+        },
+        {
+          "name": "Upload distributions",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:07:58Z",
+          "completed_at": "2026-11-15T03:07:59Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-15T03:07:59Z",
+          "completed_at": "2026-11-15T03:07:59Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-15T03:07:59Z",
+          "completed_at": "2026-11-15T03:07:59Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:07:59Z",
+          "completed_at": "2026-11-15T03:07:59Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680554427",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063828,
+      "runner_name": "GitHub Actions 1000063828",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680636380,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHX3A",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680636380",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680636380",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:01Z",
+      "started_at": "2026-11-15T03:08:04Z",
+      "completed_at": "2026-11-15T03:08:24Z",
+      "name": "installed-wheel",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:08:04Z",
+          "completed_at": "2026-11-15T03:08:07Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:08:07Z",
+          "completed_at": "2026-11-15T03:08:10Z"
+        },
+        {
+          "name": "Download distributions",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:08:10Z",
+          "completed_at": "2026-11-15T03:08:12Z"
+        },
+        {
+          "name": "Install wheel in a clean environment and smoke outside the repo",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:12Z",
+          "completed_at": "2026-11-15T03:08:21Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-11-15T03:08:21Z",
+          "completed_at": "2026-11-15T03:08:21Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T03:08:21Z",
+          "completed_at": "2026-11-15T03:08:21Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680636380",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063829,
+      "runner_name": "GitHub Actions 1000063829",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640363,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHnaw",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640363",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640363",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:08:04Z",
+      "completed_at": "2026-11-15T03:12:10Z",
+      "name": "quick",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:08:05Z",
+          "completed_at": "2026-11-15T03:08:05Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:08:05Z",
+          "completed_at": "2026-11-15T03:08:20Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:08:20Z",
+          "completed_at": "2026-11-15T03:08:20Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:20Z",
+          "completed_at": "2026-11-15T03:08:30Z"
+        },
+        {
+          "name": "Quick test tier",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:08:30Z",
+          "completed_at": "2026-11-15T03:12:08Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T03:12:08Z",
+          "completed_at": "2026-11-15T03:12:08Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-15T03:12:08Z",
+          "completed_at": "2026-11-15T03:12:08Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-15T03:12:08Z",
+          "completed_at": "2026-11-15T03:12:08Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640363",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063830,
+      "runner_name": "GitHub Actions 1000063830",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640390,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHnhg",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640390",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640390",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:08:04Z",
+      "completed_at": "2026-11-15T03:17:08Z",
+      "name": "calibration-exits-exclusive (3.13)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:08:05Z",
+          "completed_at": "2026-11-15T03:08:05Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:08:05Z",
+          "completed_at": "2026-11-15T03:08:23Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:08:23Z",
+          "completed_at": "2026-11-15T03:08:23Z"
+        },
+        {
+          "name": "Compile calibration-exit sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:23Z",
+          "completed_at": "2026-11-15T03:08:28Z"
+        },
+        {
+          "name": "Exclusive calibration-exit module",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:08:28Z",
+          "completed_at": "2026-11-15T03:17:06Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T03:17:06Z",
+          "completed_at": "2026-11-15T03:17:06Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-15T03:17:06Z",
+          "completed_at": "2026-11-15T03:17:06Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-15T03:17:06Z",
+          "completed_at": "2026-11-15T03:17:06Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640390",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063831,
+      "runner_name": "GitHub Actions 1000063831",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640400,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHnkA",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640400",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640400",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:08:04Z",
+      "completed_at": "2026-11-15T03:08:20Z",
+      "name": "align-templates",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:08:05Z",
+          "completed_at": "2026-11-15T03:08:06Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:08:06Z",
+          "completed_at": "2026-11-15T03:08:13Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:08:13Z",
+          "completed_at": "2026-11-15T03:08:13Z"
+        },
+        {
+          "name": "Install template renderer",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:13Z",
+          "completed_at": "2026-11-15T03:08:15Z"
+        },
+        {
+          "name": "Check real Qwen templates",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:08:15Z",
+          "completed_at": "2026-11-15T03:08:16Z"
+        },
+        {
+          "name": "Check history policy and effort ladder",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:08:16Z",
+          "completed_at": "2026-11-15T03:08:18Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-15T03:08:18Z",
+          "completed_at": "2026-11-15T03:08:18Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-11-15T03:08:18Z",
+          "completed_at": "2026-11-15T03:08:18Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:08:18Z",
+          "completed_at": "2026-11-15T03:08:18Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640400",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063832,
+      "runner_name": "GitHub Actions 1000063832",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640419,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHnow",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640419",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640419",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:08:04Z",
+      "completed_at": "2026-11-15T03:14:25Z",
+      "name": "calibration-writer-crash-matrix-exclusive (3.13, 1)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:08:05Z",
+          "completed_at": "2026-11-15T03:08:06Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:08:06Z",
+          "completed_at": "2026-11-15T03:08:23Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:08:23Z",
+          "completed_at": "2026-11-15T03:08:23Z"
+        },
+        {
+          "name": "Compile calibration sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:23Z",
+          "completed_at": "2026-11-15T03:08:28Z"
+        },
+        {
+          "name": "Exclusive calibration-writer crash-matrix module (shard 1 of 2)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:08:28Z",
+          "completed_at": "2026-11-15T03:14:22Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T03:14:22Z",
+          "completed_at": "2026-11-15T03:14:22Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-15T03:14:22Z",
+          "completed_at": "2026-11-15T03:14:23Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-15T03:14:23Z",
+          "completed_at": "2026-11-15T03:14:23Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640419",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063833,
+      "runner_name": "GitHub Actions 1000063833",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640433,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHnsQ",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640433",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640433",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:08:23Z",
+      "completed_at": "2026-11-15T03:11:20Z",
+      "name": "calibration-writer-crash-matrix-exclusive (3.13, 2)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:08:23Z",
+          "completed_at": "2026-11-15T03:08:26Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:08:26Z",
+          "completed_at": "2026-11-15T03:08:43Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:08:43Z",
+          "completed_at": "2026-11-15T03:08:44Z"
+        },
+        {
+          "name": "Compile calibration sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:44Z",
+          "completed_at": "2026-11-15T03:08:49Z"
+        },
+        {
+          "name": "Exclusive calibration-writer crash-matrix module (shard 2 of 2)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:08:49Z",
+          "completed_at": "2026-11-15T03:11:19Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-11-15T03:11:19Z",
+          "completed_at": "2026-11-15T03:11:19Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10,
+          "started_at": "2026-11-15T03:11:19Z",
+          "completed_at": "2026-11-15T03:11:19Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-11-15T03:11:19Z",
+          "completed_at": "2026-11-15T03:11:19Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640433",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063834,
+      "runner_name": "GitHub Actions 1000063834",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640498,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHn8g",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640498",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640498",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:09:06Z",
+      "completed_at": "2026-11-15T03:49:59Z",
+      "name": "test (3.13, 1)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:09:07Z",
+          "completed_at": "2026-11-15T03:09:08Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:09:08Z",
+          "completed_at": "2026-11-15T03:09:29Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:09:29Z",
+          "completed_at": "2026-11-15T03:09:29Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:09:29Z",
+          "completed_at": "2026-11-15T03:09:36Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:09:36Z",
+          "completed_at": "2026-11-15T03:09:56Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:09:56Z",
+          "completed_at": "2026-11-15T03:09:56Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:09:56Z",
+          "completed_at": "2026-11-15T03:49:55Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:49:55Z",
+          "completed_at": "2026-11-15T03:49:56Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:49:56Z",
+          "completed_at": "2026-11-15T03:49:56Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:49:56Z",
+          "completed_at": "2026-11-15T03:49:56Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640498",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063836,
+      "runner_name": "GitHub Actions 1000063836",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640504,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHn-A",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640504",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640504",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:08:26Z",
+      "completed_at": "2026-11-15T03:35:54Z",
+      "name": "test (3.13, 5)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:08:26Z",
+          "completed_at": "2026-11-15T03:08:27Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:08:27Z",
+          "completed_at": "2026-11-15T03:08:41Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:08:41Z",
+          "completed_at": "2026-11-15T03:08:41Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:08:41Z",
+          "completed_at": "2026-11-15T03:08:46Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:08:46Z",
+          "completed_at": "2026-11-15T03:08:56Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:08:56Z",
+          "completed_at": "2026-11-15T03:08:56Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:08:56Z",
+          "completed_at": "2026-11-15T03:35:52Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:35:52Z",
+          "completed_at": "2026-11-15T03:35:52Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:35:52Z",
+          "completed_at": "2026-11-15T03:35:52Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:35:52Z",
+          "completed_at": "2026-11-15T03:35:52Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640504",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063835,
+      "runner_name": "GitHub Actions 1000063835",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640505,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHn-Q",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640505",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640505",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:09:06Z",
+      "completed_at": "2026-11-15T03:45:16Z",
+      "name": "test (3.13, 10)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:09:07Z",
+          "completed_at": "2026-11-15T03:09:07Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:09:07Z",
+          "completed_at": "2026-11-15T03:09:23Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:09:23Z",
+          "completed_at": "2026-11-15T03:09:23Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:09:23Z",
+          "completed_at": "2026-11-15T03:09:28Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:09:28Z",
+          "completed_at": "2026-11-15T03:09:38Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:09:38Z",
+          "completed_at": "2026-11-15T03:09:38Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:09:38Z",
+          "completed_at": "2026-11-15T03:45:14Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:45:14Z",
+          "completed_at": "2026-11-15T03:45:14Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:45:14Z",
+          "completed_at": "2026-11-15T03:45:14Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:45:14Z",
+          "completed_at": "2026-11-15T03:45:14Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640505",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063837,
+      "runner_name": "GitHub Actions 1000063837",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640506,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHn-g",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640506",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640506",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:10:20Z",
+      "completed_at": "2026-11-15T03:52:06Z",
+      "name": "test (3.13, 6)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:10:21Z",
+          "completed_at": "2026-11-15T03:10:21Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:10:21Z",
+          "completed_at": "2026-11-15T03:10:41Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:10:41Z",
+          "completed_at": "2026-11-15T03:10:41Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:10:41Z",
+          "completed_at": "2026-11-15T03:10:48Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:10:48Z",
+          "completed_at": "2026-11-15T03:10:57Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:10:57Z",
+          "completed_at": "2026-11-15T03:10:57Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:10:57Z",
+          "completed_at": "2026-11-15T03:52:04Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:52:04Z",
+          "completed_at": "2026-11-15T03:52:04Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:52:04Z",
+          "completed_at": "2026-11-15T03:52:04Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:52:04Z",
+          "completed_at": "2026-11-15T03:52:04Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640506",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063839,
+      "runner_name": "GitHub Actions 1000063839",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640530,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHoEg",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640530",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640530",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:11:23Z",
+      "completed_at": "2026-11-15T03:45:46Z",
+      "name": "test (3.13, 8)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:11:23Z",
+          "completed_at": "2026-11-15T03:11:24Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:11:24Z",
+          "completed_at": "2026-11-15T03:11:38Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:11:38Z",
+          "completed_at": "2026-11-15T03:11:38Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:11:38Z",
+          "completed_at": "2026-11-15T03:11:43Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:11:43Z",
+          "completed_at": "2026-11-15T03:11:54Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:11:54Z",
+          "completed_at": "2026-11-15T03:11:54Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:11:54Z",
+          "completed_at": "2026-11-15T03:45:44Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:45:44Z",
+          "completed_at": "2026-11-15T03:45:44Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:45:44Z",
+          "completed_at": "2026-11-15T03:45:44Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:45:44Z",
+          "completed_at": "2026-11-15T03:45:44Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640530",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063841,
+      "runner_name": "GitHub Actions 1000063841",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640544,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHoIA",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640544",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640544",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:14:28Z",
+      "completed_at": "2026-11-15T03:56:18Z",
+      "name": "test (3.13, 4)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:14:29Z",
+          "completed_at": "2026-11-15T03:14:29Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:14:29Z",
+          "completed_at": "2026-11-15T03:14:49Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:14:49Z",
+          "completed_at": "2026-11-15T03:14:49Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:14:49Z",
+          "completed_at": "2026-11-15T03:14:55Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:14:55Z",
+          "completed_at": "2026-11-15T03:15:04Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:15:04Z",
+          "completed_at": "2026-11-15T03:15:04Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:15:04Z",
+          "completed_at": "2026-11-15T03:56:15Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:56:15Z",
+          "completed_at": "2026-11-15T03:56:15Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:56:15Z",
+          "completed_at": "2026-11-15T03:56:16Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:56:16Z",
+          "completed_at": "2026-11-15T03:56:16Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640544",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063844,
+      "runner_name": "GitHub Actions 1000063844",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640548,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHoJA",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640548",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640548",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:12:13Z",
+      "completed_at": "2026-11-15T04:10:29Z",
+      "name": "test (3.13, 3)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:12:13Z",
+          "completed_at": "2026-11-15T03:12:14Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:12:14Z",
+          "completed_at": "2026-11-15T03:12:33Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:12:33Z",
+          "completed_at": "2026-11-15T03:12:33Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:12:33Z",
+          "completed_at": "2026-11-15T03:12:39Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:12:39Z",
+          "completed_at": "2026-11-15T03:12:49Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:12:49Z",
+          "completed_at": "2026-11-15T03:12:49Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:12:49Z",
+          "completed_at": "2026-11-15T04:10:27Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T04:10:27Z",
+          "completed_at": "2026-11-15T04:10:27Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T04:10:27Z",
+          "completed_at": "2026-11-15T04:10:27Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T04:10:27Z",
+          "completed_at": "2026-11-15T04:10:27Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640548",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063842,
+      "runner_name": "GitHub Actions 1000063842",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640557,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHoLQ",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640557",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640557",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:10:27Z",
+      "completed_at": "2026-11-15T03:46:39Z",
+      "name": "test (3.13, 12)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:10:28Z",
+          "completed_at": "2026-11-15T03:10:28Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:10:28Z",
+          "completed_at": "2026-11-15T03:10:45Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:10:45Z",
+          "completed_at": "2026-11-15T03:10:45Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:10:45Z",
+          "completed_at": "2026-11-15T03:10:51Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:10:51Z",
+          "completed_at": "2026-11-15T03:11:05Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:11:05Z",
+          "completed_at": "2026-11-15T03:11:05Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:11:05Z",
+          "completed_at": "2026-11-15T03:46:37Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:46:37Z",
+          "completed_at": "2026-11-15T03:46:38Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:46:38Z",
+          "completed_at": "2026-11-15T03:46:38Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:46:38Z",
+          "completed_at": "2026-11-15T03:46:38Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640557",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063840,
+      "runner_name": "GitHub Actions 1000063840",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640558,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHoLg",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640558",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640558",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:09:07Z",
+      "completed_at": "2026-11-15T03:58:05Z",
+      "name": "test (3.13, 7)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:09:08Z",
+          "completed_at": "2026-11-15T03:09:08Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:09:08Z",
+          "completed_at": "2026-11-15T03:09:25Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:09:25Z",
+          "completed_at": "2026-11-15T03:09:25Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:09:25Z",
+          "completed_at": "2026-11-15T03:09:31Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:09:31Z",
+          "completed_at": "2026-11-15T03:09:42Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:09:42Z",
+          "completed_at": "2026-11-15T03:09:42Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:09:42Z",
+          "completed_at": "2026-11-15T03:58:01Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:58:01Z",
+          "completed_at": "2026-11-15T03:58:01Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:58:01Z",
+          "completed_at": "2026-11-15T03:58:02Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:58:02Z",
+          "completed_at": "2026-11-15T03:58:02Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640558",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063838,
+      "runner_name": "GitHub Actions 1000063838",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640573,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHoPQ",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640573",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640573",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:17:11Z",
+      "completed_at": "2026-11-15T04:04:36Z",
+      "name": "test (3.13, 9)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:17:12Z",
+          "completed_at": "2026-11-15T03:17:13Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:17:13Z",
+          "completed_at": "2026-11-15T03:17:32Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:17:32Z",
+          "completed_at": "2026-11-15T03:17:32Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:17:32Z",
+          "completed_at": "2026-11-15T03:17:40Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:17:40Z",
+          "completed_at": "2026-11-15T03:18:02Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:18:02Z",
+          "completed_at": "2026-11-15T03:18:02Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:18:02Z",
+          "completed_at": "2026-11-15T04:04:34Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T04:04:34Z",
+          "completed_at": "2026-11-15T04:04:34Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T04:04:34Z",
+          "completed_at": "2026-11-15T04:04:34Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T04:04:34Z",
+          "completed_at": "2026-11-15T04:04:34Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640573",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063845,
+      "runner_name": "GitHub Actions 1000063845",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640607,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHoXw",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640607",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640607",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:13:45Z",
+      "completed_at": "2026-11-15T03:42:17Z",
+      "name": "test (3.13, 2)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:13:46Z",
+          "completed_at": "2026-11-15T03:13:47Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:13:47Z",
+          "completed_at": "2026-11-15T03:14:06Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:14:06Z",
+          "completed_at": "2026-11-15T03:14:06Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:14:06Z",
+          "completed_at": "2026-11-15T03:14:13Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:14:13Z",
+          "completed_at": "2026-11-15T03:14:22Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:14:22Z",
+          "completed_at": "2026-11-15T03:14:22Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:14:22Z",
+          "completed_at": "2026-11-15T03:42:14Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:42:14Z",
+          "completed_at": "2026-11-15T03:42:14Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:42:14Z",
+          "completed_at": "2026-11-15T03:42:14Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:42:14Z",
+          "completed_at": "2026-11-15T03:42:15Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640607",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063843,
+      "runner_name": "GitHub Actions 1000063843",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 132680640674,
+      "run_id": 43670925240,
+      "workflow_name": "ci",
+      "head_branch": "ops/2026-11-11-w1-presign",
+      "run_url": "https://api.github.com/repos/mpmdw/JouleWise/actions/runs/43670925240",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOS1aGi88AAAAe5GHoog",
+      "head_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+      "url": "https://api.github.com/repos/mpmdw/JouleWise/actions/jobs/132680640674",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/43670925240/job/132680640674",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-15T03:08:02Z",
+      "started_at": "2026-11-15T03:17:20Z",
+      "completed_at": "2026-11-15T03:57:45Z",
+      "name": "test (3.13, 11)",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-11-15T03:17:21Z",
+          "completed_at": "2026-11-15T03:17:21Z"
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-11-15T03:17:21Z",
+          "completed_at": "2026-11-15T03:17:38Z"
+        },
+        {
+          "name": "Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-11-15T03:17:38Z",
+          "completed_at": "2026-11-15T03:17:39Z"
+        },
+        {
+          "name": "Compile Python sources",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-11-15T03:17:39Z",
+          "completed_at": "2026-11-15T03:17:45Z"
+        },
+        {
+          "name": "Install zsh (the night driver, its installer, and the emitted G2-a chain are zsh; tests invoke /bin/zsh)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-11-15T03:17:45Z",
+          "completed_at": "2026-11-15T03:17:57Z"
+        },
+        {
+          "name": "Provide the Mac's interpreter path (production scripts and fixtures name /opt/homebrew/bin/python3.13)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-11-15T03:17:57Z",
+          "completed_at": "2026-11-15T03:17:57Z"
+        },
+        {
+          "name": "Unit tests (stdlib core only, per D-009/D-017)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-11-15T03:17:57Z",
+          "completed_at": "2026-11-15T03:57:41Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v6",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-11-15T03:57:41Z",
+          "completed_at": "2026-11-15T03:57:41Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 14,
+          "started_at": "2026-11-15T03:57:41Z",
+          "completed_at": "2026-11-15T03:57:41Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-11-15T03:57:41Z",
+          "completed_at": "2026-11-15T03:57:41Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/mpmdw/JouleWise/check-runs/132680640674",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000063846,
+      "runner_name": "GitHub Actions 1000063846",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ],
+  "log_sha256": "eb42d1e0bf6418cce41a8df8edcb2c77520b7eb39fd691d9f0fdc14eff1252a6",
+  "log_scratch_path": "/Volumes/JW-EXT/scratch/sol-qual794-lines/ci-43670925240.log",
+  "failing_tests": [],
+  "failed_summaries": [],
+  "test_summaries": [
+    {
+      "job": "fences",
+      "line": "Ran 31 tests in 0.915s"
+    },
+    {
+      "job": "fences",
+      "line": "OK"
+    },
+    {
+      "job": "calibration-exits-exclusive (3.13)",
+      "line": "Ran 48 tests in 516.888s"
+    },
+    {
+      "job": "calibration-exits-exclusive (3.13)",
+      "line": "OK"
+    },
+    {
+      "job": "align-templates",
+      "line": "Ran 25 tests in 0.417s"
+    },
+    {
+      "job": "align-templates",
+      "line": "OK"
+    },
+    {
+      "job": "align-templates",
+      "line": "Ran 11 tests in 0.158s"
+    },
+    {
+      "job": "align-templates",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "calibration-writer-crash-matrix-exclusive (3.13, 1)",
+      "line": "Ran 1 test in 353.005s"
+    },
+    {
+      "job": "calibration-writer-crash-matrix-exclusive (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "calibration-writer-crash-matrix-exclusive (3.13, 1)",
+      "line": "SHARD SUMMARY index=1/2 modules=1 tests=1 failures=0 errors=0 skipped=0 result=PASS"
+    },
+    {
+      "job": "calibration-writer-crash-matrix-exclusive (3.13, 2)",
+      "line": "Ran 19 tests in 146.557s"
+    },
+    {
+      "job": "calibration-writer-crash-matrix-exclusive (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "calibration-writer-crash-matrix-exclusive (3.13, 2)",
+      "line": "SHARD SUMMARY index=2/2 modules=1 tests=19 failures=0 errors=0 skipped=0 result=PASS"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 36 tests in 0.165s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 6 tests in 0.073s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 2 tests in 0.593s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 13 tests in 0.266s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 7 tests in 0.039s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 1 test in 0.000s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 12 tests in 0.413s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 9 tests in 0.457s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 44 tests in 18.271s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 26 tests in 6.320s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 34 tests in 0.018s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 48 tests in 0.345s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK (skipped=3)"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 3 tests in 3.598s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 4 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 10 tests in 0.032s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 9 tests in 0.101s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 6 tests in 2292.755s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 10 tests in 2.399s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 16 tests in 3.295s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 29 tests in 5.672s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 15 tests in 0.604s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 17 tests in 0.134s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 13 tests in 0.013s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 44 tests in 2.913s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 37 tests in 4.065s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 20 tests in 10.445s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 1 test in 3.343s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 15 tests in 0.379s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 12 tests in 11.250s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 30 tests in 0.790s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 8 tests in 0.070s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 3 tests in 20.948s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 8 tests in 1.188s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 6 tests in 0.050s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 23 tests in 2.583s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK (skipped=3)"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 8 tests in 0.010s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 8 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "Ran 33 tests in 1.252s"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "SHARD SUMMARY index=1/12 modules=38 tests=626 failures=0 errors=0 skipped=7 result=PASS"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 25 tests in 39.807s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 5 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=5)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 17 tests in 37.497s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 6 tests in 0.087s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 11 tests in 0.686s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 6 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 33 tests in 0.857s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 13 tests in 3.560s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 10 tests in 1.735s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 7 tests in 1.115s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 36 tests in 29.878s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 26 tests in 0.026s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 4 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 27 tests in 21.411s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 34 tests in 1.014s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 9 tests in 0.009s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 27 tests in 32.636s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 6 tests in 4.064s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 9 tests in 0.272s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 11 tests in 0.109s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 25 tests in 1.854s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 1 test in 739.736s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 6 tests in 119.409s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 9 tests in 0.145s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 13 tests in 13.675s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 4 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=4)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 13 tests in 0.038s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 3 tests in 36.271s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 27 tests in 2.591s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 11 tests in 0.024s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 12 tests in 0.115s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 13 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 48 tests in 43.213s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 9 tests in 0.343s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 114 tests in 93.407s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 10 tests in 0.149s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 17 tests in 0.255s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 95 tests in 2.673s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 5 tests in 0.345s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 138 tests in 3.355s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 50 tests in 13.949s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 3 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 14 tests in 0.008s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 42 tests in 20.867s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 158 tests in 1.602s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 8 tests in 1.190s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 40 tests in 0.781s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 10 tests in 0.004s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 1 test in 0.077s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 11 tests in 1.721s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 1 test in 35.109s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 3 tests in 0.169s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 318 tests in 96.417s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 96 tests in 24.648s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=4)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 64 tests in 121.419s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 17 tests in 1.487s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 2 tests in 0.777s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 35 tests in 1.592s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 14 tests in 0.030s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 52 tests in 59.007s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 16 tests in 0.491s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "Ran 12 tests in 0.078s"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "SHARD SUMMARY index=5/12 modules=62 tests=1862 failures=0 errors=0 skipped=22 result=PASS"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 52 tests in 132.005s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 6 tests in 30.739s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 49 tests in 94.038s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 11 tests in 0.017s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=4)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 11 tests in 12.892s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 14 tests in 2.810s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 15 tests in 0.040s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 14 tests in 2.197s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 8 tests in 3.837s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 7 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 7 tests in 17.661s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 11 tests in 5.870s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 1 test in 0.000s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 26 tests in 0.315s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 8 tests in 2.656s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 15 tests in 0.004s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 116 tests in 1.467s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 20 tests in 2.759s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 22 tests in 10.573s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=15)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 25 tests in 0.005s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 9 tests in 385.807s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 4 tests in 0.218s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 1 test in 197.962s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 16 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 24 tests in 1.432s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 6 tests in 0.034s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 7 tests in 1.709s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 27 tests in 53.952s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 3 tests in 5.568s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 19 tests in 2.428s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 20 tests in 14.612s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 51 tests in 0.206s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 8 tests in 5.247s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 15 tests in 0.562s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 10 tests in 0.030s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 2 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 1 test in 534.188s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 4 tests in 0.212s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 9 tests in 0.652s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 7 tests in 0.092s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 62 tests in 62.828s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 30 tests in 2.808s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 26 tests in 0.007s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 74 tests in 47.520s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 22 tests in 9.765s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 6 tests in 3.034s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 37 tests in 3.629s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 156 tests in 126.916s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 15 tests in 5.775s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 10 tests in 0.326s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 4 tests in 0.036s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 57 tests in 0.142s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 3 tests in 0.076s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 24 tests in 0.654s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 18 tests in 74.443s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 19 tests in 8.949s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 2 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 271 tests in 176.671s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 41 tests in 35.033s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 3 tests in 41.917s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 7 tests in 2.442s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 19 tests in 5.217s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "Ran 4 tests in 0.016s"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "SHARD SUMMARY index=10/12 modules=63 tests=1591 failures=0 errors=0 skipped=29 result=PASS"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 9 tests in 26.417s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 15 tests in 24.960s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 6 tests in 0.010s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 10 tests in 0.815s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 3 tests in 4.126s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 7 tests in 3.448s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 3 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 10 tests in 10.953s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 2 tests in 0.137s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 22 tests in 20.080s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 1 test in 0.001s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 20 tests in 0.051s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 17 tests in 2.681s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 5 tests in 7.441s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 23 tests in 0.930s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK (skipped=4)"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 3 tests in 5.796s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 14 tests in 2.636s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 10 tests in 18.181s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 24 tests in 19.658s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 12 tests in 0.604s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 5 tests in 0.354s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 39 tests in 0.342s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 9 tests in 0.240s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 1 test in 874.221s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 9 tests in 0.082s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 4 tests in 0.063s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 116 tests in 209.591s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 12 tests in 51.639s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 2 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 26 tests in 0.086s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 1 test in 186.667s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 103 tests in 149.890s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 12 tests in 0.194s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 7 tests in 170.562s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 129 tests in 7.041s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 9 tests in 71.273s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 1 test in 0.515s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 30 tests in 1.484s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 4 tests in 21.835s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 2 tests in 6.897s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 69 tests in 82.339s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 39 tests in 370.215s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 3 tests in 0.004s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 9 tests in 0.122s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 7 tests in 11.439s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 24 tests in 0.162s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 1 test in 2.180s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 21 tests in 19.388s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 10 tests in 0.615s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 16 tests in 1.904s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 12 tests in 0.007s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 9 tests in 9.652s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 1 test in 0.280s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 1 test in 7.608s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 6 tests in 42.211s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 35 tests in 7.230s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 7 tests in 2.899s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 11 tests in 0.013s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 13 tests in 3.349s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 11 tests in 1.320s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 8 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "Ran 17 tests in 0.043s"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "SHARD SUMMARY index=6/12 modules=62 tests=1067 failures=0 errors=0 skipped=10 result=PASS"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 16 tests in 0.014s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 17 tests in 94.993s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 23 tests in 3.709s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 9 tests in 0.803s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 18 tests in 40.710s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 13 tests in 0.054s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 13 tests in 0.020s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 8 tests in 0.418s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 12 tests in 18.598s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 14 tests in 1.250s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 25 tests in 0.379s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 7 tests in 3.699s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 24 tests in 0.253s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 20 tests in 8.429s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 15 tests in 80.606s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 13 tests in 27.202s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 19 tests in 70.136s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 30 tests in 0.013s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 1 test in 5.859s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 10 tests in 8.132s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 42 tests in 221.027s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 12 tests in 0.348s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 7 tests in 0.007s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 11 tests in 91.001s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 2 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 7 tests in 0.008s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 6 tests in 0.092s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 6 tests in 1.650s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 7 tests in 1.838s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 6 tests in 0.631s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 27 tests in 31.746s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 23 tests in 0.128s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 13 tests in 0.048s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 11 tests in 1.016s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 19 tests in 26.627s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 82 tests in 6.299s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 2 tests in 886.351s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 48 tests in 17.949s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 7 tests in 0.510s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 14 tests in 0.997s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 6 tests in 3.970s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 9 tests in 217.950s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 9 tests in 0.006s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 3 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 1 test in 2.964s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 39 tests in 3.010s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 15 tests in 0.033s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 1 test in 0.110s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 32 tests in 0.119s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 10 tests in 0.017s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 24 tests in 1.423s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 2 tests in 0.676s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 17 tests in 47.191s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 8 tests in 0.809s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 8 tests in 0.619s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 1 test in 90.195s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 22 tests in 1.990s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 40 tests in 0.261s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 3 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 3 tests in 1.242s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 17 tests in 0.200s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "Ran 7 tests in 1.529s"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "SHARD SUMMARY index=8/12 modules=62 tests=936 failures=0 errors=0 skipped=7 result=PASS"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 21 tests in 4.035s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 11 tests in 0.572s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 5 tests in 122.599s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 4 tests in 1357.264s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 6 tests in 0.031s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 11 tests in 0.855s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 6 tests in 0.899s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 3 tests in 2.579s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 6 tests in 0.652s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 12 tests in 1.175s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 6 tests in 0.253s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 14 tests in 42.905s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 15 tests in 32.919s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 9 tests in 0.308s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 10 tests in 0.361s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 14 tests in 0.177s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 40 tests in 6.926s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 1 test in 0.065s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 14 tests in 0.012s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 16 tests in 0.016s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 8 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 20 tests in 0.177s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 75 tests in 9.035s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 24 tests in 74.389s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 6 tests in 18.389s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 4 tests in 0.451s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 25 tests in 18.191s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 6 tests in 7.145s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 2 tests in 0.007s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 74 tests in 4.917s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 23 tests in 4.359s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK (skipped=3)"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 34 tests in 6.151s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 3 tests in 0.856s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 22 tests in 378.441s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 5 tests in 0.452s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 7 tests in 1.601s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 7 tests in 0.020s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 49 tests in 26.400s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 4 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 4 tests in 0.060s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 10 tests in 0.493s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 79 tests in 40.119s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 20 tests in 1.281s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 3 tests in 0.336s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 69 tests in 12.861s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 76 tests in 150.973s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 12 tests in 2.779s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 16 tests in 0.986s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK (skipped=9)"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 43 tests in 0.104s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 5 tests in 0.224s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 14 tests in 1.398s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 58 tests in 67.092s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 27 tests in 2.620s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 18 tests in 9.558s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 15 tests in 21.319s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 15 tests in 2.016s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 9 tests in 6.845s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 10 tests in 0.055s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 42 tests in 21.219s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 7 tests in 0.004s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "Ran 14 tests in 0.750s"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "SHARD SUMMARY index=4/12 modules=61 tests=1188 failures=0 errors=0 skipped=15 result=PASS"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 27 tests in 338.690s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 23 tests in 96.757s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 22 tests in 55.562s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 6 tests in 0.748s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 10 tests in 19.524s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 18 tests in 194.030s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 19 tests in 0.083s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 3 tests in 0.047s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 11 tests in 2.874s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 9 tests in 0.269s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 11 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 3 tests in 0.573s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 11 tests in 0.035s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 25 tests in 1.049s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 1 test in 0.017s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 3 tests in 3.749s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 18 tests in 127.378s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 10 tests in 5.813s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 46 tests in 31.855s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 16 tests in 52.199s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 5 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 26 tests in 1.002s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 27 tests in 2.343s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 12 tests in 0.212s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 13 tests in 0.457s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 58 tests in 8.366s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 3 tests in 0.233s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 20 tests in 7.957s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 36 tests in 0.178s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 46 tests in 57.638s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 19 tests in 59.936s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 105 tests in 1828.826s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 14 tests in 0.810s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 8 tests in 5.063s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 5 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 5 tests in 0.051s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 22 tests in 30.388s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 31 tests in 1.165s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 3 tests in 5.878s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 54 tests in 0.704s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 10 tests in 26.032s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 19 tests in 28.731s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 34 tests in 147.048s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 31 tests in 9.489s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 16 tests in 0.047s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 15 tests in 1.390s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 19 tests in 3.489s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 11 tests in 0.246s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 13 tests in 1.596s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 19 tests in 0.004s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 167 tests in 26.520s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK (skipped=4)"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 21 tests in 0.167s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK (skipped=18)"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 16 tests in 5.472s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 3 tests in 0.713s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 9 tests in 0.005s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 35 tests in 29.284s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 12 tests in 10.028s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 33 tests in 21.132s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 42 tests in 5.816s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 57 tests in 195.997s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "Ran 5 tests in 0.009s"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "SHARD SUMMARY index=3/12 modules=61 tests=1391 failures=0 errors=0 skipped=28 result=PASS"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 12 tests in 96.822s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 4 tests in 0.041s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 5 tests in 0.475s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 25 tests in 3.037s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 8 tests in 21.419s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 13 tests in 0.745s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 10 tests in 14.485s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 29 tests in 2.830s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 6 tests in 0.148s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 15 tests in 6.854s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 5 tests in 56.588s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 2 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 8 tests in 2.128s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 20 tests in 1.126s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 12 tests in 15.205s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 8 tests in 39.722s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 5 tests in 46.080s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 9 tests in 0.004s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 55 tests in 5.764s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 7 tests in 0.293s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 22 tests in 0.164s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 6 tests in 161.069s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 4 tests in 0.081s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 6 tests in 0.124s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 43 tests in 0.267s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 6 tests in 0.185s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 10 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 24 tests in 29.592s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 16 tests in 32.734s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 25 tests in 1.279s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 7 tests in 0.487s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 17 tests in 0.009s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 1 test in 393.096s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 12 tests in 1.263s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 3 tests in 3.853s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 42 tests in 2.487s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 44 tests in 74.561s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 26 tests in 0.047s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 30 tests in 2.824s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 1 test in 618.322s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 5 tests in 11.028s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 29 tests in 2.130s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 1 test in 0.000s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 25 tests in 11.767s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 9 tests in 2.279s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 21 tests in 27.138s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 42 tests in 3.645s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 8 tests in 0.017s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 8 tests in 43.520s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 5 tests in 0.274s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 13 tests in 0.185s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 9 tests in 9.956s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 9 tests in 3.485s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 37 tests in 10.257s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 46 tests in 11.030s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK (skipped=3)"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 24 tests in 0.133s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 19 tests in 1.018s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 15 tests in 0.072s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 13 tests in 3.466s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 23 tests in 8.368s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 13 tests in 44.020s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 27 tests in 300.904s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "Ran 16 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "SHARD SUMMARY index=12/12 modules=63 tests=1020 failures=0 errors=0 skipped=11 result=PASS"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 11 tests in 66.141s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK (skipped=3)"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 2 tests in 0.010s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 21 tests in 26.232s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 15 tests in 3.183s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 3 tests in 0.029s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 8 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK (skipped=8)"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 43 tests in 103.660s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 6 tests in 294.580s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 11 tests in 0.097s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 13 tests in 1.586s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 34 tests in 0.198s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 11 tests in 7.246s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 18 tests in 5.510s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 2 tests in 34.720s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 16 tests in 3.490s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 80 tests in 10.917s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 4 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 5 tests in 1.622s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 3 tests in 0.485s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 30 tests in 1.006s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 25 tests in 0.032s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK (skipped=7)"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 4 tests in 0.122s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 1 test in 0.009s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 14 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 28 tests in 0.035s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 64 tests in 3.148s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 2 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 70 tests in 26.646s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 22 tests in 23.562s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 22 tests in 1.778s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 6 tests in 1.501s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 29 tests in 1.753s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 6 tests in 0.380s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 64 tests in 8.330s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 62 tests in 23.669s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 49 tests in 1504.300s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 24 tests in 10.700s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 3 tests in 52.205s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 13 tests in 42.388s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 58 tests in 247.188s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 9 tests in 4.516s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 10 tests in 29.530s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 34 tests in 0.058s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 10 tests in 51.010s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 3 tests in 41.904s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 48 tests in 72.345s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 14 tests in 3.341s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 32 tests in 4.238s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 1 test in 0.013s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 4 tests in 0.184s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 2 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 17 tests in 1.717s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 16 tests in 0.134s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 14 tests in 0.005s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 9 tests in 0.244s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 132 tests in 259.660s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 24 tests in 10.071s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 4 tests in 0.870s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 16 tests in 1.179s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 32 tests in 2.330s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 7 tests in 1.982s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 7 tests in 0.822s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "Ran 8 tests in 0.426s"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "SHARD SUMMARY index=7/12 modules=62 tests=1312 failures=0 errors=0 skipped=23 result=PASS"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 13 tests in 0.509s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 23 tests in 0.016s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 3 tests in 0.223s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 9 tests in 4.162s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 18 tests in 3.626s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 9 tests in 0.566s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 11 tests in 15.660s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 14 tests in 0.576s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 79 tests in 5.727s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 20 tests in 0.244s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 4 tests in 0.009s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 31 tests in 0.038s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 10 tests in 0.329s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 21 tests in 4.962s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 4 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 13 tests in 1.037s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 6 tests in 0.365s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 17 tests in 32.297s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 28 tests in 0.364s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 1 test in 383.677s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 10 tests in 12.344s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 3 tests in 0.096s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 38 tests in 20.073s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 13 tests in 0.024s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 81 tests in 111.052s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=6)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 6 tests in 0.344s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 12 tests in 0.135s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 6 tests in 8.442s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 30 tests in 46.327s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 11 tests in 0.004s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 7 tests in 0.094s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 29 tests in 3.409s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 2 tests in 551.563s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 7 tests in 3.902s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 10 tests in 12.062s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 3 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 7 tests in 0.011s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 3 tests in 0.335s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 25 tests in 36.797s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 1 test in 0.117s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 26 tests in 1.438s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 29 tests in 9.927s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 168 tests in 318.980s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 18 tests in 3.716s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 5 tests in 42.463s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 32 tests in 0.958s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 83 tests in 172.772s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 9 tests in 14.284s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 43 tests in 0.043s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 20 tests in 5.374s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 34 tests in 1.547s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 4 tests in 17.592s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 61 tests in 19.114s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 8 tests in 0.021s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 74 tests in 601.818s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 4 tests in 0.162s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 6 tests in 4.846s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 8 tests in 0.539s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 54 tests in 4.259s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 11 tests in 305.235s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 2 tests in 0.007s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "Ran 5 tests in 1.145s"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "SHARD SUMMARY index=9/12 modules=62 tests=1342 failures=0 errors=0 skipped=17 result=PASS"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 13 tests in 0.484s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 11 tests in 5.168s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 59 tests in 15.653s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 18 tests in 4.376s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 4 tests in 0.205s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 8 tests in 11.135s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 6 tests in 1.027s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 58 tests in 9.901s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 1 test in 0.000s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 8 tests in 1.025s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 4 tests in 0.005s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 15 tests in 4.281s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 2 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 7 tests in 42.761s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 7 tests in 0.240s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 27 tests in 0.053s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 2 tests in 3.123s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 12 tests in 13.281s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 2 tests in 7.466s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 9 tests in 0.442s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 3 tests in 0.007s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 22 tests in 46.640s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 25 tests in 7.403s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 67 tests in 1.758s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 6 tests in 0.038s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 9 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK (skipped=2)"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 9 tests in 108.830s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 18 tests in 89.966s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 19 tests in 1.226s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 13 tests in 41.239s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 11 tests in 14.352s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 44 tests in 33.646s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 9 tests in 0.003s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 1 test in 194.894s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 36 tests in 495.115s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 95 tests in 13.189s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 98 tests in 29.637s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 9 tests in 4.417s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 34 tests in 10.414s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 3 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 16 tests in 45.906s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 14 tests in 0.130s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 8 tests in 3.352s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 68 tests in 51.716s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 14 tests in 230.749s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 10 tests in 2.516s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 63 tests in 54.693s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 15 tests in 0.317s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 5 tests in 0.038s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 1 test in 0.055s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 12 tests in 0.193s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 30 tests in 31.797s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 6 tests in 1.587s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 13 tests in 0.013s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 57 tests in 20.015s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 5 tests in 0.999s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 10 tests in 0.099s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 10 tests in 9.572s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK (skipped=4)"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 43 tests in 1.163s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 10 tests in 0.899s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "Ran 27 tests in 0.435s"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "SHARD SUMMARY index=2/12 modules=61 tests=1241 failures=0 errors=0 skipped=14 result=PASS"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 5 tests in 1.243s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 17 tests in 2.770s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK (expected failures=1)"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 20 tests in 26.782s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 5 tests in 0.001s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 3 tests in 0.029s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 10 tests in 1.135s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 5 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 6 tests in 0.141s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 13 tests in 0.652s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 11 tests in 2.884s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 2 tests in 80.003s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 4 tests in 0.006s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 36 tests in 1.976s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK (skipped=3)"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 6 tests in 24.990s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 28 tests in 19.019s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 32 tests in 0.530s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 10 tests in 2.675s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 4 tests in 0.139s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 1 test in 0.007s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 1 test in 293.887s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 8 tests in 0.108s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 21 tests in 9.628s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 55 tests in 0.347s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 19 tests in 0.031s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 13 tests in 0.013s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 13 tests in 0.123s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 5 tests in 0.002s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 19 tests in 7.399s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 3 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 13 tests in 0.158s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 1 test in 95.603s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 12 tests in 6.497s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 11 tests in 0.868s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 13 tests in 1.647s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 20 tests in 12.479s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 59 tests in 23.180s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 40 tests in 16.426s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 22 tests in 14.247s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 27 tests in 9.228s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 16 tests in 9.373s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 11 tests in 26.434s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 187 tests in 343.347s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK (skipped=11)"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 12 tests in 4.384s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 5 tests in 1.700s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 20 tests in 6.338s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 85 tests in 596.936s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 112 tests in 0.533s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK (skipped=1)"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 15 tests in 60.303s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 96 tests in 4.714s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 8 tests in 382.097s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 7 tests in 5.469s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 14 tests in 12.114s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 15 tests in 0.176s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 87 tests in 1.210s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 4 tests in 0.609s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 6 tests in 0.000s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK (skipped=6)"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 21 tests in 0.276s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 6 tests in 1.563s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 26 tests in 0.052s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 2 tests in 0.004s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 14 tests in 10.255s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK (skipped=6)"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 15 tests in 2.524s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 15 tests in 249.981s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "Ran 45 tests in 2.633s"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "OK"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "SHARD SUMMARY index=11/12 modules=64 tests=1437 failures=0 errors=0 skipped=29 result=PASS"
+    }
+  ],
+  "checkouts": [
+    {
+      "job": "changes",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "fences",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "build",
+      "line": "HEAD is now at f5c37c4 Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "quick",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "calibration-exits-exclusive (3.13)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "align-templates",
+      "line": "HEAD is now at f5c37c4 Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "calibration-writer-crash-matrix-exclusive (3.13, 1)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "calibration-writer-crash-matrix-exclusive (3.13, 2)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 1)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 5)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 10)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 6)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 8)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 4)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 3)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 12)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 7)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 9)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 2)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    },
+    {
+      "job": "test (3.13, 11)",
+      "line": "HEAD is now at f5c37c4fe Merge c3f4bacd8013ca98c19cf8d41f830c701930cd41 into b4a6c217f0285a20aff33a8407160dd77af2a8a6"
+    }
+  ]
+}

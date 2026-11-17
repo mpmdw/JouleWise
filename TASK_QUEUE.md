@@ -15,6 +15,18 @@ waits for its actual clean close/Check (forecast updated).
 Explicit user rule: never edit RUN_STATE; no generated views/kernel were
 rewritten. This dated intake does not issue a session or alter live queues.
 
+## 2026-11-16 requested evidence task: RL-174 E.2 / PR #794
+
+P1 evidence/documentation, selected by the user's explicit direction ahead of the
+historical generated queue: assemble the per-kit line-1 finding census and the
+exact-head CI red-set comparison; update the unissued 1118 drafts for RL-174.
+Authority: RL-174 at `ebff15ad2`; live state is `origin/main` `0656dfe3a`, items
+344–376. [LINES.md](docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/qual-lines-794/LINES.md)
+owns evidence, open questions and the next lead step. No phase exit-checklist row
+exists for this bounded audit record. Qualification stays held pending the lead's
+line-1 dispositions, both admission records and freeze 2. Issuing and RUN_STATE
+remain lead-owned; this task authorizes no measurement-host contact or PR merge.
+
 ## Intake Rule For New Tasks
 
 For every new user task:

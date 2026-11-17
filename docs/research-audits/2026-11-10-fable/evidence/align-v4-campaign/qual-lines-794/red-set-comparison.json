@@ -1,0 +1,13 @@
+{
+  "observed_at": "2026-11-16 18:14:25 PST",
+  "head_run": 43692809699,
+  "head_sha": "6010985a3312c77bb8e4bb4bf5c920c4d49b8512",
+  "base_run": 43670925240,
+  "base_sha": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
+  "head_red_set": [],
+  "base_red_set": [],
+  "equal": true,
+  "added_red": [],
+  "removed_red": [],
+  "note": "Full successful hosted CI with successful ordinary/exclusive test steps required in addition to scanning unittest failure headers. Skips and expected failures are not red."
+}

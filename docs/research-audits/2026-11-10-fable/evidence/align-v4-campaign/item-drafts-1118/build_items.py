@@ -55,6 +55,7 @@ renewal_gate() {{
     renewed=renewed.replace('f0_eligible() {\n','f0_eligible() {\n  renewal_gate || return 1\n',1)
     renewed=renewed.replace('# THE COMPLETE ELIGIBILITY CHECK',gate+'\n# THE COMPLETE ELIGIBILITY CHECK',1)
     note=f'''- **Renewal r2 (DRAFT, RL-165 §3 rule 2).** Item 346 was issued {issued} PST; its seven-day expiry is **{start.strftime('%a %d Nov %Y %H:%M:%S PST')}** (epoch {int(start.timestamp())}). This unissued renewal begins exactly then, with planned expiry {end.strftime('%a %d Nov %Y %H:%M:%S PST')} (epoch {int(end.timestamp())}). The lead must issue at that instant for these fixed bounds; a later actual issue needs a re-dated seven-day window. F0 spacing and daily counts continue across renewals; never reset its ledger. Fetched main `{main}` and W1 head `{head}` checked by builder: {'unchanged at item 346 pin; the 17 hashes, Mac-check and all rules carry as written' if head==old else 'MOVED: do not carry the old pin/hashes/qualification; lead re-pins under rule 2'}. Nothing is issued by this file.
+- **RL-174 E.2:** if merging #794 moves the W1-line head, STANDING-F0 is void immediately and the lead reissues it with that head. This same-pin renewal cannot authorize a moved head.
 - **Optional hold paragraph (item 374 form; inactive until the lead issues it):** MAGISTRATE: arm NO STANDING-F0 from <LEAD FILLS: hold issue instant> until the lead's RUN_STATE record "offload window closed" or <LEAD FILLS: hold end instant and epoch>, whichever is first. Counted items keep their own gates/windows; a running packer is a STOP at any arm. This does not carry forward item 374's Mon16-only hold, authorize offloading, or change F0's 02:35:00–22:40:00 launch window. Lead-owned hold records must be re-read before Start and Run.
 
 '''
@@ -74,8 +75,8 @@ def render(dates):
     assert set(dates)==set(DEFAULTS)
     for value in dates.values(): dt.date.fromisoformat(value)
     # Invalid date plans can be rendered for gate refusal tests; normal builder refuses known development dates.
-    if len(set(dates.values()))<2 or any('2026-11-14'<=d<='2026-11-18' for d in dates.values()):
-        raise SystemExit('REFUSE: RL-172 (a): at least two dates disjoint from development Sat14-Wed18')
+    if len(set(dates.values()))!=3 or any('2026-11-14'<=d<='2026-11-18' for d in dates.values()):
+        raise SystemExit('REFUSE: RL-174 B.3: three distinct dates, one block each, disjoint from development Sat14-Wed18')
     if max(epoch(d) for d in dates.values())>=dt.datetime.fromisoformat(QUEUE_EXPIRY).timestamp():
         raise SystemExit('REFUSE: re-dating exceeds finite queue expiry; lead needs a new queue commit/window')
     for sub in ('kits','queues','evidence'): (HERE/sub).mkdir(exist_ok=True)

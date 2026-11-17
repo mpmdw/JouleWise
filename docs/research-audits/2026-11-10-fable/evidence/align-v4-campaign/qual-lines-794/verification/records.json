@@ -1,0 +1,30 @@
+{
+  "verified_at": "2026-11-16 18:29:55 PST",
+  "result": "PASS",
+  "ci_runs": [
+    43692809699,
+    43670925240
+  ],
+  "successful_test_jobs_per_run": 15,
+  "source_tree_equalities": 2,
+  "frozen_paths_equal_per_kit": [
+    38,
+    38,
+    38
+  ],
+  "no_invented_line1_or_line2_admission": true,
+  "unchanged_historical_evidence_kits_queues": [
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/evidence/gates.log",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/evidence/kit-recheck.json",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/evidence/lint.log",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/evidence/pinned-checks.log",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/evidence/redate-tests.log",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/evidence/standing-f0-tests.log",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/kits/cl-qual-01.v1.1.json",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/kits/cl-qual-02.v1.1.json",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/kits/cl-qual-03.v1.1.json",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-01.queue.json",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-02.queue.json",
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-03.queue.json"
+  ]
+}

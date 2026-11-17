@@ -1,0 +1,53 @@
+{
+  "observed_at": "2026-11-16 18:22:22 PST",
+  "prs": [
+    {
+      "headRefOid": "41afd6eeaf4018acaa79bc0533c439eb7b1cc885",
+      "state": "OPEN",
+      "url": "https://github.com/mpmdw/JouleWise/pull/795",
+      "relevant_body_lines": []
+    },
+    {
+      "headRefOid": "69931e529040230d57876db491dd7a6054cae842",
+      "state": "OPEN",
+      "url": "https://github.com/mpmdw/JouleWise/pull/799",
+      "relevant_body_lines": [
+        {
+          "line": 107,
+          "text": "| - | Soak retry (RL-171; Mythos #794 F3): `soak_attempts` printed per span; a refused soak then an accepted retry is not a stop; no accepted soak is a REFUSAL | `check_soak`, `_retried_soak` (`DESK_ATTEMPTS` on a record that disagrees with its stages) | `test_no_retry_prints_one_accepted_soak`, `test_a_refused_soak_then_an_accepted_retry_is_not_a_stopped_span`, `test_a_second_soak_refusal_is_a_stop` |"
+        },
+        {
+          "line": 121,
+          "text": "| **Mythos F3 / Sol 13** (HIGH/MED): false REFUSAL on development-pin receipts | No `soak_attempts` field plus exactly one `soak` stage with rc 0 is one accepted soak. A `soak.a<k>` stage without the field is `DESK_ATTEMPTS` | `LegacyPins`, on the **pinned runners' own mocks** at `b4b6aeb19` (cl-dev-02) and `2d347f721` (cl-dev-04), committed as fixtures; a test regenerates them from the pins when they are in the clone |"
+        },
+        {
+          "line": 122,
+          "text": "| **Sol 7** (HIGH): a hand table with no measurements \"agrees\" | Every row must carry every comparable field (`attempts`, `contaminated_redos`, `g0_outcome`, `g0_s`, `wall_s`, `band_reached`, `admitted`, plus `g0_role` and `span_reference` on v1.1), with `named_stops` and `soak_attempts` at the top. A missing, duplicate, mistyped or non-finite field is `HAND_TABLE_INVALID`, which holds the next arm | `IncompleteHandTable` (2 tests) |"
+        },
+        {
+          "line": 123,
+          "text": "| **Sol 8 / Mythos F6**: a retried soak does not trigger the hand table; the refusal kind is lost | A retried soak is a mandatory hand-table trigger (RL-172a). The refusal text and kind (`slope`, `load`, `settle_or_quiet`) go into `desk_summary.json` and the Q1 print | `test_a_refused_soak_then_an_accepted_retry_is_not_a_stopped_span` |"
+        },
+        {
+          "line": 124,
+          "text": "| **Sol 9** (HIGH): an error receipt or failed restore certifies | Each of these is a REFUSAL with a hold: a non-zero receipt rc or an error, a missing or failed restore (a missing restore is also `DESK_SCHEMA`), any failed stage (except a retried soak and the non-fatal `display`), or a transition status other than CLOSED_OK. An accepted soak needs its stage with rc 0. A span result that contradicts the rc is `DESK_SCHEMA` | `CommandResults` (4 tests) |"
+        }
+      ]
+    },
+    {
+      "headRefOid": "9dc15c4738aafefc30795b3b026dcad05cffab50",
+      "state": "OPEN",
+      "url": "https://github.com/mpmdw/JouleWise/pull/800",
+      "relevant_body_lines": [
+        {
+          "line": 242,
+          "text": "clean: dev-05-s01 CLOSED_OK (pin 2d347f721, no soak_attempts); JOURNAL_COPY then HAND_GATE held dev-05-s02; verdict HAND_TABLE_DUE, then final with the hand table; class A released; dev-05-s02 armed"
+        },
+        {
+          "line": 243,
+          "text": "soak_retry: qual-01-s01 CLOSED_OK, soak refused then accepted (pin e1b85a59c); desk: no stop, triggers ['retried soak (settle_or_quiet; RL-172a)', ...]"
+        }
+      ]
+    }
+  ]
+}

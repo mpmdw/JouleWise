@@ -137,9 +137,9 @@ FREEZE2_COEF_SHA256="<LEAD FILLS: FREEZE2_COEF_SHA256>"
 FREEZE2_COEF_PATH="<LEAD FILLS: FREEZE2_COEF_PATH>"
 COLD_SEAT_RECORD="<LEAD FILLS: per-kit cold seat ADMIT and RL-167 Part B Q2 confirmation>"
 LINE2_RECORD="<LEAD FILLS: qual-pin suite red set equals c3f4bacd8 test for test>"
-HOST_EVENT_RECORD="<LEAD FILLS: pre-freeze-2 host event done or explicit waiver/deferral and readback>"
+HOST_EVENT_RECORD="<LEAD FILLS: four host-state lines under RL-174 C, with readback>"
 HOST_STATE_ID="<LEAD FILLS: qualification host-state identity frozen before freeze 2>"
-INCLUSION_RECORD="<LEAD FILLS: research-lead freeze-2 maintenance-flag disposition RL-171 §5.3>"
+INCLUSION_RECORD="RL-174 B.5 at ebff15ad27e831499dd65796b3727d8c5d451e21: six rules unchanged; maintenance overlaps print-only (RESEARCH-LEAD-DECISIONS.md)"
 QUEUE_COMMIT="<LEAD FILLS: authenticated audit commit containing this queue>"
 filled() {
   case "${1:-}" in ''|*'<LEAD '*) return 1;; *) return 0;; esac
@@ -174,11 +174,11 @@ qual_pin_gate() {
 }
 host_event_gate() {
   filled "$HOST_EVENT_RECORD" && filled "$HOST_STATE_ID" \
-    || { echo 'WAIT: pre-freeze-2 host event record unfilled (RL-171 §5; RL-172 (h); RL-173 E)'; return 1; }
+    || { echo 'WAIT: four host-state lines/readback unfilled (RL-174 C); no restart or hygiene action required'; return 1; }
   case "${HOST_EVENT_DISPOSITION:-}" in done|waived|deferred) ;; *) echo 'WAIT: host-event disposition absent'; return 1;; esac
+  # Identity covers hygiene settings, not boot time. RL-174 C permits an unplanned restart.
   test "${CURRENT_HOST_STATE_ID:-}" = "$HOST_STATE_ID" && test "${FREEZE2_HOST_STATE_ID:-}" = "$HOST_STATE_ID" \
-    && test "${HOST_EVENT_BEFORE_FREEZE2:-}" = yes \
-    || { echo 'STOP: host state differs or event not recorded before freeze 2 (RL-173 E)'; return 1; }
+    || { echo 'WAIT: record current host state under RL-174 C; an unplanned restart needs an event and four fresh lines, not a new hygiene gate'; return 1; }
   filled "$INCLUSION_RECORD" || { echo 'WAIT: research-lead maintenance-flag disposition at freeze 2 (RL-171 §5.3)'; return 1; }
   # The kit is not silently amended. A changed inclusion rule requires its own lead/research-lead disposition.
   test "${QUAL_INCLUSION_UNCHANGED:-}" = yes \
@@ -199,7 +199,7 @@ def stop(s): sys.exit('REFUSE: day law ' + s)
 TZ=ZoneInfo('America/Los_Angeles'); day=dt.datetime.fromtimestamp(int(now),TZ).date().isoformat()
 try:
     planned=dict(x.split('=') for x in dates.split(','))
-    if set(planned)!= {'qual-01','qual-02','qual-03'} or len(set(planned.values())) < 2: stop('three blocks require at least two dates (RL-172 (a)3)')
+    if set(planned)!= {'qual-01','qual-02','qual-03'} or len(set(planned.values())) != 3: stop('three distinct dates, one block each (RL-174 B.3)')
     for date in planned.values(): dt.date.fromisoformat(date)
     if day != wanted or planned[camp.removeprefix('cl-')] != day: stop('outside this item t0-date; lead re-dates (RL-172 (a)5)')
     if '2026-11-14' <= day <= '2026-11-18': stop('known development date Sat14-Wed18 (RL-172 (a)3)')
@@ -224,12 +224,13 @@ try:
                 if actual==day:
                     count+=len(roster); blocks.add(block); firsts[block]=min(firsts.get(block,t),t); seen.append((out.name,len(roster)))
     n=len(legs.split(',')); blocks.add(camp.removeprefix('cl-'))
-    if count+n > 24: stop('25th leg / >24 qualification legs; conservative RL-149 §2.3 two-block reading, OPEN Q1')
-    if len(blocks)>2: stop('more than two qualification blocks; conservative RL-149 §2.3, OPEN Q1')
+    if count+n > 24: stop('25th leg / >24 qualification legs; RL-174 B.3 / RL-149 §2.3 cap applies')
+    if len(blocks)>2: stop('more than two qualification blocks; RL-174 B.3 / RL-149 §2.3 cap applies')
     firsts.setdefault(camp.removeprefix('cl-'),int(now))
-    if len(firsts)==2 and abs(max(firsts.values())-min(firsts.values()))<36000: stop('two block starts less than 10 h apart; conservative RL-149 §2.3, OPEN Q1')
+    if len(firsts)==2 and abs(max(firsts.values())-min(firsts.values()))<36000: stop('two block starts less than 10 h apart; RL-174 B.3 / RL-149 §2.3 cap applies')
+    if len(blocks)>1: stop('one qualification block per t0-date; cap is not a slip remedy (RL-174 B.3)')
 except (OSError,ValueError,KeyError,TypeError,OverflowError) as e: stop('unreadable/contradictory receipt or plan '+str(e))
-print('DAY OK',day,'already',count,'plus',n,'blocks',sorted(blocks),'rule RL-172 (a)3; <=24/two blocks/10h conservative RL-149 §2.3 OPEN Q1',seen)
+print('DAY OK',day,'already',count,'plus',n,'blocks',sorted(blocks),'RL-174 B.3: three dates/one block each; <=24/two blocks/10h cap applies, never a slip remedy',seen)
 PY
 }
 queue_gate() {
@@ -264,6 +265,14 @@ try:
         assert isinstance(s['desk_final_record'],str) and s['desk_final_record'].strip() and '<LEAD ' not in s['desk_final_record']
         if s['runner_kind']=='cadence-legs-v1.1':
             assert isinstance(s['q1_complete_record'],str) and s['q1_complete_record'].strip() and '<LEAD ' not in s['q1_complete_record']
+    # RL-174 E.5: retain the named dev-05 debt even if a supplied census omits it.
+    if sys.argv[2] in ('qual-01-s01','qual-01-s02'):
+        required='dev-05-'+sys.argv[2].rsplit('-',1)[1]
+        rows=[s for s in order if s['span_id']==required]
+        assert len(rows)==1 and rows[0]['runner_kind']=='cadence-legs-v1.1'
+        for key in ('desk_final_record','q1_complete_record'):
+            value=rows[0].get(key)
+            assert isinstance(value,str) and value.strip() and '<LEAD ' not in value
     assert r['authenticated_roster_identity_checks']=='RL-172 (c)'
 except (OSError,ValueError,KeyError,TypeError,AssertionError): sys.exit('WAIT: line 9 desk-final or typed Q1 record absent/contradictory; debt counts across blocks')
 print('LINE9 PAID through',ids[-2],'; Q1 completion through same span (RL-173 E); next',sys.argv[2])
