@@ -1,0 +1,32 @@
+Verification started 2026-11-17T02:38:14Z
+11 Python sources, 22 complete shell item syntax checks, 27 embedded Python checks PASS
+PASS f2-p01 bash gate cases complete
+PASS f2-p02 bash gate cases complete
+PASS f2-p03 bash gate cases complete
+PASS f2-p04 bash gate cases complete
+PASS f2-p01 zsh gate cases complete
+PASS f2-p02 zsh gate cases complete
+PASS f2-p03 zsh gate cases complete
+PASS f2-p04 zsh gate cases complete
+896 synthetic gate checks; 0 failures; both bash and zsh; no MBP/custody
+PASS f2-p01 bash gate cases complete
+PASS f2-p02 bash gate cases complete
+PASS f2-p03 bash gate cases complete
+PASS f2-p04 bash gate cases complete
+PASS f2-p01 zsh gate cases complete
+PASS f2-p02 zsh gate cases complete
+PASS f2-p03 zsh gate cases complete
+PASS f2-p04 zsh gate cases complete
+896 synthetic gate checks; 0 failures; both bash and zsh; no MBP/custody
+PASS hp-02-s01 bash
+PASS hp-02-s01 zsh
+PASS hp-02-s02 bash
+PASS hp-02-s02 zsh
+PASS hp-02-s03 bash
+PASS hp-02-s03 zsh
+396 synthetic hp-02 gate checks PASS
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/sol-f2-kits-0203/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/tests/verify_build.py", line 78, in <module>
+    assert (checked.returncode==0)==(want==0),(kitrec['name'],label,checked.stdout,checked.stderr)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('cl-hp-02', 'contaminated', '', 'Traceback (most recent call last):\n  File "<stdin>", line 16, in <module>\n  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 787, in read_text\n    with self.open(mode=\'r\', encoding=encoding, errors=errors, newline=newline) as f:\n         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 771, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: \'/Volumes/JW-EXT/tmp/jw-rl174-verify-cyc_lva5/contaminated/span/result.json\'\n')

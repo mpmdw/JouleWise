@@ -1,0 +1,25 @@
+{
+ "schema": "joulewise.cadence_queue.v1",
+ "queue_id": "cq-f2-inst-02-a",
+ "expires_at": "2026-11-23T00:00:00-08:00",
+ "halt": null,
+ "standing_notice": null,
+ "spans": [
+  {
+   "seq": 1,
+   "span_id": "f2-inst-02-p1",
+   "block_id": "f2-inst-02",
+   "kit": {
+    "path": "f2-inst-02/f2-inst-02.v1.1.json",
+    "sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65"
+   },
+   "legs": [
+    "L001",
+    "L002",
+    "L003"
+   ],
+   "attempt": 1,
+   "not_before": "2026-11-19"
+  }
+ ]
+}

@@ -1,0 +1,2364 @@
+{
+ "built_at_date": "2026-11-16 18:20:56 PST",
+ "synthetic_only": true,
+ "seed_scan": {
+  "refs": 2172,
+  "unique_kit_blobs": 0,
+  "used_master_seeds": []
+ },
+ "kits": [
+  {
+   "name": "f2-inst-02",
+   "path": "f2-inst-02/f2-inst-02.v1.1.json",
+   "pin": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+   "source": "1f683fc634ed6b8722a3976af400920ee1f7dd7d",
+   "source_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+   "sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+   "decode": 128,
+   "master_seed": 2026111442,
+   "rejected_seeds": [
+    {
+     "seed": 2026111441,
+     "reason": "not every prompt size in every position"
+    }
+   ],
+   "layout": [
+    [
+     2000,
+     256,
+     19458
+    ],
+    [
+     256,
+     19458,
+     2000
+    ],
+    [
+     19458,
+     2000,
+     256
+    ],
+    [
+     19458,
+     256,
+     2000
+    ]
+   ],
+   "delta": [
+    {
+     "path": "/campaign_id",
+     "before": "f2-inst-01",
+     "after": "f2-inst-02"
+    },
+    {
+     "path": "/ruling/id",
+     "before": "RL-169a",
+     "after": "RL-174"
+    },
+    {
+     "path": "/leg_defaults/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/seed_law/master_seed",
+     "before": 2026111443,
+     "after": 2026111442
+    },
+    {
+     "path": "/legs/0/seed",
+     "before": 1808890015,
+     "after": 842275945
+    },
+    {
+     "path": "/legs/0/prefill_tokens",
+     "before": 19458,
+     "after": 2000
+    },
+    {
+     "path": "/legs/0/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/1/seed",
+     "before": 4087299478,
+     "after": 2769631332
+    },
+    {
+     "path": "/legs/1/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/2/seed",
+     "before": 3037885276,
+     "after": 3160018608
+    },
+    {
+     "path": "/legs/2/prefill_tokens",
+     "before": 2000,
+     "after": 19458
+    },
+    {
+     "path": "/legs/2/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/3/seed",
+     "before": 3083930040,
+     "after": 3001476547
+    },
+    {
+     "path": "/legs/3/prefill_tokens",
+     "before": 2000,
+     "after": 256
+    },
+    {
+     "path": "/legs/3/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/4/seed",
+     "before": 3178683063,
+     "after": 619640656
+    },
+    {
+     "path": "/legs/4/prefill_tokens",
+     "before": 256,
+     "after": 19458
+    },
+    {
+     "path": "/legs/4/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/5/seed",
+     "before": 755340826,
+     "after": 2360222299
+    },
+    {
+     "path": "/legs/5/prefill_tokens",
+     "before": 19458,
+     "after": 2000
+    },
+    {
+     "path": "/legs/5/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/6/seed",
+     "before": 791951226,
+     "after": 292748994
+    },
+    {
+     "path": "/legs/6/prefill_tokens",
+     "before": 256,
+     "after": 19458
+    },
+    {
+     "path": "/legs/6/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/7/seed",
+     "before": 3583144100,
+     "after": 1164193979
+    },
+    {
+     "path": "/legs/7/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/8/seed",
+     "before": 1453542947,
+     "after": 1615978232
+    },
+    {
+     "path": "/legs/8/prefill_tokens",
+     "before": 19458,
+     "after": 256
+    },
+    {
+     "path": "/legs/8/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/9/seed",
+     "before": 2365426978,
+     "after": 2468898385
+    },
+    {
+     "path": "/legs/9/prefill_tokens",
+     "before": 2000,
+     "after": 19458
+    },
+    {
+     "path": "/legs/9/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/10/seed",
+     "before": 1350390875,
+     "after": 1385709711
+    },
+    {
+     "path": "/legs/10/prefill_tokens",
+     "before": 19458,
+     "after": 256
+    },
+    {
+     "path": "/legs/10/decode_tokens",
+     "before": 512,
+     "after": 128
+    },
+    {
+     "path": "/legs/11/seed",
+     "before": 3330252309,
+     "after": 1177355809
+    },
+    {
+     "path": "/legs/11/prefill_tokens",
+     "before": 256,
+     "after": 2000
+    },
+    {
+     "path": "/legs/11/decode_tokens",
+     "before": 512,
+     "after": 128
+    }
+   ],
+   "validate": [
+    {
+     "campaign_id": "f2-inst-02",
+     "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+     "frozen_paths_verified": true,
+     "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+     "legs": 12,
+     "ok": true
+    },
+    {
+     "campaign_id": "f2-inst-02",
+     "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+     "frozen_paths_verified": true,
+     "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+     "legs": 12,
+     "ok": true
+    }
+   ],
+   "plans": [
+    {
+     "piece": 1,
+     "roster": "L001,L002,L003",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-02",
+      "deadline_epoch_s": 1795088250.0,
+      "expected_s": 7346,
+      "fence_end_epoch_s": 1795089710.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "launch_deadline_epoch_s": 1795088810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1346,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L001",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 842275945,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1329,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L002",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2769631332,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1521,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L003",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3160018608,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 1,
+     "roster": "L001,L002,L003",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-02",
+      "deadline_epoch_s": 1795134150.0,
+      "expected_s": 7346,
+      "fence_end_epoch_s": 1795135610.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "launch_deadline_epoch_s": 1795134710.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1346,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L001",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 842275945,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1329,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L002",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2769631332,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1521,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L003",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3160018608,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 2,
+     "roster": "L004,L005,L006",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-02",
+      "deadline_epoch_s": 1795088250.0,
+      "expected_s": 7346,
+      "fence_end_epoch_s": 1795089710.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "launch_deadline_epoch_s": 1795088810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1329,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L004",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3001476547,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1521,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L005",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 619640656,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1346,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L006",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2360222299,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 2,
+     "roster": "L004,L005,L006",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-02",
+      "deadline_epoch_s": 1795134150.0,
+      "expected_s": 7346,
+      "fence_end_epoch_s": 1795135610.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "launch_deadline_epoch_s": 1795134710.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1329,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L004",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3001476547,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1521,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L005",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 619640656,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1346,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L006",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2360222299,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 3,
+     "roster": "L007,L008,L009",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-02",
+      "deadline_epoch_s": 1795088250.0,
+      "expected_s": 7346,
+      "fence_end_epoch_s": 1795089710.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "launch_deadline_epoch_s": 1795088810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1521,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L007",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 292748994,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1346,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L008",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1164193979,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1329,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L009",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1615978232,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 3,
+     "roster": "L007,L008,L009",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-02",
+      "deadline_epoch_s": 1795134150.0,
+      "expected_s": 7346,
+      "fence_end_epoch_s": 1795135610.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "launch_deadline_epoch_s": 1795134710.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1521,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L007",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 292748994,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1346,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L008",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1164193979,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1329,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L009",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1615978232,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 4,
+     "roster": "L010,L011,L012",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-02",
+      "deadline_epoch_s": 1795088250.0,
+      "expected_s": 7346,
+      "fence_end_epoch_s": 1795089710.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "launch_deadline_epoch_s": 1795088810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1521,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L010",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2468898385,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1329,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L011",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1385709711,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1346,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L012",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1177355809,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 4,
+     "roster": "L010,L011,L012",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-02",
+      "deadline_epoch_s": 1795134150.0,
+      "expected_s": 7346,
+      "fence_end_epoch_s": 1795135610.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "launch_deadline_epoch_s": 1795134710.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1521,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L010",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2468898385,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1329,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L011",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1385709711,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1346,
+        "campaign_id": "f2-inst-02",
+        "decode_tokens": 128,
+        "leg_id": "L012",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1177355809,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    }
+   ],
+   "mocks": [
+    {
+     "piece": 1,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-gjxld35l/f2-inst-02-1/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-gjxld35l/f2-inst-02-1/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    },
+    {
+     "piece": 2,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-gjxld35l/f2-inst-02-2/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-gjxld35l/f2-inst-02-2/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    },
+    {
+     "piece": 3,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-gjxld35l/f2-inst-02-3/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-gjxld35l/f2-inst-02-3/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    },
+    {
+     "piece": 4,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-gjxld35l/f2-inst-02-4/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-gjxld35l/f2-inst-02-4/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    }
+   ]
+  },
+  {
+   "name": "f2-inst-03",
+   "path": "f2-inst-03/f2-inst-03.v1.1.json",
+   "pin": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+   "source": "1f683fc634ed6b8722a3976af400920ee1f7dd7d",
+   "source_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+   "sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+   "decode": 256,
+   "master_seed": 2026111441,
+   "rejected_seeds": [],
+   "layout": [
+    [
+     2000,
+     256,
+     19458
+    ],
+    [
+     256,
+     19458,
+     2000
+    ],
+    [
+     256,
+     19458,
+     2000
+    ],
+    [
+     19458,
+     2000,
+     256
+    ]
+   ],
+   "delta": [
+    {
+     "path": "/campaign_id",
+     "before": "f2-inst-01",
+     "after": "f2-inst-03"
+    },
+    {
+     "path": "/ruling/id",
+     "before": "RL-169a",
+     "after": "RL-174"
+    },
+    {
+     "path": "/leg_defaults/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/seed_law/master_seed",
+     "before": 2026111443,
+     "after": 2026111441
+    },
+    {
+     "path": "/legs/0/seed",
+     "before": 1808890015,
+     "after": 3266769068
+    },
+    {
+     "path": "/legs/0/prefill_tokens",
+     "before": 19458,
+     "after": 2000
+    },
+    {
+     "path": "/legs/0/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/1/seed",
+     "before": 4087299478,
+     "after": 3618992204
+    },
+    {
+     "path": "/legs/1/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/2/seed",
+     "before": 3037885276,
+     "after": 2571839790
+    },
+    {
+     "path": "/legs/2/prefill_tokens",
+     "before": 2000,
+     "after": 19458
+    },
+    {
+     "path": "/legs/2/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/3/seed",
+     "before": 3083930040,
+     "after": 376846499
+    },
+    {
+     "path": "/legs/3/prefill_tokens",
+     "before": 2000,
+     "after": 256
+    },
+    {
+     "path": "/legs/3/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/4/seed",
+     "before": 3178683063,
+     "after": 3571675422
+    },
+    {
+     "path": "/legs/4/prefill_tokens",
+     "before": 256,
+     "after": 19458
+    },
+    {
+     "path": "/legs/4/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/5/seed",
+     "before": 755340826,
+     "after": 405833379
+    },
+    {
+     "path": "/legs/5/prefill_tokens",
+     "before": 19458,
+     "after": 2000
+    },
+    {
+     "path": "/legs/5/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/6/seed",
+     "before": 791951226,
+     "after": 2740631111
+    },
+    {
+     "path": "/legs/6/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/7/seed",
+     "before": 3583144100,
+     "after": 3535398535
+    },
+    {
+     "path": "/legs/7/prefill_tokens",
+     "before": 2000,
+     "after": 19458
+    },
+    {
+     "path": "/legs/7/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/8/seed",
+     "before": 1453542947,
+     "after": 1910514557
+    },
+    {
+     "path": "/legs/8/prefill_tokens",
+     "before": 19458,
+     "after": 2000
+    },
+    {
+     "path": "/legs/8/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/9/seed",
+     "before": 2365426978,
+     "after": 539591720
+    },
+    {
+     "path": "/legs/9/prefill_tokens",
+     "before": 2000,
+     "after": 19458
+    },
+    {
+     "path": "/legs/9/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/10/seed",
+     "before": 1350390875,
+     "after": 4129108971
+    },
+    {
+     "path": "/legs/10/prefill_tokens",
+     "before": 19458,
+     "after": 2000
+    },
+    {
+     "path": "/legs/10/decode_tokens",
+     "before": 512,
+     "after": 256
+    },
+    {
+     "path": "/legs/11/seed",
+     "before": 3330252309,
+     "after": 2273151040
+    },
+    {
+     "path": "/legs/11/decode_tokens",
+     "before": 512,
+     "after": 256
+    }
+   ],
+   "validate": [
+    {
+     "campaign_id": "f2-inst-03",
+     "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+     "frozen_paths_verified": true,
+     "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+     "legs": 12,
+     "ok": true
+    },
+    {
+     "campaign_id": "f2-inst-03",
+     "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+     "frozen_paths_verified": true,
+     "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+     "legs": 12,
+     "ok": true
+    }
+   ],
+   "plans": [
+    {
+     "piece": 1,
+     "roster": "L001,L002,L003",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-03",
+      "deadline_epoch_s": 1795088250.0,
+      "expected_s": 7377,
+      "fence_end_epoch_s": 1795089710.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "launch_deadline_epoch_s": 1795088810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1357,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L001",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3266769068,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1339,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L002",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3618992204,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1531,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L003",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2571839790,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 1,
+     "roster": "L001,L002,L003",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-03",
+      "deadline_epoch_s": 1795134150.0,
+      "expected_s": 7377,
+      "fence_end_epoch_s": 1795135610.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "launch_deadline_epoch_s": 1795134710.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1357,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L001",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3266769068,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1339,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L002",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3618992204,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1531,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L003",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2571839790,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 2,
+     "roster": "L004,L005,L006",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-03",
+      "deadline_epoch_s": 1795088250.0,
+      "expected_s": 7377,
+      "fence_end_epoch_s": 1795089710.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "launch_deadline_epoch_s": 1795088810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1339,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L004",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 376846499,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1531,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L005",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3571675422,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1357,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L006",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 405833379,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 2,
+     "roster": "L004,L005,L006",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-03",
+      "deadline_epoch_s": 1795134150.0,
+      "expected_s": 7377,
+      "fence_end_epoch_s": 1795135610.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "launch_deadline_epoch_s": 1795134710.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1339,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L004",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 376846499,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1531,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L005",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3571675422,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1357,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L006",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 405833379,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 3,
+     "roster": "L007,L008,L009",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-03",
+      "deadline_epoch_s": 1795088250.0,
+      "expected_s": 7377,
+      "fence_end_epoch_s": 1795089710.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "launch_deadline_epoch_s": 1795088810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1339,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L007",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2740631111,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1531,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L008",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3535398535,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1357,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L009",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1910514557,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 3,
+     "roster": "L007,L008,L009",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-03",
+      "deadline_epoch_s": 1795134150.0,
+      "expected_s": 7377,
+      "fence_end_epoch_s": 1795135610.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "launch_deadline_epoch_s": 1795134710.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1339,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L007",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2740631111,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1531,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L008",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3535398535,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1357,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L009",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1910514557,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 4,
+     "roster": "L010,L011,L012",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-03",
+      "deadline_epoch_s": 1795088250.0,
+      "expected_s": 7377,
+      "fence_end_epoch_s": 1795089710.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "launch_deadline_epoch_s": 1795088810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1531,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L010",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 539591720,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1357,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L011",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 4129108971,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1339,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L012",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2273151040,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    },
+    {
+     "piece": 4,
+     "roster": "L010,L011,L012",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "f2-inst-03",
+      "deadline_epoch_s": 1795134150.0,
+      "expected_s": 7377,
+      "fence_end_epoch_s": 1795135610.0,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "launch_deadline_epoch_s": 1795134710.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1531,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L010",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 539591720,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1357,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L011",
+        "prefill_chars": 4111,
+        "prefill_tokens": 2000,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 4129108971,
+        "start_band": "q600"
+       },
+       {
+        "budget_s": 1339,
+        "campaign_id": "f2-inst-03",
+        "decode_tokens": 256,
+        "leg_id": "L012",
+        "prefill_chars": 526,
+        "prefill_tokens": 256,
+        "quiet_s": 600,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2273151040,
+        "start_band": "q600"
+       }
+      ],
+      "redo_quota": 0,
+      "runner_kind": "cadence-legs-v1.1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 11250
+     }
+    }
+   ],
+   "mocks": [
+    {
+     "piece": 1,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-0fks038c/f2-inst-03-1/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-0fks038c/f2-inst-03-1/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    },
+    {
+     "piece": 2,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-0fks038c/f2-inst-03-2/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-0fks038c/f2-inst-03-2/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    },
+    {
+     "piece": 3,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-0fks038c/f2-inst-03-3/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-0fks038c/f2-inst-03-3/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    },
+    {
+     "piece": 4,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-0fks038c/f2-inst-03-4/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-0fks038c/f2-inst-03-4/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    }
+   ]
+  },
+  {
+   "name": "cl-hp-02",
+   "path": "hp-02/cl-hp-02.json",
+   "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
+   "source": "bbd34dc876001786c3603d9c4583391639284253",
+   "source_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+   "sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+   "decode": 4096,
+   "master_seed": 2026111601,
+   "rejected_seeds": [],
+   "layout": [
+    [
+     19458,
+     19458,
+     19458
+    ],
+    [
+     19458,
+     19458,
+     19458
+    ],
+    [
+     19458,
+     19458,
+     19458
+    ],
+    [
+     19458,
+     19458,
+     19458
+    ]
+   ],
+   "delta": [
+    {
+     "path": "/campaign_id",
+     "before": "cl-hp-01",
+     "after": "cl-hp-02"
+    },
+    {
+     "path": "/ruling/id",
+     "before": "RL-149 \u00a72",
+     "after": "RL-174"
+    },
+    {
+     "path": "/seed_law/master_seed",
+     "before": 2026111404,
+     "after": 2026111601
+    },
+    {
+     "path": "/legs/0/seed",
+     "before": 4048693807,
+     "after": 3647512302
+    },
+    {
+     "path": "/legs/1/seed",
+     "before": 1251089132,
+     "after": 1603347076
+    },
+    {
+     "path": "/legs/2/seed",
+     "before": 3543179003,
+     "after": 2027507057
+    },
+    {
+     "path": "/legs/3/seed",
+     "before": 954626506,
+     "after": 1851779591
+    },
+    {
+     "path": "/legs/4/seed",
+     "before": 983646378,
+     "after": 3584571682
+    },
+    {
+     "path": "/legs/5/seed",
+     "before": 2048410933,
+     "after": 3643703426
+    },
+    {
+     "path": "/legs/6/seed",
+     "before": 1350544700,
+     "after": 2878738608
+    },
+    {
+     "path": "/legs/7/seed",
+     "before": 1180804720,
+     "after": 825084403
+    },
+    {
+     "path": "/legs/8/seed",
+     "before": 3701535075,
+     "after": 3292754346
+    },
+    {
+     "path": "/legs/9/seed",
+     "before": 2827066148,
+     "after": 1256642238
+    },
+    {
+     "path": "/legs/10/seed",
+     "before": 2178814401,
+     "after": 1933637934
+    },
+    {
+     "path": "/legs/11/seed",
+     "before": 1042807770,
+     "after": 397751866
+    }
+   ],
+   "validate": [
+    {
+     "campaign_id": "cl-hp-02",
+     "frozen_commit": "dd206025abb30fd5c07515cd4b34b3e653174810",
+     "frozen_paths_verified": true,
+     "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+     "legs": 12,
+     "ok": true
+    },
+    {
+     "campaign_id": "cl-hp-02",
+     "frozen_commit": "dd206025abb30fd5c07515cd4b34b3e653174810",
+     "frozen_paths_verified": true,
+     "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+     "legs": 12,
+     "ok": true
+    }
+   ],
+   "plans": [
+    {
+     "piece": 1,
+     "roster": "L001,L002,L003",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "cl-hp-02",
+      "deadline_epoch_s": 1795093650.0,
+      "expected_s": 6903,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "launch_deadline_epoch_s": 1795094210.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L001",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3647512302,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L002",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1603347076,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L003",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2027507057,
+        "start_band": "q0"
+       }
+      ],
+      "redo_quota": 2,
+      "runner_kind": "cadence-legs-v1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 16650
+     }
+    },
+    {
+     "piece": 1,
+     "roster": "L001,L002,L003",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "cl-hp-02",
+      "deadline_epoch_s": 1795139550.0,
+      "expected_s": 6903,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "launch_deadline_epoch_s": 1795140110.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L001",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3647512302,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L002",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1603347076,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L003",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2027507057,
+        "start_band": "q0"
+       }
+      ],
+      "redo_quota": 2,
+      "runner_kind": "cadence-legs-v1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 16650
+     }
+    },
+    {
+     "piece": 2,
+     "roster": "L004,L005,L006,L007",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "cl-hp-02",
+      "deadline_epoch_s": 1795096350.0,
+      "expected_s": 8154,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "launch_deadline_epoch_s": 1795096910.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L004",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1851779591,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L005",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3584571682,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L006",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3643703426,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L007",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2878738608,
+        "start_band": "q0"
+       }
+      ],
+      "redo_quota": 2,
+      "runner_kind": "cadence-legs-v1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 19350
+     }
+    },
+    {
+     "piece": 2,
+     "roster": "L004,L005,L006,L007",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "cl-hp-02",
+      "deadline_epoch_s": 1795142250.0,
+      "expected_s": 8154,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "launch_deadline_epoch_s": 1795142810.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L004",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1851779591,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L005",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3584571682,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L006",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3643703426,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L007",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 2878738608,
+        "start_band": "q0"
+       }
+      ],
+      "redo_quota": 2,
+      "runner_kind": "cadence-legs-v1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 19350
+     }
+    },
+    {
+     "piece": 3,
+     "roster": "L008,L009,L010,L011,L012",
+     "argument": "13:14-13:15",
+     "plan": {
+      "batch_windows": [
+       "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "cl-hp-02",
+      "deadline_epoch_s": 1795099050.0,
+      "expected_s": 9405,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "launch_deadline_epoch_s": 1795099610.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L008",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 825084403,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L009",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3292754346,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L010",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1256642238,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L011",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1933637934,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L012",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 397751866,
+        "start_band": "q0"
+       }
+      ],
+      "redo_quota": 2,
+      "runner_kind": "cadence-legs-v1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795077000.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 22050
+     }
+    },
+    {
+     "piece": 3,
+     "roster": "L008,L009,L010,L011,L012",
+     "argument": "02:00-02:35",
+     "plan": {
+      "batch_windows": [
+       "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "campaign_id": "cl-hp-02",
+      "deadline_epoch_s": 1795144950.0,
+      "expected_s": 9405,
+      "fixed_overhead_s": 1200,
+      "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "launch_deadline_epoch_s": 1795145510.0,
+      "leg_cap_s": 2700,
+      "legs": [
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L008",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 825084403,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L009",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 3292754346,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L010",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1256642238,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L011",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 1933637934,
+        "start_band": "q0"
+       },
+       {
+        "budget_s": 1251,
+        "campaign_id": "cl-hp-02",
+        "decode_tokens": 4096,
+        "leg_id": "L012",
+        "prefill_chars": 40000,
+        "prefill_tokens": 19458,
+        "quiet_s": 0,
+        "schema": "joulewise.cadence_leg_spec.v1",
+        "seed": 397751866,
+        "start_band": "q0"
+       }
+      ],
+      "redo_quota": 2,
+      "runner_kind": "cadence-legs-v1",
+      "schema": "joulewise.cadence_span_plan.v1",
+      "soak_s": 1950,
+      "t0_epoch_s": 1795122900.0,
+      "time_model": {
+       "decode_tokens_per_s": 12.03,
+       "fixed_s": 500.0,
+       "g0_s": 209.0,
+       "prefill_s_per_token": 0.005,
+       "warmup_extra_s": 6.0
+      },
+      "worst_case_s": 22050
+     }
+    }
+   ],
+   "mocks": [
+    {
+     "piece": 1,
+     "output": {
+      "rc": 0,
+      "legs": 3,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-ow4u1tjs/cl-hp-02-1/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-ow4u1tjs/cl-hp-02-1/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    },
+    {
+     "piece": 2,
+     "output": {
+      "rc": 0,
+      "legs": 4,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-ow4u1tjs/cl-hp-02-2/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-ow4u1tjs/cl-hp-02-2/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    },
+    {
+     "piece": 3,
+     "output": {
+      "rc": 0,
+      "legs": 5,
+      "stops": [],
+      "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-ow4u1tjs/cl-hp-02-3/runner_receipt.json",
+      "table": "/Volumes/JW-EXT/tmp/jw-rl174-synthetic-ow4u1tjs/cl-hp-02-3/desk/JOURNAL-TABLE.md"
+     },
+     "qualification": "SYNTHETIC; streams not opened"
+    }
+   ]
+  }
+ ]
+}

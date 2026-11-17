@@ -1,0 +1,53 @@
+Verification started 2026-11-17T02:47:47Z
+12 Python sources, 22 complete shell item syntax checks, 27 embedded Python checks PASS
+PASS f2-p01 bash gate cases complete
+PASS f2-p02 bash gate cases complete
+PASS f2-p03 bash gate cases complete
+PASS f2-p04 bash gate cases complete
+PASS f2-p01 zsh gate cases complete
+PASS f2-p02 zsh gate cases complete
+PASS f2-p03 zsh gate cases complete
+PASS f2-p04 zsh gate cases complete
+944 synthetic gate checks; 0 failures; both bash and zsh; no MBP/custody
+PASS f2-p01 bash gate cases complete
+PASS f2-p02 bash gate cases complete
+PASS f2-p03 bash gate cases complete
+PASS f2-p04 bash gate cases complete
+PASS f2-p01 zsh gate cases complete
+PASS f2-p02 zsh gate cases complete
+PASS f2-p03 zsh gate cases complete
+PASS f2-p04 zsh gate cases complete
+944 synthetic gate checks; 0 failures; both bash and zsh; no MBP/custody
+PASS ITEM-f2-p01.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p01.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p02.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p02.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p03.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p03.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p04.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p04.md zsh recorded close identity and copy regressions
+144 close/copy regression checks; zero failures; bash and zsh; synthetic only
+PASS ITEM-f2-p01.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p01.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p02.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p02.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p03.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p03.md zsh recorded close identity and copy regressions
+PASS ITEM-f2-p04.md bash recorded close identity and copy regressions
+PASS ITEM-f2-p04.md zsh recorded close identity and copy regressions
+144 close/copy regression checks; zero failures; bash and zsh; synthetic only
+PASS hp-02-s01 bash
+PASS hp-02-s01 zsh
+PASS hp-02-s02 bash
+PASS hp-02-s02 zsh
+PASS hp-02-s03 bash
+PASS hp-02-s03 zsh
+396 synthetic hp-02 gate checks PASS
+/private/tmp/jw-f2-0203-pin-2d347f721/scripts/align_r1_rehearsal.py:1986: SyntaxWarning: 'return' in a 'finally' block
+  return 4
+30 pinned kit/law/delta/queue/fault-injection checks PASS; no measured input or stream opened
+PASS f2-inst-02 local dry/stage/reuse/all spans/admission/hand/fence/dirty refusals
+PASS f2-inst-03 local dry/stage/reuse/all spans/admission/hand/fence/dirty refusals
+PASS hp-02 local dry/stage/reuse/all spans/admission/hand/fence/dirty refusals
+50 local staging checks PASS; no network, measurement Mac or measured files
+Verification finished 2026-11-17T02:49:13Z

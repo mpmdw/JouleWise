@@ -1,0 +1,214 @@
+{
+  "synthetic_only": true,
+  "checks": [
+    [
+      "f2-inst-02",
+      "validate-kit",
+      "02:00-02:35",
+      "PASS"
+    ],
+    [
+      "f2-inst-02",
+      "validate-kit",
+      "13:14-13:15",
+      "PASS"
+    ],
+    [
+      "f2-inst-02",
+      "gen-legs / exact allowed delta",
+      "PASS"
+    ],
+    [
+      "f2-inst-02",
+      "queue a",
+      "PASS"
+    ],
+    [
+      "f2-inst-02",
+      "queue b TEMPORARY ONLY",
+      "PASS"
+    ],
+    [
+      "f2-inst-02",
+      "SYNTHETIC contaminated",
+      {
+        "rc": 0,
+        "legs": 3,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-verify-y3hredll/contaminated/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/tmp/jw-rl174-verify-y3hredll/contaminated/desk/JOURNAL-TABLE.md"
+      }
+    ],
+    [
+      "f2-inst-02",
+      "embedded Check / SYNTHETIC contaminated",
+      "PASS"
+    ],
+    [
+      "f2-inst-02",
+      "SYNTHETIC G0-timeout",
+      {
+        "rc": 0,
+        "legs": 3,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-verify-y3hredll/G0-timeout/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/tmp/jw-rl174-verify-y3hredll/G0-timeout/desk/JOURNAL-TABLE.md"
+      }
+    ],
+    [
+      "f2-inst-02",
+      "embedded Check / SYNTHETIC G0-timeout",
+      "PASS"
+    ],
+    [
+      "f2-inst-03",
+      "validate-kit",
+      "02:00-02:35",
+      "PASS"
+    ],
+    [
+      "f2-inst-03",
+      "validate-kit",
+      "13:14-13:15",
+      "PASS"
+    ],
+    [
+      "f2-inst-03",
+      "gen-legs / exact allowed delta",
+      "PASS"
+    ],
+    [
+      "f2-inst-03",
+      "queue a",
+      "PASS"
+    ],
+    [
+      "f2-inst-03",
+      "queue b TEMPORARY ONLY",
+      "PASS"
+    ],
+    [
+      "f2-inst-03",
+      "SYNTHETIC contaminated",
+      {
+        "rc": 0,
+        "legs": 3,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-verify-9uk7vq6j/contaminated/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/tmp/jw-rl174-verify-9uk7vq6j/contaminated/desk/JOURNAL-TABLE.md"
+      }
+    ],
+    [
+      "f2-inst-03",
+      "embedded Check / SYNTHETIC contaminated",
+      "PASS"
+    ],
+    [
+      "f2-inst-03",
+      "SYNTHETIC G0-timeout",
+      {
+        "rc": 0,
+        "legs": 3,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-verify-9uk7vq6j/G0-timeout/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/tmp/jw-rl174-verify-9uk7vq6j/G0-timeout/desk/JOURNAL-TABLE.md"
+      }
+    ],
+    [
+      "f2-inst-03",
+      "embedded Check / SYNTHETIC G0-timeout",
+      "PASS"
+    ],
+    [
+      "cl-hp-02",
+      "validate-kit",
+      "02:00-02:35",
+      "PASS"
+    ],
+    [
+      "cl-hp-02",
+      "validate-kit",
+      "13:14-13:15",
+      "PASS"
+    ],
+    [
+      "cl-hp-02",
+      "gen-legs / exact allowed delta",
+      "PASS"
+    ],
+    [
+      "cl-hp-02",
+      "queue a",
+      "PASS"
+    ],
+    [
+      "cl-hp-02",
+      "SYNTHETIC contaminated",
+      {
+        "rc": 0,
+        "legs": 3,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-verify-k78x0qn9/contaminated/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/tmp/jw-rl174-verify-k78x0qn9/contaminated/desk/JOURNAL-TABLE.md"
+      }
+    ],
+    [
+      "cl-hp-02",
+      "embedded Check / SYNTHETIC contaminated",
+      "PASS"
+    ],
+    [
+      "cl-hp-02",
+      "SYNTHETIC G0-timeout",
+      {
+        "rc": 0,
+        "legs": 3,
+        "stops": [],
+        "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-verify-k78x0qn9/G0-timeout/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/tmp/jw-rl174-verify-k78x0qn9/G0-timeout/desk/JOURNAL-TABLE.md"
+      }
+    ],
+    [
+      "cl-hp-02",
+      "embedded Check / SYNTHETIC G0-timeout",
+      "PASS"
+    ],
+    [
+      "cl-hp-02",
+      "SYNTHETIC failing-restore",
+      {
+        "rc": 2,
+        "legs": 3,
+        "stops": [
+          {
+            "code": "REFUSAL",
+            "detail": "chain_exit_code=2 chain_outcome=INCOMPLETE outcome=REFUSED"
+          },
+          {
+            "code": "RESTORE_UNPROVEN",
+            "detail": "the close did not prove AC powermode 0 and no High Power marker; it holds everything until the lead restores and records it"
+          }
+        ],
+        "receipt": "/Volumes/JW-EXT/tmp/jw-rl174-verify-k78x0qn9/failing-restore/runner_receipt.json",
+        "table": "/Volumes/JW-EXT/tmp/jw-rl174-verify-k78x0qn9/failing-restore/desk/JOURNAL-TABLE.md"
+      }
+    ],
+    [
+      "cl-hp-02",
+      "embedded Check / SYNTHETIC failing-restore",
+      "PASS"
+    ],
+    [
+      "q600 real orchestration / synthetic runtime",
+      128,
+      "PASS"
+    ],
+    [
+      "q600 real orchestration / synthetic runtime",
+      256,
+      "PASS"
+    ]
+  ],
+  "count": 30,
+  "measurement_streams_opened": false
+}

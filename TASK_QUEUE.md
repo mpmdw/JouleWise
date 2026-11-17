@@ -55,6 +55,24 @@ For every new user task:
     must cite that matrix row (file + item id). If no matrix row exists
     for the work, say so explicitly in the evidence cell.
 
+## User-directed builder intake — 2026-11-16, RL-174 B
+
+P2 [AGENT], documentation/kit preparation: build finite f2-inst-02/03 and the
+conditional hp-02 in the supplied sol-f2-kits-0203 worktree. Explicit user
+direction selects this bounded task ahead of the historical generated restart
+queue; RL-174 B is its authority. No phase exit-checklist row is being closed.
+Kit data, eleven unissued items, finite queue drafts, delta note and local
+verification/staging tools are in
+[item-drafts-f2-0203](docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/STATUS.md).
+Builder work is delivered; independent executing delta admission, inst-01
+piece-1 PASS, hp accounting/text dispositions, current no-HP-look evidence and
+live issue/staging remain lead-owned. The user forbids this builder to edit
+RUN_STATE; no generated state view is regenerated. Next: lead dispatches the
+cold delta seat with DELTA-CHECK.md, resolves STATUS's owner questions, then
+stages/issues only a lawful next item. No MBP/SSH or measured-data read.
+Evidence and targeted-check scope:
+[run report](docs/run_reports/2026-11-16-sol-f2-kits-0203.md).
+
 ## Priority Scale
 
 - **P0 Safety**: prevents accidental data loss, bad commits, broken handoffs, or
