@@ -30,6 +30,7 @@ from unittest.mock import patch
 from joulewise import durable
 from scripts import gen_current, launch_align_r0 as fence
 from scripts.air import night_results_watch
+from tests.git_fixture import init_git_fixture
 
 SOURCE = Path(__file__).resolve().parents[2]
 REAL_MONOTONIC = time.monotonic
@@ -168,9 +169,6 @@ class World:
                            ("pids", [FAKE_PID]), ("signals", [])):
             self.boundary.put(key, value)
         self.repo, self.remote = self.root / "repo", self.root / "remote.git"
-        self.git("init", "-q", str(self.repo))
-        self.git("init", "-q", "--bare", str(self.remote))
-        self.git("remote", "add", "origin", str(self.remote), repo=self.repo)
         self.offload_config = self.root / "offload.json"
         self.air_config = self.root / "air.json"
         self.env = {key: value for key, value in os.environ.items()
@@ -179,6 +177,12 @@ class World:
                         GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull,
                         GIT_ALLOW_PROTOCOL="file", JW_CLUSTER_BOUNDARY=str(self.controls))
         self.env["PATH"] = os.pathsep.join((str(self.bin), os.defpath, "/opt/homebrew/bin"))
+        self.repo.mkdir()
+        self.remote.mkdir()
+        with patch.dict(os.environ, self.env, clear=True):
+            init_git_fixture(self.repo, "-q", "--template=")
+            init_git_fixture(self.remote, "-q", "--bare", "--template=")
+        self.git("remote", "add", "origin", str(self.remote), repo=self.repo)
         self.checkpoints = []
         self.invocations = []
         self.actions = {}

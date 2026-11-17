@@ -24,6 +24,9 @@ path and the generated pointer were outside this task.
   The timing coverage invariant passed locally with filename discovery.
   Full unittest discovery encountered denied metadata probes from unrelated
   archive-dependent tests. Hosted quick CI runs the complete invariant.
+- Hosted shard 2 required the shared disposable Git helper. The world
+  now initializes both repositories through that helper and inherits its
+  detached-maintenance controls. The Git fixture guards passed locally.
 - The fixture census attempted `scripts/fixture_orphan_census.py --fail-on-orphans`
   and could not obtain the process inventory because `ps` was denied
   (`Operation not permitted`). No orphan count was established.
