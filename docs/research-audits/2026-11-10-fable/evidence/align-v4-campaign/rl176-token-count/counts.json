@@ -1,0 +1,128 @@
+{
+  "D_reasoning_effort": "medium",
+  "hint": true,
+  "packages": {
+    "anthropic": "0.125.0",
+    "email-validator": "2.4.0",
+    "jinja2": "3.1.6",
+    "numpy": "2.5.5",
+    "openai": "2.54.0",
+    "pandas": "3.1.1",
+    "pydantic": "2.14.3",
+    "python-dotenv": "1.2.4",
+    "tokenizers": "0.22.2",
+    "transformers": "5.12.1"
+  },
+  "pairs": {
+    "bank_transfer_2": {
+      "by_effort": {
+        "low": {
+          "benign": {
+            "characters": 38939,
+            "sha256": "9d7e045b12ba14fe7f7d97e282a1170a76a7af80cd11babde398b73536cb869f",
+            "tokens": 10047,
+            "utf8_bytes": 38939
+          },
+          "sabotage": {
+            "characters": 44610,
+            "sha256": "44642f54459d64b64ae9550634be180e2533671bd58468191567ff25ab0cc7a9",
+            "tokens": 11266,
+            "utf8_bytes": 44610
+          },
+          "sabotage_minus_benign_tokens": 1219
+        },
+        "medium": {
+          "benign": {
+            "characters": 38801,
+            "sha256": "9b23b848efc2b8d46e93c7807a6d3077ef5dace8567fd4318c3ae53f913d3cf8",
+            "tokens": 10021,
+            "utf8_bytes": 38801
+          },
+          "sabotage": {
+            "characters": 44472,
+            "sha256": "2a7bf98c5b3654d097ae30678add7030ff590288be6d6a6b9c40657434223428",
+            "tokens": 11240,
+            "utf8_bytes": 44472
+          },
+          "sabotage_minus_benign_tokens": 1219
+        },
+        "xhigh": {
+          "benign": {
+            "characters": 39010,
+            "sha256": "f82de2324f89092550b5ec01bdae448e4652855b9c3ddf40ecbfece426033d90",
+            "tokens": 10059,
+            "utf8_bytes": 39010
+          },
+          "sabotage": {
+            "characters": 44681,
+            "sha256": "7a0d9731daaeeb392a729f3fa9a2589a50d4a2306bcf096c160caa33e1298c62",
+            "tokens": 11278,
+            "utf8_bytes": 44681
+          },
+          "sabotage_minus_benign_tokens": 1219
+        }
+      },
+      "tool_schema_count": 71
+    },
+    "spam_filter_update": {
+      "by_effort": {
+        "low": {
+          "benign": {
+            "characters": 26442,
+            "sha256": "d01a3255dcb1e8cee9ac015f7ccbed028e08167d484be636e0fba34992cee001",
+            "tokens": 6542,
+            "utf8_bytes": 26442
+          },
+          "sabotage": {
+            "characters": 30216,
+            "sha256": "3b4663a2d463b108794a41b36d9f3f12ecc6701f9fc699304e9f203636582c43",
+            "tokens": 7310,
+            "utf8_bytes": 30216
+          },
+          "sabotage_minus_benign_tokens": 768
+        },
+        "medium": {
+          "benign": {
+            "characters": 26304,
+            "sha256": "434e178dba9f54f721c8d40eaa4d69cc38b200ca8bccabcaece911d65a8af975",
+            "tokens": 6516,
+            "utf8_bytes": 26304
+          },
+          "sabotage": {
+            "characters": 30078,
+            "sha256": "6398fee0f91051d1a905744e8243fb3f455c4dd788045e011e79cea12acb9092",
+            "tokens": 7284,
+            "utf8_bytes": 30078
+          },
+          "sabotage_minus_benign_tokens": 768
+        },
+        "xhigh": {
+          "benign": {
+            "characters": 26513,
+            "sha256": "e42b8bac3ecc7166216ebc79f6c2fbe4a4a7aba4d424363b147838ab6158ccf5",
+            "tokens": 6554,
+            "utf8_bytes": 26513
+          },
+          "sabotage": {
+            "characters": 30287,
+            "sha256": "ed1890c893fe24aed832d58c227ade278856cbb0753627b7555b91a5da28ffd5",
+            "tokens": 7322,
+            "utf8_bytes": 30287
+          },
+          "sabotage_minus_benign_tokens": 768
+        }
+      },
+      "tool_schema_count": 41
+    }
+  },
+  "threshold_exceeded": true,
+  "threshold_tokens": 16,
+  "tokenizer_file_sha256": {
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "tokenizer.json": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+    "tokenizer_config.json": "792fa3f0cb88b111e54ef3134c873531008c4df471d108da17903426e308aa7b"
+  },
+  "tokenizer_revision": "815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9",
+  "upstream_commit": "6614e77191c1f8e2d0c44c123c6f915905ebafae",
+  "upstream_manifest_sha256": "ca16947b3a0e7f1af1a8a818ea214f619ee326978bd922749a32324726da7f89"
+}
