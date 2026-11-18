@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timedelta
+from fnmatch import fnmatchcase
 import hashlib
 import json
 import math
@@ -63,6 +64,21 @@ def command(argv):
     if result.returncode:
         raise RuntimeError(f"{argv[0]} exit {result.returncode}: {result.stderr.strip()}")
     return result.stdout
+
+
+def _installed_night_agents(directory):
+    try:
+        try:
+            directory.lstat()
+        except FileNotFoundError:
+            # A user can have no LaunchAgents directory. Once observed, the
+            # directory must be read to completion to clear the census.
+            return []
+        with os.scandir(directory) as entries:
+            return sorted(str(directory / entry.name) for entry in entries
+                          if fnmatchcase(entry.name, "com.joulewise.night*.plist"))
+    except OSError as exc:
+        raise Refused(f"LaunchAgent census indeterminate: cannot enumerate {directory}: {exc}") from exc
 
 
 class QuietGuard:
@@ -213,7 +229,7 @@ class QuietGuard:
         for parent in parents:
             if "restricted" in parent.parts or not parent.is_dir():
                 raise Refused(f"custody parent missing or not a directory: {parent}")
-        installed = sorted(str(p) for p in (Path.home() / "Library/LaunchAgents").glob("com.joulewise.night*.plist"))
+        installed = _installed_night_agents(Path.home() / "Library/LaunchAgents")
         receipt["installed_night_agents"] = installed
         if installed:
             raise Refused(f"measurement window armed: {installed}")

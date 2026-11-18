@@ -253,6 +253,8 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             report["stopped_after"] = {"check": name, "model": model, "outcome": row["status"]}
             raise _StopChecks
         return row
+
+    guard_admitted = False
     try:
         if long_decode_attempts not in (1, 2):
             raise ValueError("long_decode_attempts must be 1 or 2")
@@ -262,6 +264,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         # This guard precedes host probes, file inventories, optional SMC and
         # lazy imports. No model can be opened after a refused initial census.
         guard.check(force=True)
+        guard_admitted = True
         report["implementation_sha256"] = {
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in (Path(__file__), Path(r0.__file__), REPO / "joulewise/align/r0_host.py",
@@ -338,11 +341,15 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
     finally:
         flags_before = len(getattr(guard, "contention_flags", []))
         try:
-            _end_guard(guard, verify=report["status"] == "pass")
+            # Retain the final sampler evidence even when a check failed.
+            _end_guard(guard, verify=guard_admitted)
         except Refused as exc:
-            report.update(status="refused", refusal=str(exc), complete_r0=False)
-            if report["checks"]:
-                report["checks"][-1].update(status="refused", refusal=str(exc))
+            if report["status"] == "pass":
+                report.update(status="refused", refusal=str(exc), complete_r0=False)
+                if report["checks"]:
+                    report["checks"][-1].update(status="refused", refusal=str(exc))
+            else:
+                report.setdefault("refusal", str(exc))
         flags = getattr(guard, "contention_flags", [])[flags_before:]
         if flags and report["checks"]:
             report["checks"][-1].setdefault("contention_flags", []).extend(flags)
