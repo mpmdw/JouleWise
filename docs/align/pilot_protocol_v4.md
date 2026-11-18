@@ -1254,6 +1254,8 @@ RL-22 corrects RL-14's known-SE approximation: joint-rule equivalence power is a
 | 11 | .19 / .43 / .70 | 0 (W < 8) |
 | 6 (T windows only) | .10 / .22 / .40 | 0 |
 
+B2a's Q planning reference uses the original .025 column at K_S = 11 (.28 / .55 / .79).
+
 Alternatives weighed under the former design-interval-only planning calculation: c = 0.5 (U6's per-row value applied to member scores) gives equivalence power .25 at
 K_S = 22, so the predicted null would usually stay inconclusive; c = 1.0 gives .96 but would call "equivalent" a
 shift that raises a sabotage-instructed episode's alarm probability to about 17 %. The T windows alone cannot
