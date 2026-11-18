@@ -115,6 +115,30 @@ def _end_guard(guard, *, verify=False):
         end()
 
 
+def _verify_publication(guard):
+    verify = getattr(guard, "verify_publication", None)
+    if verify is not None:
+        verify()
+
+
+def _record_guard_refusal(report, error):
+    if report["status"] == "pass":
+        report.update(status="refused", refusal=str(error), complete_r0=False)
+        if report["checks"]:
+            report["checks"][-1].update(status="refused", refusal=str(error))
+    else:
+        report.setdefault("refusal", str(error))
+
+
+def _save_terminal_report(output, report):
+    try:
+        save_report(output, report)
+    except OSError as exc:
+        if "refusal" in report:
+            raise Refused(report["refusal"]) from exc
+        raise
+
+
 DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
 
 
@@ -345,12 +369,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             # Retain the final sampler evidence even when a check failed.
             _end_guard(guard, verify=guard_admitted)
         except Refused as exc:
-            if report["status"] == "pass":
-                report.update(status="refused", refusal=str(exc), complete_r0=False)
-                if report["checks"]:
-                    report["checks"][-1].update(status="refused", refusal=str(exc))
-            else:
-                report.setdefault("refusal", str(exc))
+            _record_guard_refusal(report, exc)
         flags = getattr(guard, "contention_flags", [])[flags_before:]
         if flags and report["checks"]:
             report["checks"][-1].setdefault("contention_flags", []).extend(flags)
@@ -360,9 +379,14 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         report["census"] = guard.receipts
         contention_summary()
         display_summary(report, display_probe, started_epoch, time.time())
+        if report["status"] == "pass":
+            try:
+                _verify_publication(guard)
+            except Refused as exc:
+                _record_guard_refusal(report, exc)
         report["total_seconds"] = time.monotonic() - started_run
         report["finished_utc"] = datetime.now(timezone.utc).isoformat()
-        save_report(output, report)
+        _save_terminal_report(output, report)
     return report
 
 
@@ -411,16 +435,19 @@ def _main(argv, *, backend_factory, guard_factory, lock_path, display_probe):
         except BlockingIOError:
             parser.exit(2, "Another R0 runner owns the machine lock\n")
         if args.inventory:
+            admitted = False
             try:
                 guard.check(force=True)
+                admitted = True
                 rows = inventory(_path(str(args.inventory)), guard.check)
-            except BaseException:
-                _end_guard(guard)
-                raise
-            _end_guard(guard, verify=True)
+            finally:
+                # A latched census refusal still governs when scanning the
+                # input raises. Verify before propagating an inventory error.
+                _end_guard(guard, verify=admitted)
+            payload = json.dumps(rows, indent=2, sort_keys=True) + "\n"
+            _verify_publication(guard)
             with args.output.open("x") as handle:
-                json.dump(rows, handle, indent=2, sort_keys=True)
-                handle.write("\n")
+                handle.write(payload)
             return 0
         if os.path.lexists(args.output):
             raise FileExistsError(f"R0 output already exists: {args.output}")
@@ -448,6 +475,14 @@ def _main(argv, *, backend_factory, guard_factory, lock_path, display_probe):
                     relative = Path(attempt["output_dir"]).relative_to(working)
                     attempt["output_dir"] = str(args.output / relative)
         save_report(working, report)
+        if report["status"] == "pass":
+            try:
+                _verify_publication(guard)
+            except Refused as exc:
+                _record_guard_refusal(report, exc)
+                print(f"unpublished R0 diagnostics: {working}", file=sys.stderr)
+                _save_terminal_report(working, report)
+                raise
         # Preserve exclusive-output semantics before replacing our own empty
         # reservation with the completed working directory.
         args.output.mkdir(exist_ok=False)

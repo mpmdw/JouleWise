@@ -1055,6 +1055,53 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertIn(f"{required} (errno {errno.EIO})", stderr.getvalue())
                 self.assertFalse(output.exists())
 
+    def test_inventory_rechecks_agents_after_serializing_before_publication(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+        from joulewise import agent_identity
+        from joulewise.align.r0_runner import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            inputs = work / "inputs"
+            inputs.mkdir()
+            (inputs / "blob").write_bytes(b"fixture")
+            config = work / "config.json"
+            config.write_text(json.dumps(config_at(work)))
+            output = work / "inventory.json"
+            guard, _, _, _ = self.admission(busy=False)
+            normal = guard.run
+            executable = "/Applications/Codex.app/Contents/MacOS/Codex"
+            encoded = False
+
+            def run(argv, **kwargs):
+                if encoded and argv[0] == "/usr/bin/pgrep":
+                    return subprocess.CompletedProcess(argv, 0, f"42 {executable}\n", "")
+                return normal(argv, **kwargs)
+
+            dumps = json.dumps
+
+            def encode(rows, **kwargs):
+                nonlocal encoded
+                result = dumps(rows, **kwargs)
+                encoded = True
+                return result
+
+            filter_census = agent_identity.filter_census
+            info = agent_identity.ProcessInfo(42, 1, 42, executable, (executable,))
+            guard.run = run
+            stderr = StringIO()
+            with (patch.object(json, "dumps", side_effect=encode),
+                  patch.object(agent_identity, "filter_census",
+                               lambda stdout, **kwargs: filter_census(stdout, inspector=lambda _: info, **kwargs)),
+                  redirect_stderr(stderr)):
+                status = main(["--config", str(config), "--output", str(output), "--inventory", str(inputs)],
+                              guard_factory=lambda _: guard, lock_path=work / "lock")
+            self.assertTrue(encoded)
+            self.assertEqual(status, 2)
+            self.assertIn(executable, stderr.getvalue())
+            self.assertFalse(output.exists())
+
     def test_queued_contention_survives_census_failure_or_stall(self):
         for reason, message in (("census", "LaunchAgent census indeterminate"),
                                 ("stall", "background snapshots stalled")):
@@ -1382,7 +1429,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     self.assertEqual(candidate_times, [start])
                     self.assertIn(command_line, diagnostic)
                 else:
-                    self.assertEqual(candidate_times, [45, 60, 75] if args else [])
+                    self.assertEqual(candidate_times, [45, 60, 75, 75, 75, 75] if args else [])
 
     def test_r0_rechecks_agents_at_baseline_close_later_admission_and_publication(self):
         import re
@@ -1431,7 +1478,8 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 filter_census = agent_identity.filter_census
                 info = agent_identity.ProcessInfo(42, 1, 42, executable, (executable,))
                 guard.run = run
-                with (patch.object(agent_identity, "filter_census", lambda stdout: filter_census(stdout, inspector=lambda _: info)),
+                with (patch.object(agent_identity, "filter_census",
+                                   lambda stdout, **kwargs: filter_census(stdout, inspector=lambda _: info, **kwargs)),
                       patch.object(r0_runner, "save_report", side_effect=save)):
                     status, output, diagnostic = self.run_synthetic_host_cli(required, guard, host)
                 if mode == "quiet":
@@ -2344,25 +2392,35 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.assert_rate(max(rates), 0.02, prewindow.INTERVAL_S)
         self.assertIsNone(guard.failure)
 
-    def test_no_sleep_or_process_on_caller_after_first_admission(self):
+    def test_caller_only_repeats_agent_census_at_admission_boundaries(self):
+        from joulewise.align.r0_host import R0_AGENT_CENSUS_ARGV
+
         guard, clock, calls = self.guard([cpu_table()] * 4, driven=False)
         guard.check(force=True)
         guard.sleep = lambda seconds: self.fail("caller slept after admission")
         self.tick(guard, clock, 45)
         run = guard.run
-        guard.run = lambda *a, **k: self.fail("caller launched a process after admission")
+        admissions = []
+
+        def agent_only(argv, **kwargs):
+            self.assertEqual(argv, R0_AGENT_CENSUS_ARGV)
+            admissions.append(clock.now)
+            return self.runner(argv, **kwargs)
+
+        guard.run = agent_only
         # Per-token checks, forced boundaries and windows judged on stored data.
         for step in range(1, 200):
             clock.now = 45 + step * 0.05
             guard.check(force=step % 50 == 0)
         guard.run = run
         self.tick(guard, clock, 60)
-        guard.run = lambda *a, **k: self.fail("caller launched a process after admission")
+        guard.run = agent_only
         clock.now = 61
         guard.check(force=True)
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["end_monotonic_s"], 60)
         self.assertEqual(guard.receipts[-1]["background_snapshots_monotonic_s"], [60])
         self.assertEqual(len(calls), 5)  # 3 admission + 2 daemon
+        self.assertEqual(admissions, [45.05, 47.5, 50, 52.5, 61])
 
     def test_background_snapshot_failure_refuses_next_check_and_stops(self):
         guard, clock, _ = self.guard([cpu_table(), cpu_table(), RuntimeError("ps failed")], driven=False)
