@@ -176,17 +176,18 @@ def cmd_next(args):
 
 
 def cmd_checklist(args):
-    kit, _ = kitmod.load_kit(args.kit, batch_window=_window(args.batch_window))
+    kit, sha = kitmod.load_kit(args.kit, batch_window=_window(args.batch_window))
     obs = json.loads(Path(args.observations).read_text())
     if kit["schema"] in (kit_v11.SCHEMA, ctl.SCHEMA):
         rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256,
                                           batch_window=_window(args.batch_window) if args.batch_window else None)
         if kit["schema"] == ctl.SCHEMA:
-            try:
-                ctl.require_issued(kit)
-            except kitmod.KitError as error:
-                rows.append({"id": "ctl_authority", "kind": "ctl_authority", "ok": False,
-                             "detail": str(error)})
+            for name, check, values in (("ctl_authority", ctl.require_issued, (kit,)),
+                                        ("ctl_queue_hash", ctl.require_queue_kit_hash, (args.kit_sha256, sha))):
+                try:
+                    check(*values)
+                except kitmod.KitError as error:
+                    rows.append({"id": name, "kind": name, "ok": False, "detail": str(error)})
     else:
         rows = kitmod.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256)
     for r in rows:

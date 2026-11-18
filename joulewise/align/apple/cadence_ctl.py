@@ -85,7 +85,10 @@ def endpoint_class(base, script, audit, *, synthetic):
                 if kind == "hidden":
                     self.physical_call(self.hidden_endpoint, messages, kwargs, dose, logged=False)
                 elif kind == "turn":
-                    # Every call starts from the same prompt and seed.
+                    if script["kind"] == "split":
+                        # The native sampler derives its seed from the endpoint turn.
+                        # Each split call starts at the plain member's logical turn zero.
+                        self._turn = 0
                     visible.append(self.physical_call(self, messages, kwargs, dose, logged=True))
                 else:
                     self.interval(kind, dose)

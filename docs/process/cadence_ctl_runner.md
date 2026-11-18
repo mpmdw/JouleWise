@@ -101,11 +101,18 @@ holds L004–L012 until PASS. The first native split leg is read before the
 look. Each span has a fresh soak and a capture. The extra-turn and CPU legs
 capture, and the hidden and split/plain legs consume. The split/plain pair
 is adjacent under the same reference, with the same prompt, total cap and
-split leg's deterministic seed. A cold kit seat assesses capture and
+split leg's deterministic seed. Each split call starts at the plain call's
+logical turn zero for native seed derivation. A cold kit seat assesses capture and
 consumer balance before issue. Each requested roster must equal one kit
 layout span, and the nine-leg cap and 12 h launch ceiling apply.
 
 ## Launch authority
+
+Use the selected span's `kit.sha256` from the validated queue as
+`--kit-sha256` for both ctl checklist and launch. Both compare the exact
+kit bytes they read to that digest. The checklist also checks the
+observations against it. A mismatch at launch refuses before host probes,
+ledger changes, fence creation or bootstrap.
 
 The lead obtains the predecessor from the shared launcher's `close-proof`
 command. Export the current close checks using the existing RL-179 item
@@ -113,12 +120,14 @@ variables `HOST_RESTORE_OK`, `FEEDS_STOPPED`, `GROUPS_ABSENT` and
 `FOREIGN_PROCESSES_ABSENT` as `1`, with `CLOSE_PROOF_RECEIPT` set to the latest
 attempt's exact receipt path. The CLI and ctl launch require that proof. They
 also refuse failed or contradictory shutdown evidence in the receipt, even
-when all four checks are supplied. For ctl the launcher requires `--attempt-ledger`,
+when all four checks are supplied. A native cadence receipt must record a
+successful restore command and an integer AC Automatic readback of 0.
+For ctl the launcher requires `--attempt-ledger`,
 `--previous-close-receipt`, `--span-id` and `--t0-not-before-ns`. Under the
 fence lock it re-proves that the receipt belongs to the latest attempt, its
 restore succeeded, and the receipt path and exact close time match the
 supplied proof. It publishes the successor attempt before bootstrap, and
-passes the exact digest of the validated kit to the child. The child refuses
+passes the verified queue digest to the child. The child refuses
 substituted bytes before creating production dependencies or output. It
 checks both the wall reading and the full interval projected from the
 sleep-inclusive arm clock against the exact close time before creating its

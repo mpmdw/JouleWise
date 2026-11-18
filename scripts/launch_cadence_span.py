@@ -119,6 +119,23 @@ def latest_attempt(ledger, span_pattern):
     return max(candidates, key=lambda row: row["monotonic_ns"])
 
 
+def verify_restore(result, *, native):
+    def zero(value):
+        return type(value) is int and value == 0
+
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise ValueError("restore lacks a successful readback")
+    for field in ("rc", "exit_code"):
+        if (field in result or (native and field == "exit_code")) and not zero(result.get(field)):
+            raise ValueError("restore command did not pass")
+    if (native or "observed" in result) and not zero(result.get("observed")):
+        raise ValueError("restore readback must record AC Automatic (0)")
+    if "read" in result:
+        read = result["read"]
+        if not isinstance(read, dict) or not zero(read.get("value")) or read.get("error") is not None:
+            raise ValueError("restore has incomplete or contradictory AC readback evidence")
+
+
 def verify_shutdown(receipt, path, *, require_attestation, runner):
     """Check recorded restore and feed stops against the lead's RL-179 close attestation."""
     def stopped(result):
@@ -130,6 +147,7 @@ def verify_shutdown(receipt, path, *, require_attestation, runner):
 
     stop_steps = {}
     restore_steps = 0
+    native = receipt.get("schema") == runner.RECEIPT_SCHEMA
     for row in receipt.get("steps", []):
         name = row["name"]
         if name == "restore" or name.startswith(("stop-", "close-")):
@@ -137,8 +155,9 @@ def verify_shutdown(receipt, path, *, require_attestation, runner):
                 raise ValueError(f"{name} did not pass")
         if name == "restore":
             restore_steps += 1
-            if restore_steps != 1 or row.get("result", {}).get("ok") is not True:
+            if restore_steps != 1:
                 raise ValueError("restore lacks a unique successful readback")
+            verify_restore(row.get("result"), native=native)
         if name.startswith("stop-"):
             feed = name[5:]
             result = row.get("result")
@@ -147,9 +166,15 @@ def verify_shutdown(receipt, path, *, require_attestation, runner):
                 raise ValueError(f"{name} lacks a unique successful stop proof")
             stop_steps[feed] = {"rc": row["rc"], **result}
     feeds = receipt.get("feeds", {})
-    if receipt.get("schema") == runner.RECEIPT_SCHEMA:
+    if native:
         if restore_steps != 1 or not {"agents", "meter", "volumes"} <= stop_steps.keys() or feeds.keys() != stop_steps.keys():
             raise ValueError("cadence receipt does not prove every feed stopped")
+    if "restore_readbacks" in receipt:
+        readbacks = receipt["restore_readbacks"]
+        if not isinstance(readbacks, dict) or not readbacks or not all(v is True for v in readbacks.values()):
+            raise ValueError("restore readbacks did not pass")
+    elif restore_steps != 1:
+        raise ValueError("restore readbacks did not pass")
     for name, feed in feeds.items():
         stop = feed.get("stop")
         if (not stopped(stop) or type(stop.get("rc")) is not int or stop["rc"] != 0
@@ -170,15 +195,6 @@ def proven_close(ledger, runner, *, require_attestation=True):
         receipt = json.loads(Path(attempt["close_receipt"]).read_text(), parse_float=Decimal)
         if receipt.get("span_id") != span:
             raise ValueError("close receipt span id differs from the latest attempt")
-        if "restore_readbacks" in receipt:
-            readbacks = receipt["restore_readbacks"]
-            restored = isinstance(readbacks, dict) and bool(readbacks) and all(v is True for v in readbacks.values())
-        else:
-            restore = [step for step in receipt.get("steps", []) if step["name"] == "restore"]
-            restored = (len(restore) == 1 and type(restore[0]["rc"]) is int and restore[0]["rc"] == 0
-                        and restore[0]["result"].get("ok") is True)
-        if not restored:
-            raise ValueError("restore readbacks did not pass")
         verify_shutdown(receipt, attempt["close_receipt"], require_attestation=require_attestation, runner=runner)
         ended = receipt["ended"]
         if "epoch_ns" in ended:
@@ -263,8 +279,12 @@ def launch(args, *, loaded_kit=None) -> None:
         raise ValueError("cadence-legs-v1 requires an existing --kit")
     kit, sha = kitmod.load_kit(args.kit) if loaded_kit is None else loaded_kit
     scripted_ctl = kit["runner"]["kind"] == ctl.RUNNER_KIND
+    approved_sha = getattr(args, "kit_sha256", None)
     if scripted_ctl:
         ctl.require_issued(kit)
+        ctl.require_queue_kit_hash(approved_sha, sha)
+    elif approved_sha is not None:
+        raise ValueError("queue-approved ctl kit was replaced by a different runner kind")
     ledger_path = getattr(args, "attempt_ledger", None)
     previous_receipt = getattr(args, "previous_close_receipt", None)
     span_id = getattr(args, "span_id", None)
@@ -297,7 +317,7 @@ def launch(args, *, loaded_kit=None) -> None:
         raise ValueError("cadence-legs-v1 deadline cannot fit the span's worst case, work reserve and cleanup grace")
     if scripted_ctl and getattr(args, "t0_anchor", None) is None:
         args.t0_anchor = span_runner.RealClock.arm_anchor_ns()
-    child_argv = runner_argv(args, kit_sha256=sha if scripted_ctl else None)
+    child_argv = runner_argv(args, kit_sha256=approved_sha)
     runner = Path(child_argv[1])
     if not runner.is_file() or not os.access(args.python_bin, os.X_OK):
         raise ValueError("measurement checkout runner and executable interpreter required")
@@ -407,6 +427,7 @@ def main(argv=None) -> int:
     start = sub.add_parser("launch", help="magistrate: publish fence, bootstrap once, then exit session")
     start.add_argument("--repo", type=Path, required=True)
     start.add_argument("--kit", type=Path, required=True, help="the frozen campaign kit (RL-149 section 2)")
+    start.add_argument("--kit-sha256", help="ctl only: SHA-256 from the validated queue span")
     start.add_argument("--legs", help="the queue span's roster, comma-separated kit leg ids")
     start.add_argument("--batch-window", help="HH:MM-HH:MM blackout (default: none, RL-171)")
     start.add_argument("--output", type=Path, required=True)
@@ -445,7 +466,7 @@ def main(argv=None) -> int:
         if args.command == "launch":
             loaded = kitmod.load_kit(args.kit)
             kit, _ = loaded
-            if kit["runner"]["kind"] == ctl.RUNNER_KIND:
+            if kit["runner"]["kind"] == ctl.RUNNER_KIND or args.kit_sha256 is not None:
                 launch(args, loaded_kit=loaded)
                 return 0
             try:

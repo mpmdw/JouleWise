@@ -225,6 +225,13 @@ def require_issued(kit):
         raise base.KitError(["ctl kit is DRAFT / UNFROZEN: research-lead lm-inst-01 read and lead issue required"])
 
 
+def require_queue_kit_hash(approved_sha, actual_sha):
+    if not isinstance(approved_sha, str) or not base.HEX64.fullmatch(approved_sha):
+        raise base.KitError(["ctl requires --kit-sha256 from the validated queue span"])
+    if approved_sha != actual_sha:
+        raise base.KitError(["ctl kit hash differs from the queue-approved kit"])
+
+
 def apply_instrument_read(kit, *, below_gpu_floor, below_dc_in_floor, return_time_s, decode_end_lag_s,
                           prompt_sizes, raised_doses=None):
     """Apply RL-186 to the lead's scalar inputs, returning a draft for cold review."""

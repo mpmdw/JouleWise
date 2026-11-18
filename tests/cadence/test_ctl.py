@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from joulewise.cadence import ctl, kit as kits, legs, desk
+from joulewise.cadence import ctl, kit as kits, legs, desk, queue
 from joulewise.align.apple import cadence_ctl, r1_runtime as rt, workload
 from scripts import cadence_legs_runner as runner, cadence_queue, launch_cadence_span as launcher
 from tests.cadence import test_kit_v11 as v11_tests
@@ -181,11 +181,12 @@ class LaunchAuthorityTests(unittest.TestCase):
 
     def setUp(self):
         kit = draft()
-        kit.update(status="issued", frozen={"commit": "a" * 40, "paths": {kit["runner"]["entry"]: "b" * 64}})
+        kit.update(status="issued", frozen={"commit": "a" * 40, "paths": {kit["runner"]["entry"]: "1" * 64}})
         kit["ruling"]["authorizes_spans"] = True
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
         self.kit_path = self.root / "synthetic-issued.json"
         self.kit_path.write_text(json.dumps(kit))
+        self.approved_sha = hashlib.sha256(self.kit_path.read_bytes()).hexdigest()
         self.output = self.root / "out"
         self.fence_root = self.root / "fence"
         self.ledger = self.root / "ledger.json"
@@ -200,7 +201,8 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.argv = ["launch", "--repo", str(runner.ROOT), "--kit", str(self.kit_path), "--output", str(self.output),
                      "--legs", "L001,L002,L003", "--python-bin", sys.executable, "--disk-path", str(self.root),
                      "--custody-root", str(self.fence_root), "--magistrate-pid", "234",
-                     "--deadline", str(self.now + 40000), "--launchctl-bin", "synthetic-launchctl"]
+                     "--deadline", str(self.now + 40000), "--launchctl-bin", "synthetic-launchctl",
+                     "--kit-sha256", self.approved_sha]
         self.proof = [("--attempt-ledger", str(self.ledger)), ("--previous-close-receipt", str(self.receipt)),
                       ("--span-id", self.span_id), ("--t0-not-before-ns", str(self.close_ns))]
 
@@ -265,8 +267,60 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.assertEqual(child[child.index("--t0-not-before-ns") + 1], str(self.close_ns))
         self.check_child_close_bound(child[2:])
 
+    def revised_dose_kit(self):
+        old = json.loads(self.kit_path.read_bytes())
+        revised = ctl.apply_instrument_read(draft(), below_gpu_floor=True, below_dc_in_floor=True,
+                                            raised_doses=(192, 384, 768), return_time_s=120,
+                                            decode_end_lag_s=2, prompt_sizes=[2000])
+        revised.update(status=old["status"], frozen=old["frozen"], ruling=old["ruling"])
+        self.assertEqual((specs(old)[1]["script"]["hidden_tokens"], specs(revised)[1]["script"]["hidden_tokens"]),
+                         (512, 768))
+        return ctl.validate_kit(revised)
+
+    def test_ctl_refuses_kit_revision_between_queue_and_launch(self):
+        queue_file = self.root / "queue.json"
+        queue_file.write_text(json.dumps({
+            "schema": queue.SCHEMA, "queue_id": "cq-ctl-audit", "expires_at": "2026-11-20T00:00:00Z",
+            "halt": None, "standing_notice": None, "spans": [
+                {"seq": 1, "span_id": self.span_id, "block_id": "cl-ctl-01",
+                 "kit": {"path": self.kit_path.name, "sha256": self.approved_sha},
+                 "legs": ["L001", "L002", "L003"], "attempt": 1, "not_before": "2026-11-19"},
+            ],
+        }))
+        obs = self.root / "observations.json"
+        obs.write_text(json.dumps({**v11_tests.FreeT0Checklist.GOOD, "kit_sha256": self.approved_sha,
+                                   "t0_epoch_s": self.now, "end_by_epoch_s": self.now + 40000}))
+        validate = ["validate-queue", str(queue_file), "--kits-root", str(self.root)]
+        check = ["checklist", "--kit", str(self.kit_path), "--observations", str(obs),
+                 "--kit-sha256", self.approved_sha]
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cadence_queue.main(validate), 0, stdout.getvalue())
+            self.assertEqual(cadence_queue.main(check), 0, stdout.getvalue())
+
+        with (patch.object(launcher.base, "pid_alive") as host,
+              patch.object(runner.RealClock, "arm_anchor_ns") as arm,
+              patch.object(launcher.subprocess, "run") as service):
+            approved_argv = self.argv[:]
+            self.argv = approved_argv[:-2]
+            self.assertIn("requires --kit-sha256", self.launch(self.proof))
+            self.assertIn("requires --kit-sha256", self.launch(self.proof, "--kit-sha256", "bad"))
+            self.argv = approved_argv
+            self.kit_path.write_text(json.dumps(self.revised_dose_kit()))
+            with redirect_stdout(io.StringIO()) as stdout:
+                self.assertEqual(cadence_queue.main(validate), 1)
+                self.assertEqual(cadence_queue.main(check), 1)
+                self.assertIn("kit hash differs from the queue-approved kit", stdout.getvalue())
+            self.assertIn("kit hash differs from the queue-approved kit", self.launch(self.proof))
+            self.kit_path.write_text(json.dumps(v11_tests.v11_kit()))
+            self.assertIn("different runner kind", self.launch(self.proof))
+            host.assert_not_called()
+            arm.assert_not_called()
+            service.assert_not_called()
+        self.assertFalse(self.fence_root.exists())
+        self.assertFalse(self.output.exists())
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+
     def test_ctl_refuses_kit_revision_between_launch_and_child(self):
-        approved = hashlib.sha256(self.kit_path.read_bytes()).hexdigest()
         child = []
 
         def bootstrap(command, **_kwargs):
@@ -281,15 +335,8 @@ class LaunchAuthorityTests(unittest.TestCase):
               patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
               patch.object(launcher.subprocess, "run", side_effect=bootstrap), redirect_stdout(io.StringIO())):
             self.assertEqual(launcher.main(self.argv + [item for pair in self.proof for item in pair]), 0)
-        self.assertEqual(child[child.index("--kit-sha256") + 1], approved)
-        old = json.loads(self.kit_path.read_bytes())
-        revised = ctl.apply_instrument_read(draft(), below_gpu_floor=True, below_dc_in_floor=True,
-                                            raised_doses=(192, 384, 768), return_time_s=120,
-                                            decode_end_lag_s=2, prompt_sizes=[2000])
-        revised.update(status=old["status"], frozen=old["frozen"], ruling=old["ruling"])
-        self.assertEqual((specs(old)[1]["script"]["hidden_tokens"], specs(revised)[1]["script"]["hidden_tokens"]),
-                         (512, 768))
-        ctl.validate_kit(revised)
+        self.assertEqual(child[child.index("--kit-sha256") + 1], self.approved_sha)
+        revised = self.revised_dose_kit()
         for replacement, message in ((revised, "kit hash differs"), (v11_tests.v11_kit(), "different runner kind")):
             self.kit_path.write_text(json.dumps(replacement))
             with (self.subTest(message=message), patch.object(runner, "production_deps") as work,
@@ -300,14 +347,48 @@ class LaunchAuthorityTests(unittest.TestCase):
             work.assert_not_called()
             self.assertFalse(self.output.exists())
 
+    def native_close(self):
+        return {"schema": runner.RECEIPT_SCHEMA, "span_id": "previous",
+                "ended": {"epoch_ns": self.close_ns}, "rc": 2,
+                "steps": [{"name": "restore", "rc": 0, "result": {"ok": True, "rc": 0, "exit_code": 0, "observed": 0}},
+                          *[{"name": f"stop-{feed}", "rc": 0, "result": {"proven_stopped": True}}
+                            for feed in ("meter", "agents", "volumes")]],
+                "feeds": {feed: {"stop": {"rc": 0, "proven_stopped": True}}
+                          for feed in ("meter", "agents", "volumes")}}
+
+    def test_contradictory_restore_readback_refuses_cli_and_ctl_bootstrap(self):
+        clean = self.native_close()
+        argv = ["close-proof", "--attempt-ledger", str(self.ledger)]
+        self.receipt.write_text(json.dumps(clean))
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(launcher.main(argv), 0)
+        discrepancies = ({"observed": 2}, {"observed": False}, {"observed": "0"}, {"observed": None},
+                         {"exit_code": 1}, {"rc": False}, {"read": {"value": 2}},
+                         {"read": {"value": 0, "error": "synthetic read failure"}})
+        with (patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service):
+            for result, summary in (({"observed": 2}, False),
+                                    *((result, True) for result in (*discrepancies, {}))):
+                receipt = deepcopy(clean)
+                if summary:
+                    receipt["restore_readbacks"] = {"automatic": True}
+                restore = receipt["steps"][0]["result"]
+                if result:
+                    restore.update(result)
+                else:
+                    del restore["observed"]
+                self.receipt.write_text(json.dumps(receipt))
+                with self.subTest(result=result, summary=summary), redirect_stderr(io.StringIO()):
+                    self.assertEqual(launcher.main(argv), 2)
+                    self.assertIn("restore", self.launch(self.proof))
+            service.assert_not_called()
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+
     def test_incomplete_close_refuses_cli_and_ctl_bootstrap(self):
-        clean = {"schema": runner.RECEIPT_SCHEMA, "span_id": "previous",
-                 "ended": {"epoch_ns": self.close_ns}, "rc": 2,
-                 "steps": [{"name": "restore", "rc": 0, "result": {"ok": True}},
-                           *[{"name": f"stop-{feed}", "rc": 0, "result": {"proven_stopped": True}}
-                             for feed in ("meter", "agents", "volumes")]],
-                 "feeds": {feed: {"stop": {"rc": 0, "proven_stopped": True}}
-                           for feed in ("meter", "agents", "volumes")}}
+        clean = self.native_close()
         fixtures = (
             ({"rc": 2, "result": {"proven_stopped": False}}, {"rc": 2, "proven_stopped": False}),
             ({"rc": 0, "result": {"proven_stopped": False}}, {"rc": 0, "proven_stopped": True}),
@@ -468,6 +549,48 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(c,0,(out/rt.CUSTODY_NAME).read_text())
         self.assertEqual(result["g0_role"],"consume")
         self.assertTrue(result["g0_reference_record_sha256"])
+
+    def test_split_and_plain_use_same_prompt_and_physical_rng_seed(self):
+        from joulewise.align.apple import endpoint
+        from tests.align import w1_synthetic
+
+        roster = specs()
+        capture = roster[3]
+        code, source, _ = self.call(capture, capture["leg_id"])
+        self.assertEqual(code, 0)
+        seed_rng = w1_synthetic.FakeRandom.seed
+        generate_turn = endpoint.generate_turn
+        seeds, calls = [], []
+
+        def record_seed(rng, seed):
+            seeds.append(seed)
+            return seed_rng(rng, seed)
+
+        def record_call(*args, **kwargs):
+            before = len(seeds)
+            result = generate_turn(*args, **kwargs)
+            self.assertEqual(len(seeds), before + 1)
+            calls.append((result.output_tokens, seeds[-1], result.prompt_token_ids))
+            return result
+
+        pair = {}
+        with (patch.object(w1_synthetic.FakeRandom, "seed", record_seed),
+              patch.object(endpoint, "generate_turn", record_call)):
+            for spec in roster:
+                kind = spec["script"]["kind"]
+                if kind in {"split", "plain"}:
+                    calls.clear()
+                    code, _, result = self.call(spec, spec["leg_id"], source=source)
+                    self.assertEqual(code, 0)
+                    self.assertTrue(legs.leg_admitted(result, contaminated=False))
+                    pair[kind] = (spec["seed"], list(calls))
+        plain_seed, [(plain_tokens, physical_seed, prompt)] = pair["plain"]
+        split_seed, split_calls = pair["split"]
+        self.assertEqual(plain_seed, split_seed)
+        self.assertEqual([tokens for tokens, _, _ in split_calls], [342, 341, 341])
+        self.assertEqual(sum(tokens for tokens, _, _ in split_calls), plain_tokens)
+        self.assertTrue(prompt)
+        self.assertEqual([(seed, ids) for _, seed, ids in split_calls], [(physical_seed, prompt)] * 3)
 
     def test_missing_reference_fails_without_running_a_script(self):
         spec = specs()[1]
