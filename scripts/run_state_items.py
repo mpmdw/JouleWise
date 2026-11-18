@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -32,7 +33,7 @@ TOP_MARKER_PREFIX = "<!-- RUN_STATE TYPED ITEMS:"
 LEGACY_MARKER_PREFIX = "<!-- RUN_STATE LEGACY ITEMS"
 LEGACY_MARKER_RE = re.compile(r"^<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover ([1-9][0-9]*) -->$")
 ARCHIVED_LEGACY_MARKER_RE = re.compile(
-    r"^<!-- RUN_STATE LEGACY ITEMS: archived in docs/archive/[^;\s]+\.md; "
+    r"^<!-- RUN_STATE LEGACY ITEMS: archived in (docs/archive/[A-Za-z0-9_.-]+\.md); "
     r"cutover ([1-9][0-9]*); legacy_max ([1-9][0-9]*) -->$")
 REFERENCE = re.compile(r"[1-9][0-9]*[a-z]?")
 _PROSE_REF = r"[`#]*[1-9][0-9]*[a-z]?`?(?!\w)"
@@ -230,22 +231,39 @@ def legacy_archive_plan(text: str) -> LegacyArchivePlan:
     return LegacyArchivePlan(references, live, spans, prefix_start)
 
 
-def _markers(lines: list[_Line], errors: list[ItemError]) -> tuple[int | None, int | None, int | None, int | None]:
+def archive_reader(root: Path) -> Callable[[str], str]:
+    """Read a legacy archive referenced by a record in this checkout."""
+    root = root.resolve()
+
+    def read(relative: str) -> str:
+        path = root / relative
+        if path.resolve() != path or (path.exists() and not path.is_file()):
+            raise ValueError(f"RUN_STATE legacy archive must be a regular checkout file: {relative}")
+        try:
+            return path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return ""
+
+    return read
+
+
+def _markers(lines: list[_Line], errors: list[ItemError]):
     tops = [line for line in lines if line.kind == "top"]
     legacies = [line for line in lines if line.kind == "legacy"]
     if not tops and not legacies:
-        return None, None, None, None
+        return None, None, None, None, None
     for markers, name in ((tops, "top"), (legacies, "legacy")):
         if not markers:
             other = (tops or legacies)[0]
             errors.append(ItemError(other.number, "MARKER", f"missing {name} marker"))
         for duplicate in markers[1:]:
             errors.append(ItemError(duplicate.number, "MARKER", f"duplicate {name} marker"))
-    cutover = legacy_max = None
+    cutover = legacy_max = archive = None
     for marker in legacies:
         if match := ARCHIVED_LEGACY_MARKER_RE.fullmatch(marker.text):
             if cutover is None:
-                cutover, legacy_max = map(int, match.groups())
+                archive = match[1]
+                cutover, legacy_max = int(match[2]), int(match[3])
         elif match := LEGACY_MARKER_RE.fullmatch(marker.text):
             if cutover is None:
                 cutover = int(match[1])
@@ -255,7 +273,7 @@ def _markers(lines: list[_Line], errors: list[ItemError]) -> tuple[int | None, i
     legacy = legacies[0].number if legacies else None
     if top is not None and legacy is not None and top >= legacy:
         errors.append(ItemError(legacy, "MARKER", "legacy marker must follow the top marker"))
-    return cutover, top, legacy, legacy_max
+    return cutover, top, legacy, legacy_max, archive
 
 
 def _json_object(pairs: list[tuple[str, object]]) -> dict:
@@ -290,10 +308,10 @@ def _header(line: _Line, errors: list[ItemError]) -> dict | None:
     return header
 
 
-def parse(text: str) -> Parsed:
+def parse(text: str, *, read_archive: Callable[[str], str] | None = None) -> Parsed:
     lines = list(_scan(text))
     errors = []
-    cutover, top, legacy, legacy_max = _markers(lines, errors)
+    cutover, top, legacy, legacy_max, archive = _markers(lines, errors)
     items = []
     legacy_lines = {}
     heading = None
@@ -306,7 +324,7 @@ def parse(text: str) -> Parsed:
                 and (legacy is None or line.number < legacy)):
             errors.append(ItemError(line.number, "UNCLOSED_FENCE", "code fence in typed region reaches end of file"))
         if top is None or legacy is None or not top < line.number < legacy:
-            if line.kind == "heading" and legacy_max is None:
+            if line.kind == "heading":
                 match = HEADING.match(line.text)
                 legacy_lines.setdefault(match[1] + match[2], line.number)
             elif line.kind in ("item", "unterminated_item"):
@@ -343,9 +361,13 @@ def parse(text: str) -> Parsed:
         else:
             eligible = False
 
+    legacy_numbers = set(legacy_lines)
+    if archive is not None and read_archive is not None:
+        legacy_numbers.update(f"{number}{suffix}" for _, number, suffix in heading_lines(read_archive(archive)))
     if cutover is not None and top is not None and legacy is not None and top < legacy:
-        maximum = legacy_max if legacy_max is not None else max(
-            (int(key.rstrip("abcdefghijklmnopqrstuvwxyz")) for key in legacy_lines), default=0)
+        maximum = max((int(key.rstrip("abcdefghijklmnopqrstuvwxyz")) for key in legacy_numbers),
+                      default=0)
+        maximum = max(maximum, legacy_max or 0)
         if cutover <= maximum:
             errors.append(ItemError(legacy, "MARKER", "cutover must exceed the maximum legacy heading"))
         if first_line is not None and first_line not in item_headings:
@@ -369,7 +391,7 @@ def parse(text: str) -> Parsed:
             errors.append(ItemError(item.line, "ORDER", "typed items must descend and be at or above the cutover"))
         seen_numbers.setdefault(item.number, item.line)
         previous = item
-    return Parsed(cutover, top, tuple(items), frozenset(legacy_lines), legacy_max, tuple(errors))
+    return Parsed(cutover, top, tuple(items), frozenset(legacy_numbers), legacy_max, tuple(errors))
 
 
 def valid_epoch(value: object) -> bool:
@@ -441,7 +463,7 @@ def _replay(parsed: Parsed, items: list[Item], errors: list[ItemError]):
         for ref, status, at in transitions:
             target = targets.get(ref)
             ref_number = int(ref.rstrip("abcdefghijklmnopqrstuvwxyz"))
-            is_legacy = ref in parsed.legacy_numbers or (parsed.legacy_max is not None and ref_number <= parsed.legacy_max)
+            is_legacy = ref in parsed.legacy_numbers
             if ref not in known_headings and not is_legacy:
                 code, detail = "DANGLING_REF", "no matching heading"
             elif ref_number >= number:
@@ -518,7 +540,7 @@ def main(argv=None) -> int:
     clock.add_argument("--as-of-epoch", type=int)
     args = parser.parse_args(argv)
     try:
-        parsed = parse(args.run_state.read_text(encoding="utf-8"))
+        parsed = parse(args.run_state.read_text(encoding="utf-8"), read_archive=archive_reader(args.run_state.parent))
         errors = validate(parsed)
         if errors:
             for error in errors:

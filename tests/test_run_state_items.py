@@ -45,9 +45,9 @@ def doc(typed=(), cutover=21):
     return EARLY + TOP_MARKER + "\n\n" + "".join(typed) + LEGACY_MARKER.format(cutover) + "\n\n" + LATE
 
 
-def archived_doc(typed=(), cutover=405, legacy_max=404):
+def archived_doc(typed=(), cutover=405, legacy_max=404, legacy=""):
     marker = f"<!-- RUN_STATE LEGACY ITEMS: archived in {ARCHIVE}; cutover {cutover}; legacy_max {legacy_max} -->"
-    return "# Synthetic RUN_STATE\n\n" + TOP_MARKER + "\n\n" + "".join(typed) + marker + "\n"
+    return "# Synthetic RUN_STATE\n\n" + TOP_MARKER + "\n\n" + "".join(typed) + marker + "\n" + legacy
 
 
 def header(number, **changes):
@@ -282,13 +282,17 @@ class RunStateItemsTests(unittest.TestCase):
         self.assertEqual(items.main(["check"]), 0)
 
     def test_archived_legacy_range_reserves_numbers_and_resolves_references(self):
-        parsed = items.parse(archived_doc([item(405, supersedes=["346", "256b", "404"])]))
+        live_legacy = "\n346. **Retained fixture**\n"
+        parsed = items.parse(archived_doc([item(405, supersedes=["346"])], legacy=live_legacy))
         self.assertEqual((parsed.cutover, parsed.legacy_max), (405, 404))
         self.assertEqual(items.validate(parsed), [])
         self.assertEqual(items.replay(parsed), {405: "ISSUED"})
         self.assertIn("DUPLICATE_NUMBER", codes(archived_doc([item(404)])))
+        self.assertEqual(codes(archived_doc([item(405, supersedes=["346z", "404"])], legacy=live_legacy)),
+                         ["DANGLING_REF", "DANGLING_REF"])
         self.assertEqual(codes(archived_doc([item(406, supersedes=["405"])])), ["DANGLING_REF"])
-        self.assertEqual(codes(archived_doc([item(405, sets=[change(346, "VOID")])])), ["LEGACY_TARGET"])
+        self.assertEqual(codes(archived_doc([item(405, sets=[change(346, "VOID")])], legacy=live_legacy)),
+                         ["LEGACY_TARGET"])
         self.assertIn("MARKER", codes(archived_doc(legacy_max=405)))
 
     def test_kind_is_optional_and_restricted_to_the_enum(self):

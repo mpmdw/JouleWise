@@ -112,18 +112,20 @@ def _entries(body: list[tuple[int, str]]) -> tuple[dict[str, str], dict[str, int
     return values, lines
 
 
-def render(run_state_text: str) -> bytes:
+def render(run_state_text: str, *, source_path: Path | None = None) -> bytes:
     """Validate every block, then render the highest numbered block's declaration.
 
     Other fenced code suppresses recognition of headings and pointer fences.
     Quoted and indented pointer fences are examples, never declarations.
+    The source path locates the legacy archive for reference validation only.
     """
     if __package__:
         from . import run_state_items
     else:
         import run_state_items
 
-    parsed = run_state_items.parse(run_state_text)
+    read_archive = run_state_items.archive_reader(source_path.parent) if source_path is not None else None
+    parsed = run_state_items.parse(run_state_text, read_archive=read_archive)
     errors = run_state_items.validate(parsed)
     if errors:
         raise PointerError("\n".join(map(str, errors)))
@@ -177,7 +179,8 @@ def render(run_state_text: str) -> bytes:
 
 def generate(run_state_path: str | Path, out_path: str | Path) -> None:
     """Render first, then atomically replace the output in its own directory."""
-    data = render(Path(run_state_path).read_text(encoding="utf-8"))
+    source = Path(run_state_path)
+    data = render(source.read_text(encoding="utf-8"), source_path=source)
     out_path = Path(out_path)
     fd, temporary = tempfile.mkstemp(dir=out_path.parent, prefix=".gen_current.")
     try:
@@ -274,7 +277,8 @@ def validate(pointer: object) -> None:
 def check(run_state_path: str | Path, out_path: str | Path) -> int:
     """Return 0 for byte agreement, 1 for drift, 2 for invalid/unreadable input."""
     try:
-        expected = render(Path(run_state_path).read_text(encoding="utf-8"))
+        source = Path(run_state_path)
+        expected = render(source.read_text(encoding="utf-8"), source_path=source)
         actual = Path(out_path).read_bytes()
         # Parsing distinguishes an invalid file from valid JSON with byte drift.
         validate(json.loads(actual.decode("utf-8"), object_pairs_hook=_object))
