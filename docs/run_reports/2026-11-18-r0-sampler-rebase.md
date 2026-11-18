@@ -100,3 +100,18 @@ Complete listings index entries by case-folded name and preserve their recorded 
 | HIGH, matching exact stored case skipped a live owner under `Night`. | `test_background_census_matches_folded_names_and_refuses_collisions` covers `Night`, `CHAIN.STARTED`, `Active-Campaigns` and a colliding pair. | PASS |
 
 The round 4 fault matrix now injects errors at the descriptor-relative filesystem operations. Both CLI modes still return 2 without publication on census refusal. The background receipt test runs the strict scanner against an empty synthetic custody root so it verifies the resolved root supplied by the scanner. The frozen sampler spec remains in force. Exact-candidate CI and the requested two-family delta reviews are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Lead-directed R0 repair after round 6
+
+Round 6 reviewed `a1be3f7bfa01aa826a10aca0facc5f37aac22ae8`. Regression commit `f413276af` produced six failing synthetic cases on that implementation. Repair `8b4c877f759a67a4837943cdde81284470a67088` addresses both verified findings.
+
+The issued W1 presign pin and PR #734 head both resolved to `b2e01464d6d4fbf2901ff4d4154df9455104a12a`. Git object checks matched all ten frozen R1 blob IDs at that pin to the W1 source census. `joulewise/night_gate.py` is outside that ten-path set. Its issued W1 blob is `cf9acc2f4a3acf493495b1a8edb59812e9f98dba` and its R0 lane blob is `452da0de9363555dff3cf6f0f65b327b45e354fa`. The repair changes only R0 host code. It supplies R0's `pgrep -i` query with explicit Claude and Codex desktop bundle paths, then applies the shared process-identity filter. [W1 source census](https://github.com/mpmdw/JouleWise/blob/2acbb013567e2d97232497791419f61264dbf831/docs/run_reports/2026-11-18-w1-integration-evidence.md#seventeen-path-census)
+
+For a contender present at opening and absent at close, R0 now subtracts the opening CPU counter from the largest observed counter before exit and judges that lower bound over the full window. If both that evidence and previous-window evidence exceed the limit, the flag uses the observed delta once. A contender whose birth is proven inside the window still uses a zero opening counter.
+
+| Verified finding | Regression | Result on `8b4c877f` |
+| --- | --- | --- |
+| HIGH, the inherited case-sensitive query missed the Claude desktop executable. | `test_r0_cli_refuses_desktop_agents_in_its_own_census` covers both desktop apps, the CLI, startup and background discovery, and an incidental app path in an unrelated process's arguments. | PASS |
+| MED, a worker present at baseline opening could exceed the limit and exit without a flag. | `test_r0_baseline_flags_cpu_delta_of_worker_that_exits_mid_window`, `test_exit_delta_replaces_previous_interval_evidence_for_same_worker` | PASS |
+
+Both auditor probes passed three synthetic replays. Claude and Codex each refused with exit 2 and no publication. The exiting-worker baseline passed with one R0-L3 flag at 0.06 CPU-s/s, as did the still-running control. The R0 lane delta leaves all ten frozen R1 paths, `night_gate.py` and the code pin registry byte-identical to its base. Exact-candidate CI and two-family review are tracked on draft PR #824. NEEDS_SPEC has no entries.
