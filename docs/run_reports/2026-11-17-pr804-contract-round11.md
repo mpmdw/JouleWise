@@ -5,6 +5,10 @@ merge order. Its previous head was `5755eef52`. The branch was rebased onto
 `4a4d12930`, the head of [PR #811](https://github.com/mpmdw/JouleWise/pull/811).
 RUN_STATE item 399 records the adopted decisions.
 
+GitHub reported merge conflicts against the advanced `main`. The PR now
+targets the #811 branch at the pinned contract head so Actions can test the
+step-2 tree. Retarget #804 to `main` after #811 lands.
+
 ## Verification
 
 | Tree | Scenario passes | Scenario xfails | Scenario failures |
