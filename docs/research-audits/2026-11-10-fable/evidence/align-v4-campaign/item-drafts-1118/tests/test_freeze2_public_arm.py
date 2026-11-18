@@ -628,6 +628,9 @@ def matrix(root, probe, items):
 def check_regeneration(scratch, base, items):
     repo = Path(oid(DRAFT, "rev-parse", "--show-toplevel"))
     prefix = DRAFT.relative_to(repo).as_posix()
+    source_roots = ("joulewise", "scripts", "configs")
+    git(repo, "diff", "--exit-code", f"{base}...HEAD", "--", *source_roots)
+    git(repo, "diff", "--exit-code", "HEAD", "--", *source_roots)
 
     def base_blob(name):
         return git(repo, "cat-file", "blob", f"{base}:{prefix}/{name}")
