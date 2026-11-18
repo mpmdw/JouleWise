@@ -232,8 +232,10 @@ class EligibilityWitnesses(ReviewBase):
         packet = t2.build()
         self.assertNotIn('pilot', t1.record['sources'])
         self.assertNotIn('exclusions', t1.record['sources'])
-        self.assertEqual(next(r for r in packet['series_history'] if r.get('window_id') == 'T1')['status'], 'final')
-        self.assertIs(series.bind_packet(self.root, 'T3', packet, authenticated_by_rebuild=True), packet)
+        self.assertEqual(next(r for r in packet['series_history'] if r.get('window_id') == 'T1')['status'],
+                         'provisional')
+        with self.assertRaisesRegex(ValueError, 'R17: window k final eligibility'):
+            series.bind_packet(self.root, 'T3', packet, authenticated_by_rebuild=True)
         self.assertFalse(evaluate(t2, packet)['admitted'],
                          'the arm rebuild admitted T3 while T1 and T2 are both provisional')
 

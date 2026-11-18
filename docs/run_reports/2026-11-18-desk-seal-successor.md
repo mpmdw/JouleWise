@@ -49,3 +49,5 @@ Authority is RL-183b on audit head `26a9a306e`. The production caller census fou
 | 5 | `test_rl183b_failed_unpack_leaves_no_receipt` | PASS |
 
 The actual pack/unpack round-trip also verifies exactly four canonical fields, deterministic bytes on a fresh restore, refusal inside the source tree, and preservation of an existing output. The frozen-source test compares all ten R1 files against `b2e01464d`. Finding 1's exporter blob still equals the early-review blob. Independent review and the W1 signing gate remain with the lead. The draft remains the venue for Fable's readback.
+
+The 49-test packet suite and the targeted receipt reruns passed. The broader offload run identified one old assertion that labeled a test window final before its desk finished, and one transient archive-provenance difference. The revised T-window test passed with provisional history and R17 refusal at k+2. The provenance test passed unchanged on rerun.
