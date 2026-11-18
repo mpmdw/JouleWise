@@ -1,7 +1,10 @@
 """Synthetic gate evidence for the Part C cited rebind."""
 from contextlib import contextmanager
+from copy import deepcopy
+import json
 from pathlib import Path
 import sys
+from tempfile import TemporaryDirectory
 from types import ModuleType
 import unittest
 from unittest.mock import patch
@@ -54,9 +57,8 @@ def evaluator_world():
         rehearsal = ModuleType("scripts.align_r1_rehearsal")
 
         def turn_check(count, x7, flags, minimum):
-            assert type(count) is int and count >= minimum
-            assert type(x7) is bool and isinstance(flags, list)
-            return True, {"own_stop": not x7 and not flags, "why": ", ".join(flags) or None}
+            clean = x7 is False and isinstance(flags, list) and not flags
+            return count >= minimum, {"own_stop": clean, "why": ", ".join(flags or []) or None}
 
         rehearsal.turn_check = turn_check
         modules[rehearsal.__name__] = rehearsal
@@ -67,8 +69,7 @@ def evaluator_world():
         prints.FRESH_STAMP_S = 2.0  # RL-152 section 1.6, the existing evaluator constant.
 
         def stamp_fresh(age):
-            assert isinstance(age, (int, float)) and -2.0 <= age <= 2.0
-            return True
+            return type(age) in (int, float) and -2.0 <= age <= 2.0
 
         prints.stamp_fresh = stamp_fresh
         modules[prints.__name__] = prints
@@ -95,12 +96,85 @@ STEP = {"g0_outcome": "released", "g0_wait_s": 20.0,
         "slope_c_per_min": 0.05}
 
 
+def write_receipt(directory, value):
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / pc.RECEIPT_NAME).write_text(json.dumps(value), encoding="utf-8")
+
+
+def member_record(root, role, facts, *, save=True):
+    """Build paired synthetic evidence from the facts used by the verdict tests."""
+    member = deepcopy(facts)
+    segment = root / pc.SEGMENTS[role]
+    member.setdefault("bundle_path", str(segment / "member"))
+    for idx, turn in enumerate(member.setdefault("turns", [])):
+        turn.setdefault("start_ns", (idx + 1) * 100_000_000_000)
+        turn.setdefault("end_ns", turn["start_ns"] + 5_000_000_000)
+        turn.setdefault("prefill_tokens", 50)
+    for row in member.setdefault("intervals", []):
+        row.setdefault("token_count", None)
+        row.setdefault("exit_sample_ns", row.get("end_ns"))
+        row.setdefault("release", deepcopy(STEP["release"]))
+        row.setdefault("reference", deepcopy(STEP["reference"]))
+        row.setdefault("slope_c_per_min", STEP["slope_c_per_min"])
+    member.setdefault("reading_stamps", sorted({row["exit_sample_ns"] for row in member["intervals"]
+                                                if type(row["exit_sample_ns"]) is int}))
+    member.setdefault("episode_flags", [])
+    member.setdefault("thermal_flags", [])
+    member.setdefault("journal_flags", [])
+    member.setdefault("journal_intervals", [{k: deepcopy(v) for k, v in row.items() if k != "release_status"}
+                                            for row in member["intervals"]])
+    g0 = next((row for row in member["intervals"] if row["kind"] == "G0"), {})
+    reference = g0.get("reference") or STEP["reference"]
+    receipt = {
+        "admitted_turns": len(member["turns"]), "member_status": "succeeded",
+        "bundle": "member", "episode_flags": deepcopy(member["episode_flags"]),
+        "g0_outcome": g0.get("outcome"), "g0_wait_s": g0.get("duration_s"), "g0_timeout_s": 1200,
+        "g0_reference": deepcopy(g0.get("reference")), "reference_c": reference["slow_c"],
+        "reference_fast_c": reference["fast_c"], "operating_reference": deepcopy(reference),
+        "gate_waits_s": {kind: [row["duration_s"] for row in member["intervals"] if row["kind"] == kind]
+                         for kind in ("G0", "G1", "H")},
+        "decode_tokens": sum(turn["decode_tokens"] for turn in member["turns"]),
+        "prefill_tokens": sum(turn["prefill_tokens"] for turn in member["turns"]),
+        "x7": member.get("x7"), "deadman": {"T_dead_s": member.get("t_dead_s", 1000)},
+    }
+    if role == "step-d":
+        receipt.update(g0_released=True, g0_release=deepcopy(g0["release"]))
+    receipt.update(member.get("runtime") or {})
+    member["runtime"] = receipt
+    if save:
+        write_receipt(segment, receipt)
+    return member
+
+
+def step_record(root, step, n_chunk, *, receipt=None, save=True):
+    turn = {"index": 0, "decode_tokens": 1500}
+    gate = {**interval("G0", 0, step["g0_wait_s"], step["g0_outcome"]),
+            **{key: step[key] for key in ("release", "reference", "slope_c_per_min")}}
+    saved = {"slots": {"N_chunk": n_chunk, "B_D": 6144}} if receipt is None else receipt
+    member = member_record(root, "step-d", {"turns": [turn], "intervals": [gate], "runtime": saved}, save=save)
+    return {**step, "member": member}
+
+
+def evaluation_inputs(root, *, step_d=STEP, d_bank=None, x_g=None, n_chunk=4096):
+    write_receipt(root / "capture_predecessor_30b", {"bundle": "predecessor", "ac_powermode": "Automatic"})
+    step = dict(step_d)
+    if "member" not in step and all(step.get(key) is not None for key in STEP):
+        wait = step["g0_wait_s"]
+        if type(wait) in (int, float) and pc._finite(wait):
+            step = step_record(root, step, n_chunk)
+    return {"step_d": step,
+            "d_bank": None if d_bank is None else member_record(root, "d-bank", d_bank),
+            "x_g": None if x_g is None else member_record(root, "x-g", x_g),
+            "n_chunk": n_chunk}
+
+
 def evaluate_world(*, d_bank=None, x_g=None, step_d=STEP, **kwargs):
-    with evaluator_world():
+    with evaluator_world(), TemporaryDirectory() as tmp:
         return pc.evaluate(
-            step_d=step_d,
-            d_bank=clean_facts() if d_bank is None else d_bank,
-            n_chunk=4096, x_g=clean_facts(contrast=True) if x_g is None else x_g, **kwargs)
+            **evaluation_inputs(Path(tmp), step_d=step_d,
+                                d_bank=clean_facts() if d_bank is None else d_bank,
+                                x_g=clean_facts(contrast=True) if x_g is None else x_g),
+            **kwargs)
 
 
 class PartCEvaluatorTimeoutTests(unittest.TestCase):
@@ -207,7 +281,7 @@ class PartCEvidenceReconciliationTests(unittest.TestCase):
                 step = pc.step_d_facts(Path("/synthetic"), STEP)
                 self.assertEqual(evaluate_world(step_d=step)["verdict"], "other_failure")
         with patch.object(pc, "facts_from_bundle", return_value={"intervals": [good]}):
-            self.assertTrue(evaluate_world(step_d=pc.step_d_facts(Path("/synthetic"), STEP))["pass"])
+            self.assertTrue(pc.step_d_line(pc.step_d_facts(Path("/synthetic"), STEP))["pass"])
 
     def test_step_d_requires_finite_nonnegative_wait_and_finite_release_facts(self):
         cases = ({"g0_wait_s": -1}, {"g0_wait_s": float("nan")}, {"g0_wait_s": True},
@@ -216,3 +290,95 @@ class PartCEvidenceReconciliationTests(unittest.TestCase):
         for damage in cases:
             with self.subTest(damage=damage):
                 self.assertEqual(evaluate_world(step_d={**STEP, **damage})["verdict"], "other_failure")
+
+
+def evidence_paths(value, prefix=()):
+    """Visit every child, including whole rows and empty containers."""
+    children = value.items() if isinstance(value, dict) else enumerate(value) if isinstance(value, list) else ()
+    for key, child in children:
+        at = (*prefix, key)
+        yield at, child
+        yield from evidence_paths(child, at)
+
+
+def change_evidence(original, path, *replacement):
+    value = deepcopy(original)
+    parent = value
+    for key in path[:-1]:
+        parent = parent[key]
+    if replacement:
+        parent[path[-1]] = replacement[0]
+    else:
+        del parent[path[-1]]
+    return value
+
+
+class PartCMutationTests(unittest.TestCase):
+    def test_no_single_evidence_mutation_can_pass(self):
+        bank = clean_facts()
+        contrast = clean_facts(contrast=True)
+        for member in (bank, contrast):
+            for i, row in enumerate(member["intervals"]):
+                offset = i * 100_000_000_000
+                row["start_ns"] += offset
+                row["end_ns"] += offset
+                row["release_status"]["pm_age_s"] = 2.0
+            for turn in member["turns"]:
+                turn["first_reading_after_start"]["pm_age_s"] = 2.0
+        mutations = 0
+        with TemporaryDirectory() as tmp, evaluator_world():
+            root = Path(tmp)
+            control = evaluation_inputs(root, d_bank=bank, x_g=contrast)
+            self.assertTrue(pc.evaluate(**control)["pass"])
+
+            def rejected(label, inputs=control):
+                nonlocal mutations
+                mutations += 1
+                with self.subTest(mutation=label):
+                    result = pc.evaluate(**inputs)
+                    self.assertFalse(result["pass"], result)
+                    self.assertIn(result["verdict"], ("other_failure", "start_state_failed",
+                                                      "mechanics_gate_time_failed"))
+
+            for segment in ("capture_predecessor_30b", *pc.SEGMENTS.values()):
+                path = root / segment / pc.RECEIPT_NAME
+                original = path.read_text(encoding="utf-8")
+                saved = json.loads(original)
+                path.unlink()
+                rejected(("delete receipt", segment))
+                path.write_text("{", encoding="utf-8")
+                rejected(("truncate receipt", segment))
+                for at, value in evidence_paths(saved):
+                    path.write_text(json.dumps(change_evidence(saved, at)), encoding="utf-8")
+                    rejected(("delete receipt field", segment, at))
+                    if segment != "capture_predecessor_30b" and type(value) in (int, float):
+                        path.write_text(json.dumps(change_evidence(saved, at, value + 1)), encoding="utf-8")
+                        rejected(("perturb receipt field", segment, at))
+                path.write_text(original, encoding="utf-8")
+
+            fields = {"step_d": ("g0_outcome", "g0_wait_s", "release", "reference", "slope_c_per_min"),
+                      "d_bank": ("x7", "t_dead_s"), "x_g": ("x7",)}
+            member_fields = ("runtime", "bundle_path", "episode_flags", "thermal_flags", "journal_flags",
+                             "reading_stamps", "turns", "intervals", "journal_intervals")
+            for key in control:
+                rejected(("delete evaluator input", key), change_evidence(control, (key,)))
+            rejected(("perturb configured chunk",), change_evidence(control, ("n_chunk",), 4097))
+            for role, role_fields in fields.items():
+                member_at = (role, "member") if role == "step_d" else (role,)
+                member = control["step_d"]["member"] if role == "step_d" else control[role]
+                paths = list(evidence_paths({key: control[role][key] for key in role_fields}, (role,)))
+                paths.extend(evidence_paths({key: member[key] for key in member_fields}, member_at))
+                for at, value in paths:
+                    # Release and dispatch status decide D_bank only.
+                    if ("first_reading_after_start" in at or "release_status" in at) and role != "d_bank":
+                        continue
+                    rejected(("delete evidence", at), change_evidence(control, at))
+                    # A one-unit change of an unpaired turn timestamp can still
+                    # satisfy the timing rule. Its presence is checked above.
+                    if type(value) in (int, float) and not ("turns" in at and at[-1] in ("start_ns", "end_ns")):
+                        rejected(("perturb evidence", at), change_evidence(control, at, value + 1))
+                for source in ("episode_flags", "thermal_flags", "journal_flags"):
+                    at = (*member_at, source)
+                    rejected(("insert cut flag", at), change_evidence(control, at, ["episode.time_guard:3"]))
+            self.assertTrue(pc.evaluate(**control)["pass"])
+        print(f"Part C evidence mutations rejected: {mutations}")

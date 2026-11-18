@@ -17,6 +17,7 @@ from unittest.mock import patch
 from joulewise.align.apple import r1_runtime as rt
 from scripts import align_r1_followup_kit as kit, align_r1_part_c as pc, launch_align_r0 as launcher
 from scripts import run_align_r1_smoke as smoke
+from tests.test_part_c_gate_evidence import evaluation_inputs, member_record, step_record, write_receipt
 
 
 def status(level=0, state='Nominal', age=0.5):
@@ -50,7 +51,10 @@ XG = {'x7': False, 'turns': [turn(0, 1500), turn(1, 3000)],
 
 
 def run(step=STEP, d_bank=None, n_chunk=4096, x_g=XG, **kw):
-    return pc.evaluate(step_d=step, d_bank=bank() if d_bank is None else d_bank, n_chunk=n_chunk, x_g=x_g, **kw)
+    with tempfile.TemporaryDirectory() as tmp:
+        inputs = evaluation_inputs(Path(tmp), step_d=step, d_bank=bank() if d_bank is None else d_bank,
+                                   n_chunk=n_chunk, x_g=x_g)
+        return pc.evaluate(**inputs, **kw)
 
 
 class ExpectedHoldsTests(unittest.TestCase):
@@ -91,11 +95,11 @@ class EvaluatorPassTests(unittest.TestCase):
         self.assertEqual(run(d_bank=d, n_chunk=4096)['verdict'], 'other_failure')
 
     def test_x_g_not_run_is_logged_and_does_not_fail(self):
-        result = run(x_g=None, x_g_not_run_reason='launcher cannot run it')
+        result = run(x_g=None, x_g_not_run_reason='Refusal: launcher cannot run it')
         self.assertTrue(result['pass'])
         self.assertIsNone(result['lines']['x_g'])
         self.assertEqual(result['log'], ['three-turn clause not evaluated: one D run',     # RL-152 section 1.4
-                                         'X_G was not run: launcher cannot run it'])
+                                         'X_G was not run: Refusal: launcher cannot run it'])
 
 
 class EvaluatorFailureTests(unittest.TestCase):
@@ -123,7 +127,7 @@ class EvaluatorFailureTests(unittest.TestCase):
         self.assertIsNone(result['lines']['d_bank_mechanics']['checks']['gate_time']['gates_plus_holds_s'])
 
     def test_fewer_than_three_admitted_turns(self):
-        d = bank(turns=[turn(0, 1500), turn(1, 3000)])
+        d = bank(turns=[turn(0, 1500), turn(1, 3000)], episode_flags=['episode.time_guard:2'])
         self.check(run(d_bank=d), 'd_bank_mechanics', 'admitted_turns', 'other_failure')
 
     def test_gate_time_over_forty_percent_of_t_dead_is_the_gate_time_branch(self):
@@ -287,8 +291,10 @@ class OwnStopTurnCheckTests(unittest.TestCase):
         d['intervals'][0].update(duration_s=500.0, end_ns=500_000_000_000)
         self.assertEqual(run(d_bank=d)['verdict'], 'mechanics_gate_time_failed')
 
-    def test_three_turns_need_no_stop_reading(self):
-        self.assertTrue(run(d_bank=bank(episode_flags=None))['pass'])
+    def test_three_turns_need_readable_stop_evidence(self):
+        result = run(d_bank=bank(episode_flags=None))
+        self.assertEqual(result['verdict'], 'other_failure')
+        self.assertIn('flags', result['evidence_failures']['d_bank'])
 
 
 class SidecarJournalTests(unittest.TestCase):
@@ -332,17 +338,26 @@ class SidecarJournalTests(unittest.TestCase):
         g1 = self.tick()
         t1 = self.clocks.monotonic_ns() + 100_000_000
         self.tick(3)
-        self.sidecar.event('align_thermal_gate', {'gate_kind': 'G1', 'state': 'release', 'turn': 1})
-        self.sidecar.stop()
         intervals = [{'kind': 'G0', 'turn': 0, 'outcome': 'released', 'duration_s': 110.0,
                       'start_ns': 0, 'end_ns': 110_000_000_000,
                       'exit_sample_ns': g0 if release_ns is None else release_ns},
                      {'kind': 'G1', 'turn': 1, 'outcome': 'released', 'duration_s': 99.8,
                       'start_ns': 0, 'end_ns': 99_800_000_000, 'exit_sample_ns': g1}]
+        from joulewise.align.apple.thermal_gates import ThermalSession
+        for row in intervals:
+            row.update(token_count=None, reference=STEP['reference'], release={'fast_c': 50.0, 'slow_c': 34.0},
+                       slope_c_per_min=STEP['slope_c_per_min'], entry_stamp={'monotonic_ns': row['start_ns']})
+            self.sidecar.event('align_thermal_gate', {'gate_kind': row['kind'], 'state': 'begin',
+                                                     'turn': row['turn'], 'token_count': None,
+                                                     'entry_stamp': row['entry_stamp']})
+            ThermalSession.persist_interval(SimpleNamespace(sidecar=self.sidecar), row)
+        self.sidecar.stop()
         turns = [SimpleNamespace(index=0, start_ns=t0, end_ns=t0 + 2, decode_tokens=2200, prefill_tokens=11211),
                  SimpleNamespace(index=1, start_ns=t1, end_ns=t1 + 2, decode_tokens=4096, prefill_tokens=40)]
-        ep = SimpleNamespace(hardware={'thermal': {'intervals': intervals}, 'token_budget': {'deadman_s': 983.1}},
+        ep = SimpleNamespace(hardware={'thermal': {'intervals': intervals, 'flags': []},
+                                       'token_budget': {'deadman_s': 983.1}},
                              turns=turns, flags=list(flags))
+        self.fixture_episode = ep
         with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep):
             return pc.facts_from_bundle(self.bundle, role='d-bank')
 
@@ -361,7 +376,8 @@ class SidecarJournalTests(unittest.TestCase):
             self.assertEqual((sample['os_level'], sample['pm_state'], sample['stamp_fresh']), (0, 'Nominal', True))
             self.assertLess(sample['pm_age_s'], 0)           # the stamp follows the sample's own stamp
             self.assertGreater(sample['pm_age_s'], -0.1)
-        result = pc.evaluate(step_d=STEP, d_bank=facts, n_chunk=4096, x_g=None, x_g_not_run_reason='not in this test')
+        facts.pop('bundle_path')
+        result = run(d_bank=facts, x_g=None, x_g_not_run_reason='Refusal: synthetic launch refusal')
         self.assertEqual((result['pass'], result['verdict']), (True, 'pass'), result['lines'])
         self.assertEqual(result['lines']['d_bank_mechanics']['checks']['admitted_turns']['status'],
                          'not_applicable: episode returned at turn 1')
@@ -401,12 +417,45 @@ class SidecarJournalTests(unittest.TestCase):
         after_start['values']['status'] = {'error': 'OSError: synthetic'}
         journal.write_text(''.join(json.dumps(r) + '\n' for r in rows))
         ep = SimpleNamespace(flags=[], turns=[SimpleNamespace(**t) for t in facts['turns']],
-                             hardware={'thermal': {'intervals': []}})
+                             hardware={'thermal': {'intervals': [], 'flags': []}})
         with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep):
             selected = pc.facts_from_bundle(self.bundle, role='d-bank')['turns'][0]['first_reading_after_start']
         self.assertEqual(selected.get('error'), 'OSError: synthetic')
         facts['turns'][0]['first_reading_after_start'] = selected
         self.assertEqual(run(d_bank=facts)['verdict'], 'start_state_failed')
+
+    def test_every_native_journal_row_is_required(self):
+        control = self.facts()
+        control.pop('bundle_path')
+        self.assertTrue(run(d_bank=control)['pass'])
+        journal = self.bundle / 'outputs/align_thermal.jsonl'
+        original = journal.read_text().splitlines(keepends=True)
+        mutations = 0
+        for i, line in enumerate(original):
+            row = json.loads(line)
+            for damage in ([], ['{\n'], [json.dumps({**row, 'seq': row['seq'] + 1}) + '\n']):
+                journal.write_text(''.join(original[:i] + damage + original[i+1:]))
+                with self.subTest(row=i, damage=damage):
+                    with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=self.fixture_episode):
+                        evidence = pc.facts_from_bundle(self.bundle, role='d-bank')
+                    self.assertIn('evidence_error', evidence)
+                    self.assertFalse(run(d_bank=evidence)['pass'])
+                    mutations += 1
+        for gate in control['intervals']:
+            i, sample = next((i, row) for i, line in enumerate(original)
+                             if (row := json.loads(line))['kind'] == 'reading'
+                             and row['started']['monotonic_ns'] == gate['exit_sample_ns'])
+            for sensor_key in ('TG0D', 'TH0P'):
+                changed = deepcopy(sample)
+                changed['values']['sensors'][sensor_key] += 1
+                journal.write_text(''.join(original[:i] + [json.dumps(changed) + '\n'] + original[i+1:]))
+                with self.subTest(gate=gate['kind'], sensor=sensor_key):
+                    with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=self.fixture_episode):
+                        evidence = pc.facts_from_bundle(self.bundle, role='d-bank')
+                    self.assertIn('differs from its thermal reading', evidence['evidence_error'])
+                    self.assertFalse(run(d_bank=evidence)['pass'])
+                    mutations += 1
+        print(f'Part C native journal mutations rejected: {mutations}')
 
     def test_finalized_journal_failure_disagrees_with_bundle_for_both_roles(self):
         from joulewise.align.apple.thermal_gates import ThermalSession
@@ -415,20 +464,27 @@ class SidecarJournalTests(unittest.TestCase):
         sidecar = SimpleNamespace(event=lambda kind, values: rows.append(
             {'module': 'temperature', 'kind': kind, 'values': values}))
         for journal_turn in (2, 3):
-            rows = []
+            rows = [{'kind': 'session_start', 'module': 'temperature', 'values': {}}]
             ThermalSession.persist_interval(SimpleNamespace(sidecar=sidecar),
                                             interval('G1', journal_turn, outcome='timeout'))
-            ep = SimpleNamespace(flags=[], turns=[], hardware={'thermal': {'intervals': bank()['intervals']}})
+            rows.append({'kind': 'session_end', 'module': 'temperature', 'values': {}})
+            ep = SimpleNamespace(flags=[], turns=[], hardware={'thermal': {'intervals': bank()['intervals'],
+                                                                           'flags': []}})
             encoded = '\n'.join(map(json.dumps, rows)).encode()
             with self.subTest(journal_turn=journal_turn), \
                     patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep), \
                     patch('joulewise.desk_compress.read_bytes', return_value=encoded):
                 extracted = pc.facts_from_bundle(self.bundle, role='x-g')
+                self.assertEqual(extracted['journal_intervals'][0]['outcome'], 'timeout')
                 for role in ('d_bank', 'x_g'):
                     facts = {**bank(), **extracted, 'turns': bank()['turns'], 't_dead_s': 1000.0}
                     for row in facts['intervals']:
                         row['release_status'] = status()
-                    self.assertEqual(run(**{role: facts})['verdict'], 'other_failure')
+                    result = run(**{role: facts})
+                    self.assertEqual(result['verdict'], 'other_failure')
+                    timeout = (result['lines']['x_g'] if role == 'x_g' else
+                               result['lines']['d_bank_mechanics']['checks']['no_g1_timeout'])
+                    self.assertIn(journal_turn, timeout['g1_timeout_turns'])
 
 
 class KitSequenceTests(unittest.TestCase):
@@ -445,24 +501,33 @@ class KitSequenceTests(unittest.TestCase):
         self.calls.append(kind)
         if kind == 'x-g' and self.x_g_fails:
             raise kit.r1.Refusal('runtime.x-g: exit 2: synthetic')
-        base = {'bundle': kind + '-bundle'}
         if kind == 'step-d':
-            return {**base, 'g0_outcome': 'released', 'g0_wait_s': 212.0,
-                    'slots': {'N_chunk': 4096, 'B_D': 6144}, 'slot_detail': {'N_chunk_formula': 1280}}
+            fields = {'slots': {'N_chunk': 4096, 'B_D': 6144}, 'slot_detail': {'N_chunk_formula': 1280}}
+            return step_record(output.parent, STEP, 4096, receipt=fields)['member']['runtime']
         if kind == 'd-bank-benign-s1':
-            return {**base, 'admitted_turns': 3, 'x7': False, 'deadman': {'T_dead_s': 1000.0}}
+            return member_record(output.parent, 'd-bank', bank())['runtime']
         if kind == 'x-g':
-            return {**base, 'admitted_turns': 2, 'episode_flags': []}
-        return base
+            return member_record(output.parent, 'x-g', XG)['runtime']
+        fields = {'bundle': 'member', 'ac_powermode': 'Automatic'}
+        write_receipt(output, fields)
+        return fields
 
     def facts(self, bundle, *, role):
         return {'d-bank': bank(), 'x-g': deepcopy(XG)}[role]
 
     def run_c(self, *, bank_facts=None, step_facts=None):
-        facts = (lambda bundle, *, role: bank_facts if role == 'd-bank' and bank_facts else self.facts(bundle, role=role))
+        root = self.tmp / 'c'
+
+        def facts(bundle, *, role):
+            payload = bank_facts if role == 'd-bank' and bank_facts else self.facts(bundle, role=role)
+            return member_record(root, role, payload, save=False)
+
+        def step_inputs(bundle, fields):
+            return step_record(root, step_facts or STEP, 4096, receipt=fields, save=False)
+
         config = SimpleNamespace()
-        return kit.smoke_part_c(self.tmp / 'c', ['runtime'], config, soak_reference='soak.json', invoke=self.invoke,
-                                facts=facts, step_facts=lambda *_: dict(step_facts or STEP),
+        return kit.smoke_part_c(root, ['runtime'], config, soak_reference='soak.json', invoke=self.invoke,
+                                facts=facts, step_facts=step_inputs,
                                 prints=lambda bundle: {'turns': [{'turn': 0, 'token_basis': 'uniform_estimate'}],
                                                      'desk_verdict': {'exclusion_reasons': ['r']}})
 
