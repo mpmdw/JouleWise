@@ -261,6 +261,28 @@ The public v2 function uses the same table.
 
 The niced synthetic shard reported 64 passes and one expected v1 skip.
 
+## Round 9 descriptor layout
+
+With fd 1 vacant, the transfer worker saved stderr into fd 1 and then
+overwrote the saved descriptor during stdout redirection. The original
+probe lost 12 of 18 notices on each branch. The regression froze at
+`f7bdefe04`. Commit `9d8cb9d60` gives the dispatcher and transfer worker
+one startup helper. It fills vacant standard descriptors with
+`/dev/null` and saves public stderr at fd 10 or higher with close-on-exec
+set. Notices use the saved descriptor across redirection. Commit
+`bd1090bc3` applies the worker repair on the transfer branch.
+
+| Finding | Disposition and regression |
+| --- | --- |
+| HIGH, implementation bug | Both worker copies delivered all 18 exact notices on the original probe and exited 2 before the read or 1 after it. `test_transfer_preserves_notice_with_vacant_standard_descriptors` covers each closed descriptor and stdout with no reader, before and after the read in both buffering modes. `test_dispatch_notices_use_saved_stderr_with_vacant_standard_descriptors` covers parser, validation, legacy and outer failures. With fd 2 closed at startup the notice goes to the replacement `/dev/null`. |
+| MED, admission integration | Transfer stage-1 arm bounds and authoritative public registration-source authorization remain with their owners. |
+| LOW, preservation | The schemas, pinned validators, registered and candidate manifests, ledger and state files retain their prior bytes. |
+
+The niced integration shard reported 66 passes and one expected v1 skip.
+The historical transfer branch's focused run reported 15 passes and one
+expected v1 skip. Descriptor exhaustion still exits 2 whether the
+reserved range is unavailable or full.
+
 ## RL-185 and lead handoff
 
 RL-185 §4 resolves the previous NEEDS_SPEC. Both description drafts carry
